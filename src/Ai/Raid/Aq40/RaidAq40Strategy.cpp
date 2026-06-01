@@ -1,6 +1,7 @@
 #include "RaidAq40Strategy.h"
 
 #include "MovementActions.h"
+#include "Playerbots.h"
 #include "Strategy.h"
 
 void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
