@@ -12,19 +12,19 @@ public:
     bool IsActive() override { return true; }
 };
 
-class Aq40HasEmperorAggroTrigger : public Trigger
-{
-public:
-    Aq40HasEmperorAggroTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 has emperor aggro") {}
-    bool IsActive() override;
-};
+// class Aq40HasEmperorAggroTrigger : public Trigger
+// {
+// public:
+//     Aq40HasEmperorAggroTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 has emperor aggro") {}
+//     bool IsActive() override;
+// };
 
-class Aq40WarlockTankEmperorTrigger : public Trigger
-{
-public:
-    Aq40WarlockTankEmperorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 warlock tank emperor") {}
-    bool IsActive() override;
-};
+// class Aq40WarlockTankEmperorTrigger : public Trigger
+// {
+// public:
+//     Aq40WarlockTankEmperorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 warlock tank emperor") {}
+//     bool IsActive() override;
+// };
 
 class Aq40MageFrostboltViscidusTrigger : public Trigger
 {
@@ -40,103 +40,103 @@ public:
     bool IsActive() override;
 };
 
-class Aq40EmperorTrigger : public Trigger
-{
-public:
-    Aq40EmperorTrigger(PlayerbotAI* botAI, std::string const name) : Trigger(botAI, name) {}
-    bool IsActive() override;
-protected:
-    virtual bool IsVekLor() { return false; }
-    virtual bool IsVekNilash() { return false; }
-    virtual bool IsForHealers() { return false; }
-    virtual bool IsPestControl() { return false; }
-};
+// class Aq40EmperorTrigger : public Trigger
+// {
+// public:
+//     Aq40EmperorTrigger(PlayerbotAI* botAI, std::string const name) : Trigger(botAI, name) {}
+//     bool IsActive() override;
+// protected:
+//     virtual bool IsVekLor() { return false; }
+//     virtual bool IsVekNilash() { return false; }
+//     virtual bool IsForHealers() { return false; }
+//     virtual bool IsPestControl() { return false; }
+// };
 
-class Aq40TargetEmperorVekLorTrigger : public Aq40EmperorTrigger
-{
-public:
-    Aq40TargetEmperorVekLorTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 target emperor vek'lor") {}
-protected:
-    bool IsVekLor() override { return true; }
-    bool IsVekNilash() override { return false; }
-    bool IsForHealers() override { return false; }
-    bool IsPestControl() override { return false; }
-};
+// class Aq40TargetEmperorVekLorTrigger : public Aq40EmperorTrigger
+// {
+// public:
+//     Aq40TargetEmperorVekLorTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 target emperor vek'lor") {}
+// protected:
+//     bool IsVekLor() override { return true; }
+//     bool IsVekNilash() override { return false; }
+//     bool IsForHealers() override { return false; }
+//     bool IsPestControl() override { return false; }
+// };
 
-class Aq40TargetEmperorVekNilashTrigger : public Aq40EmperorTrigger
-{
-public:
-    Aq40TargetEmperorVekNilashTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 target emperor vek'nilash") {}
-protected:
-    bool IsVekLor() override { return false; }
-    bool IsVekNilash() override { return true; }
-    bool IsForHealers() override { return false; }
-    bool IsPestControl() override { return false; }
-};
+// class Aq40TargetEmperorVekNilashTrigger : public Aq40EmperorTrigger
+// {
+// public:
+//     Aq40TargetEmperorVekNilashTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 target emperor vek'nilash") {}
+// protected:
+//     bool IsVekLor() override { return false; }
+//     bool IsVekNilash() override { return true; }
+//     bool IsForHealers() override { return false; }
+//     bool IsPestControl() override { return false; }
+// };
 
-class Aq40TargetEmperorPestsTrigger : public Aq40EmperorTrigger
-{
-public:
-    Aq40TargetEmperorPestsTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 target emperor pests") {}
-protected:
-    bool IsVekLor() override { return false; }
-    bool IsVekNilash() override { return false; }
-    bool IsForHealers() override { return false; }
-    bool IsPestControl() override { return true; }
-};
+// class Aq40TargetEmperorPestsTrigger : public Aq40EmperorTrigger
+// {
+// public:
+//     Aq40TargetEmperorPestsTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 target emperor pests") {}
+// protected:
+//     bool IsVekLor() override { return false; }
+//     bool IsVekNilash() override { return false; }
+//     bool IsForHealers() override { return false; }
+//     bool IsPestControl() override { return true; }
+// };
 
-class Aq40ApproachEmperorVekLorTrigger : public Aq40EmperorTrigger
-{
-public:
-    Aq40ApproachEmperorVekLorTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 approach emperor vek'lor") {}
-protected:
-    bool IsVekLor() override { return true; }
-    bool IsVekNilash() override { return false; }
-    bool IsForHealers() override { return true; }
-    bool IsPestControl() override { return false; }
-};
+// class Aq40ApproachEmperorVekLorTrigger : public Aq40EmperorTrigger
+// {
+// public:
+//     Aq40ApproachEmperorVekLorTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 approach emperor vek'lor") {}
+// protected:
+//     bool IsVekLor() override { return true; }
+//     bool IsVekNilash() override { return false; }
+//     bool IsForHealers() override { return true; }
+//     bool IsPestControl() override { return false; }
+// };
 
-class Aq40ApproachEmperorVekNilashTrigger : public Aq40EmperorTrigger
-{
-public:
-    Aq40ApproachEmperorVekNilashTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 approach emperor vek'nilash") {}
-protected:
-    bool IsVekLor() override { return false; }
-    bool IsVekNilash() override { return true; }
-    bool IsForHealers() override { return true; }
-    bool IsPestControl() override { return false; }
-};
+// class Aq40ApproachEmperorVekNilashTrigger : public Aq40EmperorTrigger
+// {
+// public:
+//     Aq40ApproachEmperorVekNilashTrigger(PlayerbotAI* botAI) : Aq40EmperorTrigger(botAI, "aq40 approach emperor vek'nilash") {}
+// protected:
+//     bool IsVekLor() override { return false; }
+//     bool IsVekNilash() override { return true; }
+//     bool IsForHealers() override { return true; }
+//     bool IsPestControl() override { return false; }
+// };
 
-class Aq40TankAnchorTrigger : public Trigger
-{
-public:
-    Aq40TankAnchorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 tank anchor") {}
-    bool IsActive() override;
-};
+// class Aq40TankAnchorTrigger : public Trigger
+// {
+// public:
+//     Aq40TankAnchorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 tank anchor") {}
+//     bool IsActive() override;
+// };
 
-class Aq40CenterPositionTrigger : public Trigger
-{
-public:
-    Aq40CenterPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 center position") {}
-    bool IsActive() override;
-};
+// class Aq40CenterPositionTrigger : public Trigger
+// {
+// public:
+//     Aq40CenterPositionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 center position") {}
+//     bool IsActive() override;
+// };
 
-class Aq40EmperorPreTeleportTrigger : public Trigger
-{
-public:
-    Aq40EmperorPreTeleportTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 emperor pre teleport") {}
-    bool IsActive() override;
-private:
-    uint32 lastTeleportTime = 0;
-    bool fightStarted = false;
-};
+// class Aq40EmperorPreTeleportTrigger : public Trigger
+// {
+// public:
+//     Aq40EmperorPreTeleportTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 emperor pre teleport") {}
+//     bool IsActive() override;
+// private:
+//     uint32 lastTeleportTime = 0;
+//     bool fightStarted = false;
+// };
 
-class Aq40NearVeklorTrigger : public Trigger
-{
-public:
-    Aq40NearVeklorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 near veklor") {}
-    bool IsActive() override;
-};
+// class Aq40NearVeklorTrigger : public Trigger
+// {
+// public:
+//     Aq40NearVeklorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 near veklor") {}
+//     bool IsActive() override;
+// };
 
 class Aq40OuroBurrowedTrigger : public Trigger
 {

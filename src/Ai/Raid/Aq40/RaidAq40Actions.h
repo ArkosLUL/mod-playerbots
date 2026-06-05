@@ -23,8 +23,8 @@ public:
     bool Execute(Event event) override;
 };
 
-BEGIN_RANGED_SPELL_ACTION(Aq40WarlockCastSearingPainAction, "searing pain")
-END_SPELL_ACTION()
+// BEGIN_RANGED_SPELL_ACTION(Aq40WarlockCastSearingPainAction, "searing pain")
+// END_SPELL_ACTION()
 
 BEGIN_RANGED_SPELL_ACTION(Aq40MageCastFrostboltAction, "frostbolt")
 END_SPELL_ACTION()
@@ -36,89 +36,89 @@ public:
     bool Execute(Event event) override;
 };
 
-class Aq40AttackTargetByNameAction : public AttackAction
-{
-public:
-    Aq40AttackTargetByNameAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {}
-    bool Execute(Event event) override;
+// class Aq40AttackTargetByNameAction : public AttackAction
+// {
+// public:
+//     Aq40AttackTargetByNameAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {}
+//     bool Execute(Event event) override;
 
-    virtual std::string const WhichEmperor() { return ""; }
-};
+//     virtual std::string const WhichEmperor() { return ""; }
+// };
 
-class Aq40AttackEmperorVekLorAction : public Aq40AttackTargetByNameAction
-{
-public:
-    Aq40AttackEmperorVekLorAction(PlayerbotAI* botAI) : Aq40AttackTargetByNameAction(botAI, "aq40 attack emperor vek'lor") {}
+// class Aq40AttackEmperorVekLorAction : public Aq40AttackTargetByNameAction
+// {
+// public:
+//     Aq40AttackEmperorVekLorAction(PlayerbotAI* botAI) : Aq40AttackTargetByNameAction(botAI, "aq40 attack emperor vek'lor") {}
 
-    std::string const WhichEmperor() override { return "emperor vek'lor"; }
-};
+//     std::string const WhichEmperor() override { return "emperor vek'lor"; }
+// };
 
-class Aq40AttackEmperorVekNilashAction : public Aq40AttackTargetByNameAction
-{
-public:
-    Aq40AttackEmperorVekNilashAction(PlayerbotAI* botAI) : Aq40AttackTargetByNameAction(botAI, "aq40 attack emperor vek'nilash") {}
+// class Aq40AttackEmperorVekNilashAction : public Aq40AttackTargetByNameAction
+// {
+// public:
+//     Aq40AttackEmperorVekNilashAction(PlayerbotAI* botAI) : Aq40AttackTargetByNameAction(botAI, "aq40 attack emperor vek'nilash") {}
 
-    std::string const WhichEmperor() override { return "emperor vek'nilash"; }
-};
+//     std::string const WhichEmperor() override { return "emperor vek'nilash"; }
+// };
 
-class Aq40AttackEmperorPestsAction : public AttackAction
-{
-public:
-    Aq40AttackEmperorPestsAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 attack emperor pests") {}
-    bool Execute(Event event) override;
-};
+// class Aq40AttackEmperorPestsAction : public AttackAction
+// {
+// public:
+//     Aq40AttackEmperorPestsAction(PlayerbotAI* botAI) : AttackAction(botAI, "aq40 attack emperor pests") {}
+//     bool Execute(Event event) override;
+// };
 
-class Aq40MoveTowardsEmperorAction : public MovementAction
-{
-public:
-    Aq40MoveTowardsEmperorAction(PlayerbotAI* botAI, std::string const name)
-        : MovementAction(botAI, name) {}
-    bool Execute(Event event) override;
+// class Aq40MoveTowardsEmperorAction : public MovementAction
+// {
+// public:
+//     Aq40MoveTowardsEmperorAction(PlayerbotAI* botAI, std::string const name)
+//         : MovementAction(botAI, name) {}
+//     bool Execute(Event event) override;
 
-    virtual std::string const WhichEmperor() { return ""; }
-};
+//     virtual std::string const WhichEmperor() { return ""; }
+// };
 
-class Aq40MoveTowardsEmperorVekLorAction : public Aq40MoveTowardsEmperorAction
-{
-public:
-    Aq40MoveTowardsEmperorVekLorAction(PlayerbotAI* botAI)
-        : Aq40MoveTowardsEmperorAction(botAI, "aq40 move towards emperor vek'lor") {}
+// class Aq40MoveTowardsEmperorVekLorAction : public Aq40MoveTowardsEmperorAction
+// {
+// public:
+//     Aq40MoveTowardsEmperorVekLorAction(PlayerbotAI* botAI)
+//         : Aq40MoveTowardsEmperorAction(botAI, "aq40 move towards emperor vek'lor") {}
     
-    std::string const WhichEmperor() override { return "emperor vek'lor"; }
-};
+//     std::string const WhichEmperor() override { return "emperor vek'lor"; }
+// };
 
-class Aq40MoveTowardsEmperorVekNilashAction : public Aq40MoveTowardsEmperorAction
-{
-public:
-    Aq40MoveTowardsEmperorVekNilashAction(PlayerbotAI* botAI)
-        : Aq40MoveTowardsEmperorAction(botAI, "aq40 move towards emperor vek'nilash") {}
+// class Aq40MoveTowardsEmperorVekNilashAction : public Aq40MoveTowardsEmperorAction
+// {
+// public:
+//     Aq40MoveTowardsEmperorVekNilashAction(PlayerbotAI* botAI)
+//         : Aq40MoveTowardsEmperorAction(botAI, "aq40 move towards emperor vek'nilash") {}
     
-    std::string const WhichEmperor() override { return "emperor vek'nilash"; }
-};
+//     std::string const WhichEmperor() override { return "emperor vek'nilash"; }
+// };
 
-class Aq40TankAnchorPositionAction : public MovementAction
-{
-public:
-    Aq40TankAnchorPositionAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 tank anchor position") {}
-    bool Execute(Event event) override;
-};
+// class Aq40TankAnchorPositionAction : public MovementAction
+// {
+// public:
+//     Aq40TankAnchorPositionAction(PlayerbotAI* botAI)
+//         : MovementAction(botAI, "aq40 tank anchor position") {}
+//     bool Execute(Event event) override;
+// };
 
-class Aq40MoveToRoomCenterAction : public MovementAction
-{
-public:
-    Aq40MoveToRoomCenterAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 move to room center") {}
-    bool Execute(Event event) override;
-};
+// class Aq40MoveToRoomCenterAction : public MovementAction
+// {
+// public:
+//     Aq40MoveToRoomCenterAction(PlayerbotAI* botAI)
+//         : MovementAction(botAI, "aq40 move to room center") {}
+//     bool Execute(Event event) override;
+// };
 
-class Aq40MoveFromVeklorAction : public MovementAction
-{
-public:
-    Aq40MoveFromVeklorAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "aq40 move from veklor") {}
-    bool Execute(Event event) override;
-};
+// class Aq40MoveFromVeklorAction : public MovementAction
+// {
+// public:
+//     Aq40MoveFromVeklorAction(PlayerbotAI* botAI)
+//         : MovementAction(botAI, "aq40 move from veklor") {}
+//     bool Execute(Event event) override;
+// };
 
 class Aq40OuroBurrowedFleeAction : public Action
 {

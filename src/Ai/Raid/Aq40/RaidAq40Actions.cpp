@@ -57,44 +57,44 @@ bool Aq40UseResistanceBuffsAction::Execute(Event event)
 
 // 88072: The Master's Eye for positioning maybe
 
-bool Aq40MoveFromOtherEmperorAction::Execute(Event event)
-{
-    const float radius = 120.0f;  // emperors' heal range is 60
+// bool Aq40MoveFromOtherEmperorAction::Execute(Event event)
+// {
+//     const float radius = 120.0f;  // emperors' heal range is 60
 
-    if (Unit* boss1 = AI_VALUE2(Unit*, "find target", "emperor vek'lor"))
-    if (Unit* boss2 = AI_VALUE2(Unit*, "find target", "emperor vek'nilash"))
-    {
-        ObjectGuid botGuid = bot->GetGUID();
-        ObjectGuid petGuid = ObjectGuid::Empty;
-        if (Pet* pet = bot->GetPet())
-            petGuid = pet->GetGUID();
+//     if (Unit* boss1 = AI_VALUE2(Unit*, "find target", "emperor vek'lor"))
+//     if (Unit* boss2 = AI_VALUE2(Unit*, "find target", "emperor vek'nilash"))
+//     {
+//         ObjectGuid botGuid = bot->GetGUID();
+//         ObjectGuid petGuid = ObjectGuid::Empty;
+//         if (Pet* pet = bot->GetPet())
+//             petGuid = pet->GetGUID();
 
-        Unit* moveAwayFrom = NULL;
+//         Unit* moveAwayFrom = NULL;
 
-        if (boss1->GetTarget() == botGuid || boss1->GetTarget() == petGuid)
-        {
-            moveAwayFrom = boss2;
-            if (petGuid)
-                botAI->PetFollow();
-        }
-        else if (boss2->GetTarget() == botGuid || boss2->GetTarget() == petGuid)
-        {
-            moveAwayFrom = boss1;
-            if (petGuid)
-                botAI->PetFollow();
-        }
+//         if (boss1->GetTarget() == botGuid || boss1->GetTarget() == petGuid)
+//         {
+//             moveAwayFrom = boss2;
+//             if (petGuid)
+//                 botAI->PetFollow();
+//         }
+//         else if (boss2->GetTarget() == botGuid || boss2->GetTarget() == petGuid)
+//         {
+//             moveAwayFrom = boss1;
+//             if (petGuid)
+//                 botAI->PetFollow();
+//         }
 
-        if (moveAwayFrom != NULL)
-        {
-            long distToTravel = radius - bot->GetDistance(moveAwayFrom);
+//         if (moveAwayFrom != NULL)
+//         {
+//             long distToTravel = radius - bot->GetDistance(moveAwayFrom);
 
-            if (distToTravel > 0)
-                return MoveAway(moveAwayFrom, distToTravel);
-        }
-    }
+//             if (distToTravel > 0)
+//                 return MoveAway(moveAwayFrom, distToTravel);
+//         }
+//     }
 
-    return false;
-}
+//     return false;
+// }
 
 bool Aq40MeleeViscidusAction::Execute(Event event)
 {
@@ -120,142 +120,142 @@ bool Aq40MeleeViscidusAction::Execute(Event event)
     return false;
 }
 
-bool Aq40AttackTargetByNameAction::Execute(Event event)
-{
-    if (Unit* boss = AI_VALUE2(Unit*, "find target", WhichEmperor()))
-    {
-        if (bot->GetTarget() != boss->GetGUID())
-        {
-            ObjectGuid guid = boss->GetGUID();
+// bool Aq40AttackTargetByNameAction::Execute(Event event)
+// {
+//     if (Unit* boss = AI_VALUE2(Unit*, "find target", WhichEmperor()))
+//     {
+//         if (bot->GetTarget() != boss->GetGUID())
+//         {
+//             ObjectGuid guid = boss->GetGUID();
 
-            botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({guid});
-            bool result = Attack(boss);
-            if (result)
-                context->GetValue<ObjectGuid>("pull target")->Set(guid);
+//             botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({guid});
+//             bool result = Attack(boss);
+//             if (result)
+//                 context->GetValue<ObjectGuid>("pull target")->Set(guid);
 
-            return result;
-        }
-    }
-    return false;
-}
+//             return result;
+//         }
+//     }
+//     return false;
+// }
 
-bool Aq40AttackEmperorPestsAction::Execute(Event event)
-{
-    Unit* current = AI_VALUE(Unit*, "current target");
+// bool Aq40AttackEmperorPestsAction::Execute(Event event)
+// {
+//     Unit* current = AI_VALUE(Unit*, "current target");
 
-    if (current && (current->GetName() == "qiraji scarab" || current->GetName() == "qiraji scorpion"))
-        return false;
-
-
-    Unit* pest1 = AI_VALUE2(Unit*, "find target", "qiraji scarab");
-    Unit* pest2 = AI_VALUE2(Unit*, "find target", "qiraji scorpion");
-    Unit* pest;
-
-    if (pest1 && pest2)
-    {
-        if (pest1->GetDistance(bot) < pest2->GetDistance(bot))
-            pest = pest1;
-
-        else
-            pest = pest2;
-    }
-    else if (pest1)
-        pest = pest1;
-
-    else if (pest2)
-        pest = pest2;
-
-    else
-        return false;
+//     if (current && (current->GetName() == "qiraji scarab" || current->GetName() == "qiraji scorpion"))
+//         return false;
 
 
-    ObjectGuid guid = pest->GetGUID();
-    botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({guid});
-    bool result = Attack(pest);
-    if (result)
-        context->GetValue<ObjectGuid>("pull target")->Set(guid);
+//     Unit* pest1 = AI_VALUE2(Unit*, "find target", "qiraji scarab");
+//     Unit* pest2 = AI_VALUE2(Unit*, "find target", "qiraji scorpion");
+//     Unit* pest;
 
-    return result;
-}
+//     if (pest1 && pest2)
+//     {
+//         if (pest1->GetDistance(bot) < pest2->GetDistance(bot))
+//             pest = pest1;
 
-bool Aq40MoveTowardsEmperorAction::Execute(Event event)
-{
-    const float radius = 20.0f; // assume general healing range of 40, try to keep healers near the tanks/victims
+//         else
+//             pest = pest2;
+//     }
+//     else if (pest1)
+//         pest = pest1;
 
-    if (Unit* boss = AI_VALUE2(Unit*, "find target", WhichEmperor()))
-    {
-        if (ObjectGuid bossTarget = boss->GetTarget())
-        {
-            Unit* target = botAI->GetUnit(bossTarget);
+//     else if (pest2)
+//         pest = pest2;
 
-            if (target)
-            {
-                float travelTarget = radius - bot->GetDistance(target);
-                float travelBoss = radius - bot->GetDistance(boss);
+//     else
+//         return false;
 
-                if (travelTarget > travelBoss)
-                    return MoveTo(target, travelTarget);
-                else
-                    return MoveTo(boss, travelBoss);
-            }
-            else
-            {
-                float travelBoss = radius - bot->GetDistance(boss);
-                if (travelBoss > 0)
-                    return MoveTo(boss, travelBoss);
-            }
-        }
-    }
 
-    return false;
-}
+//     ObjectGuid guid = pest->GetGUID();
+//     botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({guid});
+//     bool result = Attack(pest);
+//     if (result)
+//         context->GetValue<ObjectGuid>("pull target")->Set(guid);
 
-bool Aq40TankAnchorPositionAction::Execute(Event event)
-{
-    // Torch positions at opposite ends of the room
-    const float leftX = -8894.3f, leftY = 1285.5f, leftZ = -112.25f;
-    const float rightX = -9029.1f, rightY = 1261.8f, rightZ = -112.25f;
-    const float roomCenterX = -8961.7f;
+//     return result;
+// }
 
-    // Determine which anchor this tank is assigned to based on current position
-    bool botOnLeft = bot->GetPositionX() > roomCenterX;
-    float anchorX = botOnLeft ? leftX : rightX;
-    float anchorY = botOnLeft ? leftY : rightY;
-    float anchorZ = botOnLeft ? leftZ : rightZ;
+// bool Aq40MoveTowardsEmperorAction::Execute(Event event)
+// {
+//     const float radius = 20.0f; // assume general healing range of 40, try to keep healers near the tanks/victims
 
-    // Move to anchor if more than 10yd away
-    if (bot->GetDistance(anchorX, anchorY, anchorZ) > 10.0f)
-    {
-        return MoveTo(bot->GetMapId(), anchorX, anchorY, anchorZ,
-            false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
-    }
-    return false;
-}
+//     if (Unit* boss = AI_VALUE2(Unit*, "find target", WhichEmperor()))
+//     {
+//         if (ObjectGuid bossTarget = boss->GetTarget())
+//         {
+//             Unit* target = botAI->GetUnit(bossTarget);
 
-bool Aq40MoveToRoomCenterAction::Execute(Event event)
-{
-    // Midpoint between torch_left (-8894.3, 1285.5) and torch_right (-9029.1, 1261.8)
-    const float centerX = -8961.7f;
-    const float centerY = 1273.65f;
-    const float centerZ = -112.25f;
+//             if (target)
+//             {
+//                 float travelTarget = radius - bot->GetDistance(target);
+//                 float travelBoss = radius - bot->GetDistance(boss);
 
-    if (bot->GetDistance(centerX, centerY, centerZ) > 10.0f)
-    {
-        return MoveTo(bot->GetMapId(), centerX, centerY, centerZ,
-            false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
-    }
-    return false;
-}
+//                 if (travelTarget > travelBoss)
+//                     return MoveTo(target, travelTarget);
+//                 else
+//                     return MoveTo(boss, travelBoss);
+//             }
+//             else
+//             {
+//                 float travelBoss = radius - bot->GetDistance(boss);
+//                 if (travelBoss > 0)
+//                     return MoveTo(boss, travelBoss);
+//             }
+//         }
+//     }
 
-bool Aq40MoveFromVeklorAction::Execute(Event event)
-{
-    if (Unit* veklor = AI_VALUE2(Unit*, "find target", "emperor vek'lor"))
-    {
-        if (bot->GetDistance(veklor) < 15.0f)
-            return MoveAway(veklor, 15.0f);
-    }
-    return false;
-}
+//     return false;
+// }
+
+// bool Aq40TankAnchorPositionAction::Execute(Event event)
+// {
+//     // Torch positions at opposite ends of the room
+//     const float leftX = -8894.3f, leftY = 1285.5f, leftZ = -112.25f;
+//     const float rightX = -9029.1f, rightY = 1261.8f, rightZ = -112.25f;
+//     const float roomCenterX = -8961.7f;
+
+//     // Determine which anchor this tank is assigned to based on current position
+//     bool botOnLeft = bot->GetPositionX() > roomCenterX;
+//     float anchorX = botOnLeft ? leftX : rightX;
+//     float anchorY = botOnLeft ? leftY : rightY;
+//     float anchorZ = botOnLeft ? leftZ : rightZ;
+
+//     // Move to anchor if more than 10yd away
+//     if (bot->GetDistance(anchorX, anchorY, anchorZ) > 10.0f)
+//     {
+//         return MoveTo(bot->GetMapId(), anchorX, anchorY, anchorZ,
+//             false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
+//     }
+//     return false;
+// }
+
+// bool Aq40MoveToRoomCenterAction::Execute(Event event)
+// {
+//     // Midpoint between torch_left (-8894.3, 1285.5) and torch_right (-9029.1, 1261.8)
+//     const float centerX = -8961.7f;
+//     const float centerY = 1273.65f;
+//     const float centerZ = -112.25f;
+
+//     if (bot->GetDistance(centerX, centerY, centerZ) > 10.0f)
+//     {
+//         return MoveTo(bot->GetMapId(), centerX, centerY, centerZ,
+//             false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
+//     }
+//     return false;
+// }
+
+// bool Aq40MoveFromVeklorAction::Execute(Event event)
+// {
+//     if (Unit* veklor = AI_VALUE2(Unit*, "find target", "emperor vek'lor"))
+//     {
+//         if (bot->GetDistance(veklor) < 15.0f)
+//             return MoveAway(veklor, 15.0f);
+//     }
+//     return false;
+// }
 
 bool Aq40OuroBurrowedFleeAction::Execute(Event event)
 {
