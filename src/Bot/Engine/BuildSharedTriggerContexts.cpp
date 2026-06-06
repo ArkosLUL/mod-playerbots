@@ -29,6 +29,7 @@ void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Tr
     triggerContexts.Add(new ChatTriggerContext());
     triggerContexts.Add(new WorldPacketTriggerContext());
     triggerContexts.Add(new RaidAq20TriggerContext());
+    triggerContexts.Add(new RaidAq40TriggerContext());
     triggerContexts.Add(new RaidMcTriggerContext());
     triggerContexts.Add(new RaidBwlTriggerContext());
     triggerContexts.Add(new RaidKarazhanTriggerContext());
