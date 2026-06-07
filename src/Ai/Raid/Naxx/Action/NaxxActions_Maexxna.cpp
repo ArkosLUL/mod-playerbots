@@ -1,8 +1,8 @@
 #include "NaxxActions.h"
 #include <limits>
 #include "Playerbots.h"
-#include "RaidNaxxActions.h"
-#include "RaidNaxxSpellIds.h"
+#include "NaxxActions.h"
+#include "NaxxSpellIds.h"
 
 bool MaexxnaAttackWebWrapAction::isUseful()
 {

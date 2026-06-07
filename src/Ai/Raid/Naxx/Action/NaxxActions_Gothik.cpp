@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include "Playerbots.h"
-#include "RaidNaxxSpellIds.h"
+#include "NaxxSpellIds.h"
 
 namespace
 {

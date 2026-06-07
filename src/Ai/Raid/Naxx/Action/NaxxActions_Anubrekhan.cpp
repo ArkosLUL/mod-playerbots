@@ -4,7 +4,7 @@
 
 #include "ObjectGuid.h"
 #include "Playerbots.h"
-#include "RaidNaxxSpellIds.h"
+#include "NaxxSpellIds.h"
 
 bool AnubrekhanChooseTargetAction::Execute(Event event)
 {

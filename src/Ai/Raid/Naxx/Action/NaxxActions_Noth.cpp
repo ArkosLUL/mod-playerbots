@@ -2,8 +2,8 @@
 
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidNaxxBossHelper.h"
-#include "RaidNaxxSpellIds.h"
+#include "NaxxBossHelper.h"
+#include "NaxxSpellIds.h"
 
 bool NothChooseTargetAction::Execute(Event event)
 {

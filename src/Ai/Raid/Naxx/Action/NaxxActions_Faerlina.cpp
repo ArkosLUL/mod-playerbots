@@ -1,6 +1,6 @@
 #include "NaxxActions.h"
 
-#include "RaidNaxxSpellIds.h"
+#include "NaxxSpellIds.h"
 
 #include <limits>
 
