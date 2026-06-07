@@ -297,23 +297,23 @@ private:
     LoathebBossHelper helper;
 };
 
-class NothTrigger : public Trigger
-{
-public:
-    NothTrigger(PlayerbotAI* ai) : Trigger(ai, "noth"), helper(ai) {}
-    bool IsActive() override;
+// class NothTrigger : public Trigger
+// {
+// public:
+//     NothTrigger(PlayerbotAI* ai) : Trigger(ai, "noth"), helper(ai) {}
+//     bool IsActive() override;
 
-private:
-    NothBossHelper helper;
-};
+// private:
+//     NothBossHelper helper;
+// };
 
-class NothCurseTrigger : public Trigger
-{
-public:
-    NothCurseTrigger(PlayerbotAI* ai) : Trigger(ai, "noth curse"), helper(ai) {}
-    bool IsActive() override;
+// class NothCurseTrigger : public Trigger
+// {
+// public:
+//     NothCurseTrigger(PlayerbotAI* ai) : Trigger(ai, "noth curse"), helper(ai) {}
+//     bool IsActive() override;
 
-private:
-    NothBossHelper helper;
-};
+// private:
+//     NothBossHelper helper;
+// };
 #endif

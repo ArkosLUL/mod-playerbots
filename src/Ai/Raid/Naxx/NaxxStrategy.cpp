@@ -171,19 +171,19 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // Noth the Plaguebringer
-    triggers.push_back(
-        new TriggerNode("noth",
-        {
-            NextAction("noth position", ACTION_RAID + 1),
-            NextAction("noth choose target", ACTION_RAID + 1)
-        })
-    );
-    triggers.push_back(
-        new TriggerNode("noth curse",
-        {
-            NextAction("cure party member", ACTION_RAID + 2)
-        })
-    );
+    // triggers.push_back(
+    //     new TriggerNode("noth",
+    //     {
+    //         NextAction("noth position", ACTION_RAID + 1),
+    //         NextAction("noth choose target", ACTION_RAID + 1)
+    //     })
+    // );
+    // triggers.push_back(
+    //     new TriggerNode("noth curse",
+    //     {
+    //         NextAction("cure party member", ACTION_RAID + 2)
+    //     })
+    // );
 }
 
 void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
@@ -198,5 +198,5 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new AnubrekhanGenericMultiplier(botAI));
     multipliers.push_back(new FourhorsemanGenericMultiplier(botAI));
     multipliers.push_back(new GluthGenericMultiplier(botAI));
-    multipliers.push_back(new NothGenericMultiplier(botAI));
+    // multipliers.push_back(new NothGenericMultiplier(botAI));
 }

@@ -420,40 +420,40 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
-float NothGenericMultiplier::GetValue(Action* action)
-{
-    if (!helper.UpdateBossAI())
-    {
-        return 1.0f;
-    }
-    if (helper.HasCurseInGroup() && (bot->getClass() == CLASS_DRUID || bot->getClass() == CLASS_SHAMAN ||
-                                    bot->getClass() == CLASS_MAGE))
-    {
-        if (dynamic_cast<CurePartyMemberAction*>(action))
-        {
-            return 2.0f;
-        }
-        if (dynamic_cast<CastHealingSpellAction*>(action))
-        {
-            return 1.0f;
-        }
-        return 0.0f;
-    }
-    if (!helper.IsBlinkWindow() || botAI->IsTank(bot))
-    {
-        return 1.0f;
-    }
-    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-        dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
-    {
-        return 0.0f;
-    }
-    if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
-    {
-        return 0.0f;
-    }
-    return 1.0f;
-}
+// float NothGenericMultiplier::GetValue(Action* action)
+// {
+//     if (!helper.UpdateBossAI())
+//     {
+//         return 1.0f;
+//     }
+//     if (helper.HasCurseInGroup() && (bot->getClass() == CLASS_DRUID || bot->getClass() == CLASS_SHAMAN ||
+//                                     bot->getClass() == CLASS_MAGE))
+//     {
+//         if (dynamic_cast<CurePartyMemberAction*>(action))
+//         {
+//             return 2.0f;
+//         }
+//         if (dynamic_cast<CastHealingSpellAction*>(action))
+//         {
+//             return 1.0f;
+//         }
+//         return 0.0f;
+//     }
+//     if (!helper.IsBlinkWindow() || botAI->IsTank(bot))
+//     {
+//         return 1.0f;
+//     }
+//     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
+//         dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+//     {
+//         return 0.0f;
+//     }
+//     if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
+//     {
+//         return 0.0f;
+//     }
+//     return 1.0f;
+// }
 
 float AnubrekhanGenericMultiplier::GetValue(Action* action)
 {

@@ -59,8 +59,8 @@ public:
         creators["gluth main tank mortal wound"] = &RaidNaxxTriggerContext::gluth_main_tank_mortal_wound;
 
         creators["loatheb"] = &RaidNaxxTriggerContext::loatheb;
-        creators["noth"] = &RaidNaxxTriggerContext::noth;
-        creators["noth curse"] = &RaidNaxxTriggerContext::noth_curse;
+        // creators["noth"] = &RaidNaxxTriggerContext::noth;
+        // creators["noth curse"] = &RaidNaxxTriggerContext::noth_curse;
     }
 
 private:
@@ -99,8 +99,8 @@ private:
     static Trigger* gluth(PlayerbotAI* ai) { return new GluthTrigger(ai); }
     static Trigger* gluth_main_tank_mortal_wound(PlayerbotAI* ai) { return new GluthMainTankMortalWoundTrigger(ai); }
     static Trigger* loatheb(PlayerbotAI* ai) { return new LoathebTrigger(ai); }
-    static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
-    static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }
+    // static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
+    // static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }
 };
 
 #endif

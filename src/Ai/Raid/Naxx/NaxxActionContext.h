@@ -60,8 +60,8 @@ public:
         creators["loatheb position"] = &RaidNaxxActionContext::loatheb_position;
         creators["loatheb choose target"] = &RaidNaxxActionContext::loatheb_choose_target;
 
-        creators["noth position"] = &RaidNaxxActionContext::noth_position;
-        creators["noth choose target"] = &RaidNaxxActionContext::noth_choose_target;
+    //     creators["noth position"] = &RaidNaxxActionContext::noth_position;
+    //     creators["noth choose target"] = &RaidNaxxActionContext::noth_choose_target;
     }
 
 private:
@@ -102,8 +102,8 @@ private:
     static Action* patchwerk_ranged_position(PlayerbotAI* ai) { return new PatchwerkRangedPositionAction(ai); }
     static Action* loatheb_position(PlayerbotAI* ai) { return new LoathebPositionAction(ai); }
     static Action* loatheb_choose_target(PlayerbotAI* ai) { return new LoathebChooseTargetAction(ai); }
-    static Action* noth_position(PlayerbotAI* ai) { return new NothPositionAction(ai); }
-    static Action* noth_choose_target(PlayerbotAI* ai) { return new NothChooseTargetAction(ai); }
+    // static Action* noth_position(PlayerbotAI* ai) { return new NothPositionAction(ai); }
+    // static Action* noth_choose_target(PlayerbotAI* ai) { return new NothChooseTargetAction(ai); }
 };
 
 #endif

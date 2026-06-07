@@ -114,14 +114,14 @@ private:
     GluthBossHelper helper;
 };
 
-class NothGenericMultiplier : public Multiplier
-{
-public:
-    NothGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "noth generic"), helper(ai) {}
-    float GetValue(Action* action) override;
+// class NothGenericMultiplier : public Multiplier
+// {
+// public:
+//     NothGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "noth generic"), helper(ai) {}
+//     float GetValue(Action* action) override;
 
-private:
-    NothBossHelper helper;
-};
+// private:
+//     NothBossHelper helper;
+// };
 
 #endif

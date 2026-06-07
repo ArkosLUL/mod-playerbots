@@ -945,101 +945,101 @@ private:
     Unit* _unit = nullptr;
 };
 
-class NothBossHelper : public AiObject
-{
-public:
-    const std::pair<float, float> center = {2684.94f, -3502.53f};
-    NothBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
-    bool UpdateBossAI()
-    {
-        if (!bot->IsInCombat())
-        {
-            Reset();
-        }
-        if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
-        {
-            Reset();
-        }
-        if (!_unit)
-        {
-            _unit = AI_VALUE2(Unit*, "find target", "noth the plaguebringer");
-        }
-        if (!_unit)
-        {
-            return false;
-        }
-        if (_unit->HasUnitState(UNIT_STATE_CASTING))
-        {
-            Spell* spell = _unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-            if (!spell)
-            {
-                spell = _unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-            }
-            if (spell)
-            {
-                SpellInfo const* info = spell->GetSpellInfo();
-                bool isBlink = NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Blink});
-                if (!isBlink && info && info->SpellName[LOCALE_enUS])
-                {
-                    isBlink = botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "blink");
-                }
-                if (isBlink)
-                {
-                    _last_blink_ms = getMSTime();
-                }
-            }
-        }
-        return true;
-    }
-    bool IsBalconyPhase() const { return _unit && _unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); }
-    bool IsBlinkWindow() const { return _last_blink_ms != 0 && getMSTime() - _last_blink_ms < 3000; }
-    bool HasCurseInGroup() const
-    {
-        GuidVector members = AI_VALUE(GuidVector, "group members");
-        for (ObjectGuid const& guid : members)
-        {
-            Unit* member = botAI->GetUnit(guid);
-            if (!member)
-            {
-                continue;
-            }
-            if (NaxxSpellIds::HasAnyAura(botAI, member, {NaxxSpellIds::CurseOfThePlaguebringer}) ||
-                botAI->HasAura("curse of the plaguebringer", member))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-    Player* GetAliveAssistTank() const
-    {
-        GuidVector members = AI_VALUE(GuidVector, "group members");
-        for (ObjectGuid const& guid : members)
-        {
-            Unit* member = botAI->GetUnit(guid);
-            if (!member || !member->IsAlive())
-            {
-                continue;
-            }
-            Player* player = member->ToPlayer();
-            if (player && botAI->IsAssistTank(player))
-            {
-                return player;
-            }
-        }
-        return nullptr;
-    }
+// class NothBossHelper : public AiObject
+// {
+// public:
+//     const std::pair<float, float> center = {2684.94f, -3502.53f};
+//     NothBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
+//     bool UpdateBossAI()
+//     {
+//         if (!bot->IsInCombat())
+//         {
+//             Reset();
+//         }
+//         if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
+//         {
+//             Reset();
+//         }
+//         if (!_unit)
+//         {
+//             _unit = AI_VALUE2(Unit*, "find target", "noth the plaguebringer");
+//         }
+//         if (!_unit)
+//         {
+//             return false;
+//         }
+//         if (_unit->HasUnitState(UNIT_STATE_CASTING))
+//         {
+//             Spell* spell = _unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+//             if (!spell)
+//             {
+//                 spell = _unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+//             }
+//             if (spell)
+//             {
+//                 SpellInfo const* info = spell->GetSpellInfo();
+//                 bool isBlink = NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Blink});
+//                 if (!isBlink && info && info->SpellName[LOCALE_enUS])
+//                 {
+//                     isBlink = botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "blink");
+//                 }
+//                 if (isBlink)
+//                 {
+//                     _last_blink_ms = getMSTime();
+//                 }
+//             }
+//         }
+//         return true;
+//     }
+//     bool IsBalconyPhase() const { return _unit && _unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); }
+//     bool IsBlinkWindow() const { return _last_blink_ms != 0 && getMSTime() - _last_blink_ms < 3000; }
+//     bool HasCurseInGroup() const
+//     {
+//         GuidVector members = AI_VALUE(GuidVector, "group members");
+//         for (ObjectGuid const& guid : members)
+//         {
+//             Unit* member = botAI->GetUnit(guid);
+//             if (!member)
+//             {
+//                 continue;
+//             }
+//             if (NaxxSpellIds::HasAnyAura(botAI, member, {NaxxSpellIds::CurseOfThePlaguebringer}) ||
+//                 botAI->HasAura("curse of the plaguebringer", member))
+//             {
+//                 return true;
+//             }
+//         }
+//         return false;
+//     }
+//     Player* GetAliveAssistTank() const
+//     {
+//         GuidVector members = AI_VALUE(GuidVector, "group members");
+//         for (ObjectGuid const& guid : members)
+//         {
+//             Unit* member = botAI->GetUnit(guid);
+//             if (!member || !member->IsAlive())
+//             {
+//                 continue;
+//             }
+//             Player* player = member->ToPlayer();
+//             if (player && botAI->IsAssistTank(player))
+//             {
+//                 return player;
+//             }
+//         }
+//         return nullptr;
+//     }
 
-private:
-    void Reset()
-    {
-        _unit = nullptr;
-        _last_blink_ms = 0;
-    }
+// private:
+//     void Reset()
+//     {
+//         _unit = nullptr;
+//         _last_blink_ms = 0;
+//     }
 
-    Unit* _unit = nullptr;
-    uint32 _last_blink_ms = 0;
-};
+//     Unit* _unit = nullptr;
+//     uint32 _last_blink_ms = 0;
+// };
 
 class FourhorsemanBossHelper : public AiObject
 {

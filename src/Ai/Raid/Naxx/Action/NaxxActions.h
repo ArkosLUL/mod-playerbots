@@ -354,25 +354,25 @@ private:
     LoathebBossHelper helper;
 };
 
-class NothChooseTargetAction : public AttackAction
-{
-public:
-    NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "noth choose target"), helper(ai) {}
-    bool Execute(Event event) override;
+// class NothChooseTargetAction : public AttackAction
+// {
+// public:
+//     NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "noth choose target"), helper(ai) {}
+//     bool Execute(Event event) override;
 
-private:
-    NothBossHelper helper;
-};
+// private:
+//     NothBossHelper helper;
+// };
 
-class NothPositionAction : public MovementAction
-{
-public:
-    NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, "noth position"), helper(ai) {}
-    bool Execute(Event event) override;
+// class NothPositionAction : public MovementAction
+// {
+// public:
+//     NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, "noth position"), helper(ai) {}
+//     bool Execute(Event event) override;
 
-private:
-    NothBossHelper helper;
-};
+// private:
+//     NothBossHelper helper;
+// };
 
 class PatchwerkRangedPositionAction : public MovementAction
 {
