@@ -19,9 +19,9 @@ public:
         creators["mutating injection removed"] = &RaidNaxxTriggerContext::mutating_injection_removed;
         creators["grobbulus cloud"] = &RaidNaxxTriggerContext::grobbulus_cloud;
 
-        creators["heigan melee"] = &RaidNaxxTriggerContext::heigan_melee;
-        creators["heigan ranged"] = &RaidNaxxTriggerContext::heigan_ranged;
-        creators["heigan decrepit fever"] = &RaidNaxxTriggerContext::heigan_decrepit_fever;
+        // creators["heigan melee"] = &RaidNaxxTriggerContext::heigan_melee;
+        // creators["heigan ranged"] = &RaidNaxxTriggerContext::heigan_ranged;
+        // creators["heigan decrepit fever"] = &RaidNaxxTriggerContext::heigan_decrepit_fever;
 
         creators["thaddius phase pet"] = &RaidNaxxTriggerContext::thaddius_phase_pet;
         creators["thaddius phase pet lose aggro"] = &RaidNaxxTriggerContext::thaddius_phase_pet_lose_aggro;
@@ -68,9 +68,9 @@ private:
     static Trigger* mutating_injection_ranged(PlayerbotAI* ai) { return new MutatingInjectionRangedTrigger(ai); }
     static Trigger* mutating_injection_removed(PlayerbotAI* ai) { return new MutatingInjectionRemovedTrigger(ai); }
     static Trigger* grobbulus_cloud(PlayerbotAI* ai) { return new GrobbulusCloudTrigger(ai); }
-    static Trigger* heigan_melee(PlayerbotAI* ai) { return new HeiganMeleeTrigger(ai); }
-    static Trigger* heigan_ranged(PlayerbotAI* ai) { return new HeiganRangedTrigger(ai); }
-    static Trigger* heigan_decrepit_fever(PlayerbotAI* ai) { return new HeiganDecrepitFeverTrigger(ai); }
+    // static Trigger* heigan_melee(PlayerbotAI* ai) { return new HeiganMeleeTrigger(ai); }
+    // static Trigger* heigan_ranged(PlayerbotAI* ai) { return new HeiganRangedTrigger(ai); }
+    // static Trigger* heigan_decrepit_fever(PlayerbotAI* ai) { return new HeiganDecrepitFeverTrigger(ai); }
 
     static Trigger* thaddius_phase_pet(PlayerbotAI* ai) { return new ThaddiusPhasePetTrigger(ai); }
     static Trigger* thaddius_phase_pet_lose_aggro(PlayerbotAI* ai) { return new ThaddiusPhasePetLoseAggroTrigger(ai); }

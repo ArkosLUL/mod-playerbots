@@ -28,8 +28,8 @@ namespace NaxxSpellIds
     static constexpr uint32 GothikDeadRiderEntry     = 16150;
 
     // Heigan
-    static constexpr uint32 Eruption10 = 29371;
-    static constexpr uint32 DecrepitFever = 29998;
+    // static constexpr uint32 Eruption10 = 29371;
+    // static constexpr uint32 DecrepitFever = 29998;
 /*
     SPELL_SPELL_DISRUPTION          = 29310,
     SPELL_PLAGUE_CLOUD              = 29350,
