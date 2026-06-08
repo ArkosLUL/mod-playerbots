@@ -91,17 +91,17 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     ));
 
     // Patchwerk
-    triggers.push_back(new TriggerNode("patchwerk tank",
-        { NextAction("tank face", ACTION_RAID + 2) }
-    ));
+    // triggers.push_back(new TriggerNode("patchwerk tank",
+    //     { NextAction("tank face", ACTION_RAID + 2) }
+    // ));
 
-    triggers.push_back(new TriggerNode("patchwerk ranged",
-        { NextAction("patchwerk ranged position", ACTION_RAID + 2) }
-    ));
+    // triggers.push_back(new TriggerNode("patchwerk ranged",
+    //     { NextAction("patchwerk ranged position", ACTION_RAID + 2) }
+    // ));
 
-    triggers.push_back(new TriggerNode("patchwerk non-tank",
-        { NextAction("rear flank", ACTION_RAID + 1) }
-    ));
+    // triggers.push_back(new TriggerNode("patchwerk non-tank",
+    //     { NextAction("rear flank", ACTION_RAID + 1) }
+    // ));
 
     // Thaddius
     triggers.push_back(new TriggerNode("thaddius phase pet",

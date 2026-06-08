@@ -374,12 +374,12 @@ private:
 //     NothBossHelper helper;
 // };
 
-class PatchwerkRangedPositionAction : public MovementAction
-{
-public:
-    PatchwerkRangedPositionAction(PlayerbotAI* ai) : MovementAction(ai, "patchwerk ranged position") {}
-    bool Execute(Event event) override;
-};
+// class PatchwerkRangedPositionAction : public MovementAction
+// {
+// public:
+//     PatchwerkRangedPositionAction(PlayerbotAI* ai) : MovementAction(ai, "patchwerk ranged position") {}
+//     bool Execute(Event event) override;
+// };
 
 // Maexxna
 class MaexxnaAttackWebWrapAction : public AttackAction

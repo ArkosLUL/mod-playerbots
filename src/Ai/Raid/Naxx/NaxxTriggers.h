@@ -163,26 +163,26 @@ public:
     bool IsActive() override;
 };
 
-class PatchwerkTankTrigger : public Trigger
-{
-public:
-    PatchwerkTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk tank") {}
-    bool IsActive() override;
-};
+// class PatchwerkTankTrigger : public Trigger
+// {
+// public:
+//     PatchwerkTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk tank") {}
+//     bool IsActive() override;
+// };
 
-class PatchwerkNonTankTrigger : public Trigger
-{
-public:
-    PatchwerkNonTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk non-tank") {}
-    bool IsActive() override;
-};
+// class PatchwerkNonTankTrigger : public Trigger
+// {
+// public:
+//     PatchwerkNonTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk non-tank") {}
+//     bool IsActive() override;
+// };
 
-class PatchwerkRangedTrigger : public Trigger
-{
-public:
-    PatchwerkRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk ranged") {}
-    bool IsActive() override;
-};
+// class PatchwerkRangedTrigger : public Trigger
+// {
+// public:
+//     PatchwerkRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk ranged") {}
+//     bool IsActive() override;
+// };
 
 class ThaddiusPhasePetTrigger : public Trigger
 {

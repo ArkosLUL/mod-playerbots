@@ -378,35 +378,35 @@ bool GothikChooseTargetTrigger::IsActive()
     return boss->IsInCombat() || bot->IsInCombat();
 }
 
-bool PatchwerkTankTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "patchwerk");
-    if (!boss)
-    {
-        return false;
-    }
-    return !botAI->IsTank(bot) && !botAI->IsRanged(bot);
-}
+// bool PatchwerkTankTrigger::IsActive()
+// {
+//     Unit* boss = AI_VALUE2(Unit*, "find target", "patchwerk");
+//     if (!boss)
+//     {
+//         return false;
+//     }
+//     return !botAI->IsTank(bot) && !botAI->IsRanged(bot);
+// }
 
-bool PatchwerkRangedTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "patchwerk");
-    if (!boss)
-    {
-        return false;
-    }
-    return !botAI->IsTank(bot) && botAI->IsRanged(bot);
-}
+// bool PatchwerkRangedTrigger::IsActive()
+// {
+//     Unit* boss = AI_VALUE2(Unit*, "find target", "patchwerk");
+//     if (!boss)
+//     {
+//         return false;
+//     }
+//     return !botAI->IsTank(bot) && botAI->IsRanged(bot);
+// }
 
-bool PatchwerkNonTankTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "patchwerk");
-    if (!boss)
-    {
-        return false;
-    }
-    return !botAI->IsTank(bot);
-}
+// bool PatchwerkNonTankTrigger::IsActive()
+// {
+//     Unit* boss = AI_VALUE2(Unit*, "find target", "patchwerk");
+//     if (!boss)
+//     {
+//         return false;
+//     }
+//     return !botAI->IsTank(bot);
+// }
 
 bool LoathebTrigger::IsActive() { return helper.UpdateBossAI(); }
 
