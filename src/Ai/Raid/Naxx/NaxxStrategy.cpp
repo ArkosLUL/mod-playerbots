@@ -82,13 +82,13 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // Gothik the Harvester
-    triggers.push_back(new TriggerNode("gothik move to assigned side",
-        { NextAction("gothik move to assigned side", ACTION_RAID + 4) }
-    ));
+    // triggers.push_back(new TriggerNode("gothik move to assigned side",
+    //     { NextAction("gothik move to assigned side", ACTION_RAID + 4) }
+    // ));
 
-    triggers.push_back(new TriggerNode("gothik choose target",
-        { NextAction("gothik choose target", ACTION_RAID + 1) }
-    ));
+    // triggers.push_back(new TriggerNode("gothik choose target",
+    //     { NextAction("gothik choose target", ACTION_RAID + 1) }
+    // ));
 
     // Patchwerk
     // triggers.push_back(new TriggerNode("patchwerk tank",

@@ -48,8 +48,8 @@ public:
         creators["maexxna attack web wrap"] = &RaidNaxxActionContext::maexxna_attack_web_wrap;
         creators["maexxna tank spiderlings"] = &RaidNaxxActionContext::maexxna_tank_spiderlings;
 
-        creators["gothik move to assigned side"] = &RaidNaxxActionContext::gothik_move_to_assigned_side;
-        creators["gothik choose target"] = &RaidNaxxActionContext::gothik_choose_target;
+        // creators["gothik move to assigned side"] = &RaidNaxxActionContext::gothik_move_to_assigned_side;
+        // creators["gothik choose target"] = &RaidNaxxActionContext::gothik_choose_target;
 
         creators["gluth choose target"] = &RaidNaxxActionContext::gluth_choose_target;
         creators["gluth position"] = &RaidNaxxActionContext::gluth_position;
@@ -94,8 +94,8 @@ private:
     static Action* faerlina_sacrifice_worshipper(PlayerbotAI* ai) { return new FaerlinaSacrificeWorshipperAction(ai); }
     static Action* maexxna_attack_web_wrap(PlayerbotAI* ai) { return new MaexxnaAttackWebWrapAction(ai); }
     static Action* maexxna_tank_spiderlings(PlayerbotAI* ai) { return new MaexxnaTankSpiderlingsAction(ai); }
-    static Action* gothik_move_to_assigned_side(PlayerbotAI* ai) { return new GothikMoveToAssignedSideAction(ai); }
-    static Action* gothik_choose_target(PlayerbotAI* ai) { return new GothikChooseTargetAction(ai); }
+    // static Action* gothik_move_to_assigned_side(PlayerbotAI* ai) { return new GothikMoveToAssignedSideAction(ai); }
+    // static Action* gothik_choose_target(PlayerbotAI* ai) { return new GothikChooseTargetAction(ai); }
     static Action* gluth_choose_target(PlayerbotAI* ai) { return new GluthChooseTargetAction(ai); }
     static Action* gluth_position(PlayerbotAI* ai) { return new GluthPositionAction(ai); }
     static Action* gluth_slowdown(PlayerbotAI* ai) { return new GluthSlowdownAction(ai); }

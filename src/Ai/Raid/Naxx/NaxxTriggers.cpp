@@ -360,23 +360,23 @@ bool MaexxnaSpiderlingsTrigger::IsActive()
     return false;
 }
 
-bool GothikMoveToAssignedSideTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "gothik the harvester");
-    if (!boss)
-        return false;
+// bool GothikMoveToAssignedSideTrigger::IsActive()
+// {
+//     Unit* boss = AI_VALUE2(Unit*, "find target", "gothik the harvester");
+//     if (!boss)
+//         return false;
 
-    return bot->GetDistance(boss) <= 160.0f;
-}
+//     return bot->GetDistance(boss) <= 160.0f;
+// }
 
-bool GothikChooseTargetTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "gothik the harvester");
-    if (!boss)
-        return false;
+// bool GothikChooseTargetTrigger::IsActive()
+// {
+//     Unit* boss = AI_VALUE2(Unit*, "find target", "gothik the harvester");
+//     if (!boss)
+//         return false;
 
-    return boss->IsInCombat() || bot->IsInCombat();
-}
+//     return boss->IsInCombat() || bot->IsInCombat();
+// }
 
 // bool PatchwerkTankTrigger::IsActive()
 // {
