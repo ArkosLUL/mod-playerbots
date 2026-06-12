@@ -521,8 +521,7 @@ float GluthGenericMultiplier::GetValue(Action* action)
         return 1.0f;
     }
     if ((dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-         dynamic_cast<FleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
-         dynamic_cast<CastStarfallAction*>(action)))
+         dynamic_cast<FleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action)))
     {
         return 0.0f;
     }

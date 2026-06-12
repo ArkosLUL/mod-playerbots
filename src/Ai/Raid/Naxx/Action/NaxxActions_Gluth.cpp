@@ -108,8 +108,8 @@ bool GluthPositionAction::Execute(Event event)
     {
         if (AI_VALUE2(bool, "has aggro", "boss target"))
         {
-            if (raid25)
-            {
+            // if (raid25)
+            // {
                 if (MoveTo(NAXX_MAP_ID, helper.mainTankPos25.first, helper.mainTankPos25.second, bot->GetPositionZ(), false, false, false,
                            false, MovementPriority::MOVEMENT_COMBAT))
                 {
@@ -117,17 +117,17 @@ bool GluthPositionAction::Execute(Event event)
                 }
                 return MoveInside(NAXX_MAP_ID, helper.mainTankPos25.first, helper.mainTankPos25.second, bot->GetPositionZ(), 2.0f,
                                   MovementPriority::MOVEMENT_COMBAT);
-            }
-            else
-            {
-                if (MoveTo(NAXX_MAP_ID, helper.mainTankPos10.first, helper.mainTankPos10.second, bot->GetPositionZ(), false, false, false,
-                           false, MovementPriority::MOVEMENT_COMBAT))
-                {
-                    return true;
-                }
-                return MoveInside(NAXX_MAP_ID, helper.mainTankPos10.first, helper.mainTankPos10.second, bot->GetPositionZ(), 2.0f,
-                                  MovementPriority::MOVEMENT_COMBAT);
-            }
+            // }
+            // else
+            // {
+            //     if (MoveTo(NAXX_MAP_ID, helper.mainTankPos10.first, helper.mainTankPos10.second, bot->GetPositionZ(), false, false, false,
+            //                false, MovementPriority::MOVEMENT_COMBAT))
+            //     {
+            //         return true;
+            //     }
+            //     return MoveInside(NAXX_MAP_ID, helper.mainTankPos10.first, helper.mainTankPos10.second, bot->GetPositionZ(), 2.0f,
+            //                       MovementPriority::MOVEMENT_COMBAT);
+            // }
         }
     }
     else if (botAI->IsAssistTankOfIndex(bot, 1))
@@ -155,8 +155,8 @@ bool GluthPositionAction::Execute(Event event)
     }
     else if (botAI->IsRangedDps(bot))
     {
-        if (raid25)
-        {
+        // if (raid25)
+        // {
             if (botAI->GetClassIndex(bot, CLASS_HUNTER) == 0)
             {
                 return MoveInside(NAXX_MAP_ID, helper.leftSlowDownPos.first, helper.leftSlowDownPos.second, bot->GetPositionZ(), 0.0f,
@@ -167,7 +167,7 @@ bool GluthPositionAction::Execute(Event event)
                 return MoveInside(NAXX_MAP_ID, helper.rightSlowDownPos.first, helper.rightSlowDownPos.second, bot->GetPositionZ(), 0.0f,
                                   MovementPriority::MOVEMENT_COMBAT);
             }
-        }
+        // }
         return MoveInside(NAXX_MAP_ID, helper.rangedPos.first, helper.rangedPos.second, bot->GetPositionZ(), 3.0f,
                           MovementPriority::MOVEMENT_COMBAT);
     }
@@ -186,10 +186,10 @@ bool GluthSlowdownAction::Execute(Event event)
         return false;
     }
     bool raid25 = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL;
-    if (!raid25)
-    {
-        return false;
-    }
+    // if (!raid25)
+    // {
+    //     return false;
+    // }
     if (helper.JustStartCombat())
     {
         return false;

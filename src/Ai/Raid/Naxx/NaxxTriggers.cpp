@@ -209,6 +209,17 @@ bool SapphironFlightTrigger::IsActive()
 
 bool GluthTrigger::IsActive() { return helper.UpdateBossAI(); }
 
+bool GluthLowHealthZombieAoeTrigger::IsActive()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && helper.IsZombieChow(target) && target->GetHealthPct() <= helper.decimatedZombiePct;
+}
+
 bool GluthMainTankMortalWoundTrigger::IsActive()
 {
     if (!helper.UpdateBossAI())

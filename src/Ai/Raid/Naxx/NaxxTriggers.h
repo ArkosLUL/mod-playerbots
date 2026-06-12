@@ -275,6 +275,17 @@ private:
     GluthBossHelper helper;
 };
 
+class GluthLowHealthZombieAoeTrigger : public Trigger
+{
+public:
+    GluthLowHealthZombieAoeTrigger(PlayerbotAI* ai)
+        : Trigger(ai, "gluth low health zombie aoe"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
 class GluthMainTankMortalWoundTrigger : public Trigger
 {
 public:
