@@ -164,7 +164,9 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("gluth low health zombie aoe",
         {
             NextAction("starfall", ACTION_RAID + 1),
-            NextAction("blizzard", ACTION_RAID + 1)
+            NextAction("blizzard", ACTION_RAID + 1),
+            NextAction("volley", ACTION_RAID + 1),
+            NextAction("rain of fire", ACTION_RAID + 1)
         })
     );
 
