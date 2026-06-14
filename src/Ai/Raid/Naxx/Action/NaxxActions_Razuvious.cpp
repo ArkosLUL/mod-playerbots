@@ -62,19 +62,19 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event event)
             if (tauntUseful && !charm->HasSpellCooldown(29060))
             {
                 // shield
-                if (!charm->HasSpellCooldown(29061))
+                if (!charm->HasSpellCooldown(SPELL_BONE_BARRIER))
                 {
-                    charm->CastSpell(charm, 29061, true);
-                    charm->AddSpellCooldown(29061, 0, 30 * 1000);
+                    charm->CastSpell(charm, SPELL_BONE_BARRIER, true);
+                    charm->AddSpellCooldown(SPELL_BONE_BARRIER, 0, 30 * 1000);
                 }
-                charm->CastSpell(target, 29060, true);
-                charm->AddSpellCooldown(29060, 0, 20 * 1000);
+                charm->CastSpell(target, SPELL_UNDERSTUDY_TAUNT, true);
+                charm->AddSpellCooldown(SPELL_UNDERSTUDY_TAUNT, 0, 20 * 1000);
             }
             // strike
-            if (!charm->HasSpellCooldown(61696))
+            if (!charm->HasSpellCooldown(SPELL_BLOOD_STRIKE))
             {
-                charm->CastSpell(target, 61696, true);
-                charm->AddSpellCooldown(61696, 0, 4 * 1000);
+                charm->CastSpell(target, SPELL_BLOOD_STRIKE, true);
+                charm->AddSpellCooldown(SPELL_BLOOD_STRIKE, 0, 4 * 1000);
             }
         }
     }
