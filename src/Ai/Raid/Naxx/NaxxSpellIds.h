@@ -128,12 +128,14 @@ namespace NaxxSpellIds
     inline bool HasAnyAura(Unit* unit, std::initializer_list<uint32> spellIds)
     {
         if (!unit)
+        {
             return false;
         }
 
         for (uint32 spellId : spellIds)
         {
             if (unit->HasAura(spellId))
+            {
                 return true;
             }
         }

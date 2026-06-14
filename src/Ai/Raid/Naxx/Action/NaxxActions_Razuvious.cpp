@@ -56,11 +56,8 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event /*event*/)
                 Unit* victim = target->GetVictim();
                 if (victim && victim->HasAura(SPELL_BONE_BARRIER))
                     tauntUseful = false;
-                }
                 if (forceObedience->GetDuration() <= 3000)
-                {
                     tauntUseful = false;
-                }
             }
             if (forceObedience->GetDuration() >= (duration_time - 500))
             {

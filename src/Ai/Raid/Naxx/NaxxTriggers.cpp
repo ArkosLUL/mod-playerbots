@@ -330,7 +330,7 @@ bool MaexxnaWebWrapTrigger::IsActive()
             if (!member || !member->IsAlive())
                 continue;
 
-            if (botAI->HasAura(NaxxSpellIds::MaexxnaWebWrapStun, member))
+            if (member->HasAura(NaxxSpellIds::MaexxnaWebWrapStun))
                 return true;
         }
     }

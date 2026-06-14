@@ -33,13 +33,13 @@ bool SapphironGroundPositionAction::Execute(Event event)
         bool needsSideStack = boss->isInFront(bot) || boss->isInBack(bot);
         if (!needsSideStack)
         {
-            needsSideStack = NaxxSpellIds::HasAnyAura(botAI, bot, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", bot);
+            needsSideStack = NaxxSpellIds::HasAnyAura(bot, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", bot);
         }
         if (needsSideStack)
         {
             float distance;
             if (botAI->IsRanged(bot) || botAI->IsHeal(bot) ||
-                NaxxSpellIds::HasAnyAura(botAI, bot, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", bot))
+                NaxxSpellIds::HasAnyAura(bot, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", bot))
             {
                 distance = 30.0f;
             }
@@ -105,7 +105,7 @@ bool SapphironFlightPositionAction::Execute(Event event)
     {
         botAI->ChangeStrategy("cure", BOT_STATE_COMBAT);
     }
-    if (NaxxSpellIds::HasAnyAura(botAI, bot, {NaxxSpellIds::Icebolt10, NaxxSpellIds::Icebolt25}) ||
+    if (NaxxSpellIds::HasAnyAura(bot, {NaxxSpellIds::Icebolt10, NaxxSpellIds::Icebolt25}) ||
         botAI->HasAura("icebolt", bot, false, false, -1, true))
     {
         return false;

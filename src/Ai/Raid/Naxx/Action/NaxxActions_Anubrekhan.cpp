@@ -102,7 +102,7 @@ bool AnubrekhanPositionAction::Execute(Event event)
         return false;
     }
 
-    bool inPhase = NaxxSpellIds::HasAnyAura(botAI, boss, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm10Alt,
+    bool inPhase = NaxxSpellIds::HasAnyAura(boss, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm10Alt,
                                                          NaxxSpellIds::LocustSwarm25}) ||
                    botAI->HasAura("locust swarm", boss);
     if (inPhase)

@@ -344,7 +344,7 @@ public:
             {
                 continue;
             }
-            if (botAI->HasAura(spellId, member))
+            if (member->HasAura(spellId))
             {
                 return member;
             }
@@ -358,7 +358,7 @@ public:
         {
             return false;
         }
-        return botAI->HasAura(NaxxSpellIds::DetonateMana, player);
+        return player->HasAura(NaxxSpellIds::DetonateMana);
     }
     bool HasChains(Player* player)
     {
@@ -366,7 +366,7 @@ public:
         {
             return false;
         }
-        return botAI->HasAura(NaxxSpellIds::ChainsOfKelthuzad, player);
+        return player->HasAura(NaxxSpellIds::ChainsOfKelthuzad);
     }
 
     std::vector<Unit*> GetGuardians() const
