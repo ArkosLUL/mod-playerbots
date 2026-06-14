@@ -3,6 +3,7 @@
 #include "ChatTriggerContext.h"
 #include "WorldPacketTriggerContext.h"
 #include "Aq20TriggerContext.h"
+#include "Ai/Raid/Aq40/RaidAq40TriggerContext.h"
 #include "MCTriggerContext.h"
 #include "BWLTriggerContext.h"
 #include "KaraTriggerContext.h"
@@ -29,6 +30,7 @@ void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Tr
     triggerContexts.Add(new ChatTriggerContext());
     triggerContexts.Add(new WorldPacketTriggerContext());
     triggerContexts.Add(new RaidAq20TriggerContext());
+    triggerContexts.Add(new RaidAq40TriggerContext());
     triggerContexts.Add(new RaidMcTriggerContext());
     triggerContexts.Add(new RaidBwlTriggerContext());
     triggerContexts.Add(new RaidKarazhanTriggerContext());
