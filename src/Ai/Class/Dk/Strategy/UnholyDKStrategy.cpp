@@ -1,5 +1,6 @@
 /*
- * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license, you may redistribute it and/or modify it under version 3 of the License, or (at your option), any later version.
+ * Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license, you may redistribute it
+ * and/or modify it under version 3 of the License, or (at your option), any later version.
  */
 
 #include "UnholyDKStrategy.h"
@@ -88,6 +89,13 @@ void UnholyDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     GenericDKStrategy::InitTriggers(triggers);
 
     triggers.push_back(
+        new TriggerNode("no pet", { NextAction("raise dead", ACTION_NORMAL + 5) }));
+    triggers.push_back(
+        new TriggerNode("has pet", { NextAction("toggle pet spell", 60.0f) }));
+    triggers.push_back(
+        new TriggerNode("new pet", { NextAction("set pet stance", 60.0f) }));
+
+    triggers.push_back(
         new TriggerNode(
             "death and decay cooldown",
             {
@@ -143,13 +151,6 @@ void UnholyDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode("dd cd and icy touch 3s",
             {
                 NextAction("icy touch", ACTION_HIGH + 2)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode("no rune",
-            {
-                NextAction("empower rune weapon", ACTION_HIGH + 1)
             }
         )
     );

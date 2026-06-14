@@ -15,11 +15,7 @@ public:
     {
         creators["sanctity aura"] = &sanctity_aura;
         creators["retribution aura"] = &retribution_aura;
-        creators["seal of corruption"] = &seal_of_corruption;
-        creators["seal of vengeance"] = &seal_of_vengeance;
-        creators["seal of command"] = &seal_of_command;
         creators["blessing of might"] = &blessing_of_might;
-        creators["crusader strike"] = &crusader_strike;
         creators["repentance"] = &repentance;
         creators["repentance on enemy healer"] = &repentance_on_enemy_healer;
         creators["repentance on snare target"] = &repentance_on_snare_target;
@@ -27,52 +23,12 @@ public:
     }
 
 private:
-    static ActionNode* seal_of_corruption([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "seal of corruption",
-            /*P*/ {},
-            /*A*/ { NextAction("seal of vengeance") },
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* seal_of_vengeance([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "seal of vengeance",
-            /*P*/ {},
-            /*A*/ { NextAction("seal of command") },
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* seal_of_command([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "seal of command",
-            /*P*/ {},
-            /*A*/ { NextAction("seal of righteousness") },
-            /*C*/ {}
-        );
-    }
-
     static ActionNode* blessing_of_might([[maybe_unused]] PlayerbotAI* botAI)
     {
         return new ActionNode(
             "blessing of might",
             /*P*/ {},
             /*A*/ { NextAction("blessing of kings") },
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* crusader_strike([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "crusader strike",
-            /*P*/ {},
-            /*A*/ {},
             /*C*/ {}
         );
     }

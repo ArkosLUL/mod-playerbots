@@ -12,36 +12,13 @@ class DpsRogueStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
 public:
     DpsRogueStrategyActionNodeFactory()
     {
-        creators["mutilate"] = &mutilate;
         creators["sinister strike"] = &sinister_strike;
         creators["kick"] = &kick;
-        creators["kidney shot"] = &kidney_shot;
         creators["backstab"] = &backstab;
-        creators["melee"] = &melee;
         creators["rupture"] = &rupture;
     }
 
 private:
-    static ActionNode* melee([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "melee",
-            /*P*/ {},
-            /*A*/ {
-                NextAction("mutilate") },
-            /*C*/ {}
-        );
-    }
-    static ActionNode* mutilate([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "mutilate",
-            /*P*/ {},
-            /*A*/ {
-                NextAction("sinister strike") },
-            /*C*/ {}
-        );
-    }
     static ActionNode* sinister_strike([[maybe_unused]] PlayerbotAI* botAI)
     {
         return new ActionNode(
@@ -62,22 +39,13 @@ private:
             /*C*/ {}
         );
     }
-    static ActionNode* kidney_shot([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "kidney shot",
-            /*P*/ {},
-            /*A*/ {},
-            /*C*/ {}
-        );
-    }
     static ActionNode* backstab([[maybe_unused]] PlayerbotAI* botAI)
     {
         return new ActionNode(
             "backstab",
             /*P*/ {},
             /*A*/ {
-                NextAction("mutilate") },
+                NextAction("sinister strike") },
             /*C*/ {}
         );
     }
@@ -140,7 +108,7 @@ void DpsRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
-            "combo points available",
+            "combo points 5 available",
             {
                 NextAction("rupture", ACTION_HIGH + 1),
                 NextAction("eviscerate", ACTION_HIGH)
@@ -257,9 +225,6 @@ public:
     StealthedRogueStrategyActionNodeFactory()
     {
         creators["ambush"] = &ambush;
-        creators["cheap shot"] = &cheap_shot;
-        creators["garrote"] = &garrote;
-        creators["sap"] = &sap;
         creators["sinister strike"] = &sinister_strike;
     }
 
@@ -270,36 +235,6 @@ private:
             "ambush",
             /*P*/ {},
             /*A*/ { NextAction("garrote") },
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* cheap_shot([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "cheap shot",
-            /*P*/ {},
-            /*A*/ {},
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* garrote([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "garrote",
-            /*P*/ {},
-            /*A*/ {},
-            /*C*/ {}
-        );
-    }
-
-    static ActionNode* sap([[maybe_unused]] PlayerbotAI* botAI)
-    {
-        return new ActionNode(
-            "sap",
-            /*P*/ {},
-            /*A*/ {},
             /*C*/ {}
         );
     }
@@ -335,7 +270,7 @@ void StealthedRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(
         new TriggerNode(
-            "combo points available",
+            "combo points 5 available",
             {
                 NextAction("eviscerate", ACTION_HIGH)
             }

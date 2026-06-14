@@ -8,13 +8,9 @@
 #include "Playerbots.h"
 #include "Strategy.h"
 
-class HealPaladinStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
-{
-};
-
 HealPaladinStrategy::HealPaladinStrategy(PlayerbotAI* botAI) : GenericPaladinStrategy(botAI)
 {
-    actionNodeFactories.Add(new HealPaladinStrategyActionNodeFactory());
+    // No custom ActionNodeFactory needed
 }
 
 std::vector<NextAction> HealPaladinStrategy::getDefaultActions()
@@ -30,7 +26,7 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "seal",
             {
-                NextAction("seal of wisdom", ACTION_HIGH)
+                NextAction("seal of wisdom", ACTION_HIGH),
             }
         )
     );
