@@ -118,18 +118,22 @@ namespace NaxxSpellIds
 
     // Loatheb
     static constexpr uint32 NecroticAura10 = 55593;
-
-    inline bool HasAnyAura(PlayerbotAI* botAI, Unit* unit, std::initializer_list<uint32> spellIds)
+/*
+    SPELL_NECROTIC_AURA                         = 55593,
+    SPELL_SUMMON_SPORE                          = 29234,
+    SPELL_DEATHBLOOM                            = 29865,
+    SPELL_INEVITABLE_DOOM                       = 29204,
+    SPELL_BERSERK                               = 26662
+*/
+    inline bool HasAnyAura(Unit* unit, std::initializer_list<uint32> spellIds)
     {
-        if (!botAI || !unit)
-        {
+        if (!unit)
             return false;
         }
 
         for (uint32 spellId : spellIds)
         {
-            if (botAI->HasAura(spellId, unit))
-            {
+            if (unit->HasAura(spellId))
                 return true;
             }
         }

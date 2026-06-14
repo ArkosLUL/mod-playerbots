@@ -673,7 +673,7 @@ public:
             {
                 continue;
             }
-            if (NaxxSpellIds::HasAnyAura(botAI, member, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", member))
+            if (NaxxSpellIds::HasAnyAura(member, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", member))
             {
                 return true;
             }
@@ -782,7 +782,7 @@ private:
             {
                 continue;
             }
-            if (NaxxSpellIds::HasAnyAura(botAI, member, {NaxxSpellIds::Icebolt10, NaxxSpellIds::Icebolt25}) ||
+            if (NaxxSpellIds::HasAnyAura(member, {NaxxSpellIds::Icebolt10, NaxxSpellIds::Icebolt25}) ||
                 botAI->HasAura("icebolt", member, false, false, -1, true))
             {
                 hasIcebolt = true;
