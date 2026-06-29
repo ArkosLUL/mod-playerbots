@@ -61,7 +61,7 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event /*event*/)
             }
             if (forceObedience->GetDuration() >= int32(duration_time - 500))
                 tauntUseful = false;
-            }
+            
             if (tauntUseful && !charm->HasSpellCooldown(29060))
             {
                 // shield
