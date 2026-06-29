@@ -73,4 +73,70 @@ public:
     bool IsActive() override;
 };
 
+// Lord Jaraxxus
+
+class JaraxxusEngagedByMainTankTrigger : public Trigger
+{
+public:
+    JaraxxusEngagedByMainTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus engaged by main tank") {}
+    bool IsActive() override;
+};
+
+class JaraxxusAddNeedsAssistTankTrigger : public Trigger
+{
+public:
+    JaraxxusAddNeedsAssistTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus add needs assist tank") {}
+    bool IsActive() override;
+};
+
+class JaraxxusSecondAddNeedsAssistTankTrigger : public Trigger
+{
+public:
+    JaraxxusSecondAddNeedsAssistTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus second add needs assist tank") {}
+    bool IsActive() override;
+};
+
+class JaraxxusAddShouldBeFocusedTrigger : public Trigger
+{
+public:
+    JaraxxusAddShouldBeFocusedTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus add should be focused") {}
+    bool IsActive() override;
+};
+
+class JaraxxusLegionFlameNearbyTrigger : public Trigger
+{
+public:
+    JaraxxusLegionFlameNearbyTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus legion flame nearby") {}
+    bool IsActive() override;
+};
+
+class JaraxxusIncinerateFleshOnRaidTrigger : public Trigger
+{
+public:
+    JaraxxusIncinerateFleshOnRaidTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus incinerate flesh on raid") {}
+    bool IsActive() override;
+};
+
+class JaraxxusNetherPowerActiveTrigger : public Trigger
+{
+public:
+    JaraxxusNetherPowerActiveTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus nether power active") {}
+    bool IsActive() override;
+};
+
+class JaraxxusFelFireballInterruptibleTrigger : public Trigger
+{
+public:
+    JaraxxusFelFireballInterruptibleTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "jaraxxus fel fireball interruptible") {}
+    bool IsActive() override;
+};
+
 #endif

@@ -30,6 +30,24 @@ public:
             &RaidTrialOfTheCrusaderActionContext::icehowl_main_tank_hold_boss;
         creators["icehowl clear charge path"] =
             &RaidTrialOfTheCrusaderActionContext::icehowl_clear_charge_path;
+
+        // Lord Jaraxxus
+        creators["jaraxxus main tank hold boss"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_main_tank_hold_boss;
+        creators["jaraxxus assist tank hold add"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_assist_tank_hold_add;
+        creators["jaraxxus assist tank hold second add"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_assist_tank_hold_second_add;
+        creators["jaraxxus focus add"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_focus_add;
+        creators["jaraxxus avoid legion flame"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_avoid_legion_flame;
+        creators["jaraxxus heal incinerate target"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_heal_incinerate_target;
+        creators["jaraxxus remove nether power"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_remove_nether_power;
+        creators["jaraxxus interrupt fel fireball"] =
+            &RaidTrialOfTheCrusaderActionContext::jaraxxus_interrupt_fel_fireball;
     }
 
 private:
@@ -63,6 +81,38 @@ private:
 
     static Action* icehowl_clear_charge_path(PlayerbotAI* botAI) {
         return new IcehowlClearChargePathAction(botAI);
+    }
+
+    static Action* jaraxxus_main_tank_hold_boss(PlayerbotAI* botAI) {
+        return new JaraxxusMainTankHoldBossAction(botAI);
+    }
+
+    static Action* jaraxxus_assist_tank_hold_add(PlayerbotAI* botAI) {
+        return new JaraxxusAssistTankHoldAddAction(botAI);
+    }
+
+    static Action* jaraxxus_assist_tank_hold_second_add(PlayerbotAI* botAI) {
+        return new JaraxxusAssistTankHoldSecondAddAction(botAI);
+    }
+
+    static Action* jaraxxus_focus_add(PlayerbotAI* botAI) {
+        return new JaraxxusFocusAddAction(botAI);
+    }
+
+    static Action* jaraxxus_avoid_legion_flame(PlayerbotAI* botAI) {
+        return new JaraxxusAvoidLegionFlameAction(botAI);
+    }
+
+    static Action* jaraxxus_heal_incinerate_target(PlayerbotAI* botAI) {
+        return new JaraxxusHealIncinerateTargetAction(botAI);
+    }
+
+    static Action* jaraxxus_remove_nether_power(PlayerbotAI* botAI) {
+        return new JaraxxusRemoveNetherPowerAction(botAI);
+    }
+
+    static Action* jaraxxus_interrupt_fel_fireball(PlayerbotAI* botAI) {
+        return new JaraxxusInterruptFelFireballAction(botAI);
     }
 };
 

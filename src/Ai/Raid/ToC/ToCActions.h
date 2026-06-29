@@ -75,4 +75,70 @@ public:
     bool Execute(Event event) override;
 };
 
+// Lord Jaraxxus
+
+class JaraxxusMainTankHoldBossAction : public AttackAction
+{
+public:
+    JaraxxusMainTankHoldBossAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus main tank hold boss") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusAssistTankHoldAddAction : public AttackAction
+{
+public:
+    JaraxxusAssistTankHoldAddAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus assist tank hold add") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusAssistTankHoldSecondAddAction : public AttackAction
+{
+public:
+    JaraxxusAssistTankHoldSecondAddAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus assist tank hold second add") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusFocusAddAction : public AttackAction
+{
+public:
+    JaraxxusFocusAddAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus focus add") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusAvoidLegionFlameAction : public MovementAction
+{
+public:
+    JaraxxusAvoidLegionFlameAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus avoid legion flame") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusHealIncinerateTargetAction : public Action
+{
+public:
+    JaraxxusHealIncinerateTargetAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus heal incinerate target") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusRemoveNetherPowerAction : public Action
+{
+public:
+    JaraxxusRemoveNetherPowerAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus remove nether power") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusInterruptFelFireballAction : public AttackAction
+{
+public:
+    JaraxxusInterruptFelFireballAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus interrupt fel fireball") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 #endif

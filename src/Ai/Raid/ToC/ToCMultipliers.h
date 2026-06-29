@@ -21,4 +21,13 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Keep tanks anchored on Jaraxxus and his adds instead of drifting with the combat formation
+class JaraxxusControlTankMovementMultiplier : public Multiplier
+{
+public:
+    JaraxxusControlTankMovementMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "jaraxxus control tank movement multiplier") {}
+    float GetValue(Action* action) override;
+};
+
 #endif
