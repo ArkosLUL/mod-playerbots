@@ -51,7 +51,7 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event /*event*/)
         {
             // taunt
             bool tauntUseful = true;
-            if (forceObedience->GetDuration() <= (duration_time - 5000))
+            if (forceObedience->GetDuration() <= int32(duration_time - 5000))
             {
                 Unit* victim = target->GetVictim();
                 if (victim && victim->HasAura(SPELL_BONE_BARRIER))
@@ -59,8 +59,7 @@ bool RazuviousUseObedienceCrystalAction::Execute(Event /*event*/)
                 if (forceObedience->GetDuration() <= 3000)
                     tauntUseful = false;
             }
-            if (forceObedience->GetDuration() >= (duration_time - 500))
-            {
+            if (forceObedience->GetDuration() >= int32(duration_time - 500))
                 tauntUseful = false;
             }
             if (tauntUseful && !charm->HasSpellCooldown(29060))
