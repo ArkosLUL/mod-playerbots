@@ -22,6 +22,7 @@
 #include "OnyTriggerContext.h"
 #include "ICCTriggerContext.h"
 #include "RSTriggerContext.h"
+#include "Ai/Raid/ToC/ToCTriggerContext.h"
 #include "Ai/Dungeon/TbcDungeonTriggerContext.h"
 #include "Ai/Dungeon/WotlkDungeonTriggerContext.h"
 
@@ -50,6 +51,7 @@ void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Tr
     triggerContexts.Add(new RaidOnyxiaTriggerContext());
     triggerContexts.Add(new RaidIccTriggerContext());
     triggerContexts.Add(new RaidRsTriggerContext());
+    triggerContexts.Add(new RaidTrialOfTheCrusaderTriggerContext());
     triggerContexts.Add(new TbcDungeonAuchenaiCryptsTriggerContext());
     triggerContexts.Add(new WotlkDungeonUKTriggerContext());
     triggerContexts.Add(new WotlkDungeonNexTriggerContext());
