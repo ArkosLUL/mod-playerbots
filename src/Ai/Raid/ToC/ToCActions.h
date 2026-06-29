@@ -141,4 +141,54 @@ public:
     bool Execute(Event event) override;
 };
 
+// Anub'arak
+
+class AnubarakMainTankHoldBossAction : public AttackAction
+{
+public:
+    AnubarakMainTankHoldBossAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak main tank hold boss") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakAssistTankHoldBurrowerAction : public AttackAction
+{
+public:
+    AnubarakAssistTankHoldBurrowerAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak assist tank hold burrower") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakFocusBurrowerAction : public AttackAction
+{
+public:
+    AnubarakFocusBurrowerAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak focus burrower") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakFocusScarabAction : public AttackAction
+{
+public:
+    AnubarakFocusScarabAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak focus scarab") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakKiteSpikeToPermafrostAction : public MovementAction
+{
+public:
+    AnubarakKiteSpikeToPermafrostAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak kite spike to permafrost") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakDestroyFrostSphereAction : public AttackAction
+{
+public:
+    AnubarakDestroyFrostSphereAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak destroy frost sphere") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 #endif

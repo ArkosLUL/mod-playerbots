@@ -56,6 +56,26 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
 
     triggers.push_back(new TriggerNode("jaraxxus legion flame nearby", {
         NextAction("jaraxxus avoid legion flame", ACTION_EMERGENCY + 8) }));
+
+    // Anub'arak
+    triggers.push_back(new TriggerNode("anubarak engaged by main tank", {
+        NextAction("anubarak main tank hold boss", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("anubarak burrower needs assist tank", {
+        NextAction("anubarak assist tank hold burrower", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode("anubarak burrower should be focused", {
+        NextAction("anubarak focus burrower", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode("anubarak scarab on raid", {
+        NextAction("anubarak focus scarab", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode("anubarak ranged should seed permafrost", {
+        NextAction("anubarak destroy frost sphere", ACTION_RAID) }));
+
+    // The spike-chase target drops everything to kite the spike into Permafrost
+    triggers.push_back(new TriggerNode("anubarak pursued by spike", {
+        NextAction("anubarak kite spike to permafrost", ACTION_EMERGENCY + 8) }));
 }
 
 void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
@@ -63,4 +83,7 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     multipliers.push_back(new IcehowlSuppressMovementDuringChargeMultiplier(botAI));
     multipliers.push_back(new NorthrendBeastsControlTankMovementMultiplier(botAI));
     multipliers.push_back(new JaraxxusControlTankMovementMultiplier(botAI));
+    multipliers.push_back(new AnubarakControlTankMovementMultiplier(botAI));
+    multipliers.push_back(new AnubarakProtectSpikeKiteMultiplier(botAI));
+    multipliers.push_back(new AnubarakDelayBloodlustUntilLeechingSwarmMultiplier(botAI));
 }

@@ -48,6 +48,20 @@ public:
             &RaidTrialOfTheCrusaderTriggerContext::jaraxxus_nether_power_active;
         creators["jaraxxus fel fireball interruptible"] =
             &RaidTrialOfTheCrusaderTriggerContext::jaraxxus_fel_fireball_interruptible;
+
+        // Anub'arak
+        creators["anubarak engaged by main tank"] =
+            &RaidTrialOfTheCrusaderTriggerContext::anubarak_engaged_by_main_tank;
+        creators["anubarak burrower needs assist tank"] =
+            &RaidTrialOfTheCrusaderTriggerContext::anubarak_burrower_needs_assist_tank;
+        creators["anubarak burrower should be focused"] =
+            &RaidTrialOfTheCrusaderTriggerContext::anubarak_burrower_should_be_focused;
+        creators["anubarak scarab on raid"] =
+            &RaidTrialOfTheCrusaderTriggerContext::anubarak_scarab_on_raid;
+        creators["anubarak pursued by spike"] =
+            &RaidTrialOfTheCrusaderTriggerContext::anubarak_pursued_by_spike;
+        creators["anubarak ranged should seed permafrost"] =
+            &RaidTrialOfTheCrusaderTriggerContext::anubarak_ranged_should_seed_permafrost;
     }
 
 private:
@@ -113,6 +127,30 @@ private:
 
     static Trigger* jaraxxus_fel_fireball_interruptible(PlayerbotAI* botAI) {
         return new JaraxxusFelFireballInterruptibleTrigger(botAI);
+    }
+
+    static Trigger* anubarak_engaged_by_main_tank(PlayerbotAI* botAI) {
+        return new AnubarakEngagedByMainTankTrigger(botAI);
+    }
+
+    static Trigger* anubarak_burrower_needs_assist_tank(PlayerbotAI* botAI) {
+        return new AnubarakBurrowerNeedsAssistTankTrigger(botAI);
+    }
+
+    static Trigger* anubarak_burrower_should_be_focused(PlayerbotAI* botAI) {
+        return new AnubarakBurrowerShouldBeFocusedTrigger(botAI);
+    }
+
+    static Trigger* anubarak_scarab_on_raid(PlayerbotAI* botAI) {
+        return new AnubarakScarabOnRaidTrigger(botAI);
+    }
+
+    static Trigger* anubarak_pursued_by_spike(PlayerbotAI* botAI) {
+        return new AnubarakPursuedBySpikeTrigger(botAI);
+    }
+
+    static Trigger* anubarak_ranged_should_seed_permafrost(PlayerbotAI* botAI) {
+        return new AnubarakRangedShouldSeedPermafrostTrigger(botAI);
     }
 };
 

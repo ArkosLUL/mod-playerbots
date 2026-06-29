@@ -139,4 +139,54 @@ public:
     bool IsActive() override;
 };
 
+// Anub'arak
+
+class AnubarakEngagedByMainTankTrigger : public Trigger
+{
+public:
+    AnubarakEngagedByMainTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "anubarak engaged by main tank") {}
+    bool IsActive() override;
+};
+
+class AnubarakBurrowerNeedsAssistTankTrigger : public Trigger
+{
+public:
+    AnubarakBurrowerNeedsAssistTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "anubarak burrower needs assist tank") {}
+    bool IsActive() override;
+};
+
+class AnubarakBurrowerShouldBeFocusedTrigger : public Trigger
+{
+public:
+    AnubarakBurrowerShouldBeFocusedTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "anubarak burrower should be focused") {}
+    bool IsActive() override;
+};
+
+class AnubarakScarabOnRaidTrigger : public Trigger
+{
+public:
+    AnubarakScarabOnRaidTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "anubarak scarab on raid") {}
+    bool IsActive() override;
+};
+
+class AnubarakPursuedBySpikeTrigger : public Trigger
+{
+public:
+    AnubarakPursuedBySpikeTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "anubarak pursued by spike") {}
+    bool IsActive() override;
+};
+
+class AnubarakRangedShouldSeedPermafrostTrigger : public Trigger
+{
+public:
+    AnubarakRangedShouldSeedPermafrostTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "anubarak ranged should seed permafrost") {}
+    bool IsActive() override;
+};
+
 #endif

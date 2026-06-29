@@ -48,6 +48,20 @@ public:
             &RaidTrialOfTheCrusaderActionContext::jaraxxus_remove_nether_power;
         creators["jaraxxus interrupt fel fireball"] =
             &RaidTrialOfTheCrusaderActionContext::jaraxxus_interrupt_fel_fireball;
+
+        // Anub'arak
+        creators["anubarak main tank hold boss"] =
+            &RaidTrialOfTheCrusaderActionContext::anubarak_main_tank_hold_boss;
+        creators["anubarak assist tank hold burrower"] =
+            &RaidTrialOfTheCrusaderActionContext::anubarak_assist_tank_hold_burrower;
+        creators["anubarak focus burrower"] =
+            &RaidTrialOfTheCrusaderActionContext::anubarak_focus_burrower;
+        creators["anubarak focus scarab"] =
+            &RaidTrialOfTheCrusaderActionContext::anubarak_focus_scarab;
+        creators["anubarak kite spike to permafrost"] =
+            &RaidTrialOfTheCrusaderActionContext::anubarak_kite_spike_to_permafrost;
+        creators["anubarak destroy frost sphere"] =
+            &RaidTrialOfTheCrusaderActionContext::anubarak_destroy_frost_sphere;
     }
 
 private:
@@ -113,6 +127,30 @@ private:
 
     static Action* jaraxxus_interrupt_fel_fireball(PlayerbotAI* botAI) {
         return new JaraxxusInterruptFelFireballAction(botAI);
+    }
+
+    static Action* anubarak_main_tank_hold_boss(PlayerbotAI* botAI) {
+        return new AnubarakMainTankHoldBossAction(botAI);
+    }
+
+    static Action* anubarak_assist_tank_hold_burrower(PlayerbotAI* botAI) {
+        return new AnubarakAssistTankHoldBurrowerAction(botAI);
+    }
+
+    static Action* anubarak_focus_burrower(PlayerbotAI* botAI) {
+        return new AnubarakFocusBurrowerAction(botAI);
+    }
+
+    static Action* anubarak_focus_scarab(PlayerbotAI* botAI) {
+        return new AnubarakFocusScarabAction(botAI);
+    }
+
+    static Action* anubarak_kite_spike_to_permafrost(PlayerbotAI* botAI) {
+        return new AnubarakKiteSpikeToPermafrostAction(botAI);
+    }
+
+    static Action* anubarak_destroy_frost_sphere(PlayerbotAI* botAI) {
+        return new AnubarakDestroyFrostSphereAction(botAI);
     }
 };
 

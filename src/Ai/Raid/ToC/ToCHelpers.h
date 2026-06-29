@@ -22,6 +22,13 @@ enum class ToCNpcs : uint32
     NPC_LEGION_FLAME    = 34784,
     NPC_NETHER_PORTAL   = 34825,
     NPC_INFERNAL_VOLCANO = 34813,
+
+    // Anub'arak
+    NPC_ANUBARAK            = 34564,
+    NPC_FROST_SPHERE        = 34606, // flying sphere; becomes a grounded Permafrost patch when killed
+    NPC_NERUBIAN_BURROWER   = 34607, // phase 1 add
+    NPC_SWARM_SCARAB        = 34605, // submerge-phase add
+    NPC_PURSUING_SPIKE      = 34660, // submerge-phase chase mob
 };
 
 enum class ToCSpells : uint32
@@ -46,6 +53,12 @@ enum class ToCSpells : uint32
     SPELL_NETHER_POWER_10H  = 67106,
     SPELL_NETHER_POWER_25N  = 67107,
     SPELL_NETHER_POWER_25H  = 67108,
+
+    // Anub'arak
+    SPELL_MARK              = 67574, // on the player the Pursuing Spike is chasing
+    SPELL_PERMAFROST        = 66193, // aura on a grounded Frost Sphere; despawns a spike that reaches it
+    SPELL_LEECHING_SWARM    = 66118, // raid-wide drain on the boss during phase 3 (<30%)
+    SPELL_SUBMERGE_ANUB     = 65981, // boss submerge aura (phase 2)
 };
 
 enum class ToCDisplayIds : uint32
@@ -60,6 +73,10 @@ constexpr uint32 TRIAL_OF_THE_CRUSADER_MAP_ID = 649;
 
 // Center of the Crusaders' Coliseum arena (trial_of_the_crusader.h Locs[LOC_CENTER])
 extern const Position ARENA_CENTER;
+
+// Center of the underground nerubian pit where Anub'arak is fought (AnubLocs[0], Z ~142).
+// This is a different floor from ARENA_CENTER (the upper coliseum at Z ~393).
+extern const Position ANUBARAK_PIT_CENTER;
 
 // True while the worm is in its mobile (chasing) form rather than stationary
 bool IsWormMobile(Unit* worm);
@@ -88,6 +105,20 @@ Unit* GetPriorityJaraxxusAdd(PlayerbotAI* botAI);
 // is still up). Returns nullptr unless both adds are alive, so a lone add is handled by the
 // priority assignment alone.
 Unit* GetSecondaryJaraxxusAdd(PlayerbotAI* botAI);
+
+// Anub'arak
+
+// True during the submerge phase (phase 2): a Pursuing Spike or Swarm Scarab is alive, or the boss
+// itself carries the submerge aura. Used to gate behaviours that only make sense while burrowed.
+bool AnubarakSubmerged(PlayerbotAI* botAI);
+
+// True during the final phase (phase 3): the boss carries the Leeching Swarm aura, or has dropped
+// below 30% health. Gates the saved-up Bloodlust/Heroism burn.
+bool AnubarakLeechingSwarmActive(PlayerbotAI* botAI);
+
+// Nearest grounded Permafrost patch (a Frost Sphere that has been destroyed and now carries the
+// Permafrost aura) within radius. Returns nullptr when no patch has been seeded yet.
+Unit* GetNearestPermafrost(Player* bot, float radius);
 
 }
 
