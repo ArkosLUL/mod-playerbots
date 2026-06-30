@@ -25,6 +25,7 @@
 #include "Ai/Raid/ToC/ToCActionContext.h"
 #include "Ai/Dungeon/TbcDungeonActionContext.h"
 #include "Ai/Dungeon/WotlkDungeonActionContext.h"
+#include "Ai/Dungeon/TOC/TOCActionContext.h"
 
 void AiObjectContext::BuildSharedActionContexts(SharedNamedObjectContextList<Action>& actionContexts)
 {

@@ -1,5 +1,5 @@
-#ifndef PLAYERBOTS_TOCACTIONS_H
-#define PLAYERBOTS_TOCACTIONS_H
+#ifndef PLAYERBOTS_RAID_TOCACTIONS_H
+#define PLAYERBOTS_RAID_TOCACTIONS_H
 
 #include "Action.h"
 #include "AttackAction.h"
