@@ -66,6 +66,18 @@ public:
         // Faction Champions
         creators["faction champions should focus"] =
             &RaidTrialOfTheCrusaderTriggerContext::faction_champions_should_focus;
+
+        // Twin Val'kyr
+        creators["twin valkyr engaged by main tank"] =
+            &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_engaged_by_main_tank;
+        creators["twin valkyr darkbane needs assist tank"] =
+            &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_darkbane_needs_assist_tank;
+        creators["twin valkyr vortex requires essence"] =
+            &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_vortex_requires_essence;
+        creators["twin valkyr touched requires essence"] =
+            &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_touched_requires_essence;
+        creators["twin valkyr needs initial essence"] =
+            &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_needs_initial_essence;
     }
 
 private:
@@ -159,6 +171,26 @@ private:
 
     static Trigger* faction_champions_should_focus(PlayerbotAI* botAI) {
         return new FactionChampionsShouldFocusTrigger(botAI);
+    }
+
+    static Trigger* twin_valkyr_engaged_by_main_tank(PlayerbotAI* botAI) {
+        return new TwinValkyrEngagedByMainTankTrigger(botAI);
+    }
+
+    static Trigger* twin_valkyr_darkbane_needs_assist_tank(PlayerbotAI* botAI) {
+        return new TwinValkyrDarkbaneNeedsAssistTankTrigger(botAI);
+    }
+
+    static Trigger* twin_valkyr_vortex_requires_essence(PlayerbotAI* botAI) {
+        return new TwinValkyrVortexRequiresEssenceTrigger(botAI);
+    }
+
+    static Trigger* twin_valkyr_touched_requires_essence(PlayerbotAI* botAI) {
+        return new TwinValkyrTouchedRequiresEssenceTrigger(botAI);
+    }
+
+    static Trigger* twin_valkyr_needs_initial_essence(PlayerbotAI* botAI) {
+        return new TwinValkyrNeedsInitialEssenceTrigger(botAI);
     }
 };
 

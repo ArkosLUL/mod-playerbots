@@ -82,6 +82,27 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     // rogue kick, etc.), so focusing the healer is enough for those kicks to land.
     triggers.push_back(new TriggerNode("faction champions should focus", {
         NextAction("faction champions focus priority", ACTION_RAID + 2) }));
+
+    // Twin Val'kyr. The twins share health, so the main tank skull-marks Fjola and non-tank DPS focus
+    // her via the default "dps assist" (killing one kills both). The colour-matching Essence system is
+    // the survival core: bots grab an essence at the pull and swap to match the active Vortex / heroic
+    // Touch. Powering Up (orb collection) is intentionally out of scope; the enrage is met via the
+    // shared-health focus-fire, not the DPS buff.
+    triggers.push_back(new TriggerNode("twin valkyr engaged by main tank", {
+        NextAction("twin valkyr main tank hold light twin", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr darkbane needs assist tank", {
+        NextAction("twin valkyr assist tank hold dark twin", ACTION_RAID + 2) }));
+
+    // Touch outranks Vortex: a touched bot is taking a personal heavy DoT that only the colour swap stops
+    triggers.push_back(new TriggerNode("twin valkyr touched requires essence", {
+        NextAction("twin valkyr swap essence for touch", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr vortex requires essence", {
+        NextAction("twin valkyr swap essence for vortex", ACTION_EMERGENCY + 5) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr needs initial essence", {
+        NextAction("twin valkyr acquire initial essence", ACTION_RAID) }));
 }
 
 void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
@@ -93,4 +114,6 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     multipliers.push_back(new AnubarakProtectSpikeKiteMultiplier(botAI));
     multipliers.push_back(new AnubarakDelayBloodlustUntilLeechingSwarmMultiplier(botAI));
     multipliers.push_back(new FactionChampionsSuppressAoeMultiplier(botAI));
+    multipliers.push_back(new TwinValkyrControlTankMovementMultiplier(botAI));
+    multipliers.push_back(new TwinValkyrPrioritizeEssenceSwapMultiplier(botAI));
 }

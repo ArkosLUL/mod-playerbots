@@ -66,6 +66,18 @@ public:
         // Faction Champions
         creators["faction champions focus priority"] =
             &RaidTrialOfTheCrusaderActionContext::faction_champions_focus_priority;
+
+        // Twin Val'kyr
+        creators["twin valkyr main tank hold light twin"] =
+            &RaidTrialOfTheCrusaderActionContext::twin_valkyr_main_tank_hold_light_twin;
+        creators["twin valkyr assist tank hold dark twin"] =
+            &RaidTrialOfTheCrusaderActionContext::twin_valkyr_assist_tank_hold_dark_twin;
+        creators["twin valkyr swap essence for vortex"] =
+            &RaidTrialOfTheCrusaderActionContext::twin_valkyr_swap_essence_for_vortex;
+        creators["twin valkyr swap essence for touch"] =
+            &RaidTrialOfTheCrusaderActionContext::twin_valkyr_swap_essence_for_touch;
+        creators["twin valkyr acquire initial essence"] =
+            &RaidTrialOfTheCrusaderActionContext::twin_valkyr_acquire_initial_essence;
     }
 
 private:
@@ -159,6 +171,26 @@ private:
 
     static Action* faction_champions_focus_priority(PlayerbotAI* botAI) {
         return new FactionChampionsFocusPriorityAction(botAI);
+    }
+
+    static Action* twin_valkyr_main_tank_hold_light_twin(PlayerbotAI* botAI) {
+        return new TwinValkyrMainTankHoldLightTwinAction(botAI);
+    }
+
+    static Action* twin_valkyr_assist_tank_hold_dark_twin(PlayerbotAI* botAI) {
+        return new TwinValkyrAssistTankHoldDarkTwinAction(botAI);
+    }
+
+    static Action* twin_valkyr_swap_essence_for_vortex(PlayerbotAI* botAI) {
+        return new TwinValkyrSwapEssenceForVortexAction(botAI);
+    }
+
+    static Action* twin_valkyr_swap_essence_for_touch(PlayerbotAI* botAI) {
+        return new TwinValkyrSwapEssenceForTouchAction(botAI);
+    }
+
+    static Action* twin_valkyr_acquire_initial_essence(PlayerbotAI* botAI) {
+        return new TwinValkyrAcquireInitialEssenceAction(botAI);
     }
 };
 

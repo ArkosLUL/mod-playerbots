@@ -29,6 +29,12 @@ enum class ToCNpcs : uint32
     NPC_NERUBIAN_BURROWER   = 34607, // phase 1 add
     NPC_SWARM_SCARAB        = 34605, // submerge-phase add
     NPC_PURSUING_SPIKE      = 34660, // submerge-phase chase mob
+
+    // Twin Val'kyr
+    NPC_FJOLA_LIGHTBANE     = 34497, // the Light twin (controls the encounter, casts Light Vortex)
+    NPC_EYDIS_DARKBANE      = 34496, // the Dark twin (casts Dark Vortex)
+    NPC_LIGHT_ESSENCE       = 34568, // portal NPC; its gossip grants the Light Essence aura
+    NPC_DARK_ESSENCE        = 34567, // portal NPC; its gossip grants the Dark Essence aura
 };
 
 enum class ToCSpells : uint32
@@ -59,6 +65,16 @@ enum class ToCSpells : uint32
     SPELL_PERMAFROST        = 66193, // aura on a grounded Frost Sphere; despawns a spike that reaches it
     SPELL_LEECHING_SWARM    = 66118, // raid-wide drain on the boss during phase 3 (<30%)
     SPELL_SUBMERGE_ANUB     = 65981, // boss submerge aura (phase 2)
+
+    // Twin Val'kyr - player essence auras (granted by the portal NPCs' gossip)
+    SPELL_LIGHT_ESSENCE     = 65686, // matches Light Vortex / Light Touch
+    SPELL_DARK_ESSENCE      = 65684, // matches Dark Vortex / Dark Touch
+    // Vortex raid-wide pulses (cast by the matching twin); detected via the boss's current spell
+    SPELL_LIGHT_VORTEX      = 66046,
+    SPELL_DARK_VORTEX       = 66058,
+    // Touch DoTs (heroic only) placed on an opposite-essence player; remedy is to swap colour
+    SPELL_LIGHT_TOUCH       = 67297,
+    SPELL_DARK_TOUCH        = 67282,
 };
 
 // Faction Champions (Trial of the Crusader, third encounter). Both faction rosters are listed
@@ -177,6 +193,22 @@ Unit* GetPriorityFactionChampion(PlayerbotAI* botAI);
 // A second alive healer to crowd-control, distinct from killTarget. Returns the highest-health
 // off-target healer (so it stays locked longest) or nullptr when fewer than two healers are up.
 Unit* GetCcFactionChampionHealer(PlayerbotAI* botAI, Unit* killTarget);
+
+// Twin Val'kyr
+
+// True while either twin (Fjola or Eydis) is alive. Gates the shared strategy's Twin Val'kyr
+// multipliers so they stay inert during the other ToC encounters.
+bool TwinValkyrEncounterActive(PlayerbotAI* botAI);
+
+// Essence aura checks on a unit (typically the bot itself).
+bool HasLightEssence(Unit* unit);
+bool HasDarkEssence(Unit* unit);
+bool HasAnyEssence(Unit* unit);
+
+// True while the matching-coloured Vortex is being cast. Detected via the casting twin's current
+// spell (Light Vortex from Fjola, Dark Vortex from Eydis), mirroring the Jaraxxus fel-fireball idiom.
+bool TwinValkyrLightVortexActive(PlayerbotAI* botAI);
+bool TwinValkyrDarkVortexActive(PlayerbotAI* botAI);
 
 }
 

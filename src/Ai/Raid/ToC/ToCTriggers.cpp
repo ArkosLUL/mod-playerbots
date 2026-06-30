@@ -249,3 +249,51 @@ bool FactionChampionsShouldFocusTrigger::IsActive()
 
     return GetPriorityFactionChampion(botAI) != nullptr;
 }
+
+// Twin Val'kyr
+
+bool TwinValkyrEngagedByMainTankTrigger::IsActive()
+{
+    return botAI->IsMainTank(bot) &&
+           GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_FJOLA_LIGHTBANE));
+}
+
+bool TwinValkyrDarkbaneNeedsAssistTankTrigger::IsActive()
+{
+    return botAI->IsAssistTankOfIndex(bot, 0, false) &&
+           GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE));
+}
+
+bool TwinValkyrVortexRequiresEssenceTrigger::IsActive()
+{
+    // Tanks stay anchored on their twin; only non-tanks run to a portal to swap. A bot that already
+    // matches the active vortex colour is fine, so only fire on a genuine mismatch.
+    if (botAI->IsTank(bot))
+        return false;
+
+    if (TwinValkyrLightVortexActive(botAI) && !HasLightEssence(bot))
+        return true;
+
+    return TwinValkyrDarkVortexActive(botAI) && !HasDarkEssence(bot);
+}
+
+bool TwinValkyrTouchedRequiresEssenceTrigger::IsActive()
+{
+    // Touch (heroic) only lands on essence-carrying non-tanks (the boss excludes current tanks). The
+    // remedy is to switch to the touch's colour: Light Touch absorbed by Light Essence, and vice versa.
+    if (botAI->IsTank(bot))
+        return false;
+
+    if (bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_LIGHT_TOUCH)) && !HasLightEssence(bot))
+        return true;
+
+    return bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_DARK_TOUCH)) && !HasDarkEssence(bot);
+}
+
+bool TwinValkyrNeedsInitialEssenceTrigger::IsActive()
+{
+    // Everyone (tanks included) grabs an essence at the pull so they have an absorb for the first
+    // vortex/ball/touch. Tanks keep this fixed colour for the whole fight (they are excluded from the
+    // vortex/touch swap triggers); non-tanks swap from here as those mechanics fire. Low priority.
+    return TwinValkyrEncounterActive(botAI) && !HasAnyEssence(bot);
+}

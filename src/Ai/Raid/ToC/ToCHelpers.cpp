@@ -317,4 +317,39 @@ Unit* GetCcFactionChampionHealer(PlayerbotAI* botAI, Unit* killTarget)
     return highestHealer;
 }
 
+// Twin Val'kyr
+
+bool TwinValkyrEncounterActive(PlayerbotAI* botAI)
+{
+    return GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_FJOLA_LIGHTBANE)) ||
+           GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE));
+}
+
+bool HasLightEssence(Unit* unit)
+{
+    return unit && unit->HasAura(static_cast<uint32>(ToCSpells::SPELL_LIGHT_ESSENCE));
+}
+
+bool HasDarkEssence(Unit* unit)
+{
+    return unit && unit->HasAura(static_cast<uint32>(ToCSpells::SPELL_DARK_ESSENCE));
+}
+
+bool HasAnyEssence(Unit* unit)
+{
+    return HasLightEssence(unit) || HasDarkEssence(unit);
+}
+
+bool TwinValkyrLightVortexActive(PlayerbotAI* botAI)
+{
+    Unit* fjola = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_FJOLA_LIGHTBANE));
+    return fjola && fjola->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_LIGHT_VORTEX));
+}
+
+bool TwinValkyrDarkVortexActive(PlayerbotAI* botAI)
+{
+    Unit* eydis = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE));
+    return eydis && eydis->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_DARK_VORTEX));
+}
+
 }

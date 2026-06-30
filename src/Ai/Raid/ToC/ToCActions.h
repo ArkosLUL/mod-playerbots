@@ -201,4 +201,58 @@ public:
     bool Execute(Event event) override;
 };
 
+// Twin Val'kyr
+
+class TwinValkyrMainTankHoldLightTwinAction : public AttackAction
+{
+public:
+    TwinValkyrMainTankHoldLightTwinAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr main tank hold light twin") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrAssistTankHoldDarkTwinAction : public AttackAction
+{
+public:
+    TwinValkyrAssistTankHoldDarkTwinAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr assist tank hold dark twin") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Shared base for the essence-acquiring actions: walks to the nearest portal of the wanted colour and
+// triggers its gossip-hello hook (which casts the essence aura on the bot).
+class TwinValkyrEssenceActionBase : public MovementAction
+{
+public:
+    TwinValkyrEssenceActionBase(
+        PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {};
+
+protected:
+    bool AcquireEssence(bool wantLight);
+};
+
+class TwinValkyrSwapEssenceForVortexAction : public TwinValkyrEssenceActionBase
+{
+public:
+    TwinValkyrSwapEssenceForVortexAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr swap essence for vortex") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrSwapEssenceForTouchAction : public TwinValkyrEssenceActionBase
+{
+public:
+    TwinValkyrSwapEssenceForTouchAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr swap essence for touch") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrAcquireInitialEssenceAction : public TwinValkyrEssenceActionBase
+{
+public:
+    TwinValkyrAcquireInitialEssenceAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr acquire initial essence") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 #endif

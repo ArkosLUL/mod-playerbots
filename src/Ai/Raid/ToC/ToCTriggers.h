@@ -199,4 +199,46 @@ public:
     bool IsActive() override;
 };
 
+// Twin Val'kyr
+
+class TwinValkyrEngagedByMainTankTrigger : public Trigger
+{
+public:
+    TwinValkyrEngagedByMainTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr engaged by main tank") {}
+    bool IsActive() override;
+};
+
+class TwinValkyrDarkbaneNeedsAssistTankTrigger : public Trigger
+{
+public:
+    TwinValkyrDarkbaneNeedsAssistTankTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr darkbane needs assist tank") {}
+    bool IsActive() override;
+};
+
+class TwinValkyrVortexRequiresEssenceTrigger : public Trigger
+{
+public:
+    TwinValkyrVortexRequiresEssenceTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr vortex requires essence") {}
+    bool IsActive() override;
+};
+
+class TwinValkyrTouchedRequiresEssenceTrigger : public Trigger
+{
+public:
+    TwinValkyrTouchedRequiresEssenceTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr touched requires essence") {}
+    bool IsActive() override;
+};
+
+class TwinValkyrNeedsInitialEssenceTrigger : public Trigger
+{
+public:
+    TwinValkyrNeedsInitialEssenceTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr needs initial essence") {}
+    bool IsActive() override;
+};
+
 #endif
