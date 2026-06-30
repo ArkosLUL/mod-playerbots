@@ -191,4 +191,14 @@ public:
     bool Execute(Event event) override;
 };
 
+// Faction Champions
+
+class FactionChampionsFocusPriorityAction : public AttackAction
+{
+public:
+    FactionChampionsFocusPriorityAction(
+        PlayerbotAI* botAI, std::string const name = "faction champions focus priority") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 #endif

@@ -1,6 +1,7 @@
 #include "ToCMultipliers.h"
 #include "ToCActions.h"
 #include "ToCHelpers.h"
+#include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
@@ -144,6 +145,21 @@ float AnubarakDelayBloodlustUntilLeechingSwarmMultiplier::GetValue(Action* actio
     {
         return 0.0f;
     }
+
+    return 1.0f;
+}
+
+float FactionChampionsSuppressAoeMultiplier::GetValue(Action* action)
+{
+    // Only gate AoE while champions are alive; the other ToC bosses share this strategy and must keep
+    // their AoE (e.g. Northrend Beasts add waves, Anub'arak burrowers/scarabs).
+    if (!action || !FactionChampionsEncounterActive(botAI))
+        return 1.0f;
+
+    // Champions stack a damage-reduction aura when several are hit by the same AoE, so bots single-
+    // target. AoE heals are exempt so healers can still raid-heal through the pile.
+    if (action->getThreatType() == Action::ActionThreatType::Aoe && !dynamic_cast<CastHealingSpellAction*>(action))
+        return 0.0f;
 
     return 1.0f;
 }

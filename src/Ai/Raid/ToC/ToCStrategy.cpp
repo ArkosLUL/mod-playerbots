@@ -76,6 +76,12 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     // The spike-chase target drops everything to kite the spike into Permafrost
     triggers.push_back(new TriggerNode("anubarak pursued by spike", {
         NextAction("anubarak kite spike to permafrost", ACTION_EMERGENCY + 8) }));
+
+    // Faction Champions. Interrupts are intentionally not handled here: every caster bot already runs
+    // an always-on class behaviour that interrupts enemy healers (mage "counterspell on enemy healer",
+    // rogue kick, etc.), so focusing the healer is enough for those kicks to land.
+    triggers.push_back(new TriggerNode("faction champions should focus", {
+        NextAction("faction champions focus priority", ACTION_RAID + 2) }));
 }
 
 void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
@@ -86,4 +92,5 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     multipliers.push_back(new AnubarakControlTankMovementMultiplier(botAI));
     multipliers.push_back(new AnubarakProtectSpikeKiteMultiplier(botAI));
     multipliers.push_back(new AnubarakDelayBloodlustUntilLeechingSwarmMultiplier(botAI));
+    multipliers.push_back(new FactionChampionsSuppressAoeMultiplier(botAI));
 }

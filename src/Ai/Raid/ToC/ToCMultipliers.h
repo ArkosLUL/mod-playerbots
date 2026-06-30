@@ -58,4 +58,13 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Suppress AoE damage during Faction Champions so they never gain the stacking Anti-AoE mitigation
+class FactionChampionsSuppressAoeMultiplier : public Multiplier
+{
+public:
+    FactionChampionsSuppressAoeMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "faction champions suppress aoe multiplier") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

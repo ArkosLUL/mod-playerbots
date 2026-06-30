@@ -62,6 +62,10 @@ public:
             &RaidTrialOfTheCrusaderActionContext::anubarak_kite_spike_to_permafrost;
         creators["anubarak destroy frost sphere"] =
             &RaidTrialOfTheCrusaderActionContext::anubarak_destroy_frost_sphere;
+
+        // Faction Champions
+        creators["faction champions focus priority"] =
+            &RaidTrialOfTheCrusaderActionContext::faction_champions_focus_priority;
     }
 
 private:
@@ -151,6 +155,10 @@ private:
 
     static Action* anubarak_destroy_frost_sphere(PlayerbotAI* botAI) {
         return new AnubarakDestroyFrostSphereAction(botAI);
+    }
+
+    static Action* faction_champions_focus_priority(PlayerbotAI* botAI) {
+        return new FactionChampionsFocusPriorityAction(botAI);
     }
 };
 

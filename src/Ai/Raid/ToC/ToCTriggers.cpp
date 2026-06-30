@@ -237,3 +237,15 @@ bool AnubarakRangedShouldSeedPermafrostTrigger::IsActive()
 
     return false;
 }
+
+// Faction Champions
+
+bool FactionChampionsShouldFocusTrigger::IsActive()
+{
+    // Healers keep healing the raid; every other role burns the focus target. There is no boss to
+    // tank here (threat is artificial), so tanks join the damage dealers on the kill target.
+    if (botAI->IsHeal(bot))
+        return false;
+
+    return GetPriorityFactionChampion(botAI) != nullptr;
+}

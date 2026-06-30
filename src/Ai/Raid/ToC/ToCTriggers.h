@@ -189,4 +189,14 @@ public:
     bool IsActive() override;
 };
 
+// Faction Champions
+
+class FactionChampionsShouldFocusTrigger : public Trigger
+{
+public:
+    FactionChampionsShouldFocusTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "faction champions should focus") {}
+    bool IsActive() override;
+};
+
 #endif

@@ -62,6 +62,10 @@ public:
             &RaidTrialOfTheCrusaderTriggerContext::anubarak_pursued_by_spike;
         creators["anubarak ranged should seed permafrost"] =
             &RaidTrialOfTheCrusaderTriggerContext::anubarak_ranged_should_seed_permafrost;
+
+        // Faction Champions
+        creators["faction champions should focus"] =
+            &RaidTrialOfTheCrusaderTriggerContext::faction_champions_should_focus;
     }
 
 private:
@@ -151,6 +155,10 @@ private:
 
     static Trigger* anubarak_ranged_should_seed_permafrost(PlayerbotAI* botAI) {
         return new AnubarakRangedShouldSeedPermafrostTrigger(botAI);
+    }
+
+    static Trigger* faction_champions_should_focus(PlayerbotAI* botAI) {
+        return new FactionChampionsShouldFocusTrigger(botAI);
     }
 };
 
