@@ -6,6 +6,7 @@
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 #include "Unit.h"
 
 const Position VOA_EMALON_RESTORE_POSITION = Position(-221.8f, -243.8f, 96.8f, 4.7f);
@@ -184,4 +185,89 @@ bool EmalonFallFromFloorAction::isUseful()
 {
     EmalonFallFromFloorTrigger emalonFallFromFloorTrigger(botAI);
     return emalonFallFromFloorTrigger.IsActive();
+}
+
+//
+//  Archavon the Stone Watcher
+//
+
+bool ArchavonMarkBossAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "archavon the stone watcher");
+    if (!boss || !boss->IsAlive())
+    {
+        return false;
+    }
+
+    bool isMainTank = botAI->IsMainTank(bot);
+    Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
+
+    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a real player
+    {
+        // Iterate through the first 3 bot tanks to assign the Skull marker
+        for (int i = 0; i < 3; ++i)
+        {
+            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
+            {
+                Group* group = bot->GetGroup();
+                if (group && boss)
+                {
+                    int8 skullIndex = 7;  // Skull
+                    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
+
+                    // If there's no skull set yet, or the skull is on a different target, set boss
+                    if (!currentSkullTarget || (boss->GetGUID() != currentSkullTarget))
+                    {
+                        group->SetTargetIcon(skullIndex, bot->GetGUID(), boss->GetGUID());
+                        return true;
+                    }
+                }
+                break;  // Stop after finding the first valid bot tank
+            }
+        }
+    }
+    else if (isMainTank)  // Bot is the main tank
+    {
+        Group* group = bot->GetGroup();
+        if (group)
+        {
+            int8 skullIndex = 7;  // Skull
+            ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
+
+            // If there's no skull set yet, or the skull is on a different target, set boss
+            if (!currentSkullTarget || (boss->GetGUID() != currentSkullTarget))
+            {
+                group->SetTargetIcon(skullIndex, bot->GetGUID(), boss->GetGUID());
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool ArchavonMarkBossAction::isUseful()
+{
+    ArchavonMarkBossTrigger archavonMarkBossTrigger(botAI);
+    return archavonMarkBossTrigger.IsActive();
+}
+
+// Ranged bots spread out so a single Rock Shards splashes fewer players
+bool ArchavonRockShardsSpreadAction::Execute(Event /*event*/)
+{
+    constexpr float safeDistance = 8.0f;
+    constexpr uint32 minInterval = 0;
+    if (Unit* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistance))
+    {
+        return FleePosition(nearestPlayer->GetPosition(), safeDistance, minInterval);
+    }
+
+    return false;
+}
+
+bool ArchavonRockShardsSpreadAction::isUseful()
+{
+    ArchavonRockShardsSpreadTrigger archavonRockShardsSpreadTrigger(botAI);
+    return archavonRockShardsSpreadTrigger.IsActive();
 }

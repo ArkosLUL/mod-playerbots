@@ -21,6 +21,9 @@ public:
         creators["emalon fall from floor trigger"] = &RaidVoATriggerContext::emalon_fall_from_floor_trigger;
         creators["emalon nature resistance trigger"] = &RaidVoATriggerContext::emalon_nature_resistance_trigger;
         creators["koralon fire resistance trigger"] = &RaidVoATriggerContext::koralon_fire_resistance_trigger;
+        creators["archavon mark boss trigger"] = &RaidVoATriggerContext::archavon_mark_boss_trigger;
+        creators["archavon rock shards spread trigger"] = &RaidVoATriggerContext::archavon_rock_shards_spread_trigger;
+        creators["archavon nature resistance trigger"] = &RaidVoATriggerContext::archavon_nature_resistance_trigger;
     }
 
 private:
@@ -30,6 +33,9 @@ private:
     static Trigger* emalon_fall_from_floor_trigger(PlayerbotAI* ai) { return new EmalonFallFromFloorTrigger(ai); }
     static Trigger* emalon_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "emalon the storm watcher"); }
     static Trigger* koralon_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "koralon the flame watcher"); }
+    static Trigger* archavon_mark_boss_trigger(PlayerbotAI* ai) { return new ArchavonMarkBossTrigger(ai); }
+    static Trigger* archavon_rock_shards_spread_trigger(PlayerbotAI* ai) { return new ArchavonRockShardsSpreadTrigger(ai); }
+    static Trigger* archavon_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "archavon the stone watcher"); }
 };
 
 #endif

@@ -23,6 +23,9 @@ public:
         creators["emalon fall from floor action"] = &RaidVoAActionContext::emalon_fall_from_floor_action;
         creators["emalon nature resistance action"] = &RaidVoAActionContext::emalon_nature_resistance_action;
         creators["koralon fire resistance action"] = &RaidVoAActionContext::koralon_fire_resistance_action;
+        creators["archavon mark boss action"] = &RaidVoAActionContext::archavon_mark_boss_action;
+        creators["archavon rock shards spread action"] = &RaidVoAActionContext::archavon_rock_shards_spread_action;
+        creators["archavon nature resistance action"] = &RaidVoAActionContext::archavon_nature_resistance_action;
     }
 
 private:
@@ -32,6 +35,9 @@ private:
     static Action* emalon_fall_from_floor_action(PlayerbotAI* ai) { return new EmalonFallFromFloorAction(ai); }
     static Action* emalon_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "emalon the storm watcher"); }
     static Action* koralon_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "koralon the flame watcher"); }
+    static Action* archavon_mark_boss_action(PlayerbotAI* ai) { return new ArchavonMarkBossAction(ai); }
+    static Action* archavon_rock_shards_spread_action(PlayerbotAI* ai) { return new ArchavonRockShardsSpreadAction(ai); }
+    static Action* archavon_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "archavon the stone watcher"); }
 };
 
 #endif

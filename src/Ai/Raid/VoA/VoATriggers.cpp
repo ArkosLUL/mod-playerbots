@@ -4,6 +4,7 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 
 bool EmalonMarkBossTrigger::IsActive()
 {
@@ -134,4 +135,59 @@ bool EmalonFallFromFloorTrigger::IsActive()
 
     // Check if bot is on the floor
     return bot->GetPositionZ() < 80.0f;
+}
+
+//
+// Archavon the Stone Watcher
+//
+bool ArchavonMarkBossTrigger::IsActive()
+{
+    // Only tank bot can mark target
+    if (!botAI->IsTank(bot))
+    {
+        return false;
+    }
+
+    // Check boss and it is alive
+    Unit* boss = AI_VALUE2(Unit*, "find target", "archavon the stone watcher");
+    if (!boss || !boss->IsAlive())
+    {
+        return false;
+    }
+
+    // Check if boss already have skull mark
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
+
+    int8 skullIndex = 7;  // Skull
+    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
+    if (currentSkullTarget == boss->GetGUID())
+    {
+        return false;
+    }
+
+    return true;
+}
+
+bool ArchavonRockShardsSpreadTrigger::IsActive()
+{
+    // Only ranged bots spread; melee stay stacked on the boss
+    if (!botAI->IsRanged(bot))
+    {
+        return false;
+    }
+
+    // Check boss is engaged and alive
+    Unit* boss = AI_VALUE2(Unit*, "find target", "archavon the stone watcher");
+    if (!boss || !boss->IsAlive() || !boss->IsInCombat())
+    {
+        return false;
+    }
+
+    // Only move when clustered with another player (Rock Shards splashes nearby)
+    constexpr float spreadRadius = 8.0f;
+    return GetNearestPlayerInRadius(bot, spreadRadius) != nullptr;
 }

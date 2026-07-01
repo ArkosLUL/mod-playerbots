@@ -42,4 +42,24 @@ public:
     bool isUseful() override;
 };
 
+//
+//  Archavon the Stone Watcher
+//
+
+class ArchavonMarkBossAction : public MovementAction
+{
+public:
+    ArchavonMarkBossAction(PlayerbotAI* botAI) : MovementAction(botAI, "archavon mark boss action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class ArchavonRockShardsSpreadAction : public MovementAction
+{
+public:
+    ArchavonRockShardsSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "archavon rock shards spread action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 #endif

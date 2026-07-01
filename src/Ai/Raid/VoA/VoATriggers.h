@@ -14,6 +14,10 @@ enum VoAIDs
     NPC_TEMPEST_MINION = 33998,
     SPELL_LIGHTNING_NOVA_10_MAN = 64216,
     SPELL_LIGHTNING_NOVA_25_MAN = 65279,
+
+    // Archavon the Stone Watcher
+    BOSS_ARCHAVON = 31125,
+    SPELL_ROCK_SHARDS = 58678,
 };
 
 //
@@ -44,6 +48,23 @@ class EmalonFallFromFloorTrigger : public Trigger
 {
 public:
     EmalonFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon fall from floor trigger") {}
+    bool IsActive() override;
+};
+
+//
+// Archavon the Stone Watcher
+//
+class ArchavonMarkBossTrigger : public Trigger
+{
+public:
+    ArchavonMarkBossTrigger(PlayerbotAI* ai) : Trigger(ai, "archavon mark boss trigger") {}
+    bool IsActive() override;
+};
+
+class ArchavonRockShardsSpreadTrigger : public Trigger
+{
+public:
+    ArchavonRockShardsSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "archavon rock shards spread trigger") {}
     bool IsActive() override;
 };
 
