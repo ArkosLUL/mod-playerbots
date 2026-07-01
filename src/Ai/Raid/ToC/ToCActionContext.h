@@ -14,6 +14,8 @@ public:
             &RaidTrialOfTheCrusaderActionContext::gormok_main_tank_hold_boss;
         creators["gormok focus snobold"] =
             &RaidTrialOfTheCrusaderActionContext::gormok_focus_snobold;
+        creators["gormok tank swap taunt"] =
+            &RaidTrialOfTheCrusaderActionContext::gormok_tank_swap_taunt;
 
         // Acidmaw & Dreadscale
         creators["northrend worms main tank hold mobile worm"] =
@@ -24,6 +26,10 @@ public:
             &RaidTrialOfTheCrusaderActionContext::worms_spread;
         creators["northrend worms keep moving"] =
             &RaidTrialOfTheCrusaderActionContext::worms_keep_moving;
+        creators["northrend worms avoid slime pool"] =
+            &RaidTrialOfTheCrusaderActionContext::worms_avoid_slime_pool;
+        creators["northrend worms avoid sweep"] =
+            &RaidTrialOfTheCrusaderActionContext::worms_avoid_sweep;
 
         // Icehowl
         creators["icehowl main tank hold boss"] =
@@ -78,6 +84,8 @@ public:
             &RaidTrialOfTheCrusaderActionContext::twin_valkyr_swap_essence_for_touch;
         creators["twin valkyr acquire initial essence"] =
             &RaidTrialOfTheCrusaderActionContext::twin_valkyr_acquire_initial_essence;
+        creators["twin valkyr interrupt pact"] =
+            &RaidTrialOfTheCrusaderActionContext::twin_valkyr_interrupt_pact;
     }
 
 private:
@@ -87,6 +95,10 @@ private:
 
     static Action* gormok_focus_snobold(PlayerbotAI* botAI) {
         return new GormokFocusSnoboldAction(botAI);
+    }
+
+    static Action* gormok_tank_swap_taunt(PlayerbotAI* botAI) {
+        return new GormokTankSwapTauntAction(botAI);
     }
 
     static Action* worms_main_tank_hold_mobile_worm(PlayerbotAI* botAI) {
@@ -103,6 +115,14 @@ private:
 
     static Action* worms_keep_moving(PlayerbotAI* botAI) {
         return new WormsKeepMovingAction(botAI);
+    }
+
+    static Action* worms_avoid_slime_pool(PlayerbotAI* botAI) {
+        return new WormsAvoidSlimePoolAction(botAI);
+    }
+
+    static Action* worms_avoid_sweep(PlayerbotAI* botAI) {
+        return new WormsAvoidSweepAction(botAI);
     }
 
     static Action* icehowl_main_tank_hold_boss(PlayerbotAI* botAI) {
@@ -191,6 +211,10 @@ private:
 
     static Action* twin_valkyr_acquire_initial_essence(PlayerbotAI* botAI) {
         return new TwinValkyrAcquireInitialEssenceAction(botAI);
+    }
+
+    static Action* twin_valkyr_interrupt_pact(PlayerbotAI* botAI) {
+        return new TwinValkyrInterruptPactAction(botAI);
     }
 };
 

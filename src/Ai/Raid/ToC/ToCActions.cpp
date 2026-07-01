@@ -24,6 +24,28 @@ Unit* FindWorm(PlayerbotAI* botAI, bool mobile)
 
     return nullptr;
 }
+
+// Cast the bot's class taunt on target. Only tank classes have one; returns false for other classes or
+// when the taunt is unavailable / on cooldown.
+bool CastTankTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
+{
+    if (!target || !target->IsAlive())
+        return false;
+
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+            return botAI->CastSpell("hand of reckoning", target);
+        case CLASS_DEATH_KNIGHT:
+            return botAI->CastSpell("dark command", target);
+        case CLASS_DRUID:
+            return botAI->CastSpell("growl", target);
+        case CLASS_WARRIOR:
+            return botAI->CastSpell("taunt", target);
+        default:
+            return false;
+    }
+}
 }
 
 // Gormok the Impaler
@@ -73,6 +95,27 @@ bool GormokFocusSnoboldAction::Execute(Event /*event*/)
 
     if (AI_VALUE(Unit*, "current target") != snobold)
         return Attack(snobold);
+
+    return false;
+}
+
+bool GormokTankSwapTauntAction::Execute(Event /*event*/)
+{
+    Unit* gormok = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_GORMOK));
+    if (!gormok)
+        return false;
+
+    MarkTargetWithSkull(bot, gormok);
+    SetRtiTarget(botAI, "skull", gormok);
+
+    // Taunt to pull Gormok off the overloaded tank; the Impale bleed then decays on the old tank before
+    // it stacks to a lethal amount.
+    if (CastTankTaunt(botAI, bot, gormok))
+        return true;
+
+    // Taunt unavailable / on cooldown: at least commit melee onto the boss so threat keeps building.
+    if (AI_VALUE(Unit*, "current target") != gormok)
+        return Attack(gormok);
 
     return false;
 }
@@ -141,6 +184,58 @@ bool WormsKeepMovingAction::Execute(Event /*event*/)
     }
 
     return MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, destX, destY, center.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT, true, false);
+}
+
+bool AvoidCreatureClusterAction::FleeFromCreatureCluster(uint32 entry)
+{
+    // Scan wider than the trigger radius so the escape vector runs from the centre of the whole cluster,
+    // not the nearest patch, and does not push the bot from one patch straight into the next.
+    constexpr float clusterRadius = 15.0f;
+    Position center;
+    if (!GetCreatureClusterCenter(bot, entry, clusterRadius, center))
+        return false;
+
+    botAI->InterruptSpell();
+
+    constexpr float fleeDistance = 12.0f;
+    constexpr uint32 minInterval = 500;
+    return FleePosition(center, fleeDistance, minInterval);
+}
+
+bool WormsAvoidSlimePoolAction::Execute(Event /*event*/)
+{
+    return FleeFromCreatureCluster(static_cast<uint32>(ToCNpcs::NPC_SLIME_POOL));
+}
+
+bool WormsAvoidSweepAction::Execute(Event /*event*/)
+{
+    Unit* worm = GetWormCastingSweep(botAI);
+    if (!worm)
+        return false;
+
+    // Step perpendicular to the worm's facing to clear the frontal Sweep cone, fleeing toward whichever
+    // side the bot is already on.
+    const float orientation = worm->GetOrientation();
+    const float dirX = std::cos(orientation);
+    const float dirY = std::sin(orientation);
+
+    const float relX = bot->GetPositionX() - worm->GetPositionX();
+    const float relY = bot->GetPositionY() - worm->GetPositionY();
+
+    const float perpendicular = relX * dirY - relY * dirX;
+    const float side = perpendicular >= 0.0f ? 1.0f : -1.0f;
+
+    const float escapeX = dirY * side;
+    const float escapeY = -dirX * side;
+
+    botAI->InterruptSpell();
+
+    constexpr float clearance = 12.0f;
+    const float destX = bot->GetPositionX() + escapeX * clearance;
+    const float destY = bot->GetPositionY() + escapeY * clearance;
+
+    return MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, destX, destY, bot->GetPositionZ(), false, false,
                   false, false, MovementPriority::MOVEMENT_COMBAT, true, false);
 }
 
@@ -309,20 +404,7 @@ bool JaraxxusFocusAddAction::Execute(Event /*event*/)
 
 bool JaraxxusAvoidLegionFlameAction::Execute(Event /*event*/)
 {
-    // Legion Flame lays a trail of patches; flee away from the centre of the whole nearby
-    // cluster (scanning wider than the trigger radius) so the escape vector does not push the
-    // bot from the nearest patch straight into the next one in the line.
-    constexpr float clusterRadius = 15.0f;
-    Position flameCenter;
-    if (!GetCreatureClusterCenter(bot, static_cast<uint32>(ToCNpcs::NPC_LEGION_FLAME), clusterRadius, flameCenter))
-        return false;
-
-    botAI->InterruptSpell();
-
-    // Step away from the fire and keep a comfortable buffer
-    constexpr float fleeDistance = 12.0f;
-    constexpr uint32 minInterval = 500;
-    return FleePosition(flameCenter, fleeDistance, minInterval);
+    return FleeFromCreatureCluster(static_cast<uint32>(ToCNpcs::NPC_LEGION_FLAME));
 }
 
 bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
@@ -722,4 +804,19 @@ bool TwinValkyrAcquireInitialEssenceAction::Execute(Event /*event*/)
     // from there.
     bool const wantLight = !(botAI->IsTank(bot) && !botAI->IsMainTank(bot));
     return AcquireEssence(wantLight);
+}
+
+bool TwinValkyrInterruptPactAction::Execute(Event /*event*/)
+{
+    Unit* twin = GetTwinCastingPact(botAI);
+    if (!twin)
+        return false;
+
+    // Pull a free damage dealer onto the casting twin so its always-on class interrupt (Counterspell /
+    // Pummel / Kick / Mind Freeze ...) lands on the Twin's Pact channel. The damage-reflect shield the
+    // twins carry during specials does not reflect interrupts, so the kick lands normally.
+    if (AI_VALUE(Unit*, "current target") != twin)
+        return Attack(twin);
+
+    return false;
 }

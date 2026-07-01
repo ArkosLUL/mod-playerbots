@@ -10,6 +10,10 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     triggers.push_back(new TriggerNode("gormok snobold on raid", {
         NextAction("gormok focus snobold", ACTION_RAID + 2) }));
 
+    // Off-tank taunts once the current tank's Impale bleed stacks up, so the two tanks trade the boss
+    triggers.push_back(new TriggerNode("gormok tank swap needed", {
+        NextAction("gormok tank swap taunt", ACTION_RAID + 5) }));
+
     // Northrend Beasts - Acidmaw & Dreadscale
     triggers.push_back(new TriggerNode("northrend worms mobile engaged by main tank", {
         NextAction("northrend worms main tank hold mobile worm", ACTION_RAID + 1) }));
@@ -22,6 +26,13 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
 
     triggers.push_back(new TriggerNode("northrend worms afflicted by burning", {
         NextAction("northrend worms keep moving", ACTION_EMERGENCY + 5) }));
+
+    // Persistent ground hazards / frontal cone dodges outrank the generic spread/keep-moving above
+    triggers.push_back(new TriggerNode("northrend worms slime pool nearby", {
+        NextAction("northrend worms avoid slime pool", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode("northrend worms sweep frontal", {
+        NextAction("northrend worms avoid sweep", ACTION_EMERGENCY + 7) }));
 
     // Northrend Beasts - Icehowl
     triggers.push_back(new TriggerNode("icehowl engaged by main tank", {
@@ -103,6 +114,11 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
 
     triggers.push_back(new TriggerNode("twin valkyr needs initial essence", {
         NextAction("twin valkyr acquire initial essence", ACTION_RAID) }));
+
+    // Break the twins' heal-to-full Twin's Pact channel. Below the essence swaps (+5/+6) so a bot that
+    // must swap essence to survive still swaps first.
+    triggers.push_back(new TriggerNode("twin valkyr pact interruptible", {
+        NextAction("twin valkyr interrupt pact", ACTION_EMERGENCY + 2) }));
 }
 
 void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)

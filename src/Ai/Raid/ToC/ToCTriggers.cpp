@@ -24,6 +24,24 @@ bool GormokSnoboldOnRaidTrigger::IsActive()
            GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_SNOBOLD_VASSAL));
 }
 
+bool GormokTankSwapNeededTrigger::IsActive()
+{
+    // Either tank (main or first assist) taunts when the OTHER tank is the one currently holding Gormok
+    // and is carrying a lethal Impale stack count. With two tanks this ping-pongs the boss between them.
+    if (!botAI->IsMainTank(bot) && !botAI->IsAssistTankOfIndex(bot, 0, false))
+        return false;
+
+    Unit* gormok = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_GORMOK));
+    if (!gormok)
+        return false;
+
+    Unit* victim = gormok->GetVictim();
+    if (!victim || victim == bot)
+        return false;
+
+    return GetGormokImpaleStacks(victim) >= GORMOK_IMPALE_SWAP_STACKS;
+}
+
 // Acidmaw & Dreadscale
 
 bool WormsMobileEngagedByMainTankTrigger::IsActive()
@@ -69,6 +87,30 @@ bool WormsAfflictedByBurningTrigger::IsActive()
 
     return bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_BURNING_BITE)) ||
            bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_BURNING_SPRAY));
+}
+
+bool WormsSlimePoolNearbyTrigger::IsActive()
+{
+    // The slime pool is a persistent ground hazard everyone (tanks included) steps out of, like the
+    // Jaraxxus Legion Flame trail.
+    constexpr float slimePoolRadius = 6.0f;
+    return GetNearestCreatureByEntry(bot, static_cast<uint32>(ToCNpcs::NPC_SLIME_POOL), slimePoolRadius) != nullptr;
+}
+
+bool WormsSweepFrontalTrigger::IsActive()
+{
+    // Sweep is a frontal cone; only bots standing in front of the casting worm need to dodge. Tanks hold
+    // the worm head-on and eat it by design, so only non-tanks break off.
+    if (botAI->IsTank(bot))
+        return false;
+
+    Unit* worm = GetWormCastingSweep(botAI);
+    if (!worm)
+        return false;
+
+    constexpr float sweepArc = static_cast<float>(M_PI) / 2.0f; // ~90-degree frontal cone
+    constexpr float sweepRange = 20.0f;
+    return IsBotInFrontalCone(bot, worm, sweepArc, sweepRange);
 }
 
 // Icehowl
@@ -296,4 +338,15 @@ bool TwinValkyrNeedsInitialEssenceTrigger::IsActive()
     // vortex/ball/touch. Tanks keep this fixed colour for the whole fight (they are excluded from the
     // vortex/touch swap triggers); non-tanks swap from here as those mechanics fire. Low priority.
     return TwinValkyrEncounterActive(botAI) && !HasAnyEssence(bot);
+}
+
+bool TwinValkyrPactInterruptibleTrigger::IsActive()
+{
+    // Pure healers keep the raid up; tanks stay anchored on their twin (the tank on the casting twin
+    // already interrupts via its always-on class behaviour). Free DPS retarget the casting twin so their
+    // interrupt breaks the heal-to-full channel.
+    if (botAI->IsTank(bot) || botAI->IsHeal(bot))
+        return false;
+
+    return GetTwinCastingPact(botAI) != nullptr;
 }

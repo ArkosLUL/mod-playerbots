@@ -21,6 +21,14 @@ public:
     bool IsActive() override;
 };
 
+class GormokTankSwapNeededTrigger : public Trigger
+{
+public:
+    GormokTankSwapNeededTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "gormok tank swap needed") {}
+    bool IsActive() override;
+};
+
 // Acidmaw & Dreadscale
 
 class WormsMobileEngagedByMainTankTrigger : public Trigger
@@ -52,6 +60,22 @@ class WormsAfflictedByBurningTrigger : public Trigger
 public:
     WormsAfflictedByBurningTrigger(
         PlayerbotAI* botAI) : Trigger(botAI, "northrend worms afflicted by burning") {}
+    bool IsActive() override;
+};
+
+class WormsSlimePoolNearbyTrigger : public Trigger
+{
+public:
+    WormsSlimePoolNearbyTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms slime pool nearby") {}
+    bool IsActive() override;
+};
+
+class WormsSweepFrontalTrigger : public Trigger
+{
+public:
+    WormsSweepFrontalTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms sweep frontal") {}
     bool IsActive() override;
 };
 
@@ -238,6 +262,14 @@ class TwinValkyrNeedsInitialEssenceTrigger : public Trigger
 public:
     TwinValkyrNeedsInitialEssenceTrigger(
         PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr needs initial essence") {}
+    bool IsActive() override;
+};
+
+class TwinValkyrPactInterruptibleTrigger : public Trigger
+{
+public:
+    TwinValkyrPactInterruptibleTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "twin valkyr pact interruptible") {}
     bool IsActive() override;
 };
 

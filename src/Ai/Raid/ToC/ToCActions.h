@@ -5,6 +5,18 @@
 #include "AttackAction.h"
 #include "MovementActions.h"
 
+// Shared base for actions that flee a spreading ground hazard made of many same-entry creatures
+// (Legion Flame trail, slime pools, ...). Flees the centre of the whole nearby cluster so the escape
+// vector does not push the bot from one patch straight into the next.
+class AvoidCreatureClusterAction : public MovementAction
+{
+public:
+    AvoidCreatureClusterAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {};
+
+protected:
+    bool FleeFromCreatureCluster(uint32 entry);
+};
+
 // Gormok the Impaler
 
 class GormokMainTankHoldBossAction : public AttackAction
@@ -20,6 +32,14 @@ class GormokFocusSnoboldAction : public AttackAction
 public:
     GormokFocusSnoboldAction(
         PlayerbotAI* botAI, std::string const name = "gormok focus snobold") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class GormokTankSwapTauntAction : public AttackAction
+{
+public:
+    GormokTankSwapTauntAction(
+        PlayerbotAI* botAI, std::string const name = "gormok tank swap taunt") : AttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -54,6 +74,22 @@ class WormsKeepMovingAction : public MovementAction
 public:
     WormsKeepMovingAction(
         PlayerbotAI* botAI, std::string const name = "northrend worms keep moving") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsAvoidSlimePoolAction : public AvoidCreatureClusterAction
+{
+public:
+    WormsAvoidSlimePoolAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms avoid slime pool") : AvoidCreatureClusterAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsAvoidSweepAction : public MovementAction
+{
+public:
+    WormsAvoidSweepAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms avoid sweep") : MovementAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -109,11 +145,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class JaraxxusAvoidLegionFlameAction : public MovementAction
+class JaraxxusAvoidLegionFlameAction : public AvoidCreatureClusterAction
 {
 public:
     JaraxxusAvoidLegionFlameAction(
-        PlayerbotAI* botAI, std::string const name = "jaraxxus avoid legion flame") : MovementAction(botAI, name) {};
+        PlayerbotAI* botAI, std::string const name = "jaraxxus avoid legion flame") : AvoidCreatureClusterAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -252,6 +288,14 @@ class TwinValkyrAcquireInitialEssenceAction : public TwinValkyrEssenceActionBase
 public:
     TwinValkyrAcquireInitialEssenceAction(
         PlayerbotAI* botAI, std::string const name = "twin valkyr acquire initial essence") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrInterruptPactAction : public AttackAction
+{
+public:
+    TwinValkyrInterruptPactAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr interrupt pact") : AttackAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 

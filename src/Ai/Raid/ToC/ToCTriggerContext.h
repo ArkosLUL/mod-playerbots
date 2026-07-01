@@ -14,6 +14,8 @@ public:
             &RaidTrialOfTheCrusaderTriggerContext::gormok_engaged_by_main_tank;
         creators["gormok snobold on raid"] =
             &RaidTrialOfTheCrusaderTriggerContext::gormok_snobold_on_raid;
+        creators["gormok tank swap needed"] =
+            &RaidTrialOfTheCrusaderTriggerContext::gormok_tank_swap_needed;
 
         // Acidmaw & Dreadscale
         creators["northrend worms mobile engaged by main tank"] =
@@ -24,6 +26,10 @@ public:
             &RaidTrialOfTheCrusaderTriggerContext::worms_ranged_should_spread;
         creators["northrend worms afflicted by burning"] =
             &RaidTrialOfTheCrusaderTriggerContext::worms_afflicted_by_burning;
+        creators["northrend worms slime pool nearby"] =
+            &RaidTrialOfTheCrusaderTriggerContext::worms_slime_pool_nearby;
+        creators["northrend worms sweep frontal"] =
+            &RaidTrialOfTheCrusaderTriggerContext::worms_sweep_frontal;
 
         // Icehowl
         creators["icehowl engaged by main tank"] =
@@ -78,6 +84,8 @@ public:
             &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_touched_requires_essence;
         creators["twin valkyr needs initial essence"] =
             &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_needs_initial_essence;
+        creators["twin valkyr pact interruptible"] =
+            &RaidTrialOfTheCrusaderTriggerContext::twin_valkyr_pact_interruptible;
     }
 
 private:
@@ -87,6 +95,10 @@ private:
 
     static Trigger* gormok_snobold_on_raid(PlayerbotAI* botAI) {
         return new GormokSnoboldOnRaidTrigger(botAI);
+    }
+
+    static Trigger* gormok_tank_swap_needed(PlayerbotAI* botAI) {
+        return new GormokTankSwapNeededTrigger(botAI);
     }
 
     static Trigger* worms_mobile_engaged_by_main_tank(PlayerbotAI* botAI) {
@@ -103,6 +115,14 @@ private:
 
     static Trigger* worms_afflicted_by_burning(PlayerbotAI* botAI) {
         return new WormsAfflictedByBurningTrigger(botAI);
+    }
+
+    static Trigger* worms_slime_pool_nearby(PlayerbotAI* botAI) {
+        return new WormsSlimePoolNearbyTrigger(botAI);
+    }
+
+    static Trigger* worms_sweep_frontal(PlayerbotAI* botAI) {
+        return new WormsSweepFrontalTrigger(botAI);
     }
 
     static Trigger* icehowl_engaged_by_main_tank(PlayerbotAI* botAI) {
@@ -191,6 +211,10 @@ private:
 
     static Trigger* twin_valkyr_needs_initial_essence(PlayerbotAI* botAI) {
         return new TwinValkyrNeedsInitialEssenceTrigger(botAI);
+    }
+
+    static Trigger* twin_valkyr_pact_interruptible(PlayerbotAI* botAI) {
+        return new TwinValkyrPactInterruptibleTrigger(botAI);
     }
 };
 

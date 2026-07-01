@@ -11,6 +11,32 @@ const Position ARENA_CENTER = { 563.672974f, 139.571f, 393.837006f };
 
 const Position ANUBARAK_PIT_CENTER = { 722.65f, 135.41f, 142.16f };
 
+uint32 GetGormokImpaleStacks(Unit* unit)
+{
+    return unit ? unit->GetAuraCount(static_cast<uint32>(ToCSpells::SPELL_IMPALE)) : 0;
+}
+
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
+{
+    return bot && source && source->GetExactDist2d(bot) <= range && source->HasInArc(coneAngle, bot);
+}
+
+Unit* GetWormCastingSweep(PlayerbotAI* botAI)
+{
+    for (uint32 const entry : { static_cast<uint32>(ToCNpcs::NPC_ACIDMAW),
+                                static_cast<uint32>(ToCNpcs::NPC_DREADSCALE) })
+    {
+        Unit* worm = GetFirstAliveUnitByEntry(botAI, entry);
+        if (worm && (worm->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_SWEEP_0)) ||
+                     worm->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_SWEEP_1))))
+        {
+            return worm;
+        }
+    }
+
+    return nullptr;
+}
+
 bool IsWormMobile(Unit* worm)
 {
     if (!worm)
@@ -350,6 +376,24 @@ bool TwinValkyrDarkVortexActive(PlayerbotAI* botAI)
 {
     Unit* eydis = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE));
     return eydis && eydis->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_DARK_VORTEX));
+}
+
+Unit* GetTwinCastingPact(PlayerbotAI* botAI)
+{
+    // Fjola casts Light Pact and Eydis casts Dark Pact, but check both ids on each twin so the detection
+    // survives either twin being the surviving/controlling one.
+    for (uint32 const entry : { static_cast<uint32>(ToCNpcs::NPC_FJOLA_LIGHTBANE),
+                                static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE) })
+    {
+        Unit* twin = GetFirstAliveUnitByEntry(botAI, entry);
+        if (twin && (twin->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_LIGHT_TWIN_PACT)) ||
+                     twin->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_DARK_TWIN_PACT))))
+        {
+            return twin;
+        }
+    }
+
+    return nullptr;
 }
 
 }

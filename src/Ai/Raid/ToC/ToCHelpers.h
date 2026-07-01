@@ -14,6 +14,7 @@ enum class ToCNpcs : uint32
     NPC_DREADSCALE      = 34799,
     NPC_ICEHOWL         = 34797,
     NPC_SNOBOLD_VASSAL  = 34800,
+    NPC_SLIME_POOL      = 35176, // Acidmaw/Dreadscale slime pool: a persistent ground hazard
 
     // Lord Jaraxxus
     NPC_JARAXXUS        = 34780,
@@ -39,9 +40,15 @@ enum class ToCNpcs : uint32
 
 enum class ToCSpells : uint32
 {
+    // Northrend Beasts - Gormok the Impaler
+    SPELL_IMPALE            = 66331, // stacking bleed on the current tank; drives the tank swap
+
     // Acidmaw & Dreadscale (worms). The bite/spray spells carry the debuff aura directly.
     SPELL_BURNING_BITE      = 66879,
     SPELL_BURNING_SPRAY     = 66902,
+    // Sweep: frontal-cone knockback/damage cast by a worm (one id per mobility form)
+    SPELL_SWEEP_0           = 66794,
+    SPELL_SWEEP_1           = 67646,
 
     // Icehowl. Massive Crash is applied to players with a difficulty-specific spell id.
     SPELL_MASSIVE_CRASH_10N = 66683,
@@ -75,6 +82,9 @@ enum class ToCSpells : uint32
     // Touch DoTs (heroic only) placed on an opposite-essence player; remedy is to swap colour
     SPELL_LIGHT_TOUCH       = 67297,
     SPELL_DARK_TOUCH        = 67282,
+    // Twin's Pact: channeled heal-to-full at EVENT_SPECIAL (Fjola casts Light, Eydis casts Dark)
+    SPELL_LIGHT_TWIN_PACT   = 65876,
+    SPELL_DARK_TWIN_PACT    = 65875,
 };
 
 // Faction Champions (Trial of the Crusader, third encounter). Both faction rosters are listed
@@ -132,8 +142,23 @@ extern const Position ARENA_CENTER;
 // This is a different floor from ARENA_CENTER (the upper coliseum at Z ~393).
 extern const Position ANUBARAK_PIT_CENTER;
 
+// Gormok the Impaler
+
+// Impale stacks a bleed on the current tank; once the tank has this many, the off-tank taunts so the
+// bleed decays before it becomes lethal (starting value; tune against actual bleed damage).
+constexpr uint32 GORMOK_IMPALE_SWAP_STACKS = 3;
+
+// Total Impale stack count on a unit (0 if none)
+uint32 GetGormokImpaleStacks(Unit* unit);
+
 // True while the worm is in its mobile (chasing) form rather than stationary
 bool IsWormMobile(Unit* worm);
+
+// True if source is facing the bot within the given frontal arc (radians) and range (used for Sweep)
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
+
+// The worm (Acidmaw or Dreadscale) currently casting its Sweep frontal cone, else nullptr
+Unit* GetWormCastingSweep(PlayerbotAI* botAI);
 
 // True if the bot sits inside Icehowl's forward charge corridor (the ~12y wide lane he tramples)
 bool IsBotInChargeCorridor(Player* bot, Unit* icehowl, float halfWidth);
@@ -209,6 +234,10 @@ bool HasAnyEssence(Unit* unit);
 // spell (Light Vortex from Fjola, Dark Vortex from Eydis), mirroring the Jaraxxus fel-fireball idiom.
 bool TwinValkyrLightVortexActive(PlayerbotAI* botAI);
 bool TwinValkyrDarkVortexActive(PlayerbotAI* botAI);
+
+// The twin (Fjola or Eydis) currently channeling its Twin's Pact heal-to-full, else nullptr. The
+// channel is interruptible; retargeting an interrupter onto it breaks the heal.
+Unit* GetTwinCastingPact(PlayerbotAI* botAI);
 
 }
 
