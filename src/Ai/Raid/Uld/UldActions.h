@@ -500,4 +500,47 @@ public:
     bool Execute(Event event) override;
 };
 
+//
+// Algalon the Observer
+//
+class AlgalonCosmicSmashAction : public MovementAction
+{
+public:
+    AlgalonCosmicSmashAction(PlayerbotAI* ai) : MovementAction(ai, "algalon cosmic smash action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AlgalonBigBangHideAction : public MovementAction
+{
+public:
+    AlgalonBigBangHideAction(PlayerbotAI* ai) : MovementAction(ai, "algalon big bang hide action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AlgalonPhasePunchSwapAction : public AttackAction
+{
+public:
+    AlgalonPhasePunchSwapAction(PlayerbotAI* ai) : AttackAction(ai, "algalon phase punch swap action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AlgalonConstellationKiteAction : public MovementAction
+{
+public:
+    AlgalonConstellationKiteAction(PlayerbotAI* ai) : MovementAction(ai, "algalon constellation kite action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AlgalonDarkMatterMarkAction : public Action
+{
+public:
+    AlgalonDarkMatterMarkAction(PlayerbotAI* ai) : Action(ai, "algalon dark matter mark action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 #endif

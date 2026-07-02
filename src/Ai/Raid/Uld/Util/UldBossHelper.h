@@ -139,9 +139,29 @@ enum UlduarIDs
     SPELL_LUNATIC_GAZE_YS = 64163,
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
 
+    // Algalon the Observer
+    NPC_ALGALON = 32871,
+    NPC_LIVING_CONSTELLATION = 33052,
+    NPC_COLLAPSING_STAR = 32955,
+    NPC_BLACK_HOLE = 32953,
+    NPC_WORM_HOLE = 34099,
+    NPC_UNLEASHED_DARK_MATTER = 34097,
+    NPC_ALGALON_ASTEROID_TARGET_1 = 33104,
+    NPC_ALGALON_ASTEROID_TARGET_2 = 33105,
+    SPELL_ALGALON_BIG_BANG = 64443,
+    SPELL_ALGALON_PHASE_PUNCH = 64412,
+    SPELL_ALGALON_COSMIC_SMASH = 62301,
+    SPELL_ALGALON_BLACK_HOLE_DAMAGE = 62169,
+
     // Buffs
     SPELL_FROST_TRAP = 13809
 };
+
+// Off-tank taunts once the active tank reaches this many Phase Punch stacks
+constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
+
+// Kiter stops this far past the Black Hole (away from the constellation) to stay out of its phase/damage aura
+constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 5.0f;
 
 constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
 constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;

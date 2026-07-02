@@ -313,4 +313,27 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "yogg-saron phase 3 positioning trigger",
         { NextAction("yogg-saron phase 3 positioning action", ACTION_RAID) }));
+
+    //
+    // Algalon the Observer
+    //
+    triggers.push_back(new TriggerNode(
+        "algalon cosmic smash trigger",
+        { NextAction("algalon cosmic smash action", ACTION_EMERGENCY) }));
+
+    triggers.push_back(new TriggerNode(
+        "algalon big bang trigger",
+        { NextAction("algalon big bang hide action", ACTION_EMERGENCY + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "algalon phase punch swap trigger",
+        { NextAction("algalon phase punch swap action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "algalon constellation kite trigger",
+        { NextAction("algalon constellation kite action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "algalon dark matter trigger",
+        { NextAction("algalon dark matter mark action", ACTION_RAID) }));
 }
