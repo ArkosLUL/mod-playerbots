@@ -202,3 +202,9 @@ Unit* GetNearestPlayerInRadius(Player* bot, float radius)
 
     return nearestPlayer;
 }
+
+// Return true when bot sits inside source's frontal cone: within range and inside the half-angle arc
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
+{
+    return bot && source && source->GetExactDist2d(bot) <= range && source->HasInArc(coneAngle, bot);
+}

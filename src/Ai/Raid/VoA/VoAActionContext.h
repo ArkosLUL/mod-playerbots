@@ -26,6 +26,9 @@ public:
         creators["archavon mark boss action"] = &RaidVoAActionContext::archavon_mark_boss_action;
         creators["archavon rock shards spread action"] = &RaidVoAActionContext::archavon_rock_shards_spread_action;
         creators["archavon nature resistance action"] = &RaidVoAActionContext::archavon_nature_resistance_action;
+        creators["koralon mark boss action"] = &RaidVoAActionContext::koralon_mark_boss_action;
+        creators["koralon burning breath action"] = &RaidVoAActionContext::koralon_burning_breath_action;
+        creators["koralon flaming cinder spread action"] = &RaidVoAActionContext::koralon_flaming_cinder_spread_action;
     }
 
 private:
@@ -38,6 +41,9 @@ private:
     static Action* archavon_mark_boss_action(PlayerbotAI* ai) { return new ArchavonMarkBossAction(ai); }
     static Action* archavon_rock_shards_spread_action(PlayerbotAI* ai) { return new ArchavonRockShardsSpreadAction(ai); }
     static Action* archavon_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "archavon the stone watcher"); }
+    static Action* koralon_mark_boss_action(PlayerbotAI* ai) { return new KoralonMarkBossAction(ai); }
+    static Action* koralon_burning_breath_action(PlayerbotAI* ai) { return new KoralonBurningBreathAction(ai); }
+    static Action* koralon_flaming_cinder_spread_action(PlayerbotAI* ai) { return new KoralonFlamingCinderSpreadAction(ai); }
 };
 
 #endif

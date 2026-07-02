@@ -271,3 +271,130 @@ bool ArchavonRockShardsSpreadAction::isUseful()
     ArchavonRockShardsSpreadTrigger archavonRockShardsSpreadTrigger(botAI);
     return archavonRockShardsSpreadTrigger.IsActive();
 }
+
+//
+//  Koralon the Flame Watcher
+//
+
+bool KoralonMarkBossAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "koralon the flame watcher");
+    if (!boss || !boss->IsAlive())
+    {
+        return false;
+    }
+
+    bool isMainTank = botAI->IsMainTank(bot);
+    Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
+    Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
+
+    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a real player
+    {
+        // Iterate through the first 3 bot tanks to assign the Skull marker
+        for (int i = 0; i < 3; ++i)
+        {
+            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
+            {
+                Group* group = bot->GetGroup();
+                if (group && boss)
+                {
+                    int8 skullIndex = 7;  // Skull
+                    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
+
+                    // If there's no skull set yet, or the skull is on a different target, set boss
+                    if (!currentSkullTarget || (boss->GetGUID() != currentSkullTarget))
+                    {
+                        group->SetTargetIcon(skullIndex, bot->GetGUID(), boss->GetGUID());
+                        return true;
+                    }
+                }
+                break;  // Stop after finding the first valid bot tank
+            }
+        }
+    }
+    else if (isMainTank)  // Bot is the main tank
+    {
+        Group* group = bot->GetGroup();
+        if (group)
+        {
+            int8 skullIndex = 7;  // Skull
+            ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
+
+            // If there's no skull set yet, or the skull is on a different target, set boss
+            if (!currentSkullTarget || (boss->GetGUID() != currentSkullTarget))
+            {
+                group->SetTargetIcon(skullIndex, bot->GetGUID(), boss->GetGUID());
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool KoralonMarkBossAction::isUseful()
+{
+    KoralonMarkBossTrigger koralonMarkBossTrigger(botAI);
+    return koralonMarkBossTrigger.IsActive();
+}
+
+// Non-tanks step out of Koralon's frontal Burning Breath cone
+bool KoralonBurningBreathAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "koralon the flame watcher");
+    if (!boss)
+    {
+        return false;
+    }
+
+    // Step perpendicular to the boss's facing to clear the frontal cone, fleeing toward whichever
+    // side the bot is already on.
+    const float orientation = boss->GetOrientation();
+    const float dirX = std::cos(orientation);
+    const float dirY = std::sin(orientation);
+
+    const float relX = bot->GetPositionX() - boss->GetPositionX();
+    const float relY = bot->GetPositionY() - boss->GetPositionY();
+
+    const float perpendicular = relX * dirY - relY * dirX;
+    const float side = perpendicular >= 0.0f ? 1.0f : -1.0f;
+
+    const float escapeX = dirY * side;
+    const float escapeY = -dirX * side;
+
+    botAI->InterruptSpell();
+
+    constexpr float clearance = 12.0f;
+    float destX = bot->GetPositionX() + escapeX * clearance;
+    float destY = bot->GetPositionY() + escapeY * clearance;
+    float destZ = bot->GetPositionZ();
+    bot->UpdateAllowedPositionZ(destX, destY, destZ);
+
+    return MoveTo(bot->GetMapId(), destX, destY, destZ, false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT, true, false);
+}
+
+bool KoralonBurningBreathAction::isUseful()
+{
+    KoralonBurningBreathTrigger koralonBurningBreathTrigger(botAI);
+    return koralonBurningBreathTrigger.IsActive();
+}
+
+// Ranged bots spread out so a single Flaming Cinder splashes fewer players
+bool KoralonFlamingCinderSpreadAction::Execute(Event /*event*/)
+{
+    constexpr float safeDistance = 8.0f;
+    constexpr uint32 minInterval = 0;
+    if (Unit* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistance))
+    {
+        return FleePosition(nearestPlayer->GetPosition(), safeDistance, minInterval);
+    }
+
+    return false;
+}
+
+bool KoralonFlamingCinderSpreadAction::isUseful()
+{
+    KoralonFlamingCinderSpreadTrigger koralonFlamingCinderSpreadTrigger(botAI);
+    return koralonFlamingCinderSpreadTrigger.IsActive();
+}

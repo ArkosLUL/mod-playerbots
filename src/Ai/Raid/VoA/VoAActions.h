@@ -62,4 +62,32 @@ public:
     bool isUseful() override;
 };
 
+//
+//  Koralon the Flame Watcher
+//
+
+class KoralonMarkBossAction : public MovementAction
+{
+public:
+    KoralonMarkBossAction(PlayerbotAI* botAI) : MovementAction(botAI, "koralon mark boss action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KoralonBurningBreathAction : public MovementAction
+{
+public:
+    KoralonBurningBreathAction(PlayerbotAI* botAI) : MovementAction(botAI, "koralon burning breath action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KoralonFlamingCinderSpreadAction : public MovementAction
+{
+public:
+    KoralonFlamingCinderSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "koralon flaming cinder spread action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 #endif

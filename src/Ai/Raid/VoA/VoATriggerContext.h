@@ -24,6 +24,9 @@ public:
         creators["archavon mark boss trigger"] = &RaidVoATriggerContext::archavon_mark_boss_trigger;
         creators["archavon rock shards spread trigger"] = &RaidVoATriggerContext::archavon_rock_shards_spread_trigger;
         creators["archavon nature resistance trigger"] = &RaidVoATriggerContext::archavon_nature_resistance_trigger;
+        creators["koralon mark boss trigger"] = &RaidVoATriggerContext::koralon_mark_boss_trigger;
+        creators["koralon burning breath trigger"] = &RaidVoATriggerContext::koralon_burning_breath_trigger;
+        creators["koralon flaming cinder spread trigger"] = &RaidVoATriggerContext::koralon_flaming_cinder_spread_trigger;
     }
 
 private:
@@ -36,6 +39,9 @@ private:
     static Trigger* archavon_mark_boss_trigger(PlayerbotAI* ai) { return new ArchavonMarkBossTrigger(ai); }
     static Trigger* archavon_rock_shards_spread_trigger(PlayerbotAI* ai) { return new ArchavonRockShardsSpreadTrigger(ai); }
     static Trigger* archavon_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "archavon the stone watcher"); }
+    static Trigger* koralon_mark_boss_trigger(PlayerbotAI* ai) { return new KoralonMarkBossTrigger(ai); }
+    static Trigger* koralon_burning_breath_trigger(PlayerbotAI* ai) { return new KoralonBurningBreathTrigger(ai); }
+    static Trigger* koralon_flaming_cinder_spread_trigger(PlayerbotAI* ai) { return new KoralonFlamingCinderSpreadTrigger(ai); }
 };
 
 #endif

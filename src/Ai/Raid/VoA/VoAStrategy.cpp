@@ -1,4 +1,5 @@
 #include "VoAStrategy.h"
+#include "VoAMultipliers.h"
 #include "Action.h"
 #include "Strategy.h"
 #include "Trigger.h"
@@ -37,6 +38,18 @@ void RaidVoAStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "koralon fire resistance trigger",
         { NextAction("koralon fire resistance action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "koralon mark boss trigger",
+        { NextAction("koralon mark boss action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "koralon flaming cinder spread trigger",
+        { NextAction("koralon flaming cinder spread action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "koralon burning breath trigger",
+        { NextAction("koralon burning breath action", ACTION_EMERGENCY) }));
+
     //
     // Archavon the Stone Watcher
     //
@@ -52,4 +65,12 @@ void RaidVoAStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "archavon nature resistance trigger",
         { NextAction("archavon nature resistance action", ACTION_RAID) }));
+}
+
+void RaidVoAStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
+{
+    //
+    // Koralon the Flame Watcher
+    //
+    multipliers.push_back(new KoralonBurningBreathMultiplier(botAI));
 }

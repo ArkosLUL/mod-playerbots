@@ -18,6 +18,9 @@ enum VoAIDs
     // Archavon the Stone Watcher
     BOSS_ARCHAVON = 31125,
     SPELL_ROCK_SHARDS = 58678,
+
+    // Koralon the Flame Watcher
+    SPELL_BURNING_BREATH = 66665,
 };
 
 //
@@ -65,6 +68,30 @@ class ArchavonRockShardsSpreadTrigger : public Trigger
 {
 public:
     ArchavonRockShardsSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "archavon rock shards spread trigger") {}
+    bool IsActive() override;
+};
+
+//
+// Koralon the Flame Watcher
+//
+class KoralonMarkBossTrigger : public Trigger
+{
+public:
+    KoralonMarkBossTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon mark boss trigger") {}
+    bool IsActive() override;
+};
+
+class KoralonBurningBreathTrigger : public Trigger
+{
+public:
+    KoralonBurningBreathTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon burning breath trigger") {}
+    bool IsActive() override;
+};
+
+class KoralonFlamingCinderSpreadTrigger : public Trigger
+{
+public:
+    KoralonFlamingCinderSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon flaming cinder spread trigger") {}
     bool IsActive() override;
 };
 
