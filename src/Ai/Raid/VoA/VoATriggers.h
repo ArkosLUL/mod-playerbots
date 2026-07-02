@@ -10,17 +10,19 @@ enum VoAIDs
 {
     // Emalon the Storm Watcher
     AURA_OVERCHARGE = 64217,
-    BOSS_EMALON = 33993,
     NPC_TEMPEST_MINION = 33998,
     SPELL_LIGHTNING_NOVA_10_MAN = 64216,
     SPELL_LIGHTNING_NOVA_25_MAN = 65279,
 
     // Archavon the Stone Watcher
-    BOSS_ARCHAVON = 31125,
     SPELL_ROCK_SHARDS = 58678,
 
     // Koralon the Flame Watcher
     SPELL_BURNING_BREATH = 66665,
+
+    // Toravon the Ice Watcher
+    NPC_FROZEN_ORB = 38456,
+    SPELL_FREEZING_GROUND = 72090,
 };
 
 //
@@ -57,13 +59,6 @@ public:
 //
 // Archavon the Stone Watcher
 //
-class ArchavonMarkBossTrigger : public Trigger
-{
-public:
-    ArchavonMarkBossTrigger(PlayerbotAI* ai) : Trigger(ai, "archavon mark boss trigger") {}
-    bool IsActive() override;
-};
-
 class ArchavonRockShardsSpreadTrigger : public Trigger
 {
 public:
@@ -74,13 +69,6 @@ public:
 //
 // Koralon the Flame Watcher
 //
-class KoralonMarkBossTrigger : public Trigger
-{
-public:
-    KoralonMarkBossTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon mark boss trigger") {}
-    bool IsActive() override;
-};
-
 class KoralonBurningBreathTrigger : public Trigger
 {
 public:
@@ -92,6 +80,23 @@ class KoralonFlamingCinderSpreadTrigger : public Trigger
 {
 public:
     KoralonFlamingCinderSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "koralon flaming cinder spread trigger") {}
+    bool IsActive() override;
+};
+
+//
+// Toravon the Ice Watcher
+//
+class ToravonFreezingGroundTrigger : public Trigger
+{
+public:
+    ToravonFreezingGroundTrigger(PlayerbotAI* ai) : Trigger(ai, "toravon freezing ground trigger") {}
+    bool IsActive() override;
+};
+
+class ToravonFrozenOrbAvoidTrigger : public Trigger
+{
+public:
+    ToravonFrozenOrbAvoidTrigger(PlayerbotAI* ai) : Trigger(ai, "toravon frozen orb avoid trigger") {}
     bool IsActive() override;
 };
 

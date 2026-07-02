@@ -141,38 +141,6 @@ bool EmalonFallFromFloorTrigger::IsActive()
 //
 // Archavon the Stone Watcher
 //
-bool ArchavonMarkBossTrigger::IsActive()
-{
-    // Only tank bot can mark target
-    if (!botAI->IsTank(bot))
-    {
-        return false;
-    }
-
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "archavon the stone watcher");
-    if (!boss || !boss->IsAlive())
-    {
-        return false;
-    }
-
-    // Check if boss already have skull mark
-    Group* group = bot->GetGroup();
-    if (!group)
-    {
-        return false;
-    }
-
-    int8 skullIndex = 7;  // Skull
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    if (currentSkullTarget == boss->GetGUID())
-    {
-        return false;
-    }
-
-    return true;
-}
-
 bool ArchavonRockShardsSpreadTrigger::IsActive()
 {
     // Only ranged bots spread; melee stay stacked on the boss
@@ -196,38 +164,6 @@ bool ArchavonRockShardsSpreadTrigger::IsActive()
 //
 // Koralon the Flame Watcher
 //
-bool KoralonMarkBossTrigger::IsActive()
-{
-    // Only tank bot can mark target
-    if (!botAI->IsTank(bot))
-    {
-        return false;
-    }
-
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "koralon the flame watcher");
-    if (!boss || !boss->IsAlive())
-    {
-        return false;
-    }
-
-    // Check if boss already have skull mark
-    Group* group = bot->GetGroup();
-    if (!group)
-    {
-        return false;
-    }
-
-    int8 skullIndex = 7;  // Skull
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    if (currentSkullTarget == boss->GetGUID())
-    {
-        return false;
-    }
-
-    return true;
-}
-
 bool KoralonBurningBreathTrigger::IsActive()
 {
     // Tanks hold the boss and stay in the cone; only non-tanks need to clear it
@@ -280,4 +216,22 @@ bool KoralonFlamingCinderSpreadTrigger::IsActive()
     // Only move when clustered with another player (Flaming Cinder splashes nearby)
     constexpr float spreadRadius = 8.0f;
     return GetNearestPlayerInRadius(bot, spreadRadius) != nullptr;
+}
+
+//
+// Toravon the Ice Watcher
+//
+bool ToravonFreezingGroundTrigger::IsActive()
+{
+    // Freezing Ground drops a persistent frost patch (dynobj area aura) under a random player;
+    // anyone standing in it gets the aura and must move out. Same spell id across all difficulties.
+    return bot->HasAura(SPELL_FREEZING_GROUND);
+}
+
+bool ToravonFrozenOrbAvoidTrigger::IsActive()
+{
+    // Frozen Orbs pulse frost damage in a small radius and chase players; keep clear of them.
+    // Orb count scales with difficulty (1 on 10-man, 3 on 25-man) but the entry is identical.
+    constexpr float orbDangerRadius = 10.0f;
+    return bot->FindNearestCreature(NPC_FROZEN_ORB, orbDangerRadius) != nullptr;
 }

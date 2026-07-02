@@ -19,4 +19,15 @@ public:
     virtual float GetValue(Action* action);
 };
 
+// Toravon the Ice Watcher
+
+// While a bot must dodge Freezing Ground or a Frozen Orb, suppress the movement/reach actions that would
+// pull it back toward the boss, so the avoidance action wins.
+class ToravonAvoidMultiplier : public Multiplier
+{
+public:
+    ToravonAvoidMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "toravon avoid multiplier") {}
+    virtual float GetValue(Action* action);
+};
+
 #endif

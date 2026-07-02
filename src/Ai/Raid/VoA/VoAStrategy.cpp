@@ -65,6 +65,26 @@ void RaidVoAStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "archavon nature resistance trigger",
         { NextAction("archavon nature resistance action", ACTION_RAID) }));
+
+    //
+    // Toravon the Ice Watcher
+    //
+
+    triggers.push_back(new TriggerNode(
+        "toravon mark boss trigger",
+        { NextAction("toravon mark boss action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "toravon frost resistance trigger",
+        { NextAction("toravon frost resistance action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "toravon freezing ground trigger",
+        { NextAction("toravon freezing ground action", ACTION_EMERGENCY) }));
+
+    triggers.push_back(new TriggerNode(
+        "toravon frozen orb avoid trigger",
+        { NextAction("toravon frozen orb avoid action", ACTION_EMERGENCY) }));
 }
 
 void RaidVoAStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
@@ -73,4 +93,5 @@ void RaidVoAStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Koralon the Flame Watcher
     //
     multipliers.push_back(new KoralonBurningBreathMultiplier(botAI));
+    multipliers.push_back(new ToravonAvoidMultiplier(botAI));
 }

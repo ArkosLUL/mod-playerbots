@@ -10,14 +10,6 @@
 //  Emalon the Storm Watcher
 //
 
-class EmalonMarkBossAction : public MovementAction
-{
-public:
-    EmalonMarkBossAction(PlayerbotAI* botAI) : MovementAction(botAI, "emalon mark boss action") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
 class EmalonLightingNovaAction : public MovementAction
 {
 public:
@@ -46,14 +38,6 @@ public:
 //  Archavon the Stone Watcher
 //
 
-class ArchavonMarkBossAction : public MovementAction
-{
-public:
-    ArchavonMarkBossAction(PlayerbotAI* botAI) : MovementAction(botAI, "archavon mark boss action") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
 class ArchavonRockShardsSpreadAction : public MovementAction
 {
 public:
@@ -65,14 +49,6 @@ public:
 //
 //  Koralon the Flame Watcher
 //
-
-class KoralonMarkBossAction : public MovementAction
-{
-public:
-    KoralonMarkBossAction(PlayerbotAI* botAI) : MovementAction(botAI, "koralon mark boss action") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
 
 class KoralonBurningBreathAction : public MovementAction
 {
@@ -86,6 +62,26 @@ class KoralonFlamingCinderSpreadAction : public MovementAction
 {
 public:
     KoralonFlamingCinderSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "koralon flaming cinder spread action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+//
+//  Toravon the Ice Watcher
+//
+
+class ToravonFreezingGroundAction : public MovementAction
+{
+public:
+    ToravonFreezingGroundAction(PlayerbotAI* botAI) : MovementAction(botAI, "toravon freezing ground action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class ToravonFrozenOrbAvoidAction : public MovementAction
+{
+public:
+    ToravonFrozenOrbAvoidAction(PlayerbotAI* botAI) : MovementAction(botAI, "toravon frozen orb avoid action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

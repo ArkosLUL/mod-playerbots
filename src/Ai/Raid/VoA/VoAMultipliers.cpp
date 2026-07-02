@@ -27,3 +27,22 @@ float KoralonBurningBreathMultiplier::GetValue(Action* action)
 
     return 1.0f;
 }
+
+// Toravon the Ice Watcher
+
+float ToravonAvoidMultiplier::GetValue(Action* action)
+{
+    // Only clamp movement while the bot actually needs to dodge Freezing Ground or a Frozen Orb
+    ToravonFreezingGroundTrigger freezingGroundTrigger(botAI);
+    ToravonFrozenOrbAvoidTrigger frozenOrbTrigger(botAI);
+    if (!freezingGroundTrigger.IsActive() && !frozenOrbTrigger.IsActive())
+        return 1.0f;
+
+    if (dynamic_cast<CastReachTargetSpellAction*>(action) ||
+        dynamic_cast<ReachTargetAction*>(action) ||
+        dynamic_cast<CombatFormationMoveAction*>(action) ||
+        dynamic_cast<FollowAction*>(action))
+        return 0.0f;
+
+    return 1.0f;
+}
