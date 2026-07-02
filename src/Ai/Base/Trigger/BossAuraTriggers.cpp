@@ -9,6 +9,7 @@
 #include <PaladinBuffStrategies.h>
 #include <Unit.h>
 
+#include "Group.h"
 #include "Playerbots.h"
 
 bool BossFireResistanceTrigger::IsActive()
@@ -111,6 +112,28 @@ bool BossFrostResistanceTrigger::IsActive()
     }
 
     return false;
+}
+
+bool BossMarkSkullTrigger::IsActive()
+{
+    // Only a tank bot assigns the raid target marker
+    if (!botAI->IsTank(bot))
+        return false;
+
+    // Check boss and it is alive
+    Unit* boss = AI_VALUE2(Unit*, "find target", bossName);
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    int8 skullIndex = 7;  // Skull
+    if (group->GetTargetIcon(skullIndex) == boss->GetGUID())
+        return false;
+
+    return true;
 }
 
 bool BossNatureResistanceTrigger::IsActive()

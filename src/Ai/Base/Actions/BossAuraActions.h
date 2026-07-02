@@ -68,4 +68,19 @@ private:
     std::string bossName;
 };
 
+// Assigns the Skull raid marker to a boss so the whole group focuses one target.
+class BossMarkSkullAction : public Action
+{
+public:
+    BossMarkSkullAction(PlayerbotAI* botAI, std::string const bossName)
+        : Action(botAI, bossName + " mark boss action"), bossName(bossName)
+    {
+    }
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    std::string bossName;
+};
+
 #endif

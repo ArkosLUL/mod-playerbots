@@ -21,5 +21,6 @@ Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
 Unit* GetFirstAliveUnitByEntry(
     PlayerbotAI* botAI, uint32 entry);
 Unit* GetNearestPlayerInRadius(Player* bot, float radius);
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
 
 #endif
