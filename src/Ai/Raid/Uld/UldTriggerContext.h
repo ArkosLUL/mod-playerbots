@@ -84,6 +84,11 @@ public:
         creators["yogg-saron move to exit portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_exit_portal_trigger;
         creators["yogg-saron lunatic gaze trigger"] = &RaidUlduarTriggerContext::yogg_saron_lunatic_gaze_trigger;
         creators["yogg-saron phase 3 positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_positioning_trigger;
+        creators["algalon cosmic smash trigger"] = &RaidUlduarTriggerContext::algalon_cosmic_smash_trigger;
+        creators["algalon big bang trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_trigger;
+        creators["algalon phase punch swap trigger"] = &RaidUlduarTriggerContext::algalon_phase_punch_swap_trigger;
+        creators["algalon constellation kite trigger"] = &RaidUlduarTriggerContext::algalon_constellation_kite_trigger;
+        creators["algalon dark matter trigger"] = &RaidUlduarTriggerContext::algalon_dark_matter_trigger;
     }
 
 private:
@@ -156,6 +161,11 @@ private:
     static Trigger* yogg_saron_move_to_exit_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalTrigger(ai); }
     static Trigger* yogg_saron_lunatic_gaze_trigger(PlayerbotAI* ai) { return new YoggSaronLunaticGazeTrigger(ai); }
     static Trigger* yogg_saron_phase_3_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningTrigger(ai); }
+    static Trigger* algalon_cosmic_smash_trigger(PlayerbotAI* ai) { return new AlgalonCosmicSmashTrigger(ai); }
+    static Trigger* algalon_big_bang_trigger(PlayerbotAI* ai) { return new AlgalonBigBangTrigger(ai); }
+    static Trigger* algalon_phase_punch_swap_trigger(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapTrigger(ai); }
+    static Trigger* algalon_constellation_kite_trigger(PlayerbotAI* ai) { return new AlgalonConstellationKiteTrigger(ai); }
+    static Trigger* algalon_dark_matter_trigger(PlayerbotAI* ai) { return new AlgalonDarkMatterTrigger(ai); }
 };
 
 #endif
