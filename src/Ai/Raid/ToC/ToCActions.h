@@ -1,0 +1,302 @@
+#ifndef PLAYERBOTS_RAID_TOCACTIONS_H
+#define PLAYERBOTS_RAID_TOCACTIONS_H
+
+#include "Action.h"
+#include "AttackAction.h"
+#include "MovementActions.h"
+
+// Shared base for actions that flee a spreading ground hazard made of many same-entry creatures
+// (Legion Flame trail, slime pools, ...). Flees the centre of the whole nearby cluster so the escape
+// vector does not push the bot from one patch straight into the next.
+class AvoidCreatureClusterAction : public MovementAction
+{
+public:
+    AvoidCreatureClusterAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {};
+
+protected:
+    bool FleeFromCreatureCluster(uint32 entry);
+};
+
+// Gormok the Impaler
+
+class GormokMainTankHoldBossAction : public AttackAction
+{
+public:
+    GormokMainTankHoldBossAction(
+        PlayerbotAI* botAI, std::string const name = "gormok main tank hold boss") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class GormokFocusSnoboldAction : public AttackAction
+{
+public:
+    GormokFocusSnoboldAction(
+        PlayerbotAI* botAI, std::string const name = "gormok focus snobold") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class GormokTankSwapTauntAction : public AttackAction
+{
+public:
+    GormokTankSwapTauntAction(
+        PlayerbotAI* botAI, std::string const name = "gormok tank swap taunt") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Acidmaw & Dreadscale
+
+class WormsMainTankHoldMobileWormAction : public AttackAction
+{
+public:
+    WormsMainTankHoldMobileWormAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms main tank hold mobile worm") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsAssistTankHoldStationaryWormAction : public AttackAction
+{
+public:
+    WormsAssistTankHoldStationaryWormAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms assist tank hold stationary worm") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsSpreadAction : public MovementAction
+{
+public:
+    WormsSpreadAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms spread") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsKeepMovingAction : public MovementAction
+{
+public:
+    WormsKeepMovingAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms keep moving") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsAvoidSlimePoolAction : public AvoidCreatureClusterAction
+{
+public:
+    WormsAvoidSlimePoolAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms avoid slime pool") : AvoidCreatureClusterAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class WormsAvoidSweepAction : public MovementAction
+{
+public:
+    WormsAvoidSweepAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms avoid sweep") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Icehowl
+
+class IcehowlMainTankHoldBossAction : public AttackAction
+{
+public:
+    IcehowlMainTankHoldBossAction(
+        PlayerbotAI* botAI, std::string const name = "icehowl main tank hold boss") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class IcehowlClearChargePathAction : public MovementAction
+{
+public:
+    IcehowlClearChargePathAction(
+        PlayerbotAI* botAI, std::string const name = "icehowl clear charge path") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Lord Jaraxxus
+
+class JaraxxusMainTankHoldBossAction : public AttackAction
+{
+public:
+    JaraxxusMainTankHoldBossAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus main tank hold boss") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusAssistTankHoldAddAction : public AttackAction
+{
+public:
+    JaraxxusAssistTankHoldAddAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus assist tank hold add") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusAssistTankHoldSecondAddAction : public AttackAction
+{
+public:
+    JaraxxusAssistTankHoldSecondAddAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus assist tank hold second add") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusFocusAddAction : public AttackAction
+{
+public:
+    JaraxxusFocusAddAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus focus add") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusAvoidLegionFlameAction : public AvoidCreatureClusterAction
+{
+public:
+    JaraxxusAvoidLegionFlameAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus avoid legion flame") : AvoidCreatureClusterAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusHealIncinerateTargetAction : public Action
+{
+public:
+    JaraxxusHealIncinerateTargetAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus heal incinerate target") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusRemoveNetherPowerAction : public Action
+{
+public:
+    JaraxxusRemoveNetherPowerAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus remove nether power") : Action(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class JaraxxusInterruptFelFireballAction : public AttackAction
+{
+public:
+    JaraxxusInterruptFelFireballAction(
+        PlayerbotAI* botAI, std::string const name = "jaraxxus interrupt fel fireball") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Anub'arak
+
+class AnubarakMainTankHoldBossAction : public AttackAction
+{
+public:
+    AnubarakMainTankHoldBossAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak main tank hold boss") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakAssistTankHoldBurrowerAction : public AttackAction
+{
+public:
+    AnubarakAssistTankHoldBurrowerAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak assist tank hold burrower") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakFocusBurrowerAction : public AttackAction
+{
+public:
+    AnubarakFocusBurrowerAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak focus burrower") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakFocusScarabAction : public AttackAction
+{
+public:
+    AnubarakFocusScarabAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak focus scarab") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakKiteSpikeToPermafrostAction : public MovementAction
+{
+public:
+    AnubarakKiteSpikeToPermafrostAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak kite spike to permafrost") : MovementAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class AnubarakDestroyFrostSphereAction : public AttackAction
+{
+public:
+    AnubarakDestroyFrostSphereAction(
+        PlayerbotAI* botAI, std::string const name = "anubarak destroy frost sphere") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Faction Champions
+
+class FactionChampionsFocusPriorityAction : public AttackAction
+{
+public:
+    FactionChampionsFocusPriorityAction(
+        PlayerbotAI* botAI, std::string const name = "faction champions focus priority") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Twin Val'kyr
+
+class TwinValkyrMainTankHoldLightTwinAction : public AttackAction
+{
+public:
+    TwinValkyrMainTankHoldLightTwinAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr main tank hold light twin") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrAssistTankHoldDarkTwinAction : public AttackAction
+{
+public:
+    TwinValkyrAssistTankHoldDarkTwinAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr assist tank hold dark twin") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+// Shared base for the essence-acquiring actions: walks to the nearest portal of the wanted colour and
+// triggers its gossip-hello hook (which casts the essence aura on the bot).
+class TwinValkyrEssenceActionBase : public MovementAction
+{
+public:
+    TwinValkyrEssenceActionBase(
+        PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {};
+
+protected:
+    bool AcquireEssence(bool wantLight);
+};
+
+class TwinValkyrSwapEssenceForVortexAction : public TwinValkyrEssenceActionBase
+{
+public:
+    TwinValkyrSwapEssenceForVortexAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr swap essence for vortex") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrSwapEssenceForTouchAction : public TwinValkyrEssenceActionBase
+{
+public:
+    TwinValkyrSwapEssenceForTouchAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr swap essence for touch") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrAcquireInitialEssenceAction : public TwinValkyrEssenceActionBase
+{
+public:
+    TwinValkyrAcquireInitialEssenceAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr acquire initial essence") : TwinValkyrEssenceActionBase(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+class TwinValkyrInterruptPactAction : public AttackAction
+{
+public:
+    TwinValkyrInterruptPactAction(
+        PlayerbotAI* botAI, std::string const name = "twin valkyr interrupt pact") : AttackAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
+#endif
