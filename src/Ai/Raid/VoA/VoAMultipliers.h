@@ -8,6 +8,17 @@
 
 #include "Multiplier.h"
 
+// Emalon the Storm Watcher
+
+// While a non-tank must run out of Emalon's Lightning Nova PBAoE, suppress the movement/reach actions that
+// would pull the bot back toward the boss, so the run-out (emalon lighting nova action) wins.
+class EmalonLightningNovaMultiplier : public Multiplier
+{
+public:
+    EmalonLightningNovaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "emalon lightning nova multiplier") {}
+    virtual float GetValue(Action* action);
+};
+
 // Koralon the Flame Watcher
 
 // While a non-tank stands in Koralon's Burning Breath cone, suppress the movement/reach actions that would

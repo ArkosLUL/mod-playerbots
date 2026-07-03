@@ -90,6 +90,11 @@ void RaidVoAStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 void RaidVoAStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     //
+    // Emalon the Storm Watcher
+    //
+    multipliers.push_back(new EmalonLightningNovaMultiplier(botAI));
+
+    //
     // Koralon the Flame Watcher
     //
     multipliers.push_back(new KoralonBurningBreathMultiplier(botAI));

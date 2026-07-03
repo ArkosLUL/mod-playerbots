@@ -10,6 +10,24 @@
 #include "Playerbots.h"
 #include "ReachTargetActions.h"
 
+// Emalon the Storm Watcher
+
+float EmalonLightningNovaMultiplier::GetValue(Action* action)
+{
+    // Only clamp movement while the bot actually needs to run out of the Lightning Nova PBAoE
+    EmalonLightingNovaTrigger lightningNovaTrigger(botAI);
+    if (!lightningNovaTrigger.IsActive())
+        return 1.0f;
+
+    if (dynamic_cast<CastReachTargetSpellAction*>(action) ||
+        dynamic_cast<ReachTargetAction*>(action) ||
+        dynamic_cast<CombatFormationMoveAction*>(action) ||
+        dynamic_cast<FollowAction*>(action))
+        return 0.0f;
+
+    return 1.0f;
+}
+
 // Koralon the Flame Watcher
 
 float KoralonBurningBreathMultiplier::GetValue(Action* action)
