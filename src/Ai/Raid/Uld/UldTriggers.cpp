@@ -2230,12 +2230,12 @@ bool AlgalonConstellationKiteTrigger::IsActive()
         return false;
 
     // Only active constellations are selectable; passive/pre-activation ones are flagged out
-    Creature* constellation = bot->FindNearestCreature(NPC_LIVING_CONSTELLATION, 100.0f);
+    Creature* constellation = bot->FindNearestCreature(PB_NPC_LIVING_CONSTELLATION, 100.0f);
     if (!constellation || !constellation->IsAlive() || constellation->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
         return false;
 
     // Need a live Black Hole to drag it into
-    Creature* blackHole = bot->FindNearestCreature(NPC_BLACK_HOLE, 200.0f);
+    Creature* blackHole = bot->FindNearestCreature(PB_NPC_BLACK_HOLE, 200.0f);
     return blackHole != nullptr;
 }
 
@@ -2249,7 +2249,7 @@ bool AlgalonDarkMatterTrigger::IsActive()
     if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
         return false;
 
-    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, NPC_UNLEASHED_DARK_MATTER);
+    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
     if (!darkMatter)
         return false;
 

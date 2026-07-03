@@ -3062,9 +3062,9 @@ bool AlgalonBigBangHideAction::isUseful()
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 {
     // Run into the nearest Black Hole (or Worm Hole in phase 2) to gain the safe phase aura
-    Creature* hole = bot->FindNearestCreature(NPC_BLACK_HOLE, 200.0f);
+    Creature* hole = bot->FindNearestCreature(PB_NPC_BLACK_HOLE, 200.0f);
     if (!hole)
-        hole = bot->FindNearestCreature(NPC_WORM_HOLE, 200.0f);
+        hole = bot->FindNearestCreature(PB_NPC_WORM_HOLE, 200.0f);
 
     if (!hole)
         return false;
@@ -3102,11 +3102,11 @@ bool AlgalonConstellationKiteAction::isUseful()
 
 bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
 {
-    Creature* constellation = bot->FindNearestCreature(NPC_LIVING_CONSTELLATION, 100.0f);
+    Creature* constellation = bot->FindNearestCreature(PB_NPC_LIVING_CONSTELLATION, 100.0f);
     if (!constellation || !constellation->IsAlive() || constellation->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
         return false;
 
-    Creature* blackHole = bot->FindNearestCreature(NPC_BLACK_HOLE, 200.0f);
+    Creature* blackHole = bot->FindNearestCreature(PB_NPC_BLACK_HOLE, 200.0f);
     if (!blackHole)
         return false;
 
@@ -3129,7 +3129,7 @@ bool AlgalonDarkMatterMarkAction::isUseful()
 
 bool AlgalonDarkMatterMarkAction::Execute(Event /*event*/)
 {
-    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, NPC_UNLEASHED_DARK_MATTER);
+    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
     if (!darkMatter)
         return false;
 
