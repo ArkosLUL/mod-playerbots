@@ -110,7 +110,7 @@ bool WormsSweepFrontalTrigger::IsActive()
 
     constexpr float sweepArc = static_cast<float>(M_PI) / 2.0f; // ~90-degree frontal cone
     constexpr float sweepRange = 20.0f;
-    return IsBotInFrontalCone(bot, worm, sweepArc, sweepRange);
+    return TrialOfTheCrusaderHelpers::IsBotInFrontalCone(bot, worm, sweepArc, sweepRange);
 }
 
 // Icehowl
