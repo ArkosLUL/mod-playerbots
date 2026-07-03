@@ -24,6 +24,10 @@ bool EmalonMarkBossTrigger::IsActive()
 
     // Check if boss have skull mark
     Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
     int8 skullIndex = 7;  // Skull
     ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
     if (currentSkullTarget == boss->GetGUID())
@@ -115,6 +119,10 @@ bool EmalonOverchargeTrigger::IsActive()
 
     // Check if minion have skull mark
     Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
     int8 skullIndex = 7;  // Skull
     ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
     if (currentSkullTarget == overchargedMinion->GetGUID())
@@ -156,8 +164,9 @@ bool ArchavonRockShardsSpreadTrigger::IsActive()
         return false;
     }
 
-    // Only move when clustered with another player (Rock Shards splashes nearby)
-    constexpr float spreadRadius = 8.0f;
+    // Only move when clustered with another player (Rock Shards splashes nearby). Trigger radius (6y) is
+    // tighter than the action's flee distance (8y) so bots settle into a spread and stop repositioning.
+    constexpr float spreadRadius = 6.0f;
     return GetNearestPlayerInRadius(bot, spreadRadius) != nullptr;
 }
 
@@ -213,8 +222,9 @@ bool KoralonFlamingCinderSpreadTrigger::IsActive()
         return false;
     }
 
-    // Only move when clustered with another player (Flaming Cinder splashes nearby)
-    constexpr float spreadRadius = 8.0f;
+    // Only move when clustered with another player (Flaming Cinder splashes nearby). Trigger radius (6y) is
+    // tighter than the action's flee distance (8y) so bots settle into a spread and stop repositioning.
+    constexpr float spreadRadius = 6.0f;
     return GetNearestPlayerInRadius(bot, spreadRadius) != nullptr;
 }
 

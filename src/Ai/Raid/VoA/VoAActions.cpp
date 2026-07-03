@@ -60,52 +60,10 @@ bool EmalonOverchargeAction::Execute(Event /*event*/)
         return false;
     }
 
-    bool isMainTank = botAI->IsMainTank(bot);
-    Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
-    Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
-
-    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a real player
-    {
-        // Iterate through the first 3 bot tanks to assign the Skull marker
-        for (int i = 0; i < 3; ++i)
-        {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
-            {
-                Group* group = bot->GetGroup();
-                if (group && minion)
-                {
-                    int8 skullIndex = 7;  // Skull
-                    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-
-                    // If there's no skull set yet, or the skull is on a different target, set Tempest Minion
-                    if (!currentSkullTarget || (minion->GetGUID() != currentSkullTarget))
-                    {
-                        group->SetTargetIcon(skullIndex, bot->GetGUID(), minion->GetGUID());
-                        return true;
-                    }
-                }
-                break;  // Stop after finding the first valid bot tank
-            }
-        }
-    }
-    else if (isMainTank)  // Bot is the main tank
-    {
-        Group* group = bot->GetGroup();
-        if (group)
-        {
-            int8 skullIndex = 7;  // Skull
-            ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-
-            // If there's no skull set yet, or the skull is on a different target, set the Eonar's Gift
-            if (!currentSkullTarget || (minion->GetGUID() != currentSkullTarget))
-            {
-                group->SetTargetIcon(skullIndex, bot->GetGUID(), minion->GetGUID());
-                return true;
-            }
-        }
-    }
-
-    return false;
+    // The trigger already gates this to a single tank bot; mark the overcharged minion so DPS burn it.
+    // MarkTargetWithSkull null-checks the group and only re-sets when the icon differs (idempotent).
+    MarkTargetWithSkull(bot, minion);
+    return true;
 }
 
 bool EmalonOverchargeAction::isUseful()
@@ -135,7 +93,7 @@ bool EmalonFallFromFloorAction::isUseful()
 bool ArchavonRockShardsSpreadAction::Execute(Event /*event*/)
 {
     constexpr float safeDistance = 8.0f;
-    constexpr uint32 minInterval = 1000;
+    constexpr uint32 minInterval = 3000;
     if (Unit* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistance))
     {
         return FleePosition(nearestPlayer->GetPosition(), safeDistance, minInterval);
@@ -200,7 +158,7 @@ bool KoralonBurningBreathAction::isUseful()
 bool KoralonFlamingCinderSpreadAction::Execute(Event /*event*/)
 {
     constexpr float safeDistance = 8.0f;
-    constexpr uint32 minInterval = 1000;
+    constexpr uint32 minInterval = 3000;
     if (Unit* nearestPlayer = GetNearestPlayerInRadius(bot, safeDistance))
     {
         return FleePosition(nearestPlayer->GetPosition(), safeDistance, minInterval);
