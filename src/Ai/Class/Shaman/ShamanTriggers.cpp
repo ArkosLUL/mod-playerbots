@@ -470,3 +470,23 @@ bool SetTotemTrigger::IsActive()
 
    return false;
 }
+
+bool ShamanBoostTrigger::IsActive()
+{
+    if (!BuffTrigger::IsActive())
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->ToPlayer())
+        return true;
+
+    // Level 60+ shamans: only boost on bosses, never on trash packs
+    if (bot->GetLevel() >= 60)
+    {
+        Creature* creature = target ? target->ToCreature() : nullptr;
+        return creature && (creature->IsDungeonBoss() || creature->isWorldBoss());
+    }
+
+    // Level 1-59: original balance-based logic (fires on tough trash swarms too)
+    return AI_VALUE(uint8, "balance") <= balance;
+}
