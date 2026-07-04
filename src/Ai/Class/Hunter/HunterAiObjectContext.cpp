@@ -90,6 +90,7 @@ public:
         creators["tranquilizing shot enrage"] = &HunterTriggerFactoryInternal::remove_enrage;
         creators["tranquilizing shot magic"] = &HunterTriggerFactoryInternal::remove_magic;
         creators["immolation trap no cd"] = &HunterTriggerFactoryInternal::immolation_trap_no_cd;
+        creators["trap launcher: explosive trap no cd"] = &HunterTriggerFactoryInternal::trap_launcher_explosive_no_cd;
         creators["kill command"] = &HunterTriggerFactoryInternal::kill_command;
         creators["explosive shot"] = &HunterTriggerFactoryInternal::explosive_shot;
         creators["lock and load"] = &HunterTriggerFactoryInternal::lock_and_load;
@@ -128,6 +129,7 @@ private:
     static Trigger* remove_enrage(PlayerbotAI* botAI) { return new TargetRemoveEnrageTrigger(botAI); }
     static Trigger* remove_magic(PlayerbotAI* botAI) { return new TargetRemoveMagicTrigger(botAI); }
     static Trigger* immolation_trap_no_cd(PlayerbotAI* botAI) { return new ImmolationTrapNoCdTrigger(botAI); }
+    static Trigger* trap_launcher_explosive_no_cd(PlayerbotAI* botAI) { return new TrapLauncherExplosiveNoCdTrigger(botAI); }
     static Trigger* kill_command(PlayerbotAI* botAI) { return new KillCommandTrigger(botAI); }
     static Trigger* explosive_shot(PlayerbotAI* botAI) { return new ExplosiveShotTrigger(botAI); }
     static Trigger* lock_and_load(PlayerbotAI* botAI) { return new LockAndLoadTrigger(botAI); }
@@ -190,6 +192,7 @@ public:
         creators["disengage"] = &HunterAiObjectContextInternal::disengage;
         creators["immolation trap"] = &HunterAiObjectContextInternal::immolation_trap;
         creators["explosive trap"] = &HunterAiObjectContextInternal::explosive_trap;
+        creators["trap launcher: explosive trap"] = &HunterAiObjectContextInternal::trap_launcher_explosive;
         creators["explosive shot base"] = &HunterAiObjectContextInternal::explosive_shot_base;
         creators["explosive shot rank 4"] = &HunterAiObjectContextInternal::explosive_shot_rank_4;
         creators["explosive shot rank 3"] = &HunterAiObjectContextInternal::explosive_shot_rank_3;
@@ -247,6 +250,7 @@ private:
     static Action* disengage(PlayerbotAI* botAI) { return new CastDisengageAction(botAI); }
     static Action* immolation_trap(PlayerbotAI* botAI) { return new CastImmolationTrapAction(botAI); }
     static Action* explosive_trap(PlayerbotAI* botAI) { return new CastExplosiveTrapAction(botAI); }
+    static Action* trap_launcher_explosive(PlayerbotAI* botAI) { return new CastTrapLauncherExplosiveAction(botAI); }
     static Action* explosive_shot_base(PlayerbotAI* botAI) { return new CastExplosiveShotBaseAction(botAI); }
     static Action* explosive_shot_rank_4(PlayerbotAI* botAI) { return new CastExplosiveShotRank4Action(botAI); }
     static Action* explosive_shot_rank_3(PlayerbotAI* botAI) { return new CastExplosiveShotRank3Action(botAI); }
