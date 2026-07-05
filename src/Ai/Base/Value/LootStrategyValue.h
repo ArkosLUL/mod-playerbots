@@ -6,6 +6,7 @@
 #ifndef PLAYERBOTS_LOOTSTRATEGYVALUE_H
 #define PLAYERBOTS_LOOTSTRATEGYVALUE_H
 
+#include "PlayerbotAIConfig.h"
 #include "Value.h"
 
 class LootStrategy;
@@ -15,7 +16,7 @@ class LootStrategyValue : public ManualSetValue<LootStrategy*>
 {
 public:
     LootStrategyValue(PlayerbotAI* botAI, std::string const name = "loot strategy")
-        : ManualSetValue<LootStrategy*>(botAI, normal, name)
+        : ManualSetValue<LootStrategy*>(botAI, LootStrategyValue::instance(sPlayerbotAIConfig.lootStrategy), name)
     {
     }
     virtual ~LootStrategyValue();
@@ -27,6 +28,7 @@ public:
     static LootStrategy* gray;
     static LootStrategy* all;
     static LootStrategy* disenchant;
+    static LootStrategy* equip;
     static LootStrategy* instance(std::string const name);
 };
 

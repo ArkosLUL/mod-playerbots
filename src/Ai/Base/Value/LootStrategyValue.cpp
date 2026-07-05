@@ -65,6 +65,19 @@ public:
     std::string const GetName() override { return "all"; }
 };
 
+class EquipLootStrategy : public LootStrategy
+{
+public:
+    // Loot only gear pieces (armor + weapons) of uncommon quality or higher.
+    bool CanLoot(ItemTemplate const* proto, AiObjectContext* /*context*/) override
+    {
+        return proto->Quality >= ITEM_QUALITY_UNCOMMON &&
+               (proto->Class == ITEM_CLASS_ARMOR || proto->Class == ITEM_CLASS_WEAPON);
+    }
+
+    std::string const GetName() override { return "equip"; }
+};
+
 LootStrategyValue::~LootStrategyValue()
 {
     // delete defaultValue;
@@ -74,6 +87,7 @@ LootStrategy* LootStrategyValue::normal = new NormalLootStrategy();
 LootStrategy* LootStrategyValue::gray = new GrayLootStrategy();
 LootStrategy* LootStrategyValue::disenchant = new DisenchantLootStrategy();
 LootStrategy* LootStrategyValue::all = new AllLootStrategy();
+LootStrategy* LootStrategyValue::equip = new EquipLootStrategy();
 
 LootStrategy* LootStrategyValue::instance(std::string const strategy)
 {
@@ -85,6 +99,9 @@ LootStrategy* LootStrategyValue::instance(std::string const strategy)
 
     if (strategy == "d" || strategy == "e" || strategy == "disenchant" || strategy == "enchant")
         return disenchant;
+
+    if (strategy == "equip" || strategy == "gear" || strategy == "eq")
+        return equip;
 
     return normal;
 }

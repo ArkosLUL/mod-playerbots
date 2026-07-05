@@ -255,6 +255,7 @@ public:
     bool fleeingEnabled;
     bool summonAtInnkeepersEnabled;
     std::string combatStrategies, nonCombatStrategies;
+    std::string lootStrategy;
     std::string randomBotCombatStrategies, randomBotNonCombatStrategies;
     bool applyInstanceStrategies;
     uint32 randomBotMinLevel, randomBotMaxLevel;
