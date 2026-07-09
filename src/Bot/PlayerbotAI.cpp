@@ -1620,7 +1620,7 @@ std::vector<std::string> PlayerbotAI::GetStrategies(BotState type)
     return e->GetStrategies();
 }
 
-void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
+std::vector<std::string> const& PlayerbotAI::GetInstanceStrategies()
 {
     static const std::vector<std::string> allInstanceStrategies =
     {
@@ -1632,7 +1632,18 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
         "wotlk-vh", "zulaman"
     };
 
-    for (const std::string& strat : allInstanceStrategies)
+    return allInstanceStrategies;
+}
+
+bool PlayerbotAI::IsInstanceStrategy(std::string const& name)
+{
+    std::vector<std::string> const& all = GetInstanceStrategies();
+    return std::find(all.begin(), all.end(), name) != all.end();
+}
+
+void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
+{
+    for (const std::string& strat : GetInstanceStrategies())
     {
         engines[BOT_STATE_COMBAT]->removeStrategy(strat);
         engines[BOT_STATE_NON_COMBAT]->removeStrategy(strat);

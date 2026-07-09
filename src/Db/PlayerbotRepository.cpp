@@ -5,6 +5,9 @@
 
 #include "PlayerbotRepository.h"
 #include "AiObjectContext.h"
+#include "PlayerbotAIConfig.h"
+
+#include <algorithm>
 
 void PlayerbotRepository::Load(PlayerbotAI* botAI)
 {
@@ -43,6 +46,12 @@ void PlayerbotRepository::Load(PlayerbotAI* botAI)
 
         botAI->GetAiObjectContext()->Load(values);
     }
+
+    // The saved combat strategy string can carry a stale instance strategy (e.g. a bot last saved
+    // in Serpentshrine Cavern keeps "ssc" when logging into The Eye). Re-derive the instance
+    // strategy from the bot's current map so it always matches where the bot actually is.
+    if (sPlayerbotAIConfig.applyInstanceStrategies)
+        botAI->ApplyInstanceStrategies(botAI->GetBot()->GetMapId());
 }
 
 void PlayerbotRepository::Save(PlayerbotAI* botAI)
@@ -62,9 +71,20 @@ void PlayerbotRepository::Save(PlayerbotAI* botAI)
         SaveValue(guid, "value", *i);
     }
 
-    SaveValue(guid, "co", FormatStrategies("co", botAI->GetStrategies(BOT_STATE_COMBAT)));
-    SaveValue(guid, "nc", FormatStrategies("nc", botAI->GetStrategies(BOT_STATE_NON_COMBAT)));
-    SaveValue(guid, "dead", FormatStrategies("dead", botAI->GetStrategies(BOT_STATE_DEAD)));
+    // Instance strategies are map-derived at login (see PlayerbotAI::ApplyInstanceStrategies), so
+    // they must never be persisted — otherwise a stale one leaks back in on Load. Filter them out.
+    SaveValue(guid, "co", FormatStrategies("co", FilterInstanceStrategies(botAI->GetStrategies(BOT_STATE_COMBAT))));
+    SaveValue(guid, "nc", FormatStrategies("nc", FilterInstanceStrategies(botAI->GetStrategies(BOT_STATE_NON_COMBAT))));
+    SaveValue(guid, "dead", FormatStrategies("dead", FilterInstanceStrategies(botAI->GetStrategies(BOT_STATE_DEAD))));
+}
+
+std::vector<std::string> PlayerbotRepository::FilterInstanceStrategies(std::vector<std::string> strategies)
+{
+    strategies.erase(
+        std::remove_if(strategies.begin(), strategies.end(),
+            [](std::string const& name) { return PlayerbotAI::IsInstanceStrategy(name); }),
+        strategies.end());
+    return strategies;
 }
 
 std::string const PlayerbotRepository::FormatStrategies(std::string const /*type*/, std::vector<std::string> strategies)
