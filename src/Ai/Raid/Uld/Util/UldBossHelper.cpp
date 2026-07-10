@@ -1,4 +1,5 @@
 #include "UldBossHelper.h"
+#include "AiFactory.h"
 #include "ObjectAccessor.h"
 #include "GameObject.h"
 #include "Group.h"
@@ -259,4 +260,28 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
 
     // Set current time in the cooldown map for this bot to start cooldown
     _lastRoleSwapTime[botGuid] = std::time(nullptr);
+}
+
+Player* GetAlgalonBigBangDispersionPriest(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != ULDUAR_MAP_ID)
+            continue;
+
+        if (member->getClass() != CLASS_PRIEST)
+            continue;
+
+        if (AiFactory::GetPlayerSpecTab(member) != PRIEST_TAB_SHADOW)
+            continue;
+
+        return member;
+    }
+
+    return nullptr;
 }

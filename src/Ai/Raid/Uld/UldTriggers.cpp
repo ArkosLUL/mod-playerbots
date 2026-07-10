@@ -265,6 +265,52 @@ bool RazorscaleFuseArmorTrigger::IsActive()
     return false;
 }
 
+bool RazorscaleFocusCasterTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // One bot drives the marking to avoid the whole raid fighting over the icon
+    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+        return false;
+
+    // Sentinels are the top kill priority and own the skull; only focus casters once they are down
+    if (GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
+        return false;
+
+    // Watcher (ranged caster) first so bots interrupt it, then Guardian
+    Unit* target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER);
+    if (!target)
+        target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
+
+    if (!target)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == target->GetGUID())
+        return false;
+
+    return true;
+}
+
+bool RazorscaleFlameBreathTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Flame Breath is a grounded-phase frontal cone; while flying she is not breathing
+    if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+        return false;
+
+    // The tank holds the boss and eats the breath; only reposition non-tanks caught in the cone
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+        return false;
+
+    return IsBotInFrontalCone(bot, boss, M_PI / 2.0f, 40.0f);
+}
+
 bool IronAssemblyLightningTendrilsTrigger::IsActive()
 {
     // Check boss and it is alive
@@ -554,12 +600,14 @@ bool HodirNearSnowpackedIcicleTrigger::IsActive()
         return false;
     }
 
-    // Find the nearest Snowpacked Icicle Target
+    // Prefer a Snowpacked Icicle; fall back to a Toasty Fire when none has dropped nearby
     Creature* target = bot->FindNearestCreature(NPC_SNOWPACKED_ICICLE, 100.0f);
+    if (!target)
+        target = bot->FindNearestCreature(NPC_TOASTY_FIRE, 100.0f);
     if (!target)
         return false;
 
-    // Check that bot is stacked on Snowpacked Icicle
+    // Check that bot is stacked on the safe spot
     if (bot->GetDistance2d(target->GetPositionX(), target->GetPositionY()) <= 5.0f)
     {
         return false;
@@ -2175,6 +2223,31 @@ bool AlgalonBigBangTrigger::IsActive()
     if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
         return false;
 
+    // The designated Shadow Priest soaks Big Bang with Dispersion instead of hiding
+    if (GetAlgalonBigBangDispersionPriest(bot) == bot)
+        return false;
+
+    return true;
+}
+
+// The designated Shadow Priest stays out and Disperses to survive Big Bang instead of hiding in a hole
+bool AlgalonBigBangDispersionTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!boss->HasUnitState(UNIT_STATE_CASTING) || !boss->FindCurrentSpellBySpellId(SPELL_ALGALON_BIG_BANG))
+        return false;
+
+    // Only the designated (first alive) Shadow Priest reacts this way
+    if (GetAlgalonBigBangDispersionPriest(bot) != bot)
+        return false;
+
+    // Already mitigating
+    if (bot->HasAura(SPELL_DISPERSION))
+        return false;
+
     return true;
 }
 
@@ -2229,14 +2302,14 @@ bool AlgalonConstellationKiteTrigger::IsActive()
     if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
         return false;
 
-    // Only active constellations are selectable; passive/pre-activation ones are flagged out
+    // Only active constellations are selectable; passive/pre-activation ones are flagged out.
+    // Fire whether or not a Black Hole exists: with one, the action drags the constellation
+    // through it; without one, the action falls back to kiting it clear of the raid.
     Creature* constellation = bot->FindNearestCreature(PB_NPC_LIVING_CONSTELLATION, 100.0f);
     if (!constellation || !constellation->IsAlive() || constellation->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
         return false;
 
-    // Need a live Black Hole to drag it into
-    Creature* blackHole = bot->FindNearestCreature(PB_NPC_BLACK_HOLE, 200.0f);
-    return blackHole != nullptr;
+    return true;
 }
 
 // Focus-kill Unleashed Dark Matter when it spawns (phase 2)
@@ -2256,6 +2329,198 @@ bool AlgalonDarkMatterTrigger::IsActive()
     // Skip if it is already the skull target
     Group* group = bot->GetGroup();
     if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == darkMatter->GetGUID())
+        return false;
+
+    return true;
+}
+
+//
+// Ignis the Furnace Master
+//
+bool IgnisScorchedGroundTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "ignis the furnace master");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToScorchedGround(botAI);
+    return tooCloseToScorchedGround.TooCloseToCreature(NPC_IGNIS_SCORCHED_GROUND, 8.0f);
+}
+
+bool IgnisIronConstructTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "ignis the furnace master");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+        return false;
+
+    // Only an activated construct is selectable and worth focusing; passive ones are skipped
+    GuidVector targets = AI_VALUE(GuidVector, "possible targets");
+    for (ObjectGuid const& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_IGNIS_IRON_CONSTRUCT)
+            continue;
+
+        if (unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            continue;
+
+        Group* group = bot->GetGroup();
+        if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == unit->GetGUID())
+            return false;
+
+        return true;
+    }
+
+    return false;
+}
+
+//
+// Auriaya
+//
+bool AuriayaSonicScreechTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "auriaya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // The tank keeps Auriaya facing away from the raid, so tanks must not reposition
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+        return false;
+
+    // Sonic Screech and Sentinel Blast are frontal cones; keep non-tanks out of the front
+    return IsBotInFrontalCone(bot, boss, M_PI / 2.0f, 45.0f);
+}
+
+bool AuriayaSeepingEssenceTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "auriaya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToSeepingEssence(botAI);
+    return tooCloseToSeepingEssence.TooCloseToCreature(NPC_AURIAYA_SEEPING_FERAL_ESSENCE, 10.0f);
+}
+
+bool AuriayaMarkDpsTargetTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "auriaya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+        return false;
+
+    // Feral Defender is the highest kill priority; otherwise focus a Sanctum Sentry
+    Unit* target = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
+    if (!target)
+        target = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY);
+
+    if (!target)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == target->GetGUID())
+        return false;
+
+    return true;
+}
+
+//
+// Mimiron
+//
+bool MimironProximityMineTrigger::IsActive()
+{
+    TooCloseToCreatureTrigger tooCloseToProximityMine(botAI);
+    return tooCloseToProximityMine.TooCloseToCreature(NPC_PROXIMITY_MINE, 6.0f);
+}
+
+bool MimironBombBotTrigger::IsActive()
+{
+    TooCloseToCreatureTrigger tooCloseToBombBot(botAI);
+    return tooCloseToBombBot.TooCloseToCreature(NPC_BOMB_BOT, 6.0f);
+}
+
+//
+// General Vezax
+//
+bool VezaxSaroniteVaporsTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToSaroniteVapors(botAI);
+    return tooCloseToSaroniteVapors.TooCloseToCreature(NPC_VEZAX_SARONITE_VAPORS, 6.0f);
+}
+
+//
+// Thorim
+//
+bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
+        return false;
+
+    if (!boss->IsAlive() || !boss->IsHostileTo(bot))
+        return false;
+
+    bool const isMainTank = botAI->IsMainTank(bot);
+    bool const isFirstAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
+    if (!isMainTank && !isFirstAssistTank)
+        return false;
+
+    // This bot must be the off-tank, not the one currently holding the boss
+    Unit* activeTank = boss->GetVictim();
+    if (!activeTank || activeTank == bot)
+        return false;
+
+    Player* activeTankPlayer = activeTank->ToPlayer();
+    if (!activeTankPlayer)
+        return false;
+
+    // The active tank must be this bot's swap partner so the taunt is symmetric both ways
+    bool const partnerIsSwapTank = isMainTank ? PlayerbotAI::IsAssistTankOfIndex(activeTankPlayer, 0)
+                                              : PlayerbotAI::IsMainTank(activeTankPlayer);
+    if (!partnerIsSwapTank)
+        return false;
+
+    // Don't taunt while this bot still carries Unbalancing Strike (let it fall off first)
+    if (bot->HasAura(SPELL_UNBALANCING_STRIKE))
+        return false;
+
+    // Swap in once the active tank is suffering Unbalancing Strike
+    return activeTank->HasAura(SPELL_UNBALANCING_STRIKE);
+}
+
+//
+// Algalon the Observer
+//
+bool AlgalonCollapsingStarTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+        return false;
+
+    // Unleashed Dark Matter owns the skull marker while it is up
+    if (GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER))
+        return false;
+
+    Unit* star = GetFirstAliveUnitByEntry(botAI, PB_NPC_COLLAPSING_STAR);
+    if (!star)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == star->GetGUID())
         return false;
 
     return true;

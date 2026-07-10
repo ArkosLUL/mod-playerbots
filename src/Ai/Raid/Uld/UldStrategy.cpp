@@ -45,6 +45,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("razorscale fuse armor action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
+        "razorscale focus caster trigger",
+        { NextAction("razorscale focus caster action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "razorscale flame breath trigger",
+        { NextAction("razorscale flame breath action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "razorscale fire resistance trigger",
         { NextAction("razorscale fire resistance action", ACTION_RAID) }));
 
@@ -54,6 +62,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "ignis fire resistance trigger",
         { NextAction("ignis fire resistance action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis scorched ground trigger",
+        { NextAction("ignis scorched ground action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis iron construct trigger",
+        { NextAction("ignis iron construct action", ACTION_RAID) }));
 
     //
     // Iron Assembly
@@ -112,6 +128,18 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "auriaya fall from floor trigger",
         { NextAction("auriaya fall from floor action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "auriaya seeping essence trigger",
+        { NextAction("auriaya seeping essence action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "auriaya sonic screech trigger",
+        { NextAction("auriaya sonic screech action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "auriaya mark dps target trigger",
+        { NextAction("auriaya mark dps target action", ACTION_RAID) }));
+
     //
     // Hodir
     //
@@ -164,6 +192,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "thorim unbalancing strike trigger",
         { NextAction("thorim unbalancing strike action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim unbalancing strike swap trigger",
+        { NextAction("thorim unbalancing strike swap action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "thorim mark dps target trigger",
@@ -224,6 +256,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron cheat trigger",
         { NextAction("mimiron cheat action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "mimiron proximity mine trigger",
+        { NextAction("mimiron proximity mine action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron bomb bot trigger",
+        { NextAction("mimiron bomb bot action", ACTION_RAID + 2) }));
+
     //
     // General Vezax
     //
@@ -234,6 +274,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "vezax shadow crash trigger",
         { NextAction("vezax shadow crash action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax saronite vapors trigger",
+        { NextAction("vezax saronite vapors action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "vezax mark of the faceless trigger",
@@ -326,6 +370,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("algalon big bang hide action", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode(
+        "algalon big bang dispersion trigger",
+        { NextAction("algalon big bang dispersion action", ACTION_EMERGENCY + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "algalon phase punch swap trigger",
         { NextAction("algalon phase punch swap action", ACTION_RAID + 2) }));
 
@@ -336,4 +384,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "algalon dark matter trigger",
         { NextAction("algalon dark matter mark action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "algalon collapsing star trigger",
+        { NextAction("algalon collapsing star mark action", ACTION_RAID) }));
 }

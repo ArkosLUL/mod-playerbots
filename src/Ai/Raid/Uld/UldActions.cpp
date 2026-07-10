@@ -1426,12 +1426,14 @@ bool HodirMoveSnowpackedIcicleAction::isUseful()
     if (!boss->HasUnitState(UNIT_STATE_CASTING) || !boss->FindCurrentSpellBySpellId(SPELL_FLASH_FREEZE))
         return false;
 
-    // Find the nearest Snowpacked Icicle Target
+    // Prefer a Snowpacked Icicle; fall back to a Toasty Fire when none has dropped nearby
     Creature* target = bot->FindNearestCreature(NPC_SNOWPACKED_ICICLE, 100.0f);
+    if (!target)
+        target = bot->FindNearestCreature(NPC_TOASTY_FIRE, 100.0f);
     if (!target)
         return false;
 
-    // Check that bot is stacked on Snowpacked Icicle
+    // Check that bot is stacked on the safe spot
     if (bot->GetDistance2d(target->GetPositionX(), target->GetPositionY()) <= 5.0f)
         return false;
 
@@ -1441,6 +1443,8 @@ bool HodirMoveSnowpackedIcicleAction::isUseful()
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
 {
     Creature* target = bot->FindNearestCreature(NPC_SNOWPACKED_ICICLE, 100.0f);
+    if (!target)
+        target = bot->FindNearestCreature(NPC_TOASTY_FIRE, 100.0f);
     if (!target)
         return false;
 
@@ -1530,7 +1534,6 @@ bool FreyaMarkDpsTargetAction::Execute(Event /*event*/)
     // Check which adds is up
     Unit* eonarsGift = nullptr;
     Unit* ancientConservator = nullptr;
-    Unit* snaplasher = nullptr;
     Unit* ancientWaterSpirit = nullptr;
     Unit* stormLasher = nullptr;
     Unit* firstDetonatingLasher = nullptr;
@@ -1547,8 +1550,6 @@ bool FreyaMarkDpsTargetAction::Execute(Event /*event*/)
             eonarsGift = target;
         else if (target->GetEntry() == NPC_ANCIENT_CONSERVATOR)
             ancientConservator = target;
-        else if (target->GetEntry() == NPC_SNAPLASHER)
-            snaplasher = target;
         else if (target->GetEntry() == NPC_ANCIENT_WATER_SPIRIT)
             ancientWaterSpirit = target;
         else if (target->GetEntry() == NPC_STORM_LASHER)
@@ -1565,32 +1566,15 @@ bool FreyaMarkDpsTargetAction::Execute(Event /*event*/)
     if (ancientConservator && !targetToMark)
         targetToMark = ancientConservator;
 
-    // Check that trio of adds is need to be mark
-    if ((snaplasher || ancientWaterSpirit || stormLasher) && !targetToMark)
+    // Trio wave: Storm Lasher is the burst/interrupt priority, Ancient Water Spirit next.
+    // The Snaplasher hardens the more attackers strike it, so it is deliberately left
+    // unmarked to avoid funnelling the whole raid onto it (which would make it invulnerable).
+    if (!targetToMark)
     {
-        Unit* highestHealthUnit = nullptr;
-        uint32 highestHealth = 0;
-
-        if (snaplasher && snaplasher->GetHealth() > highestHealth)
-        {
-            highestHealth = snaplasher->GetHealth();
-            highestHealthUnit = snaplasher;
-        }
-        if (ancientWaterSpirit && ancientWaterSpirit->GetHealth() > highestHealth)
-        {
-            highestHealth = ancientWaterSpirit->GetHealth();
-            highestHealthUnit = ancientWaterSpirit;
-        }
-        if (stormLasher && stormLasher->GetHealth() > highestHealth)
-        {
-            highestHealthUnit = stormLasher;
-        }
-
-        // If the highest health unit is not already marked, mark it
-        if (highestHealthUnit)
-        {
-            targetToMark = highestHealthUnit;
-        }
+        if (stormLasher)
+            targetToMark = stormLasher;
+        else if (ancientWaterSpirit)
+            targetToMark = ancientWaterSpirit;
     }
 
     // Check that detonating lasher is need to be mark
@@ -3073,6 +3057,18 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
                   false, false, false, false, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
+bool AlgalonBigBangDispersionAction::isUseful()
+{
+    AlgalonBigBangDispersionTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool AlgalonBigBangDispersionAction::Execute(Event event)
+{
+    // The designated Shadow Priest Disperses in place to survive Big Bang (90% damage reduction)
+    return botAI->DoSpecificAction("dispersion", event, true);
+}
+
 bool AlgalonPhasePunchSwapAction::isUseful()
 {
     AlgalonPhasePunchSwapTrigger trigger(botAI);
@@ -3108,7 +3104,22 @@ bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
 
     Creature* blackHole = bot->FindNearestCreature(PB_NPC_BLACK_HOLE, 200.0f);
     if (!blackHole)
-        return false;
+    {
+        // No Black Hole to drag it into: rather than idling, lead the constellation clear of the
+        // raid by moving directly away from the nearest other player so its Arcane pulses don't
+        // chain across the group.
+        Unit* nearest = GetNearestPlayerInRadius(bot, 30.0f);
+        if (!nearest)
+            return false;
+
+        float const awayAngle = Position::NormalizeOrientation(nearest->GetAngle(bot));
+        float const kiteDistance = 15.0f;
+        float const fx = bot->GetPositionX() + std::cos(awayAngle) * kiteDistance;
+        float const fy = bot->GetPositionY() + std::sin(awayAngle) * kiteDistance;
+
+        return MoveTo(bot->GetMapId(), fx, fy, bot->GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT);
+    }
 
     // Stand just past the Black Hole on the side away from the constellation, so the chasing constellation
     // is dragged through its phase effect while we stay clear of the hole's own phase/damage aura.
@@ -3135,5 +3146,156 @@ bool AlgalonDarkMatterMarkAction::Execute(Event /*event*/)
 
     MarkTargetWithSkull(bot, darkMatter);
     SetRtiTarget(botAI, "skull", darkMatter);
+    return true;
+}
+
+bool IgnisIronConstructAction::isUseful()
+{
+    IgnisIronConstructTrigger ignisIronConstructTrigger(botAI);
+    return ignisIronConstructTrigger.IsActive();
+}
+
+bool IgnisIronConstructAction::Execute(Event /*event*/)
+{
+    GuidVector targets = AI_VALUE(GuidVector, "possible targets");
+    for (ObjectGuid const& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_IGNIS_IRON_CONSTRUCT)
+            continue;
+
+        if (unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+            continue;
+
+        MarkTargetWithSkull(bot, unit);
+        SetRtiTarget(botAI, "skull", unit);
+        return true;
+    }
+
+    return false;
+}
+
+bool AuriayaSonicScreechAction::isUseful()
+{
+    AuriayaSonicScreechTrigger auriayaSonicScreechTrigger(botAI);
+    return auriayaSonicScreechTrigger.IsActive();
+}
+
+bool AuriayaSonicScreechAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "auriaya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Step to a spot behind the boss (out of the frontal cone) while keeping current range
+    float const distance = std::max(5.0f, bot->GetExactDist2d(boss));
+    float const behindAngle = Position::NormalizeOrientation(boss->GetOrientation() + M_PI);
+    float const x = boss->GetPositionX() + std::cos(behindAngle) * distance;
+    float const y = boss->GetPositionY() + std::sin(behindAngle) * distance;
+
+    return MoveTo(boss->GetMapId(), x, y, boss->GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool AuriayaMarkDpsTargetAction::isUseful()
+{
+    AuriayaMarkDpsTargetTrigger auriayaMarkDpsTargetTrigger(botAI);
+    return auriayaMarkDpsTargetTrigger.IsActive();
+}
+
+bool AuriayaMarkDpsTargetAction::Execute(Event /*event*/)
+{
+    Unit* target = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
+    if (!target)
+        target = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY);
+
+    if (!target)
+        return false;
+
+    MarkTargetWithSkull(bot, target);
+    SetRtiTarget(botAI, "skull", target);
+    return true;
+}
+
+bool RazorscaleFocusCasterAction::isUseful()
+{
+    RazorscaleFocusCasterTrigger razorscaleFocusCasterTrigger(botAI);
+    return razorscaleFocusCasterTrigger.IsActive();
+}
+
+bool RazorscaleFocusCasterAction::Execute(Event /*event*/)
+{
+    Unit* target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER);
+    if (!target)
+        target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
+
+    if (!target)
+        return false;
+
+    MarkTargetWithSkull(bot, target);
+    SetRtiTarget(botAI, "skull", target);
+    return true;
+}
+
+bool RazorscaleFlameBreathAction::isUseful()
+{
+    RazorscaleFlameBreathTrigger razorscaleFlameBreathTrigger(botAI);
+    return razorscaleFlameBreathTrigger.IsActive();
+}
+
+bool RazorscaleFlameBreathAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Step to a spot behind the boss (out of the frontal cone) while keeping current range
+    float const distance = std::max(5.0f, bot->GetExactDist2d(boss));
+    float const behindAngle = Position::NormalizeOrientation(boss->GetOrientation() + M_PI);
+    float const x = boss->GetPositionX() + std::cos(behindAngle) * distance;
+    float const y = boss->GetPositionY() + std::sin(behindAngle) * distance;
+
+    return MoveTo(boss->GetMapId(), x, y, boss->GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool ThorimUnbalancingStrikeSwapAction::isUseful()
+{
+    ThorimUnbalancingStrikeSwapTrigger thorimUnbalancingStrikeSwapTrigger(botAI);
+    return thorimUnbalancingStrikeSwapTrigger.IsActive();
+}
+
+bool ThorimUnbalancingStrikeSwapAction::Execute(Event event)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (AI_VALUE(Unit*, "current target") != boss)
+        return Attack(boss);
+
+    if (boss->GetVictim() != bot)
+        return botAI->DoSpecificAction("taunt spell", event, true);
+
+    return false;
+}
+
+bool AlgalonCollapsingStarMarkAction::isUseful()
+{
+    AlgalonCollapsingStarTrigger algalonCollapsingStarTrigger(botAI);
+    return algalonCollapsingStarTrigger.IsActive();
+}
+
+bool AlgalonCollapsingStarMarkAction::Execute(Event /*event*/)
+{
+    Unit* star = GetFirstAliveUnitByEntry(botAI, PB_NPC_COLLAPSING_STAR);
+    if (!star)
+        return false;
+
+    MarkTargetWithSkull(bot, star);
+    SetRtiTarget(botAI, "skull", star);
     return true;
 }

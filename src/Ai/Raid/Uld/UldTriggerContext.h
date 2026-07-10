@@ -24,6 +24,8 @@ public:
         creators["razorscale grounded"] = &RaidUlduarTriggerContext::razorscale_grounded;
         creators["razorscale harpoon trigger"] = &RaidUlduarTriggerContext::razorscale_harpoon_trigger;
         creators["razorscale fuse armor trigger"] = &RaidUlduarTriggerContext::razorscale_fuse_armor_trigger;
+        creators["razorscale focus caster trigger"] = &RaidUlduarTriggerContext::razorscale_focus_caster_trigger;
+        creators["razorscale flame breath trigger"] = &RaidUlduarTriggerContext::razorscale_flame_breath_trigger;
         creators["razorscale fire resistance trigger"] = &RaidUlduarTriggerContext::razorscale_fire_resistance_trigger;
         creators["ignis fire resistance trigger"] = &RaidUlduarTriggerContext::ignis_fire_resistance_trigger;
         creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
@@ -86,9 +88,20 @@ public:
         creators["yogg-saron phase 3 positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_positioning_trigger;
         creators["algalon cosmic smash trigger"] = &RaidUlduarTriggerContext::algalon_cosmic_smash_trigger;
         creators["algalon big bang trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_trigger;
+        creators["algalon big bang dispersion trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_dispersion_trigger;
         creators["algalon phase punch swap trigger"] = &RaidUlduarTriggerContext::algalon_phase_punch_swap_trigger;
         creators["algalon constellation kite trigger"] = &RaidUlduarTriggerContext::algalon_constellation_kite_trigger;
         creators["algalon dark matter trigger"] = &RaidUlduarTriggerContext::algalon_dark_matter_trigger;
+        creators["algalon collapsing star trigger"] = &RaidUlduarTriggerContext::algalon_collapsing_star_trigger;
+        creators["ignis scorched ground trigger"] = &RaidUlduarTriggerContext::ignis_scorched_ground_trigger;
+        creators["ignis iron construct trigger"] = &RaidUlduarTriggerContext::ignis_iron_construct_trigger;
+        creators["auriaya sonic screech trigger"] = &RaidUlduarTriggerContext::auriaya_sonic_screech_trigger;
+        creators["auriaya seeping essence trigger"] = &RaidUlduarTriggerContext::auriaya_seeping_essence_trigger;
+        creators["auriaya mark dps target trigger"] = &RaidUlduarTriggerContext::auriaya_mark_dps_target_trigger;
+        creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
+        creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
+        creators["vezax saronite vapors trigger"] = &RaidUlduarTriggerContext::vezax_saronite_vapors_trigger;
+        creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
     }
 
 private:
@@ -101,6 +114,8 @@ private:
     static Trigger* razorscale_grounded(PlayerbotAI* ai) { return new RazorscaleGroundedTrigger(ai); }
     static Trigger* razorscale_harpoon_trigger(PlayerbotAI* ai) { return new RazorscaleHarpoonAvailableTrigger(ai); }
     static Trigger* razorscale_fuse_armor_trigger(PlayerbotAI* ai) { return new RazorscaleFuseArmorTrigger(ai); }
+    static Trigger* razorscale_focus_caster_trigger(PlayerbotAI* ai) { return new RazorscaleFocusCasterTrigger(ai); }
+    static Trigger* razorscale_flame_breath_trigger(PlayerbotAI* ai) { return new RazorscaleFlameBreathTrigger(ai); }
     static Trigger* razorscale_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "razorscale"); }
     static Trigger* ignis_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); }
     static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
@@ -163,9 +178,20 @@ private:
     static Trigger* yogg_saron_phase_3_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningTrigger(ai); }
     static Trigger* algalon_cosmic_smash_trigger(PlayerbotAI* ai) { return new AlgalonCosmicSmashTrigger(ai); }
     static Trigger* algalon_big_bang_trigger(PlayerbotAI* ai) { return new AlgalonBigBangTrigger(ai); }
+    static Trigger* algalon_big_bang_dispersion_trigger(PlayerbotAI* ai) { return new AlgalonBigBangDispersionTrigger(ai); }
     static Trigger* algalon_phase_punch_swap_trigger(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapTrigger(ai); }
     static Trigger* algalon_constellation_kite_trigger(PlayerbotAI* ai) { return new AlgalonConstellationKiteTrigger(ai); }
     static Trigger* algalon_dark_matter_trigger(PlayerbotAI* ai) { return new AlgalonDarkMatterTrigger(ai); }
+    static Trigger* algalon_collapsing_star_trigger(PlayerbotAI* ai) { return new AlgalonCollapsingStarTrigger(ai); }
+    static Trigger* ignis_scorched_ground_trigger(PlayerbotAI* ai) { return new IgnisScorchedGroundTrigger(ai); }
+    static Trigger* ignis_iron_construct_trigger(PlayerbotAI* ai) { return new IgnisIronConstructTrigger(ai); }
+    static Trigger* auriaya_sonic_screech_trigger(PlayerbotAI* ai) { return new AuriayaSonicScreechTrigger(ai); }
+    static Trigger* auriaya_seeping_essence_trigger(PlayerbotAI* ai) { return new AuriayaSeepingEssenceTrigger(ai); }
+    static Trigger* auriaya_mark_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetTrigger(ai); }
+    static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
+    static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
+    static Trigger* vezax_saronite_vapors_trigger(PlayerbotAI* ai) { return new VezaxSaroniteVaporsTrigger(ai); }
+    static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
 };
 
 #endif

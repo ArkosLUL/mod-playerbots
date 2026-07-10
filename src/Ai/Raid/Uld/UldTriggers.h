@@ -75,6 +75,37 @@ public:
     bool IsActive() override;
 };
 
+class RazorscaleFocusCasterTrigger : public Trigger
+{
+public:
+    RazorscaleFocusCasterTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale focus caster trigger") {}
+    bool IsActive() override;
+};
+
+class RazorscaleFlameBreathTrigger : public Trigger
+{
+public:
+    RazorscaleFlameBreathTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale flame breath trigger") {}
+    bool IsActive() override;
+};
+
+//
+// Ignis the Furnace Master
+//
+class IgnisScorchedGroundTrigger : public Trigger
+{
+public:
+    IgnisScorchedGroundTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis scorched ground trigger") {}
+    bool IsActive() override;
+};
+
+class IgnisIronConstructTrigger : public Trigger
+{
+public:
+    IgnisIronConstructTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis iron construct trigger") {}
+    bool IsActive() override;
+};
+
 //
 // Iron Assembly
 //
@@ -161,6 +192,27 @@ public:
     bool IsActive() override;
 };
 
+class AuriayaSonicScreechTrigger : public Trigger
+{
+public:
+    AuriayaSonicScreechTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya sonic screech trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaSeepingEssenceTrigger : public Trigger
+{
+public:
+    AuriayaSeepingEssenceTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya seeping essence trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaMarkDpsTargetTrigger : public Trigger
+{
+public:
+    AuriayaMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya mark dps target trigger") {}
+    bool IsActive() override;
+};
+
 //
 // Hodir
 //
@@ -209,6 +261,13 @@ class ThorimUnbalancingStrikeTrigger : public Trigger
 {
 public:
     ThorimUnbalancingStrikeTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim unbalancing strike trigger") {}
+    bool IsActive() override;
+};
+
+class ThorimUnbalancingStrikeSwapTrigger : public Trigger
+{
+public:
+    ThorimUnbalancingStrikeSwapTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim unbalancing strike swap trigger") {}
     bool IsActive() override;
 };
 
@@ -306,6 +365,20 @@ public:
     bool IsActive() override;
 };
 
+class MimironProximityMineTrigger : public Trigger
+{
+public:
+    MimironProximityMineTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron proximity mine trigger") {}
+    bool IsActive() override;
+};
+
+class MimironBombBotTrigger : public Trigger
+{
+public:
+    MimironBombBotTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron bomb bot trigger") {}
+    bool IsActive() override;
+};
+
 //
 // General Vezax
 //
@@ -327,6 +400,13 @@ class VezaxMarkOfTheFacelessTrigger : public Trigger
 {
 public:
     VezaxMarkOfTheFacelessTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax mark of the faceless trigger") {}
+    bool IsActive() override;
+};
+
+class VezaxSaroniteVaporsTrigger : public Trigger
+{
+public:
+    VezaxSaroniteVaporsTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax saronite vapors trigger") {}
     bool IsActive() override;
 };
 
@@ -482,6 +562,13 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonBigBangDispersionTrigger : public Trigger
+{
+public:
+    AlgalonBigBangDispersionTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon big bang dispersion trigger") {}
+    bool IsActive() override;
+};
+
 class AlgalonPhasePunchSwapTrigger : public Trigger
 {
 public:
@@ -500,6 +587,13 @@ class AlgalonDarkMatterTrigger : public Trigger
 {
 public:
     AlgalonDarkMatterTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon dark matter trigger") {}
+    bool IsActive() override;
+};
+
+class AlgalonCollapsingStarTrigger : public Trigger
+{
+public:
+    AlgalonCollapsingStarTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon collapsing star trigger") {}
     bool IsActive() override;
 };
 

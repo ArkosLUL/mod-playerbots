@@ -25,6 +25,8 @@ public:
         creators["razorscale grounded"] = &RaidUlduarActionContext::razorscale_grounded;
         creators["razorscale harpoon action"] = &RaidUlduarActionContext::razorscale_harpoon_action;
         creators["razorscale fuse armor action"] = &RaidUlduarActionContext::razorscale_fuse_armor_action;
+        creators["razorscale focus caster action"] = &RaidUlduarActionContext::razorscale_focus_caster_action;
+        creators["razorscale flame breath action"] = &RaidUlduarActionContext::razorscale_flame_breath_action;
         creators["razorscale fire resistance action"] = &RaidUlduarActionContext::razorscale_fire_resistance_action;
         creators["ignis fire resistance action"] = &RaidUlduarActionContext::ignis_fire_resistance_action;
         creators["iron assembly lightning tendrils action"] = &RaidUlduarActionContext::iron_assembly_lightning_tendrils_action;
@@ -85,9 +87,20 @@ public:
         creators["yogg-saron phase 3 positioning action"] = &RaidUlduarActionContext::yogg_saron_phase_3_positioning_action;
         creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
         creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
+        creators["algalon big bang dispersion action"] = &RaidUlduarActionContext::algalon_big_bang_dispersion_action;
         creators["algalon phase punch swap action"] = &RaidUlduarActionContext::algalon_phase_punch_swap_action;
         creators["algalon constellation kite action"] = &RaidUlduarActionContext::algalon_constellation_kite_action;
         creators["algalon dark matter mark action"] = &RaidUlduarActionContext::algalon_dark_matter_mark_action;
+        creators["algalon collapsing star mark action"] = &RaidUlduarActionContext::algalon_collapsing_star_mark_action;
+        creators["ignis scorched ground action"] = &RaidUlduarActionContext::ignis_scorched_ground_action;
+        creators["ignis iron construct action"] = &RaidUlduarActionContext::ignis_iron_construct_action;
+        creators["auriaya sonic screech action"] = &RaidUlduarActionContext::auriaya_sonic_screech_action;
+        creators["auriaya seeping essence action"] = &RaidUlduarActionContext::auriaya_seeping_essence_action;
+        creators["auriaya mark dps target action"] = &RaidUlduarActionContext::auriaya_mark_dps_target_action;
+        creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
+        creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
+        creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
+        creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
     }
 
 private:
@@ -100,6 +113,8 @@ private:
     static Action* razorscale_grounded(PlayerbotAI* ai) { return new RazorscaleGroundedAction(ai); }
     static Action* razorscale_harpoon_action(PlayerbotAI* ai) { return new RazorscaleHarpoonAction(ai); }
     static Action* razorscale_fuse_armor_action(PlayerbotAI* ai) { return new RazorscaleFuseArmorAction(ai); }
+    static Action* razorscale_focus_caster_action(PlayerbotAI* ai) { return new RazorscaleFocusCasterAction(ai); }
+    static Action* razorscale_flame_breath_action(PlayerbotAI* ai) { return new RazorscaleFlameBreathAction(ai); }
     static Action* razorscale_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "razorscale"); }
     static Action* ignis_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "ignis the furnace master"); }
     static Action* iron_assembly_lightning_tendrils_action(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsAction(ai); }
@@ -160,9 +175,20 @@ private:
     static Action* yogg_saron_phase_3_positioning_action(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningAction(ai); }
     static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
     static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
+    static Action* algalon_big_bang_dispersion_action(PlayerbotAI* ai) { return new AlgalonBigBangDispersionAction(ai); }
     static Action* algalon_phase_punch_swap_action(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapAction(ai); }
     static Action* algalon_constellation_kite_action(PlayerbotAI* ai) { return new AlgalonConstellationKiteAction(ai); }
     static Action* algalon_dark_matter_mark_action(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkAction(ai); }
+    static Action* algalon_collapsing_star_mark_action(PlayerbotAI* ai) { return new AlgalonCollapsingStarMarkAction(ai); }
+    static Action* ignis_scorched_ground_action(PlayerbotAI* ai) { return new IgnisScorchedGroundAction(ai); }
+    static Action* ignis_iron_construct_action(PlayerbotAI* ai) { return new IgnisIronConstructAction(ai); }
+    static Action* auriaya_sonic_screech_action(PlayerbotAI* ai) { return new AuriayaSonicScreechAction(ai); }
+    static Action* auriaya_seeping_essence_action(PlayerbotAI* ai) { return new AuriayaSeepingEssenceAction(ai); }
+    static Action* auriaya_mark_dps_target_action(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetAction(ai); }
+    static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
+    static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
+    static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }
+    static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
 };
 
 #endif

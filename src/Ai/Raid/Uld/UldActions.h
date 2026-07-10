@@ -107,10 +107,44 @@ public:
     bool isUseful() override;
 };
 
+class RazorscaleFocusCasterAction : public Action
+{
+public:
+    RazorscaleFocusCasterAction(PlayerbotAI* botAI) : Action(botAI, "razorscale focus caster action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class RazorscaleFlameBreathAction : public MovementAction
+{
+public:
+    RazorscaleFlameBreathAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale flame breath action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class HodirMoveSnowpackedIcicleAction : public MovementAction
 {
 public:
     HodirMoveSnowpackedIcicleAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir move snowpacked icicle") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+//
+// Ignis the Furnace Master
+//
+class IgnisScorchedGroundAction : public MoveAwayFromCreatureAction
+{
+public:
+    IgnisScorchedGroundAction(PlayerbotAI* botAI)
+        : MoveAwayFromCreatureAction(botAI, "ignis scorched ground action", NPC_IGNIS_SCORCHED_GROUND, 8.0f) {}
+};
+
+class IgnisIronConstructAction : public Action
+{
+public:
+    IgnisIronConstructAction(PlayerbotAI* botAI) : Action(botAI, "ignis iron construct action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -194,6 +228,29 @@ public:
     bool isUseful() override;
 };
 
+class AuriayaSonicScreechAction : public MovementAction
+{
+public:
+    AuriayaSonicScreechAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya sonic screech action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AuriayaSeepingEssenceAction : public MoveAwayFromCreatureAction
+{
+public:
+    AuriayaSeepingEssenceAction(PlayerbotAI* botAI)
+        : MoveAwayFromCreatureAction(botAI, "auriaya seeping essence action", NPC_AURIAYA_SEEPING_FERAL_ESSENCE, 10.0f) {}
+};
+
+class AuriayaMarkDpsTargetAction : public Action
+{
+public:
+    AuriayaMarkDpsTargetAction(PlayerbotAI* botAI) : Action(botAI, "auriaya mark dps target action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class HodirBitingColdJumpAction : public MovementAction
 {
 public:
@@ -231,6 +288,15 @@ class ThorimUnbalancingStrikeAction : public Action
 {
 public:
     ThorimUnbalancingStrikeAction(PlayerbotAI* ai) : Action(ai, "thorim unbalancing strike action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class ThorimUnbalancingStrikeSwapAction : public AttackAction
+{
+public:
+    ThorimUnbalancingStrikeSwapAction(PlayerbotAI* ai) : AttackAction(ai, "thorim unbalancing strike swap action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -355,6 +421,20 @@ public:
     bool Execute(Event event) override;
 };
 
+class MimironProximityMineAction : public MoveAwayFromCreatureAction
+{
+public:
+    MimironProximityMineAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "mimiron proximity mine action", NPC_PROXIMITY_MINE, 6.0f) {}
+};
+
+class MimironBombBotAction : public MoveAwayFromCreatureAction
+{
+public:
+    MimironBombBotAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "mimiron bomb bot action", NPC_BOMB_BOT, 6.0f) {}
+};
+
 class VezaxCheatAction : public Action
 {
 public:
@@ -377,6 +457,13 @@ public:
     VezaxMarkOfTheFacelessAction(PlayerbotAI* ai) : MovementAction(ai, "vezax mark of the faceless action") {}
 
     bool Execute(Event event) override;
+};
+
+class VezaxSaroniteVaporsAction : public MoveAwayFromCreatureAction
+{
+public:
+    VezaxSaroniteVaporsAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "vezax saronite vapors action", NPC_VEZAX_SARONITE_VAPORS, 6.0f) {}
 };
 
 class YoggSaronOminousCloudCheatAction : public Action
@@ -519,6 +606,14 @@ public:
     bool isUseful() override;
 };
 
+class AlgalonBigBangDispersionAction : public Action
+{
+public:
+    AlgalonBigBangDispersionAction(PlayerbotAI* ai) : Action(ai, "algalon big bang dispersion action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 class AlgalonPhasePunchSwapAction : public AttackAction
 {
 public:
@@ -539,6 +634,14 @@ class AlgalonDarkMatterMarkAction : public Action
 {
 public:
     AlgalonDarkMatterMarkAction(PlayerbotAI* ai) : Action(ai, "algalon dark matter mark action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AlgalonCollapsingStarMarkAction : public Action
+{
+public:
+    AlgalonCollapsingStarMarkAction(PlayerbotAI* ai) : Action(ai, "algalon collapsing star mark action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
