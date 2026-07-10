@@ -8,6 +8,7 @@
 #include "CellImpl.h"
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
+#include "InstanceScript.h"
 #include "Playerbots.h"
 #include "ReputationMgr.h"
 #include "ServerFacade.h"
@@ -239,6 +240,42 @@ bool AttackersValue::IsPossibleTarget(Unit* attacker, Player* bot, float /*range
 bool AttackersValue::IsValidTarget(Unit* attacker, Player* bot)
 {
     return IsPossibleTarget(attacker, bot) && bot->IsWithinLOSInMap(attacker);
+}
+
+bool AttackersValue::IsInBossFight(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return false;
+
+    // Instance path: any scripted encounter currently in progress counts as a boss fight.
+    Map* map = bot->GetMap();
+    if (map && map->IsDungeon())
+    {
+        if (InstanceScript* instance = ((InstanceMap*)map)->GetInstanceScript())
+        {
+            for (uint32 i = 0; i < instance->GetEncounterCount(); ++i)
+            {
+                if (instance->GetBossState(i) == IN_PROGRESS)
+                    return true;
+            }
+        }
+    }
+
+    // Attacker path: covers world bosses (and anything lacking an instance script).
+    GuidVector attackers = botAI->GetAiObjectContext()->GetValue<GuidVector>("attackers")->Get();
+    for (ObjectGuid const& guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        Creature* creature = unit->ToCreature();
+        if (creature && (creature->IsDungeonBoss() || creature->isWorldBoss()))
+            return true;
+    }
+
+    return false;
 }
 
 bool PossibleAddsValue::Calculate()

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "GenericBuffUtils.h"
+#include "AttackersValue.h"
 #include "CreatureAI.h"
 #include "ItemVisitors.h"
 #include "LastSpellCastValue.h"
@@ -292,6 +293,25 @@ bool DebuffOnBossTrigger::IsActive()
 
     Creature* creature = GetTarget()->ToCreature();
     return creature && (creature->IsDungeonBoss() || creature->isWorldBoss());
+}
+
+bool SelfResurrectTrigger::IsActive()
+{
+    if (bot->IsAlive())
+        return false;
+
+    uint32 const resSpell = bot->GetUInt32Value(PLAYER_SELF_RES_SPELL);
+    if (!resSpell)
+        return false;
+
+    // Shaman Reincarnation self-res (21169) is a scarce cooldown: conserve it for boss fights.
+    // Warlock Soulstone recipients use a different self-res spell id and are left unrestricted.
+    uint32 const SPELL_REINCARNATION_SELF_RES = 21169;
+    if (resSpell == SPELL_REINCARNATION_SELF_RES && sPlayerbotAIConfig.battleRezBossOnly &&
+        !AttackersValue::IsInBossFight(botAI))
+        return false;
+
+    return true;
 }
 
 bool SpellTrigger::IsActive() { return GetTarget(); }

@@ -660,6 +660,7 @@ bool PlayerbotAIConfig::Initialize()
     lootRollDisenchant = sConfigMgr->GetOption<bool>("AiPlayerbot.LootRollDisenchant", false);
     lootGreedRollLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.LootGreedRollLevel", false);
     lootStrategy = sConfigMgr->GetOption<std::string>("AiPlayerbot.LootStrategy", "normal");
+    battleRezBossOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.BattleRezBossOnly", true);
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
     equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);

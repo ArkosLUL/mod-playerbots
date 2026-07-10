@@ -956,7 +956,7 @@ class SelfResurrectTrigger : public Trigger
 public:
     SelfResurrectTrigger(PlayerbotAI* botAI) : Trigger(botAI, "can self resurrect") {}
 
-    bool IsActive() override { return !bot->IsAlive() && bot->GetUInt32Value(PLAYER_SELF_RES_SPELL); }
+    bool IsActive() override;
 };
 
 class NewPetTrigger : public Trigger

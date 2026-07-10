@@ -256,6 +256,7 @@ public:
     bool summonAtInnkeepersEnabled;
     std::string combatStrategies, nonCombatStrategies;
     std::string lootStrategy;
+    bool battleRezBossOnly;
     std::string randomBotCombatStrategies, randomBotNonCombatStrategies;
     bool applyInstanceStrategies;
     uint32 randomBotMinLevel, randomBotMaxLevel;

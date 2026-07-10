@@ -309,6 +309,13 @@ AiPlayerbot.FreeMethodLoot = 0
 # Default: normal
 AiPlayerbot.LootStrategy = normal
 
+# Restrict bot battle/combat resurrection (Druid Rebirth, Shaman Reincarnation) to boss
+# fights only, conserving these scarce cooldowns on trash packs. A boss fight is detected
+# when an instance encounter is IN_PROGRESS or a current group attacker is a dungeon/world
+# boss. Set to 0 to restore always-on in-combat rez behavior.
+# Default: 1 (boss fights only)
+AiPlayerbot.BattleRezBossOnly = 1
+
 # Bots' Roll level bots will use for items they Need (0 = pass, 1 = greed, 2 = need)
 # Default: 1 (greed)
 AiPlayerbot.LootNeedRollLevel = 1
