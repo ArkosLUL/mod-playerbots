@@ -22,5 +22,7 @@ Unit* GetFirstAliveUnitByEntry(
     PlayerbotAI* botAI, uint32 entry);
 Unit* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
+void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
+void StopPet(PlayerbotAI* botAI);
 
 #endif
