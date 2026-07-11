@@ -1,5 +1,7 @@
 #include "UldStrategy.h"
 
+#include "UldMultipliers.h"
+
 void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     //
@@ -370,8 +372,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("algalon big bang hide action", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "algalon big bang dispersion trigger",
-        { NextAction("algalon big bang dispersion action", ACTION_EMERGENCY + 1) }));
+        "algalon big bang soak trigger",
+        { NextAction("algalon big bang soak action", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode(
         "algalon phase punch swap trigger",
@@ -388,4 +390,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "algalon collapsing star trigger",
         { NextAction("algalon collapsing star mark action", ACTION_RAID) }));
+}
+
+void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
+{
+    // Reserve the Big Bang soaker priest's Dispersion for the Big Bang cast
+    multipliers.push_back(new AlgalonMultiplier(botAI));
 }

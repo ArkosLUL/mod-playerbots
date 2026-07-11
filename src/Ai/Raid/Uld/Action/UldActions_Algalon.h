@@ -31,10 +31,10 @@ public:
     bool isUseful() override;
 };
 
-class AlgalonBigBangDispersionAction : public Action
+class AlgalonBigBangSoakAction : public Action
 {
 public:
-    AlgalonBigBangDispersionAction(PlayerbotAI* ai) : Action(ai, "algalon big bang dispersion action") {}
+    AlgalonBigBangSoakAction(PlayerbotAI* ai) : Action(ai, "algalon big bang soak action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

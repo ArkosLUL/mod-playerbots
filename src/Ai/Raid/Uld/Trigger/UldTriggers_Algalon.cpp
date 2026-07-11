@@ -48,15 +48,16 @@ bool AlgalonBigBangTrigger::IsActive()
     if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
         return false;
 
-    // The designated Shadow Priest soaks Big Bang with Dispersion instead of hiding
-    if (GetAlgalonBigBangDispersionPriest(bot) == bot)
+    // The designated Shadow Priest soaks Big Bang with Dispersion instead of hiding.
+    // If Dispersion is down the soak action falls back to hiding, so the exemption stays safe.
+    if (GetAlgalonBigBangSoakerPriest(bot) == bot)
         return false;
 
     return true;
 }
 
-// The designated Shadow Priest stays out and Disperses to survive Big Bang instead of hiding in a hole
-bool AlgalonBigBangDispersionTrigger::IsActive()
+// The designated Shadow Priest stays out and pops Dispersion to survive Big Bang
+bool AlgalonBigBangSoakTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
     if (!boss || !boss->IsAlive())
@@ -66,11 +67,11 @@ bool AlgalonBigBangDispersionTrigger::IsActive()
         return false;
 
     // Only the designated (first alive) Shadow Priest reacts this way
-    if (GetAlgalonBigBangDispersionPriest(bot) != bot)
+    if (GetAlgalonBigBangSoakerPriest(bot) != bot)
         return false;
 
-    // Already mitigating
-    if (bot->HasAura(SPELL_DISPERSION))
+    // Already phased safely inside a hole (cooldown fallback ran)
+    if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
         return false;
 
     return true;

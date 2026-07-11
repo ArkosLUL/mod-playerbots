@@ -56,14 +56,10 @@ bool AuriayaSonicScreechAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Step to a spot behind the boss (out of the frontal cone) while keeping current range
-    float const distance = std::max(5.0f, bot->GetExactDist2d(boss));
-    float const behindAngle = Position::NormalizeOrientation(boss->GetOrientation() + M_PI);
-    float const x = boss->GetPositionX() + std::cos(behindAngle) * distance;
-    float const y = boss->GetPositionY() + std::sin(behindAngle) * distance;
-
-    return MoveTo(boss->GetMapId(), x, y, boss->GetPositionZ(), false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT);
+    // Sidestep the shortest way out of the frontal cone while keeping current range
+    Position const dest = GetPositionOutsideFrontalCone(bot, boss, M_PI / 2.0f);
+    return MoveTo(boss->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool AuriayaMarkDpsTargetAction::isUseful()

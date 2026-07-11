@@ -69,16 +69,23 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
                   false, false, false, false, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
-bool AlgalonBigBangDispersionAction::isUseful()
+bool AlgalonBigBangSoakAction::isUseful()
 {
-    AlgalonBigBangDispersionTrigger trigger(botAI);
+    AlgalonBigBangSoakTrigger trigger(botAI);
     return trigger.IsActive();
 }
 
-bool AlgalonBigBangDispersionAction::Execute(Event event)
+bool AlgalonBigBangSoakAction::Execute(Event event)
 {
-    // The designated Shadow Priest Disperses in place to survive Big Bang (90% damage reduction)
-    return botAI->DoSpecificAction("dispersion", event, true);
+    // The designated Shadow Priest stays out and pops Dispersion to survive Big Bang. Big Bang is
+    // unavoidable raid-wide damage that immunity cannot prevent; Dispersion's 90% reduction survives it.
+    // The cooldown is reserved for this moment by AlgalonMultiplier (blocks normal Dispersion casts).
+    if (botAI->DoSpecificAction("dispersion", event, true))
+        return true;
+
+    // Dispersion unavailable (on cooldown): hide in a hole like the rest of the raid
+    AlgalonBigBangHideAction hide(botAI);
+    return hide.Execute(event);
 }
 
 bool AlgalonPhasePunchSwapAction::isUseful()

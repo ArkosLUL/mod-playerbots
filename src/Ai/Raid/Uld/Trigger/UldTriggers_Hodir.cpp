@@ -49,14 +49,12 @@ bool HodirNearSnowpackedIcicleTrigger::IsActive()
         return false;
     }
 
-    // Prefer a Snowpacked Icicle; fall back to a Toasty Fire when none has dropped nearby
+    // Only a Snowpacked Icicle blocks line of sight to Flash Freeze; a Toasty Fire does not
     Creature* target = bot->FindNearestCreature(NPC_SNOWPACKED_ICICLE, 100.0f);
-    if (!target)
-        target = bot->FindNearestCreature(NPC_TOASTY_FIRE, 100.0f);
     if (!target)
         return false;
 
-    // Check that bot is stacked on the safe spot
+    // Check that bot is stacked on the Snowpacked Icicle
     if (bot->GetDistance2d(target->GetPositionX(), target->GetPositionY()) <= 5.0f)
     {
         return false;

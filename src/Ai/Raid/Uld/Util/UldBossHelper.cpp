@@ -262,7 +262,7 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
     _lastRoleSwapTime[botGuid] = std::time(nullptr);
 }
 
-Player* GetAlgalonBigBangDispersionPriest(Player* bot)
+Player* GetAlgalonBigBangSoakerPriest(Player* bot)
 {
     Group* group = bot->GetGroup();
     if (!group)

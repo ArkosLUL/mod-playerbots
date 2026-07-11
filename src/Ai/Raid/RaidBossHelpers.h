@@ -2,6 +2,7 @@
 #define PLAYERBOTS_RAIDBOSSHELPERS_H
 
 #include "AiObject.h"
+#include "Position.h"
 #include "Unit.h"
 
 void MarkTargetWithIcon(Player* bot, Unit* target, uint8 iconId);
@@ -22,6 +23,7 @@ Unit* GetFirstAliveUnitByEntry(
     PlayerbotAI* botAI, uint32 entry);
 Unit* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
+Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
 void StopPet(PlayerbotAI* botAI);
 

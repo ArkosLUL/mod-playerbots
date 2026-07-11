@@ -152,7 +152,6 @@ enum UlduarIDs
     SPELL_ALGALON_PHASE_PUNCH = 64412,
     SPELL_ALGALON_COSMIC_SMASH = 62301,
     SPELL_ALGALON_BLACK_HOLE_DAMAGE = 62169,
-    SPELL_DISPERSION = 47585,
 
     // Buffs
     SPELL_FROST_TRAP = 13809,
@@ -160,13 +159,11 @@ enum UlduarIDs
     // Ignis the Furnace Master
     NPC_IGNIS_IRON_CONSTRUCT = 33121,
     NPC_IGNIS_SCORCHED_GROUND = 33123,
-    SPELL_IGNIS_SLAG_POT = 62717,
 
     // Auriaya
     NPC_AURIAYA_SANCTUM_SENTRY = 34014,
     NPC_AURIAYA_FERAL_DEFENDER = 34035,
     NPC_AURIAYA_SEEPING_FERAL_ESSENCE = 34098,
-    SPELL_AURIAYA_SONIC_SCREECH = 64422,
 
     // General Vezax
     NPC_VEZAX_SARONITE_VAPORS = 33488
@@ -178,9 +175,11 @@ constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
 // Kiter stops this far past the Black Hole (away from the constellation) to stay out of its phase/damage aura
 constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 5.0f;
 
-// Designated Big Bang soaker: the first alive Shadow Priest in the raid, who Disperses in place instead
-// of hiding in a hole. Returns nullptr if the raid has no living Shadow Priest.
-Player* GetAlgalonBigBangDispersionPriest(Player* bot);
+// Designated Big Bang soaker: the first alive Shadow Priest in the raid, who stays out and pops
+// Dispersion (90% damage reduction) to survive Big Bang instead of hiding in a hole. Big Bang is
+// unavoidable — full immunity (Paladin Divine Shield) does not prevent it, only mitigation survives.
+// Returns nullptr if the raid has no living Shadow Priest.
+Player* GetAlgalonBigBangSoakerPriest(Player* bot);
 
 constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
 constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;

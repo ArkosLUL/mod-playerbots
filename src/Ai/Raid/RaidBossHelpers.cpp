@@ -2,6 +2,8 @@
 #include "Playerbots.h"
 #include "CreatureAI.h"
 #include "RtiTargetValue.h"
+#include <algorithm>
+#include <cmath>
 
 // Functions to mark targets with raid target icons
 // Note that these functions do not allow the player to change the icon during the encounter
@@ -228,6 +230,29 @@ Unit* GetNearestPlayerInRadius(Player* bot, float radius)
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
 {
     return bot && source && source->GetExactDist2d(bot) <= range && source->HasInArc(coneAngle, bot);
+}
+
+// Return the shortest-rotation spot just outside source's frontal cone, at the bot's current
+// distance, so a bot caught in a cone attack sidesteps out of the arc instead of running the whole
+// way behind the boss. coneAngle is the full arc width (matching IsBotInFrontalCone); margin is the
+// extra clearance past the cone edge.
+Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin)
+{
+    float const distance = std::max(5.0f, source->GetExactDist2d(bot));
+    float const facing = source->GetOrientation();
+
+    // Signed bearing of the bot relative to where the boss is facing, in (-pi, pi]
+    float diff = Position::NormalizeOrientation(source->GetAngle(bot) - facing);
+    if (diff > M_PI)
+        diff -= 2.0f * static_cast<float>(M_PI);
+
+    // Rotate just past the cone edge on the side the bot is already on (shortest exit)
+    float const edge = coneAngle / 2.0f + margin;
+    float const targetAngle = Position::NormalizeOrientation(facing + (diff >= 0.0f ? edge : -edge));
+
+    float const x = source->GetPositionX() + std::cos(targetAngle) * distance;
+    float const y = source->GetPositionY() + std::sin(targetAngle) * distance;
+    return Position(x, y, bot->GetPositionZ(), 0.0f);
 }
 
 // Command the bot's guardian pet onto target. Mirrors PetAttackAction, which is disabled

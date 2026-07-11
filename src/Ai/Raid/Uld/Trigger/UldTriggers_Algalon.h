@@ -23,10 +23,10 @@ public:
     bool IsActive() override;
 };
 
-class AlgalonBigBangDispersionTrigger : public Trigger
+class AlgalonBigBangSoakTrigger : public Trigger
 {
 public:
-    AlgalonBigBangDispersionTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon big bang dispersion trigger") {}
+    AlgalonBigBangSoakTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon big bang soak trigger") {}
     bool IsActive() override;
 };
 

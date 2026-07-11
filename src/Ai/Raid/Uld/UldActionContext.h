@@ -87,7 +87,7 @@ public:
         creators["yogg-saron phase 3 positioning action"] = &RaidUlduarActionContext::yogg_saron_phase_3_positioning_action;
         creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
         creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
-        creators["algalon big bang dispersion action"] = &RaidUlduarActionContext::algalon_big_bang_dispersion_action;
+        creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
         creators["algalon phase punch swap action"] = &RaidUlduarActionContext::algalon_phase_punch_swap_action;
         creators["algalon constellation kite action"] = &RaidUlduarActionContext::algalon_constellation_kite_action;
         creators["algalon dark matter mark action"] = &RaidUlduarActionContext::algalon_dark_matter_mark_action;
@@ -175,7 +175,7 @@ private:
     static Action* yogg_saron_phase_3_positioning_action(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningAction(ai); }
     static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
     static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
-    static Action* algalon_big_bang_dispersion_action(PlayerbotAI* ai) { return new AlgalonBigBangDispersionAction(ai); }
+    static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }
     static Action* algalon_phase_punch_swap_action(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapAction(ai); }
     static Action* algalon_constellation_kite_action(PlayerbotAI* ai) { return new AlgalonConstellationKiteAction(ai); }
     static Action* algalon_dark_matter_mark_action(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkAction(ai); }
