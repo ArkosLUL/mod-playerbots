@@ -1,0 +1,257 @@
+#include "UldTriggers_Razorscale.h"
+
+#include "GameObject.h"
+#include "Object.h"
+#include "PlayerbotAI.h"
+#include "Playerbots.h"
+#include "UldBossHelper.h"
+#include "UldScripts.h"
+#include "RaidBossHelpers.h"
+#include "ScriptedCreature.h"
+#include "SharedDefines.h"
+#include "Trigger.h"
+#include "Vehicle.h"
+#include <MovementActions.h>
+#include <FollowMasterStrategy.h>
+#include <RtiTargetValue.h>
+
+bool RazorscaleFlyingAloneTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss)
+    {
+        return false;
+    }
+
+    // Check if the boss is flying
+    if (boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+    {
+        return false;
+    }
+
+    // Get the list of attackers
+    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
+    if (attackers.empty())
+    {
+        return true;  // No attackers implies flying alone
+    }
+
+    std::vector<Unit*> dark_rune_adds;
+
+    // Loop through attackers to find dark rune adds
+    for (ObjectGuid const& guid : attackers)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        uint32 entry = unit->GetEntry();
+
+        // Check for valid dark rune entries
+        if (entry == RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER ||
+            entry == RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN ||
+            entry == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
+        {
+            dark_rune_adds.push_back(unit);
+        }
+    }
+
+    // Return whether there are no dark rune adds
+    return dark_rune_adds.empty();
+}
+
+bool RazorscaleDevouringFlamesTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss)
+        return false;
+
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
+    for (auto& npc : npcs)
+    {
+        Unit* unit = botAI->GetUnit(npc);
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DEVOURING_FLAME)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool RazorscaleAvoidSentinelTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss)
+        return false;
+
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
+    for (auto& npc : npcs)
+    {
+        Unit* unit = botAI->GetUnit(npc);
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool RazorscaleAvoidWhirlwindTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss)
+        return false;
+
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
+    for (auto& npc : npcs)
+    {
+        Unit* unit = botAI->GetUnit(npc);
+        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
+            (unit->HasAura(RazorscaleBossHelper::SPELL_SENTINEL_WHIRLWIND) ||
+             unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL)))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool RazorscaleGroundedTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss)
+    {
+        return false;
+    }
+
+    // Check if the boss is flying
+    if (boss->GetPositionZ() < RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+    {
+        return true;
+    }
+    return false;
+}
+
+bool RazorscaleHarpoonAvailableTrigger::IsActive()
+{
+    // Get harpoon data from the helper
+    const std::vector<RazorscaleBossHelper::HarpoonData>& harpoonData = RazorscaleBossHelper::GetHarpoonData();
+
+    // Get the boss entity
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+    {
+        return false;
+    }
+
+    // Update the boss AI context in the helper
+    RazorscaleBossHelper razorscaleHelper(botAI);
+
+    if (!razorscaleHelper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    // Check each harpoon entry
+    for (auto const& harpoon : harpoonData)
+    {
+        // Skip harpoons whose chain spell is already active on the boss
+        if (razorscaleHelper.IsHarpoonFired(harpoon.chainSpellId))
+        {
+            continue;
+        }
+
+        // Find the nearest harpoon GameObject within 200 yards
+        if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
+        {
+            if (RazorscaleBossHelper::IsHarpoonReady(harpoonGO))
+            {
+                return true;  // At least one harpoon is available and ready to be fired
+            }
+        }
+    }
+
+    // No harpoons are available or need to be fired
+    return false;
+}
+
+bool RazorscaleFuseArmorTrigger::IsActive()
+{
+    // Get the boss entity
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+    {
+        return false;
+    }
+
+    // Only proceed if this bot can actually tank
+    if (!botAI->IsTank(bot))
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    // Iterate through group members to find the main tank with Fuse Armor
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || !botAI->IsMainTank(member))
+            continue;
+
+        Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSEARMOR);
+        if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
+            return true;
+    }
+
+    return false;
+}
+
+bool RazorscaleFocusCasterTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // One bot drives the marking to avoid the whole raid fighting over the icon
+    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+        return false;
+
+    // Sentinels are the top kill priority and own the skull; only focus casters once they are down
+    if (GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
+        return false;
+
+    // Watcher (ranged caster) first so bots interrupt it, then Guardian
+    Unit* target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER);
+    if (!target)
+        target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
+
+    if (!target)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == target->GetGUID())
+        return false;
+
+    return true;
+}
+
+bool RazorscaleFlameBreathTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Flame Breath is a grounded-phase frontal cone; while flying she is not breathing
+    if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+        return false;
+
+    // The tank holds the boss and eats the breath; only reposition non-tanks caught in the cone
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+        return false;
+
+    return IsBotInFrontalCone(bot, boss, M_PI / 2.0f, 40.0f);
+}

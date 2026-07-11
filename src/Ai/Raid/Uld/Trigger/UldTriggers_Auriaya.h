@@ -1,0 +1,40 @@
+#ifndef PLAYERBOTS_ULDTRIGGERS_AURIAYA_H
+#define PLAYERBOTS_ULDTRIGGERS_AURIAYA_H
+
+#include "EventMap.h"
+#include "GenericTriggers.h"
+#include "UldBossHelper.h"
+#include "Trigger.h"
+
+//
+// Auriaya
+//
+class AuriayaFallFromFloorTrigger : public Trigger
+{
+public:
+    AuriayaFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya fall from floor trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaSonicScreechTrigger : public Trigger
+{
+public:
+    AuriayaSonicScreechTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya sonic screech trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaSeepingEssenceTrigger : public Trigger
+{
+public:
+    AuriayaSeepingEssenceTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya seeping essence trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaMarkDpsTargetTrigger : public Trigger
+{
+public:
+    AuriayaMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya mark dps target trigger") {}
+    bool IsActive() override;
+};
+
+#endif
