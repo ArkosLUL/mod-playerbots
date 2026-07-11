@@ -1,5 +1,6 @@
 #include "RaidBossHelpers.h"
 #include "Playerbots.h"
+#include "CreatureAI.h"
 #include "RtiTargetValue.h"
 
 // Functions to mark targets with raid target icons
@@ -216,4 +217,56 @@ Unit* GetNearestPlayerInRadius(Player* bot, float radius)
     }
 
     return nearestPlayer;
+}
+
+// Return true when bot sits inside source's frontal cone: within range and inside the half-angle arc
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
+{
+    return bot && source && source->GetExactDist2d(bot) <= range && source->HasInArc(coneAngle, bot);
+}
+
+// Command the bot's guardian pet onto target. Mirrors PetAttackAction, which is disabled
+// globally, so scripted fights must redirect pets explicitly (e.g. off an immune boss).
+void CommandPetAttack(PlayerbotAI* botAI, Unit* target)
+{
+    Player* bot = botAI->GetBot();
+    Guardian* pet = bot->GetGuardianPet();
+    if (!pet || !target)
+        return;
+
+    // Respect a passive pet stance and never attack an invalid target.
+    if (pet->GetReactState() == REACT_PASSIVE)
+        return;
+
+    if (!bot->IsValidAttackTarget(target))
+        return;
+
+    // Already on target: avoid re-issuing the command every tick (would stutter the pet).
+    if (pet->GetVictim() == target)
+        return;
+
+    pet->ClearUnitState(UNIT_STATE_FOLLOW);
+    pet->AttackStop();
+    pet->SetTarget(target->GetGUID());
+
+    pet->GetCharmInfo()->SetIsCommandAttack(true);
+    pet->GetCharmInfo()->SetIsAtStay(false);
+    pet->GetCharmInfo()->SetIsFollowing(false);
+    pet->GetCharmInfo()->SetIsCommandFollow(false);
+    pet->GetCharmInfo()->SetIsReturning(false);
+
+    pet->ToCreature()->AI()->AttackStart(target);
+}
+
+// Stop the bot's guardian pet and clear its target so it disengages the current victim.
+void StopPet(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Guardian* pet = bot->GetGuardianPet();
+    if (!pet)
+        return;
+
+    pet->AttackStop();
+    pet->SetTarget(ObjectGuid::Empty);
+    pet->GetCharmInfo()->SetIsCommandAttack(false);
 }
