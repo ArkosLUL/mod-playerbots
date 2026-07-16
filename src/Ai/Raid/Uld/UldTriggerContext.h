@@ -17,6 +17,7 @@ public:
     {
         creators["flame leviathan on vehicle"] = &RaidUlduarTriggerContext::flame_leviathan_on_vehicle;
         creators["flame leviathan vehicle near"] = &RaidUlduarTriggerContext::flame_leviathan_vehicle_near;
+        creators["flame leviathan tower hazard"] = &RaidUlduarTriggerContext::flame_leviathan_tower_hazard;
         creators["razorscale flying alone"] = &RaidUlduarTriggerContext::razorscale_flying_alone;
         creators["razorscale avoid devouring flames"] = &RaidUlduarTriggerContext::razorscale_avoid_devouring_flames;
         creators["razorscale avoid sentinel"] = &RaidUlduarTriggerContext::razorscale_avoid_sentinel;
@@ -31,6 +32,8 @@ public:
         creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
         creators["iron assembly overload trigger"] = &RaidUlduarTriggerContext::iron_assembly_overload_trigger;
         creators["iron assembly rune of power trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_trigger;
+        creators["iron assembly kill order trigger"] = &RaidUlduarTriggerContext::iron_assembly_kill_order_trigger;
+        creators["iron assembly fusion punch swap trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_swap_trigger;
         creators["kologarn mark dps target trigger"] = &RaidUlduarTriggerContext::kologarn_mark_dps_target_trigger;
         creators["kologarn fall from floor trigger"] = &RaidUlduarTriggerContext::kologarn_fall_from_floor_trigger;
         creators["kologarn nature resistance trigger"] = &RaidUlduarTriggerContext::kologarn_nature_resistance_trigger;
@@ -101,12 +104,17 @@ public:
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
         creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
         creators["vezax saronite vapors trigger"] = &RaidUlduarTriggerContext::vezax_saronite_vapors_trigger;
+        creators["vezax saronite animus trigger"] = &RaidUlduarTriggerContext::vezax_saronite_animus_trigger;
+        creators["vezax profound darkness trigger"] = &RaidUlduarTriggerContext::vezax_profound_darkness_trigger;
         creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
+        creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
+        creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
     }
 
 private:
     static Trigger* flame_leviathan_on_vehicle(PlayerbotAI* ai) { return new FlameLeviathanOnVehicleTrigger(ai); }
     static Trigger* flame_leviathan_vehicle_near(PlayerbotAI* ai) { return new FlameLeviathanVehicleNearTrigger(ai); }
+    static Trigger* flame_leviathan_tower_hazard(PlayerbotAI* ai) { return new FlameLeviathanTowerHazardTrigger(ai); }
     static Trigger* razorscale_flying_alone(PlayerbotAI* ai) { return new RazorscaleFlyingAloneTrigger(ai); }
     static Trigger* razorscale_avoid_devouring_flames(PlayerbotAI* ai) { return new RazorscaleDevouringFlamesTrigger(ai); }
     static Trigger* razorscale_avoid_sentinel(PlayerbotAI* ai) { return new RazorscaleAvoidSentinelTrigger(ai); }
@@ -121,6 +129,8 @@ private:
     static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
     static Trigger* iron_assembly_overload_trigger(PlayerbotAI* ai) { return new IronAssemblyOverloadTrigger(ai); }
     static Trigger* iron_assembly_rune_of_power_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerTrigger(ai); }
+    static Trigger* iron_assembly_kill_order_trigger(PlayerbotAI* ai) { return new IronAssemblyKillOrderTrigger(ai); }
+    static Trigger* iron_assembly_fusion_punch_swap_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapTrigger(ai); }
     static Trigger* kologarn_mark_dps_target_trigger(PlayerbotAI* ai) { return new KologarnMarkDpsTargetTrigger(ai); }
     static Trigger* kologarn_fall_from_floor_trigger(PlayerbotAI* ai) { return new KologarnFallFromFloorTrigger(ai); }
     static Trigger* kologarn_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "kologarn"); }
@@ -191,7 +201,11 @@ private:
     static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
     static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
     static Trigger* vezax_saronite_vapors_trigger(PlayerbotAI* ai) { return new VezaxSaroniteVaporsTrigger(ai); }
+    static Trigger* vezax_saronite_animus_trigger(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
+    static Trigger* vezax_profound_darkness_trigger(PlayerbotAI* ai) { return new VezaxProfoundDarknessTrigger(ai); }
     static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
+    static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
+    static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
 };
 
 #endif

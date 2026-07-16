@@ -17,6 +17,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "RtiValue.h"
@@ -397,4 +398,30 @@ bool FlameLeviathanEnterVehicleAction::AllMainVehiclesOnUse()
     Difficulty diff = bot->GetRaidDifficulty();
     int maxC = (diff == RAID_DIFFICULTY_10MAN_NORMAL || diff == RAID_DIFFICULTY_10MAN_HEROIC) ? 2 : 5;
     return demolisher >= maxC && siege >= maxC;
+}
+
+bool FlameLeviathanTowerHazardAction::Execute(Event /*event*/)
+{
+    Unit* vehicleBase = bot->GetVehicleBase();
+    if (!vehicleBase)
+        return false;
+
+    uint32 towerMask = FlameLeviathanActiveTowerMask(botAI);
+    if (!towerMask)
+        return false;
+
+    Unit* hazard = GetFlameLeviathanNearestTowerHazard(botAI, vehicleBase, towerMask, ULDUAR_FL_TOWER_HAZARD_RADIUS);
+    if (!hazard)
+        return false;
+
+    // Pilot the vehicle straight away from the hazard, clearing the danger radius plus a
+    // small buffer. Forced priority so this beats the normal kite/DPS movement loop.
+    float const angle = hazard->GetAngle(vehicleBase);
+    float const fleeDist = ULDUAR_FL_TOWER_HAZARD_RADIUS - vehicleBase->GetExactDist2d(hazard) + 5.0f;
+    float const x = vehicleBase->GetPositionX() + std::cos(angle) * fleeDist;
+    float const y = vehicleBase->GetPositionY() + std::sin(angle) * fleeDist;
+    float const z = vehicleBase->GetPositionZ();
+
+    return MoveTo(vehicleBase->GetMap()->GetId(), x, y, z, false, false, false, false,
+                  MovementPriority::MOVEMENT_FORCED);
 }

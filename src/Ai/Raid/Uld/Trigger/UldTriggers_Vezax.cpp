@@ -5,8 +5,10 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
+#include "RangeTriggers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
@@ -71,4 +73,39 @@ bool VezaxSaroniteVaporsTrigger::IsActive()
 
     TooCloseToCreatureTrigger tooCloseToSaroniteVapors(botAI);
     return tooCloseToSaroniteVapors.TooCloseToCreature(NPC_VEZAX_SARONITE_VAPORS, 6.0f);
+}
+
+bool VezaxSaroniteAnimusTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!IsVezaxHardModeActive(botAI))
+        return false;
+
+    Unit* animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
+    if (!animus)
+        return false;
+
+    // Vezax is invulnerable behind the Saronite Barrier until the Animus dies, so everyone
+    // switches to it. Only fire when the bot is not already on it.
+    return AI_VALUE(Unit*, "current target") != animus;
+}
+
+bool VezaxProfoundDarknessTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!IsVezaxHardModeActive(botAI))
+        return false;
+
+    // Melee tank the Animus; only ranged/healers dodge its Profound Darkness.
+    if (!PlayerbotAI::IsRanged(bot))
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToAnimus(botAI);
+    return tooCloseToAnimus.TooCloseToCreature(NPC_VEZAX_SARONITE_ANIMUS, ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS);
 }

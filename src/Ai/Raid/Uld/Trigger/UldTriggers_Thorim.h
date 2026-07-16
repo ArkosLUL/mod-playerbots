@@ -58,4 +58,20 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode: bot standing inside Sif's moving Blizzard ground AoE.
+class ThorimSifBlizzardTrigger : public Trigger
+{
+public:
+    ThorimSifBlizzardTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim sif blizzard trigger") {}
+    bool IsActive() override;
+};
+
+// Hard mode: ranged/healer standing within Sif's point-blank Frost Nova range.
+class ThorimSifFrostNovaTrigger : public Trigger
+{
+public:
+    ThorimSifFrostNovaTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim sif frost nova trigger") {}
+    bool IsActive() override;
+};
+
 #endif

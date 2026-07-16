@@ -84,3 +84,12 @@ bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
                   ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT.GetPositionZ(), false, false, false, true,
                   MovementPriority::MOVEMENT_FORCED, true, false);
 }
+
+bool VezaxSaroniteAnimusAction::Execute(Event /*event*/)
+{
+    Unit* animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
+    if (!animus)
+        return false;
+
+    return Attack(animus);
+}

@@ -43,4 +43,22 @@ public:
         : MoveAwayFromCreatureAction(ai, "vezax saronite vapors action", NPC_VEZAX_SARONITE_VAPORS, 6.0f) {}
 };
 
+// Hard mode: switch to and kill the invulnerability-granting Saronite Animus.
+class VezaxSaroniteAnimusAction : public AttackAction
+{
+public:
+    VezaxSaroniteAnimusAction(PlayerbotAI* ai) : AttackAction(ai, "vezax saronite animus action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Hard mode: ranged/healers step out of the Animus' Profound Darkness.
+class VezaxProfoundDarknessAction : public MoveAwayFromCreatureAction
+{
+public:
+    VezaxProfoundDarknessAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "vezax profound darkness action", NPC_VEZAX_SARONITE_ANIMUS,
+                                     ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS) {}
+};
+
 #endif

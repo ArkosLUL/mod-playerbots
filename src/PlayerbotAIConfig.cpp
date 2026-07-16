@@ -661,6 +661,10 @@ bool PlayerbotAIConfig::Initialize()
     lootGreedRollLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.LootGreedRollLevel", false);
     lootStrategy = sConfigMgr->GetOption<std::string>("AiPlayerbot.LootStrategy", "normal");
     battleRezBossOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.BattleRezBossOnly", true);
+    ulduarVezaxHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarVezaxHardMode", false);
+    ulduarIronAssemblyHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarIronAssemblyHardMode", false);
+    ulduarFlameLeviathanHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFlameLeviathanHardMode", false);
+    ulduarThorimHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarThorimHardMode", false);
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
     equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);

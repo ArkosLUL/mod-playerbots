@@ -26,6 +26,11 @@ enum UlduarIDs
     SPELL_OVERLOAD_10_MAN_2 = 63485,
     SPELL_OVERLOAD_25_MAN_2 = 61886,
     SPELL_RUNE_OF_POWER = 64320,
+    NPC_STEELBREAKER = 32867,
+    NPC_MOLGEIM = 32927,
+    NPC_BRUNDIR = 32857,
+    SPELL_FUSION_PUNCH = 61903,
+    SPELL_OVERWHELMING_POWER = 64637,
 
     // Kologarn
     NPC_RIGHT_ARM = 32934,
@@ -166,8 +171,39 @@ enum UlduarIDs
     NPC_AURIAYA_SEEPING_FERAL_ESSENCE = 34098,
 
     // General Vezax
-    NPC_VEZAX_SARONITE_VAPORS = 33488
+    NPC_VEZAX_SARONITE_VAPORS = 33488,
+    NPC_VEZAX_SARONITE_ANIMUS = 33524,
+
+    // Flame Leviathan hard mode (each tower left standing empowers the boss and
+    // spawns that tower's periodic ground hazard).
+    NPC_FLAME_LEVIATHAN = 33113,
+    SPELL_FL_TOWER_OF_STORMS = 65076,        // boss empower aura while Storm tower up
+    SPELL_FL_TOWER_OF_FLAMES = 65075,        // boss empower aura while Flame tower up
+    SPELL_FL_TOWER_OF_FROST = 65077,         // boss empower aura while Frost tower up
+    SPELL_FL_TOWER_OF_LIFE = 64482,          // boss empower aura while Life tower up
+    NPC_FL_THORIM_HAMMER_TARGET = 33364,     // Storm: static lightning-strike marks
+    NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,  // Flame: moving fire trail
+    NPC_FL_HODIRS_FURY_TARGET = 33108,       // Frost: chases a random player then drops frost
+
+    // Thorim hard mode (arena gauntlet cleared fast enough that Sif joins the fight).
+    NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
+    NPC_SIF_BLIZZARD = 32879      // moving Blizzard ground AoE, only ever exists in hard mode
 };
+
+// Flame Leviathan hard-mode active-tower bitmask (which empower auras the boss carries).
+enum FlameLeviathanTowerFlags
+{
+    FL_TOWER_STORM = 0x1,
+    FL_TOWER_FLAMES = 0x2,
+    FL_TOWER_FROST = 0x4,
+    FL_TOWER_LIFE = 0x8
+};
+
+// Vehicle keeps this clear of any active-tower ground hazard (strike / fire / frost).
+constexpr float ULDUAR_FL_TOWER_HAZARD_RADIUS = 18.0f;
+
+// Vezax hard mode: ranged/healers stay outside the Saronite Animus' Profound Darkness (63420).
+constexpr float ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f;
 
 // Off-tank taunts once the active tank reaches this many Phase Punch stacks
 constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
@@ -185,6 +221,11 @@ constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
 constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
 constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
 constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
+
+// Thorim hard mode: bots clear Sif's moving Blizzard, and ranged/healers keep this far from
+// Sif herself so her point-blank Frost Nova (cast after she teleports next to a target) misses.
+constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 12.0f;
+constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;

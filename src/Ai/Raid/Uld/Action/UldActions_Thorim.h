@@ -74,4 +74,26 @@ public:
     bool isUseful() override;
 };
 
+// Hard mode: clear Sif's moving Blizzard ground AoE.
+class ThorimSifBlizzardAction : public MoveAwayFromCreatureAction
+{
+public:
+    ThorimSifBlizzardAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "thorim sif blizzard action", NPC_SIF_BLIZZARD,
+                                     ULDUAR_THORIM_SIF_BLIZZARD_RADIUS)
+    {
+    }
+};
+
+// Hard mode: ranged/healers back off so Sif's point-blank Frost Nova misses.
+class ThorimSifFrostNovaAction : public MoveAwayFromCreatureAction
+{
+public:
+    ThorimSifFrostNovaAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "thorim sif frost nova action", NPC_SIF,
+                                     ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS)
+    {
+    }
+};
+
 #endif

@@ -47,4 +47,12 @@ protected:
     bool AllMainVehiclesOnUse();
 };
 
+// Hard mode only: pilot the vehicle out of the nearest active-tower ground hazard.
+class FlameLeviathanTowerHazardAction : public MovementAction
+{
+public:
+    FlameLeviathanTowerHazardAction(PlayerbotAI* botAI) : MovementAction(botAI, "flame leviathan tower hazard") {}
+    bool Execute(Event event) override;
+};
+
 #endif

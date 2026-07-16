@@ -5,8 +5,10 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
+#include "RangeTriggers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
@@ -437,4 +439,26 @@ bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
 
     // Swap in once the active tank is suffering Unbalancing Strike
     return activeTank->HasAura(SPELL_UNBALANCING_STRIKE);
+}
+
+bool ThorimSifBlizzardTrigger::IsActive()
+{
+    if (!IsThorimHardModeActive(botAI))
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToBlizzard(botAI);
+    return tooCloseToBlizzard.TooCloseToCreature(NPC_SIF_BLIZZARD, ULDUAR_THORIM_SIF_BLIZZARD_RADIUS);
+}
+
+bool ThorimSifFrostNovaTrigger::IsActive()
+{
+    if (!IsThorimHardModeActive(botAI))
+        return false;
+
+    // Melee stay on Sif; only ranged/healers keep clear of her point-blank Frost Nova.
+    if (!PlayerbotAI::IsRanged(bot))
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToSif(botAI);
+    return tooCloseToSif.TooCloseToCreature(NPC_SIF, ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS);
 }

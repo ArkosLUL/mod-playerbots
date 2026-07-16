@@ -23,4 +23,12 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode only: fires while the bot's vehicle is inside an active-tower ground hazard.
+class FlameLeviathanTowerHazardTrigger : public Trigger
+{
+public:
+    FlameLeviathanTowerHazardTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan tower hazard") {}
+    bool IsActive() override;
+};
+
 #endif

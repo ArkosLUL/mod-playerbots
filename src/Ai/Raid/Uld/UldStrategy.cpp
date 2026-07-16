@@ -15,6 +15,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "flame leviathan on vehicle",
         { NextAction("flame leviathan vehicle", ACTION_RAID + 1) }));
 
+    triggers.push_back(new TriggerNode(
+        "flame leviathan tower hazard",
+        { NextAction("flame leviathan tower hazard", ACTION_RAID + 3) }));
+
     //
     // Razorscale
     //
@@ -87,6 +91,15 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "iron assembly rune of power trigger",
         { NextAction("iron assembly rune of power action", ACTION_RAID) }));
+
+    // Hard mode (config-gated): enforce Steelbreaker-last kill order and tank-swap his empowered kit.
+    triggers.push_back(new TriggerNode(
+        "iron assembly kill order trigger",
+        { NextAction("iron assembly kill order action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly fusion punch swap trigger",
+        { NextAction("iron assembly fusion punch swap action", ACTION_RAID + 2) }));
 
     //
     // Kologarn
@@ -219,6 +232,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim phase 2 positioning trigger",
         { NextAction("thorim phase 2 positioning action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "thorim sif blizzard trigger",
+        { NextAction("thorim sif blizzard action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim sif frost nova trigger",
+        { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
+
     //
     // Mimiron
     //
@@ -288,6 +309,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "vezax shadow resistance trigger",
         { NextAction("vezax shadow resistance action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax saronite animus trigger",
+        { NextAction("vezax saronite animus action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax profound darkness trigger",
+        { NextAction("vezax profound darkness action", ACTION_RAID + 2) }));
 
     //
     // Yogg-Saron

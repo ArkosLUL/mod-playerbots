@@ -17,6 +17,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "RtiValue.h"
@@ -84,4 +85,43 @@ bool IronAssemblyRuneOfPowerAction::Execute(Event /*event*/)
         return false;
 
     return MoveAway(target, 10.0f, true);
+}
+
+bool IronAssemblyKillOrderAction::isUseful()
+{
+    // Coarse relevance gate; the paired trigger does the full check. Only the main tank drives
+    // the marker, so skip the rest early.
+    return IsIronAssemblyHardModeActive(botAI) && botAI->IsMainTank(bot);
+}
+
+bool IronAssemblyKillOrderAction::Execute(Event /*event*/)
+{
+    Unit* next = GetIronAssemblyNextKillTarget(botAI);
+    if (!next)
+        return false;
+
+    MarkTargetWithSkull(bot, next);
+    SetRtiTarget(botAI, "skull", next);
+    return true;
+}
+
+bool IronAssemblyFusionPunchSwapAction::isUseful()
+{
+    // Coarse relevance gate; the paired trigger decides the actual swap.
+    return IsSteelbreakerEmpowered(botAI);
+}
+
+bool IronAssemblyFusionPunchSwapAction::Execute(Event event)
+{
+    Unit* steelbreaker = GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER);
+    if (!steelbreaker)
+        return false;
+
+    if (AI_VALUE(Unit*, "current target") != steelbreaker)
+        return Attack(steelbreaker);
+
+    if (steelbreaker->GetVictim() != bot)
+        return botAI->DoSpecificAction("taunt spell", event, true);
+
+    return false;
 }

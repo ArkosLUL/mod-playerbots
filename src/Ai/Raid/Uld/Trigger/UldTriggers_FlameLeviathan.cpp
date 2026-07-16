@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
@@ -48,4 +49,17 @@ bool FlameLeviathanVehicleNearTrigger::IsActive()
         return false;
 
     return true;
+}
+
+bool FlameLeviathanTowerHazardTrigger::IsActive()
+{
+    uint32 towerMask = FlameLeviathanActiveTowerMask(botAI);
+    if (!towerMask)
+        return false;
+
+    Unit* vehicleBase = bot->GetVehicleBase();
+    if (!vehicleBase)
+        return false;
+
+    return GetFlameLeviathanNearestTowerHazard(botAI, vehicleBase, towerMask, ULDUAR_FL_TOWER_HAZARD_RADIUS) != nullptr;
 }

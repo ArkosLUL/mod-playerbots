@@ -18,6 +18,7 @@ public:
     {
         creators["flame leviathan vehicle"] = &RaidUlduarActionContext::flame_leviathan_vehicle;
         creators["flame leviathan enter vehicle"] = &RaidUlduarActionContext::flame_leviathan_enter_vehicle;
+        creators["flame leviathan tower hazard"] = &RaidUlduarActionContext::flame_leviathan_tower_hazard;
         creators["razorscale avoid devouring flames"] = &RaidUlduarActionContext::razorscale_avoid_devouring_flames;
         creators["razorscale avoid sentinel"] = &RaidUlduarActionContext::razorscale_avoid_sentinel;
         creators["razorscale ignore flying alone"] = &RaidUlduarActionContext::razorscale_ignore_flying_alone;
@@ -32,6 +33,8 @@ public:
         creators["iron assembly lightning tendrils action"] = &RaidUlduarActionContext::iron_assembly_lightning_tendrils_action;
         creators["iron assembly overload action"] = &RaidUlduarActionContext::iron_assembly_overload_action;
         creators["iron assembly rune of power action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_action;
+        creators["iron assembly kill order action"] = &RaidUlduarActionContext::iron_assembly_kill_order_action;
+        creators["iron assembly fusion punch swap action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_swap_action;
         creators["kologarn mark dps target action"] = &RaidUlduarActionContext::kologarn_mark_dps_target_action;
         creators["kologarn fall from floor action"] = &RaidUlduarActionContext::kologarn_fall_from_floor_action;
         creators["kologarn nature resistance action"] = &RaidUlduarActionContext::kologarn_nature_resistance_action;
@@ -100,12 +103,17 @@ public:
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
         creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
+        creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
+        creators["vezax profound darkness action"] = &RaidUlduarActionContext::vezax_profound_darkness_action;
         creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
+        creators["thorim sif blizzard action"] = &RaidUlduarActionContext::thorim_sif_blizzard_action;
+        creators["thorim sif frost nova action"] = &RaidUlduarActionContext::thorim_sif_frost_nova_action;
     }
 
 private:
     static Action* flame_leviathan_vehicle(PlayerbotAI* ai) { return new FlameLeviathanVehicleAction(ai); }
     static Action* flame_leviathan_enter_vehicle(PlayerbotAI* ai) { return new FlameLeviathanEnterVehicleAction(ai); }
+    static Action* flame_leviathan_tower_hazard(PlayerbotAI* ai) { return new FlameLeviathanTowerHazardAction(ai); }
     static Action* razorscale_avoid_devouring_flames(PlayerbotAI* ai) { return new RazorscaleAvoidDevouringFlameAction(ai); }
     static Action* razorscale_avoid_sentinel(PlayerbotAI* ai) { return new RazorscaleAvoidSentinelAction(ai); }
     static Action* razorscale_ignore_flying_alone(PlayerbotAI* ai) { return new RazorscaleIgnoreBossAction(ai); }
@@ -120,6 +128,8 @@ private:
     static Action* iron_assembly_lightning_tendrils_action(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsAction(ai); }
     static Action* iron_assembly_overload_action(PlayerbotAI* ai) { return new IronAssemblyOverloadAction(ai); }
     static Action* iron_assembly_rune_of_power_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerAction(ai); }
+    static Action* iron_assembly_kill_order_action(PlayerbotAI* ai) { return new IronAssemblyKillOrderAction(ai); }
+    static Action* iron_assembly_fusion_punch_swap_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapAction(ai); }
     static Action* kologarn_mark_dps_target_action(PlayerbotAI* ai) { return new KologarnMarkDpsTargetAction(ai); }
     static Action* kologarn_fall_from_floor_action(PlayerbotAI* ai) { return new KologarnFallFromFloorAction(ai); }
     static Action* kologarn_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "kologarn"); }
@@ -188,7 +198,11 @@ private:
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
     static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }
+    static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
+    static Action* vezax_profound_darkness_action(PlayerbotAI* ai) { return new VezaxProfoundDarknessAction(ai); }
     static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
+    static Action* thorim_sif_blizzard_action(PlayerbotAI* ai) { return new ThorimSifBlizzardAction(ai); }
+    static Action* thorim_sif_frost_nova_action(PlayerbotAI* ai) { return new ThorimSifFrostNovaAction(ai); }
 };
 
 #endif

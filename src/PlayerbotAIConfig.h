@@ -257,6 +257,10 @@ public:
     std::string combatStrategies, nonCombatStrategies;
     std::string lootStrategy;
     bool battleRezBossOnly;
+    bool ulduarVezaxHardMode;
+    bool ulduarIronAssemblyHardMode;
+    bool ulduarFlameLeviathanHardMode;
+    bool ulduarThorimHardMode;
     std::string randomBotCombatStrategies, randomBotNonCombatStrategies;
     bool applyInstanceStrategies;
     uint32 randomBotMinLevel, randomBotMaxLevel;
