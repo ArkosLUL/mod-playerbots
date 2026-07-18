@@ -339,6 +339,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_HIT] += 2.3f;
         stats_weights_[STATS_TYPE_CRIT] += 2.2f;
         stats_weights_[STATS_TYPE_HASTE] += 0.8f;
+        stats_weights_[STATS_TYPE_INTELLECT] -= 2.0f;
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 2.0f;
         stats_weights_[STATS_TYPE_DEFENSE] -= 1.0f;
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.5f;
@@ -353,6 +354,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_HIT] += 2.0f;
         stats_weights_[STATS_TYPE_CRIT] += 1.9f;
         stats_weights_[STATS_TYPE_HASTE] += 0.8f;
+        stats_weights_[STATS_TYPE_INTELLECT] -= 2.0f;
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 2.0f;
         stats_weights_[STATS_TYPE_DEFENSE] -= 1.0f;
         stats_weights_[STATS_TYPE_EXPERTISE] += 1.4f;
