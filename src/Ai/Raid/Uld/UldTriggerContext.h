@@ -47,6 +47,9 @@ public:
         creators["hodir biting cold"] = &RaidUlduarTriggerContext::hodir_biting_cold;
         creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
         creators["hodir frost resistance trigger"] = &RaidUlduarTriggerContext::hodir_frost_resistance_trigger;
+        creators["hodir free frozen helper"] = &RaidUlduarTriggerContext::hodir_free_frozen_helper;
+        creators["hodir spread storm cloud"] = &RaidUlduarTriggerContext::hodir_spread_storm_cloud;
+        creators["hodir move to toasty fire"] = &RaidUlduarTriggerContext::hodir_move_to_toasty_fire;
         creators["freya near nature bomb"] = &RaidUlduarTriggerContext::freya_near_nature_bomb;
         creators["freya fire resistance trigger"] = &RaidUlduarTriggerContext::freya_fire_resistance_trigger;
         creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
@@ -146,6 +149,9 @@ private:
     static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
     static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "hodir"); }
+    static Trigger* hodir_free_frozen_helper(PlayerbotAI* ai) { return new HodirFreeFrozenHelperTrigger(ai); }
+    static Trigger* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudTrigger(ai); }
+    static Trigger* hodir_move_to_toasty_fire(PlayerbotAI* ai) { return new HodirMoveToToastyFireTrigger(ai); }
     static Trigger* freya_near_nature_bomb(PlayerbotAI* ai) { return new FreyaNearNatureBombTrigger(ai); }
     static Trigger* freya_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "freya"); }
     static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }

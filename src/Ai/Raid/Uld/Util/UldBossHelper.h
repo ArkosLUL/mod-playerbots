@@ -46,6 +46,9 @@ enum UlduarIDs
     NPC_TOASTY_FIRE = 33342,
     SPELL_FLASH_FREEZE = 61968,
     SPELL_BITING_COLD_PLAYER_AURA = 62039,
+    // Hodir hard mode (3-min timed kill): free the flash-frozen helpers, then exploit their buffs.
+    NPC_HODIR_FLASH_FREEZE_BLOCK = 32938,  // ice block encasing a frozen helper NPC; kill it to free them
+    SPELL_HODIR_STORM_CLOUD = 65123,       // shaman buff on a random player; base id, difficulty-mapped at runtime
 
     // Freya
     NPC_SNAPLASHER = 32916,
@@ -216,6 +219,15 @@ constexpr float ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f;
 // Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
 constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
+
+// Hodir hard mode: a bot within this of a Toasty Fire counts as protected (no Biting Cold, Flash
+// Freeze exemption), so it only seeks a fire when further out. Matches the Snowpacked Icicle stack range.
+constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 5.0f;
+
+// Hodir hard mode: a Storm Cloud carrier spreads Storm Power (crit-damage buff) to allies within this
+// range. Exact radius is DBC, so this is a conservative default; the carrier joins the pack when it has
+// fewer than a couple of allies this close.
+constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 10.0f;
 
 // Off-tank taunts once the active tank reaches this many Phase Punch stacks
 constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;

@@ -170,6 +170,22 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "hodir frost resistance trigger",
         { NextAction("hodir frost resistance action", ACTION_RAID) }));
 
+    // Hard mode (config-gated): win the 3-minute Rare Cache race - free the helpers, spread Storm
+    // Cloud, and sit in a Toasty Fire when Biting Cold stacks. Helper-freeing stays below the
+    // snowpacked-icicle move (ACTION_RAID + 1) so surviving a Flash Freeze always wins over running
+    // off to a helper block when both want the bot at once.
+    triggers.push_back(new TriggerNode(
+        "hodir free frozen helper",
+        { NextAction("hodir free frozen helper", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir spread storm cloud",
+        { NextAction("hodir spread storm cloud", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir move to toasty fire",
+        { NextAction("hodir move to toasty fire", ACTION_RAID) }));
+
     //
     // Freya
     //

@@ -691,6 +691,7 @@ bool PlayerbotAIConfig::Initialize()
     ulduarFlameLeviathanHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFlameLeviathanHardMode", false);
     ulduarThorimHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarThorimHardMode", false);
     ulduarFreyaHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFreyaHardMode", false);
+    ulduarHodirHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarHodirHardMode", false);
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
     equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);

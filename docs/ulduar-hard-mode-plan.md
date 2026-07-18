@@ -47,9 +47,9 @@ server truth*, so triggers stay thin. Reuse `GetFirstAliveUnitByEntry`
 (`RaidBossHelpers.h:21`) to find the boss/add, then
 `->ToCreature()->AI()->GetData(id)` where the server exposes a flag:
 
-- `bool IsHodirHardModeActive(botAI)` — Hodir `GetData` hard-mode flag + berserk/3-min
-  timer awareness (server: `EVENT_HARD_MODE_MISSED` 3min, `EVENT_BERSERK` 8min in
-  `boss_hodir.cpp`).
+- `bool IsHodirHardModeActive(botAI)` — **DONE.** Config + Hodir (32845) in combat. `GetData(3)`
+  (the 3-min timer flag) was NOT used: buff optimisation is harmless past the window and GetData is
+  fragile. See `ulduar-hodir-hardmode-findings.md`.
 - `bool IsVezaxHardModeActive(botAI)` — Vezax `GetData(1)` (`hardmodeAvailable`) **and**
   Saronite Animus (NPC 33524) alive (`boss_general_vezax.cpp`).
 - `uint32 FreyaActiveElderMask(botAI)` — which of Brightleaf/Ironbranch/Stonebark are
@@ -94,7 +94,7 @@ Each new behaviour is the **same 5 edit sites**, now in the per-boss files:
 | Boss | Detected state | Added bot behaviour |
 |---|---|---|
 | **Vezax** | Saronite Animus (33524) alive | Skull-mark + focus the Animus; dodge its Profound Darkness AoE. Simplest hard mode — pure "new add appears, kill it". Add `NPC_SARONITE_ANIMUS` enum. |
-| **Hodir** | Hard-mode flag, 3-min cache timer not yet missed | Maximise DPS/heal uptime: stand in Toasty Fire (33342), stack captured-NPC buffs, minimise Flash-Freeze/Biting-Cold downtime. No new boss ability — a race. Depends on the Sev-1 Flash-Freeze/Biting-Cold fixes landing first. |
+| **Hodir** | Config + Hodir in combat (3-min Rare Cache race; no new hazard) | **DONE.** DPS-race buff optimisation: free the flash-frozen helpers (block 32938), spread Storm Cloud (65123) to the pack, stand in a Toasty Fire (33342) when Biting Cold ticks (legit no-cheat mitigation). See `ulduar-hodir-hardmode-findings.md`. |
 | **Assembly of Iron** | Steelbreaker empowered (last alive) | Handle Steelbreaker's empowered kit: tank-swap on Fusion Punch, dodge Meltdown/Electrical Charge at low HP, kill order via marked focus. |
 | **Flame Leviathan** | Active tower mask | Per active tower, dodge its zone AoE from the vehicle: Storm→Thorim's Hammer strikes, Flame→Mimiron's Inferno chase-fire, Frost→Hodir's Fury, Life→Freya's adds. Add tower NPC/GO enums. |
 | **Thorim** | Sif present / arena hard mode | Dodge Sif's Blizzard/Frost Nova in the arena phase; keep kill-speed (follow marked focus). |
@@ -105,7 +105,8 @@ Each new behaviour is the **same 5 edit sites**, now in the per-boss files:
 ### Phased implementation order (ascending complexity / risk)
 
 1. **Infra (Step 0)** + **Vezax Animus** (reference boss — smallest, self-contained delta). **DONE**
-2. **Hodir** race + **Assembly** Steelbreaker kit. Assembly **DONE**; Hodir pending.
+2. **Hodir** race + **Assembly** Steelbreaker kit. Both **DONE** (Hodir: see
+   `ulduar-hodir-hardmode-findings.md`).
 3. **Flame Leviathan** towers + **Thorim** Sif. **DONE**
 4. **Mimiron** Firefighter + **Freya** Elders. Freya **DONE** (mechanics-only: break Iron Roots,
    dodge Unstable Sun Beam — see `ulduar-freya-hardmode-findings.md`); Mimiron pending.

@@ -128,3 +128,12 @@ bool IsFreyaHardModeActive(PlayerbotAI* botAI)
     Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
     return freya != nullptr && freya->IsInCombat();
 }
+
+bool IsHodirHardModeActive(PlayerbotAI* botAI)
+{
+    if (!sPlayerbotAIConfig.ulduarHodirHardMode)
+        return false;
+
+    Unit* hodir = GetFirstAliveUnitByEntry(botAI, NPC_HODIR);
+    return hodir != nullptr && hodir->IsInCombat();
+}

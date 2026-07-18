@@ -358,6 +358,15 @@ AiPlayerbot.UlduarThorimHardMode = 0
 # Default: 0 (disabled)
 AiPlayerbot.UlduarFreyaHardMode = 0
 
+# Enable Hodir hard-mode behaviour (the "Rare Cache of Winter" 3-minute timed kill). The fight is the
+# same as normal mode - there is no extra add - the raid just has to kill Hodir within 180 seconds, so
+# when on, bots optimise for the DPS race: free the flash-frozen helper NPCs at the pull, a bot carrying
+# Storm Cloud moves into the raid to spread its Storm Power crit buff, and bots stand in a Toasty Fire
+# when Biting Cold stacks on them (a no-cheat alternative to shaking it off). With it off they ignore
+# the helpers and play the fight as normal mode.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarHodirHardMode = 0
+
 # Bots' Roll level bots will use for items they Need (0 = pass, 1 = greed, 2 = need)
 # Default: 1 (greed)
 AiPlayerbot.LootNeedRollLevel = 1

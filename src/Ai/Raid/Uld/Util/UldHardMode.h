@@ -64,4 +64,12 @@ bool IsThorimHardModeActive(PlayerbotAI* botAI);
 // only ever exist in hard mode, so config-enabled AND Freya in combat is a sufficient gate.
 bool IsFreyaHardModeActive(PlayerbotAI* botAI);
 
+// Hodir: hard mode = the "Rare Cache of Winter" 3-minute timed kill. There is no extra add or empower
+// aura - the fight is identical, the raid just needs to kill within 180s. So there is no distinct
+// server object to key off: the gate is simply config-enabled AND Hodir in combat, and the per-mechanic
+// triggers add the DPS-race behaviours (free the frozen helpers, spread Storm Cloud, sit in a Toasty
+// Fire). GetData(3) reports the timer but is not needed - the buff optimisation is harmless even after
+// the window is missed, and GetData reads are fragile (see the Vezax note above).
+bool IsHodirHardModeActive(PlayerbotAI* botAI);
+
 #endif
