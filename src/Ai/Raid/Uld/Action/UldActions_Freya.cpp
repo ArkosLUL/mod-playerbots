@@ -205,3 +205,75 @@ bool FreyaMoveToHealingSporeAction::Execute(Event /*event*/)
     return MoveTo(nearestSpore->GetMapId(), nearestSpore->GetPositionX(), nearestSpore->GetPositionY(),
                   nearestSpore->GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
 }
+
+bool FreyaBreakIronRootsAction::isUseful()
+{
+    FreyaBreakIronRootsTrigger freyaBreakIronRootsTrigger(botAI);
+    return freyaBreakIronRootsTrigger.IsActive();
+}
+
+bool FreyaBreakIronRootsAction::Execute(Event /*event*/)
+{
+    // The root creature is summoned on the trapped bot; killing it removes the root DoT.
+    Creature* root = bot->FindNearestCreature(NPC_FREYA_STRENGTHENED_IRON_ROOTS, 10.0f);
+    if (!root)
+        root = bot->FindNearestCreature(NPC_FREYA_IRON_ROOTS, 10.0f);
+
+    if (!root || !root->IsAlive())
+        return false;
+
+    return Attack(root);
+}
+
+bool FreyaDodgeUnstableSunBeamAction::isUseful()
+{
+    FreyaDodgeUnstableSunBeamTrigger freyaDodgeUnstableSunBeamTrigger(botAI);
+    return freyaDodgeUnstableSunBeamTrigger.IsActive();
+}
+
+bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
+{
+    // Beam stalkers are non-selectable, so find them via the raw nearby-npc list. Flee from the centre of
+    // every in-range beam (not just the nearest) out past the whole cluster, so a bot in overlapping beams
+    // steps clear instead of sidestepping one beam straight into another.
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    std::vector<Position> beams;
+
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_FREYA_SUN_BEAM && unit->GetEntry() != NPC_FREYA_UNSTABLE_SUN_BEAM)
+            continue;
+
+        if (bot->GetExactDist2d(unit) < ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS)
+            beams.push_back(unit->GetPosition());
+    }
+
+    if (beams.empty())
+        return false;
+
+    float cx = 0.0f, cy = 0.0f;
+    for (Position const& beam : beams)
+    {
+        cx += beam.GetPositionX();
+        cy += beam.GetPositionY();
+    }
+    cx /= beams.size();
+    cy /= beams.size();
+
+    // Flee far enough to clear the outermost in-range beam, not just the centre.
+    Position const centre(cx, cy, 0.0f);
+    float spread = 0.0f;
+    for (Position const& beam : beams)
+    {
+        float const d = centre.GetExactDist2d(beam.GetPositionX(), beam.GetPositionY());
+        if (d > spread)
+            spread = d;
+    }
+
+    return FleePosition(Position(cx, cy, bot->GetPositionZ()),
+                        ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS + spread + 1.0f);
+}

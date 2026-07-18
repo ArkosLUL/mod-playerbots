@@ -37,4 +37,22 @@ public:
     bool isUseful() override;
 };
 
+// Hard mode: kill the Iron Roots creature trapping the bot - its death removes the root DoT.
+class FreyaBreakIronRootsAction : public AttackAction
+{
+public:
+    FreyaBreakIronRootsAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya break iron roots") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Hard mode: step out of an Unstable Sun Beam before it detonates.
+class FreyaDodgeUnstableSunBeamAction : public MovementAction
+{
+public:
+    FreyaDodgeUnstableSunBeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya dodge unstable sun beam") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 #endif

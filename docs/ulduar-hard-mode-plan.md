@@ -104,10 +104,11 @@ Each new behaviour is the **same 5 edit sites**, now in the per-boss files:
 
 ### Phased implementation order (ascending complexity / risk)
 
-1. **Infra (Step 0)** + **Vezax Animus** (reference boss — smallest, self-contained delta).
-2. **Hodir** race + **Assembly** Steelbreaker kit.
-3. **Flame Leviathan** towers + **Thorim** Sif.
-4. **Mimiron** Firefighter + **Freya** Elders (needs new Elder enums).
+1. **Infra (Step 0)** + **Vezax Animus** (reference boss — smallest, self-contained delta). **DONE**
+2. **Hodir** race + **Assembly** Steelbreaker kit. Assembly **DONE**; Hodir pending.
+3. **Flame Leviathan** towers + **Thorim** Sif. **DONE**
+4. **Mimiron** Firefighter + **Freya** Elders. Freya **DONE** (mechanics-only: break Iron Roots,
+   dodge Unstable Sun Beam — see `ulduar-freya-hardmode-findings.md`); Mimiron pending.
 5. **Yogg-Saron** reduced-Keeper discipline (largest, most test-heavy — last).
 
 Each numbered step is a discrete session: research the exact server `GetData` id

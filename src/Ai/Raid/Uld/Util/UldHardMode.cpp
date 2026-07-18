@@ -119,3 +119,12 @@ bool IsThorimHardModeActive(PlayerbotAI* botAI)
     // channel to join the fight - being below the floor threshold is the live hard-mode signal.
     return sif->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 }
+
+bool IsFreyaHardModeActive(PlayerbotAI* botAI)
+{
+    if (!sPlayerbotAIConfig.ulduarFreyaHardMode)
+        return false;
+
+    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    return freya != nullptr && freya->IsInCombat();
+}

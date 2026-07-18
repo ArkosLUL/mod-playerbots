@@ -57,6 +57,15 @@ enum UlduarIDs
     NPC_EONARS_GIFT = 33228,
     GOBJECT_NATURE_BOMB = 194902,
 
+    // Freya hard mode: Elders left alive permanently empower Freya with an extra ability each.
+    // NPC_FREYA comes from core ulduar.h via UldScripts.h.
+    NPC_FREYA_IRON_ROOTS = 33088,               // Ironbranch's Iron Roots trap (selectable)
+    NPC_FREYA_STRENGTHENED_IRON_ROOTS = 33168,  // Freya's empowered Iron Roots trap (selectable)
+    NPC_FREYA_SUN_BEAM = 33170,                 // Freya's Unstable Sun Beam stalker (non-selectable)
+    NPC_FREYA_UNSTABLE_SUN_BEAM = 33050,        // Brightleaf's Unstable Sun Beam stalker (non-selectable)
+    SPELL_IRON_ROOTS_DAMAGE = 62283,            // DoT on a player trapped by Ironbranch's roots
+    SPELL_IRON_ROOTS_FREYA_DAMAGE = 62861,      // DoT on a player trapped by Freya's roots
+
     // Thorim
     NPC_DARK_RUNE_ACOLYTE_I = 32886,
     NPC_CAPTURED_MERCENARY_SOLDIER_ALLY = 32885,
@@ -203,6 +212,10 @@ constexpr float ULDUAR_FL_TOWER_HAZARD_RADIUS = 18.0f;
 
 // Vezax hard mode: ranged/healers stay outside the Saronite Animus' Profound Darkness (63420).
 constexpr float ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f;
+
+// Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
+// radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
+constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
 
 // Off-tank taunts once the active tank reaches this many Phase Punch stacks
 constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;

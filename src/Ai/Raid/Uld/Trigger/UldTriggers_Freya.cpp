@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
@@ -206,4 +207,37 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
 
     // If the nearest spore is farther than 6 yards, a move is required
     return nearestDistance > 6.0f;
+}
+
+bool FreyaBreakIronRootsTrigger::IsActive()
+{
+    if (!IsFreyaHardModeActive(botAI))
+        return false;
+
+    // Trapped by either the Ironbranch or the Freya-cast Iron Roots (each leaves its own DoT).
+    return bot->HasAura(SPELL_IRON_ROOTS_DAMAGE) || bot->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE);
+}
+
+bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
+{
+    if (!IsFreyaHardModeActive(botAI))
+        return false;
+
+    // The beam stalkers are non-selectable, so they never show up in attack-target lists - scan the
+    // raw nearby-npc list instead.
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_FREYA_SUN_BEAM && unit->GetEntry() != NPC_FREYA_UNSTABLE_SUN_BEAM)
+            continue;
+
+        if (bot->GetExactDist2d(unit) < ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS)
+            return true;
+    }
+
+    return false;
 }

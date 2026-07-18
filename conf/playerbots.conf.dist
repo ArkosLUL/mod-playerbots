@@ -350,6 +350,14 @@ AiPlayerbot.UlduarFlameLeviathanHardMode = 0
 # Default: 0 (disabled)
 AiPlayerbot.UlduarThorimHardMode = 0
 
+# Enable Freya hard-mode behaviour (Elders left alive). Each living Elder permanently empowers Freya
+# for the whole fight: Ironbranch -> Iron Roots (traps a player in a killable root), Brightleaf ->
+# Unstable Sun Beam (a damaging ground zone). When on, a rooted bot kills the root trapping it and
+# bots step out of Unstable Sun Beams; with it off they play the fight as normal mode. Stonebark's
+# Ground Tremor (raid-wide knockback) is unavoidable and left to the healers either way.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarFreyaHardMode = 0
+
 # Bots' Roll level bots will use for items they Need (0 = pass, 1 = greed, 2 = need)
 # Default: 1 (greed)
 AiPlayerbot.LootNeedRollLevel = 1

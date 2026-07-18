@@ -193,6 +193,16 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya move to healing spore trigger",
         { NextAction("freya move to healing spore action", ACTION_RAID) }));
 
+    // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
+    // root outranks the dodge - a rooted bot can't move, so it has to free itself before it can step out.
+    triggers.push_back(new TriggerNode(
+        "freya break iron roots",
+        { NextAction("freya break iron roots", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya dodge unstable sun beam",
+        { NextAction("freya dodge unstable sun beam", ACTION_RAID + 2) }));
+
     //
     // Thorim
     //

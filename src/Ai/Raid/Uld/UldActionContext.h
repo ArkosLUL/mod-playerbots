@@ -52,6 +52,8 @@ public:
         creators["freya nature resistance action"] = &RaidUlduarActionContext::freya_nature_resistance_action;
         creators["freya mark dps target action"] = &RaidUlduarActionContext::freya_mark_dps_target_action;
         creators["freya move to healing spore action"] = &RaidUlduarActionContext::freya_move_to_healing_spore_action;
+        creators["freya break iron roots"] = &RaidUlduarActionContext::freya_break_iron_roots;
+        creators["freya dodge unstable sun beam"] = &RaidUlduarActionContext::freya_dodge_unstable_sun_beam;
         creators["thorim frost resistance action"] = &RaidUlduarActionContext::thorim_frost_resistance_action;
         creators["thorim nature resistance action"] = &RaidUlduarActionContext::thorim_nature_resistance_action;
         creators["thorim unbalancing strike action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_action;
@@ -147,6 +149,8 @@ private:
     static Action* freya_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "freya"); }
     static Action* freya_mark_dps_target_action(PlayerbotAI* ai) { return new FreyaMarkDpsTargetAction(ai); }
     static Action* freya_move_to_healing_spore_action(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeAction(ai); }
+    static Action* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsAction(ai); }
+    static Action* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamAction(ai); }
     static Action* thorim_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "thorim"); }
     static Action* thorim_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "thorim"); }
     static Action* thorim_unbalancing_strike_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeAction(ai); }

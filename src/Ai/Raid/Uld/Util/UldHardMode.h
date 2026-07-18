@@ -57,4 +57,11 @@ Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32
 // config-enabled AND Sif fighting in the arena.
 bool IsThorimHardModeActive(PlayerbotAI* botAI);
 
+// Freya: hard mode = an Elder (Brightleaf/Stonebark/Ironbranch) was left alive when Freya was engaged,
+// permanently empowering her with an extra ability. The empower keeps firing for the rest of the fight
+// even after the Elder dies, so this is only the coarse config + encounter gate; the per-mechanic
+// triggers add the specific hazard check (rooted bot / nearby Unstable Sun Beam). Those hazard objects
+// only ever exist in hard mode, so config-enabled AND Freya in combat is a sufficient gate.
+bool IsFreyaHardModeActive(PlayerbotAI* botAI);
+
 #endif

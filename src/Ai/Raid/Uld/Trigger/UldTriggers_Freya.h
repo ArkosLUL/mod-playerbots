@@ -30,4 +30,20 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode: bot is trapped by Iron Roots (Ironbranch or Freya-cast) and must break out.
+class FreyaBreakIronRootsTrigger : public Trigger
+{
+public:
+    FreyaBreakIronRootsTrigger(PlayerbotAI* ai) : Trigger(ai, "freya break iron roots") {}
+    bool IsActive() override;
+};
+
+// Hard mode: bot is standing in an Unstable Sun Beam and must step out before it detonates.
+class FreyaDodgeUnstableSunBeamTrigger : public Trigger
+{
+public:
+    FreyaDodgeUnstableSunBeamTrigger(PlayerbotAI* ai) : Trigger(ai, "freya dodge unstable sun beam") {}
+    bool IsActive() override;
+};
+
 #endif
