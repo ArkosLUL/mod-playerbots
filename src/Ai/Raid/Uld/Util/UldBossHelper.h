@@ -13,6 +13,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "ScriptedCreature.h"
+#include "UldScripts.h"
 
 constexpr uint32 ULDUAR_MAP_ID = 603;
 
@@ -26,9 +27,7 @@ enum UlduarIDs
     SPELL_OVERLOAD_10_MAN_2 = 63485,
     SPELL_OVERLOAD_25_MAN_2 = 61886,
     SPELL_RUNE_OF_POWER = 64320,
-    NPC_STEELBREAKER = 32867,
-    NPC_MOLGEIM = 32927,
-    NPC_BRUNDIR = 32857,
+    // NPC_STEELBREAKER / NPC_MOLGEIM / NPC_BRUNDIR come from core ulduar.h via UldScripts.h
     SPELL_FUSION_PUNCH = 61903,
     SPELL_OVERWHELMING_POWER = 64637,
 

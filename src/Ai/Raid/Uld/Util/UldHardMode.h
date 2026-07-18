@@ -1,7 +1,10 @@
 #ifndef PLAYERBOTS_ULDHARDMODE_H
 #define PLAYERBOTS_ULDHARDMODE_H
 
+#include "Define.h"
+
 class PlayerbotAI;
+class Unit;
 
 // Ulduar hard-mode detectors.
 //
