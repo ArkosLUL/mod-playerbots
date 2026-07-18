@@ -228,6 +228,13 @@ public:
     ImmolationTrapNoCdTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "immolation trap") {}
 };
 
+class TrapLauncherExplosiveNoCdTrigger : public SpellNoCooldownTrigger
+{
+public:
+    TrapLauncherExplosiveNoCdTrigger(PlayerbotAI* botAI)
+        : SpellNoCooldownTrigger(botAI, "trap launcher: explosive trap") {}
+};
+
 BEGIN_TRIGGER(HuntersPetDeadTrigger, Trigger)
 END_TRIGGER()
 

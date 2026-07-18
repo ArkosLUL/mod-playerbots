@@ -120,6 +120,10 @@ public:
     MagtheridonEraseTimersAndTrackersAction(
         PlayerbotAI* botAI, std::string const name = "magtheridon erase timers and trackers") : Action(botAI, name) {}
     bool Execute(Event event) override;
+
+private:
+    bool AssignCubeClickers();
+    bool NeedsCubeReassignment(uint32 instanceId);
 };
 
 #endif

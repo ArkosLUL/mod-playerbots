@@ -86,4 +86,17 @@ private:
     std::string bossName;
 };
 
+class BossMarkSkullTrigger : public Trigger
+{
+public:
+    BossMarkSkullTrigger(PlayerbotAI* ai, std::string const bossName)
+        : Trigger(ai, bossName + " mark boss trigger"), bossName(bossName)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    std::string bossName;
+};
+
 #endif

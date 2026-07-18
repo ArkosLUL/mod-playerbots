@@ -77,6 +77,8 @@ void GenericHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("tranquilizing shot magic", { NextAction("tranquilizing shot", 61.0f) }));
 
     // Ranged-based Triggers
+    triggers.push_back(new TriggerNode("trap launcher: explosive trap no cd",
+                                       { NextAction("trap launcher: explosive trap", 17.0f) }));
     triggers.push_back(new TriggerNode("enemy within melee", { NextAction("explosive trap", 37.0f),
                                                                NextAction("mongoose bite", 22.0f),
                                                                NextAction("wing clip", 21.0f) }));

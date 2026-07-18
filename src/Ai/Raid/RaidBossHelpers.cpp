@@ -83,6 +83,26 @@ void SetRtiTarget(PlayerbotAI* botAI, const std::string& rtiName, Unit* target)
     }
 }
 
+// For bots to assign the crowd-control raid icon to a target. Unlike SetRtiTarget (which drives the
+// main "rti"/focus mark), this drives the parallel "rti cc" value the per-class "cc" strategy reads,
+// so the two never compete: a skull-marked kill target and a moon-marked CC target coexist. The
+// icon is placed on the unit and the "rti cc" value is pointed at that icon; RtiCcTargetValue then
+// resolves the marked unit for the CC actions.
+void SetRtiCcTarget(PlayerbotAI* botAI, const std::string& rtiName, Unit* target)
+{
+    if (!target)
+        return;
+
+    int32 const iconIndex = RtiTargetValue::GetRtiIndex(rtiName);
+    if (iconIndex < 0)
+        return;
+
+    MarkTargetWithIcon(botAI->GetBot(), target, static_cast<uint8>(iconIndex));
+
+    if (botAI->GetAiObjectContext()->GetValue<std::string>("rti cc")->Get() != rtiName)
+        botAI->GetAiObjectContext()->GetValue<std::string>("rti cc")->Set(rtiName);
+}
+
 // Return the first alive DPS bot in the specified instance map, excluding any specified bot
 // Intended for purposes of storing and erasing timers and trackers in associative containers
 bool IsMechanicTrackerBot(PlayerbotAI* botAI, Player* bot, uint32 mapId, Player* exclude)
@@ -216,4 +236,10 @@ Unit* GetNearestPlayerInRadius(Player* bot, float radius)
     }
 
     return nearestPlayer;
+}
+
+// Return true when bot sits inside source's frontal cone: within range and inside the half-angle arc
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
+{
+    return bot && source && source->GetExactDist2d(bot) <= range && source->HasInArc(coneAngle, bot);
 }

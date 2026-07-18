@@ -3,6 +3,7 @@
 
 #include "Strategy.h"
 #include "Aq20Strategy.h"
+#include "RaidAq40Strategy.h"
 #include "MCStrategy.h"
 #include "BWLStrategy.h"
 #include "KaraStrategy.h"
@@ -21,6 +22,7 @@
 #include "OnyStrategy.h"
 #include "ICCStrategy.h"
 #include "RSStrategy.h"
+#include "ToCStrategy.h"
 
 class RaidStrategyContext : public NamedObjectContext<Strategy>
 {
@@ -28,6 +30,7 @@ public:
     RaidStrategyContext() : NamedObjectContext<Strategy>(false, true)
     {
         creators["aq20"] = &RaidStrategyContext::aq20;
+        creators["aq40"] = &RaidStrategyContext::aq40;
         creators["moltencore"] = &RaidStrategyContext::moltencore;
         creators["bwl"] = &RaidStrategyContext::bwl;
         creators["karazhan"] = &RaidStrategyContext::karazhan;
@@ -46,10 +49,12 @@ public:
         creators["onyxia"] = &RaidStrategyContext::onyxia;
         creators["icc"] = &RaidStrategyContext::icc;
         creators["rs"] = &RaidStrategyContext::rs;
+        creators["trialofthecrusader"] = &RaidStrategyContext::trialofthecrusader;
     }
 
 private:
     static Strategy* aq20(PlayerbotAI* botAI) { return new RaidAq20Strategy(botAI); }
+    static Strategy* aq40(PlayerbotAI* botAI) { return new RaidAq40Strategy(botAI); }
     static Strategy* moltencore(PlayerbotAI* botAI) { return new RaidMcStrategy(botAI); }
     static Strategy* bwl(PlayerbotAI* botAI) { return new RaidBwlStrategy(botAI); }
     static Strategy* karazhan(PlayerbotAI* botAI) { return new RaidKarazhanStrategy(botAI); }
@@ -68,6 +73,7 @@ private:
     static Strategy* ulduar(PlayerbotAI* botAI) { return new RaidUlduarStrategy(botAI); }
     static Strategy* icc(PlayerbotAI* botAI) { return new RaidIccStrategy(botAI); }
     static Strategy* rs(PlayerbotAI* botAI) { return new RaidRsStrategy(botAI); }
+    static Strategy* trialofthecrusader(PlayerbotAI* botAI) { return new RaidTrialOfTheCrusaderStrategy(botAI); }
 };
 
 #endif

@@ -302,6 +302,17 @@ AiPlayerbot.TwoRoundsGearInit = 0
 # Default: 0 (disabled)
 AiPlayerbot.FreeMethodLoot = 0
 
+# Default loot strategy applied to bots. Controls which items bots pick up.
+# Quest items, always-loot whitelist, and quest-starter items are always looted regardless.
+# Accepted values:
+#   normal     - loot anything the bot considers useful (gear, food, water, scrolls, recipes, reagents, sellable junk)
+#   gray       - normal plus poor (gray) quality items
+#   disenchant - normal plus BoE uncommon+ armor/weapons for disenchanting
+#   all        - loot everything
+#   equip      - loot only gear pieces (armor + weapons) of uncommon quality or higher
+# Default: normal
+AiPlayerbot.LootStrategy = normal
+
 # Bots' Roll level bots will use for items they Need (0 = pass, 1 = greed, 2 = need)
 # Default: 1 (greed)
 AiPlayerbot.LootNeedRollLevel = 1

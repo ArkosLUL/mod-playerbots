@@ -410,6 +410,8 @@ public:
     Strategy* GetStrategy(std::string const name, BotState type);
     void ApplyInstanceStrategies(uint32 mapId, bool tellMaster = false);
     bool HasTargetExclusions() const;
+    static std::vector<std::string> const& GetInstanceStrategies();
+    static bool IsInstanceStrategy(std::string const& name);
     void EvaluateHealerDpsStrategy();
     bool ContainsStrategy(StrategyType type);
     bool HasStrategy(std::string const name, BotState type);

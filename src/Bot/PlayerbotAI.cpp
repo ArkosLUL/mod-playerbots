@@ -1618,19 +1618,30 @@ std::vector<std::string> PlayerbotAI::GetStrategies(BotState type)
     return e->GetStrategies();
 }
 
-void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
+std::vector<std::string> const& PlayerbotAI::GetInstanceStrategies()
 {
     static const std::vector<std::string> allInstanceStrategies =
     {
-        "aq20", "blacktemple", "bwl", "gruulslair", "hyjal", "icc", "karazhan",
-        "magtheridon", "moltencore", "naxx", "onyxia", "rs", "ssc", "tbc-ac", "tempestkeep",
-        "ulduar", "voa", "wotlk-an", "wotlk-cos", "wotlk-dtk", "wotlk-eoe", "wotlk-fos",
-        "wotlk-gd", "wotlk-hol", "wotlk-hor", "wotlk-hos", "wotlk-nex", "wotlk-occ",
+        "aq20", "aq40", "blacktemple", "bwl", "gruulslair", "hyjal", "icc", "karazhan",
+        "magtheridon", "moltencore", "naxx", "onyxia", "ssc", "tbc-ac", "tempestkeep",
+        "trialofthecrusader", "ulduar", "voa", "wotlk-an", "wotlk-cos", "wotlk-dtk", "wotlk-eoe",
+        "wotlk-fos", "wotlk-gd", "wotlk-hol", "wotlk-hor", "wotlk-hos", "wotlk-nex", "wotlk-occ",
         "wotlk-ok", "wotlk-os", "wotlk-pos", "wotlk-toc", "wotlk-uk", "wotlk-up",
         "wotlk-vh", "zulaman"
     };
 
-    for (const std::string& strat : allInstanceStrategies)
+    return allInstanceStrategies;
+}
+
+bool PlayerbotAI::IsInstanceStrategy(std::string const& name)
+{
+    std::vector<std::string> const& all = GetInstanceStrategies();
+    return std::find(all.begin(), all.end(), name) != all.end();
+}
+
+void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
+{
+    for (const std::string& strat : GetInstanceStrategies())
     {
         engines[BOT_STATE_COMBAT]->removeStrategy(strat);
         engines[BOT_STATE_NON_COMBAT]->removeStrategy(strat);
@@ -1650,6 +1661,9 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
             break;
         case 509:
             strategyName = "aq20";  // Ruins of Ahn'Qiraj
+            break;
+        case 531:
+            strategyName = "aq40";  // Temple of Ahn'Qiraj
             break;
         case 532:
             strategyName = "karazhan";  // Karazhan
@@ -1734,6 +1748,9 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
             break;
         case 632:
             strategyName = "wotlk-fos";  // The Forge of Souls
+            break;
+        case 649:
+            strategyName = "trialofthecrusader";  // Trial of the Crusader
             break;
         case 650:
             strategyName = "wotlk-toc";  // Trial of the Champion

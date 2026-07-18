@@ -15,11 +15,13 @@ void MarkTargetWithCross(Player* bot, Unit* target);
 void MarkTargetWithMoon(Player* bot, Unit* target);
 void ClearTargetIcon(Player* bot, uint8 iconId);
 void SetRtiTarget(PlayerbotAI* botAI, const std::string& rtiName, Unit* target);
+void SetRtiCcTarget(PlayerbotAI* botAI, const std::string& rtiName, Unit* target);
 bool IsMechanicTrackerBot(PlayerbotAI* botAI, Player* bot, uint32 mapId, Player* exclude = nullptr);
 Player* GetGroupMainTank(PlayerbotAI* botAI, Player* bot);
 Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
 Unit* GetFirstAliveUnitByEntry(
     PlayerbotAI* botAI, uint32 entry);
 Unit* GetNearestPlayerInRadius(Player* bot, float radius);
+bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
 
 #endif
