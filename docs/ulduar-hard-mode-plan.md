@@ -108,8 +108,10 @@ Each new behaviour is the **same 5 edit sites**, now in the per-boss files:
 2. **Hodir** race + **Assembly** Steelbreaker kit. Both **DONE** (Hodir: see
    `ulduar-hodir-hardmode-findings.md`).
 3. **Flame Leviathan** towers + **Thorim** Sif. **DONE**
-4. **Mimiron** Firefighter + **Freya** Elders. Freya **DONE** (mechanics-only: break Iron Roots,
-   dodge Unstable Sun Beam — see `ulduar-freya-hardmode-findings.md`); Mimiron pending.
+4. **Mimiron** Firefighter + **Freya** Elders. Both **DONE** (mechanics-only). Freya: break Iron
+   Roots, dodge Unstable Sun Beam (`ulduar-freya-hardmode-findings.md`). Mimiron: dodge persistent
+   ground fire + Frost Bomb, detect via mech Emergency Mode aura, Emergency Fire Bots are friendly
+   so left alone (`ulduar-mimiron-hardmode-findings.md`).
 5. **Yogg-Saron** reduced-Keeper discipline (largest, most test-heavy — last).
 
 Each numbered step is a discrete session: research the exact server `GetData` id

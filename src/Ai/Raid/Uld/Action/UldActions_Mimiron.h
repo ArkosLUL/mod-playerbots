@@ -101,4 +101,25 @@ public:
         : MoveAwayFromCreatureAction(ai, "mimiron bomb bot action", NPC_BOMB_BOT, 6.0f) {}
 };
 
+// Hard mode (Firefighter): step out of the persistent ground fire before it burns the bot down.
+class MimironDodgeFlamesAction : public MovementAction
+{
+public:
+    MimironDodgeFlamesAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron dodge flames action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Hard mode (Firefighter): clear VX-001's Frost Bomb radius before it detonates.
+class MimironFrostBombAction : public MoveAwayFromCreatureAction
+{
+public:
+    MimironFrostBombAction(PlayerbotAI* ai)
+        : MoveAwayFromCreatureAction(ai, "mimiron frost bomb action", NPC_FROST_BOMB,
+                                     ULDUAR_MIMIRON_FROST_BOMB_RADIUS) {}
+
+    bool isUseful() override;
+};
+
 #endif

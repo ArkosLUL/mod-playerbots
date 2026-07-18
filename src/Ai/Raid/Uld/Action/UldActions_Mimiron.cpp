@@ -421,3 +421,61 @@ bool MimironCheatAction::Execute(Event /*event*/)
 
     return true;
 }
+
+bool MimironDodgeFlamesAction::isUseful()
+{
+    MimironDodgeFlamesTrigger mimironDodgeFlamesTrigger(botAI);
+    return mimironDodgeFlamesTrigger.IsActive();
+}
+
+bool MimironDodgeFlamesAction::Execute(Event /*event*/)
+{
+    // Fire nodes are non-selectable, so find them via the raw nearby-npc list. Flee from the centre of the
+    // whole in-range fire field (not just the nearest node) out past its edge, so the bot leaves the field
+    // instead of stepping out of one node straight into the next.
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    std::vector<Position> nodes;
+
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_FLAMES_SPREAD && unit->GetEntry() != NPC_FLAMES_INITIAL)
+            continue;
+
+        if (bot->GetExactDist2d(unit) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+            nodes.push_back(unit->GetPosition());
+    }
+
+    if (nodes.empty())
+        return false;
+
+    float cx = 0.0f, cy = 0.0f;
+    for (Position const& node : nodes)
+    {
+        cx += node.GetPositionX();
+        cy += node.GetPositionY();
+    }
+    cx /= nodes.size();
+    cy /= nodes.size();
+
+    // Flee far enough to clear the outermost in-range node, not just the centre.
+    Position const centre(cx, cy, 0.0f);
+    float spread = 0.0f;
+    for (Position const& node : nodes)
+    {
+        float const d = centre.GetExactDist2d(node.GetPositionX(), node.GetPositionY());
+        if (d > spread)
+            spread = d;
+    }
+
+    return FleePosition(Position(cx, cy, bot->GetPositionZ()), ULDUAR_MIMIRON_FLAMES_RADIUS + spread + 1.0f);
+}
+
+bool MimironFrostBombAction::isUseful()
+{
+    MimironFrostBombTrigger mimironFrostBombTrigger(botAI);
+    return mimironFrostBombTrigger.IsActive();
+}

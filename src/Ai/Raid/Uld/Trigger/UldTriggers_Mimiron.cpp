@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
@@ -390,4 +391,37 @@ bool MimironBombBotTrigger::IsActive()
 {
     TooCloseToCreatureTrigger tooCloseToBombBot(botAI);
     return tooCloseToBombBot.TooCloseToCreature(NPC_BOMB_BOT, 6.0f);
+}
+
+bool MimironDodgeFlamesTrigger::IsActive()
+{
+    if (!IsMimironHardModeActive(botAI))
+        return false;
+
+    // The fire nodes are non-selectable trigger creatures, so they never show up in attack-target
+    // lists - scan the raw nearby-npc list instead.
+    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_FLAMES_SPREAD && unit->GetEntry() != NPC_FLAMES_INITIAL)
+            continue;
+
+        if (bot->GetExactDist2d(unit) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+            return true;
+    }
+
+    return false;
+}
+
+bool MimironFrostBombTrigger::IsActive()
+{
+    if (!IsMimironHardModeActive(botAI))
+        return false;
+
+    TooCloseToCreatureTrigger tooCloseToFrostBomb(botAI);
+    return tooCloseToFrostBomb.TooCloseToCreature(NPC_FROST_BOMB, ULDUAR_MIMIRON_FROST_BOMB_RADIUS);
 }

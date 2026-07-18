@@ -79,4 +79,20 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode (Firefighter): bot is standing in a persistent ground-fire node and must step out.
+class MimironDodgeFlamesTrigger : public Trigger
+{
+public:
+    MimironDodgeFlamesTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron dodge flames trigger") {}
+    bool IsActive() override;
+};
+
+// Hard mode (Firefighter): bot is inside VX-001's Frost Bomb radius and must clear it before it blows.
+class MimironFrostBombTrigger : public Trigger
+{
+public:
+    MimironFrostBombTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron frost bomb trigger") {}
+    bool IsActive() override;
+};
+
 #endif

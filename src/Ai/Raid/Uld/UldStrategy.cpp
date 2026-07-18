@@ -313,6 +313,15 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron bomb bot trigger",
         { NextAction("mimiron bomb bot action", ACTION_RAID + 2) }));
 
+    // Hard mode (config-gated): step out of the persistent ground fire and clear the Frost Bomb.
+    triggers.push_back(new TriggerNode(
+        "mimiron dodge flames trigger",
+        { NextAction("mimiron dodge flames action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron frost bomb trigger",
+        { NextAction("mimiron frost bomb action", ACTION_RAID + 3) }));
+
     //
     // General Vezax
     //

@@ -72,4 +72,13 @@ bool IsFreyaHardModeActive(PlayerbotAI* botAI);
 // the window is missed, and GetData reads are fragile (see the Vezax note above).
 bool IsHodirHardModeActive(PlayerbotAI* botAI);
 
+// Mimiron: hard mode ("Firefighter") = a player pressed the Big Red Button before the pull, which sets
+// _hardmode on Mimiron for the whole fight and adds two hazards - a persistent, spreading ground fire and
+// VX-001's Frost Bomb. The flag lives on Mimiron (33350) himself, but he stays in his pod and never enters
+// the bots' attack-target lists, so the live signal is the Emergency Mode aura (64582) that firefighter
+// puts on whichever mech is currently active (Leviathan MK II / VX-001 / Aerial Command Unit). Returns
+// config-enabled AND that aura present. Note: the Emergency Fire Bots (34147) that also spawn are friendly
+// fire extinguishers, not kill targets, so bots leave them alone.
+bool IsMimironHardModeActive(PlayerbotAI* botAI);
+
 #endif

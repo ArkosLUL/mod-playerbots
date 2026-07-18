@@ -137,3 +137,25 @@ bool IsHodirHardModeActive(PlayerbotAI* botAI)
     Unit* hodir = GetFirstAliveUnitByEntry(botAI, NPC_HODIR);
     return hodir != nullptr && hodir->IsInCombat();
 }
+
+bool IsMimironHardModeActive(PlayerbotAI* botAI)
+{
+    if (!sPlayerbotAIConfig.ulduarMimironHardMode)
+        return false;
+
+    // Only the active mech is a real attack target (Mimiron himself never leaves his pod), so key
+    // off the Emergency Mode aura firefighter puts on whichever mech is currently up.
+    Unit* mkii = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    if (mkii && mkii->HasAura(SPELL_EMERGENCY_MODE))
+        return true;
+
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    if (vx001 && vx001->HasAura(SPELL_EMERGENCY_MODE))
+        return true;
+
+    Unit* acu = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    if (acu && acu->HasAura(SPELL_EMERGENCY_MODE))
+        return true;
+
+    return false;
+}

@@ -367,6 +367,14 @@ AiPlayerbot.UlduarFreyaHardMode = 0
 # Default: 0 (disabled)
 AiPlayerbot.UlduarHodirHardMode = 0
 
+# Enable Mimiron hard-mode behaviour ("Firefighter", the Big Red Button pressed before the pull).
+# Firefighter adds two hazards on top of the normal fight: a persistent, spreading ground fire and
+# VX-001's Frost Bomb (a large delayed explosion). When on, bots step out of the fire and clear the
+# Frost Bomb radius before it detonates; with it off they play the fight as normal mode. The Emergency
+# Fire Bots that also spawn are friendly extinguishers, so bots leave them alone either way.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarMimironHardMode = 0
+
 # Bots' Roll level bots will use for items they Need (0 = pass, 1 = greed, 2 = need)
 # Default: 1 (greed)
 AiPlayerbot.LootNeedRollLevel = 1

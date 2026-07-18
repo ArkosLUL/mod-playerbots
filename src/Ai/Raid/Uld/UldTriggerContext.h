@@ -115,6 +115,8 @@ public:
         creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
         creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
         creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
+        creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
+        creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
     }
 
 private:
@@ -217,6 +219,8 @@ private:
     static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
     static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
     static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
+    static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
+    static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
 };
 
 #endif

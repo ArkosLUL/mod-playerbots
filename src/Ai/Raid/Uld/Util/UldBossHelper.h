@@ -198,7 +198,14 @@ enum UlduarIDs
 
     // Thorim hard mode (arena gauntlet cleared fast enough that Sif joins the fight).
     NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
-    NPC_SIF_BLIZZARD = 32879      // moving Blizzard ground AoE, only ever exists in hard mode
+    NPC_SIF_BLIZZARD = 32879,     // moving Blizzard ground AoE, only ever exists in hard mode
+
+    // Mimiron hard mode ("Firefighter", Big Red Button pressed): mechs empowered, two extra hazards.
+    // NPC_MIMIRON (the boss; sits in his pod, never a bot attack target) comes from core ulduar.h via UldScripts.h.
+    NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
+    NPC_FLAMES_SPREAD = 34121,     // persistent spreading ground-fire node (non-selectable)
+    NPC_FROST_BOMB = 34149,        // VX-001's Frost Bomb; detonates in a large AoE
+    SPELL_EMERGENCY_MODE = 64582   // empower aura on the active mech while firefighter is up
 };
 
 // Flame Leviathan hard-mode active-tower bitmask (which empower auras the boss carries).
@@ -250,6 +257,12 @@ constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 // Sif herself so her point-blank Frost Nova (cast after she teleports next to a target) misses.
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 12.0f;
 constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
+
+// Mimiron hard mode: bots flee a persistent fire node when this close (cells are small), and clear
+// the Frost Bomb's larger explosion. Exact radii are DBC, so these are conservative defaults to
+// confirm in-game.
+constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
+constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 12.0f;
 constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
