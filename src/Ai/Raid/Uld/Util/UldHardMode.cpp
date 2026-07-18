@@ -1,11 +1,14 @@
 #include "UldHardMode.h"
 
 #include "AiObjectContext.h"
+#include "InstanceScript.h"
+#include "Map.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "UldBossHelper.h"
+#include "UldScripts.h"
 #include "Unit.h"
 
 bool IsVezaxHardModeActive(PlayerbotAI* botAI)
@@ -158,4 +161,52 @@ bool IsMimironHardModeActive(PlayerbotAI* botAI)
         return true;
 
     return false;
+}
+
+// The Ulduar instance script, or nullptr if the bot is not in an instance with one.
+static InstanceScript* GetBotInstanceScript(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return nullptr;
+
+    Map* map = bot->GetMap();
+    if (!map || !map->IsDungeon())
+        return nullptr;
+
+    return ((InstanceMap*)map)->GetInstanceScript();
+}
+
+uint32 YoggActiveKeeperMask(PlayerbotAI* botAI)
+{
+    InstanceScript* instance = GetBotInstanceScript(botAI);
+    if (!instance)
+        return 0;
+
+    // Same source the boss script reads: the freed-Keeper bitmask the raid set from the pre-pull gossips.
+    return instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
+}
+
+bool IsYoggSaronHardModeActive(PlayerbotAI* botAI)
+{
+    if (!sPlayerbotAIConfig.ulduarYoggSaronHardMode)
+        return false;
+
+    InstanceScript* instance = GetBotInstanceScript(botAI);
+    if (!instance || instance->GetBossState(BOSS_YOGGSARON) != IN_PROGRESS)
+        return false;
+
+    uint32 mask = instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
+    uint32 keeperCount = 0;
+    for (uint8 i = 0; i < 4; ++i)
+        if (mask & (1u << i))
+            ++keeperCount;
+
+    // Fewer than the full 4 Keepers is the hard mode; 4 Keepers plays as normal mode.
+    return keeperCount < 4;
+}
+
+bool YoggThorimKeeperActive(PlayerbotAI* botAI)
+{
+    return (YoggActiveKeeperMask(botAI) & (1u << KEEPER_THORIM)) != 0;
 }

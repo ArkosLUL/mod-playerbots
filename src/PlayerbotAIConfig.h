@@ -272,6 +272,7 @@ public:
     bool ulduarFreyaHardMode;
     bool ulduarHodirHardMode;
     bool ulduarMimironHardMode;
+    bool ulduarYoggSaronHardMode;
     std::string randomBotCombatStrategies, randomBotNonCombatStrategies;
     bool applyInstanceStrategies;
     uint32 randomBotMinLevel, randomBotMaxLevel;

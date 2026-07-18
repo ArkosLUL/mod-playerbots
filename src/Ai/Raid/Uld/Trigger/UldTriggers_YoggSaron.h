@@ -141,4 +141,31 @@ public:
     bool IsActive() override;
 };
 
+// Reduced-Keeper hard mode: ranged DPS peel onto a live Crusher Tentacle (P2) to clear its Diminish
+// Power fast, so melee are not dragged out to the stationary tentacle.
+class YoggSaronCrusherTentacleTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronCrusherTentacleTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron crusher tentacle trigger") {}
+    bool IsActive() override;
+};
+
+// Reduced-Keeper hard mode with Thorim: the tank taunts loose Immortal Guardians (P3) to the melee
+// stack so they get cleaved to Weakened and Thorim's Titanic Storm executes them.
+class YoggSaronGuardianControlTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronGuardianControlTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron guardian control trigger") {}
+    bool IsActive() override;
+};
+
+// Reduced-Keeper hard mode: with no Sanity Wells to run to, a bot near the Insane cliff retreats to a
+// safe ranged spot and faces away from Yogg to stop every avoidable sanity drain.
+class YoggSaronSanityConservationTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronSanityConservationTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron sanity conservation trigger") {}
+    bool IsActive() override;
+};
+
 #endif

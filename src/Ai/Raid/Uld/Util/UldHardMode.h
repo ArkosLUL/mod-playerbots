@@ -81,4 +81,18 @@ bool IsHodirHardModeActive(PlayerbotAI* botAI);
 // fire extinguishers, not kill targets, so bots leave them alone.
 bool IsMimironHardModeActive(PlayerbotAI* botAI);
 
+// Yogg-Saron: hard mode is the reduced-Keeper achievement ladder - the raid frees fewer than 4 Keepers
+// before the pull, losing that Keeper's support. Detection reads the authoritative freed-Keeper bitmask
+// from the instance's persistent data (PERSISTENT_DATA_WATCHERS_MASK), the same source the boss script
+// uses. It is tuned for the hardest single-Keeper case, Thorim only: with Freya absent there are no
+// Sanity Wells, so sanity is a one-way drain.
+//   YoggActiveKeeperMask       - the raw bitmask (bits KEEPER_FREYA..KEEPER_THORIM), 0 if no instance.
+//   IsYoggSaronHardModeActive  - config-enabled AND the Yogg encounter in progress AND fewer than 4 Keepers.
+//   YoggThorimKeeperActive     - whether Thorim is among the active Keepers, which decides whether Immortal
+//                                Guardians can be executed by his Titanic Storm (real handling) or must fall
+//                                back to the existing cheat instakill.
+uint32 YoggActiveKeeperMask(PlayerbotAI* botAI);
+bool IsYoggSaronHardModeActive(PlayerbotAI* botAI);
+bool YoggThorimKeeperActive(PlayerbotAI* botAI);
+
 #endif

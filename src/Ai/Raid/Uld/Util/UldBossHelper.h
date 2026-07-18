@@ -153,6 +153,7 @@ enum UlduarIDs
     SPELL_CANCEL_ILLUSION_AURA = 63993,
     SPELL_INDUCE_MADNESS = 64059,
     SPELL_LUNATIC_GAZE_YS = 64163,
+    SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
 
     // Algalon the Observer
@@ -270,6 +271,11 @@ constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 150.0f;
 constexpr float ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS = 150.0f;
 constexpr float ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS = 150.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
+
+// Yogg-Saron reduced-Keeper hard mode: a bot whose Sanity (63050, 100 stacks) is at or below this
+// pulls behind Yogg and faces away to conserve it. With Freya absent there are no Sanity Wells, so the
+// drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
+constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
 extern const Position ULDUAR_THORIM_NEAR_ARENA_CENTER;
 extern const Position ULDUAR_THORIM_NEAR_ENTRANCE_POSITION;

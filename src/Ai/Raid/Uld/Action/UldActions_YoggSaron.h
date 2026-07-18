@@ -133,4 +133,32 @@ public:
     bool Execute(Event event) override;
 };
 
+// Reduced-Keeper hard mode: a ranged DPS bot attacks the nearest Crusher Tentacle directly (no group
+// marker, so melee keep their target).
+class YoggSaronCrusherTentacleAction : public AttackAction
+{
+public:
+    YoggSaronCrusherTentacleAction(PlayerbotAI* ai) : AttackAction(ai, "yogg-saron crusher tentacle action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Reduced-Keeper hard mode: the tank holds the melee stack and taunts loose Immortal Guardians to it.
+class YoggSaronGuardianControlAction : public MovementAction
+{
+public:
+    YoggSaronGuardianControlAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron guardian control action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Reduced-Keeper hard mode: retreat to a safe ranged spot and face away from Yogg to conserve sanity.
+class YoggSaronSanityConservationAction : public MovementAction
+{
+public:
+    YoggSaronSanityConservationAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron sanity conservation action") {}
+
+    bool Execute(Event event) override;
+};
+
 #endif

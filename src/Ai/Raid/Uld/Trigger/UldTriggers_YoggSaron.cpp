@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
@@ -623,4 +624,82 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
     }
 
     return false;
+}
+
+bool YoggSaronCrusherTentacleTrigger::IsActive()
+{
+    if (!IsYoggSaronHardModeActive(botAI) || !IsPhase2())
+        return false;
+
+    // Ranged DPS handle the stationary Crusher Tentacle; melee stay on the other targets and healers heal.
+    if (!botAI->IsRangedDps(bot))
+        return false;
+
+    Unit* crusher = GetFirstAliveUnitByEntry(botAI, NPC_CRUSHER_TENTACLE);
+    if (!crusher)
+        return false;
+
+    // Only fire when the bot is not already on it.
+    return AI_VALUE(Unit*, "current target") != crusher;
+}
+
+bool YoggSaronGuardianControlTrigger::IsActive()
+{
+    // Only meaningful with Thorim: he executes the Weakened guardians the tank feeds to the melee stack.
+    if (!IsYoggSaronHardModeActive(botAI) || !YoggThorimKeeperActive(botAI) || !IsPhase3())
+        return false;
+
+    if (!botAI->IsTank(bot))
+        return false;
+
+    // Fire while any guardian is loose - alive and not yet held by a tank.
+    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
+    for (const ObjectGuid& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_IMMORTAL_GUARDIAN && unit->GetEntry() != NPC_MARKED_IMMORTAL_GUARDIAN)
+            continue;
+
+        Player* targetedPlayer = botAI->GetPlayer(unit->GetTarget());
+        if (!targetedPlayer || !botAI->IsTank(targetedPlayer))
+            return true;
+    }
+
+    return false;
+}
+
+bool YoggSaronSanityConservationTrigger::IsActive()
+{
+    if (!IsYoggSaronHardModeActive(botAI))
+        return false;
+
+    // The main tank must stay on the adds; never pull it out.
+    if (botAI->IsBotMainTank(bot))
+        return false;
+
+    Aura* sanityAura = bot->GetAura(SPELL_SANITY);
+    if (!sanityAura || sanityAura->GetStackAmount() > ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD)
+        return false;
+
+    // A linked bot must stay near its Brain Link partner - retreating would drain more sanity, not less.
+    if (bot->HasAura(SPELL_BRAIN_LINK))
+        return false;
+
+    // If a Sanity Well is reachable (a Keeper set with Freya), the normal sanity action handles recovery.
+    if (bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f))
+        return false;
+
+    // Only in the boss room; the brain/illusion level is cheated through.
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return false;
+
+    // Let the death-orb dodge win when an orb is near (death rays still hurt at low health).
+    TooCloseToCreatureTrigger tooCloseToDeathOrb(botAI);
+    if (tooCloseToDeathOrb.TooCloseToCreature(NPC_DEATH_ORB, 10.0f))
+        return false;
+
+    return true;
 }

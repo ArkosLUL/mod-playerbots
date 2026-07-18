@@ -94,6 +94,9 @@ public:
         creators["yogg-saron move to exit portal action"] = &RaidUlduarActionContext::yogg_saron_move_to_exit_portal_action;
         creators["yogg-saron lunatic gaze action"] = &RaidUlduarActionContext::yogg_saron_lunatic_gaze_action;
         creators["yogg-saron phase 3 positioning action"] = &RaidUlduarActionContext::yogg_saron_phase_3_positioning_action;
+        creators["yogg-saron crusher tentacle action"] = &RaidUlduarActionContext::yogg_saron_crusher_tentacle_action;
+        creators["yogg-saron guardian control action"] = &RaidUlduarActionContext::yogg_saron_guardian_control_action;
+        creators["yogg-saron sanity conservation action"] = &RaidUlduarActionContext::yogg_saron_sanity_conservation_action;
         creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
         creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
         creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
@@ -196,6 +199,9 @@ private:
     static Action* yogg_saron_move_to_exit_portal_action(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalAction(ai); }
     static Action* yogg_saron_lunatic_gaze_action(PlayerbotAI* ai) { return new YoggSaronLunaticGazeAction(ai); }
     static Action* yogg_saron_phase_3_positioning_action(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningAction(ai); }
+    static Action* yogg_saron_crusher_tentacle_action(PlayerbotAI* ai) { return new YoggSaronCrusherTentacleAction(ai); }
+    static Action* yogg_saron_guardian_control_action(PlayerbotAI* ai) { return new YoggSaronGuardianControlAction(ai); }
+    static Action* yogg_saron_sanity_conservation_action(PlayerbotAI* ai) { return new YoggSaronSanityConservationAction(ai); }
     static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
     static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
     static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }

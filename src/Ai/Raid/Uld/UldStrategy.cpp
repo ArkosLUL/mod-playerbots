@@ -424,6 +424,19 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron phase 3 positioning trigger",
         { NextAction("yogg-saron phase 3 positioning action", ACTION_RAID) }));
 
+    // Reduced-Keeper (Thorim-only) hard mode
+    triggers.push_back(new TriggerNode(
+        "yogg-saron crusher tentacle trigger",
+        { NextAction("yogg-saron crusher tentacle action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron guardian control trigger",
+        { NextAction("yogg-saron guardian control action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron sanity conservation trigger",
+        { NextAction("yogg-saron sanity conservation action", ACTION_RAID + 5) }));
+
     //
     // Algalon the Observer
     //

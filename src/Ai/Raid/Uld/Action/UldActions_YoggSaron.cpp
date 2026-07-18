@@ -17,6 +17,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "UldBossHelper.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "RtiValue.h"
@@ -60,6 +61,8 @@ bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 bool YoggSaronSanityAction::Execute(Event /*event*/)
 {
     Creature* sanityWell = bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f);
+    if (!sanityWell)
+        return false;
 
     return MoveTo(bot->GetMapId(), sanityWell->GetPositionX(), sanityWell->GetPositionY(), sanityWell->GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED,
@@ -75,7 +78,9 @@ bool YoggSaronMarkTargetAction::Execute(Event /*event*/)
     YoggSaronTrigger yoggSaronTrigger(botAI);
     if (yoggSaronTrigger.IsPhase2())
     {
-        if (botAI->HasCheat(BotCheatMask::raid))
+        // In reduced-Keeper hard mode the Crusher Tentacles are played for real (ranged nuke them in
+        // place), so skip the cheat instakill; normal mode keeps it.
+        if (botAI->HasCheat(BotCheatMask::raid) && !IsYoggSaronHardModeActive(botAI))
         {
             Unit* crusherTentacle = bot->FindNearestCreature(NPC_CRUSHER_TENTACLE, 200.0f, true);
             if (crusherTentacle)
@@ -145,8 +150,12 @@ bool YoggSaronMarkTargetAction::Execute(Event /*event*/)
         if (lowestHealthUnit)
         {
             // Added because lunatic gaze freeze all bots and they can't attack
-            // If someone fix it then this cheat can be removed
-            if (botAI->HasCheat(BotCheatMask::raid))
+            // If someone fix it then this cheat can be removed.
+            // In reduced-Keeper hard mode with Thorim present we play it for real instead: the tank
+            // brings the guardian to the melee stack, they cleave it to Weakened, and Thorim's Titanic
+            // Storm executes it. Fall back to the cheat when hard mode is off or Thorim is not a Keeper.
+            if (botAI->HasCheat(BotCheatMask::raid) &&
+                !(IsYoggSaronHardModeActive(botAI) && YoggThorimKeeperActive(botAI)))
                 lowestHealthUnit->Kill(bot, lowestHealthUnit);
             else
                 group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), lowestHealthUnit->GetGUID());
@@ -529,4 +538,109 @@ bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
     }
 
     return false;
+}
+
+bool YoggSaronCrusherTentacleAction::Execute(Event /*event*/)
+{
+    Unit* crusher = GetFirstAliveUnitByEntry(botAI, NPC_CRUSHER_TENTACLE);
+    if (!crusher)
+        return false;
+
+    return Attack(crusher);
+}
+
+bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
+{
+    // Tank only: melee/ranged already focus the skull guardian and the phase-3 positioning stacks them.
+    if (!botAI->IsTank(bot))
+        return false;
+
+    // Hold the melee stack so taunted guardians pile onto the melee bots to be cleaved down.
+    if (bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > 5.0f)
+    {
+        return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
+                      ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
+                      ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_FORCED, true, false);
+    }
+
+    // Taunt the nearest loose guardian (not already coming to a tank) so it comes to the stack.
+    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
+    Unit* looseGuardian = nullptr;
+    float nearestDistance = std::numeric_limits<float>::max();
+    for (const ObjectGuid& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_IMMORTAL_GUARDIAN && unit->GetEntry() != NPC_MARKED_IMMORTAL_GUARDIAN)
+            continue;
+
+        Player* targetedPlayer = botAI->GetPlayer(unit->GetTarget());
+        if (targetedPlayer && botAI->IsTank(targetedPlayer))
+            continue;
+
+        float distance = bot->GetDistance(unit);
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            looseGuardian = unit;
+        }
+    }
+
+    if (!looseGuardian)
+        return false;
+
+    switch (bot->getClass())
+    {
+        case CLASS_WARRIOR:
+            return botAI->CastSpell("taunt", looseGuardian);
+        case CLASS_PALADIN:
+            return botAI->CastSpell("hand of reckoning", looseGuardian);
+        case CLASS_DEATH_KNIGHT:
+            return botAI->CastSpell("dark command", looseGuardian);
+        case CLASS_DRUID:
+            return botAI->CastSpell("growl", looseGuardian);
+        default:
+            return false;
+    }
+}
+
+bool YoggSaronSanityConservationAction::Execute(Event /*event*/)
+{
+    Unit* yogg = AI_VALUE2(Unit*, "find target", "yogg-saron");
+    if (!yogg || !yogg->IsAlive())
+        return false;
+
+    // Pull to the back of Yogg-Saron - the spot behind him, opposite his facing.
+    float const behindDistance = 15.0f;
+    float behindAngle = Position::NormalizeOrientation(yogg->GetOrientation() + M_PI);
+    float behindX = yogg->GetPositionX() + behindDistance * cos(behindAngle);
+    float behindY = yogg->GetPositionY() + behindDistance * sin(behindAngle);
+    float behindZ = yogg->GetPositionZ();
+
+    if (bot->GetDistance2d(behindX, behindY) > 5.0f)
+    {
+        return MoveTo(bot->GetMapId(), behindX, behindY, behindZ, false, false, false, true,
+                      MovementPriority::MOVEMENT_FORCED, true, false);
+    }
+
+    // Face directly away from Yogg: Lunatic Gaze only hits units with him in their front arc.
+    float awayAngle = Position::NormalizeOrientation(bot->GetAngle(yogg) + M_PI);
+    bot->SetFacingTo(awayAngle);
+
+    // Only heal/DPS a target already in the front hemisphere (away from Yogg), so the bot never
+    // turns back toward Yogg and eats a gaze. Otherwise hold, facing away.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive())
+    {
+        float diff = Position::NormalizeOrientation(bot->GetAngle(target) - awayAngle);
+        if (diff > M_PI)
+            diff = 2 * M_PI - diff;
+        if (diff <= M_PI / 2)
+            return false;
+    }
+
+    return true;
 }
