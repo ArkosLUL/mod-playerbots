@@ -567,6 +567,64 @@ void StatsWeightCalculator::GenerateAdditionalWeights(Player* player)
         stats_weights_[STATS_TYPE_RESILIENCE] -= 3.0f;
 }
 
+namespace
+{
+constexpr float kSmartStatWeightThreshold = 0.2f;
+
+uint32 BuildSmartMaskFromWeights(float const* weights)
+{
+    uint32 mask = SMARTSTAT_NONE;
+
+    if (weights[STATS_TYPE_HIT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_HIT;
+    if (weights[STATS_TYPE_SPELL_POWER] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_HEAL_POWER] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_SPELL_POWER;
+    if (weights[STATS_TYPE_HASTE] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_HASTE;
+    if (weights[STATS_TYPE_CRIT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_CRIT;
+    if (weights[STATS_TYPE_INTELLECT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_INTELLECT;
+    if (weights[STATS_TYPE_SPIRIT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_SPIRIT;
+    if (weights[STATS_TYPE_EXPERTISE] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_EXPERTISE;
+    if (weights[STATS_TYPE_ATTACK_POWER] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_ATTACK_POWER;
+    if (weights[STATS_TYPE_ARMOR_PENETRATION] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_ARMOR_PEN;
+    if (weights[STATS_TYPE_AGILITY] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_AGILITY;
+    if (weights[STATS_TYPE_STAMINA] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_STAMINA;
+    if (weights[STATS_TYPE_DEFENSE] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_DODGE] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_PARRY] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_BLOCK_RATING] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_BLOCK_VALUE] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_AVOIDANCE;
+    if (weights[STATS_TYPE_MANA_REGENERATION] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_MP5;
+    if (weights[STATS_TYPE_STRENGTH] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_STRENGTH;
+
+    return mask;
+}
+}  // namespace
+
+uint32 StatsWeightCalculator::BuildSmartStatMask(Player* player)
+{
+    if (!player)
+        return SMARTSTAT_NONE;
+
+    StatsWeightCalculator calculator(player);
+    calculator.Reset();
+    calculator.GenerateWeights(player);
+
+    return BuildSmartMaskFromWeights(calculator.stats_weights_);
+}
+
 void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate const* proto)
 {
     uint32 itemSet = proto->ItemSet;

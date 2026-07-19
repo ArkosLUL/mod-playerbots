@@ -22,10 +22,18 @@ void StatsCollector::Reset()
 
 void StatsCollector::CollectItemStats(ItemTemplate const* proto)
 {
+    // A melee/tank never makes ranged attacks, so on a ranged weapon its base ranged DPS and any
+    // chance-on-hit proc (which only fires on melee swings) are worthless. Skip both so a statless ranged
+    // stat-stick scores 0 instead of reading as an equip upgrade. Hunters use the RANGED collector.
+    bool const rangedWeaponForMelee = proto->IsRangedWeapon() && (type_ & CollectorType::MELEE);
+
     if (proto->IsRangedWeapon())
     {
-        float val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
-        stats[STATS_TYPE_RANGED_DPS] += val;
+        if (!rangedWeaponForMelee)
+        {
+            float val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
+            stats[STATS_TYPE_RANGED_DPS] += val;
+        }
     }
     else if (proto->IsWeapon())
     {
@@ -51,7 +59,7 @@ void StatsCollector::CollectItemStats(ItemTemplate const* proto)
                 CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(0));
                 break;
             case ITEM_SPELLTRIGGER_CHANCE_ON_HIT:
-                if (type_ & CollectorType::MELEE)
+                if ((type_ & CollectorType::MELEE) && !rangedWeaponForMelee)
                 {
                     if (proto->Spells[j].SpellPPMRate > 0.01f)
                         CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(static_cast<int>(60000 / proto->Spells[j].SpellPPMRate)));

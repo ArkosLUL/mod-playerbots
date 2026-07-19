@@ -13,6 +13,9 @@
 #include "Value.h"
 
 class PlayerbotAI;
+class Group;
+class Player;
+struct ItemTemplate;
 
 // Cheat class copy to hack into the loot system
 class LootTemplateAccess

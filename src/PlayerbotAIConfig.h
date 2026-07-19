@@ -377,6 +377,18 @@ public:
     std::string autoPickReward;
     bool autoEquipUpgradeLoot;
     float equipUpgradeThreshold;
+    int32 lootRollLevel;           // 0 = pass, 1 = greed only, 2 = full smart loot
+    bool allowBoENeedIfUpgrade;    // Loot roll fine-tuning
+    bool allowBoUNeedIfUpgrade;    // Allow NEED on BoU if upgrade
+    float crossArmorExtraMargin;
+    bool crossArmorGreedIsPass;    // If true, off-armor (lower tier) GREED becomes PASS
+    uint8 deButtonMode;            // 0 = no DE, 1 = enchanters only, 2 = all bots can DE
+    float tokenILevelMargin;       // ilvl threshold to consider the token an upgrade
+    uint8 sanctificationTokenRollMode;  // 0 = always GREED, 1 = NEED if under quota
+    bool smartNeedBySpec;          // Intelligent NEED (based on stats/spec)
+    bool rollUseGroupUsageChecks;  // Enable group-wide upgrade checks for loot decisions
+    bool needOnProfessionRecipes;  // NEED profession recipes/patterns/books the bot can learn
+    bool recipesIgnoreSkillRank;   // Ignore skill rank requirement when rolling on recipes
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
     bool syncQuestForPlayer;

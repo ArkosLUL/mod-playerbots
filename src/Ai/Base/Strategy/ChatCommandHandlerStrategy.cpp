@@ -114,6 +114,7 @@ ChatCommandHandlerStrategy::ChatCommandHandlerStrategy(PlayerbotAI* botAI) : Pas
     supported.push_back("autogear");
     supported.push_back("autogear bis");
     supported.push_back("equip upgrade");
+    supported.push_back("equip upgrades");
     supported.push_back("chat");
     supported.push_back("home");
     supported.push_back("destroy");
