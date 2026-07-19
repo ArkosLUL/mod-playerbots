@@ -397,6 +397,13 @@ AiPlayerbot.UlduarYoggSaronHardMode = 0
 # which was the old safe default but bypasses the new decision-making.
 AiPlayerbot.LootRollLevel = 2
 
+# Upgrades-only roll mode. When enabled, bots roll GREED (never NEED) on items that
+# would be a direct gear upgrade for them, so real players always keep the NEED option.
+# Bots PASS on everything else: recipes, crafting materials, disenchantable items,
+# tier/set tokens, off-spec/unusable gear, duplicates and cosmetics.
+# Default: 0 (disabled - normal smart-loot behavior)
+AiPlayerbot.Roll.UpgradesOnly = 0
+
 # NEED only if the item matches the bot's MAIN spec (stats & armor/weapon type).
 # Off-spec upgrades are automatically downgraded to GREED.
 # Default: 1 (enabled)

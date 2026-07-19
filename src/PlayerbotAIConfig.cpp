@@ -713,6 +713,7 @@ bool PlayerbotAIConfig::Initialize()
     sanctificationTokenRollMode = static_cast<uint8>(tokenRollMode);
     needOnProfessionRecipes = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.NeedOnProfessionRecipes", true);
     recipesIgnoreSkillRank = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.Recipes.IgnoreSkillRank", false);
+    rollUpgradesOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.UpgradesOnly", false);
     smartNeedBySpec = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.SmartNeedBySpec", true);
     rollUseGroupUsageChecks = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.UseGroupUsageChecks", false);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);

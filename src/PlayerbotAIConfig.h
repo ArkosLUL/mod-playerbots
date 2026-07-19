@@ -389,6 +389,7 @@ public:
     bool rollUseGroupUsageChecks;  // Enable group-wide upgrade checks for loot decisions
     bool needOnProfessionRecipes;  // NEED profession recipes/patterns/books the bot can learn
     bool recipesIgnoreSkillRank;   // Ignore skill rank requirement when rolling on recipes
+    bool rollUpgradesOnly;         // Bots GREED (not NEED) only on gear upgrades, PASS on everything else
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
     bool syncQuestForPlayer;

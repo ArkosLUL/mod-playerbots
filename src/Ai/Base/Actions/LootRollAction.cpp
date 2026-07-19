@@ -37,6 +37,7 @@ bool LootRollAction::Execute(Event /*event*/)
         return false;
 
     std::vector<Roll*> const& rolls = group->GetRolls();
+    bool voted = false;
     for (Roll* const roll : rolls)
     {
         if (!roll)
@@ -68,11 +69,10 @@ bool LootRollAction::Execute(Event /*event*/)
             sent = PASS;
 
         group->CountRollVote(bot->GetGUID(), guid, sent);
-        // One item at a time
-        return true;
+        voted = true;
     }
 
-    return false;
+    return voted;
 }
 
 bool MasterLootRollAction::isUseful() { return !botAI->HasActivePlayerMaster(); }

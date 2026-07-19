@@ -2262,12 +2262,17 @@ static RollVote ApplyDisenchantPreference(RollVote currentVote, ItemTemplate con
 
 static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemUsage usage, Group* group, Player* bot)
 {
-    vote = ApplyDisenchantPreference(vote, proto, usage, group, bot);
-
     if (sPlayerbotAIConfig.lootRollLevel == 0)
     {
         return PASS;
     }
+
+    // Upgrades-only: bots GREED (not NEED) on their own gear upgrades so real players keep NEED
+    // priority; everything else (recipes, mats, disenchant, tokens, off-spec, cosmetics) -> PASS.
+    if (sPlayerbotAIConfig.rollUpgradesOnly)
+        return (vote == NEED && (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)) ? GREED : PASS;
+
+    vote = ApplyDisenchantPreference(vote, proto, usage, group, bot);
 
     if (sPlayerbotAIConfig.lootRollLevel == 1)
     {
