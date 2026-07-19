@@ -439,6 +439,7 @@ public:
     int32 addClassCommand;
     int32 addClassAccountPoolSize;
     int32 maintenanceCommand;
+    bool fulfillMetaGemRequirements;
     bool altMaintenanceAttunementQs,
             altMaintenanceBags,
             altMaintenanceAmmo,

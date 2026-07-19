@@ -1016,6 +1016,13 @@ AiPlayerbot.MinEnchantingBotLevel = 60
 # Default: 1 (enabled)
 AiPlayerbot.LimitEnchantExpansion = 1
 
+# When socketing gems, steer colored gems so the equipped meta gem's activation requirement
+# (e.g. "requires at least 2 Blue Gems") is met, then activate the meta gem. Bots still pick the
+# best-stat gems for their class/spec; only the minimum sockets needed for the meta are adjusted.
+# Disable to keep the old behavior (meta gem may stay inactive).
+# Default: 1 (enabled)
+AiPlayerbot.FulfillMetaGemRequirements = 1
+
 # Enable expansion limitation for gear
 # If enabled, bots will not equip TBC gear until level 61 or WotLK gear until level 71
 # Default: 1 (enabled)
