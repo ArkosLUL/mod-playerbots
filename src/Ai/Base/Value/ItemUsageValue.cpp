@@ -1331,7 +1331,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
 ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
 {
-    if (bot->getClass() != CLASS_HUNTER || bot->getClass() != CLASS_ROGUE || bot->getClass() != CLASS_WARRIOR)
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE && bot->getClass() != CLASS_WARRIOR)
         return ITEM_USAGE_NONE;
 
     Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
@@ -2091,6 +2091,8 @@ static int8 TokenSlotFromName(ItemTemplate const* proto)
     return -1;
 }
 
+constexpr uint32 SANCTIFICATION_TOKEN_MAX_COUNT = 5u;
+
 static std::array<uint32, 6> const& GetSanctificationTokenIds()
 {
     static std::array<uint32, 6> const sanctificationTokenIds = {
@@ -2171,6 +2173,34 @@ static bool IsTokenLikelyUpgrade(ItemTemplate const* token, uint8 invTypeSlot, P
     return (float)token->ItemLevel >= (float)oldProto->ItemLevel + margin;
 }
 
+// For tokens whose name doesn't reveal the slot (e.g. "Trophy of the Crusade" redeems any of the
+// five tier pieces): treat as upgrade when any tier slot is empty or behind the token's ilvl.
+static bool IsAnyTierSlotLikelyUpgrade(ItemTemplate const* token, Player* bot)
+{
+    if (!token || !bot)
+        return false;
+
+    static constexpr uint8 tierSlots[] = {EQUIPMENT_SLOT_HEAD, EQUIPMENT_SLOT_SHOULDERS, EQUIPMENT_SLOT_CHEST,
+                                          EQUIPMENT_SLOT_HANDS, EQUIPMENT_SLOT_LEGS};
+
+    float margin = sPlayerbotAIConfig.tokenILevelMargin;
+    for (uint8 const slot : tierSlots)
+    {
+        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!oldItem)
+            return true;
+
+        ItemTemplate const* oldProto = oldItem->GetTemplate();
+        if (!oldProto)
+            return true;
+
+        if ((float)token->ItemLevel >= (float)oldProto->ItemLevel + margin)
+            return true;
+    }
+
+    return false;
+}
+
 struct TokenInfo
 {
     bool isToken = false;
@@ -2196,8 +2226,14 @@ static TokenInfo BuildTokenInfo(ItemTemplate const* proto, Player* bot)
     info.classCanUse = CanBotUseToken(proto, bot);
     info.invTypeSlot = TokenSlotFromName(proto);
 
-    if (info.classCanUse && info.invTypeSlot >= 0)
-        info.likelyUpgrade = IsTokenLikelyUpgrade(proto, static_cast<uint8>(info.invTypeSlot), bot);
+    if (info.classCanUse)
+    {
+        if (info.invTypeSlot >= 0)
+            info.likelyUpgrade = IsTokenLikelyUpgrade(proto, static_cast<uint8>(info.invTypeSlot), bot);
+        // Sanctification marks excluded: their ilvl says nothing about the 251->264->277 upgrade they gate.
+        else if (!IsSanctificationToken(proto))
+            info.likelyUpgrade = IsAnyTierSlotLikelyUpgrade(proto, bot);
+    }
 
     return info;
 }
@@ -2205,7 +2241,6 @@ static TokenInfo BuildTokenInfo(ItemTemplate const* proto, Player* bot)
 static bool TryTokenRollVote(ItemTemplate const* proto, Player* bot, RollVote& outVote)
 {
     TokenInfo const token = BuildTokenInfo(proto, bot);
-    constexpr uint32 SANCTIFICATION_TOKEN_MAX_COUNT = 5u;
 
     // Not a token → let other rules decide.
     if (!token.isToken)
@@ -2268,9 +2303,30 @@ static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemU
     }
 
     // Upgrades-only: bots GREED (not NEED) on their own gear upgrades so real players keep NEED
-    // priority; everything else (recipes, mats, disenchant, tokens, off-spec, cosmetics) -> PASS.
+    // priority; everything else (recipes, mats, disenchant, off-spec, cosmetics) -> PASS.
+    // Tier tokens are non-equippable so their usage is never EQUIP/REPLACE — re-check them here
+    // so class-eligible token upgrades still get a GREED instead of falling through to PASS.
     if (sPlayerbotAIConfig.rollUpgradesOnly)
+    {
+        TokenInfo const token = BuildTokenInfo(proto, bot);  // early-outs cheaply for non-tokens
+        if (token.isToken)
+        {
+            if (!token.classCanUse)
+                return PASS;
+
+            if (IsSanctificationToken(proto))
+                return (sPlayerbotAIConfig.sanctificationTokenRollMode == 1u &&
+                        GetOwnedSanctificationTokenCount(bot) < SANCTIFICATION_TOKEN_MAX_COUNT) ? GREED : PASS;
+
+            // Bots never spend tokens; cap at 1 unspent copy.
+            if (bot->GetItemCount(proto->ItemId, true) > 0)
+                return PASS;
+
+            return token.likelyUpgrade ? GREED : PASS;
+        }
+
         return (vote == NEED && (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)) ? GREED : PASS;
+    }
 
     vote = ApplyDisenchantPreference(vote, proto, usage, group, bot);
 
