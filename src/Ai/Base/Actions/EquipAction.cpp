@@ -358,6 +358,13 @@ ItemIds EquipAction::SelectInventoryItemsToEquip()
         std::string const itemUsageParam = ItemUsageValue::BuildItemUsageParam(itemId, randomProperty);
 
         ItemUsage usage = AI_VALUE2(ItemUsage, "item upgrade", itemUsageParam);
+
+        // Warriors/rogues only use the ranged slot as a stat stick: a BAD_EQUIP (zero-score) gun/bow
+        // contributes nothing, so don't fill an empty slot with it. Wands are excluded by class.
+        if (usage == ITEM_USAGE_BAD_EQUIP && itemTemplate->IsRangedWeapon() &&
+            (bot->getClass() == CLASS_WARRIOR || bot->getClass() == CLASS_ROGUE))
+            continue;
+
         if (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE || usage == ITEM_USAGE_BAD_EQUIP)
             items.insert(itemId);
     }

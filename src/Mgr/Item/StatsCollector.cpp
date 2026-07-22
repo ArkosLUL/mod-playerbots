@@ -56,7 +56,9 @@ void StatsCollector::CollectItemStats(ItemTemplate const* proto)
                 CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(proto->Spells[j].SpellCooldown));
                 break;
             case ITEM_SPELLTRIGGER_ON_EQUIP:
-                CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(0));
+                // On a ranged weapon the equip proc fires from ranged attacks a melee never makes, so
+                // block the proc chain; passive stat auras on the spell still count.
+                CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(0), rangedWeaponForMelee);
                 break;
             case ITEM_SPELLTRIGGER_CHANCE_ON_HIT:
                 if ((type_ & CollectorType::MELEE) && !rangedWeaponForMelee)
@@ -79,7 +81,8 @@ void StatsCollector::CollectItemStats(ItemTemplate const* proto)
     }
 }
 
-void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, Milliseconds spellCooldown)
+void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, Milliseconds spellCooldown,
+                                       bool blockProcTriggers)
 {
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
 
@@ -93,7 +96,7 @@ void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, Millise
 
     Milliseconds triggerCooldown = eventEntry ? eventEntry->Cooldown : 0ms;
 
-    bool canNextTrigger = true;
+    bool canNextTrigger = !blockProcTriggers;
 
     uint32 procFlags;
     uint32 procChance;
