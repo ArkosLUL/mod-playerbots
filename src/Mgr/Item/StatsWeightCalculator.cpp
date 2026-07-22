@@ -34,6 +34,42 @@ constexpr uint32 SPELL_POLEAXE_SPECIALIZATION = 12785;
 constexpr uint32 SPELL_NERVES_OF_COLD_STEEL = 50138;
 constexpr uint32 SPELL_SHADOW_FOCUS = 15835;
 constexpr uint32 SPELL_ARCANE_FOCUS = 12840;
+
+// Primary nuke school per caster spec, so single-school spell power items
+// (e.g. +51 fire damage) score for the specs they actually benefit
+uint32 SpecPrimarySpellSchoolMask(uint8 cls, int tab)
+{
+    switch (cls)
+    {
+        case CLASS_MAGE:
+            if (tab == MAGE_TAB_ARCANE)
+                return SPELL_SCHOOL_MASK_ARCANE;
+            if (tab == MAGE_TAB_FIRE)
+                return SPELL_SCHOOL_MASK_FIRE;
+            if (tab == MAGE_TAB_FROST)
+                return SPELL_SCHOOL_MASK_FROST;
+            break;
+        case CLASS_WARLOCK:
+            if (tab == WARLOCK_TAB_DESTRUCTION)
+                return SPELL_SCHOOL_MASK_FIRE;
+            return SPELL_SCHOOL_MASK_SHADOW;
+        case CLASS_PRIEST:
+            if (tab == PRIEST_TAB_SHADOW)
+                return SPELL_SCHOOL_MASK_SHADOW;
+            break;
+        case CLASS_DRUID:
+            if (tab == DRUID_TAB_BALANCE)
+                return SPELL_SCHOOL_MASK_NATURE;
+            break;
+        case CLASS_SHAMAN:
+            if (tab == SHAMAN_TAB_ELEMENTAL)
+                return SPELL_SCHOOL_MASK_NATURE;
+            break;
+        default:
+            break;
+    }
+    return 0;
+}
 }
 
 template <size_t Size>
@@ -63,7 +99,7 @@ StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
     cls = player->getClass();
     lvl = player->GetLevel();
     tab = AiFactory::GetPlayerSpecTab(player);
-    collector_ = std::make_unique<StatsCollector>(type_, cls);
+    collector_ = std::make_unique<StatsCollector>(type_, cls, SpecPrimarySpellSchoolMask(cls, tab));
 
     if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_UNHOLY)
         hitOverflowType_ = CollectorType::SPELL;

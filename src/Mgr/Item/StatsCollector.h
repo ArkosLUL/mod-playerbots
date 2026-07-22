@@ -62,7 +62,7 @@ enum CollectorType : uint8
 class StatsCollector
 {
 public:
-    StatsCollector(CollectorType type, int32 cls = -1);
+    StatsCollector(CollectorType type, int32 cls = -1, uint32 schoolMask = 0);
     StatsCollector(StatsCollector& stats) = default;
     void Reset();
     void CollectItemStats(ItemTemplate const* proto);
@@ -87,6 +87,9 @@ private:
 private:
     CollectorType type_;
     uint32 cls_;
+    // Magic schools the owner's spec scales with; single-school spell power auras
+    // (e.g. +fire damage) only count when they overlap this mask
+    uint32 schoolMask_;
 };
 
 #endif

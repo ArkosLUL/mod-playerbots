@@ -10,7 +10,11 @@
 #include "SpellMgr.h"
 #include "Util.h"
 
-StatsCollector::StatsCollector(CollectorType type, int32 cls) : type_(type), cls_(cls) { Reset(); }
+StatsCollector::StatsCollector(CollectorType type, int32 cls, uint32 schoolMask)
+    : type_(type), cls_(cls), schoolMask_(schoolMask)
+{
+    Reset();
+}
 
 void StatsCollector::Reset()
 {
@@ -574,6 +578,10 @@ void StatsCollector::HandleApplyAura(const SpellEffectInfo& effectInfo, float mu
             if (schoolType & SPELL_SCHOOL_MASK_NORMAL)
                 stats[STATS_TYPE_ATTACK_POWER] += val * multiplier;
             if ((schoolType & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
+                stats[STATS_TYPE_SPELL_POWER] += val * multiplier;
+            // Single-school spell power (e.g. +51 fire damage) is worth full value
+            // to a spec whose primary nuke school matches
+            else if (schoolType & schoolMask_)
                 stats[STATS_TYPE_SPELL_POWER] += val * multiplier;
             break;
         }
