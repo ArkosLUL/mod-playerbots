@@ -54,6 +54,27 @@ bool AttackMyTargetAction::Execute(Event /*event*/)
     return result;
 }
 
+// Records the geometry of oversized targets, which is what melee approach distances are derived
+// from. Only runs under the "debug move" strategy.
+void AttackAction::LogLargeTargetOnce(Unit* target)
+{
+    if (!target || !target->IsCreature() || target->GetCombatReach() <= 5.0f)
+        return;
+
+    if (!botAI->HasStrategy("debug move", BOT_STATE_NON_COMBAT))
+        return;
+
+    if (!loggedLargeTargets.insert(target->GetEntry()).second)
+        return;
+
+    LOG_DEBUG("playerbots",
+              "LargeTarget entry: {}, name: {}, combatReach: {:.2f}, meleeReach: {:.2f}, collisionHeight: {:.2f}, "
+              "scale: {:.2f}, pos: ({:.2f}, {:.2f}, {:.2f}), botMeleeRange: {:.2f}",
+              target->GetEntry(), target->GetName(), target->GetCombatReach(), target->GetMeleeReach(),
+              target->GetCollisionHeight(), target->GetObjectScale(), target->GetPositionX(), target->GetPositionY(),
+              target->GetPositionZ(), bot->GetMeleeRange(target));
+}
+
 bool AttackAction::Attack(Unit* target, bool /*with_pet*/ /*true*/)
 {
     if (!target)
@@ -138,6 +159,8 @@ bool AttackAction::Attack(Unit* target, bool /*with_pet*/ /*true*/)
     // Check is needed to stop some auto-attack situations.
     if (botAI->IsInVehicle() && !botAI->IsInVehicle(false, false, true))
         return false;
+
+    LogLargeTargetOnce(target);
 
     Unit* oldTarget = context->GetValue<Unit*>("current target")->Get();
     bool shouldMelee = bot->IsWithinMeleeRange(target) || botAI->IsMelee(bot);

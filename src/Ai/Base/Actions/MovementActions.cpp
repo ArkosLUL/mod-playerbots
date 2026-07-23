@@ -799,24 +799,30 @@ bool MovementAction::MoveTo(WorldObject* target, float distance, MovementPriorit
     return MoveTo(target->GetMapId(), dx, dy, dz, false, false, false, false, priority);
 }
 
-void MovementAction::LogReachCombat(Unit* target, char const* outcome, float distance, bool predicted, int pathType)
+// "wanted" is always the caller's requested distance; the combat reaches that get added on top are
+// logged alongside it so the effective stop distance stays derivable.
+void MovementAction::LogReachCombat(bool debugMove, Unit* target, char const* outcome, float wanted, bool predicted,
+                                    int pathType)
 {
-    if (!target || !botAI->HasStrategy("debug move", BOT_STATE_NON_COMBAT))
+    if (!debugMove || !target)
         return;
 
     LOG_DEBUG("playerbots",
               "ReachCombatTo [{}] bot: {}, target: {} (entry {}), botReach: {:.2f}, targetReach: {:.2f}, "
               "dist: {:.2f}, meleeRange: {:.2f}, wanted: {:.2f}, predicted: {}, pathType: {}",
               outcome, bot->GetName(), target->GetName(), target->GetEntry(), bot->GetCombatReach(),
-              target->GetCombatReach(), bot->GetExactDist(target), bot->GetMeleeRange(target), distance,
+              target->GetCombatReach(), bot->GetExactDist(target), bot->GetMeleeRange(target), wanted,
               predicted ? 1 : 0, pathType);
 }
 
 bool MovementAction::ReachCombatTo(Unit* target, float distance)
 {
+    bool const debugMove = botAI->HasStrategy("debug move", BOT_STATE_NON_COMBAT);
+    float const wanted = distance;
+
     if (!IsMovingAllowed(target))
     {
-        LogReachCombat(target, "movement not allowed", distance, false, -1);
+        LogReachCombat(debugMove, target, "movement not allowed", wanted, false, -1);
         return false;
     }
 
@@ -844,20 +850,27 @@ bool MovementAction::ReachCombatTo(Unit* target, float distance)
             tx = target->GetPositionX();
             ty = target->GetPositionY();
             tz = target->GetPositionZ();
+            predicted = false;
         }
     }
     float combatDistance = bot->GetCombatReach() + target->GetCombatReach();
     distance += combatDistance;
 
     if (bot->GetExactDist(tx, ty, tz) <= distance)
+    {
+        LogReachCombat(debugMove, target, "already within wanted distance", wanted, predicted, -1);
         return false;
+    }
 
     PathGenerator path(bot);
     path.CalculatePath(tx, ty, tz, false);
     PathType type = path.GetPathType();
     int typeOk = PATHFIND_NORMAL | PATHFIND_INCOMPLETE | PATHFIND_SHORTCUT;
     if (!(type & typeOk))
+    {
+        LogReachCombat(debugMove, target, "unusable path type", wanted, predicted, int(type));
         return false;
+    }
     float shortenTo = distance;
 
     // Avoid walking too far when moving towards each other
@@ -870,8 +883,17 @@ bool MovementAction::ReachCombatTo(Unit* target, float distance)
 
     path.ShortenPathUntilDist(G3D::Vector3(tx, ty, tz), shortenTo);
     G3D::Vector3 endPos = path.GetPath().back();
-    return MoveTo(target->GetMapId(), endPos.x, endPos.y, endPos.z, false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT, true);
+    bool moved = MoveTo(target->GetMapId(), endPos.x, endPos.y, endPos.z, false, false, false, false,
+                        MovementPriority::MOVEMENT_COMBAT, true);
+
+    if (debugMove)
+    {
+        LogReachCombat(debugMove, target, moved ? "moving" : "MoveTo declined", wanted, predicted, int(type));
+        LOG_DEBUG("playerbots", "ReachCombatTo endpoint bot: {}, endPos: ({:.2f}, {:.2f}, {:.2f}), endDistToTarget: {:.2f}",
+                  bot->GetName(), endPos.x, endPos.y, endPos.z, target->GetExactDist(endPos.x, endPos.y, endPos.z));
+    }
+
+    return moved;
 }
 
 float MovementAction::GetFollowAngle()
