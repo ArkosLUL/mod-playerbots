@@ -15,7 +15,7 @@ leave Elders alive, reach Thorim fast, reduce Yogg Keepers). They are **not** th
 10/25 heroic difficulty flag, so the "heroic comes free via spell-id predicate"
 trick from other raids does not apply here.
 
-The gap was already catalogued in `docs/ulduar-boss-strategy-gap-analysis.md`
+The gap was already catalogued in `docs/raids/ulduar/ulduar-boss-strategy-gap-analysis.md`
 (Severity-3 table). That doc's Sev-1 normal-mode fixes are the phase currently in
 progress (the modified Algalon/Hodir/Razorscale/Auriaya files in git status); this
 plan is the **Sev-3 hard-mode phase**. Today there is **zero** hard-mode code except
