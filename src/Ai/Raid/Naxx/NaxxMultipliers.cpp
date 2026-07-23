@@ -556,3 +556,34 @@ float GluthGenericMultiplier::GetValue(Action* action)
     }
     return 1.0f;
 }
+
+float NaxxThreatRedirectMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<CastMisdirectionOnMainTankAction*>(action) &&
+        !dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    // Encounters where the main tank is not the right threat sink: tank swaps on a debuff stack,
+    // mind-controlled tanks, or one tank per boss. "find target" only sees creatures that already
+    // have this bot on their threat list, so all four horsemen are listed - a melee bot parked on
+    // Thane or the Baron never resolves Zeliek.
+    static std::vector<std::string> const noRedirectBosses = {"gluth",
+                                                              "instructor razuvious",
+                                                              "gothik the harvester",
+                                                              "sir zeliek",
+                                                              "lady blaumeux",
+                                                              "thane korth'azz",
+                                                              "baron rivendare",
+                                                              "highlord mograine"};
+
+    for (std::string const& name : noRedirectBosses)
+    {
+        if (AI_VALUE2(Unit*, "find target", name))
+        {
+            return 0.0f;
+        }
+    }
+    return 1.0f;
+}

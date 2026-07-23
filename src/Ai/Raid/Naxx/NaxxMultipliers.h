@@ -114,6 +114,13 @@ private:
     GluthBossHelper helper;
 };
 
+class NaxxThreatRedirectMultiplier : public Multiplier
+{
+public:
+    NaxxThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "naxx threat redirect") {}
+    float GetValue(Action* action) override;
+};
+
 // class NothGenericMultiplier : public Multiplier
 // {
 // public:

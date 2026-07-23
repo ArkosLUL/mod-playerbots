@@ -217,5 +217,6 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new AnubrekhanGenericMultiplier(botAI));
     multipliers.push_back(new FourhorsemanGenericMultiplier(botAI));
     multipliers.push_back(new GluthGenericMultiplier(botAI));
+    multipliers.push_back(new NaxxThreatRedirectMultiplier(botAI));
     // multipliers.push_back(new NothGenericMultiplier(botAI));
 }

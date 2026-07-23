@@ -88,6 +88,8 @@ public:
         creators["switch to melee"] = &HunterTriggerFactoryInternal::switch_to_melee;
         creators["switch to ranged"] = &HunterTriggerFactoryInternal::switch_to_ranged;
         creators["misdirection on main tank"] = &HunterTriggerFactoryInternal::misdirection_on_main_tank;
+        creators["misdirection on main tank and light aoe"] =
+            &HunterTriggerFactoryInternal::misdirection_on_main_tank_and_light_aoe;
         creators["tranquilizing shot enrage"] = &HunterTriggerFactoryInternal::remove_enrage;
         creators["tranquilizing shot magic"] = &HunterTriggerFactoryInternal::remove_magic;
         creators["immolation trap no cd"] = &HunterTriggerFactoryInternal::immolation_trap_no_cd;
@@ -127,6 +129,10 @@ private:
     static Trigger* switch_to_melee(PlayerbotAI* botAI) { return new SwitchToMeleeTrigger(botAI); }
     static Trigger* switch_to_ranged(PlayerbotAI* botAI) { return new SwitchToRangedTrigger(botAI); }
     static Trigger* misdirection_on_main_tank(PlayerbotAI* botAI) { return new MisdirectionOnMainTankTrigger(botAI); }
+    static Trigger* misdirection_on_main_tank_and_light_aoe(PlayerbotAI* botAI)
+    {
+        return new TwoTriggers(botAI, "misdirection on main tank", "light aoe");
+    }
     static Trigger* remove_enrage(PlayerbotAI* botAI) { return new TargetRemoveEnrageTrigger(botAI); }
     static Trigger* remove_magic(PlayerbotAI* botAI) { return new TargetRemoveMagicTrigger(botAI); }
     static Trigger* immolation_trap_no_cd(PlayerbotAI* botAI) { return new ImmolationTrapNoCdTrigger(botAI); }

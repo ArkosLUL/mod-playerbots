@@ -799,10 +799,26 @@ bool MovementAction::MoveTo(WorldObject* target, float distance, MovementPriorit
     return MoveTo(target->GetMapId(), dx, dy, dz, false, false, false, false, priority);
 }
 
+void MovementAction::LogReachCombat(Unit* target, char const* outcome, float distance, bool predicted, int pathType)
+{
+    if (!target || !botAI->HasStrategy("debug move", BOT_STATE_NON_COMBAT))
+        return;
+
+    LOG_DEBUG("playerbots",
+              "ReachCombatTo [{}] bot: {}, target: {} (entry {}), botReach: {:.2f}, targetReach: {:.2f}, "
+              "dist: {:.2f}, meleeRange: {:.2f}, wanted: {:.2f}, predicted: {}, pathType: {}",
+              outcome, bot->GetName(), target->GetName(), target->GetEntry(), bot->GetCombatReach(),
+              target->GetCombatReach(), bot->GetExactDist(target), bot->GetMeleeRange(target), distance,
+              predicted ? 1 : 0, pathType);
+}
+
 bool MovementAction::ReachCombatTo(Unit* target, float distance)
 {
     if (!IsMovingAllowed(target))
+    {
+        LogReachCombat(target, "movement not allowed", distance, false, -1);
         return false;
+    }
 
     float tx = target->GetPositionX();
     float ty = target->GetPositionY();
@@ -815,8 +831,10 @@ bool MovementAction::ReachCombatTo(Unit* target, float distance)
         deltaAngle -= 2.0f * M_PI;  // -PI..PI
     // if target is moving forward and moving far away, predict the position
     bool behind = fabs(deltaAngle) > M_PI_2;
+    bool predicted = false;
     if (target->HasUnitMovementFlag(MOVEMENTFLAG_FORWARD) && behind)
     {
+        predicted = true;
         float predictDis = std::min(3.0f, target->GetObjectSize() * 2);
         tx += cos(target->GetOrientation()) * predictDis;
         ty += sin(target->GetOrientation()) * predictDis;
