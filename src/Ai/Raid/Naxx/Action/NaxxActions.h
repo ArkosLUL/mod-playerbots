@@ -360,6 +360,16 @@ private:
     GluthBossHelper helper;
 };
 
+class GluthTranquilizingShotAction : public Action
+{
+public:
+    GluthTranquilizingShotAction(PlayerbotAI* ai) : Action(ai, "gluth tranquilizing shot"), helper(ai) {}
+    bool Execute(Event event) override;
+
+private:
+    GluthBossHelper helper;
+};
+
 class LoathebPositionAction : public MovementAction
 {
 public:

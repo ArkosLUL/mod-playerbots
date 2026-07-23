@@ -106,6 +106,8 @@ namespace NaxxSpellIds
     static constexpr uint32 Decimate25Alt = 28375;
     static constexpr uint32 MortalWound10 = 25646;
     static constexpr uint32 MortalWound25 = 54378;
+    static constexpr uint32 GluthFrenzy10 = 28371;
+    static constexpr uint32 GluthFrenzy25 = 54427;
 /*
     SPELL_MORTAL_WOUND                  = 25646,
     SPELL_ENRAGE                        = 28371,

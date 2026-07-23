@@ -167,6 +167,10 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("taunt spell", ACTION_RAID + 1) }
     ));
 
+    triggers.push_back(new TriggerNode("gluth frenzy",
+        { NextAction("gluth tranquilizing shot", ACTION_RAID + 4) }
+    ));
+
     triggers.push_back(new TriggerNode("gluth low health zombie aoe",
         {
             NextAction("starfall", ACTION_RAID + 1),

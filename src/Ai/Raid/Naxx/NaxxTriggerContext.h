@@ -60,6 +60,7 @@ public:
         creators["gluth"] = &RaidNaxxTriggerContext::gluth;
         creators["gluth main tank mortal wound"] = &RaidNaxxTriggerContext::gluth_main_tank_mortal_wound;
         creators["gluth low health zombie aoe"] = &RaidNaxxTriggerContext::gluth_low_health_zombie_aoe;
+        creators["gluth frenzy"] = &RaidNaxxTriggerContext::gluth_frenzy;
 
         creators["loatheb"] = &RaidNaxxTriggerContext::loatheb;
         // creators["noth"] = &RaidNaxxTriggerContext::noth;
@@ -103,6 +104,7 @@ private:
     static Trigger* gluth(PlayerbotAI* ai) { return new GluthTrigger(ai); }
     static Trigger* gluth_main_tank_mortal_wound(PlayerbotAI* ai) { return new GluthMainTankMortalWoundTrigger(ai); }
     static Trigger* gluth_low_health_zombie_aoe(PlayerbotAI* ai) { return new GluthLowHealthZombieAoeTrigger(ai); }
+    static Trigger* gluth_frenzy(PlayerbotAI* ai) { return new GluthFrenzyTrigger(ai); }
     static Trigger* loatheb(PlayerbotAI* ai) { return new LoathebTrigger(ai); }
     // static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
     // static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }

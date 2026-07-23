@@ -32,11 +32,11 @@ bool GluthChooseTargetAction::Execute(Event event)
             target_boss = unit;
         }
     }
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0, true))
     {
         target = target_boss;
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 1))
+    else if (botAI->IsTank(bot))
     {
         for (Unit* t : target_zombies)
         {
@@ -104,7 +104,7 @@ bool GluthPositionAction::Execute(Event event)
         return false;
     }
     bool raid25 = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL;
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
+    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0, true))
     {
         if (AI_VALUE2(bool, "has aggro", "boss target"))
         {
@@ -129,8 +129,15 @@ bool GluthPositionAction::Execute(Event event)
             //                       MovementPriority::MOVEMENT_COMBAT);
             // }
         }
+        else
+        {
+            // Non-aggro boss tank stages at the door anchor so taunt swaps don't strand it.
+            auto const& anchor = raid25 ? helper.mainTankPos25 : helper.mainTankPos10;
+            return MoveInside(NAXX_MAP_ID, anchor.first, anchor.second,
+                              bot->GetPositionZ(), 5.0f, MovementPriority::MOVEMENT_COMBAT);
+        }
     }
-    else if (botAI->IsAssistTankOfIndex(bot, 1))
+    else if (botAI->IsTank(bot))
     {
         if (helper.BeforeDecimate())
         {
@@ -203,4 +210,18 @@ bool GluthSlowdownAction::Execute(Event event)
             break;
     }
     return false;
+}
+
+bool GluthTranquilizingShotAction::Execute(Event event)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+    Unit* boss = AI_VALUE2(Unit*, "find target", "gluth");
+    if (!boss)
+    {
+        return false;
+    }
+    return botAI->CastSpell("tranquilizing shot", boss);
 }

@@ -308,6 +308,16 @@ private:
     GluthBossHelper helper;
 };
 
+class GluthFrenzyTrigger : public Trigger
+{
+public:
+    GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth frenzy"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
 class LoathebTrigger : public Trigger
 {
 public:
