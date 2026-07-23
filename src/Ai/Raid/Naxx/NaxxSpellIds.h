@@ -124,6 +124,8 @@ namespace NaxxSpellIds
 
     // Loatheb
     static constexpr uint32 NecroticAura10 = 55593;
+    // Spore crit buff. Not referenced by this core's boss_loatheb.cpp, so it may never land.
+    static constexpr uint32 FungalCreep = 29232;
 /*
     SPELL_NECROTIC_AURA                         = 55593,
     SPELL_SUMMON_SPORE                          = 29234,

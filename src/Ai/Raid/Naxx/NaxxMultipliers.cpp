@@ -1,5 +1,6 @@
 #include "NaxxMultipliers.h"
 
+#include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
 #include "DKActions.h"
 #include "DruidActions.h"
@@ -585,5 +586,83 @@ float NaxxThreatRedirectMultiplier::GetValue(Action* action)
             return 0.0f;
         }
     }
+    return 1.0f;
+}
+
+float NaxxBurstWindowMultiplier::GetValue(Action* action)
+{
+    if (!action || !IsBurstCooldownAction(action->getName()))
+    {
+        return 1.0f;
+    }
+
+    uint32 now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedValue = EvaluateWindow();
+    }
+    return cachedValue;
+}
+
+float NaxxBurstWindowMultiplier::EvaluateWindow()
+{
+    // Resolved up front rather than in encounter order, so the fight timer is cleared even when an
+    // earlier boss's branch takes the return.
+    bool const loathebUp = loatheb.UpdateBossAI();
+    if (!loathebUp)
+    {
+        loathebFightStartMs = 0;
+    }
+
+    if (kelthuzad.UpdateBossAI())
+    {
+        if (kelthuzad.IsPhaseOne())
+        {
+            return 0.0f;
+        }
+        // Phase 2 below the Guardian threshold is the actual DPS race.
+        Unit* boss = kelthuzad.GetBoss();
+        return boss && boss->GetHealthPct() <= KELTHUZAD_GUARDIAN_PCT ? 1.0f : 0.0f;
+    }
+
+    if (sapphiron.UpdateBossAI())
+    {
+        return sapphiron.IsPhaseFlight() ? 0.0f : 1.0f;
+    }
+
+    if (thaddius.UpdateBossAI())
+    {
+        // Save everything for the boss himself - he has a 5 minute enrage.
+        return thaddius.IsPhaseThaddius() ? 1.0f : 0.0f;
+    }
+
+    if (loathebUp)
+    {
+        uint32 now = getMSTime();
+        if (!loathebFightStartMs)
+        {
+            loathebFightStartMs = now;
+        }
+
+        if (NaxxSpellIds::GetAnyAura(bot, {NaxxSpellIds::FungalCreep}) || botAI->HasAura("fungal creep", bot))
+        {
+            return 1.0f;
+        }
+        return getMSTimeDiff(loathebFightStartMs, now) >= LOATHEB_FALLBACK_MS ? 1.0f : 0.0f;
+    }
+
+    // Noth and Gothik have no helper class; the balcony phases are readable straight off the unit
+    // flags the core scripts set (boss_noth.cpp:99, boss_gothik.cpp:232).
+    if (Unit* noth = AI_VALUE2(Unit*, "find target", "noth the plaguebringer"))
+    {
+        return noth->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? 0.0f : 1.0f;
+    }
+
+    if (Unit* gothik = AI_VALUE2(Unit*, "find target", "gothik the harvester"))
+    {
+        return gothik->HasUnitFlag(UNIT_FLAG_DISABLE_MOVE) ? 0.0f : 1.0f;
+    }
+
     return 1.0f;
 }

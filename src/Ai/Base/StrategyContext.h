@@ -10,6 +10,7 @@
 #include "AggressiveStrategy.h"
 #include "AttackEnemyPlayersStrategy.h"
 #include "BattlegroundStrategy.h"
+#include "BurstWindowStrategy.h"
 #include "CastTimeStrategy.h"
 #include "ChatCommandHandlerStrategy.h"
 #include "ConserveManaStrategy.h"
@@ -130,6 +131,7 @@ public:
         creators["master fishing"] = &StrategyContext::master_fishing;
         creators["wait for attack"] = &StrategyContext::wait_for_attack;
         creators["focus heal targets"] = &StrategyContext::focus_heal_targets;
+        creators["burst"] = &StrategyContext::burst;
     }
 
 private:
@@ -204,6 +206,7 @@ private:
     static Strategy* master_fishing(PlayerbotAI* botAI) { return new MasterFishingStrategy(botAI); }
     static Strategy* wait_for_attack(PlayerbotAI* botAI) { return new WaitForAttackStrategy(botAI); }
     static Strategy* focus_heal_targets(PlayerbotAI* botAI) { return new FocusHealTargetsStrategy(botAI); }
+    static Strategy* burst(PlayerbotAI* botAI) { return new BurstWindowStrategy(botAI); }
 };
 
 class MovementStrategyContext : public NamedObjectContext<Strategy>
