@@ -39,6 +39,7 @@ public:
         creators["sapphiron flight"] = &RaidNaxxTriggerContext::sapphiron_flight;
 
         creators["kel'thuzad"] = &RaidNaxxTriggerContext::kelthuzad;
+        creators["kel'thuzad shadow fissure"] = &RaidNaxxTriggerContext::kelthuzad_shadow_fissure;
 
         creators["anub'rekhan"] = &RaidNaxxTriggerContext::anubrekhan;
 
@@ -87,6 +88,7 @@ private:
     static Trigger* sapphiron_ground(PlayerbotAI* ai) { return new SapphironGroundTrigger(ai); }
     static Trigger* sapphiron_flight(PlayerbotAI* ai) { return new SapphironFlightTrigger(ai); }
     static Trigger* kelthuzad(PlayerbotAI* ai) { return new KelthuzadTrigger(ai); }
+    static Trigger* kelthuzad_shadow_fissure(PlayerbotAI* ai) { return new KelthuzadShadowFissureTrigger(ai); }
     static Trigger* anubrekhan(PlayerbotAI* ai) { return new AnubrekhanTrigger(ai); }
     static Trigger* faerlina(PlayerbotAI* ai) { return new FaerlinaTrigger(ai); }
     static Trigger* faerlina_frenzy(PlayerbotAI* ai) { return new FaerlinaFrenzyTrigger(ai); }	

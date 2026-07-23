@@ -323,7 +323,8 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    if (helper.IsPhaseTwo() && helper.IsBossCasting(NaxxSpellIds::FrostBoltSingle))
+    if (helper.IsPhaseTwo() &&
+        helper.IsBossCastingAny({NaxxSpellIds::FrostBoltSingle, NaxxSpellIds::FrostBoltSingle25}))
     {
         std::string const name = action->getName();
         if (name == "kick" || name == "pummel" || name == "shield bash" ||
@@ -349,6 +350,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         if (helper.HasAuraInGroup(NaxxSpellIds::FrostBlast))
         {
             if (dynamic_cast<KelthuzadPositionAction*>(action) ||
+                dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
                 dynamic_cast<CastHealingSpellAction*>(action) ||
                 dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<CastAoeHealSpellAction*>(action) ||
@@ -361,6 +363,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         if (helper.HasAuraInGroup(NaxxSpellIds::ChainsOfKelthuzad))
         {
             if (dynamic_cast<KelthuzadPositionAction*>(action) ||
+                dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
                 dynamic_cast<CastHealingSpellAction*>(action) ||
                 dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<CastAoeHealSpellAction*>(action) ||

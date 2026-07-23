@@ -249,6 +249,17 @@ bool GluthMainTankMortalWoundTrigger::IsActive()
 
 bool KelthuzadTrigger::IsActive() { return helper.UpdateBossAI(); }
 
+bool KelthuzadShadowFissureTrigger::IsActive()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    Unit* fissure = helper.GetNearestShadowFissure();
+    return fissure && bot->IsWithinDistInMap(fissure, KelthuzadBossHelper::FISSURE_DANGER_RADIUS);
+}
+
 bool AnubrekhanTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "anub'rekhan");

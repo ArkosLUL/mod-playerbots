@@ -39,10 +39,16 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(
         new TriggerNode("kel'thuzad",
         {
+            NextAction("kel'thuzad misdirect boss to main tank", ACTION_RAID + 3),
             NextAction("kel'thuzad position", ACTION_RAID + 2),
             NextAction("kel'thuzad choose target", ACTION_RAID + 1)
         })
     );
+
+    // Emergency priority so the flee beats every P2 positioning action by construction.
+    triggers.push_back(new TriggerNode("kel'thuzad shadow fissure",
+        { NextAction("kel'thuzad flee shadow fissure", ACTION_EMERGENCY + 6) }
+    ));
 
     // Anub'Rekhan
     triggers.push_back(new TriggerNode("anub'rekhan",

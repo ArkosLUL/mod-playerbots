@@ -284,6 +284,32 @@ private:
     KelthuzadBossHelper helper;
 };
 
+class KelthuzadFleeShadowFissureAction : public MovementAction
+{
+public:
+    KelthuzadFleeShadowFissureAction(PlayerbotAI* ai)
+        : MovementAction(ai, "kel'thuzad flee shadow fissure"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
+class KelthuzadMisdirectBossToMainTankAction : public AttackAction
+{
+public:
+    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* ai)
+        : AttackAction(ai, "kel'thuzad misdirect boss to main tank"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
 class AnubrekhanChooseTargetAction : public AttackAction
 {
 public:

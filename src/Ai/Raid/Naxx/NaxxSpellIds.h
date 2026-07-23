@@ -95,6 +95,10 @@ namespace NaxxSpellIds
     static constexpr uint32 ShadowFissure = 27810;
     static constexpr uint32 FrostBoltSingle = 28478;
     static constexpr uint32 FrostBoltMulti = 28479;
+    // 25-man single-target Frost Bolt id from spelldifficulty_dbc (28478->55802).
+    static constexpr uint32 FrostBoltSingle25 = 55802;
+    // Proc aura left on the hunter after casting Misdirection (34477); consumed by the next 3 shots.
+    static constexpr uint32 Misdirection = 35079;
 
     // Gluth
     static constexpr uint32 Decimate10 = 28374;
