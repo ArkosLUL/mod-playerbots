@@ -177,33 +177,13 @@ float ThaddiusGenericMultiplier::GetValue(Action* action)
     }
 
     Unit* target = AI_VALUE(Unit*, "current target");
-    Unit* feugen = helper.GetFeugen();
-    Unit* stalagg = helper.GetStalagg();
-    if (helper.IsPhasePet() && target && feugen && stalagg && target->IsAlive() &&
-        (target == feugen || target == stalagg) && feugen->IsAlive() && stalagg->IsAlive())
+    if (helper.IsPhasePet() && !botAI->IsTank(bot) && helper.PetSyncSuppress(target))
     {
-        float targetPct = target->GetHealthPct();
-        Unit* other = (target == feugen) ? stalagg : feugen;
-        float otherPct = other->GetHealthPct();
+        if (dynamic_cast<MeleeAction*>(action))
+            return 0.0f;
 
-        float diff = otherPct - targetPct;
-
-        bool inSyncWindow = (targetPct <= 30.0f || otherPct <= 30.0f);
-
-        bool hardHold = (targetPct <= 12.0f && otherPct > 12.0f);
-
-        bool softHold = (targetPct <= 25.0f && diff >= 4.0f);
-
-        bool shouldHold = inSyncWindow && (hardHold || softHold);
-
-        if (shouldHold && !botAI->IsTank(bot))
-        {
-            if (dynamic_cast<MeleeAction*>(action))
-                return 0.0f;
-
-            if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
-                return 0.0f;
-        }
+        if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
+            return 0.0f;
     }
     // magnetic pull
     // uint32 curr_timer = eventMap->GetTimer();

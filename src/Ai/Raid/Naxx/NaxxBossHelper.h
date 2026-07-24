@@ -1566,10 +1566,30 @@ public:
         return false;
     }
 
+    // Called several times per AI tick on a hot combat path, and each call rescans the
+    // whole group. Memoize the self result per tick; getMSTime granularity is fine here
+    // (a rare ms-boundary miss just recomputes).
     bool IsAssignedToPrimarySide(Player* player)
+    {
+        if (player != bot)
+            return ComputeAssignedToPrimarySide(player);
+
+        uint32 now = getMSTime();
+        if (_sideCacheValid && _sideCacheTime == now)
+            return _sideCacheValue;
+
+        _sideCacheValue = ComputeAssignedToPrimarySide(player);
+        _sideCacheTime = now;
+        _sideCacheValid = true;
+        return _sideCacheValue;
+    }
+
+    bool ComputeAssignedToPrimarySide(Player* player)
     {
         if (!player)
             return true;
+
+        Group* group = bot->GetGroup();
 
         if (botAI->IsTank(player))
         {
@@ -1579,16 +1599,36 @@ public:
             if (NaxxHasStrategyAnyState(player, "tank assist") && !NaxxHasStrategyAnyState(player, "tank face"))
                 return false;
 
-            return botAI->IsMainTank(player);
+            if (botAI->IsMainTank(player))
+                return true;
+
+            // Split remaining tanks evenly: first non-main tank -> secondary, then alternate.
+            uint32 index = 0;
+            if (group)
+            {
+                for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+                {
+                    Player* member = ref->GetSource();
+                    if (!member || !member->IsAlive())
+                        continue;
+                    if (!botAI->IsTank(member) || botAI->IsMainTank(member))
+                        continue;
+                    if (member == player)
+                        return (index % 2) == 1;
+                    ++index;
+                }
+            }
+
+            // Lone/unmatched tank (no group, or own entry transiently skipped): use the
+            // same stable parity fallback the heal/DPS branches use instead of pinning
+            // to one pet.
+            int32 slotIndex = botAI->GetGroupSlotIndex(player);
+            if (slotIndex >= 0)
+                return (slotIndex % 2) == 1;
+            return (player->GetGUID().GetCounter() % 2) == 1;
         }
 
-        Group* group = bot->GetGroup();
-        uint32 const membersCount = group ? group->GetMembersCount() : 0;
-        bool const is25Man = membersCount > 10;
-
-        uint32 const primaryHeals = is25Man ? 2u : 1u;
-        uint32 const primaryDps   = is25Man ? 9u : 3u;
-
+        // Even 50/50 split per role by group-order index parity, independent of raid size.
         if (botAI->IsHeal(player))
         {
             uint32 index = 0;
@@ -1604,12 +1644,11 @@ public:
                         continue;
 
                     if (member == player)
-                        return index < primaryHeals;
+                        return (index % 2) == 0;
 
                     ++index;
                 }
             }
-
         }
 
         uint32 index = 0;
@@ -1625,7 +1664,7 @@ public:
                     continue;
 
                 if (member == player)
-                    return index < primaryDps;
+                    return (index % 2) == 0;
 
                 ++index;
             }
@@ -1638,19 +1677,81 @@ public:
         return (player->GetGUID().GetCounter() % 2) == 0;
     }
 
-    Unit* GetAssignedPetForBot()
+    // Single source of truth for side->pet. When a valid RTI pair is set the marks win
+    // (primary = primary-icon pet), so marked and mark-free code paths never disagree
+    // within a tick. Mark-free fallback convention: primary = Stalagg, secondary = Feugen.
+    // Falls back to the live sibling if the chosen pet is dead.
+    Unit* GetPetForSide(bool primary)
     {
         uint8 primaryIcon = RAID_ICON_SKULL;
         uint8 secondaryIcon = RAID_ICON_CROSS;
-        bool hasPair = GetPetIconPair(primaryIcon, secondaryIcon);
+        if (GetPetIconPair(primaryIcon, secondaryIcon))
+        {
+            if (Unit* marked = GetMarkedPet(primary ? primaryIcon : secondaryIcon))
+                return marked;
+        }
+
+        Unit* preferred = primary ? stalagg : feugen;
+        Unit* sibling   = primary ? feugen : stalagg;
+        if (preferred && preferred->IsAlive())
+            return preferred;
+        if (sibling && sibling->IsAlive())
+            return sibling;
+        return nullptr;
+    }
+
+    // Sync window tuning (percent). Balancing only kicks in once a pet enters the low
+    // window; above that both burn freely. Inside it, keep both pets dropping through
+    // the last few % together so both die inside the ~5s revive window.
+    static constexpr float SYNC_WINDOW_PCT = 30.0f;
+    static constexpr float SYNC_BALANCE_MARGIN = 5.0f;
+    static constexpr float SYNC_HARD_FLOOR_PCT = 5.0f;
+    static constexpr float SYNC_FLOOR_RELEASE_PCT = 8.0f;
+
+    // Whether damage on `target` (one of the two pets) should be suppressed to keep
+    // both pets converging to death together. Symmetric, margin-based, hard-floored.
+    bool PetSyncSuppress(Unit* target)
+    {
+        if (!target || !feugen || !stalagg)
+            return false;
+        if (target != feugen && target != stalagg)
+            return false;
+        if (!feugen->IsAlive() || !stalagg->IsAlive())
+            return false;
+
+        float targetPct = target->GetHealthPct();
+        Unit* other = (target == feugen) ? stalagg : feugen;
+        float otherPct = other->GetHealthPct();
+
+        // Only manage the sync near death: while both pets are healthy, burn freely.
+        if (targetPct > SYNC_WINDOW_PCT && otherPct > SYNC_WINDOW_PCT)
+            return false;
+
+        // Both within the floor band -> free-burn both to death simultaneously.
+        if (targetPct <= SYNC_FLOOR_RELEASE_PCT && otherPct <= SYNC_FLOOR_RELEASE_PCT)
+            return false;
+
+        // Hard floor: don't push this pet to 0 while the sibling is still above the band.
+        if (targetPct <= SYNC_HARD_FLOOR_PCT)
+            return true;
+
+        // Balance hold: this pet is already the lower one -> let the sibling catch up.
+        if (targetPct < otherPct - SYNC_BALANCE_MARGIN)
+            return true;
+
+        return false;
+    }
+
+    Unit* GetAssignedPetForBot()
+    {
+        bool hasPair = HasPetIconPair();
 
         if (botAI->IsTank(bot))
         {
             if (hasPair && (!bot->IsInCombat() || (!IsMainTankEngagedOnPets() && !IsOffTankEngagedOnPets())))
             {
-                bool primarySide = IsAssignedToPrimarySide(bot);
-                if (Unit* marked = GetMarkedPet(primarySide ? primaryIcon : secondaryIcon))
-                    return marked;
+                if (Unit* pet = GetPetForSide(IsAssignedToPrimarySide(bot)))
+                    return pet;
             }
 
             Unit* feugenAlive = (feugen && feugen->IsAlive()) ? feugen : nullptr;
@@ -1662,9 +1763,8 @@ public:
                 float dStalagg = bot->GetDistance2d(tankPosStalagg.first, tankPosStalagg.second);
                 if (hasPair && (dFeugen > 45.0f && dStalagg > 45.0f))
                 {
-                    bool primarySide = IsAssignedToPrimarySide(bot);
-                    if (Unit* marked = GetMarkedPet(primarySide ? primaryIcon : secondaryIcon))
-                        return marked;
+                    if (Unit* pet = GetPetForSide(IsAssignedToPrimarySide(bot)))
+                        return pet;
                 }
                 bool onFeugenSide = IsOnFeugenSide(bot);
                 Unit* sidePet = onFeugenSide ? feugenAlive : stalaggAlive;
@@ -1678,13 +1778,10 @@ public:
             return GetNearestPet();
          }
 
-        if (hasPair)
-        {
-            bool primarySide = IsAssignedToPrimarySide(bot);
-            Unit* target = GetMarkedPet(primarySide ? primaryIcon : secondaryIcon);
-            if (target)
-                return target;
-        }
+        // Non-tanks: GetPetForSide resolves marks (when set) or the fixed side mapping,
+        // so marked and mark-free assignments always agree within a tick.
+        if (Unit* sidePet = GetPetForSide(IsAssignedToPrimarySide(bot)))
+            return sidePet;
 
         return GetNearestPet();
     }
@@ -1708,11 +1805,17 @@ protected:
         _unit = nullptr;
         feugen = nullptr;
         stalagg = nullptr;
+        _sideCacheValid = false;
     }
 
     Unit* _unit = nullptr;
     Unit* feugen = nullptr;
     Unit* stalagg = nullptr;
+
+    // Per-tick memo of IsAssignedToPrimarySide(bot); see that method.
+    uint32 _sideCacheTime = 0;
+    bool _sideCacheValue = false;
+    bool _sideCacheValid = false;
 };
 
 #endif

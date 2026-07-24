@@ -10,10 +10,6 @@ bool ThaddiusAttackNearestPetAction::isUseful()
     {
         return false;
     }
-    if (!helper.HasPetIconPair())
-    {
-        return false;
-    }
     if (!helper.IsPhasePet())
     {
         return false;
@@ -69,8 +65,10 @@ bool ThaddiusAttackNearestPetAction::Execute(Event event)
     if (AI_VALUE(Unit*, "current target") != target && !botAI->IsHeal(bot))
         return Attack(target);
 
-    if (botAI->IsTank(bot) && AI_VALUE2(bool, "has aggro", "current target"))
+    if (botAI->IsTank(bot))
     {
+        // Pin the add at its coil the moment we engage, not only after aggro,
+        // so it is never dragged far enough to overload the tesla coil.
         std::pair<float, float> posForTank = helper.PetPhaseGetPosForTank(target);
         return MoveTo(533, posForTank.first, posForTank.second, helper.tankPosZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
