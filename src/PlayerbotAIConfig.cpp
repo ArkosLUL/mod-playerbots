@@ -622,6 +622,7 @@ bool PlayerbotAIConfig::Initialize()
     addClassAccountPoolSize = sConfigMgr->GetOption<int32>("AiPlayerbot.AddClassAccountPoolSize", 50);
     maintenanceCommand = sConfigMgr->GetOption<int32>("AiPlayerbot.MaintenanceCommand", 1);
     fulfillMetaGemRequirements = sConfigMgr->GetOption<bool>("AiPlayerbot.FulfillMetaGemRequirements", true);
+    offensivePotions = sConfigMgr->GetOption<bool>("AiPlayerbot.OffensivePotions", true);
 
     altMaintenanceAttunementQs = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceAttunementQuests", true);
     altMaintenanceBags = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceBags", true);

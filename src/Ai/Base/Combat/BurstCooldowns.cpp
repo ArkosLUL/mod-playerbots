@@ -41,7 +41,9 @@ namespace
         // death knight
         "killing machine", "army of the dead", "summon gargoyle",
         // shaman
-        "fire elemental totem", "elemental mastery"};
+        "fire elemental totem", "elemental mastery",
+        // consumable
+        "offensive potion"};
 }  // namespace
 
 bool IsBurstCooldownAction(std::string const& actionName)

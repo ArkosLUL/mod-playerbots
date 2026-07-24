@@ -94,6 +94,7 @@ public:
         creators["tank assist"] = &TriggerContext::TankAssist;
         creators["lose aggro"] = &TriggerContext::LoseAggro;
         creators["has aggro"] = &TriggerContext::HasAggro;
+        creators["offensive potion"] = &TriggerContext::OffensivePotion;
 
         creators["light aoe"] = &TriggerContext::LightAoe;
         creators["medium aoe"] = &TriggerContext::MediumAoe;
@@ -315,6 +316,7 @@ private:
     static Trigger* HasAreaDebuff(PlayerbotAI* botAI) { return new HasAreaDebuffTrigger(botAI); }
     static Trigger* LoseAggro(PlayerbotAI* botAI) { return new LoseAggroTrigger(botAI); }
     static Trigger* HasAggro(PlayerbotAI* botAI) { return new HasAggroTrigger(botAI); }
+    static Trigger* OffensivePotion(PlayerbotAI* botAI) { return new OffensivePotionTrigger(botAI); }
     static Trigger* LowHealth(PlayerbotAI* botAI) { return new LowHealthTrigger(botAI); }
     static Trigger* MediumHealth(PlayerbotAI* botAI) { return new MediumHealthTrigger(botAI); }
     static Trigger* AlmostFullHealth(PlayerbotAI* botAI) { return new AlmostFullHealthTrigger(botAI); }

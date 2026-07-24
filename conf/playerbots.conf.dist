@@ -1023,6 +1023,13 @@ AiPlayerbot.LimitEnchantExpansion = 1
 # Default: 1 (enabled)
 AiPlayerbot.FulfillMetaGemRequirements = 1
 
+# DPS bots stock and use a level-appropriate offensive potion (haste/strength/speed/wild magic)
+# during their burst window on dungeon and world bosses. Casters get the spellpower ladder,
+# physical DPS the attack-power ladder. Tanks and healers are unaffected.
+# Disable to stop stocking and using offensive potions entirely.
+# Default: 1 (enabled)
+AiPlayerbot.OffensivePotions = 1
+
 # Enable expansion limitation for gear
 # If enabled, bots will not equip TBC gear until level 61 or WotLK gear until level 71
 # Default: 1 (enabled)

@@ -112,6 +112,37 @@ bool LoseAggroTrigger::IsActive() { return !AI_VALUE2(bool, "has aggro", "curren
 
 bool HasAggroTrigger::IsActive() { return AI_VALUE2(bool, "has aggro", "current target"); }
 
+bool OffensivePotionTrigger::IsActive()
+{
+    if (!sPlayerbotAIConfig.offensivePotions || !PlayerbotAI::IsDps(bot) || !bot->IsInCombat())
+    {
+        holdState.Reset();
+        return false;
+    }
+
+    // Don't arm without a potion in the bags, otherwise the ACTION_HIGH action fires every tick and
+    // whispers "No items available" to the master for the whole encounter.
+    if (!AI_VALUE2(uint32, "item count", "offensive potion"))
+    {
+        holdState.Reset();
+        return false;
+    }
+
+    // Only arm on dungeon/world bosses (mirrors HoldBurstUntilTankEngagedMultiplier::GetValue).
+    Unit* target = AI_VALUE(Unit*, "current target");
+    Creature* creature = target ? target->ToCreature() : nullptr;
+    if (!creature || !(creature->IsDungeonBoss() || creature->isWorldBoss()))
+    {
+        holdState.Reset();
+        return false;
+    }
+
+    // Hold the pop until the main tank has firmly held the boss, so a DPS doesn't pull threat. The
+    // 'burst' strategy also gates this action, but enforcing it here keeps the potion safe when
+    // that strategy isn't loaded.
+    return MainTankHasHeldBoss(bot, target, holdState, POTION_HOLD_MS);
+}
+
 bool PanicTrigger::IsActive()
 {
     return AI_VALUE2(uint8, "health", "self target") < sPlayerbotAIConfig.criticalHealth &&

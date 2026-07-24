@@ -369,6 +369,7 @@ public:
     uint32 botActiveAloneSmartScaleWhenMinLevel;
     uint32 botActiveAloneSmartScaleWhenMaxLevel;
 
+    bool offensivePotions;
     bool freeMethodLoot;
     int32 lootNeedRollLevel;
     bool lootGreedRollLevel;

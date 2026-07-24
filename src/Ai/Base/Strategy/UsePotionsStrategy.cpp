@@ -34,4 +34,6 @@ void UsePotionsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "critical health", { NextAction("healthstone", ACTION_MEDIUM_HEAL + 1) }));
     triggers.push_back(
         new TriggerNode("medium mana", { NextAction("mana potion", ACTION_EMERGENCY) }));
+    triggers.push_back(new TriggerNode(
+        "offensive potion", { NextAction("offensive potion", ACTION_HIGH) }));
 }

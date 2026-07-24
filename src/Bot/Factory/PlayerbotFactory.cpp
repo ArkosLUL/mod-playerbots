@@ -3848,6 +3848,38 @@ void PlayerbotFactory::InitPotions()
         if (Item* newItem = StoreNewItemInInventorySlot(bot, itemId, urand(maxCount / 2, maxCount)))
             newItem->AddToUpdateQueueOf(bot);
     }
+
+    // Role/armor detection is spec-based (bySpec), like the oil/sharpening ladders above, so it
+    // doesn't depend on combat strategies being initialised when the factory runs.
+    if (sPlayerbotAIConfig.offensivePotions && PlayerbotAI::IsDps(bot, true))
+    {
+        // Damage-stat ladder (descending): first entry whose RequiredLevel the bot meets wins,
+        // so the band picks itself the same way the oil/sharpening-stone ladders do.
+        std::vector<uint32> const casterLadder = {POTION_OF_WILD_MAGIC, DESTRUCTION_POTION, HASTE_POTION};
+        // Insane Strength only converts to attack power for Strength classes; agility melee get next
+        // to nothing from it, so they fall straight through to the class-neutral Haste Potion.
+        bool const strengthClass = bot->getClass() == CLASS_WARRIOR || bot->getClass() == CLASS_PALADIN ||
+                                   bot->getClass() == CLASS_DEATH_KNIGHT;
+        std::vector<uint32> const strengthLadder = {POTION_OF_SPEED, INSANE_STRENGTH_POTION, HASTE_POTION};
+        std::vector<uint32> const agilityLadder = {POTION_OF_SPEED, HASTE_POTION};
+        std::vector<uint32> const& ladder =
+            PlayerbotAI::IsCaster(bot, true) ? casterLadder : (strengthClass ? strengthLadder : agilityLadder);
+
+        for (uint32 itemId : ladder)
+        {
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+            if (!proto || proto->RequiredLevel > level)
+                continue;
+
+            if (bot->GetItemCount(itemId))
+                break;
+
+            uint32 maxCount = proto->GetMaxStackSize();
+            if (Item* newItem = StoreNewItemInInventorySlot(bot, itemId, urand(maxCount / 2, maxCount)))
+                newItem->AddToUpdateQueueOf(bot);
+            break;
+        }
+    }
 }
 
 std::vector<uint32> PlayerbotFactory::GetCurrentGemsCount()
