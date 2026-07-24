@@ -623,6 +623,7 @@ bool PlayerbotAIConfig::Initialize()
     maintenanceCommand = sConfigMgr->GetOption<int32>("AiPlayerbot.MaintenanceCommand", 1);
     fulfillMetaGemRequirements = sConfigMgr->GetOption<bool>("AiPlayerbot.FulfillMetaGemRequirements", true);
     offensivePotions = sConfigMgr->GetOption<bool>("AiPlayerbot.OffensivePotions", true);
+    burstOnBossOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.BurstOnBossOnly", true);
 
     altMaintenanceAttunementQs = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceAttunementQuests", true);
     altMaintenanceBags = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceBags", true);

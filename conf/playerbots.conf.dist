@@ -1041,6 +1041,13 @@ AiPlayerbot.FulfillMetaGemRequirements = 1
 # Default: 1 (enabled)
 AiPlayerbot.OffensivePotions = 1
 
+# Grouped DPS bots hold their major offensive burst cooldowns (Recklessness, Arcane Power,
+# Adrenaline Rush, Avenging Wrath, Bloodlust/Heroism, etc.) for dungeon and world bosses
+# instead of spending them on trash. Solo bots are unaffected, and priest Shadowfiend stays
+# available for mana. Disable to let bots burst on any target.
+# Default: 1 (enabled)
+AiPlayerbot.BurstOnBossOnly = 1
+
 # Enable expansion limitation for gear
 # If enabled, bots will not equip TBC gear until level 61 or WotLK gear until level 71
 # Default: 1 (enabled)
