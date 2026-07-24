@@ -260,8 +260,19 @@ public:
     bool Execute(Event event) override;
 
 protected:
+    // Result of a shelter attempt. Moving => this action owns the tick (cast-time
+    // heals can't fire while the bot moves anyway). Sheltered => bot is stopped
+    // behind its block, so the tick can yield to heals. None => nothing to do.
+    enum class ShelterResult { None, Moving, Sheltered };
+
     SapphironBossHelper helper;
-    bool MoveToNearestIcebolt();
+    ShelterResult MoveToNearestIcebolt();
+    void ResetShelterLatch();
+
+    // Per-bot state, latched for the duration of one flight phase (see cache in
+    // Engine::CreateActionNode — actions are created once per bot and reused).
+    ObjectGuid assignedBlockGuid;
+    bool sheltered = false;
 };
 
 class KelthuzadChooseTargetAction : public AttackAction
