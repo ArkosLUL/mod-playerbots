@@ -14,6 +14,7 @@ public:
         creators["avoid twilight fissure"] = &RaidOsActionContext::avoid_twilight_fissure;
         creators["avoid flame tsunami"] = &RaidOsActionContext::avoid_flame_tsunami;
         creators["sartharion attack priority"] = &RaidOsActionContext::attack_priority;
+        creators["sartharion ranged position"] = &RaidOsActionContext::ranged_position;
         creators["enter twilight portal"] = &RaidOsActionContext::enter_twilight_portal;
         creators["exit twilight portal"] = &RaidOsActionContext::exit_twilight_portal;
     }
@@ -23,6 +24,7 @@ private:
     static Action* avoid_twilight_fissure(PlayerbotAI* ai) { return new AvoidTwilightFissureAction(ai); }
     static Action* avoid_flame_tsunami(PlayerbotAI* ai) { return new AvoidFlameTsunamiAction(ai); }
     static Action* attack_priority(PlayerbotAI* ai) { return new SartharionAttackPriorityAction(ai); }
+    static Action* ranged_position(PlayerbotAI* ai) { return new SartharionRangedPositionAction(ai); }
     static Action* enter_twilight_portal(PlayerbotAI* ai) { return new EnterTwilightPortalAction(ai); }
     static Action* exit_twilight_portal(PlayerbotAI* ai) { return new ExitTwilightPortalAction(ai); }
 };

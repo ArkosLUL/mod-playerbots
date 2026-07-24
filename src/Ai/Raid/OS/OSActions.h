@@ -45,6 +45,14 @@ public:
     bool Execute(Event event) override;
 };
 
+class SartharionRangedPositionAction : public MovementAction
+{
+public:
+    SartharionRangedPositionAction(PlayerbotAI* botAI, std::string const name = "sartharion ranged position")
+        : MovementAction(botAI, name) {}
+    bool Execute(Event event) override;
+};
+
 class EnterTwilightPortalAction : public MovementAction
 {
 public:

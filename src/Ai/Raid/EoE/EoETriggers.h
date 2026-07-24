@@ -59,9 +59,9 @@ public:
     MalygosTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos") {}
     bool IsActive() override;
     // Finds Malygos even while he is flagged non-attackable (P2 flight / phase transitions).
-    Unit* static getMalygos(Player* bot);
+    static Unit* getMalygos(Player* bot);
     // 0 = inactive/pre-pull, 1 = P1, 2 = P2 (adds up), 3 = drake phase, 4 = phase transition hold.
-    uint8 static getPhase(Player* bot);
+    static uint8 getPhase(Player* bot);
 };
 
 class PowerSparkTrigger : public Trigger

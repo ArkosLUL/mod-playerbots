@@ -103,6 +103,13 @@ public:
     bool IsActive() override;
 };
 
+class SartharionRangedPositioningTrigger : public Trigger
+{
+public:
+    SartharionRangedPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "sartharion ranged positioning") {}
+    bool IsActive() override;
+};
+
 class TwilightPortalEnterTrigger : public Trigger
 {
 public:

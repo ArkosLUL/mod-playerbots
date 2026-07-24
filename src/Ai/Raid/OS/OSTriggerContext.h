@@ -14,6 +14,7 @@ public:
         creators["twilight fissure"] = &RaidOsTriggerContext::twilight_fissure;
         creators["sartharion dps"] = &RaidOsTriggerContext::sartharion_dps;
         creators["sartharion melee positioning"] = &RaidOsTriggerContext::sartharion_melee;
+        creators["sartharion ranged positioning"] = &RaidOsTriggerContext::sartharion_ranged;
         creators["twilight portal enter"] = &RaidOsTriggerContext::twilight_portal_enter;
         creators["twilight portal exit"] = &RaidOsTriggerContext::twilight_portal_exit;
     }
@@ -24,6 +25,7 @@ private:
     static Trigger* twilight_fissure(PlayerbotAI* ai) { return new TwilightFissureTrigger(ai); }
     static Trigger* sartharion_dps(PlayerbotAI* ai) { return new SartharionDpsTrigger(ai); }
     static Trigger* sartharion_melee(PlayerbotAI* ai) { return new SartharionMeleePositioningTrigger(ai); }
+    static Trigger* sartharion_ranged(PlayerbotAI* ai) { return new SartharionRangedPositioningTrigger(ai); }
     static Trigger* twilight_portal_enter(PlayerbotAI* ai) { return new TwilightPortalEnterTrigger(ai); }
     static Trigger* twilight_portal_exit(PlayerbotAI* ai) { return new TwilightPortalExitTrigger(ai); }
 };

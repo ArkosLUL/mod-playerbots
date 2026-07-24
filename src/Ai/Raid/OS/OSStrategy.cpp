@@ -19,6 +19,8 @@ void RaidOsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Flank dragon positioning
     triggers.push_back(new TriggerNode("sartharion melee positioning",
         { NextAction("rear flank", ACTION_MOVE + 4) }));
+    triggers.push_back(new TriggerNode("sartharion ranged positioning",
+        { NextAction("sartharion ranged position", ACTION_MOVE) }));
 
     triggers.push_back(new TriggerNode("twilight portal enter",
         { NextAction("enter twilight portal", ACTION_RAID + 1) }));
