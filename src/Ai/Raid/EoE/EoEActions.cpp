@@ -4,10 +4,7 @@
 
 bool MalygosPositionAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "malygos");
-    if (!boss) { return false; }
-
-    uint8 phase = MalygosTrigger::getPhase(bot, boss);
+    uint8 phase = MalygosTrigger::getPhase(bot);
 
     float distance = 5.0f;
 
@@ -36,17 +33,11 @@ bool MalygosPositionAction::Execute(Event /*event*/)
             }
             return false;
         }
-        // Position DK for spark pull
-        // else if (spark && bot->IsClass(CLASS_DEATH_KNIGHT))
-        // {
-        //     if (bot->GetDistance2d(MALYGOS_STACK_POSITION.first, MALYGOS_STACK_POSITION.second) > distance)
-        //     {
-        //         bot->Yell("SPARK SPAWNED, MOVING TO STACK", LANG_UNIVERSAL);
-        //         return MoveTo(EOE_MAP_ID, MALYGOS_STACK_POSITION.first, MALYGOS_STACK_POSITION.second, bot->GetPositionZ(),
-        //             false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
-        //     }
-        //     return false;
-        // }
+        // DK handles the spark via death grip; leave the rest of the raid stacked.
+        else if (spark && bot->IsClass(CLASS_DEATH_KNIGHT))
+        {
+            return false;
+        }
         else if (spark)
         {
             return false;
@@ -61,6 +52,30 @@ bool MalygosPositionAction::Execute(Event /*event*/)
             return false;
         }
     }
+    else if (phase == 2 || phase == 4)
+    {
+        // Anti-fall: the platform edge drops into the void. Keep everyone inside a safe
+        // interior ring around the centre; also gathers the raid for the P3 drake mount.
+        float const cx = MALYGOS_CENTER_POSITION.first;
+        float const cy = MALYGOS_CENTER_POSITION.second;
+        float const safeRadius = 30.0f;
+
+        float dist = bot->GetDistance2d(cx, cy);
+        if (dist > safeRadius)
+        {
+            float target = safeRadius - 3.0f;
+            float tx = cx;
+            float ty = cy;
+            if (dist > 0.01f)
+            {
+                tx = cx + (bot->GetPositionX() - cx) / dist * target;
+                ty = cy + (bot->GetPositionY() - cy) / dist * target;
+            }
+            return MoveTo(EOE_MAP_ID, tx, ty, bot->GetPositionZ(),
+                false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+        }
+        return false;
+    }
 
     return false;
 }
@@ -68,37 +83,36 @@ bool MalygosPositionAction::Execute(Event /*event*/)
 bool MalygosTargetAction::Execute(Event /*event*/)
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "malygos");
-    if (!boss) { return false; }
-
-    uint8 phase = MalygosTrigger::getPhase(bot, boss);
+    uint8 phase = MalygosTrigger::getPhase(bot);
 
     if (phase == 1)
     {
         if (botAI->IsHeal(bot)) { return false; }
+        if (!boss) { return false; }
 
-        // Init this as boss by default, if no better target is found just fall back to Malygos
+        // Fall back to Malygos unless a spark should be picked up by ranged DPS.
         Unit* newTarget = boss;
-        // Unit* spark = nullptr;
+        Unit* spark = nullptr;
 
-        // GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-        // for (auto& target : targets)
-        // {
-        //     Unit* unit = botAI->GetUnit(target);
-        //     if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-        //     {
-        //         spark = unit;
-        //         break;
-        //     }
-        // }
+        GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
+        for (auto& target : targets)
+        {
+            Unit* unit = botAI->GetUnit(target);
+            if (unit && unit->GetEntry() == NPC_POWER_SPARK)
+            {
+                spark = unit;
+                break;
+            }
+        }
 
-        // if (spark && botAI->IsRangedDps(bot))
-        // {
-        //     newTarget = spark;
-        // }
+        if (spark && botAI->IsRangedDps(bot))
+        {
+            newTarget = spark;
+        }
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-        if (!currentTarget || currentTarget->GetEntry() != newTarget->GetEntry())
+        if (!currentTarget || currentTarget->GetGUID() != newTarget->GetGUID())
         {
             return Attack(newTarget);
         }
@@ -145,84 +159,117 @@ bool MalygosTargetAction::Execute(Event /*event*/)
         }
     }
 
-    // else if (phase == 3)
-    // {}
+    return false;
+}
+
+Unit* PullPowerSparkAction::GetSpark()
+{
+    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
+    for (auto& target : targets)
+    {
+        Unit* unit = botAI->GetUnit(target);
+        if (unit && unit->GetEntry() == NPC_POWER_SPARK)
+        {
+            return unit;
+        }
+    }
+    return nullptr;
+}
+
+bool PullPowerSparkAction::isUseful()
+{
+    if (!bot->IsClass(CLASS_DEATH_KNIGHT)) { return false; }
+    Unit* spark = GetSpark();
+    if (!spark) { return false; }
+    return botAI->CanCastSpell("death grip", spark);
+}
+
+bool PullPowerSparkAction::Execute(Event /*event*/)
+{
+    Unit* spark = GetSpark();
+    if (!spark) { return false; }
+
+    // Grip it away from Malygos so it never reaches him and hands him the buff.
+    if (spark->GetDistance2d(MALYGOS_STACK_POSITION.first, MALYGOS_STACK_POSITION.second) > 3.0f)
+    {
+        return botAI->CastSpell("death grip", spark);
+    }
 
     return false;
 }
 
-// bool PullPowerSparkAction::Execute(Event event)
-// {
-//     Unit* spark = nullptr;
+bool KillPowerSparkAction::isUseful()
+{
+    // Only ranged DPS peel onto sparks (matching MalygosTargetAction); tanks and melee stay on
+    // Malygos so his threat and Arcane Breath cone don't swing into the raid. DK grips handle the
+    // spark separately via PullPowerSparkAction. Hunters stay on the boss.
+    if (!botAI->IsRangedDps(bot)) { return false; }
+    if (bot->IsClass(CLASS_HUNTER)) { return false; }
 
-//     GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-//     for (auto& target : targets)
-//     {
-//         Unit* unit = botAI->GetUnit(target);
-//         if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-//         {
-//             spark = unit;
-//             break;
-//         }
-//     }
+    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
+    for (auto& target : targets)
+    {
+        Unit* unit = botAI->GetUnit(target);
+        if (unit && unit->GetEntry() == NPC_POWER_SPARK)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
-//     if (!spark) { return false; }
+bool KillPowerSparkAction::Execute(Event /*event*/)
+{
+    Unit* spark = nullptr;
+    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
+    for (auto& target : targets)
+    {
+        Unit* unit = botAI->GetUnit(target);
+        if (unit && unit->GetEntry() == NPC_POWER_SPARK)
+        {
+            spark = unit;
+            break;
+        }
+    }
+    if (!spark) { return false; }
 
-//     if (spark->GetDistance2d(MALYGOS_STACK_POSITION.first, MALYGOS_STACK_POSITION.second) > 3.0f)
-//     {
-//         bot->Yell("GRIPPING SPARK", LANG_UNIVERSAL);
-//         return botAI->CastSpell("death grip", spark);
-//     }
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    if (!currentTarget || currentTarget->GetGUID() != spark->GetGUID())
+    {
+        return Attack(spark);
+    }
+    return false;
+}
 
-//     return false;
-// }
+bool DeepBreathDodgeAction::Execute(Event /*event*/)
+{
+    float radius = 8.0f;
+    float extraDistance = 2.0f;
 
-// bool PullPowerSparkAction::isPossible()
-// {
-//     Unit* spark = nullptr;
+    // Arcane Overload is a non-attackable summoned hazard, so it never shows up in "nearest hostile
+    // npcs"; scan for the creature directly, same as DeepBreathTrigger.
+    Creature* closest = bot->FindNearestCreature(NPC_ARCANE_OVERLOAD, radius + extraDistance + 4.0f, true);
+    if (closest && bot->GetExactDist2d(closest) < radius + extraDistance)
+    {
+        return MoveAway(closest, fmin(4.0f, radius + extraDistance - bot->GetExactDist2d(closest)));
+    }
 
-//     GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-//     for (auto& target : targets)
-//     {
-//         Unit* unit = botAI->GetUnit(target);
-//         if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-//         {
-//             spark = unit;
-//             break;
-//         }
-//     }
+    return false;
+}
 
-//     return botAI->CanCastSpell(spell, spark);
-// }
+bool AvoidSurgeOfPowerAction::Execute(Event /*event*/)
+{
+    // Surge of Power's focus unit is non-attackable too; find it directly like SurgeOfPowerTrigger.
+    Creature* surge = bot->FindNearestCreature(NPC_SURGE_OF_POWER, 100.0f, true);
 
-// bool PullPowerSparkAction::isUseful()
-// {
-//     Unit* spark = nullptr;
+    // The beam runs from Malygos through the surge focus; stepping off that line clears it.
+    if (surge && bot->GetExactDist2d(surge) < 12.0f)
+    {
+        return MoveAway(surge, 6.0f);
+    }
 
-//     GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-//     for (auto& target : targets)
-//     {
-//         Unit* unit = botAI->GetUnit(target);
-//         if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-//         {
-//             spark = unit;
-//             break;
-//         }
-//     }
-
-//     if (!spark)
-//         return false;
-
-//     if (!spark->IsInWorld() || spark->GetMapId() != bot->GetMapId())
-//         return false;
-
-//     return bot->GetDistance2d(MALYGOS_STACK_POSITION.first, MALYGOS_STACK_POSITION.second) < 3.0f;
-// }
-
-// bool KillPowerSparkAction::Execute(Event event)
-// {
-//     return false;
-// }
+    return false;
+}
 
 bool EoEFlyDrakeAction::isPossible()
 {
@@ -238,35 +285,16 @@ bool EoEFlyDrakeAction::Execute(Event /*event*/)
     if (!vehicleBase || !masterVehicle) { return false; }
 
     MotionMaster* mm = vehicleBase->GetMotionMaster();
-    Unit* boss = AI_VALUE2(Unit*, "find target", "malygos");
-    if (boss && false)
-    {
-        // Handle as boss encounter instead of formation flight
-        mm->Clear(false);
-        float distance = vehicleBase->GetExactDist(boss);
-        float range = 55.0f;    // Drake range is 60yd
-        if (distance > range)
-        {
-            mm->MoveForwards(boss, range - distance);
-            vehicleBase->SendMovementFlagUpdate();
-            return true;
-        }
 
-        vehicleBase->SetFacingToObject(boss);
-        mm->MoveIdle();
-        vehicleBase->SendMovementFlagUpdate();
-        return false;
-    }
-
-    if (vehicleBase->GetExactDist(masterVehicle) > 5.0f)
+    // Fan out around the master so Static Field / Arcane Storm can't clip the whole flight.
+    if (vehicleBase->GetExactDist(masterVehicle) > 20.0f)
     {
         uint8 numPlayers;
         bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? numPlayers = 25 : numPlayers = 10;
-        // 3/4 of a circle, with frontal cone 90 deg unobstructed
+        // 3/4 of a circle, with a 90 deg frontal cone left clear
         float angle = botAI->GetGroupSlotIndex(bot) * (2*M_PI - M_PI_2)/numPlayers + M_PI_2;
-        // float angle = M_PI;
         vehicleBase->SetCanFly(true);
-        mm->MoveFollow(masterVehicle, 3.0f, angle);
+        mm->MoveFollow(masterVehicle, 15.0f, angle);
         vehicleBase->SendMovementFlagUpdate();
         return true;
     }
@@ -287,10 +315,7 @@ bool EoEDrakeAttackAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Unit* target = AI_VALUE(Unit*, "current target");
     Unit* boss = AI_VALUE2(Unit*, "find target", "malygos");
-    // if (!boss) { return false; }
-
     if (!boss)
     {
         GuidVector npcs = AI_VALUE(GuidVector, "possible targets");
@@ -306,48 +331,68 @@ bool EoEDrakeAttackAction::Execute(Event /*event*/)
             break;
         }
     }
-    // Check this again to see if a target was assigned
     if (!boss)
     {
         return false;
     }
 
-    uint8 numHealers;
-    bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? numHealers = 10 : numHealers = 4;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-    std::vector<std::pair<ObjectGuid, Player*>> sortedMembers;
-    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
-    {
-        Player* member = itr->GetSource();
-        sortedMembers.push_back(std::make_pair(member->GetGUID(), member));
-    }
-    std::sort(sortedMembers.begin(), sortedMembers.end());
-
-    int botIndex = -1;
-    for (size_t i = 0; i < sortedMembers.size(); ++i)
-    {
-        if (sortedMembers[i].first == bot->GetGUID())
-        {
-            botIndex = i;
-            break;
-        }
-    }
-
-    if (botIndex == -1)
-        return false;
-
-    if (botIndex > numHealers)
-    {
-        return DrakeDpsAction(boss);
-    }
-    else
+    if (IsHealDrake())
     {
         return DrakeHealAction();
     }
+    return DrakeDpsAction(boss);
+}
 
+bool EoEDrakeAttackAction::IsHealDrake()
+{
+    // Use the bot's real role first; fall back to a count-based split only to guarantee a
+    // minimum number of drake healers if too few bots are flagged as healers.
+    if (botAI->IsHeal(bot))
+    {
+        return true;
+    }
+
+    uint8 minHealers;
+    bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? minHealers = 6 : minHealers = 2;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
+
+    std::vector<ObjectGuid> nonHealers;
+    uint8 healerCount = 0;
+    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+    {
+        Player* member = itr->GetSource();
+        if (!member) { continue; }
+
+        if (botAI->IsHeal(member))
+        {
+            ++healerCount;
+        }
+        else
+        {
+            nonHealers.push_back(member->GetGUID());
+        }
+    }
+
+    if (healerCount >= minHealers)
+    {
+        return false;
+    }
+
+    // Promote the lowest-GUID non-healers to make up the healer shortfall (stable across bots).
+    std::sort(nonHealers.begin(), nonHealers.end());
+    uint8 needed = minHealers - healerCount;
+    for (uint8 i = 0; i < needed && i < nonHealers.size(); ++i)
+    {
+        if (nonHealers[i] == bot->GetGUID())
+        {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -364,10 +409,22 @@ bool EoEDrakeAttackAction::CastDrakeSpellAction(Unit* target, uint32 spellId, ui
 
 bool EoEDrakeAttackAction::DrakeDpsAction(Unit* target)
 {
-    Unit* vehicleBase = bot->GetVehicleBase();
-    if (!vehicleBase) { return false; }
+    Unit* drake = bot->GetVehicleBase();
+    if (!drake) { return false; }
 
-    uint8 comboPoints = vehicleBase->GetComboPoints(target);
+    // Close to firing range even if the master idles, without breaking the formation fan.
+    float range = 55.0f;    // Drake abilities reach 60yd
+    float distance = drake->GetExactDist(target);
+    if (distance > range)
+    {
+        MotionMaster* mm = drake->GetMotionMaster();
+        mm->Clear(false);
+        mm->MoveForwards(target, distance - range);
+        drake->SendMovementFlagUpdate();
+        return true;
+    }
+
+    uint8 comboPoints = drake->GetComboPoints(target);
     if (comboPoints >= 2)
     {
         return CastDrakeSpellAction(target, SPELL_ENGULF_IN_FLAMES, 0);
@@ -380,23 +437,142 @@ bool EoEDrakeAttackAction::DrakeDpsAction(Unit* target)
 
 bool EoEDrakeAttackAction::DrakeHealAction()
 {
-    Unit* vehicleBase = bot->GetVehicleBase();
-    if (!vehicleBase)
+    Unit* drake = bot->GetVehicleBase();
+    if (!drake)
     {
         return false;
     }
 
-    uint8 comboPoints = vehicleBase->GetComboPoints(vehicleBase);
-    if (comboPoints >= 5)
+    // Find the most-injured drake in the flight, not just our own vehicle.
+    Unit* healTarget = nullptr;
+    uint8 injuredCount = 0;
+    if (Group* group = bot->GetGroup())
     {
-        return CastDrakeSpellAction(vehicleBase, SPELL_LIFE_BURST, 0);
+        for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+        {
+            Player* member = itr->GetSource();
+            if (!member) { continue; }
+
+            Unit* allyDrake = member->GetVehicleBase();
+            if (!allyDrake || allyDrake->GetEntry() != NPC_WYRMREST_SKYTALON) { continue; }
+            if (allyDrake->IsFullHealth()) { continue; }
+
+            ++injuredCount;
+            if (!healTarget || allyDrake->GetHealthPct() < healTarget->GetHealthPct())
+            {
+                healTarget = allyDrake;
+            }
+        }
     }
-    else
+
+    if (!healTarget)
     {
-        // "Revivify" may be bugged server-side:
-        // "botAI->CanCastVehicleSpell()" returns SPELL_FAILED_BAD_TARGETS when targeting drakes.
-        // Forcing the cast attempt seems to succeed, not sure what's going on here.
-        // return CastDrakeSpellAction(target, SPELL_REVIVIFY, 0);
-        return botAI->CastVehicleSpell(SPELL_REVIVIFY, vehicleBase);
+        healTarget = drake;
     }
+
+    uint8 comboPoints = drake->GetComboPoints(drake);
+    // Life Burst is an AoE burst; worth the combo dump when several drakes are hurt.
+    if (comboPoints >= 5 && injuredCount >= 2)
+    {
+        return CastDrakeSpellAction(drake, SPELL_LIFE_BURST, 0);
+    }
+
+    // Revivify is single-target. CanCastVehicleSpell reports BAD_TARGETS on drakes, so force it.
+    return botAI->CastVehicleSpell(SPELL_REVIVIFY, healTarget);
+}
+
+bool AvoidStaticFieldAction::isPossible()
+{
+    Unit* vehicleBase = bot->GetVehicleBase();
+    return (vehicleBase && vehicleBase->GetEntry() == NPC_WYRMREST_SKYTALON);
+}
+
+bool AvoidStaticFieldAction::Execute(Event /*event*/)
+{
+    Unit* drake = bot->GetVehicleBase();
+    if (!drake) { return false; }
+
+    Creature* field = drake->FindNearestCreature(NPC_STATIC_FIELD, 20.0f, true);
+    if (!field) { return false; }
+
+    // Let an in-progress flee finish instead of clearing and restamping every tick, which stutters
+    // the drake in place and fights EoEFlyDrakeAction's follow formation.
+    if (drake->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
+    {
+        return true;
+    }
+
+    float dx = drake->GetPositionX() - field->GetPositionX();
+    float dy = drake->GetPositionY() - field->GetPositionY();
+    float len = std::sqrt(dx * dx + dy * dy);
+    if (len < 0.01f)
+    {
+        dx = std::cos(drake->GetOrientation());
+        dy = std::sin(drake->GetOrientation());
+        len = 1.0f;
+    }
+
+    float const flee = 25.0f;
+    float tx = field->GetPositionX() + dx / len * flee;
+    float ty = field->GetPositionY() + dy / len * flee;
+
+    MotionMaster* mm = drake->GetMotionMaster();
+    mm->Clear(false);
+    mm->MovePoint(0, tx, ty, drake->GetPositionZ());
+    drake->SendMovementFlagUpdate();
+    return true;
+}
+
+bool DrakeDodgeSurgeAction::isPossible()
+{
+    Unit* vehicleBase = bot->GetVehicleBase();
+    return (vehicleBase && vehicleBase->GetEntry() == NPC_WYRMREST_SKYTALON);
+}
+
+bool DrakeDodgeSurgeAction::Execute(Event /*event*/)
+{
+    Unit* drake = bot->GetVehicleBase();
+    if (!drake) { return false; }
+
+    Unit* boss = MalygosTrigger::getMalygos(bot);
+    if (!boss) { return false; }
+
+    // Flame Shield absorbs the surge; pop it on cooldown as the fixate lands.
+    if (botAI->CanCastVehicleSpell(SPELL_FLAME_SHIELD, drake) &&
+        !drake->HasSpellCooldown(SPELL_FLAME_SHIELD))
+    {
+        if (botAI->CastVehicleSpell(SPELL_FLAME_SHIELD, drake))
+        {
+            drake->AddSpellCooldown(SPELL_FLAME_SHIELD, 0, 30000);
+        }
+    }
+
+    // Blazing Speed to peel out of the beam faster when available.
+    if (botAI->CanCastVehicleSpell(SPELL_BLAZING_SPEED, drake) &&
+        !drake->HasSpellCooldown(SPELL_BLAZING_SPEED))
+    {
+        if (botAI->CastVehicleSpell(SPELL_BLAZING_SPEED, drake))
+        {
+            drake->AddSpellCooldown(SPELL_BLAZING_SPEED, 0, 60000);
+        }
+    }
+
+    // Let an in-progress strafe finish rather than clearing and reissuing it every tick, which
+    // stutters the drake and stomps EoEFlyDrakeAction's follow formation.
+    if (drake->GetMotionMaster()->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
+    {
+        return true;
+    }
+
+    // Strafe perpendicular to the boss line so we leave the beam's path.
+    float angle = boss->GetAngle(drake) + M_PI_2;
+    float const strafe = 25.0f;
+    float tx = drake->GetPositionX() + std::cos(angle) * strafe;
+    float ty = drake->GetPositionY() + std::sin(angle) * strafe;
+
+    MotionMaster* mm = drake->GetMotionMaster();
+    mm->Clear(false);
+    mm->MovePoint(0, tx, ty, drake->GetPositionZ());
+    drake->SendMovementFlagUpdate();
+    return true;
 }
