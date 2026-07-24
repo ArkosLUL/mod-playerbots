@@ -22,7 +22,7 @@ public:
 private:
     // Lust goes out a second earlier so the personal cooldowns land inside the haste window.
     static constexpr uint32 LUST_DWELL_MS = 3000;
-    static constexpr uint32 BURST_DWELL_MS = 4000;
+    static constexpr uint32 BURST_DWELL_MS = 5000;
 
     BurstHoldState holdState;
 };

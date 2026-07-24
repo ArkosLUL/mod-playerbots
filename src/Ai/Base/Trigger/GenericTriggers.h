@@ -165,7 +165,7 @@ public:
 private:
     // Dwell before a DPS pops the potion, so the main tank has firm aggro first. Matches the burst
     // multiplier's window; enforced here too so the timing holds even without the 'burst' strategy.
-    static constexpr uint32 POTION_HOLD_MS = 4000;
+    static constexpr uint32 POTION_HOLD_MS = 5000;
 
     BurstHoldState holdState;
 };
