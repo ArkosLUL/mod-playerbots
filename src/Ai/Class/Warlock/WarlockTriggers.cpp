@@ -9,6 +9,10 @@
 #include "Playerbots.h"
 #include "PlayerbotAI.h"
 #include "Player.h"
+#include "Group.h"
+#include "Bag.h"
+#include "Item.h"
+#include "RitualOfSoulsActions.h"
 
 static const uint32 SOUL_SHARD_ITEM_ID = 6265;
 
@@ -255,4 +259,68 @@ bool RainOfFireChannelCheckTrigger::IsActive()
 
     // Not channeling Rain of Fire
     return false;
+}
+
+char* strstri(char const* haystack, char const* needle);
+
+// Match the same rule the "healthstone" inventory value uses (item name contains "Healthstone"),
+// so this stays in sync with the soulwell / use-item paths instead of a parallel id list that can
+// drift as new ranks/variants are added.
+static bool ItemNameHasHealthstone(Item* item)
+{
+    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
+    return proto && strstri(proto->Name1.c_str(), "Healthstone");
+}
+
+static bool HasAnyHealthstone(Player* player)
+{
+    for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        if (ItemNameHasHealthstone(player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot)))
+            return true;
+
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
+        if (Bag* pBag = player->GetBagByPos(bag))
+            for (uint32 j = 0; j < pBag->GetBagSize(); ++j)
+                if (ItemNameHasHealthstone(pBag->GetItemByPos(j)))
+                    return true;
+
+    return false;
+}
+
+static constexpr float RITUAL_NEARBY_RANGE = 30.0f;
+static constexpr uint32 RITUAL_MIN_PARTICIPANTS = 3;  // caster + 2 helpers
+static constexpr uint32 RITUAL_MIN_MISSING = 3;       // don't bother for a single missing stone
+
+bool RitualOfSoulsTrigger::IsActive()
+{
+    if (bot->IsInCombat())
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    if (GetSoulShardCount(bot) < 1)
+        return false;
+
+    // Don't re-cast while a ritual or soulwell (ours or a group member's) is already up.
+    if (FindGroupRitualPortal(botAI, false) || FindGroupSoulwell(botAI))
+        return false;
+
+    uint32 nearbyMembers = 0;  // alive, out of combat, in range (incl. self) -> potential participants
+    uint32 missing = 0;        // of those, how many lack a healthstone
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->IsInCombat())
+            continue;
+        if (member != bot && bot->GetDistance(member) > RITUAL_NEARBY_RANGE)
+            continue;
+
+        ++nearbyMembers;
+        if (!HasAnyHealthstone(member))
+            ++missing;
+    }
+
+    return nearbyMembers >= RITUAL_MIN_PARTICIPANTS && missing >= RITUAL_MIN_MISSING;
 }
