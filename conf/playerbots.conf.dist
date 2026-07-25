@@ -295,8 +295,8 @@ AiPlayerbot.ItemSet.UseForUpgrades = 1
 
 # Score boost an item gets for every set bonus it keeps active or newly unlocks.
 # Higher values make bots hold on to tier pieces harder.
-# Default: 0.25 (+25% score per bonus)
-AiPlayerbot.ItemSet.BonusWeight = 0.25
+# Default: 0.15 (+15% score per bonus)
+AiPlayerbot.ItemSet.BonusWeight = 0.15
 
 # Score boost per already-owned set piece for items that do not cross a bonus threshold yet.
 # Nudges bots toward completing a set they have started.
@@ -309,8 +309,8 @@ AiPlayerbot.ItemSet.ProgressWeight = 0.03
 AiPlayerbot.Socket.ValueFactor = 1.0
 
 # Upper limit on the socket multiplier, so socket-heavy items cannot run away with the score.
-# Default: 1.5 (sockets can add at most 50%)
-AiPlayerbot.Socket.MaxMultiplier = 1.5
+# Default: 1.3 (sockets can add at most 30%)
+AiPlayerbot.Socket.MaxMultiplier = 1.3
 
 # Flat per-socket bonus used when gem value cannot be determined (no gems loaded, ValueFactor = 0,
 # or an item whose own stats score zero).

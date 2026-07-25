@@ -5,10 +5,8 @@
 
 #include "StatsWeightCalculator.h"
 
+#include <algorithm>
 #include <memory>
-#include <mutex>
-#include <shared_mutex>
-#include <unordered_map>
 
 #include "AiFactory.h"
 #include "DBCStores.h"
@@ -74,16 +72,11 @@ uint32 SpecPrimarySpellSchoolMask(uint8 cls, int tab)
     return 0;
 }
 
-// key: cls | tab | level | pvpSpec | socketColor  ->  best gem score for that socket.
-// Bots tick on parallel map threads, so lookups take the shared lock and misses the exclusive one.
-// Bounded by class x spec x level x color, so no eviction.
-std::unordered_map<uint64, float> s_bestGemScore;
-std::shared_mutex s_bestGemScoreMutex;
-
-// ItemSetEntry pairs spells[j] with the piece count that triggers it. Entries can be zero or
-// duplicated across the array, so count distinct thresholds only.
+// ItemSetEntry pairs spells[j] with the piece count that triggers it. Several spells can share one
+// threshold (that is still a single set bonus to the player), so count distinct thresholds only.
 uint32 ActiveSetBonuses(ItemSetEntry const* set, uint32 pieces)
 {
+    uint32 seen[MAX_ITEM_SET_SPELLS];
     uint32 active = 0;
     for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; ++j)
     {
@@ -91,7 +84,10 @@ uint32 ActiveSetBonuses(ItemSetEntry const* set, uint32 pieces)
         if (!threshold || !set->spells[j] || pieces < threshold)
             continue;
 
-        active++;
+        if (std::find(seen, seen + active, threshold) != seen + active)
+            continue;
+
+        seen[active++] = threshold;
     }
     return active;
 }
@@ -199,12 +195,16 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
         weight_ += stats_weights_[i] * collector_->stats[i];
     }
 
+    // Socket value is expressed relative to the item's own stats, so it needs the plain stat sum,
+    // before the type penalty and set multiplier scale weight_ away from that space.
+    float statSumWeight = weight_;
+
     CalculateItemTypePenalty(proto);
 
     if (enable_item_set_bonus_)
         CalculateItemSetMod(player_, proto);
 
-    CalculateSocketBonus(player_, proto);
+    CalculateSocketBonus(proto, statSumWeight);
 
     if (enable_quality_blend_)
     {
@@ -737,7 +737,7 @@ void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate con
     weight_ *= multiplier;
 }
 
-void StatsWeightCalculator::CalculateSocketBonus(Player* /*player*/, ItemTemplate const* proto)
+void StatsWeightCalculator::CalculateSocketBonus(ItemTemplate const* proto, float statSumWeight)
 {
     uint32 socketNum = 0;
     float socketValue = 0.0f;
@@ -757,32 +757,30 @@ void StatsWeightCalculator::CalculateSocketBonus(Player* /*player*/, ItemTemplat
     if (!socketNum)
         return;
 
-    // The gem scores live in the raw stat-sum space, the same space weight_ is in at this point
-    // (the quality/ilvl blend happens after). Expressing socket value as a fraction of the item's
-    // own stats keeps the multiplier unit-consistent and free of magic constants.
+    // Gem scores live in the raw stat-sum space, so the ratio is taken against statSumWeight rather
+    // than the running weight_. Expressing socket value as a fraction of the item's own stats keeps
+    // the multiplier unit-consistent and free of magic constants.
     float multiplier;
-    if (socketValue > 0.0f && weight_ > 0.001f)
-        multiplier = 1.0f + sPlayerbotAIConfig.socketValueFactor * (socketValue / weight_);
+    if (socketValue > 0.0f && statSumWeight > 0.001f)
+        multiplier = 1.0f + sPlayerbotAIConfig.socketValueFactor * (socketValue / statSumWeight);
     else
         multiplier = 1.0f + socketNum * sPlayerbotAIConfig.socketWeightPerSocket;
 
-    multiplier = std::min(multiplier, sPlayerbotAIConfig.socketMaxMultiplier);
+    // A cap below 1.0 would turn the bonus into a penalty on every socketed item, so floor it.
+    multiplier = std::min(multiplier, std::max(1.0f, sPlayerbotAIConfig.socketMaxMultiplier));
 
     weight_ *= multiplier;
 }
 
 float StatsWeightCalculator::BestGemScore(uint8 socketColor)
 {
-    uint64 key = (static_cast<uint64>(cls) << 40) | (static_cast<uint64>(static_cast<uint32>(tab)) << 32) |
-                 (static_cast<uint64>(lvl) << 16) | (static_cast<uint64>(pvpSpec_ ? 1 : 0) << 8) |
-                 static_cast<uint64>(socketColor);
+    // Only the flags a caller can flip between CalculateItem calls need to be in the key; everything
+    // else the score depends on (bot, class, spec, level) is fixed for this calculator's lifetime.
+    uint32 key = (pvpSpec_ ? 1u << 9 : 0) | (exclude_resilience_ ? 1u << 8 : 0) | socketColor;
 
-    {
-        std::shared_lock<std::shared_mutex> lock(s_bestGemScoreMutex);
-        auto it = s_bestGemScore.find(key);
-        if (it != s_bestGemScore.end())
-            return it->second;
-    }
+    auto it = best_gem_score_.find(key);
+    if (it != best_gem_score_.end())
+        return it->second;
 
     // Nothing to score before the factory has loaded its gem pool; don't cache that as a real 0.
     if (PlayerbotFactory::enchantGemIdCache.empty())
@@ -829,16 +827,14 @@ float StatsWeightCalculator::BestGemScore(uint8 socketColor)
         if (enchant->requiredLevel > lvl)
             continue;
 
-        // Skill-gated gems are skipped: the cache is keyed on class/spec/level only, and a bot's
-        // profession skill is not part of that key.
+        // Skill-gated gems are skipped: a bot's profession skill is not checked here.
         if (enchant->requiredSkill)
             continue;
 
         best = std::max(best, gemCalculator.CalculateEnchant(enchant_id));
     }
 
-    std::unique_lock<std::shared_mutex> lock(s_bestGemScoreMutex);
-    s_bestGemScore[key] = best;
+    best_gem_score_[key] = best;
     return best;
 }
 

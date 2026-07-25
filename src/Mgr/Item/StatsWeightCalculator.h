@@ -7,6 +7,8 @@
 #ifndef PLAYERBOTS_STATSWEIGHTCALCULATOR_H
 #define PLAYERBOTS_STATSWEIGHTCALCULATOR_H
 
+#include <unordered_map>
+
 #include "Player.h"
 #include "StatsCollector.h"
 
@@ -69,9 +71,10 @@ public:
 
     void CalculateRandomProperty(int32 randomPropertyId, uint32 itemId);
     void CalculateItemSetMod(Player* player, ItemTemplate const* proto);
-    void CalculateSocketBonus(Player* player, ItemTemplate const* proto);
-    // Score of the best gem this bot would slot into a socket of the given color, cached per
-    // class/spec/level/pvp/color.
+    // statSumWeight is the item's plain weighted stat sum, before the type penalty and set
+    // multiplier; socket value is scored as a fraction of it.
+    void CalculateSocketBonus(ItemTemplate const* proto, float statSumWeight);
+    // Score of the best gem this bot would slot into a socket of the given color.
     float BestGemScore(uint8 socketColor);
 
     void CalculateItemTypePenalty(ItemTemplate const* proto);
@@ -99,6 +102,9 @@ private:
     float stats_weights_[STATS_TYPE_MAX];
     bool pvpSpec_ = false;
     bool exclude_resilience_ = false;
+    // key: pvpSpec | excludeResilience | socketColor. Instance-local, so no cross-bot bleed and no
+    // locking; scoring every candidate gem per socket per item would otherwise dominate the cost.
+    std::unordered_map<uint32, float> best_gem_score_;
 };
 
 #endif
