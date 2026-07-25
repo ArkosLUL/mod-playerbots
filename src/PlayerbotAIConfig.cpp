@@ -701,6 +701,12 @@ bool PlayerbotAIConfig::Initialize()
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
     equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);
+    itemSetUseForUpgrades = sConfigMgr->GetOption<bool>("AiPlayerbot.ItemSet.UseForUpgrades", true);
+    itemSetBonusWeight = sConfigMgr->GetOption<float>("AiPlayerbot.ItemSet.BonusWeight", 0.25f);
+    itemSetProgressWeight = sConfigMgr->GetOption<float>("AiPlayerbot.ItemSet.ProgressWeight", 0.03f);
+    socketValueFactor = sConfigMgr->GetOption<float>("AiPlayerbot.Socket.ValueFactor", 1.0f);
+    socketMaxMultiplier = sConfigMgr->GetOption<float>("AiPlayerbot.Socket.MaxMultiplier", 1.5f);
+    socketWeightPerSocket = sConfigMgr->GetOption<float>("AiPlayerbot.Socket.WeightPerSocket", 0.03f);
     lootRollLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.LootRollLevel", 2);
     allowBoENeedIfUpgrade = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.AllowBoENeedIfUpgrade", true);
     allowBoUNeedIfUpgrade = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.AllowBoUNeedIfUpgrade", true);

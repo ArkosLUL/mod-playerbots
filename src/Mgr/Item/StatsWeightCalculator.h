@@ -55,6 +55,9 @@ public:
 
     void SetOverflowPenalty(bool apply) { enable_overflow_penalty_ = apply; }
     void SetItemSetBonus(bool apply) { enable_item_set_bonus_ = apply; }
+    // Set id of the piece occupying the slot being contested. That piece counts as removed, so the
+    // incumbent and the challenger are measured against the same baseline. 0 = no slot context.
+    void SetReplacedItemSet(uint32 setId) { replaced_item_set_ = setId; }
     void SetQualityBlend(bool apply) { enable_quality_blend_ = apply; }
     void SetPvpSpec(bool isPvp) { pvpSpec_ = isPvp; }
     void SetExcludeResilience(bool exclude) { exclude_resilience_ = exclude; }
@@ -67,6 +70,9 @@ public:
     void CalculateRandomProperty(int32 randomPropertyId, uint32 itemId);
     void CalculateItemSetMod(Player* player, ItemTemplate const* proto);
     void CalculateSocketBonus(Player* player, ItemTemplate const* proto);
+    // Score of the best gem this bot would slot into a socket of the given color, cached per
+    // class/spec/level/pvp/color.
+    float BestGemScore(uint8 socketColor);
 
     void CalculateItemTypePenalty(ItemTemplate const* proto);
     float ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot);
@@ -87,6 +93,7 @@ private:
     bool enable_overflow_penalty_;
     bool enable_item_set_bonus_;
     bool enable_quality_blend_;
+    uint32 replaced_item_set_ = 0;
 
     float weight_;
     float stats_weights_[STATS_TYPE_MAX];

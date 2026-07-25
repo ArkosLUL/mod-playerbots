@@ -1014,13 +1014,16 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     // One calculator for the candidate and every equipped slot below; sRandomItemMgr.CalculateItemWeight
     // would build a fresh StatsWeightCalculator per call. Same settings it uses.
     StatsWeightCalculator weightCalc(bot);
-    weightCalc.SetItemSetBonus(false);
+    weightCalc.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
     weightCalc.SetOverflowPenalty(false);
 
     float newScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
     if (newScore <= 0.0f)
         return usage;
     float bestOld = 0.0f;
+    // Candidate score measured in the same slot context as bestOld, so set bonuses do not count
+    // for the incumbent only.
+    float bestOldNewScore = newScore;
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
     {
@@ -1041,12 +1044,18 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         if (oldProto->Quality <= ITEM_QUALITY_NORMAL)
             continue;
 
+        weightCalc.SetReplacedItemSet(oldProto->ItemSet);
         float oldScore = weightCalc.CalculateItem(
             oldProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+        float slotNewScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
 
         if (oldScore > bestOld)
+        {
             bestOld = oldScore;
+            bestOldNewScore = slotNewScore;
+        }
     }
+    weightCalc.SetReplacedItemSet(0);
 
     if (bestOld <= 0.0f)
         return ITEM_USAGE_EQUIP;
@@ -1057,7 +1066,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     float const margin = (traits.isHealer && isLeveling) ? sPlayerbotAIConfig.equipUpgradeThreshold
                                                          : sPlayerbotAIConfig.crossArmorExtraMargin;
 
-    if (bestOld > 0.0f && newScore >= bestOld * margin)
+    if (bestOld > 0.0f && bestOldNewScore >= bestOld * margin)
         return ITEM_USAGE_EQUIP;
 
     return usage;
@@ -1163,7 +1172,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
     bool shouldEquip = false;
     // uint32 statWeight = sRandomItemMgr.GetLiveStatWeight(bot, itemProto->ItemId);
     StatsWeightCalculator calculator(bot);
-    calculator.SetItemSetBonus(false);
+    calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
 
     // Apply PvP weights if the bot is specced for PvP
@@ -1248,12 +1257,19 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         }
 
         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
+
+        // Both scores have to be taken with the contested slot treated as empty, otherwise the
+        // incumbent's own set bonus counts for it and cancels out.
+        calculator.SetReplacedItemSet(oldItemProto->ItemSet);
+        float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId);
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+        calculator.SetReplacedItemSet(0);
+
         if (oldItem)
         {
             // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-            if (itemScore || oldScore)
-                shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
+            if (slotItemScore || oldScore)
+                shouldEquipInSlot = slotItemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
         }
 
         // Bigger quiver
@@ -1278,7 +1294,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         // Compare items based on item level, quality or itemId.
         bool isBetter = false;
-        if (itemScore > oldScore)
+        if (slotItemScore > oldScore)
             isBetter = true;
         // else if (newItemPower == oldScore && itemProto->Quality > oldItemProto->Quality)
         //     isBetter = true;

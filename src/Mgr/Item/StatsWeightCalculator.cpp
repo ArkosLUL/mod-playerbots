@@ -6,6 +6,9 @@
 #include "StatsWeightCalculator.h"
 
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <unordered_map>
 
 #include "AiFactory.h"
 #include "DBCStores.h"
@@ -67,6 +70,54 @@ uint32 SpecPrimarySpellSchoolMask(uint8 cls, int tab)
             break;
         default:
             break;
+    }
+    return 0;
+}
+
+// key: cls | tab | level | pvpSpec | socketColor  ->  best gem score for that socket.
+// Bots tick on parallel map threads, so lookups take the shared lock and misses the exclusive one.
+// Bounded by class x spec x level x color, so no eviction.
+std::unordered_map<uint64, float> s_bestGemScore;
+std::shared_mutex s_bestGemScoreMutex;
+
+// ItemSetEntry pairs spells[j] with the piece count that triggers it. Entries can be zero or
+// duplicated across the array, so count distinct thresholds only.
+uint32 ActiveSetBonuses(ItemSetEntry const* set, uint32 pieces)
+{
+    uint32 active = 0;
+    for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; ++j)
+    {
+        uint32 threshold = set->items_to_triggerspell[j];
+        if (!threshold || !set->spells[j] || pieces < threshold)
+            continue;
+
+        active++;
+    }
+    return active;
+}
+
+// Smallest piece count above `pieces` that triggers another bonus, 0 if the set is maxed out.
+uint32 NextSetThreshold(ItemSetEntry const* set, uint32 pieces)
+{
+    uint32 next = 0;
+    for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; ++j)
+    {
+        uint32 threshold = set->items_to_triggerspell[j];
+        if (!threshold || !set->spells[j] || threshold <= pieces)
+            continue;
+
+        if (!next || threshold < next)
+            next = threshold;
+    }
+    return next;
+}
+
+uint32 EquippedSetPieces(Player* player, uint32 setId)
+{
+    for (ItemSetEffect const* eff : player->ItemSetEff)
+    {
+        if (eff && eff->setid == setId)
+            return eff->item_count;
     }
     return 0;
 }
@@ -667,40 +718,21 @@ void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate con
     if (!itemSet)
         return;
 
-    float multiplier = 1.0f;
-    size_t i = 0;
-    for (i = 0; i < player->ItemSetEff.size(); i++)
-    {
-        if (player->ItemSetEff[i])
-        {
-            ItemSetEffect* eff = player->ItemSetEff[i];
+    ItemSetEntry const* setEntry = sItemSetStore.LookupEntry(itemSet);
+    if (!setEntry)
+        return;
 
-            uint32 setId = eff->setid;
-            if (itemSet != setId)
-                continue;
+    // Baseline is the set as it would look with the contested slot empty, so the piece being
+    // replaced does not count toward its own score.
+    uint32 base = EquippedSetPieces(player, itemSet);
+    if (replaced_item_set_ == itemSet && base > 0)
+        base--;
 
-            const ItemSetEntry* setEntry = sItemSetStore.LookupEntry(setId);
-            if (!setEntry)
-                continue;
+    uint32 gained = ActiveSetBonuses(setEntry, base + 1) - ActiveSetBonuses(setEntry, base);
 
-            uint32 itemCount = eff->item_count;
-            uint32 max_items = 0;
-            for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; j++)
-                max_items = std::max(max_items, setEntry->items_to_triggerspell[j]);
-            if (itemCount < max_items)
-            {
-                multiplier += 0.1f * itemCount;  // 10% bonus for each item already equipped
-            }
-            else
-            {
-                multiplier = 1.0f;  // All item set effect has been triggerred
-            }
-            break;
-        }
-    }
-
-    if (i == player->ItemSetEff.size())
-        multiplier = 1.05f;  // this is the first item in the item set
+    float multiplier = 1.0f + sPlayerbotAIConfig.itemSetBonusWeight * gained;
+    if (!gained && NextSetThreshold(setEntry, base))
+        multiplier += sPlayerbotAIConfig.itemSetProgressWeight * (base + 1);
 
     weight_ *= multiplier;
 }
@@ -708,6 +740,7 @@ void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate con
 void StatsWeightCalculator::CalculateSocketBonus(Player* /*player*/, ItemTemplate const* proto)
 {
     uint32 socketNum = 0;
+    float socketValue = 0.0f;
     for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot < SOCK_ENCHANTMENT_SLOT + MAX_GEM_SOCKETS;
          ++enchant_slot)
     {
@@ -717,11 +750,96 @@ void StatsWeightCalculator::CalculateSocketBonus(Player* /*player*/, ItemTemplat
             continue;
 
         socketNum++;
+        if (sPlayerbotAIConfig.socketValueFactor > 0.0f)
+            socketValue += BestGemScore(socketColor);
     }
 
-    float multiplier = 1.0f + socketNum * 0.03f;  // 3% bonus for socket
+    if (!socketNum)
+        return;
+
+    // The gem scores live in the raw stat-sum space, the same space weight_ is in at this point
+    // (the quality/ilvl blend happens after). Expressing socket value as a fraction of the item's
+    // own stats keeps the multiplier unit-consistent and free of magic constants.
+    float multiplier;
+    if (socketValue > 0.0f && weight_ > 0.001f)
+        multiplier = 1.0f + sPlayerbotAIConfig.socketValueFactor * (socketValue / weight_);
+    else
+        multiplier = 1.0f + socketNum * sPlayerbotAIConfig.socketWeightPerSocket;
+
+    multiplier = std::min(multiplier, sPlayerbotAIConfig.socketMaxMultiplier);
 
     weight_ *= multiplier;
+}
+
+float StatsWeightCalculator::BestGemScore(uint8 socketColor)
+{
+    uint64 key = (static_cast<uint64>(cls) << 40) | (static_cast<uint64>(static_cast<uint32>(tab)) << 32) |
+                 (static_cast<uint64>(lvl) << 16) | (static_cast<uint64>(pvpSpec_ ? 1 : 0) << 8) |
+                 static_cast<uint64>(socketColor);
+
+    {
+        std::shared_lock<std::shared_mutex> lock(s_bestGemScoreMutex);
+        auto it = s_bestGemScore.find(key);
+        if (it != s_bestGemScore.end())
+            return it->second;
+    }
+
+    // Nothing to score before the factory has loaded its gem pool; don't cache that as a real 0.
+    if (PlayerbotFactory::enchantGemIdCache.empty())
+        return 0.0f;
+
+    bool isMetaSocket = (socketColor & SOCKET_COLOR_META) != 0;
+
+    // CalculateEnchant calls Reset(), which would wipe the weight and collector state of the
+    // in-flight CalculateItem, so score the candidate gems on a throwaway calculator.
+    StatsWeightCalculator gemCalculator(player_);
+    gemCalculator.SetPvpSpec(pvpSpec_);
+    gemCalculator.SetExcludeResilience(exclude_resilience_);
+
+    float best = 0.0f;
+    for (uint32 const& enchantGem : PlayerbotFactory::enchantGemIdCache)
+    {
+        ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
+        if (!gemTemplate)
+            continue;
+
+        if (sPlayerbotAIConfig.limitEnchantExpansion && lvl <= 70 && enchantGem >= 39900)
+            continue;
+
+        if (gemTemplate->ItemLevel > lvl)
+            continue;
+
+        GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
+        if (!gemProperties)
+            continue;
+
+        // meta gems only go in meta sockets, colored gems only in colored sockets
+        bool isMetaGem = gemProperties->color == SOCKET_COLOR_META;
+        if (isMetaGem != isMetaSocket)
+            continue;
+
+        uint32 enchant_id = gemProperties->spellitemenchantement;
+        if (!enchant_id)
+            continue;
+
+        SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchant_id);
+        if (!enchant || (enchant->slot != PERM_ENCHANTMENT_SLOT && enchant->slot != TEMP_ENCHANTMENT_SLOT))
+            continue;
+
+        if (enchant->requiredLevel > lvl)
+            continue;
+
+        // Skill-gated gems are skipped: the cache is keyed on class/spec/level only, and a bot's
+        // profession skill is not part of that key.
+        if (enchant->requiredSkill)
+            continue;
+
+        best = std::max(best, gemCalculator.CalculateEnchant(enchant_id));
+    }
+
+    std::unique_lock<std::shared_mutex> lock(s_bestGemScoreMutex);
+    s_bestGemScore[key] = best;
+    return best;
 }
 
 void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)

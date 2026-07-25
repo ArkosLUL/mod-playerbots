@@ -287,6 +287,36 @@ AiPlayerbot.AutoEquipUpgradeLoot = 1
 # Default: 1.1 (Equip when the equipment score of the new item is 1.1 times higher than the currently equipped item)
 AiPlayerbot.EquipUpgradeThreshold = 1.1
 
+# Take item set (tier) bonuses into account when bots pick upgrades and vote on loot.
+# When disabled, set bonuses only affect initial gearing, so bots break active 2/4/6-piece
+# bonuses for marginal stat upgrades.
+# Default: 1 (enabled)
+AiPlayerbot.ItemSet.UseForUpgrades = 1
+
+# Score boost an item gets for every set bonus it keeps active or newly unlocks.
+# Higher values make bots hold on to tier pieces harder.
+# Default: 0.25 (+25% score per bonus)
+AiPlayerbot.ItemSet.BonusWeight = 0.25
+
+# Score boost per already-owned set piece for items that do not cross a bonus threshold yet.
+# Nudges bots toward completing a set they have started.
+# Default: 0.03 (+3% per piece)
+AiPlayerbot.ItemSet.ProgressWeight = 0.03
+
+# Scales how much gem sockets add to an item's score. Sockets are valued at the best gem the bot
+# would actually slot, relative to what the item's own stats are worth.
+# Default: 1.0 (0 = fall back to the flat per-socket bonus below)
+AiPlayerbot.Socket.ValueFactor = 1.0
+
+# Upper limit on the socket multiplier, so socket-heavy items cannot run away with the score.
+# Default: 1.5 (sockets can add at most 50%)
+AiPlayerbot.Socket.MaxMultiplier = 1.5
+
+# Flat per-socket bonus used when gem value cannot be determined (no gems loaded, ValueFactor = 0,
+# or an item whose own stats score zero).
+# Default: 0.03 (+3% per socket)
+AiPlayerbot.Socket.WeightPerSocket = 0.03
+
 # Two rounds of equipment initialization to create more suitable gear
 AiPlayerbot.TwoRoundsGearInit = 0
 

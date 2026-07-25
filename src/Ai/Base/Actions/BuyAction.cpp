@@ -64,7 +64,9 @@ bool BuyAction::Execute(Event event)
                 continue;
 
             StatsWeightCalculator calculator(bot);
-            calculator.SetItemSetBonus(false);
+            // Vendor items are ranked against each other, not against a specific equipped slot,
+            // so no slot context here.
+            calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
             calculator.SetOverflowPenalty(false);
 
             std::sort(m_items_sorted.begin(), m_items_sorted.end(),

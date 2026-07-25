@@ -382,6 +382,12 @@ public:
     std::string autoPickReward;
     bool autoEquipUpgradeLoot;
     float equipUpgradeThreshold;
+    bool itemSetUseForUpgrades;    // Score item set bonuses on equip/loot decisions, not just initial gearing
+    float itemSetBonusWeight;      // Score boost per set bonus an item keeps or unlocks
+    float itemSetProgressWeight;   // Per-piece nudge toward the next set threshold
+    float socketValueFactor;       // Scales the gem-value-derived socket multiplier (0 = flat fallback)
+    float socketMaxMultiplier;     // Clamp on the socket multiplier
+    float socketWeightPerSocket;   // Flat per-socket bonus used when gem value is unusable
     int32 lootRollLevel;           // 0 = pass, 1 = greed only, 2 = full smart loot
     bool allowBoENeedIfUpgrade;    // Loot roll fine-tuning
     bool allowBoUNeedIfUpgrade;    // Allow NEED on BoU if upgrade
