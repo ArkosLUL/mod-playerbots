@@ -53,6 +53,7 @@
 #include "ReleaseSpiritAction.h"
 #include "RemoveAuraAction.h"
 #include "ResetInstancesAction.h"
+#include "RitualOfSoulsActions.h"
 #include "RevealGatheringItemAction.h"
 #include "RpgAction.h"
 #include "RpgSubActions.h"
@@ -118,6 +119,7 @@ public:
         creators["healthstone"] = &ActionContext::healthstone;
         creators["healing potion"] = &ActionContext::healing_potion;
         creators["mana potion"] = &ActionContext::mana_potion;
+        creators["offensive potion"] = &ActionContext::offensive_potion;
         creators["food"] = &ActionContext::food;
         creators["drink"] = &ActionContext::drink;
         creators["tank assist"] = &ActionContext::tank_assist;
@@ -279,9 +281,13 @@ public:
         creators["new rpg travel flight"] = &ActionContext::new_rpg_travel_flight;
         creators["new rpg outdoor pvp"] = &ActionContext::new_rpg_outdoor_pvp;
         creators["wait for attack keep safe distance"] = &ActionContext::wait_for_attack_keep_safe_distance;
+        creators["join ritual of souls"] = &ActionContext::join_ritual_of_souls;
+        creators["use soulwell"] = &ActionContext::use_soulwell;
     }
 
 private:
+    static Action* join_ritual_of_souls(PlayerbotAI* botAI) { return new JoinRitualOfSoulsAction(botAI); }
+    static Action* use_soulwell(PlayerbotAI* botAI) { return new UseSoulwellAction(botAI); }
     static Action* give_water(PlayerbotAI* botAI) { return new GiveWaterAction(botAI); }
     static Action* give_food(PlayerbotAI* botAI) { return new GiveFoodAction(botAI); }
     static Action* ra(PlayerbotAI* botAI) { return new RemoveAuraAction(botAI); }
@@ -363,6 +369,7 @@ private:
     static Action* food(PlayerbotAI* botAI) { return new EatAction(botAI); }
     static Action* mana_potion(PlayerbotAI* botAI) { return new UseManaPotion(botAI); }
     static Action* healing_potion(PlayerbotAI* botAI) { return new UseHealingPotion(botAI); }
+    static Action* offensive_potion(PlayerbotAI* botAI) { return new UseOffensivePotion(botAI); }
     static Action* healthstone(PlayerbotAI* botAI) { return new UseItemAction(botAI, "healthstone"); }
     static Action* move_out_of_enemy_contact(PlayerbotAI* botAI) { return new MoveOutOfEnemyContactAction(botAI); }
     static Action* set_facing(PlayerbotAI* botAI) { return new SetFacingTargetAction(botAI); }

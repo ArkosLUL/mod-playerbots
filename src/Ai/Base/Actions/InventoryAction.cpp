@@ -273,6 +273,13 @@ std::vector<Item*> InventoryAction::parseItems(std::string const text, IterateIt
         found.insert(visitor.GetResult().begin(), visitor.GetResult().end());
     }
 
+    if (text == "offensive potion")
+    {
+        FindOffensivePotionVisitor visitor(bot);
+        IterateItems(&visitor, ITERATE_ITEMS_IN_BAGS);
+        found.insert(visitor.GetResult().begin(), visitor.GetResult().end());
+    }
+
     if (text == "mount")
     {
         FindMountVisitor visitor(bot);

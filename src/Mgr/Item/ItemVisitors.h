@@ -299,6 +299,16 @@ private:
     uint32 effectId;
 };
 
+class FindOffensivePotionVisitor : public FindUsableItemVisitor
+{
+public:
+    FindOffensivePotionVisitor(Player* bot) : FindUsableItemVisitor(bot) {}
+
+    // Matches the OffensivePotionId set (haste/strength/destruction/speed/wild magic). These are
+    // stat/haste potions, not HEAL/ENERGIZE effect potions, so FindPotionVisitor can't match them.
+    bool Accept(ItemTemplate const* proto) override;
+};
+
 class FindFoodVisitor : public FindUsableItemVisitor
 {
 public:

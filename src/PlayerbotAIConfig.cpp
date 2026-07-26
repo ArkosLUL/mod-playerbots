@@ -621,6 +621,9 @@ bool PlayerbotAIConfig::Initialize()
     addClassCommand = sConfigMgr->GetOption<int32>("AiPlayerbot.AddClassCommand", 1);
     addClassAccountPoolSize = sConfigMgr->GetOption<int32>("AiPlayerbot.AddClassAccountPoolSize", 50);
     maintenanceCommand = sConfigMgr->GetOption<int32>("AiPlayerbot.MaintenanceCommand", 1);
+    fulfillMetaGemRequirements = sConfigMgr->GetOption<bool>("AiPlayerbot.FulfillMetaGemRequirements", true);
+    offensivePotions = sConfigMgr->GetOption<bool>("AiPlayerbot.OffensivePotions", true);
+    burstOnBossOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.BurstOnBossOnly", true);
 
     altMaintenanceAttunementQs = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceAttunementQuests", true);
     altMaintenanceBags = sConfigMgr->GetOption<bool>("AiPlayerbot.AltMaintenanceBags", true);
@@ -685,9 +688,44 @@ bool PlayerbotAIConfig::Initialize()
     lootRollDisenchant = sConfigMgr->GetOption<bool>("AiPlayerbot.LootRollDisenchant", false);
     lootGreedRollLevel = sConfigMgr->GetOption<bool>("AiPlayerbot.LootGreedRollLevel", false);
     lootStrategy = sConfigMgr->GetOption<std::string>("AiPlayerbot.LootStrategy", "normal");
+    battleRezBossOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.BattleRezBossOnly", true);
+    ulduarVezaxHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarVezaxHardMode", false);
+    ulduarIronAssemblyHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarIronAssemblyHardMode", false);
+    ulduarFlameLeviathanHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFlameLeviathanHardMode", false);
+    ulduarThorimHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarThorimHardMode", false);
+    ulduarFreyaHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFreyaHardMode", false);
+    ulduarHodirHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarHodirHardMode", false);
+    ulduarMimironHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarMimironHardMode", false);
+    ulduarYoggSaronHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarYoggSaronHardMode", false);
+    sartharionDrakesAlive = std::clamp(sConfigMgr->GetOption<int32>("AiPlayerbot.SartharionDrakesAlive", 0), 0, 3);
     autoPickReward = sConfigMgr->GetOption<std::string>("AiPlayerbot.AutoPickReward", "yes");
     autoEquipUpgradeLoot = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoEquipUpgradeLoot", true);
     equipUpgradeThreshold = sConfigMgr->GetOption<float>("AiPlayerbot.EquipUpgradeThreshold", 1.1f);
+    itemSetUseForUpgrades = sConfigMgr->GetOption<bool>("AiPlayerbot.ItemSet.UseForUpgrades", true);
+    itemSetBonusWeight = sConfigMgr->GetOption<float>("AiPlayerbot.ItemSet.BonusWeight", 0.25f);
+    itemSetProgressWeight = sConfigMgr->GetOption<float>("AiPlayerbot.ItemSet.ProgressWeight", 0.03f);
+    socketValueFactor = sConfigMgr->GetOption<float>("AiPlayerbot.Socket.ValueFactor", 1.0f);
+    socketMaxMultiplier = sConfigMgr->GetOption<float>("AiPlayerbot.Socket.MaxMultiplier", 1.5f);
+    socketWeightPerSocket = sConfigMgr->GetOption<float>("AiPlayerbot.Socket.WeightPerSocket", 0.03f);
+    lootRollLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.LootRollLevel", 2);
+    allowBoENeedIfUpgrade = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.AllowBoENeedIfUpgrade", true);
+    allowBoUNeedIfUpgrade = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.AllowBoUNeedIfUpgrade", true);
+    crossArmorExtraMargin = sConfigMgr->GetOption<float>("AiPlayerbot.Roll.CrossArmorExtraMargin", 1.20f);
+    crossArmorGreedIsPass = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.CrossArmorGreedIsPass", false);
+    uint32 deMode = sConfigMgr->GetOption<uint32>("AiPlayerbot.Roll.UseDEButton", 1u);
+    if (deMode > 2u)
+        deMode = 2u;
+    deButtonMode = static_cast<uint8>(deMode);
+    tokenILevelMargin = sConfigMgr->GetOption<float>("AiPlayerbot.Roll.TokenILevelMargin", 0.10f);
+    uint32 tokenRollMode = sConfigMgr->GetOption<uint32>("AiPlayerbot.Roll.SanctificationTokenMode", 0u);
+    if (tokenRollMode > 1u)
+        tokenRollMode = 1u;
+    sanctificationTokenRollMode = static_cast<uint8>(tokenRollMode);
+    needOnProfessionRecipes = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.NeedOnProfessionRecipes", true);
+    recipesIgnoreSkillRank = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.Recipes.IgnoreSkillRank", false);
+    rollUpgradesOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.UpgradesOnly", false);
+    smartNeedBySpec = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.SmartNeedBySpec", true);
+    rollUseGroupUsageChecks = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.UseGroupUsageChecks", false);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);
     syncQuestWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestWithPlayer", true);
     syncQuestForPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestForPlayer", false);

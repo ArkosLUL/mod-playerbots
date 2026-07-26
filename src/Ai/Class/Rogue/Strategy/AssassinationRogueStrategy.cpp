@@ -203,6 +203,17 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         )
     );
 
+    // On packs the redirect has to be up before Fan of Knives, so keep it on cooldown instead of
+    // waiting for threat to already be lost.
+    triggers.push_back(
+        new TriggerNode(
+            "tricks of the trade on main tank and light aoe",
+            {
+                NextAction("tricks of the trade on main tank", ACTION_HIGH + 7),
+            }
+        )
+    );
+
     triggers.push_back(
         new TriggerNode(
             "enemy out of melee",

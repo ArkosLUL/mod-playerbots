@@ -1963,6 +1963,13 @@ bool LadyVashjAssignPhase2AndPhase3DpsPriorityAction::Execute(Event /*event*/)
         currentTarget = nullptr;
     }
 
+    // Redirect the bot's pet along with the bot: the generic pet-attack action is disabled
+    // globally, so the pet would otherwise keep hitting the invulnerable Vashj in phase 2.
+    if (target)
+        CommandPetAttack(botAI, target);
+    else
+        StopPet(botAI);
+
     if (target && currentTarget != target &&
         AI_VALUE(Unit*, "current target") != target)
         return Attack(target);

@@ -152,6 +152,10 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
     ActionBasket* basket = nullptr;
     time_t currentTime = time(nullptr);
 
+    // Resolved once per tick: the lookup copies a std::string through two layers and this loop runs
+    // for every queued action of every bot.
+    bool const debugMove = botAI->HasStrategy("debug move", BOT_STATE_NON_COMBAT);
+
     // Update triggers and push default actions
     ProcessTriggers(minimal);
     PushDefaultActions();
@@ -215,6 +219,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 if (actionExecuted)
                 {
                     LogAction("A:%s - OK", action->getName().c_str());
+                    LogMeleeApproach(debugMove, action, "won the tick", relevance);
                     MultiplyAndPush(actionNode->getContinuers(), relevance, false, event, "cont");
                     lastRelevance = relevance;
                     delete actionNode;  // Safe memory management
@@ -223,18 +228,21 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 else
                 {
                     LogAction("A:%s - FAILED", action->getName().c_str());
+                    LogMeleeApproach(debugMove, action, "failed", relevance);
                     MultiplyAndPush(actionNode->getAlternatives(), relevance + 0.003f, false, event, "alt");
                 }
             }
             else
             {
                 LogAction("A:%s - IMPOSSIBLE", action->getName().c_str());
+                LogMeleeApproach(debugMove, action, "impossible", relevance);
                 MultiplyAndPush(actionNode->getAlternatives(), relevance + 0.003f, false, event, "alt");
             }
         }
         else
         {
             LogAction("A:%s - USELESS", action->getName().c_str());
+            LogMeleeApproach(debugMove, action, "useless", relevance);
             lastRelevance = relevance;
         }
 
@@ -638,6 +646,28 @@ void Engine::LogAction(char const* format, ...)
     {
         LOG_DEBUG("playerbots", "{} {}", bot->GetName().c_str(), buf);
     }
+}
+
+// Diagnostics for melee bots that fail to close on a target: shows which action wins the tick
+// while the bot is still out of melee range. Only runs under the "debug move" strategy.
+void Engine::LogMeleeApproach(bool debugMove, Action* action, char const* verdict, float relevance)
+{
+    if (!debugMove || !action)
+        return;
+
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsMelee(bot))
+        return;
+
+    Unit* target = aiObjectContext->GetValue<Unit*>("current target")->Get();
+    if (!target || bot->IsWithinMeleeRange(target))
+        return;
+
+    LOG_DEBUG("playerbots",
+              "MeleeApproach bot: {}, action: {} ({}), relevance: {:.2f}, target: {} (entry {}), dist: {:.2f}, "
+              "meleeRange: {:.2f}, targetReach: {:.2f}",
+              bot->GetName(), action->getName(), verdict, relevance, target->GetName(), target->GetEntry(),
+              bot->GetExactDist(target), bot->GetMeleeRange(target), target->GetCombatReach());
 }
 
 void Engine::ChangeStrategy(std::string const names)

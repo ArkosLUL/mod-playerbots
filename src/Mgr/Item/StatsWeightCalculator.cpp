@@ -5,6 +5,7 @@
 
 #include "StatsWeightCalculator.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "AiFactory.h"
@@ -34,6 +35,88 @@ constexpr uint32 SPELL_POLEAXE_SPECIALIZATION = 12785;
 constexpr uint32 SPELL_NERVES_OF_COLD_STEEL = 50138;
 constexpr uint32 SPELL_SHADOW_FOCUS = 15835;
 constexpr uint32 SPELL_ARCANE_FOCUS = 12840;
+
+// Primary nuke school per caster spec, so single-school spell power items
+// (e.g. +51 fire damage) score for the specs they actually benefit
+uint32 SpecPrimarySpellSchoolMask(uint8 cls, int tab)
+{
+    switch (cls)
+    {
+        case CLASS_MAGE:
+            if (tab == MAGE_TAB_ARCANE)
+                return SPELL_SCHOOL_MASK_ARCANE;
+            if (tab == MAGE_TAB_FIRE)
+                return SPELL_SCHOOL_MASK_FIRE;
+            if (tab == MAGE_TAB_FROST)
+                return SPELL_SCHOOL_MASK_FROST;
+            break;
+        case CLASS_WARLOCK:
+            if (tab == WARLOCK_TAB_DESTRUCTION)
+                return SPELL_SCHOOL_MASK_FIRE;
+            return SPELL_SCHOOL_MASK_SHADOW;
+        case CLASS_PRIEST:
+            if (tab == PRIEST_TAB_SHADOW)
+                return SPELL_SCHOOL_MASK_SHADOW;
+            break;
+        case CLASS_DRUID:
+            if (tab == DRUID_TAB_BALANCE)
+                return SPELL_SCHOOL_MASK_NATURE;
+            break;
+        case CLASS_SHAMAN:
+            if (tab == SHAMAN_TAB_ELEMENTAL)
+                return SPELL_SCHOOL_MASK_NATURE;
+            break;
+        default:
+            break;
+    }
+    return 0;
+}
+
+// ItemSetEntry pairs spells[j] with the piece count that triggers it. Several spells can share one
+// threshold (that is still a single set bonus to the player), so count distinct thresholds only.
+uint32 ActiveSetBonuses(ItemSetEntry const* set, uint32 pieces)
+{
+    uint32 seen[MAX_ITEM_SET_SPELLS];
+    uint32 active = 0;
+    for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; ++j)
+    {
+        uint32 threshold = set->items_to_triggerspell[j];
+        if (!threshold || !set->spells[j] || pieces < threshold)
+            continue;
+
+        if (std::find(seen, seen + active, threshold) != seen + active)
+            continue;
+
+        seen[active++] = threshold;
+    }
+    return active;
+}
+
+// Smallest piece count above `pieces` that triggers another bonus, 0 if the set is maxed out.
+uint32 NextSetThreshold(ItemSetEntry const* set, uint32 pieces)
+{
+    uint32 next = 0;
+    for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; ++j)
+    {
+        uint32 threshold = set->items_to_triggerspell[j];
+        if (!threshold || !set->spells[j] || threshold <= pieces)
+            continue;
+
+        if (!next || threshold < next)
+            next = threshold;
+    }
+    return next;
+}
+
+uint32 EquippedSetPieces(Player* player, uint32 setId)
+{
+    for (ItemSetEffect const* eff : player->ItemSetEff)
+    {
+        if (eff && eff->setid == setId)
+            return eff->item_count;
+    }
+    return 0;
+}
 }
 
 template <size_t Size>
@@ -63,7 +146,7 @@ StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
     cls = player->getClass();
     lvl = player->GetLevel();
     tab = AiFactory::GetPlayerSpecTab(player);
-    collector_ = std::make_unique<StatsCollector>(type_, cls);
+    collector_ = std::make_unique<StatsCollector>(type_, cls, SpecPrimarySpellSchoolMask(cls, tab));
 
     if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_UNHOLY)
         hitOverflowType_ = CollectorType::SPELL;
@@ -112,12 +195,16 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
         weight_ += stats_weights_[i] * collector_->stats[i];
     }
 
+    // Socket value is expressed relative to the item's own stats, so it needs the plain stat sum,
+    // before the type penalty and set multiplier scale weight_ away from that space.
+    float statSumWeight = weight_;
+
     CalculateItemTypePenalty(proto);
 
     if (enable_item_set_bonus_)
         CalculateItemSetMod(player_, proto);
 
-    CalculateSocketBonus(player_, proto);
+    CalculateSocketBonus(proto, statSumWeight);
 
     if (enable_quality_blend_)
     {
@@ -339,6 +426,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_HIT] += 2.3f;
         stats_weights_[STATS_TYPE_CRIT] += 2.2f;
         stats_weights_[STATS_TYPE_HASTE] += 0.8f;
+        stats_weights_[STATS_TYPE_INTELLECT] -= 2.0f;
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 2.0f;
         stats_weights_[STATS_TYPE_DEFENSE] -= 1.0f;
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.5f;
@@ -353,6 +441,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_HIT] += 2.0f;
         stats_weights_[STATS_TYPE_CRIT] += 1.9f;
         stats_weights_[STATS_TYPE_HASTE] += 0.8f;
+        stats_weights_[STATS_TYPE_INTELLECT] -= 2.0f;
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 2.0f;
         stats_weights_[STATS_TYPE_DEFENSE] -= 1.0f;
         stats_weights_[STATS_TYPE_EXPERTISE] += 1.4f;
@@ -565,53 +654,93 @@ void StatsWeightCalculator::GenerateAdditionalWeights(Player* player)
         stats_weights_[STATS_TYPE_RESILIENCE] -= 3.0f;
 }
 
+namespace
+{
+constexpr float kSmartStatWeightThreshold = 0.2f;
+
+uint32 BuildSmartMaskFromWeights(float const* weights)
+{
+    uint32 mask = SMARTSTAT_NONE;
+
+    if (weights[STATS_TYPE_HIT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_HIT;
+    if (weights[STATS_TYPE_SPELL_POWER] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_HEAL_POWER] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_SPELL_POWER;
+    if (weights[STATS_TYPE_HASTE] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_HASTE;
+    if (weights[STATS_TYPE_CRIT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_CRIT;
+    if (weights[STATS_TYPE_INTELLECT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_INTELLECT;
+    if (weights[STATS_TYPE_SPIRIT] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_SPIRIT;
+    if (weights[STATS_TYPE_EXPERTISE] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_EXPERTISE;
+    if (weights[STATS_TYPE_ATTACK_POWER] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_ATTACK_POWER;
+    if (weights[STATS_TYPE_ARMOR_PENETRATION] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_ARMOR_PEN;
+    if (weights[STATS_TYPE_AGILITY] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_AGILITY;
+    if (weights[STATS_TYPE_STAMINA] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_STAMINA;
+    if (weights[STATS_TYPE_DEFENSE] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_DODGE] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_PARRY] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_BLOCK_RATING] >= kSmartStatWeightThreshold ||
+        weights[STATS_TYPE_BLOCK_VALUE] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_AVOIDANCE;
+    if (weights[STATS_TYPE_MANA_REGENERATION] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_MP5;
+    if (weights[STATS_TYPE_STRENGTH] >= kSmartStatWeightThreshold)
+        mask |= SMARTSTAT_STRENGTH;
+
+    return mask;
+}
+}  // namespace
+
+uint32 StatsWeightCalculator::BuildSmartStatMask(Player* player)
+{
+    if (!player)
+        return SMARTSTAT_NONE;
+
+    StatsWeightCalculator calculator(player);
+    calculator.Reset();
+    calculator.GenerateWeights(player);
+
+    return BuildSmartMaskFromWeights(calculator.stats_weights_);
+}
+
 void StatsWeightCalculator::CalculateItemSetMod(Player* player, ItemTemplate const* proto)
 {
     uint32 itemSet = proto->ItemSet;
     if (!itemSet)
         return;
 
-    float multiplier = 1.0f;
-    size_t i = 0;
-    for (i = 0; i < player->ItemSetEff.size(); i++)
-    {
-        if (player->ItemSetEff[i])
-        {
-            ItemSetEffect* eff = player->ItemSetEff[i];
+    ItemSetEntry const* setEntry = sItemSetStore.LookupEntry(itemSet);
+    if (!setEntry)
+        return;
 
-            uint32 setId = eff->setid;
-            if (itemSet != setId)
-                continue;
+    // Baseline is the set as it would look with the contested slot empty, so the piece being
+    // replaced does not count toward its own score.
+    uint32 base = EquippedSetPieces(player, itemSet);
+    if (replaced_item_set_ == itemSet && base > 0)
+        base--;
 
-            const ItemSetEntry* setEntry = sItemSetStore.LookupEntry(setId);
-            if (!setEntry)
-                continue;
+    uint32 gained = ActiveSetBonuses(setEntry, base + 1) - ActiveSetBonuses(setEntry, base);
 
-            uint32 itemCount = eff->item_count;
-            uint32 max_items = 0;
-            for (size_t j = 0; j < MAX_ITEM_SET_SPELLS; j++)
-                max_items = std::max(max_items, setEntry->items_to_triggerspell[j]);
-            if (itemCount < max_items)
-            {
-                multiplier += 0.1f * itemCount;  // 10% bonus for each item already equipped
-            }
-            else
-            {
-                multiplier = 1.0f;  // All item set effect has been triggerred
-            }
-            break;
-        }
-    }
-
-    if (i == player->ItemSetEff.size())
-        multiplier = 1.05f;  // this is the first item in the item set
+    float multiplier = 1.0f + sPlayerbotAIConfig.itemSetBonusWeight * gained;
+    if (!gained && NextSetThreshold(setEntry, base))
+        multiplier += sPlayerbotAIConfig.itemSetProgressWeight * (base + 1);
 
     weight_ *= multiplier;
 }
 
-void StatsWeightCalculator::CalculateSocketBonus(Player* /*player*/, ItemTemplate const* proto)
+void StatsWeightCalculator::CalculateSocketBonus(ItemTemplate const* proto, float statSumWeight)
 {
     uint32 socketNum = 0;
+    float socketValue = 0.0f;
     for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot < SOCK_ENCHANTMENT_SLOT + MAX_GEM_SOCKETS;
          ++enchant_slot)
     {
@@ -621,11 +750,92 @@ void StatsWeightCalculator::CalculateSocketBonus(Player* /*player*/, ItemTemplat
             continue;
 
         socketNum++;
+        if (sPlayerbotAIConfig.socketValueFactor > 0.0f)
+            socketValue += BestGemScore(socketColor);
     }
 
-    float multiplier = 1.0f + socketNum * 0.03f;  // 3% bonus for socket
+    if (!socketNum)
+        return;
+
+    // Gem scores live in the raw stat-sum space, so the ratio is taken against statSumWeight rather
+    // than the running weight_. Expressing socket value as a fraction of the item's own stats keeps
+    // the multiplier unit-consistent and free of magic constants.
+    float multiplier;
+    if (socketValue > 0.0f && statSumWeight > 0.001f)
+        multiplier = 1.0f + sPlayerbotAIConfig.socketValueFactor * (socketValue / statSumWeight);
+    else
+        multiplier = 1.0f + socketNum * sPlayerbotAIConfig.socketWeightPerSocket;
+
+    // A cap below 1.0 would turn the bonus into a penalty on every socketed item, so floor it.
+    multiplier = std::min(multiplier, std::max(1.0f, sPlayerbotAIConfig.socketMaxMultiplier));
 
     weight_ *= multiplier;
+}
+
+float StatsWeightCalculator::BestGemScore(uint8 socketColor)
+{
+    // Only the flags a caller can flip between CalculateItem calls need to be in the key; everything
+    // else the score depends on (bot, class, spec, level) is fixed for this calculator's lifetime.
+    uint32 key = (pvpSpec_ ? 1u << 9 : 0) | (exclude_resilience_ ? 1u << 8 : 0) | socketColor;
+
+    auto it = best_gem_score_.find(key);
+    if (it != best_gem_score_.end())
+        return it->second;
+
+    // Nothing to score before the factory has loaded its gem pool; don't cache that as a real 0.
+    if (PlayerbotFactory::enchantGemIdCache.empty())
+        return 0.0f;
+
+    bool isMetaSocket = (socketColor & SOCKET_COLOR_META) != 0;
+
+    // CalculateEnchant calls Reset(), which would wipe the weight and collector state of the
+    // in-flight CalculateItem, so score the candidate gems on a throwaway calculator.
+    StatsWeightCalculator gemCalculator(player_);
+    gemCalculator.SetPvpSpec(pvpSpec_);
+    gemCalculator.SetExcludeResilience(exclude_resilience_);
+
+    float best = 0.0f;
+    for (uint32 const& enchantGem : PlayerbotFactory::enchantGemIdCache)
+    {
+        ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
+        if (!gemTemplate)
+            continue;
+
+        if (sPlayerbotAIConfig.limitEnchantExpansion && lvl <= 70 && enchantGem >= 39900)
+            continue;
+
+        if (gemTemplate->ItemLevel > lvl)
+            continue;
+
+        GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
+        if (!gemProperties)
+            continue;
+
+        // meta gems only go in meta sockets, colored gems only in colored sockets
+        bool isMetaGem = gemProperties->color == SOCKET_COLOR_META;
+        if (isMetaGem != isMetaSocket)
+            continue;
+
+        uint32 enchant_id = gemProperties->spellitemenchantement;
+        if (!enchant_id)
+            continue;
+
+        SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchant_id);
+        if (!enchant || (enchant->slot != PERM_ENCHANTMENT_SLOT && enchant->slot != TEMP_ENCHANTMENT_SLOT))
+            continue;
+
+        if (enchant->requiredLevel > lvl)
+            continue;
+
+        // Skill-gated gems are skipped: a bot's profession skill is not checked here.
+        if (enchant->requiredSkill)
+            continue;
+
+        best = std::max(best, gemCalculator.CalculateEnchant(enchant_id));
+    }
+
+    best_gem_score_[key] = best;
+    return best;
 }
 
 void StatsWeightCalculator::CalculateItemTypePenalty(ItemTemplate const* proto)

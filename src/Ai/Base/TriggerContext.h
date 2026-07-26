@@ -18,6 +18,7 @@
 #include "NewRpgTriggers.h"
 #include "PvpTriggers.h"
 #include "PullTriggers.h"
+#include "RitualOfSoulsActions.h"
 #include "RpgTriggers.h"
 #include "RtiTriggers.h"
 #include "StuckTriggers.h"
@@ -93,6 +94,7 @@ public:
         creators["tank assist"] = &TriggerContext::TankAssist;
         creators["lose aggro"] = &TriggerContext::LoseAggro;
         creators["has aggro"] = &TriggerContext::HasAggro;
+        creators["offensive potion"] = &TriggerContext::OffensivePotion;
 
         creators["light aoe"] = &TriggerContext::LightAoe;
         creators["medium aoe"] = &TriggerContext::MediumAoe;
@@ -245,9 +247,13 @@ public:
         creators["can use fishing bobber"] = &TriggerContext::can_use_fishing_bobber;
         creators["new pet"] = &TriggerContext::new_pet;
         creators["wait for attack safe distance"] = &TriggerContext::wait_for_attack_safe_distance;
+        creators["ritual of souls portal nearby"] = &TriggerContext::ritual_of_souls_portal_nearby;
+        creators["soulwell nearby"] = &TriggerContext::soulwell_nearby;
     }
 
 private:
+    static Trigger* ritual_of_souls_portal_nearby(PlayerbotAI* botAI) { return new RitualPortalNearbyTrigger(botAI); }
+    static Trigger* soulwell_nearby(PlayerbotAI* botAI) { return new SoulwellNearbyTrigger(botAI); }
     static Trigger* give_food(PlayerbotAI* botAI) { return new GiveFoodTrigger(botAI); }
     static Trigger* give_water(PlayerbotAI* botAI) { return new GiveWaterTrigger(botAI); }
     static Trigger* no_rti(PlayerbotAI* botAI) { return new NoRtiTrigger(botAI); }
@@ -310,6 +316,7 @@ private:
     static Trigger* HasAreaDebuff(PlayerbotAI* botAI) { return new HasAreaDebuffTrigger(botAI); }
     static Trigger* LoseAggro(PlayerbotAI* botAI) { return new LoseAggroTrigger(botAI); }
     static Trigger* HasAggro(PlayerbotAI* botAI) { return new HasAggroTrigger(botAI); }
+    static Trigger* OffensivePotion(PlayerbotAI* botAI) { return new OffensivePotionTrigger(botAI); }
     static Trigger* LowHealth(PlayerbotAI* botAI) { return new LowHealthTrigger(botAI); }
     static Trigger* MediumHealth(PlayerbotAI* botAI) { return new MediumHealthTrigger(botAI); }
     static Trigger* AlmostFullHealth(PlayerbotAI* botAI) { return new AlmostFullHealthTrigger(botAI); }

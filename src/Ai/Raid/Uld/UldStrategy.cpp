@@ -6,6 +6,8 @@
 
 #include "UldStrategy.h"
 
+#include "UldMultipliers.h"
+
 void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     //
@@ -18,6 +20,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "flame leviathan on vehicle",
         { NextAction("flame leviathan vehicle", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "flame leviathan tower hazard",
+        { NextAction("flame leviathan tower hazard", ACTION_RAID + 3) }));
 
     //
     // Razorscale
@@ -51,6 +57,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("razorscale fuse armor action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
+        "razorscale focus caster trigger",
+        { NextAction("razorscale focus caster action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "razorscale flame breath trigger",
+        { NextAction("razorscale flame breath action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "razorscale fire resistance trigger",
         { NextAction("razorscale fire resistance action", ACTION_RAID) }));
 
@@ -60,6 +74,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "ignis fire resistance trigger",
         { NextAction("ignis fire resistance action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis scorched ground trigger",
+        { NextAction("ignis scorched ground action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis iron construct trigger",
+        { NextAction("ignis iron construct action", ACTION_RAID) }));
 
     //
     // Iron Assembly
@@ -75,6 +97,15 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "iron assembly rune of power trigger",
         { NextAction("iron assembly rune of power action", ACTION_RAID) }));
+
+    // Hard mode (config-gated): enforce Steelbreaker-last kill order and tank-swap his empowered kit.
+    triggers.push_back(new TriggerNode(
+        "iron assembly kill order trigger",
+        { NextAction("iron assembly kill order action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly fusion punch swap trigger",
+        { NextAction("iron assembly fusion punch swap action", ACTION_RAID + 2) }));
 
     //
     // Kologarn
@@ -118,6 +149,18 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "auriaya fall from floor trigger",
         { NextAction("auriaya fall from floor action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "auriaya seeping essence trigger",
+        { NextAction("auriaya seeping essence action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "auriaya sonic screech trigger",
+        { NextAction("auriaya sonic screech action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "auriaya mark dps target trigger",
+        { NextAction("auriaya mark dps target action", ACTION_RAID) }));
+
     //
     // Hodir
     //
@@ -132,6 +175,22 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "hodir frost resistance trigger",
         { NextAction("hodir frost resistance action", ACTION_RAID) }));
+
+    // Hard mode (config-gated): win the 3-minute Rare Cache race - free the helpers, spread Storm
+    // Cloud, and sit in a Toasty Fire when Biting Cold stacks. Helper-freeing stays below the
+    // snowpacked-icicle move (ACTION_RAID + 1) so surviving a Flash Freeze always wins over running
+    // off to a helper block when both want the bot at once.
+    triggers.push_back(new TriggerNode(
+        "hodir free frozen helper",
+        { NextAction("hodir free frozen helper", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir spread storm cloud",
+        { NextAction("hodir spread storm cloud", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir move to toasty fire",
+        { NextAction("hodir move to toasty fire", ACTION_RAID) }));
 
     //
     // Freya
@@ -156,6 +215,16 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya move to healing spore trigger",
         { NextAction("freya move to healing spore action", ACTION_RAID) }));
 
+    // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
+    // root outranks the dodge - a rooted bot can't move, so it has to free itself before it can step out.
+    triggers.push_back(new TriggerNode(
+        "freya break iron roots",
+        { NextAction("freya break iron roots", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya dodge unstable sun beam",
+        { NextAction("freya dodge unstable sun beam", ACTION_RAID + 2) }));
+
     //
     // Thorim
     //
@@ -170,6 +239,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "thorim unbalancing strike trigger",
         { NextAction("thorim unbalancing strike action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim unbalancing strike swap trigger",
+        { NextAction("thorim unbalancing strike swap action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "thorim mark dps target trigger",
@@ -190,6 +263,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "thorim phase 2 positioning trigger",
         { NextAction("thorim phase 2 positioning action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim sif blizzard trigger",
+        { NextAction("thorim sif blizzard action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim sif frost nova trigger",
+        { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
 
     //
     // Mimiron
@@ -230,6 +311,23 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron cheat trigger",
         { NextAction("mimiron cheat action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "mimiron proximity mine trigger",
+        { NextAction("mimiron proximity mine action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron bomb bot trigger",
+        { NextAction("mimiron bomb bot action", ACTION_RAID + 2) }));
+
+    // Hard mode (config-gated): step out of the persistent ground fire and clear the Frost Bomb.
+    triggers.push_back(new TriggerNode(
+        "mimiron dodge flames trigger",
+        { NextAction("mimiron dodge flames action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron frost bomb trigger",
+        { NextAction("mimiron frost bomb action", ACTION_RAID + 3) }));
+
     //
     // General Vezax
     //
@@ -242,12 +340,24 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("vezax shadow crash action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
+        "vezax saronite vapors trigger",
+        { NextAction("vezax saronite vapors action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "vezax mark of the faceless trigger",
         { NextAction("vezax mark of the faceless action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
         "vezax shadow resistance trigger",
         { NextAction("vezax shadow resistance action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax saronite animus trigger",
+        { NextAction("vezax saronite animus action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax profound darkness trigger",
+        { NextAction("vezax profound darkness action", ACTION_RAID + 2) }));
 
     //
     // Yogg-Saron
@@ -320,6 +430,19 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron phase 3 positioning trigger",
         { NextAction("yogg-saron phase 3 positioning action", ACTION_RAID) }));
 
+    // Reduced-Keeper (Thorim-only) hard mode
+    triggers.push_back(new TriggerNode(
+        "yogg-saron crusher tentacle trigger",
+        { NextAction("yogg-saron crusher tentacle action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron guardian control trigger",
+        { NextAction("yogg-saron guardian control action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron sanity conservation trigger",
+        { NextAction("yogg-saron sanity conservation action", ACTION_RAID + 5) }));
+
     //
     // Algalon the Observer
     //
@@ -332,6 +455,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("algalon big bang hide action", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode(
+        "algalon big bang soak trigger",
+        { NextAction("algalon big bang soak action", ACTION_EMERGENCY + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "algalon phase punch swap trigger",
         { NextAction("algalon phase punch swap action", ACTION_RAID + 2) }));
 
@@ -342,4 +469,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "algalon dark matter trigger",
         { NextAction("algalon dark matter mark action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "algalon collapsing star trigger",
+        { NextAction("algalon collapsing star mark action", ACTION_RAID) }));
+}
+
+void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
+{
+    // Reserve the Big Bang soaker priest's Dispersion for the Big Bang cast
+    multipliers.push_back(new AlgalonMultiplier(botAI));
 }

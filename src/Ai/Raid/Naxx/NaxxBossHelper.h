@@ -113,6 +113,7 @@ public:
     KelthuzadBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
 
     static constexpr uint32 NPC_GUARDIAN_OF_ICECROWN = 16441;
+    static constexpr uint32 NPC_SHADOW_FISSURE = 16129;
 
     bool IsGuardian(Unit* unit) const
     {
@@ -122,6 +123,23 @@ public:
             if (c->GetEntry() == NPC_GUARDIAN_OF_ICECROWN)
                 return true;
         return botAI->EqualLowercaseName(unit->GetName(), "guardian of icecrown");
+    }
+
+    bool IsShadowFissure(Unit* unit) const
+    {
+        if (!unit)
+            return false;
+        if (Creature* c = unit->ToCreature())
+            if (c->GetEntry() == NPC_SHADOW_FISSURE)
+                return true;
+        return botAI->EqualLowercaseName(unit->GetName(), "shadow fissure");
+    }
+
+    // Activated adds are AttackStart()ed by the boss script; parked perimeter adds are
+    // stationary decoration until their proximity aggro fires.
+    bool IsAddActive(Unit* unit) const
+    {
+        return unit && (unit->IsInCombat() || unit->GetVictim() || unit->isMoving());
     }
 
     const std::pair<float, float> center = {3716.19f, -5106.58f};
@@ -135,6 +153,11 @@ public:
     static constexpr float TANK_HOLD_MAX_RADIUS = 20.0f;
     static constexpr float PHASE1_TANK_MAX_RADIUS = 16.0f;
     static constexpr float PHASE1_TANK_HOLD_RADIUS = 12.0f;
+    // Void Blast (27812) is 10y, but radius checks add target combat reach - pad the escape.
+    static constexpr float FISSURE_DANGER_RADIUS = 13.0f;
+    // Frost Blast chains at 10y around its target.
+    static constexpr float FROST_BLAST_SAFE_DIST = 12.0f;
+    static constexpr float P1_ACTIVE_ADD_MAX_CENTER_DIST = 45.0f;
 
     bool UpdateBossAI()
     {
@@ -157,7 +180,7 @@ public:
 
     Unit* GetBoss() const { return _unit; }
 
-    bool IsBossCasting(uint32 spellId) const
+    bool IsBossCastingAny(std::initializer_list<uint32> spellIds) const
     {
         if (!_unit)
         {
@@ -166,13 +189,12 @@ public:
 
         if (Spell* spell = _unit->GetCurrentSpell(CURRENT_GENERIC_SPELL))
         {
-            if (SpellInfo const* info = spell->GetSpellInfo())
-            {
-                return info->Id == spellId;
-            }
+            return NaxxSpellIds::MatchesAnySpellId(spell->GetSpellInfo(), spellIds);
         }
         return false;
     }
+
+    bool IsBossCasting(uint32 spellId) const { return IsBossCastingAny({spellId}); }
 
     uint32 GetRangedCount() const
     {
@@ -192,6 +214,63 @@ public:
             }
 
             if (botAI->IsRanged(member))
+            {
+                ++count;
+            }
+        }
+        return count;
+    }
+
+    // GetMeleeIndex counts tanks too - melee spread needs a DPS-only index.
+    uint32 GetMeleeDpsIndex(Player* player) const
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return 0;
+        }
+
+        uint32 index = 0;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member)
+            {
+                continue;
+            }
+
+            if (botAI->IsRanged(member) || botAI->IsTank(member))
+            {
+                continue;
+            }
+
+            if (member == player)
+            {
+                return index;
+            }
+            ++index;
+        }
+        return 0;
+    }
+
+    uint32 GetMeleeDpsCount() const
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return 0;
+        }
+
+        uint32 count = 0;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member)
+            {
+                continue;
+            }
+
+            if (!botAI->IsRanged(member) && !botAI->IsTank(member))
             {
                 ++count;
             }
@@ -282,6 +361,9 @@ public:
         return {x, y};
     }
 
+    // Two-ring layout keeping every pair >= ~11y apart (Frost Blast chains at 10y).
+    // Outer ring r=24 holds up to 12; overflow goes to an inner ring at r=14 whose slots
+    // are staggered 15 degrees off the outer grid and ordered to stay away from the MT.
     void ComputeRangedSpreadPosition(uint32 index, uint32 total, float& outX, float& outY) const
     {
         if (total == 0)
@@ -291,49 +373,140 @@ public:
             return;
         }
 
-        float radii[3] = {18.0f, 21.0f, 24.0f};
-        uint32 ringSizes[3] = {0, 0, 0};
-        uint32 rings = 1;
+        float tankAngle = std::atan2(tank_pos.second - center.second, tank_pos.first - center.first);
+        uint32 nOuter = std::min<uint32>(total, 12);
 
-        if (total <= 10)
+        float angle;
+        float radius;
+        if (index < nOuter)
         {
-            rings = 1;
-            ringSizes[0] = total;
-        }
-        else if (total <= 18)
-        {
-            rings = 2;
-            ringSizes[0] = (total + 1) / 2;
-            ringSizes[1] = total - ringSizes[0];
+            angle = tankAngle + float(M_PI) / 12.0f + 2.0f * float(M_PI) * float(index) / float(nOuter);
+            radius = ROOM_MAX_RADIUS;
         }
         else
         {
-            rings = 3;
-            ringSizes[0] = (total + 2) / 3;
-            ringSizes[1] = (total + 1) / 3;
-            ringSizes[2] = total - ringSizes[0] - ringSizes[1];
+            // +-90/+-150 first (far from MT); +-30 are last-resort slots ~8.6y from the MT.
+            static constexpr float innerOffsetsDeg[6] = {90.0f, -90.0f, 150.0f, -150.0f, 30.0f, -30.0f};
+            angle = tankAngle + innerOffsetsDeg[(index - nOuter) % 6] * float(M_PI) / 180.0f;
+            radius = 14.0f;
         }
 
-        uint32 ring = 0;
-        uint32 localIndex = index;
-        for (uint32 r = 0; r < rings; ++r)
-        {
-            if (localIndex < ringSizes[r])
-            {
-                ring = r;
-                break;
-            }
-            localIndex -= ringSizes[r];
-        }
-
-        uint32 slots = std::max<uint32>(1, ringSizes[ring]);
-        float angle = 2.0f * float(M_PI) * (float(localIndex) / float(slots));
-
-        angle += float(ring) * (float(M_PI) / 8.0f);
-
-        outX = center.first + std::cos(angle) * radii[ring];
-        outY = center.second + std::sin(angle) * radii[ring];
+        outX = center.first + std::cos(angle) * radius;
+        outY = center.second + std::sin(angle) * radius;
         ClampToRoom(outX, outY);
+    }
+
+    // Melee DPS rear arc around the boss, excluding a half-arc around the MT so a Frost
+    // Blast on melee never chains to the tank. If the boss reach is too small for real
+    // isolation, everyone stacks the single rear point and we accept the residual risk.
+    bool ComputeMeleeSpreadPosition(uint32 index, uint32 total, float& outX, float& outY)
+    {
+        Unit* boss = GetBoss();
+        if (!boss || total == 0)
+        {
+            return false;
+        }
+
+        Player* mainTank = nullptr;
+        if (Group* group = bot->GetGroup())
+        {
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (member && member->IsAlive() && botAI->IsMainTank(member))
+                {
+                    mainTank = member;
+                    break;
+                }
+            }
+        }
+
+        float refAngle = mainTank ? boss->GetAngle(mainTank) : boss->GetAngle(tank_pos.first, tank_pos.second);
+
+        float maxR = std::max(5.0f, bot->GetMeleeRange(boss) - 0.5f);
+        float r = std::clamp(boss->GetCombatReach() + 1.0f, 5.0f, maxR);
+
+        float phi = std::max(100.0f * float(M_PI) / 180.0f, 2.0f * std::asin(std::min(1.0f, 5.5f / r)));
+        float arcWidth = 2.0f * float(M_PI) - 2.0f * phi;
+
+        float angle;
+        if (total == 1 || arcWidth <= 0.0f)
+        {
+            angle = refAngle + float(M_PI);
+        }
+        else
+        {
+            angle = refAngle + phi + arcWidth * float(index % total) / float(total - 1);
+        }
+
+        outX = boss->GetPositionX() + std::cos(angle) * r;
+        outY = boss->GetPositionY() + std::sin(angle) * r;
+        ClampToRoom(outX, outY);
+        return true;
+    }
+
+    // Clamp-aware escape from a hazard point: straight away first; if ClampToRoom would
+    // project the destination back into danger (outer-ring bots), walk the ring instead.
+    bool ComputeEscapeFromPoint(float hx, float hy, float safeDist, float& outX, float& outY)
+    {
+        float dirX = bot->GetPositionX() - hx;
+        float dirY = bot->GetPositionY() - hy;
+        float len = std::sqrt(dirX * dirX + dirY * dirY);
+        if (len < 0.001f)
+        {
+            dirX = bot->GetPositionX() - center.first;
+            dirY = bot->GetPositionY() - center.second;
+            len = std::sqrt(dirX * dirX + dirY * dirY);
+        }
+        if (len < 0.001f)
+        {
+            dirX = 1.0f;
+            dirY = 0.0f;
+            len = 1.0f;
+        }
+
+        float dx = hx + dirX / len * (safeDist + 1.0f);
+        float dy = hy + dirY / len * (safeDist + 1.0f);
+        ClampToRoom(dx, dy);
+        if (std::sqrt((dx - hx) * (dx - hx) + (dy - hy) * (dy - hy)) >= safeDist)
+        {
+            outX = dx;
+            outY = dy;
+            return true;
+        }
+
+        float botDx = bot->GetPositionX() - center.first;
+        float botDy = bot->GetPositionY() - center.second;
+        float r = std::clamp(std::sqrt(botDx * botDx + botDy * botDy), ROOM_MIN_RADIUS, ROOM_MAX_RADIUS);
+        float theta = std::atan2(botDy, botDx);
+        float hazardTheta = std::atan2(hy - center.second, hx - center.first);
+        float diff = theta - hazardTheta;
+        while (diff > float(M_PI))
+        {
+            diff -= 2.0f * float(M_PI);
+        }
+        while (diff < -float(M_PI))
+        {
+            diff += 2.0f * float(M_PI);
+        }
+        float awaySign = diff >= 0.0f ? 1.0f : -1.0f;
+
+        for (uint32 k = 1; k <= 8; ++k)
+        {
+            for (float sign : {awaySign, -awaySign})
+            {
+                float candTheta = theta + sign * float(k) * float(M_PI) / 12.0f;
+                float cx = center.first + std::cos(candTheta) * r;
+                float cy = center.second + std::sin(candTheta) * r;
+                if (std::sqrt((cx - hx) * (cx - hx) + (cy - hy) * (cy - hy)) >= safeDist)
+                {
+                    outX = cx;
+                    outY = cy;
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     Player* GetPlayerWithAura(uint32 spellId)
@@ -546,21 +719,46 @@ public:
         return best;
     }
 
-    Unit* GetAnyShadowFissure()
+    Unit* GetNearestShadowFissure()
     {
-        Unit* shadow_fissure = nullptr;
+        Unit* nearest = nullptr;
+        float bestDist = std::numeric_limits<float>::max();
         GuidVector units = *context->GetValue<GuidVector>("nearest triggers");
-        for (auto i = units.begin(); i != units.end(); i++)
+        for (ObjectGuid const& guid : units)
         {
-            Unit* unit = botAI->GetUnit(*i);
-            if (!unit)
-                continue;
-            if (botAI->EqualLowercaseName(unit->GetName(), "shadow fissure"))
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsShadowFissure(unit))
             {
-                shadow_fissure = unit;
+                continue;
+            }
+
+            float dist = bot->GetDistance2d(unit);
+            if (!nearest || dist < bestDist)
+            {
+                nearest = unit;
+                bestDist = dist;
             }
         }
-        return shadow_fissure;
+        return nearest;
+    }
+
+    bool IsNearShadowFissure(float x, float y, float radius = FISSURE_DANGER_RADIUS)
+    {
+        GuidVector units = *context->GetValue<GuidVector>("nearest triggers");
+        for (ObjectGuid const& guid : units)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!IsShadowFissure(unit))
+            {
+                continue;
+            }
+
+            if (unit->GetDistance2d(x, y) < radius)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
 private:
@@ -1162,7 +1360,7 @@ public:
     static constexpr uint8 RAID_ICON_SQUARE = 5;
     static constexpr uint8 RAID_ICON_CROSS = 6;
     static constexpr uint8 RAID_ICON_SKULL = 7;
-	
+
     static constexpr uint32 NPC_STALAGG = 15929;
     static constexpr uint32 NPC_FEUGEN  = 15930;
 
@@ -1374,10 +1572,30 @@ public:
         return false;
     }
 
+    // Called several times per AI tick on a hot combat path, and each call rescans the
+    // whole group. Memoize the self result per tick; getMSTime granularity is fine here
+    // (a rare ms-boundary miss just recomputes).
     bool IsAssignedToPrimarySide(Player* player)
+    {
+        if (player != bot)
+            return ComputeAssignedToPrimarySide(player);
+
+        uint32 now = getMSTime();
+        if (_sideCacheValid && _sideCacheTime == now)
+            return _sideCacheValue;
+
+        _sideCacheValue = ComputeAssignedToPrimarySide(player);
+        _sideCacheTime = now;
+        _sideCacheValid = true;
+        return _sideCacheValue;
+    }
+
+    bool ComputeAssignedToPrimarySide(Player* player)
     {
         if (!player)
             return true;
+
+        Group* group = bot->GetGroup();
 
         if (botAI->IsTank(player))
         {
@@ -1387,16 +1605,36 @@ public:
             if (NaxxHasStrategyAnyState(player, "tank assist") && !NaxxHasStrategyAnyState(player, "tank face"))
                 return false;
 
-            return botAI->IsMainTank(player);
+            if (botAI->IsMainTank(player))
+                return true;
+
+            // Split remaining tanks evenly: first non-main tank -> secondary, then alternate.
+            uint32 index = 0;
+            if (group)
+            {
+                for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+                {
+                    Player* member = ref->GetSource();
+                    if (!member || !member->IsAlive())
+                        continue;
+                    if (!botAI->IsTank(member) || botAI->IsMainTank(member))
+                        continue;
+                    if (member == player)
+                        return (index % 2) == 1;
+                    ++index;
+                }
+            }
+
+            // Lone/unmatched tank (no group, or own entry transiently skipped): use the
+            // same stable parity fallback the heal/DPS branches use instead of pinning
+            // to one pet.
+            int32 slotIndex = botAI->GetGroupSlotIndex(player);
+            if (slotIndex >= 0)
+                return (slotIndex % 2) == 1;
+            return (player->GetGUID().GetCounter() % 2) == 1;
         }
 
-        Group* group = bot->GetGroup();
-        uint32 const membersCount = group ? group->GetMembersCount() : 0;
-        bool const is25Man = membersCount > 10;
-
-        uint32 const primaryHeals = is25Man ? 2u : 1u;
-        uint32 const primaryDps   = is25Man ? 9u : 3u;
-
+        // Even 50/50 split per role by group-order index parity, independent of raid size.
         if (botAI->IsHeal(player))
         {
             uint32 index = 0;
@@ -1412,12 +1650,11 @@ public:
                         continue;
 
                     if (member == player)
-                        return index < primaryHeals;
+                        return (index % 2) == 0;
 
                     ++index;
                 }
             }
-
         }
 
         uint32 index = 0;
@@ -1433,7 +1670,7 @@ public:
                     continue;
 
                 if (member == player)
-                    return index < primaryDps;
+                    return (index % 2) == 0;
 
                 ++index;
             }
@@ -1446,19 +1683,81 @@ public:
         return (player->GetGUID().GetCounter() % 2) == 0;
     }
 
-    Unit* GetAssignedPetForBot()
+    // Single source of truth for side->pet. When a valid RTI pair is set the marks win
+    // (primary = primary-icon pet), so marked and mark-free code paths never disagree
+    // within a tick. Mark-free fallback convention: primary = Stalagg, secondary = Feugen.
+    // Falls back to the live sibling if the chosen pet is dead.
+    Unit* GetPetForSide(bool primary)
     {
         uint8 primaryIcon = RAID_ICON_SKULL;
         uint8 secondaryIcon = RAID_ICON_CROSS;
-        bool hasPair = GetPetIconPair(primaryIcon, secondaryIcon);
+        if (GetPetIconPair(primaryIcon, secondaryIcon))
+        {
+            if (Unit* marked = GetMarkedPet(primary ? primaryIcon : secondaryIcon))
+                return marked;
+        }
+
+        Unit* preferred = primary ? stalagg : feugen;
+        Unit* sibling   = primary ? feugen : stalagg;
+        if (preferred && preferred->IsAlive())
+            return preferred;
+        if (sibling && sibling->IsAlive())
+            return sibling;
+        return nullptr;
+    }
+
+    // Sync window tuning (percent). Balancing only kicks in once a pet enters the low
+    // window; above that both burn freely. Inside it, keep both pets dropping through
+    // the last few % together so both die inside the ~5s revive window.
+    static constexpr float SYNC_WINDOW_PCT = 30.0f;
+    static constexpr float SYNC_BALANCE_MARGIN = 5.0f;
+    static constexpr float SYNC_HARD_FLOOR_PCT = 5.0f;
+    static constexpr float SYNC_FLOOR_RELEASE_PCT = 8.0f;
+
+    // Whether damage on `target` (one of the two pets) should be suppressed to keep
+    // both pets converging to death together. Symmetric, margin-based, hard-floored.
+    bool PetSyncSuppress(Unit* target)
+    {
+        if (!target || !feugen || !stalagg)
+            return false;
+        if (target != feugen && target != stalagg)
+            return false;
+        if (!feugen->IsAlive() || !stalagg->IsAlive())
+            return false;
+
+        float targetPct = target->GetHealthPct();
+        Unit* other = (target == feugen) ? stalagg : feugen;
+        float otherPct = other->GetHealthPct();
+
+        // Only manage the sync near death: while both pets are healthy, burn freely.
+        if (targetPct > SYNC_WINDOW_PCT && otherPct > SYNC_WINDOW_PCT)
+            return false;
+
+        // Both within the floor band -> free-burn both to death simultaneously.
+        if (targetPct <= SYNC_FLOOR_RELEASE_PCT && otherPct <= SYNC_FLOOR_RELEASE_PCT)
+            return false;
+
+        // Hard floor: don't push this pet to 0 while the sibling is still above the band.
+        if (targetPct <= SYNC_HARD_FLOOR_PCT)
+            return true;
+
+        // Balance hold: this pet is already the lower one -> let the sibling catch up.
+        if (targetPct < otherPct - SYNC_BALANCE_MARGIN)
+            return true;
+
+        return false;
+    }
+
+    Unit* GetAssignedPetForBot()
+    {
+        bool hasPair = HasPetIconPair();
 
         if (botAI->IsTank(bot))
         {
             if (hasPair && (!bot->IsInCombat() || (!IsMainTankEngagedOnPets() && !IsOffTankEngagedOnPets())))
             {
-                bool primarySide = IsAssignedToPrimarySide(bot);
-                if (Unit* marked = GetMarkedPet(primarySide ? primaryIcon : secondaryIcon))
-                    return marked;
+                if (Unit* pet = GetPetForSide(IsAssignedToPrimarySide(bot)))
+                    return pet;
             }
 
             Unit* feugenAlive = (feugen && feugen->IsAlive()) ? feugen : nullptr;
@@ -1470,9 +1769,8 @@ public:
                 float dStalagg = bot->GetDistance2d(tankPosStalagg.first, tankPosStalagg.second);
                 if (hasPair && (dFeugen > 45.0f && dStalagg > 45.0f))
                 {
-                    bool primarySide = IsAssignedToPrimarySide(bot);
-                    if (Unit* marked = GetMarkedPet(primarySide ? primaryIcon : secondaryIcon))
-                        return marked;
+                    if (Unit* pet = GetPetForSide(IsAssignedToPrimarySide(bot)))
+                        return pet;
                 }
                 bool onFeugenSide = IsOnFeugenSide(bot);
                 Unit* sidePet = onFeugenSide ? feugenAlive : stalaggAlive;
@@ -1486,13 +1784,10 @@ public:
             return GetNearestPet();
          }
 
-        if (hasPair)
-        {
-            bool primarySide = IsAssignedToPrimarySide(bot);
-            Unit* target = GetMarkedPet(primarySide ? primaryIcon : secondaryIcon);
-            if (target)
-                return target;
-        }
+        // Non-tanks: GetPetForSide resolves marks (when set) or the fixed side mapping,
+        // so marked and mark-free assignments always agree within a tick.
+        if (Unit* sidePet = GetPetForSide(IsAssignedToPrimarySide(bot)))
+            return sidePet;
 
         return GetNearestPet();
     }
@@ -1516,11 +1811,17 @@ protected:
         _unit = nullptr;
         feugen = nullptr;
         stalagg = nullptr;
+        _sideCacheValid = false;
     }
 
     Unit* _unit = nullptr;
     Unit* feugen = nullptr;
     Unit* stalagg = nullptr;
+
+    // Per-tick memo of IsAssignedToPrimarySide(bot); see that method.
+    uint32 _sideCacheTime = 0;
+    bool _sideCacheValue = false;
+    bool _sideCacheValid = false;
 };
 
 #endif

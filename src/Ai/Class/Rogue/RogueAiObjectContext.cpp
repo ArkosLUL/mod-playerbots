@@ -77,6 +77,8 @@ public:
         creators["main hand weapon no enchant"] = &RogueTriggerFactoryInternal::main_hand_weapon_no_enchant;
         creators["off hand weapon no enchant"] = &RogueTriggerFactoryInternal::off_hand_weapon_no_enchant;
         creators["tricks of the trade on main tank"] = &RogueTriggerFactoryInternal::tricks_of_the_trade_on_main_tank;
+        creators["tricks of the trade on main tank and light aoe"] =
+            &RogueTriggerFactoryInternal::tricks_of_the_trade_on_main_tank_and_light_aoe;
         creators["adrenaline rush"] = &RogueTriggerFactoryInternal::adrenaline_rush;
         creators["blade fury"] = &RogueTriggerFactoryInternal::blade_fury;
     }
@@ -101,6 +103,10 @@ private:
     static Trigger* tricks_of_the_trade_on_main_tank(PlayerbotAI* ai)
     {
         return new TricksOfTheTradeOnMainTankTrigger(ai);
+    }
+    static Trigger* tricks_of_the_trade_on_main_tank_and_light_aoe(PlayerbotAI* ai)
+    {
+        return new TwoTriggers(ai, "tricks of the trade on main tank", "light aoe");
     }
 };
 

@@ -8,6 +8,7 @@
 #define PLAYERBOTS_RAIDBOSSHELPERS_H
 
 #include "AiObject.h"
+#include "Position.h"
 #include "Unit.h"
 
 bool MarkTargetWithIcon(Player* bot, Unit* target, uint8 iconId);
@@ -35,5 +36,8 @@ Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
 Unit* GetFirstAliveUnitByEntry(PlayerbotAI* botAI, uint32 entry);
 Player* GetNearestPlayerInRadius(Player* bot, float radius);
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId);
+Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
+void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
+void StopPet(PlayerbotAI* botAI);
 
 #endif

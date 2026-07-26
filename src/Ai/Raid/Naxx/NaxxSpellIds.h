@@ -101,6 +101,10 @@ namespace NaxxSpellIds
     static constexpr uint32 ShadowFissure = 27810;
     static constexpr uint32 FrostBoltSingle = 28478;
     static constexpr uint32 FrostBoltMulti = 28479;
+    // 25-man single-target Frost Bolt id from spelldifficulty_dbc (28478->55802).
+    static constexpr uint32 FrostBoltSingle25 = 55802;
+    // Proc aura left on the hunter after casting Misdirection (34477); consumed by the next 3 shots.
+    static constexpr uint32 Misdirection = 35079;
 
     // Gluth
     static constexpr uint32 Decimate10 = 28374;
@@ -108,6 +112,8 @@ namespace NaxxSpellIds
     static constexpr uint32 Decimate25Alt = 28375;
     static constexpr uint32 MortalWound10 = 25646;
     static constexpr uint32 MortalWound25 = 54378;
+    static constexpr uint32 GluthFrenzy10 = 28371;
+    static constexpr uint32 GluthFrenzy25 = 54427;
 /*
     SPELL_MORTAL_WOUND                  = 25646,
     SPELL_ENRAGE                        = 28371,
@@ -124,6 +130,8 @@ namespace NaxxSpellIds
 
     // Loatheb
     static constexpr uint32 NecroticAura10 = 55593;
+    // Spore crit buff. Not referenced by this core's boss_loatheb.cpp, so it may never land.
+    static constexpr uint32 FungalCreep = 29232;
 /*
     SPELL_NECROTIC_AURA                         = 55593,
     SPELL_SUMMON_SPORE                          = 29234,

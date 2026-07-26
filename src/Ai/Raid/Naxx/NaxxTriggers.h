@@ -112,6 +112,16 @@ private:
     KelthuzadBossHelper helper;
 };
 
+class KelthuzadShadowFissureTrigger : public Trigger
+{
+public:
+    KelthuzadShadowFissureTrigger(PlayerbotAI* ai) : Trigger(ai, "kel'thuzad shadow fissure"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
 class AnubrekhanTrigger : public Trigger
 {
 public:
@@ -297,6 +307,16 @@ public:
     GluthMainTankMortalWoundTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth main tank mortal wound trigger"), helper(ai)
     {
     }
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
+class GluthFrenzyTrigger : public Trigger
+{
+public:
+    GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth frenzy"), helper(ai) {}
     bool IsActive() override;
 
 private:

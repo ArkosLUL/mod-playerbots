@@ -8,6 +8,7 @@
 #define PLAYERBOTS_LOOTROLLACTION_H
 
 #include "QueryItemUsageAction.h"
+#include "ItemTemplate.h"
 
 class PlayerbotAI;
 
@@ -21,13 +22,7 @@ public:
     LootRollAction(PlayerbotAI* botAI, std::string const name = "loot roll") : QueryItemUsageAction(botAI, name) {}
 
     bool Execute(Event event) override;
-
-protected:
-    RollVote CalculateRollVote(ItemTemplate const* proto, ItemUsage usage = ITEM_USAGE_NONE);
 };
-
-bool CanBotUseToken(ItemTemplate const* proto, Player* bot);
-bool RollUniqueCheck(ItemTemplate const* proto, Player* bot);
 
 class MasterLootRollAction : public LootRollAction
 {

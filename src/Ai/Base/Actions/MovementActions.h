@@ -46,6 +46,7 @@ protected:
     bool Follow(Unit* target, float distance, float angle);
     bool ChaseTo(WorldObject* obj, float distance = 0.0f);
     bool ReachCombatTo(Unit* target, float distance = 0.0f);
+    void LogReachCombat(bool debugMove, Unit* target, char const* outcome, float wanted, bool predicted, int pathType);
     float MoveDelay(float distance, bool backwards = false);
     void WaitForReach(float distance);
     void SetNextMovementDelay(float delayMillis);

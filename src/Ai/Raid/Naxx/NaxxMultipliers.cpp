@@ -6,6 +6,7 @@
 
 #include "NaxxMultipliers.h"
 
+#include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
 #include "DKActions.h"
 #include "DruidActions.h"
@@ -182,33 +183,13 @@ float ThaddiusGenericMultiplier::GetValue(Action* action)
     }
 
     Unit* target = AI_VALUE(Unit*, "current target");
-    Unit* feugen = helper.GetFeugen();
-    Unit* stalagg = helper.GetStalagg();
-    if (helper.IsPhasePet() && target && feugen && stalagg && target->IsAlive() &&
-        (target == feugen || target == stalagg) && feugen->IsAlive() && stalagg->IsAlive())
+    if (helper.IsPhasePet() && !botAI->IsTank(bot) && helper.PetSyncSuppress(target))
     {
-        float targetPct = target->GetHealthPct();
-        Unit* other = (target == feugen) ? stalagg : feugen;
-        float otherPct = other->GetHealthPct();
+        if (dynamic_cast<MeleeAction*>(action))
+            return 0.0f;
 
-        float diff = otherPct - targetPct;
-
-        bool inSyncWindow = (targetPct <= 30.0f || otherPct <= 30.0f);
-
-        bool hardHold = (targetPct <= 12.0f && otherPct > 12.0f);
-
-        bool softHold = (targetPct <= 25.0f && diff >= 4.0f);
-
-        bool shouldHold = inSyncWindow && (hardHold || softHold);
-
-        if (shouldHold && !botAI->IsTank(bot))
-        {
-            if (dynamic_cast<MeleeAction*>(action))
-                return 0.0f;
-
-            if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
-                return 0.0f;
-        }
+        if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
+            return 0.0f;
     }
     // magnetic pull
     // uint32 curr_timer = eventMap->GetTimer();
@@ -329,7 +310,8 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    if (helper.IsPhaseTwo() && helper.IsBossCasting(NaxxSpellIds::FrostBoltSingle))
+    if (helper.IsPhaseTwo() &&
+        helper.IsBossCastingAny({NaxxSpellIds::FrostBoltSingle, NaxxSpellIds::FrostBoltSingle25}))
     {
         std::string const name = action->getName();
         if (name == "kick" || name == "pummel" || name == "shield bash" ||
@@ -355,6 +337,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         if (helper.HasAuraInGroup(NaxxSpellIds::FrostBlast))
         {
             if (dynamic_cast<KelthuzadPositionAction*>(action) ||
+                dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
                 dynamic_cast<CastHealingSpellAction*>(action) ||
                 dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<CastAoeHealSpellAction*>(action) ||
@@ -367,6 +350,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         if (helper.HasAuraInGroup(NaxxSpellIds::ChainsOfKelthuzad))
         {
             if (dynamic_cast<KelthuzadPositionAction*>(action) ||
+                dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
                 dynamic_cast<CastHealingSpellAction*>(action) ||
                 dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<CastAoeHealSpellAction*>(action) ||
@@ -557,5 +541,114 @@ float GluthGenericMultiplier::GetValue(Action* action)
             return 0.0f;
         }
     }
+    return 1.0f;
+}
+
+float NaxxThreatRedirectMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<CastMisdirectionOnMainTankAction*>(action) &&
+        !dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    // Encounters where the main tank is not the right threat sink: tank swaps on a debuff stack,
+    // mind-controlled tanks, or one tank per boss. "find target" only sees creatures that already
+    // have this bot on their threat list, so all four horsemen are listed - a melee bot parked on
+    // Thane or the Baron never resolves Zeliek.
+    static std::vector<std::string> const noRedirectBosses = {"gluth",
+                                                              "instructor razuvious",
+                                                              "gothik the harvester",
+                                                              "sir zeliek",
+                                                              "lady blaumeux",
+                                                              "thane korth'azz",
+                                                              "baron rivendare",
+                                                              "highlord mograine"};
+
+    for (std::string const& name : noRedirectBosses)
+    {
+        if (AI_VALUE2(Unit*, "find target", name))
+        {
+            return 0.0f;
+        }
+    }
+    return 1.0f;
+}
+
+float NaxxBurstWindowMultiplier::GetValue(Action* action)
+{
+    if (!action || !IsBurstCooldownAction(action->getName()))
+    {
+        return 1.0f;
+    }
+
+    uint32 now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedValue = EvaluateWindow();
+    }
+    return cachedValue;
+}
+
+float NaxxBurstWindowMultiplier::EvaluateWindow()
+{
+    // Resolved up front rather than in encounter order, so the fight timer is cleared even when an
+    // earlier boss's branch takes the return.
+    bool const loathebUp = loatheb.UpdateBossAI();
+    if (!loathebUp)
+    {
+        loathebFightStartMs = 0;
+    }
+
+    if (kelthuzad.UpdateBossAI())
+    {
+        if (kelthuzad.IsPhaseOne())
+        {
+            return 0.0f;
+        }
+        // Phase 2 below the Guardian threshold is the actual DPS race.
+        Unit* boss = kelthuzad.GetBoss();
+        return boss && boss->GetHealthPct() <= KELTHUZAD_GUARDIAN_PCT ? 1.0f : 0.0f;
+    }
+
+    if (sapphiron.UpdateBossAI())
+    {
+        return sapphiron.IsPhaseFlight() ? 0.0f : 1.0f;
+    }
+
+    if (thaddius.UpdateBossAI())
+    {
+        // Save everything for the boss himself - he has a 5 minute enrage.
+        return thaddius.IsPhaseThaddius() ? 1.0f : 0.0f;
+    }
+
+    if (loathebUp)
+    {
+        uint32 now = getMSTime();
+        if (!loathebFightStartMs)
+        {
+            loathebFightStartMs = now;
+        }
+
+        if (NaxxSpellIds::GetAnyAura(bot, {NaxxSpellIds::FungalCreep}) || botAI->HasAura("fungal creep", bot))
+        {
+            return 1.0f;
+        }
+        return getMSTimeDiff(loathebFightStartMs, now) >= LOATHEB_FALLBACK_MS ? 1.0f : 0.0f;
+    }
+
+    // Noth and Gothik have no helper class; the balcony phases are readable straight off the unit
+    // flags the core scripts set (boss_noth.cpp:99, boss_gothik.cpp:232).
+    if (Unit* noth = AI_VALUE2(Unit*, "find target", "noth the plaguebringer"))
+    {
+        return noth->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? 0.0f : 1.0f;
+    }
+
+    if (Unit* gothik = AI_VALUE2(Unit*, "find target", "gothik the harvester"))
+    {
+        return gothik->HasUnitFlag(UNIT_FLAG_DISABLE_MOVE) ? 0.0f : 1.0f;
+    }
+
     return 1.0f;
 }

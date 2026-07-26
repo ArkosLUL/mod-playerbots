@@ -104,6 +104,7 @@ private:
     bool ListenAndExecute(Action* action, Event event);
 
     void LogAction(char const* format, ...);
+    void LogMeleeApproach(bool debugMove, Action* action, char const* verdict, float relevance);
     void LogValues();
 
     ActionExecutionListeners actionExecutionListeners;

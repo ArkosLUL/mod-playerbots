@@ -6,6 +6,8 @@
 #ifndef PLAYERBOTS_PLAYERBOTAI_H
 #define PLAYERBOTS_PLAYERBOTAI_H
 
+#include <algorithm>
+#include <array>
 #include <stack>
 
 #include "Chat.h"
@@ -223,6 +225,26 @@ enum ManaOilId
     BRILLIANT_MANA_OIL    = 20748,
     SUPERIOR_MANA_OIL     = 22521
 };
+
+enum OffensivePotionId
+{
+    HASTE_POTION            = 22838,
+    INSANE_STRENGTH_POTION  = 22828,
+    DESTRUCTION_POTION      = 22839,
+    POTION_OF_SPEED         = 40211,
+    POTION_OF_WILD_MAGIC    = 40212
+};
+
+// Single source of truth for the offensive-potion id set. The item visitor and the trigger both
+// derive from this, so adding a potion here is the only edit needed for them to recognise it.
+inline constexpr std::array<uint32, 5> OFFENSIVE_POTION_IDS = {
+    HASTE_POTION, INSANE_STRENGTH_POTION, DESTRUCTION_POTION, POTION_OF_SPEED, POTION_OF_WILD_MAGIC};
+
+inline bool IsOffensivePotionId(uint32 itemId)
+{
+    return std::find(OFFENSIVE_POTION_IDS.begin(), OFFENSIVE_POTION_IDS.end(), itemId) !=
+           OFFENSIVE_POTION_IDS.end();
+}
 
 enum class BotTypeNumber : uint8
 {

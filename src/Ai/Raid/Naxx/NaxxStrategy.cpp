@@ -45,10 +45,16 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(
         new TriggerNode("kel'thuzad",
         {
+            NextAction("kel'thuzad misdirect boss to main tank", ACTION_RAID + 3),
             NextAction("kel'thuzad position", ACTION_RAID + 2),
             NextAction("kel'thuzad choose target", ACTION_RAID + 1)
         })
     );
+
+    // Emergency priority so the flee beats every P2 positioning action by construction.
+    triggers.push_back(new TriggerNode("kel'thuzad shadow fissure",
+        { NextAction("kel'thuzad flee shadow fissure", ACTION_EMERGENCY + 6) }
+    ));
 
     // Anub'Rekhan
     triggers.push_back(new TriggerNode("anub'rekhan",
@@ -167,6 +173,10 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("taunt spell", ACTION_RAID + 1) }
     ));
 
+    triggers.push_back(new TriggerNode("gluth frenzy",
+        { NextAction("gluth tranquilizing shot", ACTION_RAID + 4) }
+    ));
+
     triggers.push_back(new TriggerNode("gluth low health zombie aoe",
         {
             NextAction("starfall", ACTION_RAID + 1),
@@ -213,5 +223,7 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new AnubrekhanGenericMultiplier(botAI));
     multipliers.push_back(new FourhorsemanGenericMultiplier(botAI));
     multipliers.push_back(new GluthGenericMultiplier(botAI));
+    multipliers.push_back(new NaxxThreatRedirectMultiplier(botAI));
+    multipliers.push_back(new NaxxBurstWindowMultiplier(botAI));
     // multipliers.push_back(new NothGenericMultiplier(botAI));
 }

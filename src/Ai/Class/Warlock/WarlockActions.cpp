@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include "Event.h"
+#include "Group.h"
 #include "Item.h"
 #include "ObjectGuid.h"
 #include "Player.h"
@@ -21,6 +22,62 @@
 #include <mutex>
 
 const int ITEM_SOUL_SHARD = 6265;
+
+// Only one warlock per group should cast the ritual; the first to actually cast reserves the group
+// for a short window so any others back off (and it also stops the caster re-casting every tick).
+static std::unordered_map<ObjectGuid, uint32> ritualCastReservations;
+static std::mutex ritualCastReservationsMutex;
+
+// Caller must hold ritualCastReservationsMutex.
+static void CleanupRitualCastReservations(uint32 now)
+{
+    for (auto it = ritualCastReservations.begin(); it != ritualCastReservations.end();)
+    {
+        if (it->second <= now)
+            it = ritualCastReservations.erase(it);
+        else
+            ++it;
+    }
+}
+
+bool CastRitualOfSoulsAction::isUseful()
+{
+    if (!CastBuffSpellAction::isUseful())
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    // Read-only: never mutate the reservation from a predicate that can run multiple times per
+    // decision. The slot is claimed in Execute, once we actually commit to the cast.
+    std::lock_guard<std::mutex> lock(ritualCastReservationsMutex);
+    CleanupRitualCastReservations(getMSTime());
+    return ritualCastReservations.find(group->GetGUID()) == ritualCastReservations.end();
+}
+
+bool CastRitualOfSoulsAction::Execute(Event event)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    ObjectGuid groupGuid = group->GetGUID();
+
+    {
+        std::lock_guard<std::mutex> lock(ritualCastReservationsMutex);
+        CleanupRitualCastReservations(getMSTime());
+        if (ritualCastReservations.count(groupGuid))
+            return false;  // another warlock beat us to this group's ritual
+    }
+
+    if (!CastBuffSpellAction::Execute(event))
+        return false;
+
+    std::lock_guard<std::mutex> lock(ritualCastReservationsMutex);
+    ritualCastReservations[groupGuid] = getMSTime() + 8000;
+    return true;
+}
 
 // Checks if the bot has less than 26 soul shards, and if so, allows casting Drain Soul
 bool CastDrainSoulAction::isUseful() { return AI_VALUE2(uint32, "item count", "soul shard") < 26; }

@@ -287,6 +287,36 @@ AiPlayerbot.AutoEquipUpgradeLoot = 1
 # Default: 1.1 (Equip when the equipment score of the new item is 1.1 times higher than the currently equipped item)
 AiPlayerbot.EquipUpgradeThreshold = 1.1
 
+# Take item set (tier) bonuses into account when bots pick upgrades and vote on loot.
+# When disabled, set bonuses only affect initial gearing, so bots break active 2/4/6-piece
+# bonuses for marginal stat upgrades.
+# Default: 1 (enabled)
+AiPlayerbot.ItemSet.UseForUpgrades = 1
+
+# Score boost an item gets for every set bonus it keeps active or newly unlocks.
+# Higher values make bots hold on to tier pieces harder.
+# Default: 0.15 (+15% score per bonus)
+AiPlayerbot.ItemSet.BonusWeight = 0.15
+
+# Score boost per already-owned set piece for items that do not cross a bonus threshold yet.
+# Nudges bots toward completing a set they have started.
+# Default: 0.03 (+3% per piece)
+AiPlayerbot.ItemSet.ProgressWeight = 0.03
+
+# Scales how much gem sockets add to an item's score. Sockets are valued at the best gem the bot
+# would actually slot, relative to what the item's own stats are worth.
+# Default: 1.0 (0 = fall back to the flat per-socket bonus below)
+AiPlayerbot.Socket.ValueFactor = 1.0
+
+# Upper limit on the socket multiplier, so socket-heavy items cannot run away with the score.
+# Default: 1.3 (sockets can add at most 30%)
+AiPlayerbot.Socket.MaxMultiplier = 1.3
+
+# Flat per-socket bonus used when gem value cannot be determined (no gems loaded, ValueFactor = 0,
+# or an item whose own stats score zero).
+# Default: 0.03 (+3% per socket)
+AiPlayerbot.Socket.WeightPerSocket = 0.03
+
 # Two rounds of equipment initialization to create more suitable gear
 AiPlayerbot.TwoRoundsGearInit = 0
 
@@ -312,6 +342,166 @@ AiPlayerbot.FreeMethodLoot = 0
 #   equip      - loot only gear pieces (armor + weapons) of uncommon quality or higher
 # Default: normal
 AiPlayerbot.LootStrategy = normal
+
+# Restrict bot battle/combat resurrection (Druid Rebirth, Shaman Reincarnation) to boss
+# fights only, conserving these scarce cooldowns on trash packs. A boss fight is detected
+# when an instance encounter is IN_PROGRESS or a current group attacker is a dungeon/world
+# boss. Set to 0 to restore always-on in-combat rez behavior.
+# Default: 1 (boss fights only)
+AiPlayerbot.BattleRezBossOnly = 1
+
+# Enable Vezax hard-mode behaviour (fight the Saronite Animus). Bots follow the raid's
+# hard-mode choice only when this is on: with it off they play Vezax as normal mode even
+# if the Animus spawns.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarVezaxHardMode = 0
+
+# Enable Assembly of Iron hard-mode behaviour (kill Steelbreaker last). When on, bots mark the
+# kill order Brundir -> Molgeim -> Steelbreaker and, once Steelbreaker is the last one alive and
+# empowered, tank-swap him off a tank stacking Overwhelming Power. With it off they kill the council
+# in whatever order the raid marks and skip the empowered tank-swap.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarIronAssemblyHardMode = 0
+
+# Enable Flame Leviathan hard-mode behaviour (towers left standing). Each surviving tower
+# empowers the boss and spawns a periodic ground hazard: Storm -> Thorim's Hammer strikes,
+# Flame -> Mimiron's Inferno fire trail, Frost -> Hodir's Fury. When on, bots pilot their
+# vehicle out of whichever active-tower hazard is nearest; with it off they ignore the
+# hazards and play the fight as normal mode. Life tower (adds) needs no special handling.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarFlameLeviathanHardMode = 0
+
+# Enable Thorim hard-mode behaviour (arena gauntlet cleared fast enough that Sif joins the
+# fight). Once Sif drops into the arena she casts Frostbolt Volley (raid-wide, healed through),
+# Blizzard (a moving ground AoE) and Frost Nova (point-blank after a teleport). When on, bots
+# move out of Sif's Blizzard and ranged/healers keep their distance so her Frost Nova misses;
+# with it off they ignore Sif and play the fight as normal mode. Frostbolt Volley is unavoidable
+# and left to the healers either way.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarThorimHardMode = 0
+
+# Enable Freya hard-mode behaviour (Elders left alive). Each living Elder permanently empowers Freya
+# for the whole fight: Ironbranch -> Iron Roots (traps a player in a killable root), Brightleaf ->
+# Unstable Sun Beam (a damaging ground zone). When on, a rooted bot kills the root trapping it and
+# bots step out of Unstable Sun Beams; with it off they play the fight as normal mode. Stonebark's
+# Ground Tremor (raid-wide knockback) is unavoidable and left to the healers either way.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarFreyaHardMode = 0
+
+# Enable Hodir hard-mode behaviour (the "Rare Cache of Winter" 3-minute timed kill). The fight is the
+# same as normal mode - there is no extra add - the raid just has to kill Hodir within 180 seconds, so
+# when on, bots optimise for the DPS race: free the flash-frozen helper NPCs at the pull, a bot carrying
+# Storm Cloud moves into the raid to spread its Storm Power crit buff, and bots stand in a Toasty Fire
+# when Biting Cold stacks on them (a no-cheat alternative to shaking it off). With it off they ignore
+# the helpers and play the fight as normal mode.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarHodirHardMode = 0
+
+# Enable Mimiron hard-mode behaviour ("Firefighter", the Big Red Button pressed before the pull).
+# Firefighter adds two hazards on top of the normal fight: a persistent, spreading ground fire and
+# VX-001's Frost Bomb (a large delayed explosion). When on, bots step out of the fire and clear the
+# Frost Bomb radius before it detonates; with it off they play the fight as normal mode. The Emergency
+# Fire Bots that also spawn are friendly extinguishers, so bots leave them alone either way.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarMimironHardMode = 0
+
+# Enable Yogg-Saron reduced-Keeper hard-mode behaviour (the raid frees fewer than 4 Keepers before the
+# pull). This is tuned for the hardest single-Keeper case, Thorim only: with Freya absent there are no
+# Sanity Wells, so sanity is a one-way drain. When on, bots stop cheat-instakilling the Crusher Tentacles
+# and Immortal Guardians and play them for real - ranged nuke the stationary Crusher Tentacles in place
+# while melee stay on the other tentacles, and in phase 3 the tank brings the Immortal Guardians to the
+# melee stack to cleave them down so Thorim's Titanic Storm executes each one once Weakened. Bots low on
+# sanity, with no Well to run to, pull behind Yogg and face away, healing/DPSing only targets already in
+# front so they never turn back into a Lunatic Gaze. With it off (or with all 4 Keepers) the fight plays
+# as normal mode.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarYoggSaronHardMode = 0
+
+# Obsidian Sanctum difficulty: how many of Sartharion's drakes bots leave alive (the "Twilight Zone"
+# tier). Bots tank the kept drakes off the raid and never kill them, then burn Sartharion; killing him
+# ends the fight and despawns the drakes. Keep-order is Tenebron -> Shadron -> Vesperon, so kill-order
+# is Vesperon -> Shadron -> Tenebron.
+#   0 = kill all drakes first, then Sartharion (Sarth+0)
+#   1 = leave Tenebron alive (Sarth+1)
+#   2 = leave Tenebron + Shadron alive (Sarth+2)
+#   3 = leave all three alive (Sarth+3)
+# Default: 0
+AiPlayerbot.SartharionDrakesAlive = 0
+
+# Bots' loot roll level:
+#   0 = always pass
+#   1 = always greed (legacy default, bots never roll "need")
+#   2 = allow need (recommended with new loot AI)
+#
+# With the new loot AI, bots can correctly decide when an item is really useful.
+# Setting this to 2 lets them use "need" appropriately. Value 1 only does greed,
+# which was the old safe default but bypasses the new decision-making.
+AiPlayerbot.LootRollLevel = 2
+
+# Upgrades-only roll mode. When enabled, bots roll GREED (never NEED) on items that
+# would be a direct gear upgrade for them, so real players always keep the NEED option.
+# Bots PASS on everything else: recipes, crafting materials, disenchantable items,
+# tier/set tokens, off-spec/unusable gear, duplicates and cosmetics.
+# Default: 0 (disabled - normal smart-loot behavior)
+AiPlayerbot.Roll.UpgradesOnly = 0
+
+# NEED only if the item matches the bot's MAIN spec (stats & armor/weapon type).
+# Off-spec upgrades are automatically downgraded to GREED.
+# Default: 1 (enabled)
+AiPlayerbot.Roll.SmartNeedBySpec = 1
+
+# Enable group-wide upgrade checks (other bots' needs) during loot decisions.
+# Default: 0 (disabled)
+AiPlayerbot.Roll.UseGroupUsageChecks = 0
+
+# Bind-on-Equip etiquette: GREED by default to keep it tradeable.
+# Set to 1 to allow NEED on BoE if it's a clear upgrade.
+# Default: 1 (enabled)
+AiPlayerbot.Roll.AllowBoENeedIfUpgrade = 1
+
+# Bind-on-Use etiquette: GREED by default to keep it tradeable.
+# Set to 1 to allow NEED on BoU if it's a clear upgrade.
+# Default: 1 (enabled)
+AiPlayerbot.Roll.AllowBoUNeedIfUpgrade = 1
+
+# Disenchant behavior (Need-Before-Greed / Group Loot only):
+#   0 = never use the "Disenchant" button (bots roll GREED/PASS instead)
+#   1 = only bots with Enchanting can use "Disenchant"
+#   2 = all bots can use "Disenchant" when the item is only useful to disenchant
+# Default: 1
+AiPlayerbot.Roll.UseDEButton = 1
+
+# NEED on learnable profession recipes/patterns/books if the bot has the profession.
+# Default: 1 (enabled)
+AiPlayerbot.Roll.NeedOnProfessionRecipes = 1
+
+# Ignore required skill rank when deciding NEED on profession recipes (not recommended for strict etiquette).
+# Default: 0 (disabled)
+AiPlayerbot.Roll.Recipes.IgnoreSkillRank = 0
+
+# Cross-armor rule (cloth/leather/mail on a plate user, etc.):
+# Allow NEED only if newScore >= CrossArmorExtraMargin * bestEquippedScore.
+# Default: 1.20 (conservative). Use 9.99 to effectively forbid cross-armor NEED.
+AiPlayerbot.Roll.CrossArmorExtraMargin = 1.20
+
+# Cross-armor policy: when an off-armor (lower tier) item is not primary, should bots PASS instead of GREED?
+# false (0): cross-armor -> GREED (default, legacy behavior)
+# true (1): cross-armor -> PASS (bots won't roll at all on off-armor)
+# Default: 0 (false)
+AiPlayerbot.Roll.CrossArmorGreedIsPass = 0
+
+# Minimum item level delta to treat a SET TOKEN as a real upgrade (0 means >=).
+# Prevents NEED on same-tier duplicates.
+# Example: Paladin Prot with chest ilvl 232:
+#  - “Trophy of the Crusade” (ilvl 245) => NEED allowed.
+#  - Token ilvl 232 with TokenILevelMargin=0.1 => GREED (no same-tier NEED).
+# Default: 0.1
+AiPlayerbot.Roll.TokenILevelMargin = 0.1
+
+# ICC sanctification tokens (Conqueror/Protector/Vanquisher Mark of Sanctification):
+# 0 = always GREED; 1 = NEED while the bot has fewer than 5 tokens of that type.
+# Default: 0
+AiPlayerbot.Roll.SanctificationTokenMode = 0
 
 # Bots' Roll level bots will use for items they Need (0 = pass, 1 = greed, 2 = need)
 # Default: 1 (greed)
@@ -866,6 +1056,27 @@ AiPlayerbot.MinEnchantingBotLevel = 60
 # If enabled, bots will not use TBC enchants until level 61 or WotLK enchants and gems until level 71
 # Default: 1 (enabled)
 AiPlayerbot.LimitEnchantExpansion = 1
+
+# When socketing gems, steer colored gems so the equipped meta gem's activation requirement
+# (e.g. "requires at least 2 Blue Gems") is met, then activate the meta gem. Bots still pick the
+# best-stat gems for their class/spec; only the minimum sockets needed for the meta are adjusted.
+# Disable to keep the old behavior (meta gem may stay inactive).
+# Default: 1 (enabled)
+AiPlayerbot.FulfillMetaGemRequirements = 1
+
+# DPS bots stock and use a level-appropriate offensive potion (haste/strength/speed/wild magic)
+# during their burst window on dungeon and world bosses. Casters get the spellpower ladder,
+# physical DPS the attack-power ladder. Tanks and healers are unaffected.
+# Disable to stop stocking and using offensive potions entirely.
+# Default: 1 (enabled)
+AiPlayerbot.OffensivePotions = 1
+
+# Grouped DPS bots hold their major offensive burst cooldowns (Recklessness, Arcane Power,
+# Adrenaline Rush, Avenging Wrath, Bloodlust/Heroism, etc.) for dungeon and world bosses
+# instead of spending them on trash. Solo bots are unaffected, and priest Shadowfiend stays
+# available for mana. Disable to let bots burst on any target.
+# Default: 1 (enabled)
+AiPlayerbot.BurstOnBossOnly = 1
 
 # Enable expansion limitation for gear
 # If enabled, bots will not equip TBC gear until level 61 or WotLK gear until level 71

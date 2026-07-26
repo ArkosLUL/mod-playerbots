@@ -119,6 +119,47 @@ private:
     GluthBossHelper helper;
 };
 
+class NaxxThreatRedirectMultiplier : public Multiplier
+{
+public:
+    NaxxThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "naxx threat redirect") {}
+    float GetValue(Action* action) override;
+};
+
+// Holds the offensive burst cooldowns until the boss's actual DPS check. One multiplier for all six
+// bosses so the IsBurstCooldownAction early-out runs once per action instead of six times.
+class NaxxBurstWindowMultiplier : public Multiplier
+{
+public:
+    NaxxBurstWindowMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "naxx burst window"), kelthuzad(ai), sapphiron(ai), thaddius(ai), loatheb(ai)
+    {
+    }
+    float GetValue(Action* action) override;
+
+private:
+    // Sweeps every boss helper, so it is cached for the rest of the tick rather than re-run per
+    // action. Each helper resolves through "find target", which utf8-lowercases the whole threat
+    // list on a 1 ms cache.
+    float EvaluateWindow();
+
+    // Fungal Creep is not scripted in this core's boss_loatheb.cpp, so without a timed fallback the
+    // cooldowns would be held for the whole fight.
+    static constexpr uint32 LOATHEB_FALLBACK_MS = 45000;
+
+    // Guardians of Icecrown start spawning here (boss_kelthuzad.cpp, HealthBelowPct(45)).
+    static constexpr float KELTHUZAD_GUARDIAN_PCT = 45.0f;
+
+    KelthuzadBossHelper kelthuzad;
+    SapphironBossHelper sapphiron;
+    ThaddiusBossHelper thaddius;
+    LoathebBossHelper loatheb;
+    uint32 loathebFightStartMs = 0;
+
+    uint32 cachedAtMs = 0;
+    float cachedValue = 1.0f;
+};
+
 // class NothGenericMultiplier : public Multiplier
 // {
 // public:

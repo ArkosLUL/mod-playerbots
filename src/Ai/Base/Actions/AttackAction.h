@@ -7,6 +7,8 @@
 #ifndef PLAYERBOTS_ATTACKACTION_H
 #define PLAYERBOTS_ATTACKACTION_H
 
+#include <unordered_set>
+
 #include "MovementActions.h"
 
 class PlayerbotAI;
@@ -20,6 +22,13 @@ public:
 
 protected:
     bool Attack(Unit* target, bool with_pet = true);
+
+private:
+    void LogLargeTargetOnce(Unit* target);
+
+    // Entries already reported through this action instance. A bot holding several AttackAction
+    // subclasses reports a creature once per instance, which is close enough for telemetry.
+    std::unordered_set<uint32> loggedLargeTargets;
 };
 
 class AttackMyTargetAction : public AttackAction

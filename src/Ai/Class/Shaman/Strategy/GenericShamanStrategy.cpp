@@ -133,8 +133,8 @@ void ShamanCureStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
 void ShamanBoostStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    triggers.push_back(new TriggerNode("heroism", { NextAction("heroism", 30.0f), }));
-    triggers.push_back(new TriggerNode("bloodlust", { NextAction("bloodlust", 30.0f), }));
+    triggers.push_back(new TriggerNode("heroism", { NextAction("heroism", 50.0f), }));
+    triggers.push_back(new TriggerNode("bloodlust", { NextAction("bloodlust", 50.0f), }));
 
     Player* bot = botAI->GetBot();
     int tab = AiFactory::GetPlayerSpecTab(bot);

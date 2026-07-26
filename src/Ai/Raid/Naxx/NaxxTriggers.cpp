@@ -232,7 +232,7 @@ bool GluthMainTankMortalWoundTrigger::IsActive()
     {
         return false;
     }
-    if (!botAI->IsAssistTankOfIndex(bot, 0))
+    if (!botAI->IsAssistTankOfIndex(bot, 0, true))
     {
         return false;
     }
@@ -253,7 +253,41 @@ bool GluthMainTankMortalWoundTrigger::IsActive()
     return true;
 }
 
+bool GluthFrenzyTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_HUNTER)
+    {
+        return false;
+    }
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+    Unit* boss = AI_VALUE2(Unit*, "find target", "gluth");
+    if (!boss || !boss->IsInCombat())
+    {
+        return false;
+    }
+    if (!NaxxSpellIds::HasAnyAura(boss, {NaxxSpellIds::GluthFrenzy10, NaxxSpellIds::GluthFrenzy25}) &&
+        !botAI->GetAura("frenzy", boss))
+    {
+        return false;
+    }
+    return botAI->CanCastSpell("tranquilizing shot", boss);
+}
+
 bool KelthuzadTrigger::IsActive() { return helper.UpdateBossAI(); }
+
+bool KelthuzadShadowFissureTrigger::IsActive()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    Unit* fissure = helper.GetNearestShadowFissure();
+    return fissure && bot->IsWithinDistInMap(fissure, KelthuzadBossHelper::FISSURE_DANGER_RADIUS);
+}
 
 bool AnubrekhanTrigger::IsActive()
 {

@@ -68,6 +68,7 @@ public:
         creators["autogear"] = &ChatTriggerContext::autogear;
         creators["autogear bis"] = &ChatTriggerContext::autogear_bis;
         creators["equip upgrade"] = &ChatTriggerContext::equip_upgrade;
+        creators["equip upgrades"] = &ChatTriggerContext::equip_upgrades;
         creators["attack"] = &ChatTriggerContext::attack;
         creators["pull"] = &ChatTriggerContext::pull;
         creators["pull back"] = &ChatTriggerContext::pull_back;
@@ -224,6 +225,7 @@ private:
     static Trigger* autogear(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "autogear"); }
     static Trigger* autogear_bis(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "autogear bis"); }
     static Trigger* equip_upgrade(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "equip upgrade"); }
+    static Trigger* equip_upgrades(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "equip upgrades"); }
     static Trigger* co(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "co"); }
     static Trigger* nc(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "nc"); }
     static Trigger* dead(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "de"); }

@@ -9,6 +9,7 @@
 #include "DBCStores.h"
 #include "ItemTemplate.h"
 #include "Playerbots.h"
+#include "StatsWeightCalculator.h"
 
 std::unordered_set<uint32> RandomItemMgr::itemCache;
 
@@ -1045,6 +1046,37 @@ std::vector<uint32> const& RandomItemMgr::GetEnchantmentPool(uint32 entry) const
     return it->second;
 }
 
+float RandomItemMgr::CalculateItemWeight(Player* player, uint32 itemId, int32 randomPropertyId)
+{
+    if (!player || !itemId)
+        return 0.0f;
+
+    StatsWeightCalculator calculator(player);
+    calculator.SetItemSetBonus(false);
+    calculator.SetOverflowPenalty(false);
+    return calculator.CalculateItem(itemId, randomPropertyId);
+}
+
+bool RandomItemMgr::CanEquipForBot(Player* player, ItemTemplate const* proto)
+{
+    if (!player || !proto)
+        return false;
+
+    if (player->BotCanUseItem(proto) != EQUIP_ERR_OK)
+        return false;
+
+    if (proto->InventoryType == INVTYPE_NON_EQUIP)
+        return false;
+
+    if (proto->Class == ITEM_CLASS_WEAPON)
+        return CanEquipWeapon(proto, player->getClass());
+
+    if (proto->Class == ITEM_CLASS_ARMOR)
+        return CanEquipArmor(proto, player->getClass(), player->GetLevel());
+
+    return true;
+}
+
 bool RandomItemMgr::CanEquipArmor(ItemTemplate const* proto, uint8 clazz, uint32 level) const
 {
     // skip null proto or invalid class
@@ -1061,6 +1093,12 @@ bool RandomItemMgr::CanEquipArmor(ItemTemplate const* proto, uint8 clazz, uint32
 
     // skip additional checks for tabards - always equippable
     if (proto->InventoryType == INVTYPE_TABARD)
+        return true;
+
+    // jewelry, cloaks and held off-hands have no armor-subclass restriction
+    if (proto->InventoryType == INVTYPE_CLOAK || proto->InventoryType == INVTYPE_NECK ||
+        proto->InventoryType == INVTYPE_FINGER || proto->InventoryType == INVTYPE_TRINKET ||
+        proto->InventoryType == INVTYPE_HOLDABLE)
         return true;
 
     if ((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN || clazz == CLASS_SHAMAN) &&

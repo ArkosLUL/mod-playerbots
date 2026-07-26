@@ -6,6 +6,7 @@
 
 #include "HealthTriggers.h"
 
+#include "AttackersValue.h"
 #include "Playerbots.h"
 
 bool HealthInRangeTrigger::IsActive()
@@ -17,7 +18,17 @@ float HealthInRangeTrigger::GetValue() { return AI_VALUE2(uint8, "health", GetTa
 
 bool PartyMemberDeadTrigger::IsActive() { return GetTarget(); }
 
-bool CombatPartyMemberDeadTrigger::IsActive() { return GetTarget(); }
+bool CombatPartyMemberDeadTrigger::IsActive()
+{
+    if (!GetTarget())
+        return false;
+
+    // Conserve battle rez (Druid Rebirth) for boss fights unless the server opts out.
+    if (sPlayerbotAIConfig.battleRezBossOnly && !AttackersValue::IsInBossFight(botAI))
+        return false;
+
+    return true;
+}
 
 bool DeadTrigger::IsActive() { return AI_VALUE2(bool, "dead", GetTargetName()); }
 

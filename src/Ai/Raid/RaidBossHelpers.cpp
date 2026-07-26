@@ -9,7 +9,10 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Playerbots.h"
+#include "CreatureAI.h"
 #include "RtiTargetValue.h"
+#include <algorithm>
+#include <cmath>
 
 // Functions to mark targets with raid target icons
 // Note that these functions do not allow the player to change the icon during the encounter
@@ -283,4 +286,73 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
     }
 
     return dynObjs;
+}
+
+// Return the shortest-rotation spot just outside source's frontal cone, at the bot's current
+// distance, so a bot caught in a cone attack sidesteps out of the arc instead of running the whole
+// way behind the boss. coneAngle is the full arc width (matching IsBotInFrontalCone); margin is the
+// extra clearance past the cone edge.
+Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin)
+{
+    float const distance = std::max(5.0f, source->GetExactDist2d(bot));
+    float const facing = source->GetOrientation();
+
+    // Signed bearing of the bot relative to where the boss is facing, in (-pi, pi]
+    float diff = Position::NormalizeOrientation(source->GetAngle(bot) - facing);
+    if (diff > M_PI)
+        diff -= 2.0f * static_cast<float>(M_PI);
+
+    // Rotate just past the cone edge on the side the bot is already on (shortest exit)
+    float const edge = coneAngle / 2.0f + margin;
+    float const targetAngle = Position::NormalizeOrientation(facing + (diff >= 0.0f ? edge : -edge));
+
+    float const x = source->GetPositionX() + std::cos(targetAngle) * distance;
+    float const y = source->GetPositionY() + std::sin(targetAngle) * distance;
+    return Position(x, y, bot->GetPositionZ(), 0.0f);
+}
+
+// Command the bot's guardian pet onto target. Mirrors PetAttackAction, which is disabled
+// globally, so scripted fights must redirect pets explicitly (e.g. off an immune boss).
+void CommandPetAttack(PlayerbotAI* botAI, Unit* target)
+{
+    Player* bot = botAI->GetBot();
+    Guardian* pet = bot->GetGuardianPet();
+    if (!pet || !target)
+        return;
+
+    // Respect a passive pet stance and never attack an invalid target.
+    if (pet->GetReactState() == REACT_PASSIVE)
+        return;
+
+    if (!bot->IsValidAttackTarget(target))
+        return;
+
+    // Already on target: avoid re-issuing the command every tick (would stutter the pet).
+    if (pet->GetVictim() == target)
+        return;
+
+    pet->ClearUnitState(UNIT_STATE_FOLLOW);
+    pet->AttackStop();
+    pet->SetTarget(target->GetGUID());
+
+    pet->GetCharmInfo()->SetIsCommandAttack(true);
+    pet->GetCharmInfo()->SetIsAtStay(false);
+    pet->GetCharmInfo()->SetIsFollowing(false);
+    pet->GetCharmInfo()->SetIsCommandFollow(false);
+    pet->GetCharmInfo()->SetIsReturning(false);
+
+    pet->ToCreature()->AI()->AttackStart(target);
+}
+
+// Stop the bot's guardian pet and clear its target so it disengages the current victim.
+void StopPet(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Guardian* pet = bot->GetGuardianPet();
+    if (!pet)
+        return;
+
+    pet->AttackStop();
+    pet->SetTarget(ObjectGuid::Empty);
+    pet->GetCharmInfo()->SetIsCommandAttack(false);
 }

@@ -6,6 +6,7 @@
 #include "PlayerbotFactory.h"
 
 #include <array>
+#include <limits>
 #include <utility>
 
 #include "AccountMgr.h"
@@ -3847,6 +3848,38 @@ void PlayerbotFactory::InitPotions()
         if (Item* newItem = StoreNewItemInInventorySlot(bot, itemId, urand(maxCount / 2, maxCount)))
             newItem->AddToUpdateQueueOf(bot);
     }
+
+    // Role/armor detection is spec-based (bySpec), like the oil/sharpening ladders above, so it
+    // doesn't depend on combat strategies being initialised when the factory runs.
+    if (sPlayerbotAIConfig.offensivePotions && PlayerbotAI::IsDps(bot, true))
+    {
+        // Damage-stat ladder (descending): first entry whose RequiredLevel the bot meets wins,
+        // so the band picks itself the same way the oil/sharpening-stone ladders do.
+        std::vector<uint32> const casterLadder = {POTION_OF_WILD_MAGIC, DESTRUCTION_POTION, HASTE_POTION};
+        // Insane Strength only converts to attack power for Strength classes; agility melee get next
+        // to nothing from it, so they fall straight through to the class-neutral Haste Potion.
+        bool const strengthClass = bot->getClass() == CLASS_WARRIOR || bot->getClass() == CLASS_PALADIN ||
+                                   bot->getClass() == CLASS_DEATH_KNIGHT;
+        std::vector<uint32> const strengthLadder = {POTION_OF_SPEED, INSANE_STRENGTH_POTION, HASTE_POTION};
+        std::vector<uint32> const agilityLadder = {POTION_OF_SPEED, HASTE_POTION};
+        std::vector<uint32> const& ladder =
+            PlayerbotAI::IsCaster(bot, true) ? casterLadder : (strengthClass ? strengthLadder : agilityLadder);
+
+        for (uint32 itemId : ladder)
+        {
+            ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
+            if (!proto || proto->RequiredLevel > level)
+                continue;
+
+            if (bot->GetItemCount(itemId))
+                break;
+
+            uint32 maxCount = proto->GetMaxStackSize();
+            if (Item* newItem = StoreNewItemInInventorySlot(bot, itemId, urand(maxCount / 2, maxCount)))
+                newItem->AddToUpdateQueueOf(bot);
+            break;
+        }
+    }
 }
 
 std::vector<uint32> PlayerbotFactory::GetCurrentGemsCount()
@@ -4960,9 +4993,7 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
 {
     //int32 bestGemEnchantId[4] = {-1, -1, -1, -1};  // 1, 2, 4, 8 color //not used, line marked for removal.
     //float bestGemScore[4] = {0, 0, 0, 0}; //not used, line marked for removal.
-    std::vector<uint32> curCount = GetCurrentGemsCount();
     uint8 jewelersCount = 0;
-    int requiredActive = 2;
     std::vector<uint32> availableGems;
     for (const uint32& enchantGem : enchantGemIdCache)
     {
@@ -5005,6 +5036,82 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         availableGems.push_back(enchantGem);
     }
     StatsWeightCalculator calculator(bot);
+
+    struct SocketToGem
+    {
+        Item* item = nullptr;
+        uint32 enchantSlot = 0;
+        uint8 socketColor = 0;
+        int32 curEnchantId = -1;
+        uint32 curGemItem = 0;
+        float curScore = 0.0f;
+        bool curJewelers = false;
+    };
+    std::vector<SocketToGem> coloredSockets;
+    std::vector<SocketToGem> metaSockets;
+
+    auto gemColorOf = [&](uint32 gemItemId) -> uint8
+    {
+        if (!gemItemId)
+            return 0;
+        ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(gemItemId);
+        if (!gemTemplate)
+            return 0;
+        GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
+        return gemProperties ? static_cast<uint8>(gemProperties->color) : uint8(0);
+    };
+
+    // Pick the highest class/spec-weighted gem for a socket. restrictColor (0 = any) forces the gem to
+    // carry one of the given color bits; matching the socket color keeps the +20% socket-bonus nudge.
+    auto pickBestGem = [&](uint8 socketColor, uint8 restrictColor, uint8 jewelersUsed, int32& outEnchantId,
+                           uint32& outGemItem, float& outScore, bool& outJewelers) -> bool
+    {
+        bool isMetaSocket = (socketColor & SOCKET_COLOR_META) != 0;
+        outEnchantId = -1;
+        outGemItem = 0;
+        outScore = -1.0f;
+        outJewelers = false;
+        for (uint32 const& enchantGem : availableGems)
+        {
+            ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
+            if (!gemTemplate)
+                continue;
+
+            // Limit jewelers (JC) epic gems to 3
+            bool isJewelersGem = gemTemplate->ItemLimitCategory == 2;
+            if (isJewelersGem && jewelersUsed >= 3)
+                continue;
+
+            GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
+            if (!gemProperties)
+                continue;
+
+            // meta gems only go in meta sockets, colored gems only in colored sockets
+            bool isMetaGem = gemProperties->color == SOCKET_COLOR_META;
+            if (isMetaGem != isMetaSocket)
+                continue;
+
+            if (restrictColor && !(gemProperties->color & restrictColor))
+                continue;
+
+            uint32 enchant_id = gemProperties->spellitemenchantement;
+            if (!enchant_id)
+                continue;
+
+            float score = calculator.CalculateEnchant(enchant_id);
+            if (socketColor & gemProperties->color)
+                score *= 1.2f;
+            if (score > outScore)
+            {
+                outScore = score;
+                outEnchantId = static_cast<int32>(enchant_id);
+                outGemItem = enchantGem;
+                outJewelers = isJewelersGem;
+            }
+        }
+        return outEnchantId != -1;
+    };
+
     for (uint8 slot = 0; slot < EQUIPMENT_SLOT_END; ++slot)
     {
         if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
@@ -5085,64 +5192,166 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             if (!socketColor)
                 continue;
 
-            int32 enchantIdChosen = -1;
-            bool jewelersGemChosen;
-            float bestGemScore = -1;
-            for (uint32& enchantGem : availableGems)
+            SocketToGem entry;
+            entry.item = item;
+            entry.enchantSlot = enchant_slot;
+            entry.socketColor = socketColor;
+            if (socketColor & SOCKET_COLOR_META)
+                metaSockets.push_back(entry);
+            else
+                coloredSockets.push_back(entry);
+        }
+    }
+
+    // Deactivate any meta gem already socketed, while the colored gems are still the ones the bot logged
+    // in with. That way ApplyEnchantment's condition gate matches the meta's real applied state: it removes
+    // the meta stats only if they were actually active, and no-ops otherwise. Without this, a meta that was
+    // socketed-but-inactive gets a phantom remove in Step D that cancels its re-add, so it never activates.
+    for (SocketToGem const& ms : metaSockets)
+    {
+        if (ms.item->GetEnchantmentId(EnchantmentSlot(ms.enchantSlot)))
+            bot->ApplyEnchantment(ms.item, EnchantmentSlot(ms.enchantSlot), false);
+    }
+
+    // Choose the meta gem(s) up front but defer applying them: a meta gem's bonus only activates once
+    // enough colored gems are socketed (Player::ApplyEnchantment gates on EnchantmentFitsRequirements),
+    // so colored gems have to go in first.
+    std::vector<std::pair<SocketToGem, int32>> metaToApply;
+    uint32 metaCondition = 0;
+    for (SocketToGem const& ms : metaSockets)
+    {
+        int32 enchId;
+        uint32 gemItem;
+        float score;
+        bool jewelers;
+        if (!pickBestGem(ms.socketColor, 0, jewelersCount, enchId, gemItem, score, jewelers))
+            continue;
+
+        metaToApply.emplace_back(ms, enchId);
+        if (SpellItemEnchantmentEntry const* metaEnchant = sSpellItemEnchantmentStore.LookupEntry(static_cast<uint32>(enchId)))
+        {
+            if (metaEnchant->EnchantmentCondition && !metaCondition)
+                metaCondition = metaEnchant->EnchantmentCondition;
+        }
+    }
+
+    // Fill colored sockets with the best-stat gem for the class/spec.
+    for (SocketToGem& s : coloredSockets)
+    {
+        int32 enchId;
+        uint32 gemItem;
+        float score;
+        bool jewelers;
+        if (!pickBestGem(s.socketColor, 0, jewelersCount, enchId, gemItem, score, jewelers))
+            continue;
+
+        bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), false);
+        s.item->SetEnchantment(EnchantmentSlot(s.enchantSlot), static_cast<uint32>(enchId), 0, 0, bot->GetGUID());
+        bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), true);
+
+        s.curEnchantId = enchId;
+        s.curGemItem = gemItem;
+        s.curScore = score;
+        s.curJewelers = jewelers;
+        if (jewelers)
+            ++jewelersCount;
+    }
+
+    // Steer the cheapest colored sockets toward the meta gem's activation requirement, giving up as
+    // little class/spec stat weight as possible. EnchantmentFitsRequirements is the same evaluator the
+    // core uses, so every comparator/compare-color form is handled.
+    if (sPlayerbotAIConfig.fulfillMetaGemRequirements && metaCondition)
+    {
+        SpellItemEnchantmentConditionEntry const* cond = sSpellItemEnchantmentConditionStore.LookupEntry(metaCondition);
+        for (size_t iter = 0; cond && iter < coloredSockets.size(); ++iter)
+        {
+            if (bot->EnchantmentFitsRequirements(metaCondition, -1))
+                break;
+
+            // Colors a currently-failing "more"/"at least" clause is short of.
+            uint8 deficientMask = 0;
+            std::vector<uint32> counts = GetCurrentGemsCount();  // [meta, red, yellow, blue]
+            for (uint8 i = 0; i < 5; ++i)
             {
-                ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
-                if (!gemTemplate)
+                if (!cond->Color[i])
                     continue;
 
-                // Limit jewelers (JC) epic gems to 3
-                bool isJewelersGem = gemTemplate->ItemLimitCategory == 2;
-                if (isJewelersGem && jewelersCount >= 3)
-                    continue;
-
-                const GemPropertiesEntry* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
-                if (!gemProperties)
-                    continue;
-
-                if ((socketColor & gemProperties->color) == 0 && gemProperties->color == 1)  // meta socket
-                    continue;
-
-                uint32 enchant_id = gemProperties->spellitemenchantement;
-                if (!enchant_id)
-                    continue;
-
-                //SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchant_id); //not used, line marked for removal.
-                StatsWeightCalculator calculator(bot);
-                float score = calculator.CalculateEnchant(enchant_id);
-                if (curCount[0] != 0)
+                uint32 cur = counts[cond->Color[i] - 1];
+                uint32 cmp = cond->CompareColor[i] ? counts[cond->CompareColor[i] - 1] : cond->Value[i];
+                bool satisfied = true;
+                switch (cond->Comparator[i])
                 {
-                    // Ensure meta gem activation
-                    for (size_t i = 1; i < curCount.size(); i++)
-                    {
-                        if (curCount[i] < (uint32)requiredActive && (gemProperties->color & (1 << i)))
-                        {
-                            score *= 2;
-                            break;
-                        }
-                    }
+                    case 2: satisfied = cur < cmp; break;   // requires less
+                    case 3: satisfied = cur > cmp; break;   // requires more
+                    case 5: satisfied = cur >= cmp; break;  // requires at least
                 }
-                if (socketColor & gemProperties->color)
-                    score *= 1.2;
-                if (score > bestGemScore)
+                if (!satisfied && (cond->Comparator[i] == 3 || cond->Comparator[i] == 5))
+                    deficientMask |= static_cast<uint8>(1 << (cond->Color[i] - 1));
+            }
+            deficientMask &= ~static_cast<uint8>(SOCKET_COLOR_META);
+            if (!deficientMask)
+                break;  // only "requires less" clauses fail; adding gems can't help
+
+            float bestCost = std::numeric_limits<float>::max();
+            int bestIdx = -1;
+            int32 bestEnchId = -1;
+            uint32 bestGemItem = 0;
+            float bestNewScore = 0.0f;
+            bool bestJewelers = false;
+            for (size_t si = 0; si < coloredSockets.size(); ++si)
+            {
+                SocketToGem& s = coloredSockets[si];
+                // colors this socket doesn't already supply (swapping to a color it already has is pointless)
+                uint8 needForSocket = deficientMask & ~gemColorOf(s.curGemItem);
+                if (!needForSocket)
+                    continue;
+
+                uint8 jewelersUsed = jewelersCount - (s.curJewelers ? 1 : 0);
+                int32 enchId;
+                uint32 gemItem;
+                float score;
+                bool jewelers;
+                if (!pickBestGem(s.socketColor, needForSocket, jewelersUsed, enchId, gemItem, score, jewelers))
+                    continue;
+
+                float cost = s.curScore - score;  // stat weight given up by this swap
+                if (cost < bestCost)
                 {
-                    enchantIdChosen = enchant_id;
-                    bestGemScore = score;
-                    jewelersGemChosen = isJewelersGem;
+                    bestCost = cost;
+                    bestIdx = static_cast<int>(si);
+                    bestEnchId = enchId;
+                    bestGemItem = gemItem;
+                    bestNewScore = score;
+                    bestJewelers = jewelers;
                 }
             }
-            if (enchantIdChosen == -1)
-                continue;
-            bot->ApplyEnchantment(item, EnchantmentSlot(enchant_slot), false);
-            item->SetEnchantment(EnchantmentSlot(enchant_slot), enchantIdChosen, 0, 0, bot->GetGUID());
-            bot->ApplyEnchantment(item, EnchantmentSlot(enchant_slot), true);
-            curCount = GetCurrentGemsCount();
-            if (jewelersGemChosen)
+            if (bestIdx < 0)
+                break;  // requirement can't be met with the available sockets/gems
+
+            SocketToGem& s = coloredSockets[bestIdx];
+            bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), false);
+            s.item->SetEnchantment(EnchantmentSlot(s.enchantSlot), static_cast<uint32>(bestEnchId), 0, 0, bot->GetGUID());
+            bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), true);
+
+            if (s.curJewelers)
+                --jewelersCount;
+            if (bestJewelers)
                 ++jewelersCount;
+            s.curEnchantId = bestEnchId;
+            s.curGemItem = bestGemItem;
+            s.curScore = bestNewScore;
+            s.curJewelers = bestJewelers;
         }
+    }
+
+    // Apply the deferred meta gem(s) last. The meta is now in a known-unapplied state (pre-deactivated
+    // above) and the colored gems satisfy the condition, so this single apply activates the bonus exactly
+    // once. No leading remove — that's what caused the phantom -stats wash on already-gemmed bots.
+    for (std::pair<SocketToGem, int32> const& mp : metaToApply)
+    {
+        SocketToGem const& ms = mp.first;
+        ms.item->SetEnchantment(EnchantmentSlot(ms.enchantSlot), static_cast<uint32>(mp.second), 0, 0, bot->GetGUID());
+        bot->ApplyEnchantment(ms.item, EnchantmentSlot(ms.enchantSlot), true);
     }
 }
 

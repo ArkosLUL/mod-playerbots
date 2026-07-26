@@ -266,8 +266,19 @@ public:
     bool Execute(Event event) override;
 
 protected:
+    // Result of a shelter attempt. Moving => this action owns the tick (cast-time
+    // heals can't fire while the bot moves anyway). Sheltered => bot is stopped
+    // behind its block, so the tick can yield to heals. None => nothing to do.
+    enum class ShelterResult { None, Moving, Sheltered };
+
     SapphironBossHelper helper;
-    bool MoveToNearestIcebolt();
+    ShelterResult MoveToNearestIcebolt();
+    void ResetShelterLatch();
+
+    // Per-bot state, latched for the duration of one flight phase (see cache in
+    // Engine::CreateActionNode — actions are created once per bot and reused).
+    ObjectGuid assignedBlockGuid;
+    bool sheltered = false;
 };
 
 class KelthuzadChooseTargetAction : public AttackAction
@@ -285,6 +296,32 @@ class KelthuzadPositionAction : public MovementAction
 public:
     KelthuzadPositionAction(PlayerbotAI* ai) : MovementAction(ai, "kel'thuzad position"), helper(ai) {}
     virtual bool Execute(Event event);
+
+private:
+    KelthuzadBossHelper helper;
+};
+
+class KelthuzadFleeShadowFissureAction : public MovementAction
+{
+public:
+    KelthuzadFleeShadowFissureAction(PlayerbotAI* ai)
+        : MovementAction(ai, "kel'thuzad flee shadow fissure"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
+class KelthuzadMisdirectBossToMainTankAction : public AttackAction
+{
+public:
+    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* ai)
+        : AttackAction(ai, "kel'thuzad misdirect boss to main tank"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
 
 private:
     KelthuzadBossHelper helper;
@@ -334,6 +371,16 @@ class GluthSlowdownAction : public Action
 {
 public:
     GluthSlowdownAction(PlayerbotAI* ai) : Action(ai, "gluth slowdown"), helper(ai) {}
+    bool Execute(Event event) override;
+
+private:
+    GluthBossHelper helper;
+};
+
+class GluthTranquilizingShotAction : public Action
+{
+public:
+    GluthTranquilizingShotAction(PlayerbotAI* ai) : Action(ai, "gluth tranquilizing shot"), helper(ai) {}
     bool Execute(Event event) override;
 
 private:

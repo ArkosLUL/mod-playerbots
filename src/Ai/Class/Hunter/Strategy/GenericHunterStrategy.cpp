@@ -66,6 +66,10 @@ void GenericHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Aggro/Threat/Defensive Triggers
     triggers.push_back(new TriggerNode("has aggro", { NextAction("concussive shot", 20.0f) }));
     triggers.push_back(new TriggerNode("low tank threat", { NextAction("misdirection on main tank", 27.0f) }));
+    // On packs the redirect has to be up before Volley/Multi-Shot, so keep it on cooldown instead of
+    // waiting for threat to already be lost.
+    triggers.push_back(new TriggerNode("misdirection on main tank and light aoe",
+                                       { NextAction("misdirection on main tank", 27.0f) }));
     triggers.push_back(new TriggerNode("low health", { NextAction("deterrence", 35.0f) }));
     triggers.push_back(new TriggerNode("concussive shot on snare target", { NextAction("concussive shot", 20.0f) }));
     triggers.push_back(new TriggerNode("medium threat", { NextAction("feign death", 35.0f) }));
