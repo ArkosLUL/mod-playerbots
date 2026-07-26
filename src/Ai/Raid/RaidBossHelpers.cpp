@@ -150,6 +150,11 @@ bool IsMechanicTrackerBot(PlayerbotAI* botAI, Player* bot, uint32 mapId, Player*
     return false;
 }
 
+bool IsMechanicTrackerBot(Player* bot, uint32 mapId)
+{
+    return IsMechanicTrackerBot(nullptr, bot, mapId, nullptr);
+}
+
 // Requires the main tank to be alive
 Player* GetGroupMainTank(PlayerbotAI* botAI, Player* bot)
 {
@@ -262,6 +267,8 @@ Player* GetNearestPlayerInRadius(Player* bot, float radius)
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
 {
     return bot && source && source->GetExactDist2d(bot) <= range && source->HasInArc(coneAngle, bot);
+}
+
 // Grid search for dynamic objects for methods to avoid dynobj-based AoE hazards
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId)
 {

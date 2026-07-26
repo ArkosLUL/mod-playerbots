@@ -91,6 +91,8 @@ public:
     void InitAttunementQuests();
     void InitGuild();
 
+    static std::vector<uint32> enchantGemIdCache;
+
 private:
     enum class ProfessionSpecializationSpell : uint32
     {
@@ -222,7 +224,6 @@ private:
     static std::list<uint32> specialQuestIds;
     static std::unordered_map<uint32, std::vector<uint32>> trainerIdCache;
     static std::vector<uint32> enchantSpellIdCache;
-    static std::vector<uint32> enchantGemIdCache;
     static std::vector<uint32> ccBreakTrinketCache;
 
 protected:

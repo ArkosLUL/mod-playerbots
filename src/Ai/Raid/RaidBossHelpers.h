@@ -28,13 +28,9 @@ Player* GetGroupMainTank(PlayerbotAI* botAI, Player* bot);
 Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
 Unit* GetFirstAliveUnitByEntry(
     PlayerbotAI* botAI, uint32 entry);
-Unit* GetNearestPlayerInRadius(Player* bot, float radius);
+Player* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
 bool IsMechanicTrackerBot(Player* bot, uint32 mapId);
-Player* GetGroupMainTank(PlayerbotAI* botAI, Player* bot);
-Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
-Unit* GetFirstAliveUnitByEntry(PlayerbotAI* botAI, uint32 entry);
-Player* GetNearestPlayerInRadius(Player* bot, float radius);
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId);
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
