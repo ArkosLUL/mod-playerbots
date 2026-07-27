@@ -47,75 +47,67 @@ float GrobbulusMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
-// float HeiganDanceMultiplier::GetValue(Action* action)
-// {
-//     Unit* boss = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//     if (!boss)
-//     {
-//         return 1.0f;
-//     }
-//     bool platform_phase = boss->IsWithinDist2d(2794.26f, -3706.67f, 10.0f);
-//     bool eruption_casting = false;
-//     if (boss->HasUnitState(UNIT_STATE_CASTING))
-//     {
-//         Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-//         if (!spell)
-//         {
-//             spell = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-//         }
-//         if (spell)
-//         {
-//             SpellInfo const* info = spell->GetSpellInfo();
-//             bool isEruption = NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Eruption10});
-//             if (!isEruption && info && info->SpellName[LOCALE_enUS])
-//             {
-//                 // Fallback to name for custom spell data.
-//                 isEruption = botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "eruption");
-//             }
-//             if (isEruption)
-//             {
-//                 eruption_casting = true;
-//             }
-//         }
-//     }
-//     if (dynamic_cast<CombatFormationMoveAction*>(action) ||
-//         dynamic_cast<CastDisengageAction*>(action) ||
-//         dynamic_cast<CastBlinkBackAction*>(action) )
-//     {
-//         return 0.0f;
-//     }
+float HeiganDanceMultiplier::GetValue(Action* action)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return 1.0f;
+    }
+    if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+        dynamic_cast<CastDisengageAction*>(action) ||
+        dynamic_cast<CastBlinkBackAction*>(action) )
+    {
+        return 0.0f;
+    }
 
-//     // Speed boost for Phase 2 only. In Phase 1, Aspect of the Pack can daze the tank
-//     // if anyone gets hit, which is a common wipe cause on Heigan.
-//     if (dynamic_cast<CastAspectOfThePackAction*>(action))
-//     {
-//         return platform_phase ? 1.0f : 0.0f;
-//     }
-//     if (!platform_phase && !eruption_casting)
-//     {
-//         return 1.0f;
-//     }
-//     if (dynamic_cast<HeiganDanceAction*>(action) || dynamic_cast<CurePartyMemberAction*>(action))
-//     {
-//         return 1.0f;
-//     }
-//     if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastMeleeSpellAction*>(action))
-//     {
-//         CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
-//         uint32 spellId = AI_VALUE2(uint32, "spell id", spellAction->getSpell());
-//         SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
-//         if (!spellInfo)
-//         {
-//             return 0.0f;
-//         }
-//         uint32 castTime = spellInfo->CalcCastTime();
-//         if (castTime == 0 && !spellInfo->IsChanneled())
-//         {
-//             return 1.0f;
-//         }
-//     }
-//     return 0.0f;
-// }
+    // Speed boost for Phase 2 only. In Phase 1, Aspect of the Pack can daze the tank
+    // if anyone gets hit, which is a common wipe cause on Heigan.
+    if (dynamic_cast<CastAspectOfThePackAction*>(action))
+    {
+        return helper.IsFastDance() ? 1.0f : 0.0f;
+    }
+
+    // Out of sync we cannot say where the safe zone is, so leave the rest of the engine alone.
+    if (!helper.IsSynced())
+    {
+        return 1.0f;
+    }
+
+    // Bots parked on the ledge are not stepping anywhere this phase, so the cutoff below would cost
+    // them a quarter of their cast windows for a move they never make.
+    if (helper.ShouldHoldLedge() && helper.IsOnPlatform())
+    {
+        return 1.0f;
+    }
+
+    // Phase 1 leaves 10s between steps - only clamp down on the run-up to an eruption. The fast
+    // dance never leaves enough room for a cast.
+    if (!helper.IsFastDance() && helper.MsUntilNextEruption() > EruptionCastCutoffMs)
+    {
+        return 1.0f;
+    }
+    if (dynamic_cast<HeiganDanceAction*>(action) || dynamic_cast<HeiganDispelDecrepitFeverAction*>(action) ||
+        dynamic_cast<CurePartyMemberAction*>(action))
+    {
+        return 1.0f;
+    }
+    if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastMeleeSpellAction*>(action))
+    {
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        uint32 spellId = AI_VALUE2(uint32, "spell id", spellAction->getSpell());
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+        if (!spellInfo)
+        {
+            return 0.0f;
+        }
+        uint32 castTime = spellInfo->CalcCastTime();
+        if (castTime == 0 && !spellInfo->IsChanneled())
+        {
+            return 1.0f;
+        }
+    }
+    return 0.0f;
+}
 
 float LoathebGenericMultiplier::GetValue(Action* action)
 {
@@ -571,6 +563,14 @@ float NaxxThreatRedirectMultiplier::GetValue(Action* action)
         {
             return 0.0f;
         }
+    }
+
+    // Heigan spends 45s of every cycle REACT_PASSIVE on his ledge, so a redirect fired there burns
+    // its charges on nothing. Hold it for the arena return, where the tank has to rebuild while the
+    // raid is already back on the boss.
+    if (heigan.UpdateBossAI() && heigan.IsFastDance())
+    {
+        return 0.0f;
     }
     return 1.0f;
 }

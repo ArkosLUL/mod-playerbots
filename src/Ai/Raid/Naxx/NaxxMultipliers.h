@@ -19,14 +19,20 @@ public:
 public:
     virtual float GetValue(Action* action);
 };
-// class HeiganDanceMultiplier : public Multiplier
-// {
-// public:
-//     HeiganDanceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "helgan dance") {}
+class HeiganDanceMultiplier : public Multiplier
+{
+public:
+    HeiganDanceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "heigan dance"), helper(ai) {}
 
-// public:
-//     virtual float GetValue(Action* action);
-// };
+public:
+    virtual float GetValue(Action* action);
+
+private:
+    // How long before an eruption bots stop starting anything they cannot finish before the step.
+    static constexpr uint32 EruptionCastCutoffMs = 2500;
+
+    HeiganBossHelper helper;
+};
 
 class LoathebGenericMultiplier : public Multiplier
 {
@@ -122,8 +128,11 @@ private:
 class NaxxThreatRedirectMultiplier : public Multiplier
 {
 public:
-    NaxxThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "naxx threat redirect") {}
+    NaxxThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "naxx threat redirect"), heigan(ai) {}
     float GetValue(Action* action) override;
+
+private:
+    HeiganBossHelper heigan;
 };
 
 // Holds the offensive burst cooldowns until the boss's actual DPS check. One multiplier for all six

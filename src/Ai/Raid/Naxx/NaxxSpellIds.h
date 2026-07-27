@@ -34,13 +34,13 @@ namespace NaxxSpellIds
     // static constexpr uint32 GothikDeadRiderEntry     = 16150;
 
     // Heigan
-    // static constexpr uint32 Eruption10 = 29371;
-    // static constexpr uint32 DecrepitFever = 29998;
-/*
-    SPELL_SPELL_DISRUPTION          = 29310,
-    SPELL_PLAGUE_CLOUD              = 29350,
-    SPELL_TELEPORT_SELF             = 30211
-*/
+    // Cast by the floor GameObjects, never by the boss - see instance_naxxramas HeiganEruptSections.
+    static constexpr uint32 Eruption = 29371;
+    static constexpr uint32 DecrepitFever10 = 29998;
+    static constexpr uint32 DecrepitFever25 = 55011;
+    static constexpr uint32 SpellDisruption = 29310;
+    static constexpr uint32 PlagueCloud = 29350;
+    static constexpr uint32 TeleportSelf = 30211;
 
     // Grobbulus
     static constexpr uint32 PoisonCloud = 28240;

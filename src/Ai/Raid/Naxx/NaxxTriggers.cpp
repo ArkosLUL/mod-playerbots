@@ -92,70 +92,53 @@ bool GrobbulusCloudTrigger::IsActive()
     return true;
 }
 
-// bool HeiganMeleeTrigger::IsActive()
-// {
-//     Unit* heigan = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//     if (!heigan)
-//     {
-//         return false;
-//     }
-//     return !botAI->IsRanged(bot);
-// }
+bool HeiganMeleeTrigger::IsActive() { return helper.UpdateBossAI() && !botAI->IsRanged(bot); }
 
-// bool HeiganRangedTrigger::IsActive()
-// {
-//     Unit* heigan = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//     if (!heigan)
-//     {
-//         return false;
-//     }
-//     return botAI->IsRanged(bot);
-// }
+bool HeiganRangedTrigger::IsActive() { return helper.UpdateBossAI() && botAI->IsRanged(bot); }
 
-// bool HeiganDecrepitFeverTrigger::IsActive()
-// {
-//     Unit* heigan = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//     if (!heigan)
-//     {
-//         return false;
-//     }
+bool HeiganDecrepitFeverTrigger::IsActive()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
 
-//     // Only relevant for dispellers; keep the check cheap and local.
-//     switch (bot->getClass())
-//     {
-//         case CLASS_PALADIN:
-//         case CLASS_PRIEST:
-//         case CLASS_SHAMAN:
-//             break;
-//         default:
-//             return false;
-//     }
+    // Only relevant for dispellers; keep the check cheap and local.
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+        case CLASS_PRIEST:
+        case CLASS_SHAMAN:
+            break;
+        default:
+            return false;
+    }
 
-//     Group* group = bot->GetGroup();
-//     if (!group)
-//     {
-//         return false;
-//     }
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
 
-//     float range = botAI->GetRange("heal");
-//     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-//     {
-//         Player* member = gref->GetSource();
-//         if (!member || !member->IsAlive())
-//         {
-//             continue;
-//         }
-//         if (!member->HasAura(NaxxSpellIds::DecrepitFever))
-//         {
-//             continue;
-//         }
-//         if (bot->IsWithinDistInMap(member, range))
-//         {
-//             return true;
-//         }
-//     }
-//     return false;
-// }
+    float range = botAI->GetRange("heal");
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || !member->IsAlive())
+        {
+            continue;
+        }
+        if (!NaxxSpellIds::HasAnyAura(member, {NaxxSpellIds::DecrepitFever10, NaxxSpellIds::DecrepitFever25}))
+        {
+            continue;
+        }
+        if (bot->IsWithinDistInMap(member, range))
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 bool RazuviousTankTrigger::IsActive()
 {

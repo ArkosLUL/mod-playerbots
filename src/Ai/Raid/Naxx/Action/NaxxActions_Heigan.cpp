@@ -7,214 +7,181 @@
 #include "Playerbots.h"
 #include "NaxxActions.h"
 #include "NaxxSpellIds.h"
-#include "Spell.h"
-#include "Timer.h"
 
-// bool HeiganDanceAction::CalculateSafe()
-// {
-//     Unit* boss = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//     if (!boss)
-//     {
-//         return false;
-//     }
-//     uint32 now = getMSTime();
-//     platform_phase = boss->IsWithinDist2d(platform.first, platform.second, 10.0f);
+namespace
+{
+    // MoveInside parks the bot at exactly this distance from the waypoint along its follow angle, so
+    // it has to stay under the tightest wedge's clearance: waypoint 1 is only ~3.9 yd from the
+    // section 1/2 divider.
+    constexpr float SafeZoneSpread = 3.0f;
+    constexpr float MainTankSafeZoneSpread = 2.0f;
+    constexpr float PlatformSpread = 2.0f;
+}  // namespace
 
-//     // Phase 2: boss on platform "fast dance"
-//     if (platform_phase)
-//     {
-//         if (!last_platform_phase)
-//         {
-//             ResetSafe();
-//             phase2_start_ms = now;
-//             phase2_last_ticks = 0;
-//         }
+bool HeiganDanceAction::MoveToSafeZone(float tolerance)
+{
+    std::pair<float, float> const& safe = helper.waypoints[helper.SafeIndex()];
+    return MoveInside(bot->GetMapId(), safe.first, safe.second, helper.arenaZ, tolerance,
+                      MovementPriority::MOVEMENT_COMBAT);
+}
 
-//         // - firstEruptionDelayMs: time after teleport for the first eruption tick.
-//         // - periodMs: eruption tick interval.
-//         // - moveDelayMs: shift the zone-change slightly AFTER the tick so bots move after the eruption.
-//         static constexpr uint32 firstEruptionDelayMs = 8000;
-//         static constexpr uint32 periodMs = 4000;
-//         static constexpr uint32 moveDelayMs = 150;
+bool HeiganDanceAction::MoveToPlatform()
+{
+    if (MoveTo(bot->GetMapId(), helper.platform.first, helper.platform.second, helper.platformZ, false, false, false,
+               false, MovementPriority::MOVEMENT_COMBAT))
+    {
+        return true;
+    }
+    return MoveInside(bot->GetMapId(), helper.platform.first, helper.platform.second, helper.platformZ, PlatformSpread,
+                      MovementPriority::MOVEMENT_COMBAT);
+}
 
-//         uint32 base = phase2_start_ms + firstEruptionDelayMs + moveDelayMs;
-//         uint32 ticks = 0;
-//         if (now >= base)
-//         {
-//             ticks = 1u + (now - base) / periodMs; // after 1st tick -> go zone 2, etc.
-//         }
+bool HeiganDanceMeleeAction::Execute(Event event)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
 
-//         if (ticks > phase2_last_ticks)
-//         {
-//             uint32 delta = ticks - phase2_last_ticks;
-//             for (uint32 i = 0; i < delta; ++i)
-//             {
-//                 NextSafe();
-//             }
-//             phase2_last_ticks = ticks;
-//         }
+    // A main tank who lost the boss has a bigger problem than the dance; let the threat actions run.
+    if (!helper.IsFastDance() && botAI->IsMainTank(bot) && !AI_VALUE2(bool, "has aggro", "boss target"))
+    {
+        return false;
+    }
 
-//         last_platform_phase = true;
-//         return true;
-//     }
+    if (!helper.IsSynced())
+    {
+        // No clock, so no safe zone to step to. Wait it out on the ledge rather than hand the bot
+        // back to normal combat AI in a room that erupts every 10s. The main tank cannot leave -
+        // dragging Heigan up the ramp would evade the encounter.
+        if (botAI->IsMainTank(bot) || !helper.ShouldHoldLedge())
+        {
+            return false;
+        }
+        return MoveToPlatform();
+    }
 
-//     last_platform_phase = false;
-//     if (last_eruption_ms != 0 && now - last_eruption_ms > 15000)
-//     {
-//         ResetSafe();
-//     }
-//     if (boss->HasUnitState(UNIT_STATE_CASTING))
-//     {
-//         Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-//         if (!spell)
-//         {
-//             spell = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-//         }
-//         if (spell)
-//         {
-//             SpellInfo const* info = spell->GetSpellInfo();
-//             bool isEruption = NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Eruption10});
-//             if (!isEruption && info && info->SpellName[LOCALE_enUS])
-//             {
-//                 // Fallback to name for custom spell data.
-//                 isEruption = botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "eruption");
-//             }
-//             if (isEruption)
-//             {
-//                 if (last_eruption_ms == 0 || now - last_eruption_ms > 500)
-//                 {
-//                     NextSafe();
-//                 }
-//                 last_eruption_ms = now;
-//             }
-//         }
-//     }
-//     return true;
-// }
+    // Everyone but the tank settles a few yards off the waypoint centre, otherwise the whole melee
+    // group stacks on one point and never gets close enough to swing.
+    return MoveToSafeZone(botAI->IsMainTank(bot) ? MainTankSafeZoneSpread : SafeZoneSpread);
+}
 
-// bool HeiganDanceMeleeAction::Execute(Event event)
-// {
-//     CalculateSafe();
-//     if (!platform_phase && botAI->IsMainTank(bot) && !AI_VALUE2(bool, "has aggro", "boss target"))
-//     {
-//         return false;
-//     }
-//     assert(curr_safe >= 0 && curr_safe <= 3);
-//     return MoveInside(bot->GetMapId(), waypoints[curr_safe].first, waypoints[curr_safe].second, arenaZ,
-//                       botAI->IsMainTank(bot) ? 0 : 0, MovementPriority::MOVEMENT_COMBAT);
-// }
+bool HeiganDanceRangedAction::Execute(Event event)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
 
-// bool HeiganDanceRangedAction::Execute(Event event)
-// {
-//     CalculateSafe();
-//     if (!platform_phase)
-//     {
-//         Unit* boss = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//         bool tooCloseToBoss = boss && bot->IsWithinDistInMap(boss, 20.0f);
-//         bool onPlatform = bot->IsWithinDist2d(platform.first, platform.second, 3.0f);
+    if (helper.ShouldHoldLedge())
+    {
+        Unit* boss = helper.GetBoss();
+        bool tooCloseToBoss = boss && bot->IsWithinDistInMap(boss, 20.0f);
 
-//         if (!onPlatform || tooCloseToBoss)
-//         {
-//             if (MoveTo(bot->GetMapId(), platform.first, platform.second, platformZ, false, false, false, false,
-//                        MovementPriority::MOVEMENT_COMBAT))
-//             {
-//                 return true;
-//             }
-//             return MoveInside(bot->GetMapId(), platform.first, platform.second, platformZ, 2.0f,
-//                               MovementPriority::MOVEMENT_COMBAT);
-//         }
-//         return false;
-//     }
-//     botAI->InterruptSpell();
-//         return MoveInside(bot->GetMapId(), waypoints[curr_safe].first, waypoints[curr_safe].second, arenaZ, 0,
-//                       MovementPriority::MOVEMENT_COMBAT);
-// }
+        if (!helper.IsOnPlatform() || tooCloseToBoss)
+        {
+            return MoveToPlatform();
+        }
+        return false;
+    }
 
-// Unit* HeiganDispelDecrepitFeverAction::GetDecrepitFeverTarget() const
-// {
-//     Group* group = bot->GetGroup();
-//     if (!group)
-//         return nullptr;
+    if (!helper.IsSynced())
+    {
+        return false;
+    }
 
-//     // Prioritize the main tank if possible.
-//     Unit* best = nullptr;
-//     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-//     {
-//         Player* member = gref->GetSource();
-//         if (!member || !member->IsAlive())
-//             continue;
+    std::pair<float, float> const& safe = helper.waypoints[helper.SafeIndex()];
+    if (bot->GetDistance2d(safe.first, safe.second) > SafeZoneSpread)
+    {
+        botAI->InterruptSpell();
+    }
+    return MoveToSafeZone(SafeZoneSpread);
+}
 
-//         if (!member->HasAura(NaxxSpellIds::DecrepitFever))
-//             continue;
+Unit* HeiganDispelDecrepitFeverAction::GetDecrepitFeverTarget() const
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
 
-//         if (!bot->IsWithinDistInMap(member, botAI->GetRange("heal")))
-//             continue;
+    // Prioritize the main tank if possible.
+    Unit* best = nullptr;
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
 
-//         if (botAI->IsMainTank(member))
-//             return member;
+        if (!NaxxSpellIds::HasAnyAura(member, {NaxxSpellIds::DecrepitFever10, NaxxSpellIds::DecrepitFever25}))
+            continue;
 
-//         // Keep first match as fallback.
-//         if (!best)
-//             best = member;
-//     }
-//     return best;
-// }
+        if (!bot->IsWithinDistInMap(member, botAI->GetRange("heal")))
+            continue;
 
-// bool HeiganDispelDecrepitFeverAction::CanDispelDisease() const
-// {
-//     if (!bot->IsAlive())
-//     {
-//         return false;
-//     }
+        if (botAI->IsMainTank(member))
+            return member;
 
-//     // Keep it simple: only classes that can dispel disease in WotLK.
-//     switch (bot->getClass())
-//     {
-//         case CLASS_PALADIN:
-//             return botAI->CanCastSpell("cleanse", bot) || botAI->CanCastSpell("purify", bot);
-//         case CLASS_PRIEST:
-//             return botAI->CanCastSpell("cure disease", bot) || botAI->CanCastSpell("abolish disease", bot);
-//         case CLASS_SHAMAN:
-//             return botAI->CanCastSpell("cure disease", bot) || botAI->CanCastSpell("cleanse spirit", bot);
-//         default:
-//             return false;
-//     }
-// }
+        // Keep first match as fallback.
+        if (!best)
+            best = member;
+    }
+    return best;
+}
 
-// bool HeiganDispelDecrepitFeverAction::isUseful()
-// {
-//     Unit* heigan = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//     if (!heigan)
-//     {
-//         return false;
-//     }
-//     return CanDispelDisease() && GetDecrepitFeverTarget();
-// }
+bool HeiganDispelDecrepitFeverAction::CanDispelDisease() const
+{
+    if (!bot->IsAlive())
+    {
+        return false;
+    }
 
-// bool HeiganDispelDecrepitFeverAction::Execute(Event event)
-// {
-//     Unit* target = GetDecrepitFeverTarget();
-//     if (!target)
-//     {
-//         return false;
-//     }
-//     if (bot->getClass() == CLASS_PALADIN)
-//     {
-//         if (botAI->CanCastSpell("cleanse", target) && botAI->CastSpell("cleanse", target))
-//         {
-//             return true;
-//         }
-//         return botAI->CanCastSpell("purify", target) && botAI->CastSpell("purify", target);
-//     }
-//     if (botAI->CanCastSpell("cure disease", target) && botAI->CastSpell("cure disease", target))
-//     {
-//         return true;
-//     }
+    // Keep it simple: only classes that can dispel disease in WotLK.
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+            return botAI->CanCastSpell("cleanse", bot) || botAI->CanCastSpell("purify", bot);
+        case CLASS_PRIEST:
+            return botAI->CanCastSpell("cure disease", bot) || botAI->CanCastSpell("abolish disease", bot);
+        case CLASS_SHAMAN:
+            return botAI->CanCastSpell("cure disease", bot) || botAI->CanCastSpell("cleanse spirit", bot);
+        default:
+            return false;
+    }
+}
 
-//     if (botAI->CanCastSpell("cleanse spirit", target) && botAI->CastSpell("cleanse spirit", target))
-//     {
-//         return true;
-//     }
+bool HeiganDispelDecrepitFeverAction::isUseful()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+    return CanDispelDisease() && GetDecrepitFeverTarget();
+}
 
-//     return botAI->CanCastSpell("abolish disease", target) && botAI->CastSpell("abolish disease", target);
-// }
+bool HeiganDispelDecrepitFeverAction::Execute(Event event)
+{
+    Unit* target = GetDecrepitFeverTarget();
+    if (!target)
+    {
+        return false;
+    }
+    if (bot->getClass() == CLASS_PALADIN)
+    {
+        if (botAI->CanCastSpell("cleanse", target) && botAI->CastSpell("cleanse", target))
+        {
+            return true;
+        }
+        return botAI->CanCastSpell("purify", target) && botAI->CastSpell("purify", target);
+    }
+    if (botAI->CanCastSpell("cure disease", target) && botAI->CastSpell("cure disease", target))
+    {
+        return true;
+    }
+
+    if (botAI->CanCastSpell("cleanse spirit", target) && botAI->CastSpell("cleanse spirit", target))
+    {
+        return true;
+    }
+
+    return botAI->CanCastSpell("abolish disease", target) && botAI->CastSpell("abolish disease", target);
+}

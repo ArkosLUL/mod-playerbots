@@ -21,9 +21,9 @@ public:
         creators["grobbulus move center"] = &RaidNaxxActionContext::grobbulus_move_center;
         creators["grobbulus move away"] = &RaidNaxxActionContext::grobbulus_move_away;
 
-        // creators["heigan dance melee"] = &RaidNaxxActionContext::heigan_dance_melee;
-        // creators["heigan dance ranged"] = &RaidNaxxActionContext::heigan_dance_ranged;
-        // creators["heigan dispel decrepit fever"] = &RaidNaxxActionContext::heigan_dispel_decrepit_fever;
+        creators["heigan dance melee"] = &RaidNaxxActionContext::heigan_dance_melee;
+        creators["heigan dance ranged"] = &RaidNaxxActionContext::heigan_dance_ranged;
+        creators["heigan dispel decrepit fever"] = &RaidNaxxActionContext::heigan_dispel_decrepit_fever;
 
         creators["thaddius attack nearest pet"] = &RaidNaxxActionContext::thaddius_attack_nearest_pet;
         creators["thaddius move to platform"] = &RaidNaxxActionContext::thaddius_move_to_platform;
@@ -74,9 +74,9 @@ private:
     static Action* rotate_grobbulus(PlayerbotAI* ai) { return new GrobbulusRotateAction(ai); }
     static Action* grobbulus_move_center(PlayerbotAI* ai) { return new GrobblulusMoveCenterAction(ai); }
     static Action* grobbulus_move_away(PlayerbotAI* ai) { return new GrobbulusMoveAwayAction(ai); }
-    // static Action* heigan_dance_melee(PlayerbotAI* ai) { return new HeiganDanceMeleeAction(ai); }
-    // static Action* heigan_dance_ranged(PlayerbotAI* ai) { return new HeiganDanceRangedAction(ai); }
-    // static Action* heigan_dispel_decrepit_fever(PlayerbotAI* ai) { return new HeiganDispelDecrepitFeverAction(ai); }
+    static Action* heigan_dance_melee(PlayerbotAI* ai) { return new HeiganDanceMeleeAction(ai); }
+    static Action* heigan_dance_ranged(PlayerbotAI* ai) { return new HeiganDanceRangedAction(ai); }
+    static Action* heigan_dispel_decrepit_fever(PlayerbotAI* ai) { return new HeiganDispelDecrepitFeverAction(ai); }
     static Action* thaddius_attack_nearest_pet(PlayerbotAI* ai) { return new ThaddiusAttackNearestPetAction(ai); }
     static Action* thaddius_move_to_platform(PlayerbotAI* ai) { return new ThaddiusMoveToPlatformAction(ai); }
     static Action* thaddius_move_polarity(PlayerbotAI* ai) { return new ThaddiusMovePolarityAction(ai); }

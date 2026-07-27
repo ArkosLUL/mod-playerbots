@@ -61,26 +61,35 @@ private:
     static constexpr uint32 CloudRotationDelayMs = 15000;
 };
 
-// class HeiganMeleeTrigger : public Trigger
-// {
-// public:
-//     HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan melee") {}
-//     virtual bool IsActive();
-// };
+class HeiganMeleeTrigger : public Trigger
+{
+public:
+    HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan melee"), helper(ai) {}
+    virtual bool IsActive();
 
-// class HeiganRangedTrigger : public Trigger
-// {
-// public:
-//     HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan ranged") {}
-//     bool IsActive() override;
-// };
+private:
+    HeiganBossHelper helper;
+};
 
-// class HeiganDecrepitFeverTrigger : public Trigger
-// {
-// public:
-//     HeiganDecrepitFeverTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan decrepit fever") {}
-//     bool IsActive() override;
-// };
+class HeiganRangedTrigger : public Trigger
+{
+public:
+    HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan ranged"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    HeiganBossHelper helper;
+};
+
+class HeiganDecrepitFeverTrigger : public Trigger
+{
+public:
+    HeiganDecrepitFeverTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan decrepit fever"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    HeiganBossHelper helper;
+};
 
 class RazuviousTankTrigger : public Trigger
 {

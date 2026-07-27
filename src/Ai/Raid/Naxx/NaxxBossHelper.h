@@ -10,7 +10,9 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "AiObject.h"
@@ -1117,6 +1119,203 @@ private:
 
     Unit* _unit = nullptr;
     uint32 _combat_start_ms = 0;
+};
+
+// The eruption schedule carries no RNG, so the safe zone is a pure function of the phase start.
+// The boss never casts Eruption itself (the floor GameObjects do) and instance_naxxramas exposes no
+// GetData, so a timer model anchored on the phase edge is the only thing the module can observe.
+class HeiganBossHelper : public AiObject
+{
+public:
+    const std::pair<float, float> platform = {2794.26f, -3706.67f};
+    // Platform and arena sit on different Z-levels; both are explicit so nobody paths to an arena
+    // waypoint while still holding the platform Z.
+    const float platformZ = 276.54f;
+    const float arenaZ = 264.00f;
+    // Index i is the core's eruption section 3 - i. Index 0 is safe for the first eruption of every
+    // phase; the walk from there is 0,1,2,3,2,1,0,...
+    const std::vector<std::pair<float, float>> waypoints = {{2794.88f, -3668.12f},
+                                                            {2775.49f, -3674.43f},
+                                                            {2762.30f, -3684.59f},
+                                                            {2755.99f, -3703.96f}};
+
+    // Ranged hold the ledge through the slow dance, but the ramp down is a long walk and Plague
+    // Cloud lands on the ledge one second after Heigan teleports up. Leave well before that.
+    static constexpr uint32 LedgeDepartureMs = 12000;
+
+    HeiganBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
+
+    bool UpdateBossAI()
+    {
+        if (!bot->IsInCombat())
+        {
+            Reset();
+            return false;
+        }
+        if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
+        {
+            Reset();
+        }
+        if (!_unit)
+        {
+            _unit = AI_VALUE2(Unit*, "find target", "heigan the unclean");
+            if (!_unit)
+            {
+                return false;
+            }
+        }
+
+        Creature* creature = _unit->ToCreature();
+        if (!creature)
+        {
+            return false;
+        }
+
+        _state = &PhaseStateFor(_unit);
+
+        uint32 now = getMSTime();
+        bool fast = creature->GetReactState() == REACT_PASSIVE || _unit->HasAura(NaxxSpellIds::PlagueCloud);
+
+        if (!_state->phaseKnown || getMSTimeDiff(_state->lastSeenMs, now) > StaleStateMs)
+        {
+            // Either the first look at this Heigan, or nobody has watched him for a while - the raid
+            // wiped or reset, so the old clock says nothing about the phase running now.
+            _state->phaseKnown = true;
+            _state->fastDance = fast;
+            _state->phaseStartMs = now;
+            // Only a pull gives a trustworthy anchor. Bots that show up later inherit the clock from
+            // whoever was here first, and dance blind if nobody was.
+            _state->synced = !fast && _unit->GetHealthPct() > 99.0f;
+        }
+        else if (fast != _state->fastDance)
+        {
+            _state->fastDance = fast;
+            _state->phaseStartMs = now;
+            _state->synced = true;
+        }
+        _state->lastSeenMs = now;
+        return true;
+    }
+
+    Unit* GetBoss() const { return _unit; }
+    bool IsFastDance() const { return _state && _state->fastDance; }
+    bool IsSynced() const { return _state && _state->synced; }
+    bool IsOnPlatform() const { return bot->IsWithinDist2d(platform.first, platform.second, PlatformTolerance); }
+
+    // Nothing on the ledge erupts, so it also serves as the parking spot when the phase clock is
+    // unknown - but only while Heigan is down in the arena, since he teleports up for the fast dance.
+    bool ShouldHoldLedge() const
+    {
+        if (IsFastDance())
+        {
+            return false;
+        }
+        return !IsSynced() || MsUntilNextPhase() > LedgeDepartureMs;
+    }
+
+    // Safe waypoint for the *next* eruption, so bots step into the new zone the moment the previous
+    // one has landed.
+    uint32 SafeIndex() const
+    {
+        uint32 tick = NextEruptionTick();
+        uint32 m = tick % 6;
+        return m <= 3 ? m : 6 - m;
+    }
+
+    uint32 MsUntilNextEruption() const
+    {
+        if (!IsSynced())
+        {
+            return 0;
+        }
+        uint32 elapsed = getMSTime() - _state->phaseStartMs;
+        uint32 first = FirstEruptionMs();
+        if (elapsed < first)
+        {
+            return first - elapsed;
+        }
+        return PeriodMs() - ((elapsed - first) % PeriodMs());
+    }
+
+    uint32 MsUntilNextPhase() const
+    {
+        if (!IsSynced())
+        {
+            return 0;
+        }
+        uint32 length = IsFastDance() ? FastPhaseMs : SlowPhaseMs;
+        uint32 elapsed = getMSTime() - _state->phaseStartMs;
+        return elapsed >= length ? 0 : length - elapsed;
+    }
+
+private:
+    static constexpr uint32 SlowFirstEruptionMs = 15000;
+    static constexpr uint32 SlowPeriodMs = 10000;
+    static constexpr uint32 SlowPhaseMs = 90000;
+    static constexpr uint32 FastFirstEruptionMs = 7000;
+    static constexpr uint32 FastPeriodMs = 4000;
+    static constexpr uint32 FastPhaseMs = 45000;
+    // Hold the old zone briefly after an eruption so its damage has landed before anyone steps.
+    static constexpr uint32 StepDelayMs = 250;
+    static constexpr float PlatformTolerance = 3.0f;
+    // During a live fight the bots poll this several times a second, so a gap this long means combat
+    // stopped and the clock has to be re-anchored.
+    static constexpr uint32 StaleStateMs = 10000;
+
+    struct PhaseState
+    {
+        ObjectGuid bossGuid;
+        bool phaseKnown = false;
+        bool fastDance = false;
+        bool synced = false;
+        uint32 phaseStartMs = 0;
+        uint32 lastSeenMs = 0;
+    };
+
+    // One clock per Heigan, shared by every bot and by every trigger/action/multiplier holding a
+    // helper. The eruption schedule is raid-wide, so a bot that battle-rezzed or arrived after the
+    // pull can pick up an anchor somebody else already established instead of dancing blind. Keeping
+    // the clock outside the helpers also stops a bot's own actions from disagreeing about the phase.
+    static PhaseState& PhaseStateFor(Unit* boss)
+    {
+        // Instances update on parallel map threads, so the container lookup needs guarding. The state
+        // itself is only ever touched by the map thread that owns the instance, and unordered_map
+        // nodes keep their address across rehashes.
+        static std::mutex mutex;
+        static std::unordered_map<uint32, PhaseState> states;
+
+        std::lock_guard<std::mutex> guard(mutex);
+        PhaseState& state = states[boss->GetInstanceId()];
+        if (state.bossGuid != boss->GetGUID())
+        {
+            state = PhaseState();
+            state.bossGuid = boss->GetGUID();
+        }
+        return state;
+    }
+
+    uint32 FirstEruptionMs() const { return IsFastDance() ? FastFirstEruptionMs : SlowFirstEruptionMs; }
+    uint32 PeriodMs() const { return IsFastDance() ? FastPeriodMs : SlowPeriodMs; }
+
+    uint32 NextEruptionTick() const
+    {
+        if (!IsSynced())
+        {
+            return 0;
+        }
+        uint32 elapsed = getMSTime() - _state->phaseStartMs;
+        uint32 base = FirstEruptionMs() + StepDelayMs;
+        return elapsed < base ? 0 : 1 + (elapsed - base) / PeriodMs();
+    }
+
+    void Reset()
+    {
+        _unit = nullptr;
+        _state = nullptr;
+    }
+
+    Unit* _unit = nullptr;
+    PhaseState* _state = nullptr;
 };
 
 class LoathebBossHelper : public AiObject
