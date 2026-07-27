@@ -221,6 +221,8 @@ bool FelmystKiteDemonicVaporAction::Execute(Event /*event*/)
 
     float const distToDestination = bot->GetExactDist2d(
         destination.GetPositionX(), destination.GetPositionY());
+    if (distToDestination < 0.5f)
+        return false;
 
     float const dX = destination.GetPositionX() - bot->GetPositionX();
     float const dY = destination.GetPositionY() - bot->GetPositionY();
@@ -331,16 +333,11 @@ bool FelmystMoveToSafeFogLaneAction::TryTeleportStuckBotOntoCrate(
     Position const& destination)
 {
     constexpr float crateCollisionCheckDistance = 2.0f;
-    constexpr float progressResetDistance = 1.0f;
-    constexpr uint32 stuckTimeoutMs = 1500;
-
-    Position const FELMYST_STUCK_CRATE_POSITION = { 1484.443f, 591.337f, 23.391f };
-    Position const FELMYST_ON_CRATE_POSITION    = { 1482.181f, 591.253f, 24.545f };
+    Position const stuckCratePosition = { 1484.443f, 591.337f, 23.391f };
 
     if (bot->GetExactDist2d(
-            FELMYST_STUCK_CRATE_POSITION.GetPositionX(),
-            FELMYST_STUCK_CRATE_POSITION.GetPositionY()) >
-        crateCollisionCheckDistance)
+            stuckCratePosition.GetPositionX(),
+            stuckCratePosition.GetPositionY()) > crateCollisionCheckDistance)
     {
         _fogCrateStuckSampleMs = 0;
         return false;
@@ -359,6 +356,8 @@ bool FelmystMoveToSafeFogLaneAction::TryTeleportStuckBotOntoCrate(
         return false;
     }
 
+    constexpr float progressResetDistance = 1.0f;
+
     if (distanceToDestination + progressResetDistance < _fogCrateStuckNearestDistance)
     {
         _fogCrateStuckNearestDistance = distanceToDestination;
@@ -366,15 +365,18 @@ bool FelmystMoveToSafeFogLaneAction::TryTeleportStuckBotOntoCrate(
         return false;
     }
 
+    constexpr uint32 stuckTimeoutMs = 1500;
+
     if (getMSTimeDiff(_fogCrateStuckSampleMs, now) < stuckTimeoutMs)
         return false;
+
+    Position const onCratePosition = { 1482.181f, 591.253f, 24.545f };
 
     _fogCrateStuckSampleMs = 0;
     botAI->InterruptSpell();
     return bot->TeleportTo(
-        SWP_MAP_ID, FELMYST_ON_CRATE_POSITION.GetPositionX(),
-        FELMYST_ON_CRATE_POSITION.GetPositionY(),
-        FELMYST_ON_CRATE_POSITION.GetPositionZ(), bot->GetOrientation());
+        SWP_MAP_ID, onCratePosition.GetPositionX(),onCratePosition.GetPositionY(),
+        onCratePosition.GetPositionZ(), bot->GetOrientation());
 }
 
 bool FelmystMeleeClearTargetAction::Execute(Event /*event*/)
