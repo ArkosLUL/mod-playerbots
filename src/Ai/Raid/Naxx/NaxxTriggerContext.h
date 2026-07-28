@@ -44,6 +44,7 @@ public:
         creators["kel'thuzad shadow fissure"] = &RaidNaxxTriggerContext::kelthuzad_shadow_fissure;
 
         creators["anub'rekhan"] = &RaidNaxxTriggerContext::anubrekhan;
+        creators["anub'rekhan locust swarm"] = &RaidNaxxTriggerContext::anubrekhan_locust_swarm;
 
         creators["faerlina"] = &RaidNaxxTriggerContext::faerlina;
         creators["faerlina frenzy"] = &RaidNaxxTriggerContext::faerlina_frenzy;
@@ -99,6 +100,7 @@ private:
     static Trigger* kelthuzad(PlayerbotAI* ai) { return new KelthuzadTrigger(ai); }
     static Trigger* kelthuzad_shadow_fissure(PlayerbotAI* ai) { return new KelthuzadShadowFissureTrigger(ai); }
     static Trigger* anubrekhan(PlayerbotAI* ai) { return new AnubrekhanTrigger(ai); }
+    static Trigger* anubrekhan_locust_swarm(PlayerbotAI* ai) { return new AnubrekhanLocustSwarmTrigger(ai); }
     static Trigger* faerlina(PlayerbotAI* ai) { return new FaerlinaTrigger(ai); }
     static Trigger* faerlina_frenzy(PlayerbotAI* ai) { return new FaerlinaFrenzyTrigger(ai); }	
     static Trigger* maexxna(PlayerbotAI* ai) { return new MaexxnaTrigger(ai); }

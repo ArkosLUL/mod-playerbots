@@ -59,9 +59,16 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Anub'Rekhan
     triggers.push_back(new TriggerNode("anub'rekhan",
         {
+            NextAction("anub'rekhan redirect threat", ACTION_RAID + 3),
             NextAction("anub'rekhan position", ACTION_RAID + 2),
             NextAction("anub'rekhan choose target", ACTION_RAID + 1)
         }
+    ));
+
+    // The swarm is the one window where losing the formation wipes the raid, so holding it outranks
+    // everything else the engine might want to do.
+    triggers.push_back(new TriggerNode("anub'rekhan locust swarm",
+        { NextAction("anub'rekhan position", ACTION_EMERGENCY + 5) }
     ));
 
      // Grand Widow Faerlina

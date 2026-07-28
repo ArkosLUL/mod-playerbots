@@ -46,6 +46,63 @@ inline bool NaxxHasStrategyAnyState(Player* player, char const* name)
     return false;
 }
 
+// Slot assignment for ring formations. Every bot walks the group in the same order, so each one
+// derives the same index for itself without any of them having to agree on anything.
+struct NaxxRoleGroups
+{
+    std::vector<Player*> healers;
+    std::vector<Player*> rangedDps;
+    std::vector<Player*> meleeDps;
+};
+
+inline NaxxRoleGroups NaxxGetRoleGroups(PlayerbotAI* botAI, Player* bot)
+{
+    NaxxRoleGroups result;
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group)
+    {
+        return result;
+    }
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        // Dead members keep their slot: dropping them would renumber everyone else mid-fight.
+        if (!member || botAI->IsTank(member))
+        {
+            continue;
+        }
+        if (botAI->IsHeal(member))
+        {
+            result.healers.push_back(member);
+        }
+        else if (botAI->IsRanged(member))
+        {
+            result.rangedDps.push_back(member);
+        }
+        else
+        {
+            result.meleeDps.push_back(member);
+        }
+    }
+    return result;
+}
+
+// {slot index, slots on this ring}. Count is never 0, so callers can divide by it.
+inline std::pair<size_t, size_t> NaxxGetSlotIndexAndCount(PlayerbotAI* botAI, Player* bot,
+                                                          NaxxRoleGroups const& groups)
+{
+    std::vector<Player*> const& slots =
+        botAI->IsHeal(bot) ? groups.healers : (botAI->IsRanged(bot) ? groups.rangedDps : groups.meleeDps);
+
+    auto it = std::find(slots.begin(), slots.end(), bot);
+    if (it == slots.end())
+    {
+        return {0, 1};
+    }
+    return {static_cast<size_t>(std::distance(slots.begin(), it)), slots.size()};
+}
+
 template <class BossAiType>
 class GenericBossHelper : public AiObject
 {
@@ -1360,6 +1417,194 @@ private:
     void Reset() { _unit = nullptr; }
 
     Unit* _unit = nullptr;
+};
+
+// Impale picks a uniformly random living player - the tank included - and hurts everything around
+// the victim, so the only defence is standing apart before it goes off. boss_anubrekhan is declared
+// inside its own .cpp and runs off `scheduler` rather than an EventMap, so there is nothing to read:
+// the clock below models the script's fixed 15s-then-every-20s schedule instead.
+class AnubrekhanBossHelper : public AiObject
+{
+public:
+    static constexpr uint32 NPC_CRYPT_GUARD = 16573;
+    static constexpr uint32 NPC_CORPSE_SCARAB = 16698;
+
+    // Room geometry. The kite circle is centred on the room, not on the boss spawn point.
+    static constexpr float RoomCenterX = 3272.49f;
+    static constexpr float RoomCenterY = -3476.27f;
+    // The floor is flat, and bots that inherit their own Z end up pathing into the walls.
+    static constexpr float RoomFloorZ = 287.08f;
+    static constexpr float KiteRadius = 45.0f;
+    // Wider than the Impale splash, well inside the room.
+    static constexpr float ImpaleSpreadDistance = 12.0f;
+    // Locust Swarm reaches ~15 yd, so the ring starts outside that and ends inside cast/heal range.
+    static constexpr float RangedBandMin = 20.0f;
+    static constexpr float RangedBandMax = 28.0f;
+    // Melee cannot spread by Impale distance and still reach anything, so they only fan out.
+    static constexpr float MeleeSpreadRadius = 5.0f;
+    static constexpr float SlotTolerance = 3.0f;
+    static constexpr float AddHoldDistance = 15.0f;
+    // Crypt Guard spawns sit at r=58.7 from the centre, so this keeps the add tank well inside.
+    static constexpr float MaxHoldRadius = 40.0f;
+    static constexpr uint32 RepositionIntervalMs = 1000;
+    static constexpr uint32 ImpaleWarningMs = 3000;
+
+    struct SlotState
+    {
+        uint32 lastMoveMs = 0;
+        float destX = 0.0f;
+        float destY = 0.0f;
+        bool hasDest = false;
+    };
+
+    AnubrekhanBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
+
+    bool UpdateBossAI()
+    {
+        if (!bot->IsInCombat())
+        {
+            Reset();
+            return false;
+        }
+        if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
+        {
+            Reset();
+        }
+        if (!_unit)
+        {
+            _unit = AI_VALUE2(Unit*, "find target", "anub'rekhan");
+            if (!_unit)
+            {
+                return false;
+            }
+        }
+
+        _state = &EncounterStateFor(_unit);
+        uint32 now = getMSTime();
+        if (!_state->clockKnown || getMSTimeDiff(_state->lastSeenMs, now) > StaleStateMs)
+        {
+            // Either the first look at this Anub'Rekhan, or nobody has watched him for a while - the
+            // raid wiped or reset, so the old anchor says nothing about the pull running now.
+            _state->clockKnown = true;
+            _state->engageMs = now;
+            // Only a real pull gives a trustworthy anchor. Bots arriving later inherit whatever the
+            // pullers established, and stay unsynced if there was nobody.
+            _state->synced = _unit->GetHealthPct() > 99.0f;
+        }
+        _state->lastSeenMs = now;
+        return true;
+    }
+
+    Unit* GetBoss() const { return _unit; }
+    bool IsSynced() const { return _state && _state->synced; }
+
+    // The one place the Locust auras get checked.
+    bool IsLocustSwarmActive() const
+    {
+        if (!_unit)
+        {
+            return false;
+        }
+        return NaxxSpellIds::HasAnyAura(_unit, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm25}) ||
+               botAI->HasAura("locust swarm", _unit);
+    }
+
+    // 0 when the clock was never anchored.
+    uint32 MsUntilNextImpale() const
+    {
+        if (!IsSynced())
+        {
+            return 0;
+        }
+        uint32 elapsed = getMSTime() - _state->engageMs;
+        if (elapsed < FirstImpaleMs)
+        {
+            return FirstImpaleMs - elapsed;
+        }
+        return ImpalePeriodMs - ((elapsed - FirstImpaleMs) % ImpalePeriodMs);
+    }
+
+    bool IsImpaleImminent() const { return IsSynced() && MsUntilNextImpale() <= ImpaleWarningMs; }
+
+    // Both lists are living units only, matched on entry id, sorted by GUID so every bot sees the
+    // same order and they stop trading targets between ticks.
+    std::vector<Unit*> GetCryptGuards() { return GetLivingAttackersByEntry(NPC_CRYPT_GUARD); }
+    std::vector<Unit*> GetCorpseScarabs() { return GetLivingAttackersByEntry(NPC_CORPSE_SCARAB); }
+
+    // Per-bot movement bookkeeping, shared by every action holding a helper so they cannot disagree
+    // about where this bot was last sent.
+    static SlotState& SlotStateFor(ObjectGuid guid)
+    {
+        static std::mutex mutex;
+        static std::unordered_map<ObjectGuid, SlotState> states;
+
+        std::lock_guard<std::mutex> guard(mutex);
+        return states[guid];
+    }
+
+private:
+    static constexpr uint32 FirstImpaleMs = 15000;
+    static constexpr uint32 ImpalePeriodMs = 20000;
+    static constexpr uint32 StaleStateMs = 10000;
+
+    struct EncounterState
+    {
+        ObjectGuid bossGuid;
+        bool clockKnown = false;
+        bool synced = false;
+        uint32 engageMs = 0;
+        uint32 lastSeenMs = 0;
+    };
+
+    // One clock per Anub'Rekhan, shared by every bot in the instance.
+    static EncounterState& EncounterStateFor(Unit* boss)
+    {
+        // Instances update on parallel map threads, so the container lookup needs guarding. The state
+        // itself is only ever touched by the map thread that owns the instance, and unordered_map
+        // nodes keep their address across rehashes.
+        static std::mutex mutex;
+        static std::unordered_map<uint32, EncounterState> states;
+
+        std::lock_guard<std::mutex> guard(mutex);
+        EncounterState& state = states[boss->GetInstanceId()];
+        if (state.bossGuid != boss->GetGUID())
+        {
+            state = EncounterState();
+            state.bossGuid = boss->GetGUID();
+        }
+        return state;
+    }
+
+    std::vector<Unit*> GetLivingAttackersByEntry(uint32 entry)
+    {
+        std::vector<Unit*> result;
+        GuidVector attackers = AI_VALUE(GuidVector, "attackers");
+        for (ObjectGuid const& guid : attackers)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive())
+            {
+                continue;
+            }
+            Creature* creature = unit->ToCreature();
+            if (creature && creature->GetEntry() == entry)
+            {
+                result.push_back(unit);
+            }
+        }
+        std::sort(result.begin(), result.end(), [](Unit* left, Unit* right)
+                  { return left->GetGUID() < right->GetGUID(); });
+        return result;
+    }
+
+    void Reset()
+    {
+        _unit = nullptr;
+        _state = nullptr;
+    }
+
+    Unit* _unit = nullptr;
+    EncounterState* _state = nullptr;
 };
 
 // class NothBossHelper : public AiObject

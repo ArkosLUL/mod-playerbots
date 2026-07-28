@@ -440,19 +440,23 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
 
 float AnubrekhanGenericMultiplier::GetValue(Action* action)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "anub'rekhan");
-    if (!boss)
+    if (!helper.UpdateBossAI())
     {
         return 1.0f;
     }
-    if (NaxxSpellIds::HasAnyAura(
-            boss, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm10Alt, NaxxSpellIds::LocustSwarm25}) ||
-        botAI->HasAura("locust swarm", boss))
+
+    // The position action hands every non-tank its own slot; the generic formation mover would spend
+    // the whole fight pulling them back into one pile, which is exactly what Impale punishes.
+    if (dynamic_cast<CombatFormationMoveAction*>(action))
     {
-        if (dynamic_cast<FleeAction*>(action))
-        {
-            return 0.0f;
-        }
+        return 0.0f;
+    }
+
+    // Nobody gains from a panic move during the swarm: the tank would drop the kite and everyone else
+    // would leave the slot that keeps them out of Impale range.
+    if (helper.IsLocustSwarmActive() && dynamic_cast<FleeAction*>(action))
+    {
+        return 0.0f;
     }
     return 1.0f;
 }

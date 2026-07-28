@@ -353,18 +353,51 @@ private:
 class AnubrekhanChooseTargetAction : public AttackAction
 {
 public:
-    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "anub'rekhan choose target") {}
+    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "anub'rekhan choose target"), helper(ai) {}
     bool Execute(Event event) override;
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
+// 32 waypoints put 8.8 yd between them, so the main tank's kite tracks the circle instead of
+// jumping across it.
 class AnubrekhanPositionAction : public RotateAroundTheCenterPointAction
 {
 public:
     AnubrekhanPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, "anub'rekhan position", 3272.49f, -3476.27f, 45.0f, 16)
+        : RotateAroundTheCenterPointAction(ai, "anub'rekhan position", AnubrekhanBossHelper::RoomCenterX,
+                                           AnubrekhanBossHelper::RoomCenterY, AnubrekhanBossHelper::KiteRadius, 32),
+          helper(ai)
     {
     }
     bool Execute(Event event) override;
+
+private:
+    bool KiteBoss();
+    bool HoldAdds(Unit* boss);
+    bool TakeRangedSlot(Unit* boss);
+    bool TakeMeleeSlot(Unit* boss);
+    // Rate-limited move to a slot the caller worked out; false when the bot is already parked there.
+    bool MoveToSlot(float x, float y);
+
+    AnubrekhanBossHelper helper;
+};
+
+class AnubrekhanRedirectThreatAction : public NaxxRedirectThreatAction
+{
+public:
+    AnubrekhanRedirectThreatAction(PlayerbotAI* ai)
+        : NaxxRedirectThreatAction(ai, "anub'rekhan redirect threat"), helper(ai)
+    {
+    }
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
 class GluthChooseTargetAction : public AttackAction

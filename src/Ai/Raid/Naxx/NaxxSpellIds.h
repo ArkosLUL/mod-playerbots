@@ -125,8 +125,15 @@ namespace NaxxSpellIds
 */
     // Anub'Rekhan
     static constexpr uint32 LocustSwarm10 = 28785;
+    // 28786 exists in the DBC but boss_anubrekhan never casts it. Kept only so nobody re-adds it.
     static constexpr uint32 LocustSwarm10Alt = 28786;
     static constexpr uint32 LocustSwarm25 = 54021;  // 25-man Locust Swarm
+    // Impale leaves no aura and no dynobject, so bots cannot react to it - the ids are here for
+    // reference and the strategy pre-spreads instead.
+    static constexpr uint32 Impale10 = 28783;
+    static constexpr uint32 Impale25 = 56090;
+    static constexpr uint32 SummonCorpseScarabs5 = 29105;   // from a dead player
+    static constexpr uint32 SummonCorpseScarabs10 = 28864;  // from a dead Crypt Guard
 
     // Loatheb
     static constexpr uint32 NecroticAura10 = 55593;

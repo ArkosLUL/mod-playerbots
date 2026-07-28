@@ -345,6 +345,11 @@ bool AnubrekhanTrigger::IsActive()
     return bot->IsInCombat() || boss->IsInCombat();
 }
 
+bool AnubrekhanLocustSwarmTrigger::IsActive()
+{
+    return helper.UpdateBossAI() && helper.IsLocustSwarmActive();
+}
+
 bool FaerlinaTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "grand widow faerlina");

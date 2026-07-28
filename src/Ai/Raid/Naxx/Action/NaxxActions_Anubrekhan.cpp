@@ -4,72 +4,82 @@
  * or (at your option) any later version.
  */
 
+#include <cmath>
+
 #include "ObjectGuid.h"
 #include "Playerbots.h"
 #include "NaxxActions.h"
 
-#include "ObjectGuid.h"
-#include "Playerbots.h"
 #include "NaxxSpellIds.h"
+#include "RaidBossHelpers.h"
+
+namespace
+{
+// 240 degrees of arc keeps every slot within ~30 yd of the boss while still leaving ~10 yd between
+// neighbours at eight bots - more than the Impale splash.
+constexpr float RangedRingArc = 4.0f * static_cast<float>(M_PI) / 3.0f;
+// The ring sits at the room-centre end of the band, healers at the far end, so the two rows do not
+// share a radius and cannot line up on top of each other.
+constexpr float RangedDpsBandOffset = 4.0f;
+// A boss that has moved less than this leaves the ring where it is.
+constexpr float AnchorDriftDistance = 8.0f;
+} // namespace
 
 bool AnubrekhanChooseTargetAction::Execute(Event event)
 {
-    GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
-    Unit* target = nullptr;
-    Unit* targetBoss = nullptr;
-    std::vector<Unit*> cryptGuards;
-    std::vector<Unit*> corpseScarabs;
-    for (ObjectGuid const guid : attackers)
+    if (!helper.UpdateBossAI())
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        if (botAI->EqualLowercaseName(unit->GetName(), "anub'rekhan"))
-            targetBoss = unit;
-        else if (botAI->EqualLowercaseName(unit->GetName(), "crypt guard"))
-            cryptGuards.push_back(unit);
-        else if (botAI->EqualLowercaseName(unit->GetName(), "corpse scarab"))
-            corpseScarabs.push_back(unit);
+        return false;
     }
 
-    if (!targetBoss && cryptGuards.empty() && corpseScarabs.empty())
+    Unit* boss = helper.GetBoss();
+    std::vector<Unit*> cryptGuards = helper.GetCryptGuards();
+    std::vector<Unit*> corpseScarabs = helper.GetCorpseScarabs();
+    if (!boss && cryptGuards.empty() && corpseScarabs.empty())
+    {
         return false;
+    }
 
+    Unit* target = nullptr;
     if (botAI->IsMainTank(bot))
     {
-        target = targetBoss;
+        target = boss;
     }
     else if (botAI->IsAssistTank(bot))
     {
-        for (Unit* add : cryptGuards)
+        // Newest guard first: the one the Locust Swarm just dropped is the one nobody holds yet.
+        for (auto it = cryptGuards.rbegin(); it != cryptGuards.rend(); ++it)
         {
-            Player* victim = add->GetVictim() ? add->GetVictim()->ToPlayer() : nullptr;
+            Player* victim = (*it)->GetVictim() ? (*it)->GetVictim()->ToPlayer() : nullptr;
             if (!victim || !botAI->IsTank(victim))
             {
-                target = add;
+                target = *it;
                 break;
             }
         }
         if (!target)
         {
-            if (!cryptGuards.empty())
-                target = cryptGuards.front();
-            else
-                target = targetBoss;
+            target = cryptGuards.empty() ? boss : cryptGuards.front();
         }
     }
-    else
+    else if (!cryptGuards.empty())
     {
-        if (!cryptGuards.empty())
+        // Lowest GUID, not lowest health: the health order changes every tick as the adds trade
+        // places, and the whole raid used to re-target with it.
+        target = cryptGuards.front();
+    }
+    else if (!corpseScarabs.empty())
+    {
+        for (Unit* scarab : corpseScarabs)
         {
-            for (Unit* add : cryptGuards)
+            Player* victim = scarab->GetVictim() ? scarab->GetVictim()->ToPlayer() : nullptr;
+            if (victim && botAI->IsHeal(victim))
             {
-                if (!target || target->GetHealthPct() > add->GetHealthPct())
-                    target = add;
+                target = scarab;
+                break;
             }
         }
-        else if (!corpseScarabs.empty())
+        if (!target)
         {
             for (Unit* scarab : corpseScarabs)
             {
@@ -80,20 +90,22 @@ bool AnubrekhanChooseTargetAction::Execute(Event event)
                     break;
                 }
             }
-
-            if (!target)
-                target = corpseScarabs.front();
         }
-        else
+        if (!target)
         {
-            target = targetBoss;
+            target = corpseScarabs.front();
         }
+    }
+    else
+    {
+        target = boss;
     }
 
     if (!target)
+    {
         return false;
-
-    if (context->GetValue<Unit*>("current target")->Get() == target)
+    }
+    if (AI_VALUE(Unit*, "current target") == target)
     {
         return false;
     }
@@ -102,28 +114,161 @@ bool AnubrekhanChooseTargetAction::Execute(Event event)
 
 bool AnubrekhanPositionAction::Execute(Event event)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "anub'rekhan");
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+    Unit* boss = helper.GetBoss();
     if (!boss)
     {
         return false;
     }
 
-    bool inPhase = NaxxSpellIds::HasAnyAura(boss, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm10Alt,
-                                                         NaxxSpellIds::LocustSwarm25}) ||
-                   botAI->HasAura("locust swarm", boss);
-    if (inPhase)
+    if (botAI->IsMainTank(bot))
     {
-        if (botAI->IsMainTank(bot))
+        // Locust Swarm neither roots nor threat-wipes the boss, so he keeps chasing - outside the
+        // swarm there is nothing to kite and normal tanking should own the position.
+        return helper.IsLocustSwarmActive() ? KiteBoss() : false;
+    }
+    if (botAI->IsAssistTank(bot))
+    {
+        return HoldAdds(boss);
+    }
+    if (botAI->IsHeal(bot) || botAI->IsRanged(bot))
+    {
+        return TakeRangedSlot(boss);
+    }
+    return TakeMeleeSlot(boss);
+}
+
+bool AnubrekhanPositionAction::KiteBoss()
+{
+    uint32 nearest = FindNearestWaypoint();
+    uint32 nextPoint = (nearest + 1) % intervals;
+    return MoveTo(NAXX_MAP_ID, waypoints[nextPoint].first, waypoints[nextPoint].second,
+                  AnubrekhanBossHelper::RoomFloorZ, false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool AnubrekhanPositionAction::HoldAdds(Unit* boss)
+{
+    if (helper.GetCryptGuards().empty())
+    {
+        return false;
+    }
+
+    // Park the adds on the far side of the boss from the room centre. The ranged ring sits on the
+    // near side, and Crypt Guard cleave would otherwise land in it.
+    float outward = std::atan2(boss->GetPositionY() - AnubrekhanBossHelper::RoomCenterY,
+                               boss->GetPositionX() - AnubrekhanBossHelper::RoomCenterX);
+    float bossRadius = boss->GetExactDist2d(AnubrekhanBossHelper::RoomCenterX, AnubrekhanBossHelper::RoomCenterY);
+    float holdRadius =
+        std::min(bossRadius + AnubrekhanBossHelper::AddHoldDistance, AnubrekhanBossHelper::MaxHoldRadius);
+
+    float x = AnubrekhanBossHelper::RoomCenterX + std::cos(outward) * holdRadius;
+    float y = AnubrekhanBossHelper::RoomCenterY + std::sin(outward) * holdRadius;
+    return MoveToSlot(x, y);
+}
+
+bool AnubrekhanPositionAction::TakeRangedSlot(Unit* boss)
+{
+    NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);
+    std::pair<size_t, size_t> slot = NaxxGetSlotIndexAndCount(botAI, bot, groups);
+
+    // Anchor the arc on the bearing from the boss to the room centre, so the ring always sits on the
+    // inside of the kite circle and never gets pushed into a wall as the boss laps it.
+    float anchor = std::atan2(AnubrekhanBossHelper::RoomCenterY - boss->GetPositionY(),
+                              AnubrekhanBossHelper::RoomCenterX - boss->GetPositionX());
+    float radius = botAI->IsHeal(bot) ? AnubrekhanBossHelper::RangedBandMax
+                                      : AnubrekhanBossHelper::RangedBandMin + RangedDpsBandOffset;
+    float theta = anchor - RangedRingArc / 2.0f +
+                  RangedRingArc * (static_cast<float>(slot.first) + 0.5f) / static_cast<float>(slot.second);
+    float x = boss->GetPositionX() + std::cos(theta) * radius;
+    float y = boss->GetPositionY() + std::sin(theta) * radius;
+
+    if (MoveToSlot(x, y))
+    {
+        return true;
+    }
+
+    // Backstop, not the mechanism: the arc keeps neighbours ~10 yd apart at eight bots, but an odd
+    // group composition can still bunch two slots. Only nudge once parked, so it never fights the
+    // slot move.
+    if (bot->GetExactDist2d(x, y) <= AnubrekhanBossHelper::SlotTolerance)
+    {
+        if (Player* crowder = GetNearestPlayerInRadius(bot, AnubrekhanBossHelper::ImpaleSpreadDistance))
         {
-            uint32 nearest = FindNearestWaypoint();
-            uint32 nextPoint = (nearest + 1) % intervals;
-            return MoveTo(bot->GetMapId(), waypoints[nextPoint].first, waypoints[nextPoint].second, bot->GetPositionZ(), false, false,
-                          false, false, MovementPriority::MOVEMENT_COMBAT);
-        }
-        else
-        {
-            return MoveInside(533, 3272.49f, -3476.27f, bot->GetPositionZ(), 3.0f, MovementPriority::MOVEMENT_COMBAT);
+            return FleePosition(crowder->GetPosition(), AnubrekhanBossHelper::ImpaleSpreadDistance,
+                                AnubrekhanBossHelper::RepositionIntervalMs);
         }
     }
     return false;
+}
+
+bool AnubrekhanPositionAction::TakeMeleeSlot(Unit* boss)
+{
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+    {
+        target = boss;
+    }
+
+    NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);
+    std::pair<size_t, size_t> slot = NaxxGetSlotIndexAndCount(botAI, bot, groups);
+
+    // Melee cannot spread by Impale distance and still reach anything, so they only fan out around
+    // their own target - enough that a single Impale does not catch all of them.
+    float anchor = std::atan2(AnubrekhanBossHelper::RoomCenterY - target->GetPositionY(),
+                              AnubrekhanBossHelper::RoomCenterX - target->GetPositionX());
+    float theta =
+        anchor + 2.0f * static_cast<float>(M_PI) * static_cast<float>(slot.first) / static_cast<float>(slot.second);
+    float x = target->GetPositionX() + std::cos(theta) * AnubrekhanBossHelper::MeleeSpreadRadius;
+    float y = target->GetPositionY() + std::sin(theta) * AnubrekhanBossHelper::MeleeSpreadRadius;
+    return MoveToSlot(x, y);
+}
+
+bool AnubrekhanPositionAction::MoveToSlot(float x, float y)
+{
+    if (bot->GetExactDist2d(x, y) <= AnubrekhanBossHelper::SlotTolerance)
+    {
+        return false;
+    }
+
+    AnubrekhanBossHelper::SlotState& state = AnubrekhanBossHelper::SlotStateFor(bot->GetGUID());
+    uint32 now = getMSTime();
+    float driftX = state.destX - x;
+    float driftY = state.destY - y;
+    bool sameDestination =
+        state.hasDest && (driftX * driftX + driftY * driftY) <= AnchorDriftDistance * AnchorDriftDistance;
+
+    // Re-issuing the same move every tick makes bots jitter in place, and a jittering bot is mid-move
+    // when Impale lands. Let an order that is still valid run - unless Impale is about to go off.
+    if (sameDestination && getMSTimeDiff(state.lastMoveMs, now) < AnubrekhanBossHelper::RepositionIntervalMs &&
+        !helper.IsImpaleImminent())
+    {
+        return false;
+    }
+
+    state.lastMoveMs = now;
+    state.destX = x;
+    state.destY = y;
+    state.hasDest = true;
+    return MoveTo(NAXX_MAP_ID, x, y, AnubrekhanBossHelper::RoomFloorZ, false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
+Player* AnubrekhanRedirectThreatAction::GetRedirectTank()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return nullptr;
+    }
+    Unit* boss = helper.GetBoss();
+    Player* tank = boss ? GetTankHolding(boss) : nullptr;
+    return tank ? tank : GetGroupMainTank(botAI, bot);
+}
+
+Unit* AnubrekhanRedirectThreatAction::GetThreatDumpTarget()
+{
+    return helper.UpdateBossAI() ? helper.GetBoss() : nullptr;
 }

@@ -91,10 +91,13 @@ private:
 class AnubrekhanGenericMultiplier : public Multiplier
 {
 public:
-    AnubrekhanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "anubrekhan generic") {}
+    AnubrekhanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "anubrekhan generic"), helper(ai) {}
 
 public:
     virtual float GetValue(Action* action);
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
 class FourhorsemanGenericMultiplier : public Multiplier

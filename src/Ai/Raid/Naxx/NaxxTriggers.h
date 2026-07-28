@@ -142,6 +142,16 @@ public:
     bool IsActive() override;
 };
 
+class AnubrekhanLocustSwarmTrigger : public Trigger
+{
+public:
+    AnubrekhanLocustSwarmTrigger(PlayerbotAI* ai) : Trigger(ai, "anub'rekhan locust swarm"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    AnubrekhanBossHelper helper;
+};
+
  class FaerlinaTrigger : public Trigger
  {
  public:
