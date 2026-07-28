@@ -18,6 +18,7 @@
 #include <set>
 
 constexpr uint32 AURA_OMEN_OF_CLARITY = 16864;
+constexpr uint32 AURA_CLEARCASTING = 16870;
 
 class PlayerbotAI;
 
@@ -138,9 +139,13 @@ public:
         if (botAI->HasAura("prowl", bot))
             return false;
 
-        // Cat with Omen of Clarity: spam to fish for Clearcasting procs
+        // Cat with Omen of Clarity: cast on cooldown to bank a Clearcasting charge.
+        // Clearcasting is single-charge, so recasting while one is banked buys nothing.
         if (bot->HasAura(AURA_OMEN_OF_CLARITY))
         {
+            if (bot->HasAura(AURA_CLEARCASTING))
+                return false;
+
             Unit* target = GetTarget();
             return target && target->IsAlive() && target->IsInWorld();
         }

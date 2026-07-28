@@ -199,6 +199,13 @@ void CatDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    triggers.push_back(
+        new TriggerNode(
+            "faerie fire (feral)", {
+                NextAction("faerie fire (feral)", 20.5f)
+            }
+        )
+    );
 
     triggers.push_back(
         new TriggerNode(
@@ -267,13 +274,6 @@ void CatDruidStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "combo points not full and high energy", {
                 NextAction("claw", 5.2f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "faerie fire (feral)", {
-                NextAction("faerie fire (feral)", 5.0f)
             }
         )
     );
