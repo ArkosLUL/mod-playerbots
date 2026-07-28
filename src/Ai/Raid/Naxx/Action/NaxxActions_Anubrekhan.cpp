@@ -162,8 +162,10 @@ bool AnubrekhanPositionAction::HoldAdds(Unit* boss)
     float outward = std::atan2(boss->GetPositionY() - AnubrekhanBossHelper::RoomCenterY,
                                boss->GetPositionX() - AnubrekhanBossHelper::RoomCenterX);
     float bossRadius = boss->GetExactDist2d(AnubrekhanBossHelper::RoomCenterX, AnubrekhanBossHelper::RoomCenterY);
-    float holdRadius =
-        std::min(bossRadius + AnubrekhanBossHelper::AddHoldDistance, AnubrekhanBossHelper::MaxHoldRadius);
+    // The wall cap can shorten the step out, but never past the boss - the far side is the whole
+    // point, and anything short of it is where the ranged are standing.
+    float holdRadius = std::max(
+        bossRadius, std::min(bossRadius + AnubrekhanBossHelper::AddHoldDistance, AnubrekhanBossHelper::MaxHoldRadius));
 
     float x = AnubrekhanBossHelper::RoomCenterX + std::cos(outward) * holdRadius;
     float y = AnubrekhanBossHelper::RoomCenterY + std::sin(outward) * holdRadius;

@@ -34,6 +34,24 @@ namespace
             best = candidate;
         }
     }
+
+    void KeepLowestGuid(Unit* candidate, Unit*& best)
+    {
+        if (!best || candidate->GetGUID() < best->GetGUID())
+        {
+            best = candidate;
+        }
+    }
+
+    // One add type, picked four ways. The tank wants whatever is closest to it; DPS go by GUID so
+    // that every bot in the raid ends up on the same add instead of each chasing its own nearest.
+    struct AddPick
+    {
+        Unit* loose = nullptr;
+        Unit* nearest = nullptr;
+        Unit* tanked = nullptr;
+        Unit* any = nullptr;
+    };
 }  // namespace
 
 bool NothChooseTargetAction::Execute(Event event)
@@ -45,24 +63,22 @@ bool NothChooseTargetAction::Execute(Event event)
 
     Unit* boss = helper.GetBoss();
     bool balcony = helper.IsBalconyPhase();
+    bool ownsAdds = botAI->IsAssistTank(bot) || (botAI->IsMainTank(bot) && !helper.GetAliveAssistTank());
 
     // Noth drops out of "attackers" for the whole balcony phase, so the main tank correctly picks up
     // an add - and then keeps it, because an explicit main tank in a group with two tanks sticks to
     // its current target (TankTargetValue.cpp, FindTankTargetSmartStrategy::IsBetter). Pin him back
-    // on the boss the moment the balcony flag clears.
-    if (!balcony && boss && botAI->IsMainTank(bot))
+    // on the boss the moment the balcony flag clears - unless there is nobody else to hold the adds.
+    // A tank doing both jobs still comes back for Blink: the taunt that undoes the threat reset only
+    // fires while the boss is the current target, and an add can wait those few seconds.
+    if (!balcony && boss && botAI->IsMainTank(bot) && (!ownsAdds || helper.IsBlinkWindow()))
     {
         return AI_VALUE(Unit*, "current target") != boss && Attack(boss);
     }
 
-    bool ownsAdds = botAI->IsAssistTank(bot) || (botAI->IsMainTank(bot) && !helper.GetAliveAssistTank());
-
-    Unit* guardian = nullptr;
-    Unit* champion = nullptr;
-    Unit* warrior = nullptr;
-    Unit* looseGuardian = nullptr;
-    Unit* looseChampion = nullptr;
-    Unit* looseWarrior = nullptr;
+    AddPick guardians;
+    AddPick champions;
+    AddPick warriors;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     for (ObjectGuid const& guid : attackers)
@@ -73,43 +89,51 @@ bool NothChooseTargetAction::Execute(Event event)
             continue;
         }
 
-        Unit** nearest = nullptr;
-        Unit** loose = nullptr;
+        AddPick* pick = nullptr;
         if (helper.IsGuardian(unit))
         {
-            nearest = &guardian;
-            loose = &looseGuardian;
+            pick = &guardians;
         }
         else if (helper.IsChampion(unit))
         {
-            nearest = &champion;
-            loose = &looseChampion;
+            pick = &champions;
         }
         else if (helper.IsWarrior(unit))
         {
-            nearest = &warrior;
-            loose = &looseWarrior;
+            pick = &warriors;
         }
         else
         {
             continue;
         }
 
-        KeepNearest(bot, unit, *nearest);
+        KeepNearest(bot, unit, pick->nearest);
+        KeepLowestGuid(unit, pick->any);
 
+        Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
+        if (victim && botAI->IsTank(victim))
+        {
+            KeepLowestGuid(unit, pick->tanked);
+        }
         // Every add is summoned with SetInCombatWithZone() and runs at a random raid member, so
         // "loose" is the normal state right after a spawn and is what the add tank has to chase.
-        Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
-        if (ownsAdds && victim && !botAI->IsTank(victim))
+        else if (ownsAdds && victim)
         {
-            KeepNearest(bot, unit, *loose);
+            KeepNearest(bot, unit, pick->loose);
         }
     }
 
     std::vector<Unit*> targets;
     if (ownsAdds)
     {
-        targets = {looseGuardian, looseChampion, looseWarrior, guardian, champion, warrior};
+        targets = {guardians.loose, champions.loose, warriors.loose};
+        // A main tank covering both jobs holds the boss too, so he only leaves it for an add that
+        // nobody has picked up yet.
+        if (!balcony && botAI->IsMainTank(bot))
+        {
+            targets.push_back(boss);
+        }
+        targets.insert(targets.end(), {guardians.nearest, champions.nearest, warriors.nearest});
         if (!balcony)
         {
             targets.push_back(boss);
@@ -117,12 +141,15 @@ bool NothChooseTargetAction::Execute(Event event)
     }
     else if (balcony)
     {
-        targets = {guardian, champion, warrior};
+        // Anything a tank already holds comes first, whatever its type: chasing the nearest add
+        // instead just rips it off the add tank.
+        targets = {guardians.tanked, champions.tanked, warriors.tanked,
+                   guardians.any,    champions.any,    warriors.any};
     }
     else
     {
         // Guardians nuke the raid from range and are the one add worth pulling DPS off the boss for.
-        targets = {guardian, boss, champion, warrior};
+        targets = {guardians.tanked, guardians.any, boss};
     }
 
     Unit* target = FirstAvailable(targets);
@@ -299,18 +326,11 @@ int32 NothDispelCurseAction::GetDecurserIndex() const
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || !member->IsAlive())
+        // Class is not enough: an Enhancement shaman never learns Cleanse Spirit, and counting one
+        // would push every later decurser onto somebody else's target.
+        if (!NaxxIsCurseDispeller(member))
         {
             continue;
-        }
-        switch (member->getClass())
-        {
-            case CLASS_MAGE:
-            case CLASS_DRUID:
-            case CLASS_SHAMAN:
-                break;
-            default:
-                continue;
         }
         if (member == bot)
         {

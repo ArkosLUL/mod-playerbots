@@ -1445,8 +1445,10 @@ public:
     static constexpr float MeleeSpreadRadius = 5.0f;
     static constexpr float SlotTolerance = 3.0f;
     static constexpr float AddHoldDistance = 15.0f;
-    // Crypt Guard spawns sit at r=58.7 from the centre, so this keeps the add tank well inside.
-    static constexpr float MaxHoldRadius = 40.0f;
+    // Has to clear KiteRadius, or the cap would drag the hold point back inside the boss and onto the
+    // ranged. A Crypt Guard spawns at r=58.7, so there is floor out here, and the encounter's leash
+    // circle is 77 yd.
+    static constexpr float MaxHoldRadius = 52.0f;
     static constexpr uint32 RepositionIntervalMs = 1000;
     static constexpr uint32 ImpaleWarningMs = 3000;
 
@@ -1627,6 +1629,33 @@ inline bool NaxxCanDispelCurse(PlayerbotAI* botAI, Player* bot)
         default:
             return false;
     }
+}
+
+// Whether a group member is one of the decursers at all. Deliberately asks what the member knows
+// rather than what it could cast this instant: decursers split the cursed list by index, so a
+// cooldown or an empty mana bar must not renumber everyone mid-fight.
+inline bool NaxxIsCurseDispeller(Player* member)
+{
+    PlayerbotAI* memberAI = member && member->IsAlive() ? GET_PLAYERBOT_AI(member) : nullptr;
+    if (!memberAI)
+    {
+        return false;
+    }
+
+    std::string spell;
+    switch (member->getClass())
+    {
+        case CLASS_MAGE:
+        case CLASS_DRUID:
+            spell = "remove curse";
+            break;
+        case CLASS_SHAMAN:
+            spell = "cleanse spirit";
+            break;
+        default:
+            return false;
+    }
+    return memberAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get() != 0;
 }
 
 class NothBossHelper : public AiObject
