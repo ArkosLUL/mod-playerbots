@@ -119,7 +119,15 @@ DEBUFF_ACTION_U(CastDisarmAction, "disarm",
 DEBUFF_ENEMY_ACTION(CastDisarmOnAttackerAction, "disarm");
 BUFF_ACTION(CastShieldWallAction, "shield wall");
 // protection 2.4.3
-PROTECT_ACTION(CastInterveneAction, "intervene");
+// Intervene runs the warrior out of melee, so it is only ever an option while nothing is on him.
+class CastInterveneAction : public CastProtectSpellAction
+{
+public:
+    CastInterveneAction(PlayerbotAI* botAI) : CastProtectSpellAction(botAI, "intervene") {}
+
+    std::string const GetTargetName() override { return "party member to protect no tank"; }
+    bool isUseful() override;
+};
 BUFF_ACTION(CastSpellReflectionAction, "spell reflection");
 
 // protection talents

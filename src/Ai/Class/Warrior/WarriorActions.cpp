@@ -161,6 +161,15 @@ bool CastVigilanceAction::Execute(Event /*event*/)
     return botAI->CastSpell("vigilance", target);
 }
 
+bool CastInterveneAction::isUseful()
+{
+    if (!CastProtectSpellAction::isUseful())
+        return false;
+
+    // A tank leaving the boss to save a raider trades one death for the whole pull.
+    return AI_VALUE(uint8, "my attacker count") == 0;
+}
+
 bool CastRetaliationAction::isUseful()
 {
     if (!bot->HasSpell(SPELL_RETALIATION) || bot->HasSpellCooldown(SPELL_RETALIATION) ||
