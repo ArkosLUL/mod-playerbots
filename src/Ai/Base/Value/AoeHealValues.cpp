@@ -33,12 +33,42 @@ uint8 AoeHealValue::Calculate()
         if (!player || !player->IsAlive())
             continue;
 
-        if (player->GetDistance(bot) >= sPlayerbotAIConfig.sightDistance)
+        if (player->GetDistance(bot) >= sPlayerbotAIConfig.healDistance)
             continue;
 
         float percent = (static_cast<float>(player->GetHealth()) / player->GetMaxHealth()) * 100;
-        if (percent <= range)
-            ++count;
+        if (percent > range)
+            continue;
+
+        // Raycast last: this value is recalculated every tick, and only the members that are
+        // already hurt and in range are worth the cost.
+        if (!bot->IsWithinLOSInMap(player))
+            continue;
+
+        ++count;
+    }
+
+    return count;
+}
+
+uint8 CountHealableGroupMembers(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return 0;
+
+    uint8 count = 0;
+    Group::MemberSlotList const& groupSlot = group->GetMemberSlots();
+    for (Group::member_citerator itr = groupSlot.begin(); itr != groupSlot.end(); itr++)
+    {
+        Player* player = ObjectAccessor::FindPlayer(itr->guid);
+        if (!player || !player->IsAlive())
+            continue;
+
+        if (player->GetDistance(bot) >= sPlayerbotAIConfig.healDistance)
+            continue;
+
+        ++count;
     }
 
     return count;

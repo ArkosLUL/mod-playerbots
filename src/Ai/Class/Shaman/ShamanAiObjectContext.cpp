@@ -160,6 +160,7 @@ public:
         creators["elemental mastery"] = &ShamanATriggerFactoryInternal::elemental_mastery;
         creators["wind shear on enemy healer"] = &ShamanATriggerFactoryInternal::wind_shear_on_enemy_healer;
         creators["earth shield on main tank"] = &ShamanATriggerFactoryInternal::earth_shield_on_main_tank;
+        creators["nature's swiftness active"] = &ShamanATriggerFactoryInternal::natures_swiftness_active;
         creators["maelstrom weapon 3"] = &ShamanATriggerFactoryInternal::maelstrom_weapon_3;
         creators["maelstrom weapon 4"] = &ShamanATriggerFactoryInternal::maelstrom_weapon_4;
         creators["maelstrom weapon 5"] = &ShamanATriggerFactoryInternal::maelstrom_weapon_5;
@@ -223,6 +224,7 @@ private:
     static Trigger* frost_shock_snare(PlayerbotAI* botAI) { return new FrostShockSnareTrigger(botAI); }
     static Trigger* wind_shear_on_enemy_healer(PlayerbotAI* botAI) { return new WindShearInterruptEnemyHealerSpellTrigger(botAI); }
     static Trigger* earth_shield_on_main_tank(PlayerbotAI* botAI) { return new EarthShieldOnMainTankTrigger(botAI); }
+    static Trigger* natures_swiftness_active(PlayerbotAI* botAI) { return new ShamanNaturesSwiftnessActiveTrigger(botAI); }
     static Trigger* flame_shock(PlayerbotAI* botAI) { return new FlameShockTrigger(botAI); }
     static Trigger* fire_elemental_totem(PlayerbotAI* botAI) { return new FireElementalTotemTrigger(botAI); }
     static Trigger* earth_shock_execute(PlayerbotAI* botAI) { return new EarthShockExecuteTrigger(botAI); }
@@ -281,6 +283,8 @@ public:
         creators["chain heal on party"] = &ShamanAiObjectContextInternal::chain_heal;
         creators["riptide"] = &ShamanAiObjectContextInternal::riptide;
         creators["riptide on party"] = &ShamanAiObjectContextInternal::riptide_on_party;
+        creators["nature's swiftness"] = &ShamanAiObjectContextInternal::natures_swiftness;
+        creators["tidal force"] = &ShamanAiObjectContextInternal::tidal_force;
         creators["stormstrike"] = &ShamanAiObjectContextInternal::stormstrike;
         creators["lava lash"] = &ShamanAiObjectContextInternal::lava_lash;
         creators["fire nova"] = &ShamanAiObjectContextInternal::fire_nova;
@@ -389,6 +393,8 @@ private:
     static Action* chain_heal(PlayerbotAI* botAI) { return new CastChainHealAction(botAI); }
     static Action* riptide(PlayerbotAI* botAI) { return new CastRiptideAction(botAI); }
     static Action* riptide_on_party(PlayerbotAI* botAI) { return new CastRiptideOnPartyAction(botAI); }
+    static Action* natures_swiftness(PlayerbotAI* botAI) { return new CastShamanNaturesSwiftnessAction(botAI); }
+    static Action* tidal_force(PlayerbotAI* botAI) { return new CastTidalForceAction(botAI); }
     static Action* stormstrike(PlayerbotAI* botAI) { return new CastStormstrikeAction(botAI); }
     static Action* lava_lash(PlayerbotAI* botAI) { return new CastLavaLashAction(botAI); }
     static Action* ancestral_spirit(PlayerbotAI* botAI) { return new CastAncestralSpiritAction(botAI); }

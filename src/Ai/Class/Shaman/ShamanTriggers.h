@@ -65,6 +65,13 @@ public:
     LightningShieldTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "lightning shield") {}
 };
 
+class ShamanNaturesSwiftnessActiveTrigger : public HasAuraTrigger
+{
+public:
+    ShamanNaturesSwiftnessActiveTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "nature's swiftness") {}
+    bool IsActive() override { return botAI->HasAura("nature's swiftness", bot); }
+};
+
 class WaterWalkingTrigger : public BuffTrigger
 {
 public:

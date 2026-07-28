@@ -90,12 +90,16 @@ void ShamanNonCombatStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Healing/Resurrect Triggers
     triggers.push_back(new TriggerNode("party member dead", { NextAction("ancestral spirit", ACTION_CRITICAL_HEAL + 10) }));
     triggers.push_back(new TriggerNode("party member critical health", { NextAction("riptide on party", 31.0f),
+                                                                         NextAction("chain heal on party", 30.5f),
                                                                          NextAction("healing wave on party", 30.0f) }));
     triggers.push_back(new TriggerNode("party member low health", { NextAction("riptide on party", 29.0f),
+                                                                    NextAction("chain heal on party", 28.5f),
                                                                     NextAction("healing wave on party", 28.0f) }));
     triggers.push_back(new TriggerNode("party member medium health", { NextAction("riptide on party", 27.0f),
+                                                                       NextAction("chain heal on party", 26.5f),
                                                                        NextAction("healing wave on party", 26.0f) }));
     triggers.push_back(new TriggerNode("party member almost full health", { NextAction("riptide on party", 25.0f),
+                                                                            NextAction("chain heal on party", 24.5f),
                                                                             NextAction("lesser healing wave on party", 24.0f) }));
     triggers.push_back(new TriggerNode("group heal setting", { NextAction("chain heal on party", 27.0f) }));
 

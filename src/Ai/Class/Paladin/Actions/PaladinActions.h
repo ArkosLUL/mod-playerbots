@@ -373,7 +373,19 @@ public:
     bool isUseful() override;
 };
 
-PROTECT_ACTION(CastBlessingOfProtectionProtectAction, "blessing of protection");
+// BoP wipes melee threat and applies Forbearance, so it never goes on a tank.
+class CastBlessingOfProtectionProtectAction : public CastProtectSpellAction
+{
+public:
+    CastBlessingOfProtectionProtectAction(PlayerbotAI* botAI)
+        : CastProtectSpellAction(botAI, "blessing of protection") {}
+
+    std::string const GetTargetName() override { return "party member to protect no tank"; }
+    bool isUseful() override
+    {
+        return CastProtectSpellAction::isUseful() && !botAI->HasAura("forbearance", GetTarget());
+    }
+};
 
 class CastDivinePleaAction : public CastBuffSpellAction
 {

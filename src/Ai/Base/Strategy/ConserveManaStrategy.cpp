@@ -123,7 +123,8 @@ float HealerAutoSaveManaMultiplier::GetValue(Action* action)
         if (health >= sPlayerbotAIConfig.mediumHealth &&
             (lossAmount < estAmount || manaEfficiency <= HealingManaEfficiency::MEDIUM))
             return 0.0f;
-        if (lossAmount < estAmount || manaEfficiency <= HealingManaEfficiency::LOW)
+        if (health >= sPlayerbotAIConfig.lowHealth &&
+            (lossAmount < estAmount || manaEfficiency <= HealingManaEfficiency::LOW))
             return 0.0f;
     }
     return 1.0f;

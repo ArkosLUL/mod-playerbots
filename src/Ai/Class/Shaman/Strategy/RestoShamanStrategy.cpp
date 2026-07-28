@@ -18,30 +18,46 @@ void RestoShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     GenericShamanStrategy::InitTriggers(triggers);
 
     // Totem Triggers
-    triggers.push_back(new TriggerNode("call of the elements", { NextAction("call of the elements", 60.0f) }));
-    triggers.push_back(new TriggerNode("low health", { NextAction("stoneclaw totem", 40.0f) }));
-    triggers.push_back(new TriggerNode("medium mana", { NextAction("mana tide totem", ACTION_HIGH + 5) }));
+    // Call of the elements re-drops the whole totem set whenever two slots are empty, so it has to yield to
+    // the low and critical heal bands.
+    triggers.push_back(new TriggerNode("call of the elements", { NextAction("call of the elements", ACTION_MEDIUM_HEAL + 1) }));
+    triggers.push_back(new TriggerNode("low health", { NextAction("stoneclaw totem", ACTION_CRITICAL_HEAL + 11) }));
+    triggers.push_back(new TriggerNode("medium mana", { NextAction("mana tide totem", ACTION_MEDIUM_HEAL + 6.5f) }));
 
     // Healing Triggers
-    triggers.push_back(new TriggerNode("group heal setting", { NextAction("riptide on party", 27.0f),
-                                                               NextAction("chain heal on party", 26.0f) }));
+    // Riptide leads every band: it is instant and grants Tidal Waves for the wave that follows. Chain heal is
+    // in every band as the throughput spell and as the backstop that survives the save-mana veto.
+    triggers.push_back(new TriggerNode("party member critical health", { NextAction("nature's swiftness", 58.0f),
+                                                                         NextAction("riptide on party", ACTION_CRITICAL_HEAL + 6),
+                                                                         NextAction("lesser healing wave on party", ACTION_CRITICAL_HEAL + 4),
+                                                                         NextAction("healing wave on party", ACTION_CRITICAL_HEAL + 3),
+                                                                         NextAction("chain heal on party", ACTION_CRITICAL_HEAL + 2) }));
 
-    triggers.push_back(new TriggerNode("party member critical health", { NextAction("riptide on party", 25.0f),
-                                                                         NextAction("healing wave on party", 24.0f),
-                                                                         NextAction("lesser healing wave on party", 23.0f) }));
+    // Above the 55.0 totem re-drops, so the free instant heal is never traded for a totem.
+    triggers.push_back(new TriggerNode("nature's swiftness active", { NextAction("healing wave on party", 56.0f) }));
 
-    triggers.push_back(new TriggerNode("party member low health", { NextAction("riptide on party", 19.0f),
-                                                                    NextAction("healing wave on party", 18.0f),
-                                                                    NextAction("lesser healing wave on party", 17.0f) }));
+    triggers.push_back(new TriggerNode("medium group heal setting", { NextAction("tidal force", ACTION_CRITICAL_HEAL + 6.5f),
+                                                                      NextAction("chain heal on party", ACTION_CRITICAL_HEAL + 5),
+                                                                      NextAction("riptide on party", ACTION_CRITICAL_HEAL + 4.5f) }));
 
-    triggers.push_back(new TriggerNode("party member medium health", { NextAction("riptide on party", 16.0f),
-                                                                       NextAction("healing wave on party", 15.0f),
-                                                                       NextAction("lesser healing wave on party", 14.0f) }));
+    triggers.push_back(new TriggerNode("group heal setting", { NextAction("chain heal on party", ACTION_MEDIUM_HEAL + 8),
+                                                               NextAction("riptide on party", ACTION_MEDIUM_HEAL + 7) }));
 
-    triggers.push_back(new TriggerNode("party member almost full health", { NextAction("riptide on party", 12.0f),
-                                                                            NextAction("lesser healing wave on party", 11.0f) }));
+    // Half steps keep the band clear of the cure nodes (23/24) and wind shear (23).
+    triggers.push_back(new TriggerNode("party member low health", { NextAction("riptide on party", ACTION_MEDIUM_HEAL + 5),
+                                                                    NextAction("chain heal on party", ACTION_MEDIUM_HEAL + 4.5f),
+                                                                    NextAction("healing wave on party", ACTION_MEDIUM_HEAL + 3.5f),
+                                                                    NextAction("lesser healing wave on party", ACTION_MEDIUM_HEAL + 2.5f) }));
 
-    triggers.push_back(new TriggerNode("earth shield on main tank", { NextAction("earth shield on main tank", ACTION_HIGH + 7) }));
+    triggers.push_back(new TriggerNode("party member medium health", { NextAction("riptide on party", ACTION_LIGHT_HEAL + 9),
+                                                                       NextAction("chain heal on party", ACTION_LIGHT_HEAL + 8),
+                                                                       NextAction("lesser healing wave on party", ACTION_LIGHT_HEAL + 7),
+                                                                       NextAction("healing wave on party", ACTION_LIGHT_HEAL + 6) }));
+
+    triggers.push_back(new TriggerNode("party member almost full health", { NextAction("riptide on party", ACTION_LIGHT_HEAL + 3),
+                                                                            NextAction("chain heal on party", ACTION_LIGHT_HEAL + 2) }));
+
+    triggers.push_back(new TriggerNode("earth shield on main tank", { NextAction("earth shield on main tank", ACTION_MEDIUM_HEAL + 6) }));
 
     // Dispel Triggers
     triggers.push_back(new TriggerNode("party member cleanse spirit poison", { NextAction("cleanse spirit poison on party", ACTION_DISPEL + 2) }));
@@ -50,8 +66,8 @@ void RestoShamanStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     // Range/Mana Triggers
     triggers.push_back(new TriggerNode("enemy too close for spell", { NextAction("flee", ACTION_MOVE + 9) }));
-    triggers.push_back(new TriggerNode("party member to heal out of spell range", { NextAction("reach party member to heal", ACTION_CRITICAL_HEAL + 1) }));
-    triggers.push_back(new TriggerNode("water shield", { NextAction("water shield", 19.5f) }));
+    triggers.push_back(new TriggerNode("party member to heal out of spell range", { NextAction("reach party member to heal", ACTION_CRITICAL_HEAL + 10) }));
+    triggers.push_back(new TriggerNode("water shield", { NextAction("water shield", ACTION_LIGHT_HEAL + 0.5f) }));
 }
 
 void ShamanHealerDpsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
