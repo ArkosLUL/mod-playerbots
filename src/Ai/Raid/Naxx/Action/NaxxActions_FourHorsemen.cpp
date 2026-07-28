@@ -7,6 +7,7 @@
 #include "NaxxActions.h"
 
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 
 bool HorsemanAttractAlternativelyAction::Execute(Event event)
 {
@@ -27,6 +28,45 @@ bool HorsemanAttractAlternativelyAction::Execute(Event event)
     }
     return false;
 }
+
+std::pair<Player*, Unit*> FourhorsemanRedirectThreatAction::GetAssignment()
+{
+    int32 index = GetRedirecterIndex();
+    if (index < 0)
+    {
+        return {nullptr, nullptr};
+    }
+
+    // Only the two melee horsemen are tanked - Zeliek and Blaumeux belong to the attractor rotation,
+    // and a redirect there would only fight it. Same split as the kill order in
+    // HorsemanAttactInOrderAction: the assist tank opens on the Baron, the main tank on the Thane.
+    Unit* thane = AI_VALUE2(Unit*, "find target", "thane korth'azz");
+    Unit* baron = AI_VALUE2(Unit*, "find target", "baron rivendare");
+    if (!baron)
+    {
+        baron = AI_VALUE2(Unit*, "find target", "highlord mograine");
+    }
+
+    if (index % 2 == 1)
+    {
+        if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+        {
+            return {assistTank, baron};
+        }
+    }
+    return {GetGroupMainTank(botAI, bot), thane};
+}
+
+Player* FourhorsemanRedirectThreatAction::GetRedirectTank()
+{
+    if (!helper.IsEncounterUp())
+    {
+        return nullptr;
+    }
+    return GetAssignment().first;
+}
+
+Unit* FourhorsemanRedirectThreatAction::GetThreatDumpTarget() { return GetAssignment().second; }
 
 bool HorsemanAttactInOrderAction::Execute(Event event)
 {

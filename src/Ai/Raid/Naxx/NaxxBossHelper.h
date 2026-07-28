@@ -1077,6 +1077,10 @@ public:
         {
             _combat_start_ms = 0;
         }
+        if (BeforeDecimate())
+        {
+            _decimate_cast_ms = getMSTime();
+        }
         return true;
     }
     bool BeforeDecimate()
@@ -1107,18 +1111,28 @@ public:
 
         return info->SpellName[LOCALE_enUS] && botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "decimate");
     }
+    // The Decimate cast itself is over in a second, but the zombie wave it releases only reaches the
+    // off tank a good while later, so anything that has to react to the wave needs the wider window.
+    bool InDecimateWindow() const
+    {
+        return _decimate_cast_ms != 0 && getMSTime() - _decimate_cast_ms < DecimateWindowMs;
+    }
     bool JustStartCombat() const { return _combat_start_ms != 0 && getMSTime() - _combat_start_ms < 10000; }
     bool IsZombieChow(Unit* unit) const { return unit && botAI->EqualLowercaseName(unit->GetName(), "zombie chow"); }
 
 private:
+    static constexpr uint32 DecimateWindowMs = 15000;
+
     void Reset()
     {
         _unit = nullptr;
         _combat_start_ms = 0;
+        _decimate_cast_ms = 0;
     }
 
     Unit* _unit = nullptr;
     uint32 _combat_start_ms = 0;
+    uint32 _decimate_cast_ms = 0;
 };
 
 // The eruption schedule carries no RNG, so the safe zone is a pure function of the phase start.
@@ -1483,6 +1497,25 @@ public:
         _combat_start_ms = 0;
         posToGo = 0;
     }
+    // UpdateBossAI needs Zeliek, and "find target" only sees creatures that already have this bot on
+    // their threat list - a melee bot parked on Thane never resolves him. Anything that only needs
+    // "the encounter is running" takes any of the four instead.
+    bool IsEncounterUp()
+    {
+        if (UpdateBossAI())
+        {
+            return true;
+        }
+        for (char const* name : {"lady blaumeux", "thane korth'azz", "baron rivendare", "highlord mograine"})
+        {
+            if (AI_VALUE2(Unit*, "find target", name))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    bool JustStartCombat() const { return _combat_start_ms != 0 && getMSTime() - _combat_start_ms < PullWindowMs; }
     bool IsAttracter(Player* bot)
     {
         Difficulty diff = bot->GetRaidDifficulty();
@@ -1541,6 +1574,10 @@ public:
     }
 
 protected:
+    // How long a pull lasts for anything that only makes sense before the attractor rotation
+    // starts moving the horsemen around.
+    static constexpr uint32 PullWindowMs = 10000;
+
     Unit* _sir = nullptr;
     Unit* _lady = nullptr;
     uint32 _combat_start_ms = 0;
@@ -1626,6 +1663,7 @@ public:
     }
     bool IsPhaseThaddius() { return !IsPhasePet() && !IsPhaseTransition(); }
 
+    Unit* GetBoss() const { return _unit; }
     Unit* GetFeugen() const { return feugen; }
     Unit* GetStalagg() const { return stalagg; }
 

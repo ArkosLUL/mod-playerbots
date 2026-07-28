@@ -28,12 +28,14 @@ public:
         creators["thaddius attack nearest pet"] = &RaidNaxxActionContext::thaddius_attack_nearest_pet;
         creators["thaddius move to platform"] = &RaidNaxxActionContext::thaddius_move_to_platform;
         creators["thaddius move polarity"] = &RaidNaxxActionContext::thaddius_move_polarity;
+        creators["thaddius redirect threat"] = &RaidNaxxActionContext::thaddius_redirect_threat;
 
         creators["razuvious use obedience crystal"] = &RaidNaxxActionContext::razuvious_use_obedience_crystal;
         creators["razuvious target"] = &RaidNaxxActionContext::razuvious_target;
 
         creators["horseman attract alternatively"] = &RaidNaxxActionContext::horseman_attract_alternatively;
         creators["horseman attack in order"] = &RaidNaxxActionContext::horseman_attack_in_order;
+        creators["four horsemen redirect threat"] = &RaidNaxxActionContext::four_horsemen_redirect_threat;
 
         creators["sapphiron ground position"] = &RaidNaxxActionContext::sapphiron_ground_position;
         creators["sapphiron flight position"] = &RaidNaxxActionContext::sapphiron_flight_position;
@@ -59,6 +61,7 @@ public:
         creators["gluth position"] = &RaidNaxxActionContext::gluth_position;
         creators["gluth slowdown"] = &RaidNaxxActionContext::gluth_slowdown;
         creators["gluth tranquilizing shot"] = &RaidNaxxActionContext::gluth_tranquilizing_shot;
+        creators["gluth redirect threat"] = &RaidNaxxActionContext::gluth_redirect_threat;
 
         // creators["patchwerk ranged position"] = &RaidNaxxActionContext::patchwerk_ranged_position;
 
@@ -80,6 +83,7 @@ private:
     static Action* thaddius_attack_nearest_pet(PlayerbotAI* ai) { return new ThaddiusAttackNearestPetAction(ai); }
     static Action* thaddius_move_to_platform(PlayerbotAI* ai) { return new ThaddiusMoveToPlatformAction(ai); }
     static Action* thaddius_move_polarity(PlayerbotAI* ai) { return new ThaddiusMovePolarityAction(ai); }
+    static Action* thaddius_redirect_threat(PlayerbotAI* ai) { return new ThaddiusRedirectThreatAction(ai); }
     static Action* razuvious_target(PlayerbotAI* ai) { return new RazuviousTargetAction(ai); }
     static Action* razuvious_use_obedience_crystal(PlayerbotAI* ai)
     {
@@ -90,6 +94,10 @@ private:
         return new HorsemanAttractAlternativelyAction(ai);
     }
     static Action* horseman_attack_in_order(PlayerbotAI* ai) { return new HorsemanAttactInOrderAction(ai); }
+    static Action* four_horsemen_redirect_threat(PlayerbotAI* ai)
+    {
+        return new FourhorsemanRedirectThreatAction(ai);
+    }
     static Action* sapphiron_ground_position(PlayerbotAI* ai) { return new SapphironGroundPositionAction(ai); }
     static Action* sapphiron_flight_position(PlayerbotAI* ai) { return new SapphironFlightPositionAction(ai); }
     static Action* kelthuzad_choose_target(PlayerbotAI* ai) { return new KelthuzadChooseTargetAction(ai); }
@@ -110,6 +118,7 @@ private:
     static Action* gluth_position(PlayerbotAI* ai) { return new GluthPositionAction(ai); }
     static Action* gluth_slowdown(PlayerbotAI* ai) { return new GluthSlowdownAction(ai); }
     static Action* gluth_tranquilizing_shot(PlayerbotAI* ai) { return new GluthTranquilizingShotAction(ai); }
+    static Action* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatAction(ai); }
     // static Action* patchwerk_ranged_position(PlayerbotAI* ai) { return new PatchwerkRangedPositionAction(ai); }
     static Action* loatheb_position(PlayerbotAI* ai) { return new LoathebPositionAction(ai); }
     static Action* loatheb_choose_target(PlayerbotAI* ai) { return new LoathebChooseTargetAction(ai); }

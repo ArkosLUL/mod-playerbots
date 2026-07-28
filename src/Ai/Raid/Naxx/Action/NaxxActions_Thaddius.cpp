@@ -9,6 +9,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "NaxxSpellIds.h"
+#include "RaidBossHelpers.h"
 
 bool ThaddiusAttackNearestPetAction::isUseful()
 {
@@ -84,6 +85,46 @@ bool ThaddiusAttackNearestPetAction::Execute(Event event)
         return MoveTo(533, posForRanged.first, posForRanged.second, helper.tankPosZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
     }
     return false;
+}
+
+Player* ThaddiusRedirectThreatAction::GetRedirectTank()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return nullptr;
+    }
+
+    if (helper.IsPhasePet())
+    {
+        // Aim at the tank already on our own pet, so the two sides never redirect into each other.
+        Unit* pet = helper.GetAssignedPetForBot();
+        if (!pet)
+        {
+            return nullptr;
+        }
+        if (Player* tank = GetTankHolding(pet))
+        {
+            return tank;
+        }
+        return helper.IsAssignedToPrimarySide(bot) ? GetGroupMainTank(botAI, bot)
+                                                   : GetGroupAssistTank(botAI, bot, 0);
+    }
+
+    // Thaddius wakes up with an empty threat table - nobody owns him until the tank rebuilds it.
+    return GetGroupMainTank(botAI, bot);
+}
+
+Unit* ThaddiusRedirectThreatAction::GetThreatDumpTarget()
+{
+    if (helper.IsPhasePet())
+    {
+        return helper.GetAssignedPetForBot();
+    }
+
+    // No dump shot once Thaddius is up: Polarity Shift can land at any point and a bot standing
+    // still to finish a Steady Shot dies to it. Applying the buff is enough, the rotation spends
+    // the charges on its own.
+    return nullptr;
 }
 
 bool ThaddiusMoveToPlatformAction::isUseful() { return true; }

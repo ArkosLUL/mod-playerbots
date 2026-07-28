@@ -28,12 +28,14 @@ public:
         creators["thaddius phase pet lose aggro"] = &RaidNaxxTriggerContext::thaddius_phase_pet_lose_aggro;
         creators["thaddius phase transition"] = &RaidNaxxTriggerContext::thaddius_phase_transition;
         creators["thaddius phase thaddius"] = &RaidNaxxTriggerContext::thaddius_phase_thaddius;
+        creators["thaddius redirect threat"] = &RaidNaxxTriggerContext::thaddius_redirect_threat;
 
         creators["razuvious tank"] = &RaidNaxxTriggerContext::razuvious_tank;
         creators["razuvious nontank"] = &RaidNaxxTriggerContext::razuvious_nontank;
 
         creators["horseman attractors"] = &RaidNaxxTriggerContext::horseman_attractors;
         creators["horseman except attractors"] = &RaidNaxxTriggerContext::horseman_except_attractors;
+        creators["four horsemen redirect threat"] = &RaidNaxxTriggerContext::four_horsemen_redirect_threat;
 
         creators["sapphiron ground"] = &RaidNaxxTriggerContext::sapphiron_ground;
         creators["sapphiron flight"] = &RaidNaxxTriggerContext::sapphiron_flight;
@@ -61,6 +63,7 @@ public:
         creators["gluth main tank mortal wound"] = &RaidNaxxTriggerContext::gluth_main_tank_mortal_wound;
         creators["gluth low health zombie aoe"] = &RaidNaxxTriggerContext::gluth_low_health_zombie_aoe;
         creators["gluth frenzy"] = &RaidNaxxTriggerContext::gluth_frenzy;
+        creators["gluth redirect threat"] = &RaidNaxxTriggerContext::gluth_redirect_threat;
 
         creators["loatheb"] = &RaidNaxxTriggerContext::loatheb;
         // creators["noth"] = &RaidNaxxTriggerContext::noth;
@@ -80,11 +83,16 @@ private:
     static Trigger* thaddius_phase_pet_lose_aggro(PlayerbotAI* ai) { return new ThaddiusPhasePetLoseAggroTrigger(ai); }
     static Trigger* thaddius_phase_transition(PlayerbotAI* ai) { return new ThaddiusPhaseTransitionTrigger(ai); }
     static Trigger* thaddius_phase_thaddius(PlayerbotAI* ai) { return new ThaddiusPhaseThaddiusTrigger(ai); }
+    static Trigger* thaddius_redirect_threat(PlayerbotAI* ai) { return new ThaddiusRedirectThreatTrigger(ai); }
     static Trigger* razuvious_tank(PlayerbotAI* ai) { return new RazuviousTankTrigger(ai); }
     static Trigger* razuvious_nontank(PlayerbotAI* ai) { return new RazuviousNontankTrigger(ai); }
 
     static Trigger* horseman_attractors(PlayerbotAI* ai) { return new HorsemanAttractorsTrigger(ai); }
     static Trigger* horseman_except_attractors(PlayerbotAI* ai) { return new HorsemanExceptAttractorsTrigger(ai); }
+    static Trigger* four_horsemen_redirect_threat(PlayerbotAI* ai)
+    {
+        return new FourhorsemanRedirectThreatTrigger(ai);
+    }
 
     static Trigger* sapphiron_ground(PlayerbotAI* ai) { return new SapphironGroundTrigger(ai); }
     static Trigger* sapphiron_flight(PlayerbotAI* ai) { return new SapphironFlightTrigger(ai); }
@@ -105,6 +113,7 @@ private:
     static Trigger* gluth_main_tank_mortal_wound(PlayerbotAI* ai) { return new GluthMainTankMortalWoundTrigger(ai); }
     static Trigger* gluth_low_health_zombie_aoe(PlayerbotAI* ai) { return new GluthLowHealthZombieAoeTrigger(ai); }
     static Trigger* gluth_frenzy(PlayerbotAI* ai) { return new GluthFrenzyTrigger(ai); }
+    static Trigger* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatTrigger(ai); }
     static Trigger* loatheb(PlayerbotAI* ai) { return new LoathebTrigger(ai); }
     // static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
     // static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }

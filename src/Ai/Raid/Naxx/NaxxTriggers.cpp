@@ -160,6 +160,56 @@ bool RazuviousNontankTrigger::IsActive()
     return helper.UpdateBossAI() && !(bot->getClass() == CLASS_PRIEST);
 }
 
+// Cheap gate in front of every redirect trigger: only these two classes have anything to redirect.
+static bool CanRedirectThreat(Player* bot)
+{
+    return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;
+}
+
+bool ThaddiusRedirectThreatTrigger::IsActive()
+{
+    if (!CanRedirectThreat(bot) || !bot->IsInCombat())
+    {
+        return false;
+    }
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    if (helper.IsPhasePet())
+    {
+        // Pull only - after that both pets stay parked on their tanks.
+        Unit* pet = helper.GetAssignedPetForBot();
+        return pet && pet->GetHealthPct() > NAXX_PULL_HEALTH_PCT;
+    }
+
+    // The transition and the first seconds after Thaddius stands up are one fresh pull: he
+    // activates with an empty threat table.
+    Unit* boss = helper.GetBoss();
+    return boss && boss->GetHealthPct() > NAXX_PULL_HEALTH_PCT;
+}
+
+bool FourhorsemanRedirectThreatTrigger::IsActive()
+{
+    if (!CanRedirectThreat(bot))
+    {
+        return false;
+    }
+    if (!helper.IsEncounterUp())
+    {
+        return false;
+    }
+    // Attractors have a corner to reach and a rotation to keep; nothing they do belongs on a tank.
+    if (helper.IsAttracter(bot))
+    {
+        return false;
+    }
+    // Pull only. Once the attractor rotation starts, the horsemen change hands and a redirect
+    // lands on the wrong player.
+    return helper.JustStartCombat();
+}
+
 bool HorsemanAttractorsTrigger::IsActive()
 {
     if (!helper.UpdateBossAI())
@@ -257,6 +307,20 @@ bool GluthFrenzyTrigger::IsActive()
         return false;
     }
     return botAI->CanCastSpell("tranquilizing shot", boss);
+}
+
+bool GluthRedirectThreatTrigger::IsActive()
+{
+    if (!CanRedirectThreat(bot))
+    {
+        return false;
+    }
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+    // The pull, and every Decimate, which hands a fresh zombie wave to the off tank.
+    return helper.JustStartCombat() || helper.InDecimateWindow();
 }
 
 bool KelthuzadTrigger::IsActive() { return helper.UpdateBossAI(); }

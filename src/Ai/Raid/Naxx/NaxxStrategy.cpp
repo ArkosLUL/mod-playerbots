@@ -132,6 +132,12 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("thaddius move polarity", ACTION_RAID + 1) }
     ));
 
+    // Below the pet-phase taunt. It only ever casts the redirect buff, so outranking the
+    // positioning nodes costs a GCD, not a Polarity Shift.
+    triggers.push_back(new TriggerNode("thaddius redirect threat",
+        { NextAction("thaddius redirect threat", ACTION_RAID + 3) }
+    ));
+
     // Instructor Razuvious
     triggers.push_back(new TriggerNode("razuvious tank",
         { NextAction("razuvious use obedience crystal", ACTION_RAID + 1) }
@@ -148,6 +154,11 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("horseman except attractors",
         { NextAction("horseman attack in order", ACTION_RAID + 1) }
+    ));
+
+    // Only live for the pull window, so it can outrank the attractor rotation while it lasts.
+    triggers.push_back(new TriggerNode("four horsemen redirect threat",
+        { NextAction("four horsemen redirect threat", ACTION_RAID + 4) }
     ));
 
     // sapphiron
@@ -171,6 +182,10 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("gluth main tank mortal wound",
         { NextAction("taunt spell", ACTION_RAID + 1) }
+    ));
+
+    triggers.push_back(new TriggerNode("gluth redirect threat",
+        { NextAction("gluth redirect threat", ACTION_RAID + 2) }
     ));
 
     triggers.push_back(new TriggerNode("gluth frenzy",

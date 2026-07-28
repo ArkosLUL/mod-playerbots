@@ -8,6 +8,7 @@
 
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 #include "SharedDefines.h"
 
 bool GluthChooseTargetAction::Execute(Event event)
@@ -217,6 +218,37 @@ bool GluthSlowdownAction::Execute(Event event)
     }
     return false;
 }
+
+std::pair<Player*, Unit*> GluthRedirectThreatAction::GetAssignment()
+{
+    if (!helper.UpdateBossAI())
+    {
+        return {nullptr, nullptr};
+    }
+
+    // The zombie wave Decimate releases is picked up by the tank that is not on the boss - but only
+    // for bots that actually switched to a zombie, otherwise the threat still lands on the boss.
+    if (helper.InDecimateWindow())
+    {
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (helper.IsZombieChow(target))
+        {
+            if (Player* zombieTank = GetGroupAssistTank(botAI, bot, 1))
+            {
+                return {zombieTank, target};
+            }
+        }
+    }
+
+    Unit* boss = AI_VALUE2(Unit*, "find target", "gluth");
+    // Mortal Wound stacks swap the boss between the two tanks, so aim at whoever holds him now.
+    Player* tank = boss ? GetTankHolding(boss) : nullptr;
+    return {tank ? tank : GetGroupMainTank(botAI, bot), boss};
+}
+
+Player* GluthRedirectThreatAction::GetRedirectTank() { return GetAssignment().first; }
+
+Unit* GluthRedirectThreatAction::GetThreatDumpTarget() { return GetAssignment().second; }
 
 bool GluthTranquilizingShotAction::Execute(Event event)
 {

@@ -13,6 +13,10 @@
 #include "NaxxBossHelper.h"
 #include "Trigger.h"
 
+// Above this the encounter has effectively just been pulled, which is where a threat redirect is
+// worth its cooldown.
+static constexpr float NAXX_PULL_HEALTH_PCT = 95.0f;
+
 class MutatingInjectionTrigger : public HasAuraTrigger
 {
 public:
@@ -249,6 +253,26 @@ private:
     ThaddiusBossHelper helper;
 };
 
+class ThaddiusRedirectThreatTrigger : public Trigger
+{
+public:
+    ThaddiusRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius redirect threat"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    ThaddiusBossHelper helper;
+};
+
+class FourhorsemanRedirectThreatTrigger : public Trigger
+{
+public:
+    FourhorsemanRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "four horsemen redirect threat"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    FourhorsemanBossHelper helper;
+};
+
 class HorsemanAttractorsTrigger : public Trigger
 {
 public:
@@ -326,6 +350,16 @@ class GluthFrenzyTrigger : public Trigger
 {
 public:
     GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth frenzy"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
+class GluthRedirectThreatTrigger : public Trigger
+{
+public:
+    GluthRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth redirect threat"), helper(ai) {}
     bool IsActive() override;
 
 private:

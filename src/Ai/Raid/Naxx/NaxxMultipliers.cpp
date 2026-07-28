@@ -167,8 +167,9 @@ float ThaddiusGenericMultiplier::GetValue(Action* action)
                 return 0.0f;
         }
 
-        if (dynamic_cast<ReachPartyMemberToHealAction*>(action) ||
-            dynamic_cast<BuffOnMainTankAction*>(action))
+        // Threat redirects are NaxxThreatRedirectMultiplier's job. The rest of the main-tank buffs
+        // (Beacon of Light, Earth Shield, Thorns) are still wanted during the pet phase.
+        if (dynamic_cast<ReachPartyMemberToHealAction*>(action))
         {
             return 0.0f;
         }
@@ -547,7 +548,8 @@ float NaxxThreatRedirectMultiplier::GetValue(Action* action)
     // Encounters where the main tank is not the right threat sink: tank swaps on a debuff stack,
     // mind-controlled tanks, or one tank per boss. "find target" only sees creatures that already
     // have this bot on their threat list, so all four horsemen are listed - a melee bot parked on
-    // Thane or the Baron never resolves Zeliek.
+    // Thane or the Baron never resolves Zeliek. Thaddius' pets are the same story on a smaller
+    // scale: one tank per pet, and the main tank is only the right sink for one of them.
     static std::vector<std::string> const noRedirectBosses = {"gluth",
                                                               "instructor razuvious",
                                                               "gothik the harvester",
@@ -555,7 +557,9 @@ float NaxxThreatRedirectMultiplier::GetValue(Action* action)
                                                               "lady blaumeux",
                                                               "thane korth'azz",
                                                               "baron rivendare",
-                                                              "highlord mograine"};
+                                                              "highlord mograine",
+                                                              "stalagg",
+                                                              "feugen"};
 
     for (std::string const& name : noRedirectBosses)
     {
