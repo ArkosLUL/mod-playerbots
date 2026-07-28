@@ -46,9 +46,15 @@ namespace NaxxSpellIds
     static constexpr uint32 PoisonCloud = 28240;
 
     // Noth the Plaguebringer
-    // static constexpr uint32 CurseOfThePlaguebringer = 29213;
-    // static constexpr uint32 Cripple = 29212;
-    // static constexpr uint32 Blink = 29208;
+    // 25-man remaps these through spelldifficulty_dbc, so anything matching on a cast or an aura has
+    // to fall back to the name or to the dispel type.
+    static constexpr uint32 CurseOfThePlaguebringer = 29213;
+    static constexpr uint32 UnrelentingPlague = 29214;
+    static constexpr uint32 Cripple = 29212;
+    static constexpr uint32 Blink = 29208;
+    static constexpr uint32 NothPlaguedWarriorEntry = 16984;
+    static constexpr uint32 NothPlaguedChampionEntry = 16983;
+    static constexpr uint32 NothPlaguedGuardianEntry = 16981;
 
     // Thaddius polarity
     static constexpr uint32 PositiveCharge10 = 28059;

@@ -218,19 +218,24 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // Noth the Plaguebringer
-    // triggers.push_back(
-    //     new TriggerNode("noth",
-    //     {
-    //         NextAction("noth position", ACTION_RAID + 1),
-    //         NextAction("noth choose target", ACTION_RAID + 1)
-    //     })
-    // );
-    // triggers.push_back(
-    //     new TriggerNode("noth curse",
-    //     {
-    //         NextAction("cure party member", ACTION_RAID + 2)
-    //     })
-    // );
+    triggers.push_back(
+        new TriggerNode("noth",
+        {
+            NextAction("noth position", ACTION_RAID + 2),
+            NextAction("noth choose target", ACTION_RAID + 1)
+        })
+    );
+
+    // 25-man only, and only for the few seconds after EVENT_BLINK empties the threat table.
+    triggers.push_back(new TriggerNode("noth blink",
+        { NextAction("taunt spell", ACTION_RAID + 4) }
+    ));
+
+    // Above the positioning nodes: 25-man curses 10 players at once against a ~10s window, so a
+    // dispel that loses a GCD to a repositioning move is a dispel that does not happen.
+    triggers.push_back(new TriggerNode("noth curse",
+        { NextAction("noth dispel curse", ACTION_RAID + 5) }
+    ));
 }
 
 void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
@@ -247,5 +252,5 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new GluthGenericMultiplier(botAI));
     multipliers.push_back(new NaxxThreatRedirectMultiplier(botAI));
     multipliers.push_back(new NaxxBurstWindowMultiplier(botAI));
-    // multipliers.push_back(new NothGenericMultiplier(botAI));
+    multipliers.push_back(new NothGenericMultiplier(botAI));
 }

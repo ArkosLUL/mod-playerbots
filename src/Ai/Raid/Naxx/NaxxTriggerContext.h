@@ -67,8 +67,10 @@ public:
         creators["gluth redirect threat"] = &RaidNaxxTriggerContext::gluth_redirect_threat;
 
         creators["loatheb"] = &RaidNaxxTriggerContext::loatheb;
-        // creators["noth"] = &RaidNaxxTriggerContext::noth;
-        // creators["noth curse"] = &RaidNaxxTriggerContext::noth_curse;
+
+        creators["noth"] = &RaidNaxxTriggerContext::noth;
+        creators["noth curse"] = &RaidNaxxTriggerContext::noth_curse;
+        creators["noth blink"] = &RaidNaxxTriggerContext::noth_blink;
     }
 
 private:
@@ -117,8 +119,9 @@ private:
     static Trigger* gluth_frenzy(PlayerbotAI* ai) { return new GluthFrenzyTrigger(ai); }
     static Trigger* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatTrigger(ai); }
     static Trigger* loatheb(PlayerbotAI* ai) { return new LoathebTrigger(ai); }
-    // static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
-    // static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }
+    static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
+    static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }
+    static Trigger* noth_blink(PlayerbotAI* ai) { return new NothBlinkTrigger(ai); }
 };
 
 #endif

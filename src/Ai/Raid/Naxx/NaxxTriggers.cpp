@@ -513,20 +513,33 @@ bool MaexxnaSpiderlingsTrigger::IsActive()
 
 bool LoathebTrigger::IsActive() { return helper.UpdateBossAI(); }
 
-// bool NothTrigger::IsActive() { return helper.UpdateBossAI(); }
+bool NothTrigger::IsActive() { return helper.UpdateBossAI(); }
 
-// bool NothCurseTrigger::IsActive()
-// {
-//     if (!helper.UpdateBossAI())
-//     {
-//         return false;
-//     }
-//     if (bot->getClass() != CLASS_DRUID && bot->getClass() != CLASS_SHAMAN && bot->getClass() != CLASS_MAGE)
-//     {
-//         return false;
-//     }
-//     return helper.HasCurseInGroup();
-// }
+bool NothCurseTrigger::IsActive()
+{
+    if (!helper.UpdateBossAI() || !NaxxCanDispelCurse(botAI, bot))
+    {
+        return false;
+    }
+    return !helper.GetCursedMembers().empty();
+}
+
+bool NothBlinkTrigger::IsActive()
+{
+    if (!helper.UpdateBossAI() || !botAI->IsMainTank(bot))
+    {
+        return false;
+    }
+    if (!helper.IsBlinkWindow())
+    {
+        return false;
+    }
+
+    // Taunt targets "current target", so wait for the choose-target node to put the boss back there
+    // rather than pulling an add off the assist tank.
+    Unit* boss = helper.GetBoss();
+    return boss && boss->GetVictim() != bot && AI_VALUE(Unit*, "current target") == boss;
+}
 
 bool ThaddiusPhasePetTrigger::IsActive()
 {

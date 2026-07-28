@@ -403,40 +403,50 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
-// float NothGenericMultiplier::GetValue(Action* action)
-// {
-//     if (!helper.UpdateBossAI())
-//     {
-//         return 1.0f;
-//     }
-//     if (helper.HasCurseInGroup() && (bot->getClass() == CLASS_DRUID || bot->getClass() == CLASS_SHAMAN ||
-//                                     bot->getClass() == CLASS_MAGE))
-//     {
-//         if (dynamic_cast<CurePartyMemberAction*>(action))
-//         {
-//             return 2.0f;
-//         }
-//         if (dynamic_cast<CastHealingSpellAction*>(action))
-//         {
-//             return 1.0f;
-//         }
-//         return 0.0f;
-//     }
-//     if (!helper.IsBlinkWindow() || botAI->IsTank(bot))
-//     {
-//         return 1.0f;
-//     }
-//     if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-//         dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
-//     {
-//         return 0.0f;
-//     }
-//     if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
-//     {
-//         return 0.0f;
-//     }
-//     return 1.0f;
-// }
+float NothGenericMultiplier::GetValue(Action* action)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return 1.0f;
+    }
+
+    if (dynamic_cast<CombatFormationMoveAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    // Nothing else in the encounter warrants holding the raid back; the curse is handled by giving
+    // the dispel its own high-priority node rather than by muting three classes for 40% of the fight.
+    if (!helper.IsBlinkWindow() || botAI->IsTank(bot))
+    {
+        return 1.0f;
+    }
+
+    if (dynamic_cast<NothDispelCurseAction*>(action) || dynamic_cast<NothPositionAction*>(action) ||
+        dynamic_cast<CurePartyMemberAction*>(action) || dynamic_cast<CastHealingSpellAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    // A redirect during the window is the fastest way back to a tank holding the boss.
+    if (dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
+        dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
+        dynamic_cast<MeleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    if (dynamic_cast<CastSpellAction*>(action))
+    {
+        return 0.0f;
+    }
+    return 1.0f;
+}
 
 float AnubrekhanGenericMultiplier::GetValue(Action* action)
 {
@@ -646,13 +656,13 @@ float NaxxBurstWindowMultiplier::EvaluateWindow()
         return getMSTimeDiff(loathebFightStartMs, now) >= LOATHEB_FALLBACK_MS ? 1.0f : 0.0f;
     }
 
-    // Noth and Gothik have no helper class; the balcony phases are readable straight off the unit
-    // flags the core scripts set (boss_noth.cpp:99, boss_gothik.cpp:232).
-    if (Unit* noth = AI_VALUE2(Unit*, "find target", "noth the plaguebringer"))
+    if (noth.UpdateBossAI())
     {
-        return noth->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) ? 0.0f : 1.0f;
+        return noth.IsBalconyPhase() ? 0.0f : 1.0f;
     }
 
+    // Gothik has no helper class; his balcony phase is readable straight off the unit flag the core
+    // script sets (boss_gothik.cpp:232).
     if (Unit* gothik = AI_VALUE2(Unit*, "find target", "gothik the harvester"))
     {
         return gothik->HasUnitFlag(UNIT_FLAG_DISABLE_MOVE) ? 0.0f : 1.0f;

@@ -479,25 +479,53 @@ private:
     LoathebBossHelper helper;
 };
 
-// class NothChooseTargetAction : public AttackAction
-// {
-// public:
-//     NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "noth choose target"), helper(ai) {}
-//     bool Execute(Event event) override;
+class NothChooseTargetAction : public AttackAction
+{
+public:
+    NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "noth choose target"), helper(ai) {}
+    bool Execute(Event event) override;
 
-// private:
-//     NothBossHelper helper;
-// };
+private:
+    NothBossHelper helper;
+};
 
-// class NothPositionAction : public MovementAction
-// {
-// public:
-//     NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, "noth position"), helper(ai) {}
-//     bool Execute(Event event) override;
+class NothPositionAction : public MovementAction
+{
+public:
+    NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, "noth position"), helper(ai) {}
+    bool Execute(Event event) override;
 
-// private:
-//     NothBossHelper helper;
-// };
+private:
+    // Plagued Warriors cleave, so the tank holding them steps off anyone who wanders into the swing.
+    static constexpr float CleaveSpread = 5.0f;
+    // Plagued Champions Mortal Strike; ranged have no business standing inside that.
+    static constexpr float ChampionKiteDistance = 25.0f;
+    // Adds dragged further than this leave the healers behind.
+    static constexpr float HealerLeashDistance = 25.0f;
+    static constexpr float MeleeCloseDistance = 10.0f;
+
+    bool PositionAssistTank(Unit* currentTarget);
+    bool KiteChampions();
+    bool MoveToClamped(float x, float y);
+
+    NothBossHelper helper;
+};
+
+class NothDispelCurseAction : public Action
+{
+public:
+    NothDispelCurseAction(PlayerbotAI* ai) : Action(ai, "noth dispel curse"), helper(ai) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Unit* GetAssignedTarget();
+    // Position of this bot among the group's living decursers, in group order, so N decursers start
+    // on N different targets instead of all racing for the first one. -1 when the bot cannot decurse.
+    int32 GetDecurserIndex() const;
+
+    NothBossHelper helper;
+};
 
 // class PatchwerkRangedPositionAction : public MovementAction
 // {

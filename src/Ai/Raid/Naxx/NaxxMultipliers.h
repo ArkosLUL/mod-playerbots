@@ -144,7 +144,7 @@ class NaxxBurstWindowMultiplier : public Multiplier
 {
 public:
     NaxxBurstWindowMultiplier(PlayerbotAI* ai)
-        : Multiplier(ai, "naxx burst window"), kelthuzad(ai), sapphiron(ai), thaddius(ai), loatheb(ai)
+        : Multiplier(ai, "naxx burst window"), kelthuzad(ai), sapphiron(ai), thaddius(ai), loatheb(ai), noth(ai)
     {
     }
     float GetValue(Action* action) override;
@@ -166,20 +166,21 @@ private:
     SapphironBossHelper sapphiron;
     ThaddiusBossHelper thaddius;
     LoathebBossHelper loatheb;
+    NothBossHelper noth;
     uint32 loathebFightStartMs = 0;
 
     uint32 cachedAtMs = 0;
     float cachedValue = 1.0f;
 };
 
-// class NothGenericMultiplier : public Multiplier
-// {
-// public:
-//     NothGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "noth generic"), helper(ai) {}
-//     float GetValue(Action* action) override;
+class NothGenericMultiplier : public Multiplier
+{
+public:
+    NothGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "noth generic"), helper(ai) {}
+    float GetValue(Action* action) override;
 
-// private:
-//     NothBossHelper helper;
-// };
+private:
+    NothBossHelper helper;
+};
 
 #endif

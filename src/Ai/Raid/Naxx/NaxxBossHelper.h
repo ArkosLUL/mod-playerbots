@@ -19,6 +19,7 @@
 #include "AiObjectContext.h"
 #include "EventMap.h"
 #include "Log.h"
+#include "Map.h"
 #include "MotionMaster.h"
 #include "NamedObjectContext.h"
 #include "ObjectGuid.h"
@@ -1607,101 +1608,343 @@ private:
     EncounterState* _state = nullptr;
 };
 
-// class NothBossHelper : public AiObject
-// {
-// public:
-//     const std::pair<float, float> center = {2684.94f, -3502.53f};
-//     NothBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
-//     bool UpdateBossAI()
-//     {
-//         if (!bot->IsInCombat())
-//         {
-//             Reset();
-//         }
-//         if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
-//         {
-//             Reset();
-//         }
-//         if (!_unit)
-//         {
-//             _unit = AI_VALUE2(Unit*, "find target", "noth the plaguebringer");
-//         }
-//         if (!_unit)
-//         {
-//             return false;
-//         }
-//         if (_unit->HasUnitState(UNIT_STATE_CASTING))
-//         {
-//             Spell* spell = _unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-//             if (!spell)
-//             {
-//                 spell = _unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-//             }
-//             if (spell)
-//             {
-//                 SpellInfo const* info = spell->GetSpellInfo();
-//                 bool isBlink = NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Blink});
-//                 if (!isBlink && info && info->SpellName[LOCALE_enUS])
-//                 {
-//                     isBlink = botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "blink");
-//                 }
-//                 if (isBlink)
-//                 {
-//                     _last_blink_ms = getMSTime();
-//                 }
-//             }
-//         }
-//         return true;
-//     }
-//     bool IsBalconyPhase() const { return _unit && _unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); }
-//     bool IsBlinkWindow() const { return _last_blink_ms != 0 && getMSTime() - _last_blink_ms < 3000; }
-//     bool HasCurseInGroup() const
-//     {
-//         GuidVector members = AI_VALUE(GuidVector, "group members");
-//         for (ObjectGuid const& guid : members)
-//         {
-//             Unit* member = botAI->GetUnit(guid);
-//             if (!member)
-//             {
-//                 continue;
-//             }
-//             if (NaxxSpellIds::HasAnyAura(botAI, member, {NaxxSpellIds::CurseOfThePlaguebringer}) ||
-//                 botAI->HasAura("curse of the plaguebringer", member))
-//             {
-//                 return true;
-//             }
-//         }
-//         return false;
-//     }
-//     Player* GetAliveAssistTank() const
-//     {
-//         GuidVector members = AI_VALUE(GuidVector, "group members");
-//         for (ObjectGuid const& guid : members)
-//         {
-//             Unit* member = botAI->GetUnit(guid);
-//             if (!member || !member->IsAlive())
-//             {
-//                 continue;
-//             }
-//             Player* player = member->ToPlayer();
-//             if (player && botAI->IsAssistTank(player))
-//             {
-//                 return player;
-//             }
-//         }
-//         return nullptr;
-//     }
+// Curse of the Plaguebringer is the only curse in the encounter, and the two classes that can strip
+// it are the two that can also be told apart cheaply here.
+inline bool NaxxCanDispelCurse(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot || !bot->IsAlive())
+    {
+        return false;
+    }
 
-// private:
-//     void Reset()
-//     {
-//         _unit = nullptr;
-//         _last_blink_ms = 0;
-//     }
+    switch (bot->getClass())
+    {
+        case CLASS_MAGE:
+        case CLASS_DRUID:
+            return botAI->CanCastSpell("remove curse", bot);
+        case CLASS_SHAMAN:
+            return botAI->CanCastSpell("cleanse spirit", bot);
+        default:
+            return false;
+    }
+}
 
-//     Unit* _unit = nullptr;
-//     uint32 _last_blink_ms = 0;
-// };
+class NothBossHelper : public AiObject
+{
+public:
+    const std::pair<float, float> center = {2684.94f, -3502.53f};
+
+    // The encounter's RectangleBoundary, pulled in a few yards, plus a radius well short of the 80 yd
+    // at which boss_noth.cpp IsInRoom() forces an evade.
+    static constexpr float ROOM_MIN_X = 2623.0f;
+    static constexpr float ROOM_MAX_X = 2749.0f;
+    static constexpr float ROOM_MIN_Y = -3552.0f;
+    static constexpr float ROOM_MAX_Y = -3455.0f;
+    static constexpr float ROOM_MAX_RADIUS = 60.0f;
+
+    NothBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
+
+    bool UpdateBossAI()
+    {
+        if (!bot->IsInCombat())
+        {
+            Reset();
+        }
+        if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
+        {
+            Reset();
+        }
+        if (!_unit)
+        {
+            _unit = AI_VALUE2(Unit*, "find target", "noth the plaguebringer");
+        }
+        if (!_unit)
+        {
+            _state = nullptr;
+            return false;
+        }
+
+        _state = &PhaseStateFor(_unit);
+
+        uint32 now = getMSTime();
+        bool balcony = _unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+
+        if (!_state->phaseKnown || getMSTimeDiff(_state->lastSeenMs, now) > StaleStateMs)
+        {
+            // First look at this Noth, or nobody has watched him for long enough that the old clock
+            // says nothing about the phase running now.
+            _state->phaseKnown = true;
+            _state->balcony = balcony;
+            _state->phaseStartMs = now;
+            _state->crippleMs = 0;
+            // Only a pull anchors the ground clock. Bots arriving later inherit whatever anchor
+            // somebody else established, and fall back to watching for Cripple if there is none.
+            _state->synced = !balcony && _unit->GetHealthPct() > 99.0f;
+        }
+        else if (balcony != _state->balcony)
+        {
+            _state->balcony = balcony;
+            _state->phaseStartMs = now;
+            _state->crippleMs = 0;
+            _state->synced = true;
+        }
+        _state->lastSeenMs = now;
+
+        if (!balcony && IsCastingCripple())
+        {
+            _state->crippleMs = now;
+        }
+        return true;
+    }
+
+    Unit* GetBoss() const { return _unit; }
+
+    bool IsBalconyPhase() const { return _unit && _unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); }
+
+    bool Is25Man() const { return _unit && _unit->GetMap() && _unit->GetMap()->Is25ManRaid(); }
+
+    // EVENT_BLINK is 25-man only. It runs DoResetThreatList() on everyone, hard-casts Cripple and
+    // then Blinks, so for a moment the boss belongs to whoever topped the (now empty) table.
+    bool IsBlinkWindow() const
+    {
+        if (!_state || !Is25Man() || IsBalconyPhase())
+        {
+            return false;
+        }
+
+        uint32 now = getMSTime();
+        if (_state->crippleMs && getMSTimeDiff(_state->crippleMs, now) < BlinkWindowMs)
+        {
+            return true;
+        }
+
+        // Blink itself is cast triggered and instant, so it is never observable - the timer is the
+        // only thing that catches the reset before the raid has already pulled the boss off the tank.
+        if (!_state->synced)
+        {
+            return false;
+        }
+
+        uint32 elapsed = getMSTimeDiff(_state->phaseStartMs, now) + BlinkLeadMs;
+        if (elapsed < FirstBlinkMs)
+        {
+            return false;
+        }
+        return (elapsed - FirstBlinkMs) % BlinkPeriodMs < BlinkLeadMs + BlinkWindowMs;
+    }
+
+    bool IsWarrior(Unit* unit) const { return IsAddOfEntry(unit, NaxxSpellIds::NothPlaguedWarriorEntry, "plagued warrior"); }
+    bool IsChampion(Unit* unit) const { return IsAddOfEntry(unit, NaxxSpellIds::NothPlaguedChampionEntry, "plagued champion"); }
+    bool IsGuardian(Unit* unit) const { return IsAddOfEntry(unit, NaxxSpellIds::NothPlaguedGuardianEntry, "plagued guardian"); }
+
+    bool IsAdd(Unit* unit) const { return IsWarrior(unit) || IsChampion(unit) || IsGuardian(unit); }
+
+    bool HasCurse(Unit* member) const
+    {
+        if (!_unit || !member)
+        {
+            return false;
+        }
+
+        Unit::VisibleAuraMap const* auras = member->GetVisibleAuras();
+        if (!auras)
+        {
+            return false;
+        }
+
+        for (auto const& slot : *auras)
+        {
+            AuraApplication* application = slot.second;
+            if (!application)
+            {
+                continue;
+            }
+            Aura* aura = application->GetBase();
+            if (!aura || aura->IsRemoved() || aura->GetCasterGUID() != _unit->GetGUID())
+            {
+                continue;
+            }
+            // Matching the dispel type rather than a spell id keeps this working in 25-man, where the
+            // curse is a different DBC entry.
+            SpellInfo const* info = aura->GetSpellInfo();
+            if (info && info->Dispel == DISPEL_CURSE)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Ordered tanks -> healers -> everyone else, so decursers splitting the list by index all agree
+    // on who comes first.
+    std::vector<Player*> GetCursedMembers() const
+    {
+        std::vector<Player*> cursed;
+        std::vector<Player*> healers;
+        std::vector<Player*> others;
+
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return cursed;
+        }
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || !HasCurse(member))
+            {
+                continue;
+            }
+            if (botAI->IsTank(member))
+            {
+                cursed.push_back(member);
+            }
+            else if (botAI->IsHeal(member))
+            {
+                healers.push_back(member);
+            }
+            else
+            {
+                others.push_back(member);
+            }
+        }
+
+        cursed.insert(cursed.end(), healers.begin(), healers.end());
+        cursed.insert(cursed.end(), others.begin(), others.end());
+        return cursed;
+    }
+
+    Player* GetAliveAssistTank() const
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return nullptr;
+        }
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && botAI->IsAssistTank(member))
+            {
+                return member;
+            }
+        }
+        return nullptr;
+    }
+
+    void ClampToRoom(float& x, float& y) const
+    {
+        x = std::clamp(x, ROOM_MIN_X, ROOM_MAX_X);
+        y = std::clamp(y, ROOM_MIN_Y, ROOM_MAX_Y);
+
+        float dx = x - center.first;
+        float dy = y - center.second;
+        float r = std::sqrt(dx * dx + dy * dy);
+        if (r > ROOM_MAX_RADIUS)
+        {
+            x = center.first + dx / r * ROOM_MAX_RADIUS;
+            y = center.second + dy / r * ROOM_MAX_RADIUS;
+        }
+    }
+
+private:
+    // Ground phase: EVENT_BLINK at 26s, repeating every 30s.
+    static constexpr uint32 FirstBlinkMs = 26000;
+    static constexpr uint32 BlinkPeriodMs = 30000;
+    // How long the raid holds off after the reset while the tank re-establishes.
+    static constexpr uint32 BlinkWindowMs = 4000;
+    // EventMap only runs one event per boss tick, so the schedule drifts; start suppressing early.
+    static constexpr uint32 BlinkLeadMs = 1500;
+    static constexpr uint32 StaleStateMs = 10000;
+
+    struct PhaseState
+    {
+        ObjectGuid bossGuid;
+        bool phaseKnown = false;
+        bool balcony = false;
+        bool synced = false;
+        uint32 phaseStartMs = 0;
+        uint32 lastSeenMs = 0;
+        uint32 crippleMs = 0;
+    };
+
+    // One clock per Noth, shared by every bot and by every trigger/action/multiplier holding a
+    // helper, so a bot that battle-rezzed or arrived after the pull inherits an anchor instead of
+    // running blind, and a bot's own actions cannot disagree about the phase.
+    static PhaseState& PhaseStateFor(Unit* boss)
+    {
+        // Instances update on parallel map threads, so the container lookup needs guarding. The state
+        // itself is only ever touched by the map thread that owns the instance, and unordered_map
+        // nodes keep their address across rehashes.
+        static std::mutex mutex;
+        static std::unordered_map<uint32, PhaseState> states;
+
+        std::lock_guard<std::mutex> guard(mutex);
+        PhaseState& state = states[boss->GetInstanceId()];
+        if (state.bossGuid != boss->GetGUID())
+        {
+            state = PhaseState();
+            state.bossGuid = boss->GetGUID();
+        }
+        return state;
+    }
+
+    bool IsAddOfEntry(Unit* unit, uint32 entry, char const* name) const
+    {
+        Creature* creature = unit ? unit->ToCreature() : nullptr;
+        if (!creature)
+        {
+            return false;
+        }
+
+        switch (creature->GetEntry())
+        {
+            case NaxxSpellIds::NothPlaguedWarriorEntry:
+            case NaxxSpellIds::NothPlaguedChampionEntry:
+            case NaxxSpellIds::NothPlaguedGuardianEntry:
+                return creature->GetEntry() == entry;
+            default:
+                // Reskinned spawns keep the name even when the entry does not. Only anything that is
+                // not already a known add pays for the compare - up to a dozen of them are alive at
+                // once on the third balcony.
+                return botAI->EqualLowercaseName(creature->GetName(), name);
+        }
+    }
+
+    // Cripple is the one part of the blink sequence that is hard-cast, so it is the only piece of it
+    // bots can actually see.
+    bool IsCastingCripple() const
+    {
+        Spell* spell = _unit->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+        if (!spell)
+        {
+            spell = _unit->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        }
+        if (!spell)
+        {
+            return false;
+        }
+
+        SpellInfo const* info = spell->GetSpellInfo();
+        if (NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Cripple}))
+        {
+            return true;
+        }
+        return info && info->SpellName[LOCALE_enUS] &&
+               botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "cripple");
+    }
+
+    void Reset()
+    {
+        _unit = nullptr;
+        _state = nullptr;
+    }
+
+    Unit* _unit = nullptr;
+    PhaseState* _state = nullptr;
+};
 
 class FourhorsemanBossHelper : public AiObject
 {
