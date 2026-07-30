@@ -37,6 +37,15 @@ public:
     float GetValue(Action* action) override;
 };
 
+// The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
+// encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
+class UldThreatRedirectMultiplier : public Multiplier
+{
+public:
+    UldThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "uld threat redirect") {}
+    float GetValue(Action* action) override;
+};
+
 // Holds the offensive burst cooldowns until the encounter's real DPS check. One multiplier for every
 // gated boss so the IsBurstCooldownAction early-out runs once per action rather than once per boss.
 class UlduarBurstWindowMultiplier : public Multiplier

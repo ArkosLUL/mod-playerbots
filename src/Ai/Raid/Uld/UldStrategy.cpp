@@ -539,6 +539,9 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new XT002BurstWindowMultiplier(botAI));
     multipliers.push_back(new XT002TargetGuardMultiplier(botAI));
 
+    // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
+    multipliers.push_back(new UldThreatRedirectMultiplier(botAI));
+
     // Hold the burst cooldowns on the bosses whose DPS check is not the pull
     multipliers.push_back(new UlduarBurstWindowMultiplier(botAI));
 }
