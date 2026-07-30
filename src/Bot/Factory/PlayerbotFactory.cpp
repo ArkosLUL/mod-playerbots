@@ -110,6 +110,42 @@ constexpr uint32 SPELL_IMPROVED_HOWL_OF_TERROR = 30057;
 constexpr uint32 SPELL_NEMESIS = 63123;
 constexpr uint32 SPELL_INTENSITY = 18136;
 constexpr uint32 SPELL_NETHER_PROTECTION = 30302;
+
+constexpr uint32 SPELL_RUNE_OF_RAZORICE = 53343;
+constexpr uint32 SPELL_RUNE_OF_THE_FALLEN_CRUSADER = 53344;
+
+uint32 GetEnchantIdOfSpell(uint32 spellId)
+{
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    if (!spellInfo)
+        return 0;
+
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+        if (spellInfo->Effects[i].Effect == SPELL_EFFECT_ENCHANT_ITEM)
+            return static_cast<uint32>(spellInfo->Effects[i].MiscValue);
+
+    return 0;
+}
+
+// Death knight weapons carry a runeforge instead of a regular enchant. Frost dual wields:
+// Razorice main hand, Fallen Crusader off hand.
+uint32 GetRuneforgeEnchantId(Player* bot, uint8 slot, Item* item)
+{
+    if (bot->getClass() != CLASS_DEATH_KNIGHT || AiFactory::GetPlayerSpecTab(bot) != DEATH_KNIGHT_TAB_FROST)
+        return 0;
+
+    ItemTemplate const* proto = item->GetTemplate();
+    if (!proto || proto->Class != ITEM_CLASS_WEAPON)
+        return 0;
+
+    if (slot == EQUIPMENT_SLOT_MAINHAND)
+        return GetEnchantIdOfSpell(SPELL_RUNE_OF_RAZORICE);
+
+    if (slot == EQUIPMENT_SLOT_OFFHAND)
+        return GetEnchantIdOfSpell(SPELL_RUNE_OF_THE_FALLEN_CRUSADER);
+
+    return 0;
+}
 }
 
 bool PlayerbotFactory::IsPrimaryTradeSkill(uint16 skillId)
@@ -5134,53 +5170,62 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             continue;
         int32 bestEnchantId = -1;
         float bestScore = 0;
-        for (const uint32& enchantSpell : enchantSpellIdCache)
+        uint32 runeforgeEnchantId = GetRuneforgeEnchantId(bot, slot, item);
+        if (runeforgeEnchantId)
         {
-            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(enchantSpell);
-            if (!spellInfo)
-                continue;
-
-            if (!item->IsFitToSpellRequirements(spellInfo))
-                continue;
-
-            uint32 requiredLevel = spellInfo->BaseLevel;
-            if (requiredLevel > bot->GetLevel())
-                continue;
-
-            // disable next expansion enchantments
-            if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 60 && enchantSpell >= 27899)
-                continue;
-
-            if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantSpell >= 44483)
-                continue;
-
-            for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)
+            bestEnchantId = static_cast<int32>(runeforgeEnchantId);
+        }
+        else
+        {
+            for (const uint32& enchantSpell : enchantSpellIdCache)
             {
-                if (spellInfo->Effects[j].Effect != SPELL_EFFECT_ENCHANT_ITEM)
+                SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(enchantSpell);
+                if (!spellInfo)
                     continue;
 
-                uint32 enchant_id = spellInfo->Effects[j].MiscValue;
-                if (!enchant_id)
+                if (!item->IsFitToSpellRequirements(spellInfo))
                     continue;
 
-                SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchant_id);
-                if (!enchant || (enchant->slot != PERM_ENCHANTMENT_SLOT && enchant->slot != TEMP_ENCHANTMENT_SLOT))
+                uint32 requiredLevel = spellInfo->BaseLevel;
+                if (requiredLevel > bot->GetLevel())
                     continue;
 
-                if (enchant->requiredSkill &&
-                    (!bot->HasSkill(enchant->requiredSkill) ||
-                     (bot->GetSkillValue(enchant->requiredSkill) < enchant->requiredSkillValue)))
+                // disable next expansion enchantments
+                if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 60 && enchantSpell >= 27899)
+                    continue;
+
+                if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantSpell >= 44483)
+                    continue;
+
+                for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)
                 {
-                    continue;
-                }
-                if (enchant->requiredLevel > bot->GetLevel())
-                    continue;
+                    if (spellInfo->Effects[j].Effect != SPELL_EFFECT_ENCHANT_ITEM)
+                        continue;
 
-                float score = calculator.CalculateEnchant(enchant_id);
-                if (score >= bestScore)
-                {
-                    bestScore = score;
-                    bestEnchantId = enchant_id;
+                    uint32 enchant_id = spellInfo->Effects[j].MiscValue;
+                    if (!enchant_id)
+                        continue;
+
+                    SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchant_id);
+                    if (!enchant ||
+                        (enchant->slot != PERM_ENCHANTMENT_SLOT && enchant->slot != TEMP_ENCHANTMENT_SLOT))
+                        continue;
+
+                    if (enchant->requiredSkill &&
+                        (!bot->HasSkill(enchant->requiredSkill) ||
+                         (bot->GetSkillValue(enchant->requiredSkill) < enchant->requiredSkillValue)))
+                    {
+                        continue;
+                    }
+                    if (enchant->requiredLevel > bot->GetLevel())
+                        continue;
+
+                    float score = calculator.CalculateEnchant(enchant_id);
+                    if (score >= bestScore)
+                    {
+                        bestScore = score;
+                        bestEnchantId = enchant_id;
+                    }
                 }
             }
         }
