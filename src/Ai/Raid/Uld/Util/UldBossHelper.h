@@ -194,11 +194,6 @@ enum UlduarIDs
 
     // Flame Leviathan hard mode (each tower left standing empowers the boss and
     // spawns that tower's periodic ground hazard).
-    NPC_FLAME_LEVIATHAN = 33113,
-    SPELL_FL_TOWER_OF_STORMS = 65076,        // boss empower aura while Storm tower up
-    SPELL_FL_TOWER_OF_FLAMES = 65075,        // boss empower aura while Flame tower up
-    SPELL_FL_TOWER_OF_FROST = 65077,         // boss empower aura while Frost tower up
-    SPELL_FL_TOWER_OF_LIFE = 64482,          // boss empower aura while Life tower up
     NPC_FL_THORIM_HAMMER_TARGET = 33364,     // Storm: static lightning-strike marks
     NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,  // Flame: moving fire trail
     NPC_FL_HODIRS_FURY_TARGET = 33108,       // Frost: chases a random player then drops frost
@@ -226,17 +221,17 @@ enum UlduarIDs
     // NPC_MIMIRON (the boss; sits in his pod, never a bot attack target) comes from core ulduar.h via UldScripts.h.
     NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
     NPC_FLAMES_SPREAD = 34121,     // persistent spreading ground-fire node (non-selectable)
-    NPC_FROST_BOMB = 34149,        // VX-001's Frost Bomb; detonates in a large AoE
-    SPELL_EMERGENCY_MODE = 64582   // empower aura on the active mech while firefighter is up
+    NPC_FROST_BOMB = 34149         // VX-001's Frost Bomb; detonates in a large AoE
 };
 
-// Flame Leviathan hard-mode active-tower bitmask (which empower auras the boss carries).
+// Flame Leviathan hard-mode tower bitmask, used to pick which ground hazards to dodge.
 enum FlameLeviathanTowerFlags
 {
     FL_TOWER_STORM = 0x1,
     FL_TOWER_FLAMES = 0x2,
     FL_TOWER_FROST = 0x4,
-    FL_TOWER_LIFE = 0x8
+    FL_TOWER_LIFE = 0x8,
+    FL_TOWER_ALL = 0xF
 };
 
 // Vehicle keeps this clear of any active-tower ground hazard (strike / fire / frost).

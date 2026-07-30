@@ -11,24 +11,9 @@
 #include "UldScripts.h"
 #include "Unit.h"
 
-bool IsVezaxHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarVezaxHardMode)
-        return false;
+bool IsVezaxHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarVezaxHardMode; }
 
-    return GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS) != nullptr;
-}
-
-bool IsIronAssemblyHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarIronAssemblyHardMode)
-        return false;
-
-    // A kill order only matters while the council is still being whittled down.
-    return GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER) != nullptr ||
-           GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM) != nullptr ||
-           GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR) != nullptr;
-}
+bool IsIronAssemblyHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarIronAssemblyHardMode; }
 
 bool IsSteelbreakerEmpowered(PlayerbotAI* botAI)
 {
@@ -52,25 +37,9 @@ Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
     return GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER);
 }
 
-uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* botAI)
+uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* /*botAI*/)
 {
-    if (!sPlayerbotAIConfig.ulduarFlameLeviathanHardMode)
-        return 0;
-
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_FLAME_LEVIATHAN);
-    if (!boss)
-        return 0;
-
-    uint32 mask = 0;
-    if (boss->HasAura(SPELL_FL_TOWER_OF_STORMS))
-        mask |= FL_TOWER_STORM;
-    if (boss->HasAura(SPELL_FL_TOWER_OF_FLAMES))
-        mask |= FL_TOWER_FLAMES;
-    if (boss->HasAura(SPELL_FL_TOWER_OF_FROST))
-        mask |= FL_TOWER_FROST;
-    if (boss->HasAura(SPELL_FL_TOWER_OF_LIFE))
-        mask |= FL_TOWER_LIFE;
-    return mask;
+    return sPlayerbotAIConfig.ulduarFlameLeviathanHardMode ? FL_TOWER_ALL : 0;
 }
 
 Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius)
@@ -109,59 +78,13 @@ Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32
     return nearest;
 }
 
-bool IsThorimHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarThorimHardMode)
-        return false;
+bool IsThorimHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarThorimHardMode; }
 
-    Unit* sif = GetFirstAliveUnitByEntry(botAI, NPC_SIF);
-    if (!sif)
-        return false;
+bool IsFreyaHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarFreyaHardMode; }
 
-    // Sif spawns at Thorim's throne and only drops onto the arena floor once she interrupts her
-    // channel to join the fight - being below the floor threshold is the live hard-mode signal.
-    return sif->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
-}
+bool IsHodirHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarHodirHardMode; }
 
-bool IsFreyaHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarFreyaHardMode)
-        return false;
-
-    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
-    return freya != nullptr && freya->IsInCombat();
-}
-
-bool IsHodirHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarHodirHardMode)
-        return false;
-
-    Unit* hodir = GetFirstAliveUnitByEntry(botAI, NPC_HODIR);
-    return hodir != nullptr && hodir->IsInCombat();
-}
-
-bool IsMimironHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarMimironHardMode)
-        return false;
-
-    // Only the active mech is a real attack target (Mimiron himself never leaves his pod), so key
-    // off the Emergency Mode aura firefighter puts on whichever mech is currently up.
-    Unit* mkii = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
-    if (mkii && mkii->HasAura(SPELL_EMERGENCY_MODE))
-        return true;
-
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
-    if (vx001 && vx001->HasAura(SPELL_EMERGENCY_MODE))
-        return true;
-
-    Unit* acu = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-    if (acu && acu->HasAura(SPELL_EMERGENCY_MODE))
-        return true;
-
-    return false;
-}
+bool IsMimironHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarMimironHardMode; }
 
 bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarXT002HardMode; }
 
@@ -171,50 +94,23 @@ bool IsXT002HeartbreakActive(PlayerbotAI* botAI)
     return xt002 != nullptr && xt002->HasAura(SPELL_XT002_HEARTBREAK);
 }
 
-// The Ulduar instance script, or nullptr if the bot is not in an instance with one.
-static InstanceScript* GetBotInstanceScript(PlayerbotAI* botAI)
-{
-    Player* bot = botAI->GetBot();
-    if (!bot)
-        return nullptr;
-
-    Map* map = bot->GetMap();
-    if (!map || !map->IsDungeon())
-        return nullptr;
-
-    return ((InstanceMap*)map)->GetInstanceScript();
-}
-
-uint32 YoggActiveKeeperMask(PlayerbotAI* botAI)
-{
-    InstanceScript* instance = GetBotInstanceScript(botAI);
-    if (!instance)
-        return 0;
-
-    // Same source the boss script reads: the freed-Keeper bitmask the raid set from the pre-pull gossips.
-    return instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
-}
-
-bool IsYoggSaronHardModeActive(PlayerbotAI* botAI)
-{
-    if (!sPlayerbotAIConfig.ulduarYoggSaronHardMode)
-        return false;
-
-    InstanceScript* instance = GetBotInstanceScript(botAI);
-    if (!instance || instance->GetBossState(BOSS_YOGGSARON) != IN_PROGRESS)
-        return false;
-
-    uint32 mask = instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK);
-    uint32 keeperCount = 0;
-    for (uint8 i = 0; i < 4; ++i)
-        if (mask & (1u << i))
-            ++keeperCount;
-
-    // Fewer than the full 4 Keepers is the hard mode; 4 Keepers plays as normal mode.
-    return keeperCount < 4;
-}
+bool IsYoggSaronHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarYoggSaronHardMode; }
 
 bool YoggThorimKeeperActive(PlayerbotAI* botAI)
 {
-    return (YoggActiveKeeperMask(botAI) & (1u << KEEPER_THORIM)) != 0;
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return false;
+
+    Map* map = bot->GetMap();
+    if (!map || !map->IsDungeon())
+        return false;
+
+    InstanceScript* instance = ((InstanceMap*)map)->GetInstanceScript();
+    if (!instance)
+        return false;
+
+    // Same source the boss script reads: the freed-Keeper bitmask the raid set from the pre-pull
+    // gossips. Which Keepers are up is a raid choice made in-instance, so it cannot come from config.
+    return (instance->GetPersistentData(PERSISTENT_DATA_WATCHERS_MASK) & (1u << KEEPER_THORIM)) != 0;
 }

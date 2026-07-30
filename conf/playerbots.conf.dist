@@ -350,9 +350,19 @@ AiPlayerbot.LootStrategy = normal
 # Default: 1 (boss fights only)
 AiPlayerbot.BattleRezBossOnly = 1
 
-# Enable Vezax hard-mode behaviour (fight the Saronite Animus). Bots follow the raid's
-# hard-mode choice only when this is on: with it off they play Vezax as normal mode even
-# if the Animus spawns.
+# Ulduar hard modes.
+#
+# Hard modes are optional harder versions of an Ulduar encounter that the raid opts into (leave the
+# towers standing, keep the Saronite Vapors alive, press Mimiron's button, ...). They are not the
+# 10/25 heroic setting. Bots do not detect them: each option below is the declaration, and while it
+# is on that boss' hard-mode behaviour is armed for the whole encounter, so set it to match what your
+# raid actually does. It still only fires when the mechanic it reacts to is really there, so an
+# option left on for a boss run in normal mode mostly costs nothing - the exceptions are called out
+# per option.
+
+# Enable Vezax hard-mode behaviour (fight the Saronite Animus). When on, bots switch to the Animus
+# as soon as one exists and ranged/healers keep clear of its Profound Darkness. With it off they
+# play Vezax as normal mode even if the Animus spawns.
 # Default: 0 (disabled)
 AiPlayerbot.UlduarVezaxHardMode = 0
 
@@ -366,8 +376,9 @@ AiPlayerbot.UlduarIronAssemblyHardMode = 0
 # Enable Flame Leviathan hard-mode behaviour (towers left standing). Each surviving tower
 # empowers the boss and spawns a periodic ground hazard: Storm -> Thorim's Hammer strikes,
 # Flame -> Mimiron's Inferno fire trail, Frost -> Hodir's Fury. When on, bots pilot their
-# vehicle out of whichever active-tower hazard is nearest; with it off they ignore the
-# hazards and play the fight as normal mode. Life tower (adds) needs no special handling.
+# vehicle out of whichever hazard is nearest; with it off they ignore the hazards and play
+# the fight as normal mode. A tower the raid did destroy costs nothing here, since its hazard
+# never spawns. Life tower (adds) needs no special handling.
 # Default: 0 (disabled)
 AiPlayerbot.UlduarFlameLeviathanHardMode = 0
 
@@ -405,7 +416,8 @@ AiPlayerbot.UlduarFreyaHardMode = 0
 # when on, bots optimise for the DPS race: free the flash-frozen helper NPCs at the pull, a bot carrying
 # Storm Cloud moves into the raid to spread its Storm Power crit buff, and bots stand in a Toasty Fire
 # when Biting Cold stacks on them (a no-cheat alternative to shaking it off). With it off they ignore
-# the helpers and play the fight as normal mode.
+# the helpers and play the fight as normal mode. All three mechanics exist in normal mode as well, so
+# with this on bots run the DPS race on every Hodir kill.
 # Default: 0 (disabled)
 AiPlayerbot.UlduarHodirHardMode = 0
 
@@ -418,14 +430,15 @@ AiPlayerbot.UlduarHodirHardMode = 0
 AiPlayerbot.UlduarMimironHardMode = 0
 
 # Enable Yogg-Saron reduced-Keeper hard-mode behaviour (the raid frees fewer than 4 Keepers before the
-# pull). This is tuned for the hardest single-Keeper case, Thorim only: with Freya absent there are no
-# Sanity Wells, so sanity is a one-way drain. When on, bots stop cheat-instakilling the Crusher Tentacles
+# pull). This is tuned for the hardest single-Keeper case, Thorim only, and turning it on assumes that
+# is the Keeper your raid keeps: with Freya absent there are no Sanity Wells, so sanity is a one-way
+# drain, and the Immortal Guardian handling needs Thorim's Titanic Storm to finish them. When on, bots stop cheat-instakilling the Crusher Tentacles
 # and Immortal Guardians and play them for real - ranged nuke the stationary Crusher Tentacles in place
 # while melee stay on the other tentacles, and in phase 3 the tank brings the Immortal Guardians to the
 # melee stack to cleave them down so Thorim's Titanic Storm executes each one once Weakened. Bots low on
 # sanity, with no Well to run to, pull behind Yogg and face away, healing/DPSing only targets already in
-# front so they never turn back into a Lunatic Gaze. With it off (or with all 4 Keepers) the fight plays
-# as normal mode.
+# front so they never turn back into a Lunatic Gaze. With it off the fight plays as normal mode, with the
+# tentacles and guardians cheat-killed as before.
 # Default: 0 (disabled)
 AiPlayerbot.UlduarYoggSaronHardMode = 0
 

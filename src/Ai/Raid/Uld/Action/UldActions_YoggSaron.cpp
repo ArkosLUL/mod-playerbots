@@ -153,7 +153,8 @@ bool YoggSaronMarkTargetAction::Execute(Event /*event*/)
             // If someone fix it then this cheat can be removed.
             // In reduced-Keeper hard mode with Thorim present we play it for real instead: the tank
             // brings the guardian to the melee stack, they cleave it to Weakened, and Thorim's Titanic
-            // Storm executes it. Fall back to the cheat when hard mode is off or Thorim is not a Keeper.
+            // Storm executes it. Fall back to the cheat when hard mode is off or Thorim is not a Keeper -
+            // nothing else can kill a Weakened guardian, so it would be immortal.
             if (botAI->HasCheat(BotCheatMask::raid) &&
                 !(IsYoggSaronHardModeActive(botAI) && YoggThorimKeeperActive(botAI)))
                 lowestHealthUnit->Kill(bot, lowestHealthUnit);

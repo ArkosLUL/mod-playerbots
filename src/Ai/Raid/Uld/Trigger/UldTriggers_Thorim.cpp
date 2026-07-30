@@ -459,6 +459,13 @@ bool ThorimSifFrostNovaTrigger::IsActive()
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
+    // Sif is spawned at Thorim's throne in both modes and only drops onto the arena floor once she
+    // interrupts her channel to join the fight. While she is still up there she casts nothing, so
+    // backing away from her would only stall gauntlet DPS during the timed race.
+    Unit* sif = GetFirstAliveUnitByEntry(botAI, NPC_SIF);
+    if (!sif || sif->GetPositionZ() >= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
     TooCloseToCreatureTrigger tooCloseToSif(botAI);
     return tooCloseToSif.TooCloseToCreature(NPC_SIF, ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS);
 }
