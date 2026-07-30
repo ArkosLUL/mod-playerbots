@@ -5,6 +5,7 @@
 #include "UldTriggers_Razorscale.h"
 #include "UldTriggers_IronAssembly.h"
 #include "UldTriggers_Ignis.h"
+#include "UldTriggers_XT002.h"
 #include "UldTriggers_Kologarn.h"
 #include "UldTriggers_Auriaya.h"
 #include "UldTriggers_Hodir.h"

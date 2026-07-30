@@ -13,6 +13,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 #include "World.h"
 
 const Position ULDUAR_THORIM_NEAR_ARENA_CENTER = Position(2134.9854f, -263.11853f, 419.8465f);
@@ -290,4 +291,72 @@ Player* GetAlgalonBigBangSoakerPriest(Player* bot)
     }
 
     return nullptr;
+}
+
+// XT-002 Deconstructor
+//
+// XT and his Heart both spend part of the fight carrying UNIT_FLAG_NOT_SELECTABLE, which drops them
+// out of "possible targets" entirely (AttackersValue::IsPossibleTarget rejects the flag). Scanning
+// the raw nearby-npc list instead keeps the encounter visible right through the Heart phases.
+static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
+{
+    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == entry)
+            return unit;
+    }
+
+    return nullptr;
+}
+
+Unit* GetXT002(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_XT002); }
+
+Unit* GetXT002ExposedHeart(PlayerbotAI* botAI)
+{
+    Unit* heart = GetFirstAliveNpcByEntry(botAI, NPC_HEART_OF_DECONSTRUCTOR);
+    if (!heart || heart->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return nullptr;
+
+    // The Heart is only worth hitting while it channels Exposed Heart - that aura is what transfers
+    // its damage taken to XT.
+    return heart->HasAura(SPELL_XT002_EXPOSED_HEART) ? heart : nullptr;
+}
+
+bool IsXT002Submerged(PlayerbotAI* botAI)
+{
+    Unit* xt002 = GetXT002(botAI);
+    if (!xt002)
+        return false;
+
+    return xt002->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || xt002->HasAura(SPELL_XT002_SUBMERGE);
+}
+
+uint32 GetXT002SearingLightSpellId(Player* bot)
+{
+    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_SEARING_LIGHT_25
+                                                                   : SPELL_XT002_SEARING_LIGHT_10;
+}
+
+uint32 GetXT002GravityBombSpellId(Player* bot)
+{
+    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_GRAVITY_BOMB_25
+                                                                   : SPELL_XT002_GRAVITY_BOMB_10;
+}
+
+Unit* GetXT002KillTarget(PlayerbotAI* botAI)
+{
+    // Life Sparks chain Static Charged through the raid, Scrapbots heal XT back up if they reach him,
+    // and a Boombot only costs damage; the Pummeller is the one that can simply be tanked.
+    if (Unit* lifeSpark = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
+        return lifeSpark;
+
+    if (Unit* scrapbot = GetFirstAliveUnitByEntry(botAI, NPC_XS013_SCRAPBOT))
+        return scrapbot;
+
+    if (Unit* boombot = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_BOOMBOT))
+        return boombot;
+
+    return GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_PUMMELLER);
 }

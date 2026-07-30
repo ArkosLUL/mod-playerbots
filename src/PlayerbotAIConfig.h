@@ -273,6 +273,7 @@ public:
     bool ulduarHodirHardMode;
     bool ulduarMimironHardMode;
     bool ulduarYoggSaronHardMode;
+    bool ulduarXT002HardMode;
     // Obsidian Sanctum: how many drakes bots leave alive (0=Sarth+0, up to 3=Sarth+3).
     // Keep-order Tenebron -> Shadron -> Vesperon.
     int32 sartharionDrakesAlive;

@@ -81,6 +81,19 @@ bool IsHodirHardModeActive(PlayerbotAI* botAI);
 // fire extinguishers, not kill targets, so bots leave them alone.
 bool IsMimironHardModeActive(PlayerbotAI* botAI);
 
+// XT-002 Deconstructor: hard mode = the raid kills the exposed Heart during one of the 75/50/25%
+// windows, which full-heals XT and gives him Heartbreak for the rest of the fight.
+//
+// Unlike the other Ulduar hard modes there is no server signal before the kill - the raid's intent
+// is the only input - so IsXT002HardModeActive is the config alone. It decides whether bots burn
+// the Heart down or stop at ULDUAR_XT002_HEART_SAFE_HP_PCT.
+bool IsXT002HardModeActive(PlayerbotAI* botAI);
+
+// Hard mode is already live: XT carries Heartbreak (65737), so there will be no further Heart phase
+// and Life Sparks / Void Zones now spawn. Deliberately config-independent, so a Heartbreak the human
+// players triggered is handled too.
+bool IsXT002HeartbreakActive(PlayerbotAI* botAI);
+
 // Yogg-Saron: hard mode is the reduced-Keeper achievement ladder - the raid frees fewer than 4 Keepers
 // before the pull, losing that Keeper's support. Detection reads the authoritative freed-Keeper bitmask
 // from the instance's persistent data (PERSISTENT_DATA_WATCHERS_MASK), the same source the boss script

@@ -120,6 +120,17 @@ public:
         creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
         creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
+        creators["xt002 searing light spread trigger"] = &RaidUlduarTriggerContext::xt002_searing_light_spread_trigger;
+        creators["xt002 gravity bomb spread trigger"] = &RaidUlduarTriggerContext::xt002_gravity_bomb_spread_trigger;
+        creators["xt002 gravity bomb carrier trigger"] = &RaidUlduarTriggerContext::xt002_gravity_bomb_carrier_trigger;
+        creators["xt002 boombot avoid trigger"] = &RaidUlduarTriggerContext::xt002_boombot_avoid_trigger;
+        creators["xt002 void zone trigger"] = &RaidUlduarTriggerContext::xt002_void_zone_trigger;
+        creators["xt002 mark kill target trigger"] = &RaidUlduarTriggerContext::xt002_mark_kill_target_trigger;
+        creators["xt002 attack kill target trigger"] = &RaidUlduarTriggerContext::xt002_attack_kill_target_trigger;
+        creators["xt002 boombot ranged kill trigger"] = &RaidUlduarTriggerContext::xt002_boombot_ranged_kill_trigger;
+        creators["xt002 attack heart trigger"] = &RaidUlduarTriggerContext::xt002_attack_heart_trigger;
+        creators["xt002 pummeller taunt trigger"] = &RaidUlduarTriggerContext::xt002_pummeller_taunt_trigger;
+        creators["xt002 redirect threat trigger"] = &RaidUlduarTriggerContext::xt002_redirect_threat_trigger;
     }
 
 private:
@@ -227,6 +238,17 @@ private:
     static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
     static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
     static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
+    static Trigger* xt002_searing_light_spread_trigger(PlayerbotAI* ai) { return new XT002SearingLightSpreadTrigger(ai); }
+    static Trigger* xt002_gravity_bomb_spread_trigger(PlayerbotAI* ai) { return new XT002GravityBombSpreadTrigger(ai); }
+    static Trigger* xt002_gravity_bomb_carrier_trigger(PlayerbotAI* ai) { return new XT002GravityBombCarrierTrigger(ai); }
+    static Trigger* xt002_boombot_avoid_trigger(PlayerbotAI* ai) { return new XT002BoombotAvoidTrigger(ai); }
+    static Trigger* xt002_void_zone_trigger(PlayerbotAI* ai) { return new XT002VoidZoneTrigger(ai); }
+    static Trigger* xt002_mark_kill_target_trigger(PlayerbotAI* ai) { return new XT002MarkKillTargetTrigger(ai); }
+    static Trigger* xt002_attack_kill_target_trigger(PlayerbotAI* ai) { return new XT002AttackKillTargetTrigger(ai); }
+    static Trigger* xt002_boombot_ranged_kill_trigger(PlayerbotAI* ai) { return new XT002BoombotRangedKillTrigger(ai); }
+    static Trigger* xt002_attack_heart_trigger(PlayerbotAI* ai) { return new XT002AttackHeartTrigger(ai); }
+    static Trigger* xt002_pummeller_taunt_trigger(PlayerbotAI* ai) { return new XT002PummellerTauntTrigger(ai); }
+    static Trigger* xt002_redirect_threat_trigger(PlayerbotAI* ai) { return new XT002RedirectThreatTrigger(ai); }
 };
 
 #endif

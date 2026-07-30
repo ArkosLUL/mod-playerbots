@@ -6,6 +6,7 @@
 #include "UldActions_Razorscale.h"
 #include "UldActions_IronAssembly.h"
 #include "UldActions_Ignis.h"
+#include "UldActions_XT002.h"
 #include "UldActions_Kologarn.h"
 #include "UldActions_Auriaya.h"
 #include "UldActions_Hodir.h"

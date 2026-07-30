@@ -371,6 +371,18 @@ AiPlayerbot.UlduarIronAssemblyHardMode = 0
 # Default: 0 (disabled)
 AiPlayerbot.UlduarFlameLeviathanHardMode = 0
 
+# Enable XT-002 Deconstructor hard-mode behaviour (kill the exposed Heart). At 75%, 50% and 25% XT
+# submerges and exposes his Heart for 30 seconds; killing it full-heals him and gives him Heartbreak
+# for the rest of the fight, which also makes Searing Light spawn Life Sparks and Gravity Bomb drop
+# Void Zones. Bots cannot tell what the raid intends, so this option is the intent: with it on they
+# hold Bloodlust and the other burst cooldowns until the first Heart appears and then burn the Heart
+# to zero, and from Heartbreak onwards they focus Life Sparks and dodge Void Zones. With it off they
+# still damage the Heart during each window but stop at 15% health so the fight never flips, and the
+# burst cooldowns are saved for the push below 25%. Dodging the debuff splash, avoiding Boombots and
+# tanking the Pummeller happen either way.
+# Default: 0 (disabled)
+AiPlayerbot.UlduarXT002HardMode = 0
+
 # Enable Thorim hard-mode behaviour (arena gauntlet cleared fast enough that Sif joins the
 # fight). Once Sif drops into the arena she casts Frostbolt Volley (raid-wide, healed through),
 # Blizzard (a moving ground AoE) and Frost Nova (point-blank after a teleport). When on, bots

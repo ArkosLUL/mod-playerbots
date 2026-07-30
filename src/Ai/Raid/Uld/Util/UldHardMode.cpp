@@ -163,6 +163,14 @@ bool IsMimironHardModeActive(PlayerbotAI* botAI)
     return false;
 }
 
+bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarXT002HardMode; }
+
+bool IsXT002HeartbreakActive(PlayerbotAI* botAI)
+{
+    Unit* xt002 = GetXT002(botAI);
+    return xt002 != nullptr && xt002->HasAura(SPELL_XT002_HEARTBREAK);
+}
+
 // The Ulduar instance script, or nullptr if the bot is not in an instance with one.
 static InstanceScript* GetBotInstanceScript(PlayerbotAI* botAI)
 {

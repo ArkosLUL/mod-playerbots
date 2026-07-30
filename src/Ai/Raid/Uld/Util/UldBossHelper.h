@@ -207,6 +207,21 @@ enum UlduarIDs
     NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
     NPC_SIF_BLIZZARD = 32879,     // moving Blizzard ground AoE, only ever exists in hard mode
 
+    // XT-002 Deconstructor. NPC_XT002, NPC_XT_TOY_PILE, NPC_XS013_SCRAPBOT and
+    // NPC_HEART_OF_DECONSTRUCTOR come from core ulduar.h via UldScripts.h.
+    PB_NPC_XT002_PUMMELLER = 33344,    // aggressive add, wants an off-tank
+    PB_NPC_XT002_BOOMBOT = 33346,      // explodes on reaching XT or at 50% health; melee must not touch it
+    PB_NPC_XT002_LIFE_SPARK = 34004,   // hard mode only, spawned by an expiring Searing Light
+    PB_NPC_XT002_VOID_ZONE = 34001,    // hard mode only, dropped by an expiring Gravity Bomb
+    SPELL_XT002_SEARING_LIGHT_10 = 63018,
+    SPELL_XT002_SEARING_LIGHT_25 = 65121,
+    SPELL_XT002_GRAVITY_BOMB_10 = 63024,
+    SPELL_XT002_GRAVITY_BOMB_25 = 64234,
+    SPELL_XT002_EXPOSED_HEART = 63849,  // channeled by the Heart while it is vulnerable
+    SPELL_XT002_HEARTBREAK = 65737,     // permanent hard-mode empower once the Heart dies
+    SPELL_XT002_SUBMERGE = 37751,
+    SPELL_MISDIRECTION = 35079,  // hunter buff; its charges are what the redirect action spends
+
     // Mimiron hard mode ("Firefighter", Big Red Button pressed): mechs empowered, two extra hazards.
     // NPC_MIMIRON (the boss; sits in his pod, never a bot attack target) comes from core ulduar.h via UldScripts.h.
     NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
@@ -243,6 +258,25 @@ constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 5.0f;
 // fewer than a couple of allies this close.
 constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 10.0f;
 
+// XT-002: Searing Light and Gravity Bomb both splash around their carrier, so everyone else keeps
+// this far away. In hard mode the Gravity Bomb's Void Zone lands on the carrier's feet too.
+constexpr float ULDUAR_XT002_DEBUFF_SPREAD_RADIUS = 12.0f;
+
+// XT-002: Boom is roughly 10 yd, and a Boombot also detonates at 50% health, so melee leave margin
+// rather than trading the hit for a few swings.
+constexpr float ULDUAR_XT002_BOOMBOT_AVOID_RADIUS = 12.0f;
+
+// XT-002 hard mode: Void Zone's Consumption pool. Exact radius is DBC, so this is a conservative
+// default to confirm in-game.
+constexpr float ULDUAR_XT002_VOID_ZONE_RADIUS = 6.0f;
+
+// XT-002 normal mode: bots stop damaging the exposed Heart here so an in-flight hit cannot kill it
+// and flip the raid into hard mode by accident.
+constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
+
+// XT-002 normal mode: the last Heart phase is over below this, so the held burst cooldowns are free.
+constexpr float ULDUAR_XT002_FINAL_PUSH_HP_PCT = 25.0f;
+
 // Off-tank taunts once the active tank reaches this many Phase Punch stacks
 constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
 
@@ -254,6 +288,25 @@ constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 5.0f;
 // unavoidable — full immunity (Paladin Divine Shield) does not prevent it, only mitigation survives.
 // Returns nullptr if the raid has no living Shadow Priest.
 Player* GetAlgalonBigBangSoakerPriest(Player* bot);
+
+// XT-002 Deconstructor. These use GetFirstAliveUnitByEntry rather than "find target": the Heart
+// never attacks anyone, so it never lands on a bot's threat list and "find target" cannot resolve it.
+Unit* GetXT002(PlayerbotAI* botAI);
+
+// The Heart while it is actually vulnerable - alive, selectable and channeling Exposed Heart.
+// Damage dealt to it transfers to XT, which makes this window the encounter's damage multiplier.
+Unit* GetXT002ExposedHeart(PlayerbotAI* botAI);
+
+// XT is down in a Heart phase: not selectable and not attacking anyone.
+bool IsXT002Submerged(PlayerbotAI* botAI);
+
+// Difficulty-mapped debuff ids (the 10- and 25-man versions are separate spells).
+uint32 GetXT002SearingLightSpellId(Player* bot);
+uint32 GetXT002GravityBombSpellId(Player* bot);
+
+// The add the raid should be killing, most urgent first: Life Spark (hard mode, chain-shocks the
+// raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
+Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
 constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
 constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
