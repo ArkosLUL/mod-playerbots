@@ -109,14 +109,15 @@ public:
     virtual float GetValue(Action* action);
 };
 
-// class GothikGenericMultiplier : public Multiplier
-// {
-// public:
-//     GothikGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "gothik generic") {}
+class GothikGenericMultiplier : public Multiplier
+{
+public:
+    GothikGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "gothik generic"), helper(ai) {}
+    float GetValue(Action* action) override;
 
-// public:
-//     virtual float GetValue(Action* action);
-// };
+private:
+    GothikBossHelper helper;
+};
 
 class GluthGenericMultiplier : public Multiplier
 {

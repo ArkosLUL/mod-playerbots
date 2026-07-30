@@ -53,8 +53,8 @@ public:
         creators["maexxna web wrap"] = &RaidNaxxTriggerContext::maexxna_web_wrap;
         creators["maexxna spiderlings"] = &RaidNaxxTriggerContext::maexxna_spiderlings;
 
-        // creators["gothik move to assigned side"] = &RaidNaxxTriggerContext::gothik_move_to_assigned_side;
-        // creators["gothik choose target"] = &RaidNaxxTriggerContext::gothik_choose_target;
+        creators["gothik"] = &RaidNaxxTriggerContext::gothik;
+        creators["gothik wrong side"] = &RaidNaxxTriggerContext::gothik_wrong_side;
 
         // creators["patchwerk tank"] = &RaidNaxxTriggerContext::patchwerk_tank;
         // creators["patchwerk non-tank"] = &RaidNaxxTriggerContext::patchwerk_non_tank;
@@ -108,8 +108,8 @@ private:
     static Trigger* maexxna(PlayerbotAI* ai) { return new MaexxnaTrigger(ai); }
     static Trigger* maexxna_web_wrap(PlayerbotAI* ai) { return new MaexxnaWebWrapTrigger(ai); }
     static Trigger* maexxna_spiderlings(PlayerbotAI* ai) { return new MaexxnaSpiderlingsTrigger(ai); }
-    // static Trigger* gothik_move_to_assigned_side(PlayerbotAI* ai) { return new GothikMoveToAssignedSideTrigger(ai); }
-    // static Trigger* gothik_choose_target(PlayerbotAI* ai) { return new GothikChooseTargetTrigger(ai); }
+    static Trigger* gothik(PlayerbotAI* ai) { return new GothikTrigger(ai); }
+    static Trigger* gothik_wrong_side(PlayerbotAI* ai) { return new GothikWrongSideTrigger(ai); }
     // static Trigger* patchwerk_tank(PlayerbotAI* ai) { return new PatchwerkTankTrigger(ai); }
     // static Trigger* patchwerk_non_tank(PlayerbotAI* ai) { return new PatchwerkNonTankTrigger(ai); }
     // static Trigger* patchwerk_ranged(PlayerbotAI* ai) { return new PatchwerkRangedTrigger(ai); }

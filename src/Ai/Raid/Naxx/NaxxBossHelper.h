@@ -28,6 +28,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Spell.h"
@@ -1412,6 +1413,125 @@ public:
             _unit = AI_VALUE2(Unit*, "find target", "loatheb");
         }
         return _unit != nullptr;
+    }
+
+private:
+    void Reset() { _unit = nullptr; }
+
+    Unit* _unit = nullptr;
+};
+
+// The raid fights the whole encounter on the living side, so nothing here assigns sides - it only
+// answers "may I hit the boss yet" and "which add comes next on my side". boss_gothikAI is declared
+// inside boss_gothik.cpp, so GenericBossHelper cannot reach its EventMap and the phase is read off
+// the unit flag the script sets instead.
+class GothikBossHelper : public AiObject
+{
+public:
+    // PosGroundLivingSide in boss_gothik.cpp.
+    static constexpr float LivingHoldX = 2691.2f;
+    static constexpr float LivingHoldY = -3387.0f;
+    static constexpr float ArenaFloorZ = 267.68f;
+
+    GothikBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
+
+    bool UpdateBossAI()
+    {
+        if (!bot->IsInCombat())
+        {
+            Reset();
+        }
+        if (_unit && (!_unit->IsInWorld() || !_unit->IsAlive()))
+        {
+            Reset();
+        }
+        if (!_unit)
+        {
+            // JustEngagedWith calls SetInCombatWithZone(), so he is on everyone's threat list from the
+            // pull onward even while he is REACT_PASSIVE up on the balcony.
+            _unit = AI_VALUE2(Unit*, "find target", "gothik the harvester");
+        }
+        if (!_unit)
+        {
+            // A bot that battle-rezzed or arrived after the pull never made that threat list.
+            _unit = GetFirstAliveUnitByEntry(botAI, NaxxSpellIds::GothikEntry);
+        }
+        return _unit != nullptr;
+    }
+
+    static bool IsLiveSide(WorldObject const* who) { return who && who->GetPositionY() < NaxxSpellIds::GothikGateY; }
+
+    Unit* GetBoss() const { return _unit; }
+
+    // Set on pull, removed when the 24-wave table runs out (boss_gothik.cpp:232, :481).
+    bool IsPhaseTwo() const { return _unit && !_unit->HasUnitFlag(UNIT_FLAG_DISABLE_MOVE); }
+
+    bool IsOnBalcony() const { return _unit && _unit->GetPositionZ() > NaxxSpellIds::GothikBalconyZ; }
+
+    // He takes no damage before phase 2, and while the gate is shut anything on the other side is out
+    // of reach anyway - in phase 2 he teleports between the sides every 20s.
+    bool IsBossAttackable() const { return IsPhaseTwo() && !IsOnBalcony() && IsLiveSide(_unit) == IsLiveSide(bot); }
+
+    static uint32 GetAddPriority(uint32 entry)
+    {
+        switch (entry)
+        {
+            // Drain Life heals it and Unholy Frenzy snowballs the rest of the wave.
+            case NaxxSpellIds::GothikDeadRiderEntry:
+                return 70;
+            // Shadow Bolt Volley is the biggest raid damage in the wave phase.
+            case NaxxSpellIds::GothikLivingRiderEntry:
+                return 60;
+            case NaxxSpellIds::GothikDeadKnightEntry:
+                return 50;
+            case NaxxSpellIds::GothikDeadHorseEntry:
+                return 40;
+            case NaxxSpellIds::GothikLivingKnightEntry:
+                return 30;
+            case NaxxSpellIds::GothikDeadTraineeEntry:
+                return 20;
+            case NaxxSpellIds::GothikLivingTraineeEntry:
+                return 10;
+            default:
+                return 0;
+        }
+    }
+
+    // Highest priority alive add on the bot's own side, nearest first on a tie. The no-los list is
+    // deliberate: the gate wall hides adds the raid is about to inherit, and the side test is on
+    // coordinates, so an add that walks over once the gate opens becomes a target on its own.
+    Unit* GetBestAdd()
+    {
+        bool const myLiveSide = IsLiveSide(bot);
+        GuidVector candidates = context->GetValue<GuidVector>("possible targets no los")->Get();
+
+        Unit* best = nullptr;
+        uint32 bestPriority = 0;
+        float bestDistance = 0.0f;
+
+        for (ObjectGuid const& guid : candidates)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive())
+            {
+                continue;
+            }
+
+            uint32 priority = GetAddPriority(unit->GetEntry());
+            if (!priority || IsLiveSide(unit) != myLiveSide)
+            {
+                continue;
+            }
+
+            float distance = bot->GetDistance(unit);
+            if (!best || priority > bestPriority || (priority == bestPriority && distance < bestDistance))
+            {
+                best = unit;
+                bestPriority = priority;
+                bestDistance = distance;
+            }
+        }
+        return best;
     }
 
 private:

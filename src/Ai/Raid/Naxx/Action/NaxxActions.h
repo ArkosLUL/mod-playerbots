@@ -554,22 +554,28 @@ public:
 };
 
 // Gothik the Harvester
-// class GothikMoveToAssignedSideAction : public MovementAction
-// {
-// public:
-//     GothikMoveToAssignedSideAction(PlayerbotAI* ai) : MovementAction(ai, "gothik move to assigned side") {}
+class GothikChooseTargetAction : public AttackAction
+{
+public:
+    GothikChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "gothik choose target"), helper(ai) {}
 
-//     bool Execute(Event event) override;
-//     bool isUseful() override;
-// };
+    bool Execute(Event event) override;
+    bool isUseful() override;
 
-// class GothikChooseTargetAction : public AttackAction
-// {
-// public:
-//     GothikChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "gothik choose target") {}
+private:
+    GothikBossHelper helper;
+};
 
-//     bool Execute(Event event) override;
-//     bool isUseful() override;
-// };
+class GothikStayOnLivingSideAction : public MovementAction
+{
+public:
+    GothikStayOnLivingSideAction(PlayerbotAI* ai) : MovementAction(ai, "gothik stay on living side"), helper(ai) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    GothikBossHelper helper;
+};
 
 #endif

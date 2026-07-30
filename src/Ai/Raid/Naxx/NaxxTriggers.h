@@ -187,19 +187,27 @@ public:
     bool IsActive() override;
 };
 
-// class GothikMoveToAssignedSideTrigger : public Trigger
-// {
-// public:
-//     GothikMoveToAssignedSideTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik move to assigned side") {}
-//     bool IsActive() override;
-// };
+class GothikTrigger : public Trigger
+{
+public:
+    GothikTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik"), helper(ai) {}
+    bool IsActive() override;
 
-// class GothikChooseTargetTrigger : public Trigger
-// {
-// public:
-//     GothikChooseTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik choose target") {}
-//     bool IsActive() override;
-// };
+private:
+    GothikBossHelper helper;
+};
+
+// A safety net for a bot that started on the dead side or got shoved across it. While the gate is
+// shut nobody can cross on purpose.
+class GothikWrongSideTrigger : public Trigger
+{
+public:
+    GothikWrongSideTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik wrong side"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GothikBossHelper helper;
+};
 
 // class PatchwerkTankTrigger : public Trigger
 // {

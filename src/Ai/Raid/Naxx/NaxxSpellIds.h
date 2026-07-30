@@ -24,14 +24,18 @@ namespace NaxxSpellIds
     static constexpr uint32 MaexxnaSpiderlingEntry = 17055;
 
     // Gothik the Harvester
-    // static constexpr float GothikGateY = -3360.78f;
-    // static constexpr uint32 GothikLivingTraineeEntry = 16124;
-    // static constexpr uint32 GothikLivingKnightEntry  = 16125;
-    // static constexpr uint32 GothikLivingRiderEntry   = 16126;
-    // static constexpr uint32 GothikDeadTraineeEntry   = 16127;
-    // static constexpr uint32 GothikDeadKnightEntry    = 16148;
-    // static constexpr uint32 GothikDeadHorseEntry     = 16149;
-    // static constexpr uint32 GothikDeadRiderEntry     = 16150;
+    static constexpr uint32 GothikEntry = 16060;
+    // POS_Y_GATE in boss_gothik.cpp: everything south of it is the living side.
+    static constexpr float GothikGateY = -3360.78f;
+    // His balcony perch sits at Z 285.5, both arena floors at Z ~267.7.
+    static constexpr float GothikBalconyZ = 280.0f;
+    static constexpr uint32 GothikLivingTraineeEntry = 16124;
+    static constexpr uint32 GothikLivingKnightEntry = 16125;
+    static constexpr uint32 GothikLivingRiderEntry = 16126;
+    static constexpr uint32 GothikDeadTraineeEntry = 16127;
+    static constexpr uint32 GothikDeadKnightEntry = 16148;
+    static constexpr uint32 GothikDeadHorseEntry = 16149;
+    static constexpr uint32 GothikDeadRiderEntry = 16150;
 
     // Heigan
     // Cast by the floor GameObjects, never by the boss - see instance_naxxramas HeiganEruptSections.

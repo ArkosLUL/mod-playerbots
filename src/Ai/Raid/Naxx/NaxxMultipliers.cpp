@@ -486,30 +486,38 @@ float FourhorsemanGenericMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
-// float GothikGenericMultiplier::GetValue(Action* action)
-// {
-//     Unit* boss = AI_VALUE2(Unit*, "find target", "gothik the harvester");
-//     if (!boss)
-//     {
-//         return 1.0f;
-//     }
-//     BossAI* boss_ai = dynamic_cast<BossAI*>(boss->GetAI());
-//     EventMap* eventMap = boss_botAI->GetEvents();
-//     uint32 curr_phase = eventMap->GetPhaseMask();
-//     if (curr_phase == 1 && (dynamic_cast<FollowAction*>(action)))
-//     {
-//         return 0.0f;
-//     }
-//     if (curr_phase == 1 && (dynamic_cast<AttackAction*>(action)))
-//     {
-//         Unit* target = action->GetTarget();
-//         if (target == boss)
-//         {
-//             return 0.0f;
-//         }
-//     }
-//     return 1.0f;
-// }
+float GothikGenericMultiplier::GetValue(Action* action)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return 1.0f;
+    }
+
+    // Targeting belongs to "gothik choose target"; the generic assist actions would copy whatever the
+    // tank happens to be on, which loses the kill order the whole tactic rests on.
+    context->GetValue<bool>("neglect threat")->Set(true);
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    // On the balcony he is immune and out of reach, and behind the gate he is unreachable. Either way
+    // nothing may spend a global or a step on him.
+    if (!helper.IsBossAttackable() && AI_VALUE(Unit*, "current target") == helper.GetBoss())
+    {
+        if (dynamic_cast<CastHealingSpellAction*>(action))
+        {
+            return 1.0f;
+        }
+        if (action->getName() == "gothik choose target" || action->getName() == "gothik stay on living side")
+        {
+            return 1.0f;
+        }
+        return 0.0f;
+    }
+
+    return 1.0f;
+}
 
 float GluthGenericMultiplier::GetValue(Action* action)
 {
@@ -661,8 +669,8 @@ float NaxxBurstWindowMultiplier::EvaluateWindow()
         return noth.IsBalconyPhase() ? 0.0f : 1.0f;
     }
 
-    // Gothik has no helper class; his balcony phase is readable straight off the unit flag the core
-    // script sets (boss_gothik.cpp:232).
+    // Cheaper than another helper member: his balcony phase is readable straight off the unit flag
+    // the core script sets (boss_gothik.cpp:232), which is all this needs.
     if (Unit* gothik = AI_VALUE2(Unit*, "find target", "gothik the harvester"))
     {
         return gothik->HasUnitFlag(UNIT_FLAG_DISABLE_MOVE) ? 0.0f : 1.0f;
