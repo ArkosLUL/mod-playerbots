@@ -65,6 +65,7 @@ enum UlduarIDs
     NPC_HEALTHY_SPORE = 33215,
     NPC_EONARS_GIFT = 33228,
     GOBJECT_NATURE_BOMB = 194902,
+    SPELL_ATTUNED_TO_NATURE = 62519,  // damage reduction Freya carries for the whole wave phase
 
     // Freya hard mode: Elders left alive permanently empower Freya with an extra ability each.
     // NPC_FREYA comes from core ulduar.h via UldScripts.h.
@@ -299,6 +300,11 @@ bool IsXT002Submerged(PlayerbotAI* botAI);
 uint32 GetXT002SearingLightSpellId(Player* bot);
 uint32 GetXT002GravityBombSpellId(Player* bot);
 
+// Yogg-Saron phase reads. Yogg is not reliably on a bot's threat list, so both scan for the creature
+// instead of going through "find target".
+bool YoggSaronInPhase2(PlayerbotAI* botAI);
+bool YoggSaronInPhase3(PlayerbotAI* botAI);
+
 // The add the raid should be killing, most urgent first: Life Spark (hard mode, chain-shocks the
 // raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);
@@ -427,6 +433,11 @@ public:
 
     bool IsGroundPhase() const;
     bool IsFlyingPhase() const;
+
+    // Same phase reads against a boss unit the caller already holds, for code that must not run
+    // UpdateBossAI() first - it reassigns the raid's tank roles as a side effect.
+    static bool IsGroundPhaseFor(Unit* boss);
+    static bool IsFlyingPhaseFor(Unit* boss);
 
     bool IsHarpoonFired(uint32 chainSpellId) const;
     static bool IsHarpoonReady(GameObject* harpoonGO);

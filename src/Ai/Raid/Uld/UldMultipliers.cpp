@@ -121,3 +121,112 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
 
     return retargets.count(action->getName()) ? 1.0f : 0.0f;
 }
+
+// Several Ulduar bosses put their real DPS check minutes after the pull, where the generic
+// hold-until-the-tank-engages window spends everything on a phase that does not matter.
+float UlduarBurstWindowMultiplier::GetValue(Action* action)
+{
+    if (!action || !IsBurstCooldownAction(action->getName()))
+        return 1.0f;
+
+    if (!bot->IsInCombat())
+        return 1.0f;
+
+    uint32 now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedValue = EvaluateWindow();
+    }
+
+    std::string const& name = action->getName();
+    bool const allowed = (name == "bloodlust" || name == "heroism") ? cachedValue.allowLust : cachedValue.allowAll;
+
+    return allowed ? 1.0f : 0.0f;
+}
+
+UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWindow()
+{
+    Unit* razorscale = nullptr;
+    Unit* leviathanMkII = nullptr;
+    Unit* vx001 = nullptr;
+    Unit* aerialCommandUnit = nullptr;
+    Unit* steelbreaker = nullptr;
+    Unit* molgeim = nullptr;
+    Unit* brundir = nullptr;
+    Unit* freya = nullptr;
+    Unit* thorim = nullptr;
+
+    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
+    for (auto const& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        switch (unit->GetEntry())
+        {
+            case NPC_RAZORSCALE: razorscale = unit; break;
+            case NPC_LEVIATHAN_MKII: leviathanMkII = unit; break;
+            case NPC_VX001: vx001 = unit; break;
+            case NPC_AERIAL_COMMAND_UNIT: aerialCommandUnit = unit; break;
+            case NPC_STEELBREAKER: steelbreaker = unit; break;
+            case NPC_MOLGEIM: molgeim = unit; break;
+            case NPC_BRUNDIR: brundir = unit; break;
+            case NPC_FREYA: freya = unit; break;
+            case NPC_THORIM: thorim = unit; break;
+            default: break;
+        }
+    }
+
+    // She takes no damage at all while airborne, and the harpoon knockdowns before 50% end on a
+    // timer, so only the permanent ground phase is worth a lust.
+    if (razorscale)
+    {
+        bool const grounded = razorscale->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
+
+        return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
+    }
+
+    // Damage in P1-P3 counts, so only lust waits. All three mechs up at once is phase 4, the burn
+    // the fight is actually balanced around - and it outlasts a 10-minute lust.
+    if (leviathanMkII || vx001 || aerialCommandUnit)
+        return {true, leviathanMkII && vx001 && aerialCommandUnit};
+
+    // The council members resurrect each other until one is left, so only the survivor is a real
+    // kill. Covers the hard mode too, where that survivor is the empowered phase-3 Steelbreaker.
+    if (steelbreaker || molgeim || brundir)
+    {
+        uint32 const aliveCount = (steelbreaker ? 1u : 0u) + (molgeim ? 1u : 0u) + (brundir ? 1u : 0u);
+
+        return {true, aliveCount == 1};
+    }
+
+    // Attuned to Nature is up for the whole wave phase and reduces her damage taken; the core drops
+    // it when it enters the final phase (boss_freya.cpp).
+    if (freya)
+    {
+        return {true, !freya->HasAura(SPELL_ATTUNED_TO_NATURE) || freya->GetHealthPct() <= FREYA_LUST_FALLBACK_PCT};
+    }
+
+    if (thorim)
+    {
+        // He is immune on his balcony for the whole gauntlet.
+        bool const onArenaFloor = thorim->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
+
+        return {onArenaFloor, onArenaFloor};
+    }
+
+    // P1 damage lands on Sara and is wasted; P3 is the body burn, with no Shadow Barrier and no
+    // Guardian soaking it up. Sara has to be part of the check because Yogg himself is not summoned
+    // until the P2 transition, so P1 would otherwise fall through ungated.
+    if (bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true) ||
+        bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true))
+    {
+        bool const phaseThree = YoggSaronInPhase3(botAI);
+
+        return {phaseThree || YoggSaronInPhase2(botAI), phaseThree};
+    }
+
+    return {};
+}

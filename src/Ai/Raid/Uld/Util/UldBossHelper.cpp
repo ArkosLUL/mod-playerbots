@@ -80,17 +80,27 @@ Unit* RazorscaleBossHelper::GetBoss() const
     return _boss;
 }
 
+bool RazorscaleBossHelper::IsGroundPhaseFor(Unit* boss)
+{
+    return boss && boss->IsAlive() &&
+           (boss->GetPositionZ() <= RAZORSCALE_FLYING_Z_THRESHOLD) &&
+           (boss->GetHealthPct() < 50.0f) &&
+           !boss->HasAura(SPELL_STUN_AURA);
+}
+
+bool RazorscaleBossHelper::IsFlyingPhaseFor(Unit* boss)
+{
+    return boss && (!IsGroundPhaseFor(boss) || boss->GetPositionZ() >= RAZORSCALE_FLYING_Z_THRESHOLD);
+}
+
 bool RazorscaleBossHelper::IsGroundPhase() const
 {
-    return _boss && _boss->IsAlive() &&
-           (_boss->GetPositionZ() <= RAZORSCALE_FLYING_Z_THRESHOLD) &&
-           (_boss->GetHealthPct() < 50.0f) &&
-           !_boss->HasAura(SPELL_STUN_AURA);
+    return IsGroundPhaseFor(_boss);
 }
 
 bool RazorscaleBossHelper::IsFlyingPhase() const
 {
-    return _boss && (!IsGroundPhase() || _boss->GetPositionZ() >= RAZORSCALE_FLYING_Z_THRESHOLD);
+    return IsFlyingPhaseFor(_boss);
 }
 
 bool RazorscaleBossHelper::IsHarpoonFired(uint32 chainSpellId) const
@@ -291,6 +301,22 @@ Player* GetAlgalonBigBangSoakerPriest(Player* bot)
     }
 
     return nullptr;
+}
+
+bool YoggSaronInPhase2(PlayerbotAI* botAI)
+{
+    Creature* yogg = botAI->GetBot()->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+
+    return yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER);
+}
+
+bool YoggSaronInPhase3(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+    Creature* guardian = bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, 200.0f, true);
+
+    return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
 }
 
 // XT-002 Deconstructor

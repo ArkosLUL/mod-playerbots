@@ -47,17 +47,12 @@ Unit* YoggSaronTrigger::GetSaraIfAlive()
 
 bool YoggSaronTrigger::IsPhase2()
 {
-    Creature* target = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
-
-    return target && target->IsAlive() && target->HasAura(SPELL_SHADOW_BARRIER);
+    return YoggSaronInPhase2(botAI);
 }
 
 bool YoggSaronTrigger::IsPhase3()
 {
-    Creature* target = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
-    Creature* guardian = bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, 200.0f, true);
-
-    return target && target->IsAlive() && !target->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
+    return YoggSaronInPhase3(botAI);
 }
 
 bool YoggSaronTrigger::IsInBrainLevel()

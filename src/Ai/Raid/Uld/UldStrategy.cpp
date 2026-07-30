@@ -538,4 +538,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // damage on the exposed Heart before it dies and flips the raid into hard mode
     multipliers.push_back(new XT002BurstWindowMultiplier(botAI));
     multipliers.push_back(new XT002TargetGuardMultiplier(botAI));
+
+    // Hold the burst cooldowns on the bosses whose DPS check is not the pull
+    multipliers.push_back(new UlduarBurstWindowMultiplier(botAI));
 }
