@@ -968,23 +968,29 @@ uint32 RandomItemMgr::GetAmmo(uint32 level, uint32 subClass) const
     if (subItr == levelItr->second.end() || subItr->second.empty())
         return 0;
 
-    std::vector<uint32> const& ammo = subItr->second;
-    if (!sPlayerbotAIConfig.limitGearExpansion)
-        return ammo.front();
+    for (uint32 entry : subItr->second)
+    {
+        if (IsAllowedForLevelExpansion(entry, level))
+            return entry;
+    }
 
+    return 0;
+}
+
+bool RandomItemMgr::IsAllowedForLevelExpansion(uint32 itemId, uint32 level)
+{
+    if (!sPlayerbotAIConfig.limitGearExpansion)
+        return true;
+
+    // Item ids run roughly chronologically, so the first id of an expansion's content doubles as a
+    // cutoff for "this didn't exist yet at that level cap".
     static constexpr uint32 EXPANSION_ITEM_ID_TBC   = 23728; // approx. first item in TBC content (patch 2.0)
     static constexpr uint32 EXPANSION_ITEM_ID_WOTLK = 35570; // approx. first item in WotLK content (patch 3.0)
     uint32 const maxEntryId = level <= 60 ? EXPANSION_ITEM_ID_TBC :
                               level <= 70 ? EXPANSION_ITEM_ID_WOTLK :
                               std::numeric_limits<uint32>::max();
 
-    for (uint32 entry : ammo)
-    {
-        if (entry < maxEntryId)
-            return entry;
-    }
-
-    return 0;
+    return itemId < maxEntryId;
 }
 
 uint32 RandomItemMgr::GetRandomPotion(uint32 level, uint32 effect) const

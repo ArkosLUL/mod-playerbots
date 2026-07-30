@@ -213,6 +213,7 @@ public:
 
     [[nodiscard]] static bool IsInternalItem(ItemTemplate const* proto);
     [[nodiscard]] static bool IsValidItem(ItemTemplate const* proto);
+    [[nodiscard]] static bool IsAllowedForLevelExpansion(uint32 itemId, uint32 level);
     [[nodiscard]] static bool IsUsedBySkill(ItemTemplate const* proto, uint32 skillId);
 
 private:
