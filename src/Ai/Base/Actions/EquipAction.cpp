@@ -74,6 +74,9 @@ void EquipAction::EquipItem(Item* item)
     // Handle ammunition separately
     if (invType == INVTYPE_AMMO)
     {
+        if (!RangedWeaponNeedsAmmo(bot))
+            return;
+
         bot->SetAmmo(itemId);
         std::ostringstream out;
         out << "equipping " << chat->FormatItem(itemProto);

@@ -246,6 +246,13 @@ inline bool IsOffensivePotionId(uint32 itemId)
            OFFENSIVE_POTION_IDS.end();
 }
 
+// Thori'dal and friends conjure their own arrows through this equip aura. Player::CanUseAmmo then
+// rejects every SetAmmo with EQUIP_ERR_BAG_FULL6, which the bot reports as "My bags are full", and
+// PLAYER_AMMO_ID stays 0 forever so nothing ever settles. Ammo handling has to be skipped entirely.
+constexpr uint32 SPELL_REQUIRES_NO_AMMO = 46699;
+
+bool RangedWeaponNeedsAmmo(Player* bot);
+
 enum class BotTypeNumber : uint8
 {
     ACTIVITY_TYPE_NUMBER = 1,

@@ -5491,9 +5491,14 @@ Item* PlayerbotAI::FindPoison() const
                                { return pItemProto->Class == ITEM_CLASS_CONSUMABLE && pItemProto->SubClass == 6; });
 }
 
+bool RangedWeaponNeedsAmmo(Player* bot) { return !bot->HasAura(SPELL_REQUIRES_NO_AMMO); }
+
 // Find Ammo
 Item* PlayerbotAI::FindAmmo() const
 {
+    if (!RangedWeaponNeedsAmmo(bot))
+        return nullptr;
+
     // Get equipped ranged weapon
     if (Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED))
     {

@@ -3634,6 +3634,9 @@ void PlayerbotFactory::InitAmmo()
     if (botClass != CLASS_HUNTER && botClass != CLASS_ROGUE && botClass != CLASS_WARRIOR)
         return;
 
+    if (!RangedWeaponNeedsAmmo(bot))
+        return;
+
     Item const* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
     if (!item)
         return;
@@ -3869,6 +3872,11 @@ void PlayerbotFactory::InitPotions()
         {
             ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
             if (!proto || proto->RequiredLevel > level)
+                continue;
+
+            // Potion of Speed/Wild Magic are usable at 68-70, so without this a bot on a TBC-capped
+            // realm would drink WotLK potions instead of falling through to the TBC entry.
+            if (!RandomItemMgr::IsAllowedForLevelExpansion(itemId, level))
                 continue;
 
             if (bot->GetItemCount(itemId))

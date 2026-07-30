@@ -771,6 +771,11 @@ Value<Unit*>* BuffOnMainTankTrigger::GetTargetValue() { return context->GetValue
 
 bool AmmoCountTrigger::IsActive()
 {
+    // PLAYER_AMMO_ID is pinned to 0 by the no-ammo aura, so without this the trigger would rearm
+    // every check and never be satisfiable.
+    if (!RangedWeaponNeedsAmmo(bot))
+        return false;
+
     if (bot->GetUInt32Value(PLAYER_AMMO_ID) != 0)
         return ItemCountTrigger::IsActive();  // Ammo already equipped
 
