@@ -101,6 +101,9 @@ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
             case CLASS_WARLOCK:
                 tab = WARLOCK_TAB_DEMONOLOGY;
                 break;
+            case CLASS_DEATH_KNIGHT:
+                tab = DEATH_KNIGHT_TAB_FROST;
+                break;
         }
 
         return tab;
@@ -109,7 +112,7 @@ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
 
 std::map<uint8, uint32> AiFactory::GetPlayerSpecTabs(Player* bot)
 {
-    std::map<uint8, uint32> tabs = {{0, 0}, {0, 0}, {0, 0}};
+    std::map<uint8, uint32> tabs = {{0, 0}, {1, 0}, {2, 0}};
     const PlayerTalentMap& talentMap = bot->GetTalentMap();
     for (PlayerTalentMap::const_iterator i = talentMap.begin(); i != talentMap.end(); ++i)
     {

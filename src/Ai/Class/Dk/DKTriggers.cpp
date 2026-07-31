@@ -54,6 +54,35 @@ bool HighUnholyRuneTrigger::IsActive()
     return bot->GetRuneCooldown(2) <= 2000 && bot->GetRuneCooldown(3) <= 2000;
 }
 
+bool ObliterateRunesTrigger::IsActive()
+{
+    uint32 frost = 0;
+    uint32 unholy = 0;
+    uint32 death = 0;
+    for (uint8 i = 0; i < MAX_RUNES; ++i)
+    {
+        if (bot->GetRuneCooldown(i) > 2000)
+            continue;
+
+        switch (bot->GetCurrentRune(i))
+        {
+            case RUNE_FROST:
+                ++frost;
+                break;
+            case RUNE_UNHOLY:
+                ++unholy;
+                break;
+            case RUNE_DEATH:
+                ++death;
+                break;
+            default:
+                break;
+        }
+    }
+    // A death rune covers the frost half or the unholy half, but not both at once.
+    return (frost && unholy) || (death && (frost || unholy)) || death >= 2;
+}
+
 bool NoRuneTrigger::IsActive()
 {
     for (uint32 i = 0; i < MAX_RUNES; ++i)
@@ -62,6 +91,12 @@ bool NoRuneTrigger::IsActive()
             return false;
     }
     return true;
+}
+
+// Runic power is stored at 10x, so 800 is 80 RP out of a 100 RP cap.
+bool HighRunicPowerTrigger::IsActive()
+{
+    return bot->GetPower(POWER_RUNIC_POWER) >= 800;
 }
 
 bool DesolationTrigger::IsActive()

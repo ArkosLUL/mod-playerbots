@@ -103,12 +103,6 @@ public:
     BloodStrikeTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "blood strike", 1, true) {}
 };
 
-class HowlingBlastTrigger : public DebuffTrigger
-{
-public:
-    HowlingBlastTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "howling blast", 1, true) {}
-};
-
 class MindFreezeInterruptSpellTrigger : public InterruptSpellTrigger
 {
 public:
@@ -121,10 +115,10 @@ public:
     StrangulateInterruptSpellTrigger(PlayerbotAI* botAI) : InterruptSpellTrigger(botAI, "strangulate") {}
 };
 
-class KillingMachineTrigger : public BoostTrigger
+class KillingMachineTrigger : public HasAuraTrigger
 {
 public:
-    KillingMachineTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "killing machine") {}
+    KillingMachineTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "killing machine") {}
 };
 
 class MindFreezeOnEnemyHealerTrigger : public InterruptEnemyHealerTrigger
@@ -166,10 +160,25 @@ public:
     bool IsActive() override;
 };
 
+// Obliterate costs one frost plus one unholy rune, and death runes can pay for either side.
+class ObliterateRunesTrigger : public Trigger
+{
+public:
+    ObliterateRunesTrigger(PlayerbotAI* botAI) : Trigger(botAI, "obliterate runes") {}
+    bool IsActive() override;
+};
+
 class NoRuneTrigger : public Trigger
 {
 public:
     NoRuneTrigger(PlayerbotAI* botAI) : Trigger(botAI, "no rune") {}
+    bool IsActive() override;
+};
+
+class HighRunicPowerTrigger : public Trigger
+{
+public:
+    HighRunicPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "high runic power") {}
     bool IsActive() override;
 };
 

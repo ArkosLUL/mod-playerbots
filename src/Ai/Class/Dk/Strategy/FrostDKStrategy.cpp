@@ -112,15 +112,6 @@ void FrostDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
-            "freezing fog",
-            {
-                NextAction("howling blast", ACTION_DEFAULT + 0.5f)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
             "high blood rune",
             {
                 NextAction("blood strike", ACTION_DEFAULT + 0.2f)
@@ -154,6 +145,43 @@ void FrostDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
+    // Everything below stays under the disease triggers above: without Glyph of Howling Blast, HB
+    // doesn't apply Frost Fever, so Icy Touch and Plague Strike get first refusal.
+    triggers.push_back(
+        new TriggerNode(
+            "freezing fog",
+            {
+                NextAction("howling blast", ACTION_HIGH + 1)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "killing machine",
+            {
+                NextAction("frost strike", ACTION_HIGH)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "high runic power",
+            {
+                NextAction("frost strike", ACTION_NORMAL + 9)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "frost and unholy runes",
+            {
+                NextAction("obliterate", ACTION_NORMAL + 8)
+            }
+        )
+    );
 }
 
 void FrostDKAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
