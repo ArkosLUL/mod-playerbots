@@ -71,11 +71,15 @@ public:
         creators["berserker stance"] = &WarriorTriggerFactoryInternal::berserker_stance;
         creators["shield block"] = &WarriorTriggerFactoryInternal::shield_block;
         creators["sunder armor"] = &WarriorTriggerFactoryInternal::sunder_armor;
+        creators["sunder armor stack"] = &WarriorTriggerFactoryInternal::sunder_armor_stack;
         creators["revenge"] = &WarriorTriggerFactoryInternal::revenge;
         creators["overpower"] = &WarriorTriggerFactoryInternal::overpower;
         creators["mocking blow"] = &WarriorTriggerFactoryInternal::mocking_blow;
         creators["rampage"] = &WarriorTriggerFactoryInternal::rampage;
         creators["mortal strike"] = &WarriorTriggerFactoryInternal::mortal_strike;
+        creators["mortal strike available"] = &WarriorTriggerFactoryInternal::mortal_strike_available;
+        creators["bladestorm available"] = &WarriorTriggerFactoryInternal::bladestorm_available;
+        creators["bladestorm on aoe"] = &WarriorTriggerFactoryInternal::bladestorm_on_aoe;
         creators["thunder clap on snare target"] = &WarriorTriggerFactoryInternal::thunder_clap_on_snare_target;
         creators["thunder clap"] = &WarriorTriggerFactoryInternal::thunder_clap;
         creators["bloodthirst"] = &WarriorTriggerFactoryInternal::bloodthirst;
@@ -166,11 +170,19 @@ private:
     static Trigger* thunder_clap_on_snare_target(PlayerbotAI* botAI) { return new ThunderClapSnareTrigger(botAI); }
     static Trigger* thunder_clap(PlayerbotAI* botAI) { return new ThunderClapTrigger(botAI); }
     static Trigger* mortal_strike(PlayerbotAI* botAI) { return new MortalStrikeDebuffTrigger(botAI); }
+    static Trigger* mortal_strike_available(PlayerbotAI* botAI) { return new MortalStrikeAvailableTrigger(botAI); }
+    static Trigger* bladestorm_available(PlayerbotAI* botAI) { return new BladestormAvailableTrigger(botAI); }
+    // Bladestorm is uncontrollable AoE, so it stays off unless there is a real pack to hit.
+    static Trigger* bladestorm_on_aoe(PlayerbotAI* botAI)
+    {
+        return new TwoTriggers(botAI, "medium aoe", "bladestorm available");
+    }
     static Trigger* rampage(PlayerbotAI* botAI) { return new RampageAvailableTrigger(botAI); }
     static Trigger* mocking_blow(PlayerbotAI* botAI) { return new MockingBlowTrigger(botAI); }
     static Trigger* overpower(PlayerbotAI* botAI) { return new OverpowerAvailableTrigger(botAI); }
     static Trigger* revenge(PlayerbotAI* botAI) { return new RevengeAvailableTrigger(botAI); }
     static Trigger* sunder_armor(PlayerbotAI* botAI) { return new SunderArmorDebuffTrigger(botAI); }
+    static Trigger* sunder_armor_stack(PlayerbotAI* botAI) { return new SunderArmorStackTrigger(botAI); }
     // static Trigger* slam(PlayerbotAI* ai) { return new SlamTrigger(ai); }
 
     static Trigger* vigilance(PlayerbotAI* botAI) { return new VigilanceTrigger(botAI); }

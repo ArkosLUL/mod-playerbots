@@ -161,14 +161,18 @@ void EquipAction::EquipItem(Item* item)
             // each time with the piece it would displace treated as removed, so a set bonus the
             // incumbent carries does not count for both sides.
             calculator.SetReplacedItemSet(mainHandItem ? mainHandItem->GetTemplate()->ItemSet : 0);
-            float newItemScoreVsMH = calculator.CalculateItem(itemId, item->GetItemRandomPropertyId());
+            float newItemScoreVsMH = calculator.CalculateItem(itemId, item->GetItemRandomPropertyId(),
+                                                              EQUIPMENT_SLOT_MAINHAND);
             float mainHandScore = mainHandItem
-                ? calculator.CalculateItem(mainHandItem->GetTemplate()->ItemId, mainHandItem->GetItemRandomPropertyId()) : 0.0f;
+                ? calculator.CalculateItem(mainHandItem->GetTemplate()->ItemId,
+                                           mainHandItem->GetItemRandomPropertyId(), EQUIPMENT_SLOT_MAINHAND) : 0.0f;
 
             calculator.SetReplacedItemSet(offHandItem ? offHandItem->GetTemplate()->ItemSet : 0);
-            float newItemScoreVsOH = calculator.CalculateItem(itemId, item->GetItemRandomPropertyId());
+            float newItemScoreVsOH = calculator.CalculateItem(itemId, item->GetItemRandomPropertyId(),
+                                                              EQUIPMENT_SLOT_OFFHAND);
             float offHandScore = offHandItem
-                ? calculator.CalculateItem(offHandItem->GetTemplate()->ItemId, offHandItem->GetItemRandomPropertyId()) : 0.0f;
+                ? calculator.CalculateItem(offHandItem->GetTemplate()->ItemId,
+                                           offHandItem->GetItemRandomPropertyId(), EQUIPMENT_SLOT_OFFHAND) : 0.0f;
             calculator.SetReplacedItemSet(0);
 
             // Determine where this weapon can go
@@ -296,12 +300,14 @@ void EquipAction::EquipItem(Item* item)
                     // Score the candidate once per slot, each time with the piece it would displace
                     // treated as removed, so a set bonus the incumbent carries counts for it only.
                     calc.SetReplacedItemSet(equippedItems[0]->GetTemplate()->ItemSet);
-                    float newItemScoreVsFirst = calc.CalculateItem(itemId, newItemRandomProp);
-                    float firstItemScore = calc.CalculateItem(equippedItems[0]->GetTemplate()->ItemId, firstRandomProp);
+                    float newItemScoreVsFirst = calc.CalculateItem(itemId, newItemRandomProp, dstSlot);
+                    float firstItemScore = calc.CalculateItem(equippedItems[0]->GetTemplate()->ItemId, firstRandomProp,
+                                                              dstSlot);
 
                     calc.SetReplacedItemSet(equippedItems[1]->GetTemplate()->ItemSet);
-                    float newItemScoreVsSecond = calc.CalculateItem(itemId, newItemRandomProp);
-                    float secondItemScore = calc.CalculateItem(equippedItems[1]->GetTemplate()->ItemId, secondRandomProp);
+                    float newItemScoreVsSecond = calc.CalculateItem(itemId, newItemRandomProp, dstSlot + 1);
+                    float secondItemScore = calc.CalculateItem(equippedItems[1]->GetTemplate()->ItemId, secondRandomProp,
+                                                               dstSlot + 1);
                     calc.SetReplacedItemSet(0);
 
                     // Determine which slot (if any) should be replaced

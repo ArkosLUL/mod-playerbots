@@ -59,7 +59,6 @@
 #include "Vehicle.h"
 
 constexpr uint32 SPELL_TITAN_GRIP = 49152;
-constexpr uint32 SPELL_DK_FROST_PRESENCE = 48263;
 
 std::vector<std::string> PlayerbotAI::dispel_whitelist = {
     "mutating injection",
@@ -2272,7 +2271,7 @@ bool PlayerbotAI::IsTank(Player* player, bool bySpec)
     switch (player->getClass())
     {
         case CLASS_DEATH_KNIGHT:
-            if (tab == DEATH_KNIGHT_TAB_BLOOD || player->HasAura(SPELL_DK_FROST_PRESENCE))
+            if (tab == DEATH_KNIGHT_TAB_BLOOD)
             {
                 return true;
             }

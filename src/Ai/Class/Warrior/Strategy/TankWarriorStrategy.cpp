@@ -343,4 +343,17 @@ void TankWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    // The shared "aoe" strategy only carries the abilities a DPS spec can actually use, so the
+    // protection-only part of a small pull lives here.
+    triggers.push_back(
+        new TriggerNode(
+            "light aoe",
+            {
+                NextAction("thunder clap", ACTION_HIGH + 5),
+                NextAction("shockwave", ACTION_HIGH + 4),
+                NextAction("demoralizing shout without life time check", ACTION_HIGH + 1),
+                NextAction("cleave", ACTION_HIGH)
+            }
+        )
+    );
 }

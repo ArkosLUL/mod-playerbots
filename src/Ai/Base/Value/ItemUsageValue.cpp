@@ -676,7 +676,7 @@ SpecTraits GetSpecTraits(Player* bot)
     // Role flags come from the bot's real role detection, not spec-name strings. Talent-tab names like
     // "elem", "blooddps", "frostdps" or "feraldps" don't encode caster-vs-physical or tank-vs-dps, so
     // string matching left elemental shamans as physical and blood/bear tanks as non-tanks. IsTank keys
-    // off frost presence / bear form, IsCaster off the ranged strategy - both handle those correctly.
+    // off the active tank strategy, IsCaster off the ranged strategy - both handle those correctly.
     t.isHealer = PlayerbotAI::IsHeal(bot);
     t.isTank = PlayerbotAI::IsTank(bot);
     t.isCaster = PlayerbotAI::IsCaster(bot);
@@ -1259,10 +1259,14 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
 
         // Both scores have to be taken with the contested slot treated as empty, otherwise the
-        // incumbent's own set bonus counts for it and cancels out.
+        // incumbent's own set bonus counts for it and cancels out. The slot also drives the
+        // spec weapon-speed preference, which is a no-op without it.
+        int32 const contestedSlot = static_cast<int32>((dest & 0xFF) + i);
         calculator.SetReplacedItemSet(oldItemProto->ItemSet);
-        float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId);
-        float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+        float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId, contestedSlot);
+        float oldScore = calculator.CalculateItem(oldItemProto->ItemId,
+                                                  oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID),
+                                                  contestedSlot);
         calculator.SetReplacedItemSet(0);
 
         if (oldItem)

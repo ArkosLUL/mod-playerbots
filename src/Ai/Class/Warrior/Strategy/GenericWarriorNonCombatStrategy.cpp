@@ -35,6 +35,7 @@ void GenericWarriorNonCombatStrategy::InitTriggers(std::vector<TriggerNode*>& tr
     NonCombatStrategy::InitTriggers(triggers);
 
     triggers.push_back(new TriggerNode("often", { NextAction("apply stone", 1.0f) }));
+    triggers.push_back(new TriggerNode("battle shout", { NextAction("battle shout", ACTION_NORMAL) }));
     triggers.push_back(new TriggerNode(
         "fear sleep sap", { NextAction("berserker rage", ACTION_EMERGENCY + 1) }));
 }

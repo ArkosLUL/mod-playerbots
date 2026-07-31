@@ -35,6 +35,8 @@ public:
 
 CAN_CAST_TRIGGER(RevengeAvailableTrigger, "revenge");
 CAN_CAST_TRIGGER(OverpowerAvailableTrigger, "overpower");
+CAN_CAST_TRIGGER(MortalStrikeAvailableTrigger, "mortal strike");
+CAN_CAST_TRIGGER(BladestormAvailableTrigger, "bladestorm");
 BUFF_TRIGGER(RampageAvailableTrigger, "rampage");
 BUFF_TRIGGER_A(BloodrageBuffTrigger, "bloodrage");
 CAN_CAST_TRIGGER(VictoryRushTrigger, "victory rush");
@@ -69,6 +71,18 @@ class RendDebuffTrigger : public DebuffTrigger
 {
 public:
     RendDebuffTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "rend", 1, true) {}
+};
+
+// DPS warriors are the raid's Sunder providers when no protection warrior is around, and a
+// DEBUFF_TRIGGER only fires while the debuff is entirely absent, so it cannot drive the 1->5 stack
+// ramp. Mirrors the conditions in CastSunderArmorAction::isUseful.
+class SunderArmorStackTrigger : public Trigger
+{
+public:
+    SunderArmorStackTrigger(PlayerbotAI* botAI) : Trigger(botAI, "sunder armor stack") {}
+
+    std::string const GetTargetName() override { return "current target"; }
+    bool IsActive() override;
 };
 
 class VigilanceTrigger : public BuffOnPartyTrigger

@@ -23,6 +23,36 @@ bool BloodrageBuffTrigger::IsActive()
            AI_VALUE2(uint8, "rage", "self target") < 20;
 }
 
+bool SunderArmorStackTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target || !target->IsAlive() || !target->IsInWorld())
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    if (!botAI->IsTank(bot, false))
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || member == bot || !member->IsAlive() || !member->IsInWorld() ||
+                member->GetMapId() != bot->GetMapId())
+            {
+                continue;
+            }
+
+            if (member->getClass() == CLASS_WARRIOR && botAI->IsTank(member, false))
+                return false;
+        }
+    }
+
+    Aura* aura = botAI->GetAura("sunder armor", target, false, true);
+    return !aura || aura->GetStackAmount() < 5 || aura->GetDuration() <= 6000;
+}
+
 bool VigilanceTrigger::IsActive()
 {
     if (!bot->HasSpell(SPELL_VIGILANCE))

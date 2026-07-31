@@ -78,7 +78,6 @@ ArmsWarriorStrategy::ArmsWarriorStrategy(PlayerbotAI* botAI) : GenericWarriorStr
 std::vector<NextAction> ArmsWarriorStrategy::getDefaultActions()
 {
     return {
-        NextAction("bladestorm", ACTION_DEFAULT + 0.2f),
         NextAction("mortal strike", ACTION_DEFAULT + 0.1f),
         NextAction("sunder armor", ACTION_DEFAULT + 0.05f),
         NextAction("melee", ACTION_DEFAULT)
@@ -119,25 +118,18 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "rend",
             {
-                NextAction("rend", ACTION_HIGH + 8)
+                NextAction("rend", ACTION_HIGH + 3)
             }
         )
     );
 
+    // Mortal Wound lasts 10s against a 6s cooldown, so keying off the debuff idles Mortal Strike for
+    // most of its uptime.
     triggers.push_back(
         new TriggerNode(
-            "rend on attacker",
+            "mortal strike available",
             {
-                NextAction("rend on attacker", ACTION_HIGH + 8)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "mortal strike",
-            {
-                NextAction("mortal strike", ACTION_HIGH + 3)
+                NextAction("mortal strike", ACTION_HIGH + 6)
             }
         )
     );
@@ -198,10 +190,36 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
+            "bladestorm on aoe",
+            {
+                NextAction("bladestorm", ACTION_HIGH + 1)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "sunder armor stack",
+            {
+                NextAction("sunder armor", ACTION_HIGH - 1)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "medium rage available",
+            {
+                NextAction("slam", ACTION_HIGH - 2)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
             "high rage available",
             {
-                NextAction("heroic strike", ACTION_HIGH),
-                NextAction("slam", ACTION_HIGH + 1)
+                NextAction("heroic strike", ACTION_DEFAULT + 0.1f)
             }
         )
     );
@@ -227,25 +245,7 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "critical health",
             {
-                NextAction("intimidating shout", ACTION_EMERGENCY)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "medium health",
-            {
                 NextAction("enraged regeneration", ACTION_EMERGENCY)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "almost full health",
-            {
-                NextAction("retaliation", ACTION_EMERGENCY + 1)
             }
         )
     );
