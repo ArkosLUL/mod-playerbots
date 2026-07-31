@@ -176,5 +176,11 @@ void AutoMaintenanceOnLevelupAction::AutoUpgradeEquip()
     factory.InitPotions();
 
     if (sPlayerbotAIConfig.autoUpgradeEquip)
+    {
         factory.InitEquipment(true);
+
+        // Gear swapped in here would otherwise stay bare until the next maintenance or randomize.
+        if (bot->GetLevel() >= sPlayerbotAIConfig.minEnchantingBotLevel)
+            factory.ApplyEnchantAndGemsNew();
+    }
 }

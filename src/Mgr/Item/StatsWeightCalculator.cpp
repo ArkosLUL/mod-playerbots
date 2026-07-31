@@ -827,8 +827,9 @@ float StatsWeightCalculator::BestGemScore(uint8 socketColor)
         if (enchant->requiredLevel > lvl)
             continue;
 
-        // Skill-gated gems are skipped: a bot's profession skill is not checked here.
-        if (enchant->requiredSkill)
+        // Skill-gated gems are skipped: a bot's profession skill is not checked here. Jeweler's gems
+        // carry that requirement on the item rather than the enchant, hence both checks.
+        if (enchant->requiredSkill || gemTemplate->RequiredSkill)
             continue;
 
         best = std::max(best, gemCalculator.CalculateEnchant(enchant_id));

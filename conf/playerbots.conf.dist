@@ -1082,6 +1082,15 @@ AiPlayerbot.MinEnchantingBotLevel = 60
 # Default: 1 (enabled)
 AiPlayerbot.LimitEnchantExpansion = 1
 
+# Bots apply the self-only gear upgrades their professions grant: an extra gem socket on bracers
+# and gloves (Blacksmithing), Dragon's Eye gems (Jewelcrafting, capped by their limit category), and
+# the Eternal Belt Buckle socket on the waist for any bot. Profession requirements are still
+# enforced, so a bot only gets what its own skills allow.
+# The added sockets are WotLK content, so they need level 70 - or 71 while LimitEnchantExpansion is
+# enabled, since that keeps level-70 bots on TBC-era gear.
+# Default: 1 (enabled)
+AiPlayerbot.ProfessionGearEnhancements = 1
+
 # When socketing gems, steer colored gems so the equipped meta gem's activation requirement
 # (e.g. "requires at least 2 Blue Gems") is met, then activate the meta gem. Bots still pick the
 # best-stat gems for their class/spec; only the minimum sockets needed for the meta are adjusted.

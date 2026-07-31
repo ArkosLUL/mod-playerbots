@@ -191,6 +191,9 @@ private:
     void ResetQuests();
 
     std::vector<uint32> GetCurrentGemsCount();
+    // Add the extra gem socket this bot qualifies for (Eternal Belt Buckle, Blacksmithing socket
+    // bracer/gloves). No-op if the item already has one or has no free socket slot left.
+    void ApplyPrismaticSocket(Item* item);
     bool CanEquipArmor(ItemTemplate const* proto);
     bool CanEquipWeapon(ItemTemplate const* proto);
     static void BuildCcBreakTrinketCache();
@@ -224,6 +227,9 @@ private:
     static std::list<uint32> specialQuestIds;
     static std::unordered_map<uint32, std::vector<uint32>> trainerIdCache;
     static std::vector<uint32> enchantSpellIdCache;
+    // Socket-adding enchants (Eternal Belt Buckle, Blacksmithing socket bracer/gloves). Kept apart
+    // from enchantSpellIdCache because they occupy PRISMATIC_ENCHANTMENT_SLOT, not PERM.
+    static std::vector<uint32> prismaticEnchantSpellIdCache;
     static std::vector<uint32> ccBreakTrinketCache;
 
 protected:

@@ -310,6 +310,7 @@ public:
     bool randombotsWalkingRPGInDoors;
     uint32 minEnchantingBotLevel;
     uint32 limitEnchantExpansion;
+    bool professionGearEnhancements;
     uint32 limitGearExpansion;
     uint32 randombotStartingLevel;
     bool enablePeriodicOnlineOffline;

@@ -58,6 +58,7 @@ uint32 PlayerbotFactory::tradeSkills[] = {SKILL_ALCHEMY,         SKILL_ENCHANTIN
 std::list<uint32> PlayerbotFactory::classQuestIds;
 std::list<uint32> PlayerbotFactory::specialQuestIds;
 std::vector<uint32> PlayerbotFactory::enchantSpellIdCache;
+std::vector<uint32> PlayerbotFactory::prismaticEnchantSpellIdCache;
 std::vector<uint32> PlayerbotFactory::enchantGemIdCache;
 std::unordered_map<uint32, std::vector<uint32>> PlayerbotFactory::trainerIdCache;
 std::vector<uint32> PlayerbotFactory::ccBreakTrinketCache;
@@ -487,6 +488,39 @@ void PlayerbotFactory::Init()
 
         for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)
         {
+            if (spellInfo->Effects[j].Effect == SPELL_EFFECT_ENCHANT_ITEM_PRISMATIC)
+            {
+                uint32 socketEnchantId = spellInfo->Effects[j].MiscValue;
+                if (!socketEnchantId)
+                    continue;
+
+                SpellItemEnchantmentEntry const* socketEnchant =
+                    sSpellItemEnchantmentStore.LookupEntry(socketEnchantId);
+                if (!socketEnchant)
+                    continue;
+
+                // Spell::EffectEnchantItemPrismatic only honours enchants that actually carry a
+                // prismatic socket and logs an error for the rest, so drop those here.
+                bool addsSocket = false;
+                for (uint8 e = 0; e < MAX_SPELL_ITEM_ENCHANTMENT_EFFECTS; ++e)
+                {
+                    if (socketEnchant->type[e] == ITEM_ENCHANTMENT_TYPE_PRISMATIC_SOCKET)
+                    {
+                        addsSocket = true;
+                        break;
+                    }
+                }
+
+                if (!addsSocket)
+                    continue;
+
+                if (strstr(spellInfo->SpellName[0], "Test"))
+                    break;
+
+                prismaticEnchantSpellIdCache.push_back(id);
+                break;
+            }
+
             if (spellInfo->Effects[j].Effect != SPELL_EFFECT_ENCHANT_ITEM)
                 continue;
 
@@ -510,6 +544,7 @@ void PlayerbotFactory::Init()
         }
     }
     LOG_INFO("playerbots", "Loading {} enchantment spells", enchantSpellIdCache.size());
+    LOG_INFO("playerbots", "Loading {} socket-adding enchantment spells", prismaticEnchantSpellIdCache.size());
     for (auto iter = sSpellItemEnchantmentStore.begin(); iter != sSpellItemEnchantmentStore.end(); iter++)
     {
         uint32 gemId = iter->GemID;
@@ -529,7 +564,10 @@ void PlayerbotFactory::Init()
             continue;
         }
 
-        if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+        // Jeweler's gems (Dragon's Eye) are unique-equipped but capped by their limit category, which
+        // the socketing pass enforces. Anything unique-equipped without a category has no such cap,
+        // so keep excluding it.
+        if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && !proto->ItemLimitCategory)
         {
             continue;
         }
@@ -3228,6 +3266,17 @@ void PlayerbotFactory::SetRandomSkill(uint16 id)
 {
     uint32 maxValue = level * 5;
 
+    // Professions cap at 300/375/450 by expansion, not at level * 5. Scaling to the expansion's own
+    // max level makes an 80 land on 450 instead of 400, which is what gates the 425+ recipes and
+    // self-only gear enhancements (Master's Inscription, Grand Master tinkers).
+    if (IsPrimaryTradeSkill(id))
+    {
+        uint32 const expansion = sWorld->getIntConfig(CONFIG_EXPANSION);
+        uint32 const expansionMaxSkill = 300 + expansion * 75;
+        uint32 const expansionMaxLevel = 60 + expansion * 10;
+        maxValue = std::min<uint32>(expansionMaxSkill, level * expansionMaxSkill / expansionMaxLevel);
+    }
+
     // do not let skill go beyond limit even if maxlevel > blizzlike
     // if (level > 60)
     // {
@@ -3971,6 +4020,71 @@ std::vector<uint32> PlayerbotFactory::GetCurrentGemsCount()
         }
     }
     return curcount;
+}
+
+void PlayerbotFactory::ApplyPrismaticSocket(Item* item)
+{
+    if (!sPlayerbotAIConfig.professionGearEnhancements)
+        return;
+
+    if (item->GetEnchantmentId(PRISMATIC_ENCHANTMENT_SLOT))
+        return;
+
+    // Every socket-adding enchant is WotLK content, so 70 is the hard floor even with
+    // LimitEnchantExpansion off. With it on, level-70 bots stay on TBC-era gear like they do for
+    // enchants and gems, which pushes the first socket to 71.
+    uint32 const minLevel = sPlayerbotAIConfig.limitEnchantExpansion ? 71 : 70;
+    if (bot->GetLevel() < minLevel)
+        return;
+
+    // The added gem lands in the first template socket with no color, so an item that already fills
+    // every socket slot has nowhere to put it and the core would refuse the socketing anyway.
+    uint32 usedSockets = 0;
+    while (usedSockets < MAX_GEM_SOCKETS && item->GetTemplate()->Socket[usedSockets].Color)
+        ++usedSockets;
+
+    if (usedSockets >= MAX_GEM_SOCKETS)
+        return;
+
+    for (uint32 const& socketSpell : prismaticEnchantSpellIdCache)
+    {
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(socketSpell);
+        if (!spellInfo)
+            continue;
+
+        // Restricts each enchant to the slot it was made for: buckle to the waist, socket bracer to
+        // the wrists, socket gloves to the hands.
+        if (!item->IsFitToSpellRequirements(spellInfo))
+            continue;
+
+        if (spellInfo->BaseLevel > bot->GetLevel())
+            continue;
+
+        for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)
+        {
+            if (spellInfo->Effects[j].Effect != SPELL_EFFECT_ENCHANT_ITEM_PRISMATIC)
+                continue;
+
+            uint32 socketEnchantId = spellInfo->Effects[j].MiscValue;
+            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(socketEnchantId);
+            if (!enchant)
+                continue;
+
+            // Blacksmithing is gated here; the belt buckle carries no skill requirement, so every bot
+            // clears this. The core re-checks the same requirement before it applies the gem's stats.
+            if (enchant->requiredSkill && (!bot->HasSkill(enchant->requiredSkill) ||
+                                           bot->GetSkillValue(enchant->requiredSkill) < enchant->requiredSkillValue))
+                continue;
+
+            if (enchant->requiredLevel > bot->GetLevel())
+                continue;
+
+            // No remove pass needed: we returned above if the slot was already occupied.
+            item->SetEnchantment(PRISMATIC_ENCHANTMENT_SLOT, socketEnchantId, 0, 0, bot->GetGUID());
+            bot->ApplyEnchantment(item, PRISMATIC_ENCHANTMENT_SLOT, true);
+            return;
+        }
+    }
 }
 
 void PlayerbotFactory::InitFood()
@@ -5037,7 +5151,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
 {
     //int32 bestGemEnchantId[4] = {-1, -1, -1, -1};  // 1, 2, 4, 8 color //not used, line marked for removal.
     //float bestGemScore[4] = {0, 0, 0, 0}; //not used, line marked for removal.
-    uint8 jewelersCount = 0;
     std::vector<uint32> availableGems;
     for (const uint32& enchantGem : enchantGemIdCache)
     {
@@ -5057,6 +5170,20 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         if (requiredLevel > bot->GetLevel())
         {
             continue;
+        }
+
+        // Jeweler's gems carry their profession requirement on the item, not on the enchant, so the
+        // enchant->requiredSkill check below never sees it and every bot would get Dragon's Eyes.
+        if (gemTemplate->RequiredSkill)
+        {
+            if (!sPlayerbotAIConfig.professionGearEnhancements)
+                continue;
+
+            if (!bot->HasSkill(gemTemplate->RequiredSkill) ||
+                bot->GetSkillValue(gemTemplate->RequiredSkill) < gemTemplate->RequiredSkillRank)
+            {
+                continue;
+            }
         }
 
         uint32 enchant_id = gemProperties->spellitemenchantement;
@@ -5089,10 +5216,38 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         int32 curEnchantId = -1;
         uint32 curGemItem = 0;
         float curScore = 0.0f;
-        bool curJewelers = false;
     };
     std::vector<SocketToGem> coloredSockets;
     std::vector<SocketToGem> metaSockets;
+
+    // Every socket is refilled from scratch, so counting what this pass places is enough to stay
+    // inside what Player::CanEquipUniqueItem allows: one copy of a unique-equipped gem, and the
+    // limit category's own maxCount (3 for Jeweler's Gems). Bust either and the item can't be worn.
+    std::map<uint32, uint32> gemsUsedById;
+    std::map<uint32, uint32> gemsUsedByCategory;
+
+    auto trackGem = [&](std::map<uint32, uint32>& usedById, std::map<uint32, uint32>& usedByCategory,
+                        uint32 gemItemId, bool add)
+    {
+        ItemTemplate const* gemTemplate = gemItemId ? sObjectMgr->GetItemTemplate(gemItemId) : nullptr;
+        if (!gemTemplate)
+            return;
+
+        uint32& byId = usedById[gemItemId];
+        if (add)
+            ++byId;
+        else if (byId)
+            --byId;
+
+        if (!gemTemplate->ItemLimitCategory)
+            return;
+
+        uint32& byCategory = usedByCategory[gemTemplate->ItemLimitCategory];
+        if (add)
+            ++byCategory;
+        else if (byCategory)
+            --byCategory;
+    };
 
     auto gemColorOf = [&](uint32 gemItemId) -> uint8
     {
@@ -5107,24 +5262,39 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
 
     // Pick the highest class/spec-weighted gem for a socket. restrictColor (0 = any) forces the gem to
     // carry one of the given color bits; matching the socket color keeps the +20% socket-bonus nudge.
-    auto pickBestGem = [&](uint8 socketColor, uint8 restrictColor, uint8 jewelersUsed, int32& outEnchantId,
-                           uint32& outGemItem, float& outScore, bool& outJewelers) -> bool
+    auto pickBestGem = [&](uint8 socketColor, uint8 restrictColor, std::map<uint32, uint32> const& usedById,
+                           std::map<uint32, uint32> const& usedByCategory, int32& outEnchantId, uint32& outGemItem,
+                           float& outScore) -> bool
     {
         bool isMetaSocket = (socketColor & SOCKET_COLOR_META) != 0;
         outEnchantId = -1;
         outGemItem = 0;
         outScore = -1.0f;
-        outJewelers = false;
         for (uint32 const& enchantGem : availableGems)
         {
             ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
             if (!gemTemplate)
                 continue;
 
-            // Limit jewelers (JC) epic gems to 3
-            bool isJewelersGem = gemTemplate->ItemLimitCategory == 2;
-            if (isJewelersGem && jewelersUsed >= 3)
-                continue;
+            if (gemTemplate->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+            {
+                auto used = usedById.find(enchantGem);
+                if (used != usedById.end() && used->second)
+                    continue;
+            }
+
+            if (gemTemplate->ItemLimitCategory)
+            {
+                ItemLimitCategoryEntry const* limitEntry =
+                    sItemLimitCategoryStore.LookupEntry(gemTemplate->ItemLimitCategory);
+                // A category with no DBC row is unequippable as far as the core is concerned.
+                if (!limitEntry)
+                    continue;
+
+                auto used = usedByCategory.find(gemTemplate->ItemLimitCategory);
+                if (used != usedByCategory.end() && used->second >= limitEntry->maxCount)
+                    continue;
+            }
 
             GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
             if (!gemProperties)
@@ -5150,7 +5320,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                 outScore = score;
                 outEnchantId = static_cast<int32>(enchant_id);
                 outGemItem = enchantGem;
-                outJewelers = isJewelersGem;
             }
         }
         return outEnchantId != -1;
@@ -5221,7 +5390,9 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                         continue;
 
                     float score = calculator.CalculateEnchant(enchant_id);
-                    if (score >= bestScore)
+                    // Strict compare: bestScore starts at 0, so >= would let the last worthless
+                    // enchant of the scan win the slot purely on iteration order.
+                    if (score > bestScore)
                     {
                         bestScore = score;
                         bestEnchantId = enchant_id;
@@ -5236,6 +5407,8 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             item->SetEnchantment(PERM_ENCHANTMENT_SLOT, bestEnchantId, 0, 0, bot->GetGUID());
             bot->ApplyEnchantment(item, PERM_ENCHANTMENT_SLOT, true);
         }
+        ApplyPrismaticSocket(item);
+
         if (!item->HasSocket())
             continue;
 
@@ -5253,6 +5426,25 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                 metaSockets.push_back(entry);
             else
                 coloredSockets.push_back(entry);
+        }
+
+        // A socket added by an enchant lives in the first template socket that has no color, and the
+        // core rejects meta gems there, so it always counts as a colored socket. socketColor 0 means
+        // any gem fits and none earns the socket-bonus nudge.
+        if (item->GetEnchantmentId(PRISMATIC_ENCHANTMENT_SLOT))
+        {
+            uint32 firstPrismatic = 0;
+            while (firstPrismatic < MAX_GEM_SOCKETS && item->GetTemplate()->Socket[firstPrismatic].Color)
+                ++firstPrismatic;
+
+            if (firstPrismatic < MAX_GEM_SOCKETS)
+            {
+                SocketToGem entry;
+                entry.item = item;
+                entry.enchantSlot = SOCK_ENCHANTMENT_SLOT + firstPrismatic;
+                entry.socketColor = 0;
+                coloredSockets.push_back(entry);
+            }
         }
     }
 
@@ -5276,11 +5468,12 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         int32 enchId;
         uint32 gemItem;
         float score;
-        bool jewelers;
-        if (!pickBestGem(ms.socketColor, 0, jewelersCount, enchId, gemItem, score, jewelers))
+        if (!pickBestGem(ms.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
             continue;
 
         metaToApply.emplace_back(ms, enchId);
+        // Counted now even though the apply is deferred, so the colored pass below sees it.
+        trackGem(gemsUsedById, gemsUsedByCategory, gemItem, true);
         if (SpellItemEnchantmentEntry const* metaEnchant = sSpellItemEnchantmentStore.LookupEntry(static_cast<uint32>(enchId)))
         {
             if (metaEnchant->EnchantmentCondition && !metaCondition)
@@ -5294,8 +5487,7 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         int32 enchId;
         uint32 gemItem;
         float score;
-        bool jewelers;
-        if (!pickBestGem(s.socketColor, 0, jewelersCount, enchId, gemItem, score, jewelers))
+        if (!pickBestGem(s.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
             continue;
 
         bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), false);
@@ -5305,9 +5497,7 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         s.curEnchantId = enchId;
         s.curGemItem = gemItem;
         s.curScore = score;
-        s.curJewelers = jewelers;
-        if (jewelers)
-            ++jewelersCount;
+        trackGem(gemsUsedById, gemsUsedByCategory, gemItem, true);
     }
 
     // Steer the cheapest colored sockets toward the meta gem's activation requirement, giving up as
@@ -5350,7 +5540,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             int32 bestEnchId = -1;
             uint32 bestGemItem = 0;
             float bestNewScore = 0.0f;
-            bool bestJewelers = false;
             for (size_t si = 0; si < coloredSockets.size(); ++si)
             {
                 SocketToGem& s = coloredSockets[si];
@@ -5359,12 +5548,15 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                 if (!needForSocket)
                     continue;
 
-                uint8 jewelersUsed = jewelersCount - (s.curJewelers ? 1 : 0);
+                // The gem being replaced frees up its own unique/limit-category budget.
+                std::map<uint32, uint32> usedById = gemsUsedById;
+                std::map<uint32, uint32> usedByCategory = gemsUsedByCategory;
+                trackGem(usedById, usedByCategory, s.curGemItem, false);
+
                 int32 enchId;
                 uint32 gemItem;
                 float score;
-                bool jewelers;
-                if (!pickBestGem(s.socketColor, needForSocket, jewelersUsed, enchId, gemItem, score, jewelers))
+                if (!pickBestGem(s.socketColor, needForSocket, usedById, usedByCategory, enchId, gemItem, score))
                     continue;
 
                 float cost = s.curScore - score;  // stat weight given up by this swap
@@ -5375,7 +5567,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                     bestEnchId = enchId;
                     bestGemItem = gemItem;
                     bestNewScore = score;
-                    bestJewelers = jewelers;
                 }
             }
             if (bestIdx < 0)
@@ -5386,14 +5577,11 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             s.item->SetEnchantment(EnchantmentSlot(s.enchantSlot), static_cast<uint32>(bestEnchId), 0, 0, bot->GetGUID());
             bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), true);
 
-            if (s.curJewelers)
-                --jewelersCount;
-            if (bestJewelers)
-                ++jewelersCount;
+            trackGem(gemsUsedById, gemsUsedByCategory, s.curGemItem, false);
+            trackGem(gemsUsedById, gemsUsedByCategory, bestGemItem, true);
             s.curEnchantId = bestEnchId;
             s.curGemItem = bestGemItem;
             s.curScore = bestNewScore;
-            s.curJewelers = bestJewelers;
         }
     }
 
