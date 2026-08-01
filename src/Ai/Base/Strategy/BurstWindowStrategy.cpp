@@ -26,6 +26,11 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
     if (name == "use trinket" && !PlayerbotAI::IsDps(bot))
         return 1.0f;
 
+    // For a healer Avenging Wrath is +20% healing, so it belongs to the raid damage window rather
+    // than to the pull.
+    if (name == "avenging wrath" && PlayerbotAI::IsHeal(bot))
+        return 1.0f;
+
     // Anything that skips the dwell check has to clear the state too, or the previous boss's timer
     // satisfies the dwell instantly on the next pull.
     Unit* target = AI_VALUE(Unit*, "current target");

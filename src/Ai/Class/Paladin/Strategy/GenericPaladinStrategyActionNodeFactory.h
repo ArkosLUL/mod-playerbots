@@ -30,7 +30,7 @@ public:
         creators["judgement of wisdom"] = &judgement_of_wisdom;
         creators["divine shield"] = &divine_shield;
         creators["flash of light"] = &flash_of_light;
-        creators["flash of light on party"] = &flash_of_light_on_party;
+        creators["holy light on party"] = &holy_light_on_party;
         creators["retribution aura"] = &retribution_aura;
         creators["taunt spell"] = &hand_of_reckoning;
         creators["righteous defense"] = &righteous_defense;
@@ -158,11 +158,13 @@ private:
                               /*A*/ { NextAction("holy light") },
                               /*C*/ {});
     }
-    static ActionNode* flash_of_light_on_party(PlayerbotAI* /* ai */)
+    // Holy Light is the spec's main heal; the cheap fast heal is the fallback, never the other way
+    // round. Do not give Flash the reverse alternative - that closes a cycle in node expansion.
+    static ActionNode* holy_light_on_party(PlayerbotAI* /* ai */)
     {
-        return new ActionNode("flash of light on party",
+        return new ActionNode("holy light on party",
                               /*P*/ {},
-                              /*A*/ { NextAction("holy light on party") },
+                              /*A*/ { NextAction("flash of light on party") },
                               /*C*/ {});
     }
 };

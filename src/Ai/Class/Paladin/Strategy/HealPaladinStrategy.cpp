@@ -16,13 +16,94 @@ HealPaladinStrategy::HealPaladinStrategy(PlayerbotAI* botAI) : GenericPaladinStr
 
 std::vector<NextAction> HealPaladinStrategy::getDefaultActions()
 {
-    return { NextAction("judgement of light", ACTION_DEFAULT) };
+    // Default actions are pushed every tick with no trigger, so they bypass the mana floor on
+    // "healer should attack". The gated healer dps nodes are the idle behaviour we want instead.
+    return {};
 }
 
 void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     GenericPaladinStrategy::InitTriggers(triggers);
 
+    triggers.push_back(
+        new TriggerNode(
+            "beacon of light on tank",
+            {
+                NextAction("beacon of light on tank", ACTION_CRITICAL_HEAL + 7)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "party member critical health",
+            {
+                NextAction("holy shock on party", ACTION_CRITICAL_HEAL + 6),
+                NextAction("divine favor", ACTION_CRITICAL_HEAL + 5.5f),
+                NextAction("holy light on party", ACTION_CRITICAL_HEAL + 4),
+                NextAction("flash of light on party", ACTION_CRITICAL_HEAL + 3)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "medium group heal setting",
+            {
+                NextAction("divine sacrifice", ACTION_CRITICAL_HEAL + 5),
+                NextAction("avenging wrath", ACTION_CRITICAL_HEAL + 1),
+                NextAction("divine illumination", ACTION_CRITICAL_HEAL + 0.5f),
+                NextAction("aura mastery", ACTION_CRITICAL_HEAL)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "sacred shield on tank",
+            {
+                NextAction("sacred shield on tank", ACTION_CRITICAL_HEAL + 2)
+            }
+        )
+    );
+    // Judgements of the Pure is 15% haste for 60s on everything the paladin casts, and Judgement of
+    // Light heals the raid off melee swings, so one global every 20s pays for itself. Priced under
+    // the critical band and the raid cooldown window, over the low band.
+    triggers.push_back(
+        new TriggerNode(
+            "paladin judgement of light",
+            {
+                NextAction("judgement of light", ACTION_MEDIUM_HEAL + 7)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "infusion of light",
+            {
+                NextAction("holy light on party", ACTION_MEDIUM_HEAL + 6.5f)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "party member low health",
+            {
+                NextAction("holy shock on party", ACTION_MEDIUM_HEAL + 6),
+                NextAction("holy light on party", ACTION_MEDIUM_HEAL + 5),
+                NextAction("flash of light on party", ACTION_MEDIUM_HEAL + 3.5f)
+            }
+        )
+    );
+    // Nearly empty: refill above the medium band, because heals from an empty bar are worth less
+    // than the 50% healing penalty costs. Divine Illumination normally waits for Avenging Wrath
+    // (see CastDivineIlluminationAction::isUseful), this is its bail-out node.
+    triggers.push_back(
+        new TriggerNode(
+            "low mana",
+            {
+                NextAction("divine plea", ACTION_HIGH + 3),
+                NextAction("divine illumination", ACTION_HIGH + 2)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
             "seal",
@@ -33,89 +114,38 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
     triggers.push_back(
         new TriggerNode(
-            "medium mana",
-            {
-                NextAction("divine illumination", ACTION_HIGH + 2)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "low mana",
-            {
-                NextAction("divine favor", ACTION_HIGH + 1)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "party member to heal out of spell range",
-            {
-                NextAction("reach party member to heal", ACTION_EMERGENCY + 3)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "medium group heal setting",
-            {
-                NextAction("divine sacrifice", ACTION_CRITICAL_HEAL + 5),
-                NextAction("avenging wrath", ACTION_HIGH + 4),
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "party member critical health",
-            {
-                NextAction("holy shock on party", ACTION_CRITICAL_HEAL + 6),
-                NextAction("divine sacrifice", ACTION_CRITICAL_HEAL + 5),
-                NextAction("holy light on party", ACTION_CRITICAL_HEAL + 4)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "party member low health",
-            {
-                NextAction("holy light on party", ACTION_MEDIUM_HEAL + 5)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
             "party member medium health",
             {
+                NextAction("holy shock on party", ACTION_LIGHT_HEAL + 9.5f),
                 NextAction("holy light on party", ACTION_LIGHT_HEAL + 9),
                 NextAction("flash of light on party", ACTION_LIGHT_HEAL + 8)
             }
         )
     );
-
     triggers.push_back(
         new TriggerNode(
-        "party member almost full health",
-        {
-            NextAction("flash of light on party", ACTION_LIGHT_HEAL + 3)
-        }
-    )
-);
-
+            "party member almost full health",
+            {
+                NextAction("flash of light on party", ACTION_LIGHT_HEAL + 3)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
-        "beacon of light on main tank",
-        {
-            NextAction("beacon of light on main tank", ACTION_CRITICAL_HEAL + 7)
-        }
-    )
-);
-
+            "paladin divine plea",
+            {
+                NextAction("divine plea", ACTION_LIGHT_HEAL + 2)
+            }
+        )
+    );
+    // Below the interrupt band: chasing a target must not outrank Lay on Hands on someone dying
+    // within range.
     triggers.push_back(
         new TriggerNode(
-        "sacred shield on main tank",
-        {
-            NextAction("sacred shield on main tank", ACTION_CRITICAL_HEAL + 6)
-        }
-    )
-);
+            "party member to heal out of spell range",
+            {
+                NextAction("reach party member to heal", ACTION_INTERRUPT - 0.5f)
+            }
+        )
+    );
 }

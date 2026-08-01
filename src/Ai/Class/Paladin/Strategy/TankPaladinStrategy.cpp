@@ -98,6 +98,14 @@ void TankPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
     triggers.push_back(
         new TriggerNode(
+            "high mana",
+            {
+                NextAction("divine plea", ACTION_HIGH)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
             "light aoe",
             {
                 NextAction("avenger's shield", ACTION_HIGH + 5)
