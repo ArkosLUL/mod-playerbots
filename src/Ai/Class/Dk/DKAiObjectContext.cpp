@@ -87,6 +87,7 @@ public:
         creators["frost and unholy runes"] = &DeathKnightTriggerFactoryInternal::frost_and_unholy_runes;
         creators["high runic power"] = &DeathKnightTriggerFactoryInternal::high_runic_power;
         creators["killing machine"] = &DeathKnightTriggerFactoryInternal::killing_machine;
+        creators["killing machine on aoe"] = &DeathKnightTriggerFactoryInternal::killing_machine_on_aoe;
         creators["freezing fog"] = &DeathKnightTriggerFactoryInternal::freezing_fog;
         creators["no desolation"] = &DeathKnightTriggerFactoryInternal::no_desolation;
         creators["dd cd and no desolation"] = &DeathKnightTriggerFactoryInternal::dd_cd_and_no_desolation;
@@ -140,6 +141,10 @@ private:
     static Trigger* frost_and_unholy_runes(PlayerbotAI* botAI) { return new ObliterateRunesTrigger(botAI); }
     static Trigger* high_runic_power(PlayerbotAI* botAI) { return new HighRunicPowerTrigger(botAI); }
     static Trigger* killing_machine(PlayerbotAI* botAI) { return new KillingMachineTrigger(botAI); }
+    static Trigger* killing_machine_on_aoe(PlayerbotAI* botAI)
+    {
+        return new TwoTriggers(botAI, "medium aoe", "killing machine");
+    }
     static Trigger* freezing_fog(PlayerbotAI* botAI) { return new FreezingFogTrigger(botAI); }
     static Trigger* no_desolation(PlayerbotAI* botAI) { return new DesolationTrigger(botAI); }
     static Trigger* dd_cd_and_no_desolation(PlayerbotAI* botAI)

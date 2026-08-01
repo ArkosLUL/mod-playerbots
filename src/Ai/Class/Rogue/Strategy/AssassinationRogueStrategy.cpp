@@ -142,7 +142,7 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
 
     triggers.push_back(
         new TriggerNode(
-            "rupture",
+            "assassination rupture",
             {
                 NextAction("rupture", ACTION_HIGH + 4),
             }

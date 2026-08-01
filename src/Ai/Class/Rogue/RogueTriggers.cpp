@@ -7,6 +7,7 @@
 #include "RogueTriggers.h"
 
 #include "ArmorDebuff.h"
+#include "BleedDebuff.h"
 #include "GenericTriggers.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
@@ -121,17 +122,27 @@ bool HungerForBloodTrigger::IsActive()
     if (!BuffTrigger::IsActive())
         return false;
 
-    // Needs a bleed on the target, and Rupture is the only one the rotation keeps up outside stealth.
+    // Needs a bleed on the target, ours or anyone else's.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (!target)
         return false;
 
-    return botAI->GetAura("rupture", target, true) || botAI->GetAura("garrote", target, true);
+    return TargetHasBleed(target);
 }
 
 bool RuptureTrigger::IsActive()
 {
     return AI_VALUE2(uint8, "combo", "current target") >= 4 && DebuffTrigger::IsActive();
+}
+
+bool AssassinationRuptureTrigger::IsActive()
+{
+    if (!RuptureTrigger::IsActive())
+        return false;
+
+    // Assassination keeps Rupture up mostly to feed Hunger for Blood, so once a group mate's bleed is
+    // already on the target those 5 combo points are worth more as an Envenom.
+    return !GroupSuppliesBleedOn(bot, AI_VALUE(Unit*, "current target"));
 }
 
 bool EnvenomTrigger::IsActive()

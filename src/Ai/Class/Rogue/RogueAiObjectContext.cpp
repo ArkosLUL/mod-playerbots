@@ -65,6 +65,7 @@ public:
     {
         creators["kick"] = &RogueTriggerFactoryInternal::kick;
         creators["rupture"] = &RogueTriggerFactoryInternal::rupture;
+        creators["assassination rupture"] = &RogueTriggerFactoryInternal::assassination_rupture;
         creators["slice and dice"] = &RogueTriggerFactoryInternal::slice_and_dice;
         creators["hunger for blood"] = &RogueTriggerFactoryInternal::hunger_for_blood;
         creators["expose armor"] = &RogueTriggerFactoryInternal::expose_armor;
@@ -94,6 +95,7 @@ private:
     static Trigger* envenom(PlayerbotAI* botAI) { return new EnvenomTrigger(botAI); }
     static Trigger* kick(PlayerbotAI* botAI) { return new KickInterruptSpellTrigger(botAI); }
     static Trigger* rupture(PlayerbotAI* botAI) { return new RuptureTrigger(botAI); }
+    static Trigger* assassination_rupture(PlayerbotAI* botAI) { return new AssassinationRuptureTrigger(botAI); }
     static Trigger* slice_and_dice(PlayerbotAI* botAI) { return new SliceAndDiceTrigger(botAI); }
     static Trigger* hunger_for_blood(PlayerbotAI* botAI) { return new HungerForBloodTrigger(botAI); }
     static Trigger* expose_armor(PlayerbotAI* botAI) { return new ExposeArmorTrigger(botAI); }

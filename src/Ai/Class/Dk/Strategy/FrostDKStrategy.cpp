@@ -103,15 +103,6 @@ void FrostDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
-            "unbreakable armor",
-            {
-                NextAction("unbreakable armor", ACTION_DEFAULT + 0.6f)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
             "high blood rune",
             {
                 NextAction("blood strike", ACTION_DEFAULT + 0.2f)
@@ -146,12 +137,13 @@ void FrostDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // Everything below stays under the disease triggers above: without Glyph of Howling Blast, HB
-    // doesn't apply Frost Fever, so Icy Touch and Plague Strike get first refusal.
+    // doesn't apply Frost Fever, so Icy Touch and Plague Strike get first refusal. Unbreakable Armor
+    // shares the frost rune with Icy Touch, which is why it sits here rather than on top.
     triggers.push_back(
         new TriggerNode(
-            "freezing fog",
+            "unbreakable armor",
             {
-                NextAction("howling blast", ACTION_HIGH + 1)
+                NextAction("unbreakable armor", ACTION_HIGH + 1.5f)
             }
         )
     );
@@ -160,7 +152,16 @@ void FrostDKStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "killing machine",
             {
-                NextAction("frost strike", ACTION_HIGH)
+                NextAction("frost strike", ACTION_HIGH + 1)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "freezing fog",
+            {
+                NextAction("howling blast", ACTION_HIGH)
             }
         )
     );
@@ -191,6 +192,17 @@ void FrostDKAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             "medium aoe",
             {
                 NextAction("howling blast", ACTION_HIGH + 4)
+            }
+        )
+    );
+
+    // On several targets a Killing Machine crit is worth more on Howling Blast than on Frost Strike.
+    // The single-target node stays registered underneath and picks the proc up when HB is on cooldown.
+    triggers.push_back(
+        new TriggerNode(
+            "killing machine on aoe",
+            {
+                NextAction("howling blast", ACTION_HIGH + 5)
             }
         )
     );

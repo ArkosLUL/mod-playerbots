@@ -61,6 +61,14 @@ public:
     bool IsActive() override;
 };
 
+class AssassinationRuptureTrigger : public RuptureTrigger
+{
+public:
+    AssassinationRuptureTrigger(PlayerbotAI* botAI) : RuptureTrigger(botAI) {}
+
+    bool IsActive() override;
+};
+
 class EnvenomTrigger : public Trigger
 {
 public:

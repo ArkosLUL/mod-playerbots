@@ -93,10 +93,11 @@ bool NoRuneTrigger::IsActive()
     return true;
 }
 
-// Runic power is stored at 10x, so 800 is 80 RP out of a 100 RP cap.
+// Runic power is stored at 10x, so 600 is 60 RP out of a 100 RP cap. Frost Strike costs 40, and an
+// Obliterate hands back 20-25, so waiting any longer than this caps and wastes the difference.
 bool HighRunicPowerTrigger::IsActive()
 {
-    return bot->GetPower(POWER_RUNIC_POWER) >= 800;
+    return bot->GetPower(POWER_RUNIC_POWER) >= 600;
 }
 
 bool DesolationTrigger::IsActive()

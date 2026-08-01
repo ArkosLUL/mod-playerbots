@@ -126,11 +126,21 @@ void FuryWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    // The Bloodsurge window is 5s against a 6s Bloodthirst and an 8s Whirlwind cooldown, so the proc
+    // has to outrank both or it keeps expiring unused.
+    triggers.push_back(
+        new TriggerNode(
+            "instant slam",
+            {
+                NextAction("slam", ACTION_HIGH + 7)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
             "bloodthirst",
             {
-                NextAction("bloodthirst", ACTION_HIGH + 7)
+                NextAction("bloodthirst", ACTION_HIGH + 6)
             }
         )
     );
@@ -138,15 +148,16 @@ void FuryWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "whirlwind",
             {
-                NextAction("whirlwind", ACTION_HIGH + 6)
+                NextAction("whirlwind", ACTION_HIGH + 5)
             }
         )
     );
+    // Whirlwind hits everything in range, so on a pull it moves ahead of the single-target Bloodthirst.
     triggers.push_back(
         new TriggerNode(
-            "instant slam",
+            "medium aoe",
             {
-                NextAction("slam", ACTION_HIGH + 5)
+                NextAction("whirlwind", ACTION_HIGH + 6.5f)
             }
         )
     );

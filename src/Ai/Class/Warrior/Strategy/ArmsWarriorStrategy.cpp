@@ -170,11 +170,13 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
+    // Taste for Blood gives three charges inside a 9s window, so it has to clear Mortal Strike or the
+    // extra charges are gone before Overpower gets a turn.
     triggers.push_back(
         new TriggerNode(
             "taste for blood",
             {
-                NextAction("overpower", ACTION_HIGH + 4)
+                NextAction("overpower", ACTION_HIGH + 7)
             }
         )
     );
@@ -188,9 +190,11 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
+    // Bladestorm is a damage cooldown, not just an AoE button - WarrirorAoeStrategy pushes it up on
+    // multiple targets, this keeps it running on a single one.
     triggers.push_back(
         new TriggerNode(
-            "bladestorm on aoe",
+            "bladestorm available",
             {
                 NextAction("bladestorm", ACTION_HIGH + 1)
             }
