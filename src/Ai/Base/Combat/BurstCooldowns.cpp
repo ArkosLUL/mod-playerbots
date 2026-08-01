@@ -33,7 +33,7 @@ namespace
         // hunter
         "rapid fire", "bestial wrath", "readiness",
         // priest
-        "shadowfiend",
+        "shadowfiend", "power infusion",
         // druid
         "berserk", "force of nature",
         // paladin

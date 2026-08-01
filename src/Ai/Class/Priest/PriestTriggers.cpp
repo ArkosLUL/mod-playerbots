@@ -34,7 +34,10 @@ bool InnerFireTrigger::IsActive()
 
 bool ShadowformTrigger::IsActive() { return !botAI->HasAura("shadowform", bot); }
 
-bool ShadowfiendTrigger::IsActive() { return BoostTrigger::IsActive() && !bot->HasSpellCooldown(34433); }
+bool InnerFocusTrigger::IsActive()
+{
+    return SpellNoCooldownTrigger::IsActive() && !botAI->HasAura("inner focus", bot);
+}
 
 BindingHealTrigger::BindingHealTrigger(PlayerbotAI* botAI)
     : PartyMemberLowHealthTrigger(botAI, "binding heal", sPlayerbotAIConfig.lowHealth, 0)
@@ -69,4 +72,67 @@ bool MindSearChannelCheckTrigger::IsActive()
 
     // Not channeling Mind Sear
     return false;
+}
+
+bool MindFlayChannelCheckTrigger::IsActive()
+{
+    Spell* channeled = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    if (!channeled)
+        return false;
+
+    uint32 mindFlayId = AI_VALUE2(uint32, "spell id", "mind flay");
+    if (!mindFlayId || channeled->m_spellInfo->Id != mindFlayId)
+        return false;
+
+    Unit* target = GetTarget();
+    if (!target)
+        return false;
+
+    // Only clip once two of the three ticks have landed, otherwise we throw away more than we gain.
+    Aura* aura = botAI->GetAura("mind flay", target, true);
+    if (!aura || aura->GetDuration() > aura->GetMaxDuration() / 3)
+        return false;
+
+    uint32 mindBlastId = AI_VALUE2(uint32, "spell id", "mind blast");
+    if (mindBlastId && !bot->HasSpellCooldown(mindBlastId))
+        return true;
+
+    return !botAI->HasAura("vampiric touch", target, false, true) ||
+           !botAI->HasAura("devouring plague", target, false, true) ||
+           !botAI->HasAura("shadow word: pain", target, false, true);
+}
+
+bool WeakenedSoulOnPartyMemberTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target)
+        return false;
+
+    return target->GetHealthPct() < sPlayerbotAIConfig.almostFullHealth &&
+           botAI->HasAura("weakened soul", target);
+}
+
+bool PriestHymnOfHopeTrigger::IsActive()
+{
+    if (!AI_VALUE2(bool, "has mana", "self target"))
+        return false;
+
+    if (AI_VALUE2(uint8, "mana", "self target") >= sPlayerbotAIConfig.mediumMana)
+        return false;
+
+    // An 8 second channel must not start while somebody is about to die.
+    return AI_VALUE2(uint8, "aoe heal", "critical") == 0;
+}
+
+bool PriestShadowWordDeathExecuteTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target || !target->IsAlive() || !target->IsInWorld())
+        return false;
+
+    // SW:D backlashes onto the caster whenever the target survives it.
+    if (AI_VALUE2(uint8, "health", "self target") <= sPlayerbotAIConfig.mediumHealth)
+        return false;
+
+    return (target->GetHealth() / AI_VALUE(float, "estimated group dps")) <= lifeTime;
 }
