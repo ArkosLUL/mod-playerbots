@@ -95,6 +95,9 @@ public:
         creators["immolation trap no cd"] = &HunterTriggerFactoryInternal::immolation_trap_no_cd;
         creators["trap launcher: explosive trap no cd"] = &HunterTriggerFactoryInternal::trap_launcher_explosive_no_cd;
         creators["kill command"] = &HunterTriggerFactoryInternal::kill_command;
+        creators["bestial wrath"] = &HunterTriggerFactoryInternal::bestial_wrath;
+        creators["chimera shot no cd"] = &HunterTriggerFactoryInternal::chimera_shot_no_cd;
+        creators["aimed shot no cd"] = &HunterTriggerFactoryInternal::aimed_shot_no_cd;
         creators["explosive shot"] = &HunterTriggerFactoryInternal::explosive_shot;
         creators["lock and load"] = &HunterTriggerFactoryInternal::lock_and_load;
         creators["silencing shot"] = &HunterTriggerFactoryInternal::silencing_shot;
@@ -138,6 +141,9 @@ private:
     static Trigger* immolation_trap_no_cd(PlayerbotAI* botAI) { return new ImmolationTrapNoCdTrigger(botAI); }
     static Trigger* trap_launcher_explosive_no_cd(PlayerbotAI* botAI) { return new TrapLauncherExplosiveNoCdTrigger(botAI); }
     static Trigger* kill_command(PlayerbotAI* botAI) { return new KillCommandTrigger(botAI); }
+    static Trigger* bestial_wrath(PlayerbotAI* botAI) { return new BestialWrathTrigger(botAI); }
+    static Trigger* chimera_shot_no_cd(PlayerbotAI* botAI) { return new ChimeraShotNoCdTrigger(botAI); }
+    static Trigger* aimed_shot_no_cd(PlayerbotAI* botAI) { return new AimedShotNoCdTrigger(botAI); }
     static Trigger* explosive_shot(PlayerbotAI* botAI) { return new ExplosiveShotTrigger(botAI); }
     static Trigger* lock_and_load(PlayerbotAI* botAI) { return new LockAndLoadTrigger(botAI); }
     static Trigger* silencing_shot(PlayerbotAI* botAI) { return new SilencingShotTrigger(botAI); }

@@ -16,14 +16,14 @@ MarksmanshipHunterStrategy::MarksmanshipHunterStrategy(PlayerbotAI* botAI) : Gen
 std::vector<NextAction> MarksmanshipHunterStrategy::getDefaultActions()
 {
     return {
-        NextAction("kill command", 5.8f),
-        NextAction("kill shot", 5.7f),
-        NextAction("serpent sting", 5.6f),
-        NextAction("chimera shot", 5.5f),
-        NextAction("aimed shot", 5.4f),
-        NextAction("arcane shot", 5.3f),
-        NextAction("steady shot", 5.2f),
-        NextAction("auto shot", 5.1f)
+        NextAction("kill command", ACTION_DEFAULT + 0.8f),
+        NextAction("kill shot", ACTION_DEFAULT + 0.7f),
+        NextAction("serpent sting", ACTION_DEFAULT + 0.6f),
+        NextAction("chimera shot", ACTION_DEFAULT + 0.5f),
+        NextAction("aimed shot", ACTION_DEFAULT + 0.4f),
+        NextAction("arcane shot", ACTION_DEFAULT + 0.3f),
+        NextAction("steady shot", ACTION_DEFAULT + 0.2f),
+        NextAction("auto shot", ACTION_DEFAULT + 0.1f)
     };
 }
 
@@ -36,7 +36,7 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "silencing shot",
             {
-                NextAction("silencing shot", 40.0f)
+                NextAction("silencing shot", ACTION_INTERRUPT)
             }
         )
     );
@@ -44,7 +44,7 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "kill command",
             {
-                NextAction("kill command", 18.5f)
+                NextAction("kill command", ACTION_NORMAL + 8.5f)
             }
         )
     );
@@ -52,7 +52,7 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "target critical health",
             {
-                NextAction("kill shot", 18.0f)
+                NextAction("kill shot", ACTION_NORMAL + 8)
             }
         )
     );
@@ -60,7 +60,17 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "low mana",
             {
-                NextAction("viper sting", 17.5f)
+                NextAction("viper sting", ACTION_NORMAL + 7.5f)
+            }
+        )
+    );
+    // Above the sting refresh: Chimera Shot rolls Serpent Sting forward, so hard-recasting the sting
+    // while it is off cooldown throws the refresh away.
+    triggers.push_back(
+        new TriggerNode(
+            "chimera shot no cd",
+            {
+                NextAction("chimera shot", ACTION_NORMAL + 7)
             }
         )
     );
@@ -68,7 +78,7 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "no stings",
             {
-                NextAction("serpent sting", 17.0f)
+                NextAction("serpent sting", ACTION_NORMAL + 6.5f)
             }
         )
     );
@@ -76,7 +86,15 @@ void MarksmanshipHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "serpent sting on attacker",
             {
-                NextAction("serpent sting on attacker", 16.5f)
+                NextAction("serpent sting on attacker", ACTION_NORMAL + 6)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "aimed shot no cd",
+            {
+                NextAction("aimed shot", ACTION_NORMAL + 5.5f)
             }
         )
     );
