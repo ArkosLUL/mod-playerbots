@@ -35,6 +35,11 @@ bool SunderArmorStackTrigger::IsActive()
 
     if (!botAI->IsTank(bot, false))
     {
+        // Expose Armor occupies the same 20% slot at full value, and a DPS warrior has no threat
+        // reason to overwrite it. Tanks still sunder - for them it is a threat tool.
+        if (botAI->HasAura("expose armor", target))
+            return false;
+
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
