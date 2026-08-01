@@ -20,13 +20,17 @@ public:
 class SliceAndDiceTrigger : public BuffTrigger
 {
 public:
-    SliceAndDiceTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "slice and dice") {}
+    SliceAndDiceTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "slice and dice", 1, false, false, 2000) {}
+
+    bool IsActive() override;
 };
 
 class HungerForBloodTrigger : public BuffTrigger
 {
 public:
-    HungerForBloodTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "hunger for blood") {}
+    HungerForBloodTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "hunger for blood", 1, false, false, 2000) {}
+
+    bool IsActive() override;
 };
 
 class AdrenalineRushTrigger : public BoostTrigger
@@ -37,22 +41,38 @@ public:
     // bool isPossible();
 };
 
-class BladeFuryTrigger : public BoostTrigger
+class BladeFlurryTrigger : public BoostTrigger
 {
 public:
-    BladeFuryTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "blade fury") {}
+    BladeFlurryTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "blade flurry") {}
+};
+
+class KillingSpreeTrigger : public BoostTrigger
+{
+public:
+    KillingSpreeTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "killing spree") {}
 };
 
 class RuptureTrigger : public DebuffTrigger
 {
 public:
-    RuptureTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "rupture", 1, true) {}
+    RuptureTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "rupture", 1, true, 12.0f, 2000) {}
+
+    bool IsActive() override;
+};
+
+class EnvenomTrigger : public Trigger
+{
+public:
+    EnvenomTrigger(PlayerbotAI* botAI) : Trigger(botAI, "envenom") {}
+
+    bool IsActive() override;
 };
 
 class ExposeArmorTrigger : public DebuffTrigger
 {
 public:
-    ExposeArmorTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "expose armor") {}
+    ExposeArmorTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "expose armor", 5) {}
     virtual bool IsActive() override;
 };
 
@@ -125,6 +145,14 @@ class TricksOfTheTradeOnMainTankTrigger : public BuffOnMainTankTrigger
 {
 public:
     TricksOfTheTradeOnMainTankTrigger(PlayerbotAI* ai) : BuffOnMainTankTrigger(ai, "tricks of the trade", true) {}
+};
+
+class TricksOfTheTradeTrigger : public BuffTrigger
+{
+public:
+    TricksOfTheTradeTrigger(PlayerbotAI* ai) : BuffTrigger(ai, "tricks of the trade", 1, true) {}
+
+    std::string const GetTargetName() override { return "tricks of the trade target"; }
 };
 
 #endif

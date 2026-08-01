@@ -18,6 +18,7 @@
 #include "RogueFinishingActions.h"
 #include "RogueOpeningActions.h"
 #include "RogueTriggers.h"
+#include "RogueValues.h"
 
 class RogueStrategyFactoryInternal : public NamedObjectContext<Strategy>
 {
@@ -79,13 +80,18 @@ public:
         creators["tricks of the trade on main tank"] = &RogueTriggerFactoryInternal::tricks_of_the_trade_on_main_tank;
         creators["tricks of the trade on main tank and light aoe"] =
             &RogueTriggerFactoryInternal::tricks_of_the_trade_on_main_tank_and_light_aoe;
+        creators["tricks of the trade"] = &RogueTriggerFactoryInternal::tricks_of_the_trade;
         creators["adrenaline rush"] = &RogueTriggerFactoryInternal::adrenaline_rush;
-        creators["blade fury"] = &RogueTriggerFactoryInternal::blade_fury;
+        creators["blade flurry"] = &RogueTriggerFactoryInternal::blade_flurry;
+        creators["killing spree"] = &RogueTriggerFactoryInternal::killing_spree;
+        creators["envenom"] = &RogueTriggerFactoryInternal::envenom;
     }
 
 private:
     static Trigger* adrenaline_rush(PlayerbotAI* botAI) { return new AdrenalineRushTrigger(botAI); }
-    static Trigger* blade_fury(PlayerbotAI* botAI) { return new BladeFuryTrigger(botAI); }
+    static Trigger* blade_flurry(PlayerbotAI* botAI) { return new BladeFlurryTrigger(botAI); }
+    static Trigger* killing_spree(PlayerbotAI* botAI) { return new KillingSpreeTrigger(botAI); }
+    static Trigger* envenom(PlayerbotAI* botAI) { return new EnvenomTrigger(botAI); }
     static Trigger* kick(PlayerbotAI* botAI) { return new KickInterruptSpellTrigger(botAI); }
     static Trigger* rupture(PlayerbotAI* botAI) { return new RuptureTrigger(botAI); }
     static Trigger* slice_and_dice(PlayerbotAI* botAI) { return new SliceAndDiceTrigger(botAI); }
@@ -108,6 +114,7 @@ private:
     {
         return new TwoTriggers(ai, "tricks of the trade on main tank", "light aoe");
     }
+    static Trigger* tricks_of_the_trade(PlayerbotAI* ai) { return new TricksOfTheTradeTrigger(ai); }
 };
 
 class RogueAiObjectContextInternal : public NamedObjectContext<Action>
@@ -145,6 +152,7 @@ public:
         creators["check stealth"] = &RogueAiObjectContextInternal::check_stealth;
         creators["envenom"] = &RogueAiObjectContextInternal::envenom;
         creators["tricks of the trade on main tank"] = &RogueAiObjectContextInternal::tricks_of_the_trade_on_main_tank;
+        creators["tricks of the trade"] = &RogueAiObjectContextInternal::tricks_of_the_trade;
         creators["use instant poison on main hand"] = &RogueAiObjectContextInternal::use_instant_poison;
         creators["use deadly poison on off hand"] = &RogueAiObjectContextInternal::use_deadly_poison;
         creators["use instant poison on off hand"] = &RogueAiObjectContextInternal::use_instant_poison_off_hand;
@@ -187,12 +195,25 @@ private:
     {
         return new CastTricksOfTheTradeOnMainTankAction(ai);
     }
+    static Action* tricks_of_the_trade(PlayerbotAI* ai) { return new CastTricksOfTheTradeAction(ai); }
     static Action* use_instant_poison(PlayerbotAI* ai) { return new UseInstantPoisonAction(ai); }
     static Action* use_deadly_poison(PlayerbotAI* ai) { return new UseDeadlyPoisonAction(ai); }
     static Action* use_instant_poison_off_hand(PlayerbotAI* ai) { return new UseInstantPoisonOffHandAction(ai); }
     static Action* fan_of_knives(PlayerbotAI* ai) { return new FanOfKnivesAction(ai); }
     static Action* killing_spree(PlayerbotAI* ai) { return new CastKillingSpreeAction(ai); }
     static Action* cold_blood(PlayerbotAI* ai) { return new CastColdBloodAction(ai); }
+};
+
+class RogueValueContextInternal : public NamedObjectContext<UntypedValue>
+{
+public:
+    RogueValueContextInternal()
+    {
+        creators["tricks of the trade target"] = &RogueValueContextInternal::tricks_of_the_trade_target;
+    }
+
+private:
+    static UntypedValue* tricks_of_the_trade_target(PlayerbotAI* ai) { return new TricksOfTheTradeTargetValue(ai); }
 };
 
 SharedNamedObjectContextList<Strategy> RogueAiObjectContext::sharedStrategyContexts;
@@ -236,4 +257,5 @@ void RogueAiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextLi
 void RogueAiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
 {
     AiObjectContext::BuildSharedValueContexts(valueContexts);
+    valueContexts.Add(new RogueValueContextInternal());
 }

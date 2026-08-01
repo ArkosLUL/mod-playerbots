@@ -141,7 +141,6 @@ public:
     CastEnvenomAction(PlayerbotAI* ai) : CastMeleeSpellAction(ai, "envenom") {}
 
     bool isUseful() override;
-    bool isPossible() override;
 };
 
 class CastTricksOfTheTradeOnMainTankAction : public BuffOnMainTankAction
@@ -149,6 +148,15 @@ class CastTricksOfTheTradeOnMainTankAction : public BuffOnMainTankAction
 public:
     CastTricksOfTheTradeOnMainTankAction(PlayerbotAI* ai) : BuffOnMainTankAction(ai, "tricks of the trade", true) {}
 
+    bool isUseful() override;
+};
+
+class CastTricksOfTheTradeAction : public CastBuffSpellAction
+{
+public:
+    CastTricksOfTheTradeAction(PlayerbotAI* ai) : CastBuffSpellAction(ai, "tricks of the trade", true) {}
+
+    std::string const GetTargetName() override { return "tricks of the trade target"; }
     bool isUseful() override;
 };
 

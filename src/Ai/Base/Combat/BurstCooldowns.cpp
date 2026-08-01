@@ -25,7 +25,7 @@ namespace
         // warrior
         "recklessness", "death wish",
         // rogue
-        "adrenaline rush", "blade flurry",
+        "adrenaline rush", "blade flurry", "killing spree",
         // mage
         "arcane power", "icy veins", "combustion", "mirror image", "presence of mind",
         // warlock
