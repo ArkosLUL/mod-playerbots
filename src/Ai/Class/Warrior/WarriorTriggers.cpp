@@ -5,6 +5,8 @@
  */
 
 #include "WarriorTriggers.h"
+
+#include "ArmorDebuff.h"
 #include "Playerbots.h"
 
 namespace
@@ -35,9 +37,10 @@ bool SunderArmorStackTrigger::IsActive()
 
     if (!botAI->IsTank(bot, false))
     {
-        // Expose Armor occupies the same 20% slot at full value, and a DPS warrior has no threat
-        // reason to overwrite it. Tanks still sunder - for them it is a threat tool.
-        if (botAI->HasAura("expose armor", target))
+        // Expose Armor and a worm pet's Acid Spit occupy the same 20% slot at full value, and a DPS
+        // warrior has no threat reason to overwrite either. Tanks still sunder - for them it is a
+        // threat tool.
+        if (TargetHasNonSunderMajorArmorDebuff(botAI, target))
             return false;
 
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())

@@ -15,6 +15,10 @@ class Unit;
 // second application overwrites the first and gains the group nothing.
 bool TargetHasMajorArmorDebuff(PlayerbotAI* botAI, Unit* target);
 
+// Same slot, minus Sunder Armor. A warrior needs this rather than the check above: its own Sunder is
+// visible from the first stack, so testing for any major debuff would abort the 1->5 ramp instantly.
+bool TargetHasNonSunderMajorArmorDebuff(PlayerbotAI* botAI, Unit* target);
+
 // True when some other group member's class can supply that debuff. Class-based on purpose: no
 // spellbook scan, no talent check. A warrior who is present but never sunders will suppress a
 // rogue's Expose Armor, which costs 20% armor in that one case but avoids burning a finisher on a

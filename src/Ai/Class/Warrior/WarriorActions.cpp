@@ -7,6 +7,7 @@
 #include "WarriorActions.h"
 
 #include "AiFactory.h"
+#include "ArmorDebuff.h"
 #include "Playerbots.h"
 
 namespace
@@ -71,6 +72,9 @@ bool CastSunderArmorAction::isUseful()
 
     if (!botAI->IsTank(bot, false))
     {
+        if (TargetHasNonSunderMajorArmorDebuff(botAI, GetTarget()))
+            return false;
+
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();

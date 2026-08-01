@@ -19,8 +19,17 @@ bool TargetHasMajorArmorDebuff(PlayerbotAI* botAI, Unit* target)
     if (!botAI || !target)
         return false;
 
-    return botAI->HasAura("sunder armor", target) || botAI->HasAura("expose armor", target) ||
-           botAI->HasAura("acid spit", target);
+    return botAI->HasAura("sunder armor", target) || TargetHasNonSunderMajorArmorDebuff(botAI, target);
+}
+
+bool TargetHasNonSunderMajorArmorDebuff(PlayerbotAI* botAI, Unit* target)
+{
+    if (!botAI || !target)
+        return false;
+
+    // On a hostile target IsRealAura hides another caster's aura until it reaches max stacks, so both
+    // of these only report true at full value - 2/2 Acid Spit, and Expose Armor which never stacks.
+    return botAI->HasAura("expose armor", target) || botAI->HasAura("acid spit", target);
 }
 
 bool GroupSuppliesMajorArmorDebuff(Player* bot)
