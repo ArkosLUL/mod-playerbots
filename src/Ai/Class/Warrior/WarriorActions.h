@@ -13,6 +13,23 @@
 #include "PlayerbotAI.h"
 #include "ReachTargetActions.h"
 
+// Abilities that do not trigger the global cooldown in game. The engine stops the tick at the first
+// action returning true, so casting one of these would otherwise cost a whole react delay that
+// should have gone to a Bloodthirst or Mortal Strike. Reporting failure keeps the engine walking
+// the queue, and the cast has already gone out by then.
+template <class Base>
+class OffGlobalCooldownAction : public Base
+{
+public:
+    OffGlobalCooldownAction(PlayerbotAI* botAI, std::string const spell) : Base(botAI, spell) {}
+
+    bool Execute(Event event) override
+    {
+        Base::Execute(event);
+        return false;
+    }
+};
+
 // stances
 BUFF_ACTION(CastBattleStanceAction, "battle stance");
 BUFF_ACTION(CastDefensiveStanceAction, "defensive stance");
@@ -44,7 +61,12 @@ DEBUFF_ACTION_R(CastIntimidatingShoutAction, "intimidating shout", 8.0f);
 BUFF_ACTION(CastCommandingShoutAction, "commanding shout");
 
 // arms
-MELEE_ACTION(CastHeroicStrikeAction, "heroic strike");
+class CastHeroicStrikeAction : public OffGlobalCooldownAction<CastMeleeSpellAction>
+{
+public:
+    CastHeroicStrikeAction(PlayerbotAI* botAI)
+        : OffGlobalCooldownAction<CastMeleeSpellAction>(botAI, "heroic strike") {}
+};
 REACH_ACTION(CastChargeAction, "charge", 8.0f);
 DEBUFF_CHECKISOWNER_ACTION(CastRendAction, "rend");
 // DEBUFF_ENEMY_ACTION(CastRendOnAttackerAction, "rend");
@@ -73,16 +95,28 @@ BUFF_ACTION(CastSweepingStrikesAction, "sweeping strikes");
 MELEE_ACTION(CastBladestormAction, "bladestorm");
 
 // fury
-MELEE_ACTION(CastCleaveAction, "cleave");
+class CastCleaveAction : public OffGlobalCooldownAction<CastMeleeSpellAction>
+{
+public:
+    CastCleaveAction(PlayerbotAI* botAI) : OffGlobalCooldownAction<CastMeleeSpellAction>(botAI, "cleave") {}
+};
+
 MELEE_ACTION(CastExecuteAction, "execute");
 REACH_ACTION(CastInterceptAction, "intercept", 8.0f);
 ENEMY_HEALER_ACTION(CastInterceptOnEnemyHealerAction, "intercept");
 SNARE_ACTION(CastInterceptOnSnareTargetAction, "intercept");
-MELEE_ACTION(CastSlamAction, "slam");
-class CastBerserkerRageAction : public CastSpellAction
+class CastSlamAction : public CastMeleeSpellAction
 {
 public:
-    CastBerserkerRageAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "berserker rage") {}
+    CastSlamAction(PlayerbotAI* botAI) : CastMeleeSpellAction(botAI, "slam") {}
+
+    bool isUseful() override;
+};
+class CastBerserkerRageAction : public OffGlobalCooldownAction<CastSpellAction>
+{
+public:
+    CastBerserkerRageAction(PlayerbotAI* botAI)
+        : OffGlobalCooldownAction<CastSpellAction>(botAI, "berserker rage") {}
 
     std::string const GetTargetName() override { return "self target"; }
     bool isPossible() override;
@@ -98,8 +132,19 @@ BUFF_ACTION(CastEnragedRegenerationAction, "enraged regeneration");
 BUFF_ACTION(CastHeroicFuryAction, "heroic fury");
 
 // fury talents
-BUFF_ACTION(CastDeathWishAction, "death wish");
-BUFF_ACTION(CastRecklessnessAction, "recklessness");
+class CastDeathWishAction : public OffGlobalCooldownAction<CastBuffSpellAction>
+{
+public:
+    CastDeathWishAction(PlayerbotAI* botAI) : OffGlobalCooldownAction<CastBuffSpellAction>(botAI, "death wish") {}
+};
+
+class CastRecklessnessAction : public OffGlobalCooldownAction<CastBuffSpellAction>
+{
+public:
+    CastRecklessnessAction(PlayerbotAI* botAI)
+        : OffGlobalCooldownAction<CastBuffSpellAction>(botAI, "recklessness") {}
+};
+
 MELEE_ACTION(CastBloodthirstAction, "bloodthirst");
 DEBUFF_ACTION_R(CastPiercingHowlAction, "piercing howl", 8.0f);
 // fury talents 2.4.3
@@ -108,7 +153,11 @@ BUFF_ACTION(CastRampageAction, "rampage");
 // protection
 MELEE_ACTION_U(CastTauntAction, "taunt", GetTarget() && GetTarget()->GetTarget() != bot->GetGUID());
 SNARE_ACTION(CastTauntOnSnareTargetAction, "taunt");
-BUFF_ACTION(CastBloodrageAction, "bloodrage");
+class CastBloodrageAction : public OffGlobalCooldownAction<CastBuffSpellAction>
+{
+public:
+    CastBloodrageAction(PlayerbotAI* botAI) : OffGlobalCooldownAction<CastBuffSpellAction>(botAI, "bloodrage") {}
+};
 MELEE_ACTION(CastShieldBashAction, "shield bash");
 ENEMY_HEALER_ACTION(CastShieldBashOnEnemyHealerAction, "shield bash");
 MELEE_ACTION(CastRevengeAction, "revenge");
@@ -119,7 +168,15 @@ DEBUFF_ACTION_U(CastDisarmAction, "disarm",
 DEBUFF_ENEMY_ACTION(CastDisarmOnAttackerAction, "disarm");
 BUFF_ACTION(CastShieldWallAction, "shield wall");
 // protection 2.4.3
-PROTECT_ACTION(CastInterveneAction, "intervene");
+// Intervene runs the warrior out of melee, so it is only ever an option while nothing is on him.
+class CastInterveneAction : public CastProtectSpellAction
+{
+public:
+    CastInterveneAction(PlayerbotAI* botAI) : CastProtectSpellAction(botAI, "intervene") {}
+
+    std::string const GetTargetName() override { return "party member to protect no tank"; }
+    bool isUseful() override;
+};
 BUFF_ACTION(CastSpellReflectionAction, "spell reflection");
 
 // protection talents

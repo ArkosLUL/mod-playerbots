@@ -32,7 +32,7 @@ public:
 class CastRuptureAction : public CastDebuffSpellAction
 {
 public:
-    CastRuptureAction(PlayerbotAI* botAI) : CastDebuffSpellAction(botAI, "rupture", true, 6.0f) {}
+    CastRuptureAction(PlayerbotAI* botAI) : CastDebuffSpellAction(botAI, "rupture", true, 6.0f, 2000) {}
 };
 
 class CastKidneyShotAction : public CastMeleeSpellAction

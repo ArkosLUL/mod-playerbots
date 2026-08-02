@@ -402,6 +402,12 @@ bool UseHealingPotion::isUseful() { return AI_VALUE2(bool, "combat", "self targe
 
 bool UseManaPotion::isUseful() { return AI_VALUE2(bool, "combat", "self target"); }
 
+bool UseOffensivePotion::isUseful()
+{
+    return sPlayerbotAIConfig.offensivePotions && PlayerbotAI::IsDps(bot) &&
+           AI_VALUE2(bool, "combat", "self target");
+}
+
 bool UseHearthStone::Execute(Event event)
 {
     if (bot->isMoving())

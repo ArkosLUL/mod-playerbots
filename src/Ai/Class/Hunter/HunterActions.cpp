@@ -26,12 +26,16 @@ bool CastAspectOfTheHawkAction::isUseful()
 bool CastArcaneShotAction::isUseful()
 {
     Unit* target = GetTarget();
-    if (!target || !botAI->HasSpell("explosive shot"))
+    if (!target)
         return false;
 
-    // Armor Penetration rating check - will not cast Arcane Shot above 435 ArP
-    int32 armorPenRating =
-        bot->GetUInt32Value(PLAYER_FIELD_COMBAT_RATING_1) + bot->GetUInt32Value(CR_ARMOR_PENETRATION);
+    // Explosive Shot takes this slot in the Survival rotation.
+    if (botAI->HasSpell("explosive shot"))
+        return false;
+
+    // Arcane Shot is magic damage, so armor penetration does nothing for it - past ~435 rating the
+    // physical fillers out-damage it.
+    int32 armorPenRating = bot->GetUInt32Value(PLAYER_FIELD_COMBAT_RATING_1 + CR_ARMOR_PENETRATION);
     if (armorPenRating > 435)
         return false;
 

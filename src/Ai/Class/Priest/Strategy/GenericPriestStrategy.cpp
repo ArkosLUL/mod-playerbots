@@ -19,29 +19,16 @@ void GenericPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     CombatStrategy::InitTriggers(triggers);
 
+    // Only what all three specs want. Desperate Prayer, Hymn of Hope, Inner Focus, Shadowfiend and
+    // the self-shield bands live in the spec ladders instead: a derived InitTriggers cannot drop a
+    // base node, so anything priced per spec has to start out of here.
     triggers.push_back(new TriggerNode("medium threat", { NextAction("fade", 55.0f) }));
-    triggers.push_back(new TriggerNode("critical health", { NextAction("desperate prayer",
-        ACTION_HIGH + 5) }));
     triggers.push_back(new TriggerNode(
         "critical health", { NextAction("power word: shield", ACTION_NORMAL) }));
-
-    triggers.push_back(
-        new TriggerNode("low health", { NextAction("power word: shield", ACTION_HIGH) }));
-
-    triggers.push_back(
-        new TriggerNode("medium mana",
-            {
-                NextAction("shadowfiend", ACTION_HIGH + 2),
-                NextAction("inner focus", ACTION_HIGH + 1) }));
-
-    triggers.push_back(
-        new TriggerNode("low mana", { NextAction("hymn of hope", ACTION_HIGH) }));
 
     triggers.push_back(new TriggerNode("enemy too close for spell",
                                        { NextAction("flee", ACTION_MOVE + 9) }));
     triggers.push_back(new TriggerNode("often", { NextAction("apply oil", 1.0f) }));
-    triggers.push_back(new TriggerNode("being attacked",
-        { NextAction("power word: shield", ACTION_HIGH + 1) }));
     triggers.push_back(new TriggerNode("new pet", { NextAction("set pet stance", 60.0f) }));
 }
 
@@ -62,11 +49,10 @@ void PriestCureStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "party member cure disease", { NextAction("abolish disease on party", 30.0f) }));
 }
 
-void PriestBoostStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
+void PriestBoostStrategy::InitTriggers(std::vector<TriggerNode*>& /*triggers*/)
 {
-    triggers.push_back(
-        new TriggerNode("power infusion", { NextAction("power infusion", 41.0f) }));
-    triggers.push_back(new TriggerNode("boost", { NextAction("shadowfiend", 20.0f) }));
+    // Deliberately empty. Power Infusion and Shadowfiend are priced in the spec ladders now, but
+    // AiFactory hands the "boost" strategy to every bot, so the class still has to exist.
 }
 
 void PriestCcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -89,5 +75,5 @@ void PriestHealerDpsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(
         new TriggerNode("medium aoe and healer should attack",
                         {
-                            NextAction("mind sear", ACTION_DEFAULT + 0.5f) }));
+                            NextAction("mind sear", ACTION_DEFAULT + 0.6f) }));
 }

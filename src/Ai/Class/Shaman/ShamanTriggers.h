@@ -65,6 +65,13 @@ public:
     LightningShieldTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "lightning shield") {}
 };
 
+class ShamanNaturesSwiftnessActiveTrigger : public HasAuraTrigger
+{
+public:
+    ShamanNaturesSwiftnessActiveTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "nature's swiftness") {}
+    bool IsActive() override { return botAI->HasAura("nature's swiftness", bot); }
+};
+
 class WaterWalkingTrigger : public BuffTrigger
 {
 public:
@@ -99,16 +106,24 @@ public:
 
 // Boost Triggers
 
-class HeroismTrigger : public BoostTrigger
+class ShamanBoostTrigger : public BoostTrigger
 {
 public:
-    HeroismTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "heroism") {}
+    ShamanBoostTrigger(PlayerbotAI* botAI, std::string const spell) : BoostTrigger(botAI, spell) {}
+
+    bool IsActive() override;
 };
 
-class BloodlustTrigger : public BoostTrigger
+class HeroismTrigger : public ShamanBoostTrigger
 {
 public:
-    BloodlustTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "bloodlust") {}
+    HeroismTrigger(PlayerbotAI* botAI) : ShamanBoostTrigger(botAI, "heroism") {}
+};
+
+class BloodlustTrigger : public ShamanBoostTrigger
+{
+public:
+    BloodlustTrigger(PlayerbotAI* botAI) : ShamanBoostTrigger(botAI, "bloodlust") {}
 };
 
 class ElementalMasteryTrigger : public BuffTrigger

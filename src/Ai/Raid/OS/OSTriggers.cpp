@@ -5,8 +5,11 @@
  */
 
 #include "OSTriggers.h"
+#include "OSShared.h"
 
 #include "SharedDefines.h"
+
+using namespace ObsidianSanctumHelpers;
 
 bool SartharionTankTrigger::IsActive()
 {
@@ -72,60 +75,37 @@ bool SartharionMeleePositioningTrigger::IsActive()
 {
     if (!botAI->IsMelee(bot) || !botAI->IsDps(bot)) { return false; }
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "sartharion");
-    if (!boss) { return false; }
+    // Rear-flank whatever the melee is on (Sartharion or a to-kill drake): boss Flame Breath/Cleave
+    // and drake Shadow Breath are all frontal. Kept drakes are held by the off-tank, not attacked.
+    return AI_VALUE2(Unit*, "find target", "sartharion") != nullptr;
+}
 
-    Unit* shadron = AI_VALUE2(Unit*, "find target", "shadron");
-    Unit* tenebron = AI_VALUE2(Unit*, "find target", "tenebron");
-    Unit* vesperon = AI_VALUE2(Unit*, "find target", "vesperon");
+bool SartharionRangedPositioningTrigger::IsActive()
+{
+    if (botAI->IsMelee(bot) || botAI->IsTank(bot)) { return false; }
 
-    return !(shadron || tenebron || vesperon);
+    return AI_VALUE2(Unit*, "find target", "sartharion") != nullptr;
 }
 
 bool TwilightPortalEnterTrigger::IsActive()
 {
-    if (botAI->IsMainTank(bot) || botAI->IsAssistHealOfIndex(bot, 0)) { return false; }
-
-    // In 25-man, take two healers in. Otherwise just take one
-    // if (bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL)
-    // {
-    //     if (botAI->IsAssistHealOfIndex(bot, 0) || botAI->IsAssistHealOfIndex(bot, 1))
-    //     {
-    //         return false;
-    //     }
-    // }
-    // else
-    // {
-    //     if (botAI->IsAssistHealOfIndex(bot, 0))
-    //     {
-    //         return false;
-    //     }
-    // }
-
-    // Don't enter portal until drakes are dead
-    if (bot->HasAura(SPELL_POWER_OF_SHADRON) ||
-        bot->HasAura(SPELL_POWER_OF_TENEBRON) ||
-        bot->HasAura(SPELL_POWER_OF_VESPERON))
-    {
-        return false;
-    }
+    // Only the capped set of designated runners enters, so the raid isn't emptied into the realm
+    // every cycle and the off-tank keeps holding the drakes instead of being pulled in.
+    if (!IsTwilightRealmRunner(botAI, bot)) { return false; }
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "sartharion");
     if (!boss) { return false; }
 
-    // GuidVector objects = AI_VALUE(GuidVector, "nearest game objects no los");
-    // for (auto& object : objects)
-    // {
-    //     GameObject* go = botAI->GetGameObject(object);
-    //     if (go && go->GetEntry() == GO_TWILIGHT_PORTAL)
-    //     {
-    //         return true;
-    //     }
-    // }
+    // Nothing to do inside unless an acolyte is actually up to kill.
+    if (!AnyTwilightPortalAcolyteAlive(botAI)) { return false; }
+
     return bool(bot->FindNearestGameObject(GO_TWILIGHT_PORTAL, 100.0f));
 }
 
 bool TwilightPortalExitTrigger::IsActive()
 {
-    return bot->HasAura(SPELL_TWILIGHT_SHIFT) && !AI_VALUE2(Unit*, "find target", "acolyte of shadron");
+    // Leave the moment there's no acolyte left for this runner to kill in its realm. Tying the check
+    // to the same perception-limited lookup the attack uses avoids stranding a runner that cleared
+    // its acolyte while another remains out of reach in a different realm.
+    return bot->HasAura(SPELL_TWILIGHT_SHIFT) && FindTwilightRealmAcolyte(botAI) == nullptr;
 }

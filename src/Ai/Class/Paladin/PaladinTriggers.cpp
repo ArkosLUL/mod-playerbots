@@ -75,6 +75,40 @@ bool HandOfFreedomOnPartyTrigger::IsActive()
     return !ai::paladin::HasAnyPaladinHandFromCaster(target, bot) && botAI->IsMovementImpaired(target);
 }
 
+Value<Unit*>* BeaconOfLightOnTankTrigger::GetTargetValue() { return context->GetValue<Unit*>("tank to beacon"); }
+
+Value<Unit*>* SacredShieldOnTankTrigger::GetTargetValue() { return context->GetValue<Unit*>("tank to beacon"); }
+
+bool PaladinInfusionOfLightTrigger::IsActive()
+{
+    if (!HasAuraTrigger::IsActive())
+        return false;
+
+    // Only spend the proc when there is something worth the discounted Holy Light.
+    return AI_VALUE2(uint8, "health", "party member to heal") < sPlayerbotAIConfig.almostFullHealth;
+}
+
+bool PaladinJudgementOfLightTrigger::IsActive()
+{
+    if (!DebuffTrigger::IsActive())
+        return false;
+
+    return botAI->CanCastSpell("judgement of light", GetTarget());
+}
+
+bool PaladinDivinePleaTrigger::IsActive()
+{
+    if (!AI_VALUE2(bool, "has mana", "self target"))
+        return false;
+
+    uint8 mana = AI_VALUE2(uint8, "mana", "self target");
+    if (mana >= sPlayerbotAIConfig.mediumMana)
+        return false;
+
+    // Below the low-mana floor take the healing penalty anyway; the alternative is casting nothing.
+    return mana < sPlayerbotAIConfig.lowMana || AI_VALUE2(uint8, "aoe heal", "medium") == 0;
+}
+
 bool NotSensingUndeadTrigger::IsActive()
 {
     return !botAI->HasAura("sense undead", bot);

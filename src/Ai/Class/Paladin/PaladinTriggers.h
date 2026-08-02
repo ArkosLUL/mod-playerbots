@@ -154,12 +154,6 @@ public:
         : InterruptEnemyHealerTrigger(botAI, "hammer of justice") {}
 };
 
-class DivineFavorTrigger : public BuffTrigger
-{
-public:
-    DivineFavorTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "divine favor") {}
-};
-
 class DivineShieldLowHealthTrigger : public Trigger
 {
 public:
@@ -196,6 +190,54 @@ class SacredShieldOnMainTankTrigger : public BuffOnMainTankTrigger
 public:
     SacredShieldOnMainTankTrigger(PlayerbotAI* botAI)
         : BuffOnMainTankTrigger(botAI, "sacred shield", false) {}
+};
+
+class BeaconOfLightOnTankTrigger : public BuffOnMainTankTrigger
+{
+public:
+    BeaconOfLightOnTankTrigger(PlayerbotAI* botAI)
+        : BuffOnMainTankTrigger(botAI, "beacon of light", true) {}
+
+    Value<Unit*>* GetTargetValue() override;
+};
+
+class SacredShieldOnTankTrigger : public BuffOnMainTankTrigger
+{
+public:
+    SacredShieldOnTankTrigger(PlayerbotAI* botAI)
+        : BuffOnMainTankTrigger(botAI, "sacred shield", false) {}
+
+    Value<Unit*>* GetTargetValue() override;
+};
+
+class PaladinInfusionOfLightTrigger : public HasAuraTrigger
+{
+public:
+    PaladinInfusionOfLightTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "infusion of light") {}
+
+    bool IsActive() override;
+};
+
+// Judgement is a 10 yard spell and healers hold range, so this checks castability up front and goes
+// quiet when the boss is too far - the node must never turn into a run at the boss. checkIsOwner so
+// a second paladin's Judgement of Light does not stop this one refreshing its own Judgements of the
+// Pure.
+class PaladinJudgementOfLightTrigger : public DebuffTrigger
+{
+public:
+    PaladinJudgementOfLightTrigger(PlayerbotAI* botAI)
+        : DebuffTrigger(botAI, "judgement of light", 1000, true) {}
+
+    bool IsActive() override;
+};
+
+// Healer-safe replacement for the inherited "high mana" node: Divine Plea halves healing done.
+class PaladinDivinePleaTrigger : public Trigger
+{
+public:
+    PaladinDivinePleaTrigger(PlayerbotAI* botAI) : Trigger(botAI, "paladin divine plea") {}
+
+    bool IsActive() override;
 };
 
 class BlessingOfKingsOnPartyTrigger : public BlessingOnPartyTrigger

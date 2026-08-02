@@ -64,7 +64,9 @@ bool BuyAction::Execute(Event event)
                 continue;
 
             StatsWeightCalculator calculator(bot);
-            calculator.SetItemSetBonus(false);
+            // Vendor items are ranked against each other, not against a specific equipped slot,
+            // so no slot context here.
+            calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
             calculator.SetOverflowPenalty(false);
 
             std::sort(m_items_sorted.begin(), m_items_sorted.end(),
@@ -108,8 +110,13 @@ bool BuyAction::Execute(Event event)
 
                     uint32 invType = proto->InventoryType;
 
+                    // Check the bot's currently equipped item for this slot
+                    uint8 dstSlot = botAI->FindEquipSlot(proto, NULL_SLOT, true);
+                    Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot);
+                    int32 const scoringSlot = dstSlot == NULL_SLOT ? -1 : static_cast<int32>(dstSlot);
+
                     // Calculate item score
-                    float newScore = calculator.CalculateItem(proto->ItemId);
+                    float newScore = calculator.CalculateItem(proto->ItemId, 0, scoringSlot);
 
                     // Skip if we already bought a better item for this slot
                     if (bestPurchasedItemScore.find(invType) != bestPurchasedItemScore.end() &&
@@ -118,16 +125,12 @@ bool BuyAction::Execute(Event event)
                         break;  // Skip lower-scoring items
                     }
 
-                    // Check the bot's currently equipped item for this slot
-                    uint8 dstSlot = botAI->FindEquipSlot(proto, NULL_SLOT, true);
-                    Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, dstSlot);
-
                     float oldScore = 0.0f;
                     if (oldItem)
                     {
                         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
                         if (oldItemProto)
-                            oldScore = calculator.CalculateItem(oldItemProto->ItemId);
+                            oldScore = calculator.CalculateItem(oldItemProto->ItemId, 0, scoringSlot);
                     }
 
                     // Skip if the bot already has a better or equal item equipped

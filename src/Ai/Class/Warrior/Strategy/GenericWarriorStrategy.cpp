@@ -58,12 +58,12 @@ WarrirorAoeStrategy::WarrirorAoeStrategy(PlayerbotAI* botAI) : CombatStrategy(bo
 
 void WarrirorAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
+    // Two live attackers is the norm on a boss with adds, so this only takes over from three up.
+    // Thunder Clap, Shockwave and Demoralizing Shout are left to TankWarriorStrategy: a DPS spec
+    // either cannot cast them at all or donates a GCD to a debuff the tank already carries.
     triggers.push_back(new TriggerNode(
-        "light aoe", { NextAction("sweeping strikes", ACTION_HIGH + 7),
+        "medium aoe", { NextAction("sweeping strikes", ACTION_HIGH + 7),
                                        NextAction("bladestorm", ACTION_HIGH + 6),
-                                       NextAction("thunder clap", ACTION_HIGH + 5),
-                                       NextAction("shockwave", ACTION_HIGH + 4),
-                                       NextAction("demoralizing shout without life time check", ACTION_HIGH + 1),
                                        NextAction("cleave", ACTION_HIGH) }));
     triggers.push_back(
         new TriggerNode("shockwave on snare target",

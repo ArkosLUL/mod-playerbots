@@ -9,6 +9,7 @@
 
 #include <utility>
 
+#include "BurstCooldowns.h"
 #include "HealthTriggers.h"
 #include "RangeTriggers.h"
 #include "Trigger.h"
@@ -152,6 +153,21 @@ public:
     HasAggroTrigger(PlayerbotAI* botAI) : Trigger(botAI, "have aggro") {}
 
     bool IsActive() override;
+};
+
+class OffensivePotionTrigger : public Trigger
+{
+public:
+    OffensivePotionTrigger(PlayerbotAI* botAI) : Trigger(botAI, "offensive potion") {}
+
+    bool IsActive() override;
+
+private:
+    // Dwell before a DPS pops the potion, so the main tank has firm aggro first. Matches the burst
+    // multiplier's window; enforced here too so the timing holds even without the 'burst' strategy.
+    static constexpr uint32 POTION_HOLD_MS = 5000;
+
+    BurstHoldState holdState;
 };
 
 class SpellTrigger : public Trigger
@@ -957,7 +973,7 @@ class SelfResurrectTrigger : public Trigger
 public:
     SelfResurrectTrigger(PlayerbotAI* botAI) : Trigger(botAI, "can self resurrect") {}
 
-    bool IsActive() override { return !bot->IsAlive() && bot->GetUInt32Value(PLAYER_SELF_RES_SPELL); }
+    bool IsActive() override;
 };
 
 class NewPetTrigger : public Trigger

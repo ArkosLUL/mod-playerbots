@@ -160,7 +160,24 @@ void FuryWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
     triggers.push_back(
         new TriggerNode(
-            "medium rage available",
+            "target critical health",
+            {
+                NextAction("execute", ACTION_HIGH + 4)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
+            "sunder armor stack",
+            {
+                NextAction("sunder armor", ACTION_HIGH - 1)
+            }
+        )
+    );
+    // Dumping at 40 rage leaves too little for Bloodthirst, so only spend the overflow above 60.
+    triggers.push_back(
+        new TriggerNode(
+            "high rage available",
             {
                 NextAction("heroic strike", ACTION_DEFAULT + 0.1f)
             }
@@ -171,7 +188,7 @@ void FuryWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "death wish",
             {
-                NextAction("death wish", ACTION_HIGH)
+                NextAction("death wish", ACTION_HIGH + 1)
             }
         )
     );
@@ -179,7 +196,7 @@ void FuryWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "recklessness",
             {
-                NextAction("recklessness", ACTION_HIGH)
+                NextAction("recklessness", ACTION_HIGH + 1)
             }
         )
     );

@@ -23,9 +23,7 @@
 
 float MalygosMultiplier::GetValue(Action* action)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "malygos");
-
-    uint8 phase = MalygosTrigger::getPhase(bot, boss);
+    uint8 phase = MalygosTrigger::getPhase(bot);
     if (phase == 0) { return 1.0f; }
 
     if (phase == 1)
@@ -49,11 +47,6 @@ float MalygosMultiplier::GetValue(Action* action)
         {
             return 0.0f;
         }
-
-        // if (dynamic_cast<MovementAction*>(action) && !dynamic_cast<MalygosPositionAction*>(action))
-        // {
-        //     return 0.0f;
-        // }
     }
     else if (phase == 2)
     {
@@ -62,6 +55,8 @@ float MalygosMultiplier::GetValue(Action* action)
             return 0.0f;
         }
 
+        // Keep the generic flee from walking bots off the edge; MalygosPositionAction handles
+        // pulling anyone who drifts too far back toward the centre.
         if (dynamic_cast<FleeAction*>(action))
         {
             return 0.0f;
@@ -76,8 +71,28 @@ float MalygosMultiplier::GetValue(Action* action)
     }
     else if (phase == 3)
     {
-        // Suppresses FollowAction as well as some attack-based movements
+        // Suppresses FollowAction as well as attack-driven chase movement, but leaves the
+        // drake flight and the (non-MovementAction) avoid actions free to run.
         if (dynamic_cast<MovementAction*>(action) && !dynamic_cast<EoEFlyDrakeAction*>(action))
+        {
+            return 0.0f;
+        }
+    }
+    else if (phase == 4)
+    {
+        // Phase transition: Malygos is untargetable and the raid isn't mounted yet. Hold the
+        // gather at centre and stay off the default strategy so nobody chases into the void.
+        if (dynamic_cast<FollowAction*>(action))
+        {
+            return 0.0f;
+        }
+
+        if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+        {
+            return 0.0f;
+        }
+
+        if (dynamic_cast<MovementAction*>(action) && !dynamic_cast<MalygosPositionAction*>(action))
         {
             return 0.0f;
         }

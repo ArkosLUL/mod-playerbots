@@ -8,6 +8,7 @@
 #define PLAYERBOTS_GENERICWARLOCKNONCOMBATSTRATEGY_H
 
 #include "NonCombatStrategy.h"
+#include "RitualOfSoulsStrategy.h"
 
 class PlayerbotAI;
 
@@ -17,6 +18,15 @@ public:
     GenericWarlockNonCombatStrategy(PlayerbotAI* botAI);
 
     std::string const getName() override { return "nc"; }
+    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
+};
+
+// Warlock variant of the opt-in "ritualofsouls" strategy: everything the base strategy does (join a
+// group ritual, grab from the soulwell) plus auto-casting the ritual itself.
+class WarlockRitualOfSoulsStrategy : public RitualOfSoulsStrategy
+{
+public:
+    WarlockRitualOfSoulsStrategy(PlayerbotAI* botAI) : RitualOfSoulsStrategy(botAI) {}
     void InitTriggers(std::vector<TriggerNode*>& triggers) override;
 };
 

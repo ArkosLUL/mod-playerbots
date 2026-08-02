@@ -155,18 +155,20 @@ public:
     CastHolyLightAction(PlayerbotAI* botAI) : CastHealingSpellAction(botAI, "holy light") {}
 };
 
+// Instant, and it procs Infusion of Light, so it has to stay off the mana-saving veto to keep the
+// cooldown rolling.
 class CastHolyShockOnPartyAction : public HealPartyMemberAction
 {
 public:
     CastHolyShockOnPartyAction(PlayerbotAI* botAI)
-        : HealPartyMemberAction(botAI, "holy shock", 25.0f, HealingManaEfficiency::LOW) {}
+        : HealPartyMemberAction(botAI, "holy shock", 15.0f, HealingManaEfficiency::HIGH) {}
 };
 
 class CastHolyLightOnPartyAction : public HealPartyMemberAction
 {
 public:
     CastHolyLightOnPartyAction(PlayerbotAI* botAI)
-        : HealPartyMemberAction(botAI, "holy light", 50.0f, HealingManaEfficiency::MEDIUM) {}
+        : HealPartyMemberAction(botAI, "holy light", 25.0f, HealingManaEfficiency::MEDIUM) {}
 };
 
 class CastFlashOfLightAction : public CastHealingSpellAction
@@ -186,26 +188,23 @@ class CastLayOnHandsAction : public CastHealingSpellAction
 {
 public:
     CastLayOnHandsAction(PlayerbotAI* botAI) : CastHealingSpellAction(botAI, "lay on hands") {}
+
+    bool isUseful() override;
 };
 
 class CastLayOnHandsOnPartyAction : public HealPartyMemberAction
 {
 public:
-    CastLayOnHandsOnPartyAction(PlayerbotAI* botAI) : HealPartyMemberAction(botAI, "lay on hands") {}
+    CastLayOnHandsOnPartyAction(PlayerbotAI* botAI)
+        : HealPartyMemberAction(botAI, "lay on hands", 15.0f, HealingManaEfficiency::SUPERIOR) {}
+
+    bool isUseful() override;
 };
 
 class CastDivineProtectionAction : public CastBuffSpellAction
 {
 public:
     CastDivineProtectionAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "divine protection") {}
-};
-
-class CastDivineProtectionOnPartyAction : public HealPartyMemberAction
-{
-public:
-    CastDivineProtectionOnPartyAction(PlayerbotAI* botAI) : HealPartyMemberAction(botAI, "divine protection") {}
-
-    std::string const getName() override { return "divine protection on party"; }
 };
 
 class CastDivineShieldAction : public CastBuffSpellAction
@@ -373,12 +372,36 @@ public:
     bool isUseful() override;
 };
 
-PROTECT_ACTION(CastBlessingOfProtectionProtectAction, "blessing of protection");
+// BoP wipes melee threat and applies Forbearance, so it never goes on a tank.
+class CastBlessingOfProtectionProtectAction : public CastProtectSpellAction
+{
+public:
+    CastBlessingOfProtectionProtectAction(PlayerbotAI* botAI)
+        : CastProtectSpellAction(botAI, "blessing of protection") {}
+
+    std::string const GetTargetName() override { return "party member to protect no tank"; }
+    bool isUseful() override
+    {
+        return CastProtectSpellAction::isUseful() && !botAI->HasAura("forbearance", GetTarget());
+    }
+};
 
 class CastDivinePleaAction : public CastBuffSpellAction
 {
 public:
     CastDivinePleaAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "divine plea") {}
+
+    bool isUseful() override;
+};
+
+// Redirects damage onto the caster, so it goes on the tank list, not the "no tank" one BoP uses.
+class CastHandOfSacrificeOnPartyAction : public CastProtectSpellAction
+{
+public:
+    CastHandOfSacrificeOnPartyAction(PlayerbotAI* botAI) : CastProtectSpellAction(botAI, "hand of sacrifice") {}
+
+    std::string const getName() override { return "hand of sacrifice on party"; }
+    bool isUseful() override;
 };
 
 class ShieldOfRighteousnessAction : public CastMeleeSpellAction
@@ -399,6 +422,26 @@ public:
     CastSacredShieldOnMainTankAction(PlayerbotAI* botAI) : BuffOnMainTankAction(botAI, "sacred shield", false) {}
 };
 
+class CastBeaconOfLightOnTankAction : public BuffOnMainTankAction
+{
+public:
+    CastBeaconOfLightOnTankAction(PlayerbotAI* botAI) : BuffOnMainTankAction(botAI, "beacon of light", true) {}
+
+    Value<Unit*>* GetTargetValue() override;
+    std::string const getName() override { return "beacon of light on tank"; }
+};
+
+class CastSacredShieldOnTankAction : public BuffOnMainTankAction
+{
+public:
+    CastSacredShieldOnTankAction(PlayerbotAI* botAI) : BuffOnMainTankAction(botAI, "sacred shield", false) {}
+
+    Value<Unit*>* GetTargetValue() override;
+    std::string const getName() override { return "sacred shield on tank"; }
+};
+
+BUFF_ACTION(CastAuraMasteryAction, "aura mastery");
+
 class CastAvengingWrathAction : public CastBuffSpellAction
 {
 public:
@@ -409,6 +452,8 @@ class CastDivineIlluminationAction : public CastBuffSpellAction
 {
 public:
     CastDivineIlluminationAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "divine illumination") {}
+
+    bool isUseful() override;
 };
 
 class CastDivineSacrificeAction : public CastBuffSpellAction

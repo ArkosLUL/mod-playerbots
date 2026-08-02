@@ -15,6 +15,40 @@
 #include "Playerbots.h"
 #include "NaxxBossHelper.h"
 
+// just for test
+// class TryToGetBossAIAction : public Action
+// {
+// public:
+//     TryToGetBossAIAction(PlayerbotAI* ai) : Action(ai, "try to get boss ai") {}
+
+// public:
+//     virtual bool Execute(Event event);
+// };
+
+// Hunter Misdirection and rogue Tricks of the Trade solve the same problem at the same moments, so
+// the per-boss actions below only answer two questions: which tank should own the threat, and which
+// unit do we spend the charges on.
+class NaxxRedirectThreatAction : public AttackAction
+{
+public:
+    NaxxRedirectThreatAction(PlayerbotAI* ai, std::string const name) : AttackAction(ai, name) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+protected:
+    // Either may return nullptr, which just means "nothing to redirect this tick".
+    virtual Player* GetRedirectTank() = 0;
+    virtual Unit* GetThreatDumpTarget() = 0;
+
+    // Group tank that `target` is currently attacking, if any.
+    Player* GetTankHolding(Unit* target);
+
+    // Position of this bot among the group's living redirecters, in group order, so encounters with
+    // one tank per boss can hand out different assignments. -1 when the bot cannot redirect.
+    int32 GetRedirecterIndex();
+};
+
 class GrobbulusGoBehindAction : public MovementAction
 {
 public:
@@ -34,7 +68,9 @@ class GrobbulusRotateAction : public RotateAroundTheCenterPointAction
 {
 public:
     GrobbulusRotateAction(PlayerbotAI* botAI)
-        : RotateAroundTheCenterPointAction(botAI, "rotate grobbulus", 3281.23f, -3310.38f, 35.0f, 8, true, M_PI) {}
+        : RotateAroundTheCenterPointAction(botAI, "rotate grobbulus", 3281.23f, -3310.38f, 35.0f, 8, true, M_PI)
+    {
+    }
     virtual bool isUseful() override
     {
         return RotateAroundTheCenterPointAction::isUseful() && botAI->IsMainTank(bot) &&
@@ -43,10 +79,10 @@ public:
     uint32 GetCurrWaypoint() override;
 };
 
-class GrobbulusMoveCenterAction : public MoveInsideAction
+class GrobblulusMoveCenterAction : public MoveInsideAction
 {
 public:
-    GrobbulusMoveCenterAction(PlayerbotAI* ai) : MoveInsideAction(ai, 3281.23f, -3310.38f, 5.0f) {}
+    GrobblulusMoveCenterAction(PlayerbotAI* ai) : MoveInsideAction(ai, 3281.23f, -3310.38f, 5.0f) {}
 };
 
 class GrobbulusMoveAwayAction : public MovementAction
@@ -62,56 +98,57 @@ private:
     float distance;
 };
 
-//class HeiganDanceAction : public MovementAction
-//{
-//public:
-//    HeiganDanceAction(PlayerbotAI* ai) : MovementAction(ai, "heigan dance")
-//    {
-//        this->last_eruption_ms = 0;
-//        this->platform_phase = false;
-//        ResetSafe();
-//        waypoints.push_back(std::make_pair(2794.88f, -3668.12f));
-//        waypoints.push_back(std::make_pair(2775.49f, -3674.43f));
-//        waypoints.push_back(std::make_pair(2762.30f, -3684.59f));
-//        waypoints.push_back(std::make_pair(2755.99f, -3703.96f));
-//        platform = std::make_pair(2794.26f, -3706.67f);
-//    }
-//
-//protected:
-//    bool CalculateSafe();
-//    void ResetSafe()
-//    {
-//        curr_safe = 0;
-//        curr_dir = 1;
-//    }
-//    void NextSafe()
-//    {
-//        curr_safe += curr_dir;
-//        if (curr_safe == 3 || curr_safe == 0)
-//        {
-//            curr_dir = -curr_dir;
-//        }
-//    }
-//    uint32 last_eruption_ms;
-//    bool platform_phase;
-//    uint32 curr_safe, curr_dir;
-//    std::vector<std::pair<float, float>> waypoints;
-//    std::pair<float, float> platform;
-//};
-//
-//class HeiganDanceMeleeAction : public HeiganDanceAction
-//{
-//public:
-//    HeiganDanceMeleeAction(PlayerbotAI* ai) : HeiganDanceAction(ai) {}
-//    virtual bool Execute(Event event);
-//};
-//
-//class HeiganDanceRangedAction : public HeiganDanceAction
-//{
-//public:
-//    HeiganDanceRangedAction(PlayerbotAI* ai) : HeiganDanceAction(ai) {}
-//    virtual bool Execute(Event event);
-//};
+class FaerlinaSacrificeWorshipperAction : public AttackAction
+{
+public:
+    FaerlinaSacrificeWorshipperAction(PlayerbotAI* ai) : AttackAction(ai, "faerlina sacrifice worshipper") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+protected:
+    Unit* GetTarget() override;
+};
+
+class HeiganDanceAction : public MovementAction
+{
+public:
+    HeiganDanceAction(PlayerbotAI* ai) : MovementAction(ai, "heigan dance"), helper(ai) {}
+
+protected:
+    bool MoveToSafeZone(float tolerance);
+    bool MoveToPlatform();
+
+    HeiganBossHelper helper;
+};
+
+class HeiganDanceMeleeAction : public HeiganDanceAction
+{
+public:
+    HeiganDanceMeleeAction(PlayerbotAI* ai) : HeiganDanceAction(ai) {}
+    virtual bool Execute(Event event);
+};
+
+class HeiganDispelDecrepitFeverAction : public Action
+{
+public:
+    HeiganDispelDecrepitFeverAction(PlayerbotAI* ai) : Action(ai, "heigan dispel decrepit fever"), helper(ai) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Unit* GetDecrepitFeverTarget() const;
+    bool CanDispelDisease() const;
+
+    HeiganBossHelper helper;
+};
+
+class HeiganDanceRangedAction : public HeiganDanceAction
+{
+public:
+    HeiganDanceRangedAction(PlayerbotAI* ai) : HeiganDanceAction(ai) {}
+    virtual bool Execute(Event event);
+};
 
 class ThaddiusAttackNearestPetAction : public AttackAction
 {
@@ -139,6 +176,21 @@ private:
 //     virtual bool Execute(Event event);
 //     virtual bool isUseful();
 // };
+
+class ThaddiusRedirectThreatAction : public NaxxRedirectThreatAction
+{
+public:
+    ThaddiusRedirectThreatAction(PlayerbotAI* ai) : NaxxRedirectThreatAction(ai, "thaddius redirect threat"), helper(ai)
+    {
+    }
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
+
+private:
+    ThaddiusBossHelper helper;
+};
 
 class ThaddiusMoveToPlatformAction : public MovementAction
 {
@@ -179,34 +231,46 @@ private:
     RazuviousBossHelper helper;
 };
 
-class FourHorsemenAttractAlternativelyAction : public AttackAction
+class HorsemanAttractAlternativelyAction : public AttackAction
 {
 public:
-    FourHorsemenAttractAlternativelyAction(PlayerbotAI* ai) : AttackAction(ai, "four horsemen attract alternatively"), helper(ai)
+    HorsemanAttractAlternativelyAction(PlayerbotAI* ai) : AttackAction(ai, "horseman attract alternatively"), helper(ai)
     {
     }
     bool Execute(Event event) override;
 
 protected:
-    FourHorsemenBossHelper helper;
+    FourhorsemanBossHelper helper;
 };
 
-class FourHorsemenAttackInOrderAction : public AttackAction
+class HorsemanAttactInOrderAction : public AttackAction
 {
 public:
-    FourHorsemenAttackInOrderAction(PlayerbotAI* ai) : AttackAction(ai, "four horsemen attack in order"), helper(ai) {}
+    HorsemanAttactInOrderAction(PlayerbotAI* ai) : AttackAction(ai, "horseman attact in order"), helper(ai) {}
     bool Execute(Event event) override;
 
 protected:
-    FourHorsemenBossHelper helper;
+    FourhorsemanBossHelper helper;
 };
 
-// class SapphironGroundMainTankPositionAction : public MovementAction
-// {
-// public:
-//     SapphironGroundMainTankPositionAction(PlayerbotAI* ai) : MovementAction(ai, "sapphiron ground main tank
-//     position") {} virtual bool Execute(Event event);
-// };
+class FourhorsemanRedirectThreatAction : public NaxxRedirectThreatAction
+{
+public:
+    FourhorsemanRedirectThreatAction(PlayerbotAI* ai)
+        : NaxxRedirectThreatAction(ai, "four horsemen redirect threat"), helper(ai)
+    {
+    }
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
+
+private:
+    // Tank and horseman this bot is responsible for, both null when there is no assignment.
+    std::pair<Player*, Unit*> GetAssignment();
+
+    FourhorsemanBossHelper helper;
+};
 
 class SapphironGroundPositionAction : public MovementAction
 {
@@ -225,16 +289,20 @@ public:
     bool Execute(Event event) override;
 
 protected:
-    SapphironBossHelper helper;
-    bool MoveToNearestIcebolt();
-};
+    // Result of a shelter attempt. Moving => this action owns the tick (cast-time
+    // heals can't fire while the bot moves anyway). Sheltered => bot is stopped
+    // behind its block, so the tick can yield to heals. None => nothing to do.
+    enum class ShelterResult { None, Moving, Sheltered };
 
-// class SapphironAvoidChillAction : public MovementAction
-// {
-// public:
-//     SapphironAvoidChillAction(PlayerbotAI* ai) : MovementAction(ai, "sapphiron avoid chill") {}
-//     virtual bool Execute(Event event);
-// };
+    SapphironBossHelper helper;
+    ShelterResult MoveToNearestIcebolt();
+    void ResetShelterLatch();
+
+    // Per-bot state, latched for the duration of one flight phase (see cache in
+    // Engine::CreateActionNode — actions are created once per bot and reused).
+    ObjectGuid assignedBlockGuid;
+    bool sheltered = false;
+};
 
 class KelthuzadChooseTargetAction : public AttackAction
 {
@@ -256,19 +324,80 @@ private:
     KelthuzadBossHelper helper;
 };
 
+class KelthuzadFleeShadowFissureAction : public MovementAction
+{
+public:
+    KelthuzadFleeShadowFissureAction(PlayerbotAI* ai)
+        : MovementAction(ai, "kel'thuzad flee shadow fissure"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
+class KelthuzadMisdirectBossToMainTankAction : public AttackAction
+{
+public:
+    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* ai)
+        : AttackAction(ai, "kel'thuzad misdirect boss to main tank"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
 class AnubrekhanChooseTargetAction : public AttackAction
 {
 public:
-    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "anub'rekhan choose target") {}
+    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "anub'rekhan choose target"), helper(ai) {}
     bool Execute(Event event) override;
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
+// 32 waypoints put 8.8 yd between them, so the main tank's kite tracks the circle instead of
+// jumping across it.
 class AnubrekhanPositionAction : public RotateAroundTheCenterPointAction
 {
 public:
     AnubrekhanPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, "anub'rekhan position", 3272.49f, -3476.27f, 45.0f, 16) {}
+        : RotateAroundTheCenterPointAction(ai, "anub'rekhan position", AnubrekhanBossHelper::RoomCenterX,
+                                           AnubrekhanBossHelper::RoomCenterY, AnubrekhanBossHelper::KiteRadius, 32),
+          helper(ai)
+    {
+    }
     bool Execute(Event event) override;
+
+private:
+    bool KiteBoss();
+    bool HoldAdds(Unit* boss);
+    bool TakeRangedSlot(Unit* boss);
+    bool TakeMeleeSlot(Unit* boss);
+    // Rate-limited move to a slot the caller worked out; false when the bot is already parked there.
+    bool MoveToSlot(float x, float y);
+
+    AnubrekhanBossHelper helper;
+};
+
+class AnubrekhanRedirectThreatAction : public NaxxRedirectThreatAction
+{
+public:
+    AnubrekhanRedirectThreatAction(PlayerbotAI* ai)
+        : NaxxRedirectThreatAction(ai, "anub'rekhan redirect threat"), helper(ai)
+    {
+    }
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
 class GluthChooseTargetAction : public AttackAction
@@ -285,7 +414,9 @@ class GluthPositionAction : public RotateAroundTheCenterPointAction
 {
 public:
     GluthPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, "gluth position", 3293.61f, -3149.01f, 12.0f, 12), helper(ai) {}
+        : RotateAroundTheCenterPointAction(ai, "gluth position", 3293.61f, -3149.01f, 12.0f, 12), helper(ai)
+    {
+    }
     bool Execute(Event event) override;
 
 private:
@@ -299,6 +430,32 @@ public:
     bool Execute(Event event) override;
 
 private:
+    GluthBossHelper helper;
+};
+
+class GluthTranquilizingShotAction : public Action
+{
+public:
+    GluthTranquilizingShotAction(PlayerbotAI* ai) : Action(ai, "gluth tranquilizing shot"), helper(ai) {}
+    bool Execute(Event event) override;
+
+private:
+    GluthBossHelper helper;
+};
+
+class GluthRedirectThreatAction : public NaxxRedirectThreatAction
+{
+public:
+    GluthRedirectThreatAction(PlayerbotAI* ai) : NaxxRedirectThreatAction(ai, "gluth redirect threat"), helper(ai) {}
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
+
+private:
+    // Tank and unit this bot is responsible for, both null when there is nothing to redirect.
+    std::pair<Player*, Unit*> GetAssignment();
+
     GluthBossHelper helper;
 };
 
@@ -322,11 +479,103 @@ private:
     LoathebBossHelper helper;
 };
 
-//class PatchwerkRangedPositionAction : public MovementAction
-//{
-//public:
-//    PatchwerkRangedPositionAction(PlayerbotAI* ai) : MovementAction(ai, "patchwerk ranged position") {}
-//    bool Execute(Event event) override;
-//};
+class NothChooseTargetAction : public AttackAction
+{
+public:
+    NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "noth choose target"), helper(ai) {}
+    bool Execute(Event event) override;
+
+private:
+    NothBossHelper helper;
+};
+
+class NothPositionAction : public MovementAction
+{
+public:
+    NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, "noth position"), helper(ai) {}
+    bool Execute(Event event) override;
+
+private:
+    // Plagued Warriors cleave, so the tank holding them steps off anyone who wanders into the swing.
+    static constexpr float CleaveSpread = 5.0f;
+    // Plagued Champions Mortal Strike; ranged have no business standing inside that.
+    static constexpr float ChampionKiteDistance = 25.0f;
+    // Adds dragged further than this leave the healers behind.
+    static constexpr float HealerLeashDistance = 25.0f;
+    static constexpr float MeleeCloseDistance = 10.0f;
+
+    bool PositionAssistTank(Unit* currentTarget);
+    bool KiteChampions();
+    bool MoveToClamped(float x, float y);
+
+    NothBossHelper helper;
+};
+
+class NothDispelCurseAction : public Action
+{
+public:
+    NothDispelCurseAction(PlayerbotAI* ai) : Action(ai, "noth dispel curse"), helper(ai) {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Unit* GetAssignedTarget();
+    // Position of this bot among the group's living decursers, in group order, so N decursers start
+    // on N different targets instead of all racing for the first one. -1 when the bot cannot decurse.
+    int32 GetDecurserIndex() const;
+
+    NothBossHelper helper;
+};
+
+// class PatchwerkRangedPositionAction : public MovementAction
+// {
+// public:
+//     PatchwerkRangedPositionAction(PlayerbotAI* ai) : MovementAction(ai, "patchwerk ranged position") {}
+//     bool Execute(Event event) override;
+// };
+
+// Maexxna
+class MaexxnaAttackWebWrapAction : public AttackAction
+{
+public:
+    MaexxnaAttackWebWrapAction(PlayerbotAI* ai) : AttackAction(ai, "maexxna attack web wrap") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class MaexxnaTankSpiderlingsAction : public AttackAction
+{
+public:
+    MaexxnaTankSpiderlingsAction(PlayerbotAI* ai) : AttackAction(ai, "maexxna tank spiderlings") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Gothik the Harvester
+class GothikChooseTargetAction : public AttackAction
+{
+public:
+    GothikChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "gothik choose target"), helper(ai) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    GothikBossHelper helper;
+};
+
+class GothikStayOnLivingSideAction : public MovementAction
+{
+public:
+    GothikStayOnLivingSideAction(PlayerbotAI* ai) : MovementAction(ai, "gothik stay on living side"), helper(ai) {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    GothikBossHelper helper;
+};
 
 #endif

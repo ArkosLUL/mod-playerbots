@@ -16,14 +16,13 @@ BeastMasteryHunterStrategy::BeastMasteryHunterStrategy(PlayerbotAI* botAI) : Gen
 std::vector<NextAction> BeastMasteryHunterStrategy::getDefaultActions()
 {
     return {
-        NextAction("bestial wrath", 19.0f),
-        NextAction("kill command", 5.7f),
-        NextAction("kill shot", 5.6f),
-        NextAction("serpent sting", 5.5f),
-        NextAction("aimed shot", 5.4f),
-        NextAction("arcane shot", 5.3f),
-        NextAction("steady shot", 5.2f),
-        NextAction("auto shot", 5.1f)
+        NextAction("kill command", ACTION_DEFAULT + 0.7f),
+        NextAction("kill shot", ACTION_DEFAULT + 0.6f),
+        NextAction("serpent sting", ACTION_DEFAULT + 0.5f),
+        NextAction("aimed shot", ACTION_DEFAULT + 0.4f),
+        NextAction("arcane shot", ACTION_DEFAULT + 0.3f),
+        NextAction("steady shot", ACTION_DEFAULT + 0.2f),
+        NextAction("auto shot", ACTION_DEFAULT + 0.1f)
     };
 }
 
@@ -35,7 +34,17 @@ void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "intimidation",
             {
-                NextAction("intimidation", 40.0f)
+                NextAction("intimidation", ACTION_INTERRUPT)
+            }
+        )
+    );
+    // Next to Rapid Fire so both land inside the same burst window - The Beast Within wants them
+    // stacked.
+    triggers.push_back(
+        new TriggerNode(
+            "bestial wrath",
+            {
+                NextAction("bestial wrath", ACTION_HIGH + 8.5f)
             }
         )
     );
@@ -43,7 +52,7 @@ void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "kill command",
             {
-                NextAction("kill command", 18.5f)
+                NextAction("kill command", ACTION_NORMAL + 8.5f)
             }
         )
     );
@@ -51,7 +60,7 @@ void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "target critical health",
             {
-                NextAction("kill shot", 18.0f)
+                NextAction("kill shot", ACTION_NORMAL + 8)
             }
         )
     );
@@ -59,7 +68,7 @@ void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "low mana",
             {
-                NextAction("viper sting", 17.5f)
+                NextAction("viper sting", ACTION_NORMAL + 7.5f)
             }
         )
     );
@@ -67,7 +76,7 @@ void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "no stings",
             {
-                NextAction("serpent sting", 17.0f)
+                NextAction("serpent sting", ACTION_NORMAL + 7)
             }
         )
     );
@@ -75,7 +84,7 @@ void BeastMasteryHunterStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         new TriggerNode(
             "serpent sting on attacker",
             {
-                NextAction("serpent sting on attacker", 16.5f)
+                NextAction("serpent sting on attacker", ACTION_NORMAL + 6.5f)
             }
         )
     );

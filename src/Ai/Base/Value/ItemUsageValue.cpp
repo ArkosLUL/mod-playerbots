@@ -6,21 +6,122 @@
 
 #include "ItemUsageValue.h"
 
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <initializer_list>
+#include <string>
+#include <vector>
+
 #include "AiFactory.h"
 #include "ChatHelper.h"
+#include "Group.h"
 #include "GuildTaskMgr.h"
 #include "Item.h"
+#include "ItemTemplate.h"
+#include "LootAction.h"
 #include "LootObjectStack.h"
+#include "LootRollAction.h"
 #include "PlayerbotAIConfig.h"
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
 #include "RandomItemMgr.h"
 #include "ServerFacade.h"
+#include "SharedDefines.h"
+#include "SpellAuraDefines.h"
 #include "StatsWeightCalculator.h"
+#include "Util.h"
+#include "World.h"
+
+namespace
+{
+ParsedItemUsage ParseItemUsageQualifier(std::string const& qualifier)
+{
+    ParsedItemUsage parsed;
+    size_t const pos = qualifier.find(',');
+
+    if (pos != std::string::npos)
+    {
+        parsed.itemId = atoi(qualifier.substr(0, pos).c_str());
+        parsed.randomPropertyId = atoi(qualifier.substr(pos + 1).c_str());
+        return parsed;
+    }
+
+    parsed.itemId = atoi(qualifier.c_str());
+
+    return parsed;
+}
+} // namespace
+
+// Lowercase helper for item names using core UTF-8 utilities.
+std::string ToLowerUtf8(std::string const& s)
+{
+    if (s.empty())
+        return s;
+
+    std::wstring w;
+    if (!Utf8toWStr(s, w))
+        return s;
+
+    wstrToLower(w);
+
+    std::string lowered;
+    if (!WStrToUtf8(w, lowered))
+        return s;
+
+    return lowered;
+}
+
+uint32 GetRecipeSkill(ItemTemplate const* proto)
+{
+    if (!proto)
+        return 0;
+
+    // Primary path: DB usually sets RequiredSkill on recipe items.
+    if (proto->RequiredSkill)
+        return proto->RequiredSkill;
+
+    // Fallback heuristic on SubClass (books used by professions).
+    switch (proto->SubClass)
+    {
+        case ITEM_SUBCLASS_BOOK: // e.g. Book of Glyph Mastery
+        {
+            // If the name hints glyphs, assume Inscription.
+            std::string const lowered = ToLowerUtf8(proto->Name1);
+            if (lowered.find("glyph") != std::string::npos)
+                return SKILL_INSCRIPTION;
+            break;
+        }
+        case ITEM_SUBCLASS_LEATHERWORKING_PATTERN:
+            return SKILL_LEATHERWORKING;
+        case ITEM_SUBCLASS_TAILORING_PATTERN:
+            return SKILL_TAILORING;
+        case ITEM_SUBCLASS_ENGINEERING_SCHEMATIC:
+            return SKILL_ENGINEERING;
+        case ITEM_SUBCLASS_BLACKSMITHING:
+            return SKILL_BLACKSMITHING;
+        case ITEM_SUBCLASS_COOKING_RECIPE:
+            return SKILL_COOKING;
+        case ITEM_SUBCLASS_ALCHEMY_RECIPE:
+            return SKILL_ALCHEMY;
+        case ITEM_SUBCLASS_FIRST_AID_MANUAL:
+            return SKILL_FIRST_AID;
+        case ITEM_SUBCLASS_ENCHANTING_FORMULA:
+            return SKILL_ENCHANTING;
+        case ITEM_SUBCLASS_FISHING_MANUAL:
+            return SKILL_FISHING;
+        case ITEM_SUBCLASS_JEWELCRAFTING_RECIPE:
+            return SKILL_JEWELCRAFTING;
+        default:
+            break;
+    }
+
+    return 0;
+}
 
 ItemUsage ItemUsageValue::Calculate()
 {
-    ParsedItemUsage const parsed = GetItemIdFromQualifier();
+    ParsedItemUsage const parsed = ParseItemUsageQualifier(qualifier);
     uint32 itemId = parsed.itemId;
     uint32 randomPropertyId = parsed.randomPropertyId;
     if (!itemId)
@@ -159,6 +260,858 @@ ItemUsage ItemUsageValue::Calculate()
     return ITEM_USAGE_NONE;
 }
 
+std::string ItemUsageValue::BuildItemUsageParam(uint32 itemId, int32 randomPropertyId)
+{
+    if (randomPropertyId != 0)
+        return std::to_string(itemId) + "," + std::to_string(randomPropertyId);
+
+    return std::to_string(itemId);
+}
+
+namespace
+{
+static bool EnableGroupUsageChecks()
+{
+    return sPlayerbotAIConfig.rollUseGroupUsageChecks;
+}
+
+static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto);
+
+static bool HasAnyStat(ItemTemplate const* proto, std::initializer_list<ItemModType> mods)
+{
+    if (!proto)
+        return false;
+
+    for (auto const mod : mods)
+    {
+        for (uint8 i = 0; i < MAX_ITEM_PROTO_STATS; ++i)
+        {
+            if (proto->ItemStat[i].ItemStatType == mod && proto->ItemStat[i].ItemStatValue != 0)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+static bool HasAnyTankAvoidance(ItemTemplate const* proto)
+{
+    return HasAnyStat(proto, {ITEM_MOD_DEFENSE_SKILL_RATING, ITEM_MOD_DODGE_RATING, ITEM_MOD_PARRY_RATING,
+                              ITEM_MOD_BLOCK_RATING});
+}
+
+static bool IsRelicForClass(ItemTemplate const* proto, uint8 cls)
+{
+    if (!proto || proto->InventoryType != INVTYPE_RELIC)
+        return false;
+
+    switch (proto->SubClass)
+    {
+        case ITEM_SUBCLASS_ARMOR_IDOL:
+            return cls == CLASS_DRUID;
+        case ITEM_SUBCLASS_ARMOR_TOTEM:
+            return cls == CLASS_SHAMAN;
+        case ITEM_SUBCLASS_ARMOR_LIBRAM:
+            return cls == CLASS_PALADIN;
+        case ITEM_SUBCLASS_ARMOR_SIGIL:
+            return cls == CLASS_DEATH_KNIGHT;
+        default:
+            return false;
+    }
+}
+
+static bool IsBodyArmorInvType(uint8 invType)
+{
+    switch (invType)
+    {
+        case INVTYPE_HEAD:
+        case INVTYPE_SHOULDERS:
+        case INVTYPE_CHEST:
+        case INVTYPE_ROBE:
+        case INVTYPE_WAIST:
+        case INVTYPE_LEGS:
+        case INVTYPE_FEET:
+        case INVTYPE_WRISTS:
+        case INVTYPE_HANDS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool IsJewelryOrCloak(ItemTemplate const* proto)
+{
+    if (!proto)
+        return false;
+
+    switch (proto->InventoryType)
+    {
+        case INVTYPE_TRINKET:
+        case INVTYPE_FINGER:
+        case INVTYPE_NECK:
+        case INVTYPE_CLOAK:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static uint8 PreferredArmorSubclassFor(Player* bot)
+{
+    if (!bot)
+        return ITEM_SUBCLASS_ARMOR_CLOTH;
+
+    uint8 cls = bot->getClass();
+    uint32 lvl = bot->GetLevel();
+
+    if (cls == CLASS_MAGE || cls == CLASS_PRIEST || cls == CLASS_WARLOCK)
+        return ITEM_SUBCLASS_ARMOR_CLOTH;
+
+    if (cls == CLASS_DRUID || cls == CLASS_ROGUE)
+        return ITEM_SUBCLASS_ARMOR_LEATHER;
+
+    if (cls == CLASS_HUNTER || cls == CLASS_SHAMAN)
+        return (lvl >= 40u) ? ITEM_SUBCLASS_ARMOR_MAIL : ITEM_SUBCLASS_ARMOR_LEATHER;
+
+    if (cls == CLASS_WARRIOR || cls == CLASS_PALADIN)
+        return (lvl >= 40u) ? ITEM_SUBCLASS_ARMOR_PLATE : ITEM_SUBCLASS_ARMOR_MAIL;
+
+    if (cls == CLASS_DEATH_KNIGHT)
+        return ITEM_SUBCLASS_ARMOR_PLATE;
+
+    return ITEM_SUBCLASS_ARMOR_CLOTH;
+}
+
+static bool IsLowerTierArmorForBot(Player* bot, ItemTemplate const* proto)
+{
+    if (!bot || !proto)
+        return false;
+    if (proto->Class != ITEM_CLASS_ARMOR)
+        return false;
+    if (!IsBodyArmorInvType(proto->InventoryType))
+        return false;
+    if (proto->SubClass == ITEM_SUBCLASS_ARMOR_SHIELD || proto->InventoryType == INVTYPE_RELIC ||
+        proto->InventoryType == INVTYPE_HOLDABLE)
+        return false;
+
+    uint8 preferred = PreferredArmorSubclassFor(bot);
+    return proto->SubClass < preferred;
+}
+
+static bool IsStrictCrossArmorContext(Player* bot)
+{
+    if (!bot)
+        return true;
+
+    // Keep cross-armor strictly disabled at level cap and in raids to avoid
+    // plate/mail healers rolling NEED on cloth/leather endgame loot.
+    if (bot->GetLevel() >= static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)))
+        return true;
+
+    if (Group* group = bot->GetGroup())
+        if (group->isRaidGroup())
+            return true;
+
+    return false;
+}
+
+namespace
+{
+    static bool GroupMemberWouldEquipArmor(Player* member, PlayerbotAI* memberAI, ItemTemplate const* proto, std::string const& param)
+    {
+        if (!member || !memberAI || !proto)
+            return false;
+
+        if (IsLowerTierArmorForBot(member, proto))
+            return false;
+
+        AiObjectContext* ctx = memberAI->GetAiObjectContext();
+        if (!ctx)
+            return false;
+
+        ItemUsage const otherUsage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
+        return otherUsage == ITEM_USAGE_EQUIP || otherUsage == ITEM_USAGE_REPLACE;
+    }
+} // namespace
+
+static bool GroupHasPrimaryArmorUserLikelyToNeed(Player* self, ItemTemplate const* proto, int32 randomProperty)
+{
+    if (!self || !proto)
+        return false;
+
+    if (proto->Class != ITEM_CLASS_ARMOR || !IsBodyArmorInvType(proto->InventoryType))
+        return false;
+
+    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
+
+    return ForEachBotGroupMember(self, [&](Player* member, PlayerbotAI* memberAI) -> bool
+    {
+        return GroupMemberWouldEquipArmor(member, memberAI, proto, param);
+    });
+}
+
+static bool GroupHasDesperateUpgradeUser(Player* self, ItemTemplate const* proto, int32 randomProperty)
+{
+    if (!self || !proto)
+        return false;
+
+    if (proto->Class != ITEM_CLASS_ARMOR || !IsBodyArmorInvType(proto->InventoryType))
+        return false;
+
+    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
+
+    return ForEachBotGroupMember(self,
+        [&](Player* member, PlayerbotAI* memberAI) -> bool
+        {
+            AiObjectContext* ctx = memberAI->GetAiObjectContext();
+            if (!ctx)
+                return false;
+
+            ItemUsage usage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
+            if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
+                return false;
+
+            ItemTemplate const* bestProto = nullptr;
+            for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+            {
+                Item* oldItem = member->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+                if (!oldItem)
+                    continue;
+
+                ItemTemplate const* oldProto = oldItem->GetTemplate();
+                if (!oldProto)
+                    continue;
+
+                if (oldProto->Class != ITEM_CLASS_ARMOR)
+                    continue;
+
+                if (oldProto->InventoryType != proto->InventoryType)
+                    continue;
+
+                if (!bestProto || oldProto->ItemLevel > bestProto->ItemLevel)
+                    bestProto = oldProto;
+            }
+
+            bool hasVeryBadItem = !bestProto || bestProto->Quality <= ITEM_QUALITY_NORMAL;
+            return hasVeryBadItem;
+        });
+}
+
+static bool IsDesperateJewelryUpgradeForBot(Player* bot, ItemTemplate const* proto, int32 randomProperty)
+{
+    if (!bot || !proto)
+        return false;
+
+    uint8 jewelrySlots[2];
+    uint8 slotsCount = 0;
+
+    switch (proto->InventoryType)
+    {
+        case INVTYPE_NECK:
+            jewelrySlots[0] = EQUIPMENT_SLOT_NECK;
+            slotsCount = 1;
+            break;
+        case INVTYPE_FINGER:
+            jewelrySlots[0] = EQUIPMENT_SLOT_FINGER1;
+            jewelrySlots[1] = EQUIPMENT_SLOT_FINGER2;
+            slotsCount = 2;
+            break;
+        case INVTYPE_TRINKET:
+            jewelrySlots[0] = EQUIPMENT_SLOT_TRINKET1;
+            jewelrySlots[1] = EQUIPMENT_SLOT_TRINKET2;
+            slotsCount = 2;
+            break;
+        case INVTYPE_CLOAK:
+            jewelrySlots[0] = EQUIPMENT_SLOT_BACK;
+            slotsCount = 1;
+            break;
+        default:
+            return false;
+    }
+
+    PlayerbotAI* ai = GET_PLAYERBOT_AI(bot);
+    if (!ai)
+        return false;
+
+    AiObjectContext* ctx = ai->GetAiObjectContext();
+    if (!ctx)
+        return false;
+
+    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
+    ItemUsage const usage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
+    if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
+        return false;
+
+    ItemTemplate const* bestProto = nullptr;
+    for (uint8 i = 0; i < slotsCount; ++i)
+    {
+        uint8 const slot = jewelrySlots[i];
+        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!oldItem)
+            continue;
+
+        ItemTemplate const* oldProto = oldItem->GetTemplate();
+        if (!oldProto)
+            continue;
+
+        if (!bestProto || oldProto->ItemLevel > bestProto->ItemLevel)
+            bestProto = oldProto;
+    }
+
+    if (!bestProto)
+        return true;
+
+    return bestProto->Quality <= ITEM_QUALITY_NORMAL;
+}
+
+static bool GroupHasPrimarySpecUpgradeCandidate(Player* self, ItemTemplate const* proto, int32 randomProperty)
+{
+    if (!self || !proto)
+        return false;
+
+    std::string const param = ItemUsageValue::BuildItemUsageParam(proto->ItemId, randomProperty);
+
+    return ForEachBotGroupMember(self,
+        [&](Player* member, PlayerbotAI* memberAI) -> bool
+        {
+            AiObjectContext* ctx = memberAI->GetAiObjectContext();
+            if (!ctx)
+                return false;
+
+            ItemUsage otherUsage = ctx->GetValue<ItemUsage>("item usage", param)->Get();
+            if (otherUsage != ITEM_USAGE_EQUIP && otherUsage != ITEM_USAGE_REPLACE)
+                return false;
+
+            if (!IsPrimaryForSpec(member, proto))
+                return false;
+
+            return true;
+        });
+}
+
+static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* proto)
+{
+    if (!bot || !proto)
+        return false;
+
+    SpecTraits const traits = GetSpecTraits(bot);
+    uint32 const profile = StatsWeightCalculator::BuildSmartStatMask(bot);
+    if (profile == SMARTSTAT_NONE)
+        return true;
+
+    ItemStatProfile const stats = BuildItemStatProfile(proto);
+    bool const hasAnyStat = stats.hasINT || stats.hasSPI || stats.hasMP5 || stats.hasSP || stats.hasSTR ||
+        stats.hasAGI || stats.hasSTA || stats.hasAP || stats.hasARP || stats.hasEXP || stats.hasHIT ||
+        stats.hasHASTE || stats.hasCRIT || stats.hasDef || stats.hasAvoid || stats.hasBlockValue;
+
+    if (!hasAnyStat)
+        return true;
+
+    // Hard role-negative filters (mirror IsPrimaryForSpec): an off-spec item that merely shares one
+    // stat with the bot's mask must still not be NEEDed when it is clearly itemized for another role.
+    if (!traits.isTank && HasAnyTankAvoidance(proto))
+        return false;
+    if (traits.isHealer && stats.hasHIT)
+        return false;
+    if (traits.cls == CLASS_DEATH_KNIGHT && stats.hasAGI)
+        return false;
+    if ((traits.isHunter || traits.isRogue || traits.isEnhSham) && stats.hasSTR)
+        return false;
+
+    if (traits.isTank && !stats.hasSTA && !stats.hasDef && !stats.hasAvoid && !stats.hasBlockValue)
+        return false;
+    if ((profile & SMARTSTAT_HIT) && stats.hasHIT)
+        return true;
+    if ((profile & SMARTSTAT_SPELL_POWER) && stats.hasSP)
+        return true;
+    if ((profile & SMARTSTAT_HASTE) && stats.hasHASTE)
+        return true;
+    if ((profile & SMARTSTAT_CRIT) && stats.hasCRIT)
+        return true;
+    if ((profile & SMARTSTAT_INTELLECT) && stats.hasINT)
+        return true;
+    if ((profile & SMARTSTAT_SPIRIT) && stats.hasSPI)
+        return true;
+    if ((profile & SMARTSTAT_EXPERTISE) && stats.hasEXP)
+        return true;
+    if ((profile & SMARTSTAT_ATTACK_POWER) && stats.hasAP)
+        return true;
+    if ((profile & SMARTSTAT_ARMOR_PEN) && stats.hasARP)
+        return true;
+    if ((profile & SMARTSTAT_AGILITY) && stats.hasAGI)
+        return true;
+    if ((profile & SMARTSTAT_STAMINA) && stats.hasSTA)
+        return true;
+    if ((profile & SMARTSTAT_AVOIDANCE) && (stats.hasAvoid || stats.hasDef))
+        return true;
+    if ((profile & SMARTSTAT_MP5) && stats.hasMP5)
+        return true;
+    if ((profile & SMARTSTAT_STRENGTH) && stats.hasSTR)
+        return true;
+
+    return false;
+}
+} // namespace
+
+SpecTraits GetSpecTraits(Player* bot)
+{
+    SpecTraits t;
+    if (!bot)
+        return t;
+    t.cls = bot->getClass();
+    t.spec = AiFactory::GetPlayerSpecName(bot);
+
+    auto specIs = [&](char const* s) { return t.spec == s; };
+
+    const bool holyPal = (t.cls == CLASS_PALADIN && specIs("holy"));
+    const bool protPal = (t.cls == CLASS_PALADIN && (specIs("prot") || specIs("protection")));
+    t.isProtPal = protPal;
+    t.isRetPal = (t.cls == CLASS_PALADIN && !holyPal && !protPal);
+    t.isWarrior = (t.cls == CLASS_WARRIOR);
+    t.isWarProt = t.isWarrior && (specIs("prot") || specIs("protection"));
+    t.isHunter = (t.cls == CLASS_HUNTER);
+    t.isRogue = (t.cls == CLASS_ROGUE);
+    t.isEnhSham = (t.cls == CLASS_SHAMAN && (specIs("enhance") || specIs("enhancement")));
+
+    // Role flags come from the bot's real role detection, not spec-name strings. Talent-tab names like
+    // "elem", "blooddps", "frostdps" or "feraldps" don't encode caster-vs-physical or tank-vs-dps, so
+    // string matching left elemental shamans as physical and blood/bear tanks as non-tanks. IsTank keys
+    // off the active tank strategy, IsCaster off the ranged strategy - both handle those correctly.
+    t.isHealer = PlayerbotAI::IsHeal(bot);
+    t.isTank = PlayerbotAI::IsTank(bot);
+    t.isCaster = PlayerbotAI::IsCaster(bot);
+    t.isPhysical = !t.isCaster;
+    return t;
+}
+
+namespace
+{
+    static void UpdateItemStatProfileFromStats(ItemTemplate const* proto, ItemStatProfile& s)
+    {
+        for (uint8 i = 0; i < MAX_ITEM_PROTO_STATS; ++i)
+        {
+            if (proto->ItemStat[i].ItemStatValue == 0)
+                continue;
+
+            switch (proto->ItemStat[i].ItemStatType)
+            {
+                case ITEM_MOD_INTELLECT:
+                    s.hasINT = true;
+                    break;
+                case ITEM_MOD_SPIRIT:
+                    s.hasSPI = true;
+                    break;
+                case ITEM_MOD_SPELL_POWER:
+                    s.hasSP = true;
+                    break;
+                case ITEM_MOD_SPELL_HEALING_DONE:
+                    s.hasSP = true;
+                    break;
+                case ITEM_MOD_HIT_RATING:
+                    s.hasHIT = true;
+                    break;
+                case ITEM_MOD_CRIT_RATING:
+                    s.hasCRIT = true;
+                    break;
+                case ITEM_MOD_HASTE_RATING:
+                    s.hasHASTE = true;
+                    break;
+                case ITEM_MOD_MANA_REGENERATION:
+                    s.hasMP5 = true;
+                    break;
+                case ITEM_MOD_STRENGTH:
+                    s.hasSTR = true;
+                    break;
+                case ITEM_MOD_AGILITY:
+                    s.hasAGI = true;
+                    break;
+                case ITEM_MOD_ATTACK_POWER:
+                    s.hasAP = true;
+                    break;
+                case ITEM_MOD_ARMOR_PENETRATION_RATING:
+                    s.hasARP = true;
+                    break;
+                case ITEM_MOD_DEFENSE_SKILL_RATING:
+                    s.hasDef = true;
+                    break;
+                case ITEM_MOD_DODGE_RATING:
+                case ITEM_MOD_PARRY_RATING:
+                case ITEM_MOD_BLOCK_RATING:
+                    s.hasAvoid = true;
+                    break;
+                case ITEM_MOD_BLOCK_VALUE:
+                    s.hasBlockValue = true;
+                    break;
+                case ITEM_MOD_SPELL_PENETRATION:
+                    s.hasSpellPen = true;
+                    break;
+                default:
+                    break;
+            }
+        }
+    }
+
+    static void UpdateItemStatProfileFromSpells(ItemTemplate const* proto, ItemStatProfile& s)
+    {
+        for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+        {
+            auto const& spell = proto->Spells[i];
+            if (!spell.SpellId ||
+                (spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_EQUIP && spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_USE))
+                continue;
+
+            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell.SpellId);
+            if (!spellInfo)
+                continue;
+
+            for (int eff = 0; eff < MAX_SPELL_EFFECTS; ++eff)
+            {
+                SpellEffectInfo const& effectInfo = spellInfo->Effects[eff];
+                if (effectInfo.Effect != SPELL_EFFECT_APPLY_AURA)
+                    continue;
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_HEALING_DONE)
+                {
+                    s.hasSP = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_DAMAGE_DONE &&
+                    (effectInfo.MiscValue & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
+                {
+                    s.hasSP = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RESISTANCE &&
+                    (effectInfo.MiscValue & SPELL_SCHOOL_MASK_NORMAL) == SPELL_SCHOOL_MASK_NORMAL)
+                {
+                    s.hasAvoid = true;
+                    break;
+                }
+
+                // MOD_RATING MiscValue is a combat-rating bitmask (1 << CR_x), not a raw rating index.
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
+                    (effectInfo.MiscValue & ((1 << CR_DODGE) | (1 << CR_PARRY) | (1 << CR_BLOCK))))
+                {
+                    s.hasAvoid = true;
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
+                    (effectInfo.MiscValue & ((1 << CR_HIT_SPELL) | (1 << CR_CRIT_SPELL) | (1 << CR_HASTE_SPELL))))
+                {
+                    s.hasHIT = s.hasHIT || (effectInfo.MiscValue & (1 << CR_HIT_SPELL));
+                    s.hasCRIT = s.hasCRIT || (effectInfo.MiscValue & (1 << CR_CRIT_SPELL));
+                    s.hasHASTE = s.hasHASTE || (effectInfo.MiscValue & (1 << CR_HASTE_SPELL));
+                    break;
+                }
+
+                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
+                    effectInfo.ApplyAuraName == SPELL_AURA_MOD_RANGED_ATTACK_POWER)
+                {
+                    s.hasAP = true;
+                    break;
+                }
+            }
+
+            // Preserve original behavior: stop scanning item spells as soon as SP is detected.
+            if (s.hasSP)
+                break;
+        }
+    }
+} // namespace
+
+ItemStatProfile BuildItemStatProfile(ItemTemplate const* proto)
+{
+    ItemStatProfile s;
+    if (!proto)
+        return s;
+
+    UpdateItemStatProfileFromStats(proto, s);
+
+    s.hasAvoid = s.hasAvoid || HasAnyTankAvoidance(proto);
+
+    UpdateItemStatProfileFromSpells(proto, s);
+
+    return s;
+}
+
+namespace
+{
+static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
+{
+    if (!bot || !proto)
+        return false;
+
+    const SpecTraits traits = GetSpecTraits(bot);
+    ItemStatProfile const stats = BuildItemStatProfile(proto);
+    bool const hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
+    bool const hasCasterPrimary = stats.hasINT || stats.hasSP || stats.hasMP5;
+    bool const hasCasterRatings = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
+    bool const hasCaster = hasCasterPrimary || (hasCasterRatings && !hasPhysical);
+
+    // Caster offense ratings should only be considered in the caster context.
+    bool const hasCasterOffense = hasCaster && hasCasterRatings;
+
+    if (proto->InventoryType == INVTYPE_RELIC)
+    {
+        if (!IsRelicForClass(proto, traits.cls))
+            return false;
+
+        return IsFallbackNeedReasonableForSpec(bot, proto);
+    }
+
+    if (proto->Class == ITEM_CLASS_WEAPON)
+    {
+        if ((traits.isHunter || traits.isRogue || traits.isEnhSham) && stats.hasSTR)
+            return false;
+
+        if ((traits.isProtPal || traits.isWarProt) && proto->InventoryType == INVTYPE_2HWEAPON)
+            return false;
+
+        if (traits.isTank && hasCaster)
+            return false;
+
+        if (!traits.isCaster && hasCaster && !hasPhysical)
+            return false;
+
+        if (traits.isCaster && hasPhysical && !hasCaster)
+            return false;
+
+        if (traits.isCaster)
+        {
+            bool const isCasterWeapon =
+                proto->SubClass == ITEM_SUBCLASS_WEAPON_STAFF || proto->SubClass == ITEM_SUBCLASS_WEAPON_DAGGER ||
+                proto->SubClass == ITEM_SUBCLASS_WEAPON_SWORD || proto->SubClass == ITEM_SUBCLASS_WEAPON_MACE ||
+                proto->SubClass == ITEM_SUBCLASS_WEAPON_WAND;
+             return isCasterWeapon && (hasCaster || (hasCasterOffense && !hasPhysical));
+        }
+
+        return hasPhysical;
+    }
+
+    if (proto->Class != ITEM_CLASS_ARMOR)
+        return true;
+
+    if (traits.cls == CLASS_DEATH_KNIGHT && stats.hasAGI)
+        return false;
+
+    if ((traits.isHunter || traits.isRogue || traits.isEnhSham) && stats.hasSTR)
+        return false;
+
+    if (IsJewelryOrCloak(proto))
+    {
+        if (traits.isCaster != hasCaster)
+            return false;
+        return IsFallbackNeedReasonableForSpec(bot, proto);
+    }
+
+    if (IsLowerTierArmorForBot(bot, proto))
+        return false;
+
+    if (!traits.isTank && HasAnyTankAvoidance(proto))
+        return false;
+
+    if (traits.isTank && HasAnyTankAvoidance(proto))
+        return true;
+
+    if (traits.isHealer && stats.hasHIT)
+        return false;
+
+    if (traits.isCaster)
+        return hasCaster || (hasCasterOffense && !hasPhysical);
+
+    if (traits.isPhysical)
+        return hasPhysical && !hasCaster;
+
+    return true;
+}
+
+// Rejects items whose itemization belongs to a role the bot doesn't fill, even when the score engine
+// values them off a shared stat. Covers both loot rolls and auto-equip via QueryItemUsageForEquip.
+static bool IsRoleItemizationMismatch(Player* bot, ItemTemplate const* proto)
+{
+    if (!bot || !proto)
+        return false;
+
+    ItemStatProfile const stats = BuildItemStatProfile(proto);
+
+    // Spell penetration only itemizes caster-DPS / PvP gear; a healer never wants it.
+    if (PlayerbotAI::IsHeal(bot) && stats.hasSpellPen)
+        return true;
+
+    // A pure physical role shouldn't take a weapon itemized for casters, even if it also carries a
+    // physical stat the score engine credits (mixed weapons slip past IsPrimaryForSpec's !hasPhysical gate).
+    bool const isCaster = PlayerbotAI::IsCaster(bot);
+    bool const isHealer = PlayerbotAI::IsHeal(bot);
+    if (!isCaster && !isHealer && proto->Class == ITEM_CLASS_WEAPON)
+    {
+        if (stats.hasINT || stats.hasSP || stats.hasMP5)
+            return true;
+    }
+
+    return false;
+}
+
+static ItemUsage AdjustUsageForOffspec(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
+{
+    if (!bot || !proto)
+        return usage;
+
+    if (!sPlayerbotAIConfig.smartNeedBySpec)
+        return usage;
+
+    if (usage != ITEM_USAGE_EQUIP && usage != ITEM_USAGE_REPLACE)
+        return usage;
+
+    if (IsPrimaryForSpec(bot, proto))
+        return usage;
+
+    if (!IsFallbackNeedReasonableForSpec(bot, proto))
+        return ITEM_USAGE_BAD_EQUIP;
+
+    if (IsJewelryOrCloak(proto) && !IsDesperateJewelryUpgradeForBot(bot, proto, randomProperty))
+        return ITEM_USAGE_BAD_EQUIP;
+
+    // Lower-tier ("cross-armor") pieces are gated separately by AdjustUsageForCrossArmor via its
+    // ilvl-margin/context check, so leave them BAD_EQUIP here and let that decide the NEED.
+    if (proto->Class == ITEM_CLASS_ARMOR && IsLowerTierArmorForBot(bot, proto))
+        return ITEM_USAGE_BAD_EQUIP;
+
+    // Off-spec but a reasonable fallback need (and, for jewelry, a desperate upgrade): keep the NEED.
+    return usage;
+}
+
+static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
+{
+    if (!bot || !proto)
+        return usage;
+
+    if (usage != ITEM_USAGE_BAD_EQUIP)
+        return usage;
+
+    if (proto->Class != ITEM_CLASS_ARMOR || !IsLowerTierArmorForBot(bot, proto))
+        return usage;
+
+    // Endgame etiquette: do not allow cross-armor upgrades to turn into NEED
+    // at level cap or in raids.
+    if (IsStrictCrossArmorContext(bot))
+        return usage;
+
+    if (sPlayerbotAIConfig.crossArmorGreedIsPass)
+        return ITEM_USAGE_NONE;
+
+    if (EnableGroupUsageChecks() && GroupHasPrimaryArmorUserLikelyToNeed(bot, proto, randomProperty))
+        return usage;
+
+    if (EnableGroupUsageChecks() && GroupHasDesperateUpgradeUser(bot, proto, randomProperty))
+        return usage;
+
+    if (!IsFallbackNeedReasonableForSpec(bot, proto))
+        return usage;
+
+    // One calculator for the candidate and every equipped slot below; sRandomItemMgr.CalculateItemWeight
+    // would build a fresh StatsWeightCalculator per call. Same settings it uses.
+    StatsWeightCalculator weightCalc(bot);
+    weightCalc.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
+    weightCalc.SetOverflowPenalty(false);
+
+    float newScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
+    if (newScore <= 0.0f)
+        return usage;
+    float bestOld = 0.0f;
+    // Candidate score measured in the same slot context as bestOld, so set bonuses do not count
+    // for the incumbent only.
+    float bestOldNewScore = newScore;
+
+    for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!oldItem)
+            continue;
+
+        ItemTemplate const* oldProto = oldItem->GetTemplate();
+        if (!oldProto)
+            continue;
+
+        if (oldProto->Class != ITEM_CLASS_ARMOR)
+            continue;
+
+        if (oldProto->InventoryType != proto->InventoryType)
+            continue;
+
+        if (oldProto->Quality <= ITEM_QUALITY_NORMAL)
+            continue;
+
+        weightCalc.SetReplacedItemSet(oldProto->ItemSet);
+        float oldScore = weightCalc.CalculateItem(
+            oldProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+        float slotNewScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
+
+        if (oldScore > bestOld)
+        {
+            bestOld = oldScore;
+            bestOldNewScore = slotNewScore;
+        }
+    }
+    weightCalc.SetReplacedItemSet(0);
+
+    if (bestOld <= 0.0f)
+        return ITEM_USAGE_EQUIP;
+
+    uint32 const maxLevel = static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL));
+    bool const isLeveling = bot->GetLevel() < maxLevel;
+    SpecTraits const traits = GetSpecTraits(bot);
+    float const margin = (traits.isHealer && isLeveling) ? sPlayerbotAIConfig.equipUpgradeThreshold
+                                                         : sPlayerbotAIConfig.crossArmorExtraMargin;
+
+    if (bestOld > 0.0f && bestOldNewScore >= bestOld * margin)
+        return ITEM_USAGE_EQUIP;
+
+    return usage;
+}
+
+static bool IsUniqueItemAlreadyEquipped(Player* bot, ItemTemplate const* proto, InventoryResult equipResult)
+{
+    if (!bot || !proto)
+        return false;
+
+    // CanEquipItem may return EQUIP_ERR_CANT_CARRY_MORE_OF_THIS for unique-equip items,
+    // but it can also succeed while the item is flagged UNIQUE_EQUIPPABLE.
+    bool const needToCheckUnique =
+        (equipResult == EQUIP_ERR_CANT_CARRY_MORE_OF_THIS) || proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE);
+
+    if (!needToCheckUnique)
+        return false;
+
+    // Count the total number of the item (equipped + in bags)
+    uint32 const totalItemCount = bot->GetItemCount(proto->ItemId, true);
+    // Count the number of the item in bags only
+    uint32 const bagItemCount = bot->GetItemCount(proto->ItemId, false);
+
+    // If total > bag-only, at least one copy is equipped.
+    return totalItemCount > bagItemCount;
+}
+} // namespace
+
+ItemUsage LootUsageValue::Calculate()
+{
+    ParsedItemUsage parsed = ParseItemUsageQualifier(qualifier);
+    if (!parsed.itemId)
+        return ITEM_USAGE_NONE;
+
+    ItemUsage usage = ItemUsageValue::Calculate();
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(parsed.itemId);
+    if (!proto)
+        return usage;
+
+    usage = AdjustUsageForOffspec(bot, proto, parsed.randomPropertyId, usage);
+    usage = AdjustUsageForCrossArmor(bot, proto, parsed.randomPropertyId, usage);
+
+    return usage;
+}
+
 ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, int32 randomPropertyId)
 {
     if (bot->BotCanUseItem(itemProto) != EQUIP_ERR_OK)
@@ -219,7 +1172,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
     bool shouldEquip = false;
     // uint32 statWeight = sRandomItemMgr.GetLiveStatWeight(bot, itemProto->ItemId);
     StatsWeightCalculator calculator(bot);
-    calculator.SetItemSetBonus(false);
+    calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
 
     // Apply PvP weights if the bot is specced for PvP
@@ -231,6 +1184,11 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
     if (itemScore)
         shouldEquip = true;
+
+    // Single choke for role/itemization mismatches: BAD_EQUIP here → GREED→PASS under UpgradesOnly and
+    // never auto-equipped. IsPrimaryForSpec isn't reached for these (BAD_EQUIP short-circuits offspec).
+    if (IsRoleItemizationMismatch(bot, itemProto))
+        shouldEquip = false;
 
     if (itemProto->Class == ITEM_CLASS_WEAPON && !sRandomItemMgr.CanEquipWeapon(itemProto, bot->getClass()))
         shouldEquip = false;
@@ -299,12 +1257,23 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         }
 
         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
-        float oldScore = calculator.CalculateItem(oldItemProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
+
+        // Both scores have to be taken with the contested slot treated as empty, otherwise the
+        // incumbent's own set bonus counts for it and cancels out. The slot also drives the
+        // spec weapon-speed preference, which is a no-op without it.
+        int32 const contestedSlot = static_cast<int32>((dest & 0xFF) + i);
+        calculator.SetReplacedItemSet(oldItemProto->ItemSet);
+        float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId, contestedSlot);
+        float oldScore = calculator.CalculateItem(oldItemProto->ItemId,
+                                                  oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID),
+                                                  contestedSlot);
+        calculator.SetReplacedItemSet(0);
+
         if (oldItem)
         {
             // uint32 oldStatWeight = sRandomItemMgr.GetLiveStatWeight(bot, oldItemProto->ItemId);
-            if (itemScore || oldScore)
-                shouldEquipInSlot = itemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
+            if (slotItemScore || oldScore)
+                shouldEquipInSlot = slotItemScore > oldScore * sPlayerbotAIConfig.equipUpgradeThreshold;
         }
 
         // Bigger quiver
@@ -329,7 +1298,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
         // Compare items based on item level, quality or itemId.
         bool isBetter = false;
-        if (itemScore > oldScore)
+        if (slotItemScore > oldScore)
             isBetter = true;
         // else if (newItemPower == oldScore && itemProto->Quality > oldItemProto->Quality)
         //     isBetter = true;
@@ -382,7 +1351,10 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
 
 ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
 {
-    if (bot->getClass() != CLASS_HUNTER || bot->getClass() != CLASS_ROGUE || bot->getClass() != CLASS_WARRIOR)
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE && bot->getClass() != CLASS_WARRIOR)
+        return ITEM_USAGE_NONE;
+
+    if (!RangedWeaponNeedsAmmo(bot))
         return ITEM_USAGE_NONE;
 
     Item* rangedWeapon = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_RANGED);
@@ -439,22 +1411,6 @@ ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
     return ITEM_USAGE_NONE;
 }
 
-ParsedItemUsage ItemUsageValue::GetItemIdFromQualifier()
-{
-    ParsedItemUsage parsed;
-
-    size_t const pos = qualifier.find(",");
-    if (pos != std::string::npos)
-    {
-        parsed.itemId = atoi(qualifier.substr(0, pos).c_str());
-        parsed.randomPropertyId = atoi(qualifier.substr(pos + 1).c_str());
-        return parsed;
-    }
-    else
-        parsed.itemId = atoi(qualifier.c_str());
-    return parsed;
-}
-// Return smaltest bag size equipped
 uint32 ItemUsageValue::GetSmallestBagSize()
 {
     int8 curSlot = 0;
@@ -888,7 +1844,7 @@ std::string const ItemUsageValue::GetConsumableType(ItemTemplate const* proto, b
 
 ItemUsage ItemUpgradeValue::Calculate()
 {
-    ParsedItemUsage parsed = GetItemIdFromQualifier();
+    ParsedItemUsage parsed = ParseItemUsageQualifier(qualifier);
     uint32 itemId = parsed.itemId;
     uint32 randomPropertyId = parsed.randomPropertyId;
     if (!itemId)
@@ -906,4 +1862,676 @@ ItemUsage ItemUpgradeValue::Calculate()
         return QueryItemUsageForAmmo(proto);
 
     return ITEM_USAGE_NONE;
+}
+
+bool ItemUsageValue::IsLockboxItem(ItemTemplate const* proto)
+{
+    if (!proto)
+        return false;
+
+    // Primary, data-driven detection: lockboxes with a lock ID and Misc class.
+    if (proto->LockID && proto->Class == ITEM_CLASS_MISC)
+        return true;
+
+    // English-only fallback on name (aligns with loot-roll heuristics).
+    std::string const nameLower = ToLowerUtf8(proto->Name1);
+    if (nameLower.empty())
+        return false;
+
+    return nameLower.find("lockbox") != std::string::npos;
+}
+
+namespace
+{
+// Profession helpers: true if the item is a recipe/pattern/book (ITEM_CLASS_RECIPE).
+static inline bool IsRecipeItem(ItemTemplate const* proto) { return proto && proto->Class == ITEM_CLASS_RECIPE; }
+
+// Special-case: Book of Glyph Mastery (can own several; do not downgrade NEED on duplicates).
+static bool IsGlyphMasteryBook(ItemTemplate const* proto)
+{
+    if (!proto)
+        return false;
+
+    if (proto->Class != ITEM_CLASS_RECIPE || proto->SubClass != ITEM_SUBCLASS_BOOK)
+        return false;
+
+    constexpr uint32 SPELL_BOOK_OF_GLYPH_MASTERY = 64323;
+    for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+    {
+        if (proto->Spells[i].SpellId == SPELL_BOOK_OF_GLYPH_MASTERY)
+            return true;
+    }
+
+    if (proto->RequiredSkill == SKILL_INSCRIPTION)
+    {
+        std::string n = ToLowerUtf8(proto->Name1);
+        if (n.find("glyph mastery") != std::string::npos || n.find("book of glyph mastery") != std::string::npos)
+            return true;
+    }
+
+    return false;
+}
+
+// Value object for collectible cosmetics (mounts/pets) used in loot rules.
+struct CollectibleInfo
+{
+    bool isCosmetic = false;   // true if this is a cosmetic collectible (mount/pet)
+    bool alreadyOwned = false; // true if the bot already knows/owns it in a meaningful way
+};
+
+static CollectibleInfo BuildCollectibleInfo(Player* bot, ItemTemplate const* proto)
+{
+    CollectibleInfo info;
+
+    if (!bot || !proto)
+        return info;
+
+    if (proto->Class != ITEM_CLASS_MISC)
+        return info;
+
+#if defined(ITEM_SUBCLASS_MISC_MOUNT) || defined(ITEM_SUBCLASS_MISC_PET)
+    bool const isMount =
+#  if defined(ITEM_SUBCLASS_MISC_MOUNT)
+        proto->SubClass == ITEM_SUBCLASS_MISC_MOUNT
+#  else
+        false
+#  endif
+        ;
+    bool const isPet =
+#  if defined(ITEM_SUBCLASS_MISC_PET)
+        proto->SubClass == ITEM_SUBCLASS_MISC_PET
+#  else
+        false
+#  endif
+        ;
+    if (!isMount && !isPet)
+        return info;
+#else
+    if (proto->SubClass != 2 && proto->SubClass != 5)
+        return info;
+#endif
+
+    info.isCosmetic = true;
+
+    for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+    {
+        uint32 const spellId = proto->Spells[i].SpellId;
+        if (!spellId)
+            continue;
+
+        if (bot->HasSpell(spellId))
+        {
+            info.alreadyOwned = true;
+            return info;
+        }
+    }
+
+    if (bot->GetItemCount(proto->ItemId, true) > 0)
+        info.alreadyOwned = true;
+
+    return info;
+}
+
+struct RecipeInfo
+{
+    uint32 requiredSkill = 0;
+    uint32 requiredRank = 0;
+    uint32 botRank = 0;
+    bool botHasProfession = false;
+    bool known = false;
+};
+
+static RecipeInfo BuildRecipeInfo(Player* bot, ItemTemplate const* proto)
+{
+    RecipeInfo info;
+
+    if (!bot || !IsRecipeItem(proto))
+        return info;
+
+    info.requiredSkill = GetRecipeSkill(proto);
+    info.requiredRank = proto->RequiredSkillRank;
+
+    if (!info.requiredSkill)
+        return info;
+
+    info.botHasProfession = bot->HasSkill(info.requiredSkill);
+    if (info.botHasProfession)
+        info.botRank = bot->GetSkillValue(info.requiredSkill);
+
+    if (bot)
+    {
+        for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+        {
+            uint32 teach = proto->Spells[i].SpellId;
+            if (!teach)
+                continue;
+
+            SpellInfo const* si = sSpellMgr->GetSpellInfo(teach);
+            if (!si)
+                continue;
+
+            for (int eff = 0; eff < MAX_SPELL_EFFECTS; ++eff)
+            {
+                if (si->Effects[eff].Effect != SPELL_EFFECT_LEARN_SPELL)
+                    continue;
+
+                uint32 learned = si->Effects[eff].TriggerSpell;
+                if (learned && bot->HasSpell(learned))
+                {
+                    info.known = true;
+                    break;
+                }
+            }
+
+            if (info.known)
+                break;
+        }
+    }
+
+    return info;
+}
+
+static bool IsProfessionRecipeUsefulForBot(RecipeInfo const& recipe)
+{
+    if (!recipe.requiredSkill)
+        return false;
+
+    if (!recipe.botHasProfession)
+        return false;
+
+    if (!sPlayerbotAIConfig.recipesIgnoreSkillRank && recipe.requiredRank && recipe.botRank < recipe.requiredRank)
+        return false;
+
+    if (recipe.known)
+        return false;
+
+    return true;
+}
+
+static bool IsClassAllowedByItemTemplate(uint8 cls, ItemTemplate const* proto)
+{
+    if (!proto)
+        return true;
+
+    int32 const allowable = proto->AllowableClass;
+    if (allowable <= 0)
+        return true;
+
+    if (!cls)
+        return false;
+
+    uint32 const classMask = static_cast<uint32>(allowable);
+    uint32 const thisClassBit = 1u << (cls - 1u);
+    return (classMask & thisClassBit) != 0;
+}
+
+static bool CanBotUseToken(ItemTemplate const* proto, Player* bot);
+static bool RollUniqueCheck(ItemTemplate const* proto, Player* bot);
+
+static inline bool IsLikelyDisenchantable(ItemTemplate const* proto)
+{
+    if (!proto)
+        return false;
+
+    if (proto->DisenchantID > 0)
+        return true;
+
+    if (proto->DisenchantID < 0)
+        return false;
+
+    if (proto->Class != ITEM_CLASS_ARMOR && proto->Class != ITEM_CLASS_WEAPON)
+        return false;
+
+    return proto->Quality >= ITEM_QUALITY_UNCOMMON && proto->Quality <= ITEM_QUALITY_EPIC;
+}
+
+static int8 TokenSlotFromName(ItemTemplate const* proto)
+{
+    if (!proto)
+        return -1;
+    std::string n = std::string(proto->Name1);
+    std::transform(n.begin(), n.end(), n.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (n.find("helm") != std::string::npos || n.find("head") != std::string::npos)
+        return INVTYPE_HEAD;
+
+    if (n.find("shoulder") != std::string::npos || n.find("mantle") != std::string::npos ||
+        n.find("spauld") != std::string::npos)
+        return INVTYPE_SHOULDERS;
+
+    if (n.find("chest") != std::string::npos || n.find("tunic") != std::string::npos ||
+        n.find("robe") != std::string::npos || n.find("breastplate") != std::string::npos ||
+        n.find("chestguard") != std::string::npos)
+        return INVTYPE_CHEST;
+
+    if (n.find("glove") != std::string::npos || n.find("handguard") != std::string::npos ||
+        n.find("gauntlet") != std::string::npos)
+        return INVTYPE_HANDS;
+
+    if (n.find("leg") != std::string::npos || n.find("pant") != std::string::npos ||
+        n.find("trouser") != std::string::npos)
+        return INVTYPE_LEGS;
+
+    return -1;
+}
+
+constexpr uint32 SANCTIFICATION_TOKEN_MAX_COUNT = 5u;
+
+static std::array<uint32, 6> const& GetSanctificationTokenIds()
+{
+    static std::array<uint32, 6> const sanctificationTokenIds = {
+        52025,
+        52026,
+        52027,
+        52028,
+        52029,
+        52030
+    };
+
+    return sanctificationTokenIds;
+}
+
+static bool IsSanctificationToken(ItemTemplate const* proto)
+{
+    if (!proto)
+        return false;
+
+    for (uint32 const entry : GetSanctificationTokenIds())
+    {
+        if (proto->ItemId == entry)
+            return true;
+    }
+
+    return false;
+}
+
+static uint32 GetOwnedSanctificationTokenCount(Player* bot)
+{
+    if (!bot)
+        return 0;
+
+    uint32 total = 0;
+    for (uint32 const entry : GetSanctificationTokenIds())
+        total += bot->GetItemCount(entry, true);
+
+    return total;
+}
+
+static uint8 EquipmentSlotByInvTypeSafe(uint8 invType)
+{
+    switch (invType)
+    {
+        case INVTYPE_HEAD:
+            return EQUIPMENT_SLOT_HEAD;
+        case INVTYPE_SHOULDERS:
+            return EQUIPMENT_SLOT_SHOULDERS;
+        case INVTYPE_CHEST:
+        case INVTYPE_ROBE:
+            return EQUIPMENT_SLOT_CHEST;
+        case INVTYPE_HANDS:
+            return EQUIPMENT_SLOT_HANDS;
+        case INVTYPE_LEGS:
+            return EQUIPMENT_SLOT_LEGS;
+        default:
+            return EQUIPMENT_SLOT_END;
+    }
+}
+
+static bool IsTokenLikelyUpgrade(ItemTemplate const* token, uint8 invTypeSlot, Player* bot)
+{
+    if (!token || !bot)
+        return false;
+    uint8 eq = EquipmentSlotByInvTypeSafe(invTypeSlot);
+    if (eq >= EQUIPMENT_SLOT_END)
+        return true;
+
+    Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, eq);
+    if (!oldItem)
+        return true;
+
+    ItemTemplate const* oldProto = oldItem->GetTemplate();
+    if (!oldProto)
+        return true;
+
+    float margin = sPlayerbotAIConfig.tokenILevelMargin;
+    return (float)token->ItemLevel >= (float)oldProto->ItemLevel + margin;
+}
+
+// For tokens whose name doesn't reveal the slot (e.g. "Trophy of the Crusade" redeems any of the
+// five tier pieces): treat as upgrade when any tier slot is empty or behind the token's ilvl.
+static bool IsAnyTierSlotLikelyUpgrade(ItemTemplate const* token, Player* bot)
+{
+    if (!token || !bot)
+        return false;
+
+    static constexpr uint8 tierSlots[] = {EQUIPMENT_SLOT_HEAD, EQUIPMENT_SLOT_SHOULDERS, EQUIPMENT_SLOT_CHEST,
+                                          EQUIPMENT_SLOT_HANDS, EQUIPMENT_SLOT_LEGS};
+
+    float margin = sPlayerbotAIConfig.tokenILevelMargin;
+    for (uint8 const slot : tierSlots)
+    {
+        Item* oldItem = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!oldItem)
+            return true;
+
+        ItemTemplate const* oldProto = oldItem->GetTemplate();
+        if (!oldProto)
+            return true;
+
+        if ((float)token->ItemLevel >= (float)oldProto->ItemLevel + margin)
+            return true;
+    }
+
+    return false;
+}
+
+struct TokenInfo
+{
+    bool isToken = false;
+    bool classCanUse = false;
+    int8 invTypeSlot = -1;
+    bool likelyUpgrade = false;
+};
+
+static TokenInfo BuildTokenInfo(ItemTemplate const* proto, Player* bot)
+{
+    TokenInfo info;
+
+    if (!proto || !bot)
+        return info;
+
+    info.isToken = (proto->Class == ITEM_CLASS_MISC &&
+                    proto->SubClass == ITEM_SUBCLASS_JUNK &&
+                    proto->Quality == ITEM_QUALITY_EPIC) ||
+                   IsSanctificationToken(proto);
+    if (!info.isToken)
+        return info;
+
+    info.classCanUse = CanBotUseToken(proto, bot);
+    info.invTypeSlot = TokenSlotFromName(proto);
+
+    if (info.classCanUse)
+    {
+        if (info.invTypeSlot >= 0)
+            info.likelyUpgrade = IsTokenLikelyUpgrade(proto, static_cast<uint8>(info.invTypeSlot), bot);
+        // Sanctification marks excluded: their ilvl says nothing about the 251->264->277 upgrade they gate.
+        else if (!IsSanctificationToken(proto))
+            info.likelyUpgrade = IsAnyTierSlotLikelyUpgrade(proto, bot);
+    }
+
+    return info;
+}
+
+static bool TryTokenRollVote(ItemTemplate const* proto, Player* bot, RollVote& outVote)
+{
+    TokenInfo const token = BuildTokenInfo(proto, bot);
+
+    // Not a token → let other rules decide.
+    if (!token.isToken)
+        return false;
+
+    if (token.classCanUse)
+    {
+        if (token.invTypeSlot >= 0)
+        {
+            // Known slot: NEED only if it looks like an upgrade, otherwise GREED.
+            outVote = token.likelyUpgrade ? NEED : GREED;
+        }
+        else
+        {
+            // Unknown slot (e.g. T10 sanctification tokens).
+            if (IsSanctificationToken(proto) && sPlayerbotAIConfig.sanctificationTokenRollMode == 1u)
+            {
+                uint32 const ownedTokens = GetOwnedSanctificationTokenCount(bot);
+                outVote = (ownedTokens < SANCTIFICATION_TOKEN_MAX_COUNT) ? NEED : GREED;
+            }
+            else
+                outVote = GREED;
+        }
+    }
+    else
+    {
+        // Not eligible, so GREED.
+        outVote = GREED;
+    }
+
+    return true;
+}
+
+static RollVote ApplyDisenchantPreference(RollVote currentVote, ItemTemplate const* proto, ItemUsage usage,
+                                          Group* group, Player* bot)
+{
+    bool const isDeCandidate = IsLikelyDisenchantable(proto);
+    bool const hasEnchantSkill = bot && bot->HasSkill(SKILL_ENCHANTING);
+
+    uint8 const deMode = sPlayerbotAIConfig.deButtonMode;
+    // Mode 0 = no DE button; 1 = enchanters only; 2 = all bots can DE.
+    bool const deAllowedForBot = (deMode == 2u) || (deMode == 1u && hasEnchantSkill);
+
+    if (currentVote != NEED &&
+        deAllowedForBot &&
+        group &&
+        (group->GetLootMethod() == NEED_BEFORE_GREED || group->GetLootMethod() == GROUP_LOOT) &&
+        isDeCandidate &&
+        usage == ITEM_USAGE_DISENCHANT)
+        return DISENCHANT;
+
+    return currentVote;
+}
+
+static RollVote FinalizeRollVote(RollVote vote, ItemTemplate const* proto, ItemUsage usage, Group* group, Player* bot)
+{
+    if (sPlayerbotAIConfig.lootRollLevel == 0)
+    {
+        return PASS;
+    }
+
+    // Upgrades-only: bots GREED (not NEED) on their own gear upgrades so real players keep NEED
+    // priority; everything else (recipes, mats, disenchant, off-spec, cosmetics) -> PASS.
+    // Tier tokens are non-equippable so their usage is never EQUIP/REPLACE — re-check them here
+    // so class-eligible token upgrades still get a GREED instead of falling through to PASS.
+    if (sPlayerbotAIConfig.rollUpgradesOnly)
+    {
+        TokenInfo const token = BuildTokenInfo(proto, bot);  // early-outs cheaply for non-tokens
+        if (token.isToken)
+        {
+            if (!token.classCanUse)
+                return PASS;
+
+            if (IsSanctificationToken(proto))
+                return (sPlayerbotAIConfig.sanctificationTokenRollMode == 1u &&
+                        GetOwnedSanctificationTokenCount(bot) < SANCTIFICATION_TOKEN_MAX_COUNT) ? GREED : PASS;
+
+            // Bots never spend tokens; cap at 1 unspent copy.
+            if (bot->GetItemCount(proto->ItemId, true) > 0)
+                return PASS;
+
+            return token.likelyUpgrade ? GREED : PASS;
+        }
+
+        return (vote == NEED && (usage == ITEM_USAGE_EQUIP || usage == ITEM_USAGE_REPLACE)) ? GREED : PASS;
+    }
+
+    vote = ApplyDisenchantPreference(vote, proto, usage, group, bot);
+
+    if (sPlayerbotAIConfig.lootRollLevel == 1)
+    {
+        // Level 1 = "always greed": never NEED (downgrade to GREED, or PASS a unique duplicate);
+        // items already only worth GREED keep the GREED roll.
+        if (vote == NEED)
+            vote = RollUniqueCheck(proto, bot) ? PASS : GREED;
+    }
+
+    return vote;
+}
+
+static RollVote CalculateBaseRollVote(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage)
+{
+    // Player mimic: upgrade => NEED; useful => GREED; otherwise => PASS
+    RollVote vote = PASS;
+
+    CollectibleInfo const collectible = BuildCollectibleInfo(bot, proto);
+
+    bool const isCollectibleCosmetic = collectible.isCosmetic;
+    bool const alreadyHasCollectible = collectible.alreadyOwned;
+
+    if (isCollectibleCosmetic)
+        vote = alreadyHasCollectible ? GREED : NEED;
+
+    bool recipeChecked = false;
+    bool recipeNeed = false;
+    bool recipeUseful = false;
+    bool recipeKnown = false;
+
+    // Professions: NEED on useful recipes/patterns/books when enabled.
+    if (sPlayerbotAIConfig.needOnProfessionRecipes && IsRecipeItem(proto))
+    {
+        RecipeInfo const recipe = BuildRecipeInfo(bot, proto);
+
+        recipeChecked = true;
+        recipeKnown = recipe.known;
+
+        recipeUseful = IsProfessionRecipeUsefulForBot(recipe);
+        if (recipeUseful)
+        {
+            vote = NEED;
+            recipeNeed = true;
+        }
+        else
+            vote = GREED;  // recipe not for the bot -> GREED
+    }
+
+    // Do not overwrite the choice if already decided by recipe or cosmetic logic.
+    if (!recipeChecked && !isCollectibleCosmetic)
+    {
+        switch (usage)
+        {
+            case ITEM_USAGE_EQUIP:
+            case ITEM_USAGE_REPLACE:
+                vote = NEED;
+                break;
+            case ITEM_USAGE_BAD_EQUIP:
+            case ITEM_USAGE_GUILD_TASK:
+            case ITEM_USAGE_SKILL:
+            case ITEM_USAGE_USE:
+            case ITEM_USAGE_DISENCHANT:
+            case ITEM_USAGE_AH:
+            case ITEM_USAGE_VENDOR:
+            case ITEM_USAGE_KEEP:
+            case ITEM_USAGE_AMMO:
+                vote = GREED;
+                break;
+            default:
+                vote = PASS;
+                break;
+        }
+    }
+
+    if (vote == NEED && IsJewelryOrCloak(proto) && !IsFallbackNeedReasonableForSpec(bot, proto))
+        vote = GREED;
+
+    // Lockboxes: if the item is a lockbox and the bot is a Rogue with Lockpicking, prefer NEED (ignored by BoE/BoU).
+    const SpecTraits traits = GetSpecTraits(bot);
+    const bool isLockbox = ItemUsageValue::IsLockboxItem(proto);
+    if (isLockbox && traits.isRogue && bot->HasSkill(SKILL_LOCKPICKING))
+        vote = NEED;
+
+    // BoE/BoU rule: by default, avoid NEED on Bind-on-Equip / Bind-on-Use (raid etiquette)
+    // BoE/BoU etiquette: avoid NEED on BoE/BoU, except useful profession recipes.
+    constexpr uint32 BIND_WHEN_EQUIPPED = 2;  // BoE
+    constexpr uint32 BIND_WHEN_USE = 3;       // BoU
+
+    if (vote == NEED && !recipeNeed && !isLockbox && !isCollectibleCosmetic &&
+        proto->Bonding == BIND_WHEN_EQUIPPED &&
+        !sPlayerbotAIConfig.allowBoENeedIfUpgrade)
+
+        vote = GREED;
+
+    if (vote == NEED && !recipeNeed && !isLockbox && !isCollectibleCosmetic &&
+        proto->Bonding == BIND_WHEN_USE &&
+        !sPlayerbotAIConfig.allowBoUNeedIfUpgrade)
+
+        vote = GREED;
+
+    // Non-unique soft rule: NEED -> GREED on duplicates, except Book of Glyph Mastery.
+    if (vote == NEED)
+    {
+        if (!IsGlyphMasteryBook(proto))
+        {
+            // includeBank=true to catch banked duplicates as well.
+            if (bot->GetItemCount(proto->ItemId, true) > 0)
+                vote = GREED;
+        }
+    }
+
+    // Unique-equip: never NEED a duplicate (already equipped/owned)
+    if (vote == NEED && RollUniqueCheck(proto, bot))
+        vote = PASS;
+
+    // Final decision (with allow/deny from loot strategy).
+    RollVote finalVote = StoreLootAction::IsLootAllowed(proto->ItemId, GET_PLAYERBOT_AI(bot)) ? vote : PASS;
+
+    return finalVote;
+}
+
+static bool CanBotUseToken(ItemTemplate const* proto, Player* bot)
+{
+    if (!proto || !bot)
+        return false;
+
+    return IsClassAllowedByItemTemplate(bot->getClass(), proto);
+}
+
+static bool RollUniqueCheck(ItemTemplate const* proto, Player* bot)
+{
+    if (!proto || !bot)
+        return false;
+
+    uint32 totalItemCount = bot->GetItemCount(proto->ItemId, true);
+    uint32 bagItemCount = bot->GetItemCount(proto->ItemId, false);
+
+    bool isEquipped = (totalItemCount > bagItemCount);
+    if (isEquipped && proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+        return true;
+
+    if (proto->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE) && bagItemCount > 0)
+        return true;
+
+    return false;
+}
+} // namespace
+
+char const* RollVoteText(RollVote v)
+{
+    switch (v)
+    {
+        case NEED:
+            return "NEED";
+        case GREED:
+            return "GREED";
+        case PASS:
+            return "PASS";
+        case DISENCHANT:
+            return "DISENCHANT";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+RollVote CalculateLootRollVote(Player* bot, ItemTemplate const* proto, int32 randomProperty, ItemUsage usage,
+                               Group* group)
+{
+    if (!bot || !proto)
+        return PASS;
+
+    // usage is already off-spec- and cross-armor-adjusted by LootUsageValue ("loot usage"); re-adjusting
+    // here would revert a cross-armor EQUIP back to BAD_EQUIP.
+
+    RollVote vote = PASS;
+    if (!TryTokenRollVote(proto, bot, vote))
+    {
+        // Let CalculateBaseRollVote decide using loot-aware item usage.
+        vote = CalculateBaseRollVote(bot, proto, randomProperty, usage);
+    }
+
+    return FinalizeRollVote(vote, proto, usage, group, bot);
 }

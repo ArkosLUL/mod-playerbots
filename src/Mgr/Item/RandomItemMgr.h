@@ -185,6 +185,8 @@ public:
 
     [[nodiscard]] bool HasStatWeight(uint32 itemId);
     [[nodiscard]] uint32 CalculateStatWeight(ItemTemplate const* proto, uint8 playerclass, uint8 spec);
+    [[nodiscard]] float CalculateItemWeight(Player* player, uint32 itemId, int32 randomPropertyId = 0);
+    [[nodiscard]] bool CanEquipForBot(Player* player, ItemTemplate const* proto);
     [[nodiscard]] uint32 CalculateSingleStatWeight(uint8 playerclass, uint8 spec, std::string stat, uint32 value);
     [[nodiscard]] uint32 GetStatWeight(Player* player, uint32 itemId);
     [[nodiscard]] uint32 GetLiveStatWeight(Player* player, uint32 itemId);
@@ -211,6 +213,7 @@ public:
 
     [[nodiscard]] static bool IsInternalItem(ItemTemplate const* proto);
     [[nodiscard]] static bool IsValidItem(ItemTemplate const* proto);
+    [[nodiscard]] static bool IsAllowedForLevelExpansion(uint32 itemId, uint32 level);
     [[nodiscard]] static bool IsUsedBySkill(ItemTemplate const* proto, uint32 skillId);
 
 private:

@@ -13,6 +13,10 @@
 #include "NaxxBossHelper.h"
 #include "Trigger.h"
 
+// Above this the encounter has effectively just been pulled, which is where a threat redirect is
+// worth its cooldown.
+static constexpr float NAXX_PULL_HEALTH_PCT = 95.0f;
+
 class MutatingInjectionTrigger : public HasAuraTrigger
 {
 public:
@@ -36,10 +40,7 @@ public:
 class AuraRemovedTrigger : public Trigger
 {
 public:
-    AuraRemovedTrigger(PlayerbotAI* botAI, std::string name) : Trigger(botAI, name, 1)
-    {
-        this->prev_check = false;
-    }
+    AuraRemovedTrigger(PlayerbotAI* botAI, std::string name) : Trigger(botAI, name, 1) { this->prev_check = false; }
     virtual bool IsActive() override;
 
 protected:
@@ -64,19 +65,35 @@ private:
     static constexpr uint32 CloudRotationDelayMs = 15000;
 };
 
-//class HeiganMeleeTrigger : public Trigger
-//{
-//public:
-//    HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan melee") {}
-//    virtual bool IsActive();
-//};
-//
-//class HeiganRangedTrigger : public Trigger
-//{
-//public:
-//    HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan ranged") {}
-//    bool IsActive() override;
-//};
+class HeiganMeleeTrigger : public Trigger
+{
+public:
+    HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan melee"), helper(ai) {}
+    virtual bool IsActive();
+
+private:
+    HeiganBossHelper helper;
+};
+
+class HeiganRangedTrigger : public Trigger
+{
+public:
+    HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan ranged"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    HeiganBossHelper helper;
+};
+
+class HeiganDecrepitFeverTrigger : public Trigger
+{
+public:
+    HeiganDecrepitFeverTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan decrepit fever"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    HeiganBossHelper helper;
+};
 
 class RazuviousTankTrigger : public Trigger
 {
@@ -108,11 +125,31 @@ private:
     KelthuzadBossHelper helper;
 };
 
+class KelthuzadShadowFissureTrigger : public Trigger
+{
+public:
+    KelthuzadShadowFissureTrigger(PlayerbotAI* ai) : Trigger(ai, "kel'thuzad shadow fissure"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
 class AnubrekhanTrigger : public Trigger
 {
 public:
     AnubrekhanTrigger(PlayerbotAI* ai) : Trigger(ai, "anub'rekhan") {}
     bool IsActive() override;
+};
+
+class AnubrekhanLocustSwarmTrigger : public Trigger
+{
+public:
+    AnubrekhanLocustSwarmTrigger(PlayerbotAI* ai) : Trigger(ai, "anub'rekhan locust swarm"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
  class FaerlinaTrigger : public Trigger
@@ -122,6 +159,13 @@ public:
      bool IsActive() override;
  };
 
+class FaerlinaFrenzyTrigger : public Trigger
+{
+public:
+    FaerlinaFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "faerlina frenzy") {}
+    bool IsActive() override;
+};
+
 class MaexxnaTrigger : public Trigger
 {
 public:
@@ -129,26 +173,62 @@ public:
     bool IsActive() override;
 };
 
-//class PatchwerkTankTrigger : public Trigger
-//{
-//public:
-//    PatchwerkTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk tank") {}
-//    bool IsActive() override;
-//};
-//
-//class PatchwerkNonTankTrigger : public Trigger
-//{
-//public:
-//    PatchwerkNonTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk non-tank") {}
-//    bool IsActive() override;
-//};
-//
-//class PatchwerkRangedTrigger : public Trigger
-//{
-//public:
-//    PatchwerkRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk ranged") {}
-//    bool IsActive() override;
-//};
+class MaexxnaWebWrapTrigger : public Trigger
+{
+public:
+    MaexxnaWebWrapTrigger(PlayerbotAI* ai) : Trigger(ai, "maexxna web wrap") {}
+    bool IsActive() override;
+};
+
+class MaexxnaSpiderlingsTrigger : public Trigger
+{
+public:
+    MaexxnaSpiderlingsTrigger(PlayerbotAI* ai) : Trigger(ai, "maexxna spiderlings") {}
+    bool IsActive() override;
+};
+
+class GothikTrigger : public Trigger
+{
+public:
+    GothikTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GothikBossHelper helper;
+};
+
+// A safety net for a bot that started on the dead side or got shoved across it. While the gate is
+// shut nobody can cross on purpose.
+class GothikWrongSideTrigger : public Trigger
+{
+public:
+    GothikWrongSideTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik wrong side"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GothikBossHelper helper;
+};
+
+// class PatchwerkTankTrigger : public Trigger
+// {
+// public:
+//     PatchwerkTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk tank") {}
+//     bool IsActive() override;
+// };
+
+// class PatchwerkNonTankTrigger : public Trigger
+// {
+// public:
+//     PatchwerkNonTankTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk non-tank") {}
+//     bool IsActive() override;
+// };
+
+// class PatchwerkRangedTrigger : public Trigger
+// {
+// public:
+//     PatchwerkRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "patchwerk ranged") {}
+//     bool IsActive() override;
+// };
 
 class ThaddiusPhasePetTrigger : public Trigger
 {
@@ -191,24 +271,44 @@ private:
     ThaddiusBossHelper helper;
 };
 
-class FourHorsemenAttractorsTrigger : public Trigger
+class ThaddiusRedirectThreatTrigger : public Trigger
 {
 public:
-    FourHorsemenAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, "four horsemen attractors"), helper(ai) {}
+    ThaddiusRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius redirect threat"), helper(ai) {}
     bool IsActive() override;
 
 private:
-    FourHorsemenBossHelper helper;
+    ThaddiusBossHelper helper;
 };
 
-class FourHorsemenExceptAttractorsTrigger : public Trigger
+class FourhorsemanRedirectThreatTrigger : public Trigger
 {
 public:
-    FourHorsemenExceptAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, "four horsemen except attractors"), helper(ai) {}
+    FourhorsemanRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "four horsemen redirect threat"), helper(ai) {}
     bool IsActive() override;
 
 private:
-    FourHorsemenBossHelper helper;
+    FourhorsemanBossHelper helper;
+};
+
+class HorsemanAttractorsTrigger : public Trigger
+{
+public:
+    HorsemanAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, "fourhorsemen attractors"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    FourhorsemanBossHelper helper;
+};
+
+class HorsemanExceptAttractorsTrigger : public Trigger
+{
+public:
+    HorsemanExceptAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, "fourhorsemen except attractors"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    FourhorsemanBossHelper helper;
 };
 
 class SapphironGroundTrigger : public Trigger
@@ -241,10 +341,43 @@ private:
     GluthBossHelper helper;
 };
 
+class GluthLowHealthZombieAoeTrigger : public Trigger
+{
+public:
+    GluthLowHealthZombieAoeTrigger(PlayerbotAI* ai)
+        : Trigger(ai, "gluth low health zombie aoe"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
 class GluthMainTankMortalWoundTrigger : public Trigger
 {
 public:
-    GluthMainTankMortalWoundTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth main tank mortal wound trigger"), helper(ai) {}
+    GluthMainTankMortalWoundTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth main tank mortal wound trigger"), helper(ai)
+    {
+    }
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
+class GluthFrenzyTrigger : public Trigger
+{
+public:
+    GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth frenzy"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    GluthBossHelper helper;
+};
+
+class GluthRedirectThreatTrigger : public Trigger
+{
+public:
+    GluthRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth redirect threat"), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -261,4 +394,33 @@ private:
     LoathebBossHelper helper;
 };
 
+class NothTrigger : public Trigger
+{
+public:
+    NothTrigger(PlayerbotAI* ai) : Trigger(ai, "noth"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    NothBossHelper helper;
+};
+
+class NothCurseTrigger : public Trigger
+{
+public:
+    NothCurseTrigger(PlayerbotAI* ai) : Trigger(ai, "noth curse"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    NothBossHelper helper;
+};
+
+class NothBlinkTrigger : public Trigger
+{
+public:
+    NothBlinkTrigger(PlayerbotAI* ai) : Trigger(ai, "noth blink"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    NothBossHelper helper;
+};
 #endif

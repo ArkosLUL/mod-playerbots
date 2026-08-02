@@ -69,8 +69,9 @@ public:
 class CastDebuffSpellAction : public CastAuraSpellAction
 {
 public:
-    CastDebuffSpellAction(PlayerbotAI* botAI, std::string const spell, bool isOwner = false, float needLifeTime = 8.0f)
-        : CastAuraSpellAction(botAI, spell, isOwner), needLifeTime(needLifeTime) {}
+    CastDebuffSpellAction(PlayerbotAI* botAI, std::string const spell, bool isOwner = false, float needLifeTime = 8.0f,
+                          uint32 beforeDuration = 0)
+        : CastAuraSpellAction(botAI, spell, isOwner, false, beforeDuration), needLifeTime(needLifeTime) {}
     bool isUseful() override;
 
 private:

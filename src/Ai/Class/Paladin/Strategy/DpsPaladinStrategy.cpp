@@ -143,6 +143,14 @@ void DpsPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
+            "high mana",
+            {
+                NextAction("divine plea", ACTION_HIGH)
+            }
+        )
+    );
+    triggers.push_back(
+        new TriggerNode(
             "avenging wrath",
             {
                 NextAction("avenging wrath", ACTION_HIGH + 2)

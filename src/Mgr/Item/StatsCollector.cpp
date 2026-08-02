@@ -16,7 +16,11 @@
 #include "SpellMgr.h"
 #include "Util.h"
 
-StatsCollector::StatsCollector(CollectorType type, int32 cls) : type_(type), cls_(cls) { Reset(); }
+StatsCollector::StatsCollector(CollectorType type, int32 cls, uint32 schoolMask)
+    : type_(type), cls_(cls), schoolMask_(schoolMask)
+{
+    Reset();
+}
 
 void StatsCollector::Reset()
 {
@@ -28,10 +32,18 @@ void StatsCollector::Reset()
 
 void StatsCollector::CollectItemStats(ItemTemplate const* proto)
 {
+    // A melee/tank never makes ranged attacks, so on a ranged weapon its base ranged DPS and any
+    // chance-on-hit proc (which only fires on melee swings) are worthless. Skip both so a statless ranged
+    // stat-stick scores 0 instead of reading as an equip upgrade. Hunters use the RANGED collector.
+    bool const rangedWeaponForMelee = proto->IsRangedWeapon() && (type_ & CollectorType::MELEE);
+
     if (proto->IsRangedWeapon())
     {
-        float val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
-        stats[STATS_TYPE_RANGED_DPS] += val;
+        if (!rangedWeaponForMelee)
+        {
+            float val = (proto->Damage[0].DamageMin + proto->Damage[0].DamageMax) * 1000 / 2 / proto->Delay;
+            stats[STATS_TYPE_RANGED_DPS] += val;
+        }
     }
     else if (proto->IsWeapon())
     {
@@ -54,10 +66,12 @@ void StatsCollector::CollectItemStats(ItemTemplate const* proto)
                 CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(proto->Spells[j].SpellCooldown));
                 break;
             case ITEM_SPELLTRIGGER_ON_EQUIP:
-                CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(0));
+                // On a ranged weapon the equip proc fires from ranged attacks a melee never makes, so
+                // block the proc chain; passive stat auras on the spell still count.
+                CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(0), rangedWeaponForMelee);
                 break;
             case ITEM_SPELLTRIGGER_CHANCE_ON_HIT:
-                if (type_ & CollectorType::MELEE)
+                if ((type_ & CollectorType::MELEE) && !rangedWeaponForMelee)
                 {
                     if (proto->Spells[j].SpellPPMRate > 0.01f)
                         CollectSpellStats(proto->Spells[j].SpellId, 1.0f, Milliseconds(static_cast<int>(60000 / proto->Spells[j].SpellPPMRate)));
@@ -77,7 +91,8 @@ void StatsCollector::CollectItemStats(ItemTemplate const* proto)
     }
 }
 
-void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, Milliseconds spellCooldown)
+void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, Milliseconds spellCooldown,
+                                       bool blockProcTriggers)
 {
     SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
 
@@ -91,7 +106,7 @@ void StatsCollector::CollectSpellStats(uint32 spellId, float multiplier, Millise
 
     Milliseconds triggerCooldown = eventEntry ? eventEntry->Cooldown : 0ms;
 
-    bool canNextTrigger = true;
+    bool canNextTrigger = !blockProcTriggers;
 
     uint32 procFlags;
     uint32 procChance;
@@ -231,6 +246,9 @@ void StatsCollector::CollectEnchantStats(SpellItemEnchantmentEntry const* enchan
                 CollectSpellStats(enchant_spell_id, 1.0f);
                 break;
             }
+            // ITEM_ENCHANTMENT_TYPE_USE_SPELL (Engineering tinkers) stays unscored on purpose: nothing
+            // in the module ever fires an enchant's on-use spell, so a bot that picked one over a stat
+            // enchant would just walk around with an empty slot's worth of stats.
             case ITEM_ENCHANTMENT_TYPE_STAT:
             {
                 // for item random suffix
@@ -569,6 +587,10 @@ void StatsCollector::HandleApplyAura(const SpellEffectInfo& effectInfo, float mu
             if (schoolType & SPELL_SCHOOL_MASK_NORMAL)
                 stats[STATS_TYPE_ATTACK_POWER] += val * multiplier;
             if ((schoolType & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
+                stats[STATS_TYPE_SPELL_POWER] += val * multiplier;
+            // Single-school spell power (e.g. +51 fire damage) is worth full value
+            // to a spec whose primary nuke school matches
+            else if (schoolType & schoolMask_)
                 stats[STATS_TYPE_SPELL_POWER] += val * multiplier;
             break;
         }

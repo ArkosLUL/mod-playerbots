@@ -6,6 +6,7 @@
 
 #include "RogueTriggers.h"
 
+#include "ArmorDebuff.h"
 #include "GenericTriggers.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
@@ -110,11 +111,48 @@ bool SprintTrigger::IsActive()
             ServerFacade::instance().IsDistanceGreaterThan(AI_VALUE2(float, "distance", "enemy player target"), distance));
 }
 
+bool SliceAndDiceTrigger::IsActive()
+{
+    return AI_VALUE2(uint8, "combo", "current target") >= 1 && BuffTrigger::IsActive();
+}
+
+bool HungerForBloodTrigger::IsActive()
+{
+    if (!BuffTrigger::IsActive())
+        return false;
+
+    // Needs a bleed on the target, and Rupture is the only one the rotation keeps up outside stealth.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
+
+    return botAI->GetAura("rupture", target, true) || botAI->GetAura("garrote", target, true);
+}
+
+bool RuptureTrigger::IsActive()
+{
+    return AI_VALUE2(uint8, "combo", "current target") >= 4 && DebuffTrigger::IsActive();
+}
+
+bool EnvenomTrigger::IsActive()
+{
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive() || !target->IsInWorld())
+        return false;
+
+    if (AI_VALUE2(uint8, "combo", "current target") < 4)
+        return false;
+
+    // Envenom consumes our own Deadly Poison stacks; the aura state is what the spell itself checks,
+    // so it stays correct across poison ranks.
+    return target->HasAuraState(AURA_STATE_DEADLY_POISON, nullptr, bot);
+}
+
 bool ExposeArmorTrigger::IsActive()
 {
     Unit* target = AI_VALUE(Unit*, "current target");
-    return DebuffTrigger::IsActive() && !botAI->HasAura("sunder armor", target, false, false, -1, true) &&
-           AI_VALUE2(uint8, "combo", "current target") <= 3;
+    return DebuffTrigger::IsActive() && !TargetHasMajorArmorDebuff(botAI, target) &&
+           !GroupSuppliesMajorArmorDebuff(bot) && AI_VALUE2(uint8, "combo", "current target") <= 3;
 }
 
 bool MainHandWeaponNoEnchantTrigger::IsActive()

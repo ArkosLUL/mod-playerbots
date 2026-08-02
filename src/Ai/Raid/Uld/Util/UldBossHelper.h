@@ -19,6 +19,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "ScriptedCreature.h"
+#include "UldScripts.h"
 
 constexpr uint32 ULDUAR_MAP_ID = 603;
 
@@ -32,6 +33,9 @@ enum UlduarIDs
     SPELL_OVERLOAD_10_MAN_2 = 63485,
     SPELL_OVERLOAD_25_MAN_2 = 61886,
     SPELL_RUNE_OF_POWER = 64320,
+    // NPC_STEELBREAKER / NPC_MOLGEIM / NPC_BRUNDIR come from core ulduar.h via UldScripts.h
+    SPELL_FUSION_PUNCH = 61903,
+    SPELL_OVERWHELMING_POWER = 64637,
 
     // Kologarn
     NPC_RIGHT_ARM = 32934,
@@ -48,6 +52,9 @@ enum UlduarIDs
     NPC_TOASTY_FIRE = 33342,
     SPELL_FLASH_FREEZE = 61968,
     SPELL_BITING_COLD_PLAYER_AURA = 62039,
+    // Hodir hard mode (3-min timed kill): free the flash-frozen helpers, then exploit their buffs.
+    NPC_HODIR_FLASH_FREEZE_BLOCK = 32938,  // ice block encasing a frozen helper NPC; kill it to free them
+    SPELL_HODIR_STORM_CLOUD = 65123,       // shaman buff on a random player; base id, difficulty-mapped at runtime
 
     // Freya
     NPC_SNAPLASHER = 32916,
@@ -58,6 +65,16 @@ enum UlduarIDs
     NPC_HEALTHY_SPORE = 33215,
     NPC_EONARS_GIFT = 33228,
     GOBJECT_NATURE_BOMB = 194902,
+    SPELL_ATTUNED_TO_NATURE = 62519,  // damage reduction Freya carries for the whole wave phase
+
+    // Freya hard mode: Elders left alive permanently empower Freya with an extra ability each.
+    // NPC_FREYA comes from core ulduar.h via UldScripts.h.
+    NPC_FREYA_IRON_ROOTS = 33088,               // Ironbranch's Iron Roots trap (selectable)
+    NPC_FREYA_STRENGTHENED_IRON_ROOTS = 33168,  // Freya's empowered Iron Roots trap (selectable)
+    NPC_FREYA_SUN_BEAM = 33170,                 // Freya's Unstable Sun Beam stalker (non-selectable)
+    NPC_FREYA_UNSTABLE_SUN_BEAM = 33050,        // Brightleaf's Unstable Sun Beam stalker (non-selectable)
+    SPELL_IRON_ROOTS_DAMAGE = 62283,            // DoT on a player trapped by Ironbranch's roots
+    SPELL_IRON_ROOTS_FREYA_DAMAGE = 62861,      // DoT on a player trapped by Freya's roots
 
     // Thorim
     NPC_DARK_RUNE_ACOLYTE_I = 32886,
@@ -143,16 +160,170 @@ enum UlduarIDs
     SPELL_CANCEL_ILLUSION_AURA = 63993,
     SPELL_INDUCE_MADNESS = 64059,
     SPELL_LUNATIC_GAZE_YS = 64163,
+    SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
 
+    // Algalon the Observer
+    PB_NPC_ALGALON = 32871,
+    PB_NPC_LIVING_CONSTELLATION = 33052,
+    PB_NPC_COLLAPSING_STAR = 32955,
+    PB_NPC_BLACK_HOLE = 32953,
+    PB_NPC_WORM_HOLE = 34099,
+    PB_NPC_UNLEASHED_DARK_MATTER = 34097,
+    NPC_ALGALON_ASTEROID_TARGET_1 = 33104,
+    NPC_ALGALON_ASTEROID_TARGET_2 = 33105,
+    SPELL_ALGALON_BIG_BANG = 64443,
+    SPELL_ALGALON_PHASE_PUNCH = 64412,
+    SPELL_ALGALON_COSMIC_SMASH = 62301,
+    SPELL_ALGALON_BLACK_HOLE_DAMAGE = 62169,
+
     // Buffs
-    SPELL_FROST_TRAP = 13809
+    SPELL_FROST_TRAP = 13809,
+
+    // Ignis the Furnace Master
+    NPC_IGNIS_IRON_CONSTRUCT = 33121,
+    NPC_IGNIS_SCORCHED_GROUND = 33123,
+
+    // Auriaya
+    NPC_AURIAYA_SANCTUM_SENTRY = 34014,
+    NPC_AURIAYA_FERAL_DEFENDER = 34035,
+    NPC_AURIAYA_SEEPING_FERAL_ESSENCE = 34098,
+
+    // General Vezax
+    NPC_VEZAX_SARONITE_VAPORS = 33488,
+    NPC_VEZAX_SARONITE_ANIMUS = 33524,
+
+    // Flame Leviathan hard mode (each tower left standing empowers the boss and
+    // spawns that tower's periodic ground hazard).
+    NPC_FL_THORIM_HAMMER_TARGET = 33364,     // Storm: static lightning-strike marks
+    NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,  // Flame: moving fire trail
+    NPC_FL_HODIRS_FURY_TARGET = 33108,       // Frost: chases a random player then drops frost
+
+    // Thorim hard mode (arena gauntlet cleared fast enough that Sif joins the fight).
+    NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
+    NPC_SIF_BLIZZARD = 32879,     // moving Blizzard ground AoE, only ever exists in hard mode
+
+    // XT-002 Deconstructor. NPC_XT002, NPC_XT_TOY_PILE, NPC_XS013_SCRAPBOT and
+    // NPC_HEART_OF_DECONSTRUCTOR come from core ulduar.h via UldScripts.h.
+    PB_NPC_XT002_PUMMELLER = 33344,    // aggressive add, wants an off-tank
+    PB_NPC_XT002_BOOMBOT = 33346,      // explodes on reaching XT or at 50% health; melee must not touch it
+    PB_NPC_XT002_LIFE_SPARK = 34004,   // hard mode only, spawned by an expiring Searing Light
+    PB_NPC_XT002_VOID_ZONE = 34001,    // hard mode only, dropped by an expiring Gravity Bomb
+    SPELL_XT002_SEARING_LIGHT_10 = 63018,
+    SPELL_XT002_SEARING_LIGHT_25 = 65121,
+    SPELL_XT002_GRAVITY_BOMB_10 = 63024,
+    SPELL_XT002_GRAVITY_BOMB_25 = 64234,
+    SPELL_XT002_EXPOSED_HEART = 63849,  // channeled by the Heart while it is vulnerable
+    SPELL_XT002_HEARTBREAK = 65737,     // permanent hard-mode empower once the Heart dies
+    SPELL_XT002_SUBMERGE = 37751,
+    SPELL_MISDIRECTION = 35079,  // hunter buff; its charges are what the redirect action spends
+
+    // Mimiron hard mode ("Firefighter", Big Red Button pressed): mechs empowered, two extra hazards.
+    // NPC_MIMIRON (the boss; sits in his pod, never a bot attack target) comes from core ulduar.h via UldScripts.h.
+    NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
+    NPC_FLAMES_SPREAD = 34121,     // persistent spreading ground-fire node (non-selectable)
+    NPC_FROST_BOMB = 34149         // VX-001's Frost Bomb; detonates in a large AoE
 };
+
+// Flame Leviathan hard-mode tower bitmask, used to pick which ground hazards to dodge.
+enum FlameLeviathanTowerFlags
+{
+    FL_TOWER_STORM = 0x1,
+    FL_TOWER_FLAMES = 0x2,
+    FL_TOWER_FROST = 0x4,
+    FL_TOWER_LIFE = 0x8,
+    FL_TOWER_ALL = 0xF
+};
+
+// Vehicle keeps this clear of any active-tower ground hazard (strike / fire / frost).
+constexpr float ULDUAR_FL_TOWER_HAZARD_RADIUS = 18.0f;
+
+// Vezax hard mode: ranged/healers stay outside the Saronite Animus' Profound Darkness (63420).
+constexpr float ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f;
+
+// Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
+// radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
+constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
+
+// Hodir hard mode: a bot within this of a Toasty Fire counts as protected (no Biting Cold, Flash
+// Freeze exemption), so it only seeks a fire when further out. Matches the Snowpacked Icicle stack range.
+constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 5.0f;
+
+// Hodir hard mode: a Storm Cloud carrier spreads Storm Power (crit-damage buff) to allies within this
+// range. Exact radius is DBC, so this is a conservative default; the carrier joins the pack when it has
+// fewer than a couple of allies this close.
+constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 10.0f;
+
+// XT-002: Searing Light and Gravity Bomb both splash around their carrier, so everyone else keeps
+// this far away. In hard mode the Gravity Bomb's Void Zone lands on the carrier's feet too.
+constexpr float ULDUAR_XT002_DEBUFF_SPREAD_RADIUS = 12.0f;
+
+// XT-002: Boom is roughly 10 yd, and a Boombot also detonates at 50% health, so melee leave margin
+// rather than trading the hit for a few swings.
+constexpr float ULDUAR_XT002_BOOMBOT_AVOID_RADIUS = 12.0f;
+
+// XT-002 hard mode: Void Zone's Consumption pool. Exact radius is DBC, so this is a conservative
+// default to confirm in-game.
+constexpr float ULDUAR_XT002_VOID_ZONE_RADIUS = 6.0f;
+
+// XT-002 normal mode: bots stop damaging the exposed Heart here so an in-flight hit cannot kill it
+// and flip the raid into hard mode by accident.
+constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
+
+// XT-002 normal mode: the last Heart phase is over below this, so the held burst cooldowns are free.
+constexpr float ULDUAR_XT002_FINAL_PUSH_HP_PCT = 25.0f;
+
+// Off-tank taunts once the active tank reaches this many Phase Punch stacks
+constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
+
+// Kiter stops this far past the Black Hole (away from the constellation) to stay out of its phase/damage aura
+constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 5.0f;
+
+// Designated Big Bang soaker: the first alive Shadow Priest in the raid, who stays out and pops
+// Dispersion (90% damage reduction) to survive Big Bang instead of hiding in a hole. Big Bang is
+// unavoidable — full immunity (Paladin Divine Shield) does not prevent it, only mitigation survives.
+// Returns nullptr if the raid has no living Shadow Priest.
+Player* GetAlgalonBigBangSoakerPriest(Player* bot);
+
+// XT-002 Deconstructor. These use GetFirstAliveUnitByEntry rather than "find target": the Heart
+// never attacks anyone, so it never lands on a bot's threat list and "find target" cannot resolve it.
+Unit* GetXT002(PlayerbotAI* botAI);
+
+// The Heart while it is actually vulnerable - alive, selectable and channeling Exposed Heart.
+// Damage dealt to it transfers to XT, which makes this window the encounter's damage multiplier.
+Unit* GetXT002ExposedHeart(PlayerbotAI* botAI);
+
+// XT is down in a Heart phase: not selectable and not attacking anyone.
+bool IsXT002Submerged(PlayerbotAI* botAI);
+
+// Difficulty-mapped debuff ids (the 10- and 25-man versions are separate spells).
+uint32 GetXT002SearingLightSpellId(Player* bot);
+uint32 GetXT002GravityBombSpellId(Player* bot);
+
+// Yogg-Saron phase reads. Yogg is not reliably on a bot's threat list, so both scan for the creature
+// instead of going through "find target".
+bool YoggSaronInPhase2(PlayerbotAI* botAI);
+bool YoggSaronInPhase3(PlayerbotAI* botAI);
+
+// The add the raid should be killing, most urgent first: Life Spark (hard mode, chain-shocks the
+// raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
+Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
 constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
 constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
 constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
 constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
+
+// Thorim hard mode: bots clear Sif's moving Blizzard, and ranged/healers keep this far from
+// Sif herself so her point-blank Frost Nova (cast after she teleports next to a target) misses.
+constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 12.0f;
+constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
+
+// Mimiron hard mode: bots flee a persistent fire node when this close (cells are small), and clear
+// the Frost Bomb's larger explosion. Exact radii are DBC, so these are conservative defaults to
+// confirm in-game.
+constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
+constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 12.0f;
 constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
@@ -160,6 +331,11 @@ constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 150.0f;
 constexpr float ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS = 150.0f;
 constexpr float ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS = 150.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
+
+// Yogg-Saron reduced-Keeper hard mode: a bot whose Sanity (63050, 100 stacks) is at or below this
+// pulls behind Yogg and faces away to conserve it. With Freya absent there are no Sanity Wells, so the
+// drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
+constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
 extern const Position ULDUAR_THORIM_NEAR_ARENA_CENTER;
 extern const Position ULDUAR_THORIM_NEAR_ENTRANCE_POSITION;
@@ -257,6 +433,11 @@ public:
 
     bool IsGroundPhase() const;
     bool IsFlyingPhase() const;
+
+    // Same phase reads against a boss unit the caller already holds, for code that must not run
+    // UpdateBossAI() first - it reassigns the raid's tank roles as a side effect.
+    static bool IsGroundPhaseFor(Unit* boss);
+    static bool IsFlyingPhaseFor(Unit* boss);
 
     bool IsHarpoonFired(uint32 chainSpellId) const;
     static bool IsHarpoonReady(GameObject* harpoonGO);

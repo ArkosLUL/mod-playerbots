@@ -17,7 +17,6 @@ namespace
 constexpr uint32 BG_WS_SPELL_WARSONG_FLAG = 23333;
 constexpr uint32 BG_WS_SPELL_SILVERWING_FLAG = 23335;
 constexpr uint32 BG_EY_NETHERSTORM_FLAG_SPELL = 34976;
-constexpr uint32 SPELL_MASTER_POISONER_RANK_3 = 58410;
 }
 
 bool CastStealthAction::isUseful()
@@ -69,15 +68,14 @@ bool CastEnvenomAction::isUseful()
     return AI_VALUE2(uint8, "energy", "self target") >= 35;
 }
 
-bool CastEnvenomAction::isPossible()
-{
-    // alternate to eviscerate if talents unlearned
-    return bot->HasAura(SPELL_MASTER_POISONER_RANK_3);
-}
-
 bool CastTricksOfTheTradeOnMainTankAction::isUseful()
 {
     return CastSpellAction::isUseful() && AI_VALUE2(float, "distance", GetTargetName()) < 20.0f;
+}
+
+bool CastTricksOfTheTradeAction::isUseful()
+{
+    return CastBuffSpellAction::isUseful() && AI_VALUE2(float, "distance", GetTargetName()) < 20.0f;
 }
 
 bool UseDeadlyPoisonAction::Execute(Event /*event*/)

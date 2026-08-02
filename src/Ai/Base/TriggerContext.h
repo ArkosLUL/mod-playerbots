@@ -18,6 +18,7 @@
 #include "NewRpgTriggers.h"
 #include "PvpTriggers.h"
 #include "PullTriggers.h"
+#include "RitualOfSoulsActions.h"
 #include "RpgTriggers.h"
 #include "RtiTriggers.h"
 #include "StuckTriggers.h"
@@ -93,6 +94,7 @@ public:
         creators["tank assist"] = &TriggerContext::TankAssist;
         creators["lose aggro"] = &TriggerContext::LoseAggro;
         creators["has aggro"] = &TriggerContext::HasAggro;
+        creators["offensive potion"] = &TriggerContext::OffensivePotion;
 
         creators["light aoe"] = &TriggerContext::LightAoe;
         creators["medium aoe"] = &TriggerContext::MediumAoe;
@@ -119,6 +121,7 @@ public:
         creators["target with combo points almost dead"] = &TriggerContext::target_with_combo_points_almost_dead;
         creators["combo points not full"] = &TriggerContext::ComboPointsNotFull;
         creators["combo points not full and high energy"] = &TriggerContext::ComboPointsNotFullAndHighEnergy;
+        creators["combo points not full and medium energy"] = &TriggerContext::ComboPointsNotFullAndMediumEnergy;
 
         creators["being attacked"] = &TriggerContext::BeingAttacked;
         creators["medium threat"] = &TriggerContext::MediumThreat;
@@ -245,9 +248,13 @@ public:
         creators["can use fishing bobber"] = &TriggerContext::can_use_fishing_bobber;
         creators["new pet"] = &TriggerContext::new_pet;
         creators["wait for attack safe distance"] = &TriggerContext::wait_for_attack_safe_distance;
+        creators["ritual of souls portal nearby"] = &TriggerContext::ritual_of_souls_portal_nearby;
+        creators["soulwell nearby"] = &TriggerContext::soulwell_nearby;
     }
 
 private:
+    static Trigger* ritual_of_souls_portal_nearby(PlayerbotAI* botAI) { return new RitualPortalNearbyTrigger(botAI); }
+    static Trigger* soulwell_nearby(PlayerbotAI* botAI) { return new SoulwellNearbyTrigger(botAI); }
     static Trigger* give_food(PlayerbotAI* botAI) { return new GiveFoodTrigger(botAI); }
     static Trigger* give_water(PlayerbotAI* botAI) { return new GiveWaterTrigger(botAI); }
     static Trigger* no_rti(PlayerbotAI* botAI) { return new NoRtiTrigger(botAI); }
@@ -310,6 +317,7 @@ private:
     static Trigger* HasAreaDebuff(PlayerbotAI* botAI) { return new HasAreaDebuffTrigger(botAI); }
     static Trigger* LoseAggro(PlayerbotAI* botAI) { return new LoseAggroTrigger(botAI); }
     static Trigger* HasAggro(PlayerbotAI* botAI) { return new HasAggroTrigger(botAI); }
+    static Trigger* OffensivePotion(PlayerbotAI* botAI) { return new OffensivePotionTrigger(botAI); }
     static Trigger* LowHealth(PlayerbotAI* botAI) { return new LowHealthTrigger(botAI); }
     static Trigger* MediumHealth(PlayerbotAI* botAI) { return new MediumHealthTrigger(botAI); }
     static Trigger* AlmostFullHealth(PlayerbotAI* botAI) { return new AlmostFullHealthTrigger(botAI); }
@@ -367,6 +375,7 @@ private:
     }
     static Trigger* ComboPointsNotFull(PlayerbotAI* botAI) { return new ComboPointsNotFullTrigger(botAI); }
     static Trigger* ComboPointsNotFullAndHighEnergy(PlayerbotAI* botAI) { return new TwoTriggers(botAI, "combo points not full", "high energy available"); }
+    static Trigger* ComboPointsNotFullAndMediumEnergy(PlayerbotAI* botAI) { return new TwoTriggers(botAI, "combo points not full", "medium energy available"); }
     static Trigger* BeingAttacked(PlayerbotAI* botAI) { return new BeingAttackedTrigger(botAI); }
     static Trigger* MediumThreat(PlayerbotAI* botAI) { return new MediumThreatTrigger(botAI); }
     static Trigger* low_tank_threat(PlayerbotAI* botAI) { return new LowTankThreatTrigger(botAI); }

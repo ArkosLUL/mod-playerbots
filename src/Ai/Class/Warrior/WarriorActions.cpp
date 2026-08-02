@@ -16,6 +16,24 @@ constexpr uint32 SPELL_DIVINE_SHIELD = 642;
 constexpr uint32 SPELL_ICE_BLOCK = 45438;
 constexpr uint32 SPELL_BLESSING_OF_PROTECTION = 41450;
 constexpr uint32 SPELL_SHATTERING_THROW = 64382;
+constexpr uint32 SPELL_IMPROVED_SLAM_RANKS[] = { 12862, 12330 };
+}
+
+bool CastSlamAction::isUseful()
+{
+    if (!CastMeleeSpellAction::isUseful())
+        return false;
+
+    // A Bloodsurge proc makes Slam instant. Otherwise it is only worth the 1.5s cast with Improved
+    // Slam talented - at full cast time it clips more auto-attack damage than it adds.
+    if (botAI->HasAura("slam!", bot))
+        return true;
+
+    for (uint32 spellId : SPELL_IMPROVED_SLAM_RANKS)
+        if (bot->HasSpell(spellId))
+            return true;
+
+    return false;
 }
 
 bool CastBerserkerRageAction::isPossible()
@@ -159,6 +177,15 @@ bool CastVigilanceAction::Execute(Event /*event*/)
         return false;
 
     return botAI->CastSpell("vigilance", target);
+}
+
+bool CastInterveneAction::isUseful()
+{
+    if (!CastProtectSpellAction::isUseful())
+        return false;
+
+    // A tank leaving the boss to save a raider trades one death for the whole pull.
+    return AI_VALUE(uint8, "my attacker count") == 0;
 }
 
 bool CastRetaliationAction::isUseful()

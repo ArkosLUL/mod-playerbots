@@ -18,6 +18,7 @@ public:
     {
         creators["flame leviathan on vehicle"] = &RaidUlduarTriggerContext::flame_leviathan_on_vehicle;
         creators["flame leviathan vehicle near"] = &RaidUlduarTriggerContext::flame_leviathan_vehicle_near;
+        creators["flame leviathan tower hazard"] = &RaidUlduarTriggerContext::flame_leviathan_tower_hazard;
         creators["razorscale flying alone"] = &RaidUlduarTriggerContext::razorscale_flying_alone;
         creators["razorscale avoid devouring flames"] = &RaidUlduarTriggerContext::razorscale_avoid_devouring_flames;
         creators["razorscale avoid sentinel"] = &RaidUlduarTriggerContext::razorscale_avoid_sentinel;
@@ -25,11 +26,15 @@ public:
         creators["razorscale grounded"] = &RaidUlduarTriggerContext::razorscale_grounded;
         creators["razorscale harpoon trigger"] = &RaidUlduarTriggerContext::razorscale_harpoon_trigger;
         creators["razorscale fuse armor trigger"] = &RaidUlduarTriggerContext::razorscale_fuse_armor_trigger;
+        creators["razorscale focus caster trigger"] = &RaidUlduarTriggerContext::razorscale_focus_caster_trigger;
+        creators["razorscale flame breath trigger"] = &RaidUlduarTriggerContext::razorscale_flame_breath_trigger;
         creators["razorscale fire resistance trigger"] = &RaidUlduarTriggerContext::razorscale_fire_resistance_trigger;
         creators["ignis fire resistance trigger"] = &RaidUlduarTriggerContext::ignis_fire_resistance_trigger;
         creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
         creators["iron assembly overload trigger"] = &RaidUlduarTriggerContext::iron_assembly_overload_trigger;
         creators["iron assembly rune of power trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_trigger;
+        creators["iron assembly kill order trigger"] = &RaidUlduarTriggerContext::iron_assembly_kill_order_trigger;
+        creators["iron assembly fusion punch swap trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_swap_trigger;
         creators["kologarn mark dps target trigger"] = &RaidUlduarTriggerContext::kologarn_mark_dps_target_trigger;
         creators["kologarn fall from floor trigger"] = &RaidUlduarTriggerContext::kologarn_fall_from_floor_trigger;
         creators["kologarn nature resistance trigger"] = &RaidUlduarTriggerContext::kologarn_nature_resistance_trigger;
@@ -42,11 +47,16 @@ public:
         creators["hodir biting cold"] = &RaidUlduarTriggerContext::hodir_biting_cold;
         creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
         creators["hodir frost resistance trigger"] = &RaidUlduarTriggerContext::hodir_frost_resistance_trigger;
+        creators["hodir free frozen helper"] = &RaidUlduarTriggerContext::hodir_free_frozen_helper;
+        creators["hodir spread storm cloud"] = &RaidUlduarTriggerContext::hodir_spread_storm_cloud;
+        creators["hodir move to toasty fire"] = &RaidUlduarTriggerContext::hodir_move_to_toasty_fire;
         creators["freya near nature bomb"] = &RaidUlduarTriggerContext::freya_near_nature_bomb;
         creators["freya fire resistance trigger"] = &RaidUlduarTriggerContext::freya_fire_resistance_trigger;
         creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
         creators["freya mark dps target trigger"] = &RaidUlduarTriggerContext::freya_mark_dps_target_trigger;
         creators["freya move to healing spore trigger"] = &RaidUlduarTriggerContext::freya_move_to_healing_spore_trigger;
+        creators["freya break iron roots"] = &RaidUlduarTriggerContext::freya_break_iron_roots;
+        creators["freya dodge unstable sun beam"] = &RaidUlduarTriggerContext::freya_dodge_unstable_sun_beam;
         creators["thorim frost resistance trigger"] = &RaidUlduarTriggerContext::thorim_frost_resistance_trigger;
         creators["thorim nature resistance trigger"] = &RaidUlduarTriggerContext::thorim_nature_resistance_trigger;
         creators["thorim unbalancing strike trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_trigger;
@@ -85,11 +95,48 @@ public:
         creators["yogg-saron move to exit portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_exit_portal_trigger;
         creators["yogg-saron lunatic gaze trigger"] = &RaidUlduarTriggerContext::yogg_saron_lunatic_gaze_trigger;
         creators["yogg-saron phase 3 positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_positioning_trigger;
+        creators["yogg-saron crusher tentacle trigger"] = &RaidUlduarTriggerContext::yogg_saron_crusher_tentacle_trigger;
+        creators["yogg-saron guardian control trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_control_trigger;
+        creators["yogg-saron sanity conservation trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_conservation_trigger;
+        creators["algalon cosmic smash trigger"] = &RaidUlduarTriggerContext::algalon_cosmic_smash_trigger;
+        creators["algalon big bang trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_trigger;
+        creators["algalon big bang soak trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_soak_trigger;
+        creators["algalon phase punch swap trigger"] = &RaidUlduarTriggerContext::algalon_phase_punch_swap_trigger;
+        creators["algalon constellation kite trigger"] = &RaidUlduarTriggerContext::algalon_constellation_kite_trigger;
+        creators["algalon dark matter trigger"] = &RaidUlduarTriggerContext::algalon_dark_matter_trigger;
+        creators["algalon collapsing star trigger"] = &RaidUlduarTriggerContext::algalon_collapsing_star_trigger;
+        creators["ignis scorched ground trigger"] = &RaidUlduarTriggerContext::ignis_scorched_ground_trigger;
+        creators["ignis iron construct trigger"] = &RaidUlduarTriggerContext::ignis_iron_construct_trigger;
+        creators["auriaya sonic screech trigger"] = &RaidUlduarTriggerContext::auriaya_sonic_screech_trigger;
+        creators["auriaya seeping essence trigger"] = &RaidUlduarTriggerContext::auriaya_seeping_essence_trigger;
+        creators["auriaya mark dps target trigger"] = &RaidUlduarTriggerContext::auriaya_mark_dps_target_trigger;
+        creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
+        creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
+        creators["vezax saronite vapors trigger"] = &RaidUlduarTriggerContext::vezax_saronite_vapors_trigger;
+        creators["vezax saronite animus trigger"] = &RaidUlduarTriggerContext::vezax_saronite_animus_trigger;
+        creators["vezax profound darkness trigger"] = &RaidUlduarTriggerContext::vezax_profound_darkness_trigger;
+        creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
+        creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
+        creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
+        creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
+        creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
+        creators["xt002 searing light spread trigger"] = &RaidUlduarTriggerContext::xt002_searing_light_spread_trigger;
+        creators["xt002 gravity bomb spread trigger"] = &RaidUlduarTriggerContext::xt002_gravity_bomb_spread_trigger;
+        creators["xt002 gravity bomb carrier trigger"] = &RaidUlduarTriggerContext::xt002_gravity_bomb_carrier_trigger;
+        creators["xt002 boombot avoid trigger"] = &RaidUlduarTriggerContext::xt002_boombot_avoid_trigger;
+        creators["xt002 void zone trigger"] = &RaidUlduarTriggerContext::xt002_void_zone_trigger;
+        creators["xt002 mark kill target trigger"] = &RaidUlduarTriggerContext::xt002_mark_kill_target_trigger;
+        creators["xt002 attack kill target trigger"] = &RaidUlduarTriggerContext::xt002_attack_kill_target_trigger;
+        creators["xt002 boombot ranged kill trigger"] = &RaidUlduarTriggerContext::xt002_boombot_ranged_kill_trigger;
+        creators["xt002 attack heart trigger"] = &RaidUlduarTriggerContext::xt002_attack_heart_trigger;
+        creators["xt002 pummeller taunt trigger"] = &RaidUlduarTriggerContext::xt002_pummeller_taunt_trigger;
+        creators["xt002 redirect threat trigger"] = &RaidUlduarTriggerContext::xt002_redirect_threat_trigger;
     }
 
 private:
     static Trigger* flame_leviathan_on_vehicle(PlayerbotAI* ai) { return new FlameLeviathanOnVehicleTrigger(ai); }
     static Trigger* flame_leviathan_vehicle_near(PlayerbotAI* ai) { return new FlameLeviathanVehicleNearTrigger(ai); }
+    static Trigger* flame_leviathan_tower_hazard(PlayerbotAI* ai) { return new FlameLeviathanTowerHazardTrigger(ai); }
     static Trigger* razorscale_flying_alone(PlayerbotAI* ai) { return new RazorscaleFlyingAloneTrigger(ai); }
     static Trigger* razorscale_avoid_devouring_flames(PlayerbotAI* ai) { return new RazorscaleDevouringFlamesTrigger(ai); }
     static Trigger* razorscale_avoid_sentinel(PlayerbotAI* ai) { return new RazorscaleAvoidSentinelTrigger(ai); }
@@ -97,11 +144,15 @@ private:
     static Trigger* razorscale_grounded(PlayerbotAI* ai) { return new RazorscaleGroundedTrigger(ai); }
     static Trigger* razorscale_harpoon_trigger(PlayerbotAI* ai) { return new RazorscaleHarpoonAvailableTrigger(ai); }
     static Trigger* razorscale_fuse_armor_trigger(PlayerbotAI* ai) { return new RazorscaleFuseArmorTrigger(ai); }
+    static Trigger* razorscale_focus_caster_trigger(PlayerbotAI* ai) { return new RazorscaleFocusCasterTrigger(ai); }
+    static Trigger* razorscale_flame_breath_trigger(PlayerbotAI* ai) { return new RazorscaleFlameBreathTrigger(ai); }
     static Trigger* razorscale_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "razorscale"); }
     static Trigger* ignis_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); }
     static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
     static Trigger* iron_assembly_overload_trigger(PlayerbotAI* ai) { return new IronAssemblyOverloadTrigger(ai); }
     static Trigger* iron_assembly_rune_of_power_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerTrigger(ai); }
+    static Trigger* iron_assembly_kill_order_trigger(PlayerbotAI* ai) { return new IronAssemblyKillOrderTrigger(ai); }
+    static Trigger* iron_assembly_fusion_punch_swap_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapTrigger(ai); }
     static Trigger* kologarn_mark_dps_target_trigger(PlayerbotAI* ai) { return new KologarnMarkDpsTargetTrigger(ai); }
     static Trigger* kologarn_fall_from_floor_trigger(PlayerbotAI* ai) { return new KologarnFallFromFloorTrigger(ai); }
     static Trigger* kologarn_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "kologarn"); }
@@ -114,11 +165,16 @@ private:
     static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
     static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "hodir"); }
+    static Trigger* hodir_free_frozen_helper(PlayerbotAI* ai) { return new HodirFreeFrozenHelperTrigger(ai); }
+    static Trigger* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudTrigger(ai); }
+    static Trigger* hodir_move_to_toasty_fire(PlayerbotAI* ai) { return new HodirMoveToToastyFireTrigger(ai); }
     static Trigger* freya_near_nature_bomb(PlayerbotAI* ai) { return new FreyaNearNatureBombTrigger(ai); }
     static Trigger* freya_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "freya"); }
     static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }
     static Trigger* freya_mark_dps_target_trigger(PlayerbotAI* ai) { return new FreyaMarkDpsTargetTrigger(ai); }
     static Trigger* freya_move_to_healing_spore_trigger(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeTrigger(ai); }
+    static Trigger* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsTrigger(ai); }
+    static Trigger* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamTrigger(ai); }
     static Trigger* thorim_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_unbalancing_strike_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeTrigger(ai); }
@@ -157,6 +213,42 @@ private:
     static Trigger* yogg_saron_move_to_exit_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalTrigger(ai); }
     static Trigger* yogg_saron_lunatic_gaze_trigger(PlayerbotAI* ai) { return new YoggSaronLunaticGazeTrigger(ai); }
     static Trigger* yogg_saron_phase_3_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningTrigger(ai); }
+    static Trigger* yogg_saron_crusher_tentacle_trigger(PlayerbotAI* ai) { return new YoggSaronCrusherTentacleTrigger(ai); }
+    static Trigger* yogg_saron_guardian_control_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianControlTrigger(ai); }
+    static Trigger* yogg_saron_sanity_conservation_trigger(PlayerbotAI* ai) { return new YoggSaronSanityConservationTrigger(ai); }
+    static Trigger* algalon_cosmic_smash_trigger(PlayerbotAI* ai) { return new AlgalonCosmicSmashTrigger(ai); }
+    static Trigger* algalon_big_bang_trigger(PlayerbotAI* ai) { return new AlgalonBigBangTrigger(ai); }
+    static Trigger* algalon_big_bang_soak_trigger(PlayerbotAI* ai) { return new AlgalonBigBangSoakTrigger(ai); }
+    static Trigger* algalon_phase_punch_swap_trigger(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapTrigger(ai); }
+    static Trigger* algalon_constellation_kite_trigger(PlayerbotAI* ai) { return new AlgalonConstellationKiteTrigger(ai); }
+    static Trigger* algalon_dark_matter_trigger(PlayerbotAI* ai) { return new AlgalonDarkMatterTrigger(ai); }
+    static Trigger* algalon_collapsing_star_trigger(PlayerbotAI* ai) { return new AlgalonCollapsingStarTrigger(ai); }
+    static Trigger* ignis_scorched_ground_trigger(PlayerbotAI* ai) { return new IgnisScorchedGroundTrigger(ai); }
+    static Trigger* ignis_iron_construct_trigger(PlayerbotAI* ai) { return new IgnisIronConstructTrigger(ai); }
+    static Trigger* auriaya_sonic_screech_trigger(PlayerbotAI* ai) { return new AuriayaSonicScreechTrigger(ai); }
+    static Trigger* auriaya_seeping_essence_trigger(PlayerbotAI* ai) { return new AuriayaSeepingEssenceTrigger(ai); }
+    static Trigger* auriaya_mark_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetTrigger(ai); }
+    static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
+    static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
+    static Trigger* vezax_saronite_vapors_trigger(PlayerbotAI* ai) { return new VezaxSaroniteVaporsTrigger(ai); }
+    static Trigger* vezax_saronite_animus_trigger(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
+    static Trigger* vezax_profound_darkness_trigger(PlayerbotAI* ai) { return new VezaxProfoundDarknessTrigger(ai); }
+    static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
+    static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
+    static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
+    static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
+    static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
+    static Trigger* xt002_searing_light_spread_trigger(PlayerbotAI* ai) { return new XT002SearingLightSpreadTrigger(ai); }
+    static Trigger* xt002_gravity_bomb_spread_trigger(PlayerbotAI* ai) { return new XT002GravityBombSpreadTrigger(ai); }
+    static Trigger* xt002_gravity_bomb_carrier_trigger(PlayerbotAI* ai) { return new XT002GravityBombCarrierTrigger(ai); }
+    static Trigger* xt002_boombot_avoid_trigger(PlayerbotAI* ai) { return new XT002BoombotAvoidTrigger(ai); }
+    static Trigger* xt002_void_zone_trigger(PlayerbotAI* ai) { return new XT002VoidZoneTrigger(ai); }
+    static Trigger* xt002_mark_kill_target_trigger(PlayerbotAI* ai) { return new XT002MarkKillTargetTrigger(ai); }
+    static Trigger* xt002_attack_kill_target_trigger(PlayerbotAI* ai) { return new XT002AttackKillTargetTrigger(ai); }
+    static Trigger* xt002_boombot_ranged_kill_trigger(PlayerbotAI* ai) { return new XT002BoombotRangedKillTrigger(ai); }
+    static Trigger* xt002_attack_heart_trigger(PlayerbotAI* ai) { return new XT002AttackHeartTrigger(ai); }
+    static Trigger* xt002_pummeller_taunt_trigger(PlayerbotAI* ai) { return new XT002PummellerTauntTrigger(ai); }
+    static Trigger* xt002_redirect_threat_trigger(PlayerbotAI* ai) { return new XT002RedirectThreatTrigger(ai); }
 };
 
 #endif

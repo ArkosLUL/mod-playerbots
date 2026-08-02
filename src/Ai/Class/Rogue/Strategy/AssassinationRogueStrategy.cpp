@@ -76,74 +76,29 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
 
     triggers.push_back(
         new TriggerNode(
-            "high energy available",
+            "kick",
             {
-                NextAction("garrote", ACTION_HIGH + 7),
-                NextAction("ambush", ACTION_HIGH + 6)
+                NextAction("kick", ACTION_INTERRUPT + 2),
             }
         )
     );
 
     triggers.push_back(
         new TriggerNode(
-            "high energy available",
+            "kick on enemy healer",
             {
-                NextAction("mutilate", ACTION_NORMAL + 3)
+                NextAction("kick on enemy healer", ACTION_INTERRUPT + 1),
             }
         )
     );
 
+    // Both openers need stealth, so they sit above the survival band - nothing is hitting us yet.
     triggers.push_back(
         new TriggerNode(
-            "hunger for blood",
+            "in stealth",
             {
-                NextAction("hunger for blood", ACTION_HIGH + 6),
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "slice and dice",
-            {
-                NextAction("slice and dice", ACTION_HIGH + 5),
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "combo points 4 available",
-            {
-                NextAction("cold blood", ACTION_HIGH + 6),
-                NextAction("envenom", ACTION_HIGH + 5)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "target with combo points almost dead",
-            {
-                NextAction("envenom", ACTION_HIGH + 4)
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "expose armor",
-            {
-                NextAction("expose armor", ACTION_HIGH + 3),
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "medium threat",
-            {
-                NextAction("vanish", ACTION_HIGH),
+                NextAction("garrote", ACTION_HIGH + 9.5f),
+                NextAction("ambush", ACTION_HIGH + 9.4f)
             }
         )
     );
@@ -169,18 +124,76 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
 
     triggers.push_back(
         new TriggerNode(
-            "kick",
+            "tricks of the trade",
             {
-                NextAction("kick", ACTION_INTERRUPT + 2),
+                NextAction("tricks of the trade", ACTION_HIGH + 6),
             }
         )
     );
 
     triggers.push_back(
         new TriggerNode(
-            "kick on enemy healer",
+            "slice and dice",
             {
-                NextAction("kick on enemy healer", ACTION_INTERRUPT + 1),
+                NextAction("slice and dice", ACTION_HIGH + 5),
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "rupture",
+            {
+                NextAction("rupture", ACTION_HIGH + 4),
+            }
+        )
+    );
+
+    // Hunger for Blood needs a bleed on the target, so it has to sit under Rupture.
+    triggers.push_back(
+        new TriggerNode(
+            "hunger for blood",
+            {
+                NextAction("hunger for blood", ACTION_HIGH + 3),
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "expose armor",
+            {
+                NextAction("expose armor", ACTION_HIGH + 2),
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "envenom",
+            {
+                NextAction("cold blood", ACTION_HIGH + 1.5f),
+                NextAction("envenom", ACTION_HIGH + 1)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "target with combo points almost dead",
+            {
+                NextAction("envenom", ACTION_HIGH)
+            }
+        )
+    );
+
+    // Has to outrank the inherited "reach melee" on the same trigger, or that always wins the tick
+    // and we never sprint to close the gap.
+    triggers.push_back(
+        new TriggerNode(
+            "enemy out of melee",
+            {
+                NextAction("sprint", ACTION_HIGH + 2),
             }
         )
     );
@@ -196,20 +209,9 @@ void AssassinationRogueStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
 
     triggers.push_back(
         new TriggerNode(
-            "low tank threat",
+            "combo points not full and high energy",
             {
-                NextAction("tricks of the trade on main tank", ACTION_HIGH + 7),
-            }
-        )
-    );
-
-    triggers.push_back(
-        new TriggerNode(
-            "enemy out of melee",
-            {
-                NextAction("stealth", ACTION_HIGH + 3),
-                NextAction("sprint", ACTION_HIGH + 2),
-                NextAction("reach melee", ACTION_HIGH + 1),
+                NextAction("mutilate", ACTION_NORMAL + 3)
             }
         )
     );

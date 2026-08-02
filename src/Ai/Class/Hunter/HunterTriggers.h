@@ -81,16 +81,19 @@ public:
 
 // Cooldown Triggers
 
-class RapidFireTrigger : public BoostTrigger
+// The burst cooldowns below only say "off cooldown" - BurstWindowStrategy decides when they are
+// actually spent, so a raid-winning fight no longer keeps them unused for the whole encounter.
+
+class RapidFireTrigger : public SpellNoCooldownTrigger
 {
 public:
-    RapidFireTrigger(PlayerbotAI* botAI) : BoostTrigger(botAI, "rapid fire") {}
+    RapidFireTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "rapid fire") {}
 };
 
-class BestialWrathTrigger : public BuffTrigger
+class BestialWrathTrigger : public SpellNoCooldownTrigger
 {
 public:
-    BestialWrathTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "bestial wrath") {}
+    BestialWrathTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "bestial wrath") {}
 };
 
 class IntimidationTrigger : public BuffTrigger
@@ -99,11 +102,24 @@ public:
     IntimidationTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "intimidation") {}
 };
 
-class KillCommandTrigger : public BuffTrigger
+// Kill Command puts its aura on the hunter, not on the pet the action targets, so an aura check
+// never worked here - the cooldown is what paces it.
+class KillCommandTrigger : public SpellNoCooldownTrigger
 {
 public:
-    KillCommandTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "kill command") {}
-    bool IsActive() override;
+    KillCommandTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "kill command") {}
+};
+
+class ChimeraShotNoCdTrigger : public SpellNoCooldownTrigger
+{
+public:
+    ChimeraShotNoCdTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "chimera shot") {}
+};
+
+class AimedShotNoCdTrigger : public SpellNoCooldownTrigger
+{
+public:
+    AimedShotNoCdTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "aimed shot") {}
 };
 
 class LockAndLoadTrigger : public BuffTrigger
@@ -226,6 +242,13 @@ class ImmolationTrapNoCdTrigger : public SpellNoCooldownTrigger
 {
 public:
     ImmolationTrapNoCdTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "immolation trap") {}
+};
+
+class TrapLauncherExplosiveNoCdTrigger : public SpellNoCooldownTrigger
+{
+public:
+    TrapLauncherExplosiveNoCdTrigger(PlayerbotAI* botAI)
+        : SpellNoCooldownTrigger(botAI, "trap launcher: explosive trap") {}
 };
 
 BEGIN_TRIGGER(HuntersPetDeadTrigger, Trigger)

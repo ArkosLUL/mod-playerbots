@@ -27,7 +27,15 @@ public:
     CastPowerWordFortitudeOnPartyAction(PlayerbotAI* botAI)
         : GroupBuffOnPartyAction(botAI, "power word: fortitude") {}
 };
-BUFF_ACTION(CastPowerWordShieldAction, "power word: shield");
+// Weakened Soul blocks a re-shield, so without the extra check the bot retries a guaranteed failure
+// every tick.
+class CastPowerWordShieldAction : public CastBuffSpellAction
+{
+public:
+    CastPowerWordShieldAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "power word: shield") {}
+
+    bool isUseful() override;
+};
 
 BUFF_ACTION(CastInnerFireAction, "inner fire");
 CURE_ACTION(CastDispelMagicAction, "dispel magic");
@@ -69,10 +77,27 @@ HEAL_ACTION(CastFlashHealAction, "flash heal");
 HEAL_ACTION(CastRenewAction, "renew");
 HEAL_PARTY_ACTION(CastLesserHealOnPartyAction, "lesser heal", 50.0f, HealingManaEfficiency::MEDIUM);
 HEAL_PARTY_ACTION(CastHealOnPartyAction, "heal", 50.0f, HealingManaEfficiency::MEDIUM);
-HEAL_PARTY_ACTION(CastGreaterHealOnPartyAction, "greater heal", 50.0f, HealingManaEfficiency::MEDIUM);
-HEAL_PARTY_ACTION(CastPowerWordShieldOnPartyAction, "power word: shield", 15.0f, HealingManaEfficiency::VERY_HIGH);
-HEAL_PARTY_ACTION(CastFlashHealOnPartyAction, "flash heal", 15.0f, HealingManaEfficiency::LOW);
+HEAL_PARTY_ACTION(CastGreaterHealOnPartyAction, "greater heal", 25.0f, HealingManaEfficiency::MEDIUM);
+
+class CastPowerWordShieldOnPartyAction : public HealPartyMemberAction
+{
+public:
+    CastPowerWordShieldOnPartyAction(PlayerbotAI* botAI)
+        : HealPartyMemberAction(botAI, "power word: shield", 15.0f, HealingManaEfficiency::VERY_HIGH)
+    {
+    }
+
+    bool isUseful() override;
+};
+
+HEAL_PARTY_ACTION(CastFlashHealOnPartyAction, "flash heal", 15.0f, HealingManaEfficiency::HIGH);
 HEAL_PARTY_ACTION(CastRenewOnPartyAction, "renew", 15.0f, HealingManaEfficiency::VERY_HIGH);
+
+class CastRenewOnMainTankAction : public BuffOnMainTankAction
+{
+public:
+    CastRenewOnMainTankAction(PlayerbotAI* botAI) : BuffOnMainTankAction(botAI, "renew", true) {}
+};
 // HEAL_PARTY_ACTION(CastPrayerOfMendingAction, "prayer of mending", 10.0f, HealingManaEfficiency::HIGH);
 class CastPrayerOfMendingAction : public HealPartyMemberAction
 {
@@ -83,8 +108,8 @@ public:
     }
 };
 
-HEAL_PARTY_ACTION(CastBindingHealAction, "binding heal", 15.0f, HealingManaEfficiency::MEDIUM);
-HEAL_PARTY_ACTION(CastPrayerOfHealingAction, "prayer of healing", 15.0f, HealingManaEfficiency::MEDIUM);
+HEAL_PARTY_ACTION(CastBindingHealAction, "binding heal", 15.0f, HealingManaEfficiency::HIGH);
+HEAL_PARTY_ACTION(CastPrayerOfHealingAction, "prayer of healing", 15.0f, HealingManaEfficiency::HIGH);
 // AOE_HEAL_ACTION(CastCircleOfHealingAction, "circle of healing", 15.0f, HealingManaEfficiency::HIGH);
 class CastCircleOfHealingAction : public HealPartyMemberAction
 {
@@ -184,7 +209,7 @@ public:
 class CastPenanceOnPartyAction : public HealPartyMemberAction
 {
 public:
-    CastPenanceOnPartyAction(PlayerbotAI* ai) : HealPartyMemberAction(ai, "penance", 25.0f, HealingManaEfficiency::HIGH)
+    CastPenanceOnPartyAction(PlayerbotAI* ai) : HealPartyMemberAction(ai, "penance", 15.0f, HealingManaEfficiency::HIGH)
     {
     }
 };
@@ -210,7 +235,8 @@ class CastShadowfiendAction : public CastSpellAction
 public:
     CastShadowfiendAction(PlayerbotAI* ai) : CastSpellAction(ai, "shadowfiend") {}
 
-    virtual std::string const GetTargetName() { return "current target"; }
+    // Healers often have no current target, so fall back to whatever the group is grinding.
+    Unit* GetTarget() override;
 };
 
 class CastPowerWordShieldOnAlmostFullHealthBelowAction : public HealPartyMemberAction
@@ -249,7 +275,7 @@ class CastGuardianSpiritOnPartyAction : public HealPartyMemberAction
 {
 public:
     CastGuardianSpiritOnPartyAction(PlayerbotAI* ai)
-        : HealPartyMemberAction(ai, "guardian spirit", 40.0f, HealingManaEfficiency::MEDIUM)
+        : HealPartyMemberAction(ai, "guardian spirit", 15.0f, HealingManaEfficiency::SUPERIOR)
     {
     }
 };

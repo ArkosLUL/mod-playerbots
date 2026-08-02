@@ -23,6 +23,9 @@ public:
     GuidVector Calculate();
     static bool IsPossibleTarget(Unit* attacker, Player* bot, float range = sPlayerbotAIConfig.sightDistance);
     static bool IsValidTarget(Unit* attacker, Player* bot);
+    // True if the bot is in a boss fight: an instance encounter is IN_PROGRESS, or any current
+    // group attacker is a dungeon/world boss. Used to gate scarce battle-rez cooldowns.
+    static bool IsInBossFight(PlayerbotAI* botAI);
 
 private:
     void AddAttackersOf(Group* group, std::unordered_set<Unit*>& targets);

@@ -15,11 +15,6 @@
 #include "SharedDefines.h"
 #include "Player.h"
 
-bool KillCommandTrigger::IsActive()
-{
-    return !botAI->HasAura("kill command", GetTarget());
-}
-
 bool BlackArrowTrigger::IsActive()
 {
     if (botAI->HasStrategy("trap weave", BOT_STATE_COMBAT))

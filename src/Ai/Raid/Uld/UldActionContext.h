@@ -19,6 +19,7 @@ public:
     {
         creators["flame leviathan vehicle"] = &RaidUlduarActionContext::flame_leviathan_vehicle;
         creators["flame leviathan enter vehicle"] = &RaidUlduarActionContext::flame_leviathan_enter_vehicle;
+        creators["flame leviathan tower hazard"] = &RaidUlduarActionContext::flame_leviathan_tower_hazard;
         creators["razorscale avoid devouring flames"] = &RaidUlduarActionContext::razorscale_avoid_devouring_flames;
         creators["razorscale avoid sentinel"] = &RaidUlduarActionContext::razorscale_avoid_sentinel;
         creators["razorscale ignore flying alone"] = &RaidUlduarActionContext::razorscale_ignore_flying_alone;
@@ -26,11 +27,15 @@ public:
         creators["razorscale grounded"] = &RaidUlduarActionContext::razorscale_grounded;
         creators["razorscale harpoon action"] = &RaidUlduarActionContext::razorscale_harpoon_action;
         creators["razorscale fuse armor action"] = &RaidUlduarActionContext::razorscale_fuse_armor_action;
+        creators["razorscale focus caster action"] = &RaidUlduarActionContext::razorscale_focus_caster_action;
+        creators["razorscale flame breath action"] = &RaidUlduarActionContext::razorscale_flame_breath_action;
         creators["razorscale fire resistance action"] = &RaidUlduarActionContext::razorscale_fire_resistance_action;
         creators["ignis fire resistance action"] = &RaidUlduarActionContext::ignis_fire_resistance_action;
         creators["iron assembly lightning tendrils action"] = &RaidUlduarActionContext::iron_assembly_lightning_tendrils_action;
         creators["iron assembly overload action"] = &RaidUlduarActionContext::iron_assembly_overload_action;
         creators["iron assembly rune of power action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_action;
+        creators["iron assembly kill order action"] = &RaidUlduarActionContext::iron_assembly_kill_order_action;
+        creators["iron assembly fusion punch swap action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_swap_action;
         creators["kologarn mark dps target action"] = &RaidUlduarActionContext::kologarn_mark_dps_target_action;
         creators["kologarn fall from floor action"] = &RaidUlduarActionContext::kologarn_fall_from_floor_action;
         creators["kologarn nature resistance action"] = &RaidUlduarActionContext::kologarn_nature_resistance_action;
@@ -42,11 +47,16 @@ public:
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold jump"] = &RaidUlduarActionContext::hodir_biting_cold_jump;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
+        creators["hodir free frozen helper"] = &RaidUlduarActionContext::hodir_free_frozen_helper;
+        creators["hodir spread storm cloud"] = &RaidUlduarActionContext::hodir_spread_storm_cloud;
+        creators["hodir move to toasty fire"] = &RaidUlduarActionContext::hodir_move_to_toasty_fire;
         creators["freya move away nature bomb"] = &RaidUlduarActionContext::freya_move_away_nature_bomb;
         creators["freya fire resistance action"] = &RaidUlduarActionContext::freya_fire_resistance_action;
         creators["freya nature resistance action"] = &RaidUlduarActionContext::freya_nature_resistance_action;
         creators["freya mark dps target action"] = &RaidUlduarActionContext::freya_mark_dps_target_action;
         creators["freya move to healing spore action"] = &RaidUlduarActionContext::freya_move_to_healing_spore_action;
+        creators["freya break iron roots"] = &RaidUlduarActionContext::freya_break_iron_roots;
+        creators["freya dodge unstable sun beam"] = &RaidUlduarActionContext::freya_dodge_unstable_sun_beam;
         creators["thorim frost resistance action"] = &RaidUlduarActionContext::thorim_frost_resistance_action;
         creators["thorim nature resistance action"] = &RaidUlduarActionContext::thorim_nature_resistance_action;
         creators["thorim unbalancing strike action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_action;
@@ -84,11 +94,47 @@ public:
         creators["yogg-saron move to exit portal action"] = &RaidUlduarActionContext::yogg_saron_move_to_exit_portal_action;
         creators["yogg-saron lunatic gaze action"] = &RaidUlduarActionContext::yogg_saron_lunatic_gaze_action;
         creators["yogg-saron phase 3 positioning action"] = &RaidUlduarActionContext::yogg_saron_phase_3_positioning_action;
+        creators["yogg-saron crusher tentacle action"] = &RaidUlduarActionContext::yogg_saron_crusher_tentacle_action;
+        creators["yogg-saron guardian control action"] = &RaidUlduarActionContext::yogg_saron_guardian_control_action;
+        creators["yogg-saron sanity conservation action"] = &RaidUlduarActionContext::yogg_saron_sanity_conservation_action;
+        creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
+        creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
+        creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
+        creators["algalon phase punch swap action"] = &RaidUlduarActionContext::algalon_phase_punch_swap_action;
+        creators["algalon constellation kite action"] = &RaidUlduarActionContext::algalon_constellation_kite_action;
+        creators["algalon dark matter mark action"] = &RaidUlduarActionContext::algalon_dark_matter_mark_action;
+        creators["algalon collapsing star mark action"] = &RaidUlduarActionContext::algalon_collapsing_star_mark_action;
+        creators["ignis scorched ground action"] = &RaidUlduarActionContext::ignis_scorched_ground_action;
+        creators["ignis iron construct action"] = &RaidUlduarActionContext::ignis_iron_construct_action;
+        creators["auriaya sonic screech action"] = &RaidUlduarActionContext::auriaya_sonic_screech_action;
+        creators["auriaya seeping essence action"] = &RaidUlduarActionContext::auriaya_seeping_essence_action;
+        creators["auriaya mark dps target action"] = &RaidUlduarActionContext::auriaya_mark_dps_target_action;
+        creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
+        creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
+        creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
+        creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
+        creators["vezax profound darkness action"] = &RaidUlduarActionContext::vezax_profound_darkness_action;
+        creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
+        creators["thorim sif blizzard action"] = &RaidUlduarActionContext::thorim_sif_blizzard_action;
+        creators["thorim sif frost nova action"] = &RaidUlduarActionContext::thorim_sif_frost_nova_action;
+        creators["mimiron dodge flames action"] = &RaidUlduarActionContext::mimiron_dodge_flames_action;
+        creators["mimiron frost bomb action"] = &RaidUlduarActionContext::mimiron_frost_bomb_action;
+        creators["xt002 searing light spread action"] = &RaidUlduarActionContext::xt002_searing_light_spread_action;
+        creators["xt002 gravity bomb spread action"] = &RaidUlduarActionContext::xt002_gravity_bomb_spread_action;
+        creators["xt002 gravity bomb carrier action"] = &RaidUlduarActionContext::xt002_gravity_bomb_carrier_action;
+        creators["xt002 boombot avoid action"] = &RaidUlduarActionContext::xt002_boombot_avoid_action;
+        creators["xt002 void zone action"] = &RaidUlduarActionContext::xt002_void_zone_action;
+        creators["xt002 mark kill target action"] = &RaidUlduarActionContext::xt002_mark_kill_target_action;
+        creators["xt002 boombot ranged kill action"] = &RaidUlduarActionContext::xt002_boombot_ranged_kill_action;
+        creators["xt002 attack heart action"] = &RaidUlduarActionContext::xt002_attack_heart_action;
+        creators["xt002 pummeller taunt action"] = &RaidUlduarActionContext::xt002_pummeller_taunt_action;
+        creators["xt002 redirect threat action"] = &RaidUlduarActionContext::xt002_redirect_threat_action;
     }
 
 private:
     static Action* flame_leviathan_vehicle(PlayerbotAI* ai) { return new FlameLeviathanVehicleAction(ai); }
     static Action* flame_leviathan_enter_vehicle(PlayerbotAI* ai) { return new FlameLeviathanEnterVehicleAction(ai); }
+    static Action* flame_leviathan_tower_hazard(PlayerbotAI* ai) { return new FlameLeviathanTowerHazardAction(ai); }
     static Action* razorscale_avoid_devouring_flames(PlayerbotAI* ai) { return new RazorscaleAvoidDevouringFlameAction(ai); }
     static Action* razorscale_avoid_sentinel(PlayerbotAI* ai) { return new RazorscaleAvoidSentinelAction(ai); }
     static Action* razorscale_ignore_flying_alone(PlayerbotAI* ai) { return new RazorscaleIgnoreBossAction(ai); }
@@ -96,11 +142,15 @@ private:
     static Action* razorscale_grounded(PlayerbotAI* ai) { return new RazorscaleGroundedAction(ai); }
     static Action* razorscale_harpoon_action(PlayerbotAI* ai) { return new RazorscaleHarpoonAction(ai); }
     static Action* razorscale_fuse_armor_action(PlayerbotAI* ai) { return new RazorscaleFuseArmorAction(ai); }
+    static Action* razorscale_focus_caster_action(PlayerbotAI* ai) { return new RazorscaleFocusCasterAction(ai); }
+    static Action* razorscale_flame_breath_action(PlayerbotAI* ai) { return new RazorscaleFlameBreathAction(ai); }
     static Action* razorscale_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "razorscale"); }
     static Action* ignis_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "ignis the furnace master"); }
     static Action* iron_assembly_lightning_tendrils_action(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsAction(ai); }
     static Action* iron_assembly_overload_action(PlayerbotAI* ai) { return new IronAssemblyOverloadAction(ai); }
     static Action* iron_assembly_rune_of_power_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerAction(ai); }
+    static Action* iron_assembly_kill_order_action(PlayerbotAI* ai) { return new IronAssemblyKillOrderAction(ai); }
+    static Action* iron_assembly_fusion_punch_swap_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapAction(ai); }
     static Action* kologarn_mark_dps_target_action(PlayerbotAI* ai) { return new KologarnMarkDpsTargetAction(ai); }
     static Action* kologarn_fall_from_floor_action(PlayerbotAI* ai) { return new KologarnFallFromFloorAction(ai); }
     static Action* kologarn_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "kologarn"); }
@@ -112,11 +162,16 @@ private:
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_jump(PlayerbotAI* ai) { return new HodirBitingColdJumpAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "hodir"); }
+    static Action* hodir_free_frozen_helper(PlayerbotAI* ai) { return new HodirFreeFrozenHelperAction(ai); }
+    static Action* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudAction(ai); }
+    static Action* hodir_move_to_toasty_fire(PlayerbotAI* ai) { return new HodirMoveToToastyFireAction(ai); }
     static Action* freya_move_away_nature_bomb(PlayerbotAI* ai) { return new FreyaMoveAwayNatureBombAction(ai); }
     static Action* freya_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "freya"); }
     static Action* freya_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "freya"); }
     static Action* freya_mark_dps_target_action(PlayerbotAI* ai) { return new FreyaMarkDpsTargetAction(ai); }
     static Action* freya_move_to_healing_spore_action(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeAction(ai); }
+    static Action* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsAction(ai); }
+    static Action* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamAction(ai); }
     static Action* thorim_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "thorim"); }
     static Action* thorim_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "thorim"); }
     static Action* thorim_unbalancing_strike_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeAction(ai); }
@@ -154,6 +209,41 @@ private:
     static Action* yogg_saron_move_to_exit_portal_action(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalAction(ai); }
     static Action* yogg_saron_lunatic_gaze_action(PlayerbotAI* ai) { return new YoggSaronLunaticGazeAction(ai); }
     static Action* yogg_saron_phase_3_positioning_action(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningAction(ai); }
+    static Action* yogg_saron_crusher_tentacle_action(PlayerbotAI* ai) { return new YoggSaronCrusherTentacleAction(ai); }
+    static Action* yogg_saron_guardian_control_action(PlayerbotAI* ai) { return new YoggSaronGuardianControlAction(ai); }
+    static Action* yogg_saron_sanity_conservation_action(PlayerbotAI* ai) { return new YoggSaronSanityConservationAction(ai); }
+    static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
+    static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
+    static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }
+    static Action* algalon_phase_punch_swap_action(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapAction(ai); }
+    static Action* algalon_constellation_kite_action(PlayerbotAI* ai) { return new AlgalonConstellationKiteAction(ai); }
+    static Action* algalon_dark_matter_mark_action(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkAction(ai); }
+    static Action* algalon_collapsing_star_mark_action(PlayerbotAI* ai) { return new AlgalonCollapsingStarMarkAction(ai); }
+    static Action* ignis_scorched_ground_action(PlayerbotAI* ai) { return new IgnisScorchedGroundAction(ai); }
+    static Action* ignis_iron_construct_action(PlayerbotAI* ai) { return new IgnisIronConstructAction(ai); }
+    static Action* auriaya_sonic_screech_action(PlayerbotAI* ai) { return new AuriayaSonicScreechAction(ai); }
+    static Action* auriaya_seeping_essence_action(PlayerbotAI* ai) { return new AuriayaSeepingEssenceAction(ai); }
+    static Action* auriaya_mark_dps_target_action(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetAction(ai); }
+    static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
+    static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
+    static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }
+    static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
+    static Action* vezax_profound_darkness_action(PlayerbotAI* ai) { return new VezaxProfoundDarknessAction(ai); }
+    static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
+    static Action* thorim_sif_blizzard_action(PlayerbotAI* ai) { return new ThorimSifBlizzardAction(ai); }
+    static Action* thorim_sif_frost_nova_action(PlayerbotAI* ai) { return new ThorimSifFrostNovaAction(ai); }
+    static Action* mimiron_dodge_flames_action(PlayerbotAI* ai) { return new MimironDodgeFlamesAction(ai); }
+    static Action* mimiron_frost_bomb_action(PlayerbotAI* ai) { return new MimironFrostBombAction(ai); }
+    static Action* xt002_searing_light_spread_action(PlayerbotAI* ai) { return new XT002SearingLightSpreadAction(ai); }
+    static Action* xt002_gravity_bomb_spread_action(PlayerbotAI* ai) { return new XT002GravityBombSpreadAction(ai); }
+    static Action* xt002_gravity_bomb_carrier_action(PlayerbotAI* ai) { return new XT002GravityBombCarrierAction(ai); }
+    static Action* xt002_boombot_avoid_action(PlayerbotAI* ai) { return new XT002BoombotAvoidAction(ai); }
+    static Action* xt002_void_zone_action(PlayerbotAI* ai) { return new XT002VoidZoneAction(ai); }
+    static Action* xt002_mark_kill_target_action(PlayerbotAI* ai) { return new XT002MarkKillTargetAction(ai); }
+    static Action* xt002_boombot_ranged_kill_action(PlayerbotAI* ai) { return new XT002BoombotRangedKillAction(ai); }
+    static Action* xt002_attack_heart_action(PlayerbotAI* ai) { return new XT002AttackHeartAction(ai); }
+    static Action* xt002_pummeller_taunt_action(PlayerbotAI* ai) { return new XT002PummellerTauntAction(ai); }
+    static Action* xt002_redirect_threat_action(PlayerbotAI* ai) { return new XT002RedirectThreatAction(ai); }
 };
 
 #endif

@@ -6,6 +6,8 @@
 #ifndef PLAYERBOTS_PLAYERBOTAI_H
 #define PLAYERBOTS_PLAYERBOTAI_H
 
+#include <algorithm>
+#include <array>
 #include <stack>
 
 #include "Chat.h"
@@ -224,6 +226,33 @@ enum ManaOilId
     SUPERIOR_MANA_OIL     = 22521
 };
 
+enum OffensivePotionId
+{
+    HASTE_POTION            = 22838,
+    INSANE_STRENGTH_POTION  = 22828,
+    DESTRUCTION_POTION      = 22839,
+    POTION_OF_SPEED         = 40211,
+    POTION_OF_WILD_MAGIC    = 40212
+};
+
+// Single source of truth for the offensive-potion id set. The item visitor and the trigger both
+// derive from this, so adding a potion here is the only edit needed for them to recognise it.
+inline constexpr std::array<uint32, 5> OFFENSIVE_POTION_IDS = {
+    HASTE_POTION, INSANE_STRENGTH_POTION, DESTRUCTION_POTION, POTION_OF_SPEED, POTION_OF_WILD_MAGIC};
+
+inline bool IsOffensivePotionId(uint32 itemId)
+{
+    return std::find(OFFENSIVE_POTION_IDS.begin(), OFFENSIVE_POTION_IDS.end(), itemId) !=
+           OFFENSIVE_POTION_IDS.end();
+}
+
+// Thori'dal and friends conjure their own arrows through this equip aura. Player::CanUseAmmo then
+// rejects every SetAmmo with EQUIP_ERR_BAG_FULL6, which the bot reports as "My bags are full", and
+// PLAYER_AMMO_ID stays 0 forever so nothing ever settles. Ammo handling has to be skipped entirely.
+constexpr uint32 SPELL_REQUIRES_NO_AMMO = 46699;
+
+bool RangedWeaponNeedsAmmo(Player* bot);
+
 enum class BotTypeNumber : uint8
 {
     ACTIVITY_TYPE_NUMBER = 1,
@@ -410,6 +439,8 @@ public:
     Strategy* GetStrategy(std::string const name, BotState type);
     void ApplyInstanceStrategies(uint32 mapId, bool tellMaster = false);
     bool HasTargetExclusions() const;
+    static std::vector<std::string> const& GetInstanceStrategies();
+    static bool IsInstanceStrategy(std::string const& name);
     void EvaluateHealerDpsStrategy();
     bool ContainsStrategy(StrategyType type);
     bool HasStrategy(std::string const name, BotState type);

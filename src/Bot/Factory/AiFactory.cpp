@@ -101,6 +101,9 @@ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
             case CLASS_WARLOCK:
                 tab = WARLOCK_TAB_DEMONOLOGY;
                 break;
+            case CLASS_DEATH_KNIGHT:
+                tab = DEATH_KNIGHT_TAB_FROST;
+                break;
         }
 
         return tab;
@@ -109,7 +112,7 @@ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
 
 std::map<uint8, uint32> AiFactory::GetPlayerSpecTabs(Player* bot)
 {
-    std::map<uint8, uint32> tabs = {{0, 0}, {0, 0}, {0, 0}};
+    std::map<uint8, uint32> tabs = {{0, 0}, {1, 0}, {2, 0}};
     const PlayerTalentMap& talentMap = bot->GetTalentMap();
     for (PlayerTalentMap::const_iterator i = talentMap.begin(); i != talentMap.end(); ++i)
     {
@@ -286,7 +289,8 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
     uint8 tab = GetPlayerSpecTab(player);
 
     if (!player->InBattleground())
-        engine->addStrategiesNoInit("racials", "chat", "default", "cast time", "potions", "duel", "boost", nullptr);
+        engine->addStrategiesNoInit("racials", "chat", "default", "cast time", "potions", "duel", "boost", "burst",
+                                    nullptr);
 
     if (sPlayerbotAIConfig.autoAvoidAoe && facade->HasRealPlayerMaster())
         engine->addStrategy("avoid aoe", false);
@@ -352,7 +356,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
                 engine->addStrategiesNoInit("balance", "cure", "aoe", "cc", "dps assist", nullptr);
             }
             else if (tab == DRUID_TAB_RESTORATION)
-                engine->addStrategiesNoInit("resto", "cure", "dps assist", "tranquility", nullptr);
+                engine->addStrategiesNoInit("resto", "cure", "dps assist", "blanketing", nullptr);
             else
             {
                 if (player->HasSpell(SPELL_CAT_FORM) && !player->HasAura(SPELL_DRUID_THICK_HIDE))

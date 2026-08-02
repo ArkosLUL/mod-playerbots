@@ -21,73 +21,113 @@ public:
         creators["grobbulus move center"] = &RaidNaxxActionContext::grobbulus_move_center;
         creators["grobbulus move away"] = &RaidNaxxActionContext::grobbulus_move_away;
 
-        //creators["heigan dance melee"] = &RaidNaxxActionContext::heigan_dance_melee;
-        //creators["heigan dance ranged"] = &RaidNaxxActionContext::heigan_dance_ranged;
+        creators["heigan dance melee"] = &RaidNaxxActionContext::heigan_dance_melee;
+        creators["heigan dance ranged"] = &RaidNaxxActionContext::heigan_dance_ranged;
+        creators["heigan dispel decrepit fever"] = &RaidNaxxActionContext::heigan_dispel_decrepit_fever;
+
         creators["thaddius attack nearest pet"] = &RaidNaxxActionContext::thaddius_attack_nearest_pet;
-        // creators["thaddius melee to place"] = &RaidNaxxActionContext::thaddius_tank_to_place;
-        // creators["thaddius ranged to place"] = &RaidNaxxActionContext::thaddius_ranged_to_place;
         creators["thaddius move to platform"] = &RaidNaxxActionContext::thaddius_move_to_platform;
         creators["thaddius move polarity"] = &RaidNaxxActionContext::thaddius_move_polarity;
+        creators["thaddius redirect threat"] = &RaidNaxxActionContext::thaddius_redirect_threat;
 
         creators["razuvious use obedience crystal"] = &RaidNaxxActionContext::razuvious_use_obedience_crystal;
         creators["razuvious target"] = &RaidNaxxActionContext::razuvious_target;
 
-        creators["four horsemen attract alternatively"] = &RaidNaxxActionContext::four_horsemen_attract_alternatively;
-        creators["four horsemen attack in order"] = &RaidNaxxActionContext::four_horsemen_attack_in_order;
+        creators["horseman attract alternatively"] = &RaidNaxxActionContext::horseman_attract_alternatively;
+        creators["horseman attack in order"] = &RaidNaxxActionContext::horseman_attack_in_order;
+        creators["four horsemen redirect threat"] = &RaidNaxxActionContext::four_horsemen_redirect_threat;
 
         creators["sapphiron ground position"] = &RaidNaxxActionContext::sapphiron_ground_position;
         creators["sapphiron flight position"] = &RaidNaxxActionContext::sapphiron_flight_position;
 
         creators["kel'thuzad choose target"] = &RaidNaxxActionContext::kelthuzad_choose_target;
         creators["kel'thuzad position"] = &RaidNaxxActionContext::kelthuzad_position;
+        creators["kel'thuzad flee shadow fissure"] = &RaidNaxxActionContext::kelthuzad_flee_shadow_fissure;
+        creators["kel'thuzad misdirect boss to main tank"] =
+            &RaidNaxxActionContext::kelthuzad_misdirect_boss_to_main_tank;
 
         creators["anub'rekhan choose target"] = &RaidNaxxActionContext::anubrekhan_choose_target;
         creators["anub'rekhan position"] = &RaidNaxxActionContext::anubrekhan_position;
+        creators["anub'rekhan redirect threat"] = &RaidNaxxActionContext::anubrekhan_redirect_threat;
+
+        creators["faerlina sacrifice worshipper"] = &RaidNaxxActionContext::faerlina_sacrifice_worshipper;
+
+        creators["maexxna attack web wrap"] = &RaidNaxxActionContext::maexxna_attack_web_wrap;
+        creators["maexxna tank spiderlings"] = &RaidNaxxActionContext::maexxna_tank_spiderlings;
+
+        creators["gothik choose target"] = &RaidNaxxActionContext::gothik_choose_target;
+        creators["gothik stay on living side"] = &RaidNaxxActionContext::gothik_stay_on_living_side;
 
         creators["gluth choose target"] = &RaidNaxxActionContext::gluth_choose_target;
         creators["gluth position"] = &RaidNaxxActionContext::gluth_position;
         creators["gluth slowdown"] = &RaidNaxxActionContext::gluth_slowdown;
+        creators["gluth tranquilizing shot"] = &RaidNaxxActionContext::gluth_tranquilizing_shot;
+        creators["gluth redirect threat"] = &RaidNaxxActionContext::gluth_redirect_threat;
 
-        //creators["patchwerk ranged position"] = &RaidNaxxActionContext::patchwerk_ranged_position;
+        // creators["patchwerk ranged position"] = &RaidNaxxActionContext::patchwerk_ranged_position;
 
         creators["loatheb position"] = &RaidNaxxActionContext::loatheb_position;
         creators["loatheb choose target"] = &RaidNaxxActionContext::loatheb_choose_target;
+
+        creators["noth position"] = &RaidNaxxActionContext::noth_position;
+        creators["noth choose target"] = &RaidNaxxActionContext::noth_choose_target;
+        creators["noth dispel curse"] = &RaidNaxxActionContext::noth_dispel_curse;
     }
 
 private:
     static Action* go_behind_the_boss(PlayerbotAI* ai) { return new GrobbulusGoBehindAction(ai); }
     static Action* rotate_grobbulus(PlayerbotAI* ai) { return new GrobbulusRotateAction(ai); }
-    static Action* grobbulus_move_center(PlayerbotAI* ai) { return new GrobbulusMoveCenterAction(ai); }
+    static Action* grobbulus_move_center(PlayerbotAI* ai) { return new GrobblulusMoveCenterAction(ai); }
     static Action* grobbulus_move_away(PlayerbotAI* ai) { return new GrobbulusMoveAwayAction(ai); }
-    //static Action* heigan_dance_melee(PlayerbotAI* ai) { return new HeiganDanceMeleeAction(ai); }
-    //static Action* heigan_dance_ranged(PlayerbotAI* ai) { return new HeiganDanceRangedAction(ai); }
+    static Action* heigan_dance_melee(PlayerbotAI* ai) { return new HeiganDanceMeleeAction(ai); }
+    static Action* heigan_dance_ranged(PlayerbotAI* ai) { return new HeiganDanceRangedAction(ai); }
+    static Action* heigan_dispel_decrepit_fever(PlayerbotAI* ai) { return new HeiganDispelDecrepitFeverAction(ai); }
     static Action* thaddius_attack_nearest_pet(PlayerbotAI* ai) { return new ThaddiusAttackNearestPetAction(ai); }
-    // static Action* thaddius_tank_to_place(PlayerbotAI* ai) { return new ThaddiusMeleeToPlaceAction(ai); }
-    // static Action* thaddius_ranged_to_place(PlayerbotAI* ai) { return new ThaddiusRangedToPlaceAction(ai); }
     static Action* thaddius_move_to_platform(PlayerbotAI* ai) { return new ThaddiusMoveToPlatformAction(ai); }
     static Action* thaddius_move_polarity(PlayerbotAI* ai) { return new ThaddiusMovePolarityAction(ai); }
+    static Action* thaddius_redirect_threat(PlayerbotAI* ai) { return new ThaddiusRedirectThreatAction(ai); }
     static Action* razuvious_target(PlayerbotAI* ai) { return new RazuviousTargetAction(ai); }
     static Action* razuvious_use_obedience_crystal(PlayerbotAI* ai)
     {
         return new RazuviousUseObedienceCrystalAction(ai);
     }
-    static Action* four_horsemen_attract_alternatively(PlayerbotAI* ai) { return new FourHorsemenAttractAlternativelyAction(ai); }
-    static Action* four_horsemen_attack_in_order(PlayerbotAI* ai) { return new FourHorsemenAttackInOrderAction(ai); }
-    // static Action* sapphiron_ground_main_tank_position(PlayerbotAI* ai) { return new
-    // SapphironGroundMainTankPositionAction(ai); }
+    static Action* horseman_attract_alternatively(PlayerbotAI* ai)
+    {
+        return new HorsemanAttractAlternativelyAction(ai);
+    }
+    static Action* horseman_attack_in_order(PlayerbotAI* ai) { return new HorsemanAttactInOrderAction(ai); }
+    static Action* four_horsemen_redirect_threat(PlayerbotAI* ai)
+    {
+        return new FourhorsemanRedirectThreatAction(ai);
+    }
     static Action* sapphiron_ground_position(PlayerbotAI* ai) { return new SapphironGroundPositionAction(ai); }
     static Action* sapphiron_flight_position(PlayerbotAI* ai) { return new SapphironFlightPositionAction(ai); }
-    // static Action* sapphiron_avoid_chill(PlayerbotAI* ai) { return new SapphironAvoidChillAction(ai); }
     static Action* kelthuzad_choose_target(PlayerbotAI* ai) { return new KelthuzadChooseTargetAction(ai); }
     static Action* kelthuzad_position(PlayerbotAI* ai) { return new KelthuzadPositionAction(ai); }
+    static Action* kelthuzad_flee_shadow_fissure(PlayerbotAI* ai) { return new KelthuzadFleeShadowFissureAction(ai); }
+    static Action* kelthuzad_misdirect_boss_to_main_tank(PlayerbotAI* ai)
+    {
+        return new KelthuzadMisdirectBossToMainTankAction(ai);
+    }
     static Action* anubrekhan_choose_target(PlayerbotAI* ai) { return new AnubrekhanChooseTargetAction(ai); }
     static Action* anubrekhan_position(PlayerbotAI* ai) { return new AnubrekhanPositionAction(ai); }
+    static Action* anubrekhan_redirect_threat(PlayerbotAI* ai) { return new AnubrekhanRedirectThreatAction(ai); }
+    static Action* faerlina_sacrifice_worshipper(PlayerbotAI* ai) { return new FaerlinaSacrificeWorshipperAction(ai); }
+    static Action* maexxna_attack_web_wrap(PlayerbotAI* ai) { return new MaexxnaAttackWebWrapAction(ai); }
+    static Action* maexxna_tank_spiderlings(PlayerbotAI* ai) { return new MaexxnaTankSpiderlingsAction(ai); }
+    static Action* gothik_choose_target(PlayerbotAI* ai) { return new GothikChooseTargetAction(ai); }
+    static Action* gothik_stay_on_living_side(PlayerbotAI* ai) { return new GothikStayOnLivingSideAction(ai); }
     static Action* gluth_choose_target(PlayerbotAI* ai) { return new GluthChooseTargetAction(ai); }
     static Action* gluth_position(PlayerbotAI* ai) { return new GluthPositionAction(ai); }
     static Action* gluth_slowdown(PlayerbotAI* ai) { return new GluthSlowdownAction(ai); }
-    //static Action* patchwerk_ranged_position(PlayerbotAI* ai) { return new PatchwerkRangedPositionAction(ai); }
+    static Action* gluth_tranquilizing_shot(PlayerbotAI* ai) { return new GluthTranquilizingShotAction(ai); }
+    static Action* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatAction(ai); }
+    // static Action* patchwerk_ranged_position(PlayerbotAI* ai) { return new PatchwerkRangedPositionAction(ai); }
     static Action* loatheb_position(PlayerbotAI* ai) { return new LoathebPositionAction(ai); }
     static Action* loatheb_choose_target(PlayerbotAI* ai) { return new LoathebChooseTargetAction(ai); }
+    static Action* noth_position(PlayerbotAI* ai) { return new NothPositionAction(ai); }
+    static Action* noth_choose_target(PlayerbotAI* ai) { return new NothChooseTargetAction(ai); }
+    static Action* noth_dispel_curse(PlayerbotAI* ai) { return new NothDispelCurseAction(ai); }
 };
 
 #endif

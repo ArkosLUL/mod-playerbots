@@ -88,7 +88,6 @@ public:
         creators["vampiric touch on attacker"] = &PriestTriggerFactoryInternal::vampiric_touch_on_attacker;
         creators["shadowform"] = &PriestTriggerFactoryInternal::shadowform;
         creators["vampiric embrace"] = &PriestTriggerFactoryInternal::vampiric_embrace;
-        creators["power infusion"] = &PriestTriggerFactoryInternal::power_infusion;
         creators["inner focus"] = &PriestTriggerFactoryInternal::inner_focus;
         creators["shadow protection"] = &PriestTriggerFactoryInternal::shadow_protection;
         creators["shadow protection on party"] = &PriestTriggerFactoryInternal::shadow_protection_on_party;
@@ -105,6 +104,11 @@ public:
         creators["silence on enemy healer"] = &PriestTriggerFactoryInternal::silence_on_enemy_healer;
         creators["shadowfiend"] = &PriestTriggerFactoryInternal::shadowfiend;
         creators["mind sear channel check"] = &PriestTriggerFactoryInternal::mind_sear_channel_check;
+        creators["mind flay channel check"] = &PriestTriggerFactoryInternal::mind_flay_channel_check;
+        creators["weakened soul on party member"] = &PriestTriggerFactoryInternal::weakened_soul_on_party_member;
+        creators["hymn of hope"] = &PriestTriggerFactoryInternal::hymn_of_hope;
+        creators["renew on main tank"] = &PriestTriggerFactoryInternal::renew_on_main_tank;
+        creators["shadow word: death execute"] = &PriestTriggerFactoryInternal::shadow_word_death_execute;
     }
 
 private:
@@ -130,7 +134,6 @@ private:
     static Trigger* divine_spirit(PlayerbotAI* botAI) { return new DivineSpiritTrigger(botAI); }
     static Trigger* divine_spirit_on_party(PlayerbotAI* botAI) { return new DivineSpiritOnPartyTrigger(botAI); }
     static Trigger* inner_fire(PlayerbotAI* botAI) { return new InnerFireTrigger(botAI); }
-    static Trigger* power_infusion(PlayerbotAI* botAI) { return new PowerInfusionTrigger(botAI); }
     static Trigger* inner_focus(PlayerbotAI* botAI) { return new InnerFocusTrigger(botAI); }
     static Trigger* shadow_protection_on_party(PlayerbotAI* botAI) { return new ShadowProtectionOnPartyTrigger(botAI); }
     static Trigger* shadow_protection(PlayerbotAI* botAI) { return new ShadowProtectionTrigger(botAI); }
@@ -147,6 +150,17 @@ private:
     static Trigger* chastise(PlayerbotAI* botAI) { return new ChastiseTrigger(botAI); }
     static Trigger* binding_heal(PlayerbotAI* botAI) { return new BindingHealTrigger(botAI); }
     static Trigger* mind_sear_channel_check(PlayerbotAI* botAI) { return new MindSearChannelCheckTrigger(botAI); }
+    static Trigger* mind_flay_channel_check(PlayerbotAI* botAI) { return new MindFlayChannelCheckTrigger(botAI); }
+    static Trigger* weakened_soul_on_party_member(PlayerbotAI* botAI)
+    {
+        return new WeakenedSoulOnPartyMemberTrigger(botAI);
+    }
+    static Trigger* hymn_of_hope(PlayerbotAI* botAI) { return new PriestHymnOfHopeTrigger(botAI); }
+    static Trigger* renew_on_main_tank(PlayerbotAI* botAI) { return new RenewOnMainTankTrigger(botAI); }
+    static Trigger* shadow_word_death_execute(PlayerbotAI* botAI)
+    {
+        return new PriestShadowWordDeathExecuteTrigger(botAI);
+    }
 };
 
 class PriestAiObjectContextInternal : public NamedObjectContext<Action>
@@ -177,6 +191,7 @@ public:
         creators["power word: shield on not full"] = &PriestAiObjectContextInternal::power_word_shield_on_not_full;
         creators["renew"] = &PriestAiObjectContextInternal::renew;
         creators["renew on party"] = &PriestAiObjectContextInternal::renew_on_party;
+        creators["renew on main tank"] = &PriestAiObjectContextInternal::renew_on_main_tank;
         creators["greater heal"] = &PriestAiObjectContextInternal::greater_heal;
         creators["greater heal on party"] = &PriestAiObjectContextInternal::greater_heal_on_party;
         creators["heal"] = &PriestAiObjectContextInternal::heal;
@@ -288,6 +303,7 @@ private:
     static Action* power_word_shield_on_not_full(PlayerbotAI* ai) { return new CastPowerWordShieldOnNotFullAction(ai); }
     static Action* renew(PlayerbotAI* botAI) { return new CastRenewAction(botAI); }
     static Action* renew_on_party(PlayerbotAI* botAI) { return new CastRenewOnPartyAction(botAI); }
+    static Action* renew_on_main_tank(PlayerbotAI* botAI) { return new CastRenewOnMainTankAction(botAI); }
     static Action* greater_heal(PlayerbotAI* botAI) { return new CastGreaterHealAction(botAI); }
     static Action* greater_heal_on_party(PlayerbotAI* botAI) { return new CastGreaterHealOnPartyAction(botAI); }
     static Action* heal(PlayerbotAI* botAI) { return new CastHealAction(botAI); }

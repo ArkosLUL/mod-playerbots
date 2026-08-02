@@ -88,10 +88,16 @@ public:
         creators["switch to melee"] = &HunterTriggerFactoryInternal::switch_to_melee;
         creators["switch to ranged"] = &HunterTriggerFactoryInternal::switch_to_ranged;
         creators["misdirection on main tank"] = &HunterTriggerFactoryInternal::misdirection_on_main_tank;
+        creators["misdirection on main tank and light aoe"] =
+            &HunterTriggerFactoryInternal::misdirection_on_main_tank_and_light_aoe;
         creators["tranquilizing shot enrage"] = &HunterTriggerFactoryInternal::remove_enrage;
         creators["tranquilizing shot magic"] = &HunterTriggerFactoryInternal::remove_magic;
         creators["immolation trap no cd"] = &HunterTriggerFactoryInternal::immolation_trap_no_cd;
+        creators["trap launcher: explosive trap no cd"] = &HunterTriggerFactoryInternal::trap_launcher_explosive_no_cd;
         creators["kill command"] = &HunterTriggerFactoryInternal::kill_command;
+        creators["bestial wrath"] = &HunterTriggerFactoryInternal::bestial_wrath;
+        creators["chimera shot no cd"] = &HunterTriggerFactoryInternal::chimera_shot_no_cd;
+        creators["aimed shot no cd"] = &HunterTriggerFactoryInternal::aimed_shot_no_cd;
         creators["explosive shot"] = &HunterTriggerFactoryInternal::explosive_shot;
         creators["lock and load"] = &HunterTriggerFactoryInternal::lock_and_load;
         creators["silencing shot"] = &HunterTriggerFactoryInternal::silencing_shot;
@@ -126,10 +132,18 @@ private:
     static Trigger* switch_to_melee(PlayerbotAI* botAI) { return new SwitchToMeleeTrigger(botAI); }
     static Trigger* switch_to_ranged(PlayerbotAI* botAI) { return new SwitchToRangedTrigger(botAI); }
     static Trigger* misdirection_on_main_tank(PlayerbotAI* botAI) { return new MisdirectionOnMainTankTrigger(botAI); }
+    static Trigger* misdirection_on_main_tank_and_light_aoe(PlayerbotAI* botAI)
+    {
+        return new TwoTriggers(botAI, "misdirection on main tank", "light aoe");
+    }
     static Trigger* remove_enrage(PlayerbotAI* botAI) { return new TargetRemoveEnrageTrigger(botAI); }
     static Trigger* remove_magic(PlayerbotAI* botAI) { return new TargetRemoveMagicTrigger(botAI); }
     static Trigger* immolation_trap_no_cd(PlayerbotAI* botAI) { return new ImmolationTrapNoCdTrigger(botAI); }
+    static Trigger* trap_launcher_explosive_no_cd(PlayerbotAI* botAI) { return new TrapLauncherExplosiveNoCdTrigger(botAI); }
     static Trigger* kill_command(PlayerbotAI* botAI) { return new KillCommandTrigger(botAI); }
+    static Trigger* bestial_wrath(PlayerbotAI* botAI) { return new BestialWrathTrigger(botAI); }
+    static Trigger* chimera_shot_no_cd(PlayerbotAI* botAI) { return new ChimeraShotNoCdTrigger(botAI); }
+    static Trigger* aimed_shot_no_cd(PlayerbotAI* botAI) { return new AimedShotNoCdTrigger(botAI); }
     static Trigger* explosive_shot(PlayerbotAI* botAI) { return new ExplosiveShotTrigger(botAI); }
     static Trigger* lock_and_load(PlayerbotAI* botAI) { return new LockAndLoadTrigger(botAI); }
     static Trigger* silencing_shot(PlayerbotAI* botAI) { return new SilencingShotTrigger(botAI); }
@@ -191,6 +205,7 @@ public:
         creators["disengage"] = &HunterAiObjectContextInternal::disengage;
         creators["immolation trap"] = &HunterAiObjectContextInternal::immolation_trap;
         creators["explosive trap"] = &HunterAiObjectContextInternal::explosive_trap;
+        creators["trap launcher: explosive trap"] = &HunterAiObjectContextInternal::trap_launcher_explosive;
         creators["explosive shot base"] = &HunterAiObjectContextInternal::explosive_shot_base;
         creators["explosive shot rank 4"] = &HunterAiObjectContextInternal::explosive_shot_rank_4;
         creators["explosive shot rank 3"] = &HunterAiObjectContextInternal::explosive_shot_rank_3;
@@ -248,6 +263,7 @@ private:
     static Action* disengage(PlayerbotAI* botAI) { return new CastDisengageAction(botAI); }
     static Action* immolation_trap(PlayerbotAI* botAI) { return new CastImmolationTrapAction(botAI); }
     static Action* explosive_trap(PlayerbotAI* botAI) { return new CastExplosiveTrapAction(botAI); }
+    static Action* trap_launcher_explosive(PlayerbotAI* botAI) { return new CastTrapLauncherExplosiveAction(botAI); }
     static Action* explosive_shot_base(PlayerbotAI* botAI) { return new CastExplosiveShotBaseAction(botAI); }
     static Action* explosive_shot_rank_4(PlayerbotAI* botAI) { return new CastExplosiveShotRank4Action(botAI); }
     static Action* explosive_shot_rank_3(PlayerbotAI* botAI) { return new CastExplosiveShotRank3Action(botAI); }

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "GenericBuffUtils.h"
+#include "AttackersValue.h"
 #include "CreatureAI.h"
 #include "ItemVisitors.h"
 #include "LastSpellCastValue.h"
@@ -110,6 +111,37 @@ bool TargetWithComboPointsLowerHealTrigger::IsActive()
 bool LoseAggroTrigger::IsActive() { return !AI_VALUE2(bool, "has aggro", "current target"); }
 
 bool HasAggroTrigger::IsActive() { return AI_VALUE2(bool, "has aggro", "current target"); }
+
+bool OffensivePotionTrigger::IsActive()
+{
+    if (!sPlayerbotAIConfig.offensivePotions || !PlayerbotAI::IsDps(bot) || !bot->IsInCombat())
+    {
+        holdState.Reset();
+        return false;
+    }
+
+    // Don't arm without a potion in the bags, otherwise the ACTION_HIGH action fires every tick and
+    // whispers "No items available" to the master for the whole encounter.
+    if (!AI_VALUE2(uint32, "item count", "offensive potion"))
+    {
+        holdState.Reset();
+        return false;
+    }
+
+    // Only arm on dungeon/world bosses (mirrors HoldBurstUntilTankEngagedMultiplier::GetValue).
+    Unit* target = AI_VALUE(Unit*, "current target");
+    Creature* creature = target ? target->ToCreature() : nullptr;
+    if (!creature || !(creature->IsDungeonBoss() || creature->isWorldBoss()))
+    {
+        holdState.Reset();
+        return false;
+    }
+
+    // Hold the pop until the main tank has firmly held the boss, so a DPS doesn't pull threat. The
+    // 'burst' strategy also gates this action, but enforcing it here keeps the potion safe when
+    // that strategy isn't loaded.
+    return MainTankHasHeldBoss(bot, target, holdState, POTION_HOLD_MS);
+}
 
 bool PanicTrigger::IsActive()
 {
@@ -293,6 +325,25 @@ bool DebuffOnBossTrigger::IsActive()
 
     Creature* creature = GetTarget()->ToCreature();
     return creature && (creature->IsDungeonBoss() || creature->isWorldBoss());
+}
+
+bool SelfResurrectTrigger::IsActive()
+{
+    if (bot->IsAlive())
+        return false;
+
+    uint32 const resSpell = bot->GetUInt32Value(PLAYER_SELF_RES_SPELL);
+    if (!resSpell)
+        return false;
+
+    // Shaman Reincarnation self-res (21169) is a scarce cooldown: conserve it for boss fights.
+    // Warlock Soulstone recipients use a different self-res spell id and are left unrestricted.
+    uint32 const SPELL_REINCARNATION_SELF_RES = 21169;
+    if (resSpell == SPELL_REINCARNATION_SELF_RES && sPlayerbotAIConfig.battleRezBossOnly &&
+        !AttackersValue::IsInBossFight(botAI))
+        return false;
+
+    return true;
 }
 
 bool SpellTrigger::IsActive() { return GetTarget(); }
@@ -720,6 +771,11 @@ Value<Unit*>* BuffOnMainTankTrigger::GetTargetValue() { return context->GetValue
 
 bool AmmoCountTrigger::IsActive()
 {
+    // PLAYER_AMMO_ID is pinned to 0 by the no-ammo aura, so without this the trigger would rearm
+    // every check and never be satisfiable.
+    if (!RangedWeaponNeedsAmmo(bot))
+        return false;
+
     if (bot->GetUInt32Value(PLAYER_AMMO_ID) != 0)
         return ItemCountTrigger::IsActive();  // Ammo already equipped
 

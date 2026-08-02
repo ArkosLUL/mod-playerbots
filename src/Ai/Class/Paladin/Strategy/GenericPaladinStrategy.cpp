@@ -27,11 +27,13 @@ void GenericPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("critical health", { NextAction("lay on hands", ACTION_EMERGENCY + 1) }));
     triggers.push_back(new TriggerNode("party member critical health",
         { NextAction("lay on hands on party", ACTION_EMERGENCY + 2) }));
+    // Topping up inside the bubble must stay below the emergency heals on someone who is dying.
     triggers.push_back(new TriggerNode("divine shield low health",
-        { NextAction("flash of light", ACTION_EMERGENCY + 3), NextAction("holy light", ACTION_EMERGENCY + 2)}));
+        { NextAction("flash of light", ACTION_EMERGENCY - 1), NextAction("holy light", ACTION_EMERGENCY - 2)}));
+    // BoP wipes threat and applies Forbearance, so Hand of Sacrifice goes first.
     triggers.push_back(new TriggerNode("protect party member",
-        { NextAction("blessing of protection on party", ACTION_EMERGENCY + 3) }));
-    triggers.push_back(new TriggerNode("high mana", { NextAction("divine plea", ACTION_HIGH) }));
+        { NextAction("hand of sacrifice on party", ACTION_EMERGENCY + 3),
+          NextAction("blessing of protection on party", ACTION_EMERGENCY + 2.8f) }));
     triggers.push_back(new TriggerNode("hand of freedom on party",
         { NextAction("hand of freedom on party", ACTION_HIGH + 4) }));
 }
@@ -57,8 +59,6 @@ void PaladinCureStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
 void PaladinBoostStrategy::InitTriggers(std::vector<TriggerNode*>& /*triggers*/)
 {
-    // triggers.push_back(new TriggerNode("divine favor", { NextAction("divine favor",
-    // ACTION_HIGH + 1) }));
 }
 
 void PaladinCcStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -73,10 +73,7 @@ void PaladinHealerDpsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode("healer should attack",
                         {
                             NextAction("hammer of wrath", ACTION_DEFAULT + 0.6f),
-                            NextAction("holy shock", ACTION_DEFAULT + 0.5f),
-                            NextAction("shield of righteousness", ACTION_DEFAULT + 0.4f),
                             NextAction("judgement of light", ACTION_DEFAULT + 0.3f),
-                            NextAction("consecration", ACTION_DEFAULT + 0.2f),
                             NextAction("exorcism", ACTION_DEFAULT+ 0.1f),
                             }));
 }

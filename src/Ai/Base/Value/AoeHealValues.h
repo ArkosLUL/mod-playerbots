@@ -11,6 +11,7 @@
 #include "Value.h"
 
 class PlayerbotAI;
+class Player;
 
 class AoeHealValue : public Uint8CalculatedValue, public Qualified
 {
@@ -19,5 +20,9 @@ public:
 
     uint8 Calculate() override;
 };
+
+// Alive group members in heal range, the population "aoe heal" counts from. Anything comparing an
+// "aoe heal" count against a group size has to use this, or the two sides measure different raids.
+uint8 CountHealableGroupMembers(Player* bot);
 
 #endif

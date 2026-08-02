@@ -675,34 +675,47 @@ bool VoidReaverSpreadRangedAction::Execute(Event /*event*/)
 
         // Void Reaver's hitbox is 15 yards (GetDistance2d() of 16.5 yards for non-Tauren)
         constexpr float radius = 45.0f;
-        float targetX = 0.0f;
-        float targetY = 0.0f;
 
+        // Resolve this bot's ring angle from its role index.
+        float angle = 0.0f;
         if (healerIndex != -1 && healerCount > 0)
         {
-            float angle = 2 * M_PI * healerIndex / healerCount;
-            targetX = voidReaver->GetPositionX() + radius * std::cos(angle);
-            targetY = voidReaver->GetPositionY() + radius * std::sin(angle);
+            angle = 2 * M_PI * healerIndex / healerCount;
         }
         else if (rangedDpsIndex != -1 && rangedDpsCount > 0)
         {
-            float angle = 2 * M_PI * rangedDpsIndex / rangedDpsCount;
+            angle = 2 * M_PI * rangedDpsIndex / rangedDpsCount;
             if (healerCount > 0)
                 angle += M_PI / rangedDpsCount;
-
-            targetX = voidReaver->GetPositionX() + radius * std::cos(angle);
-            targetY = voidReaver->GetPositionY() + radius * std::sin(angle);
         }
 
-        if (bot->GetExactDist2d(targetX, targetY) > 2.0f)
+        // Use the platform floor Z (boss elevation), not the bot's own Z, so the navmesh
+        // height search near the ring point does not miss and return INVALID_HEIGHT.
+        float const targetZ = voidReaver->GetPositionZ();
+        bool moved = false;
+        for (float r : { radius, radius * 0.8f, radius * 0.6f })
         {
-            return MoveTo(TEMPEST_KEEP_MAP_ID, targetX, targetY, bot->GetPositionZ(), false,
-                          false, false, false, MovementPriority::MOVEMENT_COMBAT, true, false);
+            float targetX = voidReaver->GetPositionX() + r * std::cos(angle);
+            float targetY = voidReaver->GetPositionY() + r * std::sin(angle);
+            if (bot->GetExactDist2d(targetX, targetY) <= 2.0f)  // already at this slot
+                break;
+
+            // Force the move: stop any in-progress cast / auto-attack so a lower-priority
+            // combat action can't keep the bot rooted, and outrank IsWaitingForLastMove.
+            bot->AttackStop();
+            bot->InterruptNonMeleeSpells(true);
+            if (MoveTo(TEMPEST_KEEP_MAP_ID, targetX, targetY, targetZ, false, false, false, false,
+                       MovementPriority::MOVEMENT_FORCED, true, false))
+            {
+                moved = true;
+                break;
+            }
         }
-        else
-        {
-            hasReachedVoidReaverPosition[guid] = true;
-        }
+
+        if (moved)
+            return true;
+
+        hasReachedVoidReaverPosition[guid] = true;  // arrived (or no reachable slot)
     }
     else
     {

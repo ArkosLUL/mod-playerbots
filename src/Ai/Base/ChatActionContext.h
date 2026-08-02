@@ -142,6 +142,7 @@ public:
         creators["autogear"] = &ChatActionContext::autogear;
         creators["autogear bis"] = &ChatActionContext::autogear_bis;
         creators["equip upgrade"] = &ChatActionContext::equip_upgrade;
+        creators["equip upgrades"] = &ChatActionContext::equip_upgrade;
         creators["attack my target"] = &ChatActionContext::attack_my_target;
         creators["pull my target"] = &ChatActionContext::pull_my_target;
         creators["pull rti target"] = &ChatActionContext::pull_rti_target;

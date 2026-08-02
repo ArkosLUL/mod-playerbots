@@ -9,6 +9,7 @@
 #include "DBCStores.h"
 #include "ItemTemplate.h"
 #include "Playerbots.h"
+#include "StatsWeightCalculator.h"
 
 std::unordered_set<uint32> RandomItemMgr::itemCache;
 
@@ -967,23 +968,29 @@ uint32 RandomItemMgr::GetAmmo(uint32 level, uint32 subClass) const
     if (subItr == levelItr->second.end() || subItr->second.empty())
         return 0;
 
-    std::vector<uint32> const& ammo = subItr->second;
-    if (!sPlayerbotAIConfig.limitGearExpansion)
-        return ammo.front();
+    for (uint32 entry : subItr->second)
+    {
+        if (IsAllowedForLevelExpansion(entry, level))
+            return entry;
+    }
 
+    return 0;
+}
+
+bool RandomItemMgr::IsAllowedForLevelExpansion(uint32 itemId, uint32 level)
+{
+    if (!sPlayerbotAIConfig.limitGearExpansion)
+        return true;
+
+    // Item ids run roughly chronologically, so the first id of an expansion's content doubles as a
+    // cutoff for "this didn't exist yet at that level cap".
     static constexpr uint32 EXPANSION_ITEM_ID_TBC   = 23728; // approx. first item in TBC content (patch 2.0)
     static constexpr uint32 EXPANSION_ITEM_ID_WOTLK = 35570; // approx. first item in WotLK content (patch 3.0)
     uint32 const maxEntryId = level <= 60 ? EXPANSION_ITEM_ID_TBC :
                               level <= 70 ? EXPANSION_ITEM_ID_WOTLK :
                               std::numeric_limits<uint32>::max();
 
-    for (uint32 entry : ammo)
-    {
-        if (entry < maxEntryId)
-            return entry;
-    }
-
-    return 0;
+    return itemId < maxEntryId;
 }
 
 uint32 RandomItemMgr::GetRandomPotion(uint32 level, uint32 effect) const
@@ -1045,6 +1052,37 @@ std::vector<uint32> const& RandomItemMgr::GetEnchantmentPool(uint32 entry) const
     return it->second;
 }
 
+float RandomItemMgr::CalculateItemWeight(Player* player, uint32 itemId, int32 randomPropertyId)
+{
+    if (!player || !itemId)
+        return 0.0f;
+
+    StatsWeightCalculator calculator(player);
+    calculator.SetItemSetBonus(false);
+    calculator.SetOverflowPenalty(false);
+    return calculator.CalculateItem(itemId, randomPropertyId);
+}
+
+bool RandomItemMgr::CanEquipForBot(Player* player, ItemTemplate const* proto)
+{
+    if (!player || !proto)
+        return false;
+
+    if (player->BotCanUseItem(proto) != EQUIP_ERR_OK)
+        return false;
+
+    if (proto->InventoryType == INVTYPE_NON_EQUIP)
+        return false;
+
+    if (proto->Class == ITEM_CLASS_WEAPON)
+        return CanEquipWeapon(proto, player->getClass());
+
+    if (proto->Class == ITEM_CLASS_ARMOR)
+        return CanEquipArmor(proto, player->getClass(), player->GetLevel());
+
+    return true;
+}
+
 bool RandomItemMgr::CanEquipArmor(ItemTemplate const* proto, uint8 clazz, uint32 level) const
 {
     // skip null proto or invalid class
@@ -1061,6 +1099,12 @@ bool RandomItemMgr::CanEquipArmor(ItemTemplate const* proto, uint8 clazz, uint32
 
     // skip additional checks for tabards - always equippable
     if (proto->InventoryType == INVTYPE_TABARD)
+        return true;
+
+    // jewelry, cloaks and held off-hands have no armor-subclass restriction
+    if (proto->InventoryType == INVTYPE_CLOAK || proto->InventoryType == INVTYPE_NECK ||
+        proto->InventoryType == INVTYPE_FINGER || proto->InventoryType == INVTYPE_TRINKET ||
+        proto->InventoryType == INVTYPE_HOLDABLE)
         return true;
 
     if ((clazz == CLASS_WARRIOR || clazz == CLASS_PALADIN || clazz == CLASS_SHAMAN) &&

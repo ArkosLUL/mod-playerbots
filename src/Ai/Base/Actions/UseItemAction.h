@@ -65,6 +65,14 @@ public:
     bool isUseful() override;
 };
 
+class UseOffensivePotion : public UseItemAction
+{
+public:
+    UseOffensivePotion(PlayerbotAI* botAI) : UseItemAction(botAI, "offensive potion") {}
+
+    bool isUseful() override;
+};
+
 class UseHearthStone : public UseItemAction
 {
 public:

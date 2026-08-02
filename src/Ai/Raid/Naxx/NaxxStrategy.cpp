@@ -28,26 +28,47 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     ));
 
     // Heigan the Unclean
-    //triggers.push_back(new TriggerNode("heigan melee",
-    //    { NextAction("heigan dance melee", ACTION_RAID + 1) }
-    //));
+    triggers.push_back(new TriggerNode("heigan melee",
+        { NextAction("heigan dance melee", ACTION_RAID + 1) }
+    ));
 
-    //triggers.push_back(new TriggerNode("heigan ranged",
-    //    { NextAction("heigan dance ranged", ACTION_RAID + 1) }
-    //));
+    triggers.push_back(new TriggerNode("heigan ranged",
+        { NextAction("heigan dance ranged", ACTION_RAID + 1) }
+    ));
+
+    // Priority: dispel Decrepit Fever ASAP (tank first) during Phase 1.
+    triggers.push_back(new TriggerNode("heigan decrepit fever",
+        { NextAction("heigan dispel decrepit fever", ACTION_RAID + 5) }
+    ));
 
     // Kel'Thuzad
     triggers.push_back(
         new TriggerNode("kel'thuzad",
         {
+            NextAction("kel'thuzad misdirect boss to main tank", ACTION_RAID + 3),
             NextAction("kel'thuzad position", ACTION_RAID + 2),
             NextAction("kel'thuzad choose target", ACTION_RAID + 1)
         })
     );
 
+    // Emergency priority so the flee beats every P2 positioning action by construction.
+    triggers.push_back(new TriggerNode("kel'thuzad shadow fissure",
+        { NextAction("kel'thuzad flee shadow fissure", ACTION_EMERGENCY + 6) }
+    ));
+
     // Anub'Rekhan
     triggers.push_back(new TriggerNode("anub'rekhan",
-        { NextAction("anub'rekhan position", ACTION_RAID + 1) }
+        {
+            NextAction("anub'rekhan redirect threat", ACTION_RAID + 3),
+            NextAction("anub'rekhan position", ACTION_RAID + 2),
+            NextAction("anub'rekhan choose target", ACTION_RAID + 1)
+        }
+    ));
+
+    // The swarm is the one window where losing the formation wipes the raid, so holding it outranks
+    // everything else the engine might want to do.
+    triggers.push_back(new TriggerNode("anub'rekhan locust swarm",
+        { NextAction("anub'rekhan position", ACTION_EMERGENCY + 5) }
     ));
 
      // Grand Widow Faerlina
@@ -55,7 +76,22 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("avoid aoe", ACTION_RAID + 1) }
     ));
 
+    triggers.push_back(new TriggerNode("faerlina frenzy",
+        {
+            NextAction("tranquilizing shot", ACTION_RAID + 4),
+            NextAction("faerlina sacrifice worshipper", ACTION_RAID + 3)
+        }
+    ));
+
     // Maexxna
+    triggers.push_back(new TriggerNode("maexxna web wrap",
+        { NextAction("maexxna attack web wrap", ACTION_RAID + 5) }
+    ));
+
+    triggers.push_back(new TriggerNode("maexxna spiderlings",
+        { NextAction("maexxna tank spiderlings", ACTION_RAID + 2) }
+    ));
+
     triggers.push_back(
         new TriggerNode("maexxna",
         {
@@ -64,26 +100,36 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         })
     );
 
+    // Gothik the Harvester. The whole raid fights on the living side, so getting back across outranks
+    // whatever the bot was shooting at.
+    triggers.push_back(new TriggerNode("gothik wrong side",
+        { NextAction("gothik stay on living side", ACTION_RAID + 4) }
+    ));
+
+    triggers.push_back(new TriggerNode("gothik",
+        { NextAction("gothik choose target", ACTION_RAID + 1) }
+    ));
+
     // Patchwerk
-    //triggers.push_back(new TriggerNode("patchwerk tank",
-    //    { NextAction("tank face", ACTION_RAID + 2) }
-    //));
+    // triggers.push_back(new TriggerNode("patchwerk tank",
+    //     { NextAction("tank face", ACTION_RAID + 2) }
+    // ));
 
-    //triggers.push_back(new TriggerNode("patchwerk ranged",
-    //    { NextAction("patchwerk ranged position", ACTION_RAID + 2) }
-    //));
+    // triggers.push_back(new TriggerNode("patchwerk ranged",
+    //     { NextAction("patchwerk ranged position", ACTION_RAID + 2) }
+    // ));
 
-    //triggers.push_back(new TriggerNode("patchwerk non-tank",
-    //    { NextAction("rear flank", ACTION_RAID + 1) }
-    //));
+    // triggers.push_back(new TriggerNode("patchwerk non-tank",
+    //     { NextAction("rear flank", ACTION_RAID + 1) }
+    // ));
 
     // Thaddius
     triggers.push_back(new TriggerNode("thaddius phase pet",
-        { NextAction("thaddius attack nearest pet", ACTION_RAID + 1) }
+        { NextAction("thaddius attack nearest pet", ACTION_RAID + 6) }
     ));
 
     triggers.push_back(new TriggerNode("thaddius phase pet lose aggro",
-        { NextAction("taunt spell", ACTION_RAID + 2) }
+        { NextAction("taunt spell", ACTION_RAID + 7) }
     ));
 
     triggers.push_back(new TriggerNode("thaddius phase transition",
@@ -92,6 +138,12 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("thaddius phase thaddius",
         { NextAction("thaddius move polarity", ACTION_RAID + 1) }
+    ));
+
+    // Below the pet-phase taunt. It only ever casts the redirect buff, so outranking the
+    // positioning nodes costs a GCD, not a Polarity Shift.
+    triggers.push_back(new TriggerNode("thaddius redirect threat",
+        { NextAction("thaddius redirect threat", ACTION_RAID + 3) }
     ));
 
     // Instructor Razuvious
@@ -103,13 +155,18 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("razuvious target", ACTION_RAID + 1) }
     ));
 
-    // four horsemen
-    triggers.push_back(new TriggerNode("four horsemen attractors",
-        { NextAction("four horsemen attract alternatively", ACTION_RAID + 1) }
+    // four horseman
+    triggers.push_back(new TriggerNode("horseman attractors",
+        { NextAction("horseman attract alternatively", ACTION_RAID + 1) }
     ));
 
-    triggers.push_back(new TriggerNode("four horsemen except attractors",
-        { NextAction("four horsemen attack in order", ACTION_RAID + 1) }
+    triggers.push_back(new TriggerNode("horseman except attractors",
+        { NextAction("horseman attack in order", ACTION_RAID + 1) }
+    ));
+
+    // Only live for the pull window, so it can outrank the attractor rotation while it lasts.
+    triggers.push_back(new TriggerNode("four horsemen redirect threat",
+        { NextAction("four horsemen redirect threat", ACTION_RAID + 4) }
     ));
 
     // sapphiron
@@ -135,6 +192,23 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("taunt spell", ACTION_RAID + 1) }
     ));
 
+    triggers.push_back(new TriggerNode("gluth redirect threat",
+        { NextAction("gluth redirect threat", ACTION_RAID + 2) }
+    ));
+
+    triggers.push_back(new TriggerNode("gluth frenzy",
+        { NextAction("gluth tranquilizing shot", ACTION_RAID + 4) }
+    ));
+
+    triggers.push_back(new TriggerNode("gluth low health zombie aoe",
+        {
+            NextAction("starfall", ACTION_RAID + 1),
+            NextAction("blizzard", ACTION_RAID + 1),
+            NextAction("volley", ACTION_RAID + 1),
+            NextAction("rain of fire", ACTION_RAID + 1)
+        })
+    );
+
     // Loatheb
     triggers.push_back(
         new TriggerNode("loatheb",
@@ -144,19 +218,41 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         })
     );
 
+    // Noth the Plaguebringer
+    triggers.push_back(
+        new TriggerNode("noth",
+        {
+            NextAction("noth position", ACTION_RAID + 2),
+            NextAction("noth choose target", ACTION_RAID + 1)
+        })
+    );
+
+    // 25-man only, and only for the few seconds after EVENT_BLINK empties the threat table.
+    triggers.push_back(new TriggerNode("noth blink",
+        { NextAction("taunt spell", ACTION_RAID + 4) }
+    ));
+
+    // Above the positioning nodes: 25-man curses 10 players at once against a ~10s window, so a
+    // dispel that loses a GCD to a repositioning move is a dispel that does not happen.
+    triggers.push_back(new TriggerNode("noth curse",
+        { NextAction("noth dispel curse", ACTION_RAID + 5) }
+    ));
 }
 
 void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new GrobbulusMultiplier(botAI));
-    //multipliers.push_back(new HeiganDanceMultiplier(botAI));
+    multipliers.push_back(new HeiganDanceMultiplier(botAI));
     multipliers.push_back(new LoathebGenericMultiplier(botAI));
     multipliers.push_back(new ThaddiusGenericMultiplier(botAI));
     multipliers.push_back(new SapphironGenericMultiplier(botAI));
     multipliers.push_back(new InstructorRazuviousGenericMultiplier(botAI));
     multipliers.push_back(new KelthuzadGenericMultiplier(botAI));
     multipliers.push_back(new AnubrekhanGenericMultiplier(botAI));
-    multipliers.push_back(new FourHorsemenGenericMultiplier(botAI));
-    // multipliers.push_back(new GothikGenericMultiplier(botAI));
+    multipliers.push_back(new FourhorsemanGenericMultiplier(botAI));
     multipliers.push_back(new GluthGenericMultiplier(botAI));
+    multipliers.push_back(new GothikGenericMultiplier(botAI));
+    multipliers.push_back(new NaxxThreatRedirectMultiplier(botAI));
+    multipliers.push_back(new NaxxBurstWindowMultiplier(botAI));
+    multipliers.push_back(new NothGenericMultiplier(botAI));
 }

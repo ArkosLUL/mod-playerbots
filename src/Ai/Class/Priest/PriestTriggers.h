@@ -26,8 +26,6 @@ CURE_TRIGGER(CureDiseaseTrigger, "cure disease", DISPEL_DISEASE);
 CURE_PARTY_TRIGGER(PartyMemberCureDiseaseTrigger, "cure disease", DISPEL_DISEASE);
 BUFF_TRIGGER_A(InnerFireTrigger, "inner fire");
 BUFF_TRIGGER_A(ShadowformTrigger, "shadowform");
-BOOST_TRIGGER(PowerInfusionTrigger, "power infusion");
-BUFF_TRIGGER(InnerFocusTrigger, "inner focus");
 CC_TRIGGER(ShackleUndeadTrigger, "shackle undead");
 INTERRUPT_TRIGGER(SilenceTrigger, "silence");
 INTERRUPT_HEALER_TRIGGER(SilenceEnemyHealerTrigger, "silence");
@@ -41,7 +39,19 @@ BUFF_TRIGGER(FearWardTrigger, "fear ward");
 DEFLECT_TRIGGER(FeedbackTrigger, "feedback");
 SNARE_TRIGGER(ChastiseTrigger, "chastise");
 
-BOOST_TRIGGER_A(ShadowfiendTrigger, "shadowfiend");
+class ShadowfiendTrigger : public SpellNoCooldownTrigger
+{
+public:
+    ShadowfiendTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "shadowfiend") {}
+};
+
+class InnerFocusTrigger : public SpellNoCooldownTrigger
+{
+public:
+    InnerFocusTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "inner focus") {}
+
+    bool IsActive() override;
+};
 
 class ShadowProtectionTrigger : public BuffTrigger
 {
@@ -110,6 +120,53 @@ public:
 protected:
     uint32 minEnemies;
     static const std::set<uint32> MIND_SEAR_SPELL_IDS;
+};
+
+class MindFlayChannelCheckTrigger : public Trigger
+{
+public:
+    MindFlayChannelCheckTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "mind flay channel check") {}
+
+    std::string const GetTargetName() override { return "current target"; }
+    bool IsActive() override;
+};
+
+class WeakenedSoulOnPartyMemberTrigger : public Trigger
+{
+public:
+    WeakenedSoulOnPartyMemberTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "weakened soul on party member") {}
+
+    std::string const GetTargetName() override { return "party member to heal"; }
+    bool IsActive() override;
+};
+
+class PriestHymnOfHopeTrigger : public Trigger
+{
+public:
+    PriestHymnOfHopeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "hymn of hope") {}
+
+    bool IsActive() override;
+};
+
+class RenewOnMainTankTrigger : public BuffOnMainTankTrigger
+{
+public:
+    RenewOnMainTankTrigger(PlayerbotAI* botAI) : BuffOnMainTankTrigger(botAI, "renew", true) {}
+};
+
+class PriestShadowWordDeathExecuteTrigger : public Trigger
+{
+public:
+    PriestShadowWordDeathExecuteTrigger(PlayerbotAI* botAI, float lifeTime = 2.0f)
+        : Trigger(botAI, "shadow word: death execute"), lifeTime(lifeTime) {}
+
+    std::string const GetTargetName() override { return "current target"; }
+    bool IsActive() override;
+
+protected:
+    float lifeTime;
 };
 
 #endif

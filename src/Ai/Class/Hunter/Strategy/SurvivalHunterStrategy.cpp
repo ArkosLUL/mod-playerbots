@@ -50,16 +50,17 @@ SurvivalHunterStrategy::SurvivalHunterStrategy(PlayerbotAI* botAI) : GenericHunt
 // ===== Default Actions =====
 std::vector<NextAction> SurvivalHunterStrategy::getDefaultActions()
 {
+    // No Arcane Shot here: Survival always has Explosive Shot, which the Arcane Shot action refuses to
+    // compete with.
     return {
-        NextAction("kill command", 5.9f),
-        NextAction("kill shot", 5.8f),
-        NextAction("explosive shot", 5.7f),
-        NextAction("black arrow", 5.6f),
-        NextAction("serpent sting", 5.5f),
-        NextAction("aimed shot", 5.4f),
-        NextAction("arcane shot", 5.3f),
-        NextAction("steady shot", 5.2f),
-        NextAction("auto shot", 5.1f)
+        NextAction("kill command", ACTION_DEFAULT + 0.9f),
+        NextAction("kill shot", ACTION_DEFAULT + 0.8f),
+        NextAction("explosive shot", ACTION_DEFAULT + 0.7f),
+        NextAction("black arrow", ACTION_DEFAULT + 0.6f),
+        NextAction("serpent sting", ACTION_DEFAULT + 0.5f),
+        NextAction("aimed shot", ACTION_DEFAULT + 0.4f),
+        NextAction("steady shot", ACTION_DEFAULT + 0.2f),
+        NextAction("auto shot", ACTION_DEFAULT + 0.1f)
     };
 }
 
@@ -72,7 +73,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "lock and load",
             {
-                NextAction("explosive shot rank 4", 28.0f)
+                NextAction("explosive shot rank 4", ACTION_HIGH + 8)
             }
         )
     );
@@ -80,7 +81,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "kill command",
             {
-                NextAction("kill command", 18.5f)
+                NextAction("kill command", ACTION_NORMAL + 8.5f)
             }
         )
     );
@@ -88,7 +89,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "target critical health",
             {
-                NextAction("kill shot", 18.0f)
+                NextAction("kill shot", ACTION_NORMAL + 8)
             }
         )
     );
@@ -96,7 +97,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "explosive shot",
             {
-                NextAction("explosive shot", 17.5f)
+                NextAction("explosive shot", ACTION_NORMAL + 7.5f)
             }
         )
     );
@@ -104,7 +105,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "black arrow",
             {
-                NextAction("black arrow", 16.5f)
+                NextAction("black arrow", ACTION_NORMAL + 6.5f)
             }
         )
     );
@@ -112,7 +113,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "low mana",
             {
-                NextAction("viper sting", 16.0f)
+                NextAction("viper sting", ACTION_NORMAL + 6)
             }
         )
     );
@@ -120,7 +121,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "no stings",
             {
-                NextAction("serpent sting", 15.5f)
+                NextAction("serpent sting", ACTION_NORMAL + 5.5f)
             }
         )
     );
@@ -128,7 +129,7 @@ void SurvivalHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "serpent sting on attacker",
             {
-                NextAction("serpent sting on attacker", 15.0f)
+                NextAction("serpent sting on attacker", ACTION_NORMAL + 5)
             }
         )
     );

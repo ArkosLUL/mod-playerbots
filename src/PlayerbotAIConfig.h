@@ -263,6 +263,20 @@ public:
     bool fleeingEnabled;
     bool summonAtInnkeepersEnabled;
     std::string combatStrategies, nonCombatStrategies;
+    std::string lootStrategy;
+    bool battleRezBossOnly;
+    bool ulduarVezaxHardMode;
+    bool ulduarIronAssemblyHardMode;
+    bool ulduarFlameLeviathanHardMode;
+    bool ulduarThorimHardMode;
+    bool ulduarFreyaHardMode;
+    bool ulduarHodirHardMode;
+    bool ulduarMimironHardMode;
+    bool ulduarYoggSaronHardMode;
+    bool ulduarXT002HardMode;
+    // Obsidian Sanctum: how many drakes bots leave alive (0=Sarth+0, up to 3=Sarth+3).
+    // Keep-order Tenebron -> Shadron -> Vesperon.
+    int32 sartharionDrakesAlive;
     std::string randomBotCombatStrategies, randomBotNonCombatStrategies;
     bool applyInstanceStrategies;
     uint32 randomBotMinLevel, randomBotMaxLevel;
@@ -296,6 +310,7 @@ public:
     bool randombotsWalkingRPGInDoors;
     uint32 minEnchantingBotLevel;
     uint32 limitEnchantExpansion;
+    bool professionGearEnhancements;
     uint32 limitGearExpansion;
     uint32 randombotStartingLevel;
     bool enablePeriodicOnlineOffline;
@@ -359,6 +374,8 @@ public:
     uint32 botActiveAloneSmartScaleWhenMinLevel;
     uint32 botActiveAloneSmartScaleWhenMaxLevel;
 
+    bool offensivePotions;
+    bool burstOnBossOnly;
     bool freeMethodLoot;
     int32 lootNeedRollLevel;
     bool lootGreedRollLevel;
@@ -367,6 +384,25 @@ public:
     std::string autoPickReward;
     bool autoEquipUpgradeLoot;
     float equipUpgradeThreshold;
+    bool itemSetUseForUpgrades;    // Score item set bonuses on equip/loot decisions, not just initial gearing
+    float itemSetBonusWeight;      // Score boost per set bonus an item keeps or unlocks
+    float itemSetProgressWeight;   // Per-piece nudge toward the next set threshold
+    float socketValueFactor;       // Scales the gem-value-derived socket multiplier (0 = flat fallback)
+    float socketMaxMultiplier;     // Clamp on the socket multiplier
+    float socketWeightPerSocket;   // Flat per-socket bonus used when gem value is unusable
+    int32 lootRollLevel;           // 0 = pass, 1 = greed only, 2 = full smart loot
+    bool allowBoENeedIfUpgrade;    // Loot roll fine-tuning
+    bool allowBoUNeedIfUpgrade;    // Allow NEED on BoU if upgrade
+    float crossArmorExtraMargin;
+    bool crossArmorGreedIsPass;    // If true, off-armor (lower tier) GREED becomes PASS
+    uint8 deButtonMode;            // 0 = no DE, 1 = enchanters only, 2 = all bots can DE
+    float tokenILevelMargin;       // ilvl threshold to consider the token an upgrade
+    uint8 sanctificationTokenRollMode;  // 0 = always GREED, 1 = NEED if under quota
+    bool smartNeedBySpec;          // Intelligent NEED (based on stats/spec)
+    bool rollUseGroupUsageChecks;  // Enable group-wide upgrade checks for loot decisions
+    bool needOnProfessionRecipes;  // NEED profession recipes/patterns/books the bot can learn
+    bool recipesIgnoreSkillRank;   // Ignore skill rank requirement when rolling on recipes
+    bool rollUpgradesOnly;         // Bots GREED (not NEED) only on gear upgrades, PASS on everything else
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
     bool syncQuestForPlayer;
@@ -416,6 +452,7 @@ public:
     int32 addClassCommand;
     int32 addClassAccountPoolSize;
     int32 maintenanceCommand;
+    bool fulfillMetaGemRequirements;
     bool altMaintenanceAttunementQs,
             altMaintenanceBags,
             altMaintenanceAmmo,

@@ -5,6 +5,7 @@
  */
 
 #include "UldBossHelper.h"
+#include "AiFactory.h"
 #include "ObjectAccessor.h"
 #include "GameObject.h"
 #include "Group.h"
@@ -12,6 +13,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidBossHelpers.h"
 #include "World.h"
 
 const Position ULDUAR_THORIM_NEAR_ARENA_CENTER = Position(2134.9854f, -263.11853f, 419.8465f);
@@ -78,17 +80,27 @@ Unit* RazorscaleBossHelper::GetBoss() const
     return _boss;
 }
 
+bool RazorscaleBossHelper::IsGroundPhaseFor(Unit* boss)
+{
+    return boss && boss->IsAlive() &&
+           (boss->GetPositionZ() <= RAZORSCALE_FLYING_Z_THRESHOLD) &&
+           (boss->GetHealthPct() < 50.0f) &&
+           !boss->HasAura(SPELL_STUN_AURA);
+}
+
+bool RazorscaleBossHelper::IsFlyingPhaseFor(Unit* boss)
+{
+    return boss && (!IsGroundPhaseFor(boss) || boss->GetPositionZ() >= RAZORSCALE_FLYING_Z_THRESHOLD);
+}
+
 bool RazorscaleBossHelper::IsGroundPhase() const
 {
-    return _boss && _boss->IsAlive() &&
-           (_boss->GetPositionZ() <= RAZORSCALE_FLYING_Z_THRESHOLD) &&
-           (_boss->GetHealthPct() < 50.0f) &&
-           !_boss->HasAura(SPELL_STUN_AURA);
+    return IsGroundPhaseFor(_boss);
 }
 
 bool RazorscaleBossHelper::IsFlyingPhase() const
 {
-    return _boss && (!IsGroundPhase() || _boss->GetPositionZ() >= RAZORSCALE_FLYING_Z_THRESHOLD);
+    return IsFlyingPhaseFor(_boss);
 }
 
 bool RazorscaleBossHelper::IsHarpoonFired(uint32 chainSpellId) const
@@ -265,4 +277,112 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
 
     // Set current time in the cooldown map for this bot to start cooldown
     _lastRoleSwapTime[botGuid] = std::time(nullptr);
+}
+
+Player* GetAlgalonBigBangSoakerPriest(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != ULDUAR_MAP_ID)
+            continue;
+
+        if (member->getClass() != CLASS_PRIEST)
+            continue;
+
+        if (AiFactory::GetPlayerSpecTab(member) != PRIEST_TAB_SHADOW)
+            continue;
+
+        return member;
+    }
+
+    return nullptr;
+}
+
+bool YoggSaronInPhase2(PlayerbotAI* botAI)
+{
+    Creature* yogg = botAI->GetBot()->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+
+    return yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER);
+}
+
+bool YoggSaronInPhase3(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+    Creature* guardian = bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, 200.0f, true);
+
+    return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
+}
+
+// XT-002 Deconstructor
+//
+// XT and his Heart both spend part of the fight carrying UNIT_FLAG_NOT_SELECTABLE, which drops them
+// out of "possible targets" entirely (AttackersValue::IsPossibleTarget rejects the flag). Scanning
+// the raw nearby-npc list instead keeps the encounter visible right through the Heart phases.
+static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
+{
+    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == entry)
+            return unit;
+    }
+
+    return nullptr;
+}
+
+Unit* GetXT002(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_XT002); }
+
+Unit* GetXT002ExposedHeart(PlayerbotAI* botAI)
+{
+    Unit* heart = GetFirstAliveNpcByEntry(botAI, NPC_HEART_OF_DECONSTRUCTOR);
+    if (!heart || heart->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return nullptr;
+
+    // The Heart is only worth hitting while it channels Exposed Heart - that aura is what transfers
+    // its damage taken to XT.
+    return heart->HasAura(SPELL_XT002_EXPOSED_HEART) ? heart : nullptr;
+}
+
+bool IsXT002Submerged(PlayerbotAI* botAI)
+{
+    Unit* xt002 = GetXT002(botAI);
+    if (!xt002)
+        return false;
+
+    return xt002->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || xt002->HasAura(SPELL_XT002_SUBMERGE);
+}
+
+uint32 GetXT002SearingLightSpellId(Player* bot)
+{
+    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_SEARING_LIGHT_25
+                                                                   : SPELL_XT002_SEARING_LIGHT_10;
+}
+
+uint32 GetXT002GravityBombSpellId(Player* bot)
+{
+    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_GRAVITY_BOMB_25
+                                                                   : SPELL_XT002_GRAVITY_BOMB_10;
+}
+
+Unit* GetXT002KillTarget(PlayerbotAI* botAI)
+{
+    // Life Sparks chain Static Charged through the raid, Scrapbots heal XT back up if they reach him,
+    // and a Boombot only costs damage; the Pummeller is the one that can simply be tanked.
+    if (Unit* lifeSpark = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
+        return lifeSpark;
+
+    if (Unit* scrapbot = GetFirstAliveUnitByEntry(botAI, NPC_XS013_SCRAPBOT))
+        return scrapbot;
+
+    if (Unit* boombot = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_BOOMBOT))
+        return boombot;
+
+    return GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_PUMMELLER);
 }

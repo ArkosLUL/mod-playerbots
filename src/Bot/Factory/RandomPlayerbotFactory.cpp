@@ -88,15 +88,8 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
     const auto raceAndGender = CombineRaceAndGender(race, gender);
 
     std::string name;
-    if (!nameCache.empty())
+    if (!nameCache.empty() && !nameCache[raceAndGender].empty())
     {
-        if (nameCache[raceAndGender].empty())
-        {
-            LOG_ERROR("playerbots", "No names found for the specified race: {} and gender: {}",
-                    race, gender);
-            return nullptr;
-        }
-
         uint32 i = urand(0, nameCache[raceAndGender].size() - 1);
         name = nameCache[raceAndGender][i];
         swap(nameCache[raceAndGender][i], nameCache[raceAndGender].back());
@@ -104,6 +97,7 @@ Player* RandomPlayerbotFactory::CreateRandomBot(WorldSession* session, uint8 cls
     }
     else
     {
+        // Curated name pool empty (or this race/gender bucket drained): fall back to procedural generation
         name = CreateRandomBotName(raceAndGender);
     }
 
@@ -207,7 +201,7 @@ std::string const RandomPlayerbotFactory::CreateRandomBotName(NameRaceAndGender 
     }
 
     // CONLANG NAME GENERATION
-    LOG_ERROR("playerbots", "No more names left for random bots. Attempting conlang name generation.");
+    LOG_DEBUG("playerbots", "No curated name available for this race/gender. Attempting conlang name generation.");
     const std::string groupCategory = "SCVKRU";
     const std::string groupFormStart[2][4] = {{"SV", "SV", "VK", "RV"}, {"V", "SU", "VS", "RV"}};
     const std::string groupFormMid[2][6] = {{"CV", "CVC", "CVC", "CVK", "VC", "VK"},
@@ -278,13 +272,13 @@ std::string const RandomPlayerbotFactory::CreateRandomBotName(NameRaceAndGender 
     }
 
     // TRUE RANDOM NAME GENERATION
-    LOG_ERROR("playerbots", "Con​lang name generation failed. True random name fallback.");
+    LOG_DEBUG("playerbots", "Conlang name generation failed. True random name fallback.");
     tries = 10;
     while (--tries)
     {
         for (uint8 i = 0; i < 10; i++)
         {
-            botName += (i == 0 ? 'A' : 'a') + rand() % 26;
+            botName += (i == 0 ? 'A' : 'a') + urand(0, 25);
         }
         if (ObjectMgr::CheckPlayerName(botName) != CHAR_NAME_SUCCESS)  // Checks for reservation & profanity, too
         {
@@ -694,6 +688,9 @@ void RandomPlayerbotFactory::CreateRandomBots()
                 }
 
             } while (result->NextRow());
+
+            if (nameCache.empty())
+                LOG_WARN("playerbots", "playerbots_names pool exhausted; new bots will use procedurally generated names.");
         }
 
         LOG_DEBUG("playerbots", "Creating random bot characters for account: [{}/{}]", accountNumber + 1, totalAccountCount);

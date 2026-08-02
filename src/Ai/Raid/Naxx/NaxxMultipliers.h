@@ -9,6 +9,7 @@
 
 #include "Multiplier.h"
 #include "NaxxBossHelper.h"
+#include "GenericSpellActions.h"
 
 class GrobbulusMultiplier : public Multiplier
 {
@@ -18,15 +19,20 @@ public:
 public:
     virtual float GetValue(Action* action);
 };
+class HeiganDanceMultiplier : public Multiplier
+{
+public:
+    HeiganDanceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "heigan dance"), helper(ai) {}
 
-//class HeiganDanceMultiplier : public Multiplier
-//{
-//public:
-//    HeiganDanceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "helgan dance") {}
-//
-//public:
-//    virtual float GetValue(Action* action);
-//};
+public:
+    virtual float GetValue(Action* action);
+
+private:
+    // How long before an eruption bots stop starting anything they cannot finish before the step.
+    static constexpr uint32 EruptionCastCutoffMs = 2500;
+
+    HeiganBossHelper helper;
+};
 
 class LoathebGenericMultiplier : public Multiplier
 {
@@ -63,7 +69,9 @@ private:
 class InstructorRazuviousGenericMultiplier : public Multiplier
 {
 public:
-    InstructorRazuviousGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "instructor razuvious generic"), helper(ai) {}
+    InstructorRazuviousGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "instructor razuvious generic"), helper(ai)
+    {
+    }
     virtual float GetValue(Action* action);
 
 private:
@@ -83,29 +91,33 @@ private:
 class AnubrekhanGenericMultiplier : public Multiplier
 {
 public:
-    AnubrekhanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "anubrekhan generic") {}
+    AnubrekhanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "anubrekhan generic"), helper(ai) {}
 
 public:
     virtual float GetValue(Action* action);
+
+private:
+    AnubrekhanBossHelper helper;
 };
 
-class FourHorsemenGenericMultiplier : public Multiplier
+class FourhorsemanGenericMultiplier : public Multiplier
 {
 public:
-    FourHorsemenGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "four horsemen generic") {}
+    FourhorsemanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "fourhorseman generic") {}
 
 public:
     virtual float GetValue(Action* action);
 };
 
-// class GothikGenericMultiplier : public Multiplier
-// {
-// public:
-//     GothikGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "gothik generic") {}
+class GothikGenericMultiplier : public Multiplier
+{
+public:
+    GothikGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "gothik generic"), helper(ai) {}
+    float GetValue(Action* action) override;
 
-// public:
-//     virtual float GetValue(Action* action);
-// };
+private:
+    GothikBossHelper helper;
+};
 
 class GluthGenericMultiplier : public Multiplier
 {
@@ -115,6 +127,61 @@ public:
 
 private:
     GluthBossHelper helper;
+};
+
+class NaxxThreatRedirectMultiplier : public Multiplier
+{
+public:
+    NaxxThreatRedirectMultiplier(PlayerbotAI* ai) : Multiplier(ai, "naxx threat redirect"), heigan(ai) {}
+    float GetValue(Action* action) override;
+
+private:
+    HeiganBossHelper heigan;
+};
+
+// Holds the offensive burst cooldowns until the boss's actual DPS check. One multiplier for all six
+// bosses so the IsBurstCooldownAction early-out runs once per action instead of six times.
+class NaxxBurstWindowMultiplier : public Multiplier
+{
+public:
+    NaxxBurstWindowMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "naxx burst window"), kelthuzad(ai), sapphiron(ai), thaddius(ai), loatheb(ai), noth(ai)
+    {
+    }
+    float GetValue(Action* action) override;
+
+private:
+    // Sweeps every boss helper, so it is cached for the rest of the tick rather than re-run per
+    // action. Each helper resolves through "find target", which utf8-lowercases the whole threat
+    // list on a 1 ms cache.
+    float EvaluateWindow();
+
+    // Fungal Creep is not scripted in this core's boss_loatheb.cpp, so without a timed fallback the
+    // cooldowns would be held for the whole fight.
+    static constexpr uint32 LOATHEB_FALLBACK_MS = 45000;
+
+    // Guardians of Icecrown start spawning here (boss_kelthuzad.cpp, HealthBelowPct(45)).
+    static constexpr float KELTHUZAD_GUARDIAN_PCT = 45.0f;
+
+    KelthuzadBossHelper kelthuzad;
+    SapphironBossHelper sapphiron;
+    ThaddiusBossHelper thaddius;
+    LoathebBossHelper loatheb;
+    NothBossHelper noth;
+    uint32 loathebFightStartMs = 0;
+
+    uint32 cachedAtMs = 0;
+    float cachedValue = 1.0f;
+};
+
+class NothGenericMultiplier : public Multiplier
+{
+public:
+    NothGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "noth generic"), helper(ai) {}
+    float GetValue(Action* action) override;
+
+private:
+    NothBossHelper helper;
 };
 
 #endif

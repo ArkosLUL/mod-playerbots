@@ -6,6 +6,7 @@
 
 #include "NaxxMultipliers.h"
 
+#include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
 #include "DKActions.h"
 #include "DruidActions.h"
@@ -32,86 +33,89 @@ float GrobbulusMultiplier::GetValue(Action* action)
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "grobbulus");
     if (!boss)
+    {
         return 1.0f;
-
+    }
     if (dynamic_cast<AvoidAoeAction*>(action))
+    {
         return botAI->IsMainTank(bot) ? 0.0f : 1.0f;
-
+    }
     if (dynamic_cast<CombatFormationMoveAction*>(action))
+    {
         return 0.0f;
-
+    }
     return 1.0f;
 }
 
-//float HeiganDanceMultiplier::GetValue(Action* action)
-//{
-//    Unit* boss = AI_VALUE2(Unit*, "find target", "heigan the unclean");
-//    if (!boss)
-//    {
-//        return 1.0f;
-//    }
-//    bool platform_phase = boss->IsWithinDist2d(2794.26f, -3706.67f, 10.0f);
-//    bool eruption_casting = false;
-//    if (boss->HasUnitState(UNIT_STATE_CASTING))
-//    {
-//        Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-//        if (!spell)
-//        {
-//            spell = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-//        }
-//        if (spell)
-//        {
-//            SpellInfo const* info = spell->GetSpellInfo();
-//            bool isEruption = NaxxSpellIds::MatchesAnySpellId(info, {NaxxSpellIds::Eruption10});
-//            if (!isEruption && info && info->SpellName[LOCALE_enUS])
-//            {
-//                // Fallback to name for custom spell data.
-//                isEruption = botAI->EqualLowercaseName(info->SpellName[LOCALE_enUS], "eruption");
-//            }
-//            if (isEruption)
-//            {
-//                eruption_casting = true;
-//            }
-//        }
-//    }
-//    if (dynamic_cast<CombatFormationMoveAction*>(action) ||
-//        dynamic_cast<CastDisengageAction*>(action) ||
-//        dynamic_cast<CastBlinkBackAction*>(action) )
-//    {
-//        return 0.0f;
-//    }
-//    if (!platform_phase && !eruption_casting)
-//    {
-//        return 1.0f;
-//    }
-//    if (dynamic_cast<HeiganDanceAction*>(action) || dynamic_cast<CurePartyMemberAction*>(action))
-//    {
-//        return 1.0f;
-//    }
-//    if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastMeleeSpellAction*>(action))
-//    {
-//        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
-//        uint32 spellId = AI_VALUE2(uint32, "spell id", spellAction->getSpell());
-//        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
-//        if (!spellInfo)
-//        {
-//            return 0.0f;
-//        }
-//        uint32 castTime = spellInfo->CalcCastTime();
-//        if (castTime == 0 && !spellInfo->IsChanneled())
-//        {
-//            return 1.0f;
-//        }
-//    }
-//    return 0.0f;
-//}
+float HeiganDanceMultiplier::GetValue(Action* action)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return 1.0f;
+    }
+    if (dynamic_cast<CombatFormationMoveAction*>(action) ||
+        dynamic_cast<CastDisengageAction*>(action) ||
+        dynamic_cast<CastBlinkBackAction*>(action) )
+    {
+        return 0.0f;
+    }
+
+    // Speed boost for Phase 2 only. In Phase 1, Aspect of the Pack can daze the tank
+    // if anyone gets hit, which is a common wipe cause on Heigan.
+    if (dynamic_cast<CastAspectOfThePackAction*>(action))
+    {
+        return helper.IsFastDance() ? 1.0f : 0.0f;
+    }
+
+    // Out of sync we cannot say where the safe zone is, so leave the rest of the engine alone.
+    if (!helper.IsSynced())
+    {
+        return 1.0f;
+    }
+
+    // Bots parked on the ledge are not stepping anywhere this phase, so the cutoff below would cost
+    // them a quarter of their cast windows for a move they never make.
+    if (helper.ShouldHoldLedge() && helper.IsOnPlatform())
+    {
+        return 1.0f;
+    }
+
+    // Phase 1 leaves 10s between steps - only clamp down on the run-up to an eruption. The fast
+    // dance never leaves enough room for a cast.
+    if (!helper.IsFastDance() && helper.MsUntilNextEruption() > EruptionCastCutoffMs)
+    {
+        return 1.0f;
+    }
+    if (dynamic_cast<HeiganDanceAction*>(action) || dynamic_cast<HeiganDispelDecrepitFeverAction*>(action) ||
+        dynamic_cast<CurePartyMemberAction*>(action))
+    {
+        return 1.0f;
+    }
+    if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastMeleeSpellAction*>(action))
+    {
+        CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+        uint32 spellId = AI_VALUE2(uint32, "spell id", spellAction->getSpell());
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+        if (!spellInfo)
+        {
+            return 0.0f;
+        }
+        uint32 castTime = spellInfo->CalcCastTime();
+        if (castTime == 0 && !spellInfo->IsChanneled())
+        {
+            return 1.0f;
+        }
+    }
+    return 0.0f;
+}
 
 float LoathebGenericMultiplier::GetValue(Action* action)
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "loatheb");
     if (!boss)
+    {
         return 1.0f;
-
+    }
     context->GetValue<bool>("neglect threat")->Set(true);
     if (botAI->GetState() == BOT_STATE_COMBAT &&
         (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
@@ -121,8 +125,9 @@ float LoathebGenericMultiplier::GetValue(Action* action)
         return 0.0f;
     }
     if (!dynamic_cast<CastHealingSpellAction*>(action))
+    {
         return 1.0f;
-
+    }
     Aura* aura = NaxxSpellIds::GetAnyAura(bot, {NaxxSpellIds::NecroticAura10});
     if (!aura)
     {
@@ -130,33 +135,52 @@ float LoathebGenericMultiplier::GetValue(Action* action)
         aura = botAI->GetAura("necrotic aura", bot);
     }
     if (!aura || aura->GetDuration() <= 1500)
+    {
         return 1.0f;
-
+    }
     return 0.0f;
 }
 
 float ThaddiusGenericMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
+    {
         return 1.0f;
-
+    }
     if (dynamic_cast<CombatFormationMoveAction*>(action))
         return 0.0f;
-    // pet phase
-    if (helper.IsPhasePet() &&
-        (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-         dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
-         dynamic_cast<ReachPartyMemberToHealAction*>(action) || dynamic_cast<BuffOnMainTankAction*>(action)))
+
+    if (helper.IsPhasePet())
     {
-        return 0.0f;
+        if (dynamic_cast<FollowAction*>(action))
+            return 0.0f;
+
+        if (bot->getClass() == CLASS_ROGUE && action->getName() == "sprint")
+            return 0.0f;
+
+        if (dynamic_cast<ThaddiusAttackNearestPetAction*>(action))
+            return 2.0f;
+
+        if (!botAI->IsTank(bot))
+        {
+            if (dynamic_cast<ReachSpellAction*>(action))
+                return 0.0f;
+        }
+
+        // Threat redirects are NaxxThreatRedirectMultiplier's job. The rest of the main-tank buffs
+        // (Beacon of Light, Earth Shield, Thorns) are still wanted during the pet phase.
+        if (dynamic_cast<ReachPartyMemberToHealAction*>(action))
+        {
+            return 0.0f;
+        }
     }
-    // die at the same time
+
     Unit* target = AI_VALUE(Unit*, "current target");
-    Unit* feugen = AI_VALUE2(Unit*, "find target", "feugen");
-    Unit* stalagg = AI_VALUE2(Unit*, "find target", "stalagg");
-    if (helper.IsPhasePet() && target && feugen && stalagg && target->GetHealthPct() <= 40 &&
-        (feugen->GetHealthPct() >= target->GetHealthPct() + 3 || stalagg->GetHealthPct() >= target->GetHealthPct() + 3))
+    if (helper.IsPhasePet() && !botAI->IsTank(bot) && helper.PetSyncSuppress(target))
     {
+        if (dynamic_cast<MeleeAction*>(action))
+            return 0.0f;
+
         if (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action))
             return 0.0f;
     }
@@ -182,19 +206,62 @@ float ThaddiusGenericMultiplier::GetValue(Action* action)
 float SapphironGenericMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
+    {
         return 1.0f;
-
+    }
+    if (botAI->IsHeal(bot))
+    {
+        if (helper.IsBreathWindow())
+        {
+            if (dynamic_cast<SapphironFlightPositionAction*>(action) ||
+                dynamic_cast<CastHealingSpellAction*>(action) ||
+                dynamic_cast<HealPartyMemberAction*>(action) ||
+                dynamic_cast<CastAoeHealSpellAction*>(action) ||
+                dynamic_cast<CurePartyMemberAction*>(action))
+            {
+                return 1.0f;
+            }
+            return 0.0f;
+        }
+        if (helper.WaitForExplosion())
+        {
+            if (dynamic_cast<SapphironFlightPositionAction*>(action) ||
+                dynamic_cast<CastHealingSpellAction*>(action) ||
+                dynamic_cast<HealPartyMemberAction*>(action) ||
+                dynamic_cast<CastAoeHealSpellAction*>(action) ||
+                dynamic_cast<CurePartyMemberAction*>(action))
+            {
+                return 1.0f;
+            }
+            return 0.0f;
+        }
+        if (helper.HasLifeDrainInGroup())
+        {
+            if (dynamic_cast<SapphironGroundPositionAction*>(action) ||
+                dynamic_cast<SapphironFlightPositionAction*>(action) ||
+                dynamic_cast<CastHealingSpellAction*>(action) ||
+                dynamic_cast<HealPartyMemberAction*>(action) ||
+                dynamic_cast<CastAoeHealSpellAction*>(action) ||
+                dynamic_cast<CurePartyMemberAction*>(action))
+            {
+                return 1.0f;
+            }
+            return 0.0f;
+        }
+    }
     if (dynamic_cast<CastDeathGripAction*>(action) || dynamic_cast<CombatFormationMoveAction*>(action))
+    {
         return 0.0f;
-
+    }
     return 1.0f;
 }
 
 float InstructorRazuviousGenericMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
+    {
         return 1.0f;
-
+    }
     context->GetValue<bool>("neglect threat")->Set(true);
     if (botAI->GetState() == BOT_STATE_COMBAT &&
         (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
@@ -209,10 +276,110 @@ float InstructorRazuviousGenericMultiplier::GetValue(Action* action)
 float KelthuzadGenericMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
+    {
         return 1.0f;
+    }
 
-    if ((dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-         dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) || dynamic_cast<FleeAction*>(action)))
+    bool guardiansPresent = !helper.GetGuardians().empty();
+    bool isOffTankForKT = botAI->IsTank(bot) && !botAI->IsMainTank(bot) &&
+                          (botAI->IsAssistTank(bot) || botAI->HasStrategy("tank assist", BOT_STATE_COMBAT));
+
+    if (dynamic_cast<PetAttackAction*>(action))
+    {
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (!target)
+            return 0.0f;
+
+        if (!helper.IsWithinRoom(target, KelthuzadBossHelper::ROOM_MAX_RADIUS))
+            return 0.0f;
+
+        if (Unit* pet = bot->GetPet())
+            if (!helper.IsWithinRoom(pet, KelthuzadBossHelper::ROOM_MAX_RADIUS + 2.0f))
+                return 0.0f;
+        if (Unit* guardianPet = bot->GetGuardianPet())
+            if (!helper.IsWithinRoom(guardianPet, KelthuzadBossHelper::ROOM_MAX_RADIUS + 2.0f))
+                return 0.0f;
+
+        return 1.0f;
+    }
+
+    if (helper.IsPhaseTwo() &&
+        helper.IsBossCastingAny({NaxxSpellIds::FrostBoltSingle, NaxxSpellIds::FrostBoltSingle25}))
+    {
+        std::string const name = action->getName();
+        if (name == "kick" || name == "pummel" || name == "shield bash" ||
+            name == "mind freeze" || name == "strangulate" ||
+            name == "counterspell" || name == "wind shear" ||
+            name == "spell lock" || name == "silencing shot" ||
+            name == "bash" || name == "hammer of justice")
+        {
+            return 5.0f;
+        }
+    }
+
+    if (helper.HasChains(bot))
+    {
+        if (dynamic_cast<MovementAction*>(action))
+        {
+            return 1.0f;
+        }
+        return 0.0f;
+    }
+    if (botAI->IsHeal(bot))
+    {
+        if (helper.HasAuraInGroup(NaxxSpellIds::FrostBlast))
+        {
+            if (dynamic_cast<KelthuzadPositionAction*>(action) ||
+                dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
+                dynamic_cast<CastHealingSpellAction*>(action) ||
+                dynamic_cast<HealPartyMemberAction*>(action) ||
+                dynamic_cast<CastAoeHealSpellAction*>(action) ||
+                dynamic_cast<CurePartyMemberAction*>(action))
+            {
+                return 1.0f;
+            }
+            return 0.0f;
+        }
+        if (helper.HasAuraInGroup(NaxxSpellIds::ChainsOfKelthuzad))
+        {
+            if (dynamic_cast<KelthuzadPositionAction*>(action) ||
+                dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
+                dynamic_cast<CastHealingSpellAction*>(action) ||
+                dynamic_cast<HealPartyMemberAction*>(action) ||
+                dynamic_cast<CastAoeHealSpellAction*>(action) ||
+                dynamic_cast<CurePartyMemberAction*>(action))
+            {
+                return 1.0f;
+            }
+            return 0.0f;
+        }
+    }
+    if (helper.HasDetonateMana(bot))
+    {
+        if (dynamic_cast<KelthuzadPositionAction*>(action) || dynamic_cast<MovementAction*>(action))
+        {
+            return 1.0f;
+        }
+        return 0.0f;
+    }
+
+    if (dynamic_cast<TankAssistAction*>(action))
+    {
+        if (isOffTankForKT && guardiansPresent)
+        {
+            return 2.0f;
+        }
+        return 1.0f;
+    }
+
+    if (isOffTankForKT && guardiansPresent)
+    {
+        if (dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+            return 1.0f;
+    }
+
+    if ((dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<FleeAction*>(action) ||
+         dynamic_cast<CastDebuffSpellOnAttackerAction*>(action)))
     {
         return 0.0f;
     }
@@ -229,74 +396,137 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
     if (helper.IsPhaseTwo())
     {
         if (dynamic_cast<CastBlizzardAction*>(action) || dynamic_cast<CastFrostNovaAction*>(action))
+        {
             return 0.0f;
+        }
+    }
+    return 1.0f;
+}
 
+float NothGenericMultiplier::GetValue(Action* action)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return 1.0f;
+    }
+
+    if (dynamic_cast<CombatFormationMoveAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    // Nothing else in the encounter warrants holding the raid back; the curse is handled by giving
+    // the dispel its own high-priority node rather than by muting three classes for 40% of the fight.
+    if (!helper.IsBlinkWindow() || botAI->IsTank(bot))
+    {
+        return 1.0f;
+    }
+
+    if (dynamic_cast<NothDispelCurseAction*>(action) || dynamic_cast<NothPositionAction*>(action) ||
+        dynamic_cast<CurePartyMemberAction*>(action) || dynamic_cast<CastHealingSpellAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    // A redirect during the window is the fastest way back to a tank holding the boss.
+    if (dynamic_cast<CastMisdirectionOnMainTankAction*>(action) ||
+        dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
+        dynamic_cast<MeleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    if (dynamic_cast<CastSpellAction*>(action))
+    {
+        return 0.0f;
     }
     return 1.0f;
 }
 
 float AnubrekhanGenericMultiplier::GetValue(Action* action)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "anub'rekhan");
-    if (!boss)
-        return 1.0f;
-
-    if (NaxxSpellIds::HasAnyAura(
-            boss, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm10Alt, NaxxSpellIds::LocustSwarm25}) ||
-        botAI->HasAura("locust swarm", boss))
+    if (!helper.UpdateBossAI())
     {
-        if (dynamic_cast<FleeAction*>(action))
-            return 0.0f;
+        return 1.0f;
+    }
+
+    // The position action hands every non-tank its own slot; the generic formation mover would spend
+    // the whole fight pulling them back into one pile, which is exactly what Impale punishes.
+    if (dynamic_cast<CombatFormationMoveAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    // Nobody gains from a panic move during the swarm: the tank would drop the kite and everyone else
+    // would leave the slot that keeps them out of Impale range.
+    if (helper.IsLocustSwarmActive() && dynamic_cast<FleeAction*>(action))
+    {
+        return 0.0f;
     }
     return 1.0f;
 }
 
-float FourHorsemenGenericMultiplier::GetValue(Action* action)
+float FourhorsemanGenericMultiplier::GetValue(Action* action)
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "sir zeliek");
     if (!boss)
+    {
         return 1.0f;
-
+    }
     context->GetValue<bool>("neglect threat")->Set(true);
     if ((dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action)))
+    {
         return 0.0f;
+    }
+    return 1.0f;
+}
+
+float GothikGenericMultiplier::GetValue(Action* action)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return 1.0f;
+    }
+
+    // Targeting belongs to "gothik choose target"; the generic assist actions would copy whatever the
+    // tank happens to be on, which loses the kill order the whole tactic rests on.
+    context->GetValue<bool>("neglect threat")->Set(true);
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+    {
+        return 0.0f;
+    }
+
+    // On the balcony he is immune and out of reach, and behind the gate he is unreachable. Either way
+    // nothing may spend a global or a step on him.
+    if (!helper.IsBossAttackable() && AI_VALUE(Unit*, "current target") == helper.GetBoss())
+    {
+        if (dynamic_cast<CastHealingSpellAction*>(action))
+        {
+            return 1.0f;
+        }
+        if (action->getName() == "gothik choose target" || action->getName() == "gothik stay on living side")
+        {
+            return 1.0f;
+        }
+        return 0.0f;
+    }
 
     return 1.0f;
 }
 
-// float GothikGenericMultiplier::GetValue(Action* action)
-// {
-//     Unit* boss = AI_VALUE2(Unit*, "find target", "gothik the harvester");
-//     if (!boss)
-//     {
-//         return 1.0f;
-//     }
-//     BossAI* boss_ai = dynamic_cast<BossAI*>(boss->GetAI());
-//     EventMap* eventMap = boss_botAI->GetEvents();
-//     uint32 curr_phase = eventMap->GetPhaseMask();
-//     if (curr_phase == 1 && (dynamic_cast<FollowAction*>(action)))
-//     {
-//         return 0.0f;
-//     }
-//     if (curr_phase == 1 && (dynamic_cast<AttackAction*>(action)))
-//     {
-//         Unit* target = action->GetTarget();
-//         if (target == boss)
-//         {
-//             return 0.0f;
-//         }
-//     }
-//     return 1.0f;
-// }
-
 float GluthGenericMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
+    {
         return 1.0f;
-
+    }
     if ((dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-         dynamic_cast<FleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action) ||
-         dynamic_cast<CastStarfallAction*>(action)))
+         dynamic_cast<FleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action)))
     {
         return 0.0f;
     }
@@ -322,7 +552,129 @@ float GluthGenericMultiplier::GetValue(Action* action)
     {
         Unit* target = AI_VALUE(Unit*, "current target");
         if (helper.IsZombieChow(target))
+        {
             return 0.0f;
+        }
     }
+    return 1.0f;
+}
+
+float NaxxThreatRedirectMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<CastMisdirectionOnMainTankAction*>(action) &&
+        !dynamic_cast<CastTricksOfTheTradeOnMainTankAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    // Encounters where the main tank is not the right threat sink: tank swaps on a debuff stack,
+    // mind-controlled tanks, or one tank per boss. "find target" only sees creatures that already
+    // have this bot on their threat list, so all four horsemen are listed - a melee bot parked on
+    // Thane or the Baron never resolves Zeliek. Thaddius' pets are the same story on a smaller
+    // scale: one tank per pet, and the main tank is only the right sink for one of them.
+    static std::vector<std::string> const noRedirectBosses = {"gluth",
+                                                              "instructor razuvious",
+                                                              "gothik the harvester",
+                                                              "sir zeliek",
+                                                              "lady blaumeux",
+                                                              "thane korth'azz",
+                                                              "baron rivendare",
+                                                              "highlord mograine",
+                                                              "stalagg",
+                                                              "feugen"};
+
+    for (std::string const& name : noRedirectBosses)
+    {
+        if (AI_VALUE2(Unit*, "find target", name))
+        {
+            return 0.0f;
+        }
+    }
+
+    // Heigan spends 45s of every cycle REACT_PASSIVE on his ledge, so a redirect fired there burns
+    // its charges on nothing. Hold it for the arena return, where the tank has to rebuild while the
+    // raid is already back on the boss.
+    if (heigan.UpdateBossAI() && heigan.IsFastDance())
+    {
+        return 0.0f;
+    }
+    return 1.0f;
+}
+
+float NaxxBurstWindowMultiplier::GetValue(Action* action)
+{
+    if (!action || !IsBurstCooldownAction(action->getName()))
+    {
+        return 1.0f;
+    }
+
+    uint32 now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedValue = EvaluateWindow();
+    }
+    return cachedValue;
+}
+
+float NaxxBurstWindowMultiplier::EvaluateWindow()
+{
+    // Resolved up front rather than in encounter order, so the fight timer is cleared even when an
+    // earlier boss's branch takes the return.
+    bool const loathebUp = loatheb.UpdateBossAI();
+    if (!loathebUp)
+    {
+        loathebFightStartMs = 0;
+    }
+
+    if (kelthuzad.UpdateBossAI())
+    {
+        if (kelthuzad.IsPhaseOne())
+        {
+            return 0.0f;
+        }
+        // Phase 2 below the Guardian threshold is the actual DPS race.
+        Unit* boss = kelthuzad.GetBoss();
+        return boss && boss->GetHealthPct() <= KELTHUZAD_GUARDIAN_PCT ? 1.0f : 0.0f;
+    }
+
+    if (sapphiron.UpdateBossAI())
+    {
+        return sapphiron.IsPhaseFlight() ? 0.0f : 1.0f;
+    }
+
+    if (thaddius.UpdateBossAI())
+    {
+        // Save everything for the boss himself - he has a 5 minute enrage.
+        return thaddius.IsPhaseThaddius() ? 1.0f : 0.0f;
+    }
+
+    if (loathebUp)
+    {
+        uint32 now = getMSTime();
+        if (!loathebFightStartMs)
+        {
+            loathebFightStartMs = now;
+        }
+
+        if (NaxxSpellIds::GetAnyAura(bot, {NaxxSpellIds::FungalCreep}) || botAI->HasAura("fungal creep", bot))
+        {
+            return 1.0f;
+        }
+        return getMSTimeDiff(loathebFightStartMs, now) >= LOATHEB_FALLBACK_MS ? 1.0f : 0.0f;
+    }
+
+    if (noth.UpdateBossAI())
+    {
+        return noth.IsBalconyPhase() ? 0.0f : 1.0f;
+    }
+
+    // Cheaper than another helper member: his balcony phase is readable straight off the unit flag
+    // the core script sets (boss_gothik.cpp:232), which is all this needs.
+    if (Unit* gothik = AI_VALUE2(Unit*, "find target", "gothik the harvester"))
+    {
+        return gothik->HasUnitFlag(UNIT_FLAG_DISABLE_MOVE) ? 0.0f : 1.0f;
+    }
+
     return 1.0f;
 }

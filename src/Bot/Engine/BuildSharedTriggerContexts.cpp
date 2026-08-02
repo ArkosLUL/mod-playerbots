@@ -9,6 +9,7 @@
 #include "ChatTriggerContext.h"
 #include "WorldPacketTriggerContext.h"
 #include "Aq20TriggerContext.h"
+#include "Ai/Raid/Aq40/RaidAq40TriggerContext.h"
 #include "MCTriggerContext.h"
 #include "BWLTriggerContext.h"
 #include "KaraTriggerContext.h"
@@ -20,6 +21,7 @@
 #include "HyjalTriggerContext.h"
 #include "BTTriggerContext.h"
 #include "ZATriggerContext.h"
+#include "SWPTriggerContext.h"
 #include "OSTriggerContext.h"
 #include "EoETriggerContext.h"
 #include "VoATriggerContext.h"
@@ -27,6 +29,7 @@
 #include "OnyTriggerContext.h"
 #include "ICCTriggerContext.h"
 #include "RSTriggerContext.h"
+#include "Ai/Raid/ToC/ToCTriggerContext.h"
 #include "Ai/Dungeon/TbcDungeonTriggerContext.h"
 #include "Ai/Dungeon/WotlkDungeonTriggerContext.h"
 
@@ -36,6 +39,7 @@ void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Tr
     triggerContexts.Add(new ChatTriggerContext());
     triggerContexts.Add(new WorldPacketTriggerContext());
     triggerContexts.Add(new RaidAq20TriggerContext());
+    triggerContexts.Add(new RaidAq40TriggerContext());
     triggerContexts.Add(new RaidMcTriggerContext());
     triggerContexts.Add(new RaidBwlTriggerContext());
     triggerContexts.Add(new RaidKarazhanTriggerContext());
@@ -47,6 +51,7 @@ void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Tr
     triggerContexts.Add(new RaidHyjalSummitTriggerContext());
     triggerContexts.Add(new RaidBlackTempleTriggerContext());
     triggerContexts.Add(new RaidZulAmanTriggerContext());
+    triggerContexts.Add(new RaidSunwellTriggerContext());
     triggerContexts.Add(new RaidOsTriggerContext());
     triggerContexts.Add(new RaidEoETriggerContext());
     triggerContexts.Add(new RaidVoATriggerContext());
@@ -54,6 +59,7 @@ void AiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContextList<Tr
     triggerContexts.Add(new RaidOnyxiaTriggerContext());
     triggerContexts.Add(new RaidIccTriggerContext());
     triggerContexts.Add(new RaidRsTriggerContext());
+    triggerContexts.Add(new RaidTrialOfTheCrusaderTriggerContext());
     triggerContexts.Add(new TbcDungeonAuchenaiCryptsTriggerContext());
     triggerContexts.Add(new WotlkDungeonUKTriggerContext());
     triggerContexts.Add(new WotlkDungeonNexTriggerContext());

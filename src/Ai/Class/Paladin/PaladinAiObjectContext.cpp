@@ -15,6 +15,7 @@
 #include "PaladinActions.h"
 #include "PaladinBuffStrategies.h"
 #include "PaladinPullStrategy.h"
+#include "PaladinTankToBeaconValue.h"
 #include "PaladinTriggers.h"
 #include "Playerbots.h"
 #include "TankPaladinStrategy.h"
@@ -138,7 +139,6 @@ public:
         creators["hammer of justice on snare target"] =
             &PaladinTriggerFactoryInternal::hammer_of_justice_on_snare_target;
         creators["not sensing undead"] = &PaladinTriggerFactoryInternal::not_sensing_undead;
-        creators["divine favor"] = &PaladinTriggerFactoryInternal::divine_favor;
         creators["divine shield low health"] = &PaladinTriggerFactoryInternal::divine_shield_low_health;
         creators["turn undead"] = &PaladinTriggerFactoryInternal::turn_undead;
         creators["avenger's shield"] = &PaladinTriggerFactoryInternal::avenger_shield;
@@ -148,6 +148,11 @@ public:
         creators["repentance interrupt"] = &PaladinTriggerFactoryInternal::repentance_interrupt;
         creators["beacon of light on main tank"] = &PaladinTriggerFactoryInternal::beacon_of_light_on_main_tank;
         creators["sacred shield on main tank"] = &PaladinTriggerFactoryInternal::sacred_shield_on_main_tank;
+        creators["beacon of light on tank"] = &PaladinTriggerFactoryInternal::beacon_of_light_on_tank;
+        creators["sacred shield on tank"] = &PaladinTriggerFactoryInternal::sacred_shield_on_tank;
+        creators["infusion of light"] = &PaladinTriggerFactoryInternal::infusion_of_light;
+        creators["paladin divine plea"] = &PaladinTriggerFactoryInternal::paladin_divine_plea;
+        creators["paladin judgement of light"] = &PaladinTriggerFactoryInternal::paladin_judgement_of_light;
         creators["hand of freedom on party"] = &PaladinTriggerFactoryInternal::hand_of_freedom_on_party;
 
         creators["blessing of kings on party"] = &PaladinTriggerFactoryInternal::blessing_of_kings_on_party;
@@ -162,7 +167,6 @@ public:
 private:
     static Trigger* not_sensing_undead(PlayerbotAI* botAI) { return new NotSensingUndeadTrigger(botAI); }
     static Trigger* turn_undead(PlayerbotAI* botAI) { return new TurnUndeadTrigger(botAI); }
-    static Trigger* divine_favor(PlayerbotAI* botAI) { return new DivineFavorTrigger(botAI); }
     static Trigger* divine_shield_low_health(PlayerbotAI* botAI) { return new DivineShieldLowHealthTrigger(botAI); }
     static Trigger* holy_shield(PlayerbotAI* botAI) { return new HolyShieldTrigger(botAI); }
     static Trigger* righteous_fury(PlayerbotAI* botAI) { return new RighteousFuryTrigger(botAI); }
@@ -216,6 +220,14 @@ private:
     static Trigger* repentance_interrupt(PlayerbotAI* botAI) { return new RepentanceInterruptTrigger(botAI); }
     static Trigger* beacon_of_light_on_main_tank(PlayerbotAI* botAI) { return new BeaconOfLightOnMainTankTrigger(botAI); }
     static Trigger* sacred_shield_on_main_tank(PlayerbotAI* botAI) { return new SacredShieldOnMainTankTrigger(botAI); }
+    static Trigger* beacon_of_light_on_tank(PlayerbotAI* botAI) { return new BeaconOfLightOnTankTrigger(botAI); }
+    static Trigger* sacred_shield_on_tank(PlayerbotAI* botAI) { return new SacredShieldOnTankTrigger(botAI); }
+    static Trigger* infusion_of_light(PlayerbotAI* botAI) { return new PaladinInfusionOfLightTrigger(botAI); }
+    static Trigger* paladin_divine_plea(PlayerbotAI* botAI) { return new PaladinDivinePleaTrigger(botAI); }
+    static Trigger* paladin_judgement_of_light(PlayerbotAI* botAI)
+    {
+        return new PaladinJudgementOfLightTrigger(botAI);
+    }
     static Trigger* hand_of_freedom_on_party(PlayerbotAI* botAI) { return new HandOfFreedomOnPartyTrigger(botAI); }
 
     static Trigger* blessing_of_kings_on_party(PlayerbotAI* botAI) { return new BlessingOfKingsOnPartyTrigger(botAI); }
@@ -283,7 +295,6 @@ public:
         creators["judgement of wisdom"] = &PaladinAiObjectContextInternal::judgement_of_wisdom;
         creators["divine shield"] = &PaladinAiObjectContextInternal::divine_shield;
         creators["divine protection"] = &PaladinAiObjectContextInternal::divine_protection;
-        creators["divine protection on party"] = &PaladinAiObjectContextInternal::divine_protection_on_party;
         creators["hammer of justice"] = &PaladinAiObjectContextInternal::hammer_of_justice;
         creators["flash of light on party"] = &PaladinAiObjectContextInternal::flash_of_light_on_party;
         creators["holy light"] = &PaladinAiObjectContextInternal::holy_light;
@@ -318,6 +329,10 @@ public:
         creators["shield of righteousness"] = &PaladinAiObjectContextInternal::shield_of_righteousness;
         creators["beacon of light on main tank"] = &PaladinAiObjectContextInternal::beacon_of_light_on_main_tank;
         creators["sacred shield on main tank"] = &PaladinAiObjectContextInternal::sacred_shield_on_main_tank;
+        creators["beacon of light on tank"] = &PaladinAiObjectContextInternal::beacon_of_light_on_tank;
+        creators["sacred shield on tank"] = &PaladinAiObjectContextInternal::sacred_shield_on_tank;
+        creators["aura mastery"] = &PaladinAiObjectContextInternal::aura_mastery;
+        creators["hand of sacrifice on party"] = &PaladinAiObjectContextInternal::hand_of_sacrifice_on_party;
         creators["avenging wrath"] = &PaladinAiObjectContextInternal::avenging_wrath;
         creators["divine illumination"] = &PaladinAiObjectContextInternal::divine_illumination;
         creators["divine sacrifice"] = &PaladinAiObjectContextInternal::divine_sacrifice;
@@ -390,10 +405,6 @@ private:
     static Action* judgement_of_wisdom(PlayerbotAI* botAI) { return new CastJudgementOfWisdomAction(botAI); }
     static Action* divine_shield(PlayerbotAI* botAI) { return new CastDivineShieldAction(botAI); }
     static Action* divine_protection(PlayerbotAI* botAI) { return new CastDivineProtectionAction(botAI); }
-    static Action* divine_protection_on_party(PlayerbotAI* botAI)
-    {
-        return new CastDivineProtectionOnPartyAction(botAI);
-    }
     static Action* hammer_of_justice(PlayerbotAI* botAI) { return new CastHammerOfJusticeAction(botAI); }
     static Action* flash_of_light_on_party(PlayerbotAI* botAI) { return new CastFlashOfLightOnPartyAction(botAI); }
     static Action* holy_light(PlayerbotAI* botAI) { return new CastHolyLightAction(botAI); }
@@ -427,6 +438,13 @@ private:
     static Action* shield_of_righteousness(PlayerbotAI* botAI) { return new ShieldOfRighteousnessAction(botAI); }
     static Action* beacon_of_light_on_main_tank(PlayerbotAI* botAI) { return new CastBeaconOfLightOnMainTankAction(botAI); }
     static Action* sacred_shield_on_main_tank(PlayerbotAI* botAI) { return new CastSacredShieldOnMainTankAction(botAI); }
+    static Action* beacon_of_light_on_tank(PlayerbotAI* botAI) { return new CastBeaconOfLightOnTankAction(botAI); }
+    static Action* sacred_shield_on_tank(PlayerbotAI* botAI) { return new CastSacredShieldOnTankAction(botAI); }
+    static Action* aura_mastery(PlayerbotAI* botAI) { return new CastAuraMasteryAction(botAI); }
+    static Action* hand_of_sacrifice_on_party(PlayerbotAI* botAI)
+    {
+        return new CastHandOfSacrificeOnPartyAction(botAI);
+    }
     static Action* avenging_wrath(PlayerbotAI* botAI) { return new CastAvengingWrathAction(botAI); }
     static Action* divine_illumination(PlayerbotAI* botAI) { return new CastDivineIlluminationAction(botAI); }
     static Action* divine_sacrifice(PlayerbotAI* botAI) { return new CastDivineSacrificeAction(botAI); }
@@ -446,9 +464,12 @@ public:
         creators["greater blessing assignments"] = &PaladinValueContextInternal::greater_blessing_assignments;
         creators["greater blessing pending assignment"] =
             &PaladinValueContextInternal::greater_blessing_pending_assignment;
+        creators["tank to beacon"] = &PaladinValueContextInternal::tank_to_beacon;
     }
 
 private:
+    static UntypedValue* tank_to_beacon(PlayerbotAI* botAI) { return new PaladinTankToBeaconValue(botAI); }
+
     static UntypedValue* greater_blessing_assignments(PlayerbotAI* botAI)
     {
         return ai::gbless::greater_blessing_assignments_value(botAI);

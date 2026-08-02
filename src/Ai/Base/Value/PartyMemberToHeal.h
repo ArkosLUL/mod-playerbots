@@ -29,13 +29,17 @@ protected:
 class PartyMemberToProtect : public PartyMemberValue
 {
 public:
-    PartyMemberToProtect(PlayerbotAI* botAI, std::string const name = "party member to protect")
-        : PartyMemberValue(botAI, name)
+    // excludeTanks skips tanks entirely, for spells that would drop their threat (Blessing of Protection).
+    PartyMemberToProtect(PlayerbotAI* botAI, std::string const name = "party member to protect",
+                         bool excludeTanks = false)
+        : PartyMemberValue(botAI, name), excludeTanks(excludeTanks)
     {
     }
 
 protected:
     Unit* Calculate() override;
+
+    bool excludeTanks;
 };
 
 class HealerLowMana : public PartyMemberValue

@@ -17,6 +17,24 @@ bool CastRemoveShadowformAction::Execute(Event /*event*/)
 
 bool CastRemoveShadowformAction::isUseful() { return botAI->HasAura("shadowform", AI_VALUE(Unit*, "self target")); }
 
+bool CastPowerWordShieldAction::isUseful()
+{
+    return CastBuffSpellAction::isUseful() && !botAI->HasAura("weakened soul", GetTarget());
+}
+
+bool CastPowerWordShieldOnPartyAction::isUseful()
+{
+    return HealPartyMemberAction::isUseful() && !botAI->HasAura("weakened soul", GetTarget());
+}
+
+Unit* CastShadowfiendAction::GetTarget()
+{
+    if (Unit* target = AI_VALUE(Unit*, "current target"))
+        return target;
+
+    return AI_VALUE(Unit*, "grind target");
+}
+
 Unit* CastPowerWordShieldOnAlmostFullHealthBelowAction::GetTarget()
 {
     Group* group = bot->GetGroup();
