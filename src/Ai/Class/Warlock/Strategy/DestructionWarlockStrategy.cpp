@@ -57,6 +57,16 @@ void DestructionWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
         )
     );
 
+    // Main filler. Kept below Shadowburn so the execute window is not pushed out of the ladder.
+    triggers.push_back(
+        new TriggerNode(
+            "incinerate",
+            {
+                NextAction("incinerate", 17.5f)
+            }
+        )
+    );
+
     // Note: Corruption won't be used after the character learns Incinerate at level 64
     triggers.push_back(
         new TriggerNode(

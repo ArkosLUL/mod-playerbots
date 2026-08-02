@@ -138,16 +138,6 @@ bool CastRainOfFireAction::isUseful()
     return target && !botAI->HasSpell("seed of corruption");
 }
 
-// Checks if the enemies are close enough to use Hellfire
-bool CastHellfireAction::isUseful()
-{
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (!target)
-        return false;
-
-    return bot->IsWithinCombatRange(target, 5.0f);  // 5 yard AoE radius
-}
-
 // Checks if the "meta melee aoe" strategy is active, OR if the bot is in melee range of the target
 bool CastImmolationAuraAction::isUseful()
 {

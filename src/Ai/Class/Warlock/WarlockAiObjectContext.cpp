@@ -163,14 +163,18 @@ public:
         creators["spell lock"] = &WarlockTriggerFactoryInternal::spell_lock;
         creators["devour magic purge"] = &WarlockTriggerFactoryInternal::devour_magic_purge;
         creators["devour magic cleanse"] = &WarlockTriggerFactoryInternal::devour_magic_cleanse;
-        creators["backlash"] = &WarlockTriggerFactoryInternal::backlash;
         creators["corruption"] = &WarlockTriggerFactoryInternal::corruption;
         creators["corruption on attacker"] = &WarlockTriggerFactoryInternal::corruption_on_attacker;
+        creators["corruption snapshot"] = &WarlockTriggerFactoryInternal::corruption_snapshot;
         creators["immolate"] = &WarlockTriggerFactoryInternal::immolate;
         creators["immolate on attacker"] = &WarlockTriggerFactoryInternal::immolate_on_attacker;
         creators["unstable affliction"] = &WarlockTriggerFactoryInternal::unstable_affliction;
         creators["unstable affliction on attacker"] = &WarlockTriggerFactoryInternal::unstable_affliction_on_attacker;
         creators["haunt"] = &WarlockTriggerFactoryInternal::haunt;
+        creators["drain soul execute"] = &WarlockTriggerFactoryInternal::drain_soul_execute;
+        creators["conflagrate"] = &WarlockTriggerFactoryInternal::conflagrate;
+        creators["chaos bolt"] = &WarlockTriggerFactoryInternal::chaos_bolt;
+        creators["incinerate"] = &WarlockTriggerFactoryInternal::incinerate;
         creators["decimation"] = &WarlockTriggerFactoryInternal::decimation;
         creators["life tap"] = &WarlockTriggerFactoryInternal::life_tap;
         creators["life tap glyph buff"] = &WarlockTriggerFactoryInternal::life_tap_glyph_buff;
@@ -178,6 +182,7 @@ public:
         creators["metamorphosis"] = &WarlockTriggerFactoryInternal::metamorphosis;
         creators["demonic empowerment"] = &WarlockTriggerFactoryInternal::demonic_empowerment;
         creators["immolation aura active"] = &WarlockTriggerFactoryInternal::immolation_aura_active;
+        creators["metamorphosis active"] = &WarlockTriggerFactoryInternal::metamorphosis_active;
         creators["metamorphosis not active"] = &WarlockTriggerFactoryInternal::metamorphosis_not_active;
         creators["meta melee flee check"] = &WarlockTriggerFactoryInternal::meta_melee_flee_check;
         creators["curse of agony"] = &WarlockTriggerFactoryInternal::curse_of_agony;
@@ -209,17 +214,21 @@ private:
     static Trigger* soulstone(PlayerbotAI* botAI) { return new SoulstoneTrigger(botAI); }
     static Trigger* corruption(PlayerbotAI* botAI) { return new CorruptionTrigger(botAI); }
     static Trigger* corruption_on_attacker(PlayerbotAI* botAI) { return new CorruptionOnAttackerTrigger(botAI); }
+    static Trigger* corruption_snapshot(PlayerbotAI* botAI) { return new CorruptionSnapshotTrigger(botAI); }
     static Trigger* banish(PlayerbotAI* botAI) { return new BanishTrigger(botAI); }
     static Trigger* fear(PlayerbotAI* botAI) { return new FearTrigger(botAI); }
     static Trigger* spell_lock(PlayerbotAI* botAI) { return new SpellLockInterruptSpellTrigger(botAI); }
     static Trigger* devour_magic_purge(PlayerbotAI* botAI) { return new DevourMagicPurgeTrigger(botAI); }
     static Trigger* devour_magic_cleanse(PlayerbotAI* botAI) { return new DevourMagicCleanseTrigger(botAI); }
-    static Trigger* backlash(PlayerbotAI* botAI) { return new BacklashTrigger(botAI); }
     static Trigger* immolate(PlayerbotAI* botAI) { return new ImmolateTrigger(botAI); }
     static Trigger* immolate_on_attacker(PlayerbotAI* ai) { return new ImmolateOnAttackerTrigger(ai); }
     static Trigger* unstable_affliction(PlayerbotAI* ai) { return new UnstableAfflictionTrigger(ai); }
     static Trigger* unstable_affliction_on_attacker(PlayerbotAI* ai) { return new UnstableAfflictionOnAttackerTrigger(ai); }
     static Trigger* haunt(PlayerbotAI* ai) { return new HauntTrigger(ai); }
+    static Trigger* drain_soul_execute(PlayerbotAI* ai) { return new DrainSoulExecuteTrigger(ai); }
+    static Trigger* conflagrate(PlayerbotAI* ai) { return new ConflagrateTrigger(ai); }
+    static Trigger* chaos_bolt(PlayerbotAI* ai) { return new ChaosBoltTrigger(ai); }
+    static Trigger* incinerate(PlayerbotAI* ai) { return new IncinerateTrigger(ai); }
     static Trigger* decimation(PlayerbotAI* ai) { return new DecimationTrigger(ai); }
     static Trigger* life_tap(PlayerbotAI* ai) { return new LifeTapTrigger(ai); }
     static Trigger* life_tap_glyph_buff(PlayerbotAI* ai) { return new LifeTapGlyphBuffTrigger(ai); }
@@ -227,6 +236,7 @@ private:
     static Trigger* metamorphosis(PlayerbotAI* ai) { return new MetamorphosisTrigger(ai); }
     static Trigger* demonic_empowerment(PlayerbotAI* ai) { return new DemonicEmpowermentTrigger(ai); }
     static Trigger* immolation_aura_active(PlayerbotAI* ai) { return new ImmolationAuraActiveTrigger(ai); }
+    static Trigger* metamorphosis_active(PlayerbotAI* ai) { return new MetamorphosisActiveTrigger(ai); }
     static Trigger* metamorphosis_not_active(PlayerbotAI* ai) { return new MetamorphosisNotActiveTrigger(ai); }
     static Trigger* meta_melee_flee_check(PlayerbotAI* ai) { return new MetaMeleeEnemyTooCloseForSpellTrigger(ai); }
     static Trigger* curse_of_agony(PlayerbotAI* botAI) { return new CurseOfAgonyTrigger(botAI); }
@@ -274,10 +284,9 @@ public:
         creators["immolate on attacker"] = &WarlockAiObjectContextInternal::immolate_on_attacker;
         creators["corruption"] = &WarlockAiObjectContextInternal::corruption;
         creators["corruption on attacker"] = &WarlockAiObjectContextInternal::corruption_on_attacker;
+        creators["corruption resnapshot"] = &WarlockAiObjectContextInternal::corruption_resnapshot;
         creators["shadow bolt"] = &WarlockAiObjectContextInternal::shadow_bolt;
         creators["drain soul"] = &WarlockAiObjectContextInternal::drain_soul;
-        creators["drain mana"] = &WarlockAiObjectContextInternal::drain_mana;
-        creators["drain life"] = &WarlockAiObjectContextInternal::drain_life;
         creators["banish on cc"] = &WarlockAiObjectContextInternal::banish_on_cc;
         creators["fear on cc"] = &WarlockAiObjectContextInternal::fear_on_cc;
         creators["spell lock"] = &WarlockAiObjectContextInternal::spell_lock;
@@ -286,7 +295,6 @@ public:
         creators["seed of corruption"] = &WarlockAiObjectContextInternal::seed_of_corruption;
         creators["seed of corruption on attacker"] = &WarlockAiObjectContextInternal::seed_of_corruption_on_attacker;
         creators["rain of fire"] = &WarlockAiObjectContextInternal::rain_of_fire;
-        creators["hellfire"] = &WarlockAiObjectContextInternal::hellfire;
         creators["shadowfury"] = &WarlockAiObjectContextInternal::shadowfury;
         creators["life tap"] = &WarlockAiObjectContextInternal::life_tap;
         creators["incinerate"] = &WarlockAiObjectContextInternal::incinerate;
@@ -299,7 +307,6 @@ public:
         creators["soul fire"] = &WarlockAiObjectContextInternal::soul_fire;
         creators["incinerate"] = &WarlockAiObjectContextInternal::incinerate;
         creators["demon charge"] = &WarlockAiObjectContextInternal::demon_charge;
-        creators["shadow cleave"] = &WarlockAiObjectContextInternal::shadow_cleave;
         creators["shadowburn"] = &WarlockAiObjectContextInternal::shadowburn;
         creators["shadowflame"] = &WarlockAiObjectContextInternal::shadowflame;
         creators["immolation aura"] = &WarlockAiObjectContextInternal::immolation_aura;
@@ -348,10 +355,9 @@ private:
     static Action* fel_domination(PlayerbotAI* botAI) { return new CastFelDominationAction(botAI); }
     static Action* corruption(PlayerbotAI* botAI) { return new CastCorruptionAction(botAI); }
     static Action* corruption_on_attacker(PlayerbotAI* botAI) { return new CastCorruptionOnAttackerAction(botAI); }
+    static Action* corruption_resnapshot(PlayerbotAI* botAI) { return new CastCorruptionResnapshotAction(botAI); }
     static Action* shadow_bolt(PlayerbotAI* botAI) { return new CastShadowBoltAction(botAI); }
     static Action* drain_soul(PlayerbotAI* botAI) { return new CastDrainSoulAction(botAI); }
-    static Action* drain_mana(PlayerbotAI* botAI) { return new CastDrainManaAction(botAI); }
-    static Action* drain_life(PlayerbotAI* botAI) { return new CastDrainLifeAction(botAI); }
     static Action* banish_on_cc(PlayerbotAI* botAI) { return new CastBanishOnCcAction(botAI); }
     static Action* fear_on_cc(PlayerbotAI* botAI) { return new CastFearOnCcAction(botAI); }
     static Action* spell_lock(PlayerbotAI* botAI) { return new CastSpellLockAction(botAI); }
@@ -360,7 +366,6 @@ private:
     static Action* seed_of_corruption(PlayerbotAI* botAI) { return new CastSeedOfCorruptionAction(botAI); }
     static Action* seed_of_corruption_on_attacker(PlayerbotAI* botAI) { return new CastSeedOfCorruptionOnAttackerAction(botAI); }
     static Action* rain_of_fire(PlayerbotAI* botAI) { return new CastRainOfFireAction(botAI); }
-    static Action* hellfire(PlayerbotAI* botAI) { return new CastHellfireAction(botAI); }
     static Action* shadowfury(PlayerbotAI* botAI) { return new CastShadowfuryAction(botAI); }
     static Action* life_tap(PlayerbotAI* botAI) { return new CastLifeTapAction(botAI); }
     static Action* unstable_affliction(PlayerbotAI* ai) { return new CastUnstableAfflictionAction(ai); }
@@ -370,7 +375,6 @@ private:
     static Action* metamorphosis(PlayerbotAI* ai) { return new CastMetamorphosisAction(ai); }
     static Action* soul_fire(PlayerbotAI* ai) { return new CastSoulFireAction(ai); }
     static Action* demon_charge(PlayerbotAI* ai) { return new DemonChargeAction(ai); }
-    static Action* shadow_cleave(PlayerbotAI* ai) { return new ShadowCleaveAction(ai); }
     static Action* shadowburn(PlayerbotAI* ai) { return new CastShadowburnAction(ai); }
     static Action* shadowflame(PlayerbotAI* botAI) { return new CastShadowflameAction(botAI); }
     static Action* immolation_aura(PlayerbotAI* botAI) { return new CastImmolationAuraAction(botAI); }

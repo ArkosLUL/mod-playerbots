@@ -228,10 +228,30 @@ public:
     bool IsActive() override { return BuffTrigger::IsActive(); }
 };
 
+// Haunt is worth recasting the moment its 8 s cooldown is up, well before the 12 s debuff falls off:
+// the damage buff refreshes and every recast rolls Corruption forward through Everlasting Affliction.
+// Keeps DebuffTrigger's target guards, but fires on cooldown rather than on the debuff being missing.
 class HauntTrigger : public DebuffTrigger
 {
 public:
-    HauntTrigger(PlayerbotAI* ai) : DebuffTrigger(ai, "haunt", 1, true, 0) {}
+    HauntTrigger(PlayerbotAI* ai) : DebuffTrigger(ai, "haunt", 1, true, 8.0f) {}
+    bool IsActive() override;
+};
+
+// Corruption caches its crit chance and % damage mods at cast time. Everlasting Affliction rolls the
+// duration and base amount forward but never re-runs CalculatePeriodicData, so the snapshot taken on
+// the pull - cold, before any trinket, potion or raid cooldown - would otherwise last the whole fight.
+class CorruptionSnapshotTrigger : public Trigger
+{
+public:
+    CorruptionSnapshotTrigger(PlayerbotAI* botAI) : Trigger(botAI, "corruption snapshot", 2 * 1000) {}
+
+    std::string const GetTargetName() override { return "current target"; }
+    bool IsActive() override;
+
+private:
+    // Only recast when live crit is clearly ahead of the stored value; a GCD is not worth 1-2 %.
+    static constexpr float CRIT_DELTA_PCT = 5.0f;
 };
 
 class CurseOfAgonyTrigger : public DebuffTrigger
@@ -283,6 +303,35 @@ public:
     bool IsActive() override;
 };
 
+// Damage Triggers
+
+// Drain Soul's execute bonus kicks in at 25 % target health, above the generic 20 % "critical" band.
+class DrainSoulExecuteTrigger : public TargetLowHealthTrigger
+{
+public:
+    DrainSoulExecuteTrigger(PlayerbotAI* botAI) : TargetLowHealthTrigger(botAI, 25) {}
+};
+
+// Conflagrate needs our own Immolate on the target. In WotLK it no longer consumes the DoT.
+class ConflagrateTrigger : public SpellNoCooldownTrigger
+{
+public:
+    ConflagrateTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "conflagrate") {}
+    bool IsActive() override;
+};
+
+class ChaosBoltTrigger : public SpellNoCooldownTrigger
+{
+public:
+    ChaosBoltTrigger(PlayerbotAI* botAI) : SpellNoCooldownTrigger(botAI, "chaos bolt") {}
+};
+
+class IncinerateTrigger : public SpellCanBeCastTrigger
+{
+public:
+    IncinerateTrigger(PlayerbotAI* botAI) : SpellCanBeCastTrigger(botAI, "incinerate") {}
+};
+
 // Proc/Cooldown Triggers
 
 class LifeTapTrigger : public Trigger
@@ -324,12 +373,6 @@ public:
     ShadowTranceTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "shadow trance") {}
 };
 
-class BacklashTrigger : public HasAuraTrigger
-{
-public:
-    BacklashTrigger(PlayerbotAI* botAI) : HasAuraTrigger(botAI, "backlash") {}
-};
-
 class DecimationTrigger : public HasAuraTrigger
 {
 public:
@@ -341,6 +384,12 @@ class MoltenCoreTrigger : public HasAuraTrigger
 {
 public:
     MoltenCoreTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "molten core") {}
+};
+
+class MetamorphosisActiveTrigger : public HasAuraTrigger
+{
+public:
+    MetamorphosisActiveTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "metamorphosis") {}
 };
 
 class MetamorphosisNotActiveTrigger : public HasNoAuraTrigger

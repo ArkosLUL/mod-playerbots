@@ -13,6 +13,9 @@
 #include "Bag.h"
 #include "Item.h"
 #include "RitualOfSoulsActions.h"
+#include "SpellAuraEffects.h"
+#include "SpellAuras.h"
+#include "SpellInfo.h"
 
 static const uint32 SOUL_SHARD_ITEM_ID = 6265;
 
@@ -84,6 +87,65 @@ bool DemonicEmpowermentTrigger::IsActive()
     if (!pet)
         return false;
     return !botAI->HasAura("demonic empowerment", pet);
+}
+
+bool HauntTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target || !target->IsAlive() || !target->IsInWorld())
+        return false;
+
+    if ((target->GetHealth() / AI_VALUE(float, "estimated group dps")) < needLifeTime)
+        return false;
+
+    uint32 spellId = AI_VALUE2(uint32, "spell id", spell);
+    return spellId && !bot->HasSpellCooldown(spellId);
+}
+
+// Compares the crit chance Corruption stored at cast time against what the bot would snapshot now.
+// Self-gating: CalcPeriodicCritChance returns 0 without Pandemic, so an untalented bot never fires
+// this. Self-clearing too - the recast runs CalculatePeriodicData and the two values line up again.
+bool CorruptionSnapshotTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target)
+        return false;
+
+    Aura* aura = botAI->GetAura("corruption", target, true);
+    if (!aura)
+        return false;
+
+    AuraEffect const* periodic = nullptr;
+    for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+    {
+        AuraEffect const* effect = aura->GetEffect(i);
+        if (effect && effect->GetAuraType() == SPELL_AURA_PERIODIC_DAMAGE)
+        {
+            periodic = effect;
+            break;
+        }
+    }
+
+    if (!periodic)
+        return false;
+
+    float const snapshot = periodic->GetCritChance();
+    if (snapshot <= 0.0f)
+        return false;
+
+    SpellInfo const* spellInfo = aura->GetSpellInfo();
+    if (!spellInfo)
+        return false;
+
+    float live = bot->SpellDoneCritChance(nullptr, spellInfo, SPELL_SCHOOL_MASK_SHADOW, BASE_ATTACK, true);
+    live = target->SpellTakenCritChance(bot, spellInfo, SPELL_SCHOOL_MASK_SHADOW, live, BASE_ATTACK, true);
+
+    return live - snapshot >= CRIT_DELTA_PCT;
+}
+
+bool ConflagrateTrigger::IsActive()
+{
+    return SpellNoCooldownTrigger::IsActive() && botAI->HasAura("immolate", GetTarget(), false, true);
 }
 
 bool DecimationTrigger::IsActive()

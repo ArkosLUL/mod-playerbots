@@ -54,6 +54,16 @@ void AfflictionWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
             }
         )
     );
+    // Haunt outranks Unstable Affliction: it is the bigger throughput gain and every cast rolls
+    // Corruption forward through Everlasting Affliction.
+    triggers.push_back(
+        new TriggerNode(
+            "haunt",
+            {
+                NextAction("haunt", 17.75f)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
             "unstable affliction",
@@ -62,11 +72,14 @@ void AfflictionWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
             }
         )
     );
+
+    // Corruption is only ever cast once per fight, so its crit snapshot has to be refreshed by hand
+    // once the bot's real crit is up. Sits under the DoT block so it never delays a missing DoT.
     triggers.push_back(
         new TriggerNode(
-            "haunt",
+            "corruption snapshot",
             {
-                NextAction("haunt", 16.5f)
+                NextAction("corruption resnapshot", 16.5f)
             }
         )
     );
@@ -82,7 +95,7 @@ void AfflictionWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
     );
     triggers.push_back(
         new TriggerNode(
-            "target critical health",
+            "drain soul execute",
             {
                 NextAction("drain soul", 15.5f)
             }

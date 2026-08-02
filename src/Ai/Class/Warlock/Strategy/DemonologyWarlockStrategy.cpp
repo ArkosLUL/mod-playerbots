@@ -37,6 +37,16 @@ void DemonologyWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
             }
         )
     );
+    // Immolation Aura belongs in the single-target priority too, not just the AoE ladder - it is free
+    // damage for the whole Metamorphosis window. The action itself handles the melee-range check.
+    triggers.push_back(
+        new TriggerNode(
+            "metamorphosis active",
+            {
+                NextAction("immolation aura", 28.25f)
+            }
+        )
+    );
     triggers.push_back(
         new TriggerNode(
             "demonic empowerment",
@@ -63,6 +73,19 @@ void DemonologyWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
             }
         )
     );
+
+    // Procs
+    // A Decimation proc only lasts 10 s and Soul Fire hits far harder than a DoT refresh, so it goes
+    // above Corruption and Immolate maintenance.
+    triggers.push_back(
+        new TriggerNode(
+            "decimation",
+            {
+                NextAction("soul fire", 18.5f)
+            }
+        )
+    );
+
     triggers.push_back(
         new TriggerNode(
             "corruption",
@@ -80,15 +103,8 @@ void DemonologyWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
         )
     );
 
-    // Procs
-    triggers.push_back(
-        new TriggerNode(
-            "decimation",
-            {
-                NextAction("soul fire", 17.0f)
-            }
-        )
-    );
+    // Molten Core charges are worth more on Soul Fire than on Incinerate, which is why this node sits
+    // below the Decimation node above - keep that ordering if either relevance is ever retuned.
     triggers.push_back(
         new TriggerNode(
             "molten core",

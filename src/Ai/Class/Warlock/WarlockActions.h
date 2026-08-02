@@ -281,6 +281,19 @@ public:
     }
 };
 
+// Re-applies Corruption only to refresh the crit / % damage mods it cached at cast time, so it must
+// skip the aura-presence veto CastCorruptionAction inherits from CastAuraSpellAction.
+class CastCorruptionResnapshotAction : public CastSpellAction
+{
+public:
+    CastCorruptionResnapshotAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "corruption") {}
+    std::string const getName() override { return "corruption resnapshot"; }
+    bool isUseful() override
+    {
+        return CastSpellAction::isUseful() && !botAI->HasAura("seed of corruption", GetTarget(), false, true);
+    }
+};
+
 class CastImmolateAction : public CastDebuffSpellAction
 {
 public:
@@ -424,18 +437,6 @@ public:
     bool isUseful() override;
 };
 
-class CastDrainManaAction : public CastSpellAction
-{
-public:
-    CastDrainManaAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "drain mana") {}
-};
-
-class CastDrainLifeAction : public CastSpellAction
-{
-public:
-    CastDrainLifeAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "drain life") {}
-};
-
 class CastConflagrateAction : public CastSpellAction
 {
 public:
@@ -515,14 +516,6 @@ public:
     bool isUseful() override;
 };
 
-class CastHellfireAction : public CastSpellAction
-{
-public:
-    CastHellfireAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "hellfire") {}
-    ActionThreatType getThreatType() override { return ActionThreatType::Aoe; }
-    bool isUseful() override;
-};
-
 class CastShadowflameAction : public CastSpellAction
 {
 public:
@@ -542,11 +535,5 @@ public:
     CastImmolationAuraAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "immolation aura") {}
     ActionThreatType getThreatType() override { return ActionThreatType::Aoe; }
     bool isUseful() override;
-};
-
-class ShadowCleaveAction : public CastMeleeSpellAction
-{
-public:
-    ShadowCleaveAction(PlayerbotAI* ai) : CastMeleeSpellAction(ai, "shadow cleave") {}
 };
 #endif
