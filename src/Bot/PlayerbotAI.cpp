@@ -1624,7 +1624,7 @@ std::vector<std::string> const& PlayerbotAI::GetInstanceStrategies()
         "aq20", "aq40", "blacktemple", "bwl", "gruulslair", "hyjal", "icc", "karazhan",
         "magtheridon", "moltencore", "naxx", "onyxia", "rs", "ssc", "sunwell", "tbc-ac",
         "tempestkeep", "trialofthecrusader", "ulduar", "voa", "wotlk-an", "wotlk-cos", "wotlk-dtk",
-        "wotlk-eoe", "wotlk-fos", "wotlk-gd", "wotlk-hol", "wotlk-hor", "wotlk-hos", "wotlk-nex",
+        "wotlk-eoe", "wotlk-fos", "wotlk-gd", "wotlk-hol", "wotlk-hos", "wotlk-nex",
         "wotlk-occ", "wotlk-ok", "wotlk-os", "wotlk-pos", "wotlk-toc", "wotlk-uk", "wotlk-up",
         "wotlk-vh", "zulaman"
     };
@@ -1759,9 +1759,6 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
             break;
         case 658:
             strategyName = "wotlk-pos";  // Pit of Saron
-            break;
-        case 668:
-            strategyName = "wotlk-hor";  // Halls of Reflection
             break;
         case 724:
             strategyName = "rs";  // Ruby Sanctum
