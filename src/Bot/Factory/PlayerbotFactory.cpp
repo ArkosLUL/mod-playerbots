@@ -31,6 +31,7 @@
 #include "PlayerbotRepository.h"
 #include "PlayerbotGuildMgr.h"
 #include "Playerbots.h"
+#include "ProgressionMgr.h"
 #include "QuestDef.h"
 #include "RandomItemMgr.h"
 #include "RandomPlayerbotFactory.h"
@@ -424,6 +425,8 @@ PlayerbotFactory::PlayerbotFactory(Player* bot, uint32 level, uint32 itemQuality
 
 void PlayerbotFactory::Init()
 {
+    sProgressionMgr.Init();
+
     if (sPlayerbotAIConfig.randomBotPreQuests)
     {
         ObjectMgr::QuestMap const& questTemplates = sObjectMgr->GetQuestTemplates();
@@ -575,6 +578,13 @@ void PlayerbotFactory::Init()
         if (sRandomItemMgr.IsInternalItem(proto))
         {
            continue;
+        }
+
+        // "Solid Sky Sapphire (Unused)". IsInternalItem looks for "Unused " with a trailing space,
+        // so the parenthesised form slips past it and the gem becomes a real candidate.
+        if (gemId == 37430)
+        {
+            continue;
         }
 
         if (!sGemPropertiesStore.LookupEntry(proto->GemProperties))
@@ -992,6 +1002,10 @@ void PlayerbotFactory::InitConsumables()
 {
     uint8 specTab = AiFactory::GetPlayerSpecTab(bot);
     std::vector<std::pair<uint32, uint32>> items;
+    // Checked inside each ladder rather than on the finished list: every ladder stops at its first
+    // match, so a rejected entry has to fall through to the next-best one instead of leaving the bot
+    // empty-handed.
+    uint8 const consumableTier = sProgressionMgr.GetBotProgressionTier(bot);
 
     switch (bot->getClass())
     {
@@ -1004,7 +1018,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : wizard_oils)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 2});
                     break;
@@ -1017,7 +1032,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : mana_oils)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 2});
                     break;
@@ -1032,7 +1048,8 @@ void PlayerbotFactory::InitConsumables()
             for (uint32 itemId : wizard_oils)
             {
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                if (proto->RequiredLevel > level || level > 75)
+                if (proto->RequiredLevel > level || level > 75 ||
+                    !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                     continue;
                 items.push_back({itemId, 2});
                 break;
@@ -1048,7 +1065,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : wizard_oils)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 2});
                     break;
@@ -1065,7 +1083,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : sharpening_stones)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 20});
                     break;
@@ -1073,7 +1092,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : weightstones)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 20});
                     break;
@@ -1086,7 +1106,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : mana_oils)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 2});
                     break;
@@ -1103,7 +1124,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : mana_oils)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 2});
                     break;
@@ -1120,7 +1142,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : sharpening_stones)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 20});
                     break;
@@ -1128,7 +1151,8 @@ void PlayerbotFactory::InitConsumables()
                 for (uint32 itemId : weightstones)
                 {
                     ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                    if (proto->RequiredLevel > level || level > 75)
+                    if (proto->RequiredLevel > level || level > 75 ||
+                        !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                         continue;
                     items.push_back({itemId, 20});
                     break;
@@ -1149,7 +1173,8 @@ void PlayerbotFactory::InitConsumables()
             for (uint32 itemId : sharpening_stones)
             {
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                if (proto->RequiredLevel > level || level > 75)
+                if (proto->RequiredLevel > level || level > 75 ||
+                    !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                     continue;
                 items.push_back({itemId, 20});
                 break;
@@ -1157,7 +1182,8 @@ void PlayerbotFactory::InitConsumables()
             for (uint32 itemId : weightstones)
             {
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                if (proto->RequiredLevel > level || level > 75)
+                if (proto->RequiredLevel > level || level > 75 ||
+                    !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                     continue;
                 items.push_back({itemId, 20});
                 break;
@@ -1175,7 +1201,7 @@ void PlayerbotFactory::InitConsumables()
             for (uint32 itemId : deadly_poisons)
             {
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                if (proto->RequiredLevel > level)
+                if (proto->RequiredLevel > level || !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                     continue;
                 items.push_back({itemId, 20});
                 break;
@@ -1183,7 +1209,7 @@ void PlayerbotFactory::InitConsumables()
             for (uint32 itemId : instant_poisons)
             {
                 ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
-                if (proto->RequiredLevel > level)
+                if (proto->RequiredLevel > level || !sProgressionMgr.IsItemAllowed(itemId, consumableTier))
                     continue;
                 items.push_back({itemId, 20});
                 break;
@@ -3744,7 +3770,7 @@ void PlayerbotFactory::InitAmmo()
             return;
     }
 
-    uint32 entry = sRandomItemMgr.GetAmmo(level, subClass);
+    uint32 entry = sRandomItemMgr.GetAmmo(level, subClass, sProgressionMgr.GetBotProgressionTier(bot));
     if (!entry)
         return;
 
@@ -3952,6 +3978,7 @@ void PlayerbotFactory::InitPotions()
         std::vector<uint32> const agilityLadder = {POTION_OF_SPEED, HASTE_POTION};
         std::vector<uint32> const& ladder =
             PlayerbotAI::IsCaster(bot, true) ? casterLadder : (strengthClass ? strengthLadder : agilityLadder);
+        uint8 const potionTier = sProgressionMgr.GetBotProgressionTier(bot);
 
         for (uint32 itemId : ladder)
         {
@@ -3962,6 +3989,9 @@ void PlayerbotFactory::InitPotions()
             // Potion of Speed/Wild Magic are usable at 68-70, so without this a bot on a TBC-capped
             // realm would drink WotLK potions instead of falling through to the TBC entry.
             if (!RandomItemMgr::IsAllowedForLevelExpansion(itemId, level))
+                continue;
+
+            if (!sProgressionMgr.IsItemAllowed(itemId, potionTier))
                 continue;
 
             if (bot->GetItemCount(itemId))
@@ -4035,6 +4065,10 @@ void PlayerbotFactory::ApplyPrismaticSocket(Item* item)
     // enchants and gems, which pushes the first socket to 71.
     uint32 const minLevel = sPlayerbotAIConfig.limitEnchantExpansion ? 71 : 70;
     if (bot->GetLevel() < minLevel)
+        return;
+
+    // Level 80 says nothing about what the realm has unlocked, and every socket-adder is 3.0 content.
+    if (sProgressionMgr.GetBotProgressionTier(bot) < IP_TIER_WOTLK)
         return;
 
     // The added gem lands in the first template socket with no color, so an item that already fills
@@ -5151,6 +5185,10 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
 {
     //int32 bestGemEnchantId[4] = {-1, -1, -1, -1};  // 1, 2, 4, 8 color //not used, line marked for removal.
     //float bestGemScore[4] = {0, 0, 0, 0}; //not used, line marked for removal.
+    // Resolved once: the caches below are thousands of entries scanned per equipment slot, so the
+    // group/quest lookups behind this must not happen inside the loops.
+    uint8 const progressionTier = sProgressionMgr.GetBotProgressionTier(bot);
+
     std::vector<uint32> availableGems;
     for (const uint32& enchantGem : enchantGemIdCache)
     {
@@ -5163,6 +5201,9 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             continue;
 
         if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantGem >= 39900)
+            continue;
+
+        if (!sProgressionMgr.IsGemAllowed(gemTemplate, progressionTier))
             continue;
 
         uint32 requiredLevel = gemTemplate->ItemLevel;
@@ -5364,6 +5405,9 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                     continue;
 
                 if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantSpell >= 44483)
+                    continue;
+
+                if (!sProgressionMgr.IsEnchantSpellAllowed(enchantSpell, progressionTier))
                     continue;
 
                 for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)

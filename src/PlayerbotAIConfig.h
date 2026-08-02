@@ -312,6 +312,8 @@ public:
     uint32 limitEnchantExpansion;
     bool professionGearEnhancements;
     uint32 limitGearExpansion;
+    bool limitProgressionTier;
+    uint32 progressionTierCap;
     uint32 randombotStartingLevel;
     bool enablePeriodicOnlineOffline;
     float periodicOnlineOfflineRatio;

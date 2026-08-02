@@ -15,6 +15,7 @@
 #include "ObjectMgr.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotFactory.h"
+#include "ProgressionMgr.h"
 #include "RandomItemMgr.h"
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
@@ -772,6 +773,16 @@ void StatsWeightCalculator::CalculateSocketBonus(ItemTemplate const* proto, floa
     weight_ *= multiplier;
 }
 
+uint8 StatsWeightCalculator::ProgressionTier()
+{
+    // Costs a group lookup plus up to 18 quest status reads, and only socketed items ever ask for it,
+    // so it is not worth paying on construction: these calculators are built per item evaluation.
+    if (progression_tier_ < 0)
+        progression_tier_ = static_cast<int16>(sProgressionMgr.GetBotProgressionTier(player_));
+
+    return static_cast<uint8>(progression_tier_);
+}
+
 float StatsWeightCalculator::BestGemScore(uint8 socketColor)
 {
     // Only the flags a caller can flip between CalculateItem calls need to be in the key; everything
@@ -802,6 +813,11 @@ float StatsWeightCalculator::BestGemScore(uint8 socketColor)
             continue;
 
         if (sPlayerbotAIConfig.limitEnchantExpansion && lvl <= 70 && enchantGem >= 39900)
+            continue;
+
+        // Has to match ApplyEnchantAndGemsNew exactly, or a socketed item gets scored on gems the
+        // bot's realm progression will not let it actually socket.
+        if (!sProgressionMgr.IsGemAllowed(gemTemplate, ProgressionTier()))
             continue;
 
         if (gemTemplate->ItemLevel > lvl)

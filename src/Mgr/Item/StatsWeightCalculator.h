@@ -77,6 +77,10 @@ public:
     // Score of the best gem this bot would slot into a socket of the given color.
     float BestGemScore(uint8 socketColor);
 
+    // Resolved on first use and then fixed for this calculator's lifetime, so it stays out of the
+    // gem score key.
+    uint8 ProgressionTier();
+
     void CalculateItemTypePenalty(ItemTemplate const* proto);
     float ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot);
 
@@ -92,6 +96,8 @@ private:
     std::unique_ptr<StatsCollector> collector_;
     uint8 cls;
     uint8 lvl;
+    // -1 until ProgressionTier() resolves it.
+    int16 progression_tier_ = -1;
     int tab;
     bool enable_overflow_penalty_;
     bool enable_item_set_bonus_;

@@ -1117,6 +1117,24 @@ AiPlayerbot.BurstOnBossOnly = 1
 # Default: 1 (enabled)
 AiPlayerbot.LimitGearExpansion = 1
 
+# Limit bot enchants, gems, sockets, consumables and ammo to what the realm's Individual Progression
+# tier has actually unlocked. Without this a level 80 bot on a realm still locked to Karazhan gets
+# patch 3.2 epic gems, WotLK meta gems and an Eternal Belt Buckle, because level is the only content
+# gate the bot code otherwise has.
+# Has no effect unless mod-individual-progression is installed; the module is detected on startup.
+# Note that the gear itself is not gated, only the improvements applied to it, so a bot on a low
+# progression realm can still show up in later-expansion gear with era-correct enchants on it.
+# Default: 1 (enabled)
+AiPlayerbot.LimitProgressionTier = 1
+
+# Progression tier used for bots that are not grouped with a real player and have no progression of
+# their own. Grouped bots always follow their group leader's tier instead.
+# Tiers: 0 vanilla, 3 ZG/AQ war effort, 7 Naxx40, 8 TBC, 9 SSC/TK, 12 Sunwell, 13 WotLK,
+#        14 Ulduar, 15 Trial of the Crusader, 16 ICC, 18 everything.
+# Values outside 0-18 are clamped into that range.
+# Default: 18 (unrestricted)
+AiPlayerbot.ProgressionTierCap = 18
+
 # Chance randombot will have less-than-optimized generated gear
 # Set between 0 (0%) and 1 (100%)
 AiPlayerbot.RandomGearLoweringChance = 0

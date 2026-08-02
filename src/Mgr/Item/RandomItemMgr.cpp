@@ -9,6 +9,7 @@
 #include "DBCStores.h"
 #include "ItemTemplate.h"
 #include "Playerbots.h"
+#include "ProgressionMgr.h"
 #include "StatsWeightCalculator.h"
 
 std::unordered_set<uint32> RandomItemMgr::itemCache;
@@ -956,7 +957,7 @@ uint32 RandomItemMgr::GetRandomItem(uint32 level, RandomItemType type, RandomIte
     return Acore::Containers::SelectRandomContainerElement(list);
 }
 
-uint32 RandomItemMgr::GetAmmo(uint32 level, uint32 subClass) const
+uint32 RandomItemMgr::GetAmmo(uint32 level, uint32 subClass, uint8 progressionTier) const
 {
     level = NormalizeLevel(level);
 
@@ -970,8 +971,13 @@ uint32 RandomItemMgr::GetAmmo(uint32 level, uint32 subClass) const
 
     for (uint32 entry : subItr->second)
     {
-        if (IsAllowedForLevelExpansion(entry, level))
-            return entry;
+        if (!IsAllowedForLevelExpansion(entry, level))
+            continue;
+
+        if (!sProgressionMgr.IsItemAllowed(entry, progressionTier))
+            continue;
+
+        return entry;
     }
 
     return 0;

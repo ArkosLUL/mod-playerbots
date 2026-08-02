@@ -5,6 +5,7 @@
  */
 
 #include "PlayerbotAIConfig.h"
+#include <algorithm>
 #include <iostream>
 #include "BisListMgr.h"
 #include "Config.h"
@@ -13,6 +14,7 @@
 #include "PlayerbotFactory.h"
 #include "Playerbots.h"
 #include "PlayerbotGuildMgr.h"
+#include "ProgressionMgr.h"
 #include "RandomItemMgr.h"
 #include "RandomPlayerbotFactory.h"
 #include "RandomPlayerbotMgr.h"
@@ -675,6 +677,11 @@ bool PlayerbotAIConfig::Initialize()
     limitEnchantExpansion = sConfigMgr->GetOption<int32>("AiPlayerbot.LimitEnchantExpansion", 1);
     professionGearEnhancements = sConfigMgr->GetOption<bool>("AiPlayerbot.ProfessionGearEnhancements", true);
     limitGearExpansion = sConfigMgr->GetOption<int32>("AiPlayerbot.LimitGearExpansion", 1);
+    limitProgressionTier = sConfigMgr->GetOption<bool>("AiPlayerbot.LimitProgressionTier", true);
+    // Clamped because the tier is handed around as a uint8: 256 would wrap to 0 and block everything,
+    // -1 to 255 and disable the cap entirely.
+    progressionTierCap = static_cast<uint32>(
+        std::clamp<int32>(sConfigMgr->GetOption<int32>("AiPlayerbot.ProgressionTierCap", IP_TIER_MAX), 0, IP_TIER_MAX));
     randombotStartingLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.RandombotStartingLevel", 1);
     enablePeriodicOnlineOffline = sConfigMgr->GetOption<bool>("AiPlayerbot.EnablePeriodicOnlineOffline", false);
     enableRandomBotTrading = sConfigMgr->GetOption<int32>("AiPlayerbot.EnableRandomBotTrading", 1);
