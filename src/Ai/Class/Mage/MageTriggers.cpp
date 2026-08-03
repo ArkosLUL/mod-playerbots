@@ -145,6 +145,14 @@ bool ImprovedScorchTrigger::IsActive()
     return DebuffTrigger::IsActive();
 }
 
+bool LivingBombOnAttackersTrigger::IsActive()
+{
+    if (AI_VALUE(uint8, "attacker count") > MAX_SPREAD_TARGETS)
+        return false;
+
+    return DebuffOnAttackerTrigger::IsActive();
+}
+
 const std::unordered_set<uint32> BlizzardChannelCheckTrigger::BLIZZARD_SPELL_IDS = {
     10,     // Blizzard Rank 1
     6141,   // Blizzard Rank 2

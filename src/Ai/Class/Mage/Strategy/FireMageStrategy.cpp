@@ -48,11 +48,13 @@ void FireMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // Proc Trigger
+    // Hot Streak lasts 10 s, so it survives the two GCDs it may take to refresh Improved Scorch and
+    // Living Bomb above - a dropped debuff does not come back. Keep Pyroblast below both.
     triggers.push_back(
         new TriggerNode(
             "hot streak",
             {
-                NextAction("pyroblast", 25.0f)
+                NextAction("pyroblast", 18.25f)
             }
         )
     );

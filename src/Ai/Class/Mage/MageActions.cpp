@@ -28,41 +28,9 @@ std::vector<NextAction> CastMageArmorAction::getAlternatives()
     return CastBuffSpellAction::getAlternatives();
 }
 
-bool UseManaSapphireAction::isUseful()
-{
-    Player* bot = botAI->GetBot();
-    return AI_VALUE2(bool, "combat", "self target") && bot->GetItemCount(33312, false) > 0;  // Mana Sapphire
-}
+bool UseManaGemAction::isUseful() { return AI_VALUE2(bool, "combat", "self target"); }
 
-bool UseManaEmeraldAction::isUseful()
-{
-    Player* bot = botAI->GetBot();
-    return AI_VALUE2(bool, "combat", "self target") && bot->GetItemCount(22044, false) > 0;  // Mana Emerald
-}
-
-bool UseManaRubyAction::isUseful()
-{
-    Player* bot = botAI->GetBot();
-    return AI_VALUE2(bool, "combat", "self target") && bot->GetItemCount(8008, false) > 0;  // Mana Ruby
-}
-
-bool UseManaCitrineAction::isUseful()
-{
-    Player* bot = botAI->GetBot();
-    return AI_VALUE2(bool, "combat", "self target") && bot->GetItemCount(8007, false) > 0;  // Mana Citrine
-}
-
-bool UseManaJadeAction::isUseful()
-{
-    Player* bot = botAI->GetBot();
-    return AI_VALUE2(bool, "combat", "self target") && bot->GetItemCount(5513, false) > 0;  // Mana Jade
-}
-
-bool UseManaAgateAction::isUseful()
-{
-    Player* bot = botAI->GetBot();
-    return AI_VALUE2(bool, "combat", "self target") && bot->GetItemCount(5514, false) > 0;  // Mana Agate
-}
+bool UseManaGemAction::isPossible() { return bot->GetItemCount(itemId, false) > 0; }
 
 bool CastFrostNovaAction::isUseful()
 {

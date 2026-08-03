@@ -115,6 +115,21 @@ public:
         : TwoTriggers(botAI, "arcane blast stack", "missile barrage") {}
 };
 
+// The conserve rotation dumps a stack early, at 3 Arcane Blasts instead of 4, because the 4th cast
+// costs 175 % extra mana per stack and Missile Barrage only procs 40 % of the time.
+class ArcaneBlastConserveStackTrigger : public HasAuraStackTrigger
+{
+public:
+    ArcaneBlastConserveStackTrigger(PlayerbotAI* botAI) : HasAuraStackTrigger(botAI, "arcane blast", 3, 1) {}
+};
+
+class ArcaneBlastConserveStackAndMediumManaTrigger : public TwoTriggers
+{
+public:
+    ArcaneBlastConserveStackAndMediumManaTrigger(PlayerbotAI* botAI)
+        : TwoTriggers(botAI, "arcane blast conserve stack", "medium mana") {}
+};
+
 class CombustionTrigger : public BoostTrigger
 {
 public:
@@ -205,18 +220,29 @@ public:
 
 // Damage and Debuff Triggers
 
+// Living Bomb has to be allowed to expire rather than refreshed - clipping it loses the explosion -
+// which the inherited presence-only aura check already does. The 12 s needLifeTime is the fuse: below
+// that the target dies before the explosion lands and only the DoT ticks are worth anything.
+constexpr float LIVING_BOMB_FUSE_SECONDS = 12.0f;
+
 class LivingBombTrigger : public DebuffTrigger
 {
 public:
-    LivingBombTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "living bomb", 1, true) {}
-    bool IsActive() override { return BuffTrigger::IsActive(); }
+    LivingBombTrigger(PlayerbotAI* botAI)
+        : DebuffTrigger(botAI, "living bomb", 1, true, LIVING_BOMB_FUSE_SECONDS) {}
 };
 
 class LivingBombOnAttackersTrigger : public DebuffOnAttackerTrigger
 {
 public:
-    LivingBombOnAttackersTrigger(PlayerbotAI* botAI) : DebuffOnAttackerTrigger(botAI, "living bomb", true) {}
-    bool IsActive() override { return BuffTrigger::IsActive(); }
+    LivingBombOnAttackersTrigger(PlayerbotAI* botAI)
+        : DebuffOnAttackerTrigger(botAI, "living bomb", true, LIVING_BOMB_FUSE_SECONDS) {}
+    bool IsActive() override;
+
+private:
+    // Spreading costs a GCD per target and the debuff only runs 12 s, so past a handful of attackers
+    // the spread can never finish and would lock out Flamestrike/Blizzard for the whole pull.
+    static constexpr uint8 MAX_SPREAD_TARGETS = 5;
 };
 
 class FireballTrigger : public DebuffTrigger

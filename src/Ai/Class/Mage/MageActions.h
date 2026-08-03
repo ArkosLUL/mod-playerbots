@@ -176,45 +176,59 @@ public:
     CastConjureWaterAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "conjure water") {}
 };
 
-class UseManaSapphireAction : public UseItemAction
+// Each gem rank falls back to the one below it through the ActionNode alternative chain, and the
+// engine only walks that chain when an action reports IMPOSSIBLE - a USELESS node is dropped outright
+// (Engine::DoNextAction). So "the gem is not in the bags" has to be an isPossible() answer, never an
+// isUseful() one, or a mage holding an older gem than the rank it can conjure uses nothing at all.
+class UseManaGemAction : public UseItemAction
 {
 public:
-    UseManaSapphireAction(PlayerbotAI* botAI) : UseItemAction(botAI, "mana sapphire") {}
+    UseManaGemAction(PlayerbotAI* botAI, std::string const name, uint32 itemId)
+        : UseItemAction(botAI, name), itemId(itemId)
+    {
+    }
+
     bool isUseful() override;
-};
-class UseManaEmeraldAction : public UseItemAction
-{
-public:
-    UseManaEmeraldAction(PlayerbotAI* botAI) : UseItemAction(botAI, "mana emerald") {}
-    bool isUseful() override;
+    bool isPossible() override;
+
+private:
+    uint32 itemId;
 };
 
-class UseManaRubyAction : public UseItemAction
+class UseManaSapphireAction : public UseManaGemAction
 {
 public:
-    UseManaRubyAction(PlayerbotAI* botAI) : UseItemAction(botAI, "mana ruby") {}
-    bool isUseful() override;
+    UseManaSapphireAction(PlayerbotAI* botAI) : UseManaGemAction(botAI, "mana sapphire", 33312) {}
 };
 
-class UseManaCitrineAction : public UseItemAction
+class UseManaEmeraldAction : public UseManaGemAction
 {
 public:
-    UseManaCitrineAction(PlayerbotAI* botAI) : UseItemAction(botAI, "mana citrine") {}
-    bool isUseful() override;
+    UseManaEmeraldAction(PlayerbotAI* botAI) : UseManaGemAction(botAI, "mana emerald", 22044) {}
 };
 
-class UseManaJadeAction : public UseItemAction
+class UseManaRubyAction : public UseManaGemAction
 {
 public:
-    UseManaJadeAction(PlayerbotAI* botAI) : UseItemAction(botAI, "mana jade") {}
-    bool isUseful() override;
+    UseManaRubyAction(PlayerbotAI* botAI) : UseManaGemAction(botAI, "mana ruby", 8008) {}
 };
 
-class UseManaAgateAction : public UseItemAction
+class UseManaCitrineAction : public UseManaGemAction
 {
 public:
-    UseManaAgateAction(PlayerbotAI* botAI) : UseItemAction(botAI, "mana agate") {}
-    bool isUseful() override;
+    UseManaCitrineAction(PlayerbotAI* botAI) : UseManaGemAction(botAI, "mana citrine", 8007) {}
+};
+
+class UseManaJadeAction : public UseManaGemAction
+{
+public:
+    UseManaJadeAction(PlayerbotAI* botAI) : UseManaGemAction(botAI, "mana jade", 5513) {}
+};
+
+class UseManaAgateAction : public UseManaGemAction
+{
+public:
+    UseManaAgateAction(PlayerbotAI* botAI) : UseManaGemAction(botAI, "mana agate", 5514) {}
 };
 
 // CC, Interrupt, and Dispel Actions
@@ -303,11 +317,12 @@ public:
     CastFireBlastAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "fire blast") {}
 };
 
-class CastArcaneBlastAction : public CastBuffSpellAction
+// Arcane Blast puts its stacking buff on the caster, not the target, so there is no aura on the
+// enemy to check - a plain CastSpellAction, not one of the aura-aware variants.
+class CastArcaneBlastAction : public CastSpellAction
 {
 public:
-    CastArcaneBlastAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "arcane blast") {}
-    std::string const GetTargetName() override { return "current target"; }
+    CastArcaneBlastAction(PlayerbotAI* botAI) : CastSpellAction(botAI, "arcane blast") {}
 };
 
 class CastArcaneBarrageAction : public CastSpellAction

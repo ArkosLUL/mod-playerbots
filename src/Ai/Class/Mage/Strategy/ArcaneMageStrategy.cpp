@@ -61,4 +61,15 @@ void ArcaneMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+
+    // Below 40 % mana, stop waiting on a Missile Barrage proc that may never come and dump the stack
+    // one cast early. Outranks the node above so the conserve rotation wins when both are active.
+    triggers.push_back(
+        new TriggerNode(
+            "arcane blast conserve stack and medium mana",
+            {
+                NextAction("arcane missiles", 15.5f)
+            }
+        )
+    );
 }

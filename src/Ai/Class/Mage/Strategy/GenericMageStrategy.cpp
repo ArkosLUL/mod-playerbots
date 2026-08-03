@@ -32,6 +32,11 @@ public:
         creators["remove curse"] = &remove_curse;
         creators["remove curse on party"] = &remove_curse_on_party;
         creators["fireball"] = &fireball;
+        creators["use mana sapphire"] = &use_mana_sapphire;
+        creators["use mana emerald"] = &use_mana_emerald;
+        creators["use mana ruby"] = &use_mana_ruby;
+        creators["use mana citrine"] = &use_mana_citrine;
+        creators["use mana jade"] = &use_mana_jade;
     }
 
 private:
@@ -81,6 +86,48 @@ private:
                               /*A*/ { NextAction("shoot") },
                               /*C*/ {});
     }
+
+    // The gem node is picked from the highest Conjure rank the bot knows, but the bags may hold an
+    // older gem instead, so each rank falls back to the one below it.
+    static ActionNode* use_mana_sapphire([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("use mana sapphire",
+                              /*P*/ {},
+                              /*A*/ { NextAction("use mana emerald") },
+                              /*C*/ {});
+    }
+
+    static ActionNode* use_mana_emerald([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("use mana emerald",
+                              /*P*/ {},
+                              /*A*/ { NextAction("use mana ruby") },
+                              /*C*/ {});
+    }
+
+    static ActionNode* use_mana_ruby([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("use mana ruby",
+                              /*P*/ {},
+                              /*A*/ { NextAction("use mana citrine") },
+                              /*C*/ {});
+    }
+
+    static ActionNode* use_mana_citrine([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("use mana citrine",
+                              /*P*/ {},
+                              /*A*/ { NextAction("use mana jade") },
+                              /*C*/ {});
+    }
+
+    static ActionNode* use_mana_jade([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("use mana jade",
+                              /*P*/ {},
+                              /*A*/ { NextAction("use mana agate") },
+                              /*C*/ {});
+    }
 };
 
 GenericMageStrategy::GenericMageStrategy(PlayerbotAI* botAI) : RangedCombatStrategy(botAI)
@@ -105,6 +152,8 @@ void GenericMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("enemy too close for spell and no firestarter strategy", { NextAction("blink back", 35.0f) }));
 
     // Mana Threshold Triggers
+    // "high mana" fires *below* AiPlayerbot.HighMana (65 %) despite the name - it is the gem
+    // threshold, not a full-mana check. Each node falls back down the gem ranks if the bag is empty.
     Player* bot = botAI->GetBot();
     if (bot->HasSpell(SPELL_CONJURE_MANA_SAPPHIRE))
         triggers.push_back(new TriggerNode("high mana", { NextAction("use mana sapphire", 90.0f) }));
@@ -203,7 +252,11 @@ void MageAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
         triggers.push_back(new TriggerNode("flamestrike active and medium aoe", { NextAction("blizzard", 24.0f) }));
         triggers.push_back(new TriggerNode("firestarter", { NextAction("flamestrike", 40.0f) }));
-        triggers.push_back(new TriggerNode("living bomb on attackers", { NextAction("living bomb on attackers", 21.0f) }));
+        // Spreading Living Bomb outranks every AoE spell except a free Firestarter Flamestrike, but
+        // the trigger caps itself by attacker count so big pulls still fall through to
+        // Flamestrike/Blizzard, and it skips targets that would die before the explosion.
+        triggers.push_back(
+            new TriggerNode("living bomb on attackers", { NextAction("living bomb on attackers", 39.5f) }));
     }
     else if (tab == MAGE_TAB_FROST)
     {

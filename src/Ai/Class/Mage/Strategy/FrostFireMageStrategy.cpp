@@ -7,12 +7,13 @@
 #include "FrostFireMageStrategy.h"
 #include "Playerbots.h"
 
-FrostFireMageStrategy::FrostFireMageStrategy(PlayerbotAI* botAI) : GenericMageStrategy(botAI)
+FrostFireMageStrategy::FrostFireMageStrategy(PlayerbotAI* botAI) : FireMageStrategy(botAI)
 {
     // No custom ActionNodeFactory needed
 }
 
 // ===== Default Actions =====
+// Only the filler differs from Fire; InitTriggers is inherited.
 std::vector<NextAction> FrostFireMageStrategy::getDefaultActions()
 {
     return {
@@ -20,38 +21,4 @@ std::vector<NextAction> FrostFireMageStrategy::getDefaultActions()
         NextAction("fire blast", 5.1f),  // cast during movement
         NextAction("shoot", 5.0f)
     };
-}
-
-// ===== Trigger Initialization =====
-void FrostFireMageStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-{
-    GenericMageStrategy::InitTriggers(triggers);
-
-    // Debuff Triggers
-    triggers.push_back(
-        new TriggerNode(
-            "improved scorch",
-            {
-                NextAction("scorch", 19.0f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "living bomb",
-            {
-                NextAction("living bomb", 18.5f)
-            }
-        )
-    );
-
-    // Proc Trigger
-    triggers.push_back(
-        new TriggerNode(
-            "hot streak",
-            {
-                NextAction("pyroblast", 25.0f)
-            }
-        )
-    );
 }

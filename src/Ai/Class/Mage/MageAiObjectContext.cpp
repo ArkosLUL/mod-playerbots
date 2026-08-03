@@ -117,6 +117,8 @@ public:
         creators["flamestrike nearby"] = &MageTriggerFactoryInternal::flamestrike_nearby;
         creators["flamestrike active and medium aoe"] = &MageTriggerFactoryInternal::flamestrike_blizzard;
         creators["arcane blast 4 stacks and missile barrage"] = &MageTriggerFactoryInternal::arcane_blast_4_stacks_and_missile_barrage;
+        creators["arcane blast conserve stack"] = &MageTriggerFactoryInternal::arcane_blast_conserve_stack;
+        creators["arcane blast conserve stack and medium mana"] = &MageTriggerFactoryInternal::arcane_blast_conserve_stack_and_medium_mana;
         creators["icy veins on cd"] = &MageTriggerFactoryInternal::icy_veins_on_cd;
         creators["deep freeze on cd"] = &MageTriggerFactoryInternal::deep_freeze_on_cd;
         creators["no mana gem"] = &MageTriggerFactoryInternal::NoManaGem;
@@ -167,6 +169,8 @@ private:
     static Trigger* flamestrike_nearby(PlayerbotAI* botAI) { return new FlamestrikeNearbyTrigger(botAI); }
     static Trigger* flamestrike_blizzard(PlayerbotAI* botAI) { return new FlamestrikeBlizzardTrigger(botAI); }
     static Trigger* arcane_blast_4_stacks_and_missile_barrage(PlayerbotAI* botAI) { return new ArcaneBlast4StacksAndMissileBarrageTrigger(botAI); }
+    static Trigger* arcane_blast_conserve_stack(PlayerbotAI* botAI) { return new ArcaneBlastConserveStackTrigger(botAI); }
+    static Trigger* arcane_blast_conserve_stack_and_medium_mana(PlayerbotAI* botAI) { return new ArcaneBlastConserveStackAndMediumManaTrigger(botAI); }
     static Trigger* icy_veins_on_cd(PlayerbotAI* botAI) { return new IcyVeinsCooldownTrigger(botAI); }
     static Trigger* deep_freeze_on_cd(PlayerbotAI* botAI) { return new DeepFreezeCooldownTrigger(botAI); }
     static Trigger* NoManaGem(PlayerbotAI* botAI) { return new NoManaGemTrigger(botAI); }

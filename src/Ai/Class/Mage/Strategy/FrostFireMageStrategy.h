@@ -7,16 +7,16 @@
 #ifndef PLAYERBOTS_FROSTFIREMAGESTRATEGY_H
 #define PLAYERBOTS_FROSTFIREMAGESTRATEGY_H
 
-#include "GenericMageStrategy.h"
+#include "FireMageStrategy.h"
 
 class PlayerbotAI;
 
-class FrostFireMageStrategy : public GenericMageStrategy
+// Frostfire is a Fire build with a different filler, so it inherits Fire's whole trigger list.
+class FrostFireMageStrategy : public FireMageStrategy
 {
 public:
     FrostFireMageStrategy(PlayerbotAI* botAI);
 
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
     std::string const getName() override { return "frostfire"; }
     std::vector<NextAction> getDefaultActions() override;
 };
