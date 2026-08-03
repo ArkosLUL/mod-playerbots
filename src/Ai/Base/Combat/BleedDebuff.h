@@ -10,8 +10,9 @@
 class Player;
 class Unit;
 
-// Any bleed on the target, whoever applied it. Matches on MECHANIC_BLEED rather than a spell list, so
-// Rend, Deep Wounds, Rip, Rake, Lacerate, Garrote and Rupture all count without maintenance.
+// Any bleed on the target, whoever applied it. Reads the core's AURA_STATE_BLEEDING flag rather than a
+// spell list, so Rend, Deep Wounds, Rip, Rake, Lacerate, Garrote and Rupture all count without
+// maintenance.
 bool TargetHasBleed(Unit* target);
 
 // True when a group member other than the bot is the one bleeding the target. Pets are not resolved

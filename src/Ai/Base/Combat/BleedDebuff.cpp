@@ -27,22 +27,18 @@ bool IsBleed(Aura const* aura)
 
 bool TargetHasBleed(Unit* target)
 {
-    if (!target)
-        return false;
-
-    Unit::AuraApplicationMap const& auras = target->GetAppliedAuras();
-    for (Unit::AuraApplicationMap::const_iterator itr = auras.begin(); itr != auras.end(); ++itr)
-    {
-        if (IsBleed(itr->second->GetBase()))
-            return true;
-    }
-
-    return false;
+    // The core keeps a bleeding flag in UNIT_FIELD_AURASTATE on every aura apply and remove, so this
+    // costs one bit test instead of a walk over the aura map. AURA_STATE_BLEEDING is not per-caster,
+    // hence no caster argument.
+    return target && target->HasAuraState(AURA_STATE_BLEEDING);
 }
 
 bool GroupSuppliesBleedOn(Player* bot, Unit* target)
 {
     if (!bot || !target)
+        return false;
+
+    if (!target->HasAuraState(AURA_STATE_BLEEDING))
         return false;
 
     Group* group = bot->GetGroup();
@@ -57,7 +53,8 @@ bool GroupSuppliesBleedOn(Player* bot, Unit* target)
             continue;
 
         ObjectGuid casterGuid = aura->GetCasterGUID();
-        if (casterGuid == bot->GetGUID())
+        // Group::IsMember walks a member list, so drop creature and pet casters before paying for it.
+        if (!casterGuid.IsPlayer() || casterGuid == bot->GetGUID())
             continue;
 
         if (group->IsMember(casterGuid))

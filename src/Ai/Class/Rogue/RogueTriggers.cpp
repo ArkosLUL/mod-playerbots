@@ -161,9 +161,14 @@ bool EnvenomTrigger::IsActive()
 
 bool ExposeArmorTrigger::IsActive()
 {
+    // Cheapest predicate first: it rejects most evaluations before the name-based aura lookups below,
+    // which are the expensive part.
+    if (AI_VALUE2(uint8, "combo", "current target") > 3)
+        return false;
+
     Unit* target = AI_VALUE(Unit*, "current target");
     return DebuffTrigger::IsActive() && !TargetHasMajorArmorDebuff(botAI, target) &&
-           !GroupSuppliesMajorArmorDebuff(bot) && AI_VALUE2(uint8, "combo", "current target") <= 3;
+           !GroupSuppliesMajorArmorDebuff(bot);
 }
 
 bool MainHandWeaponNoEnchantTrigger::IsActive()
