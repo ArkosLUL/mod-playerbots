@@ -801,6 +801,9 @@ float StatsWeightCalculator::BestGemScore(uint8 socketColor)
 
     // CalculateEnchant calls Reset(), which would wipe the weight and collector state of the
     // in-flight CalculateItem, so score the candidate gems on a throwaway calculator.
+    // Cap priority is deliberately left off here: an under-cap tank would re-rank whole gear pieces
+    // on their socket value and churn gear as it crosses the cap. The estimate is a little low for
+    // that bot until it is crit-immune.
     StatsWeightCalculator gemCalculator(player_);
     gemCalculator.SetPvpSpec(pvpSpec_);
     gemCalculator.SetExcludeResilience(exclude_resilience_);
@@ -1078,6 +1081,16 @@ void StatsWeightCalculator::ApplyWeightFinetune(Player* player)
             if (armor_penetration_current > 50)
                 stats_weights_[STATS_TYPE_ARMOR_PENETRATION] *= 1.2f;
         }
+    }
+
+    // A tank short of 540 defense is taking crits, which no amount of stamina fixes. Outweigh the
+    // stamina gems until the cap is reached; ApplyOverflowPenalty caps the stat at what is still
+    // missing, so the last gem before the cap is only worth the part that counts.
+    // Bears are exempt: Survival of the Fittest grants crit immunity, so they never chase the cap.
+    if (enable_cap_priority_ && (type_ & CollectorType::MELEE_TANK) && cls != CLASS_DRUID &&
+        player->GetRatingBonusValue(CR_DEFENSE_SKILL) < DEFENSE_OVERFLOW)
+    {
+        stats_weights_[STATS_TYPE_DEFENSE] = std::max(stats_weights_[STATS_TYPE_DEFENSE], DEFENSE_UNDERCAP_WEIGHT);
     }
 }
 

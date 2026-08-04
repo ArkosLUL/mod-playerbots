@@ -483,6 +483,11 @@ void PlayerbotFactory::Init()
         if (id == 29467 || id == 29475 || id == 29480 || id == 29483) // Naxx40 Sapphiron Shoulder Enchants
             continue;
 
+        // Dragonscale / Wyrmscale Leg Armor. Their crafts (50968/50969) have no trainer and no
+        // pattern, so no player can ever wear these.
+        if (id == 50911 || id == 50913)
+            continue;
+
         SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(id);
         if (!spellInfo)
             continue;
@@ -5248,6 +5253,10 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         availableGems.push_back(enchantGem);
     }
     StatsWeightCalculator calculator(bot);
+    // Gems and enchants are the cheap way to reach the defense cap, and each one is applied to the
+    // bot before the next socket is scored, so an under-cap tank steers itself back to stamina as
+    // soon as it is crit-immune.
+    calculator.SetCapPriority(true);
 
     struct SocketToGem
     {

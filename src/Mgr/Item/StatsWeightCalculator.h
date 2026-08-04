@@ -26,6 +26,11 @@ enum StatsOverflowThreshold
     ARMOR_PENETRATION_OVERFLOW = 100
 };
 
+// Weight defense gets while a tank is short of the 540 cap: crit immunity is a hard requirement, so
+// a defense gem has to outscore a stamina one outright. ApplyOverflowPenalty trims the stat to what
+// is still missing, so the boost fades out on its own once the cap is in reach.
+constexpr float DEFENSE_UNDERCAP_WEIGHT = 10.0f;
+
 enum SmartStatFlag : uint32
 {
     SMARTSTAT_NONE = 0,
@@ -62,6 +67,10 @@ public:
     void SetReplacedItemSet(uint32 setId) { replaced_item_set_ = setId; }
     void SetQualityBlend(bool apply) { enable_quality_blend_ = apply; }
     void SetPvpSpec(bool isPvp) { pvpSpec_ = isPvp; }
+    // Only for scoring things a bot can swap freely (gems, enchants): lets an under-cap tank spend
+    // sockets on defense. Leave it off for whole-item scoring, or gear picks flip as the cap is
+    // crossed.
+    void SetCapPriority(bool apply) { enable_cap_priority_ = apply; }
     void SetExcludeResilience(bool exclude) { exclude_resilience_ = exclude; }
 
     private:
@@ -102,6 +111,7 @@ private:
     bool enable_overflow_penalty_;
     bool enable_item_set_bonus_;
     bool enable_quality_blend_;
+    bool enable_cap_priority_ = false;
     uint32 replaced_item_set_ = 0;
 
     float weight_;
