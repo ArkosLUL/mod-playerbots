@@ -181,6 +181,7 @@ public:
         creators["stoneform"] = &ActionContext::stoneform;
         creators["escape artist"] = &ActionContext::escape_artist;
         creators["use trinket"] = &ActionContext::use_trinket;
+        creators["use tinker"] = &ActionContext::use_tinker;
         creators["auto talents"] = &ActionContext::auto_talents;
         creators["auto share quest"] = &ActionContext::auto_share_quest;
         creators["auto maintenance on levelup"] = &ActionContext::auto_maintenance_on_levelup;
@@ -393,6 +394,7 @@ private:
     static Action* stoneform(PlayerbotAI* botAI) { return new CastStoneformAction(botAI); }
     static Action* escape_artist(PlayerbotAI* botAI) { return new CastEscapeArtistAction(botAI); }
     static Action* use_trinket(PlayerbotAI* botAI) { return new UseTrinketAction(botAI); }
+    static Action* use_tinker(PlayerbotAI* botAI) { return new UseTinkerAction(botAI); }
     static Action* auto_talents(PlayerbotAI* botAI) { return new AutoSetTalentsAction(botAI); }
     static Action* auto_share_quest(PlayerbotAI* ai) { return new AutoShareQuestAction(ai); }
     static Action* auto_maintenance_on_levelup(PlayerbotAI* botAI) { return new AutoMaintenanceOnLevelupAction(botAI); }

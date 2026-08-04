@@ -5433,6 +5433,15 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                     if (enchant->requiredLevel > bot->GetLevel())
                         continue;
 
+                    // Tailoring's exclusive embroideries are meant to own the cloak slot, but the
+                    // engineering cloak tinkers are a parachute with a stat rider big enough to beat
+                    // them on raw score. Leave the slot to tailoring (or a normal enchant).
+                    if (enchant->requiredSkill == SKILL_ENGINEERING &&
+                        item->GetTemplate()->InventoryType == INVTYPE_CLOAK)
+                    {
+                        continue;
+                    }
+
                     float score = calculator.CalculateEnchant(enchant_id);
                     // Strict compare: bestScore starts at 0, so >= would let the last worthless
                     // enchant of the scan win the slot purely on iteration order.

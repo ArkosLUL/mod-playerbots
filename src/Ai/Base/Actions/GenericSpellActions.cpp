@@ -16,6 +16,7 @@
 #include "Player.h"
 #include "Playerbots.h"
 #include "ServerFacade.h"
+#include "TinkerUtils.h"
 #include "WorldPacket.h"
 #include "Group.h"
 #include "Chat.h"
@@ -660,6 +661,78 @@ bool UseTrinketAction::UseTrinket(Item* item)
             trinketCategoryCooldownExpiries[itemSpellCategory] = now + static_cast<uint32>(itemSpellCategoryCooldown);
         }
     }
+
+    return true;
+}
+
+bool UseTinkerAction::Execute(Event /*event*/)
+{
+    // Every gear enchant with an on-use spell is an engineering tinker, so skip the enchantment
+    // scan entirely for the bots that can never have one.
+    if (!bot->HasSkill(SKILL_ENGINEERING))
+        return false;
+
+    static uint8 const tinkerSlots[] = {EQUIPMENT_SLOT_HANDS, EQUIPMENT_SLOT_WAIST, EQUIPMENT_SLOT_FEET,
+                                        EQUIPMENT_SLOT_HEAD, EQUIPMENT_SLOT_BACK};
+
+    for (uint8 slot : tinkerSlots)
+    {
+        if (Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot))
+        {
+            if (UseTinker(item))
+                return true;
+        }
+    }
+
+    return false;
+}
+
+bool UseTinkerAction::UseTinker(Item* item)
+{
+    if (bot->CanUseItem(item) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(true))
+        return false;
+
+    uint32 const spellId = ai::tinker::GetUsableTinkerSpell(item);
+    if (!spellId)
+        return false;
+
+    uint32 const now = getMSTime();
+    auto const cooldownItr = tinkerCooldownExpiries.find(spellId);
+    if (cooldownItr != tinkerCooldownExpiries.end())
+    {
+        if (cooldownItr->second > now)
+            return false;
+
+        tinkerCooldownExpiries.erase(cooldownItr);
+    }
+
+    if (HasSpellOrCategoryCooldown(bot, spellId))
+        return false;
+
+    if (!botAI->CanCastSpell(spellId, bot, false, nullptr, item))
+        return false;
+
+    uint8 const bagIndex = item->GetBagSlot();
+    uint8 const slot = item->GetSlot();
+    uint8 const cast_count = 1;
+    ObjectGuid const item_guid = item->GetGUID();
+    uint32 const glyphIndex = 0;
+    uint8 const castFlags = 0;
+    uint32 const targetFlag = TARGET_FLAG_NONE;
+
+    WorldPacket packet(CMSG_USE_ITEM);
+    packet << bagIndex << slot << cast_count << spellId << item_guid << glyphIndex << castFlags;
+    packet << targetFlag << bot->GetPackGUID();
+
+    bot->GetSession()->HandleUseItemOpcode(packet);
+
+    // Enchant spells are not in the bot's spellbook, so if the DBC carries no recovery time the
+    // server-side cooldown comes back as 0 and the bot would retry every tick.
+    uint32 cooldownDelay = bot->GetSpellCooldownDelay(spellId);
+    if (!cooldownDelay)
+        cooldownDelay = ai::tinker::GetTinkerCooldownMs(spellId);
+
+    tinkerCooldownExpiries[spellId] = now + cooldownDelay;
 
     return true;
 }

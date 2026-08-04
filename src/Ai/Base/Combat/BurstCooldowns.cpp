@@ -21,7 +21,7 @@ namespace
     // class strategies put into NextAction(...).
     std::unordered_set<std::string> const burstCooldownNames = {
         // raid-wide, racial and item
-        "bloodlust", "heroism", "berserking", "blood fury", "use trinket",
+        "bloodlust", "heroism", "berserking", "blood fury", "use trinket", "use tinker",
         // warrior
         "recklessness", "death wish",
         // rogue

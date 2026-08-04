@@ -356,6 +356,19 @@ private:
     std::unordered_map<uint32, uint32> trinketCategoryCooldownExpiries;
 };
 
+class UseTinkerAction : public Action
+{
+public:
+    UseTinkerAction(PlayerbotAI* botAI) : Action(botAI, "use tinker") {}
+    bool Execute(Event event) override;
+
+protected:
+    bool UseTinker(Item* item);
+
+private:
+    std::unordered_map<uint32, uint32> tinkerCooldownExpiries;
+};
+
 class CastSpellOnEnemyHealerAction : public CastSpellAction
 {
 public:

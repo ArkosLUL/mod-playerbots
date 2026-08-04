@@ -105,4 +105,7 @@ void RacialsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "generic boost", { NextAction("use trinket", ACTION_NORMAL + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "generic boost", { NextAction("use tinker", ACTION_NORMAL + 4) }));
 }

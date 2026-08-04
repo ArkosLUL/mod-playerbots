@@ -31,9 +31,10 @@ profession list for gear enhancement.
 | Profession | Enhancement | Status | Blocking gap |
 |---|---|---|---|
 | Enchanting | Ring enchants (Assault, Greater Spellpower, Stamina) | **Works** | — |
-| Engineering | Hyperspeed Accelerators, Hand-Mounted Pyro Rocket (pure on-use enchants) | Never applied, left that way | Gap 2 (scoring) |
-| Engineering | Nitro Boosts | Scored on its STAT half (+24 crit) only | Gap 2 (on-use half) |
-| Engineering | Flexweave Underlay, Springy Arachnoweave (equip enchants) | Scored generically | — |
+| Engineering | Hyperspeed Accelerators | Applied and used — see item 2 | — |
+| Engineering | Hand-Mounted Pyro Rocket | Never applied (damage-only, so it scores 0) | — |
+| Engineering | Nitro Boosts | Scored on its STAT half (+24 crit) only | — |
+| Engineering | Flexweave Underlay, Springy Arachnoweave (equip enchants) | Never applied — the cloak slot is reserved for tailoring | — |
 | Tailoring | Lightweave / Darkglow / Swordguard Embroidery | Scored generically | — |
 | Leatherworking | Fur Lining (bracers) | Scored generically | — |
 | Blacksmithing | Socket Bracer / Socket Gloves | Impossible | Gap 3 (prismatic) |
@@ -140,19 +141,23 @@ expansion maximum rather than `level * 5`. Derive from `sWorld->getIntConfig(CON
 
 Unblocks Master's Inscription and leaves headroom for the rest.
 
-### 2. Score on-use enchants — DROPPED
+### 2. Score on-use enchants — DROPPED, then reopened
 
 Scoring `ITEM_ENCHANTMENT_TYPE_USE_SPELL` in `StatsCollector::CollectEnchantStats` was implemented
-and then reverted. Reason: nothing in the module ever casts an enchant's on-use spell.
-`CastItemUseSpell` is unreachable for bots, and `UseTrinketAction` only reads `ItemTemplate->Spells[]`
-on trinket slots — neither path looks at enchantments. Scoring the tinker therefore made an
-Engineering bot trade a real stat enchant for a button nobody presses.
+and then reverted. Reason: nothing in the module ever cast an enchant's on-use spell, so scoring the
+tinker made an Engineering bot trade a real stat enchant for a button nobody presses. The stated way
+back in was to give bots an action that fires those spells, and only then re-add the scoring.
 
-Two ways to revisit: give bots an action that fires on-use enchant spells (then re-add the scoring),
-or leave tinkers out. Until the former exists, the latter is strictly better gear.
+That is what `docs/engineering-tinkers/engineering-tinkers.PLAN.md` did. `UseTinkerAction` walks the
+equipped gear slots, reads `ITEM_ENCHANTMENT_TYPE_USE_SPELL` off each enchantment and fires it with
+the same `CMSG_USE_ITEM` packet `UseTrinketAction` uses; `CollectEnchantStats` now scores those
+spells, amortized by cooldown. Both sides share `ai::tinker::IsUsableTinkerSpell`, so only tinkers
+granting a combat stat aura count — grenades, parachutes and sprints still score 0 and are never
+pressed.
 
-A `// ITEM_ENCHANTMENT_TYPE_USE_SPELL ... stays unscored on purpose` comment marks the spot in
-`CollectEnchantStats` so this doesn't get re-added blind.
+One claim in the original write-up was wrong and is worth flagging: `CastItemUseSpell` is **not**
+unreachable for bots. `UseTrinketAction` already reaches it, and `WorldSession::HandleUseItemOpcode`
+does not validate the packet's `spellId` against `ItemTemplate->Spells[]`.
 
 Shipped from this item: the tie-break in `ApplyEnchantAndGemsNew` is now `score > bestScore`, so a
 0-score enchant can no longer win a slot by iteration order.

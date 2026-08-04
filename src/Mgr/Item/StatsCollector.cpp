@@ -14,6 +14,7 @@
 #include "SpellAuraDefines.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "TinkerUtils.h"
 #include "Util.h"
 
 StatsCollector::StatsCollector(CollectorType type, int32 cls, uint32 schoolMask)
@@ -246,9 +247,17 @@ void StatsCollector::CollectEnchantStats(SpellItemEnchantmentEntry const* enchan
                 CollectSpellStats(enchant_spell_id, 1.0f);
                 break;
             }
-            // ITEM_ENCHANTMENT_TYPE_USE_SPELL (Engineering tinkers) stays unscored on purpose: nothing
-            // in the module ever fires an enchant's on-use spell, so a bot that picked one over a stat
-            // enchant would just walk around with an empty slot's worth of stats.
+            case ITEM_ENCHANTMENT_TYPE_USE_SPELL:
+            {
+                // Only score the tinkers UseTinkerAction will press. Anything else would trade a
+                // stat enchant for a button nobody uses.
+                if (!ai::tinker::IsUsableTinkerSpell(enchant_spell_id))
+                    break;
+
+                CollectSpellStats(enchant_spell_id, 1.0f,
+                                  Milliseconds(ai::tinker::GetTinkerCooldownMs(enchant_spell_id)));
+                break;
+            }
             case ITEM_ENCHANTMENT_TYPE_STAT:
             {
                 // for item random suffix
