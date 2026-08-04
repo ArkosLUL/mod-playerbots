@@ -315,13 +315,10 @@ bool ArchimondeBossEngagedByMainTankTrigger::IsActive()
     return archimonde && archimonde->GetHealthPct() > 95.0f;
 }
 
-bool ArchimondeBossCastsFearTrigger::IsActive()
+bool ArchimondeFearWindowActive(PlayerbotAI* botAI)
 {
-    if (bot->getClass() != CLASS_PRIEST &&
-        bot->getClass() != CLASS_SHAMAN)
-        return false;
+    Unit* archimonde = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "archimonde")->Get();
 
-    Unit* archimonde = AI_VALUE2(Unit*, "find target", "archimonde");
     return archimonde && archimonde->GetHealthPct() > 10.0f;
 }
 

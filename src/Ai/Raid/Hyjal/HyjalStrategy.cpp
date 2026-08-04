@@ -135,4 +135,5 @@ void RaidHyjalSummitStrategy::InitMultipliers(std::vector<Multiplier*>& multipli
 
     // Archimonde
     multipliers.push_back(new ArchimondeDisableCombatFormationMoveMultiplier(botAI));
+    multipliers.push_back(new ArchimondeAntiFearTotemGuardMultiplier(botAI));
 }

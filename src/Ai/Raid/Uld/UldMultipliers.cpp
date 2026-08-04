@@ -273,3 +273,9 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
 
     return {};
 }
+
+// Both of these run behind the base class's shaman and totem-action checks, so the encounter lookup
+// only happens for the handful of actions that could take the earth slot.
+bool AuriayaAntiFearTotemGuardMultiplier::FearWindowActive() { return AuriayaFearWindowActive(botAI); }
+
+bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }

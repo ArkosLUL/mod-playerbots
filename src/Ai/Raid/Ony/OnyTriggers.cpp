@@ -12,6 +12,12 @@
 #include "Playerbots.h"
 #include "NearestNpcsValue.h"
 
+bool OnyxiaBellowingRoarWindowActive(PlayerbotAI* botAI)
+{
+    Unit* boss = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "onyxia")->Get();
+    return boss && boss->IsAlive() && boss->GetHealthPct() <= ONYXIA_PHASE_3_HEALTH_PCT;
+}
+
 OnyxiaDeepBreathTrigger::OnyxiaDeepBreathTrigger(PlayerbotAI* botAI) : Trigger(botAI, "ony deep breath warning") {}
 
 bool OnyxiaDeepBreathTrigger::IsActive()
@@ -114,3 +120,7 @@ bool OnyxiaAvoidEggsTrigger::IsActive()
 
     return false;
 }
+
+OnyxiaAntiFearTrigger::OnyxiaAntiFearTrigger(PlayerbotAI* botAI) : RaidAntiFearTrigger(botAI, "ony anti fear trigger") {}
+
+bool OnyxiaAntiFearTrigger::FearWindowActive() { return OnyxiaBellowingRoarWindowActive(botAI); }

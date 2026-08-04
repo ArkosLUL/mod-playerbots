@@ -215,6 +215,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "auriaya mark dps target trigger",
         { NextAction("auriaya mark dps target action", ACTION_RAID) }));
 
+    triggers.push_back(new TriggerNode(
+        "auriaya anti fear trigger",
+        { NextAction("auriaya anti fear action", ACTION_RAID + 2) }));
+
     //
     // Hodir
     //
@@ -445,6 +449,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron malady of the mind action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
+        "yogg-saron anti fear trigger",
+        { NextAction("yogg-saron anti fear action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
         "yogg-saron mark target trigger",
         { NextAction("yogg-saron mark target action", ACTION_RAID) }));
 
@@ -544,4 +552,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Hold the burst cooldowns on the bosses whose DPS check is not the pull
     multipliers.push_back(new UlduarBurstWindowMultiplier(botAI));
+
+    // Keep Tremor Totem in the earth slot for as long as these two can fear
+    multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));
+    multipliers.push_back(new YoggSaronAntiFearTotemGuardMultiplier(botAI));
 }

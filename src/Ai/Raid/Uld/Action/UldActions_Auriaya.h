@@ -8,6 +8,7 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidAntiFear.h"
 #include "UldBossHelper.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
@@ -41,6 +42,15 @@ public:
     AuriayaMarkDpsTargetAction(PlayerbotAI* botAI) : Action(botAI, "auriaya mark dps target action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+};
+
+class AuriayaAntiFearAction : public RaidAntiFearAction
+{
+public:
+    AuriayaAntiFearAction(PlayerbotAI* botAI) : RaidAntiFearAction(botAI, "auriaya anti fear action") {}
+
+protected:
+    bool FearWindowActive() override { return AuriayaFearWindowActive(botAI); }
 };
 
 #endif

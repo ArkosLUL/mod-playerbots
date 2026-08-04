@@ -9,7 +9,13 @@
 #define PLAYERBOTS_ONYTRIGGERS_H
 
 #include "PlayerbotAI.h"
+#include "RaidAntiFear.h"
 #include "Trigger.h"
+
+constexpr float ONYXIA_PHASE_3_HEALTH_PCT = 40.0f;
+
+// True while Bellowing Roar (18431) can land, i.e. from the phase 3 landing at 40% onwards.
+bool OnyxiaBellowingRoarWindowActive(PlayerbotAI* botAI);
 
 // Mechanics
 class OnyxiaDeepBreathTrigger : public Trigger
@@ -45,6 +51,15 @@ class OnyxiaAvoidEggsTrigger : public Trigger
 public:
     OnyxiaAvoidEggsTrigger(PlayerbotAI* botAI);
     bool IsActive() override;
+};
+
+class OnyxiaAntiFearTrigger : public RaidAntiFearTrigger
+{
+public:
+    OnyxiaAntiFearTrigger(PlayerbotAI* botAI);
+
+protected:
+    bool FearWindowActive() override;
 };
 
 #endif

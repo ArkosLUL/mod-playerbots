@@ -319,6 +319,15 @@ bool YoggSaronInPhase3(PlayerbotAI* botAI)
     return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
 }
 
+bool AuriayaFearWindowActive(PlayerbotAI* botAI)
+{
+    Unit* auriaya = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "auriaya")->Get();
+
+    return auriaya && auriaya->IsAlive();
+}
+
+bool YoggSaronFearWindowActive(PlayerbotAI* botAI) { return YoggSaronInPhase2(botAI) || YoggSaronInPhase3(botAI); }
+
 // XT-002 Deconstructor
 //
 // XT and his Heart both spend part of the fight carrying UNIT_FLAG_NOT_SELECTABLE, which drops them

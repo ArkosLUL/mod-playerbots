@@ -109,6 +109,8 @@ public:
         creators["auriaya sonic screech action"] = &RaidUlduarActionContext::auriaya_sonic_screech_action;
         creators["auriaya seeping essence action"] = &RaidUlduarActionContext::auriaya_seeping_essence_action;
         creators["auriaya mark dps target action"] = &RaidUlduarActionContext::auriaya_mark_dps_target_action;
+        creators["auriaya anti fear action"] = &RaidUlduarActionContext::auriaya_anti_fear_action;
+        creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
         creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
@@ -224,6 +226,8 @@ private:
     static Action* auriaya_sonic_screech_action(PlayerbotAI* ai) { return new AuriayaSonicScreechAction(ai); }
     static Action* auriaya_seeping_essence_action(PlayerbotAI* ai) { return new AuriayaSeepingEssenceAction(ai); }
     static Action* auriaya_mark_dps_target_action(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetAction(ai); }
+    static Action* auriaya_anti_fear_action(PlayerbotAI* ai) { return new AuriayaAntiFearAction(ai); }
+    static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
     static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }

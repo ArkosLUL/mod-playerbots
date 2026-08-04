@@ -9,7 +9,9 @@
 
 #include "Action.h"
 #include "AttackAction.h"
+#include "HyjalTriggers.h"
 #include "MovementActions.h"
+#include "RaidAntiFear.h"
 
 // General
 
@@ -239,16 +241,14 @@ public:
     bool Execute(Event event) override;
 };
 
-class ArchimondeCastFearImmunitySpellAction : public Action
+class ArchimondeCastFearImmunitySpellAction : public RaidAntiFearAction
 {
 public:
     ArchimondeCastFearImmunitySpellAction(
-        PlayerbotAI* botAI) : Action(botAI, "archimonde cast fear immunity spell") {}
-    bool Execute(Event event) override;
+        PlayerbotAI* botAI) : RaidAntiFearAction(botAI, "archimonde cast fear immunity spell") {}
 
-private:
-    bool CastFearWardOnMainTank();
-    bool UseTremorTotemStrategy();
+protected:
+    bool FearWindowActive() override { return ArchimondeFearWindowActive(botAI); }
 };
 
 class ArchimondeSpreadToAvoidAirBurstAction : public MovementAction

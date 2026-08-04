@@ -8,6 +8,7 @@
 #define PLAYERBOTS_HYJALMULTIPLIERS_H
 
 #include "Multiplier.h"
+#include "RaidAntiFear.h"
 
 class HyjalSummitTimeBloodlustAndHeroismMultiplier : public Multiplier
 {
@@ -121,6 +122,18 @@ public:
     ArchimondeDisableCombatFormationMoveMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "archimonde disable combat formation move multiplier") {}
     virtual float GetValue(Action* action);
+};
+
+// The earth totem slot holds one totem, so the shaman's own Stoneskin / Strength of Earth nodes have
+// to be held while Archimonde is fearing, or Tremor is replaced on the next GCD.
+class ArchimondeAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
+{
+public:
+    ArchimondeAntiFearTotemGuardMultiplier(
+        PlayerbotAI* botAI) : RaidAntiFearTotemGuardMultiplier(botAI, "archimonde anti fear totem guard multiplier") {}
+
+protected:
+    bool FearWindowActive() override;
 };
 
 #endif

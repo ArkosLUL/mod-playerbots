@@ -3,6 +3,7 @@
 
 #include "EventMap.h"
 #include "GenericTriggers.h"
+#include "RaidAntiFear.h"
 #include "UldBossHelper.h"
 #include "Trigger.h"
 
@@ -35,6 +36,15 @@ class AuriayaMarkDpsTargetTrigger : public Trigger
 public:
     AuriayaMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya mark dps target trigger") {}
     bool IsActive() override;
+};
+
+class AuriayaAntiFearTrigger : public RaidAntiFearTrigger
+{
+public:
+    AuriayaAntiFearTrigger(PlayerbotAI* ai) : RaidAntiFearTrigger(ai, "auriaya anti fear trigger") {}
+
+protected:
+    bool FearWindowActive() override { return AuriayaFearWindowActive(botAI); }
 };
 
 #endif

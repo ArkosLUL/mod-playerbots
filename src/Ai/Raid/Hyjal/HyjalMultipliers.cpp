@@ -294,3 +294,5 @@ float ArchimondeDisableCombatFormationMoveMultiplier::GetValue(Action* action)
 
     return 1.0f;
 }
+
+bool ArchimondeAntiFearTotemGuardMultiplier::FearWindowActive() { return ArchimondeFearWindowActive(botAI); }

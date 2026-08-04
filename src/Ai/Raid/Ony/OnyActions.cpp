@@ -9,6 +9,7 @@
 #include "GenericSpellActions.h"
 #include "LastMovementValue.h"
 #include "MovementActions.h"
+#include "OnyTriggers.h"
 #include "Playerbots.h"
 #include "PositionAction.h"
 
@@ -165,3 +166,5 @@ bool OnyxiaAvoidEggsAction::Execute(Event /*event*/)
     return MoveTo(bot->GetMapId(), x, y, bot->GetPositionZ(), false, false, false, false,
                   MovementPriority::MOVEMENT_COMBAT);
 }
+
+bool OnyxiaAntiFearAction::FearWindowActive() { return OnyxiaBellowingRoarWindowActive(botAI); }

@@ -3,6 +3,7 @@
 
 #include "EventMap.h"
 #include "GenericTriggers.h"
+#include "RaidAntiFear.h"
 #include "UldBossHelper.h"
 #include "Trigger.h"
 
@@ -166,6 +167,17 @@ class YoggSaronSanityConservationTrigger : public YoggSaronTrigger
 public:
     YoggSaronSanityConservationTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron sanity conservation trigger") {}
     bool IsActive() override;
+};
+
+// Covers both fears the fight has: Malady of the Mind in P2 and Deafening Roar in P3. Complements
+// the malady spread node, which handles the bot who is already feared.
+class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger
+{
+public:
+    YoggSaronAntiFearTrigger(PlayerbotAI* ai) : RaidAntiFearTrigger(ai, "yogg-saron anti fear trigger") {}
+
+protected:
+    bool FearWindowActive() override { return YoggSaronFearWindowActive(botAI); }
 };
 
 #endif

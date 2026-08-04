@@ -7,7 +7,12 @@
 #ifndef PLAYERBOTS_HYJALTRIGGERS_H
 #define PLAYERBOTS_HYJALTRIGGERS_H
 
+#include "RaidAntiFear.h"
 #include "Trigger.h"
+
+// Archimonde fears on a repeating timer until he hits his 10% enrage, so the whole fight up to that
+// point is the anti-fear window.
+bool ArchimondeFearWindowActive(PlayerbotAI* botAI);
 
 // General
 
@@ -237,12 +242,14 @@ public:
     bool IsActive() override;
 };
 
-class ArchimondeBossCastsFearTrigger : public Trigger
+class ArchimondeBossCastsFearTrigger : public RaidAntiFearTrigger
 {
 public:
     ArchimondeBossCastsFearTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "archimonde boss casts fear") {}
-    bool IsActive() override;
+        PlayerbotAI* botAI) : RaidAntiFearTrigger(botAI, "archimonde boss casts fear") {}
+
+protected:
+    bool FearWindowActive() override { return ArchimondeFearWindowActive(botAI); }
 };
 
 class ArchimondeBossCastsAirBurstTrigger : public Trigger

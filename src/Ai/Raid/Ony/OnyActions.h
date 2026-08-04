@@ -11,6 +11,7 @@
 #include "AttackAction.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
+#include "RaidAntiFear.h"
 
 class PlayerbotAI;
 
@@ -110,6 +111,15 @@ public:
     OnyxiaAvoidEggsAction(PlayerbotAI* botAI) : MovementAction(botAI, "ony avoid eggs move") {}
 
     bool Execute(Event event) override;
+};
+
+class OnyxiaAntiFearAction : public RaidAntiFearAction
+{
+public:
+    OnyxiaAntiFearAction(PlayerbotAI* botAI) : RaidAntiFearAction(botAI, "ony anti fear action") {}
+
+protected:
+    bool FearWindowActive() override;
 };
 
 #endif

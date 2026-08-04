@@ -3,6 +3,7 @@
 
 #include "Define.h"
 #include "Multiplier.h"
+#include "RaidAntiFear.h"
 
 // Algalon the Observer
 class AlgalonMultiplier : public Multiplier
@@ -73,6 +74,32 @@ private:
 
     uint32 cachedAtMs = 0;
     BurstWindow cachedValue;
+};
+
+// The earth totem slot holds one totem, so the shaman's own Stoneskin / Strength of Earth nodes have
+// to be held for as long as the boss can fear, or Tremor is replaced on the next GCD.
+class AuriayaAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
+{
+public:
+    AuriayaAntiFearTotemGuardMultiplier(PlayerbotAI* botAI)
+        : RaidAntiFearTotemGuardMultiplier(botAI, "auriaya anti fear totem guard multiplier")
+    {
+    }
+
+protected:
+    bool FearWindowActive() override;
+};
+
+class YoggSaronAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
+{
+public:
+    YoggSaronAntiFearTotemGuardMultiplier(PlayerbotAI* botAI)
+        : RaidAntiFearTotemGuardMultiplier(botAI, "yogg-saron anti fear totem guard multiplier")
+    {
+    }
+
+protected:
+    bool FearWindowActive() override;
 };
 
 #endif

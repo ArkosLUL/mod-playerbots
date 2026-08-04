@@ -305,6 +305,12 @@ uint32 GetXT002GravityBombSpellId(Player* bot);
 bool YoggSaronInPhase2(PlayerbotAI* botAI);
 bool YoggSaronInPhase3(PlayerbotAI* botAI);
 
+// Windows in which a counterable fear can land, for the shared anti-fear component. Auriaya's
+// Terrifying Screech runs on a fixed 35s cycle, so the whole fight counts; Yogg-Saron fears in P2
+// (Malady of the Mind, which re-casts on removal) and again in P3 (Deafening Roar).
+bool AuriayaFearWindowActive(PlayerbotAI* botAI);
+bool YoggSaronFearWindowActive(PlayerbotAI* botAI);
+
 // The add the raid should be killing, most urgent first: Life Spark (hard mode, chain-shocks the
 // raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);

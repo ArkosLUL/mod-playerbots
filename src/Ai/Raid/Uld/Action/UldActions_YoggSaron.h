@@ -8,6 +8,7 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidAntiFear.h"
 #include "UldBossHelper.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
@@ -159,6 +160,15 @@ public:
     YoggSaronSanityConservationAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron sanity conservation action") {}
 
     bool Execute(Event event) override;
+};
+
+class YoggSaronAntiFearAction : public RaidAntiFearAction
+{
+public:
+    YoggSaronAntiFearAction(PlayerbotAI* ai) : RaidAntiFearAction(ai, "yogg-saron anti fear action") {}
+
+protected:
+    bool FearWindowActive() override { return YoggSaronFearWindowActive(botAI); }
 };
 
 #endif

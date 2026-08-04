@@ -6,6 +6,8 @@
 
 #include "OnyStrategy.h"
 
+#include "OnyMultipliers.h"
+
 void RaidOnyxiaStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     // ----------- Phase 1 (100% - 65%) -----------
@@ -28,9 +30,15 @@ void RaidOnyxiaStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "ony whelps spawn", { NextAction("ony kill whelps", ACTION_RAID + 1) }));
+
+    // ----------- Phase 3 (40% - 0%) -----------
+
+    triggers.push_back(new TriggerNode(
+        "ony anti fear trigger", { NextAction("ony anti fear action", ACTION_RAID + 2) }));
 }
 
-void RaidOnyxiaStrategy::InitMultipliers(std::vector<Multiplier*>& /*multipliers*/)
+void RaidOnyxiaStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
-    // Empty for now
+    // Hold the competing earth totems so Tremor stays down through Bellowing Roar
+    multipliers.push_back(new OnyxiaAntiFearTotemGuardMultiplier(botAI));
 }
