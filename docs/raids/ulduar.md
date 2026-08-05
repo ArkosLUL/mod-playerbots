@@ -1,0 +1,372 @@
+# Ulduar (map 603)
+
+Strategy key `ulduar`, one strategy for all 14 encounters. Cross-raid conventions are in
+[README.md](README.md).
+
+Files are split per boss: `Action/UldActions_<Boss>.{h,cpp}`, `Trigger/UldTriggers_<Boss>.{h,cpp}`,
+with `Action/UldActions.h` and `Trigger/UldTriggers.h` kept as **thin umbrella headers** that include
+the parts — so `UldActionContext.h`, `UldTriggerContext.h` and every registration map needed no edits
+when the monolith was split.
+
+## Hard modes are declared by config, not detected
+
+**Ulduar hard modes are a raid choice, not the 10/25 heroic flag**, so the "heroic comes free via a
+spell-id predicate" trick from other raids does not apply. Bots follow the **follower model**: they
+never *trigger* a hard mode, they react once the raid has. In an all-bot raid nobody triggers one —
+accepted.
+
+Detection started as "config **and** a live server signal", and that second half turned out to be the
+problem: it depended on this core's scripting details, it **silently disabled a whole boss's
+hard-mode handling** when a signal was missing, and it was invisible to the operator who had
+explicitly turned the option on. The eight `AiPlayerbot.Ulduar*HardMode` options (all default 0) are
+now the **single source of truth** — each `Is*HardModeActive` is a plain config read. The per-boss
+triggers keep their own mechanic checks (hazard nearby, debuff on the bot, add alive), and **those
+mechanic checks are the real gate**; the detectors were a redundant second one.
+
+**The config check lives in the detector, not scattered across triggers** — detectors are the only
+coupling to server internals, and triggers stay thin. A Vezax trigger that bypassed the detector by
+calling the raw lookup directly had to be fixed for exactly this reason.
+
+Still dynamic, because they are *phase* or target selection rather than hard-mode detection:
+`IsSteelbreakerEmpowered` (must not arm before phase 3), `GetIronAssemblyNextKillTarget`,
+`GetFlameLeviathanNearestTowerHazard`. `YoggActiveKeeperMask` and the file-static
+`GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives** and still reads
+`PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone.
+
+Behaviour worth knowing: with the Hodir option on, bots run the DPS-race behaviour on **every** Hodir
+kill — that is the intended semantics. Flame Leviathan's mask claims all four towers, but hazards are
+found by NPC entry, so destroyed towers contribute nothing.
+
+### Why `GetData` is avoided
+
+Three separate hard modes tried it and three found it wrong:
+
+- **Vezax** `GetData(1)` returns `lootMode == 3`, set only in `DoAction(2)` — i.e. **after** the
+  Saronite Animus dies. It is a completion flag, not a live signal. The real truth is simply "Animus
+  (33524) alive".
+- **Hodir** `GetData(3)` is the 3-minute timer flag; deliberately unused, because the buff
+  optimisation is harmless past the window.
+- **Mimiron** `GetData(1)` is authoritative but lives on Mimiron himself, who sits in his pod and
+  **never becomes a bot attack target**, so he never enters the `"possible targets"` lists.
+- **Thorim's** `SPELL_SIF_CHANNEL_HOLOGRAM` (64324) is **defined but never cast** in this core — the
+  channel Sif actually casts is `SPELL_TOUCH_OF_DOMINION` (62507).
+
+Prefer a boss's **empower aura** where one exists: Flame Leviathan's tower auras tell you *which*
+towers are up, where `GetData(DATA_GET_TOWER_COUNT)` gives only a count.
+
+## Per-boss hard modes
+
+### Vezax — the reference implementation
+
+Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** spawns; Vezax gains an
+invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark —
+each bot `Attack()`s directly); ranged and healers move out of its Profound Darkness (63420).
+`ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f` is a conservative guess — the radius is DBC, not in
+the script.
+
+### Assembly of Iron
+
+Each survivor gains a phase whenever a council member dies — the dying boss casts Supercharge (61920)
+and each `SpellHit` calls `UpdatePhase()`, so **the last one alive reaches `_phase == 3`**. The hard
+mode is the kill order: Steelbreaker last.
+
+**Steelbreaker has no `GetData` override and `_phase` is private**, so empowerment is inferred:
+*Steelbreaker alive AND Molgeim dead AND Brundir dead*.
+
+Empowered kit: Fusion Punch (61903, heavy Nature DoT on the tank), Static Disruption (61911, random
+non-melee + ~5 yd splash), **Overwhelming Power (64637 — instakills the tank on expiry unless
+dispelled)**, and Electrical Charge (61902, a stacking damage nova gained each time a player dies).
+
+Bots skull-mark Brundir → Molgeim → Steelbreaker and the off-tank taunts Steelbreaker off a tank
+carrying Fusion Punch or Overwhelming Power. **Electrical Charge is deliberately not handled
+positionally** — it is a stacking damage buff, a healer/uptime problem rather than a movement one.
+Meltdown is moot in the empowered phase, since Molgeim (who summons the elementals) is dead by then.
+
+### Flame Leviathan
+
+At pull, `ActivateTowers()` adds one empower aura to the boss per surviving tower and schedules that
+tower's periodic ground event:
+
+| Tower | Boss aura | Ground NPC | Hazard |
+|---|---|---|---|
+| Storm | 65076 | 33364 (8 spawn) | Static lightning strikes at 8 fixed marks, ~5s telegraph |
+| Flame | 65075 | 33369 | Escort-path **moving** fire trail, drops fire every 2s |
+| Frost | 65077 | 33108 (2 spawn) | **Chases** a random player, stuns, drops frost AoE at the catch point |
+| Life | 64482 | 33367 | Spawns attacking adds — kill, not dodge |
+
+The whole fight is from vehicles. Life tower is skipped: its adds are already covered by the vehicle's
+kill-nearest-attacker loop. Tower dodge outranks the normal kite loop with `MOVEMENT_FORCED`.
+
+### Thorim
+
+Sif is summoned every pull and normally channels, then despawns after the 150s dominion timer. If the
+raid clears the gauntlet fast enough she joins instead and casts Frostbolt Valley (raid-wide,
+unavoidable — healed through), Blizzard (62577 → moving `NPC_SIF_BLIZZARD` 32879, respawned every
+~15s) and Frost Nova (62605, teleport then point-blank).
+
+**Detector: Sif (33196) alive AND `GetPositionZ() < 429.6`** — she spawns at the throne and only
+`NearTeleportTo`s onto the arena floor when she joins. This reuses the same floor threshold the
+normal-mode Thorim strategy already uses.
+
+### Hodir
+
+**Hodir's hard mode is not a new hazard** — it is the "Rare Cache of Winter" 3-minute timed kill
+(`EVENT_HARD_MODE_MISSED` at 180s). The fight is otherwise identical; the raid just needs more DPS
+and fewer deaths. The way to beat it is exploiting the **friendly helper NPCs**, which spawn
+flash-frozen and must be freed first:
+
+- **Storm Cloud** (65123, difficulty-mapped at runtime) lands on a random raider every 30s; while
+  that carrier stands near allies it triggers Storm Power, the fight's #1 DPS multiplier.
+- **Toasty Fire** (`NPC_TOASTY_FIRE` 33342, aura 62821) prevents Biting Cold stacks and grants
+  Flash-Freeze exemption — legitimate non-cheat mitigation for a mechanic that previously had only a
+  cheat handler.
+- **Starlight** (druid haste zone) was dropped by user decision — area-aura detection is fiddlier and
+  the gain is lower.
+
+**Priority interaction that matters**: the Flash-Freeze icicle move sits at `ACTION_RAID + 1` and
+must strictly outrank helper-freeing at `ACTION_RAID`, so a bot never leaves line-of-sight cover to
+chase a re-frozen helper mid-cast.
+
+Storm Cloud spreading moves to the **nearest ally**, not the raid centroid, which could be an empty
+midpoint between two groups. Both radii (5 yd Toasty Fire, 10 yd Storm Cloud stack) are DBC guesses
+to confirm in-game.
+
+### Freya
+
+Hard mode = Elders left alive at pull (Brightleaf 32915 / Stonebark 32914 / Ironbranch 32913). Per
+living Elder, Freya gains an extra ability: Iron Roots (62862), Unstable Sun Beam (62450), or Ground
+Tremor (62437, raid-wide knockback — not handled, undodgeable).
+
+**Critical: the empower events are scheduled once at pull and repeat unconditionally — they keep
+firing for the whole fight even after the Elder dies.** So hard-mode reactions must key off the
+**hazard world object**, never off an Elder still being alive. Killing Elders never removes the
+empower and never costs the achievement, because the Elder count is locked at pull.
+
+The two object types differ in a way that matters:
+
+- **Root creatures 33088 / 33168 are selectable** (unit_flags 0), so a trapped bot targets and kills
+  its own root to free itself.
+- **Beam stalkers 33170 / 33050 are non-selectable** (`0x2000000`), so they never appear in
+  attack-target lists — find them by scanning `"nearest npcs"`.
+
+Breaking Iron Roots sits at `ACTION_RAID + 3`, above the Sun Beam dodge at `+2`, because **a rooted
+bot cannot move**, so it must free itself before it can step out of anything. The beam dodge flees
+the centroid of the in-range beam cluster, not the single nearest beam.
+`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is a DBC guess.
+
+### Mimiron — Firefighter
+
+A player presses the Big Red Button before the pull; `_hardmode` is set at activation and never
+cleared. Detection uses `SPELL_EMERGENCY_MODE (64582)`, the empower aura applied to whichever mech is
+currently active — those mechs *are* valid attack targets, unlike Mimiron himself.
+
+Hazards: persistent ground fire (`NPC_FLAMES_INITIAL` 34363 → `NPC_FLAMES_SPREAD` 34121, aura 64561)
+that creeps toward the nearest player all fight, and the VX-001 **Frost Bomb** (`NPC_FROST_BOMB`
+34149). Both flame nodes are non-selectable trigger creatures, so they are found by scanning
+`"nearest npcs"` — the same idiom as Freya's beams. Bots avoid the bomb *creature*, so no spell id is
+needed and 10/25 are covered identically.
+
+**Correction to the master plan**: Emergency Fire Bots (34147) are **friendly, non-combat fire
+extinguishers**. They never enter combat with players, never heal or repair Mimiron, and only run to
+flame nodes and cast Water Spray to put fires out. They are **not** kill targets.
+
+### Yogg-Saron — reduced Keepers
+
+The raid frees fewer than 4 Keepers, losing that Keeper's support. Tuned for the hardest single-Keeper
+case, **Thorim only**. The bitmask lives in `PERSISTENT_DATA_WATCHERS_MASK` — preferred over Sara's
+`GetData(DATA_GET_KEEPERS_COUNT)`, which gives a count only, because reading the mask confirms
+**which** Keeper.
+
+What Thorim-only removes: no Freya means **no Sanity Wells, so Sanity (63050, 100 stacks) is a
+one-way drain** — nothing restores it; no Hodir means no Protective Gaze absorb; no Mimiron means no
+haste clouds and therefore a slower kill and more total drain.
+
+Sanity drains, and whether anything can be done:
+
+| Source | Spell | Loss | Avoidable |
+|---|---|---|---|
+| Psychosis | 63795 / 65301 | −9 / −12 | **No** — random target every 3.5s in P2 |
+| Malady of the Mind | 63830 / 63881 | −3 | Yes |
+| Brain Link | 63803 | −2 | Yes, if the pair stays within 20 yd |
+| Lunatic Gaze (P2 skull) | 64168 | −2 | Yes — only players *facing* the caster |
+| Lunatic Gaze (P3 Yogg) | 64164 | −4 | Yes |
+| Induce Madness | 64059 | −100 | Yes — leave the brain room |
+
+**Thorim's Titanic Storm auto-kills anything carrying `SPELL_WEAKENED` (64162)**, and a guardian
+drops Empowered at ~<10% HP. So **melee only need to burn a guardian to Weakened; Thorim finishes
+it.** With no Thorim, guardians are effectively unkillable without the cheat — which is why the P3
+cheat instakill is suppressed **only when Thorim is a Keeper**, leaving other reduced-Keeper combos
+winnable.
+
+Crusher Tentacle (33966) is **stationary** and nobody tanks it — with no one in melee range its Crush
+cannot land, so ranged nuke it in place. Its Diminish Power (64145) is a raid-wide DPS debuff, so it
+must die fast.
+
+Open risks: the removed P3 cheat existed because Lunatic Gaze "freezes" bots, so guardian DPS may
+stall between gazes; a guardian spawns up to 48 yd out, so confirm taunt pickup is prompt; and the
+sanity-conservation behaviour (stand behind Yogg facing away below 15 stacks) **nearly benches a bot**
+— sanity never recovers Thorim-only, so a bot that drops to 15 stays there.
+
+### XT-002
+
+Ulduar is 10/25-man only, so **"hard mode" here is the Heartbreak split, not a difficulty flag**.
+Killing the Heart during its 30s exposed window (63849) sets XT to full health, grants **Heartbreak
+(65737) permanently**, and stops rescheduling the phase check — so there are no further Heart phases.
+Heartbreak is a reliable runtime signal that hard mode is live, but there is no signal *before* the
+kill, so the config declares intent: on, bots burn the Heart to zero on the first window; off, they
+stop at 15% so the fight stays in normal mode.
+
+**Fork quirk, deliberate:** `npc_xt_toy_pile::SummonDistance = 90.0f` with the check
+`if (!xt002 || xt002->IsWithinDist(me, SummonDistance)) return;` — **adds only spawn when XT is more
+than 90 yd from a pile**, so tanked in place they essentially never appear on this core. Add handling
+is written to work whenever adds do spawn; tank positioning is deliberately untouched.
+
+Boombots explode for 15-18k on reaching XT **or at 50% health**, so melee must never touch them.
+Scrapbots walk to XT and heal him, so they must die en route.
+
+`NPC_XT002` (33293), `NPC_XT_TOY_PILE` (33337), `NPC_XS013_SCRAPBOT` (33343) and
+`NPC_HEART_OF_DECONSTRUCTOR` (33329) come from core `ulduar.h` via `UldScripts.h` — **do not
+redeclare them.**
+
+Use the `IsBurstCooldownAction` registry rather than hand-rolling a `dynamic_cast` list the way
+BT and SWP do. Note `MoveAwayFromPlayerWithDebuffAction` takes a **single** spell id fixed at
+construction, so it cannot cover both the 10 and 25-man ids of Searing Light or Gravity Bomb.
+
+## Algalon
+
+No separate heroic script — 10N and 25N share one AI with identical entries and ids, so the strategy
+is difficulty-agnostic for free. Only the Cosmic Smash meteor count differs (1 vs 3), which is
+irrelevant since bots dodge every asteroid-target NPC present.
+
+| Mechanic | Ids | Handling |
+|---|---|---|
+| Cosmic Smash | selector 62301, impact 62304, targets 33104/33105 | Damage falls off past ~10 yd — flee each asteroid target |
+| Big Bang | 64443, every 90.5s | Raid-wide lethal to anyone not phased; a Black Hole grants phase aura 62169 |
+| Phase Punch | 64412, stacks 1→5 | At 5 the tank is fully phased out — swap before then |
+| Black Hole chain | Collapsing Star 32955 → Black Hole 32953; P2 Worm Hole 34099 | The Big Bang shelter and the constellation sink |
+| Living Constellation | 33052, phase effect 65509 | Must be **led onto a live Black Hole** — contact despawns both |
+| Unleashed Dark Matter | 34097 | Chases a random player; focus-kill |
+| Ascend / enrage | 64487 at 6 min | Also fires on the Big Bang evade |
+
+**Big Bang evade caveat, documented and not worked around:** `spell_algalon_big_bang::CheckTargets`
+calls `ACTION_ASCEND` — the boss evades and resets — when Big Bang hits **zero** targets. A pure-bot
+raid where everyone hides therefore resets the boss. The fight requires at least one non-bot soaker,
+or you accept the reset.
+
+**Big Bang is unavoidable raid-wide damage, and full immunity does not prevent it** — Divine Shield
+does not work. Only *mitigation* survives, so the soaker is a **Shadow Priest using Dispersion** (90%
+reduction), not a Protection Paladin. That needed a second piece: `AlgalonMultiplier` **reserves the
+cooldown** by returning `0.0f` for `CastDispersionAction` while the bot is the designated soaker,
+Algalon is engaged and Big Bang is not channeling — otherwise the priest spends it on the normal
+`low mana` / `critical health` nodes and it is down when it matters. Other shadow priests disperse
+normally; with no living shadow priest, everyone hides and there is no soaker.
+
+**Latent bug, still live:** the hide/soak triggers and `UldMultipliers.cpp:28` use
+`"algalon observer"` while every other call site uses `"algalon the observer"`. `"find target"` is an
+exact full-name match, so one of them never resolves. Not fixed.
+
+Two as-built notes worth keeping: the constellation kite is **movement-only**, because
+`MovementAction` exposes `MoveTo`/`FleePosition` but **not** `Attack` (that lives on the sibling
+`AttackAction`) — the kiter stands on a Black Hole and drags the chasing add through the phase field.
+And Phase Punch swap is an `AttackAction`, firing when the boss's victim reaches 3 stacks and the
+first assist tank's own stacks have decayed below that.
+
+## Burst and Bloodlust windows
+
+`UlduarBurstWindowMultiplier` is always active inside Ulduar — no config key, matching every other
+raid. Two tiers are gated separately: `allowAll` covers every burst cooldown, `allowLust` covers
+`bloodlust`/`heroism` only, because a 10-minute raid cooldown wants a later window than personal
+cooldowns that come back within a phase.
+
+Because burst only ever fires while the bot's current target is boss-flagged, **adds-only phases need
+no gate of their own**. There is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust
+is shaman-only.
+
+| Boss | `allowAll` | `allowLust` | Why |
+|---|---|---|---|
+| Razorscale | grounded (`Z <= 440`) | grounded, HP < 50%, no Stun Aura 62794 | Zero damage taken while airborne; permanent ground phase below 50% |
+| Mimiron | always | all three mechs alive | P1-P3 damage counts; all three up is P4, the enrage burn |
+| Yogg-Saron | P2 or P3 | P3 | P1 damage lands on Sara and is wasted |
+| Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
+| Freya | always | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | The aura reduces damage taken for the whole wave phase |
+| Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |
+| Hodir, Vezax, Algalon, Ignis, Auriaya, Kologarn, Flame Leviathan | — | — | No change; the pull is the right window |
+
+**Freya is the only boss with a fallback release** — `FREYA_LUST_FALLBACK_PCT = 25.0f` keeps lust
+from being held forever if the aura read ever misses. Every other window is on the mandatory path to
+the kill.
+
+**Never call `RazorscaleBossHelper::UpdateBossAI()` from a multiplier** — it side-effects into
+`AssignRolesBasedOnHealth()`, which reassigns the raid's main tank. Read Z straight off the target
+sweep instead. Yogg is resolved with `FindNearestCreature`, not `"find target"`, because he is not
+reliably on a bot's threat list.
+
+Open question that cannot be answered from source: whether the Mimiron mechs and the Assembly council
+members are `IsDungeonBoss()`-flagged. If they are not, lust never fires on them and those two gates
+are inert.
+
+## Threat redirect
+
+Before this work **no WotLK raid had either a redirect action or a veto**, so the generic main-tank
+node fired unconditionally — including on the encounters where the strategy deliberately puts a
+second tank, an add tank or a swap tank on what the DPS is hitting. This is the veto slice only; no
+Ulduar boss has a dedicated redirect action yet.
+
+**Veto — the main tank is actively wrong:**
+
+| Boss | Why | Gated on |
+|---|---|---|
+| Iron Assembly | Three bosses, one tank each, plus a Fusion Punch swap | boss entries |
+| Mimiron | Four phases, each a different creature with a fresh threat table; phase 3 has two tankable units split MT/AT0 | 33432 / 33651 / 33670 |
+| Thorim | Raid splits into arena and gauntlet squads with a tank each, plus an Unbalancing Strike swap | boss present |
+| Algalon | Phase Punch forces an MT ↔ AT0 swap on a stack timer | boss present |
+| Razorscale — **airborne only** | The MT holds nothing while she flies; Dark Rune adds belong to assist tanks. Ground phases are single-tank and the generic node is *correct*, so this is phase-gated, not blanket | boss Z vs 440 |
+
+**Do not veto** — the boss is main-tank-held all fight, so the generic node is right for the primary
+target and the only gain would be redirecting *adds*: Auriaya, Freya, Kologarn, Yogg-Saron, Ignis.
+**No** — Vezax (one tank, no swap, no reset), Hodir (no meaningful tanking), Flame Leviathan (vehicle
+combat, neither spell castable).
+
+XT-002 was already covered by `XT002TargetGuardMultiplier`, which vetoes for the whole encounter
+because the main tank is the wrong sink while a Pummeller is out.
+
+Two load-bearing details: the multiplier `dynamic_cast`s to the two **concrete** redirect actions
+only, never the shared `BuffOnMainTankAction` base; and **Razorscale's phase is read straight off the
+unit's Z** rather than through `IsFlyingPhase()`, because the helper needs `UpdateBossAI()` first and
+that reassigns the main tank. The temporary harpoon knockdowns count as grounded, which is intended —
+she is tankable then, and a redirect during the knockdown is what puts her back on the MT.
+
+**No pull-window helper exists outside Naxx, RS and SWP.** If dedicated actions follow, use BT's
+stateless `boss->GetHealthPct() > 95.0f` idiom rather than building a combat clock — it needs no new
+state and doubles as the fresh-spawn / fresh-phase test. And use `GetFirstAliveUnitByEntry`, not
+`"find target"`, for multi-tank detection: a bot parked on boss A never resolves boss B.
+
+Per decision, `NaxxRedirectThreatAction` stays where it is rather than being promoted to a shared
+raid-level base. Known cost: the Misdirection proc-aura id `35079` is already duplicated across nine
+per-raid helper headers, and Ulduar would make ten.
+
+## Normal-mode gaps still open
+
+From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
+
+| Boss | Gap |
+|---|---|
+| **Ignis** | Entire fight unimplemented except a fire-resistance buff. No Slag Pot, Flame Jets, Scorch ground fire, or Iron Construct tanking/kiting |
+| **Auriaya** | Entire fight unimplemented except fall-recovery. No Sonic Screech facing, Terrifying Screech fear, Feral Defender (9 lives + void zones), Sanctum Sentries |
+| **Mimiron** | No ground-fire avoidance in normal mode either — only fire *resistance* |
+| **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |
+| **Vezax** | Saronite Vapor puddles never dodged |
+| **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt or focus; Flame Breath cone not dodged |
+| **Freya** | Snaplasher is only skull-marked, so bots multi-DPS it and it hardens; Storm Lasher cast not interrupted |
+| **Algalon** | Collapsing Star (32955) unhandled — both `big bang hide` and `constellation kite` search only for *existing* Black Holes and silently fail when none exist |
+
+**Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
+Hodir Biting Cold (real movement commented out, cheat strips the aura); Thorim Unbalancing Strike;
+Mimiron Proximity Mines and Bomb Bots (cheat-kill only — the signature Firefighter killers have no
+avoidance); Kologarn Crunch Armor and Focused Eyebeam (cheat aura-remove / teleport, no real swap or
+kiting); Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
+(cheat instakill / teleport); Vezax no-mana-regen (cheat mana refill).
+
+Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank
+swap** — Thorim, Hodir and Kologarn all fall back to cheats. There is no enrage-timer awareness
+anywhere, which blocks every hard-mode kill-timer requirement.
