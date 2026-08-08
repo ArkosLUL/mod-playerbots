@@ -5,7 +5,6 @@
  */
 
 #include "RogueTriggers.h"
-
 #include "ArmorDebuff.h"
 #include "BleedDebuff.h"
 #include "GenericTriggers.h"

@@ -5,14 +5,6 @@
  */
 
 #include "ItemUsageValue.h"
-
-#include <algorithm>
-#include <array>
-#include <cctype>
-#include <initializer_list>
-#include <string>
-#include <vector>
-
 #include "AiFactory.h"
 #include "ChatHelper.h"
 #include "Group.h"
@@ -32,6 +24,13 @@
 #include "StatsWeightCalculator.h"
 #include "Util.h"
 #include "World.h"
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <initializer_list>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -131,7 +130,7 @@ ItemUsage ItemUsageValue::Calculate()
     if (!proto)
         return ITEM_USAGE_NONE;
 
-    if (botAI->HasActivePlayerMaster())
+    if (IsRealPlayer(botAI->GetMaster()))
     {
         if (IsItemUsefulForSkill(proto) || IsItemNeededForSkill(proto))
             return ITEM_USAGE_SKILL;
@@ -234,8 +233,8 @@ ItemUsage ItemUsageValue::Calculate()
     if (isLootFromItem && botNeedsItemForQuest)
         return ITEM_USAGE_QUEST;
 
-    // If this is not a self-bot acting alone and the master needs this quest item, defer to the master
-    if (!botAI->IsRealPlayer() && masterNeedsItemForQuest)
+    // If this is not a selfbot acting alone and the master needs this quest item, defer to the master
+    if (!IsSelfBot(bot) && masterNeedsItemForQuest)
         return ITEM_USAGE_NONE;
 
     // If the bot itself needs the item for a quest, allow looting

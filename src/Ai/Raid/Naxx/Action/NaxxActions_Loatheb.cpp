@@ -5,10 +5,9 @@
  */
 
 #include "NaxxActions.h"
-
 #include "Item.h"
-#include "Playerbots.h"
 #include "PlayerbotAI.h"
+#include "Playerbots.h"
 
 #include <cmath>
 

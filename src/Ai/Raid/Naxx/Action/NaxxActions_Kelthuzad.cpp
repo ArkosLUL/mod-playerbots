@@ -5,15 +5,14 @@
  */
 
 #include "NaxxActions.h"
+#include "PlayerbotAIConfig.h"
+#include "Playerbots.h"
+#include "RaidBossHelpers.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
-
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "RaidBossHelpers.h"
 
 bool KelthuzadChooseTargetAction::Execute(Event event)
 {

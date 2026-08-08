@@ -5,10 +5,6 @@
  */
 
 #include "LootRollAction.h"
-
-#include <string>
-#include <vector>
-
 #include "AiObjectContext.h"
 #include "Event.h"
 #include "Group.h"
@@ -18,6 +14,9 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "SharedDefines.h"
+
+#include <string>
+#include <vector>
 
 static inline int32 EncodeRandomEnchantParam(uint32 randomPropertyId, uint32 randomSuffixId)
 {
@@ -75,7 +74,7 @@ bool LootRollAction::Execute(Event /*event*/)
     return voted;
 }
 
-bool MasterLootRollAction::isUseful() { return !botAI->HasActivePlayerMaster(); }
+bool MasterLootRollAction::isUseful() { return !IsRealPlayer(botAI->GetMaster()); }
 
 bool MasterLootRollAction::Execute(Event event)
 {

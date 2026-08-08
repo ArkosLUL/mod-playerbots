@@ -7,10 +7,6 @@
 #ifndef PLAYERBOTS_ULDBOSSHELPER_H
 #define PLAYERBOTS_ULDBOSSHELPER_H
 
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "AiObject.h"
 #include "AiObjectContext.h"
 #include "EventMap.h"
@@ -20,6 +16,10 @@
 #include "Playerbots.h"
 #include "ScriptedCreature.h"
 #include "UldScripts.h"
+
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 constexpr uint32 ULDUAR_MAP_ID = 603;
 

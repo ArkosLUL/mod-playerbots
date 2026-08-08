@@ -5,10 +5,9 @@
  */
 
 #include "NaxxActions.h"
-
+#include "NaxxSpellIds.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "NaxxSpellIds.h"
 #include "RaidBossHelpers.h"
 
 bool ThaddiusAttackNearestPetAction::isUseful()

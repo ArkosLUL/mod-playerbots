@@ -5,7 +5,6 @@
  */
 
 #include "WarriorActions.h"
-
 #include "AiFactory.h"
 #include "ArmorDebuff.h"
 #include "Playerbots.h"

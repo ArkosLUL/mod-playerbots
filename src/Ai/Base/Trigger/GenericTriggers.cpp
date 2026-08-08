@@ -5,15 +5,15 @@
  */
 
 #include "GenericTriggers.h"
-
-#include <string>
-
-#include "GenericBuffUtils.h"
 #include "AttackersValue.h"
+#include "Corpse.h"
 #include "CreatureAI.h"
+#include "GenericBuffUtils.h"
 #include "ItemVisitors.h"
 #include "LastSpellCastValue.h"
 #include "ObjectGuid.h"
+#include "Player.h"
+#include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "PositionValue.h"
@@ -21,9 +21,7 @@
 #include "TemporarySummon.h"
 #include "ThreatManager.h"
 #include "Timer.h"
-#include "PlayerbotAI.h"
-#include "Player.h"
-#include "Corpse.h"
+#include <string>
 
 bool LowManaTrigger::IsActive()
 {

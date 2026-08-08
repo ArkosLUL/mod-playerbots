@@ -7,7 +7,6 @@
 #include "OSActions.h"
 #include "OSShared.h"
 #include "OSTriggers.h"
-
 #include "Playerbots.h"
 
 using namespace ObsidianSanctumHelpers;

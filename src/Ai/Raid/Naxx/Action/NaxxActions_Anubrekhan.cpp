@@ -4,14 +4,13 @@
  * or (at your option) any later version.
  */
 
-#include <cmath>
-
+#include "NaxxActions.h"
+#include "NaxxSpellIds.h"
 #include "ObjectGuid.h"
 #include "Playerbots.h"
-#include "NaxxActions.h"
-
-#include "NaxxSpellIds.h"
 #include "RaidBossHelpers.h"
+
+#include <cmath>
 
 namespace
 {

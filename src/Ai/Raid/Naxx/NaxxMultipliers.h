@@ -17,7 +17,7 @@ public:
     GrobbulusMultiplier(PlayerbotAI* ai) : Multiplier(ai, "grobbulus") {}
 
 public:
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 };
 class HeiganDanceMultiplier : public Multiplier
 {
@@ -25,7 +25,7 @@ public:
     HeiganDanceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "heigan dance"), helper(ai) {}
 
 public:
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 
 private:
     // How long before an eruption bots stop starting anything they cannot finish before the step.
@@ -40,7 +40,7 @@ public:
     LoathebGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "loatheb generic") {}
 
 public:
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 };
 
 class ThaddiusGenericMultiplier : public Multiplier
@@ -49,7 +49,7 @@ public:
     ThaddiusGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thaddius generic"), helper(ai) {}
 
 public:
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 
 private:
     ThaddiusBossHelper helper;
@@ -60,7 +60,7 @@ class SapphironGenericMultiplier : public Multiplier
 public:
     SapphironGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sapphiron generic"), helper(ai) {}
 
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 
 private:
     SapphironBossHelper helper;
@@ -69,10 +69,8 @@ private:
 class InstructorRazuviousGenericMultiplier : public Multiplier
 {
 public:
-    InstructorRazuviousGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "instructor razuvious generic"), helper(ai)
-    {
-    }
-    virtual float GetValue(Action* action);
+    InstructorRazuviousGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "instructor razuvious generic"), helper(ai) {}
+    float GetValue(Action* action) override;
 
 private:
     RazuviousBossHelper helper;
@@ -82,7 +80,7 @@ class KelthuzadGenericMultiplier : public Multiplier
 {
 public:
     KelthuzadGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "kelthuzad generic"), helper(ai) {}
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 
 private:
     KelthuzadBossHelper helper;
@@ -94,7 +92,7 @@ public:
     AnubrekhanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "anubrekhan generic"), helper(ai) {}
 
 public:
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 
 private:
     AnubrekhanBossHelper helper;
@@ -106,7 +104,7 @@ public:
     FourhorsemanGenericMultiplier(PlayerbotAI* ai) : Multiplier(ai, "fourhorseman generic") {}
 
 public:
-    virtual float GetValue(Action* action);
+    float GetValue(Action* action) override;
 };
 
 class GothikGenericMultiplier : public Multiplier

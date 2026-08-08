@@ -5,7 +5,6 @@
  */
 
 #include "HealthTriggers.h"
-
 #include "AoeHealValues.h"
 #include "AttackersValue.h"
 #include "Playerbots.h"

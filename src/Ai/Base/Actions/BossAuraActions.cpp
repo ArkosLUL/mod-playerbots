@@ -4,13 +4,12 @@
  * or (at your option) any later version.
  */
 
-#include <HunterBuffStrategies.h>
-#include <PaladinBuffStrategies.h>
-#include <PlayerbotAI.h>
-
 #include "BossAuraActions.h"
 #include "BossAuraTriggers.h"
 #include "Group.h"
+#include "HunterBuffStrategies.h"
+#include "PaladinBuffStrategies.h"
+#include "PlayerbotAI.h"
 #include "Playerbots.h"
 
 const std::string ADD_STRATEGY_CHAR = "+";

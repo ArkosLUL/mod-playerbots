@@ -13,6 +13,7 @@
 #include "BurstWindowStrategy.h"
 #include "CastTimeStrategy.h"
 #include "ChatCommandHandlerStrategy.h"
+#include "CombatStrategy.h"
 #include "ConserveManaStrategy.h"
 #include "CustomStrategy.h"
 #include "DeadStrategy.h"

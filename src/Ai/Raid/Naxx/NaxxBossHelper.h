@@ -7,14 +7,6 @@
 #ifndef PLAYERBOTS_NAXXBOSSHELPER_H
 #define PLAYERBOTS_NAXXBOSSHELPER_H
 
-#include <algorithm>
-#include <cmath>
-#include <limits>
-#include <mutex>
-#include <string>
-#include <unordered_map>
-#include <vector>
-
 #include "AiObject.h"
 #include "AiObjectContext.h"
 #include "EventMap.h"
@@ -22,6 +14,7 @@
 #include "Map.h"
 #include "MotionMaster.h"
 #include "NamedObjectContext.h"
+#include "NaxxSpellIds.h"
 #include "ObjectGuid.h"
 #include "ObjectAccessor.h"
 #include "Pet.h"
@@ -33,7 +26,14 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 #include "Timer.h"
-#include "NaxxSpellIds.h"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 const uint32 NAXX_MAP_ID = 533;
 

@@ -5,14 +5,13 @@
  */
 
 #include "NaxxActions.h"
+#include "NaxxBossHelper.h"
+#include "NaxxSpellIds.h"
+#include "PlayerbotAIConfig.h"
+#include "Playerbots.h"
 
 #include <algorithm>
 #include <limits>
-
-#include "PlayerbotAIConfig.h"
-#include "Playerbots.h"
-#include "NaxxBossHelper.h"
-#include "NaxxSpellIds.h"
 
 bool SapphironGroundPositionAction::Execute(Event event)
 {

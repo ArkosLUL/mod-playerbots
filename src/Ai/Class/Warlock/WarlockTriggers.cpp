@@ -5,13 +5,13 @@
  */
 
 #include "WarlockTriggers.h"
-#include "GenericTriggers.h"
-#include "Playerbots.h"
-#include "PlayerbotAI.h"
-#include "Player.h"
-#include "Group.h"
 #include "Bag.h"
+#include "GenericTriggers.h"
+#include "Group.h"
 #include "Item.h"
+#include "Player.h"
+#include "PlayerbotAI.h"
+#include "Playerbots.h"
 #include "RitualOfSoulsActions.h"
 #include "SpellAuraEffects.h"
 #include "SpellAuras.h"

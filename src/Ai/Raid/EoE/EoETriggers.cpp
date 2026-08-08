@@ -5,7 +5,6 @@
  */
 
 #include "EoETriggers.h"
-
 #include "SharedDefines.h"
 #include "Spell.h"
 

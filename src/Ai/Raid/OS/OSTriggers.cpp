@@ -6,7 +6,6 @@
 
 #include "OSTriggers.h"
 #include "OSShared.h"
-
 #include "SharedDefines.h"
 
 using namespace ObsidianSanctumHelpers;
