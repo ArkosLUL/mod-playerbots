@@ -14,7 +14,7 @@ namespace
 // Health percentage the new candidate has to beat the current one by before the buff moves. Beacon
 // and Sacred Shield both cost a global, so without a margin two tanks trading damage keep the
 // paladin re-buffing instead of healing.
-constexpr float SWAP_MARGIN_PCT = 30.0f;
+constexpr float SWAP_MARGIN_PCT = 75.0f;
 
 // Health difference below which two tanks count as equally hurt. Otherwise the pull, where everyone
 // is at 100%, is decided by group order and the swap margin then keeps the buff there.
