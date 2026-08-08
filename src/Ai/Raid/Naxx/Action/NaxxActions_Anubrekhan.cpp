@@ -10,7 +10,10 @@
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 
+#include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 namespace
 {
@@ -22,6 +25,25 @@ constexpr float RangedRingArc = 4.0f * static_cast<float>(M_PI) / 3.0f;
 constexpr float RangedDpsBandOffset = 4.0f;
 // A boss that has moved less than this leaves the ring where it is.
 constexpr float AnchorDriftDistance = 8.0f;
+
+// One ring shared by every non-tank, so the three role groups do not each build their own on the
+// same spot. NaxxGetSlotIndexAndCount only indexes within a group, which is what the spread wants
+// and the stack does not.
+std::pair<size_t, size_t> SwarmSlot(PlayerbotAI* botAI, Player* bot)
+{
+    NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);
+    std::vector<Player*> all;
+    all.insert(all.end(), groups.healers.begin(), groups.healers.end());
+    all.insert(all.end(), groups.rangedDps.begin(), groups.rangedDps.end());
+    all.insert(all.end(), groups.meleeDps.begin(), groups.meleeDps.end());
+
+    auto it = std::find(all.begin(), all.end(), bot);
+    if (it == all.end())
+    {
+        return {0, 1};
+    }
+    return {static_cast<size_t>(std::distance(all.begin(), it)), all.size()};
+}
 } // namespace
 
 bool AnubrekhanChooseTargetAction::Execute(Event event)
@@ -123,21 +145,45 @@ bool AnubrekhanPositionAction::Execute(Event event)
         return false;
     }
 
+    bool swarm = helper.IsSwarmFormation();
     if (botAI->IsMainTank(bot))
     {
         // Locust Swarm neither roots nor threat-wipes the boss, so he keeps chasing - outside the
         // swarm there is nothing to kite and normal tanking should own the position.
-        return helper.IsLocustSwarmActive() ? KiteBoss() : false;
+        return swarm ? KiteBoss() : false;
     }
     if (botAI->IsAssistTank(bot))
     {
         return HoldAdds(boss);
+    }
+    if (swarm)
+    {
+        // The Impale spread is what puts people inside the swarm, so it goes away for the window.
+        return TakeSwarmStack(boss);
     }
     if (botAI->IsHeal(bot) || botAI->IsRanged(bot))
     {
         return TakeRangedSlot(boss);
     }
     return TakeMeleeSlot(boss);
+}
+
+bool AnubrekhanPositionAction::TakeSwarmStack(Unit* boss)
+{
+    // Anchored on the boss rather than on the room centre: 25 yd along the bearing to the centre is
+    // in heal and cast range whatever the kite is doing, and at KiteRadius 35 the pile only orbits a
+    // 10 yd circle instead of chasing the boss around the room.
+    float toCenter = std::atan2(AnubrekhanBossHelper::RoomCenterY - boss->GetPositionY(),
+                                AnubrekhanBossHelper::RoomCenterX - boss->GetPositionX());
+    float stackX = boss->GetPositionX() + std::cos(toCenter) * AnubrekhanBossHelper::SwarmStackDistance;
+    float stackY = boss->GetPositionY() + std::sin(toCenter) * AnubrekhanBossHelper::SwarmStackDistance;
+
+    std::pair<size_t, size_t> slot = SwarmSlot(botAI, bot);
+    float theta =
+        2.0f * static_cast<float>(M_PI) * static_cast<float>(slot.first) / static_cast<float>(slot.second);
+    float x = stackX + std::cos(theta) * AnubrekhanBossHelper::SwarmStackRingRadius;
+    float y = stackY + std::sin(theta) * AnubrekhanBossHelper::SwarmStackRingRadius;
+    return MoveToSlot(x, y);
 }
 
 bool AnubrekhanPositionAction::KiteBoss()
@@ -245,7 +291,7 @@ bool AnubrekhanPositionAction::MoveToSlot(float x, float y)
     // Re-issuing the same move every tick makes bots jitter in place, and a jittering bot is mid-move
     // when Impale lands. Let an order that is still valid run - unless Impale is about to go off.
     if (sameDestination && getMSTimeDiff(state.lastMoveMs, now) < AnubrekhanBossHelper::RepositionIntervalMs &&
-        !helper.IsImpaleImminent())
+        !helper.IsImpaleImminent() && !helper.IsSwarmImminent())
     {
         return false;
     }

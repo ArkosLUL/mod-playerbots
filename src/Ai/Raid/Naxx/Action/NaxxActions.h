@@ -360,7 +360,7 @@ private:
     AnubrekhanBossHelper helper;
 };
 
-// 32 waypoints put 8.8 yd between them, so the main tank's kite tracks the circle instead of
+// 32 waypoints put 6.9 yd between them, so the main tank's kite tracks the circle instead of
 // jumping across it.
 class AnubrekhanPositionAction : public RotateAroundTheCenterPointAction
 {
@@ -378,6 +378,7 @@ private:
     bool HoldAdds(Unit* boss);
     bool TakeRangedSlot(Unit* boss);
     bool TakeMeleeSlot(Unit* boss);
+    bool TakeSwarmStack(Unit* boss);
     // Rate-limited move to a slot the caller worked out; false when the bot is already parked there.
     bool MoveToSlot(float x, float y);
 

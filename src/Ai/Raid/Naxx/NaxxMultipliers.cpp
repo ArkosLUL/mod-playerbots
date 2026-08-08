@@ -471,11 +471,21 @@ float AnubrekhanGenericMultiplier::GetValue(Action* action)
         return 0.0f;
     }
 
-    // Nobody gains from a panic move during the swarm: the tank would drop the kite and everyone else
-    // would leave the slot that keeps them out of Impale range.
-    if (helper.IsLocustSwarmActive() && dynamic_cast<FleeAction*>(action))
+    if (helper.IsSwarmFormation())
     {
-        return 0.0f;
+        // Nobody gains from a panic move during the swarm: the tank would drop the kite and everyone
+        // else would leave the pile that keeps them out of the aura.
+        if (dynamic_cast<FleeAction*>(action))
+        {
+            return 0.0f;
+        }
+
+        // The generic chase would drag melee back onto the boss as fast as the position action walks
+        // them out.
+        if (!botAI->IsTank(bot) && dynamic_cast<MeleeAction*>(action))
+        {
+            return 0.0f;
+        }
     }
     return 1.0f;
 }

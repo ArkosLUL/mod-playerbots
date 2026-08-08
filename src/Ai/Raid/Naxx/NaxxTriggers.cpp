@@ -346,7 +346,7 @@ bool AnubrekhanTrigger::IsActive()
 
 bool AnubrekhanLocustSwarmTrigger::IsActive()
 {
-    return helper.UpdateBossAI() && helper.IsLocustSwarmActive();
+    return helper.UpdateBossAI() && helper.IsSwarmFormation();
 }
 
 bool FaerlinaTrigger::IsActive()

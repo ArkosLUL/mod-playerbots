@@ -1555,7 +1555,15 @@ public:
     static constexpr float RoomCenterY = -3476.27f;
     // The floor is flat, and bots that inherit their own Z end up pathing into the walls.
     static constexpr float RoomFloorZ = 287.08f;
-    static constexpr float KiteRadius = 45.0f;
+    // The raid stacks inside the kite circle during the swarm, so this is what sets boss-to-raid
+    // distance for the whole window - drop it if healers start falling short of the tank.
+    static constexpr float KiteRadius = 35.0f;
+    // Where the raid piles up during the swarm, measured from the boss towards the room centre. Fixed
+    // to the boss rather than to the room so it is in heal and cast range wherever the kite has got
+    // to, and always outside the ~15 yd aura.
+    static constexpr float SwarmStackDistance = 25.0f;
+    // Bodies block each other on a single point. This is a de-clump ring, not a spread.
+    static constexpr float SwarmStackRingRadius = 3.0f;
     // Wider than the Impale splash, well inside the room.
     static constexpr float ImpaleSpreadDistance = 12.0f;
     // Locust Swarm reaches ~15 yd, so the ring starts outside that and ends inside cast/heal range.
@@ -1571,6 +1579,7 @@ public:
     static constexpr float MaxHoldRadius = 52.0f;
     static constexpr uint32 RepositionIntervalMs = 1000;
     static constexpr uint32 ImpaleWarningMs = 3000;
+    static constexpr uint32 SwarmWarningMs = 3000;
 
     struct SlotState
     {
@@ -1610,11 +1619,26 @@ public:
             // raid wiped or reset, so the old anchor says nothing about the pull running now.
             _state->clockKnown = true;
             _state->engageMs = now;
+            // The swarm anchor belongs to the attempt that set it, so it goes with the clock.
+            _state->swarmSeen = false;
+            _state->swarmActive = false;
+            _state->lastSwarmStartMs = 0;
             // Only a real pull gives a trustworthy anchor. Bots arriving later inherit whatever the
             // pullers established, and stay unsynced if there was nobody.
             _state->synced = _unit->GetHealthPct() > 99.0f;
         }
         _state->lastSeenMs = now;
+
+        // The core rolls the first swarm anywhere in 70-120s after the pull (boss_anubrekhan.cpp,
+        // JustEngagedWith), so it cannot be predicted - but every later one is exactly 90s after the
+        // last, and the aura gives a clean edge to anchor on.
+        bool swarmActive = IsLocustSwarmActive();
+        if (swarmActive && !_state->swarmActive)
+        {
+            _state->lastSwarmStartMs = now;
+            _state->swarmSeen = true;
+        }
+        _state->swarmActive = swarmActive;
         return true;
     }
 
@@ -1649,6 +1673,25 @@ public:
 
     bool IsImpaleImminent() const { return IsSynced() && MsUntilNextImpale() <= ImpaleWarningMs; }
 
+    // 0 until a swarm has actually been seen - the opening cast is not predictable.
+    uint32 MsUntilNextSwarm() const
+    {
+        if (!_state || !_state->swarmSeen)
+        {
+            return 0;
+        }
+        return SwarmPeriodMs - (getMSTimeDiff(_state->lastSwarmStartMs, getMSTime()) % SwarmPeriodMs);
+    }
+
+    bool IsSwarmImminent() const
+    {
+        return _state && _state->swarmSeen && !IsLocustSwarmActive() && MsUntilNextSwarm() <= SwarmWarningMs;
+    }
+
+    // The single gate the formation, the kite and the multiplier all read, so they cannot disagree
+    // about which shape the raid is in.
+    bool IsSwarmFormation() const { return IsLocustSwarmActive() || IsSwarmImminent(); }
+
     // Both lists are living units only, matched on entry id, sorted by GUID so every bot sees the
     // same order and they stop trading targets between ticks.
     std::vector<Unit*> GetCryptGuards() { return GetLivingAttackersByEntry(NPC_CRYPT_GUARD); }
@@ -1668,6 +1711,7 @@ public:
 private:
     static constexpr uint32 FirstImpaleMs = 15000;
     static constexpr uint32 ImpalePeriodMs = 20000;
+    static constexpr uint32 SwarmPeriodMs = 90000;
     static constexpr uint32 StaleStateMs = 10000;
 
     struct EncounterState
@@ -1677,6 +1721,10 @@ private:
         bool synced = false;
         uint32 engageMs = 0;
         uint32 lastSeenMs = 0;
+        // Anchored on the first swarm the raid actually sees, not on the pull.
+        bool swarmSeen = false;
+        bool swarmActive = false;
+        uint32 lastSwarmStartMs = 0;
     };
 
     // One clock per Anub'Rekhan, shared by every bot in the instance.
