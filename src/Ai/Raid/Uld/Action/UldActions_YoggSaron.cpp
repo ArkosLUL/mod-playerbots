@@ -645,3 +645,18 @@ bool YoggSaronSanityConservationAction::Execute(Event /*event*/)
 
     return true;
 }
+
+bool YoggSaronSqueezeEscapeAction::Execute(Event /*event*/)
+{
+    switch (bot->getClass())
+    {
+        case CLASS_MAGE:
+            return botAI->CanCastSpell("ice block", bot) && botAI->CastSpell("ice block", bot);
+
+        case CLASS_PALADIN:
+            return botAI->CanCastSpell("divine shield", bot) && botAI->CastSpell("divine shield", bot);
+
+        default:
+            return false;
+    }
+}

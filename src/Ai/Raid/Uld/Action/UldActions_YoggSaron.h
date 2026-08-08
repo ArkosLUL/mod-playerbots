@@ -162,6 +162,15 @@ public:
     bool Execute(Event event) override;
 };
 
+// Pop an immunity to shed Squeeze, which kills the Constrictor Tentacle holding the bot.
+class YoggSaronSqueezeEscapeAction : public Action
+{
+public:
+    YoggSaronSqueezeEscapeAction(PlayerbotAI* ai) : Action(ai, "yogg-saron squeeze escape action") {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronAntiFearAction : public RaidAntiFearAction
 {
 public:

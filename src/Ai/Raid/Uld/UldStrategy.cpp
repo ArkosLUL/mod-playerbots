@@ -505,6 +505,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron sanity conservation trigger",
         { NextAction("yogg-saron sanity conservation action", ACTION_RAID + 5) }));
 
+    triggers.push_back(new TriggerNode(
+        "yogg-saron squeeze escape trigger",
+        { NextAction("yogg-saron squeeze escape action", ACTION_RAID + 1) }));
+
     //
     // Algalon the Observer
     //

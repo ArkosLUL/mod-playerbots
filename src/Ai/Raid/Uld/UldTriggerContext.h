@@ -98,6 +98,7 @@ public:
         creators["yogg-saron crusher tentacle trigger"] = &RaidUlduarTriggerContext::yogg_saron_crusher_tentacle_trigger;
         creators["yogg-saron guardian control trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_control_trigger;
         creators["yogg-saron sanity conservation trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_conservation_trigger;
+        creators["yogg-saron squeeze escape trigger"] = &RaidUlduarTriggerContext::yogg_saron_squeeze_escape_trigger;
         creators["algalon cosmic smash trigger"] = &RaidUlduarTriggerContext::algalon_cosmic_smash_trigger;
         creators["algalon big bang trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_trigger;
         creators["algalon big bang soak trigger"] = &RaidUlduarTriggerContext::algalon_big_bang_soak_trigger;
@@ -218,6 +219,7 @@ private:
     static Trigger* yogg_saron_crusher_tentacle_trigger(PlayerbotAI* ai) { return new YoggSaronCrusherTentacleTrigger(ai); }
     static Trigger* yogg_saron_guardian_control_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianControlTrigger(ai); }
     static Trigger* yogg_saron_sanity_conservation_trigger(PlayerbotAI* ai) { return new YoggSaronSanityConservationTrigger(ai); }
+    static Trigger* yogg_saron_squeeze_escape_trigger(PlayerbotAI* ai) { return new YoggSaronSqueezeEscapeTrigger(ai); }
     static Trigger* algalon_cosmic_smash_trigger(PlayerbotAI* ai) { return new AlgalonCosmicSmashTrigger(ai); }
     static Trigger* algalon_big_bang_trigger(PlayerbotAI* ai) { return new AlgalonBigBangTrigger(ai); }
     static Trigger* algalon_big_bang_soak_trigger(PlayerbotAI* ai) { return new AlgalonBigBangSoakTrigger(ai); }

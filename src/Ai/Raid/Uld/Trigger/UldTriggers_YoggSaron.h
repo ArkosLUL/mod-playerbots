@@ -169,6 +169,15 @@ public:
     bool IsActive() override;
 };
 
+// A Constrictor Tentacle drops its passenger when Squeeze is removed, so a grabbed paladin or mage
+// can free itself with an immunity.
+class YoggSaronSqueezeEscapeTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronSqueezeEscapeTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron squeeze escape trigger") {}
+    bool IsActive() override;
+};
+
 // Covers both fears the fight has: Malady of the Mind in P2 and Deafening Roar in P3. Complements
 // the malady spread node, which handles the bot who is already feared.
 class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger

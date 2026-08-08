@@ -158,12 +158,6 @@ bool RazorscaleHarpoonAvailableTrigger::IsActive()
     // Check each harpoon entry
     for (auto const& harpoon : harpoonData)
     {
-        // Skip harpoons whose chain spell is already active on the boss
-        if (razorscaleHelper.IsHarpoonFired(harpoon.chainSpellId))
-        {
-            continue;
-        }
-
         // Find the nearest harpoon GameObject within 200 yards
         if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
         {
@@ -202,7 +196,7 @@ bool RazorscaleFuseArmorTrigger::IsActive()
         if (!member || !botAI->IsMainTank(member))
             continue;
 
-        Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSEARMOR);
+        Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
         if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
             return true;
     }

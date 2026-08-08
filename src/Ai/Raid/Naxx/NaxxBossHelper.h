@@ -2289,7 +2289,9 @@ public:
         // Consider the helper "available" as soon as we have the boss OR at least one pet.
         return _unit != nullptr || feugen != nullptr || stalagg != nullptr;
     }
-    bool IsPhasePet() { return (feugen && feugen->IsAlive()) || (stalagg && stalagg->IsAlive()); }
+    // Both pets feign death on their "kill" and only really die 12s later, when Thaddius'
+    // overload finishes them off - so the pet phase has to end on the feign, not on IsAlive().
+    bool IsPhasePet() { return !IsDownOrFeigning(feugen) || !IsDownOrFeigning(stalagg); }
     bool IsPhaseTransition()
     {
         if (IsPhasePet())
@@ -2319,11 +2321,11 @@ public:
     Unit* GetNearestPet()
     {
         Unit* unit = nullptr;
-        if (feugen && feugen->IsAlive())
+        if (!IsDownOrFeigning(feugen))
         {
             unit = feugen;
         }
-        if (stalagg && stalagg->IsAlive() && (!feugen || bot->GetDistance(stalagg) < bot->GetDistance(feugen)))
+        if (!IsDownOrFeigning(stalagg) && (!feugen || bot->GetDistance(stalagg) < bot->GetDistance(feugen)))
         {
             unit = stalagg;
         }
@@ -2359,11 +2361,11 @@ public:
         return false;
     }
 
-    // Return the pet marked with the given RTI icon, if it is Stalagg/Feugen.
+    // Return the pet marked with the given RTI icon, if it is Stalagg/Feugen and still up.
     Unit* GetMarkedPet(uint8 iconIndex)
     {
         Unit* unit = GetMarkedUnitRaw(iconIndex);
-        return IsPet(unit) ? unit : nullptr;
+        return IsPet(unit) && !IsDownOrFeigning(unit) ? unit : nullptr;
     }
 
     // Decide which RTI pair is used for phase 1.
@@ -2573,9 +2575,9 @@ public:
 
         Unit* preferred = primary ? stalagg : feugen;
         Unit* sibling   = primary ? feugen : stalagg;
-        if (preferred && preferred->IsAlive())
+        if (!IsDownOrFeigning(preferred))
             return preferred;
-        if (sibling && sibling->IsAlive())
+        if (!IsDownOrFeigning(sibling))
             return sibling;
         return nullptr;
     }
@@ -2596,7 +2598,9 @@ public:
             return false;
         if (target != feugen && target != stalagg)
             return false;
-        if (!feugen->IsAlive() || !stalagg->IsAlive())
+        // Once one pet is down the window is over: it sits at 1 HP feigning and would drag the
+        // sibling's damage to a halt.
+        if (IsDownOrFeigning(feugen) || IsDownOrFeigning(stalagg))
             return false;
 
         float targetPct = target->GetHealthPct();
@@ -2634,8 +2638,8 @@ public:
                     return pet;
             }
 
-            Unit* feugenAlive = (feugen && feugen->IsAlive()) ? feugen : nullptr;
-            Unit* stalaggAlive = (stalagg && stalagg->IsAlive()) ? stalagg : nullptr;
+            Unit* feugenAlive = !IsDownOrFeigning(feugen) ? feugen : nullptr;
+            Unit* stalaggAlive = !IsDownOrFeigning(stalagg) ? stalagg : nullptr;
 
             if (feugenAlive || stalaggAlive)
             {

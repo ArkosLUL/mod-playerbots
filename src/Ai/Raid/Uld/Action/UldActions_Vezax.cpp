@@ -4,6 +4,7 @@
 #include <CombatStrategy.h>
 #include <FollowMasterStrategy.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "AiObjectContext.h"
@@ -56,20 +57,23 @@ bool VezaxShadowCrashAction::Execute(Event /*event*/)
     float currentAngle = atan2(botY - bossY, botX - bossX);
     float currentDistance = bot->GetDistance2d(boss);
 
-    // Set desired distance from boss (stay close enough for melee, far enough for ranged)
-    float desiredDistance = 15.0f;
+    // Shadow Crash can land on melee since #26884, so strafe out of the puddle at the bot's own
+    // range instead of dragging everyone to 15 yards - melee that walks out stops attacking.
+    bool const stayInMelee = botAI->IsMelee(bot) || botAI->IsTank(bot);
+    float const minDistance = stayInMelee ? ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MIN_RANGE
+                                          : ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MIN_RANGE;
+    float const maxDistance = stayInMelee ? ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MAX_RANGE
+                                          : ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MAX_RANGE;
+    float const desiredDistance = std::clamp(currentDistance, minDistance, maxDistance);
 
-    // If too close or too far, adjust distance first
-    if (currentDistance < desiredDistance - 2.0f || currentDistance > desiredDistance + 2.0f)
-        currentDistance = desiredDistance;
-
-    // Calculate movement increment - move in increments around the boss
-    float angleIncrement = M_PI / 10;
+    // Constant step length around the boss, so a melee bot on a tight radius still clears the
+    // puddle in as few ticks as a ranged one further out.
+    float const angleIncrement = ULDUAR_VEZAX_SHADOW_CRASH_STEP_YARDS / std::max(desiredDistance, 1.0f);
     float newAngle = currentAngle + angleIncrement;
 
     // Calculate new position
-    float newX = bossX + currentDistance * cos(newAngle);
-    float newY = bossY + currentDistance * sin(newAngle);
+    float newX = bossX + desiredDistance * cos(newAngle);
+    float newY = bossY + desiredDistance * sin(newAngle);
     float newZ = bossZ;  // Keep same Z level as boss
 
     // Move to the new position

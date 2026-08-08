@@ -103,14 +103,13 @@ bool RazorscaleBossHelper::IsFlyingPhase() const
     return IsFlyingPhaseFor(_boss);
 }
 
-bool RazorscaleBossHelper::IsHarpoonFired(uint32 chainSpellId) const
-{
-    return _boss && _boss->HasAura(chainSpellId);
-}
-
 bool RazorscaleBossHelper::IsHarpoonReady(GameObject* harpoonGO)
 {
     if (!harpoonGO)
+        return false;
+
+    // A spent harpoon keeps standing there, flagged unselectable, until the controller rebuilds it.
+    if (harpoonGO->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
         return false;
 
     auto it = _harpoonCooldowns.find(harpoonGO->GetGUID());
@@ -161,12 +160,13 @@ GameObject* RazorscaleBossHelper::FindNearestHarpoon(float x, float y, float z) 
 
 const std::vector<RazorscaleBossHelper::HarpoonData>& RazorscaleBossHelper::GetHarpoonData()
 {
+    // Only two of these exist in 10-man; the missing entries simply never resolve to a GameObject.
     static const std::vector<HarpoonData> harpoonData =
     {
-        { GO_RAZORSCALE_HARPOON_1, SPELL_CHAIN_1 },
-        { GO_RAZORSCALE_HARPOON_2, SPELL_CHAIN_2 },
-        { GO_RAZORSCALE_HARPOON_3, SPELL_CHAIN_3 },
-        { GO_RAZORSCALE_HARPOON_4, SPELL_CHAIN_4 },
+        { GO_RAZORSCALE_HARPOON_1 },
+        { GO_RAZORSCALE_HARPOON_2 },
+        { GO_RAZORSCALE_HARPOON_3 },
+        { GO_RAZORSCALE_HARPOON_4 },
     };
     return harpoonData;
 }
@@ -231,7 +231,7 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
         if (!member || !botAI->IsTank(member, true) || !member->IsAlive())
             continue;
 
-        Aura* fuseArmor = member->GetAura(SPELL_FUSEARMOR);
+        Aura* fuseArmor = member->GetAura(SPELL_FUSE_ARMOR);
         if (fuseArmor && fuseArmor->GetStackAmount() >= FUSEARMOR_THRESHOLD)
             continue;
 

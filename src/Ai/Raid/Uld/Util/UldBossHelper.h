@@ -160,6 +160,7 @@ enum UlduarIDs
     SPELL_CANCEL_ILLUSION_AURA = 63993,
     SPELL_INDUCE_MADNESS = 64059,
     SPELL_LUNATIC_GAZE_YS = 64163,
+    SPELL_SQUEEZE = 64125,  // Constrictor Tentacle's grip; base id, difficulty-mapped at runtime
     SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
 
@@ -240,6 +241,18 @@ constexpr float ULDUAR_FL_TOWER_HAZARD_RADIUS = 18.0f;
 
 // Vezax hard mode: ranged/healers stay outside the Saronite Animus' Profound Darkness (63420).
 constexpr float ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f;
+
+// Shadow Crash strafe: the band each role keeps to Vezax while walking out of the puddle, and the
+// arc length of one step. Melee stay inside their reach so the dodge does not cost the whole cast.
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MIN_RANGE = 4.0f;
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MAX_RANGE = 8.0f;
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MIN_RANGE = 13.0f;
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MAX_RANGE = 17.0f;
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_STEP_YARDS = 5.0f;
+
+// Mimiron: closest a bot trailing the P3Wx2 Laser Barrage will stand to VX-001. Tighter radii keep
+// the run needed to stay behind the beam short.
+constexpr float ULDUAR_MIMIRON_BARRAGE_MIN_RADIUS = 10.0f;
 
 // Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
@@ -404,13 +417,9 @@ public:
 
     enum RazorscaleSpells : uint32
     {
-        SPELL_CHAIN_1           = 49679,
-        SPELL_CHAIN_2           = 49682,
-        SPELL_CHAIN_3           = 49683,
-        SPELL_CHAIN_4           = 49684,
         SPELL_SENTINEL_WHIRLWIND = 63806,
         SPELL_STUN_AURA         = 62794,
-        SPELL_FUSEARMOR         = 64771
+        SPELL_FUSE_ARMOR        = 64821
     };
 
     static constexpr uint32 FUSEARMOR_THRESHOLD = 2;
@@ -428,7 +437,6 @@ public:
     struct HarpoonData
     {
         uint32 gameObjectEntry;
-        uint32 chainSpellId;
     };
 
     explicit RazorscaleBossHelper(PlayerbotAI* botAI)
@@ -445,7 +453,6 @@ public:
     static bool IsGroundPhaseFor(Unit* boss);
     static bool IsFlyingPhaseFor(Unit* boss);
 
-    bool IsHarpoonFired(uint32 chainSpellId) const;
     static bool IsHarpoonReady(GameObject* harpoonGO);
     static void SetHarpoonOnCooldown(GameObject* harpoonGO);
     GameObject* FindNearestHarpoon(float x, float y, float z) const;

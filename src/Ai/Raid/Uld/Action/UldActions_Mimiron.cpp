@@ -4,6 +4,7 @@
 #include <CombatStrategy.h>
 #include <FollowMasterStrategy.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "AiObjectContext.h"
@@ -106,16 +107,28 @@ bool MimironPhase1PositioningAction::isUseful()
 
 bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 {
-    auto master = botAI->GetMaster();
-    if (!master || !master->IsAlive())
-        return false;
+    Unit* boss = AI_VALUE2(Unit*, "find target", "vx-001");
+    if (!boss || !boss->IsAlive())
+    {
+        // No boss to read a facing from - fall back to huddling on the master.
+        Player* master = botAI->GetMaster();
+        if (!master || !master->IsAlive())
+            return false;
 
-    if (bot->GetDistance2d(master) > 15.0f)
-        return bot->TeleportTo(master->GetMapId(), master->GetPositionX(), master->GetPositionY(),
-                               master->GetPositionZ(), master->GetOrientation());
+        return MoveTo(master->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    }
 
-    return MoveTo(master->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(), false,
-                  false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    // The beams follow VX-001's facing and the barrage sweeps it clockwise (#26917), so the arc it
+    // has just left - a little counterclockwise of where it points now - is the one to trail.
+    float const safeAngle = Position::NormalizeOrientation(boss->GetOrientation() + delta_angle);
+    float const radius = std::clamp(bot->GetDistance2d(boss), ULDUAR_MIMIRON_BARRAGE_MIN_RADIUS, distance);
+
+    float const x = boss->GetPositionX() + radius * cos(safeAngle);
+    float const y = boss->GetPositionY() + radius * sin(safeAngle);
+
+    return MoveTo(boss->GetMapId(), x, y, boss->GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_FORCED, true);
 }
 
 bool MimironRapidBurstAction::isUseful()

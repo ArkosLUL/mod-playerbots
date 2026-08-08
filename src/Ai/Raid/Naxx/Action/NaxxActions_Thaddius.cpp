@@ -29,13 +29,13 @@ bool ThaddiusAttackNearestPetAction::isUseful()
     }
 
     Unit* target = helper.GetAssignedPetForBot();
-    return target && target->IsAlive();
+    return !IsDownOrFeigning(target);
 }
 
 bool ThaddiusAttackNearestPetAction::Execute(Event event)
 {
     Unit* target = helper.GetAssignedPetForBot();
-    if (!target || !target->IsAlive())
+    if (IsDownOrFeigning(target))
     {
         return false;
     }

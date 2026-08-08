@@ -564,9 +564,6 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
     // Find the nearest harpoon that hasn't been fired and is not on cooldown
     for (auto const& harpoon : harpoonData)
     {
-        if (razorscaleHelper.IsHarpoonFired(harpoon.chainSpellId))
-            continue;
-
         if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
         {
             if (RazorscaleBossHelper::IsHarpoonReady(harpoonGO))
@@ -650,9 +647,6 @@ bool RazorscaleHarpoonAction::isUseful()
 
     for (auto const& harpoon : harpoonData)
     {
-        if (razorscaleHelper.IsHarpoonFired(harpoon.chainSpellId))
-            continue;
-
         if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
         {
             if (RazorscaleBossHelper::IsHarpoonReady(harpoonGO))
@@ -676,7 +670,7 @@ bool RazorscaleFuseArmorAction::isUseful()
     // If this bot is the main tank AND has Fuse Armor at the threshold, return true immediately
     if (botAI->IsMainTank(bot))
     {
-        Aura* fuseArmor = bot->GetAura(RazorscaleBossHelper::SPELL_FUSEARMOR);
+        Aura* fuseArmor = bot->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
         if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
             return true;
     }
@@ -694,7 +688,7 @@ bool RazorscaleFuseArmorAction::isUseful()
 
         if (botAI->IsMainTank(member) && member != bot)
         {
-            Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSEARMOR);
+            Aura* fuseArmor = member->GetAura(RazorscaleBossHelper::SPELL_FUSE_ARMOR);
             if (fuseArmor && fuseArmor->GetStackAmount() >= RazorscaleBossHelper::FUSEARMOR_THRESHOLD)
             {
                 // There is another main tank with high Fuse Armor

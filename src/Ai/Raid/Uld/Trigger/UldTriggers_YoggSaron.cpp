@@ -9,6 +9,7 @@
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
+#include "SpellMgr.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
 #include "Vehicle.h"
@@ -697,4 +698,16 @@ bool YoggSaronSanityConservationTrigger::IsActive()
         return false;
 
     return true;
+}
+
+bool YoggSaronSqueezeEscapeTrigger::IsActive()
+{
+    if (!IsYoggSaronFight())
+        return false;
+
+    // Only these two can shed a periodic damage aura outright; Feign Death and Vanish do not.
+    if (bot->getClass() != CLASS_PALADIN && bot->getClass() != CLASS_MAGE)
+        return false;
+
+    return bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_SQUEEZE, bot));
 }

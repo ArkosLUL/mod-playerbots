@@ -235,6 +235,16 @@ Unit* GetFirstAliveUnitByEntry(PlayerbotAI* botAI, uint32 entry)
     return nullptr;
 }
 
+// Stalagg and Feugen survive their "death" at 1 HP in feign death, so treat unselectable or
+// lying-down creatures as down instead of trusting IsAlive().
+bool IsDownOrFeigning(Unit const* unit)
+{
+    if (!unit || !unit->IsAlive())
+        return true;
+
+    return unit->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) || unit->getStandState() == UNIT_STAND_STATE_DEAD;
+}
+
 // Return the nearest alive player (human or bot) within the specified radius. Distance is
 // measured by GetExactDist2d(), which does not take into account player hitboxes (1.5y).
 Player* GetNearestPlayerInRadius(Player* bot, float radius)

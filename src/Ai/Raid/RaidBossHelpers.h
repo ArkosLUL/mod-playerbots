@@ -28,6 +28,9 @@ Player* GetGroupMainTank(PlayerbotAI* botAI, Player* bot);
 Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
 Unit* GetFirstAliveUnitByEntry(
     PlayerbotAI* botAI, uint32 entry);
+// Feign death (Stalagg/Feugen) keeps the creature alive at 1 HP but unselectable and lying down,
+// so IsAlive() on its own no longer means "still up".
+bool IsDownOrFeigning(Unit const* unit);
 Player* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
 bool IsMechanicTrackerBot(Player* bot, uint32 mapId);
