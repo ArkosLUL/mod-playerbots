@@ -106,7 +106,10 @@ public:
         creators["algalon dark matter mark action"] = &RaidUlduarActionContext::algalon_dark_matter_mark_action;
         creators["algalon collapsing star mark action"] = &RaidUlduarActionContext::algalon_collapsing_star_mark_action;
         creators["ignis scorched ground action"] = &RaidUlduarActionContext::ignis_scorched_ground_action;
-        creators["ignis iron construct action"] = &RaidUlduarActionContext::ignis_iron_construct_action;
+        creators["ignis construct tank action"] = &RaidUlduarActionContext::ignis_construct_tank_action;
+        creators["ignis brittle construct mark action"] = &RaidUlduarActionContext::ignis_brittle_construct_mark_action;
+        creators["ignis molten construct avoid action"] = &RaidUlduarActionContext::ignis_molten_construct_avoid_action;
+        creators["ignis slag pot heal action"] = &RaidUlduarActionContext::ignis_slag_pot_heal_action;
         creators["auriaya sonic screech action"] = &RaidUlduarActionContext::auriaya_sonic_screech_action;
         creators["auriaya seeping essence action"] = &RaidUlduarActionContext::auriaya_seeping_essence_action;
         creators["auriaya mark dps target action"] = &RaidUlduarActionContext::auriaya_mark_dps_target_action;
@@ -224,7 +227,10 @@ private:
     static Action* algalon_dark_matter_mark_action(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkAction(ai); }
     static Action* algalon_collapsing_star_mark_action(PlayerbotAI* ai) { return new AlgalonCollapsingStarMarkAction(ai); }
     static Action* ignis_scorched_ground_action(PlayerbotAI* ai) { return new IgnisScorchedGroundAction(ai); }
-    static Action* ignis_iron_construct_action(PlayerbotAI* ai) { return new IgnisIronConstructAction(ai); }
+    static Action* ignis_construct_tank_action(PlayerbotAI* ai) { return new IgnisConstructTankAction(ai); }
+    static Action* ignis_brittle_construct_mark_action(PlayerbotAI* ai) { return new IgnisBrittleConstructMarkAction(ai); }
+    static Action* ignis_molten_construct_avoid_action(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidAction(ai); }
+    static Action* ignis_slag_pot_heal_action(PlayerbotAI* ai) { return new IgnisSlagPotHealAction(ai); }
     static Action* auriaya_sonic_screech_action(PlayerbotAI* ai) { return new AuriayaSonicScreechAction(ai); }
     static Action* auriaya_seeping_essence_action(PlayerbotAI* ai) { return new AuriayaSeepingEssenceAction(ai); }
     static Action* auriaya_mark_dps_target_action(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetAction(ai); }

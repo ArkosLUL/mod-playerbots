@@ -16,6 +16,8 @@
 #include "ScriptedCreature.h"
 #include "World.h"
 
+const Position ULDUAR_IGNIS_WATER_POOL_WEST = Position(526.771f, 277.796f, 360.802f);
+const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.802f);
 const Position ULDUAR_THORIM_NEAR_ARENA_CENTER = Position(2134.9854f, -263.11853f, 419.8465f);
 const Position ULDUAR_THORIM_NEAR_ENTRANCE_POSITION = Position(2172.4355f, -258.27957f, 418.47162f);
 const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1 = Position(2237.6187f, -265.08844f, 412.17548f);
@@ -394,4 +396,131 @@ Unit* GetXT002KillTarget(PlayerbotAI* botAI)
         return boombot;
 
     return GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_PUMMELLER);
+}
+
+// Ignis the Furnace Master
+Unit* GetIgnis(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_IGNIS); }
+
+bool IsIgnisConstructActivated(Unit const* construct)
+{
+    if (!construct || !construct->IsAlive() || construct->GetEntry() != NPC_IGNIS_IRON_CONSTRUCT)
+        return false;
+
+    return !construct->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE) &&
+           !construct->HasAura(SPELL_IGNIS_CONSTRUCT_INACTIVE);
+}
+
+bool IsIgnisConstructMolten(Unit const* construct)
+{
+    return construct && construct->HasAura(SPELL_IGNIS_MOLTEN);
+}
+
+bool IsIgnisConstructBrittle(Unit const* construct)
+{
+    return construct && (construct->HasAura(SPELL_IGNIS_BRITTLE_10) || construct->HasAura(SPELL_IGNIS_BRITTLE_25));
+}
+
+// Constructs are dormant and unselectable until Ignis activates them, so all three lookups below walk
+// the raw nearby-npc list for the same reason GetFirstAliveNpcByEntry exists.
+static Unit* GetNearestIgnisConstructMatching(PlayerbotAI* botAI, WorldObject const* from,
+                                              bool (*predicate)(Unit const*))
+{
+    if (!from)
+        return nullptr;
+
+    Unit* best = nullptr;
+    float bestDistance = ULDUAR_IGNIS_CONSTRUCT_SEARCH_RADIUS;
+
+    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsIgnisConstructActivated(unit) || !predicate(unit))
+            continue;
+
+        float const distance = from->GetExactDist2d(unit);
+        if (distance > bestDistance)
+            continue;
+
+        best = unit;
+        bestDistance = distance;
+    }
+
+    return best;
+}
+
+Unit* GetIgnisBrittleConstruct(PlayerbotAI* botAI)
+{
+    return GetNearestIgnisConstructMatching(botAI, botAI->GetBot(), &IsIgnisConstructBrittle);
+}
+
+Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* botAI, WorldObject const* from)
+{
+    return GetNearestIgnisConstructMatching(botAI, from, &IsIgnisConstructMolten);
+}
+
+Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank)
+{
+    return GetNearestIgnisConstructMatching(botAI, tank,
+                                            [](Unit const* construct) { return !IsIgnisConstructBrittle(construct); });
+}
+
+Unit* GetIgnisNearestScorchedGround(PlayerbotAI* botAI, WorldObject const* from)
+{
+    if (!from)
+        return nullptr;
+
+    Unit* best = nullptr;
+    float bestDistance = ULDUAR_IGNIS_CONSTRUCT_SEARCH_RADIUS;
+
+    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_IGNIS_SCORCHED_GROUND)
+            continue;
+
+        float const distance = from->GetExactDist2d(unit);
+        if (distance > bestDistance)
+            continue;
+
+        best = unit;
+        bestDistance = distance;
+    }
+
+    return best;
+}
+
+Position const& GetIgnisNearestWaterPool(WorldObject const* from)
+{
+    if (!from)
+        return ULDUAR_IGNIS_WATER_POOL_WEST;
+
+    return from->GetExactDist2d(&ULDUAR_IGNIS_WATER_POOL_EAST) <
+                   from->GetExactDist2d(&ULDUAR_IGNIS_WATER_POOL_WEST)
+               ? ULDUAR_IGNIS_WATER_POOL_EAST
+               : ULDUAR_IGNIS_WATER_POOL_WEST;
+}
+
+Player* GetIgnisConstructTank(PlayerbotAI* botAI, Player* bot) { return GetGroupAssistTank(botAI, bot, 0); }
+
+bool IsIgnisSlagPotVictim(Player* bot)
+{
+    return bot && (bot->HasAura(SPELL_IGNIS_SLAG_POT_10) || bot->HasAura(SPELL_IGNIS_SLAG_POT_25));
+}
+
+Player* GetIgnisSlagPotVictim(PlayerbotAI* botAI)
+{
+    Group* group = botAI->GetBot()->GetGroup();
+    if (!group)
+        return nullptr;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && IsIgnisSlagPotVictim(member))
+            return member;
+    }
+
+    return nullptr;
 }

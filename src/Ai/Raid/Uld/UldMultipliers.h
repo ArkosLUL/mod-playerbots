@@ -38,6 +38,15 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Ignis: the two places where the generic behaviour actively breaks the encounter - the Slag Pot
+// victim cannot walk, and the construct tank has to stand in the fire everyone else runs from.
+class IgnisMultiplier : public Multiplier
+{
+public:
+    IgnisMultiplier(PlayerbotAI* ai) : Multiplier(ai, "ignis") {}
+    float GetValue(Action* action) override;
+};
+
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
 // encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
 class UldThreatRedirectMultiplier : public Multiplier

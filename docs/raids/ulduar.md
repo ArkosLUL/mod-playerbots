@@ -271,6 +271,46 @@ Two as-built notes worth keeping: the constellation kite is **movement-only**, b
 And Phase Punch swap is an `AttackAction`, firing when the boss's victim reaches 3 stacks and the
 first assist tank's own stacks have decayed below that.
 
+## Ignis
+
+The fight is a construct-disposal loop, not a damage race. Each Iron Construct (33121) Ignis
+activates puts a stack of Strength of the Creator (64473) on him, and a construct **cannot be killed
+by damage** — it only dies to the chain:
+
+1. it stacks Heat (65667) while standing in a Scorched Ground patch (33123), and turns **Molten**
+   (62373) at 10 stacks, which also wipes its threat table;
+2. a Molten construct within **18 yd of a water trigger** turns **Brittle** (62382 10-man / 67114
+   25-man) on the construct's own once-a-second poll;
+3. any single hit of 5000 (10-man) / 3000 (25-man) then shatters it, killing it and removing a
+   Strength stack.
+
+Scorch only lights a patch when it lands more than 25 yd from water, so the fire and the pools are
+always separate places and the walk between them is the mechanic. The two pools are at
+`(526.771, 277.796, 360.802)` and `(646.771, 277.796, 360.802)` — hardcoded as
+`ULDUAR_IGNIS_WATER_POOL_WEST` / `_EAST` rather than found by entry, because the water trigger is
+22515, the generic Ulduar world trigger.
+
+**Kiting is assist-tank only, on purpose.** `GetIgnisConstructTank` is a bare
+`GetGroupAssistTank(botAI, bot, 0)` with no fallback: a main tank pulled off Ignis drags the boss
+along behind the construct, and a DPS holding a Molten one dies. A raid without an assist tank
+simply skips the loop and lets the Strength stacks climb.
+
+The skull leaves Ignis only for the Brittle window and goes straight back afterwards — a Brittle
+construct dies to one hit, so a raid-wide swap for a whole kill would cost more than it is worth.
+Tanks are excluded from that swap for the same reason.
+
+**Slag Pot** (62717 / 63477) is a vehicle ride: healers pour direct heals into the victim, and the
+victim's movement actions are suppressed, since orders only fight the ride and leave it facing the
+wrong way when it drops. **Flame Jets** (62680) is deliberately unhandled — raid-wide, no dodge and
+no soak, so there is nothing a bot could do that generic healing does not already cover.
+
+Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked, and the only
+other 25-man difference is the construct cadence (30s instead of 40s).
+
+Encounter lookups go through `GetIgnis` (`GetFirstAliveNpcByEntry`), not `"find target"` — a bot
+parked on a construct never has Ignis on its threat list, and a dormant construct carries
+`UNIT_FLAG_NOT_SELECTABLE`, which drops it out of `"possible targets"` entirely.
+
 ## Burst and Bloodlust windows
 
 `UlduarBurstWindowMultiplier` is always active inside Ulduar — no config key, matching every other
@@ -351,7 +391,6 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 
 | Boss | Gap |
 |---|---|
-| **Ignis** | Entire fight unimplemented except a fire-resistance buff. No Slag Pot, Flame Jets, Scorch ground fire, or Iron Construct tanking/kiting |
 | **Auriaya** | Entire fight unimplemented except fall-recovery. No Sonic Screech facing, Terrifying Screech fear, Feral Defender (9 lives + void zones), Sanctum Sentries |
 | **Mimiron** | No ground-fire avoidance in normal mode either — only fire *resistance* |
 | **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |

@@ -182,8 +182,17 @@ enum UlduarIDs
     SPELL_FROST_TRAP = 13809,
 
     // Ignis the Furnace Master
+    NPC_IGNIS = 33118,
     NPC_IGNIS_IRON_CONSTRUCT = 33121,
     NPC_IGNIS_SCORCHED_GROUND = 33123,
+    // Dormant constructs wear this alongside UNIT_FLAG_NOT_SELECTABLE; Activate Construct strips it.
+    SPELL_IGNIS_CONSTRUCT_INACTIVE = 38757,
+    SPELL_IGNIS_MOLTEN = 62373,
+    SPELL_IGNIS_BRITTLE_10 = 62382,
+    SPELL_IGNIS_BRITTLE_25 = 67114,
+    SPELL_IGNIS_SLAG_POT_10 = 62717,
+    SPELL_IGNIS_SLAG_POT_25 = 63477,
+    SPELL_IGNIS_STRENGTH_OF_THE_CREATOR = 64473,
 
     // Auriaya
     NPC_AURIAYA_SANCTUM_SENTRY = 34014,
@@ -286,6 +295,22 @@ constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
 // XT-002 normal mode: the last Heart phase is over below this, so the held burst cooldowns are free.
 constexpr float ULDUAR_XT002_FINAL_PUSH_HP_PCT = 25.0f;
 
+// Ignis: a Molten construct turns Brittle once it is this close to one of the room's two water
+// triggers (boss_ignis.cpp polls FindNearestCreature(NPC_WATER_TRIGGER, 18.0f) once a second).
+constexpr float ULDUAR_IGNIS_WATER_BRITTLE_RADIUS = 18.0f;
+
+// Everyone but the construct tank clears Scorch's burning patch by this much; the tank parks the
+// tighter distance instead, so the construct walking into melee range ends up on it stacking Heat.
+constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS = 8.0f;
+constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_PARK_DISTANCE = 3.0f;
+
+// Molten wipes the construct's threat table and adds a heavy fire aura, so everyone who is not the
+// construct tank clears this much room. Exact aura radius is DBC, so this is a conservative default.
+constexpr float ULDUAR_IGNIS_MOLTEN_AVOID_RADIUS = 12.0f;
+
+// Ignis' platform is roughly 200x280 yards, so this covers the whole room from any tanking spot.
+constexpr float ULDUAR_IGNIS_CONSTRUCT_SEARCH_RADIUS = 100.0f;
+
 // Off-tank taunts once the active tank reaches this many Phase Punch stacks
 constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
 
@@ -328,6 +353,37 @@ bool YoggSaronFearWindowActive(PlayerbotAI* botAI);
 // raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
+// Ignis the Furnace Master. Like XT-002 these scan the nearby-npc list rather than "find target": a
+// bot parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries
+// UNIT_FLAG_NOT_SELECTABLE, which drops it out of "possible targets" entirely.
+Unit* GetIgnis(PlayerbotAI* botAI);
+
+// Activated = Ignis has cast Activate Construct on it: selectable, aggressive, and worth tanking.
+bool IsIgnisConstructActivated(Unit const* construct);
+
+// 10 Heat stacks from standing in Scorched Ground. Molten also resets the construct's threat.
+bool IsIgnisConstructMolten(Unit const* construct);
+
+// A Molten construct brought to the water. One hit of 5000 (10-man) / 3000 (25-man) shatters it.
+bool IsIgnisConstructBrittle(Unit const* construct);
+
+Unit* GetIgnisBrittleConstruct(PlayerbotAI* botAI);
+Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* botAI, WorldObject const* from);
+
+// The construct the tank is currently walking through the loop: nearest activated one that has not
+// turned Brittle yet. Once it is Brittle the tank is done and the raid takes over.
+Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank);
+
+Unit* GetIgnisNearestScorchedGround(PlayerbotAI* botAI, WorldObject const* from);
+Position const& GetIgnisNearestWaterPool(WorldObject const* from);
+
+// Assist tank, with no fallback on purpose: a raid without one skips the kiting path entirely rather
+// than pulling the boss around behind a construct or feeding a DPS to a Molten one.
+Player* GetIgnisConstructTank(PlayerbotAI* botAI, Player* bot);
+
+Player* GetIgnisSlagPotVictim(PlayerbotAI* botAI);
+bool IsIgnisSlagPotVictim(Player* bot);
+
 constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
 constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
 constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
@@ -356,6 +412,8 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
 // drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
 constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
+extern const Position ULDUAR_IGNIS_WATER_POOL_WEST;
+extern const Position ULDUAR_IGNIS_WATER_POOL_EAST;
 extern const Position ULDUAR_THORIM_NEAR_ARENA_CENTER;
 extern const Position ULDUAR_THORIM_NEAR_ENTRANCE_POSITION;
 extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1;

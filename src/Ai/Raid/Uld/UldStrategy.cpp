@@ -79,9 +79,29 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "ignis scorched ground trigger",
         { NextAction("ignis scorched ground action", ACTION_RAID + 2) }));
 
+    // An Iron Construct only dies to the Molten -> Brittle -> Shatter chain, and every one left alive
+    // is another stack of Strength of the Creator on the boss, so the kite outranks the raid's damage.
+    // The mark sits above it so the raid's kill target is already current when the construct turns
+    // Brittle. Standing next to a Molten construct and sitting in a Slag Pot both kill a bot outright.
     triggers.push_back(new TriggerNode(
-        "ignis iron construct trigger",
-        { NextAction("ignis iron construct action", ACTION_RAID) }));
+        "ignis brittle construct mark trigger",
+        { NextAction("ignis brittle construct mark action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis construct tank trigger",
+        { NextAction("ignis construct tank action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis attack brittle construct trigger",
+        { NextAction("attack rti target", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis molten construct avoid trigger",
+        { NextAction("ignis molten construct avoid action", ACTION_EMERGENCY) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis slag pot heal trigger",
+        { NextAction("ignis slag pot heal action", ACTION_EMERGENCY + 1) }));
 
     //
     // XT-002 Deconstructor
@@ -556,6 +576,9 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Hold the burst cooldowns on the bosses whose DPS check is not the pull
     multipliers.push_back(new UlduarBurstWindowMultiplier(botAI));
+
+    // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
+    multipliers.push_back(new IgnisMultiplier(botAI));
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));

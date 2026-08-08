@@ -19,13 +19,45 @@ class IgnisScorchedGroundAction : public MoveAwayFromCreatureAction
 {
 public:
     IgnisScorchedGroundAction(PlayerbotAI* botAI)
-        : MoveAwayFromCreatureAction(botAI, "ignis scorched ground action", NPC_IGNIS_SCORCHED_GROUND, 8.0f) {}
+        : MoveAwayFromCreatureAction(botAI, "ignis scorched ground action", NPC_IGNIS_SCORCHED_GROUND,
+                                     ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS)
+    {
+    }
 };
 
-class IgnisIronConstructAction : public Action
+// Walks an activated construct through the only chain that kills it: Scorched Ground until it turns
+// Molten, then the nearest water pool until it turns Brittle.
+class IgnisConstructTankAction : public AttackAction
 {
 public:
-    IgnisIronConstructAction(PlayerbotAI* botAI) : Action(botAI, "ignis iron construct action") {}
+    IgnisConstructTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "ignis construct tank action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class IgnisBrittleConstructMarkAction : public Action
+{
+public:
+    IgnisBrittleConstructMarkAction(PlayerbotAI* botAI) : Action(botAI, "ignis brittle construct mark action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class IgnisMoltenConstructAvoidAction : public MovementAction
+{
+public:
+    IgnisMoltenConstructAvoidAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "ignis molten construct avoid action")
+    {
+    }
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class IgnisSlagPotHealAction : public Action
+{
+public:
+    IgnisSlagPotHealAction(PlayerbotAI* botAI) : Action(botAI, "ignis slag pot heal action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
