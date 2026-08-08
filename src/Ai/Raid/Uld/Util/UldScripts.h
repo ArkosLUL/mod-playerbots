@@ -22,6 +22,9 @@ enum UlduarNPCs
     // Kologarn
     NPC_KOLOGARN                     = 32930,
 
+    // Auriaya
+    NPC_AURIAYA                      = 33515,
+
     // XT-002 Deconstructor
     NPC_XT002                        = 33293,
     NPC_HEART_OF_DECONSTRUCTOR       = 33329,

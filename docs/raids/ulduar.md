@@ -311,6 +311,43 @@ Encounter lookups go through `GetIgnis` (`GetFirstAliveNpcByEntry`), not `"find 
 parked on a construct never has Ignis on its threat list, and a dormant construct carries
 `UNIT_FLAG_NOT_SELECTABLE`, which drops it out of `"possible targets"` entirely.
 
+## Auriaya
+
+No hard mode, and no difficulty split — 10N and 25N share every entry and spell id.
+
+| Mechanic | Ids | Handling |
+|---|---|---|
+| Sonic Screech | 64422 | **120°** frontal cone per `spell_cone`; non-tanks sidestep out of the arc |
+| Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window |
+| Sentinel Blast | 64389 | Raid-wide, **not** a cone: no `spell_cone` row, and its SpellScript strips non-players. Healed through |
+| Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one; Strength of the Pack (64369) buffs the boss while they live |
+| Feral Defender | 34035 | Random aggro (61906) makes it untankable — focus-killed, never tanked |
+| Seeping Feral Essence | 34098 | Non-selectable stalker dropped per Defender life; found via `"nearest npcs"`, fled at 10 yd |
+| Guardian Swarm | 64396 | Tank DoT, left to the generic dispel |
+| Enrage | 47008 | 10 min, unhandled — no enrage awareness exists anywhere in the module |
+
+`IsBotInFrontalCone` forwards to `HasInArc`, which takes the **full** arc, so the original
+`M_PI / 2` left every bot between 45° and 60° off-centre standing in a cone it believed it had
+cleared.
+
+Kill order is **Sentries → Feral Defender → boss**: sentries stay dead and drop the boss's buff,
+where each Defender kill costs a void zone and buys 35s. The Defender feigns at 1 HP wearing
+`UNIT_FLAG_NOT_SELECTABLE`, so it resolves through `GetFirstLiveUnitByEntry`, never
+`GetFirstAliveUnitByEntry`. Savage Pounce (64666) fires only at 8–25 yd from the sentry's own
+victim, so a tank holding it in melee is the whole counter — the taunt needs no positioning code
+behind it.
+
+**Every Auriaya trigger used to resolve the boss through `"find target"`**, which walks only the
+bot's own threat list: any bot fighting a sentry or the Defender silently lost its cone dodge, its
+void-zone dodge and its anti-fear. All of them go through `GetAuriaya`, by entry, now.
+
+The main tank arc-steps around Auriaya until she faces away from the raid centroid — tanks excluded
+from that centroid, or they drag the bearing they are steering by. It holds still inside a 0.15 rad
+tolerance, because a tank that steps every tick never lands a cast.
+
+**Crazy Cat Lady requires no sentry killed, so it is incompatible with the kill order.** Bots
+optimise for the kill and, per the follower model, never chase achievements.
+
 ## Burst and Bloodlust windows
 
 `UlduarBurstWindowMultiplier` is always active inside Ulduar — no config key, matching every other
@@ -391,7 +428,6 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 
 | Boss | Gap |
 |---|---|
-| **Auriaya** | Entire fight unimplemented except fall-recovery. No Sonic Screech facing, Terrifying Screech fear, Feral Defender (9 lives + void zones), Sanctum Sentries |
 | **Mimiron** | No ground-fire avoidance in normal mode either — only fire *resistance* |
 | **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |
 | **Vezax** | Saronite Vapor puddles never dodged |

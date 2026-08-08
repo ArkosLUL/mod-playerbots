@@ -33,13 +33,32 @@ class AuriayaSeepingEssenceAction : public MoveAwayFromCreatureAction
 {
 public:
     AuriayaSeepingEssenceAction(PlayerbotAI* botAI)
-        : MoveAwayFromCreatureAction(botAI, "auriaya seeping essence action", NPC_AURIAYA_SEEPING_FERAL_ESSENCE, 10.0f) {}
+        : MoveAwayFromCreatureAction(botAI, "auriaya seeping essence action", NPC_AURIAYA_SEEPING_FERAL_ESSENCE,
+                                     ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
+    {
+    }
 };
 
 class AuriayaMarkDpsTargetAction : public Action
 {
 public:
     AuriayaMarkDpsTargetAction(PlayerbotAI* botAI) : Action(botAI, "auriaya mark dps target action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AuriayaSentryTauntAction : public Action
+{
+public:
+    AuriayaSentryTauntAction(PlayerbotAI* botAI) : Action(botAI, "auriaya sentry taunt action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class AuriayaTankFacingAction : public MovementAction
+{
+public:
+    AuriayaTankFacingAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya tank facing action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

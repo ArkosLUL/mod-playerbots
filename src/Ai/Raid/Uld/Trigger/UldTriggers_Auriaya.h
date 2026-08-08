@@ -38,6 +38,27 @@ public:
     bool IsActive() override;
 };
 
+class AuriayaAttackDpsTargetTrigger : public Trigger
+{
+public:
+    AuriayaAttackDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya attack dps target trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaSentryTauntTrigger : public Trigger
+{
+public:
+    AuriayaSentryTauntTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya sentry taunt trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaTankFacingTrigger : public Trigger
+{
+public:
+    AuriayaTankFacingTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya tank facing trigger") {}
+    bool IsActive() override;
+};
+
 class AuriayaAntiFearTrigger : public RaidAntiFearTrigger
 {
 public:

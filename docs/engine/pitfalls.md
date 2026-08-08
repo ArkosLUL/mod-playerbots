@@ -79,7 +79,8 @@ must still outrank heals while the bot is unsheltered.
 
 - **`"find target"` walks only the bot's own threat list** (`FindTargetValue`, via
   `GetThreatenedByMeList()`) and requires an **exact-length, case-insensitive match** against
-  `creature_template.name`. A melee bot parked on Thane never resolves Zeliek. For multi-boss
+  `creature_template.name`. A melee bot parked on Thane never resolves Zeliek, and every Auriaya
+  trigger lost the boss the same way to a Sanctum Sentry. For multi-boss
   encounters, non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry`.
 - **`AvoidAoeAction` only sees three things**: a dynobject aura, a damaging trap GameObject, or a
   `UNIT_FLAG_NOT_SELECTABLE` trigger NPC. Mechanics outside those — Anub'rekhan's Impale and Locust

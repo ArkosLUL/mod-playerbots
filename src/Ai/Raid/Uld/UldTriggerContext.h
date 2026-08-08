@@ -115,6 +115,9 @@ public:
         creators["auriaya sonic screech trigger"] = &RaidUlduarTriggerContext::auriaya_sonic_screech_trigger;
         creators["auriaya seeping essence trigger"] = &RaidUlduarTriggerContext::auriaya_seeping_essence_trigger;
         creators["auriaya mark dps target trigger"] = &RaidUlduarTriggerContext::auriaya_mark_dps_target_trigger;
+        creators["auriaya attack dps target trigger"] = &RaidUlduarTriggerContext::auriaya_attack_dps_target_trigger;
+        creators["auriaya sentry taunt trigger"] = &RaidUlduarTriggerContext::auriaya_sentry_taunt_trigger;
+        creators["auriaya tank facing trigger"] = &RaidUlduarTriggerContext::auriaya_tank_facing_trigger;
         creators["auriaya anti fear trigger"] = &RaidUlduarTriggerContext::auriaya_anti_fear_trigger;
         creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
@@ -240,6 +243,9 @@ private:
     static Trigger* auriaya_sonic_screech_trigger(PlayerbotAI* ai) { return new AuriayaSonicScreechTrigger(ai); }
     static Trigger* auriaya_seeping_essence_trigger(PlayerbotAI* ai) { return new AuriayaSeepingEssenceTrigger(ai); }
     static Trigger* auriaya_mark_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetTrigger(ai); }
+    static Trigger* auriaya_attack_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaAttackDpsTargetTrigger(ai); }
+    static Trigger* auriaya_sentry_taunt_trigger(PlayerbotAI* ai) { return new AuriayaSentryTauntTrigger(ai); }
+    static Trigger* auriaya_tank_facing_trigger(PlayerbotAI* ai) { return new AuriayaTankFacingTrigger(ai); }
     static Trigger* auriaya_anti_fear_trigger(PlayerbotAI* ai) { return new AuriayaAntiFearTrigger(ai); }
     static Trigger* yogg_saron_anti_fear_trigger(PlayerbotAI* ai) { return new YoggSaronAntiFearTrigger(ai); }
     static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }

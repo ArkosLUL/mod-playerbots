@@ -235,6 +235,23 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "auriaya mark dps target trigger",
         { NextAction("auriaya mark dps target action", ACTION_RAID) }));
 
+    // The mark on its own only moves the icon, so the swap needs its own node - and it sits below
+    // the two dodges, which a bot must always be free to run first.
+    triggers.push_back(new TriggerNode(
+        "auriaya attack dps target trigger",
+        { NextAction("attack rti target", ACTION_RAID) }));
+
+    // A loose Sanctum Sentry is the worst state the fight has: it buffs Auriaya while it lives and
+    // pounces anything 8-25 yd away, which holding it in melee prevents outright.
+    triggers.push_back(new TriggerNode(
+        "auriaya sentry taunt trigger",
+        { NextAction("auriaya sentry taunt action", ACTION_RAID + 3) }));
+
+    // Main-tank only, so it never competes with the nodes above
+    triggers.push_back(new TriggerNode(
+        "auriaya tank facing trigger",
+        { NextAction("auriaya tank facing action", ACTION_RAID) }));
+
     triggers.push_back(new TriggerNode(
         "auriaya anti fear trigger",
         { NextAction("auriaya anti fear action", ACTION_RAID + 2) }));

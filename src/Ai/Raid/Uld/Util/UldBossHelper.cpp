@@ -16,6 +16,8 @@
 #include "ScriptedCreature.h"
 #include "World.h"
 
+#include <cmath>
+
 const Position ULDUAR_IGNIS_WATER_POOL_WEST = Position(526.771f, 277.796f, 360.802f);
 const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.802f);
 const Position ULDUAR_THORIM_NEAR_ARENA_CENTER = Position(2134.9854f, -263.11853f, 419.8465f);
@@ -321,11 +323,114 @@ bool YoggSaronInPhase3(PlayerbotAI* botAI)
     return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
 }
 
-bool AuriayaFearWindowActive(PlayerbotAI* botAI)
-{
-    Unit* auriaya = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "auriaya")->Get();
+// Auriaya
+//
+// Terrifying Screech repeats on a fixed 35s cycle from the pull, so the whole encounter is one long
+// fear window - there is no narrower slice worth reserving Tremor Totem for.
+bool AuriayaFearWindowActive(PlayerbotAI* botAI) { return AuriayaEncounterActive(botAI); }
 
-    return auriaya && auriaya->IsAlive();
+Unit* GetAuriaya(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA); }
+
+bool AuriayaEncounterActive(PlayerbotAI* botAI) { return GetAuriaya(botAI) != nullptr; }
+
+Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
+{
+    if (Unit* sentry = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
+        return sentry;
+
+    return GetFirstLiveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
+}
+
+Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank)
+{
+    auto const& units = botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+    for (auto const& guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_AURIAYA_SANCTUM_SENTRY)
+            continue;
+
+        if (unit->GetVictim() != tank)
+            return unit;
+    }
+
+    return nullptr;
+}
+
+Position GetAuriayaRaidCentroid(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return Position(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
+
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    uint32 count = 0;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !member->IsInWorld() || member->GetMapId() != ULDUAR_MAP_ID)
+            continue;
+
+        if (PlayerbotAI::IsMainTank(member) || PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
+            continue;
+
+        sumX += member->GetPositionX();
+        sumY += member->GetPositionY();
+        ++count;
+    }
+
+    if (!count)
+        return Position(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
+
+    return Position(sumX / count, sumY / count, bot->GetPositionZ());
+}
+
+bool GetAuriayaFacingError(PlayerbotAI* botAI, Player* bot, float& error)
+{
+    Unit* boss = GetAuriaya(botAI);
+    if (!boss)
+        return false;
+
+    Position const centroid = GetAuriayaRaidCentroid(bot);
+    if (boss->GetExactDist2d(centroid.GetPositionX(), centroid.GetPositionY()) <
+        ULDUAR_AURIAYA_FACING_MIN_RAID_DIST)
+    {
+        return false;
+    }
+
+    // Auriaya faces her victim, so the tank steers her by standing on the bearing that points the
+    // cone away from everyone else - that is the bearing running from the raid through the boss.
+    float const desired = std::atan2(boss->GetPositionY() - centroid.GetPositionY(),
+                                     boss->GetPositionX() - centroid.GetPositionX());
+
+    float diff = Position::NormalizeOrientation(boss->GetOrientation() - desired);
+    if (diff > M_PI)
+        diff -= 2.0f * static_cast<float>(M_PI);
+
+    error = diff;
+    return true;
+}
+
+bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target)
+{
+    if (!target)
+        return false;
+
+    switch (botAI->GetBot()->getClass())
+    {
+        case CLASS_WARRIOR:
+            return botAI->CastSpell("taunt", target);
+        case CLASS_PALADIN:
+            return botAI->CastSpell("hand of reckoning", target);
+        case CLASS_DEATH_KNIGHT:
+            return botAI->CastSpell("dark command", target);
+        case CLASS_DRUID:
+            return botAI->CastSpell("growl", target);
+        default:
+            return false;
+    }
 }
 
 bool YoggSaronFearWindowActive(PlayerbotAI* botAI) { return YoggSaronInPhase2(botAI) || YoggSaronInPhase3(botAI); }

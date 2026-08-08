@@ -349,6 +349,32 @@ bool YoggSaronInPhase3(PlayerbotAI* botAI);
 bool AuriayaFearWindowActive(PlayerbotAI* botAI);
 bool YoggSaronFearWindowActive(PlayerbotAI* botAI);
 
+// Auriaya. Resolved by entry rather than "find target": that value walks only the bot's own threat
+// list, so every bot fighting a Sanctum Sentry or the Feral Defender would fail to see the boss and
+// silently lose its cone dodge and void-zone dodge.
+Unit* GetAuriaya(PlayerbotAI* botAI);
+bool AuriayaEncounterActive(PlayerbotAI* botAI);
+
+// Sanctum Sentries first: they stay dead and their Strength of the Pack (64369) buffs Auriaya while
+// they live, where the Feral Defender only feigns and comes back. Feign is why the Defender goes
+// through GetFirstLiveUnitByEntry - it sits at 1 HP and unselectable between lives, still "alive".
+Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI);
+
+// A Sanctum Sentry that is not already on the off-tank. Two spawn with the boss, so picking simply
+// "the first alive sentry" would leave the second one loose forever once the first was taunted.
+Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
+
+// Centroid of the alive raid, ignoring the two tanks so their own positions cannot drag the bearing
+// the main tank is steering Auriaya's cone away from.
+Position GetAuriayaRaidCentroid(Player* bot);
+
+// Signed shortest rotation, in (-pi, pi], from Auriaya's facing to "away from the raid centroid".
+// Returns false when there is no boss or the raid is too close for the bearing to mean anything.
+bool GetAuriayaFacingError(PlayerbotAI* botAI, Player* bot, float& error);
+
+// Class taunt, mirroring ICC's IccCastClassTaunt. Non-tank classes return false.
+bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
+
 // The add the raid should be killing, most urgent first: Life Spark (hard mode, chain-shocks the
 // raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);
@@ -400,6 +426,19 @@ constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 12.0f;
 constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
+
+// Sonic Screech (64422) is a 120-degree cone per spell_cone, and HasInArc takes the full arc, not
+// the half-angle. Seeping Feral Essence's radius is DBC, so 10 yd is a conservative guess.
+constexpr float ULDUAR_AURIAYA_SONIC_SCREECH_CONE = 2.0f * static_cast<float>(M_PI) / 3.0f;
+constexpr float ULDUAR_AURIAYA_SONIC_SCREECH_RANGE = 45.0f;
+constexpr float ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS = 10.0f;
+
+// Main tank steering Auriaya's cone away from the raid. The tank holds still inside the tolerance,
+// because a bot that never stops moving never lands a cast; the step is small so the arc stays on
+// the navmesh, and a raid huddled on the boss gives a bearing too noisy to chase.
+constexpr float ULDUAR_AURIAYA_FACING_TOLERANCE = 0.15f;
+constexpr float ULDUAR_AURIAYA_FACING_ARC_STEP = 0.125f;
+constexpr float ULDUAR_AURIAYA_FACING_MIN_RAID_DIST = 8.0f;
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
 constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 150.0f;
