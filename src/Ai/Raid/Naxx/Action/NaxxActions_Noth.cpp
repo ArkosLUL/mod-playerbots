@@ -146,10 +146,26 @@ bool NothChooseTargetAction::Execute(Event event)
         targets = {guardians.tanked, champions.tanked, warriors.tanked,
                    guardians.any,    champions.any,    warriors.any};
     }
+    else if (botAI->IsRanged(bot))
+    {
+        // Ranged clear the adds. They spawn every 30s from alcoves 25-50 yd out and nobody but the
+        // add tank ever touched them. Ordered by type rather than by distance so the whole back line
+        // lands on the same add; lowest GUID inside a type keeps that stable as they trade health.
+        targets = {guardians.tanked, guardians.any, champions.tanked, champions.any,
+                   warriors.tanked,  warriors.any,  boss};
+    }
+    else if (helper.IsBlinkWindow())
+    {
+        // Nobody may touch Noth while the threat wipe settles. No boss fallback on purpose: with no
+        // adds up, melee stand still rather than hand the boss to whoever hits hardest.
+        targets = {guardians.tanked, guardians.any, champions.tanked, champions.any,
+                   warriors.tanked,  warriors.any};
+    }
     else
     {
-        // Guardians nuke the raid from range and are the one add worth pulling DPS off the boss for.
-        targets = {guardians.tanked, guardians.any, boss};
+        // Melee stay on Noth - chasing adds across the room costs more than the adds are worth, and
+        // the ranged are already on them.
+        targets = {boss};
     }
 
     Unit* target = FirstAvailable(targets);

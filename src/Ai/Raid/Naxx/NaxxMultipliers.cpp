@@ -414,9 +414,20 @@ float NothGenericMultiplier::GetValue(Action* action)
         return 0.0f;
     }
 
+    // Targeting belongs to "noth choose target". The generic assists rank by attack range and
+    // remaining lifetime, so a fresh Plagued Warrior always outranks the boss and the bot flips
+    // between the two every tick instead of committing to either.
+    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
+    {
+        return 0.0f;
+    }
+
     // Nothing else in the encounter warrants holding the raid back; the curse is handled by giving
     // the dispel its own high-priority node rather than by muting three classes for 40% of the fight.
-    if (!helper.IsBlinkWindow() || botAI->IsTank(bot))
+    // Blink's threat wipe only empties Noth's own table, so only the bots hitting him have to hold -
+    // anyone on an add keeps going.
+    Unit* boss = helper.GetBoss();
+    if (!helper.IsBlinkWindow() || botAI->IsTank(bot) || (boss && AI_VALUE(Unit*, "current target") != boss))
     {
         return 1.0f;
     }
@@ -434,8 +445,7 @@ float NothGenericMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-        dynamic_cast<MeleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+    if (dynamic_cast<MeleeAction*>(action) || dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
     {
         return 0.0f;
     }
