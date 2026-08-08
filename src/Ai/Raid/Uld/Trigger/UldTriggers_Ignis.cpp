@@ -76,11 +76,18 @@ bool IgnisAttackBrittleConstructTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    Unit* brittle = GetIgnisBrittleConstruct(botAI);
-    if (!brittle)
+    Group* group = bot->GetGroup();
+    if (!group)
         return false;
 
-    return AI_VALUE(Unit*, "current target") != brittle;
+    // This drives "attack rti target", so it has to key off the skull itself. Keying off the nearest
+    // Brittle construct instead would never clear whenever the two disagree - no mechanic tracker in
+    // the raid, or a second construct shattering closer to this bot than the marked one.
+    Unit* marked = botAI->GetUnit(group->GetTargetIcon(RtiTargetValue::skullIndex));
+    if (!IsIgnisConstructActivated(marked) || !IsIgnisConstructBrittle(marked))
+        return false;
+
+    return AI_VALUE(Unit*, "current target") != marked;
 }
 
 bool IgnisMoltenConstructAvoidTrigger::IsActive()
@@ -90,6 +97,11 @@ bool IgnisMoltenConstructAvoidTrigger::IsActive()
         return false;
 
     if (GetIgnisConstructTank(botAI, bot) == bot)
+        return false;
+
+    // Ignis' own tank stays put too. He is melee-range of a boss that follows him, so running out of
+    // a construct's aura drags Ignis (and his Flame Jets) straight through the raid behind him.
+    if (boss->GetVictim() == bot)
         return false;
 
     Unit* molten = GetIgnisNearestMoltenConstruct(botAI, bot);
@@ -106,5 +118,10 @@ bool IgnisSlagPotHealTrigger::IsActive()
     if (!botAI->IsHeal(bot))
         return false;
 
-    return GetIgnisSlagPotVictim(botAI) != nullptr;
+    // Sits above every other heal, so it has to wait for the ticks to open a gap - otherwise the
+    // whole healing team spends the ten seconds topping off a victim who is still at full health
+    // while the tank takes Flame Jets unhealed.
+    Player* victim = GetIgnisSlagPotVictim(botAI);
+
+    return victim && victim->GetHealthPct() < ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT;
 }

@@ -304,12 +304,24 @@ constexpr float ULDUAR_IGNIS_WATER_BRITTLE_RADIUS = 18.0f;
 constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS = 8.0f;
 constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_PARK_DISTANCE = 3.0f;
 
+// A Scorched Ground creature that lands this close to a water trigger never gets lit
+// (boss_ignis.cpp skips SPELL_SCORCHED_GROUND within 25 yd of the water), so it stacks no Heat and
+// the tank must not park a construct on it.
+constexpr float ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS = 25.0f;
+
 // Molten wipes the construct's threat table and adds a heavy fire aura, so everyone who is not the
 // construct tank clears this much room. Exact aura radius is DBC, so this is a conservative default.
 constexpr float ULDUAR_IGNIS_MOLTEN_AVOID_RADIUS = 12.0f;
 
-// Ignis' platform is roughly 200x280 yards, so this covers the whole room from any tanking spot.
-constexpr float ULDUAR_IGNIS_CONSTRUCT_SEARCH_RADIUS = 100.0f;
+// The construct spawns run x 543..631 / y 217..338 and Ignis starts at (586.5, 378.8), so a tank
+// standing at a water pool is already ~120 yd from the boss and further still from the far wall.
+// Everything Ignis-side searches the grid at this radius rather than going through "nearest npcs",
+// which is capped at AiPlayerbot.SightDistance (100 yd) and drops anything out of line of sight.
+constexpr float ULDUAR_IGNIS_ROOM_SEARCH_RADIUS = 200.0f;
+
+// Slag Pot ticks for ten seconds and cannot be dispelled or moved out of, but it does not kill from
+// full, so healers only pile onto the victim once the ticks have actually opened a gap.
+constexpr float ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT = 85.0f;
 
 // Off-tank taunts once the active tank reaches this many Phase Punch stacks
 constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
@@ -357,7 +369,7 @@ bool AuriayaEncounterActive(PlayerbotAI* botAI);
 
 // Sanctum Sentries first: they stay dead and their Strength of the Pack (64369) buffs Auriaya while
 // they live, where the Feral Defender only feigns and comes back. Feign is why the Defender goes
-// through GetFirstLiveUnitByEntry - it sits at 1 HP and unselectable between lives, still "alive".
+// through IsDownOrFeigning - it sits at 1 HP and unselectable between lives, still "alive".
 Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI);
 
 // A Sanctum Sentry that is not already on the off-tank. Two spawn with the boss, so picking simply
@@ -379,9 +391,10 @@ bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 // raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
-// Ignis the Furnace Master. Like XT-002 these scan the nearby-npc list rather than "find target": a
-// bot parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries
-// UNIT_FLAG_NOT_SELECTABLE, which drops it out of "possible targets" entirely.
+// Ignis the Furnace Master. These search the grid rather than going through "find target": a bot
+// parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries
+// UNIT_FLAG_NOT_SELECTABLE, which drops it out of "possible targets" entirely. The room is also
+// wider than SightDistance, so the cached "nearest npcs" list goes blind at the water pools.
 Unit* GetIgnis(PlayerbotAI* botAI);
 
 // Activated = Ignis has cast Activate Construct on it: selectable, aggressive, and worth tanking.
@@ -398,8 +411,14 @@ Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* botAI, WorldObject const* from
 
 // The construct the tank is currently walking through the loop: nearest activated one that has not
 // turned Brittle yet. Once it is Brittle the tank is done and the raid takes over.
+//
+// Sticky per tank: a construct Ignis activates closer to the tank must not steal the walk, because
+// the one already picked up has had its threat wiped by Molten and would peel straight into the raid.
 Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank);
 
+// Scorched Ground the construct tank can actually use, i.e. one that is lit. Patches that land
+// within ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS of the water are skipped by the core and
+// stack no Heat, so parking on one would stall the Heat -> Molten chain for good.
 Unit* GetIgnisNearestScorchedGround(PlayerbotAI* botAI, WorldObject const* from);
 Position const& GetIgnisNearestWaterPool(WorldObject const* from);
 

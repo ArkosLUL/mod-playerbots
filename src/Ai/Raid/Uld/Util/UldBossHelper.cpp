@@ -17,6 +17,8 @@
 #include "World.h"
 
 #include <cmath>
+#include <list>
+#include <unordered_map>
 
 const Position ULDUAR_IGNIS_WATER_POOL_WEST = Position(526.771f, 277.796f, 360.802f);
 const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.802f);
@@ -338,7 +340,11 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
     if (Unit* sentry = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
         return sentry;
 
-    return GetFirstLiveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
+    // Between lives the Defender lies feigned at 1 HP and unselectable, so IsAlive() alone would
+    // keep the raid pointed at something it cannot hit.
+    Unit* defender = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_FERAL_DEFENDER);
+
+    return IsDownOrFeigning(defender) ? nullptr : defender;
 }
 
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank)
@@ -504,7 +510,15 @@ Unit* GetXT002KillTarget(PlayerbotAI* botAI)
 }
 
 // Ignis the Furnace Master
-Unit* GetIgnis(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_IGNIS); }
+
+// Construct each assist tank has committed to, so one Ignis activates nearer to him mid-walk cannot
+// steal the kite. Cleared once that construct turns Brittle or dies.
+static std::unordered_map<ObjectGuid, ObjectGuid> ignisTankDrivenConstructGuid;
+
+Unit* GetIgnis(PlayerbotAI* botAI)
+{
+    return botAI->GetBot()->FindNearestCreature(NPC_IGNIS, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS, true);
+}
 
 bool IsIgnisConstructActivated(Unit const* construct)
 {
@@ -525,29 +539,30 @@ bool IsIgnisConstructBrittle(Unit const* construct)
     return construct && (construct->HasAura(SPELL_IGNIS_BRITTLE_10) || construct->HasAura(SPELL_IGNIS_BRITTLE_25));
 }
 
-// Constructs are dormant and unselectable until Ignis activates them, so all three lookups below walk
-// the raw nearby-npc list for the same reason GetFirstAliveNpcByEntry exists.
-static Unit* GetNearestIgnisConstructMatching(PlayerbotAI* botAI, WorldObject const* from,
-                                              bool (*predicate)(Unit const*))
+// Constructs are dormant and unselectable until Ignis activates them, and the walk to the water
+// takes the tank past SightDistance from the pack, so every lookup below searches the grid instead
+// of the bot's cached, LOS-filtered "nearest npcs" list.
+static Unit* GetNearestIgnisConstructMatching(WorldObject const* from, bool (*predicate)(Unit const*))
 {
     if (!from)
         return nullptr;
 
-    Unit* best = nullptr;
-    float bestDistance = ULDUAR_IGNIS_CONSTRUCT_SEARCH_RADIUS;
+    std::list<Creature*> constructs;
+    from->GetCreatureListWithEntryInGrid(constructs, NPC_IGNIS_IRON_CONSTRUCT, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
 
-    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
-    for (auto const& guid : npcs)
+    Unit* best = nullptr;
+    float bestDistance = ULDUAR_IGNIS_ROOM_SEARCH_RADIUS;
+
+    for (Creature* construct : constructs)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!IsIgnisConstructActivated(unit) || !predicate(unit))
+        if (!IsIgnisConstructActivated(construct) || !predicate(construct))
             continue;
 
-        float const distance = from->GetExactDist2d(unit);
+        float const distance = from->GetExactDist2d(construct);
         if (distance > bestDistance)
             continue;
 
-        best = unit;
+        best = construct;
         bestDistance = distance;
     }
 
@@ -556,40 +571,70 @@ static Unit* GetNearestIgnisConstructMatching(PlayerbotAI* botAI, WorldObject co
 
 Unit* GetIgnisBrittleConstruct(PlayerbotAI* botAI)
 {
-    return GetNearestIgnisConstructMatching(botAI, botAI->GetBot(), &IsIgnisConstructBrittle);
+    return GetNearestIgnisConstructMatching(botAI->GetBot(), &IsIgnisConstructBrittle);
 }
 
-Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* botAI, WorldObject const* from)
+Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* /*botAI*/, WorldObject const* from)
 {
-    return GetNearestIgnisConstructMatching(botAI, from, &IsIgnisConstructMolten);
+    return GetNearestIgnisConstructMatching(from, &IsIgnisConstructMolten);
 }
 
 Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank)
 {
-    return GetNearestIgnisConstructMatching(botAI, tank,
-                                            [](Unit const* construct) { return !IsIgnisConstructBrittle(construct); });
+    if (!tank)
+        return nullptr;
+
+    ObjectGuid const tankGuid = tank->GetGUID();
+    auto const held = ignisTankDrivenConstructGuid.find(tankGuid);
+    if (held != ignisTankDrivenConstructGuid.end())
+    {
+        Unit* construct = botAI->GetUnit(held->second);
+
+        // Molten wiped this construct's threat table, so handing it to a closer new one would release
+        // it into the raid. Only Brittle (job done) or death lets the tank move on.
+        if (IsIgnisConstructActivated(construct) && !IsIgnisConstructBrittle(construct))
+            return construct;
+
+        ignisTankDrivenConstructGuid.erase(held);
+    }
+
+    Unit* construct = GetNearestIgnisConstructMatching(
+        tank, [](Unit const* candidate) { return !IsIgnisConstructBrittle(candidate); });
+    if (!construct)
+        return nullptr;
+
+    ignisTankDrivenConstructGuid[tankGuid] = construct->GetGUID();
+
+    return construct;
 }
 
-Unit* GetIgnisNearestScorchedGround(PlayerbotAI* botAI, WorldObject const* from)
+Unit* GetIgnisNearestScorchedGround(PlayerbotAI* /*botAI*/, WorldObject const* from)
 {
     if (!from)
         return nullptr;
 
-    Unit* best = nullptr;
-    float bestDistance = ULDUAR_IGNIS_CONSTRUCT_SEARCH_RADIUS;
+    std::list<Creature*> patches;
+    from->GetCreatureListWithEntryInGrid(patches, NPC_IGNIS_SCORCHED_GROUND, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
 
-    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
-    for (auto const& guid : npcs)
+    Unit* best = nullptr;
+    float bestDistance = ULDUAR_IGNIS_ROOM_SEARCH_RADIUS;
+
+    for (Creature* patch : patches)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_IGNIS_SCORCHED_GROUND)
+        if (!patch->IsAlive())
             continue;
 
-        float const distance = from->GetExactDist2d(unit);
+        // A patch that spawned next to the water never got lit, so it stacks no Heat on a construct
+        // parked in it - the kite would sit there forever waiting for Molten.
+        Position const& pool = GetIgnisNearestWaterPool(patch);
+        if (patch->GetExactDist2d(&pool) <= ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS)
+            continue;
+
+        float const distance = from->GetExactDist2d(patch);
         if (distance > bestDistance)
             continue;
 
-        best = unit;
+        best = patch;
         bestDistance = distance;
     }
 

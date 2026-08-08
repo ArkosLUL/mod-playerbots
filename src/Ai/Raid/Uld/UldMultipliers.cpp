@@ -126,20 +126,24 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
 // Ignis the Furnace Master
 float IgnisMultiplier::GetValue(Action* action)
 {
-    if (!action || !GetIgnis(botAI))
+    if (!action)
         return 1.0f;
 
     // Slag Pot is a vehicle ride: the victim is held in place for the full duration, so movement
     // orders only fight the ride and leave the bot facing the wrong way when it drops.
-    if (IsIgnisSlagPotVictim(bot) && dynamic_cast<MovementAction*>(action))
-        return 0.0f;
+    bool const slagPotRide = IsIgnisSlagPotVictim(bot) && dynamic_cast<MovementAction*>(action);
 
     // The construct tank is deliberately parked on a Scorched Ground patch - that is what stacks Heat
     // on the construct - so the generic dodge would undo the kite every tick.
-    if (action->getName() == "ignis scorched ground action" && GetIgnisConstructTank(botAI, bot) == bot)
-        return 0.0f;
+    bool const parkedTank = action->getName() == "ignis scorched ground action" &&
+                            GetIgnisConstructTank(botAI, bot) == bot;
 
-    return 1.0f;
+    // GetIgnis walks the grid, and this runs against every action of every bot on the tick, so it is
+    // asked last - only once something Ignis-specific would actually be blocked.
+    if (!slagPotRide && !parkedTank)
+        return 1.0f;
+
+    return GetIgnis(botAI) ? 0.0f : 1.0f;
 }
 
 // Only the two main-tank redirects are blocked - casting to the shared BuffOnMainTankAction base
