@@ -76,6 +76,20 @@ action is the *only* thing that can position those bots. If it silently fails �
 `MoveTo`, a `MoveInside` that never returns false — they stand still for the whole fight. Void Reaver
 is the case study.
 
+## Targeting-suppression multiplier
+
+Same idiom one layer up: a boss that owns target selection must zero `DpsAssistAction` and
+`TankAssistAction` **for the whole fight**, not only inside the phase that motivated it.
+
+**The failure mode**: a `choose target` action conventionally returns `false` once the bot already
+holds its pick, which `DoNextAction` treats as FAILED (see
+[../engine/action-selection.md](../engine/action-selection.md)) — so every settled tick keeps
+draining the queue down to `dps assist` at relevance 50. `GeneralFindTargetSmartStrategy`
+(`Value/DpsTargetValue.cpp`) ranks by attack range then remaining lifetime with **no current-target
+preference**, so a fresh low-health add always outranks a boss. The bot takes the add, the boss
+action yanks it back next tick, and it flips forever without landing a cast — in-game it reads as
+bots jiggling on the spot. Noth is the case study.
+
 ## Boss helpers
 
 `GenericBossHelper<BossAiType>` works only when the boss AI class is visible and exposes `events`.

@@ -59,21 +59,28 @@ otherwise the timer survives into a later attempt and is already expired at the 
 |---|---|
 | Impale | 28783 / 56090. `SelectTarget(Random, playerOnly, withMainTank=true)` — **uniformly random living player, tank not excluded, no range filter.** Damage lands in an area around the victim, which is why a stack dies together. |
 | Impale clock | Exactly 15s after engage, then exactly every 20s. Fully deterministic. |
-| Locust Swarm | 28785 / 54021. Self-cast ~15 yd aura, ~20s. First cast random 70-120s, then exactly every 90s. `EMOTE_LOCUST` fires on the same tick as the cast — **zero warning**. The boss is not slowed, rooted or threat-wiped, so this is a kite. |
+| Locust Swarm | 28785 / 54021. Self-cast ~15 yd aura, ~20s. First cast random 70-120s, then exactly every 90s. `EMOTE_LOCUST` fires on the same tick as the cast — **zero warning**, so the 90s repeat is modelled off the first cast the raid observes and only casts 2+ get the 3s pre-warning. The boss is not slowed, rooted or threat-wiped, so this is a kite. |
 | Crypt Guards | 16573. 25-man pre-spawns 2 on reset; 10-man gets 1 at engage +17.5s. Both modes get 1 more at every Locust Swarm +3s. |
 | Corpse Scarabs | 10 per dead Crypt Guard (28864), **5 from every dead player** (29105) — a wipe cascades. |
 
 **Nothing generic saves the bots here.** `avoid aoe` cannot see Impale or Locust Swarm (see
 [../engine/pitfalls.md](../engine/pitfalls.md)), and the generic de-clumper is inert by default
-(`DisperseDistanceValue` is `-1.0f`). **The fix is pre-emptive deterministic spread, not reactive
-avoidance.** Decisions taken: full rework, deterministic slot ring (Hyjal/Loatheb style) rather than
-reactive `FleePosition`, and during Locust Swarm non-tanks **follow the kite at safe range** — the
-old behaviour parked them in a 3-yard ball at room centre while the MT kited at radius 45, which is
-45 yd boss-to-raid, outside both caster and heal range.
+(`DisperseDistanceValue` is `-1.0f`). **Against Impale the fix is pre-emptive deterministic spread,
+not reactive avoidance**: a slot ring (Hyjal/Loatheb style), with `FleePosition` off the nearest
+player only as the backstop for residual clumping. The ring anchors on the bearing **from the boss to
+the room centre**, which keeps the arc on the inside of the kite path and inside the room as the boss
+laps the circle.
 
-The ranged ring anchors on the bearing **from the boss to the room centre**, which keeps the arc on
-the inside of the kite path and inside the room as the boss laps the circle. `FleePosition` off the
-nearest player is the backstop for residual clumping, not the primary mechanism.
+Locust Swarm inverts that — the spread is what puts people in the aura — so for the window non-tanks
+drop their slots and **stack 25 yd from the boss** along that same bearing. Anchoring the pile on
+the boss rather than on the room keeps it in heal and cast range wherever the kite has got to; at
+`KiteRadius` 35 it only orbits a 10 yd circle. Room-centre stacking
+was tried and reverted: with the MT kiting at radius 45 that is 45 yd boss-to-raid, outside both
+caster and heal range.
+
+Accepted costs, not defects: **one Impale lands on the stack per swarm** (20s window against a 20s
+period), and melee lose the window. `KiteRadius` is the single knob if healers fall short of the
+tank.
 
 ## Four Horsemen
 
@@ -200,6 +207,13 @@ Gaps the rebuild had to solve:
   `FindTankTargetSmartStrategy::IsBetter` makes an explicit main tank in a >1-tank group stick to
   `current target`. With Warriors spawning every 30s the MT can stay off the boss for the rest of the
   fight.
+- **Ground-phase targeting oscillated between Noth and the adds** — the generic assists were only
+  muted inside the blink window. See [README.md](README.md) for the mechanism.
+- **Nobody killed the Warriors.** Ground-phase DPS were sent `{guardian, boss}`, so 2-3 adds every
+  30s piled on the add tank for the whole phase. Split by role instead: **ranged burn the adds**
+  (type order, lowest GUID inside a type), **melee stay on Noth**, and melee join the adds for the
+  blink window only. `DoResetThreatList()` empties Noth's table alone, so that window no longer mutes
+  bots who are on an add.
 - Position moves had **no room clamp** (rectangle 2618..2754, −3557.43..−3450) — Kel'Thuzad's
   `ClampToRoom` / `ComputeEscapeFromPoint` are the primitives to copy.
 
