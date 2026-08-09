@@ -201,6 +201,14 @@ public:
     CastCallPetAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "call pet") {}
 };
 
+// Drives the pet directly instead of going through autocast, which will not stack Acid Spit past 1/2.
+class CastPetAcidSpitAction : public Action
+{
+public:
+    CastPetAcidSpitAction(PlayerbotAI* botAI) : Action(botAI, "pet acid spit") {}
+    bool Execute(Event event) override;
+};
+
 class CastMendPetAction : public CastAuraSpellAction
 {
 public:

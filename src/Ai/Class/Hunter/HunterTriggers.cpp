@@ -8,6 +8,7 @@
 #include "GenericSpellActions.h"
 #include "GenericTriggers.h"
 #include "HunterActions.h"
+#include "Pet.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -69,6 +70,21 @@ bool HuntersPetMediumHealthTrigger::IsActive()
     Unit* pet = AI_VALUE(Unit*, "pet target");
     return pet && AI_VALUE2(uint8, "health", "pet target") < sPlayerbotAIConfig.mediumHealth &&
            !AI_VALUE2(bool, "dead", "pet target") && !AI_VALUE2(bool, "mounted", "self target");
+}
+
+bool PetAcidSpitTrigger::IsActive()
+{
+    Pet* pet = bot->GetPet();
+    if (!pet || !pet->IsAlive())
+        return false;
+
+    // The spell id is cached for 20s, so re-check ownership - a pet swap can outrun the refresh.
+    uint32 spellId = AI_VALUE2(uint32, "spell id", "acid spit");
+    if (!spellId || !pet->HasSpell(spellId) || pet->HasSpellCooldown(spellId))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && target->IsAlive() && target->IsInWorld() && bot->IsValidAttackTarget(target);
 }
 
 bool HunterPetNotHappy::IsActive()

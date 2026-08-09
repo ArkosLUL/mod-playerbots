@@ -7,8 +7,13 @@
 #include "HunterActions.h"
 #include "Event.h"
 #include "GenericSpellActions.h"
+#include "Pet.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
+
+#include <algorithm>
 
 bool CastViperStingAction::isUseful()
 {
@@ -60,6 +65,39 @@ bool FeedPetAction::Execute(Event /*event*/)
         pet->SetPower(POWER_HAPPINESS, pet->GetMaxPower(Powers(POWER_HAPPINESS)));
     }
 
+    return true;
+}
+
+namespace
+{
+// Only used if the spell data carries no cooldown at all; the debuff itself lasts 10s.
+constexpr uint32 ACID_SPIT_FALLBACK_COOLDOWN_MS = 10000;
+} // namespace
+
+bool CastPetAcidSpitAction::Execute(Event /*event*/)
+{
+    Pet* pet = bot->GetPet();
+    if (!pet)
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
+
+    uint32 spellId = AI_VALUE2(uint32, "spell id", "acid spit");
+    if (!spellId || !pet->HasSpell(spellId))
+        return false;
+
+    if (pet->CastSpell(target, spellId, false) != SPELL_CAST_OK)
+        return false;
+
+    // Spell::SendSpellCooldown does not register creature cooldowns - only PetAI::DoCast and the pet
+    // action bar do. Without this the trigger's HasSpellCooldown() check never goes true and the
+    // action re-fires every tick, preempting the hunter's own rotation.
+    uint32 cooldown = 0;
+    if (SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId))
+        cooldown = std::max(spellInfo->RecoveryTime, spellInfo->CategoryRecoveryTime);
+    pet->AddSpellCooldown(spellId, 0, cooldown ? cooldown : ACID_SPIT_FALLBACK_COOLDOWN_MS);
     return true;
 }
 

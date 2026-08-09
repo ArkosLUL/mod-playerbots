@@ -79,6 +79,7 @@ public:
         creators["no track"] = &HunterTriggerFactoryInternal::no_track;
         creators["serpent sting on attacker"] = &HunterTriggerFactoryInternal::serpent_sting_on_attacker;
         creators["pet not happy"] = &HunterTriggerFactoryInternal::pet_not_happy;
+        creators["pet acid spit"] = &HunterTriggerFactoryInternal::pet_acid_spit;
         creators["concussive shot on snare target"] = &HunterTriggerFactoryInternal::concussive_shot_on_snare_target;
         creators["scare beast"] = &HunterTriggerFactoryInternal::scare_beast;
         creators["low ammo"] = &HunterTriggerFactoryInternal::low_ammo;
@@ -110,6 +111,7 @@ private:
     static Trigger* concussive_shot_on_snare_target(PlayerbotAI* botAI) {
         return new ConcussiveShotOnSnareTargetTrigger(botAI); }
     static Trigger* pet_not_happy(PlayerbotAI* botAI) { return new HunterPetNotHappy(botAI); }
+    static Trigger* pet_acid_spit(PlayerbotAI* botAI) { return new PetAcidSpitTrigger(botAI); }
     static Trigger* serpent_sting_on_attacker(PlayerbotAI* botAI) { return new SerpentStingOnAttackerTrigger(botAI); }
     static Trigger* trueshot_aura(PlayerbotAI* botAI) { return new TrueshotAuraTrigger(botAI); }
     static Trigger* no_track(PlayerbotAI* botAI) { return new NoTrackTrigger(botAI); }
@@ -173,6 +175,7 @@ public:
         creators["kill command"] = &HunterAiObjectContextInternal::kill_command;
         creators["revive pet"] = &HunterAiObjectContextInternal::revive_pet;
         creators["call pet"] = &HunterAiObjectContextInternal::call_pet;
+        creators["pet acid spit"] = &HunterAiObjectContextInternal::pet_acid_spit;
         creators["black arrow"] = &HunterAiObjectContextInternal::black_arrow;
         creators["freezing trap"] = &HunterAiObjectContextInternal::freezing_trap;
         creators["rapid fire"] = &HunterAiObjectContextInternal::rapid_fire;
@@ -239,6 +242,7 @@ private:
     static Action* kill_command(PlayerbotAI* botAI) { return new CastKillCommandAction(botAI); }
     static Action* revive_pet(PlayerbotAI* botAI) { return new CastRevivePetAction(botAI); }
     static Action* call_pet(PlayerbotAI* botAI) { return new CastCallPetAction(botAI); }
+    static Action* pet_acid_spit(PlayerbotAI* botAI) { return new CastPetAcidSpitAction(botAI); }
     static Action* black_arrow(PlayerbotAI* botAI) { return new CastBlackArrowAction(botAI); }
     static Action* freezing_trap(PlayerbotAI* botAI) { return new CastFreezingTrap(botAI); }
     static Action* rapid_fire(PlayerbotAI* botAI) { return new CastRapidFireAction(botAI); }

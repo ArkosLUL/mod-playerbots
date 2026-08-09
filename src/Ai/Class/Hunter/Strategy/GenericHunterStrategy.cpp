@@ -85,6 +85,10 @@ void GenericHunterStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(
         new TriggerNode("tranquilizing shot magic", { NextAction("tranquilizing shot", ACTION_RAID + 1) }));
 
+    // The pet pays the focus, so this costs the hunter nothing but the tick it wins, and the trigger
+    // only lets it through while Acid Spit is below 2/2.
+    triggers.push_back(new TriggerNode("pet acid spit", { NextAction("pet acid spit", ACTION_NORMAL + 6.5f) }));
+
     // A pet lost to raid damage takes Kill Command and Bestial Wrath with it, so both specs need a way
     // back mid-fight. Sits under every real shot but above the Steady/Auto Shot filler, so it never
     // costs a GCD the rotation wanted and still gets a chance to fire.

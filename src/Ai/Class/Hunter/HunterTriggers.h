@@ -263,6 +263,16 @@ END_TRIGGER()
 BEGIN_TRIGGER(HunterPetNotHappy, Trigger)
 END_TRIGGER()
 
+// A worm's Acid Spit is only worth its full 20% armor at 2/2, but pet autocast refuses to recast a
+// spell whose aura is already on the target, so it stalls at 1/2. The bot casts it on cooldown
+// instead, which stacks it and keeps the debuff from ever timing out.
+class PetAcidSpitTrigger : public Trigger
+{
+public:
+    PetAcidSpitTrigger(PlayerbotAI* botAI) : Trigger(botAI, "pet acid spit", 1) {}
+    bool IsActive() override;
+};
+
 class VolleyChannelCheckTrigger : public Trigger
 {
 public:
