@@ -15,7 +15,8 @@ bool HorsemanAttractAlternativelyAction::Execute(Event event)
         return false;
     }
     helper.CalculatePosToGo(bot);
-    auto [posX, posY] = helper.CurrentAttractPos();
+    auto [cornerX, cornerY] = helper.CurrentAttractPos();
+    auto [posX, posY] = helper.DodgeVoidZones(cornerX, cornerY);
     if (MoveTo(bot->GetMapId(), posX, posY, helper.posZ, false, false, false, false, MovementPriority::MOVEMENT_COMBAT))
     {
         return true;

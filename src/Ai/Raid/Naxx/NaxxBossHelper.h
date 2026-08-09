@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <list>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -2264,7 +2265,66 @@ public:
         return _lady;
     }
 
+    // Blaumeux drops a Void Zone (Consumption ticks until it despawns) on whoever she is shooting,
+    // and the attract corners are fixed points - the attractor and its healer would otherwise keep
+    // standing in the puddle that just landed on them. Nudges the corner to the nearest clear spot
+    // rather than giving it up.
+    std::pair<float, float> DodgeVoidZones(float posX, float posY)
+    {
+        std::vector<Unit*> zones;
+        std::list<Creature*> creatures;
+        bot->GetCreatureListWithEntryInGrid(creatures, NaxxSpellIds::FourHorsemenVoidZoneEntry, VoidZoneScanRadius);
+        for (Creature* creature : creatures)
+        {
+            if (creature && creature->IsAlive())
+            {
+                zones.push_back(creature);
+            }
+        }
+        if (zones.empty() || IsClearOfVoidZones(posX, posY, zones))
+        {
+            return {posX, posY};
+        }
+
+        // Fixed candidate order, nearest ring first: as long as the puddles do not change the bot
+        // keeps picking the same spot instead of jittering between equally good ones.
+        constexpr uint8 numAngles = 12;
+        for (float dist = VoidZoneHazardRadius; dist <= VoidZoneMaxCornerOffset; dist += 2.0f)
+        {
+            for (uint8 i = 0; i < numAngles; ++i)
+            {
+                float const angle = i * 2.0f * static_cast<float>(M_PI) / numAngles;
+                float const candidateX = posX + std::cos(angle) * dist;
+                float const candidateY = posY + std::sin(angle) * dist;
+                if (IsClearOfVoidZones(candidateX, candidateY, zones))
+                {
+                    return {candidateX, candidateY};
+                }
+            }
+        }
+        return {posX, posY};
+    }
+
 protected:
+    // Consumption's radius plus a step of slack, so the bot does not park on the rim.
+    static constexpr float VoidZoneHazardRadius = 6.0f;
+    static constexpr float VoidZoneScanRadius = 40.0f;
+    // Past this the bot is out of its corner and the split stops working, so eating the puddle is
+    // the lesser evil.
+    static constexpr float VoidZoneMaxCornerOffset = 14.0f;
+
+    bool IsClearOfVoidZones(float x, float y, std::vector<Unit*> const& zones) const
+    {
+        for (Unit* zone : zones)
+        {
+            if (zone->GetExactDist2d(x, y) < VoidZoneHazardRadius)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // How long a pull lasts for anything that only makes sense before the attractor rotation
     // starts moving the horsemen around.
     static constexpr uint32 PullWindowMs = 10000;

@@ -94,6 +94,11 @@ namespace NaxxSpellIds
     SPELL_POSITIVE_POLARITY             = 28059,
     SPELL_NEGATIVE_POLARITY             = 28084
 */
+    // The Four Horsemen
+    // Lady Blaumeux's Void Zone (28863) summons this; the puddle then channels Consumption on
+    // everyone standing in it until it despawns.
+    static constexpr uint32 FourHorsemenVoidZoneEntry = 16697;
+
     // Sapphiron
     static constexpr uint32 Icebolt10 = 28522;
     static constexpr uint32 Icebolt25 = 28526;
