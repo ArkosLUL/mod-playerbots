@@ -33,6 +33,7 @@ public:
         creators["lesser heal on party"] = &lesser_heal_on_party;
         creators["flash heal"] = &flash_heal;
         creators["flash heal on party"] = &flash_heal_on_party;
+        creators["penance on party"] = &penance_on_party;
         creators["psychic scream"] = &psychic_scream;
     }
 
@@ -197,6 +198,15 @@ private:
             "flash heal on party",
             /*P*/ { NextAction("remove shadowform") },
             /*A*/ { NextAction("greater heal on party") },
+            /*C*/ {}
+        );
+    }
+    static ActionNode* penance_on_party([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode(
+            "penance on party",
+            /*P*/ { NextAction("remove shadowform") },
+            /*A*/ { NextAction("flash heal on party") },
             /*C*/ {}
         );
     }

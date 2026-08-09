@@ -81,6 +81,27 @@ Weakened Soul** → Binding Heal when the priest is also hurt → Prayer of Heal
   medium), and its `25.0f, HIGH` metadata vetoes it above 75% target HP under mana pressure. It is
   the guide's #4 and the spec's signature cooldown-driven heal.
 
+### Second pass — Penance was still being suppressed
+
+D2's fix (the `weakened soul on party member` node) papered over D7. Penance leads Flash Heal inside
+every band (35.5/34.5 critical, 25.5/24.5 low, 18.5/17.5 medium), but the Weakened Soul node sat
+*outside* those bands at 27 and outranked both of the lower two. PW:S is on top of every band plus
+`power word: shield on not full` @32–33, so the bot shields constantly and Weakened Soul (15s) is up
+on the heal target nearly all the time — Flash Heal @27 therefore won every non-critical heal and
+Penance only ever fired below 25% HP.
+
+`penance on party` now leads that node at 27.4 (27.5 is taken by `low health` → self PW:S), so a
+shielded target gets Penance when it is off cooldown and Flash Heal during the cooldown. `penance on
+party` also gained the ActionNode it was the only party heal to lack — prerequisite
+`remove shadowform`, alternative `flash heal on party` — so a Penance blocked by its cooldown falls
+through in the same tick at `relevance + 0.003` instead of waiting for the queue.
+
+Ruled out while chasing this, do not re-investigate: Penance **is** in the Disc premade build
+(`PremadeSpecLink.5.0.80` ends in `1`), `spell_pri_penance::CheckCast` passes on friendly targets,
+`SpellIdValue` resolves the name, `HealerAutoSaveManaMultiplier` treats Penance and Flash Heal
+identically (both `15.0f, HIGH`), and `CastTimeMultiplier` only touches actions aimed at
+`current target`, never party heals.
+
 Current collisions: `dispel magic` = `power infusion` @41; `dispel magic on party` =
 `reach party member to heal` @40; `power word: shield on party` = `power word: shield on not full`
 @35; `penance on party` = `prayer of healing on party` @34; `penance` = `shadowfiend` @22;

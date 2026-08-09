@@ -164,11 +164,13 @@ public:
         : HealPartyMemberAction(botAI, "holy shock", 15.0f, HealingManaEfficiency::HIGH) {}
 };
 
+// Illumination refunds 30% of the mana on a heal crit and Beacon of Light mirrors the heal for
+// free, so per point healed this is the cheap spell and Flash is the expensive one.
 class CastHolyLightOnPartyAction : public HealPartyMemberAction
 {
 public:
     CastHolyLightOnPartyAction(PlayerbotAI* botAI)
-        : HealPartyMemberAction(botAI, "holy light", 25.0f, HealingManaEfficiency::MEDIUM) {}
+        : HealPartyMemberAction(botAI, "holy light", 25.0f, HealingManaEfficiency::HIGH) {}
 };
 
 class CastFlashOfLightAction : public CastHealingSpellAction

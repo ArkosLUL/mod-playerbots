@@ -121,10 +121,13 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    // Glyphed Holy Light splashes 10% to five nearby allies and Beacon mirrors it, so it stays the
+    // main heal right up to the top-off band. Flash is what is left when the mana saver vetoes it.
     triggers.push_back(
         new TriggerNode(
             "party member almost full health",
             {
+                NextAction("holy light on party", ACTION_LIGHT_HEAL + 4),
                 NextAction("flash of light on party", ACTION_LIGHT_HEAL + 3)
             }
         )

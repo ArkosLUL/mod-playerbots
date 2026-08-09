@@ -45,8 +45,10 @@ Engine and healer semantics (health bands, `HealerAutoSaveManaMultiplier`) are i
 - Divine Plea is allowed through the raid-damage suppression **below** `lowMana` (15), and a second
   `low mana` → `divine plea` node sits at 23. An unglyphed healer with an empty bar heals nothing, so
   the 50% penalty is the cheaper price there.
-- The `tank to beacon` hysteresis margin is 30 percentage points, not 20. **Without hysteresis Beacon
-  thrashes every GCD.**
+- The `tank to beacon` hysteresis margin is 75 percentage points (`SWAP_MARGIN_PCT`, raised from 30 in
+  `c4ead0074`), not 20. **Without hysteresis Beacon thrashes every GCD.** At 75 the swap condition is
+  true in nearly every realistic case, so in practice Beacon sticks to the first tank it picks until
+  that tank leaves combat, range or LOS.
 - **Judgement of Light is maintained on a debuff trigger at 27, which the plan did not have at all.**
   Dropping the ungated default (item 7) left `healer dps` @5.3 as the only path, and that node is
   gated by `HealerShouldAttackTrigger` — false whenever anyone is below 85% HP, i.e. most of a fight.
@@ -78,7 +80,8 @@ Engine and healer semantics (health bands, `HealerAutoSaveManaMultiplier`) are i
 | 23 / 22 | low mana | divine plea / divine illumination |
 | 20 | seal | seal of wisdom |
 | 19.5 / 19 / 18 | party member medium health | holy shock / holy light / flash of light on party |
-| 13 / 12 | party member almost full health / paladin divine plea | flash of light on party / divine plea |
+| 14 / 13 | party member almost full health | holy light on party / flash of light on party |
+| 12 | paladin divine plea | divine plea |
 
 Inherited from `GenericPaladinStrategy`: `hand of sacrifice on party` 93,
 `blessing of protection on party` 92.8, `lay on hands on party` 92, `lay on hands` 91,
@@ -99,6 +102,36 @@ Inherited from `GenericPaladinStrategy`: `hand of sacrifice on party` 93,
 
 Hand of Protection depends on `PartyMemberToProtect` being live — see the revival note in
 [shaman.md](shaman.md).
+
+## Holy Light over Flash of Light (second pass)
+
+The first pass fixed `estAmount` but left two things that still made Flash of Light the spell the bot
+actually cast in a raid:
+
+- **The 65–85% band held only `flash of light on party` @13.** Raid targets sit in that band most of
+  the time, so almost every global went to Flash regardless of what the lower bands said. Holy Light
+  now leads it at 14, Flash stays at 13 as the fallback.
+- **`CastHolyLightOnPartyAction` was still tagged `MEDIUM`** while Flash was `HIGH`, so
+  `HealerAutoSaveManaMultiplier` returned `0.0f` for Holy Light whenever bot mana ≤ 60 and target
+  HP ≥ 65 — the exact band above. Retagged `HIGH`. Illumination refunds 30% of the mana on a heal crit
+  and Beacon mirrors the heal for free, which makes Holy Light the cheaper spell per point healed;
+  `MEDIUM` had the WotLK economics backwards. `estAmount` stays 25, so the `lossAmount < estAmount`
+  arm still keeps Holy Light off targets above ~75% HP when the paladin is low on mana.
+
+## Glyphs — verified, do not re-audit
+
+`AiPlayerbot.PremadeSpecGlyph.2.0` (holy pve) is `41106,43367,45741,43368,43365,41109`, read as
+major/minor/major/minor/minor/major: **Glyph of Holy Light**, Lay on Hands, **Glyph of Beacon of
+Light**, Sense Undead, Blessing of Kings, **Glyph of Seal of Wisdom**. `InitGlyphs` indexes
+`parsedSpecGlyph[cls][tab]` with `AiFactory::GetPlayerSpecTab`, which is 0 for Holy, so this is what
+Holy bots get. Glyph of Holy Light (10% splash to five allies within 8 yards) is a third reason Holy
+Light has to be the primary heal.
+
+Seals are already right too: `seal of wisdom` @20 is the only seal any Holy node casts, and Seal of
+Light is never wired for Holy. One wart — `SealTrigger::IsActive` returns true when Seal of Wisdom is
+already up and mana > 70, which queues a node that then resolves `USELESS`. The clause is there for
+the DPS and tank ladders, so removing it needs a Holy-specific trigger. Costs one engine iteration,
+does not affect seal uptime.
 
 ## Confirmed correct — do not re-audit
 

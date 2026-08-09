@@ -88,10 +88,13 @@ void HealPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     );
 
     // The target is already shielded, so top it off with a direct heal instead of retrying PW:S.
+    // Penance leads here or it never gets a look-in below the critical band: PW:S is on top of every
+    // band, so Weakened Soul is up on the heal target almost permanently.
     triggers.push_back(
         new TriggerNode(
             "weakened soul on party member",
             {
+                NextAction("penance on party", ACTION_MEDIUM_HEAL + 7.4f),
                 NextAction("flash heal on party", ACTION_MEDIUM_HEAL + 7)
             }
         )
