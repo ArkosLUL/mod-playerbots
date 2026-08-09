@@ -214,6 +214,13 @@ Gaps the rebuild had to solve:
   (type order, lowest GUID inside a type), **melee stay on Noth**, and melee join the adds for the
   blink window only. `DoResetThreatList()` empties Noth's table alone, so that window no longer mutes
   bots who are on an add.
+- **Ranged kiting the Champions made them ungatherable.** The old position action ran a 25 yd flee
+  at the *nearest* Champion, whoever it was fighting, so a bot backed off adds the off-tank already
+  held, and an add chasing a bot followed it away in a straight line with the tank stuck behind.
+  Ranged now walk the add **into** the add tank (assist tank, else main tank) and stop
+  `AddTankHandoffDistance` = 10 yd short of it — outside `CleaveSpread`, so the tank does not step
+  away from the bot that just delivered it. Warriors and Guardians are left to the tank's own chase
+  in `PositionAssistTank`.
 - Position moves had **no room clamp** (rectangle 2618..2754, −3557.43..−3450) — Kel'Thuzad's
   `ClampToRoom` / `ComputeEscapeFromPoint` are the primitives to copy.
 

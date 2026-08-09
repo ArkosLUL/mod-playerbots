@@ -268,36 +268,37 @@ bool NothPositionAction::PositionAssistTank(Unit* currentTarget)
     return false;
 }
 
-bool NothPositionAction::KiteChampions()
+bool NothPositionAction::DragChampionToAddTank()
 {
-    Unit* nearest = nullptr;
-    float nearestDistance = 0.0f;
+    bool chased = false;
 
     GuidVector attackers = context->GetValue<GuidVector>("attackers")->Get();
     for (ObjectGuid const& guid : attackers)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || !helper.IsChampion(unit))
+        if (unit && unit->IsAlive() && helper.IsChampion(unit) && unit->GetVictim() == bot)
         {
-            continue;
-        }
-
-        float distance = bot->GetDistance2d(unit);
-        if (!nearest || distance < nearestDistance)
-        {
-            nearest = unit;
-            nearestDistance = distance;
+            chased = true;
+            break;
         }
     }
 
-    if (!nearest || nearestDistance >= ChampionKiteDistance)
+    if (!chased)
     {
         return false;
     }
 
-    float angle = nearest->GetAngle(bot);
-    return MoveToClamped(nearest->GetPositionX() + cos(angle) * ChampionKiteDistance,
-                         nearest->GetPositionY() + sin(angle) * ChampionKiteDistance);
+    // Running away only drags the add further out - it follows its own victim, so the tank chases
+    // from behind and never closes. Walk it into the tank instead.
+    Player* addTank = helper.GetAliveAddTank();
+    if (!addTank || addTank == bot || bot->GetDistance2d(addTank) <= AddTankHandoffDistance)
+    {
+        return false;
+    }
+
+    float angle = addTank->GetAngle(bot);
+    return MoveToClamped(addTank->GetPositionX() + cos(angle) * AddTankHandoffDistance,
+                         addTank->GetPositionY() + sin(angle) * AddTankHandoffDistance);
 }
 
 bool NothPositionAction::Execute(Event event)
@@ -316,7 +317,7 @@ bool NothPositionAction::Execute(Event event)
 
     if (botAI->IsRanged(bot))
     {
-        return KiteChampions();
+        return DragChampionToAddTank();
     }
 
     // Melee lose their target for the whole balcony phase and the replacements spawn at the alcoves,

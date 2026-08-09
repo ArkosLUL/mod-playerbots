@@ -2031,6 +2031,32 @@ public:
         return nullptr;
     }
 
+    // Who add duty falls to - the same rule "noth choose target" uses: the assist tank, or the main
+    // tank when no assist tank is alive.
+    Player* GetAliveAddTank() const
+    {
+        if (Player* assist = GetAliveAssistTank())
+        {
+            return assist;
+        }
+
+        Group* group = bot->GetGroup();
+        if (!group)
+        {
+            return nullptr;
+        }
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && botAI->IsMainTank(member))
+            {
+                return member;
+            }
+        }
+        return nullptr;
+    }
+
     void ClampToRoom(float& x, float& y) const
     {
         x = std::clamp(x, ROOM_MIN_X, ROOM_MAX_X);

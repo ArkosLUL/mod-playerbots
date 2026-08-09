@@ -499,14 +499,15 @@ public:
 private:
     // Plagued Warriors cleave, so the tank holding them steps off anyone who wanders into the swing.
     static constexpr float CleaveSpread = 5.0f;
-    // Plagued Champions Mortal Strike; ranged have no business standing inside that.
-    static constexpr float ChampionKiteDistance = 25.0f;
+    // Where a bot being chased by a Plagued Champion parks so the add tank can pick the add up.
+    // Outside CleaveSpread, or the tank keeps stepping away from the bot that just brought it in.
+    static constexpr float AddTankHandoffDistance = 10.0f;
     // Adds dragged further than this leave the healers behind.
     static constexpr float HealerLeashDistance = 25.0f;
     static constexpr float MeleeCloseDistance = 10.0f;
 
     bool PositionAssistTank(Unit* currentTarget);
-    bool KiteChampions();
+    bool DragChampionToAddTank();
     bool MoveToClamped(float x, float y);
 
     NothBossHelper helper;
