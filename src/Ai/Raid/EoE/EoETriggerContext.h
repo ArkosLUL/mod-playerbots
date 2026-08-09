@@ -17,8 +17,11 @@ public:
     {
         creators["malygos"] = &RaidEoETriggerContext::malygos;
         creators["power spark"] = &RaidEoETriggerContext::power_spark;
-        creators["deep breath"] = &RaidEoETriggerContext::deep_breath;
+        creators["malygos bubble"] = &RaidEoETriggerContext::malygos_bubble;
+        creators["malygos free disk"] = &RaidEoETriggerContext::malygos_free_disk;
+        creators["malygos on disk"] = &RaidEoETriggerContext::malygos_on_disk;
         creators["surge of power"] = &RaidEoETriggerContext::surge_of_power;
+        creators["malygos drake flight"] = &RaidEoETriggerContext::malygos_drake_flight;
         creators["static field"] = &RaidEoETriggerContext::static_field;
         creators["drake surge"] = &RaidEoETriggerContext::drake_surge;
     }
@@ -26,8 +29,11 @@ public:
 private:
     static Trigger* malygos(PlayerbotAI* ai) { return new MalygosTrigger(ai); }
     static Trigger* power_spark(PlayerbotAI* ai) { return new PowerSparkTrigger(ai); }
-    static Trigger* deep_breath(PlayerbotAI* ai) { return new DeepBreathTrigger(ai); }
+    static Trigger* malygos_bubble(PlayerbotAI* ai) { return new MalygosBubbleTrigger(ai); }
+    static Trigger* malygos_free_disk(PlayerbotAI* ai) { return new MalygosFreeDiskTrigger(ai); }
+    static Trigger* malygos_on_disk(PlayerbotAI* ai) { return new MalygosOnDiskTrigger(ai); }
     static Trigger* surge_of_power(PlayerbotAI* ai) { return new SurgeOfPowerTrigger(ai); }
+    static Trigger* malygos_drake_flight(PlayerbotAI* ai) { return new MalygosDrakeFlightTrigger(ai); }
     static Trigger* static_field(PlayerbotAI* ai) { return new StaticFieldTrigger(ai); }
     static Trigger* drake_surge(PlayerbotAI* ai) { return new DrakeSurgeTrigger(ai); }
 };

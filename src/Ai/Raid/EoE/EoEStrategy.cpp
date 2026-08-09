@@ -21,15 +21,29 @@ void RaidEoEStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("power spark",
         { NextAction("kill power spark", ACTION_RAID + 2) }));
 
-    // P2 ground hazards.
-    triggers.push_back(new TriggerNode("deep breath",
-        { NextAction("deep breath dodge", ACTION_EMERGENCY) }));
+    // P2: strip the Nexus Lords' Haste. Hangs off the boss trigger rather than one of its own so it
+    // costs nothing outside P2 - the action gates itself on class and phase.
+    triggers.push_back(new TriggerNode("malygos",
+        { NextAction("malygos spellsteal", ACTION_RAID + 2) }));
+
+    // P2 shelter. The bubble beats the surge dodge, which is only the fallback for bots that
+    // cannot reach one.
+    triggers.push_back(new TriggerNode("malygos bubble",
+        { NextAction("malygos seek bubble", ACTION_EMERGENCY + 2) }));
     triggers.push_back(new TriggerNode("surge of power",
         { NextAction("avoid surge of power", ACTION_EMERGENCY) }));
 
+    // P2 hover disks: melee ride a freed disk up to the Scions.
+    triggers.push_back(new TriggerNode("malygos free disk",
+        { NextAction("malygos board disk", ACTION_RAID + 4) }));
+    triggers.push_back(new TriggerNode("malygos on disk",
+        { NextAction("malygos ride disk", ACTION_RAID + 4) }));
+
     // P3 drake flight.
-    triggers.push_back(new TriggerNode("group flying",
-        { NextAction("eoe fly drake", ACTION_NORMAL + 1) }));
+    // Flight positioning outranks the drake rotation: it parks and turns the vehicle, then stands
+    // down for the tick. A moving or off-arc vehicle cannot cast, so this has to settle first.
+    triggers.push_back(new TriggerNode("malygos drake flight",
+        { NextAction("eoe fly drake", ACTION_NORMAL + 6) }));
     triggers.push_back(new TriggerNode("drake combat",
         { NextAction("eoe drake attack", ACTION_NORMAL + 5) }));
     triggers.push_back(new TriggerNode("static field",
