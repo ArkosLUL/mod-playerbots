@@ -5,6 +5,7 @@
  */
 
 #include "NaxxActions.h"
+#include "AiFactory.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
@@ -446,4 +447,64 @@ bool KelthuzadMisdirectBossToMainTankAction::Execute(Event event)
         }
     }
     return false;
+}
+
+bool KelthuzadCycloneChainedAction::Execute(Event /*event*/)
+{
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    Player* chained = helper.GetPlayerWithAura(NaxxSpellIds::ChainsOfKelthuzad);
+    if (!chained || chained == bot || chained->HasAura(NaxxSpellIds::Cyclone))
+    {
+        return false;
+    }
+
+    // Cyclone has full diminishing returns against a player, so only one druid may commit. Every
+    // bot ranks the eligible druids the same way, so exactly one of them picks itself.
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        return false;
+    }
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || member == chained || !member->IsAlive())
+        {
+            continue;
+        }
+        if (!KelthuzadBossHelper::CanCycloneChained(member) || !bot->IsInMap(member))
+        {
+            continue;
+        }
+
+        float memberDist = member->GetExactDist2d(chained);
+        if (memberDist > 40.0f)
+        {
+            continue;
+        }
+
+        float botDist = bot->GetExactDist2d(chained);
+        if (memberDist < botDist || (memberDist == botDist && member->GetGUID() < bot->GetGUID()))
+        {
+            return false;
+        }
+    }
+
+    // Cyclone reaches 20y; CanCastSpell passes on SPELL_FAILED_OUT_OF_RANGE, so close the gap first.
+    if (bot->GetExactDist2d(chained) > 18.0f)
+    {
+        return MoveTo(NAXX_MAP_ID, chained->GetPositionX(), chained->GetPositionY(), chained->GetPositionZ(),
+                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    if (!botAI->CanCastSpell("cyclone", chained))
+    {
+        return false;
+    }
+    return botAI->CastSpell("cyclone", chained);
 }

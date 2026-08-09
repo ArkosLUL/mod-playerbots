@@ -5,6 +5,7 @@
  */
 
 #include "NaxxTriggers.h"
+#include "AiFactory.h"
 #include "NaxxSpellIds.h"
 #include "Playerbots.h"
 #include "Timer.h"
@@ -333,6 +334,22 @@ bool KelthuzadShadowFissureTrigger::IsActive()
 
     Unit* fissure = helper.GetNearestShadowFissure();
     return fissure && bot->IsWithinDistInMap(fissure, KelthuzadBossHelper::FISSURE_DANGER_RADIUS);
+}
+
+bool KelthuzadChainsTrigger::IsActive()
+{
+    if (!KelthuzadBossHelper::CanCycloneChained(bot))
+    {
+        return false;
+    }
+
+    if (!helper.UpdateBossAI())
+    {
+        return false;
+    }
+
+    Player* chained = helper.GetPlayerWithAura(NaxxSpellIds::ChainsOfKelthuzad);
+    return chained && chained != bot;
 }
 
 bool AnubrekhanTrigger::IsActive()

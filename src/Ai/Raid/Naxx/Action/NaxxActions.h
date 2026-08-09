@@ -361,6 +361,19 @@ private:
     KelthuzadBossHelper helper;
 };
 
+class KelthuzadCycloneChainedAction : public MovementAction
+{
+public:
+    KelthuzadCycloneChainedAction(PlayerbotAI* ai)
+        : MovementAction(ai, "kel'thuzad cyclone chained"), helper(ai)
+    {
+    }
+    bool Execute(Event event) override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
 class AnubrekhanChooseTargetAction : public AttackAction
 {
 public:

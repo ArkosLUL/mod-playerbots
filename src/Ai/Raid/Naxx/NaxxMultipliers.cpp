@@ -348,6 +348,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         {
             if (dynamic_cast<KelthuzadPositionAction*>(action) ||
                 dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
+                dynamic_cast<KelthuzadCycloneChainedAction*>(action) ||
                 dynamic_cast<CastHealingSpellAction*>(action) ||
                 dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<CastAoeHealSpellAction*>(action) ||
@@ -361,6 +362,7 @@ float KelthuzadGenericMultiplier::GetValue(Action* action)
         {
             if (dynamic_cast<KelthuzadPositionAction*>(action) ||
                 dynamic_cast<KelthuzadFleeShadowFissureAction*>(action) ||
+                dynamic_cast<KelthuzadCycloneChainedAction*>(action) ||
                 dynamic_cast<CastHealingSpellAction*>(action) ||
                 dynamic_cast<HealPartyMemberAction*>(action) ||
                 dynamic_cast<CastAoeHealSpellAction*>(action) ||

@@ -55,6 +55,10 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("kel'thuzad flee shadow fissure", ACTION_EMERGENCY + 6) }
     ));
 
+    triggers.push_back(new TriggerNode("kel'thuzad chains",
+        { NextAction("kel'thuzad cyclone chained", ACTION_EMERGENCY + 5) }
+    ));
+
     // Anub'Rekhan
     triggers.push_back(new TriggerNode("anub'rekhan",
         {

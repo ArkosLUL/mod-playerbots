@@ -135,6 +135,17 @@ private:
     KelthuzadBossHelper helper;
 };
 
+// Fires on Balance/Restoration druids while a raid member is charmed by Chains of Kel'Thuzad.
+class KelthuzadChainsTrigger : public Trigger
+{
+public:
+    KelthuzadChainsTrigger(PlayerbotAI* ai) : Trigger(ai, "kel'thuzad chains"), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    KelthuzadBossHelper helper;
+};
+
 class AnubrekhanTrigger : public Trigger
 {
 public:

@@ -43,6 +43,7 @@ public:
 
         creators["kel'thuzad"] = &RaidNaxxTriggerContext::kelthuzad;
         creators["kel'thuzad shadow fissure"] = &RaidNaxxTriggerContext::kelthuzad_shadow_fissure;
+        creators["kel'thuzad chains"] = &RaidNaxxTriggerContext::kelthuzad_chains;
 
         creators["anub'rekhan"] = &RaidNaxxTriggerContext::anubrekhan;
         creators["anub'rekhan locust swarm"] = &RaidNaxxTriggerContext::anubrekhan_locust_swarm;
@@ -103,6 +104,7 @@ private:
     static Trigger* sapphiron_flight(PlayerbotAI* ai) { return new SapphironFlightTrigger(ai); }
     static Trigger* kelthuzad(PlayerbotAI* ai) { return new KelthuzadTrigger(ai); }
     static Trigger* kelthuzad_shadow_fissure(PlayerbotAI* ai) { return new KelthuzadShadowFissureTrigger(ai); }
+    static Trigger* kelthuzad_chains(PlayerbotAI* ai) { return new KelthuzadChainsTrigger(ai); }
     static Trigger* anubrekhan(PlayerbotAI* ai) { return new AnubrekhanTrigger(ai); }
     static Trigger* anubrekhan_locust_swarm(PlayerbotAI* ai) { return new AnubrekhanLocustSwarmTrigger(ai); }
     static Trigger* faerlina(PlayerbotAI* ai) { return new FaerlinaTrigger(ai); }

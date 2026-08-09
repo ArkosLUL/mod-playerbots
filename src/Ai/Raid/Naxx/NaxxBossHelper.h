@@ -177,6 +177,16 @@ public:
     static constexpr uint32 NPC_GUARDIAN_OF_ICECROWN = 16441;
     static constexpr uint32 NPC_SHADOW_FISSURE = 16129;
 
+    // Who may enter the "one druid cyclones the charmed raider" election. Cyclone is a tier-3
+    // Balance talent, so plenty of Resto builds never learn it, and a human druid doesn't run the
+    // trigger at all - either one would otherwise win the election and nobody would cast.
+    // Every bot has to apply this to itself and to its rivals or the election deadlocks.
+    static bool CanCycloneChained(Player* druid)
+    {
+        return druid && druid->IsClass(CLASS_DRUID) && GET_PLAYERBOT_AI(druid) &&
+               druid->HasSpell(NaxxSpellIds::Cyclone);
+    }
+
     bool IsGuardian(Unit* unit) const
     {
         if (!unit)

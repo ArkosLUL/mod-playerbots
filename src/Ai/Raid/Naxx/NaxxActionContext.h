@@ -46,6 +46,7 @@ public:
         creators["kel'thuzad flee shadow fissure"] = &RaidNaxxActionContext::kelthuzad_flee_shadow_fissure;
         creators["kel'thuzad misdirect boss to main tank"] =
             &RaidNaxxActionContext::kelthuzad_misdirect_boss_to_main_tank;
+        creators["kel'thuzad cyclone chained"] = &RaidNaxxActionContext::kelthuzad_cyclone_chained;
 
         creators["anub'rekhan choose target"] = &RaidNaxxActionContext::anubrekhan_choose_target;
         creators["anub'rekhan position"] = &RaidNaxxActionContext::anubrekhan_position;
@@ -111,6 +112,7 @@ private:
     {
         return new KelthuzadMisdirectBossToMainTankAction(ai);
     }
+    static Action* kelthuzad_cyclone_chained(PlayerbotAI* ai) { return new KelthuzadCycloneChainedAction(ai); }
     static Action* anubrekhan_choose_target(PlayerbotAI* ai) { return new AnubrekhanChooseTargetAction(ai); }
     static Action* anubrekhan_position(PlayerbotAI* ai) { return new AnubrekhanPositionAction(ai); }
     static Action* anubrekhan_redirect_threat(PlayerbotAI* ai) { return new AnubrekhanRedirectThreatAction(ai); }
