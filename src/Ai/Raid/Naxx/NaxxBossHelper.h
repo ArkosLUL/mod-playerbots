@@ -1541,9 +1541,8 @@ private:
 };
 
 // Impale picks a uniformly random living player - the tank included - and hurts everything around
-// the victim, so the only defence is standing apart before it goes off. boss_anubrekhan is declared
-// inside its own .cpp and runs off `scheduler` rather than an EventMap, so there is nothing to read:
-// the clock below models the script's fixed 15s-then-every-20s schedule instead.
+// the victim. Nobody can dodge that, so the raid just stands apart and eats it; the only thing worth
+// tracking here is Locust Swarm, and its aura gives a clean edge to read the 90s cycle from.
 class AnubrekhanBossHelper : public AiObject
 {
 public:
@@ -1557,20 +1556,15 @@ public:
     static constexpr float RoomFloorZ = 287.08f;
     // The raid stacks inside the kite circle during the swarm, so this is what sets boss-to-raid
     // distance for the whole window - drop it if healers start falling short of the tank.
-    static constexpr float KiteRadius = 35.0f;
-    // Where the raid piles up during the swarm, measured from the boss towards the room centre. Fixed
-    // to the boss rather than to the room so it is in heal and cast range wherever the kite has got
-    // to, and always outside the ~15 yd aura.
-    static constexpr float SwarmStackDistance = 25.0f;
+    static constexpr float KiteRadius = 45.0f;
+    // The swarm pile sits on the room centre itself. Anchoring it to the boss meant the pile trailed
+    // a moving point and he swept through it; the centre is a fixed KiteRadius away from him for the
+    // whole window, and the raid is standing on it before the aura goes up.
     // Bodies block each other on a single point. This is a de-clump ring, not a spread.
-    static constexpr float SwarmStackRingRadius = 3.0f;
-    // Wider than the Impale splash, well inside the room.
-    static constexpr float ImpaleSpreadDistance = 12.0f;
+    static constexpr float SwarmStackRingRadius = 5.0f;
     // Locust Swarm reaches ~15 yd, so the ring starts outside that and ends inside cast/heal range.
     static constexpr float RangedBandMin = 20.0f;
     static constexpr float RangedBandMax = 28.0f;
-    // Melee cannot spread by Impale distance and still reach anything, so they only fan out.
-    static constexpr float MeleeSpreadRadius = 5.0f;
     static constexpr float SlotTolerance = 3.0f;
     static constexpr float AddHoldDistance = 15.0f;
     // Has to clear KiteRadius, or the cap would drag the hold point back inside the boss and onto the
@@ -1578,7 +1572,6 @@ public:
     // circle is 77 yd.
     static constexpr float MaxHoldRadius = 52.0f;
     static constexpr uint32 RepositionIntervalMs = 1000;
-    static constexpr uint32 ImpaleWarningMs = 3000;
     static constexpr uint32 SwarmWarningMs = 3000;
 
     struct SlotState
@@ -1587,6 +1580,12 @@ public:
         float destX = 0.0f;
         float destY = 0.0f;
         bool hasDest = false;
+        // The spread slot as an offset from the boss, latched on first use. Keeping the angle rather
+        // than a world point is what stops a bot being thrown to the far side of the ring when the
+        // boss-to-room-centre bearing swings.
+        bool hasSpread = false;
+        float spreadAngle = 0.0f;
+        float spreadRadius = 0.0f;
     };
 
     AnubrekhanBossHelper(PlayerbotAI* botAI) : AiObject(botAI) {}
@@ -1618,14 +1617,10 @@ public:
             // Either the first look at this Anub'Rekhan, or nobody has watched him for a while - the
             // raid wiped or reset, so the old anchor says nothing about the pull running now.
             _state->clockKnown = true;
-            _state->engageMs = now;
             // The swarm anchor belongs to the attempt that set it, so it goes with the clock.
             _state->swarmSeen = false;
             _state->swarmActive = false;
             _state->lastSwarmStartMs = 0;
-            // Only a real pull gives a trustworthy anchor. Bots arriving later inherit whatever the
-            // pullers established, and stay unsynced if there was nobody.
-            _state->synced = _unit->GetHealthPct() > 99.0f;
         }
         _state->lastSeenMs = now;
 
@@ -1643,7 +1638,6 @@ public:
     }
 
     Unit* GetBoss() const { return _unit; }
-    bool IsSynced() const { return _state && _state->synced; }
 
     // The one place the Locust auras get checked.
     bool IsLocustSwarmActive() const
@@ -1655,23 +1649,6 @@ public:
         return NaxxSpellIds::HasAnyAura(_unit, {NaxxSpellIds::LocustSwarm10, NaxxSpellIds::LocustSwarm25}) ||
                botAI->HasAura("locust swarm", _unit);
     }
-
-    // 0 when the clock was never anchored.
-    uint32 MsUntilNextImpale() const
-    {
-        if (!IsSynced())
-        {
-            return 0;
-        }
-        uint32 elapsed = getMSTime() - _state->engageMs;
-        if (elapsed < FirstImpaleMs)
-        {
-            return FirstImpaleMs - elapsed;
-        }
-        return ImpalePeriodMs - ((elapsed - FirstImpaleMs) % ImpalePeriodMs);
-    }
-
-    bool IsImpaleImminent() const { return IsSynced() && MsUntilNextImpale() <= ImpaleWarningMs; }
 
     // 0 until a swarm has actually been seen - the opening cast is not predictable.
     uint32 MsUntilNextSwarm() const
@@ -1709,8 +1686,6 @@ public:
     }
 
 private:
-    static constexpr uint32 FirstImpaleMs = 15000;
-    static constexpr uint32 ImpalePeriodMs = 20000;
     static constexpr uint32 SwarmPeriodMs = 90000;
     static constexpr uint32 StaleStateMs = 10000;
 
@@ -1718,8 +1693,6 @@ private:
     {
         ObjectGuid bossGuid;
         bool clockKnown = false;
-        bool synced = false;
-        uint32 engageMs = 0;
         uint32 lastSeenMs = 0;
         // Anchored on the first swarm the raid actually sees, not on the pull.
         bool swarmSeen = false;
@@ -1770,6 +1743,13 @@ private:
 
     void Reset()
     {
+        // The spread angle and the last destination are latched for a whole attempt, so they have to
+        // die with it - kept across a wipe, they point at wherever the boss stood on the last pull.
+        if (_unit || _state)
+        {
+            SlotStateFor(bot->GetGUID()) = SlotState();
+        }
+
         _unit = nullptr;
         _state = nullptr;
     }

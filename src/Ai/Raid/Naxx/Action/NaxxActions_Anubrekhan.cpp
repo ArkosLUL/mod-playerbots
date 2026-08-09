@@ -5,6 +5,7 @@
  */
 
 #include "NaxxActions.h"
+#include "MotionMaster.h"
 #include "NaxxSpellIds.h"
 #include "ObjectGuid.h"
 #include "Playerbots.h"
@@ -43,6 +44,22 @@ std::pair<size_t, size_t> SwarmSlot(PlayerbotAI* botAI, Player* bot)
         return {0, 1};
     }
     return {static_cast<size_t>(std::distance(all.begin(), it)), all.size()};
+}
+
+// A spread slot is an offset from the boss, so a boss that walks toward a wall can push it straight
+// through one. Pull anything past the room boundary back onto it.
+void ClampToRoom(float& x, float& y)
+{
+    float dx = x - AnubrekhanBossHelper::RoomCenterX;
+    float dy = y - AnubrekhanBossHelper::RoomCenterY;
+    float dist = std::hypot(dx, dy);
+    if (dist <= AnubrekhanBossHelper::MaxHoldRadius)
+    {
+        return;
+    }
+    float scale = AnubrekhanBossHelper::MaxHoldRadius / dist;
+    x = AnubrekhanBossHelper::RoomCenterX + dx * scale;
+    y = AnubrekhanBossHelper::RoomCenterY + dy * scale;
 }
 } // namespace
 
@@ -159,30 +176,36 @@ bool AnubrekhanPositionAction::Execute(Event event)
     if (swarm)
     {
         // The Impale spread is what puts people inside the swarm, so it goes away for the window.
-        return TakeSwarmStack(boss);
+        return TakeSwarmStack();
     }
     if (botAI->IsHeal(bot) || botAI->IsRanged(bot))
     {
         return TakeRangedSlot(boss);
     }
-    return TakeMeleeSlot(boss);
+    // Melee stay on their target. Impale lands on a random player whatever anyone does, and walking
+    // out of melee range for it costs more uptime than the splash it would save.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && !bot->IsWithinMeleeRange(target) &&
+        bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != CHASE_MOTION_TYPE)
+    {
+        // The swarm stack leaves a point-move behind, and nothing here re-issues the chase once the
+        // window ends - without this melee just stand where the stack put them.
+        return ChaseTo(target, sPlayerbotAIConfig.meleeDistance);
+    }
+    return false;
 }
 
-bool AnubrekhanPositionAction::TakeSwarmStack(Unit* boss)
+bool AnubrekhanPositionAction::TakeSwarmStack()
 {
-    // Anchored on the boss rather than on the room centre: 25 yd along the bearing to the centre is
-    // in heal and cast range whatever the kite is doing, and at KiteRadius 35 the pile only orbits a
-    // 10 yd circle instead of chasing the boss around the room.
-    float toCenter = std::atan2(AnubrekhanBossHelper::RoomCenterY - boss->GetPositionY(),
-                                AnubrekhanBossHelper::RoomCenterX - boss->GetPositionX());
-    float stackX = boss->GetPositionX() + std::cos(toCenter) * AnubrekhanBossHelper::SwarmStackDistance;
-    float stackY = boss->GetPositionY() + std::sin(toCenter) * AnubrekhanBossHelper::SwarmStackDistance;
+    // The spread is gone for the window, so it gets re-solved from wherever the boss ends up once the
+    // swarm drops rather than sending everyone back to a slot from before the kite.
+    AnubrekhanBossHelper::SlotStateFor(bot->GetGUID()).hasSpread = false;
 
     std::pair<size_t, size_t> slot = SwarmSlot(botAI, bot);
     float theta =
         2.0f * static_cast<float>(M_PI) * static_cast<float>(slot.first) / static_cast<float>(slot.second);
-    float x = stackX + std::cos(theta) * AnubrekhanBossHelper::SwarmStackRingRadius;
-    float y = stackY + std::sin(theta) * AnubrekhanBossHelper::SwarmStackRingRadius;
+    float x = AnubrekhanBossHelper::RoomCenterX + std::cos(theta) * AnubrekhanBossHelper::SwarmStackRingRadius;
+    float y = AnubrekhanBossHelper::RoomCenterY + std::sin(theta) * AnubrekhanBossHelper::SwarmStackRingRadius;
     return MoveToSlot(x, y);
 }
 
@@ -219,58 +242,42 @@ bool AnubrekhanPositionAction::HoldAdds(Unit* boss)
 
 bool AnubrekhanPositionAction::TakeRangedSlot(Unit* boss)
 {
-    NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);
-    std::pair<size_t, size_t> slot = NaxxGetSlotIndexAndCount(botAI, bot, groups);
+    AnubrekhanBossHelper::SlotState& state = AnubrekhanBossHelper::SlotStateFor(bot->GetGUID());
 
-    // Anchor the arc on the bearing from the boss to the room centre, so the ring always sits on the
-    // inside of the kite circle and never gets pushed into a wall as the boss laps it.
-    float anchor = std::atan2(AnubrekhanBossHelper::RoomCenterY - boss->GetPositionY(),
-                              AnubrekhanBossHelper::RoomCenterX - boss->GetPositionX());
-    float radius = botAI->IsHeal(bot) ? AnubrekhanBossHelper::RangedBandMax
-                                      : AnubrekhanBossHelper::RangedBandMin + RangedDpsBandOffset;
-    float theta = anchor - RangedRingArc / 2.0f +
-                  RangedRingArc * (static_cast<float>(slot.first) + 0.5f) / static_cast<float>(slot.second);
-    float x = boss->GetPositionX() + std::cos(theta) * radius;
-    float y = boss->GetPositionY() + std::sin(theta) * radius;
-
-    if (MoveToSlot(x, y))
+    if (!state.hasSpread)
     {
-        return true;
+        NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);
+        std::pair<size_t, size_t> slot = NaxxGetSlotIndexAndCount(botAI, bot, groups);
+
+        // The arc is anchored on the bearing from the boss to the room centre, which keeps it inside
+        // the room - but only read once. That bearing swings hard whenever the boss is near the
+        // centre, and re-reading it every tick swapped bots between opposite ends of the arc.
+        float anchor = std::atan2(AnubrekhanBossHelper::RoomCenterY - boss->GetPositionY(),
+                                  AnubrekhanBossHelper::RoomCenterX - boss->GetPositionX());
+        state.spreadAngle = anchor - RangedRingArc / 2.0f +
+                            RangedRingArc * (static_cast<float>(slot.first) + 0.5f) / static_cast<float>(slot.second);
+        state.spreadRadius = botAI->IsHeal(bot) ? AnubrekhanBossHelper::RangedBandMax
+                                                : AnubrekhanBossHelper::RangedBandMin + RangedDpsBandOffset;
+        state.hasSpread = true;
     }
 
-    // Backstop, not the mechanism: the arc keeps neighbours ~10 yd apart at eight bots, but an odd
-    // group composition can still bunch two slots. Only nudge once parked, so it never fights the
-    // slot move.
-    if (bot->GetExactDist2d(x, y) <= AnubrekhanBossHelper::SlotTolerance)
+    float x = boss->GetPositionX() + std::cos(state.spreadAngle) * state.spreadRadius;
+    float y = boss->GetPositionY() + std::sin(state.spreadAngle) * state.spreadRadius;
+    ClampToRoom(x, y);
+
+    // Standing apart is the whole defence against Impale - chasing the slot around is not. While the
+    // boss stays within a step of where he was, the bot holds the spot it already walked to instead
+    // of trailing him yard for yard.
+    if (state.hasDest)
     {
-        if (Player* crowder = GetNearestPlayerInRadius(bot, AnubrekhanBossHelper::ImpaleSpreadDistance))
+        float driftX = x - state.destX;
+        float driftY = y - state.destY;
+        if (driftX * driftX + driftY * driftY <= AnchorDriftDistance * AnchorDriftDistance)
         {
-            return FleePosition(crowder->GetPosition(), AnubrekhanBossHelper::ImpaleSpreadDistance,
-                                AnubrekhanBossHelper::RepositionIntervalMs);
+            x = state.destX;
+            y = state.destY;
         }
     }
-    return false;
-}
-
-bool AnubrekhanPositionAction::TakeMeleeSlot(Unit* boss)
-{
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (!target)
-    {
-        target = boss;
-    }
-
-    NaxxRoleGroups groups = NaxxGetRoleGroups(botAI, bot);
-    std::pair<size_t, size_t> slot = NaxxGetSlotIndexAndCount(botAI, bot, groups);
-
-    // Melee cannot spread by Impale distance and still reach anything, so they only fan out around
-    // their own target - enough that a single Impale does not catch all of them.
-    float anchor = std::atan2(AnubrekhanBossHelper::RoomCenterY - target->GetPositionY(),
-                              AnubrekhanBossHelper::RoomCenterX - target->GetPositionX());
-    float theta =
-        anchor + 2.0f * static_cast<float>(M_PI) * static_cast<float>(slot.first) / static_cast<float>(slot.second);
-    float x = target->GetPositionX() + std::cos(theta) * AnubrekhanBossHelper::MeleeSpreadRadius;
-    float y = target->GetPositionY() + std::sin(theta) * AnubrekhanBossHelper::MeleeSpreadRadius;
     return MoveToSlot(x, y);
 }
 
@@ -288,10 +295,10 @@ bool AnubrekhanPositionAction::MoveToSlot(float x, float y)
     bool sameDestination =
         state.hasDest && (driftX * driftX + driftY * driftY) <= AnchorDriftDistance * AnchorDriftDistance;
 
-    // Re-issuing the same move every tick makes bots jitter in place, and a jittering bot is mid-move
-    // when Impale lands. Let an order that is still valid run - unless Impale is about to go off.
+    // Re-issuing the same move every tick makes bots jitter in place instead of casting. Let an order
+    // that is still valid run.
     if (sameDestination && getMSTimeDiff(state.lastMoveMs, now) < AnubrekhanBossHelper::RepositionIntervalMs &&
-        !helper.IsImpaleImminent() && !helper.IsSwarmImminent())
+        !helper.IsSwarmImminent())
     {
         return false;
     }

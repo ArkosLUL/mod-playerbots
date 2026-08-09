@@ -464,9 +464,11 @@ float AnubrekhanGenericMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
-    // The position action hands every non-tank its own slot; the generic formation mover would spend
-    // the whole fight pulling them back into one pile, which is exactly what Impale punishes.
-    if (dynamic_cast<CombatFormationMoveAction*>(action))
+    // The position action hands out slots the generic formation mover would pull everyone back out
+    // of, into the one pile Impale punishes. Melee are the exception outside the swarm: they are not
+    // positioned at all, so they keep the generic behaviour.
+    bool meleeDps = !botAI->IsTank(bot) && !botAI->IsHeal(bot) && !botAI->IsRanged(bot);
+    if (dynamic_cast<CombatFormationMoveAction*>(action) && !(meleeDps && !helper.IsSwarmFormation()))
     {
         return 0.0f;
     }
@@ -480,11 +482,22 @@ float AnubrekhanGenericMultiplier::GetValue(Action* action)
             return 0.0f;
         }
 
-        // The generic chase would drag melee back onto the boss as fast as the position action walks
-        // them out.
-        if (!botAI->IsTank(bot) && dynamic_cast<MeleeAction*>(action))
+        if (!botAI->IsTank(bot))
         {
-            return 0.0f;
+            // Autoattack: there is nothing in reach from the pile anyway, and swinging means facing
+            // whatever the bot last targeted.
+            if (dynamic_cast<MeleeAction*>(action))
+            {
+                return 0.0f;
+            }
+
+            // The chases, all of which fire the moment the position action goes quiet and would walk
+            // the bot straight back out: "reach melee" and "reach spell" onto a boss that is a whole
+            // KiteRadius away by design, and "reach party member to heal" onto the kiting tank.
+            if (dynamic_cast<ReachTargetAction*>(action))
+            {
+                return 0.0f;
+            }
         }
     }
     return 1.0f;

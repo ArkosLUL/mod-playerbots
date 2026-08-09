@@ -377,8 +377,7 @@ private:
     bool KiteBoss();
     bool HoldAdds(Unit* boss);
     bool TakeRangedSlot(Unit* boss);
-    bool TakeMeleeSlot(Unit* boss);
-    bool TakeSwarmStack(Unit* boss);
+    bool TakeSwarmStack();
     // Rate-limited move to a slot the caller worked out; false when the bot is already parked there.
     bool MoveToSlot(float x, float y);
 
