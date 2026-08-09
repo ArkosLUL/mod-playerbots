@@ -230,6 +230,17 @@ private:
 //     bool IsActive() override;
 // };
 
+class ThaddiusPrepullSplitTrigger : public Trigger
+{
+public:
+    // Resolving the adds out of combat costs a grid search, so do not run it every tick.
+    ThaddiusPrepullSplitTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius prepull split", 2), helper(ai) {}
+    bool IsActive() override;
+
+private:
+    ThaddiusBossHelper helper;
+};
+
 class ThaddiusPhasePetTrigger : public Trigger
 {
 public:

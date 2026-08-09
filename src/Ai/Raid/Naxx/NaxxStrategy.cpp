@@ -123,6 +123,12 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // ));
 
     // Thaddius
+    // Pre-pull only. Splits the raid onto the two adds on room entry so the pull does not start
+    // with everyone stacked in one blob - phase 1 is on a 5 minute enrage.
+    triggers.push_back(new TriggerNode("thaddius prepull split",
+        { NextAction("thaddius prepull split", ACTION_RAID) }
+    ));
+
     triggers.push_back(new TriggerNode("thaddius phase pet",
         { NextAction("thaddius attack nearest pet", ACTION_RAID + 6) }
     ));
@@ -243,6 +249,7 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new GrobbulusMultiplier(botAI));
     multipliers.push_back(new HeiganDanceMultiplier(botAI));
     multipliers.push_back(new LoathebGenericMultiplier(botAI));
+    multipliers.push_back(new ThaddiusPrepullMultiplier(botAI));
     multipliers.push_back(new ThaddiusGenericMultiplier(botAI));
     multipliers.push_back(new SapphironGenericMultiplier(botAI));
     multipliers.push_back(new InstructorRazuviousGenericMultiplier(botAI));

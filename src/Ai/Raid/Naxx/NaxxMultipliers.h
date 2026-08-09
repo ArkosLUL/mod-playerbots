@@ -43,6 +43,18 @@ public:
     float GetValue(Action* action) override;
 };
 
+class ThaddiusPrepullMultiplier : public Multiplier
+{
+public:
+    ThaddiusPrepullMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thaddius prepull"), helper(ai) {}
+
+public:
+    float GetValue(Action* action) override;
+
+private:
+    ThaddiusBossHelper helper;
+};
+
 class ThaddiusGenericMultiplier : public Multiplier
 {
 public:

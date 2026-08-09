@@ -10,6 +10,31 @@
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 
+bool ThaddiusPrepullSplitAction::isUseful() { return helper.IsPrepullStagingUsable(); }
+
+bool ThaddiusPrepullSplitAction::Execute(Event event)
+{
+    // Covers the measured-spot and slime-pit checks too: no usable spot means hold off entirely
+    // rather than parking someone in the slime or starting the fight early.
+    if (!helper.IsPrepullStagingUsable())
+        return false;
+
+    Unit* pet = helper.GetPetForSide(helper.IsAssignedToPrimarySide(bot));
+    if (!pet)
+        return false;
+
+    ThaddiusBossHelper::PrepullStaging pos = helper.PrepullGetStagingPos(pet);
+
+    // Already parked: let the lower-priority nodes run so bots can still buff, eat and drink.
+    if (bot->GetExactDist2d(pos.x, pos.y) <= ThaddiusBossHelper::PREPULL_ARRIVED)
+        return false;
+
+    // normal_only so an off-mesh destination fails outright instead of handing back an unvalidated
+    // path that walks the bot into the pit.
+    return MoveTo(NAXX_MAP_ID, pos.x, pos.y, pos.z, false, false, true, false,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
 bool ThaddiusAttackNearestPetAction::isUseful()
 {
     if (!helper.UpdateBossAI())

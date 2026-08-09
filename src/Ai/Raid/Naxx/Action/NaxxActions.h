@@ -150,6 +150,17 @@ public:
     virtual bool Execute(Event event);
 };
 
+class ThaddiusPrepullSplitAction : public MovementAction
+{
+public:
+    ThaddiusPrepullSplitAction(PlayerbotAI* ai) : MovementAction(ai, "thaddius prepull split"), helper(ai) {}
+    virtual bool Execute(Event event);
+    virtual bool isUseful();
+
+private:
+    ThaddiusBossHelper helper;
+};
+
 class ThaddiusAttackNearestPetAction : public AttackAction
 {
 public:

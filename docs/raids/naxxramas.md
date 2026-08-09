@@ -58,29 +58,48 @@ otherwise the timer survives into a later attempt and is already expired at the 
 | Fact | Detail |
 |---|---|
 | Impale | 28783 / 56090. `SelectTarget(Random, playerOnly, withMainTank=true)` — **uniformly random living player, tank not excluded, no range filter.** Damage lands in an area around the victim, which is why a stack dies together. |
-| Impale clock | Exactly 15s after engage, then exactly every 20s. Fully deterministic. |
+| Impale clock | Exactly 15s after engage, then exactly every 20s. Fully deterministic — and deliberately unused, see below. |
 | Locust Swarm | 28785 / 54021. Self-cast ~15 yd aura, ~20s. First cast random 70-120s, then exactly every 90s. `EMOTE_LOCUST` fires on the same tick as the cast — **zero warning**, so the 90s repeat is modelled off the first cast the raid observes and only casts 2+ get the 3s pre-warning. The boss is not slowed, rooted or threat-wiped, so this is a kite. |
 | Crypt Guards | 16573. 25-man pre-spawns 2 on reset; 10-man gets 1 at engage +17.5s. Both modes get 1 more at every Locust Swarm +3s. |
 | Corpse Scarabs | 10 per dead Crypt Guard (28864), **5 from every dead player** (29105) — a wipe cascades. |
 
 **Nothing generic saves the bots here.** `avoid aoe` cannot see Impale or Locust Swarm (see
 [../engine/pitfalls.md](../engine/pitfalls.md)), and the generic de-clumper is inert by default
-(`DisperseDistanceValue` is `-1.0f`). **Against Impale the fix is pre-emptive deterministic spread,
-not reactive avoidance**: a slot ring (Hyjal/Loatheb style), with `FleePosition` off the nearest
-player only as the backstop for residual clumping. The ring anchors on the bearing **from the boss to
-the room centre**, which keeps the arc on the inside of the kite path and inside the room as the boss
-laps the circle.
+(`DisperseDistanceValue` is `-1.0f`).
 
-Locust Swarm inverts that — the spread is what puts people in the aura — so for the window non-tanks
-drop their slots and **stack 25 yd from the boss** along that same bearing. Anchoring the pile on
-the boss rather than on the room keeps it in heal and cast range wherever the kite has got to; at
-`KiteRadius` 35 it only orbits a 10 yd circle. Room-centre stacking
-was tried and reverted: with the MT kiting at radius 45 that is 45 yd boss-to-raid, outside both
-caster and heal range.
+**Impale is unavoidable, so nothing may react to it.** Ranged and healers take one slot on a ring
+(Hyjal/Loatheb style) anchored on the bearing **from the boss to the room centre**, which keeps the
+arc inside the room. **The angle and radius are latched on first use, never re-read**: that bearing
+swings hard whenever the boss is near the centre, so re-solving it per tick threw bots between
+opposite ends of the arc. Only a swarm clears the latch. The slot then tracks the boss purely
+radially, and an 8 yd deadband (`AnchorDriftDistance`) against the last issued destination keeps a
+parked bot parked.
+
+Melee are not positioned at all: they stay on their target and eat the splash.
+`CombatFormationMoveAction` stays on for melee alone, zeroed for everyone holding a slot. **The
+melee branch must still restore the chase** — the swarm stack leaves a point-move behind and no raid
+action re-issues one, so without an explicit `ChaseTo` melee stand where the stack left them.
+
+Predicting the clock was tried and reverted: re-issuing moves inside a 3s pre-warning, plus a
+`FleePosition` de-clump nudge, left bots walking instead of casting and cost more DPS than the splash
+avoided. `AnubrekhanBossHelper` no longer keeps the clock.
+
+Locust Swarm inverts the spread — it is what puts people in the aura — so for the window non-tanks
+drop their slots and **stack on the room centre**, on a 5 yd de-clump ring. Boss-anchored stacking
+(25 yd along the bearing to the centre) was tried and reverted: the pile trailed a point that moved
+with the boss, so he swept through it and the raid ate the aura anyway. The centre is a fixed
+`KiteRadius` 45 from him for the whole window and the raid is standing on it before the aura goes up.
+
+**The pile only holds if the chases are suppressed.** `AnubrekhanPositionAction` returns false once a
+bot is parked, so every lower-priority action runs as normal — and nothing is in range from the centre
+by design, so `reach melee`, `reach spell` and `reach party member to heal` (the kiting tank) all fire
+every tick and walk the bot back out. The multiplier zeroes `ReachTargetAction` for non-tanks for the
+window, along with `MeleeAction` and `FleeAction`. Note `MeleeAction` is the autoattack, **not** the
+chase — zeroing it alone does nothing for positioning.
 
 Accepted costs, not defects: **one Impale lands on the stack per swarm** (20s window against a 20s
-period), and melee lose the window. `KiteRadius` is the single knob if healers fall short of the
-tank.
+period), melee lose the window, and the MT is 45 yd from the healers while kiting — unhealable, but a
+kiting tank is not being hit either. `KiteRadius` is the single knob for both.
 
 ## Four Horsemen
 

@@ -538,6 +538,8 @@ bool NothBlinkTrigger::IsActive()
     return boss && boss->GetVictim() != bot && AI_VALUE(Unit*, "current target") == boss;
 }
 
+bool ThaddiusPrepullSplitTrigger::IsActive() { return helper.IsPrepullStagingUsable(); }
+
 bool ThaddiusPhasePetTrigger::IsActive()
 {
     if (!helper.UpdateBossAI())

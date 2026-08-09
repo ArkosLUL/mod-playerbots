@@ -24,6 +24,7 @@ public:
         creators["heigan ranged"] = &RaidNaxxTriggerContext::heigan_ranged;
         creators["heigan decrepit fever"] = &RaidNaxxTriggerContext::heigan_decrepit_fever;
 
+        creators["thaddius prepull split"] = &RaidNaxxTriggerContext::thaddius_prepull_split;
         creators["thaddius phase pet"] = &RaidNaxxTriggerContext::thaddius_phase_pet;
         creators["thaddius phase pet lose aggro"] = &RaidNaxxTriggerContext::thaddius_phase_pet_lose_aggro;
         creators["thaddius phase transition"] = &RaidNaxxTriggerContext::thaddius_phase_transition;
@@ -82,6 +83,7 @@ private:
     static Trigger* heigan_ranged(PlayerbotAI* ai) { return new HeiganRangedTrigger(ai); }
     static Trigger* heigan_decrepit_fever(PlayerbotAI* ai) { return new HeiganDecrepitFeverTrigger(ai); }
 
+    static Trigger* thaddius_prepull_split(PlayerbotAI* ai) { return new ThaddiusPrepullSplitTrigger(ai); }
     static Trigger* thaddius_phase_pet(PlayerbotAI* ai) { return new ThaddiusPhasePetTrigger(ai); }
     static Trigger* thaddius_phase_pet_lose_aggro(PlayerbotAI* ai) { return new ThaddiusPhasePetLoseAggroTrigger(ai); }
     static Trigger* thaddius_phase_transition(PlayerbotAI* ai) { return new ThaddiusPhaseTransitionTrigger(ai); }

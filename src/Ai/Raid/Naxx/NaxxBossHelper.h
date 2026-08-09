@@ -2343,6 +2343,42 @@ public:
     const std::pair<float, float> rangedPosStalagg = {3441.01f, -2942.04f};
     const float tankPosZ = 312.61f;
 
+    // Where the adds actually stand, straight from boss_thaddius.cpp:165-166. tankPos*/rangedPos*
+    // are the outer end of each platform, 12-20 yd away from these - measure aggro against the
+    // spawns, not against those.
+    const std::pair<float, float> stalaggSpawn = {3450.45f, -2931.42f};
+    const std::pair<float, float> feugenSpawn = {3508.14f, -2988.65f};
+
+    // Level 83 elite vs a level 80 player aggroes at ~23 yd. Leave margin on top for pathing slop.
+    static constexpr float PREPULL_AGGRO_SAFE_DIST = 28.0f;
+
+    // Pre-pull staging. The anchor is the midpoint of the two coil spots - it hangs over the gap
+    // between the platforms and is only ever used as a distance reference.
+    static constexpr float ROOM_ANCHOR_X = 3479.54f;
+    static constexpr float ROOM_ANCHOR_Y = -2961.29f;
+    // Has to reach the entrance door (3421.86, -3017.51), which is 80.5 yd out - a leader standing
+    // in the doorway would otherwise fail the room check and nobody would stage. The Construct
+    // Quarter trash before the room sits ~142 yd out, so this does not reach back into it.
+    static constexpr float ROOM_RADIUS = 100.0f;
+    // Thaddius' platform sits at 304 and the coils at 312.6, so below this we are in the slime.
+    static constexpr float ROOM_FLOOR_Z = 295.0f;
+    static constexpr float PREPULL_ARRIVED = 3.0f;
+
+    // Catwalk staging, measured in game. Deliberately not on the add platforms: those are only
+    // ~20 yd across, so every point on one is inside its add's aggro radius. The catwalk runs ~5 yd
+    // below platform level, so each spot carries its own Z rather than borrowing tankPosZ.
+    struct PrepullStaging
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+
+        bool IsSet() const { return z != 0.0f; }
+    };
+
+    const PrepullStaging stagingFeugen{3480.12f, -3017.49f, 306.88f};
+    const PrepullStaging stagingStalagg{3422.97f, -2959.07f, 307.40f};
+
     // RTI indices in WotLK: 0 star, 1 circle, 2 diamond, 3 triangle, 4 moon, 5 square, 6 cross, 7 skull
     static constexpr uint8 RAID_ICON_SQUARE = 5;
     static constexpr uint8 RAID_ICON_CROSS = 6;
@@ -2400,9 +2436,105 @@ public:
         ResolveFromIcon(RAID_ICON_CROSS);
         ResolveFromIcon(RAID_ICON_SQUARE);
 
+        // A bot waiting at its pre-pull staging spot is out of aggro range with no threat and, in
+        // an unmarked raid, no icon either - so neither path above resolves and it never joins
+        // phase 1. Fall back to an entry lookup, but only accept an add that is already fighting:
+        // resolving idle adds here would flip IsPhasePet() for ThaddiusGenericMultiplier and kill
+        // follow-master for anyone walking past the room.
+        if (!stalagg)
+        {
+            if (Unit* found = GetFirstAliveUnitByEntry(botAI, NPC_STALAGG); found && found->IsInCombat())
+                stalagg = found;
+        }
+        if (!feugen)
+        {
+            if (Unit* found = GetFirstAliveUnitByEntry(botAI, NPC_FEUGEN); found && found->IsInCombat())
+                feugen = found;
+        }
+
         // Consider the helper "available" as soon as we have the boss OR at least one pet.
         return _unit != nullptr || feugen != nullptr || stalagg != nullptr;
     }
+    // Resolve both pets before the pull. "find target" walks the bot's threat list, which is empty
+    // out of combat, so go through the grid search instead. Kept out of UpdateBossAI() on purpose:
+    // that would make IsPhasePet() true for ThaddiusGenericMultiplier as soon as a bot is within
+    // sight range of the adds, and it zeroes FollowAction during the pet phase.
+    bool ResolvePetsPrepull()
+    {
+        stalagg = ResolvePrepullPet(_prepullStalaggGuid, NPC_STALAGG);
+        feugen = ResolvePrepullPet(_prepullFeugenGuid, NPC_FEUGEN);
+
+        return !IsDownOrFeigning(stalagg) && !IsDownOrFeigning(feugen);
+    }
+
+    // Doubles as the slime bailout: a bot that falls off the platforms drops below ROOM_FLOOR_Z,
+    // stops matching, and follow-master takes over and walks it back out.
+    bool IsInThaddiusRoom(WorldObject const* who) const
+    {
+        return who && who->GetMapId() == NAXX_MAP_ID && who->GetPositionZ() > ROOM_FLOOR_Z &&
+               who->GetExactDist2d(ROOM_ANCHOR_X, ROOM_ANCHOR_Y) <= ROOM_RADIUS;
+    }
+
+    // Whether the split should be held at all - the raid-wide half of the gate. Callers want
+    // IsPrepullStagingUsable(), which adds the per-bot half.
+    bool IsPrepullStagingActive()
+    {
+        if (bot->GetMapId() != NAXX_MAP_ID || bot->IsInCombat())
+            return false;
+
+        if (!IsInThaddiusRoom(bot))
+            return false;
+
+        // Hold the split only while whoever leads the raid is in here too, so it releases by
+        // itself the moment the room is left.
+        Player* leader = botAI->GetMaster();
+        if (!leader)
+        {
+            if (Group* group = bot->GetGroup())
+                leader = ObjectAccessor::FindPlayer(group->GetLeaderGUID());
+        }
+        if (!IsInThaddiusRoom(leader))
+            return false;
+
+        if (!ResolvePetsPrepull())
+            return false;
+
+        return !stalagg->IsInCombat() && !feugen->IsInCombat();
+    }
+
+    PrepullStaging PrepullGetStagingPos(Unit* pet) const { return (pet == feugen) ? stagingFeugen : stagingStalagg; }
+
+    // A staging spot is only usable if it is measured, clears both adds' aggro radius, and has
+    // solid ground at the height it was measured at. The gap between the platforms is a slime pit
+    // and vmap still reports ground down there, so "some ground exists" is not enough.
+    bool IsPrepullStagingSafe(PrepullStaging const& pos) const
+    {
+        if (!pos.IsSet())
+            return false;
+
+        float dStalagg = std::hypot(pos.x - stalaggSpawn.first, pos.y - stalaggSpawn.second);
+        float dFeugen = std::hypot(pos.x - feugenSpawn.first, pos.y - feugenSpawn.second);
+        if (dStalagg < PREPULL_AGGRO_SAFE_DIST || dFeugen < PREPULL_AGGRO_SAFE_DIST)
+            return false;
+
+        return std::fabs(bot->GetMapHeight(pos.x, pos.y, pos.z) - pos.z) < 2.0f;
+    }
+
+    // The gate everything actually goes through: staged, and this bot has a spot to stage on.
+    // IsPrepullStagingActive() alone is not enough - the staging spot can still fail its safety
+    // check, and then the action does nothing while the multiplier has already killed follow.
+    bool IsPrepullStagingUsable()
+    {
+        if (!IsPrepullStagingActive())
+            return false;
+
+        Unit* pet = GetPetForSide(IsAssignedToPrimarySide(bot));
+        if (!pet)
+            return false;
+
+        return IsPrepullStagingSafe(PrepullGetStagingPos(pet));
+    }
+
     // Both pets feign death on their "kill" and only really die 12s later, when Thaddius'
     // overload finishes them off - so the pet phase has to end on the feign, not on IsAlive().
     bool IsPhasePet() { return !IsDownOrFeigning(feugen) || !IsDownOrFeigning(stalagg); }
@@ -2568,16 +2700,66 @@ public:
     bool IsAssignedToPrimarySide(Player* player)
     {
         if (player != bot)
-            return ComputeAssignedToPrimarySide(player);
+            return ResolveSideFor(player);
 
         uint32 now = getMSTime();
         if (_sideCacheValid && _sideCacheTime == now)
             return _sideCacheValue;
 
-        _sideCacheValue = ComputeAssignedToPrimarySide(player);
+        _sideCacheValue = ResolveSideFor(player);
         _sideCacheTime = now;
         _sideCacheValid = true;
         return _sideCacheValue;
+    }
+
+    // Tanks keep the live answer: Magnetic Pull teleports them across and they have to stay with
+    // whichever add they end up on. Everyone else gets the latched one.
+    bool ResolveSideFor(Player* player)
+    {
+        bool computed = ComputeAssignedToPrimarySide(player);
+        if (!player || botAI->IsTank(player))
+            return computed;
+
+        return LatchedPrimarySide(player, computed);
+    }
+
+    // How long a side assignment survives without being asked for. Long enough to span a whole
+    // phase 1, short enough that the next attempt after a wipe re-splits from scratch.
+    static constexpr uint32 SideLatchStaleMs = 30000;
+
+    // ComputeAssignedToPrimarySide indexes the group skipping dead members, so one death
+    // re-parities everyone behind it and non-tanks walk to the other add mid-phase. Freeze the
+    // first answer and keep handing it back while the phase keeps asking for it.
+    static bool LatchedPrimarySide(Player* player, bool computed)
+    {
+        struct SideLatch
+        {
+            bool primary = false;
+            uint32 lastUsedMs = 0;
+        };
+
+        // Same reasoning as HeiganBossHelper::PhaseStateFor - instances update on parallel map
+        // threads, so the container needs guarding even though each entry is only ever touched by
+        // the thread owning that player's map.
+        static std::mutex mutex;
+        static std::unordered_map<ObjectGuid, SideLatch> latches;
+
+        uint32 now = getMSTime();
+        std::lock_guard<std::mutex> guard(mutex);
+
+        // Nothing ever erases on its own, so drop what has gone stale once the map gets big.
+        if (latches.size() > 200)
+        {
+            for (auto it = latches.begin(); it != latches.end();)
+                it = (getMSTimeDiff(it->second.lastUsedMs, now) > SideLatchStaleMs) ? latches.erase(it) : std::next(it);
+        }
+
+        SideLatch& latch = latches[player->GetGUID()];
+        if (!latch.lastUsedMs || getMSTimeDiff(latch.lastUsedMs, now) > SideLatchStaleMs)
+            latch.primary = computed;
+
+        latch.lastUsedMs = now;
+        return latch.primary;
     }
 
     bool ComputeAssignedToPrimarySide(Player* player)
@@ -2625,6 +2807,9 @@ public:
         }
 
         // Even 50/50 split per role by group-order index parity, independent of raid size.
+        // Healers walk 0,1,2,3 -> primary,secondary,primary,secondary, so both adds are guaranteed
+        // a healer as long as the raid brings two. One healer cannot cover both: the two staging
+        // spots are ~82 yd apart.
         if (botAI->IsHeal(player))
         {
             uint32 index = 0;
@@ -2677,7 +2862,7 @@ public:
     // (primary = primary-icon pet), so marked and mark-free code paths never disagree
     // within a tick. Mark-free fallback convention: primary = Stalagg, secondary = Feugen.
     // Falls back to the live sibling if the chosen pet is dead.
-    Unit* GetPetForSide(bool primary)
+    Unit* GetPetForSide(bool primary, bool allowSiblingFallback = true)
     {
         uint8 primaryIcon = RAID_ICON_SKULL;
         uint8 secondaryIcon = RAID_ICON_CROSS;
@@ -2691,7 +2876,7 @@ public:
         Unit* sibling   = primary ? feugen : stalagg;
         if (!IsDownOrFeigning(preferred))
             return preferred;
-        if (!IsDownOrFeigning(sibling))
+        if (allowSiblingFallback && !IsDownOrFeigning(sibling))
             return sibling;
         return nullptr;
     }
@@ -2776,12 +2961,11 @@ public:
             return GetNearestPet();
          }
 
-        // Non-tanks: GetPetForSide resolves marks (when set) or the fixed side mapping,
-        // so marked and mark-free assignments always agree within a tick.
-        if (Unit* sidePet = GetPetForSide(IsAssignedToPrimarySide(bot)))
-            return sidePet;
-
-        return GetNearestPet();
+        // Non-tanks hold their side for the whole phase. Both the sibling fallback and the
+        // nearest-pet one would send half the raid sprinting across the room the moment their own
+        // add drops into its feign, which is exactly when nobody should be moving. Returning null
+        // just means there is nothing to do on this side any more.
+        return GetPetForSide(IsAssignedToPrimarySide(bot), false);
     }
 
     std::pair<float, float> PetPhaseGetPosForTank(Unit* pet)
@@ -2806,9 +2990,49 @@ protected:
         _sideCacheValid = false;
     }
 
+    // The grid search only reaches sightDistance (100 yd by default) but the two coils are ~120 yd
+    // apart, so a bot standing at its own staging spot can no longer see the far add. Remember the
+    // guid once found, so the split does not drop out from under a bot that is already in position.
+    Unit* ResolvePrepullPet(ObjectGuid& cached, uint32 entry)
+    {
+        if (!cached.IsEmpty())
+        {
+            if (Unit* unit = botAI->GetUnit(cached))
+            {
+                if (unit->IsAlive())
+                    return unit;
+            }
+            cached.Clear();
+        }
+
+        Unit* found = GetFirstAliveUnitByEntry(botAI, entry);
+        if (!found)
+        {
+            // Marks resolve at any range, unlike the grid search.
+            for (uint8 icon : {RAID_ICON_SKULL, RAID_ICON_CROSS, RAID_ICON_SQUARE})
+            {
+                Unit* marked = GetMarkedUnitRaw(icon);
+                Creature const* c = marked ? marked->ToCreature() : nullptr;
+                if (c && c->GetEntry() == entry)
+                {
+                    found = marked;
+                    break;
+                }
+            }
+        }
+
+        if (found)
+            cached = found->GetGUID();
+
+        return found;
+    }
+
     Unit* _unit = nullptr;
     Unit* feugen = nullptr;
     Unit* stalagg = nullptr;
+
+    ObjectGuid _prepullStalaggGuid;
+    ObjectGuid _prepullFeugenGuid;
 
     // Per-tick memo of IsAssignedToPrimarySide(bot); see that method.
     uint32 _sideCacheTime = 0;

@@ -140,6 +140,24 @@ float LoathebGenericMultiplier::GetValue(Action* action)
     return 0.0f;
 }
 
+float ThaddiusPrepullMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<FollowAction*>(action))
+        return 1.0f;
+
+    // Same gate the trigger and the action use, so follow is never suppressed while staging has
+    // nothing to move the bot to - that combination leaves it standing in the room.
+    if (!helper.IsPrepullStagingUsable())
+        return 1.0f;
+
+    // Once a bot is parked the staging action returns false so it can still buff and drink, which
+    // hands the tick to "follow". That drags it off the spot, staging pulls it back, and the two
+    // fight over it on the ramp. Kill follow for as long as the split is held instead - unlike
+    // removing the strategy outright (the Thorim approach) this cannot leak, since it is re-decided
+    // every tick.
+    return 0.0f;
+}
+
 float ThaddiusGenericMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
