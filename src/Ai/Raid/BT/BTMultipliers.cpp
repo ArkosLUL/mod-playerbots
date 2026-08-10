@@ -296,10 +296,10 @@ float ReliquaryOfSoulsDontWasteHealingMultiplier::GetValue(Action* action)
     if (!AI_VALUE2(Unit*, "find target", "essence of suffering"))
         return 1.0f;
 
-    if (dynamic_cast<CastPowerWordShieldOnAlmostFullHealthBelowAction*>(action) ||
-        dynamic_cast<CastPowerWordShieldOnNotFullAction*>(action) ||
+    if (dynamic_cast<CastPowerWordShieldOnNotFullAction*>(action) ||
         dynamic_cast<CastPowerWordShieldAction*>(action) ||
-        dynamic_cast<CastPowerWordShieldOnPartyAction*>(action))
+        dynamic_cast<CastPowerWordShieldOnPartyAction*>(action) ||
+        dynamic_cast<CastPowerWordShieldOnMainTankAction*>(action))
     {
         return 1.0f;
     }

@@ -38,8 +38,7 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             {
                 NextAction("holy shock on party", ACTION_CRITICAL_HEAL + 6),
                 NextAction("divine favor", ACTION_CRITICAL_HEAL + 5.5f),
-                NextAction("holy light on party", ACTION_CRITICAL_HEAL + 4),
-                NextAction("flash of light on party", ACTION_CRITICAL_HEAL + 3)
+                NextAction("holy light on party", ACTION_CRITICAL_HEAL + 4)
             }
         )
     );
@@ -73,11 +72,16 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             }
         )
     );
+    // The proc cuts the cast time of the next Flash of Light, not Holy Light - at 2/2 that is the
+    // full 1.5s, so Flash becomes instant and is the only heal besides Holy Shock the bot can land
+    // while moving. On a Sacred Shielded target it also drops a 12s HoT (spell_pal_infusion_of_light).
+    // Priced under the critical band on purpose: Holy Shock and Holy Light still lead on a dying
+    // target, and this node picks up the global when they are vetoed - which is the moving case.
     triggers.push_back(
         new TriggerNode(
             "infusion of light",
             {
-                NextAction("holy light on party", ACTION_MEDIUM_HEAL + 6.5f)
+                NextAction("flash of light on party", ACTION_MEDIUM_HEAL + 6.5f)
             }
         )
     );
@@ -86,8 +90,7 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             "party member low health",
             {
                 NextAction("holy shock on party", ACTION_MEDIUM_HEAL + 6),
-                NextAction("holy light on party", ACTION_MEDIUM_HEAL + 5),
-                NextAction("flash of light on party", ACTION_MEDIUM_HEAL + 3.5f)
+                NextAction("holy light on party", ACTION_MEDIUM_HEAL + 5)
             }
         )
     );
@@ -116,19 +119,17 @@ void HealPaladinStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             "party member medium health",
             {
                 NextAction("holy shock on party", ACTION_LIGHT_HEAL + 9.5f),
-                NextAction("holy light on party", ACTION_LIGHT_HEAL + 9),
-                NextAction("flash of light on party", ACTION_LIGHT_HEAL + 8)
+                NextAction("holy light on party", ACTION_LIGHT_HEAL + 9)
             }
         )
     );
     // Glyphed Holy Light splashes 10% to five nearby allies and Beacon mirrors it, so it stays the
-    // main heal right up to the top-off band. Flash is what is left when the mana saver vetoes it.
+    // main heal right up to the top-off band.
     triggers.push_back(
         new TriggerNode(
             "party member almost full health",
             {
-                NextAction("holy light on party", ACTION_LIGHT_HEAL + 4),
-                NextAction("flash of light on party", ACTION_LIGHT_HEAL + 3)
+                NextAction("holy light on party", ACTION_LIGHT_HEAL + 4)
             }
         )
     );

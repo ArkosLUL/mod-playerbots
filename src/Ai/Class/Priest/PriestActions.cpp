@@ -8,6 +8,42 @@
 #include "Event.h"
 #include "Playerbots.h"
 
+namespace
+{
+// Weakened Soul locks a target out for 15 s and a shield absorbs damage without raising health %, so
+// the raider we just shielded stays the lowest-health one and keeps owning "party member to heal".
+// Picking the next shieldable body instead is what makes the shield roll across a raid.
+Unit* FindShieldTarget(PlayerbotAI* botAI, Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    float const range = botAI->GetRange("heal");
+    MinValueCalculator calc(100);
+
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* player = gref->GetSource();
+        if (!player || player->isDead() || player->IsGameMaster() || player->IsFullHealth())
+            continue;
+
+        if (player->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (player->GetDistance2d(bot) > range || !bot->IsWithinLOSInMap(player))
+            continue;
+
+        if (botAI->HasAnyAuraOf(player, "weakened soul", "power word: shield", nullptr))
+            continue;
+
+        calc.probe(player->GetHealthPct(), player);
+    }
+
+    return (Unit*)calc.param;
+}
+}
+
 bool CastRemoveShadowformAction::Execute(Event /*event*/)
 {
     botAI->RemoveAura("shadowform");
@@ -21,9 +57,23 @@ bool CastPowerWordShieldAction::isUseful()
     return CastBuffSpellAction::isUseful() && !botAI->HasAura("weakened soul", GetTarget());
 }
 
+Unit* CastPowerWordShieldOnPartyAction::GetTarget()
+{
+    Unit* target = HealPartyMemberAction::GetTarget();
+    if (target && !botAI->HasAnyAuraOf(target, "weakened soul", "power word: shield", nullptr))
+        return target;
+
+    return FindShieldTarget(botAI, bot);
+}
+
 bool CastPowerWordShieldOnPartyAction::isUseful()
 {
     return HealPartyMemberAction::isUseful() && !botAI->HasAura("weakened soul", GetTarget());
+}
+
+bool CastPowerWordShieldOnMainTankAction::isUseful()
+{
+    return BuffOnMainTankAction::isUseful() && !botAI->HasAura("weakened soul", GetTarget());
 }
 
 Unit* CastShadowfiendAction::GetTarget()
@@ -34,89 +84,7 @@ Unit* CastShadowfiendAction::GetTarget()
     return AI_VALUE(Unit*, "grind target");
 }
 
-Unit* CastPowerWordShieldOnAlmostFullHealthBelowAction::GetTarget()
-{
-    Group* group = bot->GetGroup();
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* player = gref->GetSource();
-        if (!player)
-            continue;
-        if (player->isDead())
-        {
-            continue;
-        }
-        if (player->GetHealthPct() > sPlayerbotAIConfig.almostFullHealth)
-        {
-            continue;
-        }
-        if (player->GetDistance2d(bot) > sPlayerbotAIConfig.spellDistance)
-        {
-            continue;
-        }
-        if (botAI->HasAnyAuraOf(player, "weakened soul", "power word: shield", nullptr))
-        {
-            continue;
-        }
-        return player;
-    }
-    return nullptr;
-}
-
-bool CastPowerWordShieldOnAlmostFullHealthBelowAction::isUseful()
-{
-    Group* group = bot->GetGroup();
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* player = gref->GetSource();
-        if (!player)
-            continue;
-        if (player->isDead())
-        {
-            continue;
-        }
-        if (player->GetHealthPct() > sPlayerbotAIConfig.almostFullHealth)
-        {
-            continue;
-        }
-        if (player->GetDistance2d(bot) > sPlayerbotAIConfig.spellDistance)
-        {
-            continue;
-        }
-        if (botAI->HasAnyAuraOf(player, "weakened soul", "power word: shield", nullptr))
-        {
-            continue;
-        }
-        return true;
-    }
-    return false;
-}
-
-Unit* CastPowerWordShieldOnNotFullAction::GetTarget()
-{
-    Group* group = bot->GetGroup();
-    MinValueCalculator calc(100);
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* player = gref->GetSource();
-        if (!player)
-            continue;
-        if (player->isDead() || player->IsFullHealth())
-        {
-            continue;
-        }
-        if (player->GetDistance2d(bot) > sPlayerbotAIConfig.spellDistance)
-        {
-            continue;
-        }
-        if (botAI->HasAnyAuraOf(player, "weakened soul", "power word: shield", nullptr))
-        {
-            continue;
-        }
-        calc.probe(player->GetHealthPct(), player);
-    }
-    return (Unit*)calc.param;
-}
+Unit* CastPowerWordShieldOnNotFullAction::GetTarget() { return FindShieldTarget(botAI, bot); }
 
 bool CastPowerWordShieldOnNotFullAction::isUseful()
 {

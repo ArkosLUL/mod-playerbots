@@ -23,6 +23,7 @@ public:
         creators["divine spirit on party"] = &divine_spirit_on_party;
         creators["power word: shield"] = &power_word_shield;
         creators["power word: shield on party"] = &power_word_shield_on_party;
+        creators["power word: shield on main tank"] = &power_word_shield_on_main_tank;
         creators["renew"] = &renew;
         creators["renew on party"] = &renew_on_party;
         creators["greater heal"] = &greater_heal;
@@ -106,6 +107,15 @@ private:
     {
         return new ActionNode(
             "power word: shield on party",
+            /*P*/ { NextAction("remove shadowform") },
+            /*A*/ {},
+            /*C*/ {}
+        );
+    }
+    static ActionNode* power_word_shield_on_main_tank([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode(
+            "power word: shield on main tank",
             /*P*/ { NextAction("remove shadowform") },
             /*A*/ {},
             /*C*/ {}
@@ -206,7 +216,7 @@ private:
         return new ActionNode(
             "penance on party",
             /*P*/ { NextAction("remove shadowform") },
-            /*A*/ { NextAction("flash heal on party") },
+            /*A*/ {},
             /*C*/ {}
         );
     }

@@ -54,8 +54,7 @@ void HealPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             {
                 NextAction("power word: shield on party", ACTION_CRITICAL_HEAL + 6),
                 NextAction("penance on party", ACTION_CRITICAL_HEAL + 5.5f),
-                NextAction("prayer of mending on party", ACTION_CRITICAL_HEAL + 5),
-                NextAction("flash heal on party", ACTION_CRITICAL_HEAL + 4.5f)
+                NextAction("prayer of mending on party", ACTION_CRITICAL_HEAL + 5)
             }
         )
     );
@@ -87,15 +86,25 @@ void HealPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
-    // The target is already shielded, so top it off with a direct heal instead of retrying PW:S.
-    // Penance leads here or it never gets a look-in below the critical band: PW:S is on top of every
-    // band, so Weakened Soul is up on the heal target almost permanently.
+    // The target is already shielded, so Penance is the direct heal here instead of retrying PW:S.
+    // It needs its own node or it never gets a look-in below the critical band: PW:S sits on top of
+    // every band, so Weakened Soul is up on the heal target almost permanently.
     triggers.push_back(
         new TriggerNode(
             "weakened soul on party member",
             {
-                NextAction("penance on party", ACTION_MEDIUM_HEAL + 7.4f),
-                NextAction("flash heal on party", ACTION_MEDIUM_HEAL + 7)
+                NextAction("penance on party", ACTION_MEDIUM_HEAL + 7.4f)
+            }
+        )
+    );
+
+    // Flash Heal is Disc's only direct heal and stays boxed into this one case: a shielded target
+    // under lowHealth with Penance on cooldown, so nothing cheaper can cover the hole.
+    triggers.push_back(
+        new TriggerNode(
+            "flash heal on party member",
+            {
+                NextAction("flash heal on party", ACTION_MEDIUM_HEAL + 7.35f)
             }
         )
     );
@@ -106,8 +115,18 @@ void HealPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             {
                 NextAction("power word: shield on party", ACTION_MEDIUM_HEAL + 6),
                 NextAction("penance on party", ACTION_MEDIUM_HEAL + 5.5f),
-                NextAction("prayer of mending on party", ACTION_MEDIUM_HEAL + 5),
-                NextAction("flash heal on party", ACTION_MEDIUM_HEAL + 4.5f)
+                NextAction("prayer of mending on party", ACTION_MEDIUM_HEAL + 5)
+            }
+        )
+    );
+
+    // Disc leads with the bubble rather than reacting to damage, so keep one rolling on the tank
+    // whenever Weakened Soul is down. Below the hurt-raider shield at +6, above renew at +4.
+    triggers.push_back(
+        new TriggerNode(
+            "power word: shield on main tank",
+            {
+                NextAction("power word: shield on main tank", ACTION_MEDIUM_HEAL + 4.5f)
             }
         )
     );
@@ -154,8 +173,7 @@ void HealPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             {
                 NextAction("power word: shield on party", ACTION_LIGHT_HEAL + 9),
                 NextAction("penance on party", ACTION_LIGHT_HEAL + 8.5f),
-                NextAction("prayer of mending on party", ACTION_LIGHT_HEAL + 8),
-                NextAction("flash heal on party", ACTION_LIGHT_HEAL + 7.5f)
+                NextAction("prayer of mending on party", ACTION_LIGHT_HEAL + 8)
             }
         )
     );

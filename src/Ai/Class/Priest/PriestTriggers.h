@@ -142,6 +142,18 @@ public:
     bool IsActive() override;
 };
 
+// Discipline's only direct heal, deliberately kept to the one case the spec allows: the target is
+// already shielded (Weakened Soul blocks PW:S) and Penance cannot cover the hole either.
+class FlashHealOnPartyMemberTrigger : public Trigger
+{
+public:
+    FlashHealOnPartyMemberTrigger(PlayerbotAI* botAI)
+        : Trigger(botAI, "flash heal on party member") {}
+
+    std::string const GetTargetName() override { return "party member to heal"; }
+    bool IsActive() override;
+};
+
 class PriestHymnOfHopeTrigger : public Trigger
 {
 public:
@@ -154,6 +166,17 @@ class RenewOnMainTankTrigger : public BuffOnMainTankTrigger
 {
 public:
     RenewOnMainTankTrigger(PlayerbotAI* botAI) : BuffOnMainTankTrigger(botAI, "renew", true) {}
+};
+
+// The base trigger only looks for the shield itself, so it would rearm every tick for the 15 s
+// Weakened Soul makes the recast impossible.
+class PowerWordShieldOnMainTankTrigger : public BuffOnMainTankTrigger
+{
+public:
+    PowerWordShieldOnMainTankTrigger(PlayerbotAI* botAI)
+        : BuffOnMainTankTrigger(botAI, "power word: shield") {}
+
+    bool IsActive() override;
 };
 
 class PriestShadowWordDeathExecuteTrigger : public Trigger

@@ -105,8 +105,11 @@ public:
         creators["mind sear channel check"] = &PriestTriggerFactoryInternal::mind_sear_channel_check;
         creators["mind flay channel check"] = &PriestTriggerFactoryInternal::mind_flay_channel_check;
         creators["weakened soul on party member"] = &PriestTriggerFactoryInternal::weakened_soul_on_party_member;
+        creators["flash heal on party member"] = &PriestTriggerFactoryInternal::flash_heal_on_party_member;
         creators["hymn of hope"] = &PriestTriggerFactoryInternal::hymn_of_hope;
         creators["renew on main tank"] = &PriestTriggerFactoryInternal::renew_on_main_tank;
+        creators["power word: shield on main tank"] =
+            &PriestTriggerFactoryInternal::power_word_shield_on_main_tank;
         creators["shadow word: death execute"] = &PriestTriggerFactoryInternal::shadow_word_death_execute;
     }
 
@@ -154,8 +157,16 @@ private:
     {
         return new WeakenedSoulOnPartyMemberTrigger(botAI);
     }
+    static Trigger* flash_heal_on_party_member(PlayerbotAI* botAI)
+    {
+        return new FlashHealOnPartyMemberTrigger(botAI);
+    }
     static Trigger* hymn_of_hope(PlayerbotAI* botAI) { return new PriestHymnOfHopeTrigger(botAI); }
     static Trigger* renew_on_main_tank(PlayerbotAI* botAI) { return new RenewOnMainTankTrigger(botAI); }
+    static Trigger* power_word_shield_on_main_tank(PlayerbotAI* botAI)
+    {
+        return new PowerWordShieldOnMainTankTrigger(botAI);
+    }
     static Trigger* shadow_word_death_execute(PlayerbotAI* botAI)
     {
         return new PriestShadowWordDeathExecuteTrigger(botAI);
@@ -185,12 +196,12 @@ public:
         creators["divine spirit on party"] = &PriestAiObjectContextInternal::divine_spirit_on_party;
         creators["power word: shield"] = &PriestAiObjectContextInternal::power_word_shield;
         creators["power word: shield on party"] = &PriestAiObjectContextInternal::power_word_shield_on_party;
-        creators["power word: shield on almost full health below"] =
-            &PriestAiObjectContextInternal::power_word_shield_on_almost_full_health_below;
         creators["power word: shield on not full"] = &PriestAiObjectContextInternal::power_word_shield_on_not_full;
         creators["renew"] = &PriestAiObjectContextInternal::renew;
         creators["renew on party"] = &PriestAiObjectContextInternal::renew_on_party;
         creators["renew on main tank"] = &PriestAiObjectContextInternal::renew_on_main_tank;
+        creators["power word: shield on main tank"] =
+            &PriestAiObjectContextInternal::power_word_shield_on_main_tank;
         creators["greater heal"] = &PriestAiObjectContextInternal::greater_heal;
         creators["greater heal on party"] = &PriestAiObjectContextInternal::greater_heal_on_party;
         creators["heal"] = &PriestAiObjectContextInternal::heal;
@@ -295,14 +306,14 @@ private:
     {
         return new CastPowerWordShieldOnPartyAction(botAI);
     }
-    static Action* power_word_shield_on_almost_full_health_below(PlayerbotAI* ai)
-    {
-        return new CastPowerWordShieldOnAlmostFullHealthBelowAction(ai);
-    }
     static Action* power_word_shield_on_not_full(PlayerbotAI* ai) { return new CastPowerWordShieldOnNotFullAction(ai); }
     static Action* renew(PlayerbotAI* botAI) { return new CastRenewAction(botAI); }
     static Action* renew_on_party(PlayerbotAI* botAI) { return new CastRenewOnPartyAction(botAI); }
     static Action* renew_on_main_tank(PlayerbotAI* botAI) { return new CastRenewOnMainTankAction(botAI); }
+    static Action* power_word_shield_on_main_tank(PlayerbotAI* botAI)
+    {
+        return new CastPowerWordShieldOnMainTankAction(botAI);
+    }
     static Action* greater_heal(PlayerbotAI* botAI) { return new CastGreaterHealAction(botAI); }
     static Action* greater_heal_on_party(PlayerbotAI* botAI) { return new CastGreaterHealOnPartyAction(botAI); }
     static Action* heal(PlayerbotAI* botAI) { return new CastHealAction(botAI); }

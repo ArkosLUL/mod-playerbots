@@ -7,8 +7,10 @@ in [../engine/action-selection.md](../engine/action-selection.md).
 
 ## Settled decisions — do not re-litigate
 
-- **Discipline gets no Greater Heal.** Too slow for the Disc rotation and the guide omits it. Fix
-  Flash Heal's mana-veto metadata instead.
+- **Discipline gets no Greater Heal.** Too slow for the Disc rotation and the guide omits it.
+- **Discipline gets Flash Heal in exactly one case**: the target is below `lowHealth`, carries
+  Weakened Soul and Penance is on cooldown. See "Fourth pass" below. Everywhere else the spec runs on PW:S,
+  Penance, Prayer of Mending and tank Renew, and an idle global is preferred over a Flash Heal.
 - **Shadow keeps only `critical health` → self Power Word: Shield.** Desperate Prayer and Hymn of
   Hope leave the Shadow ladder entirely — neither is castable in Shadowform, and dropping form costs
   more DPS than the self-heal is worth. Shadow relies on the raid's healers.
@@ -54,11 +56,13 @@ Inherited nodes the relevance tables must not collide with: `CombatStrategy` —
 
 Guide priority: PW:S → Renew on tank → Penance → Prayer of Mending → Flash Heal **when the target has
 Weakened Soul** → Binding Heal when the priest is also hurt → Prayer of Healing with Borrowed Time.
+The Flash Heal step is implemented narrowly — see "Fourth pass" below.
 
 - **D1. Flash Heal is offline under mana pressure.** `15.0f, LOW` — LOW is vetoed for *any* target
   above 45% HP below 60% bot mana. Its `/*A*/` alternative is `greater heal on party` at
   `50.0f, MEDIUM`, itself vetoed above 65% HP always, and not a Disc spell anyway. Flash Heal is
-  Disc's only direct heal in the ladder.
+  Disc's only direct heal in the ladder. **Superseded by the third pass — Flash Heal is gone from
+  Disc entirely, so this finding no longer applies.**
 - **D2. No Weakened Soul guard** on `power word: shield on party` or the self shield — only the two
   custom variants check it. PW:S on party leads Disc's critical band @35, so a Weakened-Soul target
   makes the bot re-attempt a guaranteed failure every tick. The guide's own rule (Flash Heal
@@ -91,10 +95,8 @@ on the heal target nearly all the time — Flash Heal @27 therefore won every no
 Penance only ever fired below 25% HP.
 
 `penance on party` now leads that node at 27.4 (27.5 is taken by `low health` → self PW:S), so a
-shielded target gets Penance when it is off cooldown and Flash Heal during the cooldown. `penance on
-party` also gained the ActionNode it was the only party heal to lack — prerequisite
-`remove shadowform`, alternative `flash heal on party` — so a Penance blocked by its cooldown falls
-through in the same tick at `relevance + 0.003` instead of waiting for the queue.
+shielded target gets Penance when it is off cooldown. `penance on party` also gained the ActionNode
+it was the only party heal to lack, carrying the `remove shadowform` prerequisite.
 
 Ruled out while chasing this, do not re-investigate: Penance **is** in the Disc premade build
 (`PremadeSpecLink.5.0.80` ends in `1`), `spell_pri_penance::CheckCast` passes on friendly targets,
@@ -102,11 +104,46 @@ Ruled out while chasing this, do not re-investigate: Penance **is** in the Disc 
 identically (both `15.0f, HIGH`), and `CastTimeMultiplier` only touches actions aimed at
 `current target`, never party heals.
 
+### Third pass — Flash Heal removed from Discipline
+
+The second pass left Flash Heal as the fallback under Penance: in every band, and as the
+`penance on party` ActionNode's alternative so a cooldown-blocked Penance fell through to it in the
+same tick. Flash Heal therefore still took most of the globals Penance and Prayer of Mending did not.
+
+Flash Heal is now gone from Discipline outright — all four `flash heal on party` entries deleted
+(critical, weakened soul, low, medium bands) and the `penance_on_party` alternative emptied. Nothing
+replaces it: Greater Heal stays off Disc per the settled decision above, so when PW:S, Penance and
+Prayer of Mending are all on cooldown the bot idles the global. **That is the intended trade, not a
+bug** — do not "fix" it by adding a filler heal.
+
+Holy is untouched: it runs `HolyHealPriestStrategy`, a sibling of `GenericPriestStrategy` rather
+than a subclass of `HealPriestStrategy`, and still lists Flash Heal at 34.5 and 25. The
+`flash heal` / `flash heal on party` actions and ActionNodes stay registered for it.
+
+### Fourth pass — Flash Heal back, on one condition only
+
+The third pass left Disc with no direct heal at all. Flash Heal returns through its own trigger node,
+`flash heal on party member` (`FlashHealOnPartyMemberTrigger`, `src/Ai/Class/Priest/PriestTriggers.cpp`),
+which fires only when the heal target is **below `lowHealth`** (45 by default), **has Weakened Soul** and **Penance is on
+cooldown** (`bot->HasSpellCooldown` on the resolved Penance id; no id at all also counts as
+unavailable, so an untalented priest still gets the heal). Priority `ACTION_MEDIUM_HEAL + 7.35f` = 27.35,
+just under `penance on party` @27.4 on the Weakened Soul node so Penance always wins when it is up.
+
+The three deleted in-band `flash heal on party` entries stay deleted, and the `penance_on_party`
+ActionNode alternative stays empty — the point is that Flash Heal cannot creep back into the general
+ladder.
+
+Known back door, accepted: `flash heal on party`'s own ActionNode keeps `greater heal on party` as its
+`/*A*/` alternative, and that node is shared with Holy through `GenericPriestStrategyActionNodeFactory`.
+So a Disc bot whose Flash Heal is unavailable can fall through to Greater Heal, against the settled
+decision above. Emptying it would strip Holy's fallback too, so it is left alone; in practice whatever
+blocks Flash Heal (mana, range) blocks the slower, pricier Greater Heal as well.
+
 Current collisions: `dispel magic` = `power infusion` @41; `dispel magic on party` =
 `reach party member to heal` @40; `power word: shield on party` = `power word: shield on not full`
 @35; `penance on party` = `prayer of healing on party` @34; `penance` = `shadowfiend` @22;
-`power word: shield` = `inner focus` @21; a four-way at 20 (`flash heal on party`, `hymn of hope`,
-`power word: shield`, `reach spell`).
+`power word: shield` = `inner focus` @21; a three-way at 20 (`hymn of hope`, `power word: shield`,
+`reach spell`).
 
 ## Holy
 
@@ -121,7 +158,8 @@ Current collisions: `dispel magic` = `power infusion` @41; `dispel magic on part
   paladin settled the equivalent node at 39.5.
 - **H6. Structural, deferred.** `HolyPriestStrategy : HealPriestStrategy` makes the off-spec
   `holy dps` layer inherit the **Discipline** ladder, including Penance nodes a Holy priest has no
-  talent for. Raid impact is nil (ungrouped only) — flag, do not fix.
+  talent for — and now also the conditional Flash Heal node. Raid impact is nil (ungrouped only) — flag, do
+  not fix.
 
 Collisions include `set facing` @37 tying with `divine hymn`, and `greater heal on party` =
 `desperate prayer` @25.

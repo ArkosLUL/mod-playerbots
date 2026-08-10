@@ -112,6 +112,29 @@ bool WeakenedSoulOnPartyMemberTrigger::IsActive()
            botAI->HasAura("weakened soul", target);
 }
 
+bool PowerWordShieldOnMainTankTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target || botAI->HasAura("weakened soul", target))
+        return false;
+
+    return BuffOnMainTankTrigger::IsActive();
+}
+
+bool FlashHealOnPartyMemberTrigger::IsActive()
+{
+    Unit* target = GetTarget();
+    if (!target)
+        return false;
+
+    if (target->GetHealthPct() >= sPlayerbotAIConfig.lowHealth || !botAI->HasAura("weakened soul", target))
+        return false;
+
+    // A priest without the talent has no Penance id at all, which counts as "cannot Penance" here.
+    uint32 penanceId = AI_VALUE2(uint32, "spell id", "penance");
+    return !penanceId || bot->HasSpellCooldown(penanceId);
+}
+
 bool PriestHymnOfHopeTrigger::IsActive()
 {
     if (!AI_VALUE2(bool, "has mana", "self target"))

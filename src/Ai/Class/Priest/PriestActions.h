@@ -88,6 +88,9 @@ public:
     }
 
     bool isUseful() override;
+    // "party member to heal" hands back one unit and a shield does not raise their health %, so
+    // without a fallback the whole spec stops shielding for the 15 s that target is locked out.
+    Unit* GetTarget() override;
 };
 
 HEAL_PARTY_ACTION(CastFlashHealOnPartyAction, "flash heal", 15.0f, HealingManaEfficiency::HIGH);
@@ -97,6 +100,17 @@ class CastRenewOnMainTankAction : public BuffOnMainTankAction
 {
 public:
     CastRenewOnMainTankAction(PlayerbotAI* botAI) : BuffOnMainTankAction(botAI, "renew", true) {}
+};
+
+// Unlike renew this does not check ownership: another priest's shield puts Weakened Soul on the tank
+// just the same, so ours would fail anyway.
+class CastPowerWordShieldOnMainTankAction : public BuffOnMainTankAction
+{
+public:
+    CastPowerWordShieldOnMainTankAction(PlayerbotAI* botAI)
+        : BuffOnMainTankAction(botAI, "power word: shield") {}
+
+    bool isUseful() override;
 };
 // HEAL_PARTY_ACTION(CastPrayerOfMendingAction, "prayer of mending", 10.0f, HealingManaEfficiency::HIGH);
 class CastPrayerOfMendingAction : public HealPartyMemberAction
@@ -236,18 +250,6 @@ public:
     CastShadowfiendAction(PlayerbotAI* ai) : CastSpellAction(ai, "shadowfiend") {}
 
     // Healers often have no current target, so fall back to whatever the group is grinding.
-    Unit* GetTarget() override;
-};
-
-class CastPowerWordShieldOnAlmostFullHealthBelowAction : public HealPartyMemberAction
-{
-public:
-    CastPowerWordShieldOnAlmostFullHealthBelowAction(PlayerbotAI* ai)
-        : HealPartyMemberAction(ai, "power word: shield", 15.0f, HealingManaEfficiency::HIGH)
-    {
-    }
-
-    bool isUseful() override;
     Unit* GetTarget() override;
 };
 
