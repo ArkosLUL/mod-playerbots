@@ -1,5 +1,13 @@
 # Merge `test-staging` into `Custom` — conflict analysis and resolution plan
 
+## Status (checked 2026-08-10)
+
+Not merged yet. `test-staging` is unchanged at 25 commits over the same merge-base `8f812e35e`, so
+the incoming side of this analysis still holds. **`Custom` has moved on though — 184 commits now,
+18 more than when the conflict list below was produced** (mostly Naxx/EoE raid work). Re-run
+`git merge-tree --write-tree Custom test-staging` before trusting the per-file classification;
+anything touching `src/Ai/Raid/{Naxx,EoE}` is the likely delta.
+
 ## Context
 
 `Custom` is a heavily diverged fork of mod-playerbots: **166 commits** ahead of merge-base

@@ -151,7 +151,9 @@ Cast directly and suppress the competition; no `ChangeStrategy`, no persistent s
 when the window closes.
 
 **Explicitly not counterable — do not target:** Insane (63120/64464, AoE charm), Psychosis, Lunatic
-Gaze and Induce Madness (sanity drains), and Chains of Kel'Thuzad (28410, mind control). Phase 1
+Gaze and Induce Madness (sanity drains), and Chains of Kel'Thuzad (28410, mind control — no *fear*
+counter applies, but a druid does Cyclone the charmed raider, see [naxxramas.md](naxxramas.md)).
+Phase 1
 WotLK content — Naxxramas, Obsidian Sanctum, Eye of Eternity, Vault of Archavon — has **zero** fear
 mechanics; all 15 Naxx boss spell enums were checked, and Gluth's vanilla Terrifying Roar (29685)
 does not exist in this build.

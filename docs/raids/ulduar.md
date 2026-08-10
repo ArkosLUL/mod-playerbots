@@ -348,6 +348,49 @@ tolerance, because a tank that steps every tick never lands a cast.
 **Crazy Cat Lady requires no sentry killed, so it is incompatible with the kill order.** Bots
 optimise for the kill and, per the follower model, never chase achievements.
 
+## Core behaviours the strategies key off
+
+Four upstream script facts our code now depends on. Each one silently disabled a behaviour before it
+was accounted for, so re-check them after any parent-repo sync.
+
+### Razorscale — harpoons are GameObject state, not auras
+
+`SPELL_CHAIN_1..4` (49679, 49682, 49683, 49684) **no longer exist anywhere in the core**. Harpoons
+fire `SPELL_HARPOON_SHOT_1..4` cast by `NPC_RAZORSCALE_CONTROLLER` out of
+`go_razorscale_harpoon::OnGossipHello`; the GameObjects are summoned per ground phase by the
+controller (two in 10-man, four in 25-man) and a spent one carries `GO_FLAG_NOT_SELECTABLE` until it
+is rebuilt. Readiness is that flag — `IsHarpoonFired()` and `HarpoonData::chainSpellId` are gone,
+they had been testing an aura that could never be present.
+
+The tank debuff also moved: **Fuse Armor is 64821**, not 64771 (64774 is still the 5-stack `Fused
+Armor`). 64771 is gone from the core, so the tank-swap check never fired. Threshold stays at 2 stacks.
+
+### Vezax — Shadow Crash can land in the melee stack
+
+The event used to only consider players beyond 15 yd; it now picks a random target outside combat
+reach and falls back to any target, so the puddle can drop on the tank. Detection was never the
+problem (`VezaxShadowCrashTrigger` keys off the puddle's area aura 63277) — the dodge orbited at a
+hard-coded 15 yd and dragged every melee out of range and held them there. It strafes at the bot's
+own radius now: melee and tanks 4–8 yd, ranged 13–17 yd, constant 5 yd of arc per step so a tight
+radius still clears the puddle quickly. Tunables sit next to the other Vezax ones in `UldBossHelper.h`.
+
+### Mimiron — Laser Barrage arcs are deterministic
+
+VX-001 does not aim at a random player. Arcs start at 6.17 rad, advance +60° counterclockwise per
+cast, reset at the start of phases 2 and 4, and the boss faces the arc during Spinning Up; the aura
+then sweeps that facing clockwise at π/60 per 250 ms (~12°/s) with the beams following unit facing.
+Cadence is 60 s, not 45. So the dodge reads the boss facing and moves to `orientation + delta_angle`
+(π/8) at the bot's own radius clamped to 10–24 yd, re-issued each tick so bots trail the beam —
+the old code teleported everyone onto the master, which is now only the fallback when VX-001 cannot
+be resolved.
+
+### Yogg-Saron — Squeeze breaks on immunity
+
+Removing the Squeeze aura (64125 / 64126) kills the Constrictor Tentacle and drops the passenger, so
+`yogg-saron squeeze escape` at `ACTION_RAID + 1` has a grabbed mage cast Ice Block and a paladin cast
+Divine Shield. Hunter Feign Death and rogue Vanish are deliberately not used — neither removes a
+periodic damage aura.
+
 ## Burst and Bloodlust windows
 
 `UlduarBurstWindowMultiplier` is always active inside Ulduar — no config key, matching every other

@@ -318,6 +318,22 @@ construction: it previously sat as step 4 of a chain, so bots handling Detonate 
 returned earlier and walked into fissures. Every computed movement destination is additionally
 vetoed against nearby fissures.
 
+**Chains (28410) is answered with Cyclone (33786)** by a Balance or Restoration druid —
+`kel'thuzad cyclone chained` at `ACTION_EMERGENCY + 5`, below the fissure dodge. Only **one** druid
+commits: every candidate sorts the alive Balance/Resto druids within 40 yd of the charmed player by
+`(distance, GUID)` and acts only if it is first, which is deterministic across bots and stops the
+whole druid roster burning diminishing returns at once. Three constraints worth keeping:
+
+- **Do not route this through `"rti cc target"` / `"cc target"` / `"possible targets"`.**
+  `AttackersValue::IsPossibleTarget` drops unflagged group members, so all of those resolve to
+  `nullptr` on a charmed raider. Walk the group directly — the same thing
+  `KaelthasSunstriderBreakMindControlAction` does.
+- **`CanCastSpell` is not a range check** — it returns true on `SPELL_FAILED_OUT_OF_RANGE`, so
+  Cyclone's 20 yd has to be measured by hand (close to within 18 yd first).
+- **It only covers about half the MC.** Cyclone has full PvP diminishing returns against a player
+  (6 → 3 → 1.5 s → immune) while Chains runs 20 s. Resto druids also only join in if their talent
+  template actually took Cyclone; otherwise `CanCastSpell` is false and they no-op.
+
 ## Thaddius (phase 1)
 
 Two encounter rules must hold: **each add stays pinned at its tesla coil** (dragging it off overloads
@@ -333,6 +349,66 @@ Decisions: split **evenly by per-role index parity** (≥1 tank, ~half DPS, ~hal
 tanks **hard-hold at the coil, never chase**; target the ~5s window with a symmetric balance margin
 plus a hard floor, so neither add can be pushed to 0 until the other is within the floor band.
 **Tanks and healing are never suppressed.**
+
+**Stalagg and Feugen never actually die during the pet phase.** Upstream clamps fatal damage to
+`health - 1` and drops the add into feign death (`UNIT_FLAG_NOT_SELECTABLE`, `REACT_PASSIVE`,
+`UNIT_STAND_STATE_DEAD`, rooted); the real death is `KillSelf()` from Thaddius' overload 12 s later,
+about 1.75 s before he engages. Anything that asked `IsAlive()` therefore parked bots on the pet
+platforms for the whole revive window and left them ~1.7 s to reach their polarity spots, or kept
+them swinging at an unattackable 1-HP add. Everything now goes through the shared
+`IsDownOrFeigning()` in `RaidBossHelpers`, and `PetSyncSuppress` bails as soon as either pet is down
+so the survivor is not throttled against a corpse.
+
+### Pre-pull staging
+
+Bots walk to their assigned side **before** the pull and wait there, so the 5-minute enrage race does
+not start with the raid scrambling out of one blob. This works at all because raid strategies already
+run out of combat — map 533 is added to both the combat and non-combat engines and nothing filters
+raid triggers by bot state. The out-of-combat lookup has to be `GetFirstAliveUnitByEntry`; `"find
+target"` walks the bot's own (empty) threat list. Ulduar's Thorim gauntlet positioning is the
+precedent for the whole shape.
+
+**There is no on-platform staging solution.** The adds spawn at `(3450.45, -2931.42)` and
+`(3508.14, -2988.65)`, the platforms are only ~20 yd across (confirmed by the Frozen Rune GO spawns),
+and a level-83 elite aggroes a level-80 player at ~23 yd — every walkable point on a platform is
+12–20 yd from its add. Staging is therefore on the **catwalk**, ~5 yd below platform level, at
+measured `.gps` coordinates that each carry their own Z:
+
+| Side | Spot | To own add |
+|---|---|---|
+| Stalagg | `3422.97, -2959.07, 307.40` | 39.0 yd |
+| Feugen | `3480.12, -3017.49, 306.88` | 40.2 yd |
+
+`IsPrepullStagingSafe` rejects any spot within `PREPULL_AGGRO_SAFE_DIST` (28 yd) of either add or
+whose ground height misses its own Z by more than 2 yd, and an unsafe spot means that side simply
+does not stage. `ROOM_RADIUS` is 100, not 80: the Thaddius Door is 80.55 yd from the room anchor, so
+a leader standing in the doorway used to fail the check by half a yard; the Construct Quarter trash
+is 141 yd out, so 100 does not reach back into it.
+
+Four things had to be true for it to hold, all found in live testing:
+
+- **`FollowAction` must be zeroed while staging.** The action returns false once parked (so bots can
+  still buff and drink), which hands the tick to `follow` at relevance 1.0 and starts an oscillation
+  on the ramp. A dedicated `ThaddiusPrepullMultiplier` re-decides this every tick from the same
+  `IsPrepullStagingActive()` gate the trigger uses, so unlike a strategy removal it cannot leak.
+- **`UpdateBossAI()` needs an entry lookup, accepted only when the resolved add is already in
+  combat.** A bot parked 40 yd out has no threat and, unmarked, no RTI icon, so it never joined the
+  fight. The in-combat condition is what keeps `IsPhasePet()` false for idle adds — otherwise
+  `ThaddiusGenericMultiplier` kills follow-master for anyone walking past the room.
+- **Non-tank side assignments are latched.** The parity walk skips dead members, so one death
+  re-parities everyone behind it and half the raid changes sides mid-fight. `LatchedPrimarySide`
+  freezes the first answer per player in a file-static GUID-keyed map (the
+  `HeiganBossHelper::PhaseStateFor` convention), stale after 30 s. **Tanks deliberately keep the live
+  answer** — Magnetic Pull teleports them across and they must follow their add.
+- **`GetAssignedPetForBot` no longer falls back** to the sibling add or nearest pet for non-tanks;
+  both sent half the raid across the room the moment their own add feigned. It returns null and the
+  bot holds. If the death sync fails badly that side idles, which is what `PetSyncSuppress` exists to
+  prevent.
+
+Pet resolution caches each add's `ObjectGuid` (revalidated through `botAI->GetUnit`) because
+`sightDistance` is 100 yd while the coils are ~120 yd apart — a bot on its own staging spot loses the
+grid search on the far add. Residual risk: a heavily lowered `AiPlayerbot.SightDistance` leaves a
+non-tank idle rather than falling back.
 
 ## Sapphiron
 
