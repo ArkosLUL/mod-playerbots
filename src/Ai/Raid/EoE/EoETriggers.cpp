@@ -8,16 +8,25 @@
 #include "CreatureAI.h"
 #include "EoEActions.h"
 #include "InstanceScript.h"
+#include "ObjectAccessor.h"
 #include "SharedDefines.h"
 #include "Spell.h"
 #include "Timer.h"
 #include "Vehicle.h"
 
+#include <list>
 #include <unordered_map>
 
 namespace
 {
 constexpr uint32 EOE_PHASE_CACHE_MS = 500;
+constexpr uint32 EOE_CREATURE_CACHE_MS = 300;
+
+// The sweep that fills the creature cache is anchored on whichever bot happened to refresh it, but
+// its answer goes to the whole raid, so it has to reach every creature in the fight from anywhere a
+// bot can be. Everything lives within ~60y of the platform centre and nothing, drakes included,
+// gets more than ~100y from it.
+constexpr float EOE_CACHE_SWEEP_RADIUS = 200.0f;
 
 struct PhaseCacheEntry
 {
@@ -25,10 +34,88 @@ struct PhaseCacheEntry
     uint8 phase;
 };
 
-// getPhase is the entry point for every trigger in this strategy and for both of its per-tick
-// actions, so an uncached call meant a dozen grid sweeps per bot per tick and the raid crawled.
+struct CreatureCacheEntry
+{
+    uint32 at = 0;
+    std::vector<ObjectGuid> guids;
+};
+
+// getPhase is the entry point for every trigger in this strategy, for both of its per-tick actions
+// and for the multiplier, so an uncached call meant a dozen grid sweeps per bot per tick and the
+// raid crawled. Past the per-bot drake check the answer is identical for everyone in the instance,
+// so both caches key on the instance and one bot's work serves all twenty-five.
 // A bot is only ever updated from its own map's thread, so a thread_local cache needs no lock.
-thread_local std::unordered_map<uint64, PhaseCacheEntry> phaseCache;
+thread_local std::unordered_map<uint32, PhaseCacheEntry> phaseCache;
+// Instance id in the high half, creature entry in the low half.
+thread_local std::unordered_map<uint64, CreatureCacheEntry> creatureCache;
+}
+
+namespace
+{
+// Guids of every live creature of `entry` in the bot's instance, refreshed at most once per window.
+// Empty and never refreshed off the Eye of Eternity map.
+std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
+{
+    static std::vector<ObjectGuid> const none;
+    if (bot->GetMapId() != EOE_MAP_ID) { return none; }
+
+    uint64 const key = (static_cast<uint64>(bot->GetInstanceId()) << 32) | entry;
+    uint32 const now = getMSTime();
+    CreatureCacheEntry& cached = creatureCache[key];
+    if (!cached.at || getMSTimeDiff(cached.at, now) >= EOE_CREATURE_CACHE_MS)
+    {
+        cached.at = now;
+        cached.guids.clear();
+
+        std::list<Creature*> found;
+        bot->GetCreatureListWithEntryInGrid(found, entry, EOE_CACHE_SWEEP_RADIUS);
+        for (Creature* creature : found)
+        {
+            if (creature->IsAlive()) { cached.guids.push_back(creature->GetGUID()); }
+        }
+    }
+
+    return cached.guids;
+}
+}
+
+void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out)
+{
+    out.clear();
+    for (ObjectGuid const& guid : GetEoECreatureGuids(bot, entry))
+    {
+        Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
+        if (unit && unit->IsAlive()) { out.push_back(unit); }
+    }
+}
+
+Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist)
+{
+    Unit* closest = nullptr;
+    float closestDist = maxDist;
+    for (ObjectGuid const& guid : GetEoECreatureGuids(bot, entry))
+    {
+        Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
+        if (!unit || !unit->IsAlive()) { continue; }
+
+        float dist = bot->GetExactDist2d(unit);
+        if (dist <= closestDist)
+        {
+            closestDist = dist;
+            closest = unit;
+        }
+    }
+    return closest;
+}
+
+bool AnyEoECreature(Player* bot, uint32 entry)
+{
+    for (ObjectGuid const& guid : GetEoECreatureGuids(bot, entry))
+    {
+        Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
+        if (unit && unit->IsAlive()) { return true; }
+    }
+    return false;
 }
 
 Unit* MalygosTrigger::getMalygos(Player* bot)
@@ -51,9 +138,13 @@ uint8 MalygosTrigger::getPhase(Player* bot)
 {
     if (bot->GetMapId() != EOE_MAP_ID) { return 0; }
 
-    uint64 const key = bot->GetGUID().GetRawValue();
+    // Riding a Skytalon is the one part of the answer that differs between bots, so it is asked
+    // every time - it is a pointer read, not a search, and it has to come before the shared cache.
+    Unit* drake = bot->GetVehicleBase();
+    if (drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON) { return 3; }
+
     uint32 const now = getMSTime();
-    PhaseCacheEntry& cached = phaseCache[key];
+    PhaseCacheEntry& cached = phaseCache[bot->GetInstanceId()];
     if (cached.at && getMSTimeDiff(cached.at, now) < EOE_PHASE_CACHE_MS)
     {
         return cached.phase;
@@ -61,19 +152,11 @@ uint8 MalygosTrigger::getPhase(Player* bot)
     cached.at = now;
     cached.phase = 0;
 
-    Unit* drake = bot->GetVehicleBase();
-    if (drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON)
-    {
-        cached.phase = 3;
-        return 3;
-    }
-
     Unit* boss = getMalygos(bot);
     if (!boss || !boss->IsInCombat()) { return 0; }
 
     // P2: Malygos is airborne/untargetable while the disc adds are up.
-    if (bot->FindNearestCreature(NPC_NEXUS_LORD, EOE_ADD_SEARCH_RADIUS, true) ||
-        bot->FindNearestCreature(NPC_SCION_OF_ETERNITY, EOE_ADD_SEARCH_RADIUS, true))
+    if (AnyEoECreature(bot, NPC_NEXUS_LORD) || AnyEoECreature(bot, NPC_SCION_OF_ETERNITY))
     {
         cached.phase = 2;
         return 2;
@@ -130,11 +213,11 @@ bool MalygosBubbleTrigger::IsActive()
         // Melee and tanks owe the raid a dead Nexus Lord first, then a disk ride up to the Scions.
         // They only take shelter once neither job is on offer - and the disk half only counts for
         // bots that MalygosFreeDiskTrigger will actually let board.
-        if (bot->FindNearestCreature(NPC_NEXUS_LORD, BUBBLE_SEARCH_RADIUS, true)) { return false; }
+        if (GetNearestEoECreature(bot, NPC_NEXUS_LORD, BUBBLE_SEARCH_RADIUS)) { return false; }
         if (IsEligibleDiskRider(bot) && AnyScionAlive(bot) && FindFreeHoverDisk(bot)) { return false; }
     }
 
-    return bot->FindNearestCreature(NPC_ARCANE_OVERLOAD, BUBBLE_SEARCH_RADIUS, true) != nullptr;
+    return GetNearestEoECreature(bot, NPC_ARCANE_OVERLOAD, BUBBLE_SEARCH_RADIUS) != nullptr;
 }
 
 bool MalygosFreeDiskTrigger::IsActive()
@@ -159,7 +242,7 @@ bool SurgeOfPowerTrigger::IsActive()
 {
     if (MalygosTrigger::getPhase(bot) != 2) { return false; }
 
-    if (bot->FindNearestCreature(NPC_SURGE_OF_POWER, 100.0f, true))
+    if (GetNearestEoECreature(bot, NPC_SURGE_OF_POWER, 100.0f))
     {
         return true;
     }
@@ -172,17 +255,6 @@ bool MalygosDrakeFlightTrigger::IsActive()
 {
     Unit* drake = bot->GetVehicleBase();
     return drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON;
-}
-
-bool StaticFieldTrigger::IsActive()
-{
-    if (MalygosTrigger::getPhase(bot) != 3) { return false; }
-
-    Unit* drake = bot->GetVehicleBase();
-    if (!drake) { return false; }
-
-    Creature* field = drake->FindNearestCreature(NPC_STATIC_FIELD, STATIC_FIELD_DANGER_RADIUS, true);
-    return bool(field);
 }
 
 bool DrakeSurgeTrigger::IsActive()

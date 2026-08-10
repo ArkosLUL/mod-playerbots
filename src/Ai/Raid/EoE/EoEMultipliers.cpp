@@ -20,19 +20,84 @@
 #include "PaladinActions.h"
 #include "ReachTargetActions.h"
 #include "ScriptedCreature.h"
+#include "Timer.h"
 #include "VehicleActions.h"
 #include "WarriorActions.h"
 
+namespace
+{
+// A bot's role does not change mid-fight, and re-deriving it per action was the most expensive
+// thing this strategy did.
+constexpr uint32 EOE_SNAPSHOT_CACHE_MS = 500;
+}
+
+void MalygosMultiplier::RefreshSnapshot()
+{
+    uint32 const now = getMSTime();
+    if (snapshotAtMs && getMSTimeDiff(snapshotAtMs, now) < EOE_SNAPSHOT_CACHE_MS)
+    {
+        return;
+    }
+    snapshotAtMs = now;
+
+    isMainTank = botAI->IsMainTank(bot);
+    isDps = botAI->IsDps(bot);
+    isRanged = botAI->IsRanged(bot);
+    isRangedDps = isRanged && isDps;
+    isHeal = botAI->IsHeal(bot);
+
+    Unit* boss = MalygosTrigger::getMalygos(bot);
+    isBossVictim = boss && boss->GetVictim() == bot;
+    isBossTank = isMainTank || isBossVictim;
+}
+
 float MalygosMultiplier::GetValue(Action* action)
 {
-    // getPhase caches per bot for half a second, which matters here: this runs once per action per
-    // bot per tick.
-    uint8 phase = MalygosTrigger::getPhase(bot);
+    uint8 const phase = MalygosTrigger::getPhase(bot);
     if (phase == 0) { return 1.0f; }
+
+    RefreshSnapshot();
+
+    // Everything this multiplier suppresses is either a MovementAction or a CastSpellAction, and
+    // the two families are disjoint. Resolving which one an action belongs to up front means a
+    // plain rotation cast pays two dynamic_casts instead of walking the whole list of thirteen.
+    MovementAction* move = dynamic_cast<MovementAction*>(action);
+    CastSpellAction* cast = move ? nullptr : dynamic_cast<CastSpellAction*>(action);
 
     if (phase == 1)
     {
-        if (dynamic_cast<FollowAction*>(action))
+        if (cast)
+        {
+            // Malygos' CombatReach of 20 keeps "enemy too close for spell" active for anyone holding
+            // a spot near him, and every class wires that trigger to an escape somewhere between 34
+            // and 50 relevance - all of it above MalygosPositionAction. Left alone the bot steps out,
+            // gets dragged back next tick and never finishes a cast.
+            if (dynamic_cast<CastBlinkBackAction*>(cast) || dynamic_cast<CastDisengageAction*>(cast))
+            {
+                return 0.0f;
+            }
+
+            // Closing on a heal target is the one exception to the movement lockout below, same as
+            // in P2, so the spell half of that lockout only bites for non-tanks.
+            if (!isBossTank && dynamic_cast<CastReachTargetSpellAction*>(cast))
+            {
+                return 0.0f;
+            }
+
+            return 1.0f;
+        }
+
+        if (!move)
+        {
+            if (isRangedDps && dynamic_cast<DropTargetAction*>(action))
+            {
+                return 0.0f;
+            }
+
+            return 1.0f;
+        }
+
+        if (dynamic_cast<FollowAction*>(move))
         {
             return 0.0f;
         }
@@ -42,29 +107,17 @@ float MalygosMultiplier::GetValue(Action* action)
         // every tick while MalygosPositionAction walks it back out, and the boss pivots between the
         // two, raking the Arcane Breath cone across the raid. The boss closes the gap himself, so
         // once the tank has aggro it simply holds the spot.
-        Unit* boss = MalygosTrigger::getMalygos(bot);
-        bool const isBossTank = botAI->IsMainTank(bot) || (boss && boss->GetVictim() == bot);
-        if (boss && boss->GetVictim() == bot && dynamic_cast<ReachTargetAction*>(action))
+        if (isBossVictim && dynamic_cast<ReachTargetAction*>(move))
         {
             return 0.0f;
         }
 
-        // Malygos' CombatReach of 20 keeps "enemy too close for spell" active for anyone holding a
-        // spot near him, and every class wires that trigger to an escape somewhere between 34 and 50
-        // relevance - all of it above MalygosPositionAction. Left alone the bot steps out, gets
-        // dragged back next tick and never finishes a cast.
-        if (dynamic_cast<FleeAction*>(action) || dynamic_cast<RunAwayAction*>(action) ||
-            dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<CastDisengageAction*>(action))
+        if (dynamic_cast<FleeAction*>(move) || dynamic_cast<RunAwayAction*>(move))
         {
             return 0.0f;
         }
 
-        if (botAI->IsDps(bot) && dynamic_cast<DpsAssistAction*>(action))
-        {
-            return 0.0f;
-        }
-
-        if (botAI->IsRangedDps(bot) && dynamic_cast<DropTargetAction*>(action))
+        if (isDps && dynamic_cast<DpsAssistAction*>(move))
         {
             return 0.0f;
         }
@@ -77,29 +130,52 @@ float MalygosMultiplier::GetValue(Action* action)
         // ranged, and the DK grips sparks to the raid, so there is nothing left to walk to.
         // Note AttackAction derives from MovementAction, so the EoE actions have to be named or they
         // go with it. Closing on a heal target is the one exception, same as in P2.
-        if (!isBossTank && !dynamic_cast<MalygosPositionAction*>(action) &&
-            !dynamic_cast<MalygosTargetAction*>(action) && !dynamic_cast<KillPowerSparkAction*>(action) &&
-            !dynamic_cast<ReachPartyMemberToHealAction*>(action) &&
-            (dynamic_cast<MovementAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action)))
+        if (!isBossTank && !dynamic_cast<MalygosPositionAction*>(move) &&
+            !dynamic_cast<MalygosTargetAction*>(move) && !dynamic_cast<KillPowerSparkAction*>(move) &&
+            !dynamic_cast<ReachPartyMemberToHealAction*>(move))
         {
             return 0.0f;
         }
 
-        if (!botAI->IsMainTank(bot) && dynamic_cast<TankAssistAction*>(action))
+        if (!isMainTank && dynamic_cast<TankAssistAction*>(move))
         {
             return 0.0f;
         }
     }
     else if (phase == 2)
     {
-        if (botAI->IsDps(bot) && dynamic_cast<DpsAssistAction*>(action))
+        bool const onVehicle = bot->GetVehicle() != nullptr;
+
+        if (cast)
+        {
+            // Same two lockouts as the movement ones below - a chase that casts on arrival steers
+            // the disk exactly like a chase that walks.
+            if (!dynamic_cast<CastReachTargetSpellAction*>(cast))
+            {
+                return 1.0f;
+            }
+
+            if (onVehicle)
+            {
+                return 0.0f;
+            }
+
+            return 1.0f;
+        }
+
+        if (!move)
+        {
+            return 1.0f;
+        }
+
+        if (isDps && dynamic_cast<DpsAssistAction*>(move))
         {
             return 0.0f;
         }
 
         // Keep the generic flee from walking bots off the edge; MalygosPositionAction handles
         // pulling anyone who drifts too far back toward the centre.
-        if (dynamic_cast<FleeAction*>(action))
+        if (dynamic_cast<FleeAction*>(move))
         {
             return 0.0f;
         }
@@ -109,9 +185,8 @@ float MalygosMultiplier::GetValue(Action* action)
         // dives 25y and MalygosRideDiskAction has to climb back up. Nothing but the EoE actions may
         // move a rider, plus a chatted "leave vehicle" as a manual override. Note AttackAction
         // derives from MovementAction, so the EoE actions have to be named or they go too.
-        if (bot->GetVehicle() && !dynamic_cast<MalygosRideDiskAction*>(action) &&
-            !dynamic_cast<MalygosTargetAction*>(action) && !dynamic_cast<LeaveVehicleAction*>(action) &&
-            (dynamic_cast<MovementAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action)))
+        if (onVehicle && !dynamic_cast<MalygosRideDiskAction*>(move) &&
+            !dynamic_cast<MalygosTargetAction*>(move) && !dynamic_cast<LeaveVehicleAction*>(move))
         {
             return 0.0f;
         }
@@ -122,14 +197,13 @@ float MalygosMultiplier::GetValue(Action* action)
         // Closing on someone to heal them is the exception: the bubble round-robin spreads the raid
         // out and the disk riders leave the ground entirely, so a healer that can't walk to a
         // raider out of range simply never heals them.
-        if (!bot->GetVehicle() && (botAI->IsRanged(bot) || botAI->IsHeal(bot)) &&
-            !dynamic_cast<ReachPartyMemberToHealAction*>(action) &&
-            (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<FollowAction*>(action)))
+        if (!onVehicle && (isRanged || isHeal) && !dynamic_cast<ReachPartyMemberToHealAction*>(move) &&
+            (dynamic_cast<ReachTargetAction*>(move) || dynamic_cast<FollowAction*>(move)))
         {
             return 0.0f;
         }
 
-        if (dynamic_cast<TankAssistAction*>(action))
+        if (dynamic_cast<TankAssistAction*>(move))
         {
             Unit* target = action->GetTarget();
             if (target && target->GetEntry() == NPC_SCION_OF_ETERNITY)
@@ -140,16 +214,10 @@ float MalygosMultiplier::GetValue(Action* action)
     }
     else if (phase == 3)
     {
-        // Suppresses FollowAction as well as attack-driven chase movement, but leaves the
-        // drake flight and the (non-MovementAction) avoid actions free to run.
-        if (dynamic_cast<MovementAction*>(action) && !dynamic_cast<EoEFlyDrakeAction*>(action))
-        {
-            return 0.0f;
-        }
-
-        // The follow formation would fly the drake straight back into the Static Field the avoid
-        // action just cleared - the master's drake is as likely to be parked in one as anybody.
-        if (dynamic_cast<EoEFlyDrakeAction*>(action) && IsStaticFieldNear(bot))
+        // EoEFlyDrakeAction is the only thing allowed to steer a Skytalon; everything else that
+        // moves - FollowAction, attack-driven chase - would fight it for the same MotionMaster.
+        // The drake rotation and the surge shield are plain Actions, so they are untouched.
+        if (move && !dynamic_cast<EoEFlyDrakeAction*>(move))
         {
             return 0.0f;
         }
@@ -158,17 +226,7 @@ float MalygosMultiplier::GetValue(Action* action)
     {
         // Phase transition: Malygos is untargetable and the raid isn't mounted yet. Hold the
         // gather at centre and stay off the default strategy so nobody chases into the void.
-        if (dynamic_cast<FollowAction*>(action))
-        {
-            return 0.0f;
-        }
-
-        if (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action))
-        {
-            return 0.0f;
-        }
-
-        if (dynamic_cast<MovementAction*>(action) && !dynamic_cast<MalygosPositionAction*>(action))
+        if (move && !dynamic_cast<MalygosPositionAction*>(move))
         {
             return 0.0f;
         }

@@ -39,17 +39,16 @@ void RaidEoEStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("malygos on disk",
         { NextAction("malygos ride disk", ACTION_RAID + 4) }));
 
-    // P3 drake flight.
-    // Flight positioning outranks the drake rotation: it parks and turns the vehicle, then stands
-    // down for the tick. A moving or off-arc vehicle cannot cast, so this has to settle first.
+    // P3 drake flight. The flight action is the only thing allowed to steer a drake, so it sits at
+    // emergency relevance: it parks the vehicle, keeps the stack clear of Static Fields and turns it
+    // onto the boss, then returns false and the rotation gets the same tick. A moving or off-arc
+    // vehicle cannot cast at all, so this has to settle first.
     triggers.push_back(new TriggerNode("malygos drake flight",
-        { NextAction("eoe fly drake", ACTION_NORMAL + 6) }));
+        { NextAction("eoe fly drake", ACTION_EMERGENCY) }));
     triggers.push_back(new TriggerNode("drake combat",
         { NextAction("eoe drake attack", ACTION_NORMAL + 5) }));
-    triggers.push_back(new TriggerNode("static field",
-        { NextAction("avoid static field", ACTION_EMERGENCY) }));
     triggers.push_back(new TriggerNode("drake surge",
-        { NextAction("drake dodge surge", ACTION_EMERGENCY + 5) }));
+        { NextAction("drake surge shield", ACTION_EMERGENCY + 5) }));
 }
 
 void RaidEoEStrategy::InitMultipliers(std::vector<Multiplier*> &multipliers)

@@ -22,7 +22,6 @@ public:
         creators["malygos on disk"] = &RaidEoETriggerContext::malygos_on_disk;
         creators["surge of power"] = &RaidEoETriggerContext::surge_of_power;
         creators["malygos drake flight"] = &RaidEoETriggerContext::malygos_drake_flight;
-        creators["static field"] = &RaidEoETriggerContext::static_field;
         creators["drake surge"] = &RaidEoETriggerContext::drake_surge;
     }
 
@@ -34,7 +33,6 @@ private:
     static Trigger* malygos_on_disk(PlayerbotAI* ai) { return new MalygosOnDiskTrigger(ai); }
     static Trigger* surge_of_power(PlayerbotAI* ai) { return new SurgeOfPowerTrigger(ai); }
     static Trigger* malygos_drake_flight(PlayerbotAI* ai) { return new MalygosDrakeFlightTrigger(ai); }
-    static Trigger* static_field(PlayerbotAI* ai) { return new StaticFieldTrigger(ai); }
     static Trigger* drake_surge(PlayerbotAI* ai) { return new DrakeSurgeTrigger(ai); }
 };
 

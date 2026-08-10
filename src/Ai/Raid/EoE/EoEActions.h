@@ -39,12 +39,14 @@ const std::pair<float, float> MALYGOS_STACK_POSITION = {754.395f, 1313.27f};
 const std::pair<float, float> MALYGOS_RANGED_POSITION = {754.395f, 1287.27f};
 // How close a bot has to be to its assigned P1 spot before it stops correcting.
 const float MALYGOS_P1_POSITION_TOLERANCE = 5.0f;
+// How far the raid stack may sit from Malygos before it is pulled in towards him. Melee range
+// against him is about 22.8y - his 20y CombatReach, the player's own reach and the 4/3 the core
+// adds on top - and a bot may park MALYGOS_P1_POSITION_TOLERANCE off its spot, so anything up to
+// ~17 is still swingable. 15 keeps a margin.
+const float MALYGOS_MELEE_HOLD_DISTANCE = 15.0f;
 
-// Every add, bubble and hazard in this fight lives on or just above the platform, which is under
-// 50y across. Grid searches visit a cell grid (33y a side) out to their radius, and getPhase alone
-// runs them several times per bot per tick, so the radius is worth keeping tight.
-const float EOE_ADD_SEARCH_RADIUS = 100.0f;
-
+// How close a bubble has to be before a bot will walk to it, and the radius the shelter checks
+// treat as "the one covering me".
 const float BUBBLE_SEARCH_RADIUS = 60.0f;
 // Each tick of SPELL_ARCANE_OVERLOAD_AURA re-grants the protection over a radius shrunk by this
 // much (SpellAuraEffects.cpp, aura 56432). Below BUBBLE_MIN_USABLE_FACTOR of the original radius a
@@ -69,31 +71,48 @@ const float POWER_SPARK_GRIP_ENGAGE_RADIUS = 45.0f;
 // Called off if Malygos ends up near the grip spot: dropping a spark next to him hands over the buff.
 const float POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE = POWER_SPARK_BUFF_RADIUS + 6.0f;
 
-// P3 drakes hold a ring around Malygos instead of trailing the raid leader. A drake that is still
+// P3 drakes hold one stack point instead of trailing the raid leader. A drake that is still
 // following is both moving and facing the wrong way, and CastVehicleSpell refuses to fire in either
 // state - it turns the vehicle and bails out - so a following drake never lands an ability.
-const float DRAKE_RING_RADIUS = 40.0f;
-// How far off its ring slot a drake drifts before it re-flies. Malygos moves, so a tight tolerance
-// would restamp the destination every tick and the drake would never stop long enough to cast.
-const float DRAKE_RING_TOLERANCE = 12.0f;
-// Drake abilities reach 60y; leave headroom for the boss drifting between ticks.
+// Malygos is pacified and immobile for all of phase 3 (MI_POINT_PH_3_FIGHT_POSITION, then
+// UNIT_FLAG_DISABLE_MOVE), so an offset from him is a fixed spot the whole flight can agree on.
+
+// Arcane Pulse (57432) is a self-cast every 3s for ~28k arcane over this radius. It is the hard
+// floor on how close the flight may ever get to him - two ticks kill a Skytalon.
+const float ARCANE_PULSE_RADIUS = 30.0f;
+// The pulse radius plus the drift the stack tolerates, plus a little. A drake nudged the full
+// tolerance boss-ward has to still be outside the pulse, and the far side has to stay inside
+// DRAKE_ATTACK_RANGE, which is what pins this between 40 and 45.
+const float DRAKE_STACK_RADIUS = ARCANE_PULSE_RADIUS + 15.0f;
+// Height of the stack. Malygos' live Z is no good for this: he opens phase 3 at CenterPos.z + 70
+// and only sinks to his fight position at CenterPos.z - 5 a few seconds later, so a stack anchored
+// on him flies up over the arena first and then rides him back down.
+const float MALYGOS_P3_BOSS_Z = MALYGOS_PLATFORM_Z - 5.0f;
+// Fixed world heading for that offset, due south of the boss. Any constant does, as long as every
+// drake picks the same one.
+const float DRAKE_STACK_ANGLE = -static_cast<float>(M_PI_2);
+// How far off the stack point a drake drifts before it re-flies. Loose on purpose: drakes park
+// anywhere inside this, which is what stops the flight piling onto one coordinate.
+const float DRAKE_STACK_TOLERANCE = 10.0f;
+// The stack point only moves when a Static Field lands on it, so it is worth holding between
+// ticks - but not for long. A field lands *on* the flight, so every tick spent on a stale answer is
+// another pulse taken. The creature lookup behind it is cached, so this is nearly free to redo.
+const uint32 DRAKE_STACK_RECALC_MS = 300;
+// Drake abilities reach 60y; leave headroom for drakes parked on the far side of the stack.
 const float DRAKE_ATTACK_RANGE = 55.0f;
 // Raid-wide drake healer counts. The rest of the flight is dps.
 const uint8 DRAKE_HEALERS_25MAN = 5;
 const uint8 DRAKE_HEALERS_10MAN = 2;
 // Combo points needed before a healer dumps Life Burst instead of stacking another Revivify.
 const uint8 DRAKE_LIFE_BURST_COMBO = 5;
-// Surge of Power repeats every 7s and the boss leaves its victim list standing until the next one,
-// so the dodge has to time itself out or a victim would strafe non-stop and never attack again.
-const uint32 DRAKE_SURGE_DODGE_COOLDOWN_MS = 5000;
 
 // Static Field (57430) drops a stationary NPC_STATIC_FIELD that pulses for its whole 20s life, and
-// the boss lands a fresh one every 12s. Bots break off at the danger radius and only stop running
-// once they are outside the safe radius - a smaller gap has them re-triggering the instant they
-// arrive, which reads as a stutter and leaves them in the damage.
-const float STATIC_FIELD_DANGER_RADIUS = 20.0f;
+// the boss lands a fresh one every 12s.
 const float STATIC_FIELD_SAFE_RADIUS = 32.0f;
-const float STATIC_FIELD_SEARCH_RADIUS = 100.0f;
+// What the stack point has to clear, as opposed to what a drake has to clear. Drakes park anywhere
+// within DRAKE_STACK_TOLERANCE of the point, so a point only STATIC_FIELD_SAFE_RADIUS from a field
+// leaves whoever stops on the field side of it inside the pulse.
+const float STATIC_FIELD_CLEARANCE = STATIC_FIELD_SAFE_RADIUS + DRAKE_STACK_TOLERANCE;
 
 // A Hover Disk whose Nexus Lord has died: the core lands it, turns it friendly and clears
 // UNIT_FLAG_NOT_SELECTABLE, so those checks double as "its rider is dead".
@@ -116,14 +135,19 @@ float GetBubbleShrinkFactor(Unit* bubble);
 // the bubble dies, which is what lets a sheltered bot relocate early instead of after it pops.
 bool IsSafelySheltered(Player* bot);
 
-// Live Static Fields within STATIC_FIELD_SEARCH_RADIUS of the bot's drake.
-void GetNearbyStaticFields(Unit* drake, std::vector<Unit*>& fields);
+// Every live Static Field in the instance. There are never more than two and the arena is small,
+// so a distance filter would only ever drop fields some part of the stack ring still cares about.
+void GetStaticFields(Player* bot, std::vector<Unit*>& fields);
 
 // True when (x, y) is at least safeRadius from every one of them.
 bool IsClearOfStaticFields(float x, float y, std::vector<Unit*> const& fields, float safeRadius);
 
-// True while a Static Field is close enough to the bot's drake to be worth breaking formation over.
-bool IsStaticFieldNear(Player* bot);
+// Where the P3 flight parks: a fixed offset from Malygos, slid clear of any Static Field that has
+// landed on it. The slide stays on the DRAKE_STACK_RADIUS ring around him and always goes the same
+// way around it, so the dodge can neither cost range on the boss nor double back into a field the
+// flight has already run from. Depends only on the boss and the fields, so every drake resolves the
+// same spot without coordinating. False when there is no drake or no boss to anchor to.
+bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x, float& y, float& z);
 
 // Nearest live Power Spark the bot can see, or nullptr.
 Unit* GetNearestPowerSpark(PlayerbotAI* botAI);
@@ -238,6 +262,9 @@ public:
     bool Execute(Event event) override;
 };
 
+// P3: sole owner of the drake's position. Parks the flight on one stack point, keeps that point
+// clear of Static Fields and turns the drake onto the boss, then returns false so the rotation gets
+// the tick. Nothing else may steer a Skytalon - two owners is what made the drake bounce.
 class EoEFlyDrakeAction : public MovementAction
 {
 public:
@@ -245,6 +272,19 @@ public:
 
     bool Execute(Event event) override;
     bool isPossible() override;
+
+private:
+    uint32 stackCalcAtMs = 0;
+    float stackX = 0.0f;
+    float stackY = 0.0f;
+    float stackZ = 0.0f;
+    bool stackValid = false;
+
+    // Last destination handed to the MotionMaster. Re-issuing MovePoint restarts the spline, so a
+    // drake that gets the same destination stamped every tick crawls and never arrives.
+    float issuedX = 0.0f;
+    float issuedY = 0.0f;
+    bool issued = false;
 };
 
 class EoEDrakeAttackAction : public Action
@@ -260,44 +300,18 @@ protected:
     bool CastDrakeSpellAction(Unit* target, uint32 spellId, uint32 cooldown);
     bool DrakeDpsAction(Unit* target);
     bool DrakeHealAction();
-
-private:
-    // Revivify's combo point lands on whoever was healed, and the drake only ever holds combo points
-    // for one unit at a time - hopping to the next most-injured drake every tick reset the count to
-    // one and Life Burst was never reachable. Hold a target until it is topped off or gone.
-    ObjectGuid healTargetGuid;
 };
 
-// P3 drake avoidance: fly clear of a Static Field hazard. Not a MovementAction so the
-// phase-3 movement suppression doesn't block it; it drives the vehicle directly.
-class AvoidStaticFieldAction : public Action
+// P3: Surge of Power cannot be outrun. The boss fires it as a triggered instant 3s after the
+// fixate lands, so there is no beam to walk out of and no cast to beat - Flame Shield is the whole
+// answer, and everything it does not cover is a heal check.
+class DrakeSurgeShieldAction : public Action
 {
 public:
-    AvoidStaticFieldAction(PlayerbotAI* botAI) : Action(botAI, "avoid static field") {}
+    DrakeSurgeShieldAction(PlayerbotAI* botAI) : Action(botAI, "drake surge shield") {}
 
     bool Execute(Event event) override;
     bool isPossible() override;
-
-private:
-    // Where this action sent the drake. Checking the MotionMaster alone can't tell our escape from
-    // the dps range-close, so a drake mid-approach used to sit out the whole flee.
-    bool fleeing = false;
-    float fleeX = 0.0f;
-    float fleeY = 0.0f;
-};
-
-// P3 drake avoidance: react to the Surge of Power fixate with Flame Shield + a hard peel.
-class DrakeDodgeSurgeAction : public Action
-{
-public:
-    DrakeDodgeSurgeAction(PlayerbotAI* botAI) : Action(botAI, "drake dodge surge") {}
-
-    bool Execute(Event event) override;
-    bool isPossible() override;
-
-private:
-    // When this bot last shielded and peeled. See DRAKE_SURGE_DODGE_COOLDOWN_MS.
-    uint32 lastDodgeAtMs = 0;
 };
 
 #endif

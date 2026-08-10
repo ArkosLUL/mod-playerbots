@@ -11,6 +11,8 @@
 #include "Playerbots.h"
 #include "Trigger.h"
 
+#include <vector>
+
 enum EyeOfEternityIDs
 {
     NPC_MALYGOS                         = 28859,
@@ -45,7 +47,7 @@ enum EyeOfEternityIDs
     SPELL_SURGE_OF_POWER_P2             = 56505,    // P2 beam
     SPELL_SURGE_OF_POWER_P3             = 57407,    // P3 fixate beam, 10-man
     SPELL_SURGE_OF_POWER_P3_25          = 60936,    // P3 fixate beam, 25-man
-    SPELL_ARCANE_PULSE                  = 57432,    // P3 raid pulse, unavoidable
+    SPELL_ARCANE_PULSE                  = 57432,    // P3, self-cast every 3s, 30y around the boss
     SPELL_STATIC_FIELD                  = 57430,    // P3 (summons NPC_STATIC_FIELD hazard)
 
     // Drake Abilities:
@@ -69,6 +71,17 @@ const uint32 EOE_DATA_MALYGOS = 0;
 const int32 EOE_DATA_FIRST_SURGE_TARGET_GUID = 14;
 const uint8 EOE_NUM_MAX_SURGE_TARGETS = 3;
 
+// Every bot in the raid asks the same questions about the same handful of creatures, and one grid
+// sweep per bot per tick was the largest single cost in this strategy. These answer from a cache
+// filled once per creature entry per instance, so twenty-five identical sweeps collapse into one.
+// Guids are what is cached, not pointers: a creature that despawns inside the window drops out of
+// the answer instead of coming back as a dangling read.
+void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out);
+// Nearest live one to the bot, or nullptr if the closest is past maxDist. The default reaches the
+// whole arena, i.e. "anywhere in the fight".
+Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist = 1000.0f);
+bool AnyEoECreature(Player* bot, uint32 entry);
+
 class MalygosTrigger : public Trigger
 {
 public:
@@ -83,7 +96,8 @@ public:
 class PowerSparkTrigger : public Trigger
 {
 public:
-    PowerSparkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "power spark") {}
+    // Sparks walk in from the edge and take seconds to matter; checking every tick buys nothing.
+    PowerSparkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "power spark", 200) {}
     bool IsActive() override;
 };
 
@@ -92,7 +106,8 @@ public:
 class MalygosBubbleTrigger : public Trigger
 {
 public:
-    MalygosBubbleTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos bubble") {}
+    // The seek is a walk across the platform, so starting it up to 200ms late is invisible.
+    MalygosBubbleTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos bubble", 200) {}
     bool IsActive() override;
 };
 
@@ -100,7 +115,8 @@ public:
 class MalygosFreeDiskTrigger : public Trigger
 {
 public:
-    MalygosFreeDiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos free disk") {}
+    // A disk sits on the ground until someone takes it; there is nothing to race.
+    MalygosFreeDiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos free disk", 300) {}
     bool IsActive() override;
 };
 
@@ -116,7 +132,10 @@ public:
 class SurgeOfPowerTrigger : public Trigger
 {
 public:
-    SurgeOfPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "surge of power") {}
+    // The beam runs for seconds and the peel is a MoveAway the MotionMaster carries on with, so
+    // this does not need re-asking every tick - it was a 100y sweep that came back empty almost
+    // every time.
+    SurgeOfPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "surge of power", 200) {}
     bool IsActive() override;
 };
 
@@ -127,14 +146,6 @@ class MalygosDrakeFlightTrigger : public Trigger
 {
 public:
     MalygosDrakeFlightTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos drake flight") {}
-    bool IsActive() override;
-};
-
-// P3: a Static Field hazard is near this bot's drake.
-class StaticFieldTrigger : public Trigger
-{
-public:
-    StaticFieldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "static field") {}
     bool IsActive() override;
 };
 

@@ -27,8 +27,7 @@ public:
         creators["avoid surge of power"] = &RaidEoEActionContext::avoid_surge_of_power;
         creators["eoe fly drake"] = &RaidEoEActionContext::eoe_fly_drake;
         creators["eoe drake attack"] = &RaidEoEActionContext::eoe_drake_attack;
-        creators["avoid static field"] = &RaidEoEActionContext::avoid_static_field;
-        creators["drake dodge surge"] = &RaidEoEActionContext::drake_dodge_surge;
+        creators["drake surge shield"] = &RaidEoEActionContext::drake_surge_shield;
     }
 
 private:
@@ -43,8 +42,7 @@ private:
     static Action* avoid_surge_of_power(PlayerbotAI* ai) { return new AvoidSurgeOfPowerAction(ai); }
     static Action* eoe_fly_drake(PlayerbotAI* ai) { return new EoEFlyDrakeAction(ai); }
     static Action* eoe_drake_attack(PlayerbotAI* ai) { return new EoEDrakeAttackAction(ai); }
-    static Action* avoid_static_field(PlayerbotAI* ai) { return new AvoidStaticFieldAction(ai); }
-    static Action* drake_dodge_surge(PlayerbotAI* ai) { return new DrakeDodgeSurgeAction(ai); }
+    static Action* drake_surge_shield(PlayerbotAI* ai) { return new DrakeSurgeShieldAction(ai); }
 };
 
 #endif
