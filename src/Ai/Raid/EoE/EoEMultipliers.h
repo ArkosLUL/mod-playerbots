@@ -31,7 +31,6 @@ private:
     bool isMainTank = false;
     bool isDps = false;
     bool isRanged = false;
-    bool isRangedDps = false;
     bool isHeal = false;
     bool isBossTank = false;
     bool isBossVictim = false;

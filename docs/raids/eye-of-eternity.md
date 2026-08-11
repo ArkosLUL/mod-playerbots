@@ -42,14 +42,23 @@ transitions, which are both at 50%.
   death-grip pull was commented out, the ranged target-switch was commented out, and
   `KillPowerSparkAction` had no body and no registration. Sparks reaching Malygos stack a
   damage + haste buff (56152) into a soft enrage. Now: `power spark` bound, DK `pull power spark`
-  at +3, ranged DPS `kill power spark` at +2, and ranged also switch in `malygos target`. Tanks and
-  melee never peel, so the boss's cone does not swing. **The DK walks out to grip, then walks back.**
-  Death Grip lands the spark *on the caster*, and a killed spark leaves
-  `SPELL_POWER_SPARK_GROUND_BUFF` (55852) on its corpse for a minute — so where the DK stands decides
-  who gets that buff, and gripping from the melee stack both wastes it and drops the spark inside the
-  12 yd at which `npc_power_spark` hands its buff to Malygos instead.
-  `POWER_SPARK_GRIP_POSITION` is the midpoint of the melee and ranged stacks (`y = 1300.27`), which is
-  the best available spot without knowing 55852's radius — it maximises the smaller of the two
+  at +3, DPS `kill power spark` at +2, and the same pick drives the switch in `malygos target`.
+  A spark spawns at one of the four `FourSidesPos` corners, 94–107 yd from centre, and walks straight
+  at Malygos at 6.0 yd/s, re-issuing `MovePoint(0, *malygos)` every 2 s. It hands over its buff at
+  12 yd, centre to centre.
+  **Reach is what decides who shoots it.** Nobody walks in P1, so `GetPowerSparkToKill` only ever
+  returns a spark the bot can hit standing still — `spellDistance` for ranged, melee range plus
+  `POWER_SPARK_MELEE_STICKY` for everyone else — and of those, the one nearest Malygos, i.e. the one
+  about to hand over its buff. Before that gate, bots locked onto whichever spark came out of the
+  target list first, usually one 100 yd away, and stood there doing nothing while the boss went unhit.
+  Melee dps take a spark that walks into them on its way past; the tank never switches, because
+  dropping Malygos swings the Arcane Breath cone into whoever is behind him.
+  **The DK walks out to grip, then walks back.** Death Grip lands the spark *on the caster*, and a
+  killed spark leaves `SPELL_POWER_SPARK_GROUND_BUFF` (55852) on its corpse for a minute — so where
+  the DK stands decides who gets that buff, and gripping from the melee stack wastes it and drops the
+  spark inside the 12 yd at which `npc_power_spark` hands its buff to Malygos instead.
+  `POWER_SPARK_GRIP_OFFSET` is the midpoint of the raid stack and the hunter spot, which is the
+  best available spot without knowing 55852's radius — it maximises the smaller of the two
   distances. It sits ~21 yd from where Malygos parks, so a spark dropped there still has 9 yd to walk
   before it could reach him, against ~12k hp and the whole raid.
   The split of duties matters: **`MalygosPositionAction` owns all the walking, `PullPowerSparkAction`
@@ -67,41 +76,51 @@ transitions, which are both at 50%.
   branch through the intro instead, so the tank is parked and facing when the boss touches down.
   During the intro only the raid's assigned main tank counts as the tank: Malygos is pacified, and
   his victim is nothing more than whoever pulled.
-- **P1 — three fixed hold spots on one north/south line.** Arcane Breath (56272) is a frontal cone
-  on the boss's *current victim*, so the fight is won or lost on where the tank stands. All three
-  spots are absolute constants, never recomputed from the boss's live position: a boss-relative spot
-  flips to his far side while he is still walking out and sweeps the cone through the raid. The one
-  exception is under the stack spot below, and it is a clamp rather than a chase. Whoever
-  Malygos is actually hitting behaves as the tank, assigned or not. A bot corrects only past
-  `MALYGOS_P1_POSITION_TOLERANCE` (5 yd).
-  - `MALYGOS_MAINTANK_POSITION` `y = 1343.27`, 42 yd due north of centre — the Exit Portal at
-    43.4 yd proves there is ground there. Malygos' CombatReach of 20 parks him ~21.5 yd short, at
-    roughly `y = 1322`.
-  - `MALYGOS_STACK_POSITION` `y = 1313.27` — melee and healers. 30 yd from the tank, inside 40 yd
-    heal range, and south of where the boss actually stops, so out of the cone. That last part only
-    holds when he walks in from the south. He lands 35 yd from centre on whatever bearing his intro
-    circuit left him on, then stops wherever his chase first brings him inside melee range of the
-    tank, so an approach from the side parks him ~38 yd from the stack with the melee half of the
-    raid standing there swinging at nothing. So the stack spot — and only the stack spot — is
-    **clamped**: further than `MALYGOS_MELEE_HOLD_DISTANCE` (15 yd) from him and it slides up the
-    line towards him until it is that close. Melee range against him is ~22.8 yd (his 20 yd
-    CombatReach, the player's own reach, plus the 4/3 the core adds) and a bot may park 5 yd off its
-    spot, so 15 swings with margin. The clamp keeps the bearing the stack already holds from him, so
-    it can never land in front of him; it moves continuously with him rather than switching between
-    two spots, which is what would set the raid bouncing; and it is off during the pull intro, when
-    he is circling and untouchable anyway. In a normal pull he ends up 7–12 yd from the stack and the
-    clamp never fires.
-  - `MALYGOS_RANGED_POSITION` `y = 1287.27` — ranged DPS, ~34.5 yd from the boss. **The stack spot
-    is unusable for ranged.** `Spell::CheckRange` adds `GetMeleeRange` to a spell's minimum for
-    `SPELL_RANGE_RANGED`, so Malygos' CombatReach of 20 inflates a hunter's 5 yd minimum to ~28 yd
-    of centre-to-centre distance and every shot came back `SPELL_FAILED_TOO_CLOSE`. The same reach
-    keeps `EnemyTooCloseForSpellTrigger` (threshold ~23.5 yd) permanently active, and every class
-    wires that trigger to an escape at 34–50 relevance — above `malygos position` at `ACTION_MOVE`.
-    Bots stepped out, were dragged back next tick and never finished a cast. The P1 multiplier now
-    also zeroes `FleeAction`, `RunAwayAction`, `CastBlinkBackAction` and `CastDisengageAction` for
-    anyone in the encounter.
-  Plus `POWER_SPARK_GRIP_POSITION` `y = 1300.27`, held only by a DK on spark duty — see the Power
-  Spark bullet above.
+- **P1 — the hold spots rotate onto the bearing Malygos landed on.** Arcane Breath (56272) is a
+  frontal cone on the boss's *current victim*, so the fight is won or lost on where the tank stands —
+  and he does not always land north. `EVENT_INTRO_MOVE_CENTER` snapshots `CenterPos.GetAngle(me)` the
+  instant `JustEngagedWith` fires, flies him in along that bearing to 35 yd out, and
+  `EVENT_INTRO_LAND` drops him straight down. He idles between the four `FourSidesPos` corners, so
+  there are only four answers: **−135.95°, +46.51°, +134.45°, −44.60°**
+  (`MALYGOS_LANDING_ANGLES`). The layout is one set of signed offsets from centre — positive towards
+  him — rotated onto whichever of those four is nearest to where he actually is:
+  - `MALYGOS_MAINTANK_OFFSET` **+42 yd** — the Exit Portal sits 43.4 yd out on bearing 133.2°, and
+    the platform GO is centred on `CenterPos`, so there is ground that far on any bearing. The portal
+    is phased out by `DATA_HIDE_IRIS_AND_PORTAL` once the fight starts. Malygos' CombatReach of 20
+    parks him ~21.5 yd short of the tank.
+  - `MALYGOS_STACK_OFFSET` **+12 yd** — melee, healers and every ranged DPS but the hunters. 30 yd
+    from the tank, inside 40 yd heal range, and behind where the boss stops, so out of the cone.
+    That last part assumes his chase actually brings him to ~21.5 yd short of the tank spot; it stops
+    wherever it first puts him in melee range, so coming in off-bearing can leave the melee half of
+    the raid swinging at nothing. So the stack spot — and only the stack spot — is **clamped**:
+    further than `MALYGOS_MELEE_HOLD_DISTANCE` (15 yd) from him and it slides up the line towards him
+    until it is that close. Melee range against him is ~22.8 yd (his 20 yd CombatReach, the player's
+    own reach, plus the 4/3 the core adds) and a bot may park 5 yd off its spot, so 15 swings with
+    margin. The clamp keeps the bearing the stack already holds from him, so it can never land in
+    front of him; it moves continuously with him rather than switching between two spots, which is
+    what would set the raid bouncing; and it is off during the pull intro, when he is circling and
+    untouchable anyway. With the layout rotated onto him it should rarely fire at all.
+  - `MALYGOS_HUNTER_OFFSET` **−14 yd**, i.e. past centre, ~33 yd from the boss — **hunters only**.
+    `Spell::CheckRange` adds `GetMeleeRange` to a spell's minimum for `SPELL_RANGE_RANGED`, so
+    Malygos' CombatReach of 20 inflates a hunter's 5 yd minimum to ~28 yd of centre-to-centre distance
+    and every shot came back `SPELL_FAILED_TOO_CLOSE`. Nothing else has a minimum range, and standing
+    out here is exactly what left the raid unable to reach a Power Spark closing on the boss from the
+    far side — 33 yd to the boss plus 12 more to the spark is well past `spellDistance`. So casters
+    hold the stack instead. The same reach keeps `EnemyTooCloseForSpellTrigger` (threshold ~23.5 yd)
+    permanently active for anyone standing close, and every class wires that trigger to an escape at
+    34–50 relevance — above `malygos position` at `ACTION_MOVE`. Bots stepped out, were dragged back
+    next tick and never finished a cast, so the P1 multiplier zeroes `FleeAction`, `RunAwayAction`,
+    `CastBlinkBackAction` and `CastDisengageAction` for anyone in the encounter.
+  - `POWER_SPARK_GRIP_OFFSET` **−1 yd**, held only by a DK on spark duty — see the Power Spark
+    bullet above.
+
+  `GetMalygosP1Layout` resolves the set once and **latches it for the pull**, keyed on the instance
+  and shared across the raid, so bots cannot end up half on one set and half on another while he
+  walks. The latch clears when the encounter drops out of combat. Within a pull the spots are never
+  recomputed from his live position: a spot that chases him flips to his far side while he is still
+  walking out, and the tank then ping-pongs between the edge and the middle, sweeping the cone through
+  the raid. Whoever Malygos is actually hitting behaves as the tank, assigned or not, and a bot
+  corrects only past `MALYGOS_P1_POSITION_TOLERANCE` (5 yd).
 
   **Nobody but the boss's current victim walks anywhere in P1.** The multiplier zeroes every
   `MovementAction` and `CastReachTargetSpellAction` for everyone else, naming
@@ -111,11 +130,13 @@ transitions, which are both at 50%.
   melee were walking out to get behind him (`set behind`, `ACTION_MOVE + 7`) or to spread
   (`combat formation move`) and being dragged back to the stack next tick — the shuffling that shows
   up in game. The hold spots need no help: they are inside his 20 yd combat reach for melee and
-  outside the inflated minimum for ranged. `SetFacingTargetAction` is a plain `Action`, so facing
-  still works; `AttackAction` is not, which is why the EoE attack actions have to be named.
+  outside the inflated minimum for hunters. `SetFacingTargetAction` is a plain `Action`, so facing
+  still works; `AttackAction` is not, which is why the EoE attack actions have to be named. Note the
+  named exemptions only ever *target* — `AttackAction::Attack` sets the target and stops nothing but a
+  sub-combat-priority walk, so a melee bot peeling onto a spark still stays put.
 
-  There is no `avoid arcane breath` action: the cone points north at the tank and every other spot
-  is behind it.
+  There is no `avoid arcane breath` action: the cone points away from the raid, at the tank, and every
+  other spot is behind it.
 - **P2 — the Arcane Overload bubbles are shelter, and the old code ran the wrong way.**
   `NPC_ARCANE_OVERLOAD` (30282) grants **56438, −50% damage taken**; the protected radius shrinks
   ~2 % per tick over the bubble's 45 s life, so bots hug the centre within 4 yd and ignore any bubble
@@ -214,6 +235,8 @@ transitions, which are both at 50%.
   flight stacked, a self-cast Life Burst covers the same drakes a targeted one would. Neither goes
   through `CanCastVehicleSpell` — it reports `BAD_TARGETS` on a drake. The healer branch runs before
   the boss lookup in `EoEDrakeAttackAction::Execute`, since a healer needs no boss at all.
+- **P3 — dps drakes bank `DRAKE_ENGULF_COMBO` (3) before they finish.** Flame Spike stacks the combo
+  points Engulf in Flames spends, and Engulf scales with them, so spending at two threw damage away.
 - **P3 — Surge of Power cannot be dodged, and the old trigger could never fire.** The boss picks its
   victims, then fires the damage as a **triggered instant 3 s later** (`me->m_Events.AddEventAtOffset`
   → `DoCastAOE`): no beam to walk out of, no cast to outrun. Flame Shield (57108) halves it and that
@@ -227,6 +250,15 @@ transitions, which are both at 50%.
   and it does so for the 25-man three-target version as well. The slots are not cleared until the
   next surge is picked, so the trigger stays hot for most of the 7 s between casts — harmless now
   that the action only pops a 30 s cooldown and returns false when it is down.
+  **The cooldown is only stamped once the aura is actually up.** `PlayerbotAI::CastVehicleSpell`
+  returns true even when the spell it prepared failed its `CheckCast`, so trusting it meant one silent
+  miss inside the 3 s window cost the drake its shield for the next 30 s; nothing else sets that
+  cooldown, since the core does not cool a vehicle spell down by itself.
+  **It is safe to fire mid-dodge**, which matters because Static Field lands *on* the flight: the
+  shield is a self-cast, so `CastVehicleSpell` skips both the branch that turns the vehicle onto a
+  target and the one that stops it dead, and it is instant. The action also returns false either way,
+  so `eoe fly drake` — directly below it at `ACTION_EMERGENCY` — still gets the tick and the dodge
+  spline is not left half-flown.
 
 **`EoEDrakeAttackAction` and `DrakeSurgeShieldAction` are plain `Action`, not `MovementAction`**, so
 the P3 movement suppression leaves them free. `EoEFlyDrakeAction` *is* a `MovementAction` and is the

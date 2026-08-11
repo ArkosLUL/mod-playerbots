@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <unordered_map>
 #include <vector>
 
 Unit* FindFreeHoverDisk(Player* bot)
@@ -142,6 +143,72 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
     return true;
 }
 
+namespace
+{
+struct LayoutCacheEntry
+{
+    bool latched = false;
+    MalygosP1Layout layout;
+};
+
+// Keyed on the instance, like the phase and creature caches in EoETriggers.cpp, and thread_local for
+// the same reason: a bot is only ever updated from its own map's thread.
+thread_local std::unordered_map<uint32, LayoutCacheEntry> layoutCache;
+
+std::pair<float, float> MalygosP1Spot(float angle, float offset)
+{
+    return {MALYGOS_CENTER_POSITION.first + std::cos(angle) * offset,
+            MALYGOS_CENTER_POSITION.second + std::sin(angle) * offset};
+}
+}
+
+MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
+{
+    LayoutCacheEntry& cached = layoutCache[bot->GetInstanceId()];
+
+    // Out of combat the encounter is either not started or reset, so the next pull gets a fresh
+    // bearing. Nothing reads the layout in that state anyway.
+    uint8 const phase = MalygosTrigger::getPhase(bot);
+    if (phase == 0) { cached.latched = false; }
+    else if (cached.latched) { return cached.layout; }
+
+    // Malygos is already committed to his landing bearing by the time bots see the intro:
+    // JustEngagedWith puts him in combat and schedules EVENT_INTRO_MOVE_CENTER in the same instant,
+    // and that snapshots the angle and flies him straight in along it. So the first resolve of the
+    // pull is the right one, and latching it stops the layout drifting as he chases the tank.
+    float angle = MALYGOS_LANDING_ANGLES[0];
+    if (Unit* boss = MalygosTrigger::getMalygos(bot))
+    {
+        float const dx = boss->GetPositionX() - MALYGOS_CENTER_POSITION.first;
+        float const dy = boss->GetPositionY() - MALYGOS_CENTER_POSITION.second;
+        if (std::fabs(dx) > 1.0f || std::fabs(dy) > 1.0f)
+        {
+            float const bearing = std::atan2(dy, dx);
+            float closest = std::numeric_limits<float>::max();
+            for (uint8 i = 0; i < MALYGOS_LANDING_ANGLE_COUNT; ++i)
+            {
+                // Wrapped into [-pi, pi] so a bearing either side of the seam still picks its
+                // neighbour rather than the one three quarters of the way round.
+                float diff = std::fabs(std::remainder(bearing - MALYGOS_LANDING_ANGLES[i],
+                                                      2.0f * static_cast<float>(M_PI)));
+                if (diff < closest)
+                {
+                    closest = diff;
+                    angle = MALYGOS_LANDING_ANGLES[i];
+                }
+            }
+        }
+
+        cached.latched = phase != 0;
+    }
+
+    cached.layout.tank = MalygosP1Spot(angle, MALYGOS_MAINTANK_OFFSET);
+    cached.layout.stack = MalygosP1Spot(angle, MALYGOS_STACK_OFFSET);
+    cached.layout.hunter = MalygosP1Spot(angle, MALYGOS_HUNTER_OFFSET);
+    cached.layout.grip = MalygosP1Spot(angle, POWER_SPARK_GRIP_OFFSET);
+    return cached.layout;
+}
+
 Unit* GetNearestPowerSpark(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -164,6 +231,45 @@ Unit* GetNearestPowerSpark(PlayerbotAI* botAI)
     return closest;
 }
 
+Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
+{
+    Player* bot = botAI->GetBot();
+
+    std::vector<Unit*> sparks;
+    GetEoECreatures(bot, NPC_POWER_SPARK, sparks);
+    if (sparks.empty()) { return nullptr; }
+
+    Unit* boss = MalygosTrigger::getMalygos(bot);
+    bool const ranged = botAI->IsRanged(bot);
+
+    Unit* best = nullptr;
+    float bestBossDist = std::numeric_limits<float>::max();
+    for (Unit* spark : sparks)
+    {
+        bool inReach;
+        if (ranged)
+        {
+            inReach = bot->IsWithinCombatRange(spark, sPlayerbotAIConfig.spellDistance);
+        }
+        else
+        {
+            // Melee only ever swing at a spark that has walked into them on its way to the boss, so
+            // the one they already have gets a couple of yards of grace before they drop it.
+            inReach = bot->IsWithinMeleeRange(spark, currentTarget == spark ? POWER_SPARK_MELEE_STICKY : 0.0f);
+        }
+        if (!inReach) { continue; }
+
+        // Whichever is closest to handing over its buff.
+        float const bossDist = boss ? boss->GetExactDist2d(spark) : bot->GetExactDist2d(spark);
+        if (bossDist < bestBossDist)
+        {
+            bestBossDist = bossDist;
+            best = spark;
+        }
+    }
+    return best;
+}
+
 bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -178,15 +284,15 @@ bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
     // raid, dropping a spark on the raid drops it on him too.
     Unit* boss = MalygosTrigger::getMalygos(bot);
     if (!boss) { return false; }
-    if (boss->GetExactDist2d(POWER_SPARK_GRIP_POSITION.first, POWER_SPARK_GRIP_POSITION.second) <
-        POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE)
+
+    std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
+    if (boss->GetExactDist2d(grip.first, grip.second) < POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE)
     {
         return false;
     }
 
     Unit* spark = GetNearestPowerSpark(botAI);
-    return spark && spark->GetExactDist2d(POWER_SPARK_GRIP_POSITION.first, POWER_SPARK_GRIP_POSITION.second) <=
-                        POWER_SPARK_GRIP_ENGAGE_RADIUS;
+    return spark && spark->GetExactDist2d(grip.first, grip.second) <= POWER_SPARK_GRIP_ENGAGE_RADIUS;
 }
 
 bool IsDrakeHealer(PlayerbotAI* botAI)
@@ -296,31 +402,33 @@ bool MalygosPositionAction::Execute(Event /*event*/)
         // Not during the intro: he is pacified there and his victim is only whoever pulled.
         bool isBossTank = botAI->IsMainTank(bot) || (!intro && boss && boss->GetVictim() == bot);
 
-        // Ranged dps hold their own spot well back: anything closer is inside Malygos' effective
-        // minimum range and inside the "enemy too close for spell" threshold his CombatReach inflates.
-        // Healers stay on the raid stack so the tank stays inside their heal range. A DK on spark duty
-        // steps out to the grip spot and comes back here once the grip is spent - this action owns the
-        // walking in both directions, PullPowerSparkAction only ever casts.
+        // Hunters hold their own spot well back: anything closer is inside Malygos' effective minimum
+        // range, which his CombatReach inflates to ~28y. Nothing else has one, so the rest of the
+        // ranged dps join the melee and the healers on the stack - out there they could not reach a
+        // Power Spark closing on the boss from the far side, and the stack keeps the tank inside heal
+        // range. A DK on spark duty steps out to the grip spot and comes back here once the grip is
+        // spent - this action owns the walking in both directions, PullPowerSparkAction only casts.
         bool const gripDuty = !isBossTank && IsOnPowerSparkGripDuty(botAI);
-        bool const rangedDps = botAI->IsRangedDps(bot);
-        bool const onStack = !isBossTank && !gripDuty && !rangedDps;
-        std::pair<float, float> const& spot = isBossTank  ? MALYGOS_MAINTANK_POSITION
-                                              : gripDuty  ? POWER_SPARK_GRIP_POSITION
-                                              : rangedDps ? MALYGOS_RANGED_POSITION
-                                                          : MALYGOS_STACK_POSITION;
+        MalygosP1Layout const& layout = GetMalygosP1Layout(bot);
+        bool const hunter = botAI->IsRangedDps(bot) && bot->IsClass(CLASS_HUNTER);
+        bool const onStack = !isBossTank && !gripDuty && !hunter;
+        std::pair<float, float> const& spot = isBossTank ? layout.tank
+                                              : gripDuty ? layout.grip
+                                              : hunter   ? layout.hunter
+                                                         : layout.stack;
         float const tolerance = gripDuty ? POWER_SPARK_GRIP_TOLERANCE : MALYGOS_P1_POSITION_TOLERANCE;
 
         float spotX = spot.first;
         float spotY = spot.second;
 
-        // The stack spot is placed for a boss who walks in from the south and stops ~21.5y short of
-        // the tank spot. He lands 35y from centre on whatever bearing his intro left him on and then
-        // stops wherever his chase first brings him inside melee range of the tank, so an approach
-        // from the side parks him ~38y from the stack and the melee half of the raid stands there
-        // with nothing in reach. Pull the stack up the line towards him, and only as far as it takes
-        // to swing. It keeps the bearing the stack already holds from him, so it can never end up in
-        // front of him, and it slides with him instead of snapping between two spots - a spot that
-        // jumps is what sets a raid bouncing. Not during the intro: he is circling and untouchable.
+        // The layout assumes Malygos stops ~21.5y short of the tank spot on the bearing he landed on.
+        // He does not always: his chase stops wherever it first brings him inside melee range of the
+        // tank, so coming in off-bearing can leave him far enough out that the melee half of the raid
+        // stands on the stack with nothing in reach. Pull the stack up the line towards him, and only
+        // as far as it takes to swing. It keeps the bearing the stack already holds from him, so it
+        // can never end up in front of him, and it slides with him instead of snapping between two
+        // spots - a spot that jumps is what sets a raid bouncing. Not during the intro: he is
+        // circling and untouchable.
         if (onStack && !intro && boss)
         {
             float const bossDist = boss->GetExactDist2d(spotX, spotY);
@@ -333,10 +441,10 @@ bool MalygosPositionAction::Execute(Event /*event*/)
             }
         }
 
-        // The tank and ranged spots stay fixed, never recomputed from where the boss happens to be:
-        // a spot that chases the boss flips to the far side of him whenever he is still on his way
-        // out, and the tank then ping-pongs between the edge and the middle, sweeping the cone
-        // through the raid.
+        // The tank and hunter spots stay put for the whole pull. The layout is picked once, off the
+        // bearing Malygos landed on, and never recomputed from where he happens to be standing: a
+        // spot that chases him flips to his far side whenever he is still on his way out, and the
+        // tank then ping-pongs between the edge and the middle, sweeping the cone through the raid.
         if (bot->GetDistance2d(spotX, spotY) > tolerance)
         {
             return MoveTo(EOE_MAP_ID, spotX, spotY, bot->GetPositionZ(),
@@ -390,27 +498,17 @@ bool MalygosTargetAction::Execute(Event /*event*/)
         if (botAI->IsHeal(bot)) { return false; }
         if (!boss) { return false; }
 
-        // Fall back to Malygos unless a spark should be picked up by ranged DPS.
-        Unit* newTarget = boss;
-        Unit* spark = nullptr;
-
-        GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-        for (auto& target : targets)
-        {
-            Unit* unit = botAI->GetUnit(target);
-            if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-            {
-                spark = unit;
-                break;
-            }
-        }
-
-        if (spark && botAI->IsRangedDps(bot))
-        {
-            newTarget = spark;
-        }
-
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
+
+        // Any dps peels onto a spark it can actually hit from where it stands - melee get the ones
+        // that walk into them on the way to the boss. The tank never does: dropping Malygos swings
+        // his Arcane Breath cone through whoever is behind him.
+        Unit* newTarget = boss;
+        bool const isBossTank = botAI->IsMainTank(bot) || boss->GetVictim() == bot;
+        if (!isBossTank && botAI->IsDps(bot))
+        {
+            if (Unit* spark = GetPowerSparkToKill(botAI, currentTarget)) { newTarget = spark; }
+        }
 
         if (!currentTarget || currentTarget->GetGUID() != newTarget->GetGUID())
         {
@@ -519,8 +617,8 @@ bool PullPowerSparkAction::isUseful()
     // wrong place is worse than not gripping: the corpse's ground buff would land out of everyone's
     // way, or the spark itself next to Malygos. Getting there is MalygosPositionAction's job, and
     // this returns false while the walk is still going so it keeps the tick.
-    if (bot->GetDistance2d(POWER_SPARK_GRIP_POSITION.first, POWER_SPARK_GRIP_POSITION.second) >
-        POWER_SPARK_GRIP_TOLERANCE)
+    std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
+    if (bot->GetDistance2d(grip.first, grip.second) > POWER_SPARK_GRIP_TOLERANCE)
     {
         return false;
     }
@@ -539,39 +637,24 @@ bool PullPowerSparkAction::Execute(Event /*event*/)
 
 bool KillPowerSparkAction::isUseful()
 {
-    // Only ranged DPS peel onto sparks (matching MalygosTargetAction); tanks and melee stay on
-    // Malygos so his threat and Arcane Breath cone don't swing into the raid. DK grips handle the
-    // spark separately via PullPowerSparkAction.
-    if (!botAI->IsRangedDps(bot)) { return false; }
+    // Any dps peels onto a spark, but only one it can reach standing still - nobody walks in P1, and
+    // a bot holding a target it can't touch is a bot doing nothing. The tank stays on Malygos so his
+    // threat and Arcane Breath cone don't swing into the raid, and DK grips are PullPowerSparkAction.
+    if (!botAI->IsDps(bot) || botAI->IsMainTank(bot)) { return false; }
 
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-    for (auto& target : targets)
-    {
-        Unit* unit = botAI->GetUnit(target);
-        if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-        {
-            return true;
-        }
-    }
-    return false;
+    Unit* boss = MalygosTrigger::getMalygos(bot);
+    if (boss && boss->GetVictim() == bot) { return false; }
+
+    return GetPowerSparkToKill(botAI, AI_VALUE(Unit*, "current target")) != nullptr;
 }
 
 bool KillPowerSparkAction::Execute(Event /*event*/)
 {
-    Unit* spark = nullptr;
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-    for (auto& target : targets)
-    {
-        Unit* unit = botAI->GetUnit(target);
-        if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-        {
-            spark = unit;
-            break;
-        }
-    }
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+
+    Unit* spark = GetPowerSparkToKill(botAI, currentTarget);
     if (!spark) { return false; }
 
-    Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget || currentTarget->GetGUID() != spark->GetGUID())
     {
         return Attack(spark);
@@ -1014,7 +1097,7 @@ bool EoEDrakeAttackAction::DrakeDpsAction(Unit* target)
     if (drake->GetExactDist(target) > DRAKE_ATTACK_RANGE) { return false; }
 
     uint8 comboPoints = drake->GetComboPoints(target);
-    if (comboPoints >= 2)
+    if (comboPoints >= DRAKE_ENGULF_COMBO)
     {
         return CastDrakeSpellAction(target, SPELL_ENGULF_IN_FLAMES, 0);
     }
@@ -1063,9 +1146,19 @@ bool DrakeSurgeShieldAction::Execute(Event /*event*/)
     // still to run. Anything it does not cover is left to the healers.
     if (drake->HasSpellCooldown(SPELL_FLAME_SHIELD)) { return false; }
 
+    // Safe to fire mid-dodge: the shield is a self-cast, so CastVehicleSpell skips both the branch
+    // that turns the vehicle onto a target and the one that stops it dead, and it is instant.
     // Same as the drake heals: CanCastVehicleSpell reports BAD_TARGETS on a drake, so force it.
-    if (!botAI->CastVehicleSpell(SPELL_FLAME_SHIELD, drake)) { return false; }
+    botAI->CastVehicleSpell(SPELL_FLAME_SHIELD, drake);
 
+    // Only cool it down once the aura is actually up. CastVehicleSpell reports success even when the
+    // spell it prepared failed its CheckCast, so trusting it meant one silent miss inside the 3s
+    // window cost the drake the shield for the next 30s. Nothing sets this cooldown but us - the core
+    // does not cool a vehicle spell down by itself.
+    if (!drake->HasAura(SPELL_FLAME_SHIELD)) { return false; }
     drake->AddSpellCooldown(SPELL_FLAME_SHIELD, 0, 30000);
-    return true;
+
+    // Hand the tick on either way: eoe fly drake sits directly below this one, and a Static Field
+    // dodge that loses a tick here is a dodge that stops halfway.
+    return false;
 }

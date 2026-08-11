@@ -22,21 +22,34 @@ const std::pair<float, float> MALYGOS_CENTER_POSITION = {754.395f, 1301.27f};
 // Platform floor (CenterPos.z). A disk rider has to come back down to about here before it is safe
 // to dismount, otherwise it steps off 20-30y up.
 const float MALYGOS_PLATFORM_Z = 266.10f;
-// P1 tank spot: 42y due north of centre. The Exit Portal sits at 43.4y, so there is ground here.
-// Dragging Malygos out this far leaves the whole platform behind him for the raid.
-const std::pair<float, float> MALYGOS_MAINTANK_POSITION = {754.395f, 1343.27f};
-// P1 raid stack, 12y north of centre. Malygos has a CombatReach of 20, so he stops roughly 21y
-// short of the tank - around y=1322 - and everyone else needs to be south of *that*, not south of
+// The bearings from centre Malygos can land on. He idles between the core's FourSidesPos, and
+// EVENT_INTRO_MOVE_CENTER snapshots CenterPos.GetAngle(me) at the pull and flies him in to 35y out
+// on that same bearing, so these four are the whole answer. Mirrored rather than included for the
+// same reason as EOE_DATA_MALYGOS - script headers are not on a module's include path. In order:
+// {686.417, 1235.52}, {828.182, 1379.05}, {681.278, 1375.796}, {821.182, 1235.42}.
+const float MALYGOS_LANDING_ANGLES[] = {-2.3729f, 0.8117f, 2.3467f, -0.7783f};
+const uint8 MALYGOS_LANDING_ANGLE_COUNT = 4;
+
+// The P1 hold spots, as signed distances from centre along whichever of those bearings this pull
+// landed on: positive is towards Malygos, negative away from him. GetMalygosP1Layout turns them into
+// world positions.
+// Tank spot. The Exit Portal sits 43.4y out, so there is ground this far on any bearing, and
+// dragging Malygos to the rim leaves the whole platform behind him for the raid.
+const float MALYGOS_MAINTANK_OFFSET = 42.0f;
+// Raid stack: melee, healers and every ranged dps but the hunters. Malygos has a CombatReach of 20,
+// so he stops roughly 21y short of the tank and everyone else needs to be behind *that*, not behind
 // the tank. A stack any closer to the tank spot sits between Malygos and his victim, i.e. straight
 // in the Arcane Breath cone. From here melee are still well inside his 20y reach.
-const std::pair<float, float> MALYGOS_STACK_POSITION = {754.395f, 1313.27f};
-// P1 ranged dps spot, 14y south of centre. Malygos' CombatReach of 20 pushes a hunter's 5y minimum
+const float MALYGOS_STACK_OFFSET = 12.0f;
+// Hunter spot, on the far side of centre. Malygos' CombatReach of 20 pushes a hunter's 5y minimum
 // range out to about 28y of centre-to-centre distance (Spell::CheckRange adds GetMeleeRange on top of
 // the minimum for SPELL_RANGE_RANGED), and from the raid stack every shot came back TOO_CLOSE. It is
 // also outside the ~23.5y at which "enemy too close for spell" starts firing escape actions that
-// outrank the position hold. From here Malygos is ~34.5y away, so even a bot drifting the full
-// MALYGOS_P1_POSITION_TOLERANCE toward him can still shoot.
-const std::pair<float, float> MALYGOS_RANGED_POSITION = {754.395f, 1287.27f};
+// outrank the position hold. From here Malygos is ~33y away, so even a hunter drifting the full
+// MALYGOS_P1_POSITION_TOLERANCE toward him can still shoot. Nothing else has a minimum range, and
+// standing this far out is what left the raid unable to reach a Power Spark closing from the far
+// side of the boss.
+const float MALYGOS_HUNTER_OFFSET = -14.0f;
 // How close a bot has to be to its assigned P1 spot before it stops correcting.
 const float MALYGOS_P1_POSITION_TOLERANCE = 5.0f;
 // How far the raid stack may sit from Malygos before it is pulled in towards him. Melee range
@@ -44,6 +57,20 @@ const float MALYGOS_P1_POSITION_TOLERANCE = 5.0f;
 // adds on top - and a bot may park MALYGOS_P1_POSITION_TOLERANCE off its spot, so anything up to
 // ~17 is still swingable. 15 keeps a margin.
 const float MALYGOS_MELEE_HOLD_DISTANCE = 15.0f;
+
+struct MalygosP1Layout
+{
+    std::pair<float, float> tank;
+    std::pair<float, float> stack;
+    std::pair<float, float> hunter;
+    std::pair<float, float> grip;
+};
+
+// The P1 hold spots for this pull: the offsets above rotated onto the landing bearing nearest to
+// where Malygos actually is. Latched on the first resolve of the encounter and shared across the
+// instance, so the raid cannot end up half on one set and half on another while he walks; cleared
+// when the encounter resets. Falls back to the first bearing if there is no boss to read.
+MalygosP1Layout const& GetMalygosP1Layout(Player* bot);
 
 // How close a bubble has to be before a bot will walk to it, and the radius the shelter checks
 // treat as "the one covering me".
@@ -59,17 +86,20 @@ const float BUBBLE_MIN_USABLE_FACTOR = 0.35f;
 const float POWER_SPARK_BUFF_RADIUS = 12.0f;
 // Where a DK parks to Death Grip a spark. Grip lands the target on the caster, and a killed spark
 // leaves SPELL_POWER_SPARK_GROUND_BUFF (55852) on its corpse for a minute - so where the DK stands
-// decides who gets the buff. This is the midpoint of MALYGOS_STACK_POSITION and
-// MALYGOS_RANGED_POSITION, which is the best spot available without knowing 55852's radius: it
-// maximises the smaller of the two distances. It also lands ~21y from where Malygos parks, so a
-// spark dropped here still has to walk 9y before it could hand him anything, and it has ~12k hp.
-const std::pair<float, float> POWER_SPARK_GRIP_POSITION = {754.395f, 1300.27f};
+// decides who gets the buff. This is the midpoint of the raid stack and the hunter spot, which is the
+// best available without knowing 55852's radius: it maximises the smaller of the two distances. It
+// also lands ~21y from where Malygos parks, so a spark dropped here still has to walk 9y before it
+// could hand him anything, and it has ~12k hp.
+const float POWER_SPARK_GRIP_OFFSET = (MALYGOS_STACK_OFFSET + MALYGOS_HUNTER_OFFSET) / 2.0f;
 // Tighter than the general P1 tolerance - the grip spot is only worth walking to if it is hit.
 const float POWER_SPARK_GRIP_TOLERANCE = 2.0f;
 // How close a spark has to be before a DK gives up boss uptime to go and meet it.
 const float POWER_SPARK_GRIP_ENGAGE_RADIUS = 45.0f;
 // Called off if Malygos ends up near the grip spot: dropping a spark next to him hands over the buff.
 const float POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE = POWER_SPARK_BUFF_RADIUS + 6.0f;
+// Slack on top of melee reach before a melee bot lets go of a spark it is already hitting. A spark
+// walks at 6y/s, so without it a bot on the edge of reach swaps target every other tick.
+const float POWER_SPARK_MELEE_STICKY = 3.0f;
 
 // P3 drakes hold one stack point instead of trailing the raid leader. A drake that is still
 // following is both moving and facing the wrong way, and CastVehicleSpell refuses to fire in either
@@ -105,6 +135,9 @@ const uint8 DRAKE_HEALERS_25MAN = 5;
 const uint8 DRAKE_HEALERS_10MAN = 2;
 // Combo points needed before a healer dumps Life Burst instead of stacking another Revivify.
 const uint8 DRAKE_LIFE_BURST_COMBO = 5;
+// Flame Spike stacks the combo points Engulf in Flames spends, and Engulf scales with them, so a
+// dps drake banks this many before it finishes.
+const uint8 DRAKE_ENGULF_COMBO = 3;
 
 // Static Field (57430) drops a stationary NPC_STATIC_FIELD that pulses for its whole 20s life, and
 // the boss lands a fresh one every 12s.
@@ -152,7 +185,14 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
 // Nearest live Power Spark the bot can see, or nullptr.
 Unit* GetNearestPowerSpark(PlayerbotAI* botAI);
 
-// True while this bot should be holding POWER_SPARK_GRIP_POSITION instead of its usual P1 spot.
+// The spark this bot should be hitting: of the ones it can reach from where it stands, the one
+// closest to Malygos, i.e. the one about to hand him his buff. Reach is the bot's own - spell range
+// for ranged, melee range for everyone else - because nobody walks anywhere in P1, so a bot that
+// locks onto a spark across the arena just stands there while the boss goes unhit. Pass the target
+// it already has to keep it from swapping off a spark that has drifted a couple of yards past reach.
+Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget);
+
+// True while this bot should be holding the grip spot instead of its usual P1 spot.
 // Both the position action and the grip itself read this, so they cannot disagree about it.
 bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI);
 

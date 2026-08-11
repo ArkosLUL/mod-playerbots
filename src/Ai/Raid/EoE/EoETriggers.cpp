@@ -184,17 +184,7 @@ bool PowerSparkTrigger::IsActive()
 {
     if (MalygosTrigger::getPhase(bot) != 1) { return false; }
 
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-    for (auto& target : targets)
-    {
-        Unit* unit = botAI->GetUnit(target);
-        if (unit && unit->GetEntry() == NPC_POWER_SPARK)
-        {
-            return true;
-        }
-    }
-
-    return false;
+    return AnyEoECreature(bot, NPC_POWER_SPARK);
 }
 
 bool MalygosBubbleTrigger::IsActive()

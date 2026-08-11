@@ -43,7 +43,6 @@ void MalygosMultiplier::RefreshSnapshot()
     isMainTank = botAI->IsMainTank(bot);
     isDps = botAI->IsDps(bot);
     isRanged = botAI->IsRanged(bot);
-    isRangedDps = isRanged && isDps;
     isHeal = botAI->IsHeal(bot);
 
     Unit* boss = MalygosTrigger::getMalygos(bot);
@@ -89,7 +88,9 @@ float MalygosMultiplier::GetValue(Action* action)
 
         if (!move)
         {
-            if (isRangedDps && dynamic_cast<DropTargetAction*>(action))
+            // Any dps may be holding a Power Spark rather than the boss; dropping it hands the spark
+            // its walk to Malygos back.
+            if (isDps && dynamic_cast<DropTargetAction*>(action))
             {
                 return 0.0f;
             }
@@ -126,8 +127,8 @@ float MalygosMultiplier::GetValue(Action* action)
         // Ranged were chasing Power Sparks back inside Malygos' minimum range; melee were walking
         // out to get behind him (set behind) or to spread (combat formation move) and being dragged
         // back to the stack next tick, which is the shuffling that shows up in game. The hold spots
-        // already sit inside his 20y combat reach for melee and outside the minimum range for
-        // ranged, and the DK grips sparks to the raid, so there is nothing left to walk to.
+        // already sit inside his 20y combat reach for melee and outside the inflated minimum range
+        // for hunters, and the DK grips sparks to the raid, so there is nothing left to walk to.
         // Note AttackAction derives from MovementAction, so the EoE actions have to be named or they
         // go with it. Closing on a heal target is the one exception, same as in P2.
         if (!isBossTank && !dynamic_cast<MalygosPositionAction*>(move) &&
