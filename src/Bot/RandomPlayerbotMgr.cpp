@@ -1721,30 +1721,36 @@ void RandomPlayerbotMgr::PrepareAddclassCache()
     // Using accounts marked as type 2 (AddClass)
     int32 collected = 0;
 
-    for (uint32 accountId : addClassTypeAccounts)
+    if (!addClassTypeAccounts.empty())
     {
-        for (uint8 claz = CLASS_WARRIOR; claz <= CLASS_DRUID; claz++)
+        std::ostringstream accountList;
+        char const* separator = "";
+        for (uint32 accountId : addClassTypeAccounts)
         {
-            if (claz == 10)
-                continue;
+            accountList << separator << accountId;
+            separator = ",";
+        }
 
-            QueryResult results = CharacterDatabase.Query(
-                "SELECT guid, race FROM characters "
-                "WHERE account = {} AND class = '{}' AND online = 0",
-                accountId, claz);
+        QueryResult results = CharacterDatabase.Query(
+            "SELECT guid, race, class FROM characters "
+            "WHERE account IN ({}) AND class BETWEEN {} AND {} AND online = 0",
+            accountList.str(), uint32(CLASS_WARRIOR), uint32(CLASS_DRUID));
 
-            if (results)
+        if (results)
+        {
+            do
             {
-                do
-                {
-                    Field* fields = results->Fetch();
-                    ObjectGuid guid = ObjectGuid(HighGuid::Player, fields[0].Get<uint32>());
-                    uint32 race = fields[1].Get<uint32>();
-                    bool isAlliance = race == 1 || race == 3 || race == 4 || race == 7 || race == 11;
-                    addclassCache[GetTeamClassIdx(isAlliance, claz)].insert(guid);
-                    collected++;
-                } while (results->NextRow());
-            }
+                Field* fields = results->Fetch();
+                uint8 claz = fields[2].Get<uint8>();
+                if (claz == 10)
+                    continue;
+
+                ObjectGuid guid = ObjectGuid(HighGuid::Player, fields[0].Get<uint32>());
+                uint32 race = fields[1].Get<uint32>();
+                bool isAlliance = race == 1 || race == 3 || race == 4 || race == 7 || race == 11;
+                addclassCache[GetTeamClassIdx(isAlliance, claz)].insert(guid);
+                collected++;
+            } while (results->NextRow());
         }
     }
 

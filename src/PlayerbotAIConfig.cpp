@@ -1174,6 +1174,12 @@ std::vector<std::vector<uint32>> PlayerbotAIConfig::ParseTempTalentsOrder(uint32
     // check bad link
     uint32 classMask = 1 << (cls - 1);
     std::vector<std::vector<uint32>> res;
+
+    // Called ~18k times at startup, almost always with an unset PremadeSpecLink. Bail out before the
+    // sTalentStore scan below, which would be thrown away anyway.
+    if (tab_link.empty())
+        return res;
+
     std::vector<std::string> tab_links = split(tab_link, "-");
     std::map<uint32, std::vector<TalentEntry const*>> spells;
     std::vector<std::vector<std::vector<uint32>>> orders(3);
@@ -1228,6 +1234,11 @@ std::vector<std::vector<uint32>> PlayerbotAIConfig::ParseTempPetTalentsOrder(uin
     // uint32 classMask = 1 << (cls - 1);
     std::vector<TalentEntry const*> spells;
     std::vector<std::vector<uint32>> orders;
+
+    // Same as ParseTempTalentsOrder: skip the store scan when there is no link to parse.
+    if (tab_link.empty())
+        return orders;
+
     for (uint32 i = 0; i < sTalentStore.GetNumRows(); ++i)
     {
         TalentEntry const* talentInfo = sTalentStore.LookupEntry(i);

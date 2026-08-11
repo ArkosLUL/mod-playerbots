@@ -15,6 +15,54 @@
 #include "SharedDefines.h"
 #include "SocialMgr.h"
 #include "Timer.h"
+#include "Util.h"
+
+namespace
+{
+    // Account names are stored upper-cased by AccountMgr::CreateAccount, and the per-name lookups this
+    // replaces only matched thanks to the column's case-insensitive collation. A std::unordered_map has
+    // no collation, so every key has to go through the same normalisation.
+    std::string NormalizeAccountName(std::string name)
+    {
+        Utf8ToUpperOnlyLatin(name);
+        return name;
+    }
+
+    std::unordered_map<std::string, uint32> LoadBotAccountIds()
+    {
+        std::unordered_map<std::string, uint32> accountIds;
+
+        QueryResult result = LoginDatabase.Query("SELECT id, username FROM account WHERE username LIKE '{}%%'",
+                                                 sPlayerbotAIConfig.randomBotAccountPrefix.c_str());
+        if (!result)
+            return accountIds;
+
+        do
+        {
+            Field* fields = result->Fetch();
+            accountIds[NormalizeAccountName(fields[1].Get<std::string>())] = fields[0].Get<uint32>();
+        } while (result->NextRow());
+
+        return accountIds;
+    }
+
+    std::unordered_map<uint32, uint32> LoadCharacterCountsPerAccount()
+    {
+        std::unordered_map<uint32, uint32> counts;
+
+        QueryResult result = CharacterDatabase.Query("SELECT account, COUNT(guid) FROM characters GROUP BY account");
+        if (!result)
+            return counts;
+
+        do
+        {
+            Field* fields = result->Fetch();
+            counts[fields[0].Get<uint32>()] = fields[1].Get<uint64>();
+        } while (result->NextRow());
+
+        return counts;
+    }
+}
 
 constexpr RandomPlayerbotFactory::NameRaceAndGender RandomPlayerbotFactory::CombineRaceAndGender(uint8 race,
                                                                                                 uint8 gender)
@@ -354,6 +402,25 @@ uint32 RandomPlayerbotFactory::CalculateTotalAccountCount()
         } while (typeCheck->NextRow());
     }
 
+    // The pool is sized off playerbots_account_type, so rows pointing at accounts that no longer exist
+    // (or were never bot accounts) inflate it. Every startup then provisions the difference again and
+    // records it, so the drift is permanent and keeps growing.
+    uint32 accountTypeRows = existingRndBotAccounts + existingAddClassAccounts + existingUnassignedAccounts;
+    if (QueryResult realAccounts = LoginDatabase.Query("SELECT COUNT(*) FROM account WHERE username LIKE '{}%%'",
+                                                       sPlayerbotAIConfig.randomBotAccountPrefix.c_str()))
+    {
+        uint32 realAccountCount = (*realAccounts)[0].Get<uint64>();
+        if (accountTypeRows > realAccountCount)
+        {
+            LOG_WARN("playerbots",
+                     "playerbots_account_type has {} rows but only {} '{}' accounts exist. The {} stale rows inflate "
+                     "the account pool, so {} accounts and their characters get created on every startup. Delete the "
+                     "rows whose account_id is not a bot account to stop it.",
+                     accountTypeRows, realAccountCount, sPlayerbotAIConfig.randomBotAccountPrefix.c_str(),
+                     accountTypeRows - realAccountCount, accountTypeRows - realAccountCount);
+        }
+    }
+
     // Determine divisor based on Death Knight availability and requested A&H faction ratio
     int divisor = CalculateAvailableCharsPerAccount();
 
@@ -589,16 +656,15 @@ void RandomPlayerbotFactory::CreateRandomBots()
     uint32 totalAccountCount = CalculateTotalAccountCount();
     uint32 timer = getMSTime();
 
+    std::unordered_map<std::string, uint32> botAccountIds = LoadBotAccountIds();
+
     for (uint32 accountNumber = 0; accountNumber < totalAccountCount; ++accountNumber)
     {
         std::ostringstream out;
         out << sPlayerbotAIConfig.randomBotAccountPrefix << accountNumber;
         std::string const accountName = out.str();
 
-        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_GET_ACCOUNT_ID_BY_USERNAME);
-        stmt->SetData(0, accountName);
-        PreparedQueryResult result = LoginDatabase.Query(stmt);
-        if (result)
+        if (botAccountIds.count(NormalizeAccountName(accountName)))
         {
             continue;
         }
@@ -628,6 +694,9 @@ void RandomPlayerbotFactory::CreateRandomBots()
             std::this_thread::sleep_for(1s);
         }
         LOG_INFO("playerbots", ">> {} Accounts loaded into database in {} ms", account_creation, GetMSTimeDiffToNow(timer));
+
+        // Accounts just created have ids only the DB knows about.
+        botAccountIds = LoadBotAccountIds();
     }
 
     LOG_INFO("playerbots", "Creating random bot characters...");
@@ -637,24 +706,22 @@ void RandomPlayerbotFactory::CreateRandomBots()
     int bot_creation = 0;
     timer = getMSTime();
     bool nameCached = false;
+    std::unordered_map<uint32, uint32> charCounts = LoadCharacterCountsPerAccount();
     for (uint32 accountNumber = 0; accountNumber < totalAccountCount; ++accountNumber)
     {
         std::ostringstream out;
         out << sPlayerbotAIConfig.randomBotAccountPrefix << accountNumber;
         std::string const accountName = out.str();
 
-        LoginDatabasePreparedStatement* stmt = LoginDatabase.GetPreparedStatement(LOGIN_GET_ACCOUNT_ID_BY_USERNAME);
-        stmt->SetData(0, accountName);
-        PreparedQueryResult result = LoginDatabase.Query(stmt);
-        if (!result)
+        auto accountIt = botAccountIds.find(NormalizeAccountName(accountName));
+        if (accountIt == botAccountIds.end())
             continue;
 
-        Field* fields = result->Fetch();
-        uint32 accountId = fields[0].Get<uint32>();
+        uint32 accountId = accountIt->second;
 
         sPlayerbotAIConfig.randomBotAccounts.push_back(accountId);
 
-        uint32 count = AccountMgr::GetCharactersCount(accountId);
+        uint32 count = charCounts[accountId];
         if (count >= 10)
         {
             continue;
@@ -664,29 +731,34 @@ void RandomPlayerbotFactory::CreateRandomBots()
         {
             nameCached = true;
             LOG_INFO("playerbots", "Creating cache for names per gender and race...");
-            QueryResult result = CharacterDatabase.Query("SELECT name, gender FROM playerbots_names");
+            // Anti-join drops names already taken by a character; both sides are indexed.
+            QueryResult result = CharacterDatabase.Query(
+                "SELECT n.name, n.gender FROM playerbots_names n "
+                "LEFT JOIN characters c ON c.name = n.name WHERE c.guid IS NULL");
             if (!result)
             {
-                LOG_ERROR("playerbots", "No more unused names left");
-                return;
-            }
-            do
-            {
-                Field* fields = result->Fetch();
-                std::string name = fields[0].Get<std::string>();
-                NameRaceAndGender raceAndGender = static_cast<NameRaceAndGender>(fields[1].Get<uint8>());
-                if (sObjectMgr->CheckPlayerName(name) == CHAR_NAME_SUCCESS)
+                // An empty result means either an empty pool table or every name already taken. Only the
+                // former is fatal; the latter falls through to the procedural-name fallback below.
+                if (!CharacterDatabase.Query("SELECT 1 FROM playerbots_names LIMIT 1"))
                 {
-                    CharacterDatabasePreparedStatement* stmt = CharacterDatabase.GetPreparedStatement(CHAR_SEL_CHECK_NAME);
-                    stmt->SetData(0, name);
-
-                    if (PreparedQueryResult result = CharacterDatabase.Query(stmt))
-                        continue;
-
-                    nameCache[raceAndGender].push_back(name);
+                    LOG_ERROR("playerbots", "No more unused names left");
+                    return;
                 }
+            }
+            else
+            {
+                do
+                {
+                    Field* fields = result->Fetch();
+                    std::string name = fields[0].Get<std::string>();
+                    NameRaceAndGender raceAndGender = static_cast<NameRaceAndGender>(fields[1].Get<uint8>());
+                    if (sObjectMgr->CheckPlayerName(name) == CHAR_NAME_SUCCESS)
+                    {
+                        nameCache[raceAndGender].push_back(name);
+                    }
 
-            } while (result->NextRow());
+                } while (result->NextRow());
+            }
 
             if (nameCache.empty())
                 LOG_WARN("playerbots", "playerbots_names pool exhausted; new bots will use procedurally generated names.");
@@ -723,6 +795,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
             playerBot->CleanupsBeforeDelete();
             delete playerBot;
             bot_creation++;
+            charCounts[accountId]++;
         }
     }
 
@@ -742,7 +815,7 @@ void RandomPlayerbotFactory::CreateRandomBots()
 
     for (uint32 accountId : sPlayerbotAIConfig.randomBotAccounts)
     {
-        totalRandomBotChars += AccountMgr::GetCharactersCount(accountId);
+        totalRandomBotChars += charCounts[accountId];
     }
 
     LOG_INFO("server.loading", ">> {} random bot accounts with {} characters available",
