@@ -15,8 +15,25 @@ Under `src/Bot/Engine/`:
 | `Multiplier` | `Multiplier.h` | `GetValue(Action*)` scales relevance; `0.0f` suppresses. |
 | `Value<T>` | `Value/Value.h` | Cached state calculators, read via `AI_VALUE` / `AI_VALUE2`. |
 
-`MovementAction` and `AttackAction` are siblings under `Action` — `MovementAction` exposes
-`MoveTo`/`FleePosition` but **not** `Attack`. Picking the wrong base silently limits the action.
+Hierarchy, verified — **`AttackAction : MovementAction`**, not siblings
+(`Ai/Base/Actions/AttackAction.h:16`):
+
+- `MovementAction : Action` → `AttackAction` (→ `DpsAssistAction`, `TankAssistAction`),
+  `FollowAction`, `FleeAction`, `RunAwayAction`, `ReachTargetAction`, `EnterVehicleAction`,
+  `LeaveVehicleAction`, `CombatFormationMoveAction` (→ `SetBehindTargetAction`), `AvoidAoeAction`
+- `CastSpellAction : Action` → `CastReachTargetSpellAction`, `CastDisengageAction`,
+  `CastBlinkBackAction`
+- `SetFacingTargetAction` and `DropTargetAction` are plain `Action`s, so facing survives a movement
+  lockout
+
+Only `AttackAction` exposes `Attack`, only `MovementAction` exposes `MoveTo`/`FleePosition`; picking
+the wrong base silently limits the action.
+
+**A blanket `MovementAction` veto therefore also kills targeting and vehicle boarding** — EoE's disk
+riders boarded and then sat still for a phase. Name the boss's own actions as exemptions. The two
+families are **disjoint**, which is what lets a multiplier suppressing only those two split on one
+`dynamic_cast` each way instead of a chain — see
+[raid-mechanics-lessons.md](raid-mechanics-lessons.md).
 
 ## The selection loop
 

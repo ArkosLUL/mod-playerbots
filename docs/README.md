@@ -8,14 +8,16 @@ changelog — git history covers that.
 
 | Directory | Holds |
 |---|---|
-| [engine/](engine/) | How the bot picks an ability, and the trap catalogue |
+| [engine/](engine/) | How the bot picks an ability, the trap catalogue, and cross-encounter lessons |
 | [systems/](systems/) | Cross-cutting subsystems: itemization, loot, consumables and burst |
 | [classes/](classes/) | Per-class rotation state: current ladders, decisions, open gaps |
 | [raids/](raids/) | Per-raid encounter knowledge, plus shared raid conventions |
 | [plans/](plans/) | In-flight work only — see below |
 
 **Start with [engine/pitfalls.md](engine/pitfalls.md)** if something silently does nothing. Most
-failures in this codebase produce no error at all.
+failures in this codebase produce no error at all. Before building a boss strategy — above all one
+with vehicles, formation movement, or twenty-five bots asking the same question — read
+[engine/raid-mechanics-lessons.md](engine/raid-mechanics-lessons.md).
 
 ## Keeping it that way
 

@@ -3,6 +3,9 @@
 Failure modes this codebase has already hit, grouped by shape. Most produce **no error** — the bot
 just quietly does nothing. Check this list before debugging "the trigger doesn't fire".
 
+Vehicle riders, oscillating movement, reach maths, coordination and per-raid cost have their own
+doc: [raid-mechanics-lessons.md](raid-mechanics-lessons.md).
+
 ## Names fail silently at runtime
 
 Everything is wired by string. Nothing here is a compile error.
@@ -53,6 +56,13 @@ must still outrank heals while the bot is unsheltered.
   points. Void Reaver's ranged never spread for this reason, and because
   `VoidReaverMaintainPositionsMultiplier` disables `CombatFormationMoveAction`, the spread action was
   the *only* thing that could position them — so they froze permanently.
+
+  Two qualifiers. The navmesh half cannot fire on a map with no `.mmtile` files — `CalculatePath`
+  short-circuits to a shortcut and every destination "paths" — but the height band still applies,
+  because `GetMapHeight` reads vmaps rather than the mesh. And the resulting
+  `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (`0x11`) equals neither `PATHFIND_NORMAL` nor
+  `PATHFIND_INCOMPLETE`, so any path-type test written with `==` rather than a mask rejects
+  everything there; `MoveToLOS` is written that way and has no callers.
 
   `FleePosition` (`MovementActions.cpp:2214`) picks a navmesh-validated destination via
   `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it, or pass the

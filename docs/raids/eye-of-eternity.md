@@ -36,6 +36,28 @@ transitions, which are both at 50%.
 
 `getMalygos` uses `FindNearestCreature` so detection survives the non-attackable flag.
 
+## No navmesh
+
+**Map 616 ships no `.mmtile` files at all** — only the 28-byte `616.mmap` header. It is the only
+one of the 98 maps in the client data like this, so nothing else in the module has met it.
+
+`PathGenerator::CalculatePath` bails at its `!HaveTile(start) || !HaveTile(dest)` guard, calls
+`BuildShortcut()` and reports `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (0x11) — whose own enum
+comment is "used when we are either flying/swiming or **on map w/o mmaps**". Three consequences:
+
+- **`generatePath` is inert here.** A shortcut path has exactly two points, and
+  `PointMovementGenerator` only uses a generated path when `GetPath().size() > 2`, so both settings
+  emit the same straight spline. Passing `false` is still right — it is explicit, and it survives
+  someone generating tiles for 616 later — but it is not what fixes anything today.
+- **The off-navmesh failure mode cannot happen on this map.** Raw ring geometry that would be
+  rejected elsewhere ([../engine/pitfalls.md](../engine/pitfalls.md)) always paths here. The *height*
+  half of `SearchForBestPath`'s check still applies, since `GetMapHeight` reads vmaps, not the mesh.
+- **Path-type tests must be bitmask, not equality.** `0x11` equals neither `PATHFIND_NORMAL` nor
+  `PATHFIND_INCOMPLETE`, so a `type != PATHFIND_NORMAL && type != PATHFIND_INCOMPLETE` test rejects
+  every path in this instance. `ReachCombatTo` and `SearchForBestPath` both mask correctly;
+  `MovementAction::MoveToLOS` does not, and would refuse to move at all here. It has no callers
+  today, so this is latent.
+
 ## Per-phase behaviour
 
 - **P1 — Power Sparks.** Previously fully stubbed: the trigger was registered but never bound, the DK
@@ -53,14 +75,25 @@ transitions, which are both at 50%.
   target list first, usually one 100 yd away, and stood there doing nothing while the boss went unhit.
   Melee dps take a spark that walks into them on its way past; the tank never switches, because
   dropping Malygos swings the Arcane Breath cone into whoever is behind him.
-  **The DK walks out to grip, then walks back.** Death Grip lands the spark *on the caster*, and a
-  killed spark leaves `SPELL_POWER_SPARK_GROUND_BUFF` (55852) on its corpse for a minute — so where
-  the DK stands decides who gets that buff, and gripping from the melee stack wastes it and drops the
-  spark inside the 12 yd at which `npc_power_spark` hands its buff to Malygos instead.
-  `POWER_SPARK_GRIP_OFFSET` is the midpoint of the raid stack and the hunter spot, which is the
-  best available spot without knowing 55852's radius — it maximises the smaller of the two
-  distances. It sits ~21 yd from where Malygos parks, so a spark dropped there still has 9 yd to walk
-  before it could reach him, against ~12k hp and the whole raid.
+  **The DK walks out to grip, then walks back.** Death Grip lands the spark *on the caster*, so
+  where the DK stands decides both who gets the corpse's buff and whether the spark ends up inside
+  the 12 yd at which `npc_power_spark` hands *its* buff to Malygos. `POWER_SPARK_GRIP_OFFSET` sits
+  ~21 yd from where Malygos parks, so a spark dropped there still has 9 yd to walk against ~12k hp
+  and the whole raid.
+
+  **Open gap — the grip spot reaches nobody.** A dying spark self-casts
+  `SPELL_POWER_SPARK_GROUND_BUFF` (55852) and despawns after 60 s (`boss_malygos.cpp:842`). 55852 is
+  a 60 s periodic-trigger aura firing **55849** once a second, and 55849 is what carries the payload:
+  `EffectRadiusIndex 14` = **8 yd**, aura 79 `MOD_DAMAGE_PERCENT_DONE`, misc 127, **+50% damage
+  done** to allies in that radius. The offset is `(MALYGOS_STACK_OFFSET + MALYGOS_HUNTER_OFFSET) / 2`
+  = −1 yd from centre, i.e. **13 yd from both** the stack and the hunters, so the buff currently
+  lands on nobody. It was chosen to maximise the smaller of the two distances back when the radius
+  was unknown; that reasoning is dead.
+
+  Retuning is not a one-line change, because the two constraints collide: the corpse wants to be
+  within 8 yd of the stack, while Malygos parks only ~8.5 yd from it (~+20.5 from centre against the
+  stack's +12) and takes the buff at 12. An offset around **+5 to +6** puts the corpse ~6 yd from the
+  stack and ~15 yd from him. Unverified in game.
   The split of duties matters: **`MalygosPositionAction` owns all the walking, `PullPowerSparkAction`
   only ever casts.** Both read `IsOnPowerSparkGripDuty`, so they cannot disagree about where the DK
   should be. Duty needs the grip off cooldown (the cooldown outlasts the gap between spawns, so there
@@ -82,8 +115,10 @@ transitions, which are both at 50%.
   instant `JustEngagedWith` fires, flies him in along that bearing to 35 yd out, and
   `EVENT_INTRO_LAND` drops him straight down. He idles between the four `FourSidesPos` corners, so
   there are only four answers: **−135.95°, +46.51°, +134.45°, −44.60°**
-  (`MALYGOS_LANDING_ANGLES`). The layout is one set of signed offsets from centre — positive towards
-  him — rotated onto whichever of those four is nearest to where he actually is:
+  (`MALYGOS_LANDING_ANGLES`), the bearings of `{686.417, 1235.52}`, `{828.182, 1379.05}`,
+  `{681.278, 1375.796}` and `{821.182, 1235.42}`. The layout is one set of signed offsets from
+  centre — positive towards him — rotated onto whichever of those four is nearest to where he
+  actually is:
   - `MALYGOS_MAINTANK_OFFSET` **+42 yd** — the Exit Portal sits 43.4 yd out on bearing 133.2°, and
     the platform GO is centred on `CenterPos`, so there is ground that far on any bearing. The portal
     is phased out by `DATA_HIDE_IRIS_AND_PORTAL` once the fight starts. Malygos' CombatReach of 20
@@ -140,21 +175,31 @@ transitions, which are both at 50%.
 - **P2 — the Arcane Overload bubbles are shelter, and the old code ran the wrong way.**
   `NPC_ARCANE_OVERLOAD` (30282) grants **56438, −50% damage taken**; the protected radius shrinks
   ~2 % per tick over the bubble's 45 s life, so bots hug the centre within 4 yd and ignore any bubble
-  already below `BUBBLE_MIN_USABLE_FACTOR` (35 %) of its original radius. The bubble NPC is
+  already below `BUBBLE_MIN_USABLE_FACTOR` (35 %) of its original radius. **The model does not
+  shrink with it** — the core declares 56435 and never casts it — so apparent size says nothing and
+  the only honest source is the aura's tick count, read off the `creature_template_addon` aura
+  applied at spawn (no aura means brand new). The bubble NPC is
   non-attackable, so it never shows in `"possible targets"` — scan with
   `GetCreatureListWithEntryInGrid`. `malygos seek bubble` sits at `ACTION_EMERGENCY + 2`, above
-  `avoid surge of power`, which is now only the fallback for bots that cannot reach one. The bubble
+  `avoid surge of power`, which is now only the fallback for bots that cannot reach one: it steps
+  off the line running from Malygos through the surge focus (`SURGE_BEAM_CLEAR_DISTANCE` to clear
+  it, `SURGE_BEAM_SIDESTEP` across), and it never fires for a disk rider or a sheltered bot, both of
+  whom are already covered and would be walked out of cover for the beam's whole 10 s. The bubble
   assignment is **latched by GUID** (the `SapphironFlightPositionAction` idiom) and spread by group
-  slot index, or bots hop between bubbles as they shrink. Once the bot holds 56438 the action returns
-  false so the rotation runs, and the phase-2 multiplier zeroes reach/chase/follow for non-vehicle
+  slot index, or bots hop between bubbles as they shrink — unless that slot's bubble is more than
+  half `BUBBLE_SEARCH_RADIUS` away, where survival beats spreading and the bot takes the nearest.
+  Once the bot holds 56438 the action returns false so the rotation runs, and the phase-2
+  multiplier zeroes reach/chase/follow for non-vehicle
   bots so nobody walks back out; `MalygosTargetAction` only accepts a Nexus Lord / Scion inside
   `spellDistance` by **`IsWithinCombatRange`**, the same 3d combat-reach test `Spell::CheckRange`
   runs — the Scions hover 20–30 yd up, and the old flat 2d distance claimed a reach that was not
-  there. Nexus Lords come first for everyone, including ranged DPS: they are on the
-  ground, can be tanked and die faster. Scions are what ranged fall back to once no Lord is in reach. Anti-fall recenter in
-  `malygos position` still applies, and it bails immediately for anyone in a vehicle. Note the old
-  code suppressed `FleeAction` wholesale in P2, removing the one instinct that might have pulled a
-  bot back from the edge.
+  there. A held add is kept **by GUID** while it is alive, still of the right kind and still in
+  reach; matching on entry alone welded bots to an add they could never get to, and re-picking every
+  tick made two equidistant Scions flip forever. Nexus Lords come first for everyone, ranged DPS
+  included: they are on the ground, can be tanked and die faster, and Scions are what ranged fall
+  back to once no Lord is in reach. Anti-fall recenter in `malygos position` still applies, and it
+  bails immediately for anyone in a vehicle. Note the old code suppressed `FleeAction` wholesale in
+  P2, removing the one instinct that might have pulled a bot back from the edge.
 - **P2 hover disks — melee only.** When a Nexus Lord dies the core lands its disk (30248), turns it
   friendly and clears `UNIT_FLAG_NOT_SELECTABLE`, so *landed + selectable + free seat* doubles as
   "its rider is dead". Melee DPS board it (`EnterVehicleAction`, which uses `HandleSpellClick` —
@@ -162,10 +207,17 @@ transitions, which are both at 50%.
   hover ~30 yd out and +20 yd up and are otherwise unreachable in melee. Passengers are immune to
   both Arcane Overload and Surge of Power, which is why tanks, ranged and healers stay in bubbles
   instead. `MalygosRideDiskAction` steers the vehicle's own `MotionMaster`, with a
-  `POINT_MOTION_TYPE` anti-stutter guard. Its `MovePoint` calls pass `generatePath = false`: the
-  mmap is 2d, so a generated path drops the destination onto the platform and the disk dives instead
-  of flying. Scion altitude is stable — the core floors a Scion disk's descent at `CenterPos.z + 20`
-  (`boss_malygos.cpp`, `MI_POINT_SCION`) — so a fixed target Z is safe.
+  `POINT_MOTION_TYPE` anti-stutter guard. Its `MovePoint` calls pass `generatePath = false`, which
+  on this map is belt-and-braces rather than the fix — see **No navmesh** below. What actually dove
+  the disk was `ReachCombatTo` running its endpoint through `UpdateAllowedPositionZ`, which clamps Z
+  to the platform floor; the multiplier lockout is what stops that. Scion altitude is stable — the
+  core floors a Scion disk's descent at `CenterPos.z + 20` (`boss_malygos.cpp`, `MI_POINT_SCION`) —
+  so a fixed target Z is safe. A rider only dismounts once
+  the disk is back down at `MALYGOS_PLATFORM_Z`; stepping off at Scion altitude is a 20–30 yd drop.
+  Ending the ride is manual — Scions can die before the Nexus Lords do and the core keeps the disks
+  until both are gone — and the descent is stamped straight over the approach in progress rather
+  than waiting for `POINT_MOTION_TYPE` to clear, because the disk is still flying at the Scion that
+  just died.
 - **P2 pets go on Nexus Lords, always.** Scions hover out of reach of any pet, and the generic
   pet-attack trigger is disabled globally, so a pet would chase its owner's airborne target forever.
   `MalygosTargetAction` redirects with `CommandPetAttack` / `StopPet` (`RaidBossHelpers`) at the top
@@ -189,7 +241,10 @@ transitions, which are both at 50%.
   `SetFacingToObject(boss)` and a `return false` handing the tick to the rotation. Everything a
   drake casts is aimed at the boss or at itself, so the facing pin applies to healers too.
   The action sits at `ACTION_EMERGENCY` — high because it is the *only* thing allowed to steer a
-  Skytalon, harmless because it stands down the moment the drake is parked.
+  Skytalon, harmless because it stands down the moment the drake is parked. Before the boss is in
+  reach there is nothing to anchor on, so the flight fans out behind the raid leader instead:
+  `DRAKE_FORMUP_RADIUS` out, spread over three quarters of a circle with a 90° frontal cone left
+  clear.
   Two earlier bugs died here: `MoveFollow` on the raid leader left every drake permanently in
   motion (a moving vehicle can neither finish a cast nor hold a facing — the flight circled the boss
   without ever firing), and `DrakeDpsAction`'s range-close called `MoveForwards`, whose endpoint
@@ -204,7 +259,8 @@ transitions, which are both at 50%.
   flight action pulled it back to a formation slot next to the field, and round it went. It is gone.
   `GetDrakeStackPoint` folds the hazard into the park spot instead: if the held heading is inside
   `STATIC_FIELD_CLEARANCE` of any field, it slides **around the boss** to another point on the
-  `DRAKE_STACK_RADIUS` ring, and the first heading that clears wins. Boxed in on every heading, it
+  `DRAKE_STACK_RADIUS` ring, and the first of `DRAKE_RING_HEADINGS` (24, so 15° apart) that clears
+  wins. Boxed in on every heading, it
   takes the roomiest one rather than sit in the field — the fields expire on their own. Staying on
   the ring is the point: an earlier version hopped 32 yd straight off the anchor toward whatever had
   the most clearance, and boss-ward was often that direction, which put the flight inside Arcane
@@ -244,7 +300,8 @@ transitions, which are both at 50%.
   generator is replaced by an idle one, so "not `POINT_MOTION_TYPE`" is the arrival signal.
   `issuedX`/`issuedY` track the *goal*, not the hop, and exist only to notice the goal itself moving:
   re-issuing `MovePoint` restarts the spline, so a drake handed the same destination every tick
-  crawls and never arrives.
+  crawls and never arrives; the goal has to move `DRAKE_DESTINATION_EPSILON` (2 yd) before it is
+  restamped.
 - **P3 — the healer split is a raid-size call, not a spec one.** Every drake carries the same
   spellbook, so `IsDrakeHealer` caps *and* floors: `DRAKE_HEALERS_25MAN` (5) / `DRAKE_HEALERS_10MAN`
   (2), filled from the bots flagged `IsHeal` in guid order and topped up from the dps if the raid
@@ -372,9 +429,11 @@ transitions, which are both at 50%.
   The latch spots a new fixate as a `DRAKE_FIXATE_GAP_MS` (2 s) gap
   in the trigger, so a drake the boss picks twice running reads as one long fixate and shields once
   for both — rare enough at one victim per 7 s cycle to be worth the simplicity.
-  **It is safe to fire mid-dodge**, which matters because Static Field lands *on* the flight: the
-  shield is a self-cast, so `CastVehicleSpell` skips both the branch that turns the vehicle onto a
-  target and the one that stops it dead, and it is instant. The action also returns false either way,
+  **It is safe to fire mid-dodge**, which matters because Static Field lands *on* the flight. Being
+  a self-cast skips the branch that turns the vehicle onto a target; the branch that stops the
+  vehicle dead is skipped only because the shield is instant. A Skytalon's seat (2200, `Flags`
+  0x62110817) does carry `VEHICLE_SEAT_FLAG_CAN_CONTROL`, so any drake spell given a cast time
+  would halt the dodge. The action also returns false either way,
   so `eoe fly drake` — directly below it at `ACTION_EMERGENCY` — still gets the tick and the dodge
   spline is not left half-flown.
 
@@ -394,8 +453,9 @@ riders board and then sit there doing nothing. `LeaveVehicleAction` is exempt as
 
 This strategy is cheap per bot and expensive per raid: twenty-five bots on one small platform were
 all asking the same questions every tick. Two things dominated — grid searches, which walk every
-cell (33 yd a side) inside their radius, and the role lookups behind the multiplier, where
-`IsMainTank` walks every group member and each check scans that member's strategy list.
+cell (`SIZE_OF_GRID_CELL`, 66.67 yd a side) inside their radius, and the role lookups behind the
+multiplier, where `IsMainTank` walks every group member and each check scans that member's strategy
+list.
 
 - **One creature cache for the whole instance.** `GetEoECreatures` / `GetNearestEoECreature` /
   `AnyEoECreature` (`EoETriggers.cpp`) answer from a `thread_local` map keyed by instance id and

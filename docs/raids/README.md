@@ -2,7 +2,9 @@
 
 Per-raid encounter knowledge lives in the sibling files. This holds what applies across all of them.
 Engine mechanics are in [../engine/action-selection.md](../engine/action-selection.md); the trap
-catalogue every boss strategy keeps rediscovering is [../engine/pitfalls.md](../engine/pitfalls.md).
+catalogue every boss strategy keeps rediscovering is [../engine/pitfalls.md](../engine/pitfalls.md);
+vehicles, movement stability, reach and per-raid cost are in
+[../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md).
 
 ## File layout and wiring
 
