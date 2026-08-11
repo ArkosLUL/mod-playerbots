@@ -1093,27 +1093,47 @@ void StatsWeightCalculator::ApplyWeightFinetune(Player* player)
     }
 }
 
+namespace
+{
+// Speed preference is a tiebreaker between comparable weapons, never a reason to keep a worse item:
+// the strong weight is for specs with a mechanic that actually scales off weapon speed, the weak one
+// for specs where everything normalises and the preference is cosmetic.
+constexpr float kSpeedWeightStrong = 0.15f;
+constexpr float kSpeedWeightWeak = 0.05f;
+
+// Ramp instead of a threshold. A hard cutoff let 100 ms decide the entire multiplier, so a 2.5s epic
+// scored below a 2.6s green.
+float PreferSlow(uint32 delay, uint32 lo, uint32 hi, float weight)
+{
+    float const t = (static_cast<float>(delay) - static_cast<float>(lo)) / static_cast<float>(hi - lo);
+    return 1.0f + weight * std::clamp(t, 0.0f, 1.0f);
+}
+
+float PreferFast(uint32 delay, uint32 lo, uint32 hi, float weight)
+{
+    float const t = (static_cast<float>(hi) - static_cast<float>(delay)) / static_cast<float>(hi - lo);
+    return 1.0f + weight * std::clamp(t, 0.0f, 1.0f);
+}
+}  // namespace
+
 float StatsWeightCalculator::ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot)
 {
-    // Multiply score by 3x when this weapon's delay matches the spec-ideal speed.
-    float weight = 2.0f;
-
     // Applies to mainhand, offhand, and ranged slots only.
     if (slot != EQUIPMENT_SLOT_MAINHAND &&
         slot != EQUIPMENT_SLOT_OFFHAND  &&
         slot != EQUIPMENT_SLOT_RANGED)
         return 1.0f;
 
-    uint32 delay = proto->Delay;  // milliseconds
-    float boost = 1.0f + weight;  // applied on a match
+    uint32 const delay = proto->Delay;  // milliseconds
+    bool const isTwoHand = proto->InventoryType == INVTYPE_2HWEAPON;
 
-    // Hunter: melee weapons are stat sticks — speed irrelevant.
-    // Ranged weapons scale Aimed/Chimera/Explosive Shot from top-end damage,
-    // so a slow ranged weapon (>=2600 ms) is strongly preferred.
+    // Hunter: melee weapons are stat sticks - speed irrelevant. Steady Shot adds the un-normalised
+    // ranged damage range plus ammo DPS times weapon speed, which is what makes a slow ranged weapon
+    // worth real damage - Aimed Shot normalises and Chimera/Explosive never touch weapon damage.
     if (cls == CLASS_HUNTER)
     {
-        if (slot == EQUIPMENT_SLOT_RANGED && delay >= 2600)
-            return boost;
+        if (slot == EQUIPMENT_SLOT_RANGED)
+            return PreferSlow(delay, 2600, 3000, kSpeedWeightStrong);
         return 1.0f;
     }
 
@@ -1121,108 +1141,87 @@ float StatsWeightCalculator::ApplyPreferredSpecWeapons(ItemTemplate const* proto
     if (cls == CLASS_DRUID && tab == DRUID_TAB_FERAL)
         return 1.0f;
 
+    // Frost DK dual-wields and every ability it uses normalises (1H to 2.4s, Killing Machine is PPM),
+    // so weapon speed changes nothing.
+    if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_FROST)
+        return 1.0f;
+
     switch (cls)
     {
+        // Deep Wounds bleeds for a share of un-normalised average weapon damage, so slow weapons are a
+        // real gain for every warrior spec. Poleaxe Specialization is handled separately off the aura -
+        // gating on axes here would push warriors who never took the talent onto them.
         case CLASS_WARRIOR:
             if (tab == WARRIOR_TAB_ARMS)
             {
-                // Arms: slow 2H axes or polearms in mainhand only (Axe Specialization: +5% crit).
-                bool isAxeOrPolearm = (proto->SubClass == ITEM_SUBCLASS_WEAPON_AXE2 ||
-                                       proto->SubClass == ITEM_SUBCLASS_WEAPON_POLEARM);
-                if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 3400 && isAxeOrPolearm)
-                    return boost;
+                if (slot == EQUIPMENT_SLOT_MAINHAND)
+                    return PreferSlow(delay, 3000, 3600, kSpeedWeightStrong);
             }
             else if (tab == WARRIOR_TAB_FURY)
             {
                 if (!player_->CanDualWield())
                 {
-                    // Pre-DW: treat like Arms — slow 2H in mainhand only.
-                    if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 3400)
-                        return boost;
+                    // Pre-DW: treat like Arms - slow 2H in mainhand only.
+                    if (slot == EQUIPMENT_SLOT_MAINHAND)
+                        return PreferSlow(delay, 3000, 3600, kSpeedWeightStrong);
                 }
                 else if (player_->CanTitanGrip())
                 {
-                    // Titan's Grip: slow 2H (>=3400) in both hands.
-                    if (delay >= 3400)
-                        return boost;
+                    // Titan's Grip: slow 2H in both hands.
+                    return PreferSlow(delay, 3000, 3600, kSpeedWeightStrong);
                 }
-                else
+                else if (!isTwoHand)
                 {
-                    // 1H DW: slow 1H (>=2600) in both hands.
-                    // 2H must be excluded — delay >= 2600 would otherwise pass
-                    // for a 2H heirloom (~3600ms) just as it did for Enhancement.
-                    if (proto->InventoryType == INVTYPE_2HWEAPON)
-                        break;
-                    if (delay >= 2600)
-                        return boost;
+                    // 1H DW: slow 1H in both hands. 2H excluded so a 2H heirloom can't ride the 1H ramp.
+                    return PreferSlow(delay, 2200, 2600, kSpeedWeightStrong);
                 }
             }
             else if (tab == WARRIOR_TAB_PROTECTION)
             {
-                // Prot: slow 1H (>=2600) in mainhand. Shield in offhand, no speed bonus.
-                if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 2600)
-                    return boost;
+                // Prot: slow 1H in mainhand. Shield in offhand, no speed preference.
+                if (slot == EQUIPMENT_SLOT_MAINHAND && !isTwoHand)
+                    return PreferSlow(delay, 2200, 2600, kSpeedWeightStrong);
             }
             break;
 
+        // Seals proc off PPM and every strike normalises, so paladin speed preference is cosmetic.
         case CLASS_PALADIN:
             if (tab == PALADIN_TAB_RETRIBUTION)
             {
-                // Ret: slow 2H in mainhand only.
-                if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 3400)
-                    return boost;
+                if (slot == EQUIPMENT_SLOT_MAINHAND)
+                    return PreferSlow(delay, 3000, 3600, kSpeedWeightWeak);
             }
             else if (tab == PALADIN_TAB_PROTECTION)
             {
-                // Prot: slow 1H (>=2600) in mainhand. Shield in offhand.
-                if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 2600)
-                    return boost;
+                if (slot == EQUIPMENT_SLOT_MAINHAND && !isTwoHand)
+                    return PreferSlow(delay, 2200, 2600, kSpeedWeightWeak);
             }
             break;
 
+        // Blood / Unholy want a 2H, but Heart Strike and Scourge Strike normalise to 3.3s, so speed
+        // within the 2H pool barely matters.
         case CLASS_DEATH_KNIGHT:
             if (tab == DEATH_KNIGHT_TAB_BLOOD || tab == DEATH_KNIGHT_TAB_UNHOLY)
             {
-                // Blood / Unholy: slow 2H in mainhand only.
-                if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 3400)
-                    return boost;
-            }
-            else if (tab == DEATH_KNIGHT_TAB_FROST)
-            {
-                // Frost DK has Dual Wield innately — always dual-wields 1H.
-                if (proto->InventoryType == INVTYPE_2HWEAPON)
-                    break;
-                if (delay >= 2600)
-                    return boost;
+                if (slot == EQUIPMENT_SLOT_MAINHAND)
+                    return PreferSlow(delay, 3000, 3600, kSpeedWeightWeak);
             }
             break;
 
+        // Windfury multiplies its AP bonus by weapon speed while the proc rate itself is PPM-normalised,
+        // so slow weapons are a genuine gain in both hands. Nothing rewards matching MH/OH speeds.
         case CLASS_SHAMAN:
             if (tab == SHAMAN_TAB_ENHANCEMENT)
             {
                 if (!player_->CanDualWield())
                 {
                     // Pre-Dual Wield: Enhancement plays like a 2H spec.
-                    if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 3400)
-                        return boost;
+                    if (slot == EQUIPMENT_SLOT_MAINHAND)
+                        return PreferSlow(delay, 3000, 3600, kSpeedWeightStrong);
                 }
-                else
+                else if (!isTwoHand)
                 {
-                    // Post-Dual Wield: slow 1H (>=2600) in both hands.
-                    if (proto->InventoryType == INVTYPE_2HWEAPON)
-                        break;
-
-                    if (delay >= 2600)
-                    {
-                        float mult = boost;
-                        if (slot == EQUIPMENT_SLOT_OFFHAND)
-                        {
-                            Item* mh = player_->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
-                            if (mh && mh->GetTemplate() && mh->GetTemplate()->Delay == delay)
-                                mult *= boost;  // synchronized: ×(1+weight)² total = ×9 for 2.0f weight
-                        }
-                        return mult;
-                    }
+                    return PreferSlow(delay, 2200, 2600, kSpeedWeightStrong);
                 }
             }
             break;
@@ -1230,19 +1229,21 @@ float StatsWeightCalculator::ApplyPreferredSpecWeapons(ItemTemplate const* proto
         case CLASS_ROGUE:
             if (tab == ROGUE_TAB_COMBAT)
             {
-                // Combat: slow MH (>=2600), fast OH (<=1500).
-                if (slot == EQUIPMENT_SLOT_MAINHAND && delay >= 2600)
-                    return boost;
-                if (slot == EQUIPMENT_SLOT_OFFHAND && delay <= 1500)
-                    return boost;
+                // Combat Potency refunds energy on a flat chance per off-hand hit, so more off-hand
+                // swings is real throughput. Mainhand only feeds normalised strikes.
+                if (slot == EQUIPMENT_SLOT_MAINHAND)
+                    return PreferSlow(delay, 2200, 2600, kSpeedWeightWeak);
+                if (slot == EQUIPMENT_SLOT_OFFHAND)
+                    return PreferFast(delay, 1300, 1800, kSpeedWeightStrong);
             }
-            else  // Assassination or Subtlety: slow dagger MH, fast dagger OH.
+            else  // Assassination / Subtlety: daggers, and daggers normalise to 1.7s.
             {
-                bool isDagger = (proto->SubClass == ITEM_SUBCLASS_WEAPON_DAGGER);
-                if (slot == EQUIPMENT_SLOT_MAINHAND && isDagger && delay >= 1700)
-                    return boost;
-                if (slot == EQUIPMENT_SLOT_OFFHAND && isDagger && delay <= 1500)
-                    return boost;
+                if (proto->SubClass != ITEM_SUBCLASS_WEAPON_DAGGER)
+                    break;
+                if (slot == EQUIPMENT_SLOT_MAINHAND)
+                    return PreferSlow(delay, 1400, 1800, kSpeedWeightWeak);
+                if (slot == EQUIPMENT_SLOT_OFFHAND)
+                    return PreferFast(delay, 1300, 1800, kSpeedWeightWeak);
             }
             break;
 

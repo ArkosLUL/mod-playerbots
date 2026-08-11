@@ -85,7 +85,7 @@ node's alternatives get pushed — harmless here (`heroic strike` → `melee`, `
 ### Gear
 
 `ApplyPreferredSpecWeapons` returned `1.0f` unless the slot was MAINHAND/OFFHAND/RANGED, and every
-runtime caller passed the default slot of −1 — so the 3× spec-speed bonus shaped initial factory
+runtime caller passed the default slot of −1 — so the spec-speed preference shaped initial factory
 gearing only. The slot is now threaded through `ItemUsageValue`, `EquipAction` and `BuyAction`. The
 vendor *sort* still scores without a slot, deliberately: candidates are ranked against each other
 there, not against an equipped piece. Server config was never involved.
