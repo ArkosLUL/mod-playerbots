@@ -18,16 +18,16 @@ public:
     {
         creators["malygos position"] = &RaidEoEActionContext::position;
         creators["malygos target"] = &RaidEoEActionContext::target;
-        creators["pull power spark"] = &RaidEoEActionContext::pull_power_spark;
-        creators["kill power spark"] = &RaidEoEActionContext::kill_power_spark;
+        creators["malygos pull power spark"] = &RaidEoEActionContext::pull_power_spark;
+        creators["malygos kill power spark"] = &RaidEoEActionContext::kill_power_spark;
         creators["malygos spellsteal"] = &RaidEoEActionContext::malygos_spellsteal;
         creators["malygos seek bubble"] = &RaidEoEActionContext::malygos_seek_bubble;
         creators["malygos board disk"] = &RaidEoEActionContext::malygos_board_disk;
         creators["malygos ride disk"] = &RaidEoEActionContext::malygos_ride_disk;
-        creators["avoid surge of power"] = &RaidEoEActionContext::avoid_surge_of_power;
+        creators["malygos avoid surge of power"] = &RaidEoEActionContext::avoid_surge_of_power;
         creators["eoe fly drake"] = &RaidEoEActionContext::eoe_fly_drake;
         creators["eoe drake attack"] = &RaidEoEActionContext::eoe_drake_attack;
-        creators["drake surge shield"] = &RaidEoEActionContext::drake_surge_shield;
+        creators["eoe drake surge shield"] = &RaidEoEActionContext::drake_surge_shield;
     }
 
 private:

@@ -5,7 +5,6 @@
  */
 
 #include "EoETriggers.h"
-#include "CreatureAI.h"
 #include "EoEActions.h"
 #include "InstanceScript.h"
 #include "ObjectAccessor.h"
@@ -22,11 +21,11 @@ namespace
 constexpr uint32 EOE_PHASE_CACHE_MS = 500;
 constexpr uint32 EOE_CREATURE_CACHE_MS = 300;
 
-// The sweep that fills the creature cache is anchored on whichever bot happened to refresh it, but
-// its answer goes to the whole raid, so it has to reach every creature in the fight from anywhere a
-// bot can be. Everything lives within ~60y of the platform centre and nothing, drakes included,
-// gets more than ~100y from it.
+// Deliberately wide: the fill is anchored on whichever bot refreshed it, but its answer
+// serves the whole raid.
 constexpr float EOE_CACHE_SWEEP_RADIUS = 200.0f;
+// Fallback when the instance script cannot hand over the boss guid.
+constexpr float EOE_BOSS_FALLBACK_SWEEP = 250.0f;
 
 struct PhaseCacheEntry
 {
@@ -40,24 +39,28 @@ struct CreatureCacheEntry
     std::vector<ObjectGuid> guids;
 };
 
-// getPhase is the entry point for every trigger in this strategy, for both of its per-tick actions
-// and for the multiplier, so an uncached call meant a dozen grid sweeps per bot per tick and the
-// raid crawled. Past the per-bot drake check the answer is identical for everyone in the instance,
-// so both caches key on the instance and one bot's work serves all twenty-five.
-// A bot is only ever updated from its own map's thread, so a thread_local cache needs no lock.
+// Past the per-bot drake check the answer is identical for the whole instance, so the caches below
+// key on the instance. thread_local needs no lock: a bot only updates on its own map thread. With
+// MapUpdate.Threads > 1 a map is not pinned to one worker, so an entry can be rebuilt on another
+// thread - all bots on a map still share a thread within any single tick, so they never disagree.
 thread_local std::unordered_map<uint32, PhaseCacheEntry> phaseCache;
 // Instance id in the high half, creature entry in the low half.
 thread_local std::unordered_map<uint64, CreatureCacheEntry> creatureCache;
+// Malygos' guid, so the whole strategy stops re-running the search behind getMalygos. No window:
+// the guid is resolved live on every read and dropped the moment it stops resolving to a live boss.
+thread_local std::unordered_map<uint32, ObjectGuid> bossCache;
 }
 
 namespace
 {
-// Guids of every live creature of `entry` in the bot's instance, refreshed at most once per window.
 // Empty and never refreshed off the Eye of Eternity map.
 std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
 {
     static std::vector<ObjectGuid> const none;
-    if (bot->GetMapId() != EOE_MAP_ID) { return none; }
+    if (bot->GetMapId() != EOE_MAP_ID)
+    {
+        return none;
+    }
 
     uint64 const key = (static_cast<uint64>(bot->GetInstanceId()) << 32) | entry;
     uint32 const now = getMSTime();
@@ -71,7 +74,10 @@ std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
         bot->GetCreatureListWithEntryInGrid(found, entry, EOE_CACHE_SWEEP_RADIUS);
         for (Creature* creature : found)
         {
-            if (creature->IsAlive()) { cached.guids.push_back(creature->GetGUID()); }
+            if (creature->IsAlive())
+            {
+                cached.guids.push_back(creature->GetGUID());
+            }
         }
     }
 
@@ -85,7 +91,10 @@ void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out)
     for (ObjectGuid const& guid : GetEoECreatureGuids(bot, entry))
     {
         Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
-        if (unit && unit->IsAlive()) { out.push_back(unit); }
+        if (unit && unit->IsAlive())
+        {
+            out.push_back(unit);
+        }
     }
 }
 
@@ -96,7 +105,10 @@ Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist)
     for (ObjectGuid const& guid : GetEoECreatureGuids(bot, entry))
     {
         Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
-        if (!unit || !unit->IsAlive()) { continue; }
+        if (!unit || !unit->IsAlive())
+        {
+            continue;
+        }
 
         float dist = bot->GetExactDist2d(unit);
         if (dist <= closestDist)
@@ -113,35 +125,69 @@ bool AnyEoECreature(Player* bot, uint32 entry)
     for (ObjectGuid const& guid : GetEoECreatureGuids(bot, entry))
     {
         Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
-        if (unit && unit->IsAlive()) { return true; }
+        if (unit && unit->IsAlive())
+        {
+            return true;
+        }
     }
     return false;
 }
 
 Unit* MalygosTrigger::getMalygos(Player* bot)
 {
-    // getPhase runs several times per bot per tick, and a 250y grid sweep is the most expensive
-    // thing in this strategy. The instance script already holds the guid, so ask it first.
+    ObjectGuid& cached = bossCache[bot->GetInstanceId()];
+    if (!cached.IsEmpty())
+    {
+        if (Unit* boss = ObjectAccessor::GetUnit(*bot, cached))
+        {
+            if (boss->IsAlive())
+            {
+                return boss;
+            }
+        }
+
+        cached.Clear();
+    }
+
+    // The instance script already holds the guid, so ask it before falling back to a grid sweep.
     if (InstanceScript* instance = bot->GetInstanceScript())
     {
-        // Guid lookup has no liveness filter of its own, unlike the search below it.
+        // Guid lookup has no liveness filter of its own, unlike the search below it. A dead boss
+        // ends the lookup here rather than paying for the sweep to tell us the same thing.
         if (Creature* boss = instance->GetCreature(EOE_DATA_MALYGOS))
         {
-            return boss->IsAlive() ? boss : nullptr;
+            if (!boss->IsAlive())
+            {
+                return nullptr;
+            }
+
+            cached = boss->GetGUID();
+            return boss;
         }
     }
 
-    return bot->FindNearestCreature(NPC_MALYGOS, 250.0f, true);
+    Unit* boss = bot->FindNearestCreature(NPC_MALYGOS, EOE_BOSS_FALLBACK_SWEEP, true);
+    if (boss)
+    {
+        cached = boss->GetGUID();
+    }
+    return boss;
 }
 
 uint8 MalygosTrigger::getPhase(Player* bot)
 {
-    if (bot->GetMapId() != EOE_MAP_ID) { return 0; }
+    if (bot->GetMapId() != EOE_MAP_ID)
+    {
+        return 0;
+    }
 
-    // Riding a Skytalon is the one part of the answer that differs between bots, so it is asked
-    // every time - it is a pointer read, not a search, and it has to come before the shared cache.
+    // Riding a Skytalon is the one per-bot part of the answer, so it is asked every time and has
+    // to come before the shared cache.
     Unit* drake = bot->GetVehicleBase();
-    if (drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON) { return 3; }
+    if (drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON)
+    {
+        return 3;
+    }
 
     uint32 const now = getMSTime();
     PhaseCacheEntry& cached = phaseCache[bot->GetInstanceId()];
@@ -153,7 +199,10 @@ uint8 MalygosTrigger::getPhase(Player* bot)
     cached.phase = 0;
 
     Unit* boss = getMalygos(bot);
-    if (!boss || !boss->IsInCombat()) { return 0; }
+    if (!boss || !boss->IsInCombat())
+    {
+        return 0;
+    }
 
     // P2: Malygos is airborne/untargetable while the disc adds are up.
     if (AnyEoECreature(bot, NPC_NEXUS_LORD) || AnyEoECreature(bot, NPC_SCION_OF_ETERNITY))
@@ -162,14 +211,13 @@ uint8 MalygosTrigger::getPhase(Player* bot)
         return 2;
     }
 
-    // Attackable with no adds and not on a drake -> Phase 1.
     if (!boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
     {
         cached.phase = 1;
         return 1;
     }
 
-    // In combat, non-attackable, no adds, not yet mounted -> P1->P2 / P2->P3 transition.
+    // P1->P2 / P2->P3 transition, and the pull intro.
     cached.phase = 4;
     return 4;
 }
@@ -182,29 +230,45 @@ bool MalygosTrigger::IsActive()
 
 bool PowerSparkTrigger::IsActive()
 {
-    if (MalygosTrigger::getPhase(bot) != 1) { return false; }
+    if (MalygosTrigger::getPhase(bot) != 1)
+    {
+        return false;
+    }
 
     return AnyEoECreature(bot, NPC_POWER_SPARK);
 }
 
 bool MalygosBubbleTrigger::IsActive()
 {
-    if (MalygosTrigger::getPhase(bot) != 2) { return false; }
+    if (MalygosTrigger::getPhase(bot) != 2)
+    {
+        return false;
+    }
 
-    // Disk riders are already immune to both Arcane Overload and Surge of Power damage.
-    if (bot->GetVehicle()) { return false; }
+    // Disk riders are already immune to both Arcane Overload and Surge of Power.
+    if (bot->GetVehicle())
+    {
+        return false;
+    }
 
-    // Fires again once the current bubble is nearly spent, so the bot walks to a fresh one before
-    // the old one despawns rather than after.
-    if (IsSafelySheltered(bot)) { return false; }
+    // Fires again once the current bubble is nearly spent, so the bot moves before it despawns.
+    if (IsSafelySheltered(bot))
+    {
+        return false;
+    }
 
     if (!botAI->IsRanged(bot) && !botAI->IsHeal(bot))
     {
-        // Melee and tanks owe the raid a dead Nexus Lord first, then a disk ride up to the Scions.
-        // They only take shelter once neither job is on offer - and the disk half only counts for
-        // bots that MalygosFreeDiskTrigger will actually let board.
-        if (GetNearestEoECreature(bot, NPC_NEXUS_LORD, BUBBLE_SEARCH_RADIUS)) { return false; }
-        if (IsEligibleDiskRider(bot) && AnyScionAlive(bot) && FindFreeHoverDisk(bot)) { return false; }
+        // Melee and tanks owe the raid a dead Nexus Lord and then a disk ride first; the disk half
+        // only counts for bots MalygosFreeDiskTrigger will actually let board.
+        if (GetNearestEoECreature(bot, NPC_NEXUS_LORD, BUBBLE_SEARCH_RADIUS))
+        {
+            return false;
+        }
+        if (IsEligibleDiskRider(bot) && AnyScionAlive(bot) && FindFreeHoverDisk(bot))
+        {
+            return false;
+        }
     }
 
     return GetNearestEoECreature(bot, NPC_ARCANE_OVERLOAD, BUBBLE_SEARCH_RADIUS) != nullptr;
@@ -212,12 +276,24 @@ bool MalygosBubbleTrigger::IsActive()
 
 bool MalygosFreeDiskTrigger::IsActive()
 {
-    if (MalygosTrigger::getPhase(bot) != 2) { return false; }
-    if (bot->GetVehicle()) { return false; }
-    if (!IsEligibleDiskRider(bot)) { return false; }
+    if (MalygosTrigger::getPhase(bot) != 2)
+    {
+        return false;
+    }
+    if (bot->GetVehicle())
+    {
+        return false;
+    }
+    if (!IsEligibleDiskRider(bot))
+    {
+        return false;
+    }
 
     // Don't climb back onto a disk the bot just got off because the Scions are dead.
-    if (!AnyScionAlive(bot)) { return false; }
+    if (!AnyScionAlive(bot))
+    {
+        return false;
+    }
 
     return FindFreeHoverDisk(bot) != nullptr;
 }
@@ -230,9 +306,12 @@ bool MalygosOnDiskTrigger::IsActive()
 
 bool SurgeOfPowerTrigger::IsActive()
 {
-    if (MalygosTrigger::getPhase(bot) != 2) { return false; }
+    if (MalygosTrigger::getPhase(bot) != 2)
+    {
+        return false;
+    }
 
-    if (GetNearestEoECreature(bot, NPC_SURGE_OF_POWER, 100.0f))
+    if (GetNearestEoECreature(bot, NPC_SURGE_OF_POWER, EOE_SURGE_SEARCH_RADIUS))
     {
         return true;
     }
@@ -249,27 +328,11 @@ bool MalygosDrakeFlightTrigger::IsActive()
 
 bool DrakeSurgeTrigger::IsActive()
 {
-    if (MalygosTrigger::getPhase(bot) != 3) { return false; }
-
-    Unit* drake = bot->GetVehicleBase();
-    if (!drake) { return false; }
-
-    Unit* boss = MalygosTrigger::getMalygos(bot);
-    if (!boss) { return false; }
-
-    Creature* bossCreature = boss->ToCreature();
-    if (!bossCreature || !bossCreature->AI()) { return false; }
-
-    // Both P3 surges are DoCastAOE with no unit target, so reading the spell's target guid always
-    // came back empty and this never fired once. The boss AI publishes the victims in its guid slots
-    // instead, and it does so 3s before the beam - the whole reaction window lives there.
-    // Only a victim burns Flame Shield and breaks formation; everyone else keeps the cooldown.
-    for (uint8 i = 0; i < EOE_NUM_MAX_SURGE_TARGETS; ++i)
+    if (MalygosTrigger::getPhase(bot) != 3)
     {
-        if (bossCreature->AI()->GetGUID(EOE_DATA_FIRST_SURGE_TARGET_GUID + i) == drake->GetGUID())
-        {
-            return true;
-        }
+        return false;
     }
-    return false;
+
+    // The healer rotation reads the same helper, so the two cannot disagree about who is hit.
+    return IsDrakeSurgeTarget(botAI);
 }

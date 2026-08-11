@@ -16,13 +16,13 @@ public:
     RaidEoETriggerContext()
     {
         creators["malygos"] = &RaidEoETriggerContext::malygos;
-        creators["power spark"] = &RaidEoETriggerContext::power_spark;
+        creators["malygos power spark"] = &RaidEoETriggerContext::power_spark;
         creators["malygos bubble"] = &RaidEoETriggerContext::malygos_bubble;
         creators["malygos free disk"] = &RaidEoETriggerContext::malygos_free_disk;
         creators["malygos on disk"] = &RaidEoETriggerContext::malygos_on_disk;
-        creators["surge of power"] = &RaidEoETriggerContext::surge_of_power;
+        creators["malygos surge of power"] = &RaidEoETriggerContext::surge_of_power;
         creators["malygos drake flight"] = &RaidEoETriggerContext::malygos_drake_flight;
-        creators["drake surge"] = &RaidEoETriggerContext::drake_surge;
+        creators["eoe drake surge"] = &RaidEoETriggerContext::drake_surge;
     }
 
 private:

@@ -19,14 +19,9 @@ public:
 private:
     void RefreshSnapshot();
 
-    // GetValue runs once per queued action per bot per tick, which is dozens of calls, and the role
-    // lookups behind it are not cheap - IsMainTank walks every group member and each check scans
-    // that member's strategy list. None of it changes between ticks, so it is resolved once per
-    // window and read from here. Strategy::InitMultipliers builds one of these per bot, so the
-    // snapshot is per bot with no sharing to worry about.
-    // The phase deliberately stays out of it: getPhase has its own cache, and stacking a second
-    // window on top would leave the multiplier applying the previous phase's rules for up to a
-    // second after the actions had moved on.
+    // GetValue runs once per queued action per bot per tick, and the role lookups behind it walk
+    // the whole group. The phase deliberately stays out: getPhase has its own window, and a
+    // second one on top would enforce the previous phase's rules after the actions moved on.
     uint32 snapshotAtMs = 0;
     bool isMainTank = false;
     bool isDps = false;

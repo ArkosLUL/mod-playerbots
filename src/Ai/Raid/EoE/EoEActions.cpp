@@ -5,6 +5,7 @@
  */
 
 #include "EoEActions.h"
+#include "CreatureAI.h"
 #include "EoETriggers.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
@@ -25,7 +26,7 @@ Unit* FindFreeHoverDisk(Player* bot)
     GetEoECreatures(bot, NPC_HOVER_DISK, disks);
 
     Unit* closest = nullptr;
-    // Seeded with the range a bot is willing to walk, so anything further out never wins.
+    // Sentinel: anything past the distance a bot will walk can never win.
     float closestDist = 40.0f;
     for (Unit* disk : disks)
     {
@@ -77,41 +78,72 @@ bool IsClearOfStaticFields(float x, float y, std::vector<Unit*> const& fields, f
     return true;
 }
 
+namespace
+{
+constexpr float TWO_PI = 2.0f * static_cast<float>(M_PI);
+
+// Instance ids are recycled, so a latch with no window eventually hands a fresh pull the previous
+// tenant's state. Far longer than any encounter, so it can never expire mid-fight.
+constexpr uint32 EOE_LATCH_STALE_MS = 5 * MINUTE * IN_MILLISECONDS;
+
+// Heading the flight holds on the ring, latched per instance. It only ever advances.
+struct DrakeStackAngle
+{
+    uint32 at = 0;
+    float angle = DRAKE_STACK_ANGLE;
+};
+
+thread_local std::unordered_map<uint32, DrakeStackAngle> stackAngleCache;
+}
+
 bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x, float& y, float& z)
 {
-    if (!bot->GetVehicleBase()) { return false; }
+    if (!bot->GetVehicleBase())
+    {
+        return false;
+    }
 
     Unit* boss = MalygosTrigger::getMalygos(bot);
-    if (!boss) { return false; }
+    if (!boss)
+    {
+        return false;
+    }
 
     float const bossX = boss->GetPositionX();
     float const bossY = boss->GetPositionY();
     z = MALYGOS_P3_BOSS_Z;
 
-    x = bossX + std::cos(DRAKE_STACK_ANGLE) * DRAKE_STACK_RADIUS;
-    y = bossY + std::sin(DRAKE_STACK_ANGLE) * DRAKE_STACK_RADIUS;
+    DrakeStackAngle& cachedAngle = stackAngleCache[bot->GetInstanceId()];
+    uint32 const nowMs = getMSTime();
+    if (cachedAngle.at && getMSTimeDiff(cachedAngle.at, nowMs) >= EOE_LATCH_STALE_MS)
+    {
+        cachedAngle.angle = DRAKE_STACK_ANGLE;
+    }
+    cachedAngle.at = nowMs;
 
-    if (IsClearOfStaticFields(x, y, fields, STATIC_FIELD_CLEARANCE)) { return true; }
+    float& held = cachedAngle.angle;
 
-    // A field has landed on the stack, so the flight slides off together rather than scattering.
-    // It slides *around* the boss, never across him or away from him: the replacement is another
-    // point on the same ring, so the dodge cannot walk the flight into Arcane Pulse or out of
-    // DRAKE_ATTACK_RANGE. An earlier version hopped a straight STATIC_FIELD_SAFE_RADIUS off the
-    // anchor in whichever direction had the most clearance, and boss-ward was often that direction.
-    // Headings are always walked the same way around the ring, and the first one that clears wins.
-    // Sweeping both ways found a nearer spot, but when the next field landed on it the answer often
-    // flipped to the far side of the anchor - straight back over the field the flight had just left.
-    // Going one way only, a second field can only ever push the flight further along.
-    uint8 const headings = 24;
-    float const step = 2.0f * static_cast<float>(M_PI) / headings;
+    x = bossX + std::cos(held) * DRAKE_STACK_RADIUS;
+    y = bossY + std::sin(held) * DRAKE_STACK_RADIUS;
+
+    if (IsClearOfStaticFields(x, y, fields, STATIC_FIELD_CLEARANCE))
+    {
+        return true;
+    }
+
+    // The dodge stays on the ring, so it can neither close on the boss nor lose range. It must
+    // not sweep backwards, and must not restart from DRAKE_STACK_ANGLE - either one reverses
+    // the whole formation when a field behind the flight expires.
+    float const step = TWO_PI / DRAKE_RING_HEADINGS;
 
     float bestClearance = 0.0f;
+    float bestAngle = held;
     float bestX = x;
     float bestY = y;
 
-    for (uint8 i = 1; i <= headings; ++i)
+    for (uint8 i = 1; i <= DRAKE_RING_HEADINGS; ++i)
     {
-        float const angle = DRAKE_STACK_ANGLE + static_cast<float>(i) * step;
+        float const angle = held + static_cast<float>(i) * step;
         float const cx = bossX + std::cos(angle) * DRAKE_STACK_RADIUS;
         float const cy = bossY + std::sin(angle) * DRAKE_STACK_RADIUS;
 
@@ -123,6 +155,7 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
 
         if (clearance >= STATIC_FIELD_CLEARANCE)
         {
+            held = std::remainder(angle, TWO_PI);
             x = cx;
             y = cy;
             return true;
@@ -131,28 +164,68 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
         if (clearance > bestClearance)
         {
             bestClearance = clearance;
+            bestAngle = angle;
             bestX = cx;
             bestY = cy;
         }
     }
 
-    // Every heading is covered. Take the roomiest one anyway rather than sit in the field - still
-    // on the ring, and the fields expire on their own in 20s.
+    // Boxed in: take the roomiest heading rather than sit in the field.
+    held = std::remainder(bestAngle, TWO_PI);
     x = bestX;
     y = bestY;
     return true;
+}
+
+void GetDrakeApproachPoint(Unit* drake, Unit* boss, float destX, float destY, float& x, float& y)
+{
+    x = destX;
+    y = destY;
+    if (!boss)
+    {
+        return;
+    }
+
+    float const bossX = boss->GetPositionX();
+    float const bossY = boss->GetPositionY();
+
+    float const from = std::atan2(drake->GetPositionY() - bossY, drake->GetPositionX() - bossX);
+    float const to = std::atan2(destY - bossY, destX - bossX);
+    float delta = std::remainder(to - from, TWO_PI);
+
+    // Forward-only is a dodge rule, and it only holds once the drake is on the ring, where the short
+    // way back runs through the field the stack just left. A drake still on its way to the ring is
+    // dodging nothing, and P3 spawns every drake on top of Malygos, where its heading off him is
+    // noise - sending those the long way round splits the flight into two arrival waves. A point less
+    // than a hop behind is drift off the stack rather than a dodge either way, so it flies straight
+    // back to it.
+    bool const onRing =
+        std::fabs(drake->GetExactDist2d(bossX, bossY) - DRAKE_STACK_RADIUS) <= DRAKE_STACK_TOLERANCE;
+    if (onRing && delta < -DRAKE_APPROACH_ARC)
+    {
+        delta += TWO_PI;
+    }
+
+    if (std::fabs(delta) <= DRAKE_APPROACH_ARC)
+    {
+        return;
+    }
+
+    float const angle = from + std::copysign(DRAKE_APPROACH_ARC, delta);
+    x = bossX + std::cos(angle) * DRAKE_STACK_RADIUS;
+    y = bossY + std::sin(angle) * DRAKE_STACK_RADIUS;
 }
 
 namespace
 {
 struct LayoutCacheEntry
 {
+    uint32 at = 0;
     bool latched = false;
     MalygosP1Layout layout;
 };
 
-// Keyed on the instance, like the phase and creature caches in EoETriggers.cpp, and thread_local for
-// the same reason: a bot is only ever updated from its own map's thread.
+// Keyed on the instance and thread_local: a bot is only updated from its own map's thread.
 thread_local std::unordered_map<uint32, LayoutCacheEntry> layoutCache;
 
 std::pair<float, float> MalygosP1Spot(float angle, float offset)
@@ -165,17 +238,24 @@ std::pair<float, float> MalygosP1Spot(float angle, float offset)
 MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
 {
     LayoutCacheEntry& cached = layoutCache[bot->GetInstanceId()];
+    uint32 const now = getMSTime();
+    if (cached.at && getMSTimeDiff(cached.at, now) >= EOE_LATCH_STALE_MS)
+    {
+        cached.latched = false;
+    }
+    cached.at = now;
 
-    // Out of combat the encounter is either not started or reset, so the next pull gets a fresh
-    // bearing. Nothing reads the layout in that state anyway.
     uint8 const phase = MalygosTrigger::getPhase(bot);
-    if (phase == 0) { cached.latched = false; }
-    else if (cached.latched) { return cached.layout; }
+    if (phase == 0)
+    {
+        cached.latched = false;
+    }
+    else if (cached.latched)
+    {
+        return cached.layout;
+    }
 
-    // Malygos is already committed to his landing bearing by the time bots see the intro:
-    // JustEngagedWith puts him in combat and schedules EVENT_INTRO_MOVE_CENTER in the same instant,
-    // and that snapshots the angle and flies him straight in along it. So the first resolve of the
-    // pull is the right one, and latching it stops the layout drifting as he chases the tank.
+    // He is committed to his bearing the instant JustEngagedWith fires, so latch the first one.
     float angle = MALYGOS_LANDING_ANGLES[0];
     if (Unit* boss = MalygosTrigger::getMalygos(bot))
     {
@@ -187,8 +267,7 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
             float closest = std::numeric_limits<float>::max();
             for (uint8 i = 0; i < MALYGOS_LANDING_ANGLE_COUNT; ++i)
             {
-                // Wrapped into [-pi, pi] so a bearing either side of the seam still picks its
-                // neighbour rather than the one three quarters of the way round.
+                // Wrapped into [-pi, pi] so a bearing either side of the seam picks its neighbour.
                 float diff = std::fabs(std::remainder(bearing - MALYGOS_LANDING_ANGLES[i],
                                                       2.0f * static_cast<float>(M_PI)));
                 if (diff < closest)
@@ -219,7 +298,10 @@ Unit* GetNearestPowerSpark(PlayerbotAI* botAI)
     for (auto& target : targets)
     {
         Unit* unit = botAI->GetUnit(target);
-        if (!unit || unit->GetEntry() != NPC_POWER_SPARK) { continue; }
+        if (!unit || unit->GetEntry() != NPC_POWER_SPARK)
+        {
+            continue;
+        }
 
         float dist = bot->GetExactDist2d(unit);
         if (dist < closestDist)
@@ -237,7 +319,10 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
 
     std::vector<Unit*> sparks;
     GetEoECreatures(bot, NPC_POWER_SPARK, sparks);
-    if (sparks.empty()) { return nullptr; }
+    if (sparks.empty())
+    {
+        return nullptr;
+    }
 
     Unit* boss = MalygosTrigger::getMalygos(bot);
     bool const ranged = botAI->IsRanged(bot);
@@ -253,13 +338,14 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
         }
         else
         {
-            // Melee only ever swing at a spark that has walked into them on its way to the boss, so
-            // the one they already have gets a couple of yards of grace before they drop it.
             inReach = bot->IsWithinMeleeRange(spark, currentTarget == spark ? POWER_SPARK_MELEE_STICKY : 0.0f);
         }
-        if (!inReach) { continue; }
+        if (!inReach)
+        {
+            continue;
+        }
 
-        // Whichever is closest to handing over its buff.
+        // Nearest to handing over its buff, not nearest to the bot.
         float const bossDist = boss ? boss->GetExactDist2d(spark) : bot->GetExactDist2d(spark);
         if (bossDist < bestBossDist)
         {
@@ -273,17 +359,22 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
 bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!bot->IsClass(CLASS_DEATH_KNIGHT) || bot->GetVehicle()) { return false; }
+    if (!bot->IsClass(CLASS_DEATH_KNIGHT) || bot->GetVehicle())
+    {
+        return false;
+    }
 
-    // Walking out costs boss uptime and the grip's cooldown outlasts the gap between spawns, so only
-    // leave when the pull is actually available.
     uint32 const gripId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", "death grip")->Get();
-    if (!gripId || !bot->HasSpell(gripId) || bot->HasSpellCooldown(gripId)) { return false; }
+    if (!gripId || !bot->HasSpell(gripId) || bot->HasSpellCooldown(gripId))
+    {
+        return false;
+    }
 
-    // The spot only works while the tank has Malygos where he belongs. If he has drifted onto the
-    // raid, dropping a spark on the raid drops it on him too.
     Unit* boss = MalygosTrigger::getMalygos(bot);
-    if (!boss) { return false; }
+    if (!boss)
+    {
+        return false;
+    }
 
     std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
     if (boss->GetExactDist2d(grip.first, grip.second) < POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE)
@@ -295,11 +386,20 @@ bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
     return spark && spark->GetExactDist2d(grip.first, grip.second) <= POWER_SPARK_GRIP_ENGAGE_RADIUS;
 }
 
-bool IsDrakeHealer(PlayerbotAI* botAI)
+void GetDrakeHealerGuids(PlayerbotAI* botAI, std::vector<ObjectGuid>& out)
 {
+    out.clear();
+
     Player* bot = botAI->GetBot();
     Group* group = bot->GetGroup();
-    if (!group) { return botAI->IsHeal(bot); }
+    if (!group)
+    {
+        if (botAI->IsHeal(bot))
+        {
+            out.push_back(bot->GetGUID());
+        }
+        return;
+    }
 
     uint8 const wanted =
         bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? DRAKE_HEALERS_25MAN : DRAKE_HEALERS_10MAN;
@@ -309,32 +409,228 @@ bool IsDrakeHealer(PlayerbotAI* botAI)
     for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
     {
         Player* member = itr->GetSource();
-        if (!member) { continue; }
+        if (!member)
+        {
+            continue;
+        }
 
         (botAI->IsHeal(member) ? healers : others).push_back(member->GetGUID());
     }
 
-    // Guid order is identical on every bot, so the whole flight agrees on the roster without talking.
+    // Guid order is identical on every bot, so the flight agrees on the roster without talking.
     std::sort(healers.begin(), healers.end());
     std::sort(others.begin(), others.end());
 
-    // Every drake carries the same spellbook, so this is a raid-size call rather than a spec one: cap
-    // the healers when the raid brought more than the flight needs, top up from the dps when it
-    // brought fewer. A raid stacked with healers used to put all of them on Revivify and the boss
-    // outlasted the phase.
     for (size_t i = 0; i < wanted && i < healers.size(); ++i)
     {
-        if (healers[i] == bot->GetGUID()) { return true; }
+        out.push_back(healers[i]);
     }
 
-    if (healers.size() >= wanted) { return false; }
+    if (out.size() >= wanted)
+    {
+        return;
+    }
 
-    size_t const shortfall = wanted - healers.size();
+    size_t const shortfall = wanted - out.size();
     for (size_t i = 0; i < shortfall && i < others.size(); ++i)
     {
-        if (others[i] == bot->GetGUID()) { return true; }
+        out.push_back(others[i]);
+    }
+}
+
+bool IsDrakeHealer(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers)
+{
+    return std::find(healers.begin(), healers.end(), botAI->GetBot()->GetGUID()) != healers.end();
+}
+
+void GetDrakeFlight(Player* bot, std::vector<Unit*>& drakes)
+{
+    drakes.clear();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        Unit* own = bot->GetVehicleBase();
+        if (own && own->GetEntry() == NPC_WYRMREST_SKYTALON)
+        {
+            drakes.push_back(own);
+        }
+        return;
+    }
+
+    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+    {
+        Player* member = itr->GetSource();
+        if (!member)
+        {
+            continue;
+        }
+
+        Unit* drake = member->GetVehicleBase();
+        if (!drake || !drake->IsAlive() || drake->GetEntry() != NPC_WYRMREST_SKYTALON)
+        {
+            continue;
+        }
+
+        drakes.push_back(drake);
+    }
+}
+
+uint32 DrakeAuraRemainingMs(Unit* drake, uint32 spellId)
+{
+    if (!drake)
+    {
+        return 0;
+    }
+
+    Aura* aura = drake->GetAura(spellId);
+    if (!aura)
+    {
+        return 0;
+    }
+
+    // Negative is a permanent aura, which none of these are.
+    int32 const remaining = aura->GetDuration();
+    return remaining > 0 ? static_cast<uint32>(remaining) : 0;
+}
+
+uint8 GetDrakeHealerRank(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers)
+{
+    Player* bot = botAI->GetBot();
+    Unit* own = bot->GetVehicleBase();
+    Group* group = bot->GetGroup();
+    if (!own || !group)
+    {
+        return 0;
+    }
+
+    ObjectGuid const ownGuid = bot->GetGUID();
+    uint32 const ownEnergy = own->GetPower(POWER_ENERGY);
+
+    uint8 rank = 0;
+    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
+    {
+        Player* member = itr->GetSource();
+        if (!member || member->GetGUID() == ownGuid)
+        {
+            continue;
+        }
+
+        if (std::find(healers.begin(), healers.end(), member->GetGUID()) == healers.end())
+        {
+            continue;
+        }
+
+        Unit* drake = member->GetVehicleBase();
+        if (!drake || !drake->IsAlive() || drake->GetEntry() != NPC_WYRMREST_SKYTALON)
+        {
+            continue;
+        }
+
+        uint32 const energy = drake->GetPower(POWER_ENERGY);
+        if (energy > ownEnergy || (energy == ownEnergy && member->GetGUID() < ownGuid))
+        {
+            ++rank;
+        }
+    }
+    return rank;
+}
+
+bool IsDrakeSurgeTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Unit* drake = bot->GetVehicleBase();
+    if (!drake)
+    {
+        return false;
+    }
+
+    Unit* boss = MalygosTrigger::getMalygos(bot);
+    if (!boss)
+    {
+        return false;
+    }
+
+    Creature* bossCreature = boss->ToCreature();
+    if (!bossCreature || !bossCreature->AI())
+    {
+        return false;
+    }
+
+    // Both P3 surges (57407, and 60936 in 25-man) are DoCastAOE with no unit target, so there is no
+    // spell target to read - the boss publishes its victims in guid slots instead.
+    for (uint8 i = 0; i < EOE_NUM_MAX_SURGE_TARGETS; ++i)
+    {
+        if (bossCreature->AI()->GetGUID(EOE_DATA_FIRST_SURGE_TARGET_GUID + i) == drake->GetGUID())
+        {
+            return true;
+        }
     }
     return false;
+}
+
+namespace
+{
+// Both come back -1 when there is no power cost worth checking, which callers read as yes.
+bool GetDrakeSpellCost(Unit* drake, uint32 spellId, int32& cost, int32& available)
+{
+    cost = -1;
+    available = -1;
+
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    if (!spellInfo)
+    {
+        return false;
+    }
+
+    // POWER_HEALTH is -2, which would index the power array out of bounds.
+    if (spellInfo->PowerType >= static_cast<uint32>(MAX_POWERS))
+    {
+        return true;
+    }
+
+    int32 const needed = spellInfo->CalcPowerCost(drake, spellInfo->GetSchoolMask());
+    if (needed <= 0)
+    {
+        return true;
+    }
+
+    cost = needed;
+    available = static_cast<int32>(drake->GetPower(Powers(spellInfo->PowerType)));
+    return true;
+}
+}
+
+bool DrakeCanAfford(Unit* drake, uint32 spellId)
+{
+    int32 cost = 0;
+    int32 available = 0;
+    if (!GetDrakeSpellCost(drake, spellId, cost, available))
+    {
+        return false;
+    }
+
+    return cost < 0 || available >= cost;
+}
+
+bool DrakeCanAffordWithShield(Unit* drake, uint32 spellId)
+{
+    int32 cost = 0;
+    int32 available = 0;
+    if (!GetDrakeSpellCost(drake, spellId, cost, available))
+    {
+        return false;
+    }
+    if (cost < 0)
+    {
+        return true;
+    }
+
+    int32 shieldCost = 0;
+    int32 shieldAvailable = 0;
+    GetDrakeSpellCost(drake, SPELL_FLAME_SHIELD, shieldCost, shieldAvailable);
+
+    return available >= cost + std::max(shieldCost, 0);
 }
 
 float GetBubbleShrinkFactor(Unit* bubble)
@@ -351,7 +647,7 @@ float GetBubbleShrinkFactor(Unit* bubble)
         return 1.0f;
     }
 
-    // Only the periodic effect counts ticks; the others sit at 0, so the max is the one we want.
+    // Only the periodic effect counts ticks; the others sit at 0.
     uint32 ticks = 0;
     for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
     {
@@ -372,7 +668,6 @@ bool IsSafelySheltered(Player* bot)
         return false;
     }
 
-    // The bot stands at its bubble's centre, so the nearest one is the one covering it.
     Unit* current = GetNearestEoECreature(bot, NPC_ARCANE_OVERLOAD, BUBBLE_SEARCH_RADIUS);
     return current && GetBubbleShrinkFactor(current) >= BUBBLE_MIN_USABLE_FACTOR;
 }
@@ -388,26 +683,17 @@ bool MalygosPositionAction::Execute(Event /*event*/)
     uint8 phase = MalygosTrigger::getPhase(bot);
     Unit* boss = MalygosTrigger::getMalygos(bot);
 
-    // Malygos flies an intro circuit before he touches down, and getPhase reports that as 4 - the
-    // same value the P1->P2 and P2->P3 gaps carry. He is untouchable for all of it, so full health
-    // is what tells the intro apart from those two. Holding the phase 1 spots through it puts the
-    // tank on his spot before the boss lands, instead of the centre gather dragging him off it and
-    // leaving him to walk back out through the raid once the fight is already running.
+    // getPhase reports the pull intro as 4, the same value the real transitions carry. He is
+    // untouchable throughout it, so full health is what tells them apart.
     bool const intro = phase == 4 && boss && boss->IsFullHealth();
 
     if (phase == 1 || intro)
     {
-        // Whoever Malygos is actually chewing on has to behave like the tank, even if the raid
-        // never assigned one - anyone else walking away would drag the boss and swing his cone.
-        // Not during the intro: he is pacified there and his victim is only whoever pulled.
+        // Whoever Malygos is chewing on behaves as the tank, assigned or not - but not in the intro,
+        // where he is pacified and his victim is only whoever pulled.
         bool isBossTank = botAI->IsMainTank(bot) || (!intro && boss && boss->GetVictim() == bot);
 
-        // Hunters hold their own spot well back: anything closer is inside Malygos' effective minimum
-        // range, which his CombatReach inflates to ~28y. Nothing else has one, so the rest of the
-        // ranged dps join the melee and the healers on the stack - out there they could not reach a
-        // Power Spark closing on the boss from the far side, and the stack keeps the tank inside heal
-        // range. A DK on spark duty steps out to the grip spot and comes back here once the grip is
-        // spent - this action owns the walking in both directions, PullPowerSparkAction only casts.
+        // This action owns the walking in both directions; PullPowerSparkAction only casts.
         bool const gripDuty = !isBossTank && IsOnPowerSparkGripDuty(botAI);
         MalygosP1Layout const& layout = GetMalygosP1Layout(bot);
         bool const hunter = botAI->IsRangedDps(bot) && bot->IsClass(CLASS_HUNTER);
@@ -421,14 +707,7 @@ bool MalygosPositionAction::Execute(Event /*event*/)
         float spotX = spot.first;
         float spotY = spot.second;
 
-        // The layout assumes Malygos stops ~21.5y short of the tank spot on the bearing he landed on.
-        // He does not always: his chase stops wherever it first brings him inside melee range of the
-        // tank, so coming in off-bearing can leave him far enough out that the melee half of the raid
-        // stands on the stack with nothing in reach. Pull the stack up the line towards him, and only
-        // as far as it takes to swing. It keeps the bearing the stack already holds from him, so it
-        // can never end up in front of him, and it slides with him instead of snapping between two
-        // spots - a spot that jumps is what sets a raid bouncing. Not during the intro: he is
-        // circling and untouchable.
+        // Slides continuously; a spot that snaps between two positions is what sets a raid bouncing.
         if (onStack && !intro && boss)
         {
             float const bossDist = boss->GetExactDist2d(spotX, spotY);
@@ -441,19 +720,13 @@ bool MalygosPositionAction::Execute(Event /*event*/)
             }
         }
 
-        // The tank and hunter spots stay put for the whole pull. The layout is picked once, off the
-        // bearing Malygos landed on, and never recomputed from where he happens to be standing: a
-        // spot that chases him flips to his far side whenever he is still on his way out, and the
-        // tank then ping-pongs between the edge and the middle, sweeping the cone through the raid.
         if (bot->GetDistance2d(spotX, spotY) > tolerance)
         {
             return MoveTo(EOE_MAP_ID, spotX, spotY, bot->GetPositionZ(),
                 false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
         }
 
-        // Parked. Keep the tank pointed at Malygos so he holds still and keeps facing north, and
-        // hand the tick back either way - this action outranks the class rotation, so owning the
-        // tick here would stop the bot attacking.
+        // Hand the tick back either way, or this outranks the rotation and the bot stops attacking.
         if (isBossTank && boss)
         {
             ServerFacade::instance().SetFacingTo(bot, boss);
@@ -462,16 +735,14 @@ bool MalygosPositionAction::Execute(Event /*event*/)
     }
     else if (phase == 2 || phase == 4)
     {
-        // Anti-fall: the platform edge drops into the void. Keep everyone inside a safe
-        // interior ring around the centre; also gathers the raid for the P3 drake mount.
         float const cx = MALYGOS_CENTER_POSITION.first;
         float const cy = MALYGOS_CENTER_POSITION.second;
-        float const safeRadius = 30.0f;
+        float const safeRadius = MALYGOS_ANTIFALL_RADIUS;
 
         float dist = bot->GetDistance2d(cx, cy);
         if (dist > safeRadius)
         {
-            float target = safeRadius - 3.0f;
+            float target = safeRadius - MALYGOS_ANTIFALL_INSET;
             float tx = cx;
             float ty = cy;
             if (dist > 0.01f)
@@ -495,19 +766,26 @@ bool MalygosTargetAction::Execute(Event /*event*/)
 
     if (phase == 1)
     {
-        if (botAI->IsHeal(bot)) { return false; }
-        if (!boss) { return false; }
+        if (botAI->IsHeal(bot))
+        {
+            return false;
+        }
+        if (!boss)
+        {
+            return false;
+        }
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-        // Any dps peels onto a spark it can actually hit from where it stands - melee get the ones
-        // that walk into them on the way to the boss. The tank never does: dropping Malygos swings
-        // his Arcane Breath cone through whoever is behind him.
+        // The tank never peels: dropping Malygos swings his Arcane Breath cone through the raid.
         Unit* newTarget = boss;
         bool const isBossTank = botAI->IsMainTank(bot) || boss->GetVictim() == bot;
         if (!isBossTank && botAI->IsDps(bot))
         {
-            if (Unit* spark = GetPowerSparkToKill(botAI, currentTarget)) { newTarget = spark; }
+            if (Unit* spark = GetPowerSparkToKill(botAI, currentTarget))
+            {
+                newTarget = spark;
+            }
         }
 
         if (!currentTarget || currentTarget->GetGUID() != newTarget->GetGUID())
@@ -517,9 +795,7 @@ bool MalygosTargetAction::Execute(Event /*event*/)
     }
     else if (phase == 2)
     {
-        // Scions hover 20-30y up where no pet can follow, so pets stay on the grounded Nexus Lords
-        // whatever their owner is shooting at. Runs before the early returns below so a disk rider's
-        // ghoul is covered too; CommandPetAttack no-ops once the pet is already on that target.
+        // Runs before the early returns below so a disk rider's ghoul is covered too.
         if (bot->GetGuardianPet())
         {
             if (Unit* petTarget = GetNearestEoECreature(bot, NPC_NEXUS_LORD))
@@ -532,21 +808,22 @@ bool MalygosTargetAction::Execute(Event /*event*/)
             }
         }
 
-        if (botAI->IsHeal(bot)) { return false; }
+        if (botAI->IsHeal(bot))
+        {
+            return false;
+        }
 
-        // Disk riders pick their own Scion in MalygosRideDiskAction.
-        if (bot->GetVehicle()) { return false; }
+        if (bot->GetVehicle())
+        {
+            return false;
+        }
 
         Unit* nexusLord = nullptr;
         Unit* scionOfEternity = nullptr;
         Unit* anyLord = nullptr;
         Unit* anyScion = nullptr;
 
-        // Ranged hold their bubble, so they prefer what can be hit from where they already stand -
-        // picking something out of reach just makes them walk out of shelter. The gate is
-        // IsWithinCombatRange, the same 3d combat-reach test Spell::CheckRange uses, because the
-        // Scions sit 20-30y above the platform and a flat 2d distance claims a reach that isn't
-        // there. Melee are still expected to walk to the Nexus Lords, so they get no distance gate.
+        // IsWithinCombatRange, not a flat 2d distance: the Scions sit 20-30y up. Melee get no gate.
         bool const gateByReach = botAI->IsRanged(bot);
         float const reach = sPlayerbotAIConfig.spellDistance;
         float closestLord = std::numeric_limits<float>::max();
@@ -558,42 +835,61 @@ bool MalygosTargetAction::Execute(Event /*event*/)
         for (auto& target : targets)
         {
             Unit* unit = botAI->GetUnit(target);
-            if (!unit) { continue; }
+            if (!unit)
+            {
+                continue;
+            }
 
             float dist = bot->GetExactDist(unit);
             bool inReach = !gateByReach || bot->IsWithinCombatRange(unit, reach);
 
             if (unit->GetEntry() == NPC_NEXUS_LORD)
             {
-                if (dist < closestAnyLord) { closestAnyLord = dist; anyLord = unit; }
-                if (inReach && dist < closestLord) { closestLord = dist; nexusLord = unit; }
+                if (dist < closestAnyLord)
+                {
+                    closestAnyLord = dist;
+                    anyLord = unit;
+                }
+                if (inReach && dist < closestLord)
+                {
+                    closestLord = dist;
+                    nexusLord = unit;
+                }
             }
             else if (unit->GetEntry() == NPC_SCION_OF_ETERNITY)
             {
-                if (dist < closestAnyScion) { closestAnyScion = dist; anyScion = unit; }
-                if (inReach && dist < closestScion) { closestScion = dist; scionOfEternity = unit; }
+                if (dist < closestAnyScion)
+                {
+                    closestAnyScion = dist;
+                    anyScion = unit;
+                }
+                if (inReach && dist < closestScion)
+                {
+                    closestScion = dist;
+                    scionOfEternity = unit;
+                }
             }
         }
 
-        // Nothing in reach at all: fall back to the nearest add anyway. Standing there with no
-        // target means the class rotation never fires once something does drift into range.
         if (!nexusLord && !scionOfEternity)
         {
             nexusLord = anyLord;
             scionOfEternity = anyScion;
         }
 
-        // Nexus Lords land, can be tanked and die faster, so they come first for everyone. Scions
-        // never land, which leaves them to ranged dps once no Lord is in reach.
         Unit* newTarget = nexusLord;
-        if (!newTarget && botAI->IsRangedDps(bot)) { newTarget = scionOfEternity; }
-        if (!newTarget) { return false; }
+        if (!newTarget && botAI->IsRangedDps(bot))
+        {
+            newTarget = scionOfEternity;
+        }
+        if (!newTarget)
+        {
+            return false;
+        }
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-        // Hold a live add of the right kind that is still in reach, so two equidistant Scions can't
-        // make the bot flip between them every tick. Anything else gets swapped by GUID - matching
-        // on entry alone left bots welded to an add they could never get to.
+        // Swapped by GUID, not entry: entry alone welded bots to an add they could never reach.
         if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == newTarget->GetEntry() &&
             (!gateByReach || bot->IsWithinCombatRange(currentTarget, reach)))
         {
@@ -611,12 +907,12 @@ bool MalygosTargetAction::Execute(Event /*event*/)
 
 bool PullPowerSparkAction::isUseful()
 {
-    if (!IsOnPowerSparkGripDuty(botAI)) { return false; }
+    if (!IsOnPowerSparkGripDuty(botAI))
+    {
+        return false;
+    }
 
-    // Cast from the spot or not at all. Death Grip lands the spark on the caster, so standing in the
-    // wrong place is worse than not gripping: the corpse's ground buff would land out of everyone's
-    // way, or the spark itself next to Malygos. Getting there is MalygosPositionAction's job, and
-    // this returns false while the walk is still going so it keeps the tick.
+    // Cast from the spot or not at all; the walk belongs to MalygosPositionAction.
     std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
     if (bot->GetDistance2d(grip.first, grip.second) > POWER_SPARK_GRIP_TOLERANCE)
     {
@@ -630,20 +926,27 @@ bool PullPowerSparkAction::isUseful()
 bool PullPowerSparkAction::Execute(Event /*event*/)
 {
     Unit* spark = GetNearestPowerSpark(botAI);
-    if (!spark) { return false; }
+    if (!spark)
+    {
+        return false;
+    }
 
     return botAI->CastSpell("death grip", spark);
 }
 
 bool KillPowerSparkAction::isUseful()
 {
-    // Any dps peels onto a spark, but only one it can reach standing still - nobody walks in P1, and
-    // a bot holding a target it can't touch is a bot doing nothing. The tank stays on Malygos so his
-    // threat and Arcane Breath cone don't swing into the raid, and DK grips are PullPowerSparkAction.
-    if (!botAI->IsDps(bot) || botAI->IsMainTank(bot)) { return false; }
+    // Only a spark reachable standing still - nobody walks in P1. DK grips are PullPowerSparkAction.
+    if (!botAI->IsDps(bot) || botAI->IsMainTank(bot))
+    {
+        return false;
+    }
 
     Unit* boss = MalygosTrigger::getMalygos(bot);
-    if (boss && boss->GetVictim() == bot) { return false; }
+    if (boss && boss->GetVictim() == bot)
+    {
+        return false;
+    }
 
     return GetPowerSparkToKill(botAI, AI_VALUE(Unit*, "current target")) != nullptr;
 }
@@ -653,7 +956,10 @@ bool KillPowerSparkAction::Execute(Event /*event*/)
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
     Unit* spark = GetPowerSparkToKill(botAI, currentTarget);
-    if (!spark) { return false; }
+    if (!spark)
+    {
+        return false;
+    }
 
     if (!currentTarget || currentTarget->GetGUID() != spark->GetGUID())
     {
@@ -664,8 +970,14 @@ bool KillPowerSparkAction::Execute(Event /*event*/)
 
 Unit* MalygosSpellstealAction::GetHastedLord()
 {
-    if (!bot->IsClass(CLASS_MAGE) || bot->GetVehicle()) { return nullptr; }
-    if (MalygosTrigger::getPhase(bot) != 2) { return nullptr; }
+    if (!bot->IsClass(CLASS_MAGE) || bot->GetVehicle())
+    {
+        return nullptr;
+    }
+    if (MalygosTrigger::getPhase(bot) != 2)
+    {
+        return nullptr;
+    }
 
     Unit* best = nullptr;
     float closest = std::numeric_limits<float>::max();
@@ -674,11 +986,19 @@ Unit* MalygosSpellstealAction::GetHastedLord()
     for (auto& target : targets)
     {
         Unit* unit = botAI->GetUnit(target);
-        if (!unit || unit->GetEntry() != NPC_NEXUS_LORD || !unit->IsAlive()) { continue; }
-        if (!unit->HasAura(SPELL_HASTE)) { continue; }
+        if (!unit || unit->GetEntry() != NPC_NEXUS_LORD || !unit->IsAlive())
+        {
+            continue;
+        }
+        if (!unit->HasAura(SPELL_HASTE))
+        {
+            continue;
+        }
 
-        // Staying in the bubble beats stealing, so only a Lord already in range counts.
-        if (!bot->IsWithinCombatRange(unit, sPlayerbotAIConfig.spellDistance)) { continue; }
+        if (!bot->IsWithinCombatRange(unit, sPlayerbotAIConfig.spellDistance))
+        {
+            continue;
+        }
 
         float dist = bot->GetExactDist(unit);
         if (dist < closest)
@@ -699,7 +1019,10 @@ bool MalygosSpellstealAction::isUseful()
 bool MalygosSpellstealAction::Execute(Event /*event*/)
 {
     Unit* lord = GetHastedLord();
-    if (!lord) { return false; }
+    if (!lord)
+    {
+        return false;
+    }
 
     return botAI->CastSpell("spellsteal", lord);
 }
@@ -711,14 +1034,12 @@ bool MalygosSeekBubbleAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Sheltered in a bubble with life left - hand the tick back so the dps/heal rotation runs.
     if (IsSafelySheltered(bot))
     {
         return false;
     }
 
-    // Arcane Overload is non-attackable, so it never shows up in "possible targets"; the shared
-    // creature cache is what stands in for a per-bot grid sweep.
+    // Arcane Overload is non-attackable, so it never shows up in "possible targets".
     std::vector<Unit*> found;
     GetEoECreatures(bot, NPC_ARCANE_OVERLOAD, found);
 
@@ -741,8 +1062,6 @@ bool MalygosSeekBubbleAction::Execute(Event /*event*/)
         return a->GetGUID().GetRawValue() < b->GetGUID().GetRawValue();
     });
 
-    // Bubbles shrink from the moment they land, so an old one is not worth walking to even though
-    // its model still looks full size.
     std::vector<Unit*> usable;
     for (Unit* bubble : bubbles)
     {
@@ -752,7 +1071,6 @@ bool MalygosSeekBubbleAction::Execute(Event /*event*/)
         }
     }
 
-    // Every bubble is nearly spent: take the freshest anyway rather than stand in the open.
     if (usable.empty())
     {
         usable.push_back(*std::max_element(bubbles.begin(), bubbles.end(), [](Unit* a, Unit* b)
@@ -764,7 +1082,6 @@ bool MalygosSeekBubbleAction::Execute(Event /*event*/)
     Unit* target = nullptr;
     if (!assignedBubbleGuid.IsEmpty())
     {
-        // Drop the latch once the assigned bubble ages out, so the bot re-picks a fresh one.
         for (Unit* bubble : usable)
         {
             if (bubble->GetGUID() == assignedBubbleGuid)
@@ -777,11 +1094,9 @@ bool MalygosSeekBubbleAction::Execute(Event /*event*/)
 
     if (!target)
     {
-        // Spread the raid over the bubbles that are up rather than piling everyone on the nearest.
         uint32 index = static_cast<uint32>(std::max(0, botAI->GetGroupSlotIndex(bot)));
         target = usable[index % usable.size()];
 
-        // ...unless the round-robin pick is across the room, in which case survival beats spreading.
         if (bot->GetExactDist2d(target) > BUBBLE_SEARCH_RADIUS / 2.0f)
         {
             for (Unit* bubble : usable)
@@ -795,7 +1110,6 @@ bool MalygosSeekBubbleAction::Execute(Event /*event*/)
         assignedBubbleGuid = target->GetGUID();
     }
 
-    // Hug the centre: the protected radius shrinks about 2% per tick over the bubble's 45s life.
     return MoveTo(EOE_MAP_ID, target->GetPositionX(), target->GetPositionY(), bot->GetPositionZ(),
         false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
 }
@@ -841,15 +1155,13 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
 
     MotionMaster* mm = disk->GetMotionMaster();
 
-    // Scions can die before the Nexus Lords do, and the core only despawns the P2 summons once both
-    // are gone - so the ride has to be ended by hand or the bot idles in the air until the phase
-    // ends. Fly back down over the platform first; stepping off 20-30y up is a long drop.
+    // The core keeps the P2 summons until both add types are dead, so the ride is ended by hand.
+    // Fly back down first; stepping off at Scion altitude is a long drop.
     if (!scion)
     {
         if (disk->GetPositionZ() > MALYGOS_PLATFORM_Z + 5.0f)
         {
-            // The disk is probably still running the approach to the Scion that just died, so the
-            // descent has to be stamped over it once rather than waiting for POINT to clear.
+            // Stamped over the approach in progress rather than waiting for POINT to clear.
             if (!descending || mm->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
             {
                 mm->Clear(false);
@@ -862,7 +1174,6 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
             return true;
         }
 
-        // The core lands the disk itself once the passenger is gone.
         Vehicle* myVehicle = bot->GetVehicle();
         VehicleSeatEntry const* seat = myVehicle ? myVehicle->GetSeatForPassenger(bot) : nullptr;
         if (!seat || !seat->CanEnterOrExit())
@@ -877,11 +1188,10 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
 
     descending = false;
 
-    float const reach = 3.0f;
+    float const reach = DISK_APPROACH_REACH;
 
-    if (closestDist > reach + 2.0f)
+    if (closestDist > reach + DISK_APPROACH_TOLERANCE)
     {
-        // Let an in-progress approach finish instead of restamping the destination every tick.
         if (mm->GetCurrentMovementGeneratorType() == POINT_MOTION_TYPE)
         {
             return true;
@@ -900,8 +1210,7 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
         float tx = scion->GetPositionX() + dx / len * reach;
         float ty = scion->GetPositionY() + dy / len * reach;
 
-        // Straight 3d spline, never a terrain path: the mmap is 2d, so a generated path drops the
-        // destination onto the platform and the disk dives 25y instead of flying to the Scion.
+        // Straight 3d spline: a generated path is 2d and drops the destination onto the platform.
         mm->Clear(false);
         mm->MovePoint(0, tx, ty, scion->GetPositionZ(), FORCED_MOVEMENT_NONE, 0.f, 0.f,
                       /*generatePath*/ false, /*forceDestination*/ true);
@@ -918,27 +1227,23 @@ bool MalygosRideDiskAction::Execute(Event /*event*/)
         return Attack(scion);
     }
 
-    // In range and already on it - let the class rotation take the tick.
     return false;
 }
 
 bool AvoidSurgeOfPowerAction::Execute(Event /*event*/)
 {
-    // Disk riders are immune to the surge, and a bubble already halves it - walking either of them
-    // out of cover is strictly worse than eating the beam, and the bubbles sit close enough to the
-    // centre that MoveAway would do exactly that for the beam's whole 10s life.
+    // Riders and sheltered bots are already covered; peeling would only walk them out of it.
     if (bot->GetVehicle() || IsSafelySheltered(bot))
     {
         return false;
     }
 
-    // Surge of Power's focus unit is non-attackable too; find it directly like SurgeOfPowerTrigger.
-    Unit* surge = GetNearestEoECreature(bot, NPC_SURGE_OF_POWER, 100.0f);
+    Unit* surge = GetNearestEoECreature(bot, NPC_SURGE_OF_POWER, EOE_SURGE_SEARCH_RADIUS);
 
     // The beam runs from Malygos through the surge focus; stepping off that line clears it.
-    if (surge && bot->GetExactDist2d(surge) < 12.0f)
+    if (surge && bot->GetExactDist2d(surge) < SURGE_BEAM_CLEAR_DISTANCE)
     {
-        return MoveAway(surge, 6.0f);
+        return MoveAway(surge, SURGE_BEAM_SIDESTEP);
     }
 
     return false;
@@ -952,12 +1257,13 @@ bool EoEFlyDrakeAction::isPossible()
 bool EoEFlyDrakeAction::Execute(Event /*event*/)
 {
     Unit* drake = bot->GetVehicleBase();
-    if (!drake) { return false; }
+    if (!drake)
+    {
+        return false;
+    }
 
     MotionMaster* mm = drake->GetMotionMaster();
 
-    // Resolving the stack point costs a grid sweep for the Static Fields. It only moves when one
-    // lands on it and they land 12s apart, so the answer keeps for a second.
     if (!stackCalcAtMs || GetMSTimeDiffToNow(stackCalcAtMs) >= DRAKE_STACK_RECALC_MS)
     {
         std::vector<Unit*> fields;
@@ -966,23 +1272,26 @@ bool EoEFlyDrakeAction::Execute(Event /*event*/)
         stackCalcAtMs = getMSTime();
     }
 
-    // The whole flight parks on that one point. Trailing the raid leader left every drake
-    // permanently in motion, and a moving vehicle can neither finish a cast nor hold a facing -
-    // which is why the flight used to circle the boss without ever firing at him.
     if (stackValid)
     {
+        Unit* boss = MalygosTrigger::getMalygos(bot);
+
         if (drake->GetExactDist(stackX, stackY, stackZ) > DRAKE_STACK_TOLERANCE)
         {
             bool const sameSpot =
-                issued && std::fabs(stackX - issuedX) < 2.0f && std::fabs(stackY - issuedY) < 2.0f;
+                issued && std::fabs(stackX - issuedX) < DRAKE_DESTINATION_EPSILON &&
+                std::fabs(stackY - issuedY) < DRAKE_DESTINATION_EPSILON;
 
+            // A finished leg takes the point generator with it, so not-POINT means the next leg is due.
             if (!sameSpot || mm->GetCurrentMovementGeneratorType() != POINT_MOTION_TYPE)
             {
-                // Straight 3d spline for the same reason the hover disks use one: a generated path
-                // is 2d and drops the destination onto whatever is underneath.
+                float legX, legY;
+                GetDrakeApproachPoint(drake, boss, stackX, stackY, legX, legY);
+
+                // Straight 3d spline, same reason as the hover disks.
                 drake->SetCanFly(true);
                 mm->Clear(false);
-                mm->MovePoint(0, stackX, stackY, stackZ, FORCED_MOVEMENT_NONE, 0.f, 0.f,
+                mm->MovePoint(0, legX, legY, stackZ, FORCED_MOVEMENT_NONE, 0.f, 0.f,
                               /*generatePath*/ false, /*forceDestination*/ true);
                 drake->SendMovementFlagUpdate();
                 issuedX = stackX;
@@ -1000,30 +1309,40 @@ bool EoEFlyDrakeAction::Execute(Event /*event*/)
             drake->SendMovementFlagUpdate();
         }
 
-        // Everything a drake casts is aimed either at the boss or at itself, so it can stay pinned
-        // on him - a heal never needs the vehicle turned.
-        if (Unit* boss = MalygosTrigger::getMalygos(bot))
+        // Everything a drake casts is aimed at the boss or itself, so healers can stay pinned too.
+        if (boss)
         {
-            if (!drake->HasInArc(CAST_ANGLE_IN_FRONT, boss)) { drake->SetFacingToObject(boss); }
+            if (!drake->HasInArc(CAST_ANGLE_IN_FRONT, boss))
+            {
+                drake->SetFacingToObject(boss);
+            }
         }
 
-        // Parked and pointed the right way - hand the tick to the drake rotation.
+        // Parked - hand the tick to the drake rotation.
         return false;
     }
 
     // No boss in reach yet: the flight is still forming up, so fan out behind the raid leader.
     Player* master = botAI->GetMaster();
-    if (!master) { return false; }
+    if (!master)
+    {
+        return false;
+    }
     Unit* masterVehicle = master->GetVehicleBase();
-    if (!masterVehicle) { return false; }
+    if (!masterVehicle)
+    {
+        return false;
+    }
 
-    if (drake->GetExactDist(masterVehicle) > 20.0f)
+    if (drake->GetExactDist(masterVehicle) > DRAKE_FORMUP_RADIUS)
     {
         uint8 const numPlayers = bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? 25 : 10;
         // 3/4 of a circle, with a 90 deg frontal cone left clear
-        float angle = botAI->GetGroupSlotIndex(bot) * (2*M_PI - M_PI_2)/numPlayers + M_PI_2;
+        float const quarter = static_cast<float>(M_PI_2);
+        float const angle = static_cast<float>(botAI->GetGroupSlotIndex(bot)) * (TWO_PI - quarter) /
+                                static_cast<float>(numPlayers) + quarter;
         drake->SetCanFly(true);
-        mm->MoveFollow(masterVehicle, 15.0f, angle);
+        mm->MoveFollow(masterVehicle, DRAKE_FORMUP_SPREAD, angle);
         drake->SendMovementFlagUpdate();
         return true;
     }
@@ -1038,16 +1357,20 @@ bool EoEDrakeAttackAction::isPossible()
 
 bool EoEDrakeAttackAction::Execute(Event /*event*/)
 {
-    vehicleBase = bot->GetVehicleBase();
-    if (!vehicleBase)
+    Unit* drake = bot->GetVehicleBase();
+    if (!drake)
     {
         return false;
     }
 
-    // Healers only ever cast on their own drake, so they need no boss resolved at all.
-    if (IsDrakeHealer(botAI))
+    // Derived once: the roster walk sorts the whole group, and the heal branch reads it twice.
+    std::vector<ObjectGuid> healers;
+    GetDrakeHealerGuids(botAI, healers);
+
+    // Healers only ever cast on their own drake, so they need no boss at all.
+    if (IsDrakeHealer(botAI, healers))
     {
-        return DrakeHealAction();
+        return DrakeHealAction(drake, healers);
     }
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "malygos");
@@ -1071,62 +1394,160 @@ bool EoEDrakeAttackAction::Execute(Event /*event*/)
         return false;
     }
 
-    return DrakeDpsAction(boss);
+    return DrakeDpsAction(drake, boss);
 }
 
-bool EoEDrakeAttackAction::CastDrakeSpellAction(Unit* target, uint32 spellId, uint32 cooldown)
+bool EoEDrakeAttackAction::CastDrakeSpellAction(Unit* drake, Unit* target, uint32 spellId)
 {
-    if (botAI->CanCastVehicleSpell(spellId, target))
-        if (botAI->CastVehicleSpell(spellId, target))
-        {
-            vehicleBase->AddSpellCooldown(spellId, 0, cooldown);
-            return true;
-        }
-    return false;
-}
-
-bool EoEDrakeAttackAction::DrakeDpsAction(Unit* target)
-{
-    Unit* drake = bot->GetVehicleBase();
-    if (!drake) { return false; }
-
-    // Closing the gap belongs to EoEFlyDrakeAction and nothing else. Steering the same vehicle from
-    // here as well left the two fighting over the destination, and MoveForwards runs its endpoint
-    // through CanReachPositionAndGetValidCoords, which has no answer for a point in mid-air - so the
-    // drake stopped dead and stayed out of range for good.
-    if (drake->GetExactDist(target) > DRAKE_ATTACK_RANGE) { return false; }
-
-    uint8 comboPoints = drake->GetComboPoints(target);
-    if (comboPoints >= DRAKE_ENGULF_COMBO)
-    {
-        return CastDrakeSpellAction(target, SPELL_ENGULF_IN_FLAMES, 0);
-    }
-    else
-    {
-        return CastDrakeSpellAction(target, SPELL_FLAME_SPIKE, 0);
-    }
-}
-
-bool EoEDrakeAttackAction::DrakeHealAction()
-{
-    Unit* drake = bot->GetVehicleBase();
-    if (!drake)
+    if (!botAI->CanCastVehicleSpell(spellId, target) || !botAI->CastVehicleSpell(spellId, target))
     {
         return false;
     }
 
-    // Revivify is a heal over time and every cast banks a combo point; Life Burst spends five of
-    // them as a heal centred on the caster that reaches the whole flight. Both stay on our own
-    // drake. A unit holds combo points for one target at a time, so chasing whoever is lowest
-    // resets the count to one every time it switches and the finisher never comes up - and with the
-    // flight stacked, a self-cast Life Burst covers the same drakes anyway.
-    // CanCastVehicleSpell reports BAD_TARGETS on a drake, so both go out unchecked.
-    if (drake->GetComboPoints() >= DRAKE_LIFE_BURST_COMBO)
+    drake->AddSpellCooldown(spellId, 0, 0);
+    return true;
+}
+
+bool EoEDrakeAttackAction::DrakeDpsAction(Unit* drake, Unit* target)
+{
+    // Closing the gap belongs to EoEFlyDrakeAction alone: two owners fight over the destination,
+    // and MoveForwards has no answer for a point in mid-air.
+    if (drake->GetExactDist(target) > DRAKE_ATTACK_RANGE)
+    {
+        return false;
+    }
+
+    uint8 comboPoints = drake->GetComboPoints(target);
+
+    if (IsDrakeSurgeTarget(botAI))
+    {
+        // Fixated: spend the bank while the bar still covers the shield, rebuild, then let it climb.
+        if (comboPoints >= DRAKE_ENGULF_COMBO && DrakeCanAffordWithShield(drake, SPELL_ENGULF_IN_FLAMES))
+        {
+            return CastDrakeSpellAction(drake, target, SPELL_ENGULF_IN_FLAMES);
+        }
+
+        // At zero the shield has nothing to spend, so that point is worth going under the reserve.
+        if (comboPoints < DRAKE_SHIELD_RESERVE_COMBO &&
+            (!comboPoints || DrakeCanAffordWithShield(drake, SPELL_FLAME_SPIKE)))
+        {
+            return CastDrakeSpellAction(drake, target, SPELL_FLAME_SPIKE);
+        }
+
+        return false;
+    }
+
+    if (comboPoints >= DRAKE_ENGULF_COMBO)
+    {
+        return CastDrakeSpellAction(drake, target, SPELL_ENGULF_IN_FLAMES);
+    }
+    else
+    {
+        return CastDrakeSpellAction(drake, target, SPELL_FLAME_SPIKE);
+    }
+}
+
+bool EoEDrakeAttackAction::DrakeHealAction(Unit* drake, std::vector<ObjectGuid> const& healers)
+{
+    // Both stay on our own drake: combo points are held for one target at a time, so chasing the
+    // lowest resets the count. DrakeCanAfford stands in for the BAD_TARGETS-reporting check.
+    if (IsDrakeSurgeTarget(botAI))
+    {
+        uint8 const comboPoints = drake->GetComboPoints();
+        if (comboPoints >= DRAKE_LIFE_BURST_COMBO && DrakeCanAffordWithShield(drake, SPELL_LIFE_BURST))
+        {
+            return botAI->CastVehicleSpell(SPELL_LIFE_BURST, drake);
+        }
+
+        if (comboPoints < DRAKE_SHIELD_RESERVE_COMBO &&
+            (!comboPoints || DrakeCanAffordWithShield(drake, SPELL_REVIVIFY)))
+        {
+            return botAI->CastVehicleSpell(SPELL_REVIVIFY, drake);
+        }
+
+        return false;
+    }
+
+    if (drake->GetComboPoints() < DRAKE_LIFE_BURST_COMBO)
+    {
+        if (!DrakeCanAfford(drake, SPELL_REVIVIFY))
+        {
+            return false;
+        }
+
+        return botAI->CastVehicleSpell(SPELL_REVIVIFY, drake);
+    }
+
+    bool const canBurst = DrakeCanAfford(drake, SPELL_LIFE_BURST);
+
+    // Life Burst is a flat heal, so the worst drake decides this, not the raid-wide total.
+    std::vector<Unit*> flight;
+    GetDrakeFlight(bot, flight);
+
+    uint8 worstPct = 100;
+    uint32 worstMissing = 0;
+    for (Unit* other : flight)
+    {
+        uint32 const max = other->GetMaxHealth();
+        if (!max)
+        {
+            continue;
+        }
+
+        uint8 const pct = static_cast<uint8>(other->GetHealth() * 100 / max);
+        if (pct < worstPct)
+        {
+            worstPct = pct;
+            worstMissing = max - other->GetHealth();
+        }
+    }
+
+    if (canBurst && worstPct <= DRAKE_BURST_EMERGENCY_PCT)
     {
         return botAI->CastVehicleSpell(SPELL_LIFE_BURST, drake);
     }
 
-    return botAI->CastVehicleSpell(SPELL_REVIVIFY, drake);
+    // The buff Life Burst leaves on its caster doubles as a record of who burst and when - true
+    // for real players too, and a cast that quietly failed leaves no trace to mislead the rest.
+    bool recentBurst = false;
+    for (Unit* other : flight)
+    {
+        if (other == drake)
+        {
+            continue;
+        }
+
+        if (DrakeAuraRemainingMs(other, SPELL_LIFE_BURST) > DRAKE_LIFE_BURST_BUFF_MS - DRAKE_BURST_STAGGER_MS)
+        {
+            recentBurst = true;
+            break;
+        }
+    }
+
+    if (canBurst && !recentBurst)
+    {
+        if (DrakeAuraRemainingMs(drake, SPELL_LIFE_BURST) < DRAKE_LIFE_BURST_REFRESH_MS)
+        {
+            return botAI->CastVehicleSpell(SPELL_LIFE_BURST, drake);
+        }
+
+        if (worstPct <= DRAKE_BURST_HEALTH_PCT)
+        {
+            uint32 const wanted = (worstMissing + DRAKE_LIFE_BURST_HEAL - 1) / DRAKE_LIFE_BURST_HEAL;
+            if (GetDrakeHealerRank(botAI, healers) < wanted)
+            {
+                return botAI->CastVehicleSpell(SPELL_LIFE_BURST, drake);
+            }
+        }
+    }
+
+    // Revivify costs exactly one global's regen, so without this floor the bar never reaches 50.
+    if (drake->GetPower(POWER_ENERGY) >= DRAKE_HOLD_ENERGY_FLOOR)
+    {
+        return botAI->CastVehicleSpell(SPELL_REVIVIFY, drake);
+    }
+
+    return false;
 }
 
 bool DrakeSurgeShieldAction::isPossible()
@@ -1138,27 +1559,56 @@ bool DrakeSurgeShieldAction::isPossible()
 bool DrakeSurgeShieldAction::Execute(Event /*event*/)
 {
     Unit* drake = bot->GetVehicleBase();
-    if (!drake) { return false; }
+    if (!drake)
+    {
+        return false;
+    }
 
-    // There is nothing to dodge: the boss fires Surge of Power as a triggered instant 3s after the
-    // fixate, so no amount of flying gets the drake out of it. Halving it with Flame Shield is the
-    // whole reaction, and the trigger reads the fixate, so the shield goes up with the full 3s
-    // still to run. Anything it does not cover is left to the healers.
-    if (drake->HasSpellCooldown(SPELL_FLAME_SHIELD)) { return false; }
+    if (drake->HasAura(SPELL_FLAME_SHIELD))
+    {
+        return false;
+    }
 
-    // Safe to fire mid-dodge: the shield is a self-cast, so CastVehicleSpell skips both the branch
-    // that turns the vehicle onto a target and the one that stops it dead, and it is instant.
-    // Same as the drake heals: CanCastVehicleSpell reports BAD_TARGETS on a drake, so force it.
+    uint32 const now = getMSTime();
+    if (!lastSeenMs || getMSTimeDiff(lastSeenMs, now) > DRAKE_FIXATE_GAP_MS)
+    {
+        fixateAtMs = now;
+    }
+    lastSeenMs = now;
+
+    uint32 const elapsed = getMSTimeDiff(fixateAtMs, now);
+    uint8 const comboPoints = drake->GetComboPoints();
+
+    // A finisher on an empty bank is SPELL_FAILED_NO_COMBO_POINTS, reported as a success.
+    if (!comboPoints)
+    {
+        return false;
+    }
+
+    // Held until the cover still reaches the end of the beam; at the fixate it expires early.
+    uint32 const cover = DRAKE_SHIELD_BASE_MS + comboPoints * DRAKE_SHIELD_MS_PER_COMBO;
+    uint32 const castAt = std::min(cover >= SURGE_BEAM_END_MS ? 0u : SURGE_BEAM_END_MS - cover, SURGE_BEAM_DELAY_MS);
+
+    if (elapsed < castAt)
+    {
+        return false;
+    }
+
+    // A big bank is worth more as a finisher, so yield - until the beam is actually landing.
+    if (comboPoints > DRAKE_SHIELD_MAX_COMBO && elapsed < SURGE_BEAM_DELAY_MS)
+    {
+        return false;
+    }
+
+    if (!DrakeCanAfford(drake, SPELL_FLAME_SHIELD))
+    {
+        return false;
+    }
+
+    // Safe mid-dodge: self-cast, so CastVehicleSpell skips the turn-the-vehicle and stop-moving
+    // branches, and it is instant. Forced, because CanCastVehicleSpell reports BAD_TARGETS.
     botAI->CastVehicleSpell(SPELL_FLAME_SHIELD, drake);
 
-    // Only cool it down once the aura is actually up. CastVehicleSpell reports success even when the
-    // spell it prepared failed its CheckCast, so trusting it meant one silent miss inside the 3s
-    // window cost the drake the shield for the next 30s. Nothing sets this cooldown but us - the core
-    // does not cool a vehicle spell down by itself.
-    if (!drake->HasAura(SPELL_FLAME_SHIELD)) { return false; }
-    drake->AddSpellCooldown(SPELL_FLAME_SHIELD, 0, 30000);
-
-    // Hand the tick on either way: eoe fly drake sits directly below this one, and a Static Field
-    // dodge that loses a tick here is a dodge that stops halfway.
+    // Hand the tick on either way, or a Static Field dodge below this one stops halfway.
     return false;
 }

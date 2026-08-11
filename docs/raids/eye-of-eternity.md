@@ -202,17 +202,22 @@ transitions, which are both at 50%.
   There used to be a separate `avoid static field` action at emergency relevance, and *that* was the
   bounce: it and the flight action both steered the same vehicle, so the drake fled to 32 yd, the
   flight action pulled it back to a formation slot next to the field, and round it went. It is gone.
-  `GetDrakeStackPoint` folds the hazard into the park spot instead: if the anchor is inside
+  `GetDrakeStackPoint` folds the hazard into the park spot instead: if the held heading is inside
   `STATIC_FIELD_CLEARANCE` of any field, it slides **around the boss** to another point on the
   `DRAKE_STACK_RADIUS` ring, and the first heading that clears wins. Boxed in on every heading, it
   takes the roomiest one rather than sit in the field — the fields expire on their own. Staying on
   the ring is the point: an earlier version hopped 32 yd straight off the anchor toward whatever had
   the most clearance, and boss-ward was often that direction, which put the flight inside Arcane
   Pulse and killed it faster than the field would have.
-  Two details matter as much as the ring itself. **The slide always goes the same way around it** —
-  sweeping both ways picked a nearer spot, but when the next field landed on that spot the answer
-  flipped to the far side of the anchor, i.e. back across the field the flight had only just
-  dodged. One-way, a second field can only push the flight further along. And **the clearance is
+  Two details matter as much as the ring itself. **The whole phase is one slow lap, always forward**
+  — the heading is latched per instance (`stackAngleCache`, `thread_local`, keyed on the instance
+  like the phase and creature caches) and the sweep starts from wherever the flight already is,
+  never from `DRAKE_STACK_ANGLE`. Both halves of that are load-bearing. Sweeping backwards picks the
+  ground the flight has just crossed, where the field it dodged is still live. And re-sweeping from
+  a fixed base is the subtler one: an expiring field frees a heading *behind* the flight, the sweep
+  finds it before any heading ahead, and the whole formation reverses — with fields lasting 20 s and
+  landing every 12 s, that happened around the third field, which is exactly what it looked like in
+  game. Forward-only, a field can only ever push the flight further along. And **the clearance is
   `STATIC_FIELD_SAFE_RADIUS` (32 yd) plus the stack tolerance**, because the tolerance is exactly how
   far off the point a drake is allowed to park: a spot 32 yd from a field still left whoever stopped
   on the field side of it standing in the pulse, which is why two or three of the flight took damage
@@ -220,40 +225,153 @@ transitions, which are both at 50%.
   Resolving the point is cheap now the creature lookup is cached, so the flight action only holds it
   for `DRAKE_STACK_RECALC_MS` (300 ms) — a field lands *on* the flight, so a stale answer here is
   damage taken.
-  It also only re-issues `MovePoint` when the destination has actually moved more than 2 yd or the
-  mover has stopped: restamping the same destination every tick restarts the spline and the drake
-  crawls without ever arriving.
+  **The flight walks round to the new point rather than flying at it.** `MovePoint` runs a straight
+  spline, so a slide of more than a quarter of the ring is a chord across the middle — straight
+  through Malygos and his 30 yd Arcane Pulse, which costs more than the field being dodged.
+  `GetDrakeApproachPoint` breaks the trip into hops of `DRAKE_APPROACH_ARC` (60°) along the
+  `DRAKE_STACK_RADIUS` ring, and a drake **already on the ring** hops **forward**, the same way the
+  stack point slides — one that took the short way round would fly back through the field. Two
+  exceptions. A point less than a hop behind the drake is its own drift off the stack rather than a
+  dodge, so it just flies straight back to it. And a drake that is not on the ring yet — more than
+  `DRAKE_STACK_TOLERANCE` off `DRAKE_STACK_RADIUS` — takes the **shortest** way, because it is not
+  dodging anything. That second exception is what makes the phase open cleanly: P3 summons every
+  drake under its own rider, all of them within a few yards of Malygos at the centre, where `atan2`
+  off the boss is noise, so forward-only would send about two thirds of the flight up to 300° round
+  the ring in legs a tick apart and the stack would fill in two separate waves.
+  The chord of one hop passes no closer than
+  `45 · cos 30° ≈ 39` yd to him, where 90° would clear the pulse by under 2 yd. Each hop goes out as
+  its own `MovePoint`, and the drake takes the next one when the spline ends — a finished point
+  generator is replaced by an idle one, so "not `POINT_MOTION_TYPE`" is the arrival signal.
+  `issuedX`/`issuedY` track the *goal*, not the hop, and exist only to notice the goal itself moving:
+  re-issuing `MovePoint` restarts the spline, so a drake handed the same destination every tick
+  crawls and never arrives.
 - **P3 — the healer split is a raid-size call, not a spec one.** Every drake carries the same
   spellbook, so `IsDrakeHealer` caps *and* floors: `DRAKE_HEALERS_25MAN` (5) / `DRAKE_HEALERS_10MAN`
   (2), filled from the bots flagged `IsHeal` in guid order and topped up from the dps if the raid
   brought fewer. The old version only had a floor, so a heal-heavy raid put seven drakes on Revivify
   and ran out of phase. Guid order is identical on every bot, so the flight agrees without talking.
+- **P3 — the drake spellbook, read out of the client DBC.** Every button spends energy from a
+  100-point bar that refills at a flat 10/s (`unit_class` 4 plus `UNIT_FLAG2_REGENERATE_POWER`, so
+  `Creature::Regenerate` hands out 20 every 2 s), and **not one of them has a cooldown**:
+
+  | spell | energy | GCD | effect |
+  |---|---|---|---|
+  | Flame Spike 56091 | 10 | 1 s | 943–1057 damage, +1 combo |
+  | Engulf in Flames 56092 | 50 | 1 s | 1500 per 3 s, stacks to 999 per caster, finisher |
+  | Revivify 57090 | 10 | 1 s | ally HoT 500/s for 10 s, 5 stacks per caster, +1 combo |
+  | Life Burst 57143 | 50 | 1 s | flat 5000 in 60 yd, self +50% healing done, finisher |
+  | Flame Shield 57108 | 25 | none | −80% damage taken, finisher |
+
+  Combo points never scale an *amount* on any of the five — no `EffectPointsPerCombo` is set. They
+  scale **duration**, through `Unit::CalcSpellDuration`'s `min + (max − min) · cp / 5`: Flame Shield
+  runs 1 s → 6 s, Engulf 2 s → 22 s, the Life Burst buff 0 s → 25 s. And all three finishers carry a
+  `SPELL_ATTR1_FINISHING_MOVE_*` bit, so each spends the **whole** bank whatever size it is — which
+  is why the healer rotation and the shield have to be tuned against one another rather than apart.
+  None of this is in the world DB; `spell_dbc` is a partial override table with no rows for these
+  spells. It comes from `modules/mod-spell-tweaks/data/dbc-reference/spell.reference.csv`
+  (regenerate with `python tools/dbc_export.py --export-reference`).
 - **P3 — drake healers only ever cast on themselves.** Revivify is a HoT and each cast banks a combo
-  point; Life Burst spends five of them as a heal centred on the caster. Both go on the healer's own
-  drake: a `Unit` holds combo points for one target at a time, so an earlier version that chased
-  whoever was lowest reset the count to one on every switch and Life Burst was unreachable. With the
-  flight stacked, a self-cast Life Burst covers the same drakes a targeted one would. Neither goes
-  through `CanCastVehicleSpell` — it reports `BAD_TARGETS` on a drake. The healer branch runs before
-  the boss lookup in `EoEDrakeAttackAction::Execute`, since a healer needs no boss at all.
-- **P3 — dps drakes bank `DRAKE_ENGULF_COMBO` (3) before they finish.** Flame Spike stacks the combo
-  points Engulf in Flames spends, and Engulf scales with them, so spending at two threw damage away.
-- **P3 — Surge of Power cannot be dodged, and the old trigger could never fire.** The boss picks its
-  victims, then fires the damage as a **triggered instant 3 s later** (`me->m_Events.AddEventAtOffset`
-  → `DoCastAOE`): no beam to walk out of, no cast to outrun. Flame Shield (57108) halves it and that
-  is the entire reaction; everything it does not cover is a heal check. The strafe and Blazing Speed
-  peel the action used to do were both pointless and are gone, along with the self-imposed rate limit
-  they needed.
+  point; Life Burst spends the bank as a flat heal on everyone within 60 yd of the caster. Both go on
+  the healer's own drake: a `Unit` holds combo points for one target at a time, so an earlier version
+  that chased whoever was lowest reset the count to one on every switch and Life Burst was
+  unreachable. With the flight stacked, a self-cast Life Burst covers the same drakes a targeted one
+  would. Neither goes through `CanCastVehicleSpell` — it reports `BAD_TARGETS` on a drake — so
+  `DrakeCanAfford` stands in for the power half of that check, reading `SpellInfo::CalcPowerCost`
+  against the drake's current power rather than hardcoding a cost. Without it an unaffordable spell
+  would look exactly like one that went out, since `CastVehicleSpell` returns true even when the cast
+  it prepared was rejected. The healer branch runs before the boss lookup in
+  `EoEDrakeAttackAction::Execute`, since a healer needs no boss at all. The dps side needs none of
+  this — its targets are the boss, so `CastDrakeSpellAction` goes through `CanCastVehicleSpell` and
+  gets the power check for free.
+- **P3 — healers bank five combo points and then hold them.** The five are not for the heal: Life
+  Burst restores a flat 5000 whatever the drake holds. They are for the **+50% healing done** it
+  leaves on the caster, which runs 5 s per point and lifts every Revivify tick as well
+  (`SpellPctHealingModsDone`, no creature exclusion). At 50 energy per 25 s out of a 10/s regen,
+  letting that buff lapse costs far more than renewing it does. An earlier version burst the instant
+  it reached five — and since every healer starts the phase together and casts once per global, the
+  whole corps burst in the same second into a full-health flight, then sat at zero combo and zero
+  energy waiting for the next one. A healer the boss has fixated skips the ladder below entirely and
+  runs the surge script in the Flame Shield bullet instead. Otherwise, at the cap it decides in this
+  order:
+  1. Worst drake at or below `DRAKE_BURST_EMERGENCY_PCT` (30%) — burst, no gates.
+  2. Another drake burst within `DRAKE_BURST_STAGGER_MS` (1.5 s) — hold.
+  3. Own buff gone or under `DRAKE_LIFE_BURST_REFRESH_MS` (5 s) — burst, for upkeep.
+  4. Worst drake at or below `DRAKE_BURST_HEALTH_PCT` (90%) — burst if this healer's rank falls inside
+     `ceil(missing / DRAKE_LIFE_BURST_HEAL)`, so one healer answers a scratch and the whole corps
+     answers a Surge of Power.
+  5. Otherwise hold, keeping Revivify rolling while energy is at or above `DRAKE_HOLD_ENERGY_FLOOR`
+     (75 — a Life Burst plus a Flame Shield). Revivify costs exactly what a Skytalon regenerates in
+     one global, so a capped healer that keeps casting is break-even forever and never banks the 50 a
+     burst needs.
+
+  **Staggering needs no shared state.** Who burst and how recently is read off the Life Burst buff
+  sitting on the other drakes (`DrakeAuraRemainingMs`) — true even when the caster was a real player,
+  and impossible to fool with a cast that quietly failed. Ties go to `GetDrakeHealerRank`, which
+  orders healer drakes by energy descending and guid ascending: every bot derives the same order from
+  the same visible state, and it rotates on its own, because bursting costs 50 energy and drops the
+  caster to the back of the queue.
+- **P3 — dps drakes bank `DRAKE_ENGULF_COMBO` (3), and three is a margin choice rather than a damage
+  one.** Engulf is a single aura per caster with a 999 stack cap, and every application runs
+  `ModStackAmount(1)` → `RefreshTimers`, so the whole stack shares one duration that resets on each
+  cast while the periodic amount is multiplied by the stack. Stacks therefore keep growing for as
+  long as the aura stays alive, which makes *applications per minute* the thing to maximise —
+  duration only has to outlive the cycle. That cycle is energy-bound: N spikes plus an Engulf costs
+  `10N + 50` at 10/s, so it runs `N + 5` seconds. Two points would land ~8.6 applications a minute
+  against three's 7.5 (about 8% more damage by the one-minute mark) but leaves only 3 s of slack
+  between a 10 s aura and a 7 s cycle, where three leaves 6 s against 14 s — enough to survive a
+  Static Field dodge or a moment out of range without dropping the stack and starting again at one.
+  Five would be clearly worse: 6 applications a minute.
+
+  There is no way to buy that margin once and keep it. `ModStackAmount` → `RefreshTimers` calls
+  `CalcMaxDuration(GetCaster())` on **every** application, which runs `Unit::CalcSpellDuration`
+  against the combo points held at that moment — and those are still on the drake, because
+  `_handle_immediate_phase` applies the aura before `_handle_finish_phase` clears the pool. So an
+  opening Engulf at five points gives the stack 22 s exactly until the next one at three resets it to
+  14 s. Opening at five only delays the first stack by two globals.
+- **P3 — Surge of Power cannot be dodged, so Flame Shield is timed rather than reflexive.** The boss
+  picks its victims, then fires the damage as a **triggered instant 3 s later**
+  (`me->m_Events.AddEventAtOffset` → `DoCastAOE`): no beam to walk out of, no cast to outrun. It then
+  ticks 12,000 every half second for 3 s — **72,000 against a 100,000 HP drake** — so the window that
+  has to be covered is t+3 s to t+6 s and nothing before it. Flame Shield (57108) takes 80% off, and
+  that is the entire reaction; everything it does not cover is a heal check. The strafe and Blazing
+  Speed peel the action used to do were both pointless and are gone, along with the self-imposed rate
+  limit they needed.
   The trigger could not fire at all before: both P3 surges are `DoCastAOE` with no unit target, so
   `m_targets.GetUnitTargetGUID()` was always empty and Flame Shield never went up once. The boss AI
   publishes its victims in its own guid slots instead (`DATA_FIRST_SURGE_TARGET_GUID = 14`, three
   slots, mirrored as `EOE_DATA_FIRST_SURGE_TARGET_GUID`), filled by the warning selector 3 s ahead,
   and it does so for the 25-man three-target version as well. The slots are not cleared until the
-  next surge is picked, so the trigger stays hot for most of the 7 s between casts — harmless now
-  that the action only pops a 30 s cooldown and returns false when it is down.
-  **The cooldown is only stamped once the aura is actually up.** `PlayerbotAI::CastVehicleSpell`
-  returns true even when the spell it prepared failed its `CheckCast`, so trusting it meant one silent
-  miss inside the 3 s window cost the drake its shield for the next 30 s; nothing else sets that
-  cooldown, since the core does not cool a vehicle spell down by itself.
+  next surge is picked, so the trigger stays hot for most of the 7 s between casts. Both the action
+  and the healer rotation read them through one helper, `IsDrakeSurgeTarget`, so they cannot disagree
+  about who is about to be hit.
+  **The 30 s cooldown it used to stamp was invented.** Flame Shield's real `RecoveryTime`,
+  `CategoryRecoveryTime` and `Category` are all 0, and nothing would enforce one even if they were
+  not: `Spell::SendSpellCooldown` returns early for a non-player caster with its `AddSpellCooldown`
+  call commented out. The stamp only ever threw shields away. The guard is now just "is the shield
+  already up".
+  **The cast waits for the beam.** The shield lasts `1 s + 1 s per combo point` and takes the whole
+  bank whatever size it is, so firing at the fixate is the worst of both worlds: at two points or
+  fewer it has expired before the first tick, and at five it has just spent a Life Burst or an Engulf
+  on cover that three would have bought. `DrakeSurgeShieldAction` latches when the fixate was first
+  seen and casts at `SURGE_BEAM_END_MS − (1 + cp)` seconds, clamped to the beam itself — immediately
+  at five points, a second before the beam at three, at the beam at two. While it waits it holds off
+  entirely above `DRAKE_SHIELD_MAX_COMBO` (3), so the rotation below can spend the bank on something
+  worth more and rebuild a couple of points; once the beam is landing it fires regardless, since even
+  a short shield eats whole ticks. It also yields on an empty bank: a finisher with no combo points
+  is `SPELL_FAILED_NO_COMBO_POINTS`, and `CastVehicleSpell` would have reported that as a success.
+  **The rotation reserves the energy for it.** Shields still went missing in testing, and the reason
+  was the bar rather than the timing: a dps drake's cycle costs `10N + 50` against a 10/s regen, so
+  it lives near empty, and a fixated drake that kept spiking or bursting through the three seconds
+  reached the beam without the shield's 25. Both rotations now branch on `IsDrakeSurgeTarget` and run
+  the same three-step script — spend the bank on Engulf or Life Burst *only* while
+  `DrakeCanAffordWithShield` says the bar covers the finisher and the shield both, rebuild to
+  `DRAKE_SHIELD_RESERVE_COMBO` (2), then stop casting and let the bar climb. Two points is the
+  cheapest bank whose `1 s + 1 s per point` spans the whole beam; at one the last two ticks land
+  unmitigated, which is 24,000 of the 72,000 at full price. The one point the shield cannot do
+  without is worth going under the energy reserve for, so a drake at zero combo always spikes.
+  The latch spots a new fixate as a `DRAKE_FIXATE_GAP_MS` (2 s) gap
+  in the trigger, so a drake the boss picks twice running reads as one long fixate and shields once
+  for both — rare enough at one victim per 7 s cycle to be worth the simplicity.
   **It is safe to fire mid-dodge**, which matters because Static Field lands *on* the flight: the
   shield is a self-cast, so `CastVehicleSpell` skips both the branch that turns the vehicle onto a
   target and the one that stops it dead, and it is instant. The action also returns false either way,

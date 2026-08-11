@@ -25,30 +25,13 @@ enum EyeOfEternityIDs
     NPC_STATIC_FIELD                    = 30592,
     NPC_HOVER_DISK                      = 30248,
 
-    SPELL_POWER_SPARK_VISUAL            = 55845,
-    SPELL_POWER_SPARK_GROUND_BUFF       = 55852,
-    SPELL_POWER_SPARK_MALYGOS_BUFF      = 56152,
-
-    SPELL_TELEPORT_VISUAL               = 52096,
-
-    SPELL_SCION_ARCANE_BARRAGE          = 56397,
-    SPELL_ARCANE_SHOCK_N                = 57058,
-    SPELL_ARCANE_SHOCK_H                = 60073,
+    // Nexus Lord self-cast, the one buff worth a spellsteal in P2.
     SPELL_HASTE                         = 57060,
 
-    SPELL_ALEXSTRASZA_GIFT              = 61028,
-
     // Boss hazards (verified against core boss_malygos.cpp)
-    SPELL_ARCANE_BREATH                 = 56272,    // P1 frontal cone on tank
-    SPELL_ARCANE_STORM                  = 61693,    // P1/P2/P3 random-target AoE, unavoidable
-    SPELL_ARCANE_OVERLOAD               = 56430,    // P2 shelter bubble (summons NPC_ARCANE_OVERLOAD)
-    SPELL_ARCANE_OVERLOAD_AURA          = 56432,    // ticks on the bubble, re-granting the protection
+    SPELL_ARCANE_OVERLOAD_AURA          = 56432,    // ticks on the P2 bubble, re-granting the protection
     SPELL_ARCANE_OVERLOAD_PROTECTION    = 56438,    // -50% damage taken, granted inside the bubble
     SPELL_SURGE_OF_POWER_P2             = 56505,    // P2 beam
-    SPELL_SURGE_OF_POWER_P3             = 57407,    // P3 fixate beam, 10-man
-    SPELL_SURGE_OF_POWER_P3_25          = 60936,    // P3 fixate beam, 25-man
-    SPELL_ARCANE_PULSE                  = 57432,    // P3, self-cast every 3s, 30y around the boss
-    SPELL_STATIC_FIELD                  = 57430,    // P3 (summons NPC_STATIC_FIELD hazard)
 
     // Drake Abilities:
     // DPS
@@ -59,26 +42,22 @@ enum EyeOfEternityIDs
     SPELL_LIFE_BURST                    = 57143,
     // Utility
     SPELL_FLAME_SHIELD                  = 57108,
-    SPELL_BLAZING_SPEED                 = 57092,
 };
 
 const uint32 EOE_MAP_ID = 616;
-// DATA_MALYGOS from the core's eye_of_eternity.h. Script headers are not on a module's include path,
-// so the value is mirrored here; it is the first entry of that file's Data enum.
+// DATA_MALYGOS, mirrored from the core's eye_of_eternity.h - script headers are not on a
+// module's include path. First entry of that file's Data enum.
 const uint32 EOE_DATA_MALYGOS = 0;
-// boss_malygos.cpp stores the P3 Surge of Power victims in its AI's guid slots, one per target, and
-// fills them 3s before the beam goes off. Mirrored here for the same reason as EOE_DATA_MALYGOS.
+// Guid slots boss_malygos.cpp fills with the P3 surge victims, 3s before the beam.
+// Mirrored for the same reason as EOE_DATA_MALYGOS.
 const int32 EOE_DATA_FIRST_SURGE_TARGET_GUID = 14;
 const uint8 EOE_NUM_MAX_SURGE_TARGETS = 3;
+// How far the P2 Surge of Power focus is looked for.
+const float EOE_SURGE_SEARCH_RADIUS = 100.0f;
 
-// Every bot in the raid asks the same questions about the same handful of creatures, and one grid
-// sweep per bot per tick was the largest single cost in this strategy. These answer from a cache
-// filled once per creature entry per instance, so twenty-five identical sweeps collapse into one.
-// Guids are what is cached, not pointers: a creature that despawns inside the window drops out of
-// the answer instead of coming back as a dangling read.
+// One instance-wide cache in place of a grid sweep per bot per tick. Guids are cached, not
+// pointers, so a creature that despawns inside the window cannot come back dangling.
 void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out);
-// Nearest live one to the bot, or nullptr if the closest is past maxDist. The default reaches the
-// whole arena, i.e. "anywhere in the fight".
 Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist = 1000.0f);
 bool AnyEoECreature(Player* bot, uint32 entry);
 
@@ -96,8 +75,8 @@ public:
 class PowerSparkTrigger : public Trigger
 {
 public:
-    // Sparks walk in from the edge and take seconds to matter; checking every tick buys nothing.
-    PowerSparkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "power spark", 200) {}
+    // Sparks walk in from the edge; checking every tick buys nothing.
+    PowerSparkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos power spark", 200) {}
     bool IsActive() override;
 };
 
@@ -106,12 +85,11 @@ public:
 class MalygosBubbleTrigger : public Trigger
 {
 public:
-    // The seek is a walk across the platform, so starting it up to 200ms late is invisible.
+    // The seek is a walk across the platform, so 200ms of latency is invisible.
     MalygosBubbleTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos bubble", 200) {}
     bool IsActive() override;
 };
 
-// P2: a Hover Disk has landed and lost its Nexus Lord, so melee dps can board it.
 class MalygosFreeDiskTrigger : public Trigger
 {
 public:
@@ -120,7 +98,6 @@ public:
     bool IsActive() override;
 };
 
-// P2: this bot is riding a Hover Disk.
 class MalygosOnDiskTrigger : public Trigger
 {
 public:
@@ -132,16 +109,14 @@ public:
 class SurgeOfPowerTrigger : public Trigger
 {
 public:
-    // The beam runs for seconds and the peel is a MoveAway the MotionMaster carries on with, so
-    // this does not need re-asking every tick - it was a 100y sweep that came back empty almost
-    // every time.
-    SurgeOfPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "surge of power", 200) {}
+    // The peel is a MoveAway the MotionMaster carries on with, and the sweep behind this comes
+    // back empty almost every time.
+    SurgeOfPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos surge of power", 200) {}
     bool IsActive() override;
 };
 
-// P3: this bot is on a Wyrmrest Skytalon. EoE-owned on purpose - the Oculus "group flying" trigger
-// this used to borrow also needs the raid leader to be mounted, and a human who has not taken a
-// drake yet would leave the whole flight unable to position or turn.
+// P3: this bot is on a Wyrmrest Skytalon. EoE-owned because the Oculus "group flying"
+// trigger also needs the raid leader mounted.
 class MalygosDrakeFlightTrigger : public Trigger
 {
 public:
@@ -149,11 +124,10 @@ public:
     bool IsActive() override;
 };
 
-// P3: Malygos has picked this bot's drake as a Surge of Power victim (10/25-man).
 class DrakeSurgeTrigger : public Trigger
 {
 public:
-    DrakeSurgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "drake surge") {}
+    DrakeSurgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "eoe drake surge") {}
     bool IsActive() override;
 };
 
