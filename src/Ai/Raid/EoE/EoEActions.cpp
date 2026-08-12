@@ -356,6 +356,43 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
     return best;
 }
 
+Unit* GetPowerSparkToSnare(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot->IsClass(CLASS_DEATH_KNIGHT) || bot->GetVehicle())
+    {
+        return nullptr;
+    }
+
+    uint32 const chainsId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", "chains of ice")->Get();
+    if (!chainsId || !bot->HasSpell(chainsId) || bot->HasSpellCooldown(chainsId))
+    {
+        return nullptr;
+    }
+
+    std::vector<Unit*> sparks;
+    GetEoECreatures(bot, NPC_POWER_SPARK, sparks);
+
+    Unit* best = nullptr;
+    float bestDist = POWER_SPARK_SNARE_RADIUS;
+    for (Unit* spark : sparks)
+    {
+        // Any caster's: a second DK re-snaring costs a rune and buys nothing.
+        if (spark->HasAura(chainsId))
+        {
+            continue;
+        }
+
+        float const dist = bot->GetExactDist2d(spark);
+        if (dist < bestDist)
+        {
+            bestDist = dist;
+            best = spark;
+        }
+    }
+    return best;
+}
+
 bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -905,33 +942,55 @@ bool MalygosTargetAction::Execute(Event /*event*/)
     return false;
 }
 
-bool PullPowerSparkAction::isUseful()
+namespace
+{
+// Where the DK stands decides where the spark lands, so the grip is cast from the parking spot or
+// not at all. The walk there belongs to MalygosPositionAction.
+Unit* GetPowerSparkToGrip(PlayerbotAI* botAI)
 {
     if (!IsOnPowerSparkGripDuty(botAI))
     {
-        return false;
+        return nullptr;
     }
 
-    // Cast from the spot or not at all; the walk belongs to MalygosPositionAction.
+    Player* bot = botAI->GetBot();
     std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
     if (bot->GetDistance2d(grip.first, grip.second) > POWER_SPARK_GRIP_TOLERANCE)
     {
-        return false;
+        return nullptr;
     }
 
     Unit* spark = GetNearestPowerSpark(botAI);
-    return spark && botAI->CanCastSpell("death grip", spark);
+    return spark && botAI->CanCastSpell("death grip", spark) ? spark : nullptr;
+}
+}
+
+bool PullPowerSparkAction::isUseful()
+{
+    if (GetPowerSparkToGrip(botAI))
+    {
+        return true;
+    }
+
+    Unit* snare = GetPowerSparkToSnare(botAI);
+    return snare && botAI->CanCastSpell("chains of ice", snare);
 }
 
 bool PullPowerSparkAction::Execute(Event /*event*/)
 {
-    Unit* spark = GetNearestPowerSpark(botAI);
-    if (!spark)
+    if (Unit* spark = GetPowerSparkToGrip(botAI))
     {
-        return false;
+        return botAI->CastSpell("death grip", spark);
     }
 
-    return botAI->CastSpell("death grip", spark);
+    // The grip only buys the distance back once, and the spark covers 6 yd/s walking it off again.
+    // Its immunity mask (creature_immunities -335) carries neither root nor snare, so this lands.
+    if (Unit* snare = GetPowerSparkToSnare(botAI))
+    {
+        return botAI->CastSpell("chains of ice", snare);
+    }
+
+    return false;
 }
 
 bool KillPowerSparkAction::isUseful()
@@ -1422,7 +1481,7 @@ bool EoEDrakeAttackAction::DrakeDpsAction(Unit* drake, Unit* target)
     if (IsDrakeSurgeTarget(botAI))
     {
         // Fixated: spend the bank while the bar still covers the shield, rebuild, then let it climb.
-        if (comboPoints >= DRAKE_ENGULF_COMBO && DrakeCanAffordWithShield(drake, SPELL_ENGULF_IN_FLAMES))
+        if (comboPoints >= DRAKE_ENGULF_SURGE_COMBO && DrakeCanAffordWithShield(drake, SPELL_ENGULF_IN_FLAMES))
         {
             return CastDrakeSpellAction(drake, target, SPELL_ENGULF_IN_FLAMES);
         }

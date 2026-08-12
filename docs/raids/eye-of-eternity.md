@@ -101,6 +101,14 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Thr
   `POWER_SPARK_GRIP_ENGAGE_RADIUS` (45 yd) of the spot, and Malygos no closer to the spot than
   `POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE`. Casting the grip ends duty, and the position action walks the
   DK back to the melee stack on the next tick.
+  **The grip is followed by Chains of Ice.** The pull buys the distance back once and the spark walks
+  it off again at 6 yd/s, so the same action snares whatever it just landed: `GetPowerSparkToSnare`
+  takes the nearest spark inside `POWER_SPARK_SNARE_RADIUS` (15 yd, about where a gripped one lands)
+  that nobody has chained yet. Power Spark's immunity mask (`creature_immunities` −335, mechanics
+  `0x26CB031D`) carries neither root nor snare, so it lands; the aura check is caster-agnostic
+  because a second DK re-snaring spends a rune for nothing. The action keeps the grip first whenever
+  the grip is available, and stays useful on the snare alone, so a DK whose grip is still on cooldown
+  can chain a spark that walks past the melee stack.
 - **P1 — the hold spots are taken during the pull intro, before the boss lands.** `JustEngagedWith`
   sends Malygos on an intro circuit and only then drops him at `CenterPos.z`, 35 yd out from centre
   on whatever heading he was circling; `EVENT_START_FIGHT` clears his flags and he chases
@@ -411,21 +419,30 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Thr
   fewer it has expired before the first tick, and at five it has just spent a Life Burst or an Engulf
   on cover that three would have bought. `DrakeSurgeShieldAction` latches when the fixate was first
   seen and casts at `SURGE_BEAM_END_MS − (1 + cp)` seconds, clamped to the beam itself — immediately
-  at five points, a second before the beam at three, at the beam at two. While it waits it holds off
-  entirely above `DRAKE_SHIELD_MAX_COMBO` (3), so the rotation below can spend the bank on something
-  worth more and rebuild a couple of points; once the beam is landing it fires regardless, since even
-  a short shield eats whole ticks. It also yields on an empty bank: a finisher with no combo points
-  is `SPELL_FAILED_NO_COMBO_POINTS`, and `CastVehicleSpell` would have reported that as a success.
+  at five points, a second before the beam at three, at the beam at two or fewer. While it waits it
+  holds off entirely above `DRAKE_SHIELD_MAX_COMBO` (3), so the rotation below can spend the bank on
+  something worth more and rebuild a point or two; once the beam is landing it fires regardless, since
+  even a short shield eats whole ticks. It also yields on an empty bank: a finisher with no combo
+  points is `SPELL_FAILED_NO_COMBO_POINTS`, and `CastVehicleSpell` would have reported that as a
+  success.
   **The rotation reserves the energy for it.** Shields still went missing in testing, and the reason
   was the bar rather than the timing: a dps drake's cycle costs `10N + 50` against a 10/s regen, so
   it lives near empty, and a fixated drake that kept spiking or bursting through the three seconds
   reached the beam without the shield's 25. Both rotations now branch on `IsDrakeSurgeTarget` and run
   the same three-step script — spend the bank on Engulf or Life Burst *only* while
   `DrakeCanAffordWithShield` says the bar covers the finisher and the shield both, rebuild to
-  `DRAKE_SHIELD_RESERVE_COMBO` (2), then stop casting and let the bar climb. Two points is the
-  cheapest bank whose `1 s + 1 s per point` spans the whole beam; at one the last two ticks land
-  unmitigated, which is 24,000 of the 72,000 at full price. The one point the shield cannot do
-  without is worth going under the energy reserve for, so a drake at zero combo always spikes.
+  `DRAKE_SHIELD_RESERVE_COMBO`, then stop casting and let the bar climb. The one point the shield
+  cannot do without is worth going under the energy reserve for, so a drake at zero combo always
+  spikes.
+  **The reserve is one point, not two.** Two would cover the whole beam rather than its first two
+  seconds — at one point the last two ticks land at full price, 24,000 of the 72,000 — but the bar
+  will not pay for it. Banking the second point is another 10 energy off a drake already spending
+  faster than it regenerates, and testing had fixated drakes reaching the beam with the points but
+  not the shield's 25. A short shield beats no shield by 43,200.
+  A fixated dps drake dumps the bank at `DRAKE_ENGULF_SURGE_COMBO` (2) rather than the rotation's
+  usual 3, because holding a two-point bank for the shield wastes it. It will not dump at one: that
+  refreshes the stack for `2 + 20 · 1/5` = 6 s, shorter than the cycle that rebuilds it, so the
+  stack falls off and everything the drake has already put into it is gone.
   The latch spots a new fixate as a `DRAKE_FIXATE_GAP_MS` (2 s) gap
   in the trigger, so a drake the boss picks twice running reads as one long fixate and shields once
   for both — rare enough at one victim per 7 s cycle to be worth the simplicity.

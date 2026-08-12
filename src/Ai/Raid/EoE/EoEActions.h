@@ -63,6 +63,9 @@ const float POWER_SPARK_GRIP_ENGAGE_RADIUS = 45.0f;
 const float POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE = POWER_SPARK_BUFF_RADIUS + 6.0f;
 // Slack on melee reach before a melee bot lets go of a spark it is already hitting.
 const float POWER_SPARK_MELEE_STICKY = 3.0f;
+// How close a spark has to be before a DK spends a rune snaring it. A gripped spark lands at his
+// feet, so this keeps Chains of Ice on the one he pulled rather than one crossing to Malygos.
+const float POWER_SPARK_SNARE_RADIUS = 15.0f;
 
 // Arcane Pulse (57432) radius - the hard floor on the P3 flight's distance to the boss.
 const float ARCANE_PULSE_RADIUS = 30.0f;
@@ -90,6 +93,10 @@ const uint8 DRAKE_HEALERS_10MAN = 2;
 // Combo points a healer banks before Life Burst - for the +50% healing buff, not the heal.
 const uint8 DRAKE_LIFE_BURST_COMBO = 5;
 const uint8 DRAKE_ENGULF_COMBO = 3;
+// What a fixated drake needs before it dumps the bank into Engulf instead of saving it for the
+// shield. One point refreshes the stack for only 6 s, less than the cycle that rebuilds it, so the
+// stack drops; two carries 10 s.
+const uint8 DRAKE_ENGULF_SURGE_COMBO = 2;
 // Life Burst's self buff at full combo, and how little may be left before a healer renews it.
 const uint32 DRAKE_LIFE_BURST_BUFF_MS = 25000;
 const uint32 DRAKE_LIFE_BURST_REFRESH_MS = 5000;
@@ -108,8 +115,10 @@ const uint32 DRAKE_SHIELD_BASE_MS = 1000;
 const uint32 DRAKE_SHIELD_MS_PER_COMBO = 1000;
 // Above this the bank is worth more as a finisher, so the shield waits for the rotation to spend it.
 const uint8 DRAKE_SHIELD_MAX_COMBO = 3;
-// What a fixated drake rebuilds to and stops at - the cheapest bank whose shield spans the beam.
-const uint8 DRAKE_SHIELD_RESERVE_COMBO = 2;
+// What a fixated drake rebuilds to and stops at. Two points would cover the whole beam instead of
+// its first two seconds, but the bar cannot fund them: the rotation spends faster than the drake
+// regenerates, and a shield that never goes up costs the full 72,000.
+const uint8 DRAKE_SHIELD_RESERVE_COMBO = 1;
 const uint32 DRAKE_FIXATE_GAP_MS = 2000;
 
 // Radius a drake has to clear of a Static Field, and the wider radius the stack point has to clear
@@ -151,6 +160,9 @@ Unit* GetNearestPowerSpark(PlayerbotAI* botAI);
 // The spark this bot should hit: of the ones it can reach standing still, the one nearest Malygos.
 // currentTarget keeps it from swapping off a spark that has drifted just past reach.
 Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget);
+
+// The spark a DK should chain: pulled in close and not snared yet.
+Unit* GetPowerSparkToSnare(PlayerbotAI* botAI);
 
 // Read by both the position action and the grip, so they cannot disagree about where the DK is.
 bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI);
