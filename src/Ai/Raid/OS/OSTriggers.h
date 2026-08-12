@@ -44,7 +44,6 @@ enum ObsidianSanctumIDs
     SPELL_POWER_OF_VESPERON                     = 61251,
     SPELL_POWER_OF_SHADRON                      = 58105,
     SPELL_GIFT_OF_TWILIGHT_FIRE                 = 58766,
-    SPELL_TWILIGHT_TORMENT_SARTHARION           = 58835,
 
     // Visuals
     SPELL_EGG_MARKER_VISUAL                     = 58547,
@@ -107,13 +106,6 @@ class SartharionMeleePositioningTrigger : public Trigger
 {
 public:
     SartharionMeleePositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "sartharion melee positioning") {}
-    bool IsActive() override;
-};
-
-class SartharionRangedPositioningTrigger : public Trigger
-{
-public:
-    SartharionRangedPositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "sartharion ranged positioning") {}
     bool IsActive() override;
 };
 
