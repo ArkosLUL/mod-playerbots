@@ -36,22 +36,29 @@ transitions, which are both at 50%.
 
 `getMalygos` uses `FindNearestCreature` so detection survives the non-attackable flag.
 
-## No navmesh
+## No navmesh, no vmaps, no terrain
 
-**Map 616 ships no `.mmtile` files at all** — only the 28-byte `616.mmap` header. It is the only
-one of the 98 maps in the client data like this, so nothing else in the module has met it.
+**Map 616 ships no `.mmtile` files at all** — only the 28-byte `616.mmap` header, which claims
+`maxTiles = 25`. It is the only one of the 98 maps in the client data like this. It also ships **no
+vmaps** (no `616.vmtree`, no `616*.vmtile`), and all 25 of its `.map` tiles are 616 bytes of header
+carrying `MHGT` flags `0x09` (`MAP_HEIGHT_NO_HEIGHT | MAP_HEIGHT_HAS_FLIGHT_BOUNDS`) with
+`gridHeight = 0.0`. There is no collision geometry of any kind here.
 
 `PathGenerator::CalculatePath` bails at its `!HaveTile(start) || !HaveTile(dest)` guard, calls
 `BuildShortcut()` and reports `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (0x11) — whose own enum
-comment is "used when we are either flying/swiming or **on map w/o mmaps**". Three consequences:
+comment is "used when we are either flying/swiming or **on map w/o mmaps**". Four consequences:
 
 - **`generatePath` is inert here.** A shortcut path has exactly two points, and
   `PointMovementGenerator` only uses a generated path when `GetPath().size() > 2`, so both settings
   emit the same straight spline. Passing `false` is still right — it is explicit, and it survives
   someone generating tiles for 616 later — but it is not what fixes anything today.
+- **Ground height is 0.0 everywhere.** `getHeightFromFlat` returns `gridHeight`, and with no vmaps
+  nothing can override it, so `Map::GetHeight` answers 0.0 across the whole map while the platform
+  sits near Z 266. `UpdateAllowedPositionZ` then pins any **non-flying** unit to Z 0 — a 266 yd
+  drop. Its flying branch only ever raises Z, so it is inert up here.
 - **The off-navmesh failure mode cannot happen on this map.** Raw ring geometry that would be
-  rejected elsewhere ([../engine/pitfalls.md](../engine/pitfalls.md)) always paths here. The *height*
-  half of `SearchForBestPath`'s check still applies, since `GetMapHeight` reads vmaps, not the mesh.
+  rejected elsewhere ([../engine/pitfalls.md](../engine/pitfalls.md)) always paths here, and the
+  *height* half of `SearchForBestPath`'s check has nothing but the flat 0.0 surface to test against.
 - **Path-type tests must be bitmask, not equality.** `0x11` equals neither `PATHFIND_NORMAL` nor
   `PATHFIND_INCOMPLETE`, so a `type != PATHFIND_NORMAL && type != PATHFIND_INCOMPLETE` test rejects
   every path in this instance. `ReachCombatTo` and `SearchForBestPath` both mask correctly;
@@ -216,9 +223,10 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Thr
   both Arcane Overload and Surge of Power, which is why tanks, ranged and healers stay in bubbles
   instead. `MalygosRideDiskAction` steers the vehicle's own `MotionMaster`, with a
   `POINT_MOTION_TYPE` anti-stutter guard. Its `MovePoint` calls pass `generatePath = false`, which
-  on this map is belt-and-braces rather than the fix — see **No navmesh** below. What actually dove
-  the disk was `ReachCombatTo` running its endpoint through `UpdateAllowedPositionZ`, which clamps Z
-  to the platform floor; the multiplier lockout is what stops that. Scion altitude is stable — the
+  on this map is belt-and-braces rather than the fix — see **No navmesh, no vmaps, no terrain**
+  below. The dive came from a rider's own chase actions steering the disk, and the multiplier
+  lockout is what stops it; the Z mechanism itself is still open (see P2 movement ownership).
+  Scion altitude is stable — the
   core floors a Scion disk's descent at `CenterPos.z + 20` (`boss_malygos.cpp`, `MI_POINT_SCION`) —
   so a fixed target Z is safe. A rider only dismounts once
   the disk is back down at `MALYGOS_PLATFORM_Z`; stepping off at Scion altitude is a 20–30 yd drop.
@@ -460,9 +468,11 @@ one thing the suppression names as an exemption — it is the only owner of the 
 
 **Nothing but the EoE actions may move a disk rider.** The P2 multiplier zeroes every
 `MovementAction` and `CastReachTargetSpellAction` for a bot in a vehicle. A rider's chase actions
-steer the *disk*, and `ReachCombatTo` runs its endpoint through `UpdateAllowedPositionZ`, which
-clamps Z to the platform floor — the disk dove 25 yd to the ground the moment it parked next to a
-Scion, then climbed back up, over and over. **`AttackAction` derives from `MovementAction`**, so the
+steer the *disk* — which dove ~25 yd the moment it parked next to a Scion, then climbed back up,
+over and over. `ReachCombatTo` passing its endpoint through `UpdateAllowedPositionZ` was blamed for
+this, but that does not hold: on map 616 that call answers 0.0 for a non-flying unit (a 266 yd drop,
+not 25) and is inert for a flying one. **Open gap**, though the lockout fixes it either way.
+**`AttackAction` derives from `MovementAction`**, so the
 exemption list has to name `MalygosRideDiskAction` and `MalygosTargetAction` explicitly or the disk
 riders board and then sit there doing nothing. `LeaveVehicleAction` is exempt as a manual override.
 

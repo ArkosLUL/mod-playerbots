@@ -58,11 +58,14 @@ must still outrank heals while the bot is unsheltered.
   the *only* thing that could position them — so they froze permanently.
 
   Two qualifiers. The navmesh half cannot fire on a map with no `.mmtile` files — `CalculatePath`
-  short-circuits to a shortcut and every destination "paths" — but the height band still applies,
-  because `GetMapHeight` reads vmaps rather than the mesh. And the resulting
-  `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (`0x11`) equals neither `PATHFIND_NORMAL` nor
+  short-circuits to a shortcut and every destination "paths". The height band survives only where
+  there is height data: `GetMapHeight` reads vmaps *and* the raw `.map` surface, and a map shipping
+  neither (Eye of Eternity) answers a flat 0.0 everywhere, pinning any non-flying Z to 0. And the
+  resulting `PATHFIND_NORMAL | PATHFIND_NOT_USING_PATH` (`0x11`) equals neither `PATHFIND_NORMAL` nor
   `PATHFIND_INCOMPLETE`, so any path-type test written with `==` rather than a mask rejects
   everything there; `MoveToLOS` is written that way and has no callers.
+
+  `src/tools/navprobe` answers both halves offline, per map and per point, without a pull.
 
   `FleePosition` (`MovementActions.cpp:2214`) picks a navmesh-validated destination via
   `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it, or pass the
