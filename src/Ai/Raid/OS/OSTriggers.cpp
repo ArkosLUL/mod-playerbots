@@ -20,8 +20,6 @@ bool SartharionTankTrigger::IsActive()
 
 bool FlameTsunamiTrigger::IsActive()
 {
-    if (botAI->IsTank(bot)) { return false; }
-
     Unit* boss = AI_VALUE2(Unit*, "find target", "sartharion");
     if (!boss) { return false; }
 
@@ -92,11 +90,9 @@ bool TwilightPortalEnterTrigger::IsActive()
     // every cycle and the off-tank keeps holding the drakes instead of being pulled in.
     if (!IsTwilightRealmRunner(botAI, bot)) { return false; }
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "sartharion");
-    if (!boss) { return false; }
-
-    // Nothing to do inside unless an acolyte is actually up to kill.
-    if (!AnyTwilightPortalAcolyteAlive(botAI)) { return false; }
+    // Nothing to do inside unless an acolyte is actually up to kill. Both auras this checks only
+    // exist while Sartharion is being fought, so it doubles as the encounter gate.
+    if (!TwilightRealmNeedsRunner(botAI, bot)) { return false; }
 
     return bool(bot->FindNearestGameObject(GO_TWILIGHT_PORTAL, 100.0f));
 }

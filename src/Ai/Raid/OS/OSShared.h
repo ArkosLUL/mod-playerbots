@@ -9,84 +9,43 @@
 
 #include "OSTriggers.h"
 #include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "ThreatManager.h"
 
+#include <vector>
+
 // Inline helpers shared across the Obsidian Sanctum (Sartharion) components. Header-only, RS-style,
-// so no extra .cpp/context wiring is needed. All the difficulty logic funnels through here so the
-// "leave N drakes alive" decision (AiPlayerbot.SartharionDrakesAlive) stays in one place.
+// so no extra .cpp/context wiring is needed.
 namespace ObsidianSanctumHelpers
 {
-    // Keep-order: kept drakes are the first N of this list; the rest are killed, hardest-priority
-    // (last of the list) first. Kill-order is therefore Vesperon -> Shadron -> Tenebron.
-    inline constexpr uint32 keepOrder[3] = {NPC_TENEBRON, NPC_SHADRON, NPC_VESPERON};
-
-    inline int32 DrakesToLeaveAlive() { return sPlayerbotAIConfig.sartharionDrakesAlive; }
+    // Kill order is landing order, which is also the order the drakes are called in: Tenebron at
+    // 20s, Shadron at 60s, Vesperon at 120s. They arrive far enough apart that usually only one is
+    // up at a time, and finishing the one already engaged beats swapping to the fresh arrival.
+    inline constexpr uint32 killOrder[3] = {NPC_TENEBRON, NPC_SHADRON, NPC_VESPERON};
 
     inline bool IsDrakeEntry(uint32 entry)
     {
         return entry == NPC_TENEBRON || entry == NPC_SHADRON || entry == NPC_VESPERON;
     }
 
-    // A drake is kept when its position in keepOrder falls within the first N (N = drakes to leave).
-    inline bool IsDrakeKept(uint32 entry)
-    {
-        int32 const leave = DrakesToLeaveAlive();
-        for (int32 i = 0; i < leave && i < 3; ++i)
-            if (keepOrder[i] == entry)
-                return true;
-        return false;
-    }
-
-    inline bool IsDrakeToKill(uint32 entry) { return IsDrakeEntry(entry) && !IsDrakeKept(entry); }
-
-    // The acolyte NPC tied to a drake's portal, if any (Tenebron has none).
-    inline uint32 AcolyteEntryFor(uint32 drakeEntry)
-    {
-        if (drakeEntry == NPC_SHADRON)
-            return NPC_ACOLYTE_OF_SHADRON;
-        if (drakeEntry == NPC_VESPERON)
-            return NPC_ACOLYTE_OF_VESPERON;
-        return 0;
-    }
-
-    inline bool AcolyteAliveFor(PlayerbotAI* botAI, uint32 drakeEntry)
-    {
-        uint32 const acolyte = AcolyteEntryFor(drakeEntry);
-        return acolyte != 0 && GetFirstAliveUnitByEntry(botAI, acolyte) != nullptr;
-    }
-
-    // Gates Twilight Revenge (Gap I): killing a drake with its acolyte still up in the realm buffs
-    // Sartharion massively. Tenebron has no acolyte so it is always clear.
-    inline bool DrakeAcolyteClear(PlayerbotAI* botAI, uint32 drakeEntry)
-    {
-        return !AcolyteAliveFor(botAI, drakeEntry);
-    }
-
-    // Highest kill-priority living drake in the kill-set whose acolyte is already cleared.
+    // Every drake that joins gets killed. How much bonus loot the raid gets is fixed the moment
+    // Sartharion is engaged - he counts the drakes still alive then and never recounts - so killing
+    // them during the fight costs nothing, while leaving one up keeps its Power of ... aura on the
+    // raid for the rest of the fight.
     inline Unit* FindDrakeToKill(PlayerbotAI* botAI)
     {
-        // Iterate kill-order (reverse of keepOrder): Vesperon, Shadron, Tenebron.
-        for (int32 i = 2; i >= 0; --i)
-        {
-            uint32 const entry = keepOrder[i];
-            if (!IsDrakeToKill(entry))
-                continue;
-            if (!DrakeAcolyteClear(botAI, entry))
-                continue;
+        for (uint32 const entry : killOrder)
             if (Unit* drake = GetFirstAliveUnitByEntry(botAI, entry))
                 return drake;
-        }
+
         return nullptr;
     }
 
+    // Whelps only. Tenebron's eggs sit in phase 16 where nothing on the ground can see or hit them,
+    // and nobody is sent into her portal, so the whelps get killed once they cross into phase 1.
     inline Unit* FindTwilightAdd(PlayerbotAI* botAI)
     {
-        // Kill eggs before they hatch, then whelps.
-        if (Unit* egg = GetFirstAliveUnitByEntry(botAI, NPC_TWILIGHT_EGG))
-            return egg;
         return GetFirstAliveUnitByEntry(botAI, NPC_TWILIGHT_WHELP);
     }
 
@@ -95,10 +54,45 @@ namespace ObsidianSanctumHelpers
         return GetFirstAliveUnitByEntry(botAI, NPC_LAVA_BLAZE);
     }
 
-    inline bool AnyTwilightPortalAcolyteAlive(PlayerbotAI* botAI)
+    // Adds the off-tank owns alongside the drakes. Whelps come first: they hatch on the boss
+    // platform inside the raid stack and put stacking Fade Armor on whoever they reach, which is
+    // usually a healer. Lava Blazes matter because one caught loose by a Flame Tsunami enrages.
+    inline std::vector<Unit*> FindOffTankAdds(PlayerbotAI* botAI, Player* bot, float range)
     {
-        return GetFirstAliveUnitByEntry(botAI, NPC_ACOLYTE_OF_SHADRON) != nullptr ||
-               GetFirstAliveUnitByEntry(botAI, NPC_ACOLYTE_OF_VESPERON) != nullptr;
+        std::vector<Unit*> whelps;
+        std::vector<Unit*> blazes;
+
+        auto const& targets =
+            botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+        for (ObjectGuid const& guid : targets)
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive() || bot->GetExactDist2d(unit) >= range)
+                continue;
+
+            if (unit->GetEntry() == NPC_TWILIGHT_WHELP)
+                whelps.push_back(unit);
+            else if (unit->GetEntry() == NPC_LAVA_BLAZE)
+                blazes.push_back(unit);
+        }
+
+        whelps.insert(whelps.end(), blazes.begin(), blazes.end());
+        return whelps;
+    }
+
+    // Acolytes live in phase 16, so a bot on the ground can never see one - detect them by the
+    // auras their presence puts on phase-1 targets instead. Shadron's acolyte keeps Gift of Twilight
+    // Fire on Sartharion (which zeroes all damage he takes); Vesperon's blankets the whole raid in
+    // Twilight Torment. Both ids are the called-by-Sartharion variants, so they can't be confused
+    // with a solo drake pull. Tenebron reopens the same shared portal every 60s but produces
+    // neither, which is what keeps runners out of a realm with nothing to kill in it.
+    inline bool TwilightRealmNeedsRunner(PlayerbotAI* botAI, Player* bot)
+    {
+        if (bot->HasAura(SPELL_TWILIGHT_TORMENT_SARTHARION))
+            return true;
+
+        Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_SARTHARION);
+        return boss && boss->HasAura(SPELL_GIFT_OF_TWILIGHT_FIRE);
     }
 
     // The acolyte a twilight-realm runner should kill: Shadron's first, then Vesperon's. Perception-

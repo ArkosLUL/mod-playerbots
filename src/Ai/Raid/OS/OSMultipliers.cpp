@@ -13,7 +13,6 @@
 #include "GenericActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
-#include "MovementActions.h"
 #include "OSActions.h"
 #include "OSShared.h"
 #include "OSTriggers.h"
@@ -48,11 +47,6 @@ float SartharionMultiplier::GetValue(Action* action)
     if (!boss) { return 1.0f; }
 
     Unit* target = action->GetTarget();
-
-    if (botAI->IsMainTank(bot) && dynamic_cast<TankFaceAction*>(action))
-    {
-        // return 0.0f;
-    }
 
     if (botAI->IsDps(bot) && dynamic_cast<DpsAssistAction*>(action))
     {

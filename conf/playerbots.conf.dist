@@ -443,17 +443,6 @@ AiPlayerbot.UlduarMimironHardMode = 0
 # Default: 0 (disabled)
 AiPlayerbot.UlduarYoggSaronHardMode = 0
 
-# Obsidian Sanctum difficulty: how many of Sartharion's drakes bots leave alive (the "Twilight Zone"
-# tier). Bots tank the kept drakes off the raid and never kill them, then burn Sartharion; killing him
-# ends the fight and despawns the drakes. Keep-order is Tenebron -> Shadron -> Vesperon, so kill-order
-# is Vesperon -> Shadron -> Tenebron.
-#   0 = kill all drakes first, then Sartharion (Sarth+0)
-#   1 = leave Tenebron alive (Sarth+1)
-#   2 = leave Tenebron + Shadron alive (Sarth+2)
-#   3 = leave all three alive (Sarth+3)
-# Default: 0
-AiPlayerbot.SartharionDrakesAlive = 0
-
 # Bots' loot roll level:
 #   0 = always pass
 #   1 = always greed (legacy default, bots never roll "need")

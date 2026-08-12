@@ -55,9 +55,9 @@ bool SartharionTankPositionAction::Execute(Event /*event*/)
                 false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
         }
     }
-    // Offtank grabs and holds every landed drake (kept and to-kill alike) far from the raid stack, so
-    // boss-centred AoE never clips a kept drake. Force-threat locks all of them onto one off-tank.
-    else if (shadron || tenebron || vesperon)
+    // Offtank holds everything that isn't Sartharion - landed drakes, Twilight Whelps and Lava
+    // Blazes - at one spot away from the raid stack. Force-threat locks all of them onto him.
+    else
     {
         float triggerDistance = 100.0f;
         Unit* held = nullptr;
@@ -86,8 +86,21 @@ bool SartharionTankPositionAction::Execute(Event /*event*/)
             }
         }
 
-        // Once the drakes are in hand, park at the off-tank spot and face them away from the raid so
-        // their frontal Shadow Breath points away from the stack.
+        // Drakes first, then the rest of the pack. Dragging the blazes along means they follow the
+        // off-tank into the tsunami safe lane, which is what stops one being caught and enraging.
+        for (Unit* add : ObsidianSanctumHelpers::FindOffTankAdds(botAI, bot, 40.0f))
+        {
+            ObsidianSanctumHelpers::ForceThreat(add, bot);
+            if (AI_VALUE(Unit*, "current target") != add && add->GetVictim() != bot)
+                return Attack(add);
+
+            if (!held)
+                held = add;
+        }
+
+        // Park at the off-tank spot. A drake faces whoever it is attacking, so what keeps its
+        // frontal Shadow Breath off the raid is where the off-tank stands, not where he looks -
+        // facing the pack is only so he can swing at it.
         if (held)
         {
             if (bot->GetExactDist2d(SARTHARION_OFFTANK_POSITION.first, SARTHARION_OFFTANK_POSITION.second) > looseDistance)
@@ -133,13 +146,13 @@ bool AvoidFlameTsunamiAction::Execute(Event /*event*/)
         {
             Position currentPos = bot->GetPosition();
 
-            // I think these are centrepoints for the wave segments. Either way they uniquely identify the wave
-            // direction as they have different coords for the left and right waves
-            // int casting is not a mistake, need to avoid FP errors somehow.
-            // I always saw these accurate to around 6 decimal places, but if there are issues,
-            // can switch this to abs comparison of floats which would technically be more robust.
-            int posY = (int) unit->GetPositionY();
-            if (posY == 500 || posY == 564)     // RIGHT WAVE
+            // Waves are summoned facing the way they travel: the left wave at X 3211 with
+            // orientation 0 (eastbound), the right wave at X 3286 with orientation pi (westbound).
+            // Orientation holds for every segment and doesn't change in flight, unlike matching on a
+            // segment's Y - the right wave has six of those and only two were ever recognised.
+            float const pi = static_cast<float>(M_PI);
+            bool const isRightWave = std::fabs(unit->GetOrientation() - pi) < pi / 4.0f;
+            if (isRightWave)
             {
                 bool wavePassed = currentPos.GetPositionX() > unit->GetPositionX();
                 if (wavePassed)
