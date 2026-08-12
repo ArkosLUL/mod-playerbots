@@ -2,57 +2,112 @@
 
 Strategy key `wotlk-os`. Cross-raid conventions are in [README.md](README.md).
 
-## Encounter model
+## Difficulty is fixed at the pull — so kill every drake
 
-**"Leave N drakes alive" means bots *tank* those N drakes but never kill them**, and burn Sartharion.
-Killing Sartharion ends the encounter and despawns the drakes, so surviving drakes cost nothing —
-but they must be held and their mechanics serviced.
+Sartharion counts the drakes alive in `JustEngagedWith`, adds a loot mode per drake, and **never
+recounts**; the Twilight Assist/Duo/Zone criteria all read that snapshot. Killing drakes during the
+fight costs no loot and no achievement, so bots kill every drake that joins. The raid picks its
+difficulty by which drakes it kills *before* pulling.
 
-Locked decisions: keep-order is **Tenebron → Shadron → Vesperon**, so kill-order is the reverse.
-Leave1 keeps Tenebron; Leave2 keeps Tenebron + Shadron. Config
-`AiPlayerbot.SartharionDrakesAlive`, 0-3, default 0.
+Leaving one up is strictly worse: each keeps an aura on the raid all fight — Tenebron
+61248 +100% shadow taken, Shadron 58105 +100% fire taken, Vesperon 61251 −25% max health — and
+Shadron's acolyte re-applies **Gift of Twilight Fire 58766, which zeroes all damage Sartharion
+takes**. Killing one costs a single Twilight Revenge (60639, +25% physical damage and attack speed).
 
-## Wipe vectors the overhaul targets
+Kill order is landing order — Tenebron (called at 20s), Shadron (60s), Vesperon (120s) — which arrive
+far enough apart that finishing the engaged one beats swapping.
 
-Each of these is a wipe at +1/+2/+3, and the strategy only reliably did Sarth+0 before:
+**Twilight Revenge fires on every drake death, unconditionally** (`DoAction(ACTION_DRAKE_DIED)`);
+acolyte state is irrelevant to it. **Berserk is 30% and unconditional**, so keeping drakes alive
+does not avoid it either.
 
-| # | Gap |
+## Flame Tsunami
+
+Alternates direction randomly every 25s, as walls of 8-yard `NPC_FLAME_TSUNAMI` (30616) segments:
+
+| Wave | Spawns | Orientation | Occupies Y | Leaves safe |
+|---|---|---|---|---|
+| Left | X 3211, eastbound | `0` | 472-496, 520-544, 568-592 | 496-520, 544-568 |
+| Right | X 3286, westbound | `pi` | 496-520, 544-568 | 520-544, plus the outer edges |
+
+The two sets are **exact complements** — no Y survives both directions, so everyone including the
+tanks moves for one of them. The `TSUNAMI_*_SAFE_*` constants are the gap midpoints: 508 and 556 for
+the left wave, which leaves two gaps and lets melee and ranged split; 532 for the right, one shared.
+
+Identify the wave by **orientation**, never by a segment's Y — the right wave has six segments and a
+Y-match recognised only two, sending bots into the fire on the other four.
+
+## Cones — from `spell_cone`, which overrides the DBC defaults
+
+| Spell | Shape | Angle | Radius |
+|---|---|---|---|
+| Flame Breath 56908 | front | 82° (±41°) | 60 yd |
+| Tail Lash 56910 | **back** (`SpellVisual[0]==3879` → `CONE_BACK`) | 82° → hits 139°-221° | 30 yd |
+| Shadow Breath 57570 | front | 60° (±30°) | 15 yd |
+| Void Blast 57581 — the fissure detonation | area | — | 4 yd |
+
+Generic `rear flank` (90°-120° off the target's facing) clears every one of them, which is why melee
+need no OS-specific positioning action. Flame Breath reaching 60 yd is why the ranged stack is placed
+off Sartharion's front axis rather than merely far from him.
+
+## Twilight realm — acolytes are invisible from the ground
+
+Acolytes (31218/31219) and Tenebron's eggs (30882) are created with `SetPhaseMask(16)`; players are
+phase 1. Both bot perception paths filter phase (`IsPossibleTarget` → `CanSeeOrDetect`, and the grid
+check's `IsWithinDistInMap`), so **no ground bot can ever see one** — any trigger looking for an
+acolyte directly is dead code. Eggs are unkillable from outside; only whelps crossing into phase 1
+get attacked.
+
+Entry keys instead on the two auras an acolyte's presence puts on phase-1 targets:
+
+| Acolyte | Signal |
 |---|---|
-| A | No difficulty config — killing all drakes was hardcoded |
-| B | DPS attack-priority kills the drakes that are supposed to be kept |
-| C | Portal entry hard-gated on "drakes still alive", so acolytes were never cleared when drakes are kept. Only **Shadron's** acolyte was handled, not Vesperon's, and the exit check only looked for `acolyte of shadron` |
-| D | No Twilight Egg / Whelp handling (Tenebron) — the enum ids were unused |
-| E | No Lava Blaze handling (Sartharion's Lava Strike adds) — enum id unused |
-| F | Melee rear-flank fired only when **no** drake was alive, so melee ate Flame Breath / Cleave / Tail Lash in every leave-alive run |
-| G | One off-tank spot and no facing control; the MT `TankFace` multiplier was a commented no-op, so Tail Lash / Cleave / drake breath pointed into the raid |
-| H | `SARTHARION_RANGED_POSITION` was defined but never used |
-| I | **Twilight Revenge**: killing a to-kill drake while its acolyte or portal is still open buffs Sartharion massively |
+| Shadron 31218 | Sartharion has Gift of Twilight Fire **58766** |
+| Vesperon 31219 | The bot has Twilight Torment **58835** |
 
-Gap I is why target selection gates on `DrakeAcolyteClear(drakeEntry)` before a to-kill drake becomes
-a valid target. Tenebron has no acolyte, so it is always clear.
+Both are the called-by-Sartharion ids — the solo-pull variants are 57835 and 57935 — so they double
+as the encounter gate, and both clear server-side the instant the acolyte dies.
 
-Target priority, first match wins: acolyte (if in the twilight realm) → twilight whelps/eggs (eggs
-before they hatch) → Lava Blaze → to-kill drake whose acolyte is cleared → Sartharion. Kept drakes
-are never selected. The same action serves both the realm and the ground because it is driven by
-`find target` name lookups, which resolve to whatever the bot can currently see.
+All three drakes share **one** refcounted instance portal at `(3247.29, 529.804, 58.9595)`. Tenebron
+reopens it every 60s with no acolyte behind it, and the aura gate is what keeps runners out of a
+realm with nothing to kill in. Shadron reschedules 30s after each acolyte death for as long as it
+lives, so the portal logic stays stateless and simply re-fires each cycle.
 
-Because Shadron and Vesperon stay alive, their acolytes respawn — so the portal logic must stay
-**stateless** and simply re-fire each cycle.
+Portal GO 193988 casts **57620** (aura 261 `SPELL_AURA_PHASE`, misc 16), whose third effect triggers
+**57874** (−25% damage done, plus a DoT). `spell_linked_spell` carries `-57620 → -57874`, so
+`HasAura(57874)` is a valid and self-clearing realm detector. Exit GO 193989 casts 61187, linked
+`61187 → -57620`, and has a permanent spawn at the same coordinates.
 
-## `ObsidianSanctumHelpers`
+## Roles
 
-An inline header (`OSShared.h`, RS-style — no new `.cpp` or context wiring) holding the keep-order
-array and its derivations (`IsDrakeKept`, `IsDrakeToKill`, `FindDrakeToKill`), plus add predicates:
-twilight egg 30882 / whelp 30890, Lava Blaze 30643, acolyte of Shadron 31218 / Vesperon 31219.
+| Role | Position |
+|---|---|
+| Main tank | On Sartharion, apart from everything else |
+| Off-tank | Holds **drakes, Twilight Whelps and Lava Blazes together**, away from the raid |
+| Melee | `rear flank` on whatever they are killing |
+| Ranged + healers | One stack, in range of *both* tanks |
 
-**`ForceThreat` does `AddThreat(bot, 1000000.0f, …)` then `FixateTarget(bot)`, and fixate overrides
-threat outright — so a threat redirect cannot actually move a drake.** That makes a wrong redirect
-here cost a wasted cooldown rather than a wipe, which is why the redirect veto is narrow.
+Whelps and blazes are off-tank work, not just DPS targets: Tenebron's called eggs hatch at
+`(3237-3258, 513-541)`, inside the raid stack, and whelps put stacking Fade Armor (60708) on whoever
+they reach; a Lava Blaze caught loose by a tsunami enrages. Holding them drags them into the safe
+lane with the off-tank.
 
-Kept drakes are parked away from the boss stack so boss-centred AoE does not accidentally kill them
-(that forfeits the achievement rather than wiping).
+`SetFacingToObject` on the off-tank does **not** turn the drake — a drake faces whoever it attacks,
+so the off-tank's *position* is what keeps Shadow Breath off the raid.
 
-## To confirm against DBC during any further work
+`ForceThreat` does `AddThreat(1000000)` then `FixateTarget`, and fixate overrides threat outright, so
+a misdirect cannot move a fixated drake and a wrong redirect costs only a wasted cooldown. Hence the
+narrow veto in `SartharionMultiplier`: the two redirect actions only, never the shared
+`BuffOnMainTankAction` base, which would also kill Beacon of Light and Earth Shield.
 
-The aura→effect mapping — Gift of Twilight Fire vs Twilight Torment, Gift of Twilight Shadow 57835
-vs Twilight Torment 57935. Several enum ids in `OSTriggers.h` are currently unused.
+Target priority, first match wins: acolyte (reachable only inside the realm) → Twilight Whelps →
+Lava Blaze → next drake in landing order → Sartharion.
+
+## Open
+
+- The ranged stack `(3240, 508)` is reasoned, not measured. Confirm in-game that it holds inside
+  30 yd of Sartharion and out of the Flame Breath cone.
+- `IsTwilightRealmRunner` sends one ranged DPS, two at 25-man, and never a melee or a healer; the
+  encounter expects more. Widen only after measuring how long the Acolyte of Shadron survives.
+- Both tank spots share a tsunami lane (Y 532.5 and 526), so Sartharion and the drake pack stay level
+  in Y all fight. Survivable now that tanks dodge — noted, not redesigned.

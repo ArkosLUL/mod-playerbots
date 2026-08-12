@@ -29,6 +29,17 @@ namespace ObsidianSanctumHelpers
         return entry == NPC_TENEBRON || entry == NPC_SHADRON || entry == NPC_VESPERON;
     }
 
+    // A drake is only ours to touch once Sartharion has called it down. Before that it waits on its
+    // own ledge, and it carries no flag a bot filters on - the encounter guards it with
+    // UNIT_FLAG_IMMUNE_TO_NPC (bots check IMMUNE_TO_PC) and only sets NOT_SELECTABLE half a second
+    // into the pull. Vesperon's ledge is 84 yards from the off-tank spot, inside bot sight range, so
+    // without this he gets force-threated and pulled solo the moment the raid engages Sartharion.
+    // Landing puts every drake at Z ~59.5; every spawn and patrol waypoint is Z 83.6 or higher.
+    inline bool IsDrakeLanded(Unit* drake)
+    {
+        return drake && drake->IsAlive() && drake->GetPositionZ() < 70.0f;
+    }
+
     // Every drake that joins gets killed. How much bonus loot the raid gets is fixed the moment
     // Sartharion is engaged - he counts the drakes still alive then and never recounts - so killing
     // them during the fight costs nothing, while leaving one up keeps its Power of ... aura on the
@@ -36,8 +47,11 @@ namespace ObsidianSanctumHelpers
     inline Unit* FindDrakeToKill(PlayerbotAI* botAI)
     {
         for (uint32 const entry : killOrder)
-            if (Unit* drake = GetFirstAliveUnitByEntry(botAI, entry))
+        {
+            Unit* drake = GetFirstAliveUnitByEntry(botAI, entry);
+            if (IsDrakeLanded(drake))
                 return drake;
+        }
 
         return nullptr;
     }

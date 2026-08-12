@@ -20,12 +20,13 @@ bool SartharionTankPositionAction::Execute(Event /*event*/)
     Unit* tenebron = nullptr;
     Unit* vesperon = nullptr;
 
-    // Detect incoming drakes before they are on aggro table
+    // Pick up landed drakes before they reach anyone's aggro table. Skipping the airborne ones is
+    // what keeps the off-tank from force-threating Vesperon off his ledge and pulling him solo.
     GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
     for (auto& target : targets)
     {
         Unit* unit = botAI->GetUnit(target);
-        if (!unit) { continue; }
+        if (!IsDrakeLanded(unit)) { continue; }
 
         switch (unit->GetEntry())
         {
@@ -202,7 +203,8 @@ bool SartharionAttackPriorityAction::Execute(Event /*event*/)
         return false;
     }
 
-    // 1. Twilight eggs/whelps (Tenebron) must be killed, eggs before they hatch.
+    // 1. Twilight Whelps (Tenebron). The eggs themselves sit in phase 16 and cannot be touched from
+    //    the ground, so the whelps only become killable once they hatch and cross into phase 1.
     if (!target)
         target = FindTwilightAdd(botAI);
 
@@ -210,8 +212,7 @@ bool SartharionAttackPriorityAction::Execute(Event /*event*/)
     if (!target)
         target = FindLavaBlaze(botAI);
 
-    // 3. A to-kill drake whose acolyte is already cleared (the clear-gate prevents Twilight Revenge).
-    //    Kept drakes are never selected here.
+    // 3. Whichever drake has landed, in landing order.
     if (!target)
         target = FindDrakeToKill(botAI);
 
