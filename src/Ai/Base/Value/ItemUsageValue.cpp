@@ -402,6 +402,9 @@ static bool IsStrictCrossArmorContext(Player* bot)
     if (!bot)
         return true;
 
+    if (!sPlayerbotAIConfig.strictCrossArmorAtEndgame)
+        return false;
+
     // Keep cross-armor strictly disabled at level cap and in raids to avoid
     // plate/mail healers rolling NEED on cloth/leather endgame loot.
     if (bot->GetLevel() >= static_cast<uint32>(sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)))

@@ -403,6 +403,7 @@ public:
     bool allowBoUNeedIfUpgrade;    // Allow NEED on BoU if upgrade
     float crossArmorExtraMargin;
     bool crossArmorGreedIsPass;    // If true, off-armor (lower tier) GREED becomes PASS
+    bool strictCrossArmorAtEndgame;  // If true, cross-armor NEED is blocked outright at max level and in raids
     uint8 deButtonMode;            // 0 = no DE, 1 = enchanters only, 2 = all bots can DE
     float tokenILevelMargin;       // ilvl threshold to consider the token an upgrade
     uint8 sanctificationTokenRollMode;  // 0 = always GREED, 1 = NEED if under quota

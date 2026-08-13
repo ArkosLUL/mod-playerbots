@@ -743,6 +743,7 @@ bool PlayerbotAIConfig::Initialize()
     allowBoUNeedIfUpgrade = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.AllowBoUNeedIfUpgrade", true);
     crossArmorExtraMargin = sConfigMgr->GetOption<float>("AiPlayerbot.Roll.CrossArmorExtraMargin", 1.20f);
     crossArmorGreedIsPass = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.CrossArmorGreedIsPass", false);
+    strictCrossArmorAtEndgame = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.StrictCrossArmorAtEndgame", true);
     uint32 deMode = sConfigMgr->GetOption<uint32>("AiPlayerbot.Roll.UseDEButton", 1u);
     if (deMode > 2u)
         deMode = 2u;

@@ -505,6 +505,12 @@ AiPlayerbot.Roll.CrossArmorExtraMargin = 1.20
 # Default: 0 (false)
 AiPlayerbot.Roll.CrossArmorGreedIsPass = 0
 
+# Block cross-armor NEED outright at max level and in raid groups, ignoring CrossArmorExtraMargin.
+# 1: never NEED off-armor there (raid etiquette: leave mail to the shamans/hunters)
+# 0: judge it on score only, so a big enough off-armor upgrade can still be NEEDed
+# Default: 1 (enabled)
+AiPlayerbot.Roll.StrictCrossArmorAtEndgame = 1
+
 # Minimum item level delta to treat a SET TOKEN as a real upgrade (0 means >=).
 # Prevents NEED on same-tier duplicates.
 # Example: Paladin Prot with chest ilvl 232:
