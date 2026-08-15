@@ -94,6 +94,17 @@ struct DrakeStackAngle
 };
 
 thread_local std::unordered_map<uint32, DrakeStackAngle> stackAngleCache;
+
+// When the boss picked this bot's drake, and when that was last confirmed.
+struct DrakeFixate
+{
+    uint32 at = 0;
+    uint32 seen = 0;
+};
+
+// Keyed on the bot rather than its drake: bot guids are stable and bounded by the population on this
+// thread, where a Skytalon is summoned fresh every pull and the map would grow without limit.
+thread_local std::unordered_map<ObjectGuid, DrakeFixate> fixateCache;
 }
 
 bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x, float& y, float& z)
@@ -480,20 +491,27 @@ bool IsDrakeHealer(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers)
     return std::find(healers.begin(), healers.end(), botAI->GetBot()->GetGUID()) != healers.end();
 }
 
-void GetDrakeFlight(Player* bot, std::vector<Unit*>& drakes)
+void GetDrakeFlightAndHealerRank(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers,
+    std::vector<Unit*>& drakes, uint8& rank)
 {
     drakes.clear();
+    rank = 0;
+
+    Player* bot = botAI->GetBot();
+    Unit* own = bot->GetVehicleBase();
 
     Group* group = bot->GetGroup();
     if (!group)
     {
-        Unit* own = bot->GetVehicleBase();
         if (own && own->GetEntry() == NPC_WYRMREST_SKYTALON)
         {
             drakes.push_back(own);
         }
         return;
     }
+
+    ObjectGuid const ownGuid = bot->GetGUID();
+    uint32 const ownEnergy = own ? own->GetPower(POWER_ENERGY) : 0;
 
     for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
     {
@@ -510,6 +528,22 @@ void GetDrakeFlight(Player* bot, std::vector<Unit*>& drakes)
         }
 
         drakes.push_back(drake);
+
+        if (!own || member->GetGUID() == ownGuid)
+        {
+            continue;
+        }
+
+        if (std::find(healers.begin(), healers.end(), member->GetGUID()) == healers.end())
+        {
+            continue;
+        }
+
+        uint32 const energy = drake->GetPower(POWER_ENERGY);
+        if (energy > ownEnergy || (energy == ownEnergy && member->GetGUID() < ownGuid))
+        {
+            ++rank;
+        }
     }
 }
 
@@ -529,48 +563,6 @@ uint32 DrakeAuraRemainingMs(Unit* drake, uint32 spellId)
     // Negative is a permanent aura, which none of these are.
     int32 const remaining = aura->GetDuration();
     return remaining > 0 ? static_cast<uint32>(remaining) : 0;
-}
-
-uint8 GetDrakeHealerRank(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers)
-{
-    Player* bot = botAI->GetBot();
-    Unit* own = bot->GetVehicleBase();
-    Group* group = bot->GetGroup();
-    if (!own || !group)
-    {
-        return 0;
-    }
-
-    ObjectGuid const ownGuid = bot->GetGUID();
-    uint32 const ownEnergy = own->GetPower(POWER_ENERGY);
-
-    uint8 rank = 0;
-    for (GroupReference* itr = group->GetFirstMember(); itr != nullptr; itr = itr->next())
-    {
-        Player* member = itr->GetSource();
-        if (!member || member->GetGUID() == ownGuid)
-        {
-            continue;
-        }
-
-        if (std::find(healers.begin(), healers.end(), member->GetGUID()) == healers.end())
-        {
-            continue;
-        }
-
-        Unit* drake = member->GetVehicleBase();
-        if (!drake || !drake->IsAlive() || drake->GetEntry() != NPC_WYRMREST_SKYTALON)
-        {
-            continue;
-        }
-
-        uint32 const energy = drake->GetPower(POWER_ENERGY);
-        if (energy > ownEnergy || (energy == ownEnergy && member->GetGUID() < ownGuid))
-        {
-            ++rank;
-        }
-    }
-    return rank;
 }
 
 bool IsDrakeSurgeTarget(PlayerbotAI* botAI)
@@ -604,6 +596,32 @@ bool IsDrakeSurgeTarget(PlayerbotAI* botAI)
         }
     }
     return false;
+}
+
+bool GetDrakeSurgeElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs)
+{
+    elapsedMs = 0;
+    if (!IsDrakeSurgeTarget(botAI))
+    {
+        return false;
+    }
+
+    DrakeFixate& fixate = fixateCache[botAI->GetBot()->GetGUID()];
+    uint32 const now = getMSTime();
+
+    // Two ways to spot a fresh pick. The gap covers the ordinary case, where the drake went unflagged
+    // for at least a tick. The cycle length covers the back-to-back case, which has no gap at all -
+    // the boss clears and refills its slots inside one UpdateAI - so a drake still flagged a whole
+    // cycle after its fixate began can only have been picked again.
+    if (!fixate.at || getMSTimeDiff(fixate.seen, now) > DRAKE_FIXATE_GAP_MS ||
+        getMSTimeDiff(fixate.at, now) >= SURGE_CYCLE_MS)
+    {
+        fixate.at = now;
+    }
+    fixate.seen = now;
+
+    elapsedMs = getMSTimeDiff(fixate.at, now);
+    return true;
 }
 
 namespace
@@ -1456,15 +1474,9 @@ bool EoEDrakeAttackAction::Execute(Event /*event*/)
     return DrakeDpsAction(drake, boss);
 }
 
-bool EoEDrakeAttackAction::CastDrakeSpellAction(Unit* drake, Unit* target, uint32 spellId)
+bool EoEDrakeAttackAction::CastDrakeSpellAction(Unit* target, uint32 spellId)
 {
-    if (!botAI->CanCastVehicleSpell(spellId, target) || !botAI->CastVehicleSpell(spellId, target))
-    {
-        return false;
-    }
-
-    drake->AddSpellCooldown(spellId, 0, 0);
-    return true;
+    return botAI->CanCastVehicleSpell(spellId, target) && botAI->CastVehicleSpell(spellId, target);
 }
 
 bool EoEDrakeAttackAction::DrakeDpsAction(Unit* drake, Unit* target)
@@ -1478,19 +1490,31 @@ bool EoEDrakeAttackAction::DrakeDpsAction(Unit* drake, Unit* target)
 
     uint8 comboPoints = drake->GetComboPoints(target);
 
-    if (IsDrakeSurgeTarget(botAI))
+    // The slots stay set for a whole SURGE_CYCLE_MS, so the raw flag would keep the drake quiet for
+    // more than twice the window it is protecting.
+    uint32 surgeElapsed = 0;
+    if (GetDrakeSurgeElapsedMs(botAI, surgeElapsed) && surgeElapsed < SURGE_BEAM_END_MS)
     {
-        // Fixated: spend the bank while the bar still covers the shield, rebuild, then let it climb.
+        // Shielded, beam still landing: keep spiking but never finish. At the reserve the shield runs
+        // out a second short of the last tick, and the re-shield needs a combo point waiting for it.
+        if (drake->HasAura(SPELL_FLAME_SHIELD))
+        {
+            return DrakeCanAffordWithShield(drake, SPELL_FLAME_SPIKE) &&
+                   CastDrakeSpellAction(target, SPELL_FLAME_SPIKE);
+        }
+
+        // Before the beam: spend the bank while the bar still covers the shield, rebuild, then let
+        // it climb.
         if (comboPoints >= DRAKE_ENGULF_SURGE_COMBO && DrakeCanAffordWithShield(drake, SPELL_ENGULF_IN_FLAMES))
         {
-            return CastDrakeSpellAction(drake, target, SPELL_ENGULF_IN_FLAMES);
+            return CastDrakeSpellAction(target, SPELL_ENGULF_IN_FLAMES);
         }
 
         // At zero the shield has nothing to spend, so that point is worth going under the reserve.
         if (comboPoints < DRAKE_SHIELD_RESERVE_COMBO &&
             (!comboPoints || DrakeCanAffordWithShield(drake, SPELL_FLAME_SPIKE)))
         {
-            return CastDrakeSpellAction(drake, target, SPELL_FLAME_SPIKE);
+            return CastDrakeSpellAction(target, SPELL_FLAME_SPIKE);
         }
 
         return false;
@@ -1498,11 +1522,11 @@ bool EoEDrakeAttackAction::DrakeDpsAction(Unit* drake, Unit* target)
 
     if (comboPoints >= DRAKE_ENGULF_COMBO)
     {
-        return CastDrakeSpellAction(drake, target, SPELL_ENGULF_IN_FLAMES);
+        return CastDrakeSpellAction(target, SPELL_ENGULF_IN_FLAMES);
     }
     else
     {
-        return CastDrakeSpellAction(drake, target, SPELL_FLAME_SPIKE);
+        return CastDrakeSpellAction(target, SPELL_FLAME_SPIKE);
     }
 }
 
@@ -1510,7 +1534,13 @@ bool EoEDrakeAttackAction::DrakeHealAction(Unit* drake, std::vector<ObjectGuid> 
 {
     // Both stay on our own drake: combo points are held for one target at a time, so chasing the
     // lowest resets the count. DrakeCanAfford stands in for the BAD_TARGETS-reporting check.
-    if (IsDrakeSurgeTarget(botAI))
+    uint32 surgeElapsed = 0;
+    bool const fixated = GetDrakeSurgeElapsedMs(botAI, surgeElapsed) && surgeElapsed < SURGE_BEAM_END_MS;
+
+    // Only until the shield lands. After that the ladder below is already right: a drake rebuilding
+    // from an empty bank cannot reach DRAKE_LIFE_BURST_COMBO before the beam ends, so it cannot spend
+    // what the re-shield needs, and the emergency rung stays reachable if it somehow does.
+    if (fixated && !drake->HasAura(SPELL_FLAME_SHIELD))
     {
         uint8 const comboPoints = drake->GetComboPoints();
         if (comboPoints >= DRAKE_LIFE_BURST_COMBO && DrakeCanAffordWithShield(drake, SPELL_LIFE_BURST))
@@ -1529,7 +1559,9 @@ bool EoEDrakeAttackAction::DrakeHealAction(Unit* drake, std::vector<ObjectGuid> 
 
     if (drake->GetComboPoints() < DRAKE_LIFE_BURST_COMBO)
     {
-        if (!DrakeCanAfford(drake, SPELL_REVIVIFY))
+        // Revivify is break-even against the regen, so a shielded drake that keeps casting never
+        // climbs back to the 25 its second shield costs unless this holds the difference back.
+        if (fixated ? !DrakeCanAffordWithShield(drake, SPELL_REVIVIFY) : !DrakeCanAfford(drake, SPELL_REVIVIFY))
         {
             return false;
         }
@@ -1541,7 +1573,8 @@ bool EoEDrakeAttackAction::DrakeHealAction(Unit* drake, std::vector<ObjectGuid> 
 
     // Life Burst is a flat heal, so the worst drake decides this, not the raid-wide total.
     std::vector<Unit*> flight;
-    GetDrakeFlight(bot, flight);
+    uint8 healerRank = 0;
+    GetDrakeFlightAndHealerRank(botAI, healers, flight, healerRank);
 
     uint8 worstPct = 100;
     uint32 worstMissing = 0;
@@ -1593,7 +1626,7 @@ bool EoEDrakeAttackAction::DrakeHealAction(Unit* drake, std::vector<ObjectGuid> 
         if (worstPct <= DRAKE_BURST_HEALTH_PCT)
         {
             uint32 const wanted = (worstMissing + DRAKE_LIFE_BURST_HEAL - 1) / DRAKE_LIFE_BURST_HEAL;
-            if (GetDrakeHealerRank(botAI, healers) < wanted)
+            if (healerRank < wanted)
             {
                 return botAI->CastVehicleSpell(SPELL_LIFE_BURST, drake);
             }
@@ -1623,19 +1656,19 @@ bool DrakeSurgeShieldAction::Execute(Event /*event*/)
         return false;
     }
 
+    // Ahead of the aura check, so the clock keeps running while a shield is up - otherwise it goes
+    // stale for the shield's whole duration and misreads the next pick as a continuation of this one.
+    uint32 elapsed = 0;
+    if (!GetDrakeSurgeElapsedMs(botAI, elapsed))
+    {
+        return false;
+    }
+
     if (drake->HasAura(SPELL_FLAME_SHIELD))
     {
         return false;
     }
 
-    uint32 const now = getMSTime();
-    if (!lastSeenMs || getMSTimeDiff(lastSeenMs, now) > DRAKE_FIXATE_GAP_MS)
-    {
-        fixateAtMs = now;
-    }
-    lastSeenMs = now;
-
-    uint32 const elapsed = getMSTimeDiff(fixateAtMs, now);
     uint8 const comboPoints = drake->GetComboPoints();
 
     // A finisher on an empty bank is SPELL_FAILED_NO_COMBO_POINTS, reported as a success.

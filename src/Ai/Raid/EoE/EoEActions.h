@@ -111,6 +111,12 @@ const uint32 DRAKE_HOLD_ENERGY_FLOOR = 75;
 // The beam has to be covered across [DELAY, END]; nothing before it counts.
 const uint32 SURGE_BEAM_DELAY_MS = 3000;
 const uint32 SURGE_BEAM_END_MS = 6000;
+// How long the boss holds a drake in its surge slots - one full repeat of EVENT_SPELL_PH3_SURGE_OF_POWER.
+// A drake still flagged this long after its fixate began has been picked again, which is the only
+// signal there is: the boss clears and refills the slots inside one UpdateAI, so a back-to-back pick
+// leaves no gap to spot. Runs a few hundred ms early when a competing event wins the tick, which is
+// far inside the shield's one-second granularity.
+const uint32 SURGE_CYCLE_MS = 7000;
 const uint32 DRAKE_SHIELD_BASE_MS = 1000;
 const uint32 DRAKE_SHIELD_MS_PER_COMBO = 1000;
 // Above this the bank is worth more as a finisher, so the shield waits for the rotation to spend it.
@@ -178,16 +184,20 @@ bool DrakeCanAfford(Unit* drake, uint32 spellId);
 
 bool DrakeCanAffordWithShield(Unit* drake, uint32 spellId);
 
-// Every Skytalon the raid is flying, walked from the group rather than the creature cache.
-void GetDrakeFlight(Player* bot, std::vector<Unit*>& drakes);
+// Every Skytalon the raid is flying, plus this bot's place in the healer queue - energy descending,
+// guid ascending, so every bot derives the same order. Both come off one walk of the roster.
+void GetDrakeFlightAndHealerRank(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers,
+    std::vector<Unit*>& drakes, uint8& rank);
 
 // Reads the Life Burst buff as ground truth for who burst when, and how long ago.
 uint32 DrakeAuraRemainingMs(Unit* drake, uint32 spellId);
 
-// Healer drakes by energy descending, guid ascending. Every bot derives the same order.
-uint8 GetDrakeHealerRank(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers);
-
 bool IsDrakeSurgeTarget(PlayerbotAI* botAI);
+
+// Milliseconds since the boss picked this drake, false when it is not picked at all. The slots stay
+// set for SURGE_CYCLE_MS while the beam only lands across [SURGE_BEAM_DELAY_MS, SURGE_BEAM_END_MS],
+// so every consumer needs the clock rather than the raw flag.
+bool GetDrakeSurgeElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs);
 
 class MalygosPositionAction : public MovementAction
 {
@@ -322,7 +332,7 @@ public:
     bool isPossible() override;
 
 protected:
-    bool CastDrakeSpellAction(Unit* drake, Unit* target, uint32 spellId);
+    bool CastDrakeSpellAction(Unit* target, uint32 spellId);
     bool DrakeDpsAction(Unit* drake, Unit* target);
     bool DrakeHealAction(Unit* drake, std::vector<ObjectGuid> const& healers);
 };
@@ -334,11 +344,6 @@ public:
 
     bool Execute(Event event) override;
     bool isPossible() override;
-
-private:
-    // A gap in lastSeenMs is how a fresh fixate is told from the one already being handled.
-    uint32 fixateAtMs = 0;
-    uint32 lastSeenMs = 0;
 };
 
 #endif

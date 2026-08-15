@@ -17,7 +17,19 @@ Verified against `boss_malygos.cpp`:
   target, unavoidable → heal through); Surge P2 `56505` → `NPC_SURGE_OF_POWER 30334`; Surge P3
   `57407` (10) / `60936` (25); Arcane Pulse `57432` (self-cast every 3 s, **30 yd** around the boss,
   ~28k arcane — a positioning hazard, not raid-wide damage); Vortex `56105` (fully server-driven, no
-  bot action). Centre anchor `{754.395, 1301.27, 266.1}`.
+  bot action). A Static Field tick is 9,425 in 30 yd. Centre anchor `{754.395, 1301.27, 266.1}`.
+- **Vortex cannot be broken by immunity — do not re-audit this.** `VortexHandling()`
+  (`instance_eye_of_eternity.cpp`) makes the **player** cast `SPELL_VORTEX_4` (55853) on a Vortex
+  trigger with `TRIGGERED_FULL_MASK`, which sets `TRIGGERED_IGNORE_CASTER_AURAS` and so skips
+  `CheckCasterAuras` outright (`Spell.cpp:6065`). And `AuraEffect::HandleAuraControlVehicle` applies
+  the aura to the **trigger**, pulling the caster in, so there is no player-side aura for Divine
+  Shield's purge-on-immunity to remove. Breaking it needs a core-side change. (For the record the
+  rogue tool would have been Cloak of Shadows, not Shadowstep.)
+- **P1 suppresses no heal or buff cast — do not re-audit the multipliers for one.**
+  `MalygosMultiplier::GetValue` returns `1.0f` for every `CastSpellAction` in P1 except
+  `CastBlinkBackAction`, `CastDisengageAction` and, for non-tanks, `CastReachTargetSpellAction`. The
+  "Disc priests never shield on Malygos" report was a **generic priest bug** that merely reproduced
+  most visibly here — see [../classes/priest.md](../classes/priest.md).
 
 ## Phase model
 
@@ -342,7 +354,10 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   is why the healer rotation and the shield have to be tuned against one another rather than apart.
   None of this is in the world DB; `spell_dbc` is a partial override table with no rows for these
   spells. It comes from `modules/mod-spell-tweaks/data/dbc-reference/spell.reference.csv`
-  (regenerate with `python tools/dbc_export.py --export-reference`).
+  (regenerate with `python tools/dbc_export.py --export-reference`). **Radius and range are not in
+  that export at all** — `SpellRadius.dbc` and `SpellRange.dbc` were parsed straight from the client
+  files, and `spellradius_dbc` / `spellrange_dbc` in `acore_world` are empty, so SQL is not a source
+  for either.
 - **P3 — drake healers only ever cast on themselves.** Revivify is a HoT and each cast banks a combo
   point; Life Burst spends the bank as a flat heal on everyone within 60 yd of the caster. Both go on
   the healer's own drake: a `Unit` holds combo points for one target at a time, so an earlier version
@@ -433,6 +448,14 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   even a short shield eats whole ticks. It also yields on an empty bank: a finisher with no combo
   points is `SPELL_FAILED_NO_COMBO_POINTS`, and `CastVehicleSpell` would have reported that as a
   success.
+  **The middle state of the gate is load-bearing.** Shielded but with the beam still landing, both
+  rotations **cast builders and never finish** — that is what keeps at least one point banked so the
+  re-shield at t+5 always lands. Without it the resumed rotation walks 0→3 combo in the three seconds
+  after the first shield, and if it reaches 3 it dumps the bank into Engulf; `DrakeSurgeShieldAction`
+  then hits `if (!comboPoints) return false` and the re-shield is silently dropped. The cost of the
+  middle state is one delayed finisher per fixate. The healer emergency rung
+  (`DRAKE_BURST_EMERGENCY_PCT`) deliberately punches through it.
+
   **The rotation reserves the energy for it.** Shields still went missing in testing, and the reason
   was the bar rather than the timing: a dps drake's cycle costs `10N + 50` against a 10/s regen, so
   it lives near empty, and a fixated drake that kept spiking or bursting through the three seconds
@@ -447,13 +470,28 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   will not pay for it. Banking the second point is another 10 energy off a drake already spending
   faster than it regenerates, and testing had fixated drakes reaching the beam with the points but
   not the shield's 25. A short shield beats no shield by 43,200.
+  **Open gap: that measurement predates the fixate-clock fix.** With the reserve script no longer
+  burning 7 s, a fixated drake now reaches the beam with materially more energy — which was the
+  stated reason the reserve is 1 rather than 2. At 2 the first shield alone covers the whole beam,
+  which would make the re-shield below redundant rather than load-bearing. Worth re-measuring.
   A fixated dps drake dumps the bank at `DRAKE_ENGULF_SURGE_COMBO` (2) rather than the rotation's
   usual 3, because holding a two-point bank for the shield wastes it. It will not dump at one: that
   refreshes the stack for `2 + 20 · 1/5` = 6 s, shorter than the cycle that rebuilds it, so the
   stack falls off and everything the drake has already put into it is gone.
-  The latch spots a new fixate as a `DRAKE_FIXATE_GAP_MS` (2 s) gap
-  in the trigger, so a drake the boss picks twice running reads as one long fixate and shields once
-  for both — rare enough at one victim per 7 s cycle to be worth the simplicity.
+  **A gap rule cannot see a re-pick, so the latch restamps on the cycle instead.**
+  `EVENT_SPELL_PH3_SURGE_OF_POWER` clears all three `_surgeTargetGUID` slots and refills them inside
+  the same `UpdateAI` call, so back-to-back picks leave **no gap at all** and a
+  `DRAKE_FIXATE_GAP_MS` rule can never fire for them. The second shield then went up ~4 s early and
+  had expired before the beam — about 15% of picks on 25-man, ~12% on 10-man, the full 72,000 each
+  time. `GetDrakeSurgeElapsedMs` restamps on either the gap **or** `SURGE_CYCLE_MS` (7000): a slot
+  cannot outlive one repeat, so a drake still flagged at 7 s must have been re-picked.
+
+  **The 7 s cycle has slack, and the casting guard that would smooth it is dead here.** Every P3 cast
+  is triggered — Arcane Pulse and Static Field via `CastSpell(..., true)`, both surges via
+  `DoCastAOE(..., true)`, Arcane Storm via `CastCustomSpell(..., true)` — so `UpdateAI`'s
+  `HasUnitState(UNIT_STATE_CASTING)` guard never fires in P3. `events.Repeat(7s)` measures from
+  execution, so the real cycle is `7000 + δ` with δ bounded by roughly three map ticks (~150–300 ms).
+  δ is per-cycle, not cumulative.
   **It is safe to fire mid-dodge**, which matters because Static Field lands *on* the flight. Being
   a self-cast skips the branch that turns the vehicle onto a target; the branch that stops the
   vehicle dead is skipped only because the shield is instant. A Skytalon's seat (2200, `Flags`
