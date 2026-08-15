@@ -5,6 +5,7 @@
 
 #include "StatsWeightCalculator.h"
 #include "AiFactory.h"
+#include "BisListMgr.h"
 #include "DBCStores.h"
 #include "ItemEnchantmentMgr.h"
 #include "ItemTemplate.h"
@@ -221,7 +222,39 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
     if (sPlayerbotAIConfig.preferredSpecWeapons && slot >= 0 && proto->Class == ITEM_CLASS_WEAPON)
         weight_ *= ApplyPreferredSpecWeapons(proto, slot);
 
+    if (enable_bis_bonus_)
+        weight_ *= BisRankMultiplier(proto);
+
     return weight_;
+}
+
+float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
+{
+    if (sPlayerbotAIConfig.bisScoreBonus <= 0.0f)
+        return 1.0f;
+
+    if (!bis_key_resolved_)
+    {
+        bis_key_resolved_ = true;
+        bis_key_valid_ = BisListMgr::ResolveSpecKey(player_, bis_cls_, bis_tab_);
+        if (bis_key_valid_)
+            bis_max_phase_ = BisListMgr::MaxPhaseForBot(player_);
+    }
+
+    if (!bis_key_valid_)
+        return 1.0f;
+
+    // Phase-limited, unlike the spec gates: a pre-raid BiS piece should stop pulling once the bot has
+    // progressed past it.
+    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_cls_, bis_tab_, bis_max_phase_);
+
+    // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.1) a ~2.5% nudge is
+    // invisible anyway. They still get the spec-gate pass, just no score change.
+    if (!rank || rank > 3)
+        return 1.0f;
+
+    static constexpr float kRankScale[3] = {1.0f, 2.0f / 3.0f, 1.0f / 3.0f};
+    return 1.0f + sPlayerbotAIConfig.bisScoreBonus * kRankScale[rank - 1];
 }
 
 float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)

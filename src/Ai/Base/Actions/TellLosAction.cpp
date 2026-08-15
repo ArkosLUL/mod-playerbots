@@ -5,6 +5,7 @@
  */
 
 #include "TellLosAction.h"
+#include "BisListMgr.h"
 #include "ChatHelper.h"
 #include "Event.h"
 #include "ItemTemplate.h"
@@ -143,10 +144,32 @@ bool TellCalculateItemAction::Execute(Event event)
     const ItemTemplate* proto = sObjectMgr->GetItemTemplate(item.itemId);
     if (!proto)
         return false;
+
+    // Match what QueryItemUsageForEquip scores with, or the printed number is not the one the loot
+    // and equip decisions actually saw.
+    calculator.SetBisBonus(true);
     float score = calculator.CalculateItem(item.itemId, item.randomPropertyId);
 
     std::ostringstream out;
     out << "Calculated score of " << chat->FormatItem(proto) << " : " << score;
+
+    uint8 bisCls = 0;
+    uint8 bisTab = 0;
+    if (!BisListMgr::ResolveSpecKey(bot, bisCls, bisTab))
+    {
+        out << " | BiS: no spec key (role mismatch or pvp spec)";
+    }
+    else
+    {
+        uint8 const phase = BisListMgr::MaxPhaseForBot(bot);
+        uint8 const rank = sBisListMgr->GetBisRank(bot, proto, phase);
+        uint8 const anyPhaseRank = sBisListMgr->GetBisRank(bot, proto, BIS_PHASE_MAX);
+
+        out << " | BiS: class " << uint32(bisCls) << " tab " << uint32(bisTab)
+            << ", phase cap " << uint32(phase) << ", rank " << uint32(rank)
+            << " (any phase " << uint32(anyPhaseRank) << ")";
+    }
+
     botAI->TellMasterNoFacing(out.str());
     return true;
 }

@@ -72,6 +72,10 @@ public:
     // crossed.
     void SetCapPriority(bool apply) { enable_cap_priority_ = apply; }
     void SetExcludeResilience(bool exclude) { exclude_resilience_ = exclude; }
+    // Off by default on purpose. CalculateItem is the single scoring entry point, so leaving this on
+    // would also steer bot generation (InitEquipment, autogear) and not just the loot/equip decision
+    // it was calibrated for. QueryItemUsageForEquip turns it on.
+    void SetBisBonus(bool apply) { enable_bis_bonus_ = apply; }
 
     private:
     void GenerateWeights(Player* player);
@@ -92,6 +96,7 @@ public:
 
     void CalculateItemTypePenalty(ItemTemplate const* proto);
     float ApplyPreferredSpecWeapons(ItemTemplate const* proto, int32 slot);
+    float BisRankMultiplier(ItemTemplate const* proto);
 
     bool NotBestArmorType(uint32 item_subclass_armor);
 
@@ -112,6 +117,14 @@ private:
     bool enable_item_set_bonus_;
     bool enable_quality_blend_;
     bool enable_cap_priority_ = false;
+    bool enable_bis_bonus_ = false;
+    // Resolved on first use and fixed for this calculator's lifetime, like progression_tier_: the
+    // spec key costs a talent walk and QueryItemUsageForEquip scores several items per evaluation.
+    bool bis_key_resolved_ = false;
+    bool bis_key_valid_ = false;
+    uint8 bis_cls_ = 0;
+    uint8 bis_tab_ = 0;
+    uint8 bis_max_phase_ = 0;
     uint32 replaced_item_set_ = 0;
 
     float weight_;

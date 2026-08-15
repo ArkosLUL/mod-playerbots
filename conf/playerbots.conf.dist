@@ -469,6 +469,22 @@ AiPlayerbot.Roll.SmartNeedBySpec = 1
 # Default: 0 (disabled)
 AiPlayerbot.Roll.UseGroupUsageChecks = 0
 
+# Ranked BiS lists (table playerbots_bis_ranked) as a loot and equip signal. The lists are
+# authoritative about which spec an item is itemized for, which the stat heuristics can only
+# guess at: proc-only trinkets in particular read as the wrong role without them.
+# An item that is on no list is never penalized - the signal only ever adds.
+# Both options no-op when the table is missing or empty.
+#
+# Let a listed item skip the stat-based spec/role gates.
+# Default: 1 (enabled)
+AiPlayerbot.Bis.GateBypass = 1
+
+# Score bonus for a rank-1 listed item, scaled down for ranks 2 and 3 (ranks 4-6 get no bonus).
+# Only affects loot and equip decisions, not bot gear generation. Compare against
+# AiPlayerbot.EquipUpgradeThreshold: at 0.15 a rank-1 item wins while up to ~4% worse on raw score.
+# Default: 0.15 (0 disables the score half and leaves only the gate above)
+AiPlayerbot.Bis.ScoreBonus = 0.15
+
 # Bind-on-Equip etiquette: GREED by default to keep it tradeable.
 # Set to 1 to allow NEED on BoE if it's a clear upgrade.
 # Default: 1 (enabled)

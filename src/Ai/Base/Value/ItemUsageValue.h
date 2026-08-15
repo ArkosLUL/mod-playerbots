@@ -75,6 +75,9 @@ struct ItemStatProfile
     bool hasAvoid = false;
     bool hasBlockValue = false;
     bool hasSpellPen = false;
+    // Melee/ranged hit, crit, haste or expertise. Those ratings only itemize physical gear, but they
+    // are not a physical *stat*, so they need their own flag to count toward hasPhysical.
+    bool hasPhysicalRating = false;
 };
 
 SpecTraits GetSpecTraits(Player* bot);

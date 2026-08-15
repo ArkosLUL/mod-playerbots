@@ -373,8 +373,8 @@ bool BisGearAction::Execute(Event event)
     uint8 tab = AiFactory::GetPlayerSpecTab(bot);
     uint8 faction = bot->GetTeamId() == TEAM_ALLIANCE ? 1 : 2;
 
-    // Druid Bear (Feral Tank) shares tab 1 with Cat. Use sentinel tab 10 when tank strategy active.
-    constexpr uint8 BIS_TAB_DRUID_BEAR = 10;
+    // Druid Bear (Feral Tank) shares tab 1 with Cat, so it lives under a sentinel tab shared with
+    // playerbots_bis_ranked (BisListMgr.h) - both tables key their Druid rows the same way.
     constexpr uint16 BIS_ILVL_FALLBACK_WINDOW = 20;
     uint16 resolvedIlvl = 0;
     std::map<uint8, uint32> bisMap;

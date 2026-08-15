@@ -6,6 +6,7 @@
 
 #include "ItemUsageValue.h"
 #include "AiFactory.h"
+#include "BisListMgr.h"
 #include "ChatHelper.h"
 #include "Group.h"
 #include "GuildTaskMgr.h"
@@ -272,6 +273,17 @@ namespace
 static bool EnableGroupUsageChecks()
 {
     return sPlayerbotAIConfig.rollUseGroupUsageChecks;
+}
+
+// Appearing on this spec's BiS list is direct evidence the item is itemized for the spec, which the
+// stat heuristics below can only guess at. Phase is deliberately ignored: an item itemized for Fury
+// stays Fury gear whichever tier it was best in. The score nudge is the phase-aware half.
+static bool IsBisForBot(Player* bot, ItemTemplate const* proto)
+{
+    if (!sPlayerbotAIConfig.bisGateBypass)
+        return false;
+
+    return sBisListMgr->IsBisListed(bot, proto);
 }
 
 static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto);
@@ -596,6 +608,9 @@ static bool IsFallbackNeedReasonableForSpec(Player* bot, ItemTemplate const* pro
     if (!bot || !proto)
         return false;
 
+    if (IsBisForBot(bot, proto))
+        return true;
+
     SpecTraits const traits = GetSpecTraits(bot);
     uint32 const profile = StatsWeightCalculator::BuildSmartStatMask(bot);
     if (profile == SMARTSTAT_NONE)
@@ -753,6 +768,123 @@ namespace
         }
     }
 
+    // An item spell is often just a proc holder whose TriggerSpell carries the real stats
+    // (Grim Toll 60436 -> 60437 armor pen, Illustration of the Dragon Soul 60485 -> 60486 spell
+    // power). One level of indirection covers every WotLK item; the score engine follows the same
+    // chain in StatsCollector::HandleApplyAura, and the two readers disagreeing is what let
+    // proc-only gear read as the wrong role.
+    static constexpr uint8 MAX_ITEM_SPELL_SCAN_DEPTH = 1;
+
+    static void UpdateItemStatProfileFromSpell(uint32 spellId, ItemStatProfile& s, uint8 depth)
+    {
+        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+        if (!spellInfo)
+            return;
+
+        for (int eff = 0; eff < MAX_SPELL_EFFECTS; ++eff)
+        {
+            SpellEffectInfo const& effectInfo = spellInfo->Effects[eff];
+            if (effectInfo.Effect != SPELL_EFFECT_APPLY_AURA)
+                continue;
+
+            if (effectInfo.ApplyAuraName == SPELL_AURA_PROC_TRIGGER_SPELL ||
+                effectInfo.ApplyAuraName == SPELL_AURA_PERIODIC_TRIGGER_SPELL)
+            {
+                if (depth < MAX_ITEM_SPELL_SCAN_DEPTH && effectInfo.TriggerSpell &&
+                    effectInfo.TriggerSpell != spellId)
+                    UpdateItemStatProfileFromSpell(effectInfo.TriggerSpell, s, static_cast<uint8>(depth + 1));
+
+                continue;
+            }
+
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_HEALING_DONE)
+            {
+                s.hasSP = true;
+                break;
+            }
+
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_DAMAGE_DONE &&
+                (effectInfo.MiscValue & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
+            {
+                s.hasSP = true;
+                break;
+            }
+
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RESISTANCE &&
+                (effectInfo.MiscValue & SPELL_SCHOOL_MASK_NORMAL) == SPELL_SCHOOL_MASK_NORMAL)
+            {
+                s.hasAvoid = true;
+                break;
+            }
+
+            // MOD_RATING MiscValue is a combat-rating bitmask (1 << CR_x), not a raw rating index.
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING)
+            {
+                int32 const ratingMask = effectInfo.MiscValue;
+
+                if (ratingMask & ((1 << CR_DODGE) | (1 << CR_PARRY) | (1 << CR_BLOCK)))
+                {
+                    s.hasAvoid = true;
+                    break;
+                }
+
+                bool matched = false;
+
+                if (ratingMask & (1 << CR_ARMOR_PENETRATION))
+                {
+                    s.hasARP = true;
+                    matched = true;
+                }
+
+                if (ratingMask & (1 << CR_EXPERTISE))
+                {
+                    s.hasEXP = true;
+                    s.hasPhysicalRating = true;
+                    matched = true;
+                }
+
+                if (ratingMask & ((1 << CR_HIT_MELEE) | (1 << CR_HIT_RANGED)))
+                {
+                    s.hasHIT = true;
+                    s.hasPhysicalRating = true;
+                    matched = true;
+                }
+
+                if (ratingMask & ((1 << CR_CRIT_MELEE) | (1 << CR_CRIT_RANGED)))
+                {
+                    s.hasCRIT = true;
+                    s.hasPhysicalRating = true;
+                    matched = true;
+                }
+
+                if (ratingMask & ((1 << CR_HASTE_MELEE) | (1 << CR_HASTE_RANGED)))
+                {
+                    s.hasHASTE = true;
+                    s.hasPhysicalRating = true;
+                    matched = true;
+                }
+
+                if (ratingMask & ((1 << CR_HIT_SPELL) | (1 << CR_CRIT_SPELL) | (1 << CR_HASTE_SPELL)))
+                {
+                    s.hasHIT = s.hasHIT || (ratingMask & (1 << CR_HIT_SPELL));
+                    s.hasCRIT = s.hasCRIT || (ratingMask & (1 << CR_CRIT_SPELL));
+                    s.hasHASTE = s.hasHASTE || (ratingMask & (1 << CR_HASTE_SPELL));
+                    matched = true;
+                }
+
+                if (matched)
+                    break;
+            }
+
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
+                effectInfo.ApplyAuraName == SPELL_AURA_MOD_RANGED_ATTACK_POWER)
+            {
+                s.hasAP = true;
+                break;
+            }
+        }
+    }
+
     static void UpdateItemStatProfileFromSpells(ItemTemplate const* proto, ItemStatProfile& s)
     {
         for (int i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
@@ -762,60 +894,7 @@ namespace
                 (spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_EQUIP && spell.SpellTrigger != ITEM_SPELLTRIGGER_ON_USE))
                 continue;
 
-            SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spell.SpellId);
-            if (!spellInfo)
-                continue;
-
-            for (int eff = 0; eff < MAX_SPELL_EFFECTS; ++eff)
-            {
-                SpellEffectInfo const& effectInfo = spellInfo->Effects[eff];
-                if (effectInfo.Effect != SPELL_EFFECT_APPLY_AURA)
-                    continue;
-
-                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_HEALING_DONE)
-                {
-                    s.hasSP = true;
-                    break;
-                }
-
-                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_DAMAGE_DONE &&
-                    (effectInfo.MiscValue & SPELL_SCHOOL_MASK_MAGIC) == SPELL_SCHOOL_MASK_MAGIC)
-                {
-                    s.hasSP = true;
-                    break;
-                }
-
-                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RESISTANCE &&
-                    (effectInfo.MiscValue & SPELL_SCHOOL_MASK_NORMAL) == SPELL_SCHOOL_MASK_NORMAL)
-                {
-                    s.hasAvoid = true;
-                    break;
-                }
-
-                // MOD_RATING MiscValue is a combat-rating bitmask (1 << CR_x), not a raw rating index.
-                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
-                    (effectInfo.MiscValue & ((1 << CR_DODGE) | (1 << CR_PARRY) | (1 << CR_BLOCK))))
-                {
-                    s.hasAvoid = true;
-                    break;
-                }
-
-                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_RATING &&
-                    (effectInfo.MiscValue & ((1 << CR_HIT_SPELL) | (1 << CR_CRIT_SPELL) | (1 << CR_HASTE_SPELL))))
-                {
-                    s.hasHIT = s.hasHIT || (effectInfo.MiscValue & (1 << CR_HIT_SPELL));
-                    s.hasCRIT = s.hasCRIT || (effectInfo.MiscValue & (1 << CR_CRIT_SPELL));
-                    s.hasHASTE = s.hasHASTE || (effectInfo.MiscValue & (1 << CR_HASTE_SPELL));
-                    break;
-                }
-
-                if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
-                    effectInfo.ApplyAuraName == SPELL_AURA_MOD_RANGED_ATTACK_POWER)
-                {
-                    s.hasAP = true;
-                    break;
-                }
-            }
+            UpdateItemStatProfileFromSpell(spell.SpellId, s, 0);
 
             // Preserve original behavior: stop scanning item spells as soon as SP is detected.
             if (s.hasSP)
@@ -846,9 +925,13 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
     if (!bot || !proto)
         return false;
 
+    if (IsBisForBot(bot, proto))
+        return true;
+
     const SpecTraits traits = GetSpecTraits(bot);
     ItemStatProfile const stats = BuildItemStatProfile(proto);
-    bool const hasPhysical = stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP;
+    bool const hasPhysical =
+        stats.hasSTR || stats.hasAGI || stats.hasAP || stats.hasARP || stats.hasPhysicalRating;
     bool const hasCasterPrimary = stats.hasINT || stats.hasSP || stats.hasMP5;
     bool const hasCasterRatings = stats.hasHIT || stats.hasCRIT || stats.hasHASTE;
     bool const hasCaster = hasCasterPrimary || (hasCasterRatings && !hasPhysical);
@@ -995,6 +1078,12 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
 
     if (proto->Class != ITEM_CLASS_ARMOR || !IsLowerTierArmorForBot(bot, proto))
         return usage;
+
+    // Reachable for a listed item: QueryItemUsageForEquip hands out BAD_EQUIP on its own when the
+    // score is low, without ever consulting IsPrimaryForSpec. If the list picked a lower armor class
+    // for this spec, that is the intended pick, not a cross-armor grab.
+    if (IsBisForBot(bot, proto))
+        return ITEM_USAGE_EQUIP;
 
     // Endgame etiquette: do not allow cross-armor upgrades to turn into NEED
     // at level cap or in raids.
@@ -1176,6 +1265,7 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
     StatsWeightCalculator calculator(bot);
     calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
     calculator.SetOverflowPenalty(false);
+    calculator.SetBisBonus(true);
 
     // Apply PvP weights if the bot is specced for PvP
     bool isPvp = sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass());
