@@ -49,6 +49,11 @@ A zeroed multiplier breaks the multiplier loop, fails `isPossible() && relevance
 the **IMPOSSIBLE** branch — which still pushes the node's `/*A*/` alternatives. Fallback chains
 survive a veto. Never build an A→B→A cycle in `getAlternatives`.
 
+**`Queue::Push` de-dupes baskets by action *name*** (`src/Script/WorldThr/Queue.cpp:11-27` walks
+`actions` and calls `updateExistingBasket` on a name match). So one action name listed at four
+different relevances is **one basket**, not four independent entries — which means retargeting or
+fixing that action once repairs every band it appears in.
+
 Relevance constants (`src/Bot/Engine/Strategy/Strategy.h:53-65`):
 
 `ACTION_DEFAULT 5` · `ACTION_NORMAL` / `ACTION_LIGHT_HEAL 10` · `ACTION_HIGH` / `ACTION_MEDIUM_HEAL 20`
@@ -151,6 +156,13 @@ Unlike creator-name strings, a `dynamic_cast` mistake fails at **compile** time.
   **This metadata is a functional gate, not documentation.** A wrong `estAmount` or efficiency takes
   a spec's main heal offline exactly under mana pressure — it did so for paladin Holy Light,
   priest Flash Heal and shaman Healing Wave.
+- **`PartyMemberToHeal::Calculate` returns a single unit** — `argmin(healthPct + distance/10)` across
+  the whole raid. Every action bound to it competes for that one target, so anything that lowers
+  damage taken without raising health % (a shield, an absorb) leaves the same unit winning the scan
+  until the effect expires.
+- A group scan measures with `botAI->GetRange("heal")` — **30 yd** — not
+  `sPlayerbotAIConfig.spellDistance`, and not `healDistance` 38.5. Null-check `bot->GetGroup()` and
+  LOS-test while you are in there.
 - `AoeInGroupTrigger` (`HealthTriggers.cpp:47-63`) needs ≥ 3 healable members: threshold 3 (≤5),
   `min(half,4)` (≤10), `min(half,6)` (≤25), `min(half,8)` above. The threshold and the counting value
   must measure the **same population** — `CountHealableGroupMembers` counts alive members inside

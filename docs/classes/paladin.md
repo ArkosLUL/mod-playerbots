@@ -178,6 +178,11 @@ Holy Radiance does not exist in 3.3.5. `bcast` gives Holy the Concentration Aura
 **not** apply Forbearance in 3.3.5. The out-of-combat ladder in `GenericPaladinNonCombatStrategy` is
 ordered correctly. Hand of Freedom's self-preference and "already has a Hand" guard are implemented.
 
+**Beacon of Light is single-rank 53563.** The ids **53652 / 53653 / 53654** that show up in Skada are
+the server-side beacon *copy heals* for Holy Light, Flash of Light and Holy Shock respectively
+(`spell_paladin.cpp:131-135`, dispatched in `spell_pal_light_s_beacon::HandleProc`). Three entries in
+the meter means the beacon is working, not that something is casting three spells.
+
 ## Reusable pattern established here
 
 **A derived `InitTriggers` cannot remove a base-class node.** The Divine Plea fix is *relocation*:

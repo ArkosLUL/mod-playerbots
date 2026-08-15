@@ -50,7 +50,7 @@ Inherited nodes the relevance tables must not collide with: `CombatStrategy` —
   `"current target"`, so a healer with no current target cannot cast it at all.
 - **Dead registrations** (registered, zero trigger nodes): `symbol of hope`, `binding heal`,
   `lightwell`, `holy nova`, `mass dispel`, `levitate`, `mind soothe`, `consume magic`, `elune's
-  grace`, `power word: shield on almost full health below`, `power infusion on party`.
+  grace`, `power infusion on party`.
 
 ## Discipline
 
@@ -65,11 +65,11 @@ The Flash Heal step is implemented narrowly — see "Fourth pass" below.
   Disc entirely, so this finding no longer applies.**
 - **D2. No Weakened Soul guard** on `power word: shield on party` or the self shield — only the two
   custom variants check it. PW:S on party leads Disc's critical band @35, so a Weakened-Soul target
-  makes the bot re-attempt a guaranteed failure every tick. The guide's own rule (Flash Heal
-  *because* of Weakened Soul) is the missing branch.
+  makes the bot re-attempt a guaranteed failure every tick. **Superseded by the fifth pass — the
+  party shields now substitute a target rather than guarding, so this reads backwards today.**
 - **D3. No Renew maintenance on the tank.** `renew on party` appears once, in the almost-full band
   @11. `BuffOnMainTankTrigger` / `BuffOnMainTankAction` already exist — reuse, do not write new
-  plumbing.
+  plumbing. **Superseded — `renew on main tank` @24 and the main-tank shield @24.5 both ship.**
 - **D4. Binding Heal is dead code.** Trigger and action are both registered and used by nothing, and
   the trigger already encodes the guide's condition exactly (a party member below `lowHealth` **and**
   the bot below `mediumHealth`).
@@ -144,6 +144,29 @@ Current collisions: `dispel magic` = `power infusion` @41; `dispel magic on part
 @35; `penance on party` = `prayer of healing on party` @34; `penance` = `shadowfiend` @22;
 `power word: shield` = `inner focus` @21; a three-way at 20 (`hymn of hope`, `power word: shield`,
 `reach spell`).
+
+### Fifth pass — Power Word: Shield was effectively offline
+
+**A shield absorbs damage but does not raise health %.** So the raider the priest just shielded stays
+the lowest-health one and keeps owning `party member to heal` for the whole 15s of Weakened Soul,
+while the shield action attached to that target can only fail. This took **all four** PW:S bands out
+at once — a raid full of eligible unshielded raiders got roughly one shield per 15s.
+
+The fix is target substitution, not a guard: the party shields resolve their own target, skipping
+anyone with Weakened Soul. Because
+[../engine/action-selection.md](../engine/action-selection.md) de-dupes baskets by action **name**,
+retargeting the one action repaired every band it appears in.
+
+- **The Weakened Soul veto on the *self* shield is correct and stays — do not re-audit.** A self-cast
+  has no alternative target to substitute.
+- `CastPowerWordShieldOnMainTankAction` leaves `checkIsOwner` at its `false` default, unlike
+  `renew on main tank` which passes `true`: **Weakened Soul is shared**, so any priest's shield
+  should stop this one.
+- **Trap:** that main-tank shield derives from `CastBuffSpellAction`, not `CastHealingSpellAction`,
+  so `HealerAutoSaveManaMultiplier` never gates it on low mana. Intended for a tank bubble; worth
+  watching in a long fight.
+- It sits at **24.5** — below the `party member low health` shield @26 and above `renew on main tank`
+  @24, so a hurt raider still outranks topping up the tank's bubble.
 
 ## Holy
 
