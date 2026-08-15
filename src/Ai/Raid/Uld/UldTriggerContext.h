@@ -37,14 +37,16 @@ public:
         creators["iron assembly rune of power trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_trigger;
         creators["iron assembly kill order trigger"] = &RaidUlduarTriggerContext::iron_assembly_kill_order_trigger;
         creators["iron assembly fusion punch swap trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_swap_trigger;
-        creators["kologarn mark dps target trigger"] = &RaidUlduarTriggerContext::kologarn_mark_dps_target_trigger;
+        creators["kologarn body tank trigger"] = &RaidUlduarTriggerContext::kologarn_body_tank_trigger;
+        creators["kologarn off tank trigger"] = &RaidUlduarTriggerContext::kologarn_off_tank_trigger;
+        creators["kologarn rubble tank trigger"] = &RaidUlduarTriggerContext::kologarn_rubble_tank_trigger;
+        creators["kologarn dps target trigger"] = &RaidUlduarTriggerContext::kologarn_dps_target_trigger;
+        creators["kologarn smash swap trigger"] = &RaidUlduarTriggerContext::kologarn_smash_swap_trigger;
+        creators["kologarn body uncovered trigger"] = &RaidUlduarTriggerContext::kologarn_body_uncovered_trigger;
         creators["kologarn fall from floor trigger"] = &RaidUlduarTriggerContext::kologarn_fall_from_floor_trigger;
         creators["kologarn nature resistance trigger"] = &RaidUlduarTriggerContext::kologarn_nature_resistance_trigger;
         creators["kologarn rubble slowdown trigger"] = &RaidUlduarTriggerContext::kologarn_rubble_slowdown_trigger;
         creators["kologarn eyebeam trigger"] = &RaidUlduarTriggerContext::kologarn_eyebeam_trigger;
-        creators["kologarn rti target trigger"] = &RaidUlduarTriggerContext::kologarn_rti_target_trigger;
-        creators["kologarn crunch armor trigger"] = &RaidUlduarTriggerContext::kologarn_crunch_armor_trigger;
-        creators["kologarn attack dps target trigger"] = &RaidUlduarTriggerContext::kologarn_attack_dps_target_trigger;
         creators["auriaya fall from floor trigger"] = &RaidUlduarTriggerContext::auriaya_fall_from_floor_trigger;
         creators["hodir biting cold"] = &RaidUlduarTriggerContext::hodir_biting_cold;
         creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
@@ -167,14 +169,16 @@ private:
     static Trigger* iron_assembly_rune_of_power_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerTrigger(ai); }
     static Trigger* iron_assembly_kill_order_trigger(PlayerbotAI* ai) { return new IronAssemblyKillOrderTrigger(ai); }
     static Trigger* iron_assembly_fusion_punch_swap_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapTrigger(ai); }
-    static Trigger* kologarn_mark_dps_target_trigger(PlayerbotAI* ai) { return new KologarnMarkDpsTargetTrigger(ai); }
+    static Trigger* kologarn_body_tank_trigger(PlayerbotAI* ai) { return new KologarnBodyTankTrigger(ai); }
+    static Trigger* kologarn_off_tank_trigger(PlayerbotAI* ai) { return new KologarnOffTankTrigger(ai); }
+    static Trigger* kologarn_rubble_tank_trigger(PlayerbotAI* ai) { return new KologarnRubbleTankTrigger(ai); }
+    static Trigger* kologarn_dps_target_trigger(PlayerbotAI* ai) { return new KologarnDpsTargetTrigger(ai); }
+    static Trigger* kologarn_smash_swap_trigger(PlayerbotAI* ai) { return new KologarnSmashSwapTrigger(ai); }
+    static Trigger* kologarn_body_uncovered_trigger(PlayerbotAI* ai) { return new KologarnBodyUncoveredTrigger(ai); }
     static Trigger* kologarn_fall_from_floor_trigger(PlayerbotAI* ai) { return new KologarnFallFromFloorTrigger(ai); }
     static Trigger* kologarn_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "kologarn"); }
     static Trigger* kologarn_rubble_slowdown_trigger(PlayerbotAI* ai) { return new KologarnRubbleSlowdownTrigger(ai); }
     static Trigger* kologarn_eyebeam_trigger(PlayerbotAI* ai) { return new KologarnEyebeamTrigger(ai); }
-    static Trigger* kologarn_rti_target_trigger(PlayerbotAI* ai) { return new KologarnRtiTargetTrigger(ai); }
-    static Trigger* kologarn_crunch_armor_trigger(PlayerbotAI* ai) { return new KologarnCrunchArmorTrigger(ai); }
-    static Trigger* kologarn_attack_dps_target_trigger(PlayerbotAI* ai) { return new KologarnAttackDpsTargetTrigger(ai); }
     static Trigger* auriaya_fall_from_floor_trigger(PlayerbotAI* ai) { return new AuriayaFallFromFloorTrigger(ai); }
     static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }

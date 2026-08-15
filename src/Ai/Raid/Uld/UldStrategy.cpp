@@ -202,37 +202,50 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Kologarn
     //
+    // Targets are picked per role in code, with no raid icons: Skull means "everyone DPS this" and
+    // Moon is the CC channel, so borrowing them for a per-role split leaks into the generic engine.
     triggers.push_back(new TriggerNode(
-        "kologarn fall from floor trigger",
-        { NextAction("kologarn fall from floor action", ACTION_RAID + 1) }));
+        "kologarn body tank trigger",
+        { NextAction("kologarn body tank action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "kologarn rti target trigger",
-        { NextAction("kologarn rti target action", ACTION_RAID + 1) }));
+        "kologarn off tank trigger",
+        { NextAction("kologarn off tank action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "kologarn eyebeam trigger",
-        { NextAction("kologarn eyebeam action", ACTION_RAID + 1) }));
+        "kologarn dps target trigger",
+        { NextAction("kologarn dps target action", ACTION_RAID) }));
+
+    // Rubble outrun players, so the off-tank holds them clear of the raid instead of kiting.
+    triggers.push_back(new TriggerNode(
+        "kologarn rubble tank trigger",
+        { NextAction("kologarn rubble tank action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "kologarn attack dps target trigger",
-        { NextAction("attack rti target", ACTION_RAID) }));
+        "kologarn rubble slowdown trigger",
+        { NextAction("kologarn rubble slowdown action", ACTION_RAID) }));
 
+    // Overhead Smash stacks Crunch Armor on whoever holds the body; the pair trade it at 2 stacks.
     triggers.push_back(new TriggerNode(
-        "kologarn mark dps target trigger",
-        { NextAction("kologarn mark dps target action", ACTION_RAID) }));
+        "kologarn smash swap trigger",
+        { NextAction("kologarn smash swap action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "kologarn nature resistance trigger",
         { NextAction("kologarn nature resistance action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "kologarn rubble slowdown trigger",
-        { NextAction("kologarn rubble slowdown action", ACTION_RAID) }));
+        "kologarn fall from floor trigger",
+        { NextAction("kologarn fall from floor action", ACTION_RAID + 1) }));
+
+    // An uncovered body means Petrifying Breath on the whole raid, so this outranks the dodges.
+    triggers.push_back(new TriggerNode(
+        "kologarn body uncovered trigger",
+        { NextAction("kologarn body uncovered action", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "kologarn crunch armor trigger",
-        { NextAction("kologarn crunch armor action", ACTION_RAID) }));
+        "kologarn eyebeam trigger",
+        { NextAction("kologarn eyebeam action", ACTION_EMERGENCY) }));
 
     //
     // Auriaya
@@ -617,6 +630,11 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
     multipliers.push_back(new IgnisMultiplier(botAI));
+
+    // Kologarn picks every target per role in code, so the generic pickers have to be shut out, and
+    // a Stone Grip victim is a passenger who cannot walk
+    multipliers.push_back(new KologarnDisableAutomaticTargetingMultiplier(botAI));
+    multipliers.push_back(new KologarnMultiplier(botAI));
 
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));

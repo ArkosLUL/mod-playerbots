@@ -1,6 +1,7 @@
 #include "UldTriggers_Kologarn.h"
 
 #include "GameObject.h"
+#include "Group.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -12,199 +13,162 @@
 #include "Trigger.h"
 #include "Vehicle.h"
 #include <MovementActions.h>
-#include <FollowMasterStrategy.h>
-#include <RtiTargetValue.h>
 
-bool KologarnMarkDpsTargetTrigger::IsActive()
+bool KologarnBodyTankTrigger::IsActive()
 {
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-    if (!boss || !boss->IsAlive())
+    Unit* kologarn = GetKologarn(botAI);
+    if (!kologarn)
         return false;
 
-    // Only tank bot can mark target
-    if (!botAI->IsTank(bot))
+    if (!IsKologarnBodyTank(botAI, bot))
         return false;
 
-    // Get current raid dps target
+    return AI_VALUE(Unit*, "current target") != kologarn || !bot->IsWithinMeleeRange(kologarn);
+}
+
+bool KologarnOffTankTrigger::IsActive()
+{
+    if (!GetKologarn(botAI) || !IsKologarnOffTank(botAI, bot))
+        return false;
+
+    // Rubble duty owns the off-tank whenever any are up; this is only the idle case.
+    if (KologarnHasRubble(botAI))
+        return false;
+
+    Unit* target = GetKologarnOffTankTarget(botAI, bot);
+    return target && AI_VALUE(Unit*, "current target") != target;
+}
+
+bool KologarnRubbleTankTrigger::IsActive()
+{
+    if (!GetKologarn(botAI) || !IsKologarnOffTank(botAI, bot))
+        return false;
+
+    return GetKologarnNearestRubble(botAI, bot) != nullptr;
+}
+
+bool KologarnDpsTargetTrigger::IsActive()
+{
+    if (!GetKologarn(botAI))
+        return false;
+
+    if (botAI->IsTank(bot) || botAI->IsHeal(bot))
+        return false;
+
+    Unit* target = GetKologarnDpsTarget(botAI, bot);
+    return target && AI_VALUE(Unit*, "current target") != target;
+}
+
+bool KologarnSmashSwapTrigger::IsActive()
+{
+    Unit* kologarn = GetKologarn(botAI);
+    if (!kologarn)
+        return false;
+
+    // Only the main tank and first assist tank trade the body.
+    bool const isMainTank = botAI->IsMainTank(bot);
+    if (!isMainTank && !botAI->IsAssistTankOfIndex(bot, 0))
+        return false;
+
+    // bot must be the one not currently holding it.
+    Unit* activeTank = kologarn->GetVictim();
+    if (!activeTank || activeTank == bot)
+        return false;
+
+    Player* activeTankPlayer = activeTank->ToPlayer();
+    if (!activeTankPlayer)
+        return false;
+
+    bool const partnerIsSwapTank = isMainTank ? PlayerbotAI::IsAssistTankOfIndex(activeTankPlayer, 0)
+                                              : PlayerbotAI::IsMainTank(activeTankPlayer);
+    if (!partnerIsSwapTank)
+        return false;
+
+    if (GetKologarnCrunchArmorStacks(activeTank) < ULDUAR_KOLOGARN_CRUNCH_ARMOR_SWAP_STACKS)
+        return false;
+
+    // Strictly fewer, not an absolute cap: Crunch Armor lasts 45s against a 14s Smash timer, so
+    // stacks never fully clear and a cap would deadlock both tanks at 2 and stop swapping for good.
+    return GetKologarnCrunchArmorStacks(bot) < GetKologarnCrunchArmorStacks(activeTank);
+}
+
+bool KologarnBodyUncoveredTrigger::IsActive()
+{
+    Unit* kologarn = GetKologarn(botAI);
+    if (!kologarn || !bot->IsAlive())
+        return false;
+
+    Unit* victim = kologarn->GetVictim();
+    if (victim && victim->IsAlive() && victim->IsWithinMeleeRange(kologarn))
+        return false;
+
+    if (!botAI->IsTank(bot) && !botAI->IsMelee(bot))
+        return false;
+
+    // Breath only fires when the victim is out of melee range *and* SelectNearbyTarget finds nobody
+    // else close, so any body in melee suppresses it - this bot standing there is already the fix.
+    if (bot->IsWithinMeleeRange(kologarn))
+        return false;
+
+    // Nearest tank covers it, and only if no tank is left does the nearest melee step in. Without
+    // this every melee in the raid would pile onto the body at once.
+    bool const botIsTank = botAI->IsTank(bot);
     Group* group = bot->GetGroup();
     if (!group)
         return false;
 
-    int8 skullIndex = 7;
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
-
-    // Check that rubble is marked
-    if (currentSkullUnit && currentSkullUnit->IsAlive() && currentSkullUnit->GetEntry() == NPC_RUBBLE)
+    float const myDistance = bot->GetExactDist2d(kologarn);
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
-        return false;  // Skull marker is already set on rubble
-    }
-
-    // Check that there is rubble to mark
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets");
-    Unit* target = nullptr;
-    for (auto i = targets.begin(); i != targets.end(); ++i)
-    {
-        target = botAI->GetUnit(*i);
-        if (!target)
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive())
             continue;
 
-        if (target->GetEntry() == NPC_RUBBLE && target->IsAlive())
-        {
-            return true;  // Found a rubble to mark
-        }
+        bool const memberIsTank = PlayerbotAI::IsTank(member);
+        if (!memberIsTank && !PlayerbotAI::IsMelee(member))
+            continue;
+
+        // A living tank always outranks melee, whatever the distance.
+        if (memberIsTank && !botIsTank)
+            return false;
+
+        if (memberIsTank == botIsTank && member->GetExactDist2d(kologarn) < myDistance)
+            return false;
     }
 
-    // Check that right arm is marked
-    if (currentSkullUnit && currentSkullUnit->IsAlive() && currentSkullUnit->GetEntry() == NPC_RIGHT_ARM)
-    {
-        return false;  // Skull marker is already set on right arm
-    }
-
-    // Check that there is right arm to mark
-    Unit* rightArm = AI_VALUE2(Unit*, "find target", "right arm");
-    if (rightArm && rightArm->IsAlive())
-    {
-        return true;  // Found a right arm to mark
-    }
-
-    // Check that main body is marked
-    if (currentSkullUnit && currentSkullUnit->IsAlive() && currentSkullUnit->GetEntry() == NPC_KOLOGARN)
-    {
-        return false;  // Skull marker is already set on main body
-    }
-
-    // Main body is not marked
     return true;
 }
 
 bool KologarnFallFromFloorTrigger::IsActive()
 {
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-    if (!boss || !boss->IsAlive())
-    {
+    if (!GetKologarn(botAI))
         return false;
-    }
 
-    // Check if bot is on the floor
     return bot->GetPositionZ() < ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT;
 }
 
 bool KologarnRubbleSlowdownTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
+    if (!GetKologarn(botAI))
         return false;
 
-    // Check if bot is hunter
     if (bot->getClass() != CLASS_HUNTER)
-        return false;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    // Check that the current skull mark is set on rubble
-    int8 skullIndex = 7;
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
-    if (!currentSkullUnit || !currentSkullUnit->IsAlive() || currentSkullUnit->GetEntry() != NPC_RUBBLE)
         return false;
 
     if (bot->HasSpellCooldown(SPELL_FROST_TRAP))
         return false;
 
-    return true;
+    return GetKologarnNearestRubble(botAI, bot) != nullptr;
 }
 
 bool KologarnEyebeamTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
+    if (!GetKologarn(botAI) || !bot->IsAlive())
         return false;
 
-    GuidVector triggers = AI_VALUE(GuidVector, "possible triggers");
+    // The chased bot has to run whatever the range: the eye follows and will close on its own.
+    if (GetKologarnEyebeamChasing(botAI, bot))
+        return true;
 
-    if (!triggers.empty())
-    {
-        for (ObjectGuid const guid : triggers)
-        {
-            if (Unit* unit = botAI->GetUnit(guid))
-            {
-                std::string triggerName = unit->GetNameForLocaleIdx(sWorld->GetDefaultDbcLocale());
-
-                if (triggerName.rfind("Focused Eyebeam", 0) == 0 &&
-                    bot->GetDistance2d(unit) < ULDUAR_KOLOGARN_EYEBEAM_RADIUS + 1.0f)
-                {
-                    return true;
-                }
-            }
-        }
-    }
-
-    return false;
-}
-
-bool KologarnAttackDpsTargetTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    // Get bot's current target
-    Unit* currentTarget = botAI->GetUnit(bot->GetTarget());
-    if (!currentTarget || !currentTarget->IsAlive())
-        return false;
-
-    // Get the current raid marker from the group
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    ObjectGuid skullTarget = group->GetTargetIcon(RtiTargetValue::skullIndex);
-    ObjectGuid crossTarget = group->GetTargetIcon(RtiTargetValue::crossIndex);
-
-    if (crossTarget && (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0)))
-    {
-        return currentTarget->GetGUID() != crossTarget;
-    }
-    else
-    {
-        return currentTarget->GetGUID() != skullTarget;
-    }
-}
-
-bool KologarnRtiTargetTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    std::string rtiMark = AI_VALUE(std::string, "rti");
-
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0))
-        return rtiMark != "cross";
-
-    return rtiMark != "skull";
-}
-
-bool KologarnCrunchArmorTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "kologarn");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    return bot->HasAura(SPELL_CRUNCH_ARMOR);
+    return GetKologarnNearestEyebeam(botAI, bot, ULDUAR_KOLOGARN_EYEBEAM_REACT_RADIUS) != nullptr;
 }

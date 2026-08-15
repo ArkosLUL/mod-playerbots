@@ -7,14 +7,41 @@
 #include "BossAuraTriggers.h"
 #include "Group.h"
 #include "HunterBuffStrategies.h"
+#include "ObjectGuid.h"
 #include "PaladinBuffStrategies.h"
 #include "Playerbots.h"
 #include "Unit.h"
 
+// Same name match as the "find target" value, but resolved against the grid sweep rather than the
+// bot's threatened-by-me list. A bot parked on an add - a Kologarn arm, a Freya lasher - never has
+// the boss on that list, so the resistance aura it is supposed to raise never goes up.
+static Unit* FindBossByName(PlayerbotAI* botAI, std::string const& bossName)
+{
+    if (bossName.empty())
+        return nullptr;
+
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit)
+            continue;
+
+        std::wstring wnamepart;
+        if (!Utf8toWStr(unit->GetName(), wnamepart))
+            continue;
+
+        wstrToLower(wnamepart);
+        if (bossName.length() == wnamepart.length() && Utf8FitTo(bossName, wnamepart))
+            return unit;
+    }
+
+    return nullptr;
+}
+
 bool BossFireResistanceTrigger::IsActive()
 {
     // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", bossName);
+    Unit* boss = FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 
@@ -65,7 +92,7 @@ bool BossFireResistanceTrigger::IsActive()
 bool BossFrostResistanceTrigger::IsActive()
 {
     // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", bossName);
+    Unit* boss = FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 
@@ -120,7 +147,7 @@ bool BossMarkSkullTrigger::IsActive()
         return false;
 
     // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", bossName);
+    Unit* boss = FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -138,7 +165,7 @@ bool BossMarkSkullTrigger::IsActive()
 bool BossNatureResistanceTrigger::IsActive()
 {
     // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", bossName);
+    Unit* boss = FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 
@@ -192,7 +219,7 @@ bool BossNatureResistanceTrigger::IsActive()
 bool BossShadowResistanceTrigger::IsActive()
 {
     // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", bossName);
+    Unit* boss = FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 

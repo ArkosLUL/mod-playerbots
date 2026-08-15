@@ -497,6 +497,85 @@ tolerance, because a tank that steps every tick never lands a cast.
 **Crazy Cat Lady requires no sentry killed, so it is incompatible with the kill order.** Bots
 optimise for the kill and, per the follower model, never chase achievements.
 
+## Kologarn
+
+**No raid target icons.** Skull means "everyone DPS this" and Moon is the CC channel, so a per-role
+split built on them leaks into the generic engine. Targets are picked in code per role, the SWP
+Eredar Twins model — which *requires* `KologarnDisableAutomaticTargetingMultiplier`, because
+`DpsTargetValue::Calculate` falls back to a smart-target strategy when no icon is set and is
+therefore **never null**: `NotDpsTargetActiveTrigger` stays true and `dps assist` retakes the target
+on alternating ticks. It zeroes `DpsAssistAction`, `TankAssistAction` and
+`CastDebuffSpellOnAttackerAction` — the last is what stops DoTs landing on whatever the bot drifted
+onto.
+
+| Role | Target |
+|---|---|
+| Body tank (`kologarn->GetVictim()`) | the body, held in melee |
+| Off-tank (the other of MT / AT0) | rubble while any live; else the right arm, but only inside 30 yd taunt range of the body |
+| Melee DPS | right arm while it lives, else the body |
+| Ranged DPS (`IsRangedDps`, excludes healers) | rubble while any live, else as melee |
+
+Rubble duty is **derived, never stored** — the off-tank is whoever is not holding the body — so it
+follows the taunt swap on its own.
+
+### Facts that contradict the retail guides
+
+| | |
+|---|---|
+| Arm respawn | **50s**, not 60 |
+| Crunch Armor | **63355** (−20%, 4 stacks, 45s). **64002 is never applied here**, so the old cheat checking it was dead code |
+| Stone Grip | 62166 / 63981, **1 target**, caster's victim stripped → **the body tank is exempt** |
+| Focused Eyebeam | 3 most distant players via `NonTankTargetSelector`, then **exactly one** at random → one runner, never the tank. Eye lives **10s**, chases at **5.5 yd/s** against a player's 7.0; beam is a **3 yd** AoE |
+| Rubble | 8.0 yd/s — **faster than players, so held, not kited**. SmartAI: Rumble 63818 (10) / **Stone Nova 63978 (25, 10 yd, ~5550 + knockback)** |
+| Shockwave (63783) | **200 yd**, nothing narrows it |
+| Petrifying Breath | fires only when the body's victim is out of melee **and** `SelectNearbyTarget` finds nobody close — any body in melee suppresses it |
+
+That tank exemption from both Grip and Eyebeam is what stops "body tanked at all times" and "run from
+the eyebeam" ever conflicting.
+
+Boss at `(1797.15, -24.40, 448.74)`, `o≈π`: **entrance is -X**, arms split along **Y**. The walkway
+runs from the Shattered Walkway Door (x 1740.84) to the broken span at x 1782, past which
+`boss_kologarn_pit_kill_bunny` instakills inside x 1782–1832 / y -56…8 / z 400–439.
+
+### Mechanics
+
+**Tank swap** at 2 Crunch Armor stacks, incoming tank holding **strictly fewer** — not an absolute
+cap, which deadlocks both tanks at 2 and stops swapping for good, since 45s duration against a 14s
+Smash timer never lets stacks clear. Equal stacks correctly means hold.
+
+**Rubble** are held **laterally**, toward the dead arm's side, ~18 yd off the raid — never backward:
+-X is the eyebeam escape lane. Ranged AoE falls out of the role table plus the engine's `"aoe count"`
+thresholds, so no AoE action exists.
+
+**Focused Eyebeam** is a real run, not a teleport, re-stepped each tick: -X toward the entrance, then
+along the walkway, then back toward the boss. Turning that corner matters — the eye outlives the ~5s
+of -X runway. Bystanders `FleePosition` off it. None of it needs the raid cheat.
+
+**Petrifying Breath** gets its own `ACTION_EMERGENCY` guard sending the nearest tank, then nearest
+melee, into melee range whenever the body is uncovered. The swap handover is already covered by the
+swap action's `Attack`; the case that wipes is the MT dying while the off-tank sits 18 yd out.
+
+**Stone Grip** victims are stunned passengers, so `KologarnMultiplier` zeroes their movement — orders
+only fight the ride. Freeing them needs no code: DPS already focus the arm.
+
+Healers need nothing boss-specific: `PartyMemberToHeal` does not filter vehicle passengers, so
+gripped victims are already picked up. Do **not** reach for `"focus heal targets"` — it is an
+*exclusive* filter and would starve the rest of the raid.
+
+Nature resistance is wanted, since Shockwave and Petrifying Breath are both Nature. Only the first
+alive hunter raises it, and Aspect of the Wild 49071 is `APPLY_AREA_AURA_RAID` +
+`MOD_RESISTANCE_EXCLUSIVE`, so a second adds nothing. Limit: 30 yd radius.
+
+### Not implemented, deliberately
+
+- **Left arm** — dies to incidental cleave. Focusing it doubles rubble spawns and risks a
+  both-arms-down Stone Shout window when the two 50s respawn timers drift into phase.
+- **Shockwave** — 200 yd hits the platform wherever anyone stands: a healing check, not a dodge.
+- **Raid formation** — no mechanic needs it, and fixed offsets on a narrow walkway over an instakill
+  pit is where bots fall in.
+- **Fall-from-floor teleport kept** — a pathing workaround, not a mechanic: a bot under the walkway
+  is in the kill box and dies within a second, so there is no walk-back to attempt.
+
 ## Core behaviours the strategies key off
 
 Upstream script and DBC facts our code now depends on, with the behaviour each one drives. Every one
@@ -659,10 +738,10 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
 Hodir Biting Cold (real movement commented out, cheat strips the aura); Thorim Unbalancing Strike;
 Mimiron Proximity Mines and Bomb Bots (cheat-kill only — the signature Firefighter killers have no
-avoidance); Kologarn Crunch Armor and Focused Eyebeam (cheat aura-remove / teleport, no real swap or
-kiting); Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
+avoidance); Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
 (cheat instakill / teleport); Vezax no-mana-regen (cheat mana refill).
 
 Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank
-swap** — Thorim, Hodir and Kologarn all fall back to cheats. There is no enrage-timer awareness
-anywhere, which blocks every hard-mode kill-timer requirement.
+swap** — Thorim and Hodir still fall back to cheats; Kologarn now swaps on Crunch Armor stacks
+instead. There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
+requirement.

@@ -12,10 +12,50 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-class KologarnMarkDpsTargetAction : public Action
+class KologarnBodyTankAction : public AttackAction
 {
 public:
-    KologarnMarkDpsTargetAction(PlayerbotAI* botAI) : Action(botAI, "kologarn mark dps target action") {}
+    KologarnBodyTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn body tank action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KologarnOffTankAction : public AttackAction
+{
+public:
+    KologarnOffTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn off tank action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KologarnRubbleTankAction : public AttackAction
+{
+public:
+    KologarnRubbleTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn rubble tank action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KologarnDpsTargetAction : public AttackAction
+{
+public:
+    KologarnDpsTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn dps target action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KologarnSmashSwapAction : public AttackAction
+{
+public:
+    KologarnSmashSwapAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn smash swap action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class KologarnBodyUncoveredAction : public AttackAction
+{
+public:
+    KologarnBodyUncoveredAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn body uncovered action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -39,22 +79,6 @@ class KologarnEyebeamAction : public MovementAction
 {
 public:
     KologarnEyebeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "kologarn eyebeam action") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
-class KologarnRtiTargetAction : public Action
-{
-public:
-    KologarnRtiTargetAction(PlayerbotAI* botAI) : Action(botAI, "kologarn rti target action") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
-class KologarnCrunchArmorAction : public Action
-{
-public:
-    KologarnCrunchArmorAction(PlayerbotAI* botAI) : Action(botAI, "kologarn crunch armor action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

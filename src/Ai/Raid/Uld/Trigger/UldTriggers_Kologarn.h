@@ -9,10 +9,49 @@
 //
 // Kologarn
 //
-class KologarnMarkDpsTargetTrigger : public Trigger
+// Targeting is decided per role in code, with no raid target icons: Skull means "everyone DPS this"
+// and Moon is the CC channel, so borrowing them for a per-role split corrupts the generic engine
+// behaviour. Same model as the Eredar Twins in SWP.
+//
+class KologarnBodyTankTrigger : public Trigger
 {
 public:
-    KologarnMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn mark dps target trigger") {}
+    KologarnBodyTankTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn body tank trigger") {}
+    bool IsActive() override;
+};
+
+class KologarnOffTankTrigger : public Trigger
+{
+public:
+    KologarnOffTankTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn off tank trigger") {}
+    bool IsActive() override;
+};
+
+class KologarnRubbleTankTrigger : public Trigger
+{
+public:
+    KologarnRubbleTankTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn rubble tank trigger") {}
+    bool IsActive() override;
+};
+
+class KologarnDpsTargetTrigger : public Trigger
+{
+public:
+    KologarnDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn dps target trigger") {}
+    bool IsActive() override;
+};
+
+class KologarnSmashSwapTrigger : public Trigger
+{
+public:
+    KologarnSmashSwapTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn smash swap trigger") {}
+    bool IsActive() override;
+};
+
+class KologarnBodyUncoveredTrigger : public Trigger
+{
+public:
+    KologarnBodyUncoveredTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn body uncovered trigger") {}
     bool IsActive() override;
 };
 
@@ -34,27 +73,6 @@ class KologarnEyebeamTrigger : public Trigger
 {
 public:
     KologarnEyebeamTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn eyebeam trigger") {}
-    bool IsActive() override;
-};
-
-class KologarnAttackDpsTargetTrigger : public Trigger
-{
-public:
-    KologarnAttackDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn attack dps target trigger") {}
-    bool IsActive() override;
-};
-
-class KologarnRtiTargetTrigger : public Trigger
-{
-public:
-    KologarnRtiTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn rti target trigger") {}
-    bool IsActive() override;
-};
-
-class KologarnCrunchArmorTrigger : public Trigger
-{
-public:
-    KologarnCrunchArmorTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn crunch armor trigger") {}
     bool IsActive() override;
 };
 

@@ -4,6 +4,7 @@
 #include <string>
 
 #include "BurstCooldowns.h"
+#include "ChooseTargetActions.h"
 #include "FollowActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
@@ -249,6 +250,41 @@ bool RazorscaleMultiplier::MoversBlocked()
         return false;
 
     return RazorscaleBossHelper::DevouringFlameBlocks(bot, target->GetPositionX(), target->GetPositionY());
+}
+
+// Kologarn
+//
+// Every bot's target here is decided per role in code rather than through a raid icon, so the
+// generic pickers have to be silenced or they fight it: "dps target" falls back to a smart-target
+// strategy when no icon is set and is therefore never null, which keeps NotDpsTargetActiveTrigger
+// permanently true. Same three casts as the Eredar Twins guard in SWP - the debuff one matters
+// because it is what lands DoTs on whatever the bot drifted onto.
+float KologarnDisableAutomaticTargetingMultiplier::GetValue(Action* action)
+{
+    if (botAI->GetState() == BOT_STATE_NON_COMBAT)
+        return 1.0f;
+
+    if (!dynamic_cast<DpsAssistAction*>(action) && !dynamic_cast<TankAssistAction*>(action) &&
+        !dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    // Asked last, because it walks the target list: only once something would actually be blocked.
+    return GetKologarn(botAI) ? 0.0f : 1.0f;
+}
+
+float KologarnMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // A gripped bot is a stunned passenger on the right arm until the arm releases it or it dies;
+    // movement orders only fight the ride and leave it facing the wrong way when it drops.
+    if (!IsKologarnStoneGripped(bot))
+        return 1.0f;
+
+    return GetKologarn(botAI) ? 0.0f : 1.0f;
 }
 
 float UldThreatRedirectMultiplier::GetValue(Action* action)

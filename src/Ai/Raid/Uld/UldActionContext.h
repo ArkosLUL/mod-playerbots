@@ -38,13 +38,16 @@ public:
         creators["iron assembly rune of power action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_action;
         creators["iron assembly kill order action"] = &RaidUlduarActionContext::iron_assembly_kill_order_action;
         creators["iron assembly fusion punch swap action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_swap_action;
-        creators["kologarn mark dps target action"] = &RaidUlduarActionContext::kologarn_mark_dps_target_action;
+        creators["kologarn body tank action"] = &RaidUlduarActionContext::kologarn_body_tank_action;
+        creators["kologarn off tank action"] = &RaidUlduarActionContext::kologarn_off_tank_action;
+        creators["kologarn rubble tank action"] = &RaidUlduarActionContext::kologarn_rubble_tank_action;
+        creators["kologarn dps target action"] = &RaidUlduarActionContext::kologarn_dps_target_action;
+        creators["kologarn smash swap action"] = &RaidUlduarActionContext::kologarn_smash_swap_action;
+        creators["kologarn body uncovered action"] = &RaidUlduarActionContext::kologarn_body_uncovered_action;
         creators["kologarn fall from floor action"] = &RaidUlduarActionContext::kologarn_fall_from_floor_action;
         creators["kologarn nature resistance action"] = &RaidUlduarActionContext::kologarn_nature_resistance_action;
         creators["kologarn rubble slowdown action"] = &RaidUlduarActionContext::kologarn_rubble_slowdown_action;
         creators["kologarn eyebeam action"] = &RaidUlduarActionContext::kologarn_eyebeam_action;
-        creators["kologarn rti target action"] = &RaidUlduarActionContext::kologarn_rti_target_action;
-        creators["kologarn crunch armor action"] = &RaidUlduarActionContext::kologarn_crunch_armor_action;
         creators["auriaya fall from floor action"] = &RaidUlduarActionContext::auriaya_fall_from_floor_action;
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold jump"] = &RaidUlduarActionContext::hodir_biting_cold_jump;
@@ -163,13 +166,16 @@ private:
     static Action* iron_assembly_rune_of_power_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerAction(ai); }
     static Action* iron_assembly_kill_order_action(PlayerbotAI* ai) { return new IronAssemblyKillOrderAction(ai); }
     static Action* iron_assembly_fusion_punch_swap_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapAction(ai); }
-    static Action* kologarn_mark_dps_target_action(PlayerbotAI* ai) { return new KologarnMarkDpsTargetAction(ai); }
+    static Action* kologarn_body_tank_action(PlayerbotAI* ai) { return new KologarnBodyTankAction(ai); }
+    static Action* kologarn_off_tank_action(PlayerbotAI* ai) { return new KologarnOffTankAction(ai); }
+    static Action* kologarn_rubble_tank_action(PlayerbotAI* ai) { return new KologarnRubbleTankAction(ai); }
+    static Action* kologarn_dps_target_action(PlayerbotAI* ai) { return new KologarnDpsTargetAction(ai); }
+    static Action* kologarn_smash_swap_action(PlayerbotAI* ai) { return new KologarnSmashSwapAction(ai); }
+    static Action* kologarn_body_uncovered_action(PlayerbotAI* ai) { return new KologarnBodyUncoveredAction(ai); }
     static Action* kologarn_fall_from_floor_action(PlayerbotAI* ai) { return new KologarnFallFromFloorAction(ai); }
     static Action* kologarn_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "kologarn"); }
     static Action* kologarn_rubble_slowdown_action(PlayerbotAI* ai) { return new KologarnRubbleSlowdownAction(ai); }
     static Action* kologarn_eyebeam_action(PlayerbotAI* ai) { return new KologarnEyebeamAction(ai); }
-    static Action* kologarn_rti_target_action(PlayerbotAI* ai) { return new KologarnRtiTargetAction(ai); }
-    static Action* kologarn_crunch_armor_action(PlayerbotAI* ai) { return new KologarnCrunchArmorAction(ai); }
     static Action* auriaya_fall_from_floor_action(PlayerbotAI* ai) { return new AuriayaFallFromFloorAction(ai); }
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_jump(PlayerbotAI* ai) { return new HodirBitingColdJumpAction(ai); }

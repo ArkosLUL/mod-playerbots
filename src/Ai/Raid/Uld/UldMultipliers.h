@@ -75,6 +75,27 @@ private:
     bool cachedBlocked = false;
 };
 
+// Kologarn selects every bot's target in code, per role, so the generic target pickers have to be
+// shut out entirely - otherwise "dps target" (which falls back to a smart-target strategy when no
+// raid icon is set, so it is never null) fights the role assignment on alternating ticks.
+class KologarnDisableAutomaticTargetingMultiplier : public Multiplier
+{
+public:
+    KologarnDisableAutomaticTargetingMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "kologarn disable automatic targeting")
+    {
+    }
+    float GetValue(Action* action) override;
+};
+
+// Stone Grip victims ride the right arm as stunned passengers; movement orders only fight the ride.
+class KologarnMultiplier : public Multiplier
+{
+public:
+    KologarnMultiplier(PlayerbotAI* ai) : Multiplier(ai, "kologarn") {}
+    float GetValue(Action* action) override;
+};
+
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
 // encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
 class UldThreatRedirectMultiplier : public Multiplier
