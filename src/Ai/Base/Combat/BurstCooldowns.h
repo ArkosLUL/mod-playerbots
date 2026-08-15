@@ -34,10 +34,12 @@ struct BurstHoldState
     }
 };
 
-// True when the boss's victim has been the group main tank continuously for at least dwellMs. State
-// is zeroed whenever the victim is not the main tank, so a tank swap or a tank death re-arms the
-// gate. Callers must also Reset() on any path that skips this call, otherwise a stale timer from the
-// previous fight satisfies the dwell instantly on the next pull.
-bool MainTankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwellMs);
+// True when the boss's victim has been a tank in the bot's group continuously for at least dwellMs.
+// Any tank counts, not only the main one: a raid that hands a boss-flagged add to its off-tank has
+// established threat just as well, and insisting on the main tank held every burst cooldown for whole
+// fights. State is zeroed whenever the victim is not a group tank, so a tank swap or a tank death
+// re-arms the gate. Callers must also Reset() on any path that skips this call, otherwise a stale
+// timer from the previous fight satisfies the dwell instantly on the next pull.
+bool TankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwellMs);
 
 #endif

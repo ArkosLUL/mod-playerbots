@@ -47,15 +47,25 @@ available on trash.
 | Non-boss target, grouped, `BurstOnBossOnly` on | `0.0f` — save it for the boss |
 | Non-boss target, solo or config off | `1.0f` — solo bots still burst tough elites |
 | Boss target, bot is the main tank or ungrouped | `1.0f` — never gated on itself |
-| Boss target otherwise | `1.0f` once the main tank has held the boss for the dwell, else `0.0f` |
+| Boss target otherwise | `1.0f` once a tank has held the boss for the dwell, else `0.0f` |
 
-"Tank has hold" means the boss's victim has been the group main tank **continuously** for the dwell;
-`MainTankHasHeldBoss` zeroes the timer whenever it is not, so a tank swap or tank death re-arms the
-gate. The boss predicate is `IsDungeonBoss() || isWorldBoss()`, the de-facto is-boss check used
-everywhere (also `ShamanTriggers.cpp:488`).
+"Tank has hold" means the boss's victim has been **any tank in the bot's group** — not only the main
+tank — **continuously** for the dwell; `TankHasHeldBoss` zeroes the timer whenever it is not, so a
+tank swap or tank death re-arms the gate. The boss predicate is `IsDungeonBoss() || isWorldBoss()`,
+the de-facto is-boss check used everywhere (also `ShamanTriggers.cpp:488`).
+
+**Any tank counts, deliberately.** A raid that hands a boss-flagged add to its off-tank has
+established threat exactly as well as one that gave it to the main tank. Main-tank-only held every
+burst cooldown for whole fights — Obsidian Sanctum's drake phase, where the drakes are boss-flagged
+and the off-tank holds them, is the case that forced it.
+
+**For `bloodlust` / `heroism` only, the boss is resolved from the main tank's victim** when the bot's
+own target is not boss-flagged. Lust is raid-wide and a healer often has nothing selected.
+Deliberately **not** extended to personal cooldowns, which would let DPS burn them on trash while a
+tank holds a boss somewhere else.
 
 **`holdState` carries the boss GUID and must be `Reset()` on every path that skips
-`MainTankHasHeldBoss`** — without that, the previous boss's timer satisfies the dwell instantly on
+`TankHasHeldBoss`** — without that, the previous boss's timer satisfies the dwell instantly on
 the next pull.
 
 Because every bot's gate opens on the same tick, bursts stack with no cross-bot coordination.

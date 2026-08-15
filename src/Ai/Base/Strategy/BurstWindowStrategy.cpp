@@ -7,7 +7,19 @@
 #include "BurstWindowStrategy.h"
 
 #include "BurstCooldowns.h"
+#include "ObjectAccessor.h"
 #include "Playerbots.h"
+
+namespace
+{
+
+bool IsBossCreature(Unit* unit)
+{
+    Creature* creature = unit ? unit->ToCreature() : nullptr;
+    return creature && (creature->IsDungeonBoss() || creature->isWorldBoss());
+}
+
+}
 
 float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
 {
@@ -33,32 +45,41 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
 
     // Anything that skips the dwell check has to clear the state too, or the previous boss's timer
     // satisfies the dwell instantly on the next pull.
+    Group* group = bot->GetGroup();
+    bool const isLust = name == "bloodlust" || name == "heroism";
     Unit* target = AI_VALUE(Unit*, "current target");
-    Creature* creature = target ? target->ToCreature() : nullptr;
-    bool const isBoss = creature && (creature->IsDungeonBoss() || creature->isWorldBoss());
 
-    if (!isBoss)
+    // Lust is raid-wide, so what this bot has selected says nothing about whether the raid is on a
+    // boss - a healer often has nothing selected at all. Ask what the main tank is holding instead.
+    // Scoped to lust: doing it for the personal cooldowns would let dps burn them on trash while a
+    // tank happens to be holding a boss somewhere else.
+    if (isLust && group && !IsBossCreature(target))
+    {
+        if (Player* mainTank = ObjectAccessor::GetPlayer(*bot, PlayerbotAI::GetMainTankGuid(group)))
+            target = mainTank->GetVictim();
+    }
+
+    if (!IsBossCreature(target))
     {
         holdState.Reset();
 
         // With the config off, when soloing, or for shadowfiend (a mana return that just happens to
         // be a burst cooldown), keep firing on whatever is being fought. Otherwise a grouped bot
         // saves the cooldown for the boss instead of blowing it on trash.
-        if (!sPlayerbotAIConfig.burstOnBossOnly || !bot->GetGroup() || name == "shadowfiend")
+        if (!sPlayerbotAIConfig.burstOnBossOnly || !group || name == "shadowfiend")
             return 1.0f;
 
         return 0.0f;
     }
 
-    if (!bot->GetGroup() || botAI->IsMainTank(bot))
+    if (!group || botAI->IsMainTank(bot))
     {
         holdState.Reset();
         return 1.0f;
     }
 
-    uint32 dwellMs = (name == "bloodlust" || name == "heroism") ? LUST_DWELL_MS : BURST_DWELL_MS;
-
-    return MainTankHasHeldBoss(bot, target, holdState, dwellMs) ? 1.0f : 0.0f;
+    return TankHasHeldBoss(bot, target, holdState, isLust ? LUST_DWELL_MS : BURST_DWELL_MS) ? 1.0f
+                                                                                            : 0.0f;
 }
 
 void BurstWindowStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)

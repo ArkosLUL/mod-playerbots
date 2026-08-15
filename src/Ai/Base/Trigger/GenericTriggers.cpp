@@ -135,10 +135,10 @@ bool OffensivePotionTrigger::IsActive()
         return false;
     }
 
-    // Hold the pop until the main tank has firmly held the boss, so a DPS doesn't pull threat. The
-    // 'burst' strategy also gates this action, but enforcing it here keeps the potion safe when
-    // that strategy isn't loaded.
-    return MainTankHasHeldBoss(bot, target, holdState, POTION_HOLD_MS);
+    // Hold the pop until a tank has firmly held the boss, so a DPS doesn't pull threat. The 'burst'
+    // strategy also gates this action, but enforcing it here keeps the potion safe when that strategy
+    // isn't loaded.
+    return TankHasHeldBoss(bot, target, holdState, POTION_HOLD_MS);
 }
 
 bool PanicTrigger::IsActive()

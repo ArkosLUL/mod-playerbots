@@ -51,7 +51,7 @@ bool IsBurstCooldownAction(std::string const& actionName)
     return burstCooldownNames.find(actionName) != burstCooldownNames.end();
 }
 
-bool MainTankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwellMs)
+bool TankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwellMs)
 {
     if (!bot || !boss)
     {
@@ -66,9 +66,9 @@ bool MainTankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 
         return false;
     }
 
-    ObjectGuid mainTankGuid = PlayerbotAI::GetMainTankGuid(group);
     Unit* victim = boss->GetVictim();
-    if (!mainTankGuid || !victim || victim->GetGUID() != mainTankGuid)
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (!holder || holder->GetGroup() != group || !PlayerbotAI::IsTank(holder))
     {
         state.Reset();
         return false;

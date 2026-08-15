@@ -65,7 +65,24 @@ must still outrank heals while the bot is unsheltered.
   `PATHFIND_INCOMPLETE`, so any path-type test written with `==` rather than a mask rejects
   everything there; `MoveToLOS` is written that way and has no callers.
 
-  `src/tools/navprobe` answers both halves offline, per map and per point, without a pull.
+  `navprobe` answers both halves offline, per map and per point, without a pull. It lives in the
+  **core fork** at `src/tools/navprobe`, not in this module, so it never shows up in module history:
+  `docker compose --profile tools run --rm ac-navprobe --map <id> coverage`. Note that
+  `env/dist/data/mmaps` is **not** in this checkout, so the tool has no tiles to read here until they
+  are generated or mounted.
+
+- **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`,
+  `PathGenerator.cpp:764-767`), so a destination the navmesh flags as magma is **reachable, not
+  rejected**. Do not discard a hand-measured point for sitting on lava — Obsidian Sanctum's pull-drag
+  corner is exactly that.
+
+- **This fork names mmap files with a 3-digit map id**, not upstream's `%04i`:
+  `"{}/mmaps/{:03}.mmap"` and `"{}/mmaps/{:03}{:02}{:02}.mmtile"` (`MMapMgr.h:48-49`). Any external
+  script or tool written against upstream naming silently finds nothing at all.
+
+  Latent, and worth knowing before trusting a tile name: the generator writes it as
+  `(mapID, tileY, tileX)` (`MapBuilder.cpp:866`) while the loader parses it as `(mapId, x, y)`
+  (`MMapMgr.cpp:71`).
 
   `FleePosition` (`MovementActions.cpp:2214`) picks a navmesh-validated destination via
   `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it, or pass the
@@ -142,6 +159,39 @@ Related traps:
   **55011**, not 29998, so a raw `HasAura(29998)` dispelled nothing in 25-man; Eruption, Spell
   Disruption and Plague Cloud have no difficulty rows at all. Check
   `spelldifficulty_dbc` per spell and use `NaxxSpellIds::HasAnyAura(unit, {…})`.
+
+## Before the pull, and out of combat
+
+- **`AttackStop()` drops the victim and nothing else.** The `"current target"` AI value survives it —
+  and that value is what the class rotation casts at and what `ReachTargetAction` walks to. Clear it
+  explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedent
+  `ICCActions_LK.cpp:690`, `SWPActions_Felmyst.cpp:386`). Blocking re-acquisition in a multiplier
+  cannot undo a target the bot has already picked up.
+- **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
+  approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
+  first, and the boss-specific rules inherit whatever state that left behind.
+- **A boss resolved by a wide grid search is resolved long before the pull** — a 200 yd search reaches
+  the instance entrance in Obsidian Sanctum. So any per-instance state stamped on first sight starts
+  its clock at zone-in, and a `lastSeenMs` staleness guard can never fire. Re-anchor on the boss's
+  **combat edge** instead.
+- **A druid tank loses bear form out of combat.** Every druid non-combat node carries
+  `/*P*/ { NextAction("caster form") }`, and `CastCasterFormAction::Execute` is a bare
+  `RemoveShapeshift()`. `CheckMountStateAction` also reaches `Mount()` with no current target, and
+  `Mount()` calls `RemoveShapeshift()` **before** the cast — so the form dies even where the mount
+  cannot succeed. `bear form` lives in the combat-only `BearDruidStrategy`, so nothing shifts him
+  back. This bites any strategy whose holds run out of combat. Suppress `CastCasterFormAction` for
+  **tanks only** — a cat-spec druid still needs caster form for Rebirth.
+
+## Upstream merges
+
+- **PR #2592 renamed the master/player predicates, and one of them changed meaning while keeping its
+  spelling.** `HasRealPlayerMaster()` ≡ `HasGameClientMaster()`; `HasActivePlayerMaster()` ≡ the free
+  `IsRealPlayer(master)`; the old **member** `IsRealPlayer()` ≡ the free `IsSelfBot(player)`. So
+  `IsRealPlayer` used to mean "is a selfbot" and now means "is a plain player with no bot AI" — same
+  name, inverted truth value, no compile error.
+- **The four raid registration sites are pure include/name lists** (`RaidStrategyContext.h`,
+  `BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp`, `GetInstanceStrategies()`), so a
+  merge that drops either side **silently unregisters raid strategies** and nothing fails to compile.
 
 ## State does not cross objects
 
