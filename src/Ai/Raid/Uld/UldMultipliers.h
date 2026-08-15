@@ -30,7 +30,9 @@ private:
 };
 
 // XT-002 normal mode: the safety floor that keeps bots from killing the exposed Heart and flipping
-// the raid into hard mode. Also keeps the class-generic threat redirects off the wrong tank.
+// the raid into hard mode. Also stands down the generic DPS targeting, which the encounter's own
+// priority action replaces, the generic movers for the ranged DPS that are anchored to a fixed spot,
+// and the class-generic threat redirects that would aim at the wrong tank.
 class XT002TargetGuardMultiplier : public Multiplier
 {
 public:

@@ -5,7 +5,6 @@
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "RangeTriggers.h"
-#include "RtiTargetValue.h"
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -37,22 +36,6 @@ static bool HasDebuffedAllyInRange(Player* bot, uint32 spellId, float range)
     }
 
     return false;
-}
-
-// True when the skull is on one of XT's adds, so the generic "attack rti target" is safe to run.
-static bool IsSkullOnXT002Add(PlayerbotAI* botAI, Player* bot)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    Unit* marked = botAI->GetUnit(group->GetTargetIcon(RtiTargetValue::skullIndex));
-    if (!marked || !marked->IsAlive())
-        return false;
-
-    uint32 const entry = marked->GetEntry();
-    return entry == PB_NPC_XT002_LIFE_SPARK || entry == NPC_XS013_SCRAPBOT || entry == PB_NPC_XT002_BOOMBOT ||
-           entry == PB_NPC_XT002_PUMMELLER;
 }
 
 bool XT002SearingLightSpreadTrigger::IsActive()
@@ -104,78 +87,45 @@ bool XT002VoidZoneTrigger::IsActive()
     return tooCloseToVoidZone.TooCloseToCreature(PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_RADIUS);
 }
 
-bool XT002MarkKillTargetTrigger::IsActive()
+bool XT002SearingLightCarrierTrigger::IsActive()
 {
     if (!GetXT002(botAI))
         return false;
 
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
-        return false;
-
-    Unit* killTarget = GetXT002KillTarget(botAI);
-    if (!killTarget)
-        return false;
-
-    Group* group = bot->GetGroup();
-    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == killTarget->GetGUID())
-        return false;
-
-    return true;
+    return bot->HasAura(GetXT002SearingLightSpellId(bot));
 }
 
-bool XT002AttackKillTargetTrigger::IsActive()
+bool XT002RaidPositionTrigger::IsActive()
 {
     if (!GetXT002(botAI))
         return false;
 
-    // Melee stay off Boombots entirely - the avoid trigger outranks this, but a Boombot must never
-    // become their attack target in the first place.
-    Group* group = bot->GetGroup();
-    if (group && botAI->IsMelee(bot))
-    {
-        Unit* marked = botAI->GetUnit(group->GetTargetIcon(RtiTargetValue::skullIndex));
-        if (marked && marked->GetEntry() == PB_NPC_XT002_BOOMBOT)
-            return false;
-    }
+    // Anything the bot has to dodge outranks standing on a spot, and the carriers have destinations of
+    // their own, so the anchor stands down rather than fighting them for the tick.
+    if (bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot)))
+        return false;
 
-    return IsSkullOnXT002Add(botAI, bot);
+    XT002BoombotAvoidTrigger boombotAvoid(botAI);
+    XT002VoidZoneTrigger voidZone(botAI);
+    if (boombotAvoid.IsActive() || voidZone.IsActive())
+        return false;
+
+    if (botAI->IsMainTank(bot))
+        return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
+
+    if (botAI->IsRangedDps(bot))
+        return bot->GetExactDist(ULDUAR_XT002_RANGED_SPOT) > ULDUAR_XT002_RANGED_SPOT_TOLERANCE;
+
+    return false;
 }
 
-bool XT002BoombotRangedKillTrigger::IsActive()
+bool XT002SetDpsPriorityTrigger::IsActive()
 {
     if (!GetXT002(botAI))
         return false;
 
-    if (!botAI->IsRanged(bot))
-        return false;
-
-    Unit* boombot = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_BOOMBOT);
-    if (!boombot)
-        return false;
-
-    // Only worth taking on from outside the blast radius; closer than that the bot should be moving.
-    return boombot->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS;
-}
-
-bool XT002AttackHeartTrigger::IsActive()
-{
-    if (!GetXT002(botAI))
-        return false;
-
-    Unit* heart = GetXT002ExposedHeart(botAI);
-    if (!heart)
-        return false;
-
-    // Hitting the Heart is what spawns the adds - Exposed Heart fires an orb at the Toy Piles on
-    // every hit - so waiting for a clear field would mean never touching it again after the first
-    // tick. Only a Life Spark is worth breaking off for, since Static Charged chains through the raid.
-    if (GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
-        return false;
-
-    if (IsXT002HardModeActive(botAI))
-        return true;
-
-    return heart->GetHealthPct() > ULDUAR_XT002_HEART_SAFE_HP_PCT;
+    // Tanks are driven by the taunt action and the generic tank assist; this only owns DPS targeting.
+    return !botAI->IsTank(bot);
 }
 
 bool XT002PummellerTauntTrigger::IsActive()

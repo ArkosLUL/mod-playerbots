@@ -213,6 +213,10 @@ Fall back to the plain-`AiObject` + timer-model pattern (`GluthBossHelper`, `Hei
   silently deletes a role when its holder dies. Passing `true` shifts indices past dead members and
   gives free auto-promotion (`PlayerbotAI.h:437-439`).
 - `botAI->GetMeleeIndex()` counts tanks too.
+- **`IsRanged()` includes healers.** With the default `bySpec = false` it is just
+  `ContainsStrategy(STRATEGY_TYPE_RANGED)` (`PlayerbotAI.cpp:1905`), so a holy priest answers it. Any
+  fixed ranged position gated on `IsRanged` therefore drags healers off heal range; use `IsRangedDps`
+  when the intent is "the ones that only need to be in cast range of the boss".
 - `FindTankTargetSmartStrategy::IsBetter` (`Value/TankTargetValue.cpp:76-84`) short-circuits: an
   explicit main tank in a group with more than one tank **sticks to `current target`** and rejects
   every alternative. A main tank that picked up an add during a phase where the boss was untargetable

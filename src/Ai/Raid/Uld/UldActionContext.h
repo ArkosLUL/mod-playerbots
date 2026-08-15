@@ -135,11 +135,11 @@ public:
         creators["xt002 searing light spread action"] = &RaidUlduarActionContext::xt002_searing_light_spread_action;
         creators["xt002 gravity bomb spread action"] = &RaidUlduarActionContext::xt002_gravity_bomb_spread_action;
         creators["xt002 gravity bomb carrier action"] = &RaidUlduarActionContext::xt002_gravity_bomb_carrier_action;
+        creators["xt002 searing light carrier action"] = &RaidUlduarActionContext::xt002_searing_light_carrier_action;
         creators["xt002 boombot avoid action"] = &RaidUlduarActionContext::xt002_boombot_avoid_action;
         creators["xt002 void zone action"] = &RaidUlduarActionContext::xt002_void_zone_action;
-        creators["xt002 mark kill target action"] = &RaidUlduarActionContext::xt002_mark_kill_target_action;
-        creators["xt002 boombot ranged kill action"] = &RaidUlduarActionContext::xt002_boombot_ranged_kill_action;
-        creators["xt002 attack heart action"] = &RaidUlduarActionContext::xt002_attack_heart_action;
+        creators["xt002 raid position action"] = &RaidUlduarActionContext::xt002_raid_position_action;
+        creators["xt002 set dps priority action"] = &RaidUlduarActionContext::xt002_set_dps_priority_action;
         creators["xt002 pummeller taunt action"] = &RaidUlduarActionContext::xt002_pummeller_taunt_action;
         creators["xt002 redirect threat action"] = &RaidUlduarActionContext::xt002_redirect_threat_action;
     }
@@ -263,11 +263,11 @@ private:
     static Action* xt002_searing_light_spread_action(PlayerbotAI* ai) { return new XT002SearingLightSpreadAction(ai); }
     static Action* xt002_gravity_bomb_spread_action(PlayerbotAI* ai) { return new XT002GravityBombSpreadAction(ai); }
     static Action* xt002_gravity_bomb_carrier_action(PlayerbotAI* ai) { return new XT002GravityBombCarrierAction(ai); }
+    static Action* xt002_searing_light_carrier_action(PlayerbotAI* ai) { return new XT002SearingLightCarrierAction(ai); }
     static Action* xt002_boombot_avoid_action(PlayerbotAI* ai) { return new XT002BoombotAvoidAction(ai); }
     static Action* xt002_void_zone_action(PlayerbotAI* ai) { return new XT002VoidZoneAction(ai); }
-    static Action* xt002_mark_kill_target_action(PlayerbotAI* ai) { return new XT002MarkKillTargetAction(ai); }
-    static Action* xt002_boombot_ranged_kill_action(PlayerbotAI* ai) { return new XT002BoombotRangedKillAction(ai); }
-    static Action* xt002_attack_heart_action(PlayerbotAI* ai) { return new XT002AttackHeartAction(ai); }
+    static Action* xt002_raid_position_action(PlayerbotAI* ai) { return new XT002RaidPositionAction(ai); }
+    static Action* xt002_set_dps_priority_action(PlayerbotAI* ai) { return new XT002SetDpsPriorityAction(ai); }
     static Action* xt002_pummeller_taunt_action(PlayerbotAI* ai) { return new XT002PummellerTauntAction(ai); }
     static Action* xt002_redirect_threat_action(PlayerbotAI* ai) { return new XT002RedirectThreatAction(ai); }
 };

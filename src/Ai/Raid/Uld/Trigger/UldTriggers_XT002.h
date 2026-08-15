@@ -37,8 +37,17 @@ public:
     bool IsActive() override;
 };
 
+// This bot carries Searing Light. It leaves for a fixed spot rather than an emergent one, so the rest
+// of the raid can hold still and knows where any hard-mode Life Spark is about to appear.
+class XT002SearingLightCarrierTrigger : public Trigger
+{
+public:
+    XT002SearingLightCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 searing light carrier trigger") {}
+    bool IsActive() override;
+};
+
 // A Boombot explodes for 15-18k when it reaches XT or drops to 50% health, so melee never stand next
-// to one. Ranged kill it from outside the blast instead (xt002 boombot ranged kill trigger).
+// to one. Ranged kill it from outside the blast instead, via the DPS priority action.
 class XT002BoombotAvoidTrigger : public Trigger
 {
 public:
@@ -53,33 +62,21 @@ public:
     bool IsActive() override;
 };
 
-class XT002MarkKillTargetTrigger : public Trigger
+// Anchors the main tank and ranged DPS. Goes false the moment anything the bot has to dodge is live,
+// so walking back to a spot can never compete with a mechanic.
+class XT002RaidPositionTrigger : public Trigger
 {
 public:
-    XT002MarkKillTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 mark kill target trigger") {}
+    XT002RaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 raid position trigger") {}
     bool IsActive() override;
 };
 
-class XT002AttackKillTargetTrigger : public Trigger
+// Non-tanks pick their own target from the encounter's priority order. Nothing is marked: raid icons
+// are group-global, so setting one here would overwrite whatever the player and other bots rely on.
+class XT002SetDpsPriorityTrigger : public Trigger
 {
 public:
-    XT002AttackKillTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 attack kill target trigger") {}
-    bool IsActive() override;
-};
-
-class XT002BoombotRangedKillTrigger : public Trigger
-{
-public:
-    XT002BoombotRangedKillTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 boombot ranged kill trigger") {}
-    bool IsActive() override;
-};
-
-// The exposed Heart is the encounter's damage multiplier. In normal mode bots stop at
-// ULDUAR_XT002_HEART_SAFE_HP_PCT so they never flip the raid into hard mode by accident.
-class XT002AttackHeartTrigger : public Trigger
-{
-public:
-    XT002AttackHeartTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 attack heart trigger") {}
+    XT002SetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 set dps priority trigger") {}
     bool IsActive() override;
 };
 

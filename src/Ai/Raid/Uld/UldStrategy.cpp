@@ -125,7 +125,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // XT-002 Deconstructor
     //
     // Dodging the debuff splash and the Boombot blast outranks everything else: both one-shot a bot
-    // that stands in them. The carrier's own run outranks the neighbours' step-out because the raid
+    // that stands in them. Each carrier's own run outranks the neighbours' step-out because the raid
     // cannot spread away from someone who is walking into it.
     triggers.push_back(new TriggerNode(
         "xt002 searing light spread trigger",
@@ -136,10 +136,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("xt002 gravity bomb spread action", ACTION_EMERGENCY) }));
 
     triggers.push_back(new TriggerNode(
-        "xt002 gravity bomb carrier trigger",
-        { NextAction("xt002 gravity bomb carrier action", ACTION_EMERGENCY + 1) }));
-
-    triggers.push_back(new TriggerNode(
         "xt002 boombot avoid trigger",
         { NextAction("xt002 boombot avoid action", ACTION_EMERGENCY) }));
 
@@ -147,33 +143,36 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "xt002 void zone trigger",
         { NextAction("xt002 void zone action", ACTION_EMERGENCY) }));
 
-    // Target priority: the exposed Heart outranks add DPS, because hitting it is what keeps spawning
-    // the adds - a raid that stops for every Scrapbot never gets the Heart down. Marking and the
-    // Pummeller taunt sit above it so add control keeps running through the Heart window. The Heart is
-    // attacked directly rather than through the skull so the two never fight over the mark.
     triggers.push_back(new TriggerNode(
-        "xt002 mark kill target trigger",
-        { NextAction("xt002 mark kill target action", ACTION_RAID + 4) }));
+        "xt002 gravity bomb carrier trigger",
+        { NextAction("xt002 gravity bomb carrier action", ACTION_EMERGENCY + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "xt002 attack kill target trigger",
-        { NextAction("attack rti target", ACTION_RAID + 1) }));
+        "xt002 searing light carrier trigger",
+        { NextAction("xt002 searing light carrier action", ACTION_EMERGENCY + 1) }));
+
+    // One action owns every non-tank's target, so nothing is marked - a raid icon is group-global and
+    // would overwrite whatever the player and the other bots are using. The Pummeller taunt sits above
+    // it so add control keeps running through the Heart window.
+    //
+    // Positioning is deliberately the lowest node here. The engine ends a tick at the first action
+    // that succeeds, so during an add wave the priority action starves it - which is the behaviour we
+    // want, since killing a Scrapbot beats standing on a spot and the anchor has yards of tolerance.
+    triggers.push_back(new TriggerNode(
+        "xt002 pummeller taunt trigger",
+        { NextAction("xt002 pummeller taunt action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "xt002 set dps priority trigger",
+        { NextAction("xt002 set dps priority action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "xt002 redirect threat trigger",
         { NextAction("xt002 redirect threat action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "xt002 boombot ranged kill trigger",
-        { NextAction("xt002 boombot ranged kill action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "xt002 pummeller taunt trigger",
-        { NextAction("xt002 pummeller taunt action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "xt002 attack heart trigger",
-        { NextAction("xt002 attack heart action", ACTION_RAID + 3) }));
+        "xt002 raid position trigger",
+        { NextAction("xt002 raid position action", ACTION_RAID) }));
 
     //
     // Iron Assembly

@@ -8,7 +8,6 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
-#include "RtiTargetValue.h"
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -95,11 +94,66 @@ bool XT002MoveAwayFromDebuffedAllyAction::Execute(Event /*event*/)
     return MoveClearOf(debuffed, range);
 }
 
+bool XT002GravityBombCarrierAction::ParkVoidZone(Unit* boss)
+{
+    Position const& origin = botAI->IsMelee(bot) ? ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE
+                                                 : ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
+    float const originX = origin.GetPositionX();
+    float const originY = origin.GetPositionY();
+    float const originZ = origin.GetPositionZ();
+
+    std::list<Creature*> voidZones;
+    boss->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
+
+    for (int cell = 0; cell < ULDUAR_XT002_BOMB_GRID_ROWS * ULDUAR_XT002_BOMB_GRID_COLS; ++cell)
+    {
+        float const candidateX = originX + (cell % ULDUAR_XT002_BOMB_GRID_ROWS) * ULDUAR_XT002_BOMB_GRID_STEP;
+        float const candidateY = originY + (cell / ULDUAR_XT002_BOMB_GRID_ROWS) * ULDUAR_XT002_BOMB_GRID_STEP;
+
+        // Room geometry is script-summoned rather than spawned, so the grid cannot be checked against
+        // the map offline - the LOS test is what keeps a cell behind a wall from being picked.
+        if (!bot->IsWithinLOS(candidateX, candidateY, originZ))
+            continue;
+
+        bool occupied = false;
+        for (Creature* voidZone : voidZones)
+        {
+            if (voidZone->GetExactDist2d(candidateX, candidateY) < ULDUAR_XT002_VOID_ZONE_RADIUS)
+            {
+                occupied = true;
+                break;
+            }
+        }
+
+        if (occupied)
+            continue;
+
+        if (bot->GetDistance(candidateX, candidateY, originZ) < 1.0f)
+            return true;
+
+        return MoveTo(bot->GetMapId(), candidateX, candidateY, originZ, false, false, false, false,
+                      MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
+    return false;
+}
+
 bool XT002GravityBombCarrierAction::Execute(Event /*event*/)
 {
     Group* group = bot->GetGroup();
     if (!group)
         return false;
+
+    // Void Zones only drop once XT actually carries Heartbreak, so before then there is nothing to
+    // park and the carrier just needs to be somewhere the splash misses - which keeps melee uptime.
+    if (IsXT002HeartbreakActive(botAI))
+    {
+        if (Unit* boss = GetXT002(botAI))
+        {
+            if (ParkVoidZone(boss))
+                return true;
+        }
+    }
 
     std::vector<Unit*> allies;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
@@ -112,35 +166,6 @@ bool XT002GravityBombCarrierAction::Execute(Event /*event*/)
     }
 
     return MoveClearOf(allies, ULDUAR_XT002_DEBUFF_SPREAD_RADIUS);
-}
-
-bool XT002MarkKillTargetAction::Execute(Event /*event*/)
-{
-    Unit* killTarget = GetXT002KillTarget(botAI);
-    if (!killTarget)
-        return false;
-
-    MarkTargetWithSkull(bot, killTarget);
-    SetRtiTarget(botAI, "skull", killTarget);
-    return true;
-}
-
-bool XT002BoombotRangedKillAction::Execute(Event /*event*/)
-{
-    Unit* boombot = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_BOOMBOT);
-    if (!boombot)
-        return false;
-
-    return Attack(boombot);
-}
-
-bool XT002AttackHeartAction::Execute(Event /*event*/)
-{
-    Unit* heart = GetXT002ExposedHeart(botAI);
-    if (!heart)
-        return false;
-
-    return Attack(heart);
 }
 
 bool XT002PummellerTauntAction::Execute(Event /*event*/)
@@ -228,4 +253,226 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
     }
 
     return false;
+}
+
+bool XT002RaidPositionAction::Execute(Event /*event*/)
+{
+    if (botAI->IsMainTank(bot))
+    {
+        if (bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) <= ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE)
+            return false;
+
+        return MoveTo(bot->GetMapId(), ULDUAR_XT002_MAINTANK_SPOT.GetPositionX(),
+                      ULDUAR_XT002_MAINTANK_SPOT.GetPositionY(), ULDUAR_XT002_MAINTANK_SPOT.GetPositionZ(),
+                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
+    if (botAI->IsRangedDps(bot))
+    {
+        if (bot->GetExactDist(ULDUAR_XT002_RANGED_SPOT) <= ULDUAR_XT002_RANGED_SPOT_TOLERANCE)
+            return false;
+
+        return MoveTo(bot->GetMapId(), ULDUAR_XT002_RANGED_SPOT.GetPositionX(),
+                      ULDUAR_XT002_RANGED_SPOT.GetPositionY(), ULDUAR_XT002_RANGED_SPOT.GetPositionZ(),
+                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
+    return false;
+}
+
+bool XT002SearingLightCarrierAction::Execute(Event /*event*/)
+{
+    // The main tank stays on XT whatever it is carrying: dragging the boss across the room to dodge a
+    // splash costs the raid far more than the splash does.
+    if (botAI->IsTank(bot))
+        return false;
+
+    if (bot->GetExactDist(ULDUAR_XT002_SEARING_LIGHT_SPOT) < 1.0f)
+        return false;
+
+    return MoveTo(bot->GetMapId(), ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionX(),
+                  ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionY(),
+                  ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
+{
+    if (!unit || !unit->IsAlive())
+        return false;
+
+    switch (unit->GetEntry())
+    {
+        case PB_NPC_XT002_BOOMBOT:
+            // Melee must never pick one up, and ranged only from outside the blast: closer than that
+            // the avoid action should be moving the bot, not this one holding it in place.
+            return !botAI->IsMelee(bot) && unit->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS;
+
+        case NPC_HEART_OF_DECONSTRUCTOR:
+            // Only a Life Spark is worth breaking off for, since Static Charged chains through the raid.
+            if (GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
+                return false;
+
+            // Reads the config flag, not the Heartbreak aura the parking code uses. This one states
+            // intent, and it has to hold before Heartbreak exists, because breaking the Heart is what
+            // creates it.
+            if (IsXT002HardModeActive(botAI))
+                return true;
+
+            return unit->GetHealthPct() > ULDUAR_XT002_HEART_SAFE_HP_PCT;
+
+        case NPC_XT002:
+            return !IsXT002Submerged(botAI);
+
+        default:
+            return true;
+    }
+}
+
+Unit* XT002SetDpsPriorityAction::SelectByEntry(Unit* currentTarget, uint32 entry,
+                                               std::vector<Unit*> const& candidates) const
+{
+    Unit* selected = nullptr;
+    if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == entry)
+        selected = currentTarget;
+
+    // Adds come from toy piles on both flanks, so nearest-to-the-bot beats measuring from a raid
+    // anchor. The margin stops two similar adds from trading the bot back and forth every tick.
+    float const switchMargin = 10.0f;
+    for (Unit* candidate : candidates)
+    {
+        if (!candidate || candidate == selected)
+            continue;
+
+        if (!selected)
+        {
+            selected = candidate;
+            continue;
+        }
+
+        if (candidate->GetExactDist2d(bot) + switchMargin < selected->GetExactDist2d(bot))
+            selected = candidate;
+    }
+
+    return selected;
+}
+
+std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityList()
+{
+    Unit* boss = nullptr;
+    Unit* heart = nullptr;
+    std::vector<Unit*> lifeSparks;
+    std::vector<Unit*> scrapbots;
+    std::vector<Unit*> boombots;
+    std::vector<Unit*> pummellers;
+
+    // One pass over the list every other XT-002 trigger already forces, so this adds no grid work.
+    GuidVector const& npcs = AI_VALUE(GuidVector, "nearest npcs");
+    for (ObjectGuid const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        switch (unit->GetEntry())
+        {
+            case NPC_XT002:
+                boss = unit;
+                break;
+            case NPC_HEART_OF_DECONSTRUCTOR:
+                heart = unit;
+                break;
+            case PB_NPC_XT002_LIFE_SPARK:
+                lifeSparks.push_back(unit);
+                break;
+            case NPC_XS013_SCRAPBOT:
+                scrapbots.push_back(unit);
+                break;
+            case PB_NPC_XT002_BOOMBOT:
+                boombots.push_back(unit);
+                break;
+            case PB_NPC_XT002_PUMMELLER:
+                pummellers.push_back(unit);
+                break;
+            default:
+                break;
+        }
+    }
+
+    // The Heart is only selectable while it is exposed, so this keeps it out of the list the rest of
+    // the fight without a second lookup.
+    if (heart && heart->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        heart = nullptr;
+
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+
+    // Life Sparks chain Static Charged through the raid and Scrapbots heal XT back up if they reach
+    // him; a Boombot only costs damage, and a Pummeller can simply be tanked. The Heart outranks add
+    // DPS because hitting it is what spawns the adds, so a raid that stops for every Scrapbot never
+    // gets it down.
+    std::vector<std::pair<uint32, Unit*>> priority;
+    priority.emplace_back(PB_NPC_XT002_LIFE_SPARK,
+                          SelectByEntry(currentTarget, PB_NPC_XT002_LIFE_SPARK, lifeSparks));
+    priority.emplace_back(NPC_XS013_SCRAPBOT, SelectByEntry(currentTarget, NPC_XS013_SCRAPBOT, scrapbots));
+    if (!botAI->IsMelee(bot))
+        priority.emplace_back(PB_NPC_XT002_BOOMBOT,
+                              SelectByEntry(currentTarget, PB_NPC_XT002_BOOMBOT, boombots));
+    priority.emplace_back(PB_NPC_XT002_PUMMELLER,
+                          SelectByEntry(currentTarget, PB_NPC_XT002_PUMMELLER, pummellers));
+    priority.emplace_back(NPC_HEART_OF_DECONSTRUCTOR, heart);
+    priority.emplace_back(NPC_XT002, boss);
+
+    return priority;
+}
+
+Unit* XT002SetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
+{
+    std::vector<std::pair<uint32, Unit*>> const priority = BuildPriorityList();
+
+    Unit* target = nullptr;
+    for (auto const& candidate : priority)
+    {
+        if (IsAllowedTarget(candidate.second))
+        {
+            target = candidate.second;
+            break;
+        }
+    }
+
+    auto const priorityIndex = [&](Unit* unit) -> size_t
+    {
+        if (!IsAllowedTarget(unit))
+            return priority.size();
+
+        for (size_t index = 0; index < priority.size(); ++index)
+        {
+            if (priority[index].first == unit->GetEntry())
+                return index;
+        }
+
+        return priority.size();
+    };
+
+    // Hold what the bot is already on unless something strictly more urgent is up, so a churn of
+    // Scrapbots cannot keep resetting swing and cast timers.
+    if (currentTarget && priorityIndex(currentTarget) <= priorityIndex(target))
+        target = currentTarget;
+
+    return target ? target : AI_VALUE(Unit*, "dps target");
+}
+
+bool XT002SetDpsPriorityAction::Execute(Event /*event*/)
+{
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    Unit* target = ResolveTarget(currentTarget);
+    if (!target)
+        return false;
+
+    // Returning false once the bot is already on the right target is what lets the lower-priority
+    // nodes run at all: the engine ends the tick at the first action that succeeds.
+    bool needsAttack = currentTarget != target;
+    if (botAI->IsMelee(bot))
+        needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
+
+    return needsAttack ? Attack(target) : false;
 }

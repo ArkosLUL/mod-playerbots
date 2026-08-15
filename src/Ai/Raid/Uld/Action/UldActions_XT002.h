@@ -2,6 +2,7 @@
 #define PLAYERBOTS_ULDACTIONS_XT002_H
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Action.h"
@@ -74,8 +75,8 @@ protected:
     uint32 GetDebuffSpellId() override { return GetXT002GravityBombSpellId(bot); }
 };
 
-// The carrier runs clear of the raid: the splash hurts everyone around it, and in hard mode the Void
-// Zone lands wherever the debuff expires.
+// The carrier runs clear of the raid: the splash hurts everyone around it, and once Heartbreak is up
+// the Void Zone lands wherever the debuff expires, so from that point the run has a fixed destination.
 class XT002GravityBombCarrierAction : public XT002MoveClearAction
 {
 public:
@@ -85,6 +86,11 @@ public:
     }
 
     bool Execute(Event event) override;
+
+private:
+    // Walks the parking grid from the role's origin and moves to the first cell that is free of Void
+    // Zones and in line of sight. False when no cell qualifies, leaving the dynamic search as fallback.
+    bool ParkVoidZone(Unit* boss);
 };
 
 class XT002BoombotAvoidAction : public MoveAwayFromCreatureAction
@@ -107,32 +113,6 @@ public:
     }
 };
 
-class XT002MarkKillTargetAction : public Action
-{
-public:
-    XT002MarkKillTargetAction(PlayerbotAI* botAI) : Action(botAI, "xt002 mark kill target action") {}
-
-    bool Execute(Event event) override;
-};
-
-class XT002BoombotRangedKillAction : public AttackAction
-{
-public:
-    XT002BoombotRangedKillAction(PlayerbotAI* botAI) : AttackAction(botAI, "xt002 boombot ranged kill action") {}
-
-    bool Execute(Event event) override;
-};
-
-// The Heart is attacked directly rather than through the skull, so the add focus and the Heart never
-// fight over the same mark.
-class XT002AttackHeartAction : public AttackAction
-{
-public:
-    XT002AttackHeartAction(PlayerbotAI* botAI) : AttackAction(botAI, "xt002 attack heart action") {}
-
-    bool Execute(Event event) override;
-};
-
 class XT002PummellerTauntAction : public Action
 {
 public:
@@ -152,6 +132,53 @@ public:
 private:
     // The tank this bot's threat should land on, or nullptr when there is nothing to redirect to.
     Player* GetRedirectTank();
+};
+
+
+// Anchors the fight. Only the main tank and ranged DPS get a spot: healers position by heal range,
+// which a fixed point cannot track, and pinning melee costs uptime on a boss that moves.
+class XT002RaidPositionAction : public MovementAction
+{
+public:
+    XT002RaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "xt002 raid position action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Searing Light splashes everyone within ULDUAR_XT002_DEBUFF_SPREAD_RADIUS, and once Heartbreak is up
+// its expiry spawns a Life Spark, so the carrier always leaves from the same place.
+class XT002SearingLightCarrierAction : public MovementAction
+{
+public:
+    XT002SearingLightCarrierAction(PlayerbotAI* botAI)
+        : MovementAction(botAI, "xt002 searing light carrier action")
+    {
+    }
+
+    bool Execute(Event event) override;
+};
+
+// Owns "current target" for every non-tank while XT is up, so nothing has to be marked. Raid icons are
+// group-global and stamping one here would overwrite whatever the player and the other bots are using.
+class XT002SetDpsPriorityAction : public AttackAction
+{
+public:
+    XT002SetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "xt002 set dps priority action") {}
+
+    bool Execute(Event event) override;
+
+private:
+    // Ordered candidates for this bot's role, most urgent first. Entries the role must not touch are
+    // left out entirely rather than filtered later.
+    std::vector<std::pair<uint32, Unit*>> BuildPriorityList();
+
+    // Nearest live candidate of `entry`, preferring the current target so two identical adds cannot
+    // make the bot alternate between them every tick.
+    Unit* SelectByEntry(Unit* currentTarget, uint32 entry, std::vector<Unit*> const& candidates) const;
+
+    bool IsAllowedTarget(Unit* unit) const;
+
+    Unit* ResolveTarget(Unit* currentTarget);
 };
 
 #endif

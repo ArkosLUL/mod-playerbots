@@ -63,6 +63,17 @@ const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE = Position(2048.63f
 const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT = Position(1998.5377f, -22.90317f, 324.8895f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.896868f, 327.07245f);
 
+// XT-002 anchors. XT spawns at (886.28, -12.05) facing -x, so the tank spot sits just behind him and
+// the boss settles roughly between the two lines. The ranged spot is pulled in from the value that
+// was measured in-game because a 30yd caster clipped out of range there and walked in every tick.
+const Position ULDUAR_XT002_MAINTANK_SPOT = Position(895.82f, -12.53954f, 409.68756f);
+const Position ULDUAR_XT002_RANGED_SPOT = Position(866.0f, -12.5f, 409.8f);
+// Far enough from both anchors to clear ULDUAR_XT002_DEBUFF_SPREAD_RADIUS without leaving the room.
+const Position ULDUAR_XT002_SEARING_LIGHT_SPOT = Position(862.73724f, 12.77857f, 409.8322f);
+// Two origins so melee and ranged carriers do not drop Void Zones on top of each other.
+const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE = Position(871.5199f, -54.04216f, 409.80377f);
+const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED = Position(837.0746f, -53.01061f, 409.80362f);
+
 // Prevent harpoon spam
 std::unordered_map<ObjectGuid, time_t> RazorscaleBossHelper::_harpoonCooldowns;
 // Prevent role assignment spam
@@ -606,22 +617,6 @@ uint32 GetXT002GravityBombSpellId(Player* bot)
 {
     return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_GRAVITY_BOMB_25
                                                                    : SPELL_XT002_GRAVITY_BOMB_10;
-}
-
-Unit* GetXT002KillTarget(PlayerbotAI* botAI)
-{
-    // Life Sparks chain Static Charged through the raid, Scrapbots heal XT back up if they reach him,
-    // and a Boombot only costs damage; the Pummeller is the one that can simply be tanked.
-    if (Unit* lifeSpark = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_LIFE_SPARK))
-        return lifeSpark;
-
-    if (Unit* scrapbot = GetFirstAliveUnitByEntry(botAI, NPC_XS013_SCRAPBOT))
-        return scrapbot;
-
-    if (Unit* boombot = GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_BOOMBOT))
-        return boombot;
-
-    return GetFirstAliveUnitByEntry(botAI, PB_NPC_XT002_PUMMELLER);
 }
 
 // Ignis the Furnace Master

@@ -103,11 +103,33 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
         return 0.0f;
     }
 
+    // xt002 set dps priority action owns every non-tank's target, so the generic picker stands down
+    // rather than pulling bots back onto whatever is nearest. "attack rti target" is deliberately left
+    // alone: bots no longer set marks here, but a mark the player sets should still win.
+    if (!botAI->IsTank(bot) && dynamic_cast<DpsAssistAction*>(action))
+        return 0.0f;
+
+    // Ranged DPS are the only role anchored to a fixed spot, and without this the generic movers walk
+    // them straight back off it - the anchor then re-fires next tick and the bot paces all fight.
+    // Healers and melee keep every generic mover, since neither is anchored.
+    if (botAI->IsRangedDps(bot) && dynamic_cast<MovementAction*>(action) &&
+        !bot->HasAura(GetXT002SearingLightSpellId(bot)) && !bot->HasAura(GetXT002GravityBombSpellId(bot)))
+    {
+        static std::set<std::string> const encounterMovers = {
+            "xt002 raid position action",        "xt002 searing light carrier action",
+            "xt002 gravity bomb carrier action", "xt002 searing light spread action",
+            "xt002 gravity bomb spread action",  "xt002 boombot avoid action",
+            "xt002 void zone action"};
+
+        if (!encounterMovers.count(action->getName()))
+            return 0.0f;
+    }
+
     if (IsXT002HardModeActive(botAI))
         return 1.0f;
 
-    // Normal mode safety floor. The attack-heart trigger goes false here too, but that only stops
-    // bots from picking the Heart up again - this is what stops the ones already swinging at it from
+    // Normal mode safety floor. The priority action stops offering the Heart here too, but that only
+    // stops bots from picking it up again - this is what stops the ones already swinging at it from
     // landing the hit that flips the raid into hard mode.
     Unit* heart = GetXT002ExposedHeart(botAI);
     if (!heart || heart->GetHealthPct() > ULDUAR_XT002_HEART_SAFE_HP_PCT)
@@ -122,8 +144,8 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     if (dynamic_cast<MovementAction*>(action) || dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    static std::set<std::string> const retargets = {"attack rti target", "xt002 mark kill target action",
-                                                    "xt002 boombot ranged kill action", "xt002 pummeller taunt action",
+    static std::set<std::string> const retargets = {"xt002 set dps priority action",
+                                                    "xt002 pummeller taunt action",
                                                     "xt002 redirect threat action"};
 
     return retargets.count(action->getName()) ? 1.0f : 0.0f;

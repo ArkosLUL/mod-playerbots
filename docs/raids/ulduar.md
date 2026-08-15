@@ -373,6 +373,22 @@ is written to work whenever adds do spawn; tank positioning is deliberately unto
 Boombots explode for 15-18k on reaching XT **or at 50% health**, so melee must never touch them.
 Scrapbots walk to XT and heal him, so they must die en route.
 
+**Void Zone and Life Spark are both gated on the Heartbreak aura, not on the config.** Both spawn out
+of an `AfterEffectRemove` handler that checks `xt002->HasAura(aurEff->GetAmount())` — the Heartbreak
+aura — before summoning (`spell_xt002_gravity_bomb_aura`, `spell_xt002_searing_light_spawn_life_spark`
+in `boss_xt002.cpp`). So anything reacting to a Void Zone or a Life Spark must key off
+`IsXT002HeartbreakActive`, which reads that aura; `IsXT002HardModeActive` is the *config* flag and is
+only correct where the code states intent ahead of the Heart dying, such as the 15% Heart floor.
+
+**Searing Light and Gravity Bomb each repeat on a 16 s (25-man) / 20 s (10-man) timer**, longer than
+the debuff lasts, so there is never more than one carrier of either type at a time — a single fixed
+drop spot per debuff is safe.
+
+XT spawns at `(886.28, -12.05, 409.6)` facing −x (orientation 3.13) and is the only DB-spawned
+creature in the room; every add is script-summoned, so room geometry cannot be checked from the world
+DB. The Void Zone parking grid therefore LOS-tests each candidate cell rather than trusting the
+coordinates.
+
 `NPC_XT002` (33293), `NPC_XT_TOY_PILE` (33337), `NPC_XS013_SCRAPBOT` (33343) and
 `NPC_HEART_OF_DECONSTRUCTOR` (33329) come from core `ulduar.h` via `UldScripts.h` — **do not
 redeclare them.**

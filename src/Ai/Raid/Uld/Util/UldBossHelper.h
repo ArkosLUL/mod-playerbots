@@ -396,6 +396,22 @@ constexpr float ULDUAR_XT002_BOOMBOT_AVOID_RADIUS = 12.0f;
 // default to confirm in-game.
 constexpr float ULDUAR_XT002_VOID_ZONE_RADIUS = 6.0f;
 
+// XT-002: how far off its anchor a bot is allowed to sit before it walks back. The tank's is loose
+// enough to survive XT drifting a step; the ranged one is a deliberate blob rather than a point, so
+// bots settle instead of shoving each other off the same pixel.
+constexpr float ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE = 3.0f;
+constexpr float ULDUAR_XT002_RANGED_SPOT_TOLERANCE = 5.0f;
+
+// XT-002 hard mode: Void Zone parking grid, walked +x/+y from whichever Gravity Bomb origin fits the
+// carrier's role. Step is just over the Void Zone diameter so consecutive drops cannot overlap.
+constexpr float ULDUAR_XT002_BOMB_GRID_STEP = 6.0f;
+constexpr int ULDUAR_XT002_BOMB_GRID_ROWS = 4;
+constexpr int ULDUAR_XT002_BOMB_GRID_COLS = 3;
+
+// Anchored on XT rather than the carrier, so one lookup covers both parking origins wherever the
+// carrier happens to be standing when the debuff lands.
+constexpr float ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS = 100.0f;
+
 // XT-002 normal mode: bots stop damaging the exposed Heart here so an in-flight hit cannot kill it
 // and flip the raid into hard mode by accident.
 constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
@@ -495,9 +511,6 @@ bool GetAuriayaFacingError(PlayerbotAI* botAI, Player* bot, float& error);
 // Class taunt, mirroring ICC's IccCastClassTaunt. Non-tank classes return false.
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 
-// The add the raid should be killing, most urgent first: Life Spark (hard mode, chain-shocks the
-// raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
-Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
 // Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
@@ -746,6 +759,11 @@ extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
+extern const Position ULDUAR_XT002_MAINTANK_SPOT;
+extern const Position ULDUAR_XT002_RANGED_SPOT;
+extern const Position ULDUAR_XT002_SEARING_LIGHT_SPOT;
+extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE;
+extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
 
 class RazorscaleBossHelper : public AiObject
 {

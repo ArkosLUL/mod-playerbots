@@ -137,12 +137,11 @@ public:
         creators["xt002 searing light spread trigger"] = &RaidUlduarTriggerContext::xt002_searing_light_spread_trigger;
         creators["xt002 gravity bomb spread trigger"] = &RaidUlduarTriggerContext::xt002_gravity_bomb_spread_trigger;
         creators["xt002 gravity bomb carrier trigger"] = &RaidUlduarTriggerContext::xt002_gravity_bomb_carrier_trigger;
+        creators["xt002 searing light carrier trigger"] = &RaidUlduarTriggerContext::xt002_searing_light_carrier_trigger;
         creators["xt002 boombot avoid trigger"] = &RaidUlduarTriggerContext::xt002_boombot_avoid_trigger;
         creators["xt002 void zone trigger"] = &RaidUlduarTriggerContext::xt002_void_zone_trigger;
-        creators["xt002 mark kill target trigger"] = &RaidUlduarTriggerContext::xt002_mark_kill_target_trigger;
-        creators["xt002 attack kill target trigger"] = &RaidUlduarTriggerContext::xt002_attack_kill_target_trigger;
-        creators["xt002 boombot ranged kill trigger"] = &RaidUlduarTriggerContext::xt002_boombot_ranged_kill_trigger;
-        creators["xt002 attack heart trigger"] = &RaidUlduarTriggerContext::xt002_attack_heart_trigger;
+        creators["xt002 raid position trigger"] = &RaidUlduarTriggerContext::xt002_raid_position_trigger;
+        creators["xt002 set dps priority trigger"] = &RaidUlduarTriggerContext::xt002_set_dps_priority_trigger;
         creators["xt002 pummeller taunt trigger"] = &RaidUlduarTriggerContext::xt002_pummeller_taunt_trigger;
         creators["xt002 redirect threat trigger"] = &RaidUlduarTriggerContext::xt002_redirect_threat_trigger;
     }
@@ -269,12 +268,11 @@ private:
     static Trigger* xt002_searing_light_spread_trigger(PlayerbotAI* ai) { return new XT002SearingLightSpreadTrigger(ai); }
     static Trigger* xt002_gravity_bomb_spread_trigger(PlayerbotAI* ai) { return new XT002GravityBombSpreadTrigger(ai); }
     static Trigger* xt002_gravity_bomb_carrier_trigger(PlayerbotAI* ai) { return new XT002GravityBombCarrierTrigger(ai); }
+    static Trigger* xt002_searing_light_carrier_trigger(PlayerbotAI* ai) { return new XT002SearingLightCarrierTrigger(ai); }
     static Trigger* xt002_boombot_avoid_trigger(PlayerbotAI* ai) { return new XT002BoombotAvoidTrigger(ai); }
     static Trigger* xt002_void_zone_trigger(PlayerbotAI* ai) { return new XT002VoidZoneTrigger(ai); }
-    static Trigger* xt002_mark_kill_target_trigger(PlayerbotAI* ai) { return new XT002MarkKillTargetTrigger(ai); }
-    static Trigger* xt002_attack_kill_target_trigger(PlayerbotAI* ai) { return new XT002AttackKillTargetTrigger(ai); }
-    static Trigger* xt002_boombot_ranged_kill_trigger(PlayerbotAI* ai) { return new XT002BoombotRangedKillTrigger(ai); }
-    static Trigger* xt002_attack_heart_trigger(PlayerbotAI* ai) { return new XT002AttackHeartTrigger(ai); }
+    static Trigger* xt002_raid_position_trigger(PlayerbotAI* ai) { return new XT002RaidPositionTrigger(ai); }
+    static Trigger* xt002_set_dps_priority_trigger(PlayerbotAI* ai) { return new XT002SetDpsPriorityTrigger(ai); }
     static Trigger* xt002_pummeller_taunt_trigger(PlayerbotAI* ai) { return new XT002PummellerTauntTrigger(ai); }
     static Trigger* xt002_redirect_threat_trigger(PlayerbotAI* ai) { return new XT002RedirectThreatTrigger(ai); }
 };
