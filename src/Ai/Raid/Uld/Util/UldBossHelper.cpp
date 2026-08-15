@@ -14,8 +14,10 @@
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
+#include "Spell.h"
 #include "World.h"
 
+#include <algorithm>
 #include <cmath>
 #include <list>
 #include <unordered_map>
@@ -673,4 +675,263 @@ Player* GetIgnisSlagPotVictim(PlayerbotAI* botAI)
     }
 
     return nullptr;
+}
+
+//
+// Flame Leviathan
+//
+
+// The four NPC_FREYA_WARD_TARGET spawn points from boss_flame_leviathan.cpp, in ring order.
+std::vector<Position> const ULDUAR_FL_ARENA_CORNERS = {
+    Position(159.4f, 64.1f, 409.8f),
+    Position(382.9f, 74.0f, 411.6f),
+    Position(374.0f, -141.0f, 411.0f),
+    Position(157.7f, -140.3f, 409.8f)
+};
+
+Unit* FlameLeviathanBoss(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_FLAME_LEVIATHAN); }
+
+bool FlameLeviathanEngaged(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot || !bot->IsInCombat())
+        return false;
+
+    Unit* boss = FlameLeviathanBoss(botAI);
+    return boss && !boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+}
+
+Unit* FlameLeviathanRiddenVehicle(Player* bot)
+{
+    Unit* base = bot ? bot->GetVehicleBase() : nullptr;
+    if (!base)
+        return nullptr;
+
+    // A gunner rides seat 0 of a turret creature that is itself a passenger of the real vehicle.
+    if (Unit* parent = base->GetVehicleBase())
+        return parent;
+
+    return base;
+}
+
+bool FlameLeviathanIsDriver(Player* bot)
+{
+    Unit* base = bot ? bot->GetVehicleBase() : nullptr;
+    if (!base)
+        return false;
+
+    uint32 const entry = base->GetEntry();
+    return entry == NPC_SALVAGED_SIEGE_ENGINE || entry == NPC_VEHICLE_CHOPPER ||
+           entry == NPC_SALVAGED_DEMOLISHER;
+}
+
+bool FlameLeviathanIsPursued(Player* bot)
+{
+    Unit* base = bot ? bot->GetVehicleBase() : nullptr;
+    if (!base)
+        return false;
+
+    if (base->HasAura(SPELL_FL_PURSUED))
+        return true;
+
+    Unit* parent = base->GetVehicleBase();
+    return parent && parent->HasAura(SPELL_FL_PURSUED);
+}
+
+bool FlameLeviathanIsVentChanneling(Unit* boss)
+{
+    if (!boss)
+        return false;
+
+    Spell* channel = boss->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+    return channel && channel->m_spellInfo && channel->m_spellInfo->Id == SPELL_FL_FLAME_VENTS;
+}
+
+// Electroshock is a 25 yd frontal cone, so a siege engine parked across the arena would win the
+// ranking and then land nothing. Range is part of eligibility, not an afterthought.
+static bool FlameLeviathanCanElectroshock(Unit* siegeEngine, Unit* boss)
+{
+    return siegeEngine && boss && !siegeEngine->HasSpellCooldown(SPELL_FL_ELECTROSHOCK) &&
+           siegeEngine->GetPower(POWER_ENERGY) >= ULDUAR_FL_ELECTROSHOCK_COST &&
+           siegeEngine->IsWithinCombatRange(boss, ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS);
+}
+
+bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot)
+{
+    Unit* base = bot ? bot->GetVehicleBase() : nullptr;
+    if (!base || base->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
+        return false;
+
+    Unit* boss = FlameLeviathanBoss(botAI);
+    if (!FlameLeviathanCanElectroshock(base, boss))
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    uint32 const myEnergy = base->GetPower(POWER_ENERGY);
+    ObjectGuid const myGuid = bot->GetGUID();
+
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || member == bot || !member->IsAlive())
+            continue;
+
+        Unit* memberBase = member->GetVehicleBase();
+        if (!memberBase || memberBase->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
+            continue;
+
+        if (!FlameLeviathanCanElectroshock(memberBase, boss))
+            continue;
+
+        uint32 const energy = memberBase->GetPower(POWER_ENERGY);
+
+        // Highest energy wins, guid breaks ties. Casting spends 20, which drops the caster to the
+        // back of its own queue, so the duty rotates with nobody having to be told.
+        if (energy > myEnergy || (energy == myEnergy && member->GetGUID() < myGuid))
+            return false;
+    }
+
+    return true;
+}
+
+bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)
+{
+    Unit* base = bot ? bot->GetVehicleBase() : nullptr;
+    if (!base || base->GetEntry() != NPC_VEHICLE_CHOPPER)
+        return false;
+
+    // A pursued chopper is kiting away from him with its back turned, which drops tar in his path
+    // for free - it does not need the lead slot, and taking it would strand the role.
+    if (FlameLeviathanIsPursued(bot))
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    ObjectGuid const myGuid = bot->GetGUID();
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || member == bot || !member->IsAlive())
+            continue;
+
+        Unit* memberBase = member->GetVehicleBase();
+        if (!memberBase || memberBase->GetEntry() != NPC_VEHICLE_CHOPPER)
+            continue;
+
+        if (FlameLeviathanIsPursued(member))
+            continue;
+
+        if (member->GetGUID() < myGuid)
+            return false;
+    }
+
+    return true;
+}
+
+bool FlameLeviathanInArena(Position const& pos, float margin)
+{
+    float minX = ULDUAR_FL_ARENA_CORNERS[0].GetPositionX();
+    float maxX = minX;
+    float minY = ULDUAR_FL_ARENA_CORNERS[0].GetPositionY();
+    float maxY = minY;
+
+    for (Position const& corner : ULDUAR_FL_ARENA_CORNERS)
+    {
+        minX = std::min(minX, corner.GetPositionX());
+        maxX = std::max(maxX, corner.GetPositionX());
+        minY = std::min(minY, corner.GetPositionY());
+        maxY = std::max(maxY, corner.GetPositionY());
+    }
+
+    return pos.GetPositionX() >= minX - margin && pos.GetPositionX() <= maxX + margin &&
+           pos.GetPositionY() >= minY - margin && pos.GetPositionY() <= maxY + margin;
+}
+
+static Position FlameLeviathanOffsetPoint(Unit* boss, float bearing, float standDist)
+{
+    float const dist = boss->GetCombatReach() + standDist;
+    return Position(boss->GetPositionX() + std::cos(bearing) * dist,
+                    boss->GetPositionY() + std::sin(bearing) * dist, boss->GetPositionZ());
+}
+
+Position FlameLeviathanRearPoint(Unit* boss, float standDist)
+{
+    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation() + M_PI, standDist);
+}
+
+Position FlameLeviathanLeadPoint(Unit* boss)
+{
+    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation(), ULDUAR_FL_TAR_LEAD_DIST);
+}
+
+std::vector<Position> const& FlameLeviathanKiteRing()
+{
+    static std::vector<Position> const ring = []
+    {
+        std::vector<Position> nodes;
+        size_t const count = ULDUAR_FL_ARENA_CORNERS.size();
+
+        float centreX = 0.0f;
+        float centreY = 0.0f;
+        for (Position const& corner : ULDUAR_FL_ARENA_CORNERS)
+        {
+            centreX += corner.GetPositionX();
+            centreY += corner.GetPositionY();
+        }
+        centreX /= static_cast<float>(count);
+        centreY /= static_cast<float>(count);
+
+        // Pull each corner off the wall first, so the chamfer is cut from a point the vehicles can
+        // actually path to rather than from the wall itself.
+        std::vector<Position> inset;
+        inset.reserve(count);
+        for (Position const& corner : ULDUAR_FL_ARENA_CORNERS)
+        {
+            float dx = centreX - corner.GetPositionX();
+            float dy = centreY - corner.GetPositionY();
+            float const len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0.0f)
+            {
+                dx /= len;
+                dy /= len;
+            }
+            inset.emplace_back(corner.GetPositionX() + dx * ULDUAR_FL_KITE_WALL_INSET,
+                               corner.GetPositionY() + dy * ULDUAR_FL_KITE_WALL_INSET,
+                               corner.GetPositionZ());
+        }
+
+        auto towards = [](Position const& from, Position const& to)
+        {
+            float dx = to.GetPositionX() - from.GetPositionX();
+            float dy = to.GetPositionY() - from.GetPositionY();
+            float const len = std::sqrt(dx * dx + dy * dy);
+            if (len > 0.0f)
+            {
+                dx /= len;
+                dy /= len;
+            }
+            return Position(from.GetPositionX() + dx * ULDUAR_FL_KITE_CORNER_CHAMFER,
+                            from.GetPositionY() + dy * ULDUAR_FL_KITE_CORNER_CHAMFER,
+                            from.GetPositionZ());
+        };
+
+        // Two nodes per corner, one on each adjoining edge, so a kiting vehicle rounds the turn
+        // instead of driving into the corner while the boss cuts the diagonal.
+        for (size_t i = 0; i < count; ++i)
+        {
+            Position const& prev = inset[(i + count - 1) % count];
+            Position const& next = inset[(i + 1) % count];
+            nodes.push_back(towards(inset[i], prev));
+            nodes.push_back(towards(inset[i], next));
+        }
+
+        return nodes;
+    }();
+
+    return ring;
 }

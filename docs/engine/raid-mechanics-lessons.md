@@ -55,7 +55,7 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 
 ## Movement that oscillates
 
-Bots jiggling on the spot is one symptom with four causes.
+Bots jiggling on the spot is one symptom with six causes.
 
 - **Two owners** — see above.
 - **A destination that chases a moving boss.** A boss-relative spot flips to his far side while he is
@@ -76,6 +76,11 @@ Bots jiggling on the spot is one symptom with four causes.
   [../raids/README.md](../raids/README.md) is the right shape, but `AttackAction` **is** a
   `MovementAction` ([action-selection.md](action-selection.md)), so the exemption list must name the
   boss's own attack and vehicle actions or they die with everything else.
+- **A dodge that steps further than the hold's arrival tolerance.** The hold's trigger fires the
+  moment the dodge finishes, walks the bot back onto the hazard, and the two alternate for the
+  hazard's whole life. Either keep the step smaller than the tolerance, or teach the hold to reject a
+  destination the hazard covers. Obsidian Sanctum's fissure dodge steps 10 yd against a raid-line
+  tolerance of 8 and needed the second fix.
 
 Two rules that belong with the geometry rather than the action:
 

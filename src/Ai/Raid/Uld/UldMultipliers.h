@@ -47,6 +47,16 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Flame Leviathan: one action owns every vehicle's movement, so the generic movers are shut out
+// entirely while a bot is riding. Two actions steering one MotionMaster bounce rather than
+// compromise, and lowering a priority only decides who wins each alternating tick.
+class FlameLeviathanVehicleMovementMultiplier : public Multiplier
+{
+public:
+    FlameLeviathanVehicleMovementMultiplier(PlayerbotAI* ai) : Multiplier(ai, "flame leviathan vehicle movement") {}
+    float GetValue(Action* action) override;
+};
+
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
 // encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
 class UldThreatRedirectMultiplier : public Multiplier

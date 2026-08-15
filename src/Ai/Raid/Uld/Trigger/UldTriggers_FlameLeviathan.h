@@ -3,8 +3,8 @@
 
 #include "EventMap.h"
 #include "GenericTriggers.h"
-#include "UldBossHelper.h"
 #include "Trigger.h"
+#include "UldBossHelper.h"
 
 //
 // Flame Levi
@@ -23,11 +23,21 @@ public:
     bool IsActive() override;
 };
 
-// Hard mode only: fires while the bot's vehicle is inside an active-tower ground hazard.
-class FlameLeviathanTowerHazardTrigger : public Trigger
+// Flame Vents is a 10 second channel and Electroshock cancels it, so the channel is the whole
+// reaction window - this stays unthrottled.
+class FlameLeviathanFlameVentsTrigger : public Trigger
 {
 public:
-    FlameLeviathanTowerHazardTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan tower hazard") {}
+    FlameLeviathanFlameVentsTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan flame vents") {}
+    bool IsActive() override;
+};
+
+// Raises the drive action above the rotation for the two cases where steering cannot wait a tick:
+// being chased, and sitting in a hard-mode ground hazard.
+class FlameLeviathanDriveUrgentTrigger : public Trigger
+{
+public:
+    FlameLeviathanDriveUrgentTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan drive urgent") {}
     bool IsActive() override;
 };
 

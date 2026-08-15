@@ -19,7 +19,8 @@ public:
     {
         creators["flame leviathan vehicle"] = &RaidUlduarActionContext::flame_leviathan_vehicle;
         creators["flame leviathan enter vehicle"] = &RaidUlduarActionContext::flame_leviathan_enter_vehicle;
-        creators["flame leviathan tower hazard"] = &RaidUlduarActionContext::flame_leviathan_tower_hazard;
+        creators["flame leviathan drive"] = &RaidUlduarActionContext::flame_leviathan_drive;
+        creators["flame leviathan interrupt vents"] = &RaidUlduarActionContext::flame_leviathan_interrupt_vents;
         creators["razorscale avoid devouring flames"] = &RaidUlduarActionContext::razorscale_avoid_devouring_flames;
         creators["razorscale avoid sentinel"] = &RaidUlduarActionContext::razorscale_avoid_sentinel;
         creators["razorscale ignore flying alone"] = &RaidUlduarActionContext::razorscale_ignore_flying_alone;
@@ -142,7 +143,8 @@ public:
 private:
     static Action* flame_leviathan_vehicle(PlayerbotAI* ai) { return new FlameLeviathanVehicleAction(ai); }
     static Action* flame_leviathan_enter_vehicle(PlayerbotAI* ai) { return new FlameLeviathanEnterVehicleAction(ai); }
-    static Action* flame_leviathan_tower_hazard(PlayerbotAI* ai) { return new FlameLeviathanTowerHazardAction(ai); }
+    static Action* flame_leviathan_drive(PlayerbotAI* ai) { return new FlameLeviathanDriveAction(ai); }
+    static Action* flame_leviathan_interrupt_vents(PlayerbotAI* ai) { return new FlameLeviathanInterruptVentsAction(ai); }
     static Action* razorscale_avoid_devouring_flames(PlayerbotAI* ai) { return new RazorscaleAvoidDevouringFlameAction(ai); }
     static Action* razorscale_avoid_sentinel(PlayerbotAI* ai) { return new RazorscaleAvoidSentinelAction(ai); }
     static Action* razorscale_ignore_flying_alone(PlayerbotAI* ai) { return new RazorscaleIgnoreBossAction(ai); }

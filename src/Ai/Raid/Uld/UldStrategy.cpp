@@ -14,6 +14,17 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Flame Leviathan
     //
     triggers.push_back(new TriggerNode(
+        "flame leviathan flame vents",
+        { NextAction("flame leviathan interrupt vents", ACTION_RAID + 4) }));
+
+    // Same action as the routine node below. The engine caches actions by name, so both nodes drive
+    // one instance and one latched destination - still a single owner of the MotionMaster, just
+    // promoted above the rotation while being chased or standing in a hazard.
+    triggers.push_back(new TriggerNode(
+        "flame leviathan drive urgent",
+        { NextAction("flame leviathan drive", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
         "flame leviathan vehicle near",
         { NextAction("flame leviathan enter vehicle", ACTION_RAID + 2) }));
 
@@ -22,8 +33,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("flame leviathan vehicle", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "flame leviathan tower hazard",
-        { NextAction("flame leviathan tower hazard", ACTION_RAID + 3) }));
+        "flame leviathan on vehicle",
+        { NextAction("flame leviathan drive", ACTION_RAID + 0.5f) }));
 
     //
     // Razorscale
@@ -596,6 +607,9 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
     multipliers.push_back(new IgnisMultiplier(botAI));
+
+    // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
+    multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));

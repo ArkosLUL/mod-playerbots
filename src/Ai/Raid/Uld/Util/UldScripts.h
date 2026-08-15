@@ -40,6 +40,9 @@ enum UlduarNPCs
     // Mimiron
     NPC_MIMIRON                      = 33350,
 
+    // Flame Leviathan
+    NPC_FLAME_LEVIATHAN              = 33113,
+
     // Flame Leviathan vehicles
     NPC_SALVAGED_SIEGE_ENGINE        = 33060,
     NPC_VEHICLE_CHOPPER              = 33062,

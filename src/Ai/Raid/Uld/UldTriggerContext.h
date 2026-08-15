@@ -18,7 +18,8 @@ public:
     {
         creators["flame leviathan on vehicle"] = &RaidUlduarTriggerContext::flame_leviathan_on_vehicle;
         creators["flame leviathan vehicle near"] = &RaidUlduarTriggerContext::flame_leviathan_vehicle_near;
-        creators["flame leviathan tower hazard"] = &RaidUlduarTriggerContext::flame_leviathan_tower_hazard;
+        creators["flame leviathan flame vents"] = &RaidUlduarTriggerContext::flame_leviathan_flame_vents;
+        creators["flame leviathan drive urgent"] = &RaidUlduarTriggerContext::flame_leviathan_drive_urgent;
         creators["razorscale flying alone"] = &RaidUlduarTriggerContext::razorscale_flying_alone;
         creators["razorscale avoid devouring flames"] = &RaidUlduarTriggerContext::razorscale_avoid_devouring_flames;
         creators["razorscale avoid sentinel"] = &RaidUlduarTriggerContext::razorscale_avoid_sentinel;
@@ -146,7 +147,8 @@ public:
 private:
     static Trigger* flame_leviathan_on_vehicle(PlayerbotAI* ai) { return new FlameLeviathanOnVehicleTrigger(ai); }
     static Trigger* flame_leviathan_vehicle_near(PlayerbotAI* ai) { return new FlameLeviathanVehicleNearTrigger(ai); }
-    static Trigger* flame_leviathan_tower_hazard(PlayerbotAI* ai) { return new FlameLeviathanTowerHazardTrigger(ai); }
+    static Trigger* flame_leviathan_flame_vents(PlayerbotAI* ai) { return new FlameLeviathanFlameVentsTrigger(ai); }
+    static Trigger* flame_leviathan_drive_urgent(PlayerbotAI* ai) { return new FlameLeviathanDriveUrgentTrigger(ai); }
     static Trigger* razorscale_flying_alone(PlayerbotAI* ai) { return new RazorscaleFlyingAloneTrigger(ai); }
     static Trigger* razorscale_avoid_devouring_flames(PlayerbotAI* ai) { return new RazorscaleDevouringFlamesTrigger(ai); }
     static Trigger* razorscale_avoid_sentinel(PlayerbotAI* ai) { return new RazorscaleAvoidSentinelTrigger(ai); }

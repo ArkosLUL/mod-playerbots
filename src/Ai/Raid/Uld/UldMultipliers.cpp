@@ -15,6 +15,9 @@
 #include "Timer.h"
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
+#include "UldActions.h"
+#include "UldScripts.h"
+#include "VehicleActions.h"
 
 // Algalon the Observer
 // Reserve Dispersion for the designated Big Bang soaker priest. Big Bang is unavoidable raid-wide
@@ -152,6 +155,46 @@ float IgnisMultiplier::GetValue(Action* action)
 // Entry lookups rather than "find target": that value only resolves creatures which already have
 // this bot on their threat list, so a bot parked on one Iron Assembly member never sees the other
 // two.
+// Flame Leviathan
+// The whole encounter is fought from vehicles and FlameLeviathanDriveAction is the only thing that
+// steers one. Anything else that moves would fight it for the MotionMaster, so the generic movers
+// are zeroed outright - but only once the boss is actually engaged, or the raid could never drive
+// into the arena in the first place.
+float FlameLeviathanVehicleMovementMultiplier::GetValue(Action* action)
+{
+    if (!action || bot->GetMapId() != ULDUAR_MAP_ID)
+        return 1.0f;
+
+    Unit* vehicleBase = bot->GetVehicleBase();
+    if (!vehicleBase)
+        return 1.0f;
+
+    switch (vehicleBase->GetEntry())
+    {
+        case NPC_SALVAGED_SIEGE_ENGINE:
+        case NPC_SALVAGED_SIEGE_ENGINE_TURRET:
+        case NPC_SALVAGED_DEMOLISHER:
+        case NPC_SALVAGED_DEMOLISHER_TURRET:
+        case NPC_VEHICLE_CHOPPER:
+            break;
+        default:
+            return 1.0f;
+    }
+
+    // One dynamic_cast up front: every rotation cast falls out here without touching the rest.
+    if (!dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // Boarding has to survive, or a bot that lost its vehicle can never take another one; and
+    // leaving has to survive so nobody is welded in after the kill.
+    if (dynamic_cast<FlameLeviathanDriveAction*>(action) ||
+        dynamic_cast<FlameLeviathanEnterVehicleAction*>(action) || dynamic_cast<LeaveVehicleAction*>(action))
+        return 1.0f;
+
+    // Asked last, because it walks the target list: only once something would actually be blocked.
+    return FlameLeviathanEngaged(botAI) ? 0.0f : 1.0f;
+}
+
 float UldThreatRedirectMultiplier::GetValue(Action* action)
 {
     if (!dynamic_cast<CastMisdirectionOnMainTankAction*>(action) &&
