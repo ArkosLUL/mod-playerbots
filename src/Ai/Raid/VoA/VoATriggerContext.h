@@ -20,6 +20,11 @@ public:
         creators["emalon lighting nova trigger"] = &RaidVoATriggerContext::emalon_lighting_nova_trigger;
         creators["emalon overcharge trigger"] = &RaidVoATriggerContext::emalon_overcharge_trigger;
         creators["emalon fall from floor trigger"] = &RaidVoATriggerContext::emalon_fall_from_floor_trigger;
+        creators["emalon main tank hold trigger"] = &RaidVoATriggerContext::emalon_main_tank_hold_trigger;
+        creators["emalon ring hold trigger"] = &RaidVoATriggerContext::emalon_ring_hold_trigger;
+        creators["emalon offtank hold trigger"] = &RaidVoATriggerContext::emalon_offtank_hold_trigger;
+        creators["emalon attack priority trigger"] = &RaidVoATriggerContext::emalon_attack_priority_trigger;
+        creators["emalon redirect threat trigger"] = &RaidVoATriggerContext::emalon_redirect_threat_trigger;
         creators["emalon nature resistance trigger"] = &RaidVoATriggerContext::emalon_nature_resistance_trigger;
         creators["koralon fire resistance trigger"] = &RaidVoATriggerContext::koralon_fire_resistance_trigger;
         creators["archavon mark boss trigger"] = &RaidVoATriggerContext::archavon_mark_boss_trigger;
@@ -39,6 +44,11 @@ private:
     static Trigger* emalon_lighting_nova_trigger(PlayerbotAI* ai) { return new EmalonLightingNovaTrigger(ai); }
     static Trigger* emalon_overcharge_trigger(PlayerbotAI* ai) { return new EmalonOverchargeTrigger(ai); }
     static Trigger* emalon_fall_from_floor_trigger(PlayerbotAI* ai) { return new EmalonFallFromFloorTrigger(ai); }
+    static Trigger* emalon_main_tank_hold_trigger(PlayerbotAI* ai) { return new EmalonMainTankHoldTrigger(ai); }
+    static Trigger* emalon_ring_hold_trigger(PlayerbotAI* ai) { return new EmalonRingHoldTrigger(ai); }
+    static Trigger* emalon_offtank_hold_trigger(PlayerbotAI* ai) { return new EmalonOffTankHoldTrigger(ai); }
+    static Trigger* emalon_attack_priority_trigger(PlayerbotAI* ai) { return new EmalonAttackPriorityTrigger(ai); }
+    static Trigger* emalon_redirect_threat_trigger(PlayerbotAI* ai) { return new EmalonRedirectThreatTrigger(ai); }
     static Trigger* emalon_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "emalon the storm watcher"); }
     static Trigger* koralon_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "koralon the flame watcher"); }
     static Trigger* archavon_mark_boss_trigger(PlayerbotAI* ai) { return new BossMarkSkullTrigger(ai, "archavon the stone watcher"); }

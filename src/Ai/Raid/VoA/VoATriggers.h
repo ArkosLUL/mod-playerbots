@@ -9,25 +9,7 @@
 
 #include "GenericTriggers.h"
 #include "Trigger.h"
-
-enum VoAIDs
-{
-    // Emalon the Storm Watcher
-    AURA_OVERCHARGE = 64217,
-    NPC_TEMPEST_MINION = 33998,
-    SPELL_LIGHTNING_NOVA_10_MAN = 64216,
-    SPELL_LIGHTNING_NOVA_25_MAN = 65279,
-
-    // Archavon the Stone Watcher
-    SPELL_ROCK_SHARDS = 58678,
-
-    // Koralon the Flame Watcher
-    SPELL_BURNING_BREATH = 66665,
-
-    // Toravon the Ice Watcher
-    NPC_FROZEN_ORB = 38456,
-    SPELL_FREEZING_GROUND = 72090,
-};
+#include "VoAHelpers.h"
 
 //
 // Emalon the Storm Watcher
@@ -57,6 +39,44 @@ class EmalonFallFromFloorTrigger : public Trigger
 {
 public:
     EmalonFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon fall from floor trigger") {}
+    bool IsActive() override;
+};
+
+// The three hold triggers below stay active for the whole encounter rather than only while something
+// needs holding. With nothing to do their actions park the bot on its anchor, and that is exactly what
+// keeps the generic movers from reclaiming it.
+class EmalonMainTankHoldTrigger : public Trigger
+{
+public:
+    EmalonMainTankHoldTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon main tank hold trigger") {}
+    bool IsActive() override;
+};
+
+class EmalonRingHoldTrigger : public Trigger
+{
+public:
+    EmalonRingHoldTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon ring hold trigger") {}
+    bool IsActive() override;
+};
+
+class EmalonOffTankHoldTrigger : public Trigger
+{
+public:
+    EmalonOffTankHoldTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon offtank hold trigger") {}
+    bool IsActive() override;
+};
+
+class EmalonAttackPriorityTrigger : public Trigger
+{
+public:
+    EmalonAttackPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon attack priority trigger") {}
+    bool IsActive() override;
+};
+
+class EmalonRedirectThreatTrigger : public Trigger
+{
+public:
+    EmalonRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "emalon redirect threat trigger") {}
     bool IsActive() override;
 };
 

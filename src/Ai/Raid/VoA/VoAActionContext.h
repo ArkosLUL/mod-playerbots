@@ -22,6 +22,11 @@ public:
         creators["emalon lighting nova action"] = &RaidVoAActionContext::emalon_lighting_nova_action;
         creators["emalon overcharge action"] = &RaidVoAActionContext::emalon_overcharge_action;
         creators["emalon fall from floor action"] = &RaidVoAActionContext::emalon_fall_from_floor_action;
+        creators["emalon main tank hold action"] = &RaidVoAActionContext::emalon_main_tank_hold_action;
+        creators["emalon ring hold action"] = &RaidVoAActionContext::emalon_ring_hold_action;
+        creators["emalon offtank hold action"] = &RaidVoAActionContext::emalon_offtank_hold_action;
+        creators["emalon attack priority action"] = &RaidVoAActionContext::emalon_attack_priority_action;
+        creators["emalon redirect threat action"] = &RaidVoAActionContext::emalon_redirect_threat_action;
         creators["emalon nature resistance action"] = &RaidVoAActionContext::emalon_nature_resistance_action;
         creators["koralon fire resistance action"] = &RaidVoAActionContext::koralon_fire_resistance_action;
         creators["archavon mark boss action"] = &RaidVoAActionContext::archavon_mark_boss_action;
@@ -41,6 +46,11 @@ private:
     static Action* emalon_lighting_nova_action(PlayerbotAI* ai) { return new EmalonLightingNovaAction(ai); }
     static Action* emalon_overcharge_action(PlayerbotAI* ai) { return new EmalonOverchargeAction(ai); }
     static Action* emalon_fall_from_floor_action(PlayerbotAI* ai) { return new EmalonFallFromFloorAction(ai); }
+    static Action* emalon_main_tank_hold_action(PlayerbotAI* ai) { return new EmalonMainTankHoldAction(ai); }
+    static Action* emalon_ring_hold_action(PlayerbotAI* ai) { return new EmalonRingHoldAction(ai); }
+    static Action* emalon_offtank_hold_action(PlayerbotAI* ai) { return new EmalonOffTankHoldAction(ai); }
+    static Action* emalon_attack_priority_action(PlayerbotAI* ai) { return new EmalonAttackPriorityAction(ai); }
+    static Action* emalon_redirect_threat_action(PlayerbotAI* ai) { return new EmalonRedirectThreatAction(ai); }
     static Action* emalon_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "emalon the storm watcher"); }
     static Action* koralon_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "koralon the flame watcher"); }
     static Action* archavon_mark_boss_action(PlayerbotAI* ai) { return new BossMarkSkullAction(ai, "archavon the stone watcher"); }

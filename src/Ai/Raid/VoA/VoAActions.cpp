@@ -15,26 +15,44 @@
 #include "RaidBossHelpers.h"
 #include "SpellAuras.h"
 #include "Unit.h"
+#include "VoAHelpers.h"
 #include "VoATriggers.h"
+
+using namespace VoaHelpers;
 
 const Position VOA_EMALON_RESTORE_POSITION = Position(-221.8f, -243.8f, 96.8f, 4.7f);
 
+bool EmalonPositioningAction::MoveToClamped(float x, float y, float tolerance)
+{
+    ClampToChamber(x, y);
+
+    if (bot->GetExactDist2d(x, y) <= tolerance)
+        return false;
+
+    return MoveTo(VOA_MAP_ID, x, y, bot->GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
 bool EmalonLightingNovaAction::Execute(Event /*event*/)
 {
-    const float radius = 25.0f;  // 20 yards + 5 yard for safety for 10 man. For 25man there is no maximum range but 25 yards should be ok
-
-    Unit* boss = AI_VALUE2(Unit*, "find target", "emalon the storm watcher");
+    Unit* boss = GetEmalon(bot);
     if (!boss)
         return false;
 
-    float currentDistance = bot->GetDistance2d(boss);
+    if (bot->GetExactDist2d(boss) >= LIGHTNING_NOVA_CLEAR_RADIUS)
+        return false;
 
-    if (currentDistance < radius)
-    {
-        return MoveAway(boss, radius - currentDistance);
-    }
+    // Out towards the entrance, not radially away from wherever the bot happens to stand. Fleeing
+    // radially walks anyone caught south of the boss into the two dead-end alcoves behind him. The
+    // sideways half-step keeps each bot on the side it is already on rather than running the whole
+    // melee pack through him, and puts the destination 24.6yd out - clear of the 20yd radius.
+    float const sideStep = LIGHTNING_NOVA_CLEAR_RADIUS / 2.0f;
+    float const x = boss->GetPositionX() +
+                    (bot->GetPositionX() < boss->GetPositionX() ? -sideStep : sideStep);
+    float const y = boss->GetPositionY() + LIGHTNING_NOVA_CLEAR_RADIUS;
 
-    return false;
+    // The cast is 5s long, so even a melee bot standing on him covers this comfortably.
+    return MoveToClamped(x, y, 0.0f);
 }
 
 bool EmalonLightingNovaAction::isUseful()
@@ -43,28 +61,134 @@ bool EmalonLightingNovaAction::isUseful()
     return emalonLightingNovaTrigger.IsActive();
 }
 
-bool EmalonOverchargeAction::Execute(Event /*event*/)
+bool EmalonMainTankHoldAction::Execute(Event /*event*/)
 {
-    // Check if there is any overcharged minion
-    Unit* minion = nullptr;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
-    {
-        Unit* unit = botAI->GetUnit(npc);
-        if (!unit)
-            continue;
+    // The anchor is 10.33yd past where Emalon should end up, which is exactly his melee range: he
+    // walks until the tank is inside it and stops there. Nothing here needs to know whether the drag
+    // has landed - the tolerance below stops the move being re-issued once the tank is on the spot.
+    return MoveToClamped(CHAMBER_CENTER_X, MAIN_TANK_ANCHOR_Y, MAIN_TANK_ARRIVAL_TOLERANCE);
+}
 
-        uint32 entry = unit->GetEntry();
-        if (entry == NPC_TEMPEST_MINION && unit->HasAura(AURA_OVERCHARGE))
+bool EmalonRingHoldAction::Execute(Event /*event*/)
+{
+    Unit* boss = GetEmalon(bot);
+    if (!boss)
+        return false;
+
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!RingSlotFor(botAI, bot, boss, x, y))
+        return false;
+
+    // The slot is derived from the boss, and he moves ~12yd during the pull drag. Without this the
+    // whole ring trails him yard for yard instead of walking once and settling.
+    if (hasDest)
+    {
+        float const driftX = x - destX;
+        float const driftY = y - destY;
+        if (driftX * driftX + driftY * driftY <= RING_ANCHOR_DRIFT * RING_ANCHOR_DRIFT)
         {
-            minion = unit;
-            break;
+            x = destX;
+            y = destY;
         }
     }
-    if (!minion)
+
+    ClampToChamber(x, y);
+    hasDest = true;
+    destX = x;
+    destY = y;
+
+    return MoveToClamped(x, y, RING_ARRIVAL_TOLERANCE);
+}
+
+bool EmalonOffTankHoldAction::Execute(Event /*event*/)
+{
+    Unit* minion = MinionToPickUp(bot);
+
+    if (minion)
     {
-        return false;
+        // Acquiring the target must not cost the tick, or the off-tank spends the whole pull picking
+        // targets and never walks anywhere.
+        if (bot->GetVictim() != minion)
+            Attack(minion);
+        else if (bot->GetTarget() != minion->GetGUID())
+            bot->SetSelection(minion->GetGUID());
+
+        // Every taunt in the game reaches 30yd, and the camp is 18-19yd from the two near spawn
+        // corners - but the two far ones are 47yd out, which nothing reaches. Walk at those rather
+        // than leave a loose minion to pick a healer.
+        if (bot->GetExactDist2d(minion) > MINION_TAUNT_RANGE)
+        {
+            float x = minion->GetPositionX();
+            float y = minion->GetPositionY();
+            ClampToChamber(x, y);
+            return MoveTo(VOA_MAP_ID, x, y, bot->GetPositionZ(), false, false, false, false,
+                          MovementPriority::MOVEMENT_COMBAT);
+        }
     }
+    else if (Unit* boss = GetEmalon(bot))
+    {
+        // Nothing to hold. If the off-tank is still swinging at Emalon he has to let go here: the
+        // multiplier blocks re-acquiring the boss but cannot drop a target already picked up.
+        if (bot->GetVictim() == boss)
+            bot->AttackStop();
+    }
+
+    float x = OFFTANK_CAMP.GetPositionX();
+    float y = OFFTANK_CAMP.GetPositionY();
+    ClampToChamber(x, y);
+
+    if (bot->GetExactDist2d(x, y) <= OFFTANK_ARRIVAL_TOLERANCE)
+        return false;
+
+    return MoveTo(VOA_MAP_ID, x, y, bot->GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool EmalonAttackPriorityAction::Execute(Event /*event*/)
+{
+    Unit* boss = GetEmalon(bot);
+    if (!boss)
+        return false;
+
+    // Melee never leave the boss. The overcharged minion is parked 34yd away at the off-tank camp and
+    // only lives 20s, so a melee round trip spends over half the window walking - and it does not need
+    // to: ~52k (10-man) and ~191k (25-man) of minion health falls to the ranged half of the raid well
+    // inside the timer.
+    Unit* target = boss;
+    if (botAI->IsRanged(bot))
+    {
+        if (Unit* overcharged = OverchargedMinion(bot))
+            target = overcharged;
+    }
+
+    if (bot->GetGuardianPet())
+        CommandPetAttack(botAI, target);
+
+    if (bot->GetVictim() != target)
+        return Attack(target);
+
+    return false;
+}
+
+Player* EmalonRedirectThreatAction::GetRedirectTank()
+{
+    return RedirectTarget(botAI, bot);
+}
+
+Unit* EmalonRedirectThreatAction::GetThreatDumpTarget()
+{
+    // Spend the three Misdirection charges on whatever the off-tank is trying to hold, which is the
+    // threat that actually matters here.
+    // Null off-tank falls through harmlessly: the lookup returns nothing to dump into.
+    return MinionToPickUp(GetOffTank(botAI, bot));
+}
+
+bool EmalonOverchargeAction::Execute(Event /*event*/)
+{
+    Unit* minion = OverchargedMinion(bot);
+    if (!minion)
+        return false;
 
     // The trigger already gates this to a single tank bot; mark the overcharged minion so DPS burn it.
     // MarkTargetWithSkull null-checks the group and only re-sets when the icon differs (idempotent).

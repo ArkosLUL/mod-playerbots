@@ -6,83 +6,59 @@
 
 #include "VoATriggers.h"
 #include "EventMap.h"
+#include "Group.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "SpellMgr.h"
+#include "VoAHelpers.h"
+
+using namespace VoaHelpers;
+
+namespace
+{
+// Skull. Raw index because that is what Group::GetTargetIcon takes.
+constexpr uint8 SKULL_ICON = 7;
+}
 
 bool EmalonMarkBossTrigger::IsActive()
 {
     // Only tank bot can mark target
     if (!botAI->IsTank(bot))
-    {
         return false;
-    }
 
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "emalon the storm watcher");
-    if (!boss || !boss->IsAlive())
-    {
+    Unit* boss = GetEmalon(bot);
+    if (!boss)
         return false;
-    }
 
-    // Check if boss have skull mark
     Group* group = bot->GetGroup();
     if (!group)
-    {
         return false;
-    }
-    int8 skullIndex = 7;  // Skull
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    if (currentSkullTarget == boss->GetGUID())
-    {
+
+    if (group->GetTargetIcon(SKULL_ICON) == boss->GetGUID())
         return false;
-    }
 
-    // Check if there is any overcharged minion
-    Unit* overchargedMinion = nullptr;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
-    {
-        Unit* unit = botAI->GetUnit(npc);
-        if (!unit)
-            continue;
-
-        uint32 entry = unit->GetEntry();
-        if (entry == NPC_TEMPEST_MINION && unit->HasAura(AURA_OVERCHARGE))
-        {
-            overchargedMinion = unit;
-            break;
-        }
-    }
-    if (overchargedMinion)
-    {
-        return false;
-    }
-
-    return true;
+    // While a minion is overcharged the skull belongs to it, not to the boss.
+    return OverchargedMinion(bot) == nullptr;
 }
 
 bool EmalonLightingNovaTrigger::IsActive()
 {
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "emalon the storm watcher");
-    if (!boss || !boss->IsAlive())
-    {
+    Unit* boss = GetEmalon(bot);
+    if (!boss)
         return false;
-    }
 
-    // Tank dont need to move
+    // The main tank eats it by definition, and the off-tank is already 34yd out on his camp.
     if (botAI->IsTank(bot))
-    {
         return false;
-    }
 
-    // Check if boss is casting Lightning Nova
-    bool isCasting = boss->HasUnitState(UNIT_STATE_CASTING);
-    bool isLightingNova = boss->FindCurrentSpellBySpellId(SPELL_LIGHTNING_NOVA_10_MAN) ||
-                          boss->FindCurrentSpellBySpellId(SPELL_LIGHTNING_NOVA_25_MAN);
+    // Deliberately not gated on standing inside the radius. This trigger also drives the movement
+    // suppression, so it has to stay up for the whole 5s cast: the moment it drops, reach melee walks
+    // whoever just ran out straight back in. The action itself is what returns false once clear.
+    bool const isCasting = boss->HasUnitState(UNIT_STATE_CASTING);
+    bool const isLightingNova = boss->FindCurrentSpellBySpellId(SPELL_LIGHTNING_NOVA_10_MAN) ||
+                                boss->FindCurrentSpellBySpellId(SPELL_LIGHTNING_NOVA_25_MAN);
     return isCasting && isLightingNova;
 }
 
@@ -90,65 +66,70 @@ bool EmalonOverchargeTrigger::IsActive()
 {
     // Only tank bot can mark target
     if (!botAI->IsTank(bot))
-    {
         return false;
-    }
 
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "emalon the storm watcher");
-    if (!boss || !boss->IsAlive())
-    {
+    if (!GetEmalon(bot))
         return false;
-    }
 
-    // Check if there is any overcharged minion
-    Unit* overchargedMinion = nullptr;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
-    {
-        Unit* unit = botAI->GetUnit(npc);
-        if (!unit)
-            continue;
-
-        uint32 entry = unit->GetEntry();
-        if (entry == NPC_TEMPEST_MINION && unit->HasAura(AURA_OVERCHARGE))
-        {
-            overchargedMinion = unit;
-            break;
-        }
-    }
+    Unit* overchargedMinion = OverchargedMinion(bot);
     if (!overchargedMinion)
-    {
         return false;
-    }
 
-    // Check if minion have skull mark
     Group* group = bot->GetGroup();
     if (!group)
-    {
         return false;
-    }
-    int8 skullIndex = 7;  // Skull
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    if (currentSkullTarget == overchargedMinion->GetGUID())
-    {
-        return false;
-    }
 
-    return true;
+    return group->GetTargetIcon(SKULL_ICON) != overchargedMinion->GetGUID();
 }
 
 bool EmalonFallFromFloorTrigger::IsActive()
 {
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "emalon the storm watcher");
-    if (!boss || !boss->IsAlive())
-    {
+    if (!GetEmalon(bot))
         return false;
-    }
 
     // Check if bot is on the floor
     return bot->GetPositionZ() < 80.0f;
+}
+
+bool EmalonMainTankHoldTrigger::IsActive()
+{
+    return botAI->IsMainTank(bot) && EmalonEncounterActive(bot);
+}
+
+bool EmalonRingHoldTrigger::IsActive()
+{
+    if (!EmalonEncounterActive(bot))
+        return false;
+
+    if (botAI->IsTank(bot))
+        return false;
+
+    return botAI->IsHeal(bot) || botAI->IsRanged(bot);
+}
+
+bool EmalonOffTankHoldTrigger::IsActive()
+{
+    if (!IsOffTank(bot) || !EmalonEncounterActive(bot))
+        return false;
+
+    return RequireOffTank(botAI, bot);
+}
+
+bool EmalonAttackPriorityTrigger::IsActive()
+{
+    return botAI->IsDps(bot) && EmalonEncounterActive(bot);
+}
+
+bool EmalonRedirectThreatTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
+        return false;
+
+    if (!EmalonEncounterActive(bot))
+        return false;
+
+    Player* tank = RedirectTarget(botAI, bot);
+    return tank && tank != bot;
 }
 
 //

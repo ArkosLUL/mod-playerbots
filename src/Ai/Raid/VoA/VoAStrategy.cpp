@@ -16,9 +16,31 @@ void RaidVoAStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Emalon the Storm Watcher
     //
+    // The run-out is the only Emalon node that outranks the formation: everything below parks a bot
+    // somewhere, and none of those places is worth standing in while the nova goes off.
     triggers.push_back(new TriggerNode(
         "emalon lighting nova trigger",
-        { NextAction("emalon lighting nova action", ACTION_RAID + 1) }));
+        { NextAction("emalon lighting nova action", ACTION_RAID + 5) }));
+
+    triggers.push_back(new TriggerNode(
+        "emalon redirect threat trigger",
+        { NextAction("emalon redirect threat action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "emalon attack priority trigger",
+        { NextAction("emalon attack priority action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "emalon main tank hold trigger",
+        { NextAction("emalon main tank hold action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "emalon offtank hold trigger",
+        { NextAction("emalon offtank hold action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "emalon ring hold trigger",
+        { NextAction("emalon ring hold action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "emalon mark boss trigger",
@@ -99,6 +121,7 @@ void RaidVoAStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Emalon the Storm Watcher
     //
     multipliers.push_back(new EmalonLightningNovaMultiplier(botAI));
+    multipliers.push_back(new EmalonPositioningMultiplier(botAI));
 
     //
     // Koralon the Flame Watcher

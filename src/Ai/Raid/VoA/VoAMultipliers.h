@@ -8,6 +8,8 @@
 
 #include "Multiplier.h"
 
+class Unit;
+
 // Emalon the Storm Watcher
 
 // While a non-tank must run out of Emalon's Lightning Nova PBAoE, suppress the movement/reach actions that
@@ -17,6 +19,42 @@ class EmalonLightningNovaMultiplier : public Multiplier
 public:
     EmalonLightningNovaMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "emalon lightning nova multiplier") {}
     virtual float GetValue(Action* action);
+
+private:
+    // Answering the trigger costs a creature grid sweep, and a multiplier runs once per queued action,
+    // so the answer is resolved once per tick and reused.
+    bool NovaLive();
+
+    uint32 cachedAtMs = 0;
+    bool cachedNova = false;
+};
+
+// Hands each role's position and target to the Emalon nodes and keeps the generic engine off them.
+class EmalonPositioningMultiplier : public Multiplier
+{
+public:
+    EmalonPositioningMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "emalon positioning multiplier") {}
+    float GetValue(Action* action) override;
+
+private:
+    // Resolving the boss and the minion list needs a grid sweep, and a multiplier runs once per queued
+    // action, so the whole picture is resolved once per tick and reused.
+    struct TickState
+    {
+        Unit* boss = nullptr;
+        bool encounterActive = false;
+        // Role lookups walk the group, and this runs once per queued action, so they are resolved
+        // with the rest of the picture rather than a few dozen times a tick.
+        bool mainTank = false;
+        bool offTank = false;
+        bool ringBot = false;
+        bool dps = false;
+    };
+
+    TickState const& Snapshot();
+
+    uint32 cachedAtMs = 0;
+    TickState cached;
 };
 
 // Koralon the Flame Watcher
