@@ -276,8 +276,8 @@ static bool EnableGroupUsageChecks()
 }
 
 // Appearing on this spec's BiS list is direct evidence the item is itemized for the spec, which the
-// stat heuristics below can only guess at. Phase is deliberately ignored: an item itemized for Fury
-// stays Fury gear whichever tier it was best in. The score nudge is the phase-aware half.
+// stat heuristics below can only guess at. Capped at the bot's own progression phase, same as the
+// score nudge - the two must not disagree about what this bot's BiS is.
 static bool IsBisForBot(Player* bot, ItemTemplate const* proto)
 {
     if (!sPlayerbotAIConfig.bisGateBypass)
@@ -724,6 +724,9 @@ namespace
                 case ITEM_MOD_SPELL_HEALING_DONE:
                     s.hasSP = true;
                     break;
+                // The generic mods grant all three schools, so they say nothing about the item's role.
+                // The school-specific ones do, and hasPhysicalRating is what keeps a plate DPS piece
+                // whose only ratings are melee ones from reading as caster gear.
                 case ITEM_MOD_HIT_RATING:
                     s.hasHIT = true;
                     break;
@@ -732,6 +735,34 @@ namespace
                     break;
                 case ITEM_MOD_HASTE_RATING:
                     s.hasHASTE = true;
+                    break;
+                case ITEM_MOD_HIT_SPELL_RATING:
+                    s.hasHIT = true;
+                    break;
+                case ITEM_MOD_CRIT_SPELL_RATING:
+                    s.hasCRIT = true;
+                    break;
+                case ITEM_MOD_HASTE_SPELL_RATING:
+                    s.hasHASTE = true;
+                    break;
+                case ITEM_MOD_HIT_MELEE_RATING:
+                case ITEM_MOD_HIT_RANGED_RATING:
+                    s.hasHIT = true;
+                    s.hasPhysicalRating = true;
+                    break;
+                case ITEM_MOD_CRIT_MELEE_RATING:
+                case ITEM_MOD_CRIT_RANGED_RATING:
+                    s.hasCRIT = true;
+                    s.hasPhysicalRating = true;
+                    break;
+                case ITEM_MOD_HASTE_MELEE_RATING:
+                case ITEM_MOD_HASTE_RANGED_RATING:
+                    s.hasHASTE = true;
+                    s.hasPhysicalRating = true;
+                    break;
+                case ITEM_MOD_EXPERTISE_RATING:
+                    s.hasEXP = true;
+                    s.hasPhysicalRating = true;
                     break;
                 case ITEM_MOD_MANA_REGENERATION:
                     s.hasMP5 = true;
@@ -828,6 +859,12 @@ namespace
                     break;
                 }
 
+                // The generic item mods grant all three schools at once, so a caster proc's mask carries
+                // the melee and ranged bits too. Only a mask with no spell-side bit at all is evidence
+                // the item is itemized for a physical role.
+                bool const spellSide =
+                    (ratingMask & ((1 << CR_HIT_SPELL) | (1 << CR_CRIT_SPELL) | (1 << CR_HASTE_SPELL))) != 0;
+
                 bool matched = false;
 
                 if (ratingMask & (1 << CR_ARMOR_PENETRATION))
@@ -846,25 +883,25 @@ namespace
                 if (ratingMask & ((1 << CR_HIT_MELEE) | (1 << CR_HIT_RANGED)))
                 {
                     s.hasHIT = true;
-                    s.hasPhysicalRating = true;
+                    s.hasPhysicalRating = s.hasPhysicalRating || !spellSide;
                     matched = true;
                 }
 
                 if (ratingMask & ((1 << CR_CRIT_MELEE) | (1 << CR_CRIT_RANGED)))
                 {
                     s.hasCRIT = true;
-                    s.hasPhysicalRating = true;
+                    s.hasPhysicalRating = s.hasPhysicalRating || !spellSide;
                     matched = true;
                 }
 
                 if (ratingMask & ((1 << CR_HASTE_MELEE) | (1 << CR_HASTE_RANGED)))
                 {
                     s.hasHASTE = true;
-                    s.hasPhysicalRating = true;
+                    s.hasPhysicalRating = s.hasPhysicalRating || !spellSide;
                     matched = true;
                 }
 
-                if (ratingMask & ((1 << CR_HIT_SPELL) | (1 << CR_CRIT_SPELL) | (1 << CR_HASTE_SPELL)))
+                if (spellSide)
                 {
                     s.hasHIT = s.hasHIT || (ratingMask & (1 << CR_HIT_SPELL));
                     s.hasCRIT = s.hasCRIT || (ratingMask & (1 << CR_CRIT_SPELL));
@@ -874,6 +911,21 @@ namespace
 
                 if (matched)
                     break;
+            }
+
+            // The STR/AGI/INT proc trinkets (Death's Choice, Darkmoon Card: Greatness,
+            // Blood of the Old God) deliver their whole payload this way, so without it they read as
+            // statless and land off-spec for the role they are itemized for.
+            if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_STAT)
+            {
+                bool const allStats = effectInfo.MiscValue == -1;
+
+                s.hasSTR = s.hasSTR || allStats || effectInfo.MiscValue == STAT_STRENGTH;
+                s.hasAGI = s.hasAGI || allStats || effectInfo.MiscValue == STAT_AGILITY;
+                s.hasSTA = s.hasSTA || allStats || effectInfo.MiscValue == STAT_STAMINA;
+                s.hasINT = s.hasINT || allStats || effectInfo.MiscValue == STAT_INTELLECT;
+                s.hasSPI = s.hasSPI || allStats || effectInfo.MiscValue == STAT_SPIRIT;
+                break;
             }
 
             if (effectInfo.ApplyAuraName == SPELL_AURA_MOD_ATTACK_POWER ||
@@ -925,7 +977,10 @@ static bool IsPrimaryForSpec(Player* bot, ItemTemplate const* proto)
     if (!bot || !proto)
         return false;
 
-    if (IsBisForBot(bot, proto))
+    // Being on the list says the item is itemized for the spec; it says nothing about whether the bot
+    // is allowed to take an armour class it is not the primary user of. That call belongs to
+    // AdjustUsageForCrossArmor, and it needs the BAD_EQUIP from here to make it.
+    if (IsBisForBot(bot, proto) && !IsLowerTierArmorForBot(bot, proto))
         return true;
 
     const SpecTraits traits = GetSpecTraits(bot);
@@ -1079,12 +1134,6 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (proto->Class != ITEM_CLASS_ARMOR || !IsLowerTierArmorForBot(bot, proto))
         return usage;
 
-    // Reachable for a listed item: QueryItemUsageForEquip hands out BAD_EQUIP on its own when the
-    // score is low, without ever consulting IsPrimaryForSpec. If the list picked a lower armor class
-    // for this spec, that is the intended pick, not a cross-armor grab.
-    if (IsBisForBot(bot, proto))
-        return ITEM_USAGE_EQUIP;
-
     // Endgame etiquette: do not allow cross-armor upgrades to turn into NEED
     // at level cap or in raids.
     if (IsStrictCrossArmorContext(bot))
@@ -1101,6 +1150,13 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
 
     if (!IsFallbackNeedReasonableForSpec(bot, proto))
         return usage;
+
+    // Reachable for a listed item: QueryItemUsageForEquip hands out BAD_EQUIP on its own when the
+    // score is low, without ever consulting IsPrimaryForSpec. If the list picked a lower armor class
+    // for this spec that is the intended pick, so the ilvl margin below has nothing left to decide -
+    // but the etiquette and group gates above still get their say first.
+    if (IsBisForBot(bot, proto) && sRandomItemMgr.CanEquipArmor(proto, bot->getClass(), bot->GetLevel()))
+        return ITEM_USAGE_EQUIP;
 
     // One calculator for the candidate and every equipped slot below; sRandomItemMgr.CalculateItemWeight
     // would build a fresh StatsWeightCalculator per call. Same settings it uses.

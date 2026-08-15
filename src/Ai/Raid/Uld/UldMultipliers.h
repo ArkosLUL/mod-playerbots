@@ -65,6 +65,14 @@ class RazorscaleMultiplier : public Multiplier
 public:
     RazorscaleMultiplier(PlayerbotAI* ai) : Multiplier(ai, "razorscale") {}
     float GetValue(Action* action) override;
+
+private:
+    // Walks the npc list and, for the destination test, the grid. Every generic mover in the queue
+    // asks the same question, so the verdict is memoised for the rest of the tick.
+    bool MoversBlocked();
+
+    uint32 cachedAtMs = 0;
+    bool cachedBlocked = false;
 };
 
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the

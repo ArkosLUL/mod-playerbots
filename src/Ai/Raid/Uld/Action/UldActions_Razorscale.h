@@ -24,13 +24,19 @@ public:
     bool isUseful() override;
 
 private:
-    // Widened for the main tank while she is airborne so he can hold the Dark Rune adds away from the
-    // patches; on the ground he only has to clear his own footprint.
-    float ClearRadius();
+    // isUseful() and Execute() run back to back on the same tick and ask the same question, so the
+    // boss lookup, the radius and the patch search are done once and reused.
+    struct FlameScan
+    {
+        uint32 atMs = 0;
+        ObjectGuid flame;
+        float clearRadius = 0.0f;
+    };
+
+    FlameScan const& Scan();
     bool StepClearOfFlames(Unit* flame, float clearRadius);
 
-    // True when the bot is standing clear but the spot it would walk back to is on fire.
-    bool ReturnSpotBlocked();
+    FlameScan _scan;
 };
 
 class RazorscaleAvoidSentinelAction : public MovementAction

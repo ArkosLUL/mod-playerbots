@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include "AiObjectContext.h"
 #include "DBCEnums.h"
@@ -24,32 +25,35 @@
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
+#include "Timer.h"
 #include "Unit.h"
 #include "Vehicle.h"
 #include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
 
-float RazorscaleAvoidDevouringFlameAction::ClearRadius()
+RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFlameAction::Scan()
 {
+    uint32 const now = getMSTime();
+    if (now == _scan.atMs && _scan.atMs)
+        return _scan;
+
+    _scan = FlameScan();
+    _scan.atMs = now;
+
     Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
-    bool const airborne = boss && boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
+    if (!boss)
+        return _scan;
+
+    // Widened for the main tank while she is airborne so he can hold the Dark Rune adds away from the
+    // patches; on the ground he only has to clear his own footprint.
+    bool const airborne = boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
     float const multiplier = (botAI->IsMainTank(bot) && airborne) ? 2.3f : 1.0f;
+    _scan.clearRadius = RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS * multiplier;
 
-    return RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS * multiplier;
-}
+    if (Unit* flame = RazorscaleBossHelper::FindDevouringFlameNear(botAI, _scan.clearRadius))
+        _scan.flame = flame->GetGUID();
 
-bool RazorscaleAvoidDevouringFlameAction::ReturnSpotBlocked()
-{
-    // Ranged never has to walk back onto the boss, and holding them here would fight the grounded
-    // stack-up for no gain. Melee and both tanks are the ones the reach actions drag into the patch.
-    if (!botAI->IsMelee(bot))
-        return false;
-
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (!target)
-        return false;
-
-    return RazorscaleBossHelper::DevouringFlameBlocks(bot, target->GetPositionX(), target->GetPositionY());
+    return _scan;
 }
 
 bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float clearRadius)
@@ -59,11 +63,22 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
     float const step = std::max(clearRadius - bot->GetDistance2d(flame) + 1.0f, 1.0f);
     float const initAngle = flame->GetAngle(bot);
 
-    for (float delta = 0.0f; delta <= M_PI / 2.0f; delta += M_PI / 8.0f)
+    // Every candidate below sits within `step` of the bot, so one collect around him covers the whole
+    // sweep. A grid search per candidate is 17 of them for a picture that cannot change within a tick.
+    std::vector<Position> flames;
+    RazorscaleBossHelper::CollectDevouringFlames(bot, step + RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS,
+                                                 flames);
+
+    // Counted in whole steps: a float delta accumulating M_PI/8 overshoots the M_PI/2 bound on the
+    // last iteration, which silently drops the two widest escape bearings.
+    constexpr int SWEEP_STEPS = 4;
+    for (int i = 0; i <= SWEEP_STEPS; ++i)
     {
+        float const delta = static_cast<float>(i) * static_cast<float>(M_PI / 8.0);
+
         for (float sign : {1.0f, -1.0f})
         {
-            if (delta == 0.0f && sign < 0.0f)
+            if (i == 0 && sign < 0.0f)
                 continue;
 
             float const angle = initAngle + sign * delta;
@@ -77,7 +92,7 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
 
             // A destination inside the next patch is what turns one dodge into a chain of them. She
             // drops these every 6-12s and they stack up, so the whole arena has to be consulted.
-            if (RazorscaleBossHelper::DevouringFlameBlocks(bot, x, y))
+            if (RazorscaleBossHelper::DevouringFlameBlocks(flames, x, y))
                 continue;
 
             if (MoveTo(bot->GetMapId(), x, y, z, false, false, true, true, MovementPriority::MOVEMENT_COMBAT))
@@ -91,27 +106,20 @@ bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float c
 
 bool RazorscaleAvoidDevouringFlameAction::Execute(Event /*event*/)
 {
-    float const clearRadius = ClearRadius();
+    FlameScan const& scan = Scan();
 
-    if (Unit* flame = RazorscaleBossHelper::FindDevouringFlameNear(botAI, clearRadius))
-        return StepClearOfFlames(flame, clearRadius);
+    Unit* flame = botAI->GetUnit(scan.flame);
+    if (!flame)
+        return false;
 
-    // Standing clear already. Consuming the tick without moving is what stops "razorscale grounded",
-    // the reach actions and the formation step from walking the bot straight back in; casting is
-    // untouched. It releases as soon as the tank has dragged her off the patch.
-    return ReturnSpotBlocked();
+    return StepClearOfFlames(flame, scan.clearRadius);
 }
 
 bool RazorscaleAvoidDevouringFlameAction::isUseful()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
-    if (!boss)
-        return false;
-
-    if (RazorscaleBossHelper::FindDevouringFlameNear(botAI, ClearRadius()))
-        return true;
-
-    return ReturnSpotBlocked();
+    // Standing clear is not this action's problem: RazorscaleMultiplier is what keeps the reach and
+    // formation nodes from walking the bot back onto a patch, and it costs no tick to do it.
+    return !Scan().flame.IsEmpty();
 }
 
 bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)

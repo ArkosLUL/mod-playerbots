@@ -139,28 +139,47 @@ Unit* RazorscaleBossHelper::FindDevouringFlameNear(PlayerbotAI* botAI, float rad
     return nearest;
 }
 
-bool RazorscaleBossHelper::DevouringFlameBlocks(Player* bot, float x, float y)
+void RazorscaleBossHelper::CollectDevouringFlames(Player* bot, float radius, std::vector<Position>& out)
 {
+    out.clear();
     if (!bot)
-        return false;
+        return;
 
     // Grid search rather than "nearest hostile npcs": that value ranks by distance to the bot, and the
-    // question here is about a point he is not standing on yet.
-    float const searchRadius = DEVOURING_FLAME_CLEAR_RADIUS + bot->GetExactDist2d(x, y);
-
+    // question here is about points he is not standing on yet.
     std::list<Creature*> found;
-    bot->GetCreatureListWithEntryInGrid(found, UNIT_DEVOURING_FLAME, searchRadius);
+    bot->GetCreatureListWithEntryInGrid(found, UNIT_DEVOURING_FLAME, radius);
 
+    out.reserve(found.size());
     for (Creature* flame : found)
     {
         if (!flame || !flame->IsAlive())
             continue;
 
-        if (flame->GetExactDist2d(x, y) < DEVOURING_FLAME_CLEAR_RADIUS)
+        out.push_back(flame->GetPosition());
+    }
+}
+
+bool RazorscaleBossHelper::DevouringFlameBlocks(std::vector<Position> const& flames, float x, float y)
+{
+    for (Position const& flame : flames)
+    {
+        if (flame.GetExactDist2d(x, y) < DEVOURING_FLAME_CLEAR_RADIUS)
             return true;
     }
 
     return false;
+}
+
+bool RazorscaleBossHelper::DevouringFlameBlocks(Player* bot, float x, float y)
+{
+    if (!bot)
+        return false;
+
+    std::vector<Position> flames;
+    CollectDevouringFlames(bot, DEVOURING_FLAME_CLEAR_RADIUS + bot->GetExactDist2d(x, y), flames);
+
+    return DevouringFlameBlocks(flames, x, y);
 }
 
 bool RazorscaleBossHelper::IsHarpoonReady(GameObject* harpoonGO)
@@ -513,9 +532,27 @@ static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
     return nullptr;
 }
 
+// Lowest health first, so two Sentinels up do not split the raid's damage and the skull does not flip
+// between them as the marking bot moves. Entry order alone is resolved per bot and is not stable.
+static Unit* GetLowestHealthUnitByEntry(PlayerbotAI* botAI, uint32 entry)
+{
+    Unit* best = nullptr;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != entry)
+            continue;
+
+        if (!best || unit->GetHealth() < best->GetHealth())
+            best = unit;
+    }
+
+    return best;
+}
+
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
 {
-    if (Unit* sentinel = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
+    if (Unit* sentinel = GetLowestHealthUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
         return sentinel;
 
     if (Unit* watcher = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER))

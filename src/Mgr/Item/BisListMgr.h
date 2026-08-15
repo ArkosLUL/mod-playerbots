@@ -71,11 +71,12 @@ public:
     // and should not repeat the talent walk in ResolveSpecKey each time.
     uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase) const;
 
-    // Listed in any phase. The spec gates use this: an item itemized for a spec stays itemized for it
-    // regardless of which tier it was best in.
+    // Listed at or below the bot's own progression phase. The spec gates use this, and they have to
+    // agree with the score nudge about what counts as this bot's BiS - answering "any phase" here lets
+    // a Naxx-progression bot bypass the gates for gear several tiers past anything it can reach.
     bool IsBisListed(Player* bot, ItemTemplate const* proto) const
     {
-        return GetBisRank(bot, proto, BIS_PHASE_MAX) != 0;
+        return GetBisRank(bot, proto, MaxPhaseForBot(bot)) != 0;
     }
 
 private:

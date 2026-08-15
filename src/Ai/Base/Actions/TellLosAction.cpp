@@ -147,7 +147,12 @@ bool TellCalculateItemAction::Execute(Event event)
 
     // Match what QueryItemUsageForEquip scores with, or the printed number is not the one the loot
     // and equip decisions actually saw.
+    calculator.SetItemSetBonus(sPlayerbotAIConfig.itemSetUseForUpgrades);
+    calculator.SetOverflowPenalty(false);
     calculator.SetBisBonus(true);
+    if (sRandomPlayerbotMgr.IsSpecPvp(bot->GetGUID().GetCounter(), bot->getClass()))
+        calculator.SetPvpSpec(true);
+
     float score = calculator.CalculateItem(item.itemId, item.randomPropertyId);
 
     std::ostringstream out;

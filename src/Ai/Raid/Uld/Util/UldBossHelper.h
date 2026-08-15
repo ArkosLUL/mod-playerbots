@@ -489,7 +489,8 @@ bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
-// Watcher (ranged caster) > Guardian. Returns nullptr when none are up.
+// Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
+// instead of splitting across two. Returns nullptr when none are up.
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
 
 // What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns
@@ -723,6 +724,13 @@ public:
 
     // Nearest live Devouring Flame patch within radius of the bot, or nullptr.
     static Unit* FindDevouringFlameNear(PlayerbotAI* botAI, float radius);
+
+    // Centres of the live patches within radius of the bot. The dodge sweep tests a dozen-plus
+    // candidate destinations against the same set, and one grid search beats one per candidate.
+    static void CollectDevouringFlames(Player* bot, float radius, std::vector<Position>& out);
+
+    // True when one of the collected patches covers (x, y).
+    static bool DevouringFlameBlocks(std::vector<Position> const& flames, float x, float y);
 
     // True when a Devouring Flame patch covers (x, y). Searched around the bot, so the radius has to
     // reach a destination he is not standing on yet as well as the patch's own reach around it.

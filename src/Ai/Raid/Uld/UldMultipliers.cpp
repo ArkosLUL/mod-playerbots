@@ -221,12 +221,34 @@ float RazorscaleMultiplier::GetValue(Action* action)
     if (!IsRazorscaleGenericMover(action))
         return 1.0f;
 
-    // Asked last, because it walks the npc list. Scoped to a live dodge only: held permanently this
-    // is the freeze bug, where a silently-failing MoveTo strands the bot for the rest of the fight.
-    return RazorscaleBossHelper::FindDevouringFlameNear(
-               botAI, RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS)
-               ? 0.0f
-               : 1.0f;
+    // Asked last, because it is the expensive half.
+    uint32 const now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedBlocked = MoversBlocked();
+    }
+
+    return cachedBlocked ? 0.0f : 1.0f;
+}
+
+bool RazorscaleMultiplier::MoversBlocked()
+{
+    // Scoped to a live dodge only: held permanently this is the freeze bug, where a silently-failing
+    // MoveTo strands the bot for the rest of the fight.
+    if (RazorscaleBossHelper::FindDevouringFlameNear(botAI, RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS))
+        return true;
+
+    // Standing clear, but the spot the movers would walk to is on fire. Ranged never has to close, and
+    // holding them here would fight the grounded stack-up for no gain.
+    if (!botAI->IsMelee(bot))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
+
+    return RazorscaleBossHelper::DevouringFlameBlocks(bot, target->GetPositionX(), target->GetPositionY());
 }
 
 float UldThreatRedirectMultiplier::GetValue(Action* action)
@@ -330,13 +352,14 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     if (!razorscale)
         razorscale = AI_VALUE2(Unit*, "find target", "razorscale");
 
-    // She takes no damage at all while airborne. Every landing is a real burn window, harpoon
-    // knockdowns included, so nothing is held back once she is on the floor.
+    // She takes no damage at all while airborne, so every landing is a real burn window - harpoon
+    // knockdowns included. Lust is the exception: a knockdown is ~30s at full health, and spending a
+    // 10-minute cooldown there costs the permanent sub-50% ground phase the fight is balanced around.
     if (razorscale)
     {
         bool const grounded = razorscale->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
 
-        return {grounded, grounded};
+        return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
     }
 
     // Damage in P1-P3 counts, so only lust waits. All three mechs up at once is phase 4, the burn
