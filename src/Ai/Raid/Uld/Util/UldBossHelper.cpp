@@ -111,6 +111,58 @@ bool RazorscaleBossHelper::IsFlyingPhase() const
     return IsFlyingPhaseFor(_boss);
 }
 
+Unit* RazorscaleBossHelper::FindDevouringFlameNear(PlayerbotAI* botAI, float radius)
+{
+    Player* bot = botAI->GetBot();
+
+    Unit* nearest = nullptr;
+    float best = std::numeric_limits<float>::max();
+
+    GuidVector npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest hostile npcs")->Get();
+    for (ObjectGuid const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != UNIT_DEVOURING_FLAME)
+            continue;
+
+        float const distance = bot->GetDistance2d(unit);
+        if (distance > radius)
+            continue;
+
+        if (!nearest || distance < best)
+        {
+            nearest = unit;
+            best = distance;
+        }
+    }
+
+    return nearest;
+}
+
+bool RazorscaleBossHelper::DevouringFlameBlocks(Player* bot, float x, float y)
+{
+    if (!bot)
+        return false;
+
+    // Grid search rather than "nearest hostile npcs": that value ranks by distance to the bot, and the
+    // question here is about a point he is not standing on yet.
+    float const searchRadius = DEVOURING_FLAME_CLEAR_RADIUS + bot->GetExactDist2d(x, y);
+
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, UNIT_DEVOURING_FLAME, searchRadius);
+
+    for (Creature* flame : found)
+    {
+        if (!flame || !flame->IsAlive())
+            continue;
+
+        if (flame->GetExactDist2d(x, y) < DEVOURING_FLAME_CLEAR_RADIUS)
+            return true;
+    }
+
+    return false;
+}
+
 bool RazorscaleBossHelper::IsHarpoonReady(GameObject* harpoonGO)
 {
     if (!harpoonGO)
@@ -459,6 +511,29 @@ static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
     }
 
     return nullptr;
+}
+
+Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
+{
+    if (Unit* sentinel = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
+        return sentinel;
+
+    if (Unit* watcher = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER))
+        return watcher;
+
+    return GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
+}
+
+Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI)
+{
+    Unit* boss = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "razorscale")->Get();
+    if (!boss || !boss->IsAlive())
+        return nullptr;
+
+    if (boss->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+        return boss;
+
+    return GetRazorscaleAddKillTarget(botAI);
 }
 
 Unit* GetXT002(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_XT002); }

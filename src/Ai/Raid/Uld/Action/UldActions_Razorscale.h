@@ -22,6 +22,15 @@ public:
     RazorscaleAvoidDevouringFlameAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale avoid devouring flames") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    // Widened for the main tank while she is airborne so he can hold the Dark Rune adds away from the
+    // patches; on the ground he only has to clear his own footprint.
+    float ClearRadius();
+    bool StepClearOfFlames(Unit* flame, float clearRadius);
+
+    // True when the bot is standing clear but the spot it would walk back to is on fire.
+    bool ReturnSpotBlocked();
 };
 
 class RazorscaleAvoidSentinelAction : public MovementAction
@@ -72,10 +81,22 @@ public:
     bool isUseful() override;
 };
 
-class RazorscaleFocusCasterAction : public Action
+// Sole owner of the skull icon for this encounter: adds while she is airborne, the boss herself the
+// moment she is on the floor. DpsTargetValue prefers the RTI target, so this is what the raid hits.
+class RazorscaleKillTargetAction : public Action
 {
 public:
-    RazorscaleFocusCasterAction(PlayerbotAI* botAI) : Action(botAI, "razorscale focus caster action") {}
+    RazorscaleKillTargetAction(PlayerbotAI* botAI) : Action(botAI, "razorscale kill target action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// The generic pet-attack node is commented out engine-wide, so a pet keeps whatever it last hit
+// unless a script hands it a new order.
+class RazorscalePetControlAction : public Action
+{
+public:
+    RazorscalePetControlAction(PlayerbotAI* botAI) : Action(botAI, "razorscale pet control action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

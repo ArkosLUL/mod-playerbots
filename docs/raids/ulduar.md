@@ -499,8 +499,9 @@ optimise for the kill and, per the follower model, never chase achievements.
 
 ## Core behaviours the strategies key off
 
-Four upstream script facts our code now depends on. Each one silently disabled a behaviour before it
-was accounted for, so re-check them after any parent-repo sync.
+Upstream script and DBC facts our code now depends on, with the behaviour each one drives. Every one
+of them silently disabled something before it was accounted for, so re-check them after any
+parent-repo sync.
 
 ### Razorscale — harpoons are GameObject state, not auras
 
@@ -513,6 +514,27 @@ they had been testing an aura that could never be present.
 
 The tank debuff also moved: **Fuse Armor is 64821**, not 64771 (64774 is still the 5-stack `Fused
 Armor`). 64771 is gone from the core, so the tank-swap check never fired. Threshold stays at 2 stacks.
+
+### Razorscale — Devouring Flame is 5 yd, and the skull has one owner
+
+The patch is NPC 34188 carrying 64709, a 2 s periodic trigger of 64704 (64733 in 25-man), **whose
+damage radius index is 8 = 5.0 yd**. Bots clear `DEVOURING_FLAME_CLEAR_RADIUS` (7 yd) so a step
+actually leaves the patch instead of stopping on its edge, and `DevouringFlameBlocks()` rejects any
+destination covered by another one — she drops these every 6–12 s and they stack up.
+
+Clearing is only half of it. `razorscale avoid devouring flames` also **holds the tick without moving**
+while the spot a melee bot would walk back to is on fire; `RazorscaleMultiplier` zeroes the generic
+movers and `avoid aoe` for the same window. Both release the moment the tank drags her clear, so
+nobody stands out the patch's full life. A permanent veto here is the freeze bug.
+
+`razorscale kill target action` is the **only** thing that sets the skull: the boss whenever she is
+on the floor, otherwise Sentinel → Watcher → Guardian. `DpsTargetValue` prefers the RTI target, so a
+skull left on an add is the whole raid left on an add. Moon stays on the boss while she is airborne —
+it is excluded from every DPS target scan — and is cleared on landing.
+
+The generic pet-attack node is commented out engine-wide (`CombatStrategy.cpp`), so pets keep whatever
+they last hit unless a script re-orders them: `razorscale pet control action` puts them on the adds
+while she flies and on her when she lands, and always reports failure so the tick falls through.
 
 ### Vezax — Shadow Crash can land in the melee stack
 
@@ -553,7 +575,7 @@ is shaman-only.
 
 | Boss | `allowAll` | `allowLust` | Why |
 |---|---|---|---|
-| Razorscale | grounded (`Z <= 440`) | grounded, HP < 50%, no Stun Aura 62794 | Zero damage taken while airborne; permanent ground phase below 50% |
+| Razorscale | grounded (`Z <= 440`) | same | Zero damage taken while airborne; every landing, harpoon knockdowns included, is a real burn window |
 | Mimiron | always | all three mechs alive | P1-P3 damage counts; all three up is P4, the enrage burn |
 | Yogg-Saron | P2 or P3 | P3 | P1 damage lands on Sara and is wasted |
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
@@ -569,6 +591,13 @@ the kill.
 `AssignRolesBasedOnHealth()`, which reassigns the raid's main tank. Read Z straight off the target
 sweep instead. Yogg is resolved with `FindNearestCreature`, not `"find target"`, because he is not
 reliably on a bot's threat list.
+
+**The `"possible targets no los"` sweep is capped at `AiPlayerbot.SightDistance` (100 yd)**, and
+Razorscale's second flight point `RazorFlightPos2` (619.1, -238.1, 475.2) sits past that from most of
+the raid. `EvaluateWindow` therefore falls back to `"find target"` for her — `DoZoneInCombat()` on her
+first flight point puts the whole raid on her threat list, so that read works at any range. Without
+it the function reaches its `return {}`, and `BurstWindow`'s member initialisers are both `true`, so
+the gate opens instead of closing.
 
 Open question that cannot be answered from source: whether the Mimiron mechs and the Assembly council
 members are `IsDungeonBoss()`-flagged. If they are not, lust never fires on them and those two gates
@@ -623,7 +652,7 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 | **Mimiron** | No ground-fire avoidance in normal mode either — only fire *resistance* |
 | **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |
 | **Vezax** | Saronite Vapor puddles never dodged |
-| **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt or focus; Flame Breath cone not dodged |
+| **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt (focus and the Flame Breath cone are handled) |
 | **Freya** | Snaplasher is only skull-marked, so bots multi-DPS it and it hardens; Storm Lasher cast not interrupted |
 | **Algalon** | Collapsing Star (32955) unhandled — both `big bang hide` and `constellation kite` search only for *existing* Black Holes and silently fail when none exist |
 

@@ -57,6 +57,16 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Razorscale: keeps the generic movers off a bot that is clearing a Devouring Flame patch. The dodge
+// action wins on priority, but it releases the tick the moment the bot is standing clear, and the
+// movers then walk it straight back onto the 5yd patch it just left.
+class RazorscaleMultiplier : public Multiplier
+{
+public:
+    RazorscaleMultiplier(PlayerbotAI* ai) : Multiplier(ai, "razorscale") {}
+    float GetValue(Action* action) override;
+};
+
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
 // encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
 class UldThreatRedirectMultiplier : public Multiplier

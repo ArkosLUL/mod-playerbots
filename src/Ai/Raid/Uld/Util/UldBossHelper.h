@@ -488,6 +488,14 @@ bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 // raid) > Scrapbot (heals XT if it arrives) > Boombot > Pummeller. Returns nullptr when none are up.
 Unit* GetXT002KillTarget(PlayerbotAI* botAI);
 
+// Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
+// Watcher (ranged caster) > Guardian. Returns nullptr when none are up.
+Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
+
+// What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns
+// included, since she is damageable then - and otherwise the add above.
+Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI);
+
 // Ignis the Furnace Master. These search the grid rather than going through "find target": a bot
 // parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries
 // UNIT_FLAG_NOT_SELECTABLE, which drops it out of "possible targets" entirely. The room is also
@@ -679,6 +687,11 @@ public:
 
     static constexpr uint32 FUSEARMOR_THRESHOLD = 2;
 
+    // The Devouring Flame stalker's tick (64704 / 64733) carries radius index 8. The clear radius adds
+    // the margin a step needs to actually leave the patch rather than stopping on its edge.
+    static constexpr float DEVOURING_FLAME_RADIUS = 5.0f;
+    static constexpr float DEVOURING_FLAME_CLEAR_RADIUS = DEVOURING_FLAME_RADIUS + 2.0f;
+
     // Constants for arena parameters
     static constexpr float RAZORSCALE_FLYING_Z_THRESHOLD = 440.0f;
     static constexpr float RAZORSCALE_ARENA_CENTER_X = 587.54f;
@@ -707,6 +720,13 @@ public:
     // UpdateBossAI() first - it reassigns the raid's tank roles as a side effect.
     static bool IsGroundPhaseFor(Unit* boss);
     static bool IsFlyingPhaseFor(Unit* boss);
+
+    // Nearest live Devouring Flame patch within radius of the bot, or nullptr.
+    static Unit* FindDevouringFlameNear(PlayerbotAI* botAI, float radius);
+
+    // True when a Devouring Flame patch covers (x, y). Searched around the bot, so the radius has to
+    // reach a destination he is not standing on yet as well as the patch's own reach around it.
+    static bool DevouringFlameBlocks(Player* bot, float x, float y);
 
     static bool IsHarpoonReady(GameObject* harpoonGO);
     static void SetHarpoonOnCooldown(GameObject* harpoonGO);

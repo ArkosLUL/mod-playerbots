@@ -27,7 +27,8 @@ public:
         creators["razorscale grounded"] = &RaidUlduarTriggerContext::razorscale_grounded;
         creators["razorscale harpoon trigger"] = &RaidUlduarTriggerContext::razorscale_harpoon_trigger;
         creators["razorscale fuse armor trigger"] = &RaidUlduarTriggerContext::razorscale_fuse_armor_trigger;
-        creators["razorscale focus caster trigger"] = &RaidUlduarTriggerContext::razorscale_focus_caster_trigger;
+        creators["razorscale kill target trigger"] = &RaidUlduarTriggerContext::razorscale_kill_target_trigger;
+        creators["razorscale pet control trigger"] = &RaidUlduarTriggerContext::razorscale_pet_control_trigger;
         creators["razorscale flame breath trigger"] = &RaidUlduarTriggerContext::razorscale_flame_breath_trigger;
         creators["razorscale fire resistance trigger"] = &RaidUlduarTriggerContext::razorscale_fire_resistance_trigger;
         creators["ignis fire resistance trigger"] = &RaidUlduarTriggerContext::ignis_fire_resistance_trigger;
@@ -156,7 +157,8 @@ private:
     static Trigger* razorscale_grounded(PlayerbotAI* ai) { return new RazorscaleGroundedTrigger(ai); }
     static Trigger* razorscale_harpoon_trigger(PlayerbotAI* ai) { return new RazorscaleHarpoonAvailableTrigger(ai); }
     static Trigger* razorscale_fuse_armor_trigger(PlayerbotAI* ai) { return new RazorscaleFuseArmorTrigger(ai); }
-    static Trigger* razorscale_focus_caster_trigger(PlayerbotAI* ai) { return new RazorscaleFocusCasterTrigger(ai); }
+    static Trigger* razorscale_kill_target_trigger(PlayerbotAI* ai) { return new RazorscaleKillTargetTrigger(ai); }
+    static Trigger* razorscale_pet_control_trigger(PlayerbotAI* ai) { return new RazorscalePetControlTrigger(ai); }
     static Trigger* razorscale_flame_breath_trigger(PlayerbotAI* ai) { return new RazorscaleFlameBreathTrigger(ai); }
     static Trigger* razorscale_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "razorscale"); }
     static Trigger* ignis_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); }

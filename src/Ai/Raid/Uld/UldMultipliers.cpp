@@ -4,6 +4,7 @@
 #include <string>
 
 #include "BurstCooldowns.h"
+#include "FollowActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "MovementActions.h"
@@ -11,6 +12,7 @@
 #include "Playerbots.h"
 #include "PriestActions.h"
 #include "RaidBossHelpers.h"
+#include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "Timer.h"
 #include "UldBossHelper.h"
@@ -195,6 +197,38 @@ float FlameLeviathanVehicleMovementMultiplier::GetValue(Action* action)
     return FlameLeviathanEngaged(botAI) ? 0.0f : 1.0f;
 }
 
+namespace
+{
+
+// Everything generic that can walk a bot back onto a patch it has just cleared. "avoid aoe" is on the
+// list because it sits at ACTION_EMERGENCY, outranks every Razorscale node, and picks its bearing
+// with no knowledge of the other patches on the floor. CastReachTargetSpellAction is a CastSpellAction
+// rather than a MovementAction, so it cannot be caught by a base-class filter.
+bool IsRazorscaleGenericMover(Action* action)
+{
+    return dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<CastReachTargetSpellAction*>(action) ||
+           dynamic_cast<CombatFormationMoveAction*>(action) || dynamic_cast<RearFlankAction*>(action) ||
+           dynamic_cast<FollowAction*>(action) || dynamic_cast<AvoidAoeAction*>(action);
+}
+
+}
+
+float RazorscaleMultiplier::GetValue(Action* action)
+{
+    if (!action || bot->GetMapId() != ULDUAR_MAP_ID)
+        return 1.0f;
+
+    if (!IsRazorscaleGenericMover(action))
+        return 1.0f;
+
+    // Asked last, because it walks the npc list. Scoped to a live dodge only: held permanently this
+    // is the freeze bug, where a silently-failing MoveTo strands the bot for the rest of the fight.
+    return RazorscaleBossHelper::FindDevouringFlameNear(
+               botAI, RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS)
+               ? 0.0f
+               : 1.0f;
+}
+
 float UldThreatRedirectMultiplier::GetValue(Action* action)
 {
     if (!dynamic_cast<CastMisdirectionOnMainTankAction*>(action) &&
@@ -288,13 +322,21 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         }
     }
 
-    // She takes no damage at all while airborne, and the harpoon knockdowns before 50% end on a
-    // timer, so only the permanent ground phase is worth a lust.
+    // The sweep above is capped at SightDistance, and her second flight point (619, -238, 475) sits
+    // past 100yd from most of the raid - so she has to be resolved off the threat list as well, or
+    // the fall-through at the bottom opens the gate instead of closing it. DoZoneInCombat() on her
+    // first flight point puts the whole raid on that list, and "find target" does not touch
+    // UpdateBossAI(), so the tank-reassignment hazard does not apply.
+    if (!razorscale)
+        razorscale = AI_VALUE2(Unit*, "find target", "razorscale");
+
+    // She takes no damage at all while airborne. Every landing is a real burn window, harpoon
+    // knockdowns included, so nothing is held back once she is on the floor.
     if (razorscale)
     {
         bool const grounded = razorscale->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
 
-        return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
+        return {grounded, grounded};
     }
 
     // Damage in P1-P3 counts, so only lust waits. All three mechs up at once is phase 4, the burn

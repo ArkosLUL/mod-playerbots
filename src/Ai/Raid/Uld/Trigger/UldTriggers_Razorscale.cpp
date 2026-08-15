@@ -204,25 +204,13 @@ bool RazorscaleFuseArmorTrigger::IsActive()
     return false;
 }
 
-bool RazorscaleFocusCasterTrigger::IsActive()
+bool RazorscaleKillTargetTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
-    if (!boss || !boss->IsAlive())
-        return false;
-
     // One bot drives the marking to avoid the whole raid fighting over the icon
     if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
         return false;
 
-    // Sentinels are the top kill priority and own the skull; only focus casters once they are down
-    if (GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
-        return false;
-
-    // Watcher (ranged caster) first so bots interrupt it, then Guardian
-    Unit* target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER);
-    if (!target)
-        target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
-
+    Unit* target = GetRazorscaleKillTarget(botAI);
     if (!target)
         return false;
 
@@ -231,6 +219,15 @@ bool RazorscaleFocusCasterTrigger::IsActive()
         return false;
 
     return true;
+}
+
+bool RazorscalePetControlTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    return bot->GetGuardianPet() != nullptr;
 }
 
 bool RazorscaleFlameBreathTrigger::IsActive()

@@ -28,7 +28,8 @@ public:
         creators["razorscale grounded"] = &RaidUlduarActionContext::razorscale_grounded;
         creators["razorscale harpoon action"] = &RaidUlduarActionContext::razorscale_harpoon_action;
         creators["razorscale fuse armor action"] = &RaidUlduarActionContext::razorscale_fuse_armor_action;
-        creators["razorscale focus caster action"] = &RaidUlduarActionContext::razorscale_focus_caster_action;
+        creators["razorscale kill target action"] = &RaidUlduarActionContext::razorscale_kill_target_action;
+        creators["razorscale pet control action"] = &RaidUlduarActionContext::razorscale_pet_control_action;
         creators["razorscale flame breath action"] = &RaidUlduarActionContext::razorscale_flame_breath_action;
         creators["razorscale fire resistance action"] = &RaidUlduarActionContext::razorscale_fire_resistance_action;
         creators["ignis fire resistance action"] = &RaidUlduarActionContext::ignis_fire_resistance_action;
@@ -152,7 +153,8 @@ private:
     static Action* razorscale_grounded(PlayerbotAI* ai) { return new RazorscaleGroundedAction(ai); }
     static Action* razorscale_harpoon_action(PlayerbotAI* ai) { return new RazorscaleHarpoonAction(ai); }
     static Action* razorscale_fuse_armor_action(PlayerbotAI* ai) { return new RazorscaleFuseArmorAction(ai); }
-    static Action* razorscale_focus_caster_action(PlayerbotAI* ai) { return new RazorscaleFocusCasterAction(ai); }
+    static Action* razorscale_kill_target_action(PlayerbotAI* ai) { return new RazorscaleKillTargetAction(ai); }
+    static Action* razorscale_pet_control_action(PlayerbotAI* ai) { return new RazorscalePetControlAction(ai); }
     static Action* razorscale_flame_breath_action(PlayerbotAI* ai) { return new RazorscaleFlameBreathAction(ai); }
     static Action* razorscale_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "razorscale"); }
     static Action* ignis_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "ignis the furnace master"); }

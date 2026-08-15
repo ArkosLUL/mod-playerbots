@@ -58,10 +58,17 @@ public:
     bool IsActive() override;
 };
 
-class RazorscaleFocusCasterTrigger : public Trigger
+class RazorscaleKillTargetTrigger : public Trigger
 {
 public:
-    RazorscaleFocusCasterTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale focus caster trigger") {}
+    RazorscaleKillTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale kill target trigger") {}
+    bool IsActive() override;
+};
+
+class RazorscalePetControlTrigger : public Trigger
+{
+public:
+    RazorscalePetControlTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale pet control trigger") {}
     bool IsActive() override;
 };
 

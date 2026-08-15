@@ -4,6 +4,7 @@
 #include <CombatStrategy.h>
 #include <FollowMasterStrategy.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "AiObjectContext.h"
@@ -11,6 +12,7 @@
 #include "GameObject.h"
 #include "Group.h"
 #include "LastMovementValue.h"
+#include "Map.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -27,181 +29,128 @@
 #include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
 
-bool RazorscaleAvoidDevouringFlameAction::Execute(Event /*event*/)
+float RazorscaleAvoidDevouringFlameAction::ClearRadius()
 {
-    RazorscaleBossHelper razorscaleHelper(botAI);
-
-    if (!razorscaleHelper.UpdateBossAI())
-        return false;
-
-    bool isMainTank = botAI->IsMainTank(bot);
-    const float flameRadius = 3.5f;
-
-    // Main tank moves further so they can hold adds away from flames, but only during the air phases
-    const float safeDistanceMultiplier = (isMainTank && !razorscaleHelper.IsGroundPhase()) ? 2.3f : 1.0f;
-    const float safeDistance = flameRadius * safeDistanceMultiplier;
-
-    // Get the boss
     Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
-    if (!boss)
+    bool const airborne = boss && boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD;
+    float const multiplier = (botAI->IsMainTank(bot) && airborne) ? 2.3f : 1.0f;
+
+    return RazorscaleBossHelper::DEVOURING_FLAME_CLEAR_RADIUS * multiplier;
+}
+
+bool RazorscaleAvoidDevouringFlameAction::ReturnSpotBlocked()
+{
+    // Ranged never has to walk back onto the boss, and holding them here would fight the grounded
+    // stack-up for no gain. Melee and both tanks are the ones the reach actions drag into the patch.
+    if (!botAI->IsMelee(bot))
         return false;
 
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    Unit* closestFlame = nullptr;
-    float closestDistance = std::numeric_limits<float>::max();
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return false;
 
-    // Find the closest Devouring Flame
-    for (auto& npc : npcs)
+    return RazorscaleBossHelper::DevouringFlameBlocks(bot, target->GetPositionX(), target->GetPositionY());
+}
+
+bool RazorscaleAvoidDevouringFlameAction::StepClearOfFlames(Unit* flame, float clearRadius)
+{
+    // Measured from where the bot is standing, not from the patch: MoveAway and MoveTo both step by a
+    // distance rather than to one, so a bot on the centre needs the whole radius.
+    float const step = std::max(clearRadius - bot->GetDistance2d(flame) + 1.0f, 1.0f);
+    float const initAngle = flame->GetAngle(bot);
+
+    for (float delta = 0.0f; delta <= M_PI / 2.0f; delta += M_PI / 8.0f)
     {
-        Unit* unit = botAI->GetUnit(npc);
-        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DEVOURING_FLAME)
+        for (float sign : {1.0f, -1.0f})
         {
-            float distance = bot->GetDistance2d(unit);
-            if (distance < closestDistance)
-            {
-                closestDistance = distance;
-                closestFlame = unit;
-            }
+            if (delta == 0.0f && sign < 0.0f)
+                continue;
+
+            float const angle = initAngle + sign * delta;
+            float x = bot->GetPositionX() + std::cos(angle) * step;
+            float y = bot->GetPositionY() + std::sin(angle) * step;
+            float z = bot->GetPositionZ();
+
+            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                                bot->GetPositionZ(), x, y, z))
+                continue;
+
+            // A destination inside the next patch is what turns one dodge into a chain of them. She
+            // drops these every 6-12s and they stack up, so the whole arena has to be consulted.
+            if (RazorscaleBossHelper::DevouringFlameBlocks(bot, x, y))
+                continue;
+
+            if (MoveTo(bot->GetMapId(), x, y, z, false, false, true, true, MovementPriority::MOVEMENT_COMBAT))
+                return true;
         }
     }
 
-    // Off tanks are following the main tank during grounded and should prioritise stacking
-    if (razorscaleHelper.IsGroundPhase() && (botAI->IsTank(bot) && !botAI->IsMainTank(bot)))
-        return false;
+    // Nothing validated clear. Any step out beats standing in it.
+    return MoveAway(flame, step);
+}
 
-    // Handle movement from flames
-    if (closestDistance < safeDistance)
-        return MoveAway(closestFlame, safeDistance);
+bool RazorscaleAvoidDevouringFlameAction::Execute(Event /*event*/)
+{
+    float const clearRadius = ClearRadius();
 
-    return false;
+    if (Unit* flame = RazorscaleBossHelper::FindDevouringFlameNear(botAI, clearRadius))
+        return StepClearOfFlames(flame, clearRadius);
+
+    // Standing clear already. Consuming the tick without moving is what stops "razorscale grounded",
+    // the reach actions and the formation step from walking the bot straight back in; casting is
+    // untouched. It releases as soon as the tank has dragged her off the patch.
+    return ReturnSpotBlocked();
 }
 
 bool RazorscaleAvoidDevouringFlameAction::isUseful()
 {
-    bool isMainTank = botAI->IsMainTank(bot);
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss)
+        return false;
 
-    const float flameRadius = 3.5f;
-    const float safeDistanceMultiplier = isMainTank ? 2.3f : 1.0f;
-    const float safeDistance = flameRadius * safeDistanceMultiplier;
+    if (RazorscaleBossHelper::FindDevouringFlameNear(botAI, ClearRadius()))
+        return true;
 
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
-    {
-        Unit* unit = botAI->GetUnit(npc);
-        if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DEVOURING_FLAME)
-        {
-            float distance = bot->GetDistance2d(unit);
-            if (distance < safeDistance)
-                return true;  // Bot is within the danger distance
-        }
-    }
-
-    return false;  // No nearby flames or bot is at a safe distance
+    return ReturnSpotBlocked();
 }
 
 bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
 {
-    bool isMainTank = botAI->IsMainTank(bot);
-    bool isRanged = botAI->IsRanged(bot);
-    const float radius = 8.0f;
+    // Marking is not done here - "razorscale kill target action" owns the skull for the whole fight,
+    // so it can hand it to the boss the moment she lands.
+    if (!botAI->IsRanged(bot))
+        return false;
 
+    const float radius = 8.0f;
     GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
 
-    Unit* lowestHealthSentinel = nullptr;
-    uint32 lowestHealth = UINT32_MAX;
     bool movedAway = false;
-
-    // Iterate through all nearby NPCs
     for (auto& npc : npcs)
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
         {
-            // Check if this sentinel has the lowest health
-            if (unit->GetHealth() < lowestHealth)
-            {
-                lowestHealth = unit->GetHealth();
-                lowestHealthSentinel = unit;
-            }
-
-            // Move away if ranged and too close
-            if (isRanged && bot->GetDistance2d(unit) < radius)
+            if (bot->GetDistance2d(unit) < radius)
                 movedAway = MoveAway(unit, radius) || movedAway;
         }
     }
 
-    // Check if the main tank is a human player
-    Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
-    Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
-
-    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a real player
-    {
-        // Iterate through the first 3 bot tanks to assign the Skull marker
-        for (int i = 0; i < 3; ++i)
-        {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
-            {
-                Group* group = bot->GetGroup();
-                if (group && lowestHealthSentinel)
-                {
-                    int8 skullIndex = 7;  // Skull
-                    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-
-                    // If there's no skull set yet, or the skull is on a different target, set the sentinel
-                    if (!currentSkullTarget || (lowestHealthSentinel->GetGUID() != currentSkullTarget))
-                        group->SetTargetIcon(skullIndex, bot->GetGUID(), lowestHealthSentinel->GetGUID());
-                }
-                break;  // Stop after finding the first valid bot tank
-            }
-        }
-    }
-    else if (isMainTank && lowestHealthSentinel)  // Bot is the main tank
-    {
-        Group* group = bot->GetGroup();
-        if (group)
-        {
-            int8 skullIndex = 7;  // Skull
-            ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-
-            // If there's no skull set yet, or the skull is on a different target, set the sentinel
-            if (!currentSkullTarget || (lowestHealthSentinel->GetGUID() != currentSkullTarget))
-                group->SetTargetIcon(skullIndex, bot->GetGUID(), lowestHealthSentinel->GetGUID());
-        }
-    }
-
-    return movedAway;  // Return true if moved
+    return movedAway;
 }
 
 bool RazorscaleAvoidSentinelAction::isUseful()
 {
-    bool isMainTank = botAI->IsMainTank(bot);
-    Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
-    Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
+    if (!botAI->IsRanged(bot))
+        return false;
 
-    // If this bot is the main tank, it should always try to mark
-    if (isMainTank)
-        return true;
-
-    // If the main tank is a human, check if this bot is one of the first three valid bot tanks
-    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a human player
-    {
-        for (int i = 0; i < 3; ++i)
-        {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
-                return true;  // This bot should assist with marking
-        }
-    }
-
-    bool isRanged = botAI->IsRanged(bot);
     const float radius = 8.0f;
-
     GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
     for (auto& npc : npcs)
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
         {
-            if (isRanged && bot->GetDistance2d(unit) < radius)
+            if (bot->GetDistance2d(unit) < radius)
                 return true;
         }
     }
@@ -713,24 +662,51 @@ bool RazorscaleFuseArmorAction::Execute(Event /*event*/)
     return true;
 }
 
-bool RazorscaleFocusCasterAction::isUseful()
+bool RazorscaleKillTargetAction::isUseful()
 {
-    RazorscaleFocusCasterTrigger razorscaleFocusCasterTrigger(botAI);
-    return razorscaleFocusCasterTrigger.IsActive();
+    RazorscaleKillTargetTrigger razorscaleKillTargetTrigger(botAI);
+    return razorscaleKillTargetTrigger.IsActive();
 }
 
-bool RazorscaleFocusCasterAction::Execute(Event /*event*/)
+bool RazorscaleKillTargetAction::Execute(Event /*event*/)
 {
-    Unit* target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER);
-    if (!target)
-        target = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
-
+    Unit* target = GetRazorscaleKillTarget(botAI);
     if (!target)
         return false;
 
     MarkTargetWithSkull(bot, target);
     SetRtiTarget(botAI, "skull", target);
     return true;
+}
+
+bool RazorscalePetControlAction::isUseful()
+{
+    RazorscalePetControlTrigger razorscalePetControlTrigger(botAI);
+    return razorscalePetControlTrigger.IsActive();
+}
+
+bool RazorscalePetControlAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (boss->GetPositionZ() >= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+    {
+        // She takes no damage up there, so the pet's whole contribution is the adds.
+        if (Unit* add = GetRazorscaleAddKillTarget(botAI))
+            CommandPetAttack(botAI, add);
+        else
+            StopPet(botAI);
+    }
+    else
+    {
+        CommandPetAttack(botAI, boss);
+    }
+
+    // Deliberately reports failure: the order is a side effect, and the tick still belongs to the
+    // dodge and positioning nodes below.
+    return false;
 }
 
 bool RazorscaleFlameBreathAction::isUseful()
