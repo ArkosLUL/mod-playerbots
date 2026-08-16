@@ -685,6 +685,11 @@ bool IsIgnisSlagPotVictim(Player* bot);
 // whole focus plan silently collapses onto the body.
 Unit* GetKologarn(PlayerbotAI* botAI);
 Unit* GetKologarnRightArm(PlayerbotAI* botAI);
+
+// The entry lookups above are a proximity scan over SightDistance and answer "is Kologarn nearby",
+// never "is he engaged". Every trigger that picks a target has to ask this instead, or the raid
+// pulls him from 100yd the moment he comes into range.
+bool KologarnEncounterActive(PlayerbotAI* botAI);
 Unit* GetKologarnNearestRubble(PlayerbotAI* botAI, WorldObject const* from);
 bool KologarnHasRubble(PlayerbotAI* botAI);
 

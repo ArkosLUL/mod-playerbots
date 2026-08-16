@@ -1044,6 +1044,14 @@ Unit* GetKologarn(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, N
 
 Unit* GetKologarnRightArm(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_RIGHT_ARM); }
 
+bool KologarnEncounterActive(PlayerbotAI* botAI)
+{
+    // The body is the only authority: the arms and the rubble are its summons, and boss_kologarn
+    // never calls SetInCombatWithZone, so this flips exactly when someone engages him.
+    Unit* kologarn = GetKologarn(botAI);
+    return kologarn && kologarn->IsInCombat();
+}
+
 Unit* GetKologarnNearestRubble(PlayerbotAI* botAI, WorldObject const* from)
 {
     if (!from)

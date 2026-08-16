@@ -346,7 +346,9 @@ float KologarnDisableAutomaticTargetingMultiplier::GetValue(Action* action)
     }
 
     // Asked last, because it walks the target list: only once something would actually be blocked.
-    return GetKologarn(botAI) ? 0.0f : 1.0f;
+    // Engagement, not proximity: before the pull the per-role pickers are inert, so silencing the
+    // generic ones would leave the bot with none, and trash within 100yd of him would be unfightable.
+    return KologarnEncounterActive(botAI) ? 0.0f : 1.0f;
 }
 
 float KologarnMultiplier::GetValue(Action* action)

@@ -16,6 +16,9 @@
 
 bool KologarnBodyTankTrigger::IsActive()
 {
+    if (!KologarnEncounterActive(botAI))
+        return false;
+
     Unit* kologarn = GetKologarn(botAI);
     if (!kologarn)
         return false;
@@ -28,7 +31,7 @@ bool KologarnBodyTankTrigger::IsActive()
 
 bool KologarnOffTankTrigger::IsActive()
 {
-    if (!GetKologarn(botAI) || !IsKologarnOffTank(botAI, bot))
+    if (!KologarnEncounterActive(botAI) || !IsKologarnOffTank(botAI, bot))
         return false;
 
     // Rubble duty owns the off-tank whenever any are up; this is only the idle case.
@@ -41,7 +44,7 @@ bool KologarnOffTankTrigger::IsActive()
 
 bool KologarnRubbleTankTrigger::IsActive()
 {
-    if (!GetKologarn(botAI) || !IsKologarnOffTank(botAI, bot))
+    if (!KologarnEncounterActive(botAI) || !IsKologarnOffTank(botAI, bot))
         return false;
 
     return GetKologarnNearestRubble(botAI, bot) != nullptr;
@@ -49,7 +52,7 @@ bool KologarnRubbleTankTrigger::IsActive()
 
 bool KologarnDpsTargetTrigger::IsActive()
 {
-    if (!GetKologarn(botAI))
+    if (!KologarnEncounterActive(botAI))
         return false;
 
     if (botAI->IsTank(bot) || botAI->IsHeal(bot))
@@ -61,6 +64,9 @@ bool KologarnDpsTargetTrigger::IsActive()
 
 bool KologarnSmashSwapTrigger::IsActive()
 {
+    if (!KologarnEncounterActive(botAI))
+        return false;
+
     Unit* kologarn = GetKologarn(botAI);
     if (!kologarn)
         return false;
@@ -94,6 +100,9 @@ bool KologarnSmashSwapTrigger::IsActive()
 
 bool KologarnBodyUncoveredTrigger::IsActive()
 {
+    if (!KologarnEncounterActive(botAI))
+        return false;
+
     Unit* kologarn = GetKologarn(botAI);
     if (!kologarn || !bot->IsAlive())
         return false;
@@ -149,7 +158,7 @@ bool KologarnFallFromFloorTrigger::IsActive()
 
 bool KologarnRubbleSlowdownTrigger::IsActive()
 {
-    if (!GetKologarn(botAI))
+    if (!KologarnEncounterActive(botAI))
         return false;
 
     if (bot->getClass() != CLASS_HUNTER)
@@ -163,7 +172,7 @@ bool KologarnRubbleSlowdownTrigger::IsActive()
 
 bool KologarnEyebeamTrigger::IsActive()
 {
-    if (!GetKologarn(botAI) || !bot->IsAlive())
+    if (!KologarnEncounterActive(botAI) || !bot->IsAlive())
         return false;
 
     // The chased bot has to run whatever the range: the eye follows and will close on its own.
