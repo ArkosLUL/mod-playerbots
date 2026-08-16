@@ -5,7 +5,6 @@
  */
 
 #include "OSMultipliers.h"
-
 #include "BurstCooldowns.h"
 #include "CheckMountStateAction.h"
 #include "ChooseTargetActions.h"
@@ -21,6 +20,7 @@
 #include "MovementActions.h"
 #include "OSActions.h"
 #include "OSHelpers.h"
+#include "OSTriggers.h"
 #include "PaladinActions.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"

@@ -5,7 +5,6 @@
  */
 
 #include "OSTriggers.h"
-
 #include "RaidBossHelpers.h"
 #include "SharedDefines.h"
 

@@ -8,7 +8,6 @@
 #define PLAYERBOTS_NAXXBOSSHELPER_H
 
 #include "AiObject.h"
-#include "AiObjectContext.h"
 #include "EventMap.h"
 #include "Log.h"
 #include "Map.h"
@@ -26,7 +25,6 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 #include "Timer.h"
-
 #include <algorithm>
 #include <cmath>
 #include <limits>

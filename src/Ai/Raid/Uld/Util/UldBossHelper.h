@@ -16,7 +16,6 @@
 #include "Playerbots.h"
 #include "ScriptedCreature.h"
 #include "UldScripts.h"
-
 #include <string>
 #include <unordered_map>
 #include <vector>

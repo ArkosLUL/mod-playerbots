@@ -5,7 +5,7 @@
  */
 
 #include "OSActions.h"
-
+#include "OSTriggers.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "Random.h"
