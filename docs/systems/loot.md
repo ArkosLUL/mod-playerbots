@@ -45,7 +45,7 @@ Two independent stat systems drive a roll, and **the bugs live in their disagree
   plus the `smartNeedBySpec` off-spec safety net, which runs only in the loot path via
   `AdjustUsageForOffspec`.
 
-`FinalizeRollVote` (`ItemUsageValue.cpp:2238-2239`) under `AiPlayerbot.Roll.UpgradesOnly = 1` forces
+`FinalizeRollVote` (`ItemUsageValue.cpp:2478`) under `AiPlayerbot.Roll.UpgradesOnly = 1` forces
 PASS on everything except a computed NEED whose usage is `ITEM_USAGE_EQUIP`/`REPLACE` (downgraded to
 GREED). **So every wrong GREED means the item was misclassified as a genuine equip-upgrade** — the
 bug is in the classifier, never in the greed fallback. Shipped default is `Roll.UpgradesOnly = 0`.
@@ -81,3 +81,43 @@ a weapon that happens to carry a caster stat — rare in WotLK itemisation.
 
 **Skull-marking drives DPS target choice**: `DpsTargetValue::Calculate` → `RtiTargetValue`, with
 `rti` defaulting to `"skull"`.
+
+## Ranked BiS lists
+
+`playerbots_bis_ranked` (loaded by `BisListMgr`, imported by `apps/bis/generate_bis.py` from the
+Bistooltip addon) is an authoritative answer to "which spec is this item itemized for", which the
+stat heuristics above can only guess at. Proc-only trinkets are the motivating case: `Grim Toll`
+(40256) carries armour pen in a proc, so the classifier reads it as caster gear and a Fury warrior
+votes PASS.
+
+The signal is **additive only** — the lists hold six candidates per slot per phase, so an absent item
+is never penalised. It reaches a roll two ways:
+
+- **Gate bypass** (`AiPlayerbot.Bis.GateBypass`) — `IsBisForBot` short-circuits
+  `IsFallbackNeedReasonableForSpec` (`:612`), `IsPrimaryForSpec` (`:984`) and `AdjustUsageForCrossArmor`
+  (`:1159`). `IsRoleItemizationMismatch` is deliberately **not** bypassed.
+- **Score bonus** (`AiPlayerbot.Bis.ScoreBonus`, `Bis.PhaseDecay`) — applied in
+  `StatsWeightCalculator::BisRankMultiplier`, gated on `SetBisBonus(true)`. That is set in
+  `QueryItemUsageForEquip`, so it moves the `usage` that voting consumes; it is not equip-only.
+
+Under `Roll.UpgradesOnly = 1` bots cap at GREED, so in practice the lists decide **GREED vs PASS**,
+not NEED vs GREED.
+
+### Expansion matching
+
+Vanilla, TBC and WotLK lists are all loaded. `BisListMgr::ProgressForBot` maps the bot's
+individual-progression tier to a `{expansion, phase}` ceiling via a static table, and `GetBisRankFor`
+**only matches rows in the bot's own expansion**. Admitting a lower expansion's tail would give a
+level-80 bot a gate bypass on ilvl-164 TBC epics, and phase numbers restart per expansion, so the
+decay arithmetic would be comparing unrelated ladders.
+
+Phase numbering: Vanilla `PR, P1..P6` (0-6); TBC `PR, T4, T5, T6, ZA, SWP` (0-5); WotLK
+`PR, T7, T8, T9, T10, RS` (0-5).
+
+Two specs get no signal at all and that is intended: Rogue Subtlety has no list in any expansion, and
+Vanilla/TBC have no Discipline priest list. `ResolveSpecKey` also refuses whenever the talent tab and
+the role the bot actually plays disagree — a wrong list is worse than none, because it bypasses the
+spec gates in the wrong direction.
+
+`LoadAll` runs once at startup with **no reload path**, so regenerated data needs a worldserver
+restart.

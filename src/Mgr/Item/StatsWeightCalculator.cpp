@@ -238,16 +238,16 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
         bis_key_resolved_ = true;
         bis_key_valid_ = BisListMgr::ResolveSpecKey(player_, bis_cls_, bis_tab_);
         if (bis_key_valid_)
-            bis_max_phase_ = BisListMgr::MaxPhaseForBot(player_);
+            bis_progress_ = BisListMgr::ProgressForBot(player_);
     }
 
     if (!bis_key_valid_)
         return 1.0f;
 
     // Phase-limited, unlike the spec gates: a pre-raid BiS piece should stop pulling once the bot has
-    // progressed past it.
+    // progressed past it. Only this bot's own expansion is consulted.
     uint8 entryPhase = 0;
-    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_cls_, bis_tab_, bis_max_phase_, &entryPhase);
+    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_cls_, bis_tab_, bis_progress_, &entryPhase);
 
     // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.1) a ~2.5% nudge is
     // invisible anyway. They still get the spec-gate pass, just no score change.
@@ -258,9 +258,9 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     // rank-1, so the two bonuses cancel and the equipped lower-ilvl piece keeps the slot on the
     // upgrade threshold alone.
     float phaseScale = 1.0f;
-    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < bis_max_phase_)
+    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < bis_progress_.phase)
     {
-        uint8 const behind = bis_max_phase_ - entryPhase;
+        uint8 const behind = bis_progress_.phase - entryPhase;
         phaseScale = std::max(0.0f, 1.0f - sPlayerbotAIConfig.bisPhaseDecay * behind);
     }
 

@@ -166,15 +166,19 @@ bool TellCalculateItemAction::Execute(Event event)
     }
     else
     {
-        uint8 const phase = BisListMgr::MaxPhaseForBot(bot);
+        BisProgress const progress = BisListMgr::ProgressForBot(bot);
         uint8 listedPhase = 0;
-        uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, phase, &listedPhase);
-        uint8 const anyPhaseRank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, BIS_PHASE_MAX);
+        uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, progress, &listedPhase);
+
+        BisProgress const anyPhase = {progress.expansion, BIS_MAX_PHASE[progress.expansion]};
+        uint8 const anyPhaseRank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, anyPhase);
 
         out << " | BiS: class " << uint32(bisCls) << " tab " << uint32(bisTab)
-            << ", phase cap " << uint32(phase) << ", rank " << uint32(rank)
-            << " listed at phase " << uint32(listedPhase)
-            << " (any phase " << uint32(anyPhaseRank) << ")";
+            << ", expansion " << uint32(progress.expansion)
+            << ", phase cap " << uint32(progress.phase) << ", rank " << uint32(rank);
+        if (rank)
+            out << " listed at phase " << uint32(listedPhase);
+        out << " (any phase " << uint32(anyPhaseRank) << ")";
     }
 
     botAI->TellMasterNoFacing(out.str());

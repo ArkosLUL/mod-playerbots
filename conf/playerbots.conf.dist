@@ -475,6 +475,13 @@ AiPlayerbot.Roll.UseGroupUsageChecks = 0
 # An item that is on no list is never penalized - the signal only ever adds.
 # Both options no-op when the table is missing or empty.
 #
+# Vanilla, TBC and WotLK lists are all loaded, and a bot only ever matches the expansion its
+# individual-progression tier puts it in - a level 80 bot gets no signal from TBC lists, and a
+# level 60 bot none from WotLK ones. Phase numbering restarts inside each expansion.
+#
+# Note this decides GREED vs PASS rather than NEED vs GREED whenever AiPlayerbot.Roll.UpgradesOnly
+# is on, since that setting caps bots at GREED so real players keep NEED priority.
+#
 # Let a listed item skip the stat-based spec/role gates.
 # Default: 1 (enabled)
 AiPlayerbot.Bis.GateBypass = 1

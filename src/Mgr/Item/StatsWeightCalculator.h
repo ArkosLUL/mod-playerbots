@@ -9,6 +9,7 @@
 
 #include <unordered_map>
 
+#include "BisListMgr.h"
 #include "Player.h"
 #include "StatsCollector.h"
 
@@ -124,7 +125,7 @@ private:
     bool bis_key_valid_ = false;
     uint8 bis_cls_ = 0;
     uint8 bis_tab_ = 0;
-    uint8 bis_max_phase_ = 0;
+    BisProgress bis_progress_ = {BIS_EXP_WOTLK, 0};
     uint32 replaced_item_set_ = 0;
 
     float weight_;

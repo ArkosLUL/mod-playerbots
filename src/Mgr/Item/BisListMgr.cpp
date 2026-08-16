@@ -60,7 +60,7 @@ void BisListMgr::LoadRanked()
     _ranked.clear();
 
     QueryResult result = PlayerbotsDatabase.Query(
-        "SELECT item_id, class, tab, phase, bis_rank FROM playerbots_bis_ranked");
+        "SELECT item_id, expansion, class, tab, phase, bis_rank FROM playerbots_bis_ranked");
     if (!result)
     {
         LOG_INFO("server.loading", "playerbots_bis_ranked table missing or empty");
@@ -74,10 +74,11 @@ void BisListMgr::LoadRanked()
         uint32 itemId = fields[0].Get<uint32>();
 
         RankedEntry entry;
-        entry.cls = fields[1].Get<uint8>();
-        entry.tab = fields[2].Get<uint8>();
-        entry.phase = fields[3].Get<uint8>();
-        entry.rank = fields[4].Get<uint8>();
+        entry.expansion = fields[1].Get<uint8>();
+        entry.cls = fields[2].Get<uint8>();
+        entry.tab = fields[3].Get<uint8>();
+        entry.phase = fields[4].Get<uint8>();
+        entry.rank = fields[5].Get<uint8>();
 
         _ranked[itemId].push_back(entry);
         ++count;
@@ -112,6 +113,8 @@ bool BisListMgr::ResolveSpecKey(Player* bot, uint8& cls, uint8& tab)
         case CLASS_WARRIOR:
             if (specTab == WARRIOR_TAB_PROTECTION)
                 resolved = isTank ? specTab : BIS_TAB_NONE;
+            else if (specTab == WARRIOR_TAB_FURY)
+                resolved = isHealer ? BIS_TAB_NONE : (isTank ? BIS_TAB_WARRIOR_FURY_PROT : specTab);
             else
                 resolved = (!isTank && !isHealer) ? specTab : BIS_TAB_NONE;
             break;
@@ -168,21 +171,42 @@ bool BisListMgr::ResolveSpecKey(Player* bot, uint8& cls, uint8& tab)
     return true;
 }
 
-uint8 BisListMgr::MaxPhaseForBot(Player* bot)
+BisProgress BisListMgr::ProgressForBot(Player* bot)
 {
-    uint8 const tier = sProgressionMgr.GetBotProgressionTier(bot);
+    // Each tier maps to the phase whose content it unlocks, reading IP's own enum comments. The
+    // WotLK block reproduces the previous BIS_PHASE_T7 + (tier - IP_TIER_WOTLK) arithmetic exactly,
+    // and Vanilla and TBC follow the same shape. A table rather than arithmetic because the three
+    // blocks are not evenly spaced and single tiers need retuning without touching the logic.
+    static constexpr BisProgress kTierToProgress[IP_TIER_MAX + 1] = {
+        {BIS_EXP_VANILLA, 0},  // 0  START           - pre-raid
+        {BIS_EXP_VANILLA, 1},  // 1  MOLTEN_CORE
+        {BIS_EXP_VANILLA, 2},  // 2  ONYXIA
+        {BIS_EXP_VANILLA, 3},  // 3  BLACKWING_LAIR
+        {BIS_EXP_VANILLA, 4},  // 4  PRE_AQ
+        {BIS_EXP_VANILLA, 5},  // 5  AQ_WAR
+        {BIS_EXP_VANILLA, 6},  // 6  AQ              - Naxx40
+        {BIS_EXP_VANILLA, 6},  // 7  NAXX40
+        {BIS_EXP_TBC, 1},      // 8  PRE_TBC         - Kara / Gruul / Mag
+        {BIS_EXP_TBC, 2},      // 9  TBC_TIER_1      - SSC / TK
+        {BIS_EXP_TBC, 3},      // 10 TBC_TIER_2      - Hyjal / BT
+        {BIS_EXP_TBC, 4},      // 11 (TBC_TIER_3)    - ZA, disabled in IP
+        {BIS_EXP_TBC, 5},      // 12 TBC_TIER_4      - Sunwell
+        {BIS_EXP_WOTLK, 1},    // 13 TBC_TIER_5      - Naxx / EoE / OS
+        {BIS_EXP_WOTLK, 2},    // 14 WOTLK_TIER_1    - Ulduar
+        {BIS_EXP_WOTLK, 3},    // 15 WOTLK_TIER_2    - ToC
+        {BIS_EXP_WOTLK, 4},    // 16 WOTLK_TIER_3    - ICC
+        {BIS_EXP_WOTLK, 5},    // 17 WOTLK_TIER_4    - Ruby Sanctum
+        {BIS_EXP_WOTLK, 5},    // 18 WOTLK_TIER_5
+    };
 
-    if (tier < IP_TIER_WOTLK)
-        return BIS_PHASE_PRERAID;
-
-    uint8 const phase = static_cast<uint8>(BIS_PHASE_T7 + (tier - IP_TIER_WOTLK));
-    return std::min<uint8>(phase, BIS_PHASE_MAX);
+    uint8 const tier = std::min<uint8>(sProgressionMgr.GetBotProgressionTier(bot), IP_TIER_MAX);
+    return kTierToProgress[tier];
 }
 
-uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase, uint8* outPhase) const
+uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase) const
 {
     if (outPhase)
-        *outPhase = BIS_PHASE_PRERAID;
+        *outPhase = 0;
 
     if (_ranked.empty())
         return 0;
@@ -192,10 +216,16 @@ uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPh
         return 0;
 
     uint8 best = 0;
-    uint8 bestPhase = BIS_PHASE_PRERAID;
+    uint8 bestPhase = 0;
     for (RankedEntry const& entry : it->second)
     {
-        if (entry.cls != cls || entry.tab != tab || entry.phase > maxPhase)
+        // Own expansion only. Admitting a lower expansion's tail would hand a level-80 bot the spec
+        // gate bypass on ilvl-164 TBC epics, and phase numbers restart per expansion so the caller's
+        // decay arithmetic would be comparing unrelated ladders.
+        if (entry.expansion != max.expansion)
+            continue;
+
+        if (entry.cls != cls || entry.tab != tab || entry.phase > max.phase)
             continue;
 
         // Latest phase that still lists the item at its best rank: an item re-listed every tier is
@@ -215,7 +245,7 @@ uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPh
     return best;
 }
 
-uint8 BisListMgr::GetBisRank(Player* bot, ItemTemplate const* proto, uint8 maxPhase) const
+uint8 BisListMgr::GetBisRank(Player* bot, ItemTemplate const* proto, BisProgress max) const
 {
     if (!bot || !proto || _ranked.empty())
         return 0;
@@ -229,7 +259,7 @@ uint8 BisListMgr::GetBisRank(Player* bot, ItemTemplate const* proto, uint8 maxPh
     if (!ResolveSpecKey(bot, cls, tab))
         return 0;
 
-    return GetBisRankFor(proto->ItemId, cls, tab, maxPhase);
+    return GetBisRankFor(proto->ItemId, cls, tab, max);
 }
 
 std::map<uint8, uint32> BisListMgr::GetBisFor(uint16 autoGearScoreLimit, uint8 cls, uint8 tab, uint8 faction) const

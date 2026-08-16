@@ -15,7 +15,18 @@
 class Player;
 struct ItemTemplate;
 
-// Content phases of the ranked lists, ordered so a bot's progression maps onto a ceiling.
+// Phase numbering restarts per expansion, so a phase is only meaningful next to one of these.
+enum BisExpansion : uint8
+{
+    BIS_EXP_VANILLA = 0,
+    BIS_EXP_TBC = 1,
+    BIS_EXP_WOTLK = 2,
+    BIS_EXP_COUNT = 3
+};
+
+// WotLK phases, ordered so a bot's progression maps onto a ceiling. Vanilla runs PR + P1..P6 and TBC
+// runs PR + T4/T5/T6/ZA/SWP over the same 0..N range; only WotLK's are named because it is the only
+// expansion the code special-cases.
 enum BisPhase : uint8
 {
     BIS_PHASE_PRERAID = 0,
@@ -27,12 +38,25 @@ enum BisPhase : uint8
     BIS_PHASE_MAX = BIS_PHASE_RS
 };
 
-// Sentinel tabs for the two role splits a talent tab cannot express on its own.
+// Highest phase index each expansion actually has rows for.
+constexpr uint8 BIS_MAX_PHASE[BIS_EXP_COUNT] = {6, 5, 5};
+
+// Sentinel tabs for the role splits a talent tab cannot express on its own.
 enum BisSpecTab : uint8
 {
     BIS_TAB_DRUID_BEAR = 10,
     BIS_TAB_DK_BLOOD_TANK = 11,
+    BIS_TAB_WARRIOR_FURY_PROT = 12,  // Vanilla only - a fury-specced tank
     BIS_TAB_NONE = 0xFF
+};
+
+// How far a bot has progressed, as a ceiling for list lookups. Lookups never cross expansions, so
+// the pair is compared as a unit and phases from different expansions are never ordered against
+// each other.
+struct BisProgress
+{
+    uint8 expansion;
+    uint8 phase;
 };
 
 class BisListMgr
@@ -60,24 +84,25 @@ public:
     // PvE-only). A wrong key is worse than none: it would bypass the spec gates in the wrong direction.
     static bool ResolveSpecKey(Player* bot, uint8& cls, uint8& tab);
 
-    // Highest phase this bot's progression has reached. Without mod-individual-progression the tier
-    // falls back to ProgressionTierCap, which clamps here to RS, i.e. every phase counts.
-    static uint8 MaxPhaseForBot(Player* bot);
+    // Expansion and phase this bot's progression has reached. Without mod-individual-progression the
+    // tier falls back to ProgressionTierCap, which clamps here to WotLK RS, i.e. every phase counts.
+    static BisProgress ProgressForBot(Player* bot);
 
-    // Best (lowest) rank at or below maxPhase, 0 when the item is not listed for this bot's spec.
-    uint8 GetBisRank(Player* bot, ItemTemplate const* proto, uint8 maxPhase) const;
+    // Best (lowest) rank at or below max, 0 when the item is not listed for this bot's spec.
+    uint8 GetBisRank(Player* bot, ItemTemplate const* proto, BisProgress max) const;
 
     // Same lookup against an already-resolved spec key, for callers that score many items for one bot
     // and should not repeat the talent walk in ResolveSpecKey each time. outPhase receives the latest
-    // phase that still lists the item at the returned rank, so callers can tell current BiS from stale.
-    uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase, uint8* outPhase = nullptr) const;
+    // phase that still lists the item at the returned rank, so callers can tell current BiS from stale;
+    // it is only meaningful when the return is non-zero.
+    uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase = nullptr) const;
 
     // Listed at or below the bot's own progression phase. The spec gates use this, and they have to
     // agree with the score nudge about what counts as this bot's BiS - answering "any phase" here lets
     // a Naxx-progression bot bypass the gates for gear several tiers past anything it can reach.
     bool IsBisListed(Player* bot, ItemTemplate const* proto) const
     {
-        return GetBisRank(bot, proto, MaxPhaseForBot(bot)) != 0;
+        return GetBisRank(bot, proto, ProgressForBot(bot)) != 0;
     }
 
 private:
@@ -90,6 +115,7 @@ private:
 
     struct RankedEntry
     {
+        uint8 expansion;
         uint8 cls;
         uint8 tab;
         uint8 phase;

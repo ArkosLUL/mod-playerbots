@@ -301,6 +301,33 @@ Glyphs (the existing `limitTalentsExpansion && level <= 70` bail approximates it
 gear itself**. Gating gems and enchants while a tier-8 bot still wears ICC gear is a known
 half-measure: correct-for-era enchants on wrong-for-era items is expected, not a bug.
 
+## Ranked BiS lists
+
+`StatsWeightCalculator::BisRankMultiplier` is the last multiplier in `CalculateItem`, and the only
+one that is off by default — it needs `SetBisBonus(true)`, which only `QueryItemUsageForEquip` and
+the `calc` debug command set. `PlayerbotFactory::InitEquipment`, autogear and
+`RandomItemMgr::CalculateItemWeight` all score without it.
+
+    1 + Bis.ScoreBonus * kRankScale[rank - 1] * phaseScale
+
+- `kRankScale = {1.0, 0.8, 0.6}` for ranks 1-3. Ranks 4-6 are filler alternates and get no score
+  change (they still get the gate bypass). Flat-ish on purpose: ranks 1-3 of a slot are
+  near-equivalent picks, and against `EquipUpgradeThreshold` (1.1) a 2.5% nudge is invisible.
+- `phaseScale = 1 - Bis.PhaseDecay * (cap.phase - entryPhase)`, floored at 0. Without it a leftover
+  pre-raid rank-1 piece is worth exactly as much as the current tier's rank-1, the two bonuses
+  cancel, and the equipped lower-ilvl piece keeps the slot on `ItemSet.BonusWeight` (x1.15) times
+  `EquipUpgradeThreshold` (x1.1) alone — a 26.5% raw-stat wall.
+
+`PhaseDecay` defaults to 1.0, so only the bot's current phase carries any bonus. One global value
+covers all three expansions even though Vanilla's `P1..P6` sit closer together in ilvl than WotLK's
+tiers; split it per expansion only with evidence that Vanilla bots cling to old gear.
+
+Lookups never cross expansions — see
+[loot.md](loot.md#expansion-matching) for the `{expansion, phase}` ceiling and the tier table.
+
+The lists carry gems and enchants per slot (the `enhs` sub-table), and the import **drops them**.
+Bots still choose both by score in `ApplyEnchantAndGemsNew`.
+
 ## Config
 
 Defaults below are the shipped values in `conf/playerbots.conf.dist`.
