@@ -55,12 +55,6 @@ bool IsThorimHardModeActive(PlayerbotAI* botAI);
 // nearby Unstable Sun Beam), and those objects only ever exist in hard mode.
 bool IsFreyaHardModeActive(PlayerbotAI* botAI);
 
-// Hodir: hard mode = the "Rare Cache of Winter" 3-minute timed kill. No extra add, no empower aura -
-// the fight is identical, the raid just needs to kill within 180s, so the triggers are DPS-race
-// behaviours (free the frozen helpers, spread Storm Cloud, sit in a Toasty Fire) on mechanics that
-// exist in normal mode too. With the option on, bots run them on every Hodir kill.
-bool IsHodirHardModeActive(PlayerbotAI* botAI);
-
 // Mimiron: hard mode ("Firefighter") = a player pressed the Big Red Button before the pull, which
 // empowers the mechs for the whole fight and adds two hazards - a persistent, spreading ground fire
 // and VX-001's Frost Bomb. Note: the Emergency Fire Bots (34147) that also spawn are friendly fire

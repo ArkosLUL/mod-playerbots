@@ -82,8 +82,6 @@ bool IsThorimHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.
 
 bool IsFreyaHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarFreyaHardMode; }
 
-bool IsHodirHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarHodirHardMode; }
-
 bool IsMimironHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarMimironHardMode; }
 
 bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarXT002HardMode; }

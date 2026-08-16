@@ -725,7 +725,6 @@ bool PlayerbotAIConfig::Initialize()
     ulduarFlameLeviathanHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFlameLeviathanHardMode", false);
     ulduarThorimHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarThorimHardMode", false);
     ulduarFreyaHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarFreyaHardMode", false);
-    ulduarHodirHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarHodirHardMode", false);
     ulduarMimironHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarMimironHardMode", false);
     ulduarYoggSaronHardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarYoggSaronHardMode", false);
     ulduarXT002HardMode = sConfigMgr->GetOption<bool>("AiPlayerbot.UlduarXT002HardMode", false);

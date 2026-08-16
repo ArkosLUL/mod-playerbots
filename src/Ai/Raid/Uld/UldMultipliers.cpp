@@ -549,6 +549,38 @@ float AuriayaMovementGuardMultiplier::GetValue(Action* action)
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
 }
 
+float HodirGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !GetHodir(botAI))
+        return 1.0f;
+
+    // hodir set dps priority action owns the target for everyone who has one. Healers are not on
+    // that node at all - they keep healing while the raid takes 14000 every two seconds - so they
+    // keep the generic picker too. "attack rti target" is deliberately left alone: bots set no marks
+    // here, but a mark the player sets should still win.
+    if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && dynamic_cast<DpsAssistAction*>(action))
+        return 0.0f;
+
+    // Only the two tanks and the ranged half stand on a spot. Melee ride the boss in the corner, so
+    // they keep every generic mover - SetBehindTargetAction in particular.
+    if (!botAI->IsMainTank(bot) && !botAI->IsAssistTankOfIndex(bot, 0, true) && !botAI->IsRanged(bot))
+        return 1.0f;
+
+    if (!dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // AttackAction derives from MovementAction, so a blanket zero would also kill targeting;
+    // ReachTargetAction is what walks a healer into range of someone the ring cannot reach.
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {
+        "hodir raid position action", "hodir move snowpacked icicle", "hodir icicle dodge action",
+        "hodir biting cold jump", "hodir spread storm cloud"};
+
+    return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
+}
+
 // Both of these run behind the base class's shaman and totem-action checks, so the encounter lookup
 // only happens for the handful of actions that could take the earth slot.
 bool AuriayaAntiFearTotemGuardMultiplier::FearWindowActive() { return AuriayaFearWindowActive(botAI); }

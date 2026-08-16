@@ -33,9 +33,8 @@ Still dynamic, because they are *phase* or target selection rather than hard-mod
 `GetBotInstanceScript` were deleted; **`YoggThorimKeeperActive` survives** and still reads
 `PERSISTENT_DATA_WATCHERS_MASK` through `InstanceScript`, so that dependency is not fully gone.
 
-Behaviour worth knowing: with the Hodir option on, bots run the DPS-race behaviour on **every** Hodir
-kill — that is the intended semantics. Flame Leviathan's mask claims all four towers, but hazards are
-found by NPC entry, so destroyed towers contribute nothing.
+Behaviour worth knowing: Flame Leviathan's mask claims all four towers, but hazards are found by NPC
+entry, so destroyed towers contribute nothing.
 
 ### Why `GetData` is avoided
 
@@ -259,26 +258,84 @@ normal-mode Thorim strategy already uses.
 
 ### Hodir
 
-**Hodir's hard mode is not a new hazard** — it is the "Rare Cache of Winter" 3-minute timed kill
-(`EVENT_HARD_MODE_MISSED` at 180s). The fight is otherwise identical; the raid just needs more DPS
-and fewer deaths. The way to beat it is exploiting the **friendly helper NPCs**, which spawn
-flash-frozen and must be freed first:
+Anchored in the **south-west corner**, `(1974.50, -275.50, 432.687)`. The room is x 1965-2041, y -170
+to -298, and he evades outside that y band. Cornering him collapses the helper NPCs' 17-30 yd
+stand-off arc into one place, which is the only way the buff zones land somewhere predictable. That
+corner is **chamfered** — the floor bevels from ~(1966, -274) to ~(1990, -298) — so the tank spot is
+the deepest point with 6 yd of floor all round, not the visual corner, which has three yards of
+nothing behind it. Off-tank `(1980.00, -277.00)` sits deeper in rather than toward the raid, so a
+taunt never walks him at the stack. All spots are navprobe-verified.
 
-- **Storm Cloud** (65123, difficulty-mapped at runtime) lands on a random raider every 30s; while
-  that carrier stands near allies it triggers Storm Power, the fight's #1 DPS multiplier.
-- **Toasty Fire** (`NPC_TOASTY_FIRE` 33342, aura 62821) prevents Biting Cold stacks and grants
-  Flash-Freeze exemption — legitimate non-cheat mitigation for a mechanic that previously had only a
-  cheat handler.
-- **Starlight** (druid haste zone) was dropped by user decision — area-aura detection is fiddlier and
-  the gain is lower.
+**Starlight is the anchor, and it is the least guessable fact in the fight.** `62807` is aura **193
+`SPELL_AURA_MELEE_SLOW`**, whose handler `HandleModCombatSpeedPct` applies `ApplyCastTimePercentMod`
+as well as all three attack timers, amount 50 — **+50% haste to casting and swinging**. 8 yd zone at
+the druid helper's feet, 60s, recast every 15s, so several overlap.
 
-**Priority interaction that matters**: the Flash-Freeze icicle move sits at `ACTION_RAID + 1` and
-must strictly outrank helper-freeing at `ACTION_RAID`, so a bot never leaves line-of-sight cover to
-chase a re-frozen helper mid-cast.
+**Toasty Fire grants no Flash-Freeze exemption.** `62821` is 11 yd and only blocks Biting Cold. The only exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off
+`65705` on **NPC 33174**, radius 9 yd.
 
-Storm Cloud spreading moves to the **nearest ally**, not the raid centroid, which could be an empty
-midpoint between two groups. Both radii (5 yd Toasty Fire, 10 yd Storm Cloud stack) are DBC guesses
-to confirm in-game.
+| Mechanic | Ids | Numbers that drive the code |
+|---|---|---|
+| Flash Freeze | 61968 | **9s cast**, every 48-49s, 200 yd. Spares only 62464 carriers and pets |
+| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift lands at T+2 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands T+9: **7s of shelter** |
+| Trapped player | 61969 / 62226 | **300s**, and the *next* Flash Freeze **instakills**. Free by killing NPC **32926** (helpers: 32938) |
+| Small icicles | 62227 → 63545 → 33169 → `62457` | **Every 2s** on 1 random player, falls after 2s, **14,000 Frost in 4 yd** + knockback. Off for 12s (25m) / 24s (10m) after each Flash Freeze |
+| Biting Cold | 62038 / 62039 | Stacks every 4s on anyone **not moving**, `200 · 2^stacks`. A jump counts as moving — `MOVEMENTFLAG_FALLING` is in `MOVEMENTFLAG_MASK_MOVING` |
+| Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing plus a 3,999 raid tick |
+| Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
+| Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** stacks, one per second — **4-6 seconds of use**. Storm Power is **3 yd**, +134% crit damage |
+| Toasty Fire | 62821 | 11 yd, 60s, at the mage's feet every 10s. **Flash Freeze wipes every fire** (62148) |
+| Berserk | 26662 | 8 min, unhandled — no enrage awareness exists anywhere in the module |
+
+**Hard mode is gone as a config.** The "Rare Cache of Winter" 3-minute kill needs no different
+behaviour: the helpers *are* the raid's damage, the fire is the Biting Cold answer, and Storm Power
+is the biggest buff in the fight, so all three run on every pull. `AiPlayerbot.UlduarHodirHardMode`
+and `IsHodirHardModeActive` were deleted rather than left gating nothing.
+
+#### The packing arithmetic, which decides three things
+
+16 ranged and healers on a ring of radius `r` inside the 8 yd Starlight zone:
+
+| `r` | Slot spacing | Bots in a 4 yd splash | Raid damage / 2s | Sustained HPS |
+|---|---|---|---|---|
+| 5 (largest that fits) | 1.95 yd | 5 | 70,000 | 35,000 |
+| 7 | 2.73 yd | 3 | 42,000 | 21,000 |
+| target only | ≥ 4 yd apart | 1 | 14,000 | 7,000 |
+
+**16 bots cannot be 4 yd apart inside an 8 yd circle** — that needs ~200 yd² and the circle is 201.
+So splash is structural, heal-through is a wipe, and **icicles are dodged rather than out-spread**.
+And for every slot to sit in *both* zones, with the druid 22 yd out and the mage 30: `8 + 2(r + t) ≤
+19` → `r + t ≤ 5.5` → `r ≤ 2.5` at tolerance 3. Both auras for everyone is unreachable, so Starlight
+wins and Toasty Fire is a bonus for whichever slots happen to fall inside one. **Do not widen
+`ULDUAR_HODIR_RAID_RING_RADIUS`** — it silently drops the buff and buys nothing against Ice Shards.
+
+The dodge stays *inside* Starlight: at `r = 5`, a 6 yd sidestep traces a 74° chord and lands back on
+the ring, so there is always an in-zone escape. Candidates are ranked in-zone first, then smallest
+displacement — maximising distance from the hazard is what walked Auriaya's bots into the corridor.
+
+**Cost, measured and accepted:** five bots move per icicle and one lands every 2s, so each bot is
+moving ~26% of the time. That is the price of Starlight, and it is not pure loss — it doubles as the
+Biting Cold answer, so ringed bots rarely need the jump.
+
+#### Traps
+
+- **Three icicle entries, and confusing them breaks the fight.** 33169 is the small one, dodged
+  always. 33173 is the drift, dodged **only while falling** — the dodge stands down once a 33174
+  exists within 9 yd of it, because 33174 is the shelter everyone is running to. 33174 is never
+  dodged.
+- **The shelter run keys off 33174 existing**, not off the boss casting. Starting when the drift
+  spawns puts the raid under a 14,000 / 7 yd detonation.
+- Everyone shelters at the drift nearest the **raid anchor**, through one shared helper, so the raid
+  converges on one and re-forms cleanly. Trigger and action calling it separately would oscillate.
+- **The anchor is abandoned every 48s and that is correct** — tanks included. He is encased otherwise.
+- The anchor is **not combat-gated**: `MoveInLineOfSight` is a no-op, so bots pre-position in the
+  corner and the tank pulls from there instead of dragging him 75 yd.
+- **Melee get no anchor, no fire and no Starlight.** Re-examined once Starlight turned out to be +50%
+  melee haste too, and confirmed: the only fix is dragging him to the druid, which costs the corner.
+- The Storm Cloud carrier **laps the ring**, direction latched for one carry; tanks never run it and
+  are never buff targets. Greedy re-targeting is the Auriaya corridor dance.
+- Healers are excluded from the targeting node entirely, and only the nearest **5** non-healers break
+  an ice block.
 
 ### Freya
 
@@ -857,7 +914,7 @@ Ulduar boss has a dedicated redirect action yet.
 
 **Do not veto** — the boss is main-tank-held all fight, so the generic node is right for the primary
 target and the only gain would be redirecting *adds*: Auriaya, Freya, Kologarn, Yogg-Saron, Ignis.
-**No** — Vezax (one tank, no swap, no reset), Hodir (no meaningful tanking), Flame Leviathan (vehicle
+**No** — Vezax (one tank, no swap, no reset), Flame Leviathan (vehicle
 combat, neither spell castable).
 
 XT-002 was already covered by `XT002TargetGuardMultiplier`, which vetoes for the whole encounter
@@ -891,11 +948,11 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 | **Algalon** | Collapsing Star (32955) unhandled — both `big bang hide` and `constellation kite` search only for *existing* Black Holes and silently fail when none exist |
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
-Hodir Biting Cold (real movement commented out, cheat strips the aura); Thorim Unbalancing Strike;
+Thorim Unbalancing Strike;
 Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
 (cheat instakill / teleport); Vezax no-mana-regen (cheat mana refill).
 
 Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank
-swap** — Thorim and Hodir still fall back to cheats; Kologarn now swaps on Crunch Armor stacks
-instead. There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
+swap** — Thorim still falls back to cheats; Kologarn swaps on Crunch Armor stacks and Hodir on
+Frozen Blows instead. There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
 requirement.

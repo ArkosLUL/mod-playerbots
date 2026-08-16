@@ -52,9 +52,11 @@ public:
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold jump"] = &RaidUlduarActionContext::hodir_biting_cold_jump;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
-        creators["hodir free frozen helper"] = &RaidUlduarActionContext::hodir_free_frozen_helper;
         creators["hodir spread storm cloud"] = &RaidUlduarActionContext::hodir_spread_storm_cloud;
-        creators["hodir move to toasty fire"] = &RaidUlduarActionContext::hodir_move_to_toasty_fire;
+        creators["hodir icicle dodge action"] = &RaidUlduarActionContext::hodir_icicle_dodge_action;
+        creators["hodir raid position action"] = &RaidUlduarActionContext::hodir_raid_position_action;
+        creators["hodir set dps priority action"] = &RaidUlduarActionContext::hodir_set_dps_priority_action;
+        creators["hodir frozen blows swap action"] = &RaidUlduarActionContext::hodir_frozen_blows_swap_action;
         creators["freya move away nature bomb"] = &RaidUlduarActionContext::freya_move_away_nature_bomb;
         creators["freya fire resistance action"] = &RaidUlduarActionContext::freya_fire_resistance_action;
         creators["freya nature resistance action"] = &RaidUlduarActionContext::freya_nature_resistance_action;
@@ -183,9 +185,11 @@ private:
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_jump(PlayerbotAI* ai) { return new HodirBitingColdJumpAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "hodir"); }
-    static Action* hodir_free_frozen_helper(PlayerbotAI* ai) { return new HodirFreeFrozenHelperAction(ai); }
     static Action* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudAction(ai); }
-    static Action* hodir_move_to_toasty_fire(PlayerbotAI* ai) { return new HodirMoveToToastyFireAction(ai); }
+    static Action* hodir_icicle_dodge_action(PlayerbotAI* ai) { return new HodirIcicleDodgeAction(ai); }
+    static Action* hodir_raid_position_action(PlayerbotAI* ai) { return new HodirRaidPositionAction(ai); }
+    static Action* hodir_set_dps_priority_action(PlayerbotAI* ai) { return new HodirSetDpsPriorityAction(ai); }
+    static Action* hodir_frozen_blows_swap_action(PlayerbotAI* ai) { return new HodirFrozenBlowsSwapAction(ai); }
     static Action* freya_move_away_nature_bomb(PlayerbotAI* ai) { return new FreyaMoveAwayNatureBombAction(ai); }
     static Action* freya_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "freya"); }
     static Action* freya_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "freya"); }

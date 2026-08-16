@@ -283,33 +283,43 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Hodir
     //
+    // The engine stops at the first action that succeeds, so this order is a survival ranking, not a
+    // preference. Sheltering is the only node whose failure is an outright death - Flash Freeze
+    // encases everyone without the Safe Area aura, and a second one instakills whoever is still
+    // trapped. Dodging is next because an icicle lands every 2s for 14000. The jump sits above the
+    // targeting node so a bot parked on an ice block still sheds Biting Cold. Position is last on
+    // purpose: killing the block that is about to get an ally killed beats standing on a dot.
     triggers.push_back(new TriggerNode(
         "hodir near snowpacked icicle",
-        { NextAction("hodir move snowpacked icicle", ACTION_RAID + 1) }));
+        { NextAction("hodir move snowpacked icicle", ACTION_RAID + 5) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir icicle dodge",
+        { NextAction("hodir icicle dodge action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir frozen blows swap",
+        { NextAction("hodir frozen blows swap action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir spread storm cloud",
+        { NextAction("hodir spread storm cloud", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "hodir biting cold",
-        { NextAction("hodir biting cold jump", ACTION_RAID) }));
+        { NextAction("hodir biting cold jump", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir set dps priority",
+        { NextAction("hodir set dps priority action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "hodir frost resistance trigger",
         { NextAction("hodir frost resistance action", ACTION_RAID) }));
 
-    // Hard mode (config-gated): win the 3-minute Rare Cache race - free the helpers, spread Storm
-    // Cloud, and sit in a Toasty Fire when Biting Cold stacks. Helper-freeing stays below the
-    // snowpacked-icicle move (ACTION_RAID + 1) so surviving a Flash Freeze always wins over running
-    // off to a helper block when both want the bot at once.
     triggers.push_back(new TriggerNode(
-        "hodir free frozen helper",
-        { NextAction("hodir free frozen helper", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir spread storm cloud",
-        { NextAction("hodir spread storm cloud", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir move to toasty fire",
-        { NextAction("hodir move to toasty fire", ACTION_RAID) }));
+        "hodir raid position",
+        { NextAction("hodir raid position action", ACTION_RAID) }));
 
     //
     // Freya
@@ -662,6 +672,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
 
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
+    multipliers.push_back(new HodirGuardMultiplier(botAI));
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));

@@ -279,7 +279,6 @@ public:
     bool ulduarFlameLeviathanHardMode;
     bool ulduarThorimHardMode;
     bool ulduarFreyaHardMode;
-    bool ulduarHodirHardMode;
     bool ulduarMimironHardMode;
     bool ulduarYoggSaronHardMode;
     bool ulduarXT002HardMode;

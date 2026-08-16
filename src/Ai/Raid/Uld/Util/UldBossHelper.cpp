@@ -13,6 +13,8 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
+#include "DynamicObject.h"
+#include "Map.h"
 #include "ScriptedCreature.h"
 #include "Spell.h"
 #include "World.h"
@@ -24,6 +26,7 @@
 #include <list>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 const Position ULDUAR_IGNIS_WATER_POOL_WEST = Position(526.771f, 277.796f, 360.802f);
 const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.802f);
@@ -81,6 +84,18 @@ const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[ULDUAR_AURIAYA_STATION_COUNT] = {
 const Position ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[ULDUAR_AURIAYA_STATION_COUNT] = {
     Position(1937.10f, 55.23f, 411.36f), Position(1927.54f, 58.19f, 411.36f),
     Position(1917.99f, 61.15f, 411.36f)};
+
+// Hodir's corner. His room runs x 1965-2041 and y -170 to -298, and he evades the moment he leaves
+// that y band. Tanking him in the south-west corner collapses the helper NPCs' 17-30 yd stand-off
+// arc into one place, which is what makes the Starlight zone and the Toasty Fires land somewhere the
+// raid can predict. That corner is chamfered, not square - the floor bevels away from about
+// (1966, -274) to (1990, -298) - so the tank spot is the deepest point with 6 yd of floor all round
+// rather than the visual corner, which has three yards of nothing behind it. The off-tank sits
+// further into the corner rather than toward the raid, so a taunt never walks him at the stack. The
+// raid anchor is only the fallback centre for the ranged ring; normally the ring rides Starlight.
+const Position ULDUAR_HODIR_MAINTANK_SPOT = Position(1974.50f, -275.50f, 432.687f);
+const Position ULDUAR_HODIR_OFFTANK_SPOT = Position(1980.00f, -277.00f, 432.687f);
+const Position ULDUAR_HODIR_RAID_ANCHOR = Position(1986.56f, -257.11f, 432.687f);
 
 // Prevent harpoon spam
 std::unordered_map<ObjectGuid, time_t> RazorscaleBossHelper::_harpoonCooldowns;
@@ -553,6 +568,247 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tol
     tolerance = botAI->IsRangedDps(bot) ? ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE
                                         : ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE;
     return true;
+}
+
+Unit* GetHodir(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_HODIR); }
+
+// Which druid this instance got, so the four-entry sweep runs once rather than on every bot every
+// tick. Guid, not a pointer, so a despawn drops out instead of dangling.
+static thread_local std::unordered_map<uint32, ObjectGuid> _hodirDruids;
+
+Creature* GetHodirDruidHelper(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return nullptr;
+
+    uint32 const instanceId = bot->GetInstanceId();
+    auto const cached = _hodirDruids.find(instanceId);
+    if (cached != _hodirDruids.end())
+    {
+        Creature* druid = ObjectAccessor::GetCreature(*bot, cached->second);
+        if (druid && druid->IsAlive())
+            return druid;
+
+        _hodirDruids.erase(instanceId);
+    }
+
+    // Faction and raid size decide which one spawned, and only one of the four is ever present.
+    static uint32 const druids[] = {NPC_HODIR_DRUID_ALLIANCE_10, NPC_HODIR_DRUID_ALLIANCE_25,
+                                    NPC_HODIR_DRUID_HORDE_10, NPC_HODIR_DRUID_HORDE_25};
+
+    for (uint32 entry : druids)
+    {
+        Creature* druid = bot->FindNearestCreature(entry, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+        if (druid && druid->IsAlive())
+        {
+            _hodirDruids[instanceId] = druid->GetGUID();
+            return druid;
+        }
+    }
+
+    return nullptr;
+}
+
+Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot || !GetHodir(botAI))
+        return nullptr;
+
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, NPC_SNOWPACKED_ICICLE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+
+    // Nearest the raid anchor rather than nearest the bot, so the whole raid converges on one drift
+    // and re-forms cleanly instead of splitting across the two or three that spawn. Trigger and
+    // action both call this: two derivations of "which shelter" would disagree and oscillate.
+    Creature* best = nullptr;
+    float bestDist = 0.0f;
+    for (Creature* shelter : found)
+    {
+        if (!shelter || !shelter->IsAlive())
+            continue;
+
+        float const dist = shelter->GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR);
+        if (!best || dist < bestDist)
+        {
+            best = shelter;
+            bestDist = dist;
+        }
+    }
+
+    return best;
+}
+
+// Latched per instance: up to four Starlight zones overlap and GetDynObject returns only the
+// first, so re-picking every tick would swap the ring centre out from under the raid.
+static thread_local std::unordered_map<uint32, Position> _hodirRingCentres;
+
+Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot)
+        return ULDUAR_HODIR_RAID_ANCHOR;
+
+    uint32 const instanceId = bot->GetInstanceId();
+    auto const latched = _hodirRingCentres.find(instanceId);
+
+    // Keep the latched zone while this bot is still standing in Starlight. The aura going missing is
+    // the exact moment the zone expired or the raid drifted off it, and it costs nothing to read -
+    // far cheaper than tracking durations across the several zones alive at any time.
+    if (latched != _hodirRingCentres.end() && bot->HasAura(SPELL_HODIR_STARLIGHT))
+        return latched->second;
+
+    Creature* druid = GetHodirDruidHelper(botAI);
+    if (!druid)
+    {
+        _hodirRingCentres.erase(instanceId);
+        return ULDUAR_HODIR_RAID_ANCHOR;
+    }
+
+    // Starlight is a persistent area aura, so there is no creature to find - the dynamic object the
+    // druid owns is the only handle on where it actually landed.
+    DynamicObject* zone = druid->GetDynObject(SPELL_HODIR_STARLIGHT);
+    if (!zone || zone->GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR) > ULDUAR_HODIR_ZONE_ADOPT_RADIUS)
+    {
+        _hodirRingCentres.erase(instanceId);
+        return ULDUAR_HODIR_RAID_ANCHOR;
+    }
+
+    Position const centre = zone->GetPosition();
+    _hodirRingCentres[instanceId] = centre;
+    return centre;
+}
+
+bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    std::vector<Player*> ringMembers;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || !memberAI->IsRanged(member) || memberAI->IsTank(member))
+            continue;
+
+        ringMembers.push_back(member);
+    }
+
+    if (ringMembers.empty())
+        return false;
+
+    // Guid order is identical on every bot, so nobody has to be told which slot is theirs.
+    std::sort(ringMembers.begin(), ringMembers.end(),
+              [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
+
+    size_t slot = ringMembers.size();
+    for (size_t i = 0; i < ringMembers.size(); ++i)
+        if (ringMembers[i] == bot)
+            slot = i;
+
+    if (slot >= ringMembers.size())
+        return false;
+
+    // Anchoring slot 0 on the bearing to the tank keeps the ring from rotating as the centre moves
+    // between Starlight zones, so a re-latch does not shuffle everyone.
+    float const anchorAngle = std::atan2(ULDUAR_HODIR_MAINTANK_SPOT.GetPositionY() - centre.GetPositionY(),
+                                         ULDUAR_HODIR_MAINTANK_SPOT.GetPositionX() - centre.GetPositionX());
+    float const step = 2.0f * static_cast<float>(M_PI) / static_cast<float>(ringMembers.size());
+    float const angle = Position::NormalizeOrientation(anchorAngle + step * slot);
+
+    float x = centre.GetPositionX() + std::cos(angle) * ULDUAR_HODIR_RAID_RING_RADIUS;
+    float y = centre.GetPositionY() + std::sin(angle) * ULDUAR_HODIR_RAID_RING_RADIUS;
+
+    // Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
+    // without telling anyone.
+    float z = bot->GetMapWaterOrGroundLevel(x, y, centre.GetPositionZ());
+    if (z <= INVALID_HEIGHT)
+        z = centre.GetPositionZ();
+
+    bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                   bot->GetPositionZ(), x, y, z, false);
+
+    out = Position(x, y, z);
+    return true;
+}
+
+bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
+{
+    if (!GetHodir(botAI))
+        return false;
+
+    if (botAI->IsMainTank(bot))
+    {
+        out = ULDUAR_HODIR_MAINTANK_SPOT;
+        tolerance = ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE;
+        return true;
+    }
+
+    if (botAI->IsAssistTankOfIndex(bot, 0, true))
+    {
+        out = ULDUAR_HODIR_OFFTANK_SPOT;
+        tolerance = ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE;
+        return true;
+    }
+
+    // Melee ride the boss in the corner. Pinning them would cost uptime, and they are far outside
+    // both buff zones there whatever we do.
+    if (!botAI->IsRanged(bot))
+        return false;
+
+    if (!GetHodirRingSlot(botAI, bot, GetHodirRingCentre(botAI, bot), out))
+        return false;
+
+    tolerance = ULDUAR_HODIR_RING_SPOT_TOLERANCE;
+    return true;
+}
+
+bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)
+{
+    if (!block)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    // Healers keep healing: the raid is taking 14000 every two seconds from icicles while this block
+    // is up, and it dies to a handful of hits anyway.
+    std::vector<Player*> candidates;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || memberAI->IsHeal(member) || memberAI->IsTank(member))
+            continue;
+
+        if (member->GetExactDist2d(block) > ULDUAR_HODIR_TRAPPED_ALLY_RANGE)
+            continue;
+
+        candidates.push_back(member);
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [block](Player* left, Player* right)
+    {
+        float const leftDist = left->GetExactDist2d(block);
+        float const rightDist = right->GetExactDist2d(block);
+        if (leftDist != rightDist)
+            return leftDist < rightDist;
+        return left->GetGUID() < right->GetGUID();
+    });
+
+    for (size_t i = 0; i < candidates.size() && i < ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS; ++i)
+        if (candidates[i] == bot)
+            return true;
+
+    return false;
 }
 
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target)

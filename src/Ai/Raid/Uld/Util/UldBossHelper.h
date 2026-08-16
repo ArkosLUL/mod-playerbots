@@ -57,14 +57,29 @@ enum UlduarIDs
     SPELL_FOCUSED_EYEBEAM_25_2 = 63976,
     SPELL_FOCUSED_EYEBEAM_25 = 63977,
 
-    // Hodir
+    // Hodir. Three distinct icicle entries, and mixing them up breaks the fight: 33169 is the small
+    // one that lands every 2s and must be dodged, 33173 is the Flash Freeze drift that must be
+    // dodged only while it is still falling, and 33174 is what 33173 leaves behind - the shelter
+    // carrying the Safe Area aura that Flash Freeze checks for.
+    NPC_HODIR_ICICLE_SMALL = 33169,
+    NPC_HODIR_ICICLE_DRIFT = 33173,
     NPC_SNOWPACKED_ICICLE = 33174,
     NPC_TOASTY_FIRE = 33342,
+    NPC_HODIR_FLASH_FREEZE_BLOCK = 32938,   // ice block encasing a frozen helper; kill it to free them
+    NPC_HODIR_FLASH_FREEZE_PLAYER = 32926,  // same, on a raider - the next Flash Freeze instakills them
+    // Starlight is an 8 yd zone centred on whichever druid helper this raid's faction and size got.
+    NPC_HODIR_DRUID_ALLIANCE_10 = 32901,
+    NPC_HODIR_DRUID_ALLIANCE_25 = 33325,
+    NPC_HODIR_DRUID_HORDE_10 = 32941,
+    NPC_HODIR_DRUID_HORDE_25 = 33333,
     SPELL_FLASH_FREEZE = 61968,
     SPELL_BITING_COLD_PLAYER_AURA = 62039,
-    // Hodir hard mode (3-min timed kill): free the flash-frozen helpers, then exploit their buffs.
-    NPC_HODIR_FLASH_FREEZE_BLOCK = 32938,  // ice block encasing a frozen helper NPC; kill it to free them
-    SPELL_HODIR_STORM_CLOUD = 65123,       // shaman buff on a random player; base id, difficulty-mapped at runtime
+    SPELL_HODIR_FLASH_FREEZE_TRAPPED = 61969,
+    SPELL_HODIR_STARLIGHT = 62807,
+    SPELL_HODIR_TOASTY_FIRE_AURA = 62821,
+    SPELL_HODIR_FROZEN_BLOWS = 62478,  // base id, difficulty-mapped at runtime
+    SPELL_HODIR_STORM_CLOUD = 65123,   // base id, difficulty-mapped at runtime
+    SPELL_HODIR_STORM_POWER = 63711,   // what the carrier hands out; also difficulty-mapped
 
     // Freya
     NPC_SNAPLASHER = 32916,
@@ -442,14 +457,48 @@ constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
 // too low to survive the blast step outside this instead.
 constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
 
-// Hodir hard mode: a bot within this of a Toasty Fire counts as protected (no Biting Cold, Flash
-// Freeze exemption), so it only seeks a fire when further out. Matches the Snowpacked Icicle stack range.
-constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 5.0f;
+// Hodir. Every radius here is the real DBC value, and three of them were previously wrong.
+//
+// Starlight (62807) is the fight's biggest throughput lever: aura 193 runs through
+// HandleModCombatSpeedPct, which applies to cast time as well as all three attack timers, for +50%.
+// Toasty Fire (62821) only stops Biting Cold - it grants no Flash Freeze exemption, whatever the old
+// comment here claimed. Only the Snowpacked Icicle Target does that, through 65705 -> 62464.
+constexpr float ULDUAR_HODIR_STARLIGHT_RADIUS = 8.0f;
+constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 11.0f;
+constexpr float ULDUAR_HODIR_SAFE_AREA_RADIUS = 9.0f;
+constexpr float ULDUAR_HODIR_SAFE_AREA_TOLERANCE = 6.0f;  // park inside the 9 yd with margin
 
-// Hodir hard mode: a Storm Cloud carrier spreads Storm Power (crit-damage buff) to allies within this
-// range. Exact radius is DBC, so this is a conservative default; the carrier joins the pack when it has
-// fewer than a couple of allies this close.
-constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 10.0f;
+// Storm Power lands on allies within 3 yd of the carrier, and the carrier only has 4 (10man) / 6
+// (25man) one-second ticks to spend, so it tours the ring rather than searching for a cluster.
+constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
+
+// Small icicles (62457) hit for 14000 in 4 yd every 2s; the drift icicle (65370) does the same in
+// 7 yd when it lands. Bots step past the edge rather than onto it.
+constexpr float ULDUAR_HODIR_ICE_SHARDS_RADIUS = 4.0f;
+constexpr float ULDUAR_HODIR_ICE_SHARDS_CLEAR = 6.0f;
+
+// The ranged ring sits inside the Starlight zone, so radius plus arrival tolerance may not exceed
+// ULDUAR_HODIR_STARLIGHT_RADIUS. Widening it silently drops the buff for the outer slots, which is
+// the whole reason the fight is anchored here - and it buys nothing against Ice Shards either: 16
+// bots cannot be 4 yd apart inside an 8 yd circle, that packing needs more area than the circle has.
+constexpr float ULDUAR_HODIR_RAID_RING_RADIUS = 5.0f;
+constexpr float ULDUAR_HODIR_RING_SPOT_TOLERANCE = 3.0f;
+constexpr float ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE = 3.0f;
+constexpr float ULDUAR_HODIR_ZONE_ADOPT_RADIUS = 15.0f;  // how far from the fixed anchor a zone may sit
+constexpr float ULDUAR_HODIR_DODGE_LEASH = 10.0f;        // max drift from the bot's anchor
+constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.0f;
+
+// Biting Cold only stacks on a bot that has stood still through four 1s ticks, and a jump counts as
+// moving. The hop alternates between two points so JumpTo's duplicate-move guard cannot reject it,
+// and 2 yd keeps it inside every arrival tolerance so it never triggers a re-anchor.
+constexpr float ULDUAR_HODIR_JUMP_HOP = 2.0f;
+constexpr uint32 ULDUAR_HODIR_JUMP_IDLE_MS = 3000;
+
+// A trapped raider dies to the next Flash Freeze 48s later, so freeing them outranks the boss - but
+// the block has little health, so only the nearest few bots leave what they were doing.
+constexpr float ULDUAR_HODIR_TRAPPED_ALLY_RANGE = 45.0f;
+constexpr uint32 ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS = 5;
+constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
 
 // XT-002: Searing Light and Gravity Bomb both splash around their carrier, so everyone else keeps
 // this far away. In hard mode the Gravity Bomb's Void Zone lands on the carrier's feet too.
@@ -586,6 +635,39 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tol
 
 // Class taunt, mirroring ICC's IccCastClassTaunt. Non-tank classes return false.
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
+
+
+// Hodir. By entry, not "find target": that value walks only the bot's own threat list, so any bot
+// parked on an ice block would stop seeing the boss and silently lose its Flash Freeze shelter.
+Unit* GetHodir(PlayerbotAI* botAI);
+
+// Whichever of the four druid helpers this raid got. Starlight is centred on it, so it is also how
+// the ring finds the zone.
+Creature* GetHodirDruidHelper(PlayerbotAI* botAI);
+
+// The Snowpacked Icicle Target the whole raid shelters at during Flash Freeze.
+Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot);
+
+// Where the ranged ring is centred: the adopted Starlight zone, or ULDUAR_HODIR_RAID_ANCHOR when no
+// zone qualifies - which is every window between the druid's 15s recasts, and the whole fight if the
+// druid is dead. The zone is latched per instance so twenty bots pick the same one of the several
+// that overlap, and re-latched only once the bot's own Starlight aura drops, which is a free and
+// exact expiry signal.
+Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot);
+
+// Where this bot belongs and how far it may stray. Tanks get their fixed corner spots; ranged and
+// healers get a slot on the ring. Melee are unanchored and get false. Trigger and action both go
+// through here so they cannot disagree.
+bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
+
+// This bot's slot on the ring, ranked by guid across the live ranged-and-healer set so every bot
+// derives the same layout without sharing state. The raw ring point is validated against the ground
+// and the collision mesh before it is returned - MoveTo rejects an off-mesh destination silently.
+bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out);
+
+// True when this bot is one of the nearest ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS non-healers to the
+// block. Ties break on guid, so the set is identical on every bot that evaluates it.
+bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block);
 
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
@@ -941,6 +1023,9 @@ extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
 // used to retire a station - the stack's real anchor comes off the live boss.
 extern const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[];
 extern const Position ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[];
+extern const Position ULDUAR_HODIR_MAINTANK_SPOT;
+extern const Position ULDUAR_HODIR_OFFTANK_SPOT;
+extern const Position ULDUAR_HODIR_RAID_ANCHOR;
 
 class RazorscaleBossHelper : public AiObject
 {

@@ -181,6 +181,20 @@ public:
     float GetValue(Action* action) override;
 };
 
+
+// Stands the generic pickers down so Hodir's own nodes own targeting and, for the anchored roles,
+// movement. Both halves are load-bearing: without the targeting half DpsTargetValue is never null,
+// so the generic node retakes the target every other tick and bots drift off the ice block that is
+// about to get an ally killed; without the movement half the anchor oscillates, the failure
+// RazorscaleMultiplier exists to prevent.
+class HodirGuardMultiplier : public Multiplier
+{
+public:
+    HodirGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "hodir guard multiplier") {}
+
+    float GetValue(Action* action) override;
+};
+
 // The earth totem slot holds one totem, so the shaman's own Stoneskin / Strength of Earth nodes have
 // to be held for as long as the boss can fear, or Tremor is replaced on the next GCD.
 class AuriayaAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier

@@ -37,6 +37,9 @@ enum UlduarNPCs
     // Freya
     NPC_FREYA                        = 32906,
 
+    // Hodir
+    NPC_HODIR                        = 32845,
+
     // Mimiron
     NPC_MIMIRON                      = 33350,
 

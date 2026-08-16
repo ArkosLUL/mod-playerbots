@@ -412,16 +412,6 @@ AiPlayerbot.UlduarThorimHardMode = 0
 # Default: 0 (disabled)
 AiPlayerbot.UlduarFreyaHardMode = 0
 
-# Enable Hodir hard-mode behaviour (the "Rare Cache of Winter" 3-minute timed kill). The fight is the
-# same as normal mode - there is no extra add - the raid just has to kill Hodir within 180 seconds, so
-# when on, bots optimise for the DPS race: free the flash-frozen helper NPCs at the pull, a bot carrying
-# Storm Cloud moves into the raid to spread its Storm Power crit buff, and bots stand in a Toasty Fire
-# when Biting Cold stacks on them (a no-cheat alternative to shaking it off). With it off they ignore
-# the helpers and play the fight as normal mode. All three mechanics exist in normal mode as well, so
-# with this on bots run the DPS race on every Hodir kill.
-# Default: 0 (disabled)
-AiPlayerbot.UlduarHodirHardMode = 0
-
 # Enable Mimiron hard-mode behaviour ("Firefighter", the Big Red Button pressed before the pull).
 # Firefighter adds two hazards on top of the normal fight: a persistent, spreading ground fire and
 # VX-001's Frost Bomb (a large delayed explosion). When on, bots step out of the fire and clear the

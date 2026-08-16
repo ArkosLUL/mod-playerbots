@@ -66,10 +66,13 @@ must still outrank heals while the bot is unsheltered.
   everything there; `MoveToLOS` is written that way and has no callers.
 
   `navprobe` answers both halves offline, per map and per point, without a pull. It lives in the
-  **core fork** at `src/tools/navprobe`, not in this module, so it never shows up in module history:
-  `docker compose --profile tools run --rm ac-navprobe --map <id> coverage`. Note that
-  `env/dist/data/mmaps` is **not** in this checkout, so the tool has no tiles to read here until they
-  are generated or mounted.
+  **core fork** at `src/tools/navprobe`, not in this module, so it never shows up in module history.
+  It is **prebuilt** in `acore/ac-wotlk-build:master`, and the tiles are in the `ac-client-data`
+  Docker volume — **not** in the host's `env/dist/data`:
+  `MSYS_NO_PATHCONV=1 docker run --rm -v azerothcore-wotlk-pb_ac-client-data:/azerothcore/env/dist/data:ro --entrypoint /azerothcore/env/dist/bin/navprobe acore/ac-wotlk-build:master --map <id> coverage`
+  (without `MSYS_NO_PATHCONV=1`, Git Bash mangles the entrypoint into a Windows path). Read the
+  **`settledZ`** column, never the trailing "N/N on mesh" line — a point can report a nearest poly
+  within 2 yd and still settle to terrain, which is off the floor.
 
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`,
   `PathGenerator.cpp:764-767`), so a destination the navmesh flags as magma is **reachable, not

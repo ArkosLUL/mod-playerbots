@@ -12,6 +12,8 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
+// Run to the Snowpacked Icicle Target the rest of the raid is running to. Standing inside its Safe
+// Area is the only way to survive Flash Freeze.
 class HodirMoveSnowpackedIcicleAction : public MovementAction
 {
 public:
@@ -20,6 +22,17 @@ public:
     bool isUseful() override;
 };
 
+// Step out from under a falling icicle, preferring a destination that is still inside Starlight.
+class HodirIcicleDodgeAction : public MovementAction
+{
+public:
+    HodirIcicleDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir icicle dodge action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Jump on the spot to shed Biting Cold. A jump counts as movement, which is what the aura checks,
+// and unlike walking it does not take the bot anywhere.
 class HodirBitingColdJumpAction : public MovementAction
 {
 public:
@@ -28,35 +41,47 @@ public:
     bool isUseful() override;
 };
 
-//
-// Hodir hard mode (config-gated): DPS-race behaviours to beat the 3-minute Rare Cache timer.
-//
-
-// Kill the ice block encasing a frozen helper so it can start handing out its buffs.
-class HodirFreeFrozenHelperAction : public AttackAction
+// Hold the bot's anchor: a fixed corner spot for the two tanks, a ring slot for ranged and healers.
+class HodirRaidPositionAction : public MovementAction
 {
 public:
-    HodirFreeFrozenHelperAction(PlayerbotAI* botAI) : AttackAction(botAI, "hodir free frozen helper") {}
+    HodirRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, "hodir raid position action") {}
     bool Execute(Event event) override;
-    bool isUseful() override;
+
+private:
+    bool _anchorReached = false;
 };
 
-// Carry Storm Cloud into the pack so its Storm Power crit buff spreads to nearby allies.
+// Trapped raiders, then flash-frozen helpers, then the boss.
+class HodirSetDpsPriorityAction : public AttackAction
+{
+public:
+    HodirSetDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, "hodir set dps priority action") {}
+    bool Execute(Event event) override;
+
+private:
+    Unit* ResolveTarget(Unit* currentTarget);
+};
+
+// Taunt Hodir off the tank Frozen Blows would kill, and take him back when it drops.
+class HodirFrozenBlowsSwapAction : public AttackAction
+{
+public:
+    HodirFrozenBlowsSwapAction(PlayerbotAI* ai) : AttackAction(ai, "hodir frozen blows swap action") {}
+    bool Execute(Event event) override;
+};
+
+// Carry Storm Cloud around the ranged ring so Storm Power lands on as much of the raid as its 4-6
+// one-second ticks reach.
 class HodirSpreadStormCloudAction : public MovementAction
 {
 public:
     HodirSpreadStormCloudAction(PlayerbotAI* ai) : MovementAction(ai, "hodir spread storm cloud") {}
     bool Execute(Event event) override;
     bool isUseful() override;
-};
 
-// Step into a Toasty Fire to stop Biting Cold stacking (no-cheat mitigation).
-class HodirMoveToToastyFireAction : public MovementAction
-{
-public:
-    HodirMoveToToastyFireAction(PlayerbotAI* ai) : MovementAction(ai, "hodir move to toasty fire") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
+private:
+    int8 _direction = 0;
 };
 
 #endif
