@@ -12,10 +12,21 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-class MimironShockBlastAction : public MovementAction
+// Shared by the Mimiron flee actions. Proximity Mines are non-selectable, so pathing knows nothing
+// about them and a bot stepping out of one hazard can land in the ten that follow a Shock Blast.
+class MimironFleeAction : public MovementAction
 {
 public:
-    MimironShockBlastAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron shock blast action") {}
+    MimironFleeAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name) {}
+
+protected:
+    bool MoveAwayClearOfMines(Unit* from, float distance);
+};
+
+class MimironShockBlastAction : public MimironFleeAction
+{
+public:
+    MimironShockBlastAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron shock blast action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -33,22 +44,19 @@ public:
 class MimironP3Wx2LaserBarrageAction : public MovementAction
 {
 public:
-    MimironP3Wx2LaserBarrageAction(PlayerbotAI* ai, float distance = 24.0f, float delta_angle = M_PI / 8)
-        : MovementAction(ai, "mimiron p3wx2 laser barrage action")
-    {
-        this->distance = distance;
-        this->delta_angle = delta_angle;
-    }
-    virtual bool Execute(Event event);
-
-protected:
-    float distance, delta_angle;
+    MimironP3Wx2LaserBarrageAction(PlayerbotAI* ai)
+        : MovementAction(ai, "mimiron p3wx2 laser barrage action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
 };
 
-class MimironRapidBurstAction : public MovementAction
+// Rapid Burst and Hand Pulse are both 104 degree cones, so no arrangement dodges them; what helps is
+// occupying more bearings than one cone covers. The six spots this replaced stacked the raid into
+// three clumps, which is the worst possible shape for that.
+class MimironArcSpreadAction : public MovementAction
 {
 public:
-    MimironRapidBurstAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron rapid burst action") {}
+    MimironArcSpreadAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron arc spread action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -62,43 +70,86 @@ public:
     bool Execute(Event event) override;
 };
 
-class MimironRocketStrikeAction : public MovementAction
+class MimironRocketStrikeAction : public MimironFleeAction
 {
 public:
-    MimironRocketStrikeAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron rocket strike action") {}
+    MimironRocketStrikeAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron rocket strike action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
 };
 
-class MimironPhase4MarkDpsAction : public Action
+class MimironPhase4MarkDpsAction : public AttackAction
 {
 public:
-    MimironPhase4MarkDpsAction(PlayerbotAI* ai) : Action(ai, "mimiron phase 4 mark dps action") {}
+    MimironPhase4MarkDpsAction(PlayerbotAI* ai) : AttackAction(ai, "mimiron phase 4 mark dps action") {}
 
     bool Execute(Event event) override;
 };
 
-class MimironCheatAction : public Action
+// One designated bot carries the Magnetic Core to the Aerial Command Unit and grounds it. Without
+// this the phase only ends when ranged whittle the ACU down from the floor.
+class MimironMagneticCoreAction : public MovementAction
 {
 public:
-    MimironCheatAction(PlayerbotAI* ai) : Action(ai, "mimiron cheat action") {}
+    MimironMagneticCoreAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron magnetic core action") {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Plasma Blast is a 3s cast on whoever is holding the MK II, every 22s, and it does not stack. The
+// two tanks alternate on it and never taunt back: one taunt each per cycle is 22s apart, clear of
+// the 15s taunt-DR reset, whereas swapping back would put two taunts 11s apart and cut the next
+// one's duration to 65%.
+class MimironPlasmaBlastAction : public AttackAction
+{
+public:
+    MimironPlasmaBlastAction(PlayerbotAI* ai) : AttackAction(ai, "mimiron plasma blast action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Owns "current target" for every non-tank while any mech is up. Raid icons stay cosmetic here: they
+// are group-global, and reading one back is what made the old rti round-trip fail whenever a bot had
+// a different "rti" string from the one the marking bot wrote.
+class MimironSetDpsPriorityAction : public AttackAction
+{
+public:
+    MimironSetDpsPriorityAction(PlayerbotAI* botAI)
+        : AttackAction(botAI, "mimiron set dps priority action") {}
+
+    bool Execute(Event event) override;
+
+private:
+    // Ordered candidates for this bot's role, most urgent first. Entries the role must not touch are
+    // left out entirely rather than filtered later.
+    std::vector<std::pair<uint32, Unit*>> BuildPriorityList();
+
+    // Nearest live candidate of `entry`, preferring the current target so two identical adds cannot
+    // make the bot alternate between them every tick.
+    Unit* SelectByEntry(Unit* currentTarget, uint32 entry, std::vector<Unit*> const& candidates) const;
+
+    bool IsAllowedTarget(Unit* unit) const;
+
+    Unit* ResolveTarget(Unit* currentTarget);
 };
 
 class MimironProximityMineAction : public MoveAwayFromCreatureAction
 {
 public:
     MimironProximityMineAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "mimiron proximity mine action", NPC_PROXIMITY_MINE, 6.0f) {}
+        : MoveAwayFromCreatureAction(ai, "mimiron proximity mine action", NPC_PROXIMITY_MINE,
+                                     ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f) {}
 };
 
 class MimironBombBotAction : public MoveAwayFromCreatureAction
 {
 public:
     MimironBombBotAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "mimiron bomb bot action", NPC_BOMB_BOT, 6.0f) {}
+        : MoveAwayFromCreatureAction(ai, "mimiron bomb bot action", NPC_BOMB_BOT,
+                                     ULDUAR_MIMIRON_BOMB_BOT_RADIUS) {}
 };
 
 // Hard mode (Firefighter): step out of the persistent ground fire before it burns the bot down.

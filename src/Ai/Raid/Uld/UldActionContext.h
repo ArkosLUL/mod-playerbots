@@ -75,11 +75,10 @@ public:
         creators["mimiron shock blast action"] = &RaidUlduarActionContext::mimiron_shock_blast_action;
         creators["mimiron phase 1 positioning action"] = &RaidUlduarActionContext::mimiron_phase_1_positioning_action;
         creators["mimiron p3wx2 laser barrage action"] = &RaidUlduarActionContext::mimiron_p3wx2_laser_barrage_action;
-        creators["mimiron rapid burst action"] = &RaidUlduarActionContext::mimiron_rapid_burst_action;
+        creators["mimiron arc spread action"] = &RaidUlduarActionContext::mimiron_arc_spread_action;
         creators["mimiron aerial command unit action"] = &RaidUlduarActionContext::mimiron_aerial_command_unit_action;
         creators["mimiron rocket strike action"] = &RaidUlduarActionContext::mimiron_rocket_strike_action;
         creators["mimiron phase 4 mark dps action"] = &RaidUlduarActionContext::mimiron_phase_4_mark_dps_action;
-        creators["mimiron cheat action"] = &RaidUlduarActionContext::mimiron_cheat_action;
         creators["vezax cheat action"] = &RaidUlduarActionContext::vezax_cheat_action;
         creators["vezax shadow crash action"] = &RaidUlduarActionContext::vezax_shadow_crash_action;
         creators["vezax mark of the faceless action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_action;
@@ -123,6 +122,9 @@ public:
         creators["auriaya sentry taunt action"] = &RaidUlduarActionContext::auriaya_sentry_taunt_action;
         creators["auriaya tank facing action"] = &RaidUlduarActionContext::auriaya_tank_facing_action;
         creators["auriaya anti fear action"] = &RaidUlduarActionContext::auriaya_anti_fear_action;
+        creators["mimiron magnetic core action"] = &RaidUlduarActionContext::mimiron_magnetic_core_action;
+        creators["mimiron plasma blast action"] = &RaidUlduarActionContext::mimiron_plasma_blast_action;
+        creators["mimiron set dps priority action"] = &RaidUlduarActionContext::mimiron_set_dps_priority_action;
         creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
@@ -205,11 +207,10 @@ private:
     static Action* mimiron_shock_blast_action(PlayerbotAI* ai) { return new MimironShockBlastAction(ai); }
     static Action* mimiron_phase_1_positioning_action(PlayerbotAI* ai) { return new MimironPhase1PositioningAction(ai); }
     static Action* mimiron_p3wx2_laser_barrage_action(PlayerbotAI* ai) { return new MimironP3Wx2LaserBarrageAction(ai); }
-    static Action* mimiron_rapid_burst_action(PlayerbotAI* ai) { return new MimironRapidBurstAction(ai); }
+    static Action* mimiron_arc_spread_action(PlayerbotAI* ai) { return new MimironArcSpreadAction(ai); }
     static Action* mimiron_aerial_command_unit_action(PlayerbotAI* ai) { return new MimironAerialCommandUnitAction(ai); }
     static Action* mimiron_rocket_strike_action(PlayerbotAI* ai) { return new MimironRocketStrikeAction(ai); }
     static Action* mimiron_phase_4_mark_dps_action(PlayerbotAI* ai) { return new MimironPhase4MarkDpsAction(ai); }
-    static Action* mimiron_cheat_action(PlayerbotAI* ai) { return new MimironCheatAction(ai); }
     static Action* vezax_cheat_action(PlayerbotAI* ai) { return new VezaxCheatAction(ai); }
     static Action* vezax_shadow_crash_action(PlayerbotAI* ai) { return new VezaxShadowCrashAction(ai); }
     static Action* vezax_mark_of_the_faceless_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessAction(ai); }
@@ -252,6 +253,9 @@ private:
     static Action* auriaya_mark_dps_target_action(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetAction(ai); }
     static Action* auriaya_sentry_taunt_action(PlayerbotAI* ai) { return new AuriayaSentryTauntAction(ai); }
     static Action* auriaya_tank_facing_action(PlayerbotAI* ai) { return new AuriayaTankFacingAction(ai); }
+    static Action* mimiron_magnetic_core_action(PlayerbotAI* ai) { return new MimironMagneticCoreAction(ai); }
+    static Action* mimiron_plasma_blast_action(PlayerbotAI* ai) { return new MimironPlasmaBlastAction(ai); }
+    static Action* mimiron_set_dps_priority_action(PlayerbotAI* ai) { return new MimironSetDpsPriorityAction(ai); }
     static Action* auriaya_anti_fear_action(PlayerbotAI* ai) { return new AuriayaAntiFearAction(ai); }
     static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }

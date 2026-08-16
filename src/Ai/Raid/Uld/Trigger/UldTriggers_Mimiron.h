@@ -30,10 +30,10 @@ public:
     bool IsActive() override;
 };
 
-class MimironRapidBurstTrigger : public Trigger
+class MimironArcSpreadTrigger : public Trigger
 {
 public:
-    MimironRapidBurstTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron rapid burst trigger") {}
+    MimironArcSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron arc spread trigger") {}
     bool IsActive() override;
 };
 
@@ -58,10 +58,24 @@ public:
     bool IsActive() override;
 };
 
-class MimironCheatTrigger : public Trigger
+class MimironMagneticCoreTrigger : public Trigger
 {
 public:
-    MimironCheatTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron cheat trigger") {}
+    MimironMagneticCoreTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron magnetic core trigger") {}
+    bool IsActive() override;
+};
+
+class MimironPlasmaBlastTrigger : public Trigger
+{
+public:
+    MimironPlasmaBlastTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron plasma blast trigger") {}
+    bool IsActive() override;
+};
+
+class MimironSetDpsPriorityTrigger : public Trigger
+{
+public:
+    MimironSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron set dps priority trigger") {}
     bool IsActive() override;
 };
 

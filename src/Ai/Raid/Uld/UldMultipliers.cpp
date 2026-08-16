@@ -521,3 +521,21 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
 bool AuriayaAntiFearTotemGuardMultiplier::FearWindowActive() { return AuriayaFearWindowActive(botAI); }
 
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }
+
+float MimironTargetGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+        !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
+        !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+        return 1.0f;
+
+    // "mimiron set dps priority" owns every non-tank's target. "attack rti target" is deliberately
+    // left alone: bots no longer set marks for each other, but a mark a player sets should still win.
+    if (!botAI->IsTank(bot) && dynamic_cast<DpsAssistAction*>(action))
+        return 0.0f;
+
+    return 1.0f;
+}

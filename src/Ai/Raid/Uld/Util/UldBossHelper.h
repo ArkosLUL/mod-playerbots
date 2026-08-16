@@ -110,19 +110,27 @@ enum UlduarIDs
 
     // Mimiron
     NPC_LEVIATHAN_MKII = 33432,
+    NPC_LEVIATHAN_MKII_CANNON = 34071,  // rides the MK II and does its Plasma Blast / Napalm casting
     NPC_VX001 = 33651,
     NPC_AERIAL_COMMAND_UNIT = 33670,
     NPC_BOMB_BOT = 33836,
     NPC_ROCKET_STRIKE_N = 34047,
     NPC_ASSAULT_BOT = 34057,
     NPC_PROXIMITY_MINE = 34362,
-    SPELL_P3WX2_LASER_BARRAGE_1 = 63293,
-    SPELL_P3WX2_LASER_BARRAGE_2 = 63297,
+    NPC_MIMIRON_DB_TARGET = 33576,  // the barrage beams aim at this; it laps the room clockwise
+    NPC_JUNK_BOT = 33855,
+    NPC_MAGNETIC_CORE = 34068,
+    SPELL_P3WX2_LASER_BARRAGE_1 = 63293,  // the only one that damages: a 104 degree cone, 50000 yd
+    SPELL_P3WX2_LASER_BARRAGE_2 = 63297,  // SPELL_EFFECT_DUMMY, places a beam visual, harmless
     SPELL_SPINNING_UP = 63414,
     SPELL_SHOCK_BLAST = 63631,
-    SPELL_P3WX2_LASER_BARRAGE_3 = 64042,
+    SPELL_P3WX2_LASER_BARRAGE_3 = 64042,  // SPELL_EFFECT_DUMMY, places a beam visual, harmless
     SPELL_P3WX2_LASER_BARRAGE_AURA_1 = 63274,
     SPELL_P3WX2_LASER_BARRAGE_AURA_2 = 63300,
+    SPELL_MIMIRON_PLASMA_BLAST = 62997,
+    SPELL_MIMIRON_NAPALM_SHELL = 63666,
+    SPELL_MIMIRON_MAGNETIC_FIELD = 64668,
+    ITEM_MIMIRON_MAGNETIC_CORE = 46029,  // 100% drop from the Assault Bot; grounds the ACU
 
     // General Vezax
     SPELL_MARK_OF_THE_FACELESS = 63276,
@@ -286,7 +294,8 @@ enum UlduarIDs
     // NPC_MIMIRON (the boss; sits in his pod, never a bot attack target) comes from core ulduar.h via UldScripts.h.
     NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
     NPC_FLAMES_SPREAD = 34121,     // persistent spreading ground-fire node (non-selectable)
-    NPC_FROST_BOMB = 34149         // VX-001's Frost Bomb; detonates in a large AoE
+    NPC_FROST_BOMB = 34149,        // VX-001's Frost Bomb; detonates in a large AoE
+    NPC_EMERGENCY_FIRE_BOT = 34147  // puts the flames out; three spawn every 45s
 };
 
 // Flame Leviathan hard-mode tower bitmask, used to pick which ground hazards to dodge.
@@ -370,9 +379,48 @@ constexpr float ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MIN_RANGE = 13.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MAX_RANGE = 17.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_STEP_YARDS = 5.0f;
 
-// Mimiron: closest a bot trailing the P3Wx2 Laser Barrage will stand to VX-001. Tighter radii keep
-// the run needed to stay behind the beam short.
-constexpr float ULDUAR_MIMIRON_BARRAGE_MIN_RADIUS = 10.0f;
+// Mimiron P3Wx2 Laser Barrage. The damage is 63293, a TARGET_UNIT_CONE_ENEMY_104 cone: 104 degrees
+// wide with a 50000 yd radius, so distance from VX-001 buys nothing and only bearing matters.
+constexpr float ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE = 52.0f * static_cast<float>(M_PI) / 180.0f;
+constexpr float ULDUAR_MIMIRON_BARRAGE_MARGIN = 12.0f * static_cast<float>(M_PI) / 180.0f;
+
+// NPC 33576 laps the room every 34016 ms, so the cone sweeps clockwise at 10.6 deg/s and covers
+// about 106 degrees over the 10 s barrage. A bot escaping clockwise runs with the sweep and only
+// gains ground at the difference of the two rates, which is what makes the radius cap matter.
+constexpr float ULDUAR_MIMIRON_BARRAGE_SWEEP_RATE = 10.6f * static_cast<float>(M_PI) / 180.0f;
+constexpr float ULDUAR_MIMIRON_BARRAGE_SWEEP_TOTAL = 106.0f * static_cast<float>(M_PI) / 180.0f;
+
+// VX-001 rides the MK II chassis in phase 4 and can sit 30 yd off centre, swinging the bearing by
+// as much as 16 degrees. Re-latch the arc once it has moved at least this far.
+constexpr float ULDUAR_MIMIRON_BARRAGE_RELATCH_DIST = 5.0f;
+
+// One Spinning Up plus one barrage is 14s. A latch older than this belongs to a previous cast (or a
+// previous attempt), so it ages out on its own and no teardown pass is needed.
+constexpr time_t ULDUAR_MIMIRON_BARRAGE_LATCH_TTL = 20;
+
+// A bot turns around VX-001 at (7.0 yd/s / radius) against a 10.6 deg/s sweep. Holding the raid
+// inside this radius makes the worst-case 52 degree rotation fit the 4 s Spinning Up warning and
+// still leaves 1.6x speed margin; break-even is 38 yd, where a bot can never out-turn the cone.
+constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
+
+// Ranged ring, kept inside ULDUAR_MIMIRON_SPREAD_RADIUS_MAX so a barrage rotation from it still
+// fits the Spinning Up window. The tolerance is what stops bots pacing over a yard of drift.
+constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
+constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
+
+// Loot range for an Assault Bot corpse, and how close the Magnetic Core has to be used: 64444 places
+// its summon by nearest entry, so the bot has to be standing under the Aerial Command Unit.
+constexpr float ULDUAR_MIMIRON_CORE_LOOT_RANGE = 5.0f;
+constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
+
+// Proximity Mines fire on anyone inside 1.9 yd and blast for 3 yd (66351). They are non-attackable,
+// so the only handling is refusing to walk a bot into one.
+constexpr float ULDUAR_MIMIRON_MINE_CLEARANCE = 5.0f;
+
+// Napalm Shell splashes 5 yd around its target. Bomb Bots blast 5 yd on melee contact (63801) and
+// match player run speed, so the extra yard here only buys time for ranged to kill them.
+constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
+constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
 
 // Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
@@ -726,6 +774,37 @@ constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
 constexpr float ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS = 100.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MIN = 1745.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MAX = 1780.0f;
+// Mimiron. The P3Wx2 Laser Barrage beams follow VX-001's facing, which the core repoints at NPC
+// 33576 on every tick of the aura, so the bearing to that NPC is the cone's centreline. Falls back
+// to VX-001's own facing when 33576 is absent (world DB update 2026_08_10_00 unapplied) - the core
+// skips the re-facing entirely in that case, leaving the cone frozen on the current facing.
+float GetMimironBarrageAngle(Player* bot, Unit* vx001);
+
+// Proximity Mines are non-selectable, so they never reach "possible targets" and pathing knows
+// nothing about them. Movement actions check their intended destination through this first.
+bool IsMimironSpotMineSafe(Player* bot, Position const& dest,
+                           float clearance = ULDUAR_MIMIRON_MINE_CLEARANCE);
+
+// The latched Laser Barrage cone: centreline bearing plus where VX-001 stood when it was taken.
+struct MimironBarrageArc
+{
+    float angle = 0.0f;
+    Position origin;
+    time_t latchedAt = 0;
+};
+
+// Latched once per barrage and per instance, so every bot derives the same safe wedge rather than
+// latching a tick apart and disagreeing, and so a bot picks its spot once and lets the cone sweep
+// away instead of chasing it for ten seconds.
+MimironBarrageArc const& GetMimironLatchedBarrageArc(Player* bot, Unit* vx001);
+
+// Where this bot stands between barrages. Ranged fan out over a full ring round the room rather than
+// around VX-001, whose facing swings to whoever it last Rapid Burst; Rapid Burst and Hand Pulse are
+// both 104 degree cones, so covering more bearings than one cone can hold is the only thing that
+// helps. Returns false for roles this does not place. Trigger and action must both call this or the
+// two disagree about where the bot belongs.
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
+
 constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MIN = -48.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MAX = -2.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_Z = 448.0f;
@@ -805,12 +884,9 @@ extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
-extern const Position ULDUAR_MIMIRON_PHASE2_SIDE1RANGE_SPOT;
-extern const Position ULDUAR_MIMIRON_PHASE2_SIDE1MELEE_SPOT;
-extern const Position ULDUAR_MIMIRON_PHASE2_SIDE2RANGE_SPOT;
-extern const Position ULDUAR_MIMIRON_PHASE2_SIDE2MELEE_SPOT;
-extern const Position ULDUAR_MIMIRON_PHASE2_SIDE3RANGE_SPOT;
-extern const Position ULDUAR_MIMIRON_PHASE2_SIDE3MELEE_SPOT;
+// VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
+// point holds still while the mechs turn and charge about.
+extern const Position ULDUAR_MIMIRON_ROOM_CENTER;
 extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
 extern const Position ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT;
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;

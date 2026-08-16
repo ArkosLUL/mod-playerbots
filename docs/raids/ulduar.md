@@ -707,15 +707,63 @@ hard-coded 15 yd and dragged every melee out of range and held them there. It st
 own radius now: melee and tanks 4–8 yd, ranged 13–17 yd, constant 5 yd of arc per step so a tight
 radius still clears the puddle quickly. Tunables sit next to the other Vezax ones in `UldBossHelper.h`.
 
-### Mimiron — Laser Barrage arcs are deterministic
+### Mimiron — Laser Barrage is a 104° cone, not a beam
 
-VX-001 does not aim at a random player. Arcs start at 6.17 rad, advance +60° counterclockwise per
-cast, reset at the start of phases 2 and 4, and the boss faces the arc during Spinning Up; the aura
-then sweeps that facing clockwise at π/60 per 250 ms (~12°/s) with the beams following unit facing.
-Cadence is 60 s, not 45. So the dodge reads the boss facing and moves to `orientation + delta_angle`
-(π/8) at the bot's own radius clamped to 10–24 yd, re-issued each tick so bots trail the beam —
-the old code teleported everyone onto the master, which is now only the fallback when VX-001 cannot
-be resolved.
+The single most load-bearing number on this boss, and it contradicts every public guide.
+
+**63297 and 64042 deal no damage.** They are `SPELL_EFFECT_DUMMY`, placing the two beam *visuals*
+via `TARGET_DEST_CASTER_FRONT` (60 yd) plus `TARGET_DEST_DEST_LEFT` 4 yd / `TARGET_DEST_DEST_RIGHT`
+6 yd. Reading those 4/6 yd radii as a beam width is what produced the old dodge.
+
+The damage is **63293**: `SPELL_EFFECT_SCHOOL_DAMAGE`, `TARGET_UNIT_CONE_ENEMY_104`, radius index 28
+= 50000 yd. `Spell.cpp` maps that target type to a **104° cone** (±52° through `HasInArc`, which
+compares `arc/2`), and no `spell_cone_angle` row overrides it. Guides describe retail's 30° visual.
+
+So **distance from VX-001 buys nothing** — the cone outreaches the room. Only bearing matters.
+
+Aim comes from `FaceBarrageArc`: VX-001 is repointed at NPC 33576 every tick of the aura, and 33576
+laps the room on a fixed spline every 34016 ms — 10.6°/s, clockwise, ~106° over the 10 s barrage.
+Warning is 4 s of Spinning Up (63414); cadence is 60 s. **NPC 33576 is spawned by world DB update
+`2026_08_10_00.sql`; without it `FaceBarrageArc` returns early and the cone never moves.**
+
+With `δ` the bot's bearing relative to the latched arc, the cone covers `[θ−52°, θ+52°]` for
+`θ = start − 10.6t`. Union swept: `[start−158°, start+52°]`. The dodge therefore:
+
+- latches the arc **once per barrage per instance**, so all 25 bots derive the same wedge, and
+  re-latches only if VX-001 has moved 5 yd (phase 4 rides the chassis up to 30 yd off centre);
+- is **selective** — bots already outside the swept union never move and keep casting;
+- rotates at **constant radius**, since radius is irrelevant to safety and melee keep their uptime;
+- picks direction by **time-to-safety**, not by a fixed boundary. Counter-clockwise clears at
+  `turnRate + 10.6°/s` because the sweep helps; clockwise only at `turnRate − 10.6°/s`. That puts
+  the switchover near −21°, and past 38 yd clockwise is impossible at all.
+
+The 24 yd cap on the arc spread is what makes this work: it keeps the worst-case 52° rotation inside
+the 4 s window with 1.6× speed margin.
+
+### Mimiron — the two adds need opposite answers
+
+**Proximity Mine (34362)** carries `unit_flags = 2` (`UNIT_FLAG_NON_ATTACKABLE`): there is no
+legitimate way to remove one. It arms 2.5 s after landing, then polls every 500 ms for a player
+inside **1.9 yd**, blasts 3 yd (66351), and self-detonates at 35 s. Ten land 8 s after every Shock
+Blast. Avoidance is the whole answer — and because mines are non-selectable they never reach
+`"possible targets"`, so pathing is blind to them. `IsMimironSpotMineSafe` gates the destination of
+every Mimiron move **except the barrage dodge**, where the cone kills instantly and a mine does not.
+
+**Bomb Bot (33836)** is the opposite: `speed_run` 1.14286 is player run speed, so it cannot be
+outrun, and it detonates on melee contact (`SMART_EVENT_DAMAGED_TARGET` → 63801, 5 yd). Backing away
+is an unwinnable race that ends with the bomb landing a hit. `HealthModifier` is 1.5873, so ranged
+kill one in a few globals — it sits at the top of the ranged priority list, and melee never take it.
+
+Both used to be handled by a main-tank `unit->Kill()` gated on `BotCheatMask::raid`. That is gone.
+
+### Mimiron — Rapid Burst and Hand Pulse cannot be dodged
+
+Both are also `TARGET_UNIT_CONE_ENEMY_104`. Rapid Burst (63387/64019) is aimed at a random player
+every 3.2 s at 100 yd; Hand Pulse (64348/64352) fires every 1.75 s in phase 4. No arrangement avoids
+a 104° cone, so the six fixed phase-2 spots that used to stack the raid into three clumps were
+solving a problem that does not exist — and three clumps is the worst shape for a cone. They are
+replaced by a ring anchored to the room centre (2744.65, 2569.46), radius 22 yd, one slot per ranged
+bot. Anchoring to VX-001 would be wrong: its facing swings to whoever it last Rapid Burst.
 
 ### Yogg-Saron — Squeeze breaks on immunity
 
@@ -811,7 +859,6 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 
 | Boss | Gap |
 |---|---|
-| **Mimiron** | No ground-fire avoidance in normal mode either — only fire *resistance* |
 | **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |
 | **Vezax** | Saronite Vapor puddles never dodged |
 | **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt (focus and the Flame Breath cone are handled) |
@@ -820,8 +867,7 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
 Hodir Biting Cold (real movement commented out, cheat strips the aura); Thorim Unbalancing Strike;
-Mimiron Proximity Mines and Bomb Bots (cheat-kill only — the signature Firefighter killers have no
-avoidance); Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
+Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
 (cheat instakill / teleport); Vezax no-mana-regen (cheat mana refill).
 
 Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank

@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <list>
 #include <unordered_map>
 #include <utility>
@@ -44,12 +45,7 @@ const Position ULDUAR_THORIM_PHASE2_TANK_SPOT = Position(2134.8572f, -287.0291f,
 const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2112.8752f, -267.69305f, 419.52814f);
 const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2134.1296f, -257.3316f, 419.8462f);
 const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2156.798f, -267.57434f, 419.52722f);
-const Position ULDUAR_MIMIRON_PHASE2_SIDE1RANGE_SPOT = Position(2753.708f, 2583.9617f, 364.31357f);
-const Position ULDUAR_MIMIRON_PHASE2_SIDE1MELEE_SPOT = Position(2746.9792f, 2573.6716f, 364.31357f);
-const Position ULDUAR_MIMIRON_PHASE2_SIDE2RANGE_SPOT = Position(2727.7224f, 2569.527f, 364.31357f);
-const Position ULDUAR_MIMIRON_PHASE2_SIDE2MELEE_SPOT = Position(2739.4746f, 2569.4106f, 364.31357f);
-const Position ULDUAR_MIMIRON_PHASE2_SIDE3RANGE_SPOT = Position(2754.1294f, 2553.9954f, 364.31357f);
-const Position ULDUAR_MIMIRON_PHASE2_SIDE3MELEE_SPOT = Position(2746.8513f, 2565.4263f, 364.31357f);
+const Position ULDUAR_MIMIRON_ROOM_CENTER = Position(2744.65f, 2569.46f, 364.32f);
 const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT = Position(2744.5754f, 2570.8657f, 364.3138f);
 const Position ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT = Position(1913.6501f, 122.93989f, 342.38083f);
 const Position ULDUAR_YOGG_SARON_MIDDLE = Position(1980.28f, -25.5868f, 329.397f);
@@ -1480,4 +1476,113 @@ std::vector<Position> const& FlameLeviathanKiteRing()
     }();
 
     return ring;
+}
+
+float GetMimironBarrageAngle(Player* bot, Unit* vx001)
+{
+    if (!bot || !vx001)
+        return 0.0f;
+
+    if (Creature* dbTarget = bot->FindNearestCreature(NPC_MIMIRON_DB_TARGET, 250.0f))
+        return vx001->GetAngle(dbTarget);
+
+    return vx001->GetOrientation();
+}
+
+bool IsMimironSpotMineSafe(Player* bot, Position const& dest, float clearance)
+{
+    if (!bot)
+        return true;
+
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    if (!botAI)
+        return true;
+
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_PROXIMITY_MINE)
+            continue;
+
+        if (dest.GetExactDist2d(unit->GetPositionX(), unit->GetPositionY()) < clearance)
+            return false;
+    }
+
+    return true;
+}
+
+MimironBarrageArc const& GetMimironLatchedBarrageArc(Player* bot, Unit* vx001)
+{
+    static std::unordered_map<uint32, MimironBarrageArc> latched;
+    static MimironBarrageArc const noArc;
+
+    if (!bot || !vx001)
+        return noArc;
+
+    time_t const now = std::time(nullptr);
+    MimironBarrageArc& arc = latched[bot->GetMap()->GetInstanceId()];
+
+    bool const expired = arc.latchedAt == 0 || now - arc.latchedAt > ULDUAR_MIMIRON_BARRAGE_LATCH_TTL;
+    bool const moved = arc.origin.GetExactDist2d(vx001->GetPositionX(), vx001->GetPositionY()) >=
+                       ULDUAR_MIMIRON_BARRAGE_RELATCH_DIST;
+
+    if (expired || moved)
+    {
+        arc.angle = GetMimironBarrageAngle(bot, vx001);
+        arc.origin = vx001->GetPosition();
+        arc.latchedAt = now;
+    }
+
+    return arc;
+}
+
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!botAI || !bot)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    // The main tank holds the chassis spot once all three mechs are up. Walking it anywhere else in
+    // phase 4 drags VX-001 with it, and VX-001 is what the Laser Barrage cone radiates from.
+    if (PlayerbotAI::IsMainTank(bot))
+    {
+        if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
+            !GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
+            !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+            return false;
+
+        out = ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
+        return true;
+    }
+
+    // Melee stand on whatever they are hitting, so only ranged and healers get a slot.
+    if (!PlayerbotAI::IsRanged(bot))
+        return false;
+
+    uint32 index = 0;
+    uint32 count = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsRanged(member) ||
+            PlayerbotAI::IsMainTank(member))
+            continue;
+
+        if (member == bot)
+            index = count;
+
+        ++count;
+    }
+
+    if (count == 0)
+        return false;
+
+    float const angle = 2.0f * static_cast<float>(M_PI) * index / count;
+    out = Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + ULDUAR_MIMIRON_SPREAD_RADIUS * cos(angle),
+                   ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + ULDUAR_MIMIRON_SPREAD_RADIUS * sin(angle),
+                   ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+    return true;
 }

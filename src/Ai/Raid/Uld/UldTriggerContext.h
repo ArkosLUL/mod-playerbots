@@ -75,11 +75,10 @@ public:
         creators["mimiron shock blast trigger"] = &RaidUlduarTriggerContext::mimiron_shock_blast_trigger;
         creators["mimiron phase 1 positioning trigger"] = &RaidUlduarTriggerContext::mimiron_phase_1_positioning_trigger;
         creators["mimiron p3wx2 laser barrage trigger"] = &RaidUlduarTriggerContext::mimiron_p3wx2_laser_barrage_trigger;
-        creators["mimiron rapid burst trigger"] = &RaidUlduarTriggerContext::mimiron_rapid_burst_trigger;
+        creators["mimiron arc spread trigger"] = &RaidUlduarTriggerContext::mimiron_arc_spread_trigger;
         creators["mimiron aerial command unit trigger"] = &RaidUlduarTriggerContext::mimiron_aerial_command_unit_trigger;
         creators["mimiron rocket strike trigger"] = &RaidUlduarTriggerContext::mimiron_rocket_strike_trigger;
         creators["mimiron phase 4 mark dps trigger"] = &RaidUlduarTriggerContext::mimiron_phase_4_mark_dps_trigger;
-        creators["mimiron cheat trigger"] = &RaidUlduarTriggerContext::mimiron_cheat_trigger;
         creators["vezax cheat trigger"] = &RaidUlduarTriggerContext::vezax_cheat_trigger;
         creators["vezax shadow crash trigger"] = &RaidUlduarTriggerContext::vezax_shadow_crash_trigger;
         creators["vezax mark of the faceless trigger"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless_trigger;
@@ -124,6 +123,9 @@ public:
         creators["auriaya attack dps target trigger"] = &RaidUlduarTriggerContext::auriaya_attack_dps_target_trigger;
         creators["auriaya sentry taunt trigger"] = &RaidUlduarTriggerContext::auriaya_sentry_taunt_trigger;
         creators["auriaya tank facing trigger"] = &RaidUlduarTriggerContext::auriaya_tank_facing_trigger;
+        creators["mimiron magnetic core trigger"] = &RaidUlduarTriggerContext::mimiron_magnetic_core_trigger;
+        creators["mimiron plasma blast trigger"] = &RaidUlduarTriggerContext::mimiron_plasma_blast_trigger;
+        creators["mimiron set dps priority trigger"] = &RaidUlduarTriggerContext::mimiron_set_dps_priority_trigger;
         creators["auriaya anti fear trigger"] = &RaidUlduarTriggerContext::auriaya_anti_fear_trigger;
         creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
@@ -208,11 +210,10 @@ private:
     static Trigger* mimiron_shock_blast_trigger(PlayerbotAI* ai) { return new MimironShockBlastTrigger(ai); }
     static Trigger* mimiron_phase_1_positioning_trigger(PlayerbotAI* ai) { return new MimironPhase1PositioningTrigger(ai); }
     static Trigger* mimiron_p3wx2_laser_barrage_trigger(PlayerbotAI* ai) { return new MimironP3Wx2LaserBarrageTrigger(ai); }
-    static Trigger* mimiron_rapid_burst_trigger(PlayerbotAI* ai) { return new MimironRapidBurstTrigger(ai); }
+    static Trigger* mimiron_arc_spread_trigger(PlayerbotAI* ai) { return new MimironArcSpreadTrigger(ai); }
     static Trigger* mimiron_aerial_command_unit_trigger(PlayerbotAI* ai) { return new MimironAerialCommandUnitTrigger(ai); }
     static Trigger* mimiron_rocket_strike_trigger(PlayerbotAI* ai) { return new MimironRocketStrikeTrigger(ai); }
     static Trigger* mimiron_phase_4_mark_dps_trigger(PlayerbotAI* ai) { return new MimironPhase4MarkDpsTrigger(ai); }
-    static Trigger* mimiron_cheat_trigger(PlayerbotAI* ai) { return new MimironCheatTrigger(ai); }
     static Trigger* vezax_cheat_trigger(PlayerbotAI* ai) { return new VezaxCheatTrigger(ai); }
     static Trigger* vezax_shadow_crash_trigger(PlayerbotAI* ai) { return new VezaxShadowCrashTrigger(ai); }
     static Trigger* vezax_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
@@ -255,6 +256,9 @@ private:
     static Trigger* auriaya_seeping_essence_trigger(PlayerbotAI* ai) { return new AuriayaSeepingEssenceTrigger(ai); }
     static Trigger* auriaya_mark_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetTrigger(ai); }
     static Trigger* auriaya_attack_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaAttackDpsTargetTrigger(ai); }
+    static Trigger* mimiron_magnetic_core_trigger(PlayerbotAI* ai) { return new MimironMagneticCoreTrigger(ai); }
+    static Trigger* mimiron_plasma_blast_trigger(PlayerbotAI* ai) { return new MimironPlasmaBlastTrigger(ai); }
+    static Trigger* mimiron_set_dps_priority_trigger(PlayerbotAI* ai) { return new MimironSetDpsPriorityTrigger(ai); }
     static Trigger* auriaya_sentry_taunt_trigger(PlayerbotAI* ai) { return new AuriayaSentryTauntTrigger(ai); }
     static Trigger* auriaya_tank_facing_trigger(PlayerbotAI* ai) { return new AuriayaTankFacingTrigger(ai); }
     static Trigger* auriaya_anti_fear_trigger(PlayerbotAI* ai) { return new AuriayaAntiFearTrigger(ai); }

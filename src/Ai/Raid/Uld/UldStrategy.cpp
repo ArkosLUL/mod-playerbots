@@ -410,15 +410,16 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
 
     //
-    // Mimiron
+    // Mimiron. Laser Barrage outranks everything else here: its cone one-shots, while a mine, a
+    // bomb bot or a rocket is survivable.
     //
     triggers.push_back(new TriggerNode(
         "mimiron p3wx2 laser barrage trigger",
-        { NextAction("mimiron p3wx2 laser barrage action", ACTION_RAID + 2) }));
+        { NextAction("mimiron p3wx2 laser barrage action", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron shock blast trigger",
-        { NextAction("mimiron shock blast action", ACTION_RAID + 1) }));
+        { NextAction("mimiron shock blast action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron fire resistance trigger",
@@ -429,8 +430,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("mimiron phase 1 positioning action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "mimiron rapid burst trigger",
-        { NextAction("mimiron rapid burst action", ACTION_RAID) }));
+        "mimiron arc spread trigger",
+        { NextAction("mimiron arc spread action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron aerial command unit trigger",
@@ -438,32 +439,40 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "mimiron rocket strike trigger",
-        { NextAction("mimiron rocket strike action", ACTION_RAID) }));
+        { NextAction("mimiron rocket strike action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron phase 4 mark dps trigger",
         { NextAction("mimiron phase 4 mark dps action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "mimiron cheat trigger",
-        { NextAction("mimiron cheat action", ACTION_RAID) }));
+        "mimiron magnetic core trigger",
+        { NextAction("mimiron magnetic core action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron plasma blast trigger",
+        { NextAction("mimiron plasma blast action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron set dps priority trigger",
+        { NextAction("mimiron set dps priority action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron proximity mine trigger",
-        { NextAction("mimiron proximity mine action", ACTION_RAID + 2) }));
+        { NextAction("mimiron proximity mine action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron bomb bot trigger",
-        { NextAction("mimiron bomb bot action", ACTION_RAID + 2) }));
+        { NextAction("mimiron bomb bot action", ACTION_RAID + 3) }));
 
     // Hard mode (config-gated): step out of the persistent ground fire and clear the Frost Bomb.
     triggers.push_back(new TriggerNode(
         "mimiron dodge flames trigger",
-        { NextAction("mimiron dodge flames action", ACTION_RAID + 3) }));
+        { NextAction("mimiron dodge flames action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron frost bomb trigger",
-        { NextAction("mimiron frost bomb action", ACTION_RAID + 3) }));
+        { NextAction("mimiron frost bomb action", ACTION_RAID + 4) }));
 
     //
     // General Vezax
@@ -624,6 +633,9 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     // Reserve the Big Bang soaker priest's Dispersion for the Big Bang cast
     multipliers.push_back(new AlgalonMultiplier(botAI));
+    // Mimiron picks every non-tank target in code, so the generic picker has to be shut out
+    multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
+
 
     // XT-002: hold the burst cooldowns for the mode's real damage window, and in normal mode stop
     // damage on the exposed Heart before it dies and flips the raid into hard mode

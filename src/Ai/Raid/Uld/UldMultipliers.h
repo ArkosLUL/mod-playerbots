@@ -40,6 +40,15 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Mimiron: "mimiron set dps priority" owns every non-tank's target, so the generic picker has to
+// stand down or it drags bots back onto whatever is nearest each tick.
+class MimironTargetGuardMultiplier : public Multiplier
+{
+public:
+    MimironTargetGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron target guard") {}
+    float GetValue(Action* action) override;
+};
+
 // Ignis: the two places where the generic behaviour actively breaks the encounter - the Slag Pot
 // victim cannot walk, and the construct tank has to stand in the fire everyone else runs from.
 class IgnisMultiplier : public Multiplier
