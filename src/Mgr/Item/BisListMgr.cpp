@@ -179,8 +179,11 @@ uint8 BisListMgr::MaxPhaseForBot(Player* bot)
     return std::min<uint8>(phase, BIS_PHASE_MAX);
 }
 
-uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase) const
+uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase, uint8* outPhase) const
 {
+    if (outPhase)
+        *outPhase = BIS_PHASE_PRERAID;
+
     if (_ranked.empty())
         return 0;
 
@@ -189,14 +192,25 @@ uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPh
         return 0;
 
     uint8 best = 0;
+    uint8 bestPhase = BIS_PHASE_PRERAID;
     for (RankedEntry const& entry : it->second)
     {
         if (entry.cls != cls || entry.tab != tab || entry.phase > maxPhase)
             continue;
 
+        // Latest phase that still lists the item at its best rank: an item re-listed every tier is
+        // current BiS, one that only ever held the rank pre-raid is not.
         if (!best || entry.rank < best)
+        {
             best = entry.rank;
+            bestPhase = entry.phase;
+        }
+        else if (entry.rank == best && entry.phase > bestPhase)
+            bestPhase = entry.phase;
     }
+
+    if (outPhase)
+        *outPhase = bestPhase;
 
     return best;
 }

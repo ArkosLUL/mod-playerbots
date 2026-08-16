@@ -167,11 +167,13 @@ bool TellCalculateItemAction::Execute(Event event)
     else
     {
         uint8 const phase = BisListMgr::MaxPhaseForBot(bot);
-        uint8 const rank = sBisListMgr->GetBisRank(bot, proto, phase);
-        uint8 const anyPhaseRank = sBisListMgr->GetBisRank(bot, proto, BIS_PHASE_MAX);
+        uint8 listedPhase = 0;
+        uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, phase, &listedPhase);
+        uint8 const anyPhaseRank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, BIS_PHASE_MAX);
 
         out << " | BiS: class " << uint32(bisCls) << " tab " << uint32(bisTab)
             << ", phase cap " << uint32(phase) << ", rank " << uint32(rank)
+            << " listed at phase " << uint32(listedPhase)
             << " (any phase " << uint32(anyPhaseRank) << ")";
     }
 

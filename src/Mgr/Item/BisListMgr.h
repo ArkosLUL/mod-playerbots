@@ -68,8 +68,9 @@ public:
     uint8 GetBisRank(Player* bot, ItemTemplate const* proto, uint8 maxPhase) const;
 
     // Same lookup against an already-resolved spec key, for callers that score many items for one bot
-    // and should not repeat the talent walk in ResolveSpecKey each time.
-    uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase) const;
+    // and should not repeat the talent walk in ResolveSpecKey each time. outPhase receives the latest
+    // phase that still lists the item at the returned rank, so callers can tell current BiS from stale.
+    uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, uint8 maxPhase, uint8* outPhase = nullptr) const;
 
     // Listed at or below the bot's own progression phase. The spec gates use this, and they have to
     // agree with the score nudge about what counts as this bot's BiS - answering "any phase" here lets

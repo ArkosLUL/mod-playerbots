@@ -246,15 +246,28 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
 
     // Phase-limited, unlike the spec gates: a pre-raid BiS piece should stop pulling once the bot has
     // progressed past it.
-    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_cls_, bis_tab_, bis_max_phase_);
+    uint8 entryPhase = 0;
+    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_cls_, bis_tab_, bis_max_phase_, &entryPhase);
 
     // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.1) a ~2.5% nudge is
     // invisible anyway. They still get the spec-gate pass, just no score change.
     if (!rank || rank > 3)
         return 1.0f;
 
-    static constexpr float kRankScale[3] = {1.0f, 2.0f / 3.0f, 1.0f / 3.0f};
-    return 1.0f + sPlayerbotAIConfig.bisScoreBonus * kRankScale[rank - 1];
+    // Without this a leftover pre-raid rank-1 piece is worth exactly as much as the current tier's
+    // rank-1, so the two bonuses cancel and the equipped lower-ilvl piece keeps the slot on the
+    // upgrade threshold alone.
+    float phaseScale = 1.0f;
+    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < bis_max_phase_)
+    {
+        uint8 const behind = bis_max_phase_ - entryPhase;
+        phaseScale = std::max(0.0f, 1.0f - sPlayerbotAIConfig.bisPhaseDecay * behind);
+    }
+
+    // Flat-ish, because ranks 1-3 of a slot's list are near-equivalent picks - the old 1/3 for rank 3
+    // left it below the upgrade threshold's own noise.
+    static constexpr float kRankScale[3] = {1.0f, 0.8f, 0.6f};
+    return 1.0f + sPlayerbotAIConfig.bisScoreBonus * kRankScale[rank - 1] * phaseScale;
 }
 
 float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)

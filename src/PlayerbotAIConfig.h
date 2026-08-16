@@ -414,6 +414,7 @@ public:
     bool rollUpgradesOnly;         // Bots GREED (not NEED) only on gear upgrades, PASS on everything else
     bool bisGateBypass;            // A BiS-listed item skips the stat-based spec/role gates
     float bisScoreBonus;           // Rank-1 score multiplier bonus from the BiS list; 0 disables
+    float bisPhaseDecay;           // Bonus lost per content phase the listing is behind the bot; 0 disables
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
     bool syncQuestForPlayer;

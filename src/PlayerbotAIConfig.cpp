@@ -759,7 +759,8 @@ bool PlayerbotAIConfig::Initialize()
     smartNeedBySpec = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.SmartNeedBySpec", true);
     rollUseGroupUsageChecks = sConfigMgr->GetOption<bool>("AiPlayerbot.Roll.UseGroupUsageChecks", false);
     bisGateBypass = sConfigMgr->GetOption<bool>("AiPlayerbot.Bis.GateBypass", true);
-    bisScoreBonus = sConfigMgr->GetOption<float>("AiPlayerbot.Bis.ScoreBonus", 0.15f);
+    bisScoreBonus = sConfigMgr->GetOption<float>("AiPlayerbot.Bis.ScoreBonus", 0.25f);
+    bisPhaseDecay = sConfigMgr->GetOption<float>("AiPlayerbot.Bis.PhaseDecay", 1.0f);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);
     syncQuestWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestWithPlayer", true);
     syncQuestForPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestForPlayer", false);

@@ -481,9 +481,18 @@ AiPlayerbot.Bis.GateBypass = 1
 
 # Score bonus for a rank-1 listed item, scaled down for ranks 2 and 3 (ranks 4-6 get no bonus).
 # Only affects loot and equip decisions, not bot gear generation. Compare against
-# AiPlayerbot.EquipUpgradeThreshold: at 0.15 a rank-1 item wins while up to ~4% worse on raw score.
-# Default: 0.15 (0 disables the score half and leaves only the gate above)
-AiPlayerbot.Bis.ScoreBonus = 0.15
+# AiPlayerbot.EquipUpgradeThreshold and AiPlayerbot.ItemSet.BonusWeight: at 0.25 a current-phase
+# rank-1 item beats an equipped tier piece that is holding a set bonus on roughly equal raw stats,
+# which is what stops bots sitting on a lower-ilvl set.
+# Default: 0.25 (0 disables the score half and leaves only the gate above)
+AiPlayerbot.Bis.ScoreBonus = 0.25
+
+# Share of the bonus above an item loses for every content phase its best listing sits behind the
+# bot's own progression phase. Without it a leftover rank-1 piece from an old tier is worth as much
+# as the current tier's rank-1, the two bonuses cancel, and the equipped piece keeps the slot on the
+# set bonus and the upgrade threshold alone.
+# Default: 1.0 (only the bot's current phase counts; 0.5 halves per phase, 0 disables the decay)
+AiPlayerbot.Bis.PhaseDecay = 1.0
 
 # Bind-on-Equip etiquette: GREED by default to keep it tradeable.
 # Set to 1 to allow NEED on BoE if it's a clear upgrade.

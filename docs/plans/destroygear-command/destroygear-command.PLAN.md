@@ -50,7 +50,9 @@ Per bagged item:
    — there is no baseline to compare against, so we can't prove it's junk.
 5. **Verdict** — destroy when `baseline - proto->ItemLevel > X`.
 
-Reusing `GetViableSlots` avoids writing a fifth InventoryType→slot mapping; the module already has
+`GetViableSlots` was declared in a private helper block and had to be moved into the public section
+of `RandomItemMgr.h` — it is a const lookup into a table built once at init, so there is nothing to
+protect. Reusing it avoids writing a fifth InventoryType→slot mapping; the module already has
 four ([PlayerbotAI::FindEquipSlot](src/Bot/PlayerbotAI.cpp#L6250),
 [_fillGearScoreData](src/Bot/PlayerbotAI.cpp#L5122),
 [GetPossibleInventoryTypeListBySlot](src/Bot/Factory/PlayerbotFactory.cpp#L5694), and
