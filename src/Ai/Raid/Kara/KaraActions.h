@@ -32,26 +32,6 @@ private:
     bool SetTremorTotem();
 };
 
-class KarazhanResetEncounterStatesAction : public Action
-{
-public:
-    KarazhanResetEncounterStatesAction(
-        PlayerbotAI* botAI) : Action(botAI, "karazhan reset encounter states") {}
-    bool Execute(Event event) override;
-};
-
-class KarazhanCastFearProtectionSpellAction : public Action
-{
-public:
-    KarazhanCastFearProtectionSpellAction(
-        PlayerbotAI* botAI) : Action(botAI, "karazhan cast fear protection spell") {}
-    bool Execute(Event event) override;
-
-private:
-    bool CastFearWardOnMainTank();
-    bool SetTremorTotem();
-};
-
 class ManaWarpStunCreatureBeforeWarpBreachAction : public AttackAction
 {
 public:

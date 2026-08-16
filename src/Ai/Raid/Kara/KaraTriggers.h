@@ -89,14 +89,6 @@ public:
     bool IsActive() override;
 };
 
-class MaidenOfVirtueGroundingTotemConsumesHolyFireTrigger : public Trigger
-{
-public:
-    MaidenOfVirtueGroundingTotemConsumesHolyFireTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "maiden of virtue grounding totem consumes holy fire") {}
-    bool IsActive() override;
-};
-
 class BigBadWolfBossEngagedByTankTrigger : public Trigger
 {
 public:
