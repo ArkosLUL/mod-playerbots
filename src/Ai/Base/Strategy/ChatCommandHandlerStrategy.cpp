@@ -41,6 +41,7 @@ void ChatCommandHandlerStrategy::InitTriggers(std::vector<TriggerNode*>& trigger
     triggers.push_back(new TriggerNode("inv", { NextAction("item count", relevance) }));
     triggers.push_back(new TriggerNode("e", { NextAction("equip", relevance) }));
     triggers.push_back(new TriggerNode("ue", { NextAction("unequip", relevance) }));
+    triggers.push_back(new TriggerNode("dg", { NextAction("destroygear", relevance) }));
     triggers.push_back(new TriggerNode("t", { NextAction("trade", relevance) }));
     triggers.push_back(new TriggerNode("nt", { NextAction("trade", relevance) }));
     triggers.push_back(new TriggerNode("s", { NextAction("sell", relevance) }));
@@ -118,6 +119,7 @@ ChatCommandHandlerStrategy::ChatCommandHandlerStrategy(PlayerbotAI* botAI) : Pas
     supported.push_back("chat");
     supported.push_back("home");
     supported.push_back("destroy");
+    supported.push_back("destroygear");
     supported.push_back("reset botAI");
     supported.push_back("emote");
     supported.push_back("buff");

@@ -78,6 +78,8 @@ public:
         creators["home"] = &ChatTriggerContext::home;
         creators["reset botAI"] = &ChatTriggerContext::reset_ai;
         creators["destroy"] = &ChatTriggerContext::destroy;
+        creators["destroygear"] = &ChatTriggerContext::destroygear;
+        creators["dg"] = &ChatTriggerContext::dg;
         creators["emote"] = &ChatTriggerContext::emote;
         creators["buff"] = &ChatTriggerContext::buff;
         creators["help"] = &ChatTriggerContext::help;
@@ -212,6 +214,8 @@ private:
     static Trigger* buff(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "buff"); }
     static Trigger* emote(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "emote"); }
     static Trigger* destroy(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "destroy"); }
+    static Trigger* destroygear(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "destroygear"); }
+    static Trigger* dg(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "dg"); }
     static Trigger* home(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "home"); }
     static Trigger* accept(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "accept"); }
     static Trigger* chat(PlayerbotAI* botAI) { return new ChatCommandTrigger(botAI, "chat"); }

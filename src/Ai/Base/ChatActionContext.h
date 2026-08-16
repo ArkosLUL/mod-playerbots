@@ -20,6 +20,7 @@
 #include "CheatAction.h"
 #include "CustomStrategyEditAction.h"
 #include "DebugAction.h"
+#include "DestroyGearAction.h"
 #include "DestroyItemAction.h"
 #include "DropQuestAction.h"
 #include "EquipAction.h"
@@ -149,6 +150,7 @@ public:
         creators["chat"] = &ChatActionContext::chat;
         creators["home"] = &ChatActionContext::home;
         creators["destroy"] = &ChatActionContext::destroy;
+        creators["destroygear"] = &ChatActionContext::destroygear;
         creators["reset botAI"] = &ChatActionContext::reset_ai;
         creators["buff"] = &ChatActionContext::buff;
         creators["help"] = &ChatActionContext::help;
@@ -255,6 +257,7 @@ private:
     static Action* help(PlayerbotAI* botAI) { return new HelpAction(botAI); }
     static Action* buff(PlayerbotAI* botAI) { return new BuffAction(botAI); }
     static Action* destroy(PlayerbotAI* botAI) { return new DestroyItemAction(botAI); }
+    static Action* destroygear(PlayerbotAI* botAI) { return new DestroyGearAction(botAI); }
     static Action* home(PlayerbotAI* botAI) { return new SetHomeAction(botAI); }
     static Action* chat(PlayerbotAI* botAI) { return new ChangeChatAction(botAI); }
     static Action* attack_my_target(PlayerbotAI* botAI) { return new AttackMyTargetAction(botAI); }
