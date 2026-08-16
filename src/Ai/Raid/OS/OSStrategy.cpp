@@ -65,5 +65,6 @@ void RaidOsStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 void RaidOsStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new SartharionMultiplier(botAI));
+    multipliers.push_back(new OsMechanicPriorityMultiplier(botAI));
     multipliers.push_back(new SartharionBurstWindowMultiplier(botAI));
 }

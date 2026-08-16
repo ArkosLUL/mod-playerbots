@@ -12,17 +12,6 @@
 
 using namespace OsHelpers;
 
-namespace
-{
-
-// A shifted bot is in phase 16 and cannot be touched by, or even see, anything on the platform.
-bool OnThePlatform(Player* bot)
-{
-    return bot->GetMapId() == OS_MAP_ID && !HasTwilightShift(bot);
-}
-
-}
-
 bool SartharionDpsTrigger::IsActive()
 {
     if (!botAI->IsDps(bot))
@@ -42,43 +31,12 @@ bool SartharionMeleePositioningTrigger::IsActive()
 
 bool OsTsunamiCorridorTrigger::IsActive()
 {
-    // Not a dodge: nothing in phase 16 can be touched by a wave. This is where the bot will be standing
-    // when the shift is stripped, which the raid's shared portal refcount only allows once the last
-    // twilight add is dead - and then on any tick, with no warning and no time to walk out of a lane.
-    if (HasTwilightShift(bot))
-    {
-        if (!TwilightRealmWaveWait(bot) || WaveClearsY(bot->GetPositionY(), ClassifyTsunamiWave(bot)))
-            return false;
-
-        return std::abs(bot->GetPositionY() - SafeCorridorY(bot)) > CorridorToleranceFor(bot);
-    }
-
-    if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
-        return false;
-
-    TsunamiWave const wave = ClassifyTsunamiWave(bot);
-    if (wave == TsunamiWave::None)
-        return false;
-
-    // A bot already standing where this pattern cannot reach stays put. The corridor holds are the
-    // fallback, not the only safe ground: the off-tank's drake spots and melee behind a drake clear
-    // some of the lines outright, and walking them 28yd to a lane that is no safer costs the trip
-    // twice - and the walk back is what their own hold spends the next tick undoing.
-    if (WaveClearsY(bot->GetPositionY(), wave))
-        return false;
-
-    return std::abs(bot->GetPositionY() - SafeCorridorY(bot)) > CorridorToleranceFor(bot);
+    return NeedsTsunamiDodge(bot);
 }
 
 bool OsTwilightFissureTrigger::IsActive()
 {
-    if (!OnThePlatform(bot) || !SartharionEncounterActive(bot))
-        return false;
-
-    // requireSelectable off. The fissure is UNIT_FLAG_NOT_SELECTABLE for its whole life, so the
-    // default search skipped it and this trigger had never fired.
-    return FindUnitByEntries(bot, { NpcId::TwilightFissure, NpcId::TwilightFissureH },
-                             FISSURE_CLEAR_RADIUS, false) != nullptr;
+    return NeedsFissureDodge(bot);
 }
 
 bool OsMainTankHoldTrigger::IsActive()
@@ -137,7 +95,9 @@ bool OsMainTankCooldownTrigger::IsActive()
 
 bool OsTranquilizeTrigger::IsActive()
 {
-    if (bot->getClass() != CLASS_HUNTER || !OnThePlatform(bot))
+    // Encounter-gated ahead of the sweep: without it every hunter ran a 35yd search every tick
+    // anywhere on map 615, trash and pre-pull included.
+    if (bot->getClass() != CLASS_HUNTER || !OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
     return TranquilizeTargetFor(bot) != nullptr;
@@ -215,25 +175,7 @@ bool OsTankShapeshiftTrigger::IsActive()
 
 bool OsOffPlatformTrigger::IsActive()
 {
-    // Not gated on OnThePlatform: that excludes shifted bots, and the Twilight Realm sits on the same
-    // coordinates. A shifted bot cannot resolve Sartharion anyway, so the encounter gate covers it.
-    // Bounded by the 200yd Sartharion search, so this catches a bot on its first step off the arena
-    // rather than one that is already halfway across the zone.
-    if (bot->GetMapId() != OS_MAP_ID || !SartharionEncounterActive(bot))
-        return false;
-
-    if (!InsideRoom(bot))
-        return true;
-
-    // The pull drag corner is a hand-measured position 1.74yd south of PLATFORM_MIN_Y, so the one bot
-    // meant to stand off the box is exempt until the drag latches.
-    Unit* boss = GetSartharion(bot);
-    if (botAI->IsMainTank(bot) && boss && !MainTankDragDone(boss))
-        return false;
-
-    // The room box is 18yd wider than the platform on X, so without this a bot standing in the lava
-    // off the east rim reads as in the fight and nothing ever walks it back.
-    return OffThePlatform(bot);
+    return NeedsPlatformReturn(botAI, bot);
 }
 
 bool TwilightPortalEnterTrigger::IsActive()

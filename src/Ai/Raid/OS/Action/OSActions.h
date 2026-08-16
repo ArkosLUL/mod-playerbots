@@ -16,8 +16,17 @@
 
 // Every positioning action here anchors on a constant (Sartharion's home X, a drake landing coord)
 // plus the raid-wide corridor Y, never on a moving reference, so there is nothing to freeze into slot
-// state. Combined with the arrival tolerances below and the duplicate-move guard already inside
-// MoveTo, that is what keeps the bots from oscillating.
+// state. What stops the re-issued move each tick is the arrival tolerance below plus the movement
+// lock MoveTo stamps - not IsDuplicateMove, which needs the destination within 0.01yd of the last one
+// and never fires here.
+//
+// MovementPriority is a separate ladder from the ACTION_* one. ACTION_* decides which action runs;
+// MovementPriority decides whether its MoveTo is accepted at all, because IsWaitingForLastMove
+// compares with a strict >. So a dodge issued at the same priority as the hold it has to interrupt is
+// silently refused for as long as the hold's lock lasts - up to MaxWaitForMove, which is longer than
+// the 3.6s a Flame Tsunami gives. The three emergency dodges issue at MOVEMENT_FORCED for that
+// reason; everything else stays at MOVEMENT_COMBAT. Precedence between the three FORCED dodges cannot
+// come from this ladder (FORCED > FORCED is false) and is settled by OsMechanicPriorityMultiplier.
 class OsPositioningAction : public MovementAction
 {
 public:
@@ -25,8 +34,15 @@ public:
 
 protected:
     // Clamps to the platform and then inside a Range Marker circle, drops the move when already
-    // within tolerance, and issues it at combat priority otherwise.
-    bool MoveToClamped(float x, float y, float tolerance = OsHelpers::CORRIDOR_ARRIVAL_TOLERANCE);
+    // within tolerance, and issues it otherwise.
+    bool MoveToClamped(float x, float y, float tolerance = OsHelpers::CORRIDOR_ARRIVAL_TOLERANCE,
+                       MovementPriority priority = MovementPriority::MOVEMENT_COMBAT);
+
+    // Resolves the destination's own ground Z rather than reusing the bot's, validates it against
+    // collision, and issues the move. Callers that clamp and test the destination themselves use this
+    // directly. rejectOnCollision is true for the dodges, where a blocked path means try elsewhere,
+    // and false for routine holds, which take the clamped coordinates and walk.
+    bool IssueMove(float x, float y, MovementPriority priority, bool rejectOnCollision);
 };
 
 class OsTsunamiCorridorAction : public OsPositioningAction
@@ -45,11 +61,22 @@ public:
     bool Execute(Event event) override;
 };
 
-class OsMainTankHoldAction : public AttackAction
+// The two holds that keep a victim as well as a position. They need Attack(), so they cannot share
+// OsPositioningAction's base, but their moves go through the same destination gate.
+class OsHoldAction : public AttackAction
+{
+public:
+    OsHoldAction(PlayerbotAI* botAI, std::string const name) : AttackAction(botAI, name) {}
+
+protected:
+    bool IssueMove(float x, float y, MovementPriority priority, bool rejectOnCollision);
+};
+
+class OsMainTankHoldAction : public OsHoldAction
 {
 public:
     OsMainTankHoldAction(PlayerbotAI* botAI, std::string const name = "os main tank hold")
-        : AttackAction(botAI, name) {}
+        : OsHoldAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 
@@ -102,11 +129,11 @@ public:
     bool Execute(Event event) override;
 };
 
-class OsOffTankHoldAction : public AttackAction
+class OsOffTankHoldAction : public OsHoldAction
 {
 public:
     OsOffTankHoldAction(PlayerbotAI* botAI, std::string const name = "os offtank hold")
-        : AttackAction(botAI, name) {}
+        : OsHoldAction(botAI, name) {}
     bool Execute(Event event) override;
 };
 

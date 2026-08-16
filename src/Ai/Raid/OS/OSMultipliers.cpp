@@ -260,3 +260,47 @@ float SartharionBurstWindowMultiplier::EvaluateWindow()
 
     return SartharionBurstWindowOpen(bot) ? 1.0f : 0.0f;
 }
+
+float OsMechanicPriorityMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    Mechanic const live = Live();
+    if (live == Mechanic::None)
+        return 1.0f;
+
+    switch (live)
+    {
+        case Mechanic::OffPlatform:
+            return dynamic_cast<OsReturnToPlatformAction*>(action) ? 1.0f : 0.0f;
+        case Mechanic::Tsunami:
+            return dynamic_cast<OsTsunamiCorridorAction*>(action) ? 1.0f : 0.0f;
+        case Mechanic::Fissure:
+            return dynamic_cast<OsAvoidTwilightFissureAction*>(action) ? 1.0f : 0.0f;
+        default:
+            return 1.0f;
+    }
+}
+
+OsMechanicPriorityMultiplier::Mechanic OsMechanicPriorityMultiplier::Live()
+{
+    uint32 const now = getMSTime();
+    if (cachedAtMs == now)
+        return cached;
+
+    cachedAtMs = now;
+
+    // The same three predicates the triggers run, in precedence order. Sharing them is what keeps this
+    // multiplier from suppressing every mover for a mechanic whose own action would never fire.
+    if (NeedsPlatformReturn(botAI, bot))
+        cached = Mechanic::OffPlatform;
+    else if (NeedsTsunamiDodge(bot))
+        cached = Mechanic::Tsunami;
+    else if (NeedsFissureDodge(bot))
+        cached = Mechanic::Fissure;
+    else
+        cached = Mechanic::None;
+
+    return cached;
+}

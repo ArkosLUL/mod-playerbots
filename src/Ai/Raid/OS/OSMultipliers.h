@@ -34,6 +34,38 @@ private:
     TickState cached;
 };
 
+// Settles which of the three emergency dodges owns the tick. All three issue at MOVEMENT_FORCED so
+// they can preempt a hold's movement lock, but that ladder cannot rank them against each other -
+// IsWaitingForLastMove compares with a strict >, so FORCED never beats FORCED. Precedence is encoded
+// here instead, the way FelmystPrioritizeDemonicVaporKiteMultiplier does it: each mechanic whitelists
+// its own action and zeroes every other mover while it is live.
+//
+// Off the platform beats a tsunami beats a fissure. Standing off the platform is the only one of the
+// three that does not fix itself - the bot is in lava and no hold will walk it back - a tsunami is
+// lethal on contact, and a Void Blast is survivable.
+class OsMechanicPriorityMultiplier : public Multiplier
+{
+public:
+    OsMechanicPriorityMultiplier(PlayerbotAI* ai) : Multiplier(ai, "os mechanic priority") {}
+    float GetValue(Action* action) override;
+
+private:
+    enum class Mechanic : uint8
+    {
+        None,
+        Fissure,
+        Tsunami,
+        OffPlatform
+    };
+
+    // Sweeps for tsunamis and fissures, so it is cached for the rest of the tick rather than re-run
+    // once per action the way GetValue is called.
+    Mechanic Live();
+
+    uint32 cachedAtMs = 0;
+    Mechanic cached = Mechanic::None;
+};
+
 // Holds every offensive throughput cooldown until the raid commits, which is Tenebron at half health.
 // The 30% enrage stays as a backstop for a run that somehow gets there without it. There is no hard
 // enrage to race - the 15 minute berserk is scheduled into extraEvents but handled in the events
