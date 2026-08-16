@@ -19,12 +19,10 @@
 #include "UldBossHelper.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
-#include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"
 #include "Vehicle.h"
-#include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
 
 bool FreyaMoveAwayNatureBombAction::isUseful()
@@ -53,120 +51,160 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
     return FleePosition(target->GetPosition(), 13.0f);
 }
 
-bool FreyaMarkDpsTargetAction::isUseful()
+bool FreyaSetDpsPriorityAction::isUseful()
 {
-    FreyaMarkDpsTargetTrigger freyaMarkDpsTargetTrigger(botAI);
-    return freyaMarkDpsTargetTrigger.IsActive();
+    FreyaSetDpsPriorityTrigger trigger(botAI);
+    return trigger.IsActive();
 }
 
-bool FreyaMarkDpsTargetAction::Execute(Event /*event*/)
+bool FreyaSetDpsPriorityAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
-    if (!boss || !boss->IsAlive())
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    Unit* target = ResolveFreyaDpsTarget(currentTarget);
+    if (!target)
         return false;
 
-    Unit* targetToMark = nullptr;
+    // Every tick, not only on a switch: the early return below is the common case, and a pet left on
+    // a dead or floored add would never catch up. CommandPetAttack no-ops when it is already there.
+    CommandPetAttack(botAI, target);
 
-    // Check which adds is up
-    Unit* eonarsGift = nullptr;
-    Unit* ancientConservator = nullptr;
-    Unit* ancientWaterSpirit = nullptr;
-    Unit* stormLasher = nullptr;
-    Unit* firstDetonatingLasher = nullptr;
+    bool needsAttack = currentTarget != target;
+    if (PlayerbotAI::IsMelee(bot))
+        needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets");
-    Unit* target = nullptr;
-    for (auto i = targets.begin(); i != targets.end(); ++i)
+    // Returning false once the bot is on the right target is what lets the lower-priority nodes run:
+    // the engine ends the tick at the first action that succeeds.
+    return needsAttack ? Attack(target) : false;
+}
+
+Unit* FreyaSetDpsPriorityAction::SelectNearestLasher(Unit* currentTarget, std::vector<Unit*> const& candidates) const
+{
+    Unit* selected = nullptr;
+    if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == NPC_DETONATING_LASHER)
+        selected = currentTarget;
+
+    // The margin stops two lashers at similar range from trading the bot back and forth every tick.
+    constexpr float switchMargin = 10.0f;
+    for (Unit* candidate : candidates)
     {
-        target = botAI->GetUnit(*i);
-        if (!target || !target->IsAlive())
+        if (!candidate || candidate == selected)
             continue;
 
-        if (target->GetEntry() == NPC_EONARS_GIFT)
-            eonarsGift = target;
-        else if (target->GetEntry() == NPC_ANCIENT_CONSERVATOR)
-            ancientConservator = target;
-        else if (target->GetEntry() == NPC_ANCIENT_WATER_SPIRIT)
-            ancientWaterSpirit = target;
-        else if (target->GetEntry() == NPC_STORM_LASHER)
-            stormLasher = target;
-        else if (target->GetEntry() == NPC_DETONATING_LASHER && !firstDetonatingLasher)
-            firstDetonatingLasher = target;
-    }
-
-    // Check that eonars gift is need to be mark
-    if (eonarsGift)
-        targetToMark = eonarsGift;
-
-    // Check that ancient conservator is need to be mark
-    if (ancientConservator && !targetToMark)
-        targetToMark = ancientConservator;
-
-    // Trio wave: Storm Lasher is the burst/interrupt priority, Ancient Water Spirit next.
-    // The Snaplasher hardens the more attackers strike it, so it is deliberately left
-    // unmarked to avoid funnelling the whole raid onto it (which would make it invulnerable).
-    if (!targetToMark)
-    {
-        if (stormLasher)
-            targetToMark = stormLasher;
-        else if (ancientWaterSpirit)
-            targetToMark = ancientWaterSpirit;
-    }
-
-    // Check that detonating lasher is need to be mark
-    if (firstDetonatingLasher && !targetToMark)
-        targetToMark = firstDetonatingLasher;
-
-    if (!targetToMark)
-        return false;  // No target to mark
-
-    bool isMainTank = botAI->IsMainTank(bot);
-    Unit* mainTankUnit = AI_VALUE(Unit*, "main tank");
-    Player* mainTank = mainTankUnit ? mainTankUnit->ToPlayer() : nullptr;
-    int8 squareIndex = 5;  // Square
-    int8 skullIndex = 7;   // Skull
-
-    if (mainTank && !GET_PLAYERBOT_AI(mainTank))  // Main tank is a real player
-    {
-        // Iterate through the first 3 bot tanks to assign the Skull marker
-        for (int i = 0; i < 3; ++i)
+        if (!selected)
         {
-            if (botAI->IsAssistTankOfIndex(bot, i) && GET_PLAYERBOT_AI(bot))  // Bot is a valid tank
-            {
-                Group* group = bot->GetGroup();
-                if (group)
-                {
-                    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-
-                    if (!currentSkullTarget || (targetToMark->GetGUID() != currentSkullTarget))
-                    {
-                        group->SetTargetIcon(skullIndex, bot->GetGUID(), targetToMark->GetGUID());
-                        group->SetTargetIcon(squareIndex, bot->GetGUID(), boss->GetGUID());
-                        return true;
-                    }
-                }
-                break;
-            }
+            selected = candidate;
+            continue;
         }
-    }
-    else if (isMainTank)  // Bot is the main tank
-    {
-        Group* group = bot->GetGroup();
-        if (group)
-        {
-            ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
 
-            if (!currentSkullTarget || (targetToMark->GetGUID() != currentSkullTarget))
-            {
-                group->SetTargetIcon(skullIndex, bot->GetGUID(), targetToMark->GetGUID());
-                group->SetTargetIcon(squareIndex, bot->GetGUID(), boss->GetGUID());
-                botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("square");
-                return true;
-            }
+        if (candidate->GetExactDist2d(bot) + switchMargin < selected->GetExactDist2d(bot))
+            selected = candidate;
+    }
+
+    return selected;
+}
+
+Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
+{
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    // Eonar's Gift heals Freya for 30-60% if it lives 12s. Ranged burn it from where they stand, so
+    // melee never eat the travel time both ways - unless there is no ranged DPS left to do it.
+    bool const takesGift = PlayerbotAI::IsRangedDps(bot) || !FreyaHasLivingRangedDps(botAI);
+
+    // Once the trio is low, leaving it costs the whole wave: a member abandoned above the floor
+    // revives 11s later, and the 60s until the next wave spawns is gone.
+    bool const trioLocked = state.TrioLocked();
+
+    std::vector<Unit*> priority;
+
+    if (takesGift && !state.TrioReleased())
+        priority.push_back(state.eonarsGift);
+
+    if (!trioLocked)
+        priority.push_back(state.conservator);
+
+    // One slot for all three members; which one this bot takes is the greedy split, not entry order.
+    Unit* const trioMember = GetFreyaTrioAssignment(botAI, state);
+    priority.push_back(trioMember);
+
+    if (trioLocked)
+        priority.push_back(state.conservator);
+    else
+        priority.push_back(SelectNearestLasher(currentTarget, state.detonatingLashers));
+
+    priority.push_back(AI_VALUE2(Unit*, "find target", "freya"));
+
+    Unit* target = nullptr;
+    for (Unit* candidate : priority)
+    {
+        if (candidate && candidate->IsAlive())
+        {
+            target = candidate;
+            break;
         }
     }
 
-    return false;
+    // Hold the current target unless something strictly more urgent is up, so a churn of adds cannot
+    // keep resetting swing and cast timers. The trio slot is exempt: GetFreyaTrioAssignment is already
+    // stable by construction, and stickiness on top would freeze each bot onto its first pick.
+    auto const priorityIndex = [&priority](Unit* unit) -> size_t
+    {
+        if (!unit || !unit->IsAlive())
+            return priority.size();
+
+        for (size_t i = 0; i < priority.size(); ++i)
+        {
+            if (priority[i] == unit)
+                return i;
+        }
+
+        return priority.size();
+    };
+
+    if (currentTarget && currentTarget != trioMember && target != trioMember &&
+        priorityIndex(currentTarget) <= priorityIndex(target))
+    {
+        target = currentTarget;
+    }
+
+    return target ? target : AI_VALUE(Unit*, "dps target");
+}
+
+bool FreyaTankAddsAction::isUseful()
+{
+    FreyaTankAddsTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaTankAddsAction::Execute(Event /*event*/)
+{
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    Unit* target = GetFreyaTankTarget(botAI, state);
+    if (!target)
+        return false;
+
+    if (target->GetVictim() != bot && UldCastClassTaunt(botAI, target))
+        return true;
+
+    return AI_VALUE(Unit*, "current target") != target ? Attack(target) : false;
+}
+
+bool FreyaAvoidDetonatingLasherAction::isUseful()
+{
+    FreyaAvoidDetonatingLasherTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaAvoidDetonatingLasherAction::Execute(Event /*event*/)
+{
+    Creature* lasher = bot->FindNearestCreature(NPC_DETONATING_LASHER, ULDUAR_FREYA_DETONATE_RADIUS);
+    if (!lasher || !lasher->IsAlive())
+        return false;
+
+    return FleePosition(lasher->GetPosition(), ULDUAR_FREYA_DETONATE_RADIUS + 1.0f);
 }
 
 bool FreyaMoveToHealingSporeAction::isUseful()

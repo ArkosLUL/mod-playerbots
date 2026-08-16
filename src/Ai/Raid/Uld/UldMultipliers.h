@@ -98,6 +98,30 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Freya picks every DPS bot's target in code so the trio wave can be split three ways. Without this
+// the generic picker reclaims those targets on alternating ticks and the split never holds. The main
+// tank is also fenced off generic tank assist, which would otherwise walk it off Freya onto a
+// loose Storm Lasher.
+class FreyaDisableAutomaticTargetingMultiplier : public Multiplier
+{
+public:
+    FreyaDisableAutomaticTargetingMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "freya disable automatic targeting")
+    {
+    }
+    float GetValue(Action* action) override;
+};
+
+// Backstop for the trio sync: the target split normally steers bots off a member that is too far
+// ahead, so this only catches damage the targeting cannot steer - a swing mid-animation, a DoT
+// already ticking.
+class FreyaTrioSyncMultiplier : public Multiplier
+{
+public:
+    FreyaTrioSyncMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya trio sync") {}
+    float GetValue(Action* action) override;
+};
+
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
 // encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
 class UldThreatRedirectMultiplier : public Multiplier

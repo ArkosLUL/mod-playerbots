@@ -599,6 +599,206 @@ Unit* GetXT002ExposedHeart(PlayerbotAI* botAI)
 }
 
 bool IsXT002Submerged(PlayerbotAI* botAI)
+// Freya
+
+std::vector<Unit*> FreyaWaveState::LivingTrio() const
+{
+    std::vector<Unit*> living;
+    for (Unit* member : {snaplasher, stormLasher, waterSpirit})
+    {
+        if (member && member->IsAlive())
+            living.push_back(member);
+    }
+
+    return living;
+}
+
+bool FreyaWaveState::TrioLocked() const
+{
+    for (Unit* member : LivingTrio())
+    {
+        if (member->GetHealthPct() < ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT)
+            return true;
+    }
+
+    return false;
+}
+
+bool FreyaWaveState::TrioReleased() const
+{
+    std::vector<Unit*> const living = LivingTrio();
+    if (living.empty())
+        return false;
+
+    for (Unit* member : living)
+    {
+        if (member->GetHealthPct() > ULDUAR_FREYA_TRIO_FLOOR_RELEASE_PCT)
+            return false;
+    }
+
+    return true;
+}
+
+void GatherFreyaWaveState(PlayerbotAI* botAI, FreyaWaveState& state)
+{
+    // Waves spawn on a fixed 60s timer whether or not the last one died, so two sets of the same add
+    // can be up at once. Keeping the more damaged one finishes the older wave first, and - because
+    // the scan order is not stable - it is also what stops the split target flipping between two
+    // identical adds from tick to tick.
+    auto const keepMoreDamaged = [](Unit*& slot, Unit* candidate)
+    {
+        if (!slot || candidate->GetHealth() < slot->GetHealth())
+            slot = candidate;
+    };
+
+    // "possible targets" enforces line of sight, which drops adds behind Freya's tree trunks out of
+    // the scan and makes the split disagree between bots standing on opposite sides.
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        switch (unit->GetEntry())
+        {
+            case NPC_EONARS_GIFT:
+                keepMoreDamaged(state.eonarsGift, unit);
+                break;
+            case NPC_ANCIENT_CONSERVATOR:
+                keepMoreDamaged(state.conservator, unit);
+                break;
+            case NPC_SNAPLASHER:
+                keepMoreDamaged(state.snaplasher, unit);
+                break;
+            case NPC_STORM_LASHER:
+                keepMoreDamaged(state.stormLasher, unit);
+                break;
+            case NPC_ANCIENT_WATER_SPIRIT:
+                keepMoreDamaged(state.waterSpirit, unit);
+                break;
+            case NPC_DETONATING_LASHER:
+                state.detonatingLashers.push_back(unit);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+bool FreyaTrioSyncSuppress(FreyaWaveState const& state, Unit* target)
+{
+    if (!target)
+        return false;
+
+    if (target != state.snaplasher && target != state.stormLasher && target != state.waterSpirit)
+        return false;
+
+    std::vector<Unit*> const living = state.LivingTrio();
+
+    // Below three the window is already open and counting down; holding damage back now only lets the
+    // ones already dead come back.
+    if (living.size() < 3)
+        return false;
+
+    if (state.TrioReleased())
+        return false;
+
+    if (target->GetHealthPct() > ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT)
+        return false;
+
+    for (Unit* member : living)
+    {
+        if (member != target && member->GetHealthPct() > ULDUAR_FREYA_TRIO_FLOOR_RELEASE_PCT)
+            return true;
+    }
+
+    return false;
+}
+
+Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    std::vector<Unit*> candidates;
+    for (Unit* member : state.LivingTrio())
+    {
+        if (!FreyaTrioSyncSuppress(state, member))
+            candidates.push_back(member);
+    }
+
+    // Everything floored at once should be impossible - the release check clears the floor as soon as
+    // the last member joins the band - but a bot with nothing to hit would fall through to the boss.
+    if (candidates.empty())
+        candidates = state.LivingTrio();
+
+    if (candidates.empty())
+        return nullptr;
+
+    std::vector<uint32> assigned(candidates.size(), 0);
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsDps(member))
+            continue;
+
+        // Whichever member would carry the most remaining health per attacker if this bot joined it.
+        // Over the whole group that lands a split proportional to remaining health, which is the
+        // quantity that has to reach zero at the same time.
+        size_t pick = 0;
+        float best = -1.0f;
+        for (size_t i = 0; i < candidates.size(); ++i)
+        {
+            float const share = float(candidates[i]->GetHealth()) / float(assigned[i] + 1);
+            if (share > best)
+            {
+                best = share;
+                pick = i;
+            }
+        }
+
+        ++assigned[pick];
+
+        if (member == bot)
+            return candidates[pick];
+    }
+
+    return nullptr;
+}
+
+Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state)
+{
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
+        return nullptr;
+
+    if (state.snaplasher && state.snaplasher->IsAlive())
+        return state.snaplasher;
+
+    if (state.conservator && state.conservator->IsAlive())
+        return state.conservator;
+
+    return nullptr;
+}
+
+bool FreyaHasLivingRangedDps(PlayerbotAI* botAI)
+{
+    Group* group = botAI->GetBot()->GetGroup();
+    if (!group)
+        return false;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && PlayerbotAI::IsRangedDps(member))
+            return true;
+    }
+
+    return false;
+}
+
 {
     Unit* xt002 = GetXT002(botAI);
     if (!xt002)

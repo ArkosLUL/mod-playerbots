@@ -282,6 +282,73 @@ to confirm in-game.
 
 ### Freya
 
+**The trio wave is the whole encounter.** Snaplasher (32916), Storm Lasher (32919) and Ancient Water
+Spirit (33202) each start their *own* 11s revive timer on death and come back unless all three are
+down when it expires (`boss_freya.cpp:1155-1198`, `ReviveWithAllies` aborts on `DATA_TRIO_DOWN >= 3`).
+A revived member removes no further `Attuned to Nature` stacks, so a raid that keeps missing the
+window makes no progress at all.
+
+They do not have equal health, which is what makes the sync hard. From `creature_template`
+`difficulty_entry_1`:
+
+| Add | 10-man | 25-man |
+|---|---|---|
+| Snaplasher | 312 792 | 977 475 |
+| Storm Lasher | 234 594 | 781 980 |
+| Ancient Water Spirit | 188 748 | 524 300 |
+
+**Hardened Bark (62663) does not make the Snaplasher tankier.** It stacks to 99 at +10%
+`MOD_DAMAGE_PERCENT_DONE` each, applied by proc 62664 when the Snaplasher is struck, and resets after
+4s without a hit. It is a threat to whoever tanks it, never a reason to stop damaging it. An earlier
+version of this strategy withheld all raid damage from the Snaplasher on the opposite assumption,
+which is why the trio could never die together.
+
+There is also a hard clock: `EVENT_FREYA_ADDS_SPAM` repeats every **60s** regardless of progress
+(`boss_freya.cpp:612-623`), capped at 6 waves, so an uncleared wave gets a second one stacked on it.
+In 25-man that is 2.28M trio health inside 60s, a ~38k raid DPS floor. Lifebinder's Gift repeats every
+45s (`:625-629`), so Eonar's Gift always overlaps a trio kill.
+
+**How the bots solve it.** DPS bots are split three ways by `GetFreyaTrioAssignment`: a greedy load
+balance over *remaining* health, recomputed every tick. Every bot walks the same group order over the
+same numbers and reaches the same split, so it needs no shared state — and it self-corrects, since a
+member the raid over-kills sheds attackers on the next tick. Splitting rather than focus-firing also
+keeps roughly two thirds of the raid off the Snaplasher at any moment, which holds Hardened Bark far
+below its cap without anyone having to withhold damage.
+
+`FreyaTrioSyncSuppress` is a backstop, not the mechanism: it only blocks damage on a member below
+`ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT` (10%) while a sibling is still above
+`ULDUAR_FREYA_TRIO_FLOOR_RELEASE_PCT` (15%), and releases entirely once all three are in the band.
+A suppressed member drops out of the assignment candidates, so its bots move to a sibling instead of
+standing idle. The band covers only the last tenth of the wave, about 6s of raid damage out of the
+60s budget.
+
+**Targeting is direct — Freya writes no raid icons.** `FreyaSetDpsPriorityAction` sets each DPS bot's
+target itself, in the SWP M'uru shape (`SWPActions_Muru.cpp:178-380`), and
+`FreyaDisableAutomaticTargetingMultiplier` stands the generic pickers down so they cannot reclaim it.
+The trio target changes several times per wave as health converges, which a group icon cannot carry
+without one bot spamming `SetTargetIcon` for everyone else to read back a tick later. A human's own
+marks are not honoured here.
+
+Priority order is Eonar's Gift > Ancient Conservator > trio slot > Detonating Lasher > Freya, with
+two reorderings: once any trio member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio
+outranks the other adds, and once every member is in the release band nothing pulls a bot away at all.
+Eonar's Gift is a ranged DPS job (12s to a 30-60% Freya heal) so melee never eat the travel time both
+ways, falling back to melee when no ranged DPS is alive.
+
+**Conservator's Grip (62532) is a 50000 yd pacify-silence** — it cannot be outranged, so melee need a
+Healthy Spore just as much as ranged. The counter is Potent Pheromones (64321), a 6 yd ally aura on
+the spore; the trigger keys off that aura rather than distance, because a bot can be inside 6 yd of a
+spore that has not landed it yet. Tanks are excluded: walking one to a spore drags the Conservator
+into the raid.
+
+Only **assist tank 0** is claimed by the encounter, for the Snaplasher. Storm Lasher and Ancient
+Water Spirit stay with generic tank assist, because owning them would mean owning Tidal Wave
+positioning too. The main tank is fenced off `TankAssistAction` so it cannot be walked off Freya.
+
+Detonating Lashers fixate on random players and cannot be tanked or herded, so there is no stacking
+behaviour — bots too low to survive Detonate (62598, 15 yd) step outside it and everything else
+cleaves them down.
+
 Hard mode = Elders left alive at pull (Brightleaf 32915 / Stonebark 32914 / Ironbranch 32913). Per
 living Elder, Freya gains an extra ability: Iron Roots (62862), Unstable Sun Beam (62450), or Ground
 Tremor (62437, raid-wide knockback — not handled, undodgeable).
@@ -298,7 +365,7 @@ The two object types differ in a way that matters:
 - **Beam stalkers 33170 / 33050 are non-selectable** (`0x2000000`), so they never appear in
   attack-target lists — find them by scanning `"nearest npcs"`.
 
-Breaking Iron Roots sits at `ACTION_RAID + 3`, above the Sun Beam dodge at `+2`, because **a rooted
+Breaking Iron Roots sits at `ACTION_RAID + 5`, above the Sun Beam dodge at `+4`, because **a rooted
 bot cannot move**, so it must free itself before it can step out of anything. The beam dodge flees
 the centroid of the in-range beam cluster, not the single nearest beam.
 `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is a DBC guess.
@@ -748,7 +815,7 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 | **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |
 | **Vezax** | Saronite Vapor puddles never dodged |
 | **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt (focus and the Flame Breath cone are handled) |
-| **Freya** | Snaplasher is only skull-marked, so bots multi-DPS it and it hardens; Storm Lasher cast not interrupted |
+| **Freya** | Storm Lasher (Stormbolt, Lightning Lash) and Ancient Water Spirit (Tidal Wave) casts are not interrupted |
 | **Algalon** | Collapsing Star (32955) unhandled — both `big bang hide` and `constellation kite` search only for *existing* Black Holes and silently fail when none exist |
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:

@@ -86,6 +86,10 @@ enum UlduarIDs
     SPELL_IRON_ROOTS_DAMAGE = 62283,            // DoT on a player trapped by Ironbranch's roots
     SPELL_IRON_ROOTS_FREYA_DAMAGE = 62861,      // DoT on a player trapped by Freya's roots
 
+    // Applied to allies within 6 yd of a Healthy Spore; grants immunity to Conservator's Grip.
+    // 62541 is what the spore casts on itself - this is the spell that actually lands on players.
+    SPELL_POTENT_PHEROMONES = 64321,
+
     // Thorim
     NPC_DARK_RUNE_ACOLYTE_I = 32886,
     NPC_CAPTURED_MERCENARY_SOLDIER_ALLY = 32885,
@@ -374,6 +378,22 @@ constexpr float ULDUAR_MIMIRON_BARRAGE_MIN_RADIUS = 10.0f;
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
 constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
 
+// Freya trio wave (Snaplasher / Storm Lasher / Ancient Water Spirit). Each member starts its own 11s
+// revive timer on death and comes back unless all three are down when it expires, so they have to die
+// together. The band only covers the last tenth of the wave - about 6s of raid damage out of the 60s
+// the next wave takes to spawn - so it is deliberately wide.
+constexpr float ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT = 30.0f;    // below this the trio outranks other adds
+constexpr float ULDUAR_FREYA_TRIO_FLOOR_RELEASE_PCT = 15.0f;  // all members below: free burn to the finish
+constexpr float ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT = 10.0f;     // never cross while a sibling is still high
+
+// Freya: Potent Pheromones (64321) is a 6 yd ally aura on a Healthy Spore. It is the only counter to
+// Conservator's Grip, which is a 50000 yd pacify-silence and so cannot be outranged.
+constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
+
+// Freya: Detonate (62598) radius. Detonating Lashers fixate and cannot be tanked or herded, so bots
+// too low to survive the blast step outside this instead.
+constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
+
 // Hodir hard mode: a bot within this of a Toasty Fire counts as protected (no Biting Cold, Flash
 // Freeze exemption), so it only seeks a fire when further out. Matches the Snowpacked Icicle stack range.
 constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 5.0f;
@@ -519,6 +539,51 @@ Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
 // What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns
 // included, since she is damageable then - and otherwise the add above.
 Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI);
+
+// Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
+// and both multipliers cannot disagree about what is up.
+struct FreyaWaveState
+{
+    Unit* eonarsGift = nullptr;
+    Unit* conservator = nullptr;
+    Unit* snaplasher = nullptr;
+    Unit* stormLasher = nullptr;
+    Unit* waterSpirit = nullptr;
+    std::vector<Unit*> detonatingLashers;
+
+    std::vector<Unit*> LivingTrio() const;
+
+    // Any living member below the sync window: the raid must finish this trio before it touches
+    // anything else, or the members already low revive.
+    bool TrioLocked() const;
+
+    // Every living member at or below the release threshold - the last seconds, where nothing may
+    // pull a bot away and no member is held back.
+    bool TrioReleased() const;
+};
+
+void GatherFreyaWaveState(PlayerbotAI* botAI, FreyaWaveState& state);
+
+// Whether damage on this trio member has to stop so the three converge. A backstop for damage the
+// targeting cannot steer - a swing mid-animation, a DoT already ticking - since GetFreyaTrioAssignment
+// has normally moved bots off a suppressed member already.
+bool FreyaTrioSyncSuppress(FreyaWaveState const& state, Unit* target);
+
+// Which trio member this bot should be hitting. Greedy load balance over remaining health, recomputed
+// every tick: every bot walks the same group order over the same numbers and reaches the same split,
+// so no shared state is needed. Suppressed members drop out of the candidate list, which is what makes
+// the floor redistribute bots instead of idling them.
+Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state);
+
+// The add this tank owns. Only the Snaplasher is claimed - Hardened Bark (62663) stacks +10% damage
+// done per hit taken, so it needs a dedicated sink. The other two are left to generic tank assist
+// because owning them would mean owning Tidal Wave positioning too.
+Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state);
+
+// True while any bot in the group that counts as ranged DPS is alive. Eonar's Gift is a ranged job,
+// but a melee-only raid still has to kill it or Freya heals 30-60%.
+bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
+
 
 // Ignis the Furnace Master. These search the grid rather than going through "find target": a bot
 // parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries

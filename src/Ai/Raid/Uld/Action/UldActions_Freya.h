@@ -1,6 +1,8 @@
 #ifndef PLAYERBOTS_ULDACTIONS_FREYA_H
 #define PLAYERBOTS_ULDACTIONS_FREYA_H
 
+#include <vector>
+
 #include "Action.h"
 #include "AttackAction.h"
 #include "GenericActions.h"
@@ -20,10 +22,35 @@ public:
     bool isUseful() override;
 };
 
-class FreyaMarkDpsTargetAction : public MovementAction
+// Owns every DPS bot's target. Eonar's Gift > Ancient Conservator > the trio slot > Detonating
+// Lashers > Freya, with the ordering flipped once the trio is low enough that leaving it would let a
+// member revive.
+class FreyaSetDpsPriorityAction : public AttackAction
 {
 public:
-    FreyaMarkDpsTargetAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya mark dps target action") {}
+    FreyaSetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya set dps priority") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Unit* ResolveFreyaDpsTarget(Unit* currentTarget);
+    Unit* SelectNearestLasher(Unit* currentTarget, std::vector<Unit*> const& candidates) const;
+};
+
+// Assist tank 0 picks up the Snaplasher so the raid's Hardened Bark stacks land on a dedicated sink.
+class FreyaTankAddsAction : public AttackAction
+{
+public:
+    FreyaTankAddsAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya tank adds") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Step outside Detonate's blast when the bot is too low to survive it.
+class FreyaAvoidDetonatingLasherAction : public MovementAction
+{
+public:
+    FreyaAvoidDetonatingLasherAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya avoid detonating lasher") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

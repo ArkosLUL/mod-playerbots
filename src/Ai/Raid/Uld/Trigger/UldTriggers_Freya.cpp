@@ -14,7 +14,6 @@
 #include "Vehicle.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
-#include <RtiTargetValue.h>
 
 bool FreyaNearNatureBombTrigger::IsActive()
 {
@@ -30,138 +29,48 @@ bool FreyaNearNatureBombTrigger::IsActive()
     return target != nullptr;
 }
 
-bool FreyaMarkDpsTargetTrigger::IsActive()
+bool FreyaSetDpsPriorityTrigger::IsActive()
 {
-    // Check boss and it is alive
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Only tank bot can mark target
+    return PlayerbotAI::IsDps(bot);
+}
+
+bool FreyaTankAddsTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
     if (!botAI->IsTank(bot))
         return false;
 
-    // Get current raid dps target
-    Group* group = bot->GetGroup();
-    if (!group)
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return GetFreyaTankTarget(botAI, state) != nullptr;
+}
+
+bool FreyaAvoidDetonatingLasherTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
         return false;
 
-    int8 skullIndex = 7;
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(skullIndex);
-    Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
+    Map* map = bot->GetMap();
+    if (!map || !map->IsRaid())
+        return false;
 
-    if (currentSkullUnit && !currentSkullUnit->IsAlive())
-    {
-        currentSkullUnit = nullptr;
-    }
+    // Detonate's maximum roll. Above this the blast cannot kill, so the bot stays and keeps hitting.
+    uint32 const healthThreshold = map->Is25ManRaid() ? 7200 : 4900;
+    if (bot->GetHealth() >= healthThreshold)
+        return false;
 
-    // Check which adds is up
-    Unit* eonarsGift = nullptr;
-    Unit* ancientConservator = nullptr;
-    Unit* snaplasher = nullptr;
-    Unit* ancientWaterSpirit = nullptr;
-    Unit* stormLasher = nullptr;
-    Unit* firstDetonatingLasher = nullptr;
+    Creature* lasher = bot->FindNearestCreature(NPC_DETONATING_LASHER, ULDUAR_FREYA_DETONATE_RADIUS);
 
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets");
-    Unit* target = nullptr;
-    for (auto i = targets.begin(); i != targets.end(); ++i)
-    {
-        target = botAI->GetUnit(*i);
-        if (!target || !target->IsAlive())
-            continue;
-
-        if (target->GetEntry() == NPC_EONARS_GIFT)
-        {
-            eonarsGift = target;
-        }
-        else if (target->GetEntry() == NPC_ANCIENT_CONSERVATOR)
-        {
-            ancientConservator = target;
-        }
-        else if (target->GetEntry() == NPC_SNAPLASHER)
-        {
-            snaplasher = target;
-        }
-        else if (target->GetEntry() == NPC_ANCIENT_WATER_SPIRIT)
-        {
-            ancientWaterSpirit = target;
-        }
-        else if (target->GetEntry() == NPC_STORM_LASHER)
-        {
-            stormLasher = target;
-        }
-        else if (target->GetEntry() == NPC_DETONATING_LASHER && !firstDetonatingLasher)
-        {
-            firstDetonatingLasher = target;
-        }
-    }
-
-    // Check that eonars gift is need to be mark
-    if (eonarsGift && (!currentSkullUnit || currentSkullUnit->GetEntry() != eonarsGift->GetEntry()))
-    {
-        return true;
-    }
-
-    // Check that ancient conservator is need to be mark
-    if (ancientConservator && (!currentSkullUnit || currentSkullUnit->GetEntry() != ancientConservator->GetEntry()))
-    {
-        return true;
-    }
-
-    // Check that trio of adds is need to be mark
-    if (snaplasher || ancientWaterSpirit || stormLasher)
-    {
-        Unit* highestHealthUnit = nullptr;
-        uint32 highestHealth = 0;
-
-        if (snaplasher && snaplasher->GetHealth() > highestHealth)
-        {
-            highestHealth = snaplasher->GetHealth();
-            highestHealthUnit = snaplasher;
-        }
-        if (ancientWaterSpirit && ancientWaterSpirit->GetHealth() > highestHealth)
-        {
-            highestHealth = ancientWaterSpirit->GetHealth();
-            highestHealthUnit = ancientWaterSpirit;
-        }
-        if (stormLasher && stormLasher->GetHealth() > highestHealth)
-        {
-            highestHealthUnit = stormLasher;
-        }
-
-        // If the highest health unit is not already marked, mark it
-        if (highestHealthUnit && (!currentSkullUnit || currentSkullUnit->GetEntry() != highestHealthUnit->GetEntry()))
-        {
-            return true;
-        }
-    }
-
-    // Check that detonating lasher is need to be mark
-    if (firstDetonatingLasher &&
-        (!currentSkullUnit || currentSkullUnit->GetEntry() != firstDetonatingLasher->GetEntry()))
-    {
-        Map* map = bot->GetMap();
-        if (!map || !map->IsRaid())
-            return false;
-
-        uint32 healthThreshold = map->Is25ManRaid() ? 7200 : 4900;  // Detonate maximum damage
-
-        // Check that detonate lasher dont kill raid members
-        for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-        {
-            Player* member = gref->GetSource();
-            if (!member || !member->IsAlive())
-                continue;
-
-            if (member->GetHealth() < healthThreshold)
-                return false;
-        }
-
-        return true;
-    }
-
-    return false;
+    return lasher && lasher->IsAlive();
 }
 
 bool FreyaMoveToHealingSporeTrigger::IsActive()
@@ -171,42 +80,28 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    if (!botAI->IsRanged(bot))
+    // Conservator's Grip is a 50000 yd pacify-silence, so melee need a spore just as much as ranged.
+    // Tanks stay put: walking one to a spore drags the Conservator into the raid.
+    if (botAI->IsTank(bot))
         return false;
 
     Unit* conservatory = AI_VALUE2(Unit*, "find target", "ancient conservator");
     if (!conservatory || !conservatory->IsAlive())
         return false;
 
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-    float nearestDistance = std::numeric_limits<float>::max();
-    bool foundSpore = false;
-
-    // Iterate through all targets to find healthy spores
-    for (const ObjectGuid& guid : targets)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        // Check if the unit is a healthy spore
-        if (unit->GetEntry() == NPC_HEALTHY_SPORE)
-        {
-            foundSpore = true;
-            float distance = bot->GetDistance(unit);
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-            }
-        }
-    }
-
-    // If no healthy spores are found, return false
-    if (!foundSpore)
+    // The pheromone aura is the thing that matters, and it is exact - a bot can be inside 6 yd of a
+    // spore that is still growing and not have it yet.
+    if (bot->HasAura(SPELL_POTENT_PHEROMONES))
         return false;
 
-    // If the nearest spore is farther than 6 yards, a move is required
-    return nearestDistance > 6.0f;
+    for (const ObjectGuid& guid : AI_VALUE(GuidVector, "nearest npcs"))
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == NPC_HEALTHY_SPORE)
+            return true;
+    }
+
+    return false;
 }
 
 bool FreyaBreakIronRootsTrigger::IsActive()

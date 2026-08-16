@@ -314,6 +314,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("hodir spread storm cloud", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
+    // Survival first, then the pacify counter, then targeting. A bot that is dead, blown up or
+    // silenced contributes nothing to the trio wave it is being steered at.
         "hodir move to toasty fire",
         { NextAction("hodir move to toasty fire", ACTION_RAID) }));
 
@@ -322,7 +324,25 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     triggers.push_back(new TriggerNode(
         "freya near nature bomb",
-        { NextAction("freya move away nature bomb", ACTION_RAID) }));
+    // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
+    // pacified bot cannot swing at anything anyway.
+        { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya avoid detonating lasher",
+        { NextAction("freya avoid detonating lasher", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya move to healing spore trigger",
+        { NextAction("freya move to healing spore action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya tank adds",
+        { NextAction("freya tank adds", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya set dps priority",
+        { NextAction("freya set dps priority", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
         "freya nature resistance trigger",
@@ -332,23 +352,15 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya fire resistance trigger",
         { NextAction("freya fire resistance action", ACTION_RAID) }));
 
-    triggers.push_back(new TriggerNode(
-        "freya mark dps target trigger",
-        { NextAction("freya mark dps target action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya move to healing spore trigger",
-        { NextAction("freya move to healing spore action", ACTION_RAID) }));
-
     // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
     // root outranks the dodge - a rooted bot can't move, so it has to free itself before it can step out.
     triggers.push_back(new TriggerNode(
         "freya break iron roots",
-        { NextAction("freya break iron roots", ACTION_RAID + 3) }));
+        { NextAction("freya break iron roots", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
         "freya dodge unstable sun beam",
-        { NextAction("freya dodge unstable sun beam", ACTION_RAID + 2) }));
+        { NextAction("freya dodge unstable sun beam", ACTION_RAID + 4) }));
 
     //
     // Thorim
@@ -629,6 +641,11 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
     multipliers.push_back(new IgnisMultiplier(botAI));
+    // Freya splits the DPS across the trio wave in code, so the generic pickers stand down, and the
+    // floor stops a stray hit killing one member well ahead of the other two
+    multipliers.push_back(new FreyaDisableAutomaticTargetingMultiplier(botAI));
+    multipliers.push_back(new FreyaTrioSyncMultiplier(botAI));
+
 
     // Kologarn picks every target per role in code, so the generic pickers have to be shut out, and
     // a Stone Grip victim is a passenger who cannot walk

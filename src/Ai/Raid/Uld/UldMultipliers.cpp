@@ -6,6 +6,7 @@
 #include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
 #include "FollowActions.h"
+#include "GenericActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "MovementActions.h"
@@ -149,6 +150,58 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
                                                     "xt002 redirect threat action"};
 
     return retargets.count(action->getName()) ? 1.0f : 0.0f;
+}
+
+// Freya
+float FreyaDisableAutomaticTargetingMultiplier::GetValue(Action* action)
+{
+    bool const isDpsAssist = botAI->GetState() == BOT_STATE_COMBAT && dynamic_cast<DpsAssistAction*>(action);
+    bool const isTankAssist = botAI->GetState() == BOT_STATE_COMBAT && dynamic_cast<TankAssistAction*>(action);
+
+    if (!isDpsAssist && !isTankAssist)
+        return 1.0f;
+
+    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    if (!freya || !freya->IsAlive())
+        return 1.0f;
+
+    if (isDpsAssist)
+        return PlayerbotAI::IsDps(bot) ? 0.0f : 1.0f;
+
+    if (PlayerbotAI::IsMainTank(bot))
+        return 0.0f;
+
+    if (PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
+    {
+        FreyaWaveState state;
+        GatherFreyaWaveState(botAI, state);
+        if (GetFreyaTankTarget(botAI, state))
+            return 0.0f;
+    }
+
+    return 1.0f;
+}
+
+float FreyaTrioSyncMultiplier::GetValue(Action* action)
+{
+    if (botAI->IsTank(bot) || !PlayerbotAI::IsDps(bot))
+        return 1.0f;
+
+    // Movement and heals are never held back: a bot waiting out the floor still has to dodge a
+    // Nature Bomb and reach a Healthy Spore.
+    bool const isDamage = dynamic_cast<MeleeAction*>(action) ||
+                          (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastHealingSpellAction*>(action));
+    if (!isDamage)
+        return 1.0f;
+
+    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    if (!freya || !freya->IsAlive())
+        return 1.0f;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return FreyaTrioSyncSuppress(state, AI_VALUE(Unit*, "current target")) ? 0.0f : 1.0f;
 }
 
 // Ignis the Furnace Master

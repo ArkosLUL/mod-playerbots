@@ -16,10 +16,28 @@ public:
     bool IsActive() override;
 };
 
-class FreyaMarkDpsTargetTrigger : public Trigger
+// Owns every DPS bot's target for the whole encounter, so the trio wave can be split three ways.
+class FreyaSetDpsPriorityTrigger : public Trigger
 {
 public:
-    FreyaMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "freya mark dps target trigger") {}
+    FreyaSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "freya set dps priority") {}
+    bool IsActive() override;
+};
+
+// Assist tank 0 holds the Snaplasher, whose Hardened Bark ramps its damage the more it is struck.
+class FreyaTankAddsTrigger : public Trigger
+{
+public:
+    FreyaTankAddsTrigger(PlayerbotAI* ai) : Trigger(ai, "freya tank adds") {}
+    bool IsActive() override;
+};
+
+// Detonating Lashers blow up for ~4-7k on death and cannot be tanked, so bots that would not
+// survive the blast step outside it.
+class FreyaAvoidDetonatingLasherTrigger : public Trigger
+{
+public:
+    FreyaAvoidDetonatingLasherTrigger(PlayerbotAI* ai) : Trigger(ai, "freya avoid detonating lasher") {}
     bool IsActive() override;
 };
 

@@ -57,7 +57,9 @@ public:
         creators["freya near nature bomb"] = &RaidUlduarTriggerContext::freya_near_nature_bomb;
         creators["freya fire resistance trigger"] = &RaidUlduarTriggerContext::freya_fire_resistance_trigger;
         creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
-        creators["freya mark dps target trigger"] = &RaidUlduarTriggerContext::freya_mark_dps_target_trigger;
+        creators["freya set dps priority"] = &RaidUlduarTriggerContext::freya_set_dps_priority;
+        creators["freya tank adds"] = &RaidUlduarTriggerContext::freya_tank_adds;
+        creators["freya avoid detonating lasher"] = &RaidUlduarTriggerContext::freya_avoid_detonating_lasher;
         creators["freya move to healing spore trigger"] = &RaidUlduarTriggerContext::freya_move_to_healing_spore_trigger;
         creators["freya break iron roots"] = &RaidUlduarTriggerContext::freya_break_iron_roots;
         creators["freya dodge unstable sun beam"] = &RaidUlduarTriggerContext::freya_dodge_unstable_sun_beam;
@@ -188,7 +190,9 @@ private:
     static Trigger* freya_near_nature_bomb(PlayerbotAI* ai) { return new FreyaNearNatureBombTrigger(ai); }
     static Trigger* freya_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "freya"); }
     static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }
-    static Trigger* freya_mark_dps_target_trigger(PlayerbotAI* ai) { return new FreyaMarkDpsTargetTrigger(ai); }
+    static Trigger* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityTrigger(ai); }
+    static Trigger* freya_tank_adds(PlayerbotAI* ai) { return new FreyaTankAddsTrigger(ai); }
+    static Trigger* freya_avoid_detonating_lasher(PlayerbotAI* ai) { return new FreyaAvoidDetonatingLasherTrigger(ai); }
     static Trigger* freya_move_to_healing_spore_trigger(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeTrigger(ai); }
     static Trigger* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsTrigger(ai); }
     static Trigger* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamTrigger(ai); }
