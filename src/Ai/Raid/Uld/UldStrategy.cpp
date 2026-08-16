@@ -249,42 +249,36 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Auriaya
     //
+    // Sonic Screech is deliberately soaked, not dodged: it shares its damage across everyone in the
+    // cone, so there is no dodge node here and the anchors exist to put the raid in the arc. Position
+    // sits at the bottom because the engine stops at the first action that succeeds - killing a sentry
+    // beats standing on a spot, and the anchor tolerances make the drift cheap.
     triggers.push_back(new TriggerNode(
         "auriaya fall from floor trigger",
-        { NextAction("auriaya fall from floor action", ACTION_RAID) }));
+        { NextAction("auriaya fall from floor action", ACTION_RAID + 4) }));
+
+    // A loose Sanctum Sentry is the worst state the fight has: it buffs Auriaya while it lives and
+    // pounces anything 8-25 yd away, which holding it in melee prevents outright. It outranks the pool
+    // dodge, which is one step and can wait a tick.
+    triggers.push_back(new TriggerNode(
+        "auriaya sentry taunt trigger",
+        { NextAction("auriaya sentry taunt action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "auriaya seeping essence trigger",
         { NextAction("auriaya seeping essence action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
-        "auriaya sonic screech trigger",
-        { NextAction("auriaya sonic screech action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "auriaya mark dps target trigger",
-        { NextAction("auriaya mark dps target action", ACTION_RAID) }));
-
-    // The mark on its own only moves the icon, so the swap needs its own node - and it sits below
-    // the two dodges, which a bot must always be free to run first.
-    triggers.push_back(new TriggerNode(
-        "auriaya attack dps target trigger",
-        { NextAction("attack rti target", ACTION_RAID) }));
-
-    // A loose Sanctum Sentry is the worst state the fight has: it buffs Auriaya while it lives and
-    // pounces anything 8-25 yd away, which holding it in melee prevents outright.
-    triggers.push_back(new TriggerNode(
-        "auriaya sentry taunt trigger",
-        { NextAction("auriaya sentry taunt action", ACTION_RAID + 3) }));
-
-    // Main-tank only, so it never competes with the nodes above
-    triggers.push_back(new TriggerNode(
-        "auriaya tank facing trigger",
-        { NextAction("auriaya tank facing action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
         "auriaya anti fear trigger",
         { NextAction("auriaya anti fear action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "auriaya set dps priority trigger",
+        { NextAction("auriaya set dps priority action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "auriaya raid position trigger",
+        { NextAction("auriaya raid position action", ACTION_RAID) }));
 
     //
     // Hodir
@@ -314,24 +308,24 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("hodir spread storm cloud", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-    // Survival first, then the pacify counter, then targeting. A bot that is dead, blown up or
-    // silenced contributes nothing to the trio wave it is being steered at.
         "hodir move to toasty fire",
         { NextAction("hodir move to toasty fire", ACTION_RAID) }));
 
     //
     // Freya
     //
+    // Survival first, then the pacify counter, then targeting. A bot that is dead, blown up or
+    // silenced contributes nothing to the trio wave it is being steered at.
     triggers.push_back(new TriggerNode(
         "freya near nature bomb",
-    // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
-    // pacified bot cannot swing at anything anyway.
         { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "freya avoid detonating lasher",
         { NextAction("freya avoid detonating lasher", ACTION_RAID + 3) }));
 
+    // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
+    // pacified bot cannot swing at anything anyway.
     triggers.push_back(new TriggerNode(
         "freya move to healing spore trigger",
         { NextAction("freya move to healing spore action", ACTION_RAID + 2) }));
@@ -633,14 +627,14 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     // Reserve the Big Bang soaker priest's Dispersion for the Big Bang cast
     multipliers.push_back(new AlgalonMultiplier(botAI));
-    // Mimiron picks every non-tank target in code, so the generic picker has to be shut out
-    multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
-
 
     // XT-002: hold the burst cooldowns for the mode's real damage window, and in normal mode stop
     // damage on the exposed Heart before it dies and flips the raid into hard mode
     multipliers.push_back(new XT002BurstWindowMultiplier(botAI));
     multipliers.push_back(new XT002TargetGuardMultiplier(botAI));
+
+    // Mimiron picks every non-tank target in code, so the generic picker has to be shut out
+    multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
 
     // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));
@@ -653,19 +647,21 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
     multipliers.push_back(new IgnisMultiplier(botAI));
-    // Freya splits the DPS across the trio wave in code, so the generic pickers stand down, and the
-    // floor stops a stray hit killing one member well ahead of the other two
-    multipliers.push_back(new FreyaDisableAutomaticTargetingMultiplier(botAI));
-    multipliers.push_back(new FreyaTrioSyncMultiplier(botAI));
-
 
     // Kologarn picks every target per role in code, so the generic pickers have to be shut out, and
     // a Stone Grip victim is a passenger who cannot walk
     multipliers.push_back(new KologarnDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new KologarnMultiplier(botAI));
 
+    // Freya splits the DPS across the trio wave in code, so the generic pickers stand down, and the
+    // floor stops a stray hit killing one member well ahead of the other two
+    multipliers.push_back(new FreyaDisableAutomaticTargetingMultiplier(botAI));
+    multipliers.push_back(new FreyaTrioSyncMultiplier(botAI));
+
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
+
+    multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));

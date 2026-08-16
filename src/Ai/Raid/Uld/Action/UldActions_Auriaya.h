@@ -21,28 +21,13 @@ public:
     bool isUseful() override;
 };
 
-class AuriayaSonicScreechAction : public MovementAction
+// Steps just far enough to clear a pool and no further, leashed to the bot's anchor. The generic
+// MoveAwayFromCreatureAction maximises distance from the nearest pool instead, which walks bots out
+// of the room once the pools have piled up.
+class AuriayaSeepingEssenceAction : public MovementAction
 {
 public:
-    AuriayaSonicScreechAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya sonic screech action") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
-class AuriayaSeepingEssenceAction : public MoveAwayFromCreatureAction
-{
-public:
-    AuriayaSeepingEssenceAction(PlayerbotAI* botAI)
-        : MoveAwayFromCreatureAction(botAI, "auriaya seeping essence action", NPC_AURIAYA_SEEPING_FERAL_ESSENCE,
-                                     ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
-    {
-    }
-};
-
-class AuriayaMarkDpsTargetAction : public Action
-{
-public:
-    AuriayaMarkDpsTargetAction(PlayerbotAI* botAI) : Action(botAI, "auriaya mark dps target action") {}
+    AuriayaSeepingEssenceAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya seeping essence action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -55,12 +40,23 @@ public:
     bool isUseful() override;
 };
 
-class AuriayaTankFacingAction : public MovementAction
+class AuriayaRaidPositionAction : public MovementAction
 {
 public:
-    AuriayaTankFacingAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya tank facing action") {}
+    AuriayaRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya raid position action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+};
+
+class AuriayaSetDpsPriorityAction : public AttackAction
+{
+public:
+    AuriayaSetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "auriaya set dps priority action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    bool IsAllowedPriorityTarget(Unit* boss, Unit* candidate);
 };
 
 class AuriayaAntiFearAction : public RaidAntiFearAction

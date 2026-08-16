@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <vector>
 
 #include "AiObjectContext.h"
 #include "DBCEnums.h"
@@ -20,16 +22,24 @@
 #include "UldBossHelper.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
-#include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"
 #include "Vehicle.h"
-#include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
 
 bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
 {
+    // Prefer the bot's own anchor: it is a known-good spot in the room, where the master may well be
+    // standing out in the corridor.
+    Position anchor;
+    float tolerance = 0.0f;
+    if (GetAuriayaAnchor(botAI, bot, anchor, tolerance))
+    {
+        return bot->TeleportTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(),
+                               anchor.GetPositionZ(), bot->GetOrientation());
+    }
+
     Player* master = botAI->GetMaster();
 
     if (!master)
@@ -45,39 +55,98 @@ bool AuriayaFallFromFloorAction::isUseful()
     return auriayaFallFromFloorTrigger.IsActive();
 }
 
-bool AuriayaSonicScreechAction::isUseful()
+bool AuriayaSeepingEssenceAction::isUseful()
 {
-    AuriayaSonicScreechTrigger auriayaSonicScreechTrigger(botAI);
-    return auriayaSonicScreechTrigger.IsActive();
+    AuriayaSeepingEssenceTrigger auriayaSeepingEssenceTrigger(botAI);
+    return auriayaSeepingEssenceTrigger.IsActive();
 }
 
-bool AuriayaSonicScreechAction::Execute(Event /*event*/)
+bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
 {
     Unit* boss = GetAuriaya(botAI);
     if (!boss)
         return false;
 
-    // Sidestep the shortest way out of the frontal cone while keeping current range
-    Position const dest = GetPositionOutsideFrontalCone(bot, boss, ULDUAR_AURIAYA_SONIC_SCREECH_CONE);
-    return MoveTo(boss->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false, false, false,
-                  true, MovementPriority::MOVEMENT_COMBAT);
-}
-
-bool AuriayaMarkDpsTargetAction::isUseful()
-{
-    AuriayaMarkDpsTargetTrigger auriayaMarkDpsTargetTrigger(botAI);
-    return auriayaMarkDpsTargetTrigger.IsActive();
-}
-
-bool AuriayaMarkDpsTargetAction::Execute(Event /*event*/)
-{
-    Unit* target = GetAuriayaFocusTarget(botAI);
-    if (!target)
+    // Wide enough that any pool able to invalidate a candidate inside the leash is in the list.
+    std::vector<Unit*> const pools =
+        CollectAuriayaEssencePools(bot, ULDUAR_AURIAYA_ESSENCE_LEASH + ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS);
+    if (pools.empty())
         return false;
 
-    MarkTargetWithSkull(bot, target);
-    SetRtiTarget(botAI, "skull", target);
-    return true;
+    // Melee ride the boss and are not anchored, so they are leashed to her instead.
+    Position anchor;
+    float tolerance = 0.0f;
+    if (!GetAuriayaAnchor(botAI, bot, anchor, tolerance))
+        anchor = Position(boss->GetPositionX(), boss->GetPositionY(), boss->GetPositionZ());
+
+    constexpr int directions = 8;
+    constexpr float increment = 3.0f;
+
+    bool found = false;
+    float bestX = 0.0f;
+    float bestY = 0.0f;
+    float bestDisplacement = std::numeric_limits<float>::max();
+
+    for (int i = 0; i < directions; ++i)
+    {
+        float const angle = (i * 2.0f * static_cast<float>(M_PI)) / directions;
+        for (float distance = increment; distance <= ULDUAR_AURIAYA_ESSENCE_LEASH; distance += increment)
+        {
+            float const candX = bot->GetPositionX() + distance * std::cos(angle);
+            float const candY = bot->GetPositionY() + distance * std::sin(angle);
+
+            if (anchor.GetExactDist2d(candX, candY) > ULDUAR_AURIAYA_ESSENCE_LEASH)
+                continue;
+
+            bool clear = true;
+            for (Unit* pool : pools)
+            {
+                if (pool->GetExactDist2d(candX, candY) < ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
+                {
+                    clear = false;
+                    break;
+                }
+            }
+
+            if (!clear || !bot->IsWithinLOS(candX, candY, bot->GetPositionZ()))
+                continue;
+
+            // Smallest step that clears, not the furthest one from the pools - maximising distance is
+            // what walks bots out of the room once the pools have piled up.
+            if (distance < bestDisplacement)
+            {
+                bestDisplacement = distance;
+                bestX = candX;
+                bestY = candY;
+                found = true;
+            }
+        }
+    }
+
+    if (found)
+    {
+        return MoveTo(bot->GetMapId(), bestX, bestY, bot->GetPositionZ(), false, false, false, false,
+                      MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    // Boxed in. FleePosition is navmesh-validated and refuses to reverse a recent flee, so it will not
+    // start a ping-pong the way a raw MoveTo would.
+    Unit* nearest = nullptr;
+    float nearestDistance = std::numeric_limits<float>::max();
+    for (Unit* pool : pools)
+    {
+        float const distance = bot->GetExactDist2d(pool);
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearest = pool;
+        }
+    }
+
+    if (!nearest)
+        return false;
+
+    return FleePosition(nearest->GetPosition(), ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS, 500);
 }
 
 bool AuriayaSentryTauntAction::isUseful()
@@ -91,31 +160,142 @@ bool AuriayaSentryTauntAction::Execute(Event /*event*/)
     return UldCastClassTaunt(botAI, GetAuriayaLooseSentry(botAI, bot));
 }
 
-bool AuriayaTankFacingAction::isUseful()
+bool AuriayaRaidPositionAction::isUseful()
 {
-    AuriayaTankFacingTrigger auriayaTankFacingTrigger(botAI);
-    return auriayaTankFacingTrigger.IsActive();
+    AuriayaRaidPositionTrigger auriayaRaidPositionTrigger(botAI);
+    return auriayaRaidPositionTrigger.IsActive();
 }
 
-bool AuriayaTankFacingAction::Execute(Event /*event*/)
+bool AuriayaRaidPositionAction::Execute(Event /*event*/)
+{
+    Position anchor;
+    float tolerance = 0.0f;
+    if (!GetAuriayaAnchor(botAI, bot, anchor, tolerance))
+        return false;
+
+    // Parked. Returning false hands the tick back so the rotation still runs.
+    if (bot->GetExactDist2d(&anchor) <= tolerance)
+        return false;
+
+    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(), false,
+                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool AuriayaSetDpsPriorityAction::isUseful()
+{
+    AuriayaSetDpsPriorityTrigger auriayaSetDpsPriorityTrigger(botAI);
+    return auriayaSetDpsPriorityTrigger.IsActive();
+}
+
+bool AuriayaSetDpsPriorityAction::IsAllowedPriorityTarget(Unit* boss, Unit* candidate)
+{
+    if (!candidate || !candidate->IsAlive())
+        return false;
+
+    if (candidate->GetEntry() == NPC_AURIAYA_FERAL_DEFENDER)
+    {
+        // Between lives it lies feigned at 1 HP and unselectable, so it is "alive" but unhittable.
+        if (IsDownOrFeigning(candidate))
+            return false;
+
+        // It re-rolls aggro constantly and roams the room. Melee swing at it when it comes to them and
+        // otherwise stay on the boss, or they spend the fight chasing it.
+        if (PlayerbotAI::IsMelee(bot) &&
+            candidate->GetExactDist2d(boss) > ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
 {
     Unit* boss = GetAuriaya(botAI);
     if (!boss)
         return false;
 
-    float error = 0.0f;
-    if (!GetAuriayaFacingError(botAI, bot, error))
+    // Sentries first: they stay dead and their Strength of the Pack buffs the boss while they live.
+    static uint32 const priorityOrder[] = {NPC_AURIAYA_SANCTUM_SENTRY, NPC_AURIAYA_FERAL_DEFENDER, NPC_AURIAYA};
+    constexpr size_t priorityCount = sizeof(priorityOrder) / sizeof(priorityOrder[0]);
+    constexpr float targetSwitchDistance = 10.0f;
+
+    Unit* currentTarget = context->GetValue<Unit*>("current target")->Get();
+
+    // Nearest live candidate of each entry.
+    Unit* perEntry[priorityCount] = {nullptr};
+
+    for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!IsAllowedPriorityTarget(boss, unit))
+            continue;
+
+        for (size_t index = 0; index < priorityCount; ++index)
+        {
+            if (unit->GetEntry() != priorityOrder[index])
+                continue;
+
+            Unit*& selected = perEntry[index];
+            if (!selected || unit->GetExactDist2d(bot) < selected->GetExactDist2d(bot))
+                selected = unit;
+
+            break;
+        }
+    }
+
+    Unit* target = nullptr;
+    size_t desiredPriority = priorityCount;
+    for (size_t index = 0; index < priorityCount; ++index)
+    {
+        if (perEntry[index])
+        {
+            target = perEntry[index];
+            desiredPriority = index;
+            break;
+        }
+    }
+
+    size_t currentPriority = priorityCount;
+    if (currentTarget && IsAllowedPriorityTarget(boss, currentTarget))
+    {
+        for (size_t index = 0; index < priorityCount; ++index)
+        {
+            if (currentTarget->GetEntry() == priorityOrder[index])
+            {
+                currentPriority = index;
+                break;
+            }
+        }
+    }
+
+    if (currentPriority < priorityCount)
+    {
+        // Never downgrade off something at least as urgent as the new pick, and within one entry only
+        // switch for something meaningfully closer - otherwise two sentries ping-pong the whole raid.
+        if (currentPriority < desiredPriority)
+            target = currentTarget;
+        else if (currentPriority == desiredPriority && target &&
+                 target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
+        {
+            target = currentTarget;
+        }
+    }
+
+    if (!target)
+        target = AI_VALUE(Unit*, "dps target");
+
+    if (!target)
         return false;
 
-    // Walk one small step around Auriaya at the range already held. Swinging straight to the far
-    // side would drag her through the raid, and a wide arc off melee range drops threat.
-    float const radius = std::max(2.0f, bot->GetExactDist2d(boss));
-    float angle = std::atan2(bot->GetPositionY() - boss->GetPositionY(), bot->GetPositionX() - boss->GetPositionX());
-    angle += (error < 0.0f) ? ULDUAR_AURIAYA_FACING_ARC_STEP : -ULDUAR_AURIAYA_FACING_ARC_STEP;
+    bool needsAttack = currentTarget != target;
+    if (PlayerbotAI::IsMelee(bot))
+        needsAttack = needsAttack || !bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
 
-    float const moveX = boss->GetPositionX() + radius * std::cos(angle);
-    float const moveY = boss->GetPositionY() + radius * std::sin(angle);
+    // Already on the right thing - yield so the lower nodes get the tick.
+    if (!needsAttack)
+        return false;
 
-    return MoveTo(bot->GetMapId(), moveX, moveY, bot->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_FORCED, true, false);
+    return Attack(target);
 }

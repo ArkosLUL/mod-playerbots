@@ -117,17 +117,15 @@ public:
         creators["ignis attack brittle construct trigger"] = &RaidUlduarTriggerContext::ignis_attack_brittle_construct_trigger;
         creators["ignis molten construct avoid trigger"] = &RaidUlduarTriggerContext::ignis_molten_construct_avoid_trigger;
         creators["ignis slag pot heal trigger"] = &RaidUlduarTriggerContext::ignis_slag_pot_heal_trigger;
-        creators["auriaya sonic screech trigger"] = &RaidUlduarTriggerContext::auriaya_sonic_screech_trigger;
         creators["auriaya seeping essence trigger"] = &RaidUlduarTriggerContext::auriaya_seeping_essence_trigger;
-        creators["auriaya mark dps target trigger"] = &RaidUlduarTriggerContext::auriaya_mark_dps_target_trigger;
-        creators["auriaya attack dps target trigger"] = &RaidUlduarTriggerContext::auriaya_attack_dps_target_trigger;
         creators["auriaya sentry taunt trigger"] = &RaidUlduarTriggerContext::auriaya_sentry_taunt_trigger;
-        creators["auriaya tank facing trigger"] = &RaidUlduarTriggerContext::auriaya_tank_facing_trigger;
+        creators["auriaya raid position trigger"] = &RaidUlduarTriggerContext::auriaya_raid_position_trigger;
+        creators["auriaya set dps priority trigger"] = &RaidUlduarTriggerContext::auriaya_set_dps_priority_trigger;
+        creators["auriaya anti fear trigger"] = &RaidUlduarTriggerContext::auriaya_anti_fear_trigger;
+        creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron magnetic core trigger"] = &RaidUlduarTriggerContext::mimiron_magnetic_core_trigger;
         creators["mimiron plasma blast trigger"] = &RaidUlduarTriggerContext::mimiron_plasma_blast_trigger;
         creators["mimiron set dps priority trigger"] = &RaidUlduarTriggerContext::mimiron_set_dps_priority_trigger;
-        creators["auriaya anti fear trigger"] = &RaidUlduarTriggerContext::auriaya_anti_fear_trigger;
-        creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
         creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
         creators["vezax saronite vapors trigger"] = &RaidUlduarTriggerContext::vezax_saronite_vapors_trigger;
@@ -252,17 +250,15 @@ private:
     static Trigger* ignis_attack_brittle_construct_trigger(PlayerbotAI* ai) { return new IgnisAttackBrittleConstructTrigger(ai); }
     static Trigger* ignis_molten_construct_avoid_trigger(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidTrigger(ai); }
     static Trigger* ignis_slag_pot_heal_trigger(PlayerbotAI* ai) { return new IgnisSlagPotHealTrigger(ai); }
-    static Trigger* auriaya_sonic_screech_trigger(PlayerbotAI* ai) { return new AuriayaSonicScreechTrigger(ai); }
     static Trigger* auriaya_seeping_essence_trigger(PlayerbotAI* ai) { return new AuriayaSeepingEssenceTrigger(ai); }
-    static Trigger* auriaya_mark_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetTrigger(ai); }
-    static Trigger* auriaya_attack_dps_target_trigger(PlayerbotAI* ai) { return new AuriayaAttackDpsTargetTrigger(ai); }
+    static Trigger* auriaya_sentry_taunt_trigger(PlayerbotAI* ai) { return new AuriayaSentryTauntTrigger(ai); }
+    static Trigger* auriaya_raid_position_trigger(PlayerbotAI* ai) { return new AuriayaRaidPositionTrigger(ai); }
+    static Trigger* auriaya_set_dps_priority_trigger(PlayerbotAI* ai) { return new AuriayaSetDpsPriorityTrigger(ai); }
+    static Trigger* auriaya_anti_fear_trigger(PlayerbotAI* ai) { return new AuriayaAntiFearTrigger(ai); }
+    static Trigger* yogg_saron_anti_fear_trigger(PlayerbotAI* ai) { return new YoggSaronAntiFearTrigger(ai); }
     static Trigger* mimiron_magnetic_core_trigger(PlayerbotAI* ai) { return new MimironMagneticCoreTrigger(ai); }
     static Trigger* mimiron_plasma_blast_trigger(PlayerbotAI* ai) { return new MimironPlasmaBlastTrigger(ai); }
     static Trigger* mimiron_set_dps_priority_trigger(PlayerbotAI* ai) { return new MimironSetDpsPriorityTrigger(ai); }
-    static Trigger* auriaya_sentry_taunt_trigger(PlayerbotAI* ai) { return new AuriayaSentryTauntTrigger(ai); }
-    static Trigger* auriaya_tank_facing_trigger(PlayerbotAI* ai) { return new AuriayaTankFacingTrigger(ai); }
-    static Trigger* auriaya_anti_fear_trigger(PlayerbotAI* ai) { return new AuriayaAntiFearTrigger(ai); }
-    static Trigger* yogg_saron_anti_fear_trigger(PlayerbotAI* ai) { return new YoggSaronAntiFearTrigger(ai); }
     static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
     static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
     static Trigger* vezax_saronite_vapors_trigger(PlayerbotAI* ai) { return new VezaxSaroniteVaporsTrigger(ai); }

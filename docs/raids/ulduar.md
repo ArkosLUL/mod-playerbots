@@ -545,37 +545,62 @@ parked on a construct never has Ignis on its threat list, and a dormant construc
 
 ## Auriaya
 
-No hard mode, and no difficulty split — 10N and 25N share every entry and spell id.
+No hard mode. Entries are shared; Sonic Screech is the only difficulty pair the strategy reads.
 
 | Mechanic | Ids | Handling |
 |---|---|---|
-| Sonic Screech | 64422 | **120°** frontal cone per `spell_cone`; non-tanks sidestep out of the arc |
+| Sonic Screech | 64422 / 64688 | **Soaked, never dodged** — see below |
 | Terrifying Screech | 64386 | Fear every 35s from the pull, so the whole fight is one anti-fear window |
 | Sentinel Blast | 64389 | Raid-wide, **not** a cone: no `spell_cone` row, and its SpellScript strips non-players. Healed through |
 | Sanctum Sentry | 34014 | Assist tank 0 taunts each loose one; Strength of the Pack (64369) buffs the boss while they live |
 | Feral Defender | 34035 | Random aggro (61906) makes it untankable — focus-killed, never tanked |
-| Seeping Feral Essence | 34098 | Non-selectable stalker dropped per Defender life; found via `"nearest npcs"`, fled at 10 yd |
+| Seeping Feral Essence | 34098 | Non-selectable stalker, one per Defender life; cleared at 10 yd |
 | Guardian Swarm | 64396 | Tank DoT, left to the generic dispel |
 | Enrage | 47008 | 10 min, unhandled — no enrage awareness exists anywhere in the module |
 
-`IsBotInFrontalCone` forwards to `HasInArc`, which takes the **full** arc, so the original
-`M_PI / 2` left every bot between 45° and 60° off-centre standing in a cone it believed it had
-cleared.
+**Sonic Screech is a damage split, not a dodge.** `spell_custom_attr` carries
+`SPELL_ATTR0_CU_SHARE_DAMAGE` on both ids (64422 also `IGNORE_ARMOR`; 64688 does not — upstream
+asymmetry), so the 120° cone (`spell_cone`) divides **60,125–69,875** (10N) or **190,000–210,000** (25N) among
+everyone it hits. She faces her victim, so the old design — non-tanks sidestepping out while the main
+tank arc-stepped her away from the raid centroid — left the tank eating it unsplit, a guaranteed death
+at 25N. It also never converged: each tank step swept the cone across the raid, and the bots it clipped
+moved, shifting the centroid the tank steered by. Bots soak it now, and there is no
+cone node left.
 
-Kill order is **Sentries → Feral Defender → boss**: sentries stay dead and drop the boss's buff,
-where each Defender kill costs a void zone and buys 35s. The Defender feigns at 1 HP wearing
-`UNIT_FLAG_NOT_SELECTABLE`, so it resolves through `GetFirstLiveUnitByEntry`, never
-`GetFirstAliveUnitByEntry`. Savage Pounce (64666) fires only at 8–25 yd from the sentry's own
-victim, so a tank holding it in melee is the whole counter — the taunt needs no positioning code
-behind it.
+**Anchoring is hybrid**, because she walks to her victim and cannot be pinned to world coordinates
+the way XT-002 is:
+
+- **Main tank** → a fixed spot from `ULDUAR_AURIAYA_MAINTANK_SPOTS`. A stationary tank is the entire
+  facing control; there is nothing left to steer.
+- **Ranged and healers** → boss + 20 yd along the boss→victim bearing, rounded to π/16 so tank drift
+  cannot shuffle twenty bots. Reading her live victim rather than a fixed bearing is what keeps the
+  split working when a human tanks.
+- **Melee and assist tank 0** → unanchored. Melee sit behind her and do not soak; at either raid size
+  the remaining soakers already make each share small.
+
+`AuriayaMovementGuardMultiplier` zeroes generic movers for the anchored roles only, or the anchor
+oscillates. It spares `AttackAction` and `ReachTargetAction` — both are `MovementAction`s, and a
+blanket veto would kill targeting and strand healers out of heal range.
+
+**The pools are permanent**: summon 64457 has `DurationIndex 21` (−1), no SmartAI touches 34098, and
+the Defender's 30s respawn never despawns them, so up to 9 accumulate per pull. Hence stations: three
+tank spots 10 yd apart along her home facing, which runs away from the corridor at +x. The tank
+advances when a pool lands within 12 yd of a station's spots, and only the tank computes the index —
+everyone else inherits the move through the bearing, so no two bots can disagree. The dodge itself
+takes the **smallest** step that clears, leashed to the bot's anchor; maximising distance from the
+nearest pool is what used to walk bots out of the room and up the corridor.
+
+Kill order is **Sentries → Feral Defender → boss**: sentries stay dead and drop the boss's buff, where
+each Defender kill costs a pool and buys 35s. Targets are picked in code — bots set no icons, but a
+mark a player sets still wins. Melee take the Defender only within 15 yd of the boss, or they chase it
+across the room as it re-rolls aggro. It feigns at 1 HP wearing `UNIT_FLAG_NOT_SELECTABLE`, so it
+resolves through `GetFirstLiveUnitByEntry`, never `GetFirstAliveUnitByEntry`. Savage Pounce (64666)
+fires only at 8–25 yd from the sentry's own victim, so a tank holding it in melee is the whole
+counter — the taunt needs no positioning code behind it.
 
 **Every Auriaya trigger used to resolve the boss through `"find target"`**, which walks only the
-bot's own threat list: any bot fighting a sentry or the Defender silently lost its cone dodge, its
-void-zone dodge and its anti-fear. All of them go through `GetAuriaya`, by entry, now.
-
-The main tank arc-steps around Auriaya until she faces away from the raid centroid — tanks excluded
-from that centroid, or they drag the bearing they are steering by. It holds still inside a 0.15 rad
-tolerance, because a tank that steps every tick never lands a cast.
+bot's own threat list: any bot fighting a sentry or the Defender silently lost its dodges and its
+anti-fear. All of them go through `GetAuriaya`, by entry, now.
 
 **Crazy Cat Lady requires no sentry killed, so it is incompatible with the kill order.** Bots
 optimise for the kill and, per the follower model, never chase achievements.

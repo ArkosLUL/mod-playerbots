@@ -567,26 +567,26 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI);
 // "the first alive sentry" would leave the second one loose forever once the first was taunted.
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
 
-// Centroid of the alive raid, ignoring the two tanks so their own positions cannot drag the bearing
-// the main tank is steering Auriaya's cone away from.
-Position GetAuriayaRaidCentroid(Player* bot);
+// Live Seeping Feral Essence pools around any object. GetCreatureListWithEntryInGrid filters
+// nothing, hence the explicit alive check; the stalkers are non-selectable, which rules out
+// "possible targets". Pass the smallest radius that answers the question - this runs per bot per
+// tick on the dodge path.
+std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius);
 
-// Signed shortest rotation, in (-pi, pi], from Auriaya's facing to "away from the raid centroid".
-// Returns false when there is no boss or the raid is too close for the bearing to mean anything.
-bool GetAuriayaFacingError(PlayerbotAI* botAI, Player* bot, float& error);
+// Which station the fight is standing on: the lowest whose two spots are both clear of pools, or,
+// once every station is polluted, whichever one keeps the nearest pool furthest away. Only the main
+// tank reads this - everyone else picks up the move through the boss, so no two bots can disagree.
+int GetAuriayaStationIndex(PlayerbotAI* botAI);
+
+// Where this bot belongs and how far it may stray before walking back. The main tank gets the
+// station's fixed spot; ranged and healers get a point derived from the live boss and tank, which is
+// what keeps the split working when a human tanks. Melee and the off-tank are unanchored, and get
+// false. Trigger and action both go through here so they cannot disagree.
+bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
 
 // Class taunt, mirroring ICC's IccCastClassTaunt. Non-tank classes return false.
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 
-
-// Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
-// Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
-// instead of splitting across two. Returns nullptr when none are up.
-Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
-
-// What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns
-// included, since she is damageable then - and otherwise the add above.
-Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI);
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
@@ -632,6 +632,15 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state);
 // but a melee-only raid still has to kill it or Freya heals 30-60%.
 bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
 
+
+// Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
+// Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
+// instead of splitting across two. Returns nullptr when none are up.
+Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
+
+// What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns
+// included, since she is damageable then - and otherwise the add above.
+Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI);
 
 // Ignis the Furnace Master. These search the grid rather than going through "find target": a bot
 // parked on an Iron Construct never has Ignis on its threat list, and a dormant construct carries
@@ -765,15 +774,6 @@ Position FlameLeviathanLeadPoint(Unit* boss);
 // Eight nodes hugging the arena walls, corners chamfered. Built once from ULDUAR_FL_ARENA_CORNERS.
 std::vector<Position> const& FlameLeviathanKiteRing();
 
-constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
-constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
-
-// Kologarn stands at (1797.15, -24.40) facing o=pi, so the entrance is -X and the arms split along
-// Y. The walkway runs from the Shattered Walkway Door (x 1740.84) to the broken span at x 1782,
-// beyond which boss_kologarn_pit_kill_bunny instakills anything that falls in.
-constexpr float ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS = 100.0f;
-constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MIN = 1745.0f;
-constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MAX = 1780.0f;
 // Mimiron. The P3Wx2 Laser Barrage beams follow VX-001's facing, which the core repoints at NPC
 // 33576 on every tick of the aura, so the bearing to that NPC is the cone's centreline. Falls back
 // to VX-001's own facing when 33576 is absent (world DB update 2026_08_10_00 unapplied) - the core
@@ -805,6 +805,15 @@ MimironBarrageArc const& GetMimironLatchedBarrageArc(Player* bot, Unit* vx001);
 // two disagree about where the bot belongs.
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 
+constexpr float ULDUAR_KOLOGARN_AXIS_Z_PATHING_ISSUE_DETECT = 420.0f;
+constexpr float ULDUAR_KOLOGARN_EYEBEAM_RADIUS = 3.0f;
+
+// Kologarn stands at (1797.15, -24.40) facing o=pi, so the entrance is -X and the arms split along
+// Y. The walkway runs from the Shattered Walkway Door (x 1740.84) to the broken span at x 1782,
+// beyond which boss_kologarn_pit_kill_bunny instakills anything that falls in.
+constexpr float ULDUAR_KOLOGARN_ROOM_SEARCH_RADIUS = 100.0f;
+constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MIN = 1745.0f;
+constexpr float ULDUAR_KOLOGARN_WALKWAY_X_MAX = 1780.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MIN = -48.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_Y_MAX = -2.0f;
 constexpr float ULDUAR_KOLOGARN_WALKWAY_Z = 448.0f;
@@ -839,18 +848,36 @@ constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 12.0f;
 constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
-// Sonic Screech (64422) is a 120-degree cone per spell_cone, and HasInArc takes the full arc, not
-// the half-angle. Seeping Feral Essence's radius is DBC, so 10 yd is a conservative guess.
-constexpr float ULDUAR_AURIAYA_SONIC_SCREECH_CONE = 2.0f * static_cast<float>(M_PI) / 3.0f;
-constexpr float ULDUAR_AURIAYA_SONIC_SCREECH_RANGE = 45.0f;
+// Seeping Feral Essence's radius is DBC, so 10 yd is a conservative guess.
 constexpr float ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS = 10.0f;
 
-// Main tank steering Auriaya's cone away from the raid. The tank holds still inside the tolerance,
-// because a bot that never stops moving never lands a cast; the step is small so the arc stays on
-// the navmesh, and a raid huddled on the boss gives a bearing too noisy to chase.
-constexpr float ULDUAR_AURIAYA_FACING_TOLERANCE = 0.15f;
-constexpr float ULDUAR_AURIAYA_FACING_ARC_STEP = 0.125f;
-constexpr float ULDUAR_AURIAYA_FACING_MIN_RAID_DIST = 8.0f;
+// Sonic Screech (64422 / 64688) carries SPELL_ATTR0_CU_SHARE_DAMAGE, so its 60k (10man) / 200k
+// (25man) is divided among everyone in the 120-degree cone. Nobody dodges it: the raid stacks in the
+// arc and splits it, and whoever eats it alone dies. Auriaya faces her victim, so a main tank that
+// holds a fixed spot is the entire facing control - there is nothing to steer.
+//
+// The stack sits this far from the boss, on the bearing running from her through the main tank. The
+// bearing is rounded to this quantum so that small tank drift cannot shuffle twenty bots; one bucket
+// is a 3.9 yd arc at the standoff, which the arrival tolerances below absorb.
+constexpr float ULDUAR_AURIAYA_RAID_STANDOFF = 20.0f;
+constexpr float ULDUAR_AURIAYA_BEARING_QUANTUM = static_cast<float>(M_PI) / 16.0f;
+constexpr float ULDUAR_AURIAYA_MAINTANK_SPOT_TOLERANCE = 3.0f;
+constexpr float ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE = 5.0f;
+constexpr float ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE = 8.0f;
+
+// Every Feral Defender life leaves a Seeping Feral Essence pool, the summon has no duration, and
+// nothing despawns them until the boss dies - up to 9 per pull. So the fight walks west in fixed
+// steps as they pile up, and a station is retired once a pool lands this close to either of its two
+// spots. Three is what the confirmed floor supports; a fourth would put the stack past x 1908.
+constexpr int ULDUAR_AURIAYA_STATION_COUNT = 3;
+constexpr float ULDUAR_AURIAYA_STATION_CLEAR_RADIUS = 12.0f;
+constexpr float ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS = 100.0f;
+
+// How far a bot may drift off its anchor to clear a pool, and how close the Feral Defender has to be
+// to the boss before melee will swing at it. It re-rolls aggro constantly, so an ungated melee would
+// spend the fight chasing it around the room.
+constexpr float ULDUAR_AURIAYA_ESSENCE_LEASH = 12.0f;
+constexpr float ULDUAR_AURIAYA_MELEE_DEFENDER_RANGE = 15.0f;
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
 constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 150.0f;
@@ -904,6 +931,11 @@ extern const Position ULDUAR_XT002_RANGED_SPOT;
 extern const Position ULDUAR_XT002_SEARING_LIGHT_SPOT;
 extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE;
 extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
+
+// Auriaya's lane, ULDUAR_AURIAYA_STATION_COUNT entries each. The nominal raid points are only ever
+// used to retire a station - the stack's real anchor comes off the live boss.
+extern const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[];
+extern const Position ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[];
 
 class RazorscaleBossHelper : public AiObject
 {

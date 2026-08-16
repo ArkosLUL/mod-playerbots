@@ -116,16 +116,15 @@ public:
         creators["ignis brittle construct mark action"] = &RaidUlduarActionContext::ignis_brittle_construct_mark_action;
         creators["ignis molten construct avoid action"] = &RaidUlduarActionContext::ignis_molten_construct_avoid_action;
         creators["ignis slag pot heal action"] = &RaidUlduarActionContext::ignis_slag_pot_heal_action;
-        creators["auriaya sonic screech action"] = &RaidUlduarActionContext::auriaya_sonic_screech_action;
         creators["auriaya seeping essence action"] = &RaidUlduarActionContext::auriaya_seeping_essence_action;
-        creators["auriaya mark dps target action"] = &RaidUlduarActionContext::auriaya_mark_dps_target_action;
         creators["auriaya sentry taunt action"] = &RaidUlduarActionContext::auriaya_sentry_taunt_action;
-        creators["auriaya tank facing action"] = &RaidUlduarActionContext::auriaya_tank_facing_action;
+        creators["auriaya raid position action"] = &RaidUlduarActionContext::auriaya_raid_position_action;
+        creators["auriaya set dps priority action"] = &RaidUlduarActionContext::auriaya_set_dps_priority_action;
         creators["auriaya anti fear action"] = &RaidUlduarActionContext::auriaya_anti_fear_action;
+        creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron magnetic core action"] = &RaidUlduarActionContext::mimiron_magnetic_core_action;
         creators["mimiron plasma blast action"] = &RaidUlduarActionContext::mimiron_plasma_blast_action;
         creators["mimiron set dps priority action"] = &RaidUlduarActionContext::mimiron_set_dps_priority_action;
-        creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
         creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
@@ -248,16 +247,15 @@ private:
     static Action* ignis_brittle_construct_mark_action(PlayerbotAI* ai) { return new IgnisBrittleConstructMarkAction(ai); }
     static Action* ignis_molten_construct_avoid_action(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidAction(ai); }
     static Action* ignis_slag_pot_heal_action(PlayerbotAI* ai) { return new IgnisSlagPotHealAction(ai); }
-    static Action* auriaya_sonic_screech_action(PlayerbotAI* ai) { return new AuriayaSonicScreechAction(ai); }
     static Action* auriaya_seeping_essence_action(PlayerbotAI* ai) { return new AuriayaSeepingEssenceAction(ai); }
-    static Action* auriaya_mark_dps_target_action(PlayerbotAI* ai) { return new AuriayaMarkDpsTargetAction(ai); }
     static Action* auriaya_sentry_taunt_action(PlayerbotAI* ai) { return new AuriayaSentryTauntAction(ai); }
-    static Action* auriaya_tank_facing_action(PlayerbotAI* ai) { return new AuriayaTankFacingAction(ai); }
+    static Action* auriaya_raid_position_action(PlayerbotAI* ai) { return new AuriayaRaidPositionAction(ai); }
+    static Action* auriaya_set_dps_priority_action(PlayerbotAI* ai) { return new AuriayaSetDpsPriorityAction(ai); }
+    static Action* auriaya_anti_fear_action(PlayerbotAI* ai) { return new AuriayaAntiFearAction(ai); }
+    static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_magnetic_core_action(PlayerbotAI* ai) { return new MimironMagneticCoreAction(ai); }
     static Action* mimiron_plasma_blast_action(PlayerbotAI* ai) { return new MimironPlasmaBlastAction(ai); }
     static Action* mimiron_set_dps_priority_action(PlayerbotAI* ai) { return new MimironSetDpsPriorityAction(ai); }
-    static Action* auriaya_anti_fear_action(PlayerbotAI* ai) { return new AuriayaAntiFearAction(ai); }
-    static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
     static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }

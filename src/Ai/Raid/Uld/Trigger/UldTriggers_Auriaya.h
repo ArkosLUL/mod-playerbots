@@ -17,31 +17,10 @@ public:
     bool IsActive() override;
 };
 
-class AuriayaSonicScreechTrigger : public Trigger
-{
-public:
-    AuriayaSonicScreechTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya sonic screech trigger") {}
-    bool IsActive() override;
-};
-
 class AuriayaSeepingEssenceTrigger : public Trigger
 {
 public:
     AuriayaSeepingEssenceTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya seeping essence trigger") {}
-    bool IsActive() override;
-};
-
-class AuriayaMarkDpsTargetTrigger : public Trigger
-{
-public:
-    AuriayaMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya mark dps target trigger") {}
-    bool IsActive() override;
-};
-
-class AuriayaAttackDpsTargetTrigger : public Trigger
-{
-public:
-    AuriayaAttackDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya attack dps target trigger") {}
     bool IsActive() override;
 };
 
@@ -52,10 +31,17 @@ public:
     bool IsActive() override;
 };
 
-class AuriayaTankFacingTrigger : public Trigger
+class AuriayaRaidPositionTrigger : public Trigger
 {
 public:
-    AuriayaTankFacingTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya tank facing trigger") {}
+    AuriayaRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya raid position trigger") {}
+    bool IsActive() override;
+};
+
+class AuriayaSetDpsPriorityTrigger : public Trigger
+{
+public:
+    AuriayaSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya set dps priority trigger") {}
     bool IsActive() override;
 };
 

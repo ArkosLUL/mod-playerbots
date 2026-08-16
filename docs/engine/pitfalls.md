@@ -237,6 +237,10 @@ back half is the entire circle, so a check like `boss->isInFront(bot) || boss->i
 **always true**. On Sapphiron this made a priority-61 repositioning action permanently active and
 starved the melee rotation for the whole ground phase.
 
+`IsBotInFrontalCone` forwards to `HasInArc`, which takes the **full** arc, not the half-angle — an
+`M_PI / 2` argument leaves everyone between 45° and 60° off-centre inside a cone they believe they
+cleared.
+
 Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` returns
 `UNIT_FIELD_COMBATREACH` (`Object.cpp:2888`), `IsWithinCombatRange` is `dist3d < d + reachSum`, and
 `GetMeleeRange = reachSum + 4/3`. Hard-coded stand distances that ignore reach break on large models.

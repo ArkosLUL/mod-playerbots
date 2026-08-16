@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <ctime>
+#include <limits>
 #include <list>
 #include <unordered_map>
 #include <utility>
@@ -69,6 +70,17 @@ const Position ULDUAR_XT002_SEARING_LIGHT_SPOT = Position(862.73724f, 12.77857f,
 // Two origins so melee and ranged carriers do not drop Void Zones on top of each other.
 const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE = Position(871.5199f, -54.04216f, 409.80377f);
 const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED = Position(837.0746f, -53.01061f, 409.80362f);
+
+// Auriaya's lane. She spawns at (1956.2, 49.32, 411.36) facing (-0.955, 0.296), which points down
+// the room and directly away from the corridor at +x, so the fight walks that bearing in 10 yd steps
+// as her void zones pile up. Tank spots sit 5/15/25 yd out, the raid points 15 yd behind each. All
+// six are inside the floor at x 1909-1956, y 43-82.
+const Position ULDUAR_AURIAYA_MAINTANK_SPOTS[ULDUAR_AURIAYA_STATION_COUNT] = {
+    Position(1951.42f, 50.79f, 411.36f), Position(1941.87f, 53.75f, 411.36f),
+    Position(1932.32f, 56.71f, 411.36f)};
+const Position ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[ULDUAR_AURIAYA_STATION_COUNT] = {
+    Position(1937.10f, 55.23f, 411.36f), Position(1927.54f, 58.19f, 411.36f),
+    Position(1917.99f, 61.15f, 411.36f)};
 
 // Prevent harpoon spam
 std::unordered_map<ObjectGuid, time_t> RazorscaleBossHelper::_harpoonCooldowns;
@@ -444,59 +456,102 @@ Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank)
     return nullptr;
 }
 
-Position GetAuriayaRaidCentroid(Player* bot)
+std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius)
 {
-    Group* group = bot->GetGroup();
-    if (!group)
-        return Position(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
+    std::vector<Unit*> pools;
+    if (!from)
+        return pools;
 
-    float sumX = 0.0f;
-    float sumY = 0.0f;
-    uint32 count = 0;
+    std::list<Creature*> found;
+    from->GetCreatureListWithEntryInGrid(found, NPC_AURIAYA_SEEPING_FERAL_ESSENCE, radius);
 
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || !member->IsInWorld() || member->GetMapId() != ULDUAR_MAP_ID)
-            continue;
+    for (Creature* creature : found)
+        if (creature && creature->IsAlive())
+            pools.push_back(creature);
 
-        if (PlayerbotAI::IsMainTank(member) || PlayerbotAI::IsAssistTankOfIndex(member, 0, true))
-            continue;
-
-        sumX += member->GetPositionX();
-        sumY += member->GetPositionY();
-        ++count;
-    }
-
-    if (!count)
-        return Position(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
-
-    return Position(sumX / count, sumY / count, bot->GetPositionZ());
+    return pools;
 }
 
-bool GetAuriayaFacingError(PlayerbotAI* botAI, Player* bot, float& error)
+// A station is dead once a pool sits inside ULDUAR_AURIAYA_STATION_CLEAR_RADIUS of either of its two
+// spots. In practice the raid point is what retires it, since the Defender dies wherever it aggroed.
+static bool AuriayaStationClear(std::vector<Unit*> const& pools, int index)
+{
+    for (Unit* pool : pools)
+    {
+        if (pool->GetExactDist2d(&ULDUAR_AURIAYA_MAINTANK_SPOTS[index]) < ULDUAR_AURIAYA_STATION_CLEAR_RADIUS ||
+            pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[index]) < ULDUAR_AURIAYA_STATION_CLEAR_RADIUS)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+int GetAuriayaStationIndex(PlayerbotAI* botAI)
+{
+    Unit* boss = GetAuriaya(botAI);
+    if (!boss)
+        return 0;
+
+    std::vector<Unit*> const pools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
+
+    for (int i = 0; i < ULDUAR_AURIAYA_STATION_COUNT; ++i)
+        if (AuriayaStationClear(pools, i))
+            return i;
+
+    // Every station is polluted, so take the least bad one. Pools never expire, so this only changes
+    // when a new one drops and cannot flip back and forth between ticks.
+    int best = ULDUAR_AURIAYA_STATION_COUNT - 1;
+    float bestClearance = -1.0f;
+
+    for (int i = 0; i < ULDUAR_AURIAYA_STATION_COUNT; ++i)
+    {
+        float clearance = std::numeric_limits<float>::max();
+        for (Unit* pool : pools)
+            clearance = std::min(clearance, pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[i]));
+
+        if (clearance > bestClearance)
+        {
+            bestClearance = clearance;
+            best = i;
+        }
+    }
+
+    return best;
+}
+
+bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     Unit* boss = GetAuriaya(botAI);
     if (!boss)
         return false;
 
-    Position const centroid = GetAuriayaRaidCentroid(bot);
-    if (boss->GetExactDist2d(centroid.GetPositionX(), centroid.GetPositionY()) <
-        ULDUAR_AURIAYA_FACING_MIN_RAID_DIST)
+    if (botAI->IsMainTank(bot))
     {
-        return false;
+        out = ULDUAR_AURIAYA_MAINTANK_SPOTS[GetAuriayaStationIndex(botAI)];
+        tolerance = ULDUAR_AURIAYA_MAINTANK_SPOT_TOLERANCE;
+        return true;
     }
 
-    // Auriaya faces her victim, so the tank steers her by standing on the bearing that points the
-    // cone away from everyone else - that is the bearing running from the raid through the boss.
-    float const desired = std::atan2(boss->GetPositionY() - centroid.GetPositionY(),
-                                     boss->GetPositionX() - centroid.GetPositionX());
+    if (!botAI->IsRanged(bot))
+        return false;
 
-    float diff = Position::NormalizeOrientation(boss->GetOrientation() - desired);
-    if (diff > M_PI)
-        diff -= 2.0f * static_cast<float>(M_PI);
+    // The stack has to sit inside the cone, and the cone points at whoever she is chasing. Reading
+    // her victim rather than a fixed bearing is what keeps this correct when a human holds her.
+    Unit* victim = boss->GetVictim();
+    float bearing = victim && victim != boss
+                        ? boss->GetAngle(victim)
+                        : boss->GetOrientation();
 
-    error = diff;
+    // Round the bearing off so tank drift cannot shuffle the whole raid every tick.
+    bearing = std::round(bearing / ULDUAR_AURIAYA_BEARING_QUANTUM) * ULDUAR_AURIAYA_BEARING_QUANTUM;
+
+    out = Position(boss->GetPositionX() + std::cos(bearing) * ULDUAR_AURIAYA_RAID_STANDOFF,
+                   boss->GetPositionY() + std::sin(bearing) * ULDUAR_AURIAYA_RAID_STANDOFF,
+                   boss->GetPositionZ());
+    tolerance = botAI->IsRangedDps(bot) ? ULDUAR_AURIAYA_RANGED_SPOT_TOLERANCE
+                                        : ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE;
     return true;
 }
 
@@ -540,61 +595,6 @@ static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
     return nullptr;
 }
 
-// Lowest health first, so two Sentinels up do not split the raid's damage and the skull does not flip
-// between them as the marking bot moves. Entry order alone is resolved per bot and is not stable.
-static Unit* GetLowestHealthUnitByEntry(PlayerbotAI* botAI, uint32 entry)
-{
-    Unit* best = nullptr;
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != entry)
-            continue;
-
-        if (!best || unit->GetHealth() < best->GetHealth())
-            best = unit;
-    }
-
-    return best;
-}
-
-Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
-{
-    if (Unit* sentinel = GetLowestHealthUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
-        return sentinel;
-
-    if (Unit* watcher = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER))
-        return watcher;
-
-    return GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
-}
-
-Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI)
-{
-    Unit* boss = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "razorscale")->Get();
-    if (!boss || !boss->IsAlive())
-        return nullptr;
-
-    if (boss->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
-        return boss;
-
-    return GetRazorscaleAddKillTarget(botAI);
-}
-
-Unit* GetXT002(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_XT002); }
-
-Unit* GetXT002ExposedHeart(PlayerbotAI* botAI)
-{
-    Unit* heart = GetFirstAliveNpcByEntry(botAI, NPC_HEART_OF_DECONSTRUCTOR);
-    if (!heart || heart->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
-        return nullptr;
-
-    // The Heart is only worth hitting while it channels Exposed Heart - that aura is what transfers
-    // its damage taken to XT.
-    return heart->HasAura(SPELL_XT002_EXPOSED_HEART) ? heart : nullptr;
-}
-
-bool IsXT002Submerged(PlayerbotAI* botAI)
 // Freya
 
 std::vector<Unit*> FreyaWaveState::LivingTrio() const
@@ -795,6 +795,61 @@ bool FreyaHasLivingRangedDps(PlayerbotAI* botAI)
     return false;
 }
 
+// Lowest health first, so two Sentinels up do not split the raid's damage and the skull does not flip
+// between them as the marking bot moves. Entry order alone is resolved per bot and is not stable.
+static Unit* GetLowestHealthUnitByEntry(PlayerbotAI* botAI, uint32 entry)
+{
+    Unit* best = nullptr;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != entry)
+            continue;
+
+        if (!best || unit->GetHealth() < best->GetHealth())
+            best = unit;
+    }
+
+    return best;
+}
+
+Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
+{
+    if (Unit* sentinel = GetLowestHealthUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
+        return sentinel;
+
+    if (Unit* watcher = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER))
+        return watcher;
+
+    return GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
+}
+
+Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI)
+{
+    Unit* boss = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "razorscale")->Get();
+    if (!boss || !boss->IsAlive())
+        return nullptr;
+
+    if (boss->GetPositionZ() <= RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
+        return boss;
+
+    return GetRazorscaleAddKillTarget(botAI);
+}
+
+Unit* GetXT002(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_XT002); }
+
+Unit* GetXT002ExposedHeart(PlayerbotAI* botAI)
+{
+    Unit* heart = GetFirstAliveNpcByEntry(botAI, NPC_HEART_OF_DECONSTRUCTOR);
+    if (!heart || heart->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return nullptr;
+
+    // The Heart is only worth hitting while it channels Exposed Heart - that aura is what transfers
+    // its damage taken to XT.
+    return heart->HasAura(SPELL_XT002_EXPOSED_HEART) ? heart : nullptr;
+}
+
+bool IsXT002Submerged(PlayerbotAI* botAI)
 {
     Unit* xt002 = GetXT002(botAI);
     if (!xt002)
