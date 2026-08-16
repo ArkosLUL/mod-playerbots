@@ -2724,31 +2724,56 @@ inline Item* StoreNewItemInInventorySlot(Player* player, uint32 newItemId, uint3
 //     }
 // }
 
-void PlayerbotFactory::InitBags(bool destroyOld)
+void PlayerbotFactory::InitBags()
 {
+    // Bags are INVTYPE_BAG, which CanChangeEquipStateInCombat() rejects, so nothing here can
+    // succeed mid-fight. The next maintenance run picks it up.
+    if (bot->IsInCombat())
+        return;
+
+    uint32 const newItemId = 51809;
+    ItemTemplate const* newProto = sObjectMgr->GetItemTemplate(newItemId);
+    if (!newProto)
+        return;
+
     for (uint8 slot = INVENTORY_SLOT_BAG_START; slot < INVENTORY_SLOT_BAG_END; ++slot)
     {
-        uint32 newItemId = 51809;
-        Item* old_bag = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
-        if (old_bag && old_bag->GetTemplate()->ItemId == newItemId)
-            continue;
+        Item* oldBag = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (oldBag)
+        {
+            ItemTemplate const* oldProto = oldBag->GetTemplate();
+            // Quivers, ammo pouches and profession bags hold things a plain bag can't.
+            if (oldProto->Class != ITEM_CLASS_CONTAINER || oldProto->SubClass != ITEM_SUBCLASS_CONTAINER)
+                continue;
+
+            if (oldProto->ContainerSlots >= newProto->ContainerSlots)
+                continue;
+        }
 
         uint16 dest;
         if (!CanEquipUnseenItem(slot, dest, newItemId))
             continue;
 
-        if (old_bag && destroyOld)
-            bot->DestroyItem(INVENTORY_SLOT_BAG_0, slot, true);
+        if (!oldBag)
+        {
+            bot->EquipNewItem(dest, newItemId, true);
+            continue;
+        }
 
-        if (old_bag)
+        // Park the new bag in the backpack, then let SwapItem's bag-exchange path carry the old
+        // bag's contents across. Storing with bag == INVENTORY_SLOT_BAG_0 restricts the search to
+        // backpack slots, so the new bag can never land inside the bag it is about to replace.
+        Item* newBag = StoreNewItemInInventorySlot(bot, newItemId, 1);
+        if (!newBag)
             continue;
 
-        bot->EquipNewItem(dest, newItemId, true);
-        // if (newItem)
-        // {
-        //     newItem->AddToWorld();
-        //     newItem->AddToUpdateQueueOf(bot);
-        // }
+        uint8 srcBag = newBag->GetBagSlot();
+        uint8 srcSlot = newBag->GetSlot();
+        bot->SwapItem((srcBag << 8) | srcSlot, (INVENTORY_SLOT_BAG_0 << 8) | slot);
+
+        // Whatever sits at the source now is an empty bag: the old one if the swap went through,
+        // the new one if it was refused.
+        bot->DestroyItem(srcBag, srcSlot, true);
     }
 }
 

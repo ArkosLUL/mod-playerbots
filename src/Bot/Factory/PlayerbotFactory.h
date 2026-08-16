@@ -84,7 +84,7 @@ public:
     void InitGlyphs(bool increment = false);
     void InitFood();
     void InitMounts();
-    void InitBags(bool destroyOld = true);
+    void InitBags();
     void ApplyEnchantAndGemsNew(bool destroyOld = true);
     void InitInstanceQuests();
     void UnbindInstance();

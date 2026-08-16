@@ -31,24 +31,29 @@ void EquipAction::EquipItems(ItemIds ids)
     }
 }
 
-// Return bagslot with smalest bag.
+// Return bagslot with smalest bag, or 0 when there is nowhere we may put one.
 uint8 EquipAction::GetSmallestBagSlot()
 {
-    int8 curBag = 0;
+    uint8 curBag = 0;
     uint32 curSlots = 0;
     for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
     {
-        const Bag* const pBag = (Bag*)bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
-        if (pBag)
-        {
-            if (curBag > 0 && curSlots < pBag->GetBagSize())
-                continue;
-
-            curBag = bag;
-            curSlots = pBag->GetBagSize();
-        }
-        else
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
+        if (!item)
             return bag;
+
+        ItemTemplate const* proto = item->GetTemplate();
+        // Never swap a plain bag over a quiver, ammo pouch or profession bag. Must stay in step
+        // with ItemUsageValue::GetSmallestBagSize, which decides whether we want the bag at all.
+        if (proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER)
+            continue;
+
+        uint32 size = ((Bag const*)item)->GetBagSize();
+        if (!curBag || size < curSlots)
+        {
+            curBag = bag;
+            curSlots = size;
+        }
     }
 
     return curBag;

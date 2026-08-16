@@ -186,7 +186,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
     if (!botAI->IsAltBot())
     {
         factory.InitAttunementQuests();
-        factory.InitBags(false);
+        factory.InitBags();
         factory.InitAmmo();
         factory.InitFood();
         factory.InitReagents();
@@ -212,7 +212,7 @@ bool MaintenanceAction::Execute(Event /*event*/)
             factory.InitAttunementQuests();
 
         if (sPlayerbotAIConfig.altMaintenanceBags)
-            factory.InitBags(false);
+            factory.InitBags();
 
         if (sPlayerbotAIConfig.altMaintenanceAmmo)
             factory.InitAmmo();

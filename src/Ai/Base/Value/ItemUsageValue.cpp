@@ -30,6 +30,7 @@
 #include <array>
 #include <cctype>
 #include <initializer_list>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -1561,23 +1562,31 @@ ItemUsage ItemUsageValue::QueryItemUsageForAmmo(ItemTemplate const* proto)
 
 uint32 ItemUsageValue::GetSmallestBagSize()
 {
-    int8 curSlot = 0;
+    bool found = false;
     uint32 curSlots = 0;
-    for (uint8 bag = INVENTORY_SLOT_BAG_START + 1; bag < INVENTORY_SLOT_BAG_END; ++bag)
+    for (uint8 bag = INVENTORY_SLOT_BAG_START; bag < INVENTORY_SLOT_BAG_END; ++bag)
     {
-        if (Bag const* pBag = (Bag*)bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag))
-        {
-            if (curSlot > 0 && curSlots < pBag->GetBagSize())
-                continue;
-
-            curSlot = pBag->GetSlot();
-            curSlots = pBag->GetBagSize();
-        }
-        else
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, bag);
+        if (!item)
             return 0;
+
+        ItemTemplate const* proto = item->GetTemplate();
+        // Quivers, ammo pouches and profession bags are off limits, so they count neither as a
+        // bag we have nor as one we could replace. Must stay in step with
+        // EquipAction::GetSmallestBagSlot, which picks the slot this size comes from.
+        if (proto->Class != ITEM_CLASS_CONTAINER || proto->SubClass != ITEM_SUBCLASS_CONTAINER)
+            continue;
+
+        uint32 size = ((Bag const*)item)->GetBagSize();
+        if (!found || size < curSlots)
+        {
+            found = true;
+            curSlots = size;
+        }
     }
 
-    return curSlots;
+    // Every slot is taken and none of them may be replaced.
+    return found ? curSlots : std::numeric_limits<uint32>::max();
 }
 
 bool ItemUsageValue::IsItemUsefulForQuest(Player* player, ItemTemplate const* proto)
