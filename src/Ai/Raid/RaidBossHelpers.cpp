@@ -305,6 +305,58 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
     return dynObjs;
 }
 
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
+                                           float maxRadius, float distanceStep, float angleStep)
+{
+    if (hazards.empty() || distanceStep <= 0.0f || angleStep <= 0.0f)
+        return Position();
+
+    // Rings outward, so the first hit is also the shortest walk. Nothing checks the path: a bot that
+    // has to cross a hazard to leave one is still better off out the far side than standing still.
+    for (float distance = distanceStep; distance <= maxRadius; distance += distanceStep)
+    {
+        for (float angle = 0.0f; angle < 2.0f * static_cast<float>(M_PI); angle += angleStep)
+        {
+            float x = bot->GetPositionX() + distance * std::cos(angle);
+            float y = bot->GetPositionY() + distance * std::sin(angle);
+            float z = bot->GetPositionZ();
+
+            bool clear = true;
+            for (Position const& hazard : hazards)
+            {
+                if (hazard.GetExactDist2d(x, y) < clearRadius)
+                {
+                    clear = false;
+                    break;
+                }
+            }
+
+            if (!clear)
+                continue;
+
+            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                               bot->GetPositionZ(), x, y, z))
+                continue;
+
+            // The collision check can pull the spot back short of the hazard it was clearing.
+            bool stillClear = true;
+            for (Position const& hazard : hazards)
+            {
+                if (hazard.GetExactDist2d(x, y) < clearRadius)
+                {
+                    stillClear = false;
+                    break;
+                }
+            }
+
+            if (stillClear)
+                return Position(x, y, z, 0.0f);
+        }
+    }
+
+    return Position();
+}
+
 // Return the shortest-rotation spot just outside source's frontal cone, at the bot's current
 // distance, so a bot caught in a cone attack sidesteps out of the arc instead of running the whole
 // way behind the boss. coneAngle is the full arc width (matching IsBotInFrontalCone); margin is the

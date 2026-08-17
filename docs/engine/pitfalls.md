@@ -88,9 +88,20 @@ must still outrank heals while the bot is unsheltered.
   (`MMapMgr.cpp:71`).
 
   `FleePosition` (`MovementActions.cpp:2214`) picks a navmesh-validated destination via
-  `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it, or pass the
-  platform/boss floor Z rather than `bot->GetPositionZ()` and shrink the radius until the path
-  succeeds.
+  `BestPositionForRangedToFlee`, which is why it never fails this way. Prefer it where 5 yd of travel
+  is enough (next bullet), or pass the platform/boss floor Z rather than `bot->GetPositionZ()` and
+  shrink the radius until the path succeeds.
+- **`FleePosition` caps travel at `AiPlayerbot.FleeDistance`** — `min(radius + 1, fleeDistance)`,
+  default **5.0** (`MovementActions.cpp:2152`, `:2215`) — so `radius` is a request, not a distance,
+  and a bot centred on a 10 yd blast steps 5 yd and eats it while the action returns `true`. It reads
+  one hazard, and for non-tank melee the candidate angles are perpendicular to the current target or
+  straight at it; away-from-the-hazard is a candidate only while `isTanking` (`:2119-2135`).
+  `CheckLastFlee` then blacklists any angle within 45° of a recent flee's reverse for 5s, so the
+  second hazard of a volley usually yields `Position()` → `false` → the bot resumes attacking inside
+  the blast. Anything wider than ~5 yd, or arriving in numbers, wants
+  `FindNearestPositionClearOfHazards` (`RaidBossHelpers.cpp`), which rings outward to the nearest spot
+  clear of *every* hazard. Freya's Nature Bombs, Detonating Lashers and Unstable Sun Beams were all
+  silently undodgeable until they moved onto it.
 - **`MoveInside(..., distance = 0)` effectively never returns false** — `MovementActions.cpp:1692`
   returns false only when `GetDistance2d <= distance`. The action then succeeds every tick,
   out-prioritises combat, and pins every melee on one exact point at zero DPS. `MoveNear` offsets by

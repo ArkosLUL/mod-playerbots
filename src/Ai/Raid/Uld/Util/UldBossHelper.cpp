@@ -1189,6 +1189,22 @@ bool FreyaHasLivingRangedDps(PlayerbotAI* botAI)
     return false;
 }
 
+std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius)
+{
+    std::list<GameObject*> bombs;
+    bot->GetGameObjectListWithEntryInGrid(bombs, GOBJECT_NATURE_BOMB, searchRadius);
+
+    std::vector<Position> positions;
+    positions.reserve(bombs.size());
+    for (GameObject* bomb : bombs)
+    {
+        if (bomb)
+            positions.push_back(bomb->GetPosition());
+    }
+
+    return positions;
+}
+
 // Lowest health first, so two Sentinels up do not split the raid's damage and the skull does not flip
 // between them as the marking bot moves. Entry order alone is resolved per bot and is not stable.
 static Unit* GetLowestHealthUnitByEntry(PlayerbotAI* botAI, uint32 entry)

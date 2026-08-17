@@ -90,7 +90,9 @@ enum UlduarIDs
     NPC_HEALTHY_SPORE = 33215,
     NPC_EONARS_GIFT = 33228,
     GOBJECT_NATURE_BOMB = 194902,
-    SPELL_ATTUNED_TO_NATURE = 62519,  // damage reduction Freya carries for the whole wave phase
+    // +8% healing received per stack, 150 stacks on engage: Freya cannot be killed until the wave
+    // adds have taken it off her, so damage on her before then is wasted.
+    SPELL_ATTUNED_TO_NATURE = 62519,
 
     // Freya hard mode: Elders left alive permanently empower Freya with an extra ability each.
     // NPC_FREYA comes from core ulduar.h via UldScripts.h.
@@ -539,6 +541,20 @@ constexpr float ULDUAR_FREYA_MELEE_LASHER_RANGE = 12.0f;
 // the gap, so without this it would swap every few ticks and lose swing timers to nothing.
 constexpr float ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT = 5.0f;
 
+// Nature Bomb (64587) is 10 yd in both raid sizes and lands at the target's own feet, leaving ~6s to
+// clear the full radius from a standing start. The extra yard covers the bot's own reach so it does
+// not clip the edge of the blast while holding still.
+constexpr float ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS = 11.0f;
+
+// Where the escape aims, deliberately past the trigger radius: landing on the boundary would re-fire
+// the node every tick as combat movement pulls the bot back toward its target.
+constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
+
+// How far the escapes look for hazards to route around. Every one of Freya's comes in numbers - a
+// bomb per player, ten lashers, overlapping sun beams - so stepping clear of the nearest is not
+// enough; the whole cluster has to be visible or the bot walks out of one and into the next.
+constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
+
 // Hodir. Every radius here is the real DBC value, and three of them were previously wrong.
 //
 // Starlight (62807) is the fight's biggest throughput lever: aura 193 runs through
@@ -818,6 +834,10 @@ Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator);
 // True while any bot in the group that counts as ranged DPS is alive. Eonar's Gift is a ranged job,
 // but a melee-only raid still has to kill it or Freya heals 30-60%.
 bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
+
+// Every live Nature Bomb near the bot. GameObjects, not creatures: the bomb NPC is banished and never
+// shows up in the npc value lists.
+std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
 
 
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >

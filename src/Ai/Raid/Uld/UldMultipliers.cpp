@@ -484,11 +484,16 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {true, aliveCount == 1};
     }
 
-    // Attuned to Nature is up for the whole wave phase and reduces her damage taken; the core drops
-    // it when it enters the final phase (boss_freya.cpp).
+    // Attuned to Nature is 150 stacks of +8% healing received, so nothing spent on Freya lands until
+    // the wave adds have taken it off her; the core drops it when it enters the final phase
+    // (boss_freya.cpp). Personal cooldowns wait with lust rather than opening on the adds: they are
+    // not boss-flagged, so HoldBurstUntilTankEngagedMultiplier zeroes burst on them anyway.
     if (freya)
     {
-        return {true, !freya->HasAura(SPELL_ATTUNED_TO_NATURE) || freya->GetHealthPct() <= FREYA_LUST_FALLBACK_PCT};
+        bool const finalPhase =
+            !freya->HasAura(SPELL_ATTUNED_TO_NATURE) || freya->GetHealthPct() <= FREYA_LUST_FALLBACK_PCT;
+
+        return {finalPhase, finalPhase};
     }
 
     if (thorim)

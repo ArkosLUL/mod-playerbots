@@ -107,7 +107,9 @@ registration maps then need no edits.
 ## Multiplier semantics
 
 Multipliers multiply, so independent gates AND together for free — the shared burst gate and a
-per-boss lust gate compose with no coordination. Returning `0.0f` is the standard veto idiom.
+per-boss lust gate compose with no coordination. Returning `0.0f` is the standard veto idiom, and it
+is **final**: no later multiplier can hand the action back, so a rule phrased as "allow X here" only
+works if nothing else already vetoed X.
 
 `dynamic_cast` is the identification mechanism, and **must be narrow**: cast to the concrete action
 (`CastMisdirectionOnMainTankAction`), never a shared base like `BuffOnMainTankAction` — that base

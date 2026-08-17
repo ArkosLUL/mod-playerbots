@@ -17,16 +17,16 @@
 
 bool FreyaNearNatureBombTrigger::IsActive()
 {
-    // Check boss and it is alive
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
-    {
         return false;
-    }
 
-    // Find the nearest Nature Bomb
-    GameObject* target = bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, 12.0f);
-    return target != nullptr;
+    // Tanks eat the bomb. Stepping out would drag Freya toward the raid, or lift the Conservator off
+    // the spore the melee are sheltering on, and ~6k every 18s is cheaper than either.
+    if (botAI->IsTank(bot))
+        return false;
+
+    return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;
 }
 
 bool FreyaSetDpsPriorityTrigger::IsActive()

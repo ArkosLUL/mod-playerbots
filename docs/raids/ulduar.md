@@ -420,10 +420,19 @@ casting range of both the boss and the melee stack. Tanks are excluded from the 
 add tank arrives inside the aura by dragging the boss there, and the main tank never repositions Freya.
 
 Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
-whole fight, dropping 7-10 bombs in 25-man at players' feet (`boss_freya.cpp:645-660`). Dodging keeps
-its `ACTION_RAID + 4` priority — a bomb hit costs more than a few pacified seconds — and the
-"go to the parked spore" rule is what makes the raid re-converge afterwards instead of smearing across
-three spores.
+whole fight, dropping one bomb per player at their own feet — 7-10 in 25-man, 3-4 in 10-man
+(`boss_freya.cpp:645-660`). Damage 64587 is 5850-6150 in **10 yd** with **no difficulty entry**, the
+fuse is ~6s (`:1300-1317`), and the marker is GO **194902** summoned in the bomb creature's `Reset()`;
+the creature itself is banished and never reaches the npc lists.
+
+The escape rings outward to a spot clear of *every* bomb inside `ULDUAR_FREYA_HAZARD_SEARCH_RADIUS`,
+because a volley drops one on each of the stacked melee. The old `FleePosition` dodge moved 5 yd out of
+a 10 yd blast, so it killed everyone it fired for
+([../engine/pitfalls.md](../engine/pitfalls.md)). Tanks are excluded: stepping out would drag Freya
+toward the raid or lift the Conservator off its spore, and ~6k per volley is cheaper than either.
+Dodging keeps its `ACTION_RAID + 4` priority — a bomb hit costs more than a few pacified seconds — and
+the "go to the parked spore" rule is what makes the raid re-converge afterwards instead of smearing
+across three spores.
 
 **Tanks.** The main tank gets Freya, assist tank 0 works down a ladder: Snaplasher (the Hardened Bark
 sink) > Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it >
@@ -461,7 +470,8 @@ never walk one back to the raid.
 Detonate (62598) rolls 4162-4837 in 15 yd and has **no difficulty entry**, so it is identical in both
 sizes — the old 10-man/25-man threshold split was wrong. Non-tanks below
 `ULDUAR_FREYA_DETONATE_FLEE_HEALTH` step out, except the bot actually killing that lasher, which is
-inside 15 yd by definition. Tanks never flee; they eat it.
+inside 15 yd by definition; the step clears *every* lasher in range, since ten roam at once. Tanks
+never flee; they eat it.
 
 **Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
 Snaplasher or Conservator is up, otherwise to whoever is holding Freya, falling back to the group main
@@ -485,8 +495,8 @@ The two object types differ in a way that matters:
   attack-target lists — find them by scanning `"nearest npcs"`.
 
 Breaking Iron Roots sits at `ACTION_RAID + 5`, above the Sun Beam dodge at `+4`, because **a rooted
-bot cannot move**, so it must free itself before it can step out of anything. The beam dodge flees
-the centroid of the in-range beam cluster, not the single nearest beam.
+bot cannot move**, so it must free itself before it can step out of anything. The beam dodge rings
+outward to a spot clear of every beam in range, not away from the nearest one.
 `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is a DBC guess.
 
 ### Mimiron — Firefighter
@@ -1262,9 +1272,11 @@ raid. Two tiers are gated separately: `allowAll` covers every burst cooldown, `a
 `bloodlust`/`heroism` only, because a 10-minute raid cooldown wants a later window than personal
 cooldowns that come back within a phase.
 
-Because burst only ever fires while the bot's current target is boss-flagged, **adds-only phases need
-no gate of their own**. There is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust
-is shaman-only.
+Burst only ever fires while the bot's current target is boss-flagged — `IsDungeonBoss() ||
+isWorldBoss()` in `HoldBurstUntilTankEngagedMultiplier`, under `AiPlayerbot.BurstOnBossOnly` (default
+on). So **adds-only phases need no gate of their own**, and conversely **no `allowAll` rule can open
+burst on an add**: that veto is final. Freya's wave adds are all `flags_extra = 0`, `rank = 1`. There
+is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust is shaman-only.
 
 | Boss | `allowAll` | `allowLust` | Why |
 |---|---|---|---|
@@ -1272,7 +1284,7 @@ is shaman-only.
 | Mimiron | always | all three mechs alive | P1-P3 damage counts; all three up is P4, the enrage burn |
 | Yogg-Saron | P2 or P3 | P3 | P1 damage lands on Sara and is wasted |
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
-| Freya | always | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | The aura reduces damage taken for the whole wave phase |
+| Freya | same as `allowLust` | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | 150 stacks of +8% healing received, so damage lands only in the final phase; the adds that strip it are not boss-flagged |
 | Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |
 | Hodir, Vezax, Algalon, Ignis, Auriaya, Kologarn, Flame Leviathan | — | — | No change; the pull is the right window |
 
