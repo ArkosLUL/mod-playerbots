@@ -169,18 +169,10 @@ float FreyaDisableAutomaticTargetingMultiplier::GetValue(Action* action)
     if (isDpsAssist)
         return PlayerbotAI::IsDps(bot) ? 0.0f : 1.0f;
 
-    if (PlayerbotAI::IsMainTank(bot))
-        return 0.0f;
-
-    if (PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
-    {
-        FreyaWaveState state;
-        GatherFreyaWaveState(botAI, state);
-        if (GetFreyaTankTarget(botAI, state))
-            return 0.0f;
-    }
-
-    return 1.0f;
+    // Every tank, for the whole encounter. Gating this on "the add ladder has something" is what let
+    // generic assist through on a pure Detonating Lasher wave, where the off-tank collected the wave and
+    // walked it into the raid stack.
+    return botAI->IsTank(bot) ? 0.0f : 1.0f;
 }
 
 float FreyaTrioSyncMultiplier::GetValue(Action* action)
@@ -374,6 +366,8 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
     }
 
     static uint32 const noRedirectBosses[] = {
+        // "freya redirect threat" aims at the add tank while it holds the Snaplasher or the Conservator
+        NPC_FREYA,
         // One tank per council member, and Fusion Punch then forces a swap
         NPC_STEELBREAKER, NPC_MOLGEIM, NPC_BRUNDIR,
         // Every phase is a different creature with a fresh threat table; phase 3 splits VX-001 and

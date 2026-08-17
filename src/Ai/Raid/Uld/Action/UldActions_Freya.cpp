@@ -77,32 +77,6 @@ bool FreyaSetDpsPriorityAction::Execute(Event /*event*/)
     return needsAttack ? Attack(target) : false;
 }
 
-Unit* FreyaSetDpsPriorityAction::SelectNearestLasher(Unit* currentTarget, std::vector<Unit*> const& candidates) const
-{
-    Unit* selected = nullptr;
-    if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == NPC_DETONATING_LASHER)
-        selected = currentTarget;
-
-    // The margin stops two lashers at similar range from trading the bot back and forth every tick.
-    constexpr float switchMargin = 10.0f;
-    for (Unit* candidate : candidates)
-    {
-        if (!candidate || candidate == selected)
-            continue;
-
-        if (!selected)
-        {
-            selected = candidate;
-            continue;
-        }
-
-        if (candidate->GetExactDist2d(bot) + switchMargin < selected->GetExactDist2d(bot))
-            selected = candidate;
-    }
-
-    return selected;
-}
-
 Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 {
     FreyaWaveState state;
@@ -129,9 +103,26 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
     priority.push_back(trioMember);
 
     if (trioLocked)
+    {
         priority.push_back(state.conservator);
+    }
     else
-        priority.push_back(SelectNearestLasher(currentTarget, state.detonatingLashers));
+    {
+        bool const isRanged = PlayerbotAI::IsRangedDps(bot);
+        Unit* lasher = isRanged ? GetFreyaRangedLasherFocus(state) : nullptr;
+
+        // The raid-wide focus can be most of the room away. Walking to it would put the bot inside the
+        // 15 yd blast, which is the one thing that keeps ranged safe here, so it shoots whatever it can
+        // already reach instead - and the two converge on their own as lashers close on players.
+        float const reach = isRanged ? sPlayerbotAIConfig.spellDistance : ULDUAR_FREYA_MELEE_LASHER_RANGE;
+        if (lasher && bot->GetExactDist2d(lasher) > reach)
+            lasher = nullptr;
+
+        if (!lasher)
+            lasher = GetFreyaLocalLasherTarget(botAI, state, currentTarget, reach);
+
+        priority.push_back(lasher);
+    }
 
     priority.push_back(AI_VALUE2(Unit*, "find target", "freya"));
 
@@ -182,14 +173,45 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    Unit* target = GetFreyaTankTarget(botAI, state);
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+    Unit* target = GetFreyaTankTarget(botAI, state, currentTarget);
     if (!target)
         return false;
 
-    if (target->GetVictim() != bot && UldCastClassTaunt(botAI, target))
+    // Taunt only what this encounter actually claims. The rest of the ladder is borrowed for damage:
+    // taunting Freya would fight a human main tank whose raid roles are set differently, taunting a Storm
+    // Lasher or Water Spirit would mean owning Tidal Wave positioning, and a lasher drops the taunt again
+    // on its next 10s threat wipe anyway.
+    bool const owned = target == state.snaplasher || target == state.conservator;
+    if (owned && target->GetVictim() != bot && UldCastClassTaunt(botAI, target))
         return true;
 
-    return AI_VALUE(Unit*, "current target") != target ? Attack(target) : false;
+    if (currentTarget != target)
+        return Attack(target);
+
+    return target == state.conservator ? ParkConservator(target) : false;
+}
+
+bool FreyaTankAddsAction::ParkConservator(Unit* conservator)
+{
+    Unit* spore = botAI->GetUnit(parkedSpore);
+    if (!spore || !spore->IsAlive())
+    {
+        spore = GetFreyaConservatorSpore(botAI, conservator);
+        parkedSpore = spore ? spore->GetGUID() : ObjectGuid::Empty;
+    }
+
+    if (!spore)
+        return false;
+
+    // Pheromones is a 6 yd aura on the spore and the Conservator stops at melee range of the tank, so
+    // standing on the spore is what puts the boss in reach of everyone sheltering on it. Hold still once
+    // it is there rather than nudging it back and forth.
+    if (conservator->GetExactDist2d(spore) <= ULDUAR_FREYA_SPORE_RADIUS - 1.0f)
+        return false;
+
+    return MoveTo(bot->GetMapId(), spore->GetPositionX(), spore->GetPositionY(), spore->GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool FreyaAvoidDetonatingLasherAction::isUseful()
@@ -215,33 +237,101 @@ bool FreyaMoveToHealingSporeAction::isUseful()
 
 bool FreyaMoveToHealingSporeAction::Execute(Event /*event*/)
 {
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-    Creature* nearestSpore = nullptr;
-    float nearestDistance = std::numeric_limits<float>::max();
+    Unit* target = nullptr;
 
-    for (auto guid : targets)
+    // Melee go to the spore the Conservator is parked on, not the nearest one - anywhere else and the
+    // DPS node drags them back out of the aura to reach the boss, and the two nodes fight all wave.
+    if (PlayerbotAI::IsMelee(bot))
+        target = GetFreyaConservatorSpore(botAI, GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR));
+
+    // Ranged and healers only need the aura, not melee range, and every spore sits 20 yd from the
+    // Conservator - inside casting range of it and of the melee stack. No reason to join the pile.
+    if (!target)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        // Check if this unit is a healthy spore and alive
-        if (unit->GetEntry() != NPC_HEALTHY_SPORE || !unit->IsAlive())
-            continue;
-
-        float distance = bot->GetDistance2d(unit);
-        if (distance < nearestDistance)
+        float nearestDistance = std::numeric_limits<float>::max();
+        for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
         {
-            nearestDistance = distance;
-            nearestSpore = static_cast<Creature*>(unit);
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_HEALTHY_SPORE)
+                continue;
+
+            float const distance = bot->GetDistance2d(unit);
+            if (distance < nearestDistance)
+            {
+                nearestDistance = distance;
+                target = unit;
+            }
         }
     }
 
-    if (!nearestSpore)
+    if (!target)
         return false;
 
-    return MoveTo(nearestSpore->GetMapId(), nearestSpore->GetPositionX(), nearestSpore->GetPositionY(),
-                  nearestSpore->GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(target->GetMapId(), target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), false,
+                  false, false, true, MovementPriority::MOVEMENT_COMBAT);
+}
+
+bool FreyaRedirectThreatAction::isUseful()
+{
+    return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;
+}
+
+Player* FreyaRedirectThreatAction::GetRedirectTank()
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    // The two adds with a real threat table that someone else is holding. Detonating Lashers reset
+    // threat every 10s, so no redirect can ever help there.
+    if (GetFirstAliveUnitByEntry(botAI, NPC_SNAPLASHER) || GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR))
+    {
+        if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+            return assistTank;
+    }
+
+    // Otherwise feed whoever is actually holding Freya, which survives a swap or a tank death.
+    if (Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA))
+    {
+        if (Unit* victim = freya->GetVictim())
+        {
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (!member || !member->IsAlive() || member == bot)
+                    continue;
+
+                if (botAI->IsTank(member) && member == victim)
+                    return member;
+            }
+        }
+    }
+
+    return GetGroupMainTank(botAI, bot);
+}
+
+bool FreyaRedirectThreatAction::Execute(Event /*event*/)
+{
+    Player* tank = GetRedirectTank();
+    if (!tank || tank == bot)
+        return false;
+
+    if (bot->getClass() == CLASS_ROGUE)
+    {
+        // Tricks redirects everything the rogue does for the next 6s, so there is no dump shot.
+        return botAI->CanCastSpell("tricks of the trade", tank) && botAI->CastSpell("tricks of the trade", tank);
+    }
+
+    if (botAI->CanCastSpell("misdirection", tank))
+        return botAI->CastSpell("misdirection", tank);
+
+    // Misdirection only moves the threat of the next three shots. Spend them on Freya rather than
+    // leaving them to whatever the rotation picks - never on an add the tank does not want.
+    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    if (freya && bot->HasAura(SPELL_MISDIRECTION) && botAI->CanCastSpell("steady shot", freya))
+        return botAI->CastSpell("steady shot", freya);
+
+    return false;
 }
 
 bool FreyaBreakIronRootsAction::isUseful()

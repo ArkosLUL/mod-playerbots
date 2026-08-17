@@ -345,6 +345,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("freya tank adds", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
+        "freya redirect threat",
+        { NextAction("freya redirect threat", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "freya set dps priority",
         { NextAction("freya set dps priority", ACTION_RAID) }));
 

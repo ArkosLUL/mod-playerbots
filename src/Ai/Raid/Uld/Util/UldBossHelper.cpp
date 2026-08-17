@@ -1025,9 +1025,134 @@ Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state)
     return nullptr;
 }
 
-Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state)
+Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state)
+{
+    Unit* best = nullptr;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive())
+            continue;
+
+        // GUID breaks the tie so a wave of untouched lashers does not resolve differently per bot.
+        if (!best || lasher->GetHealth() < best->GetHealth() ||
+            (lasher->GetHealth() == best->GetHealth() && lasher->GetGUID() < best->GetGUID()))
+        {
+            best = lasher;
+        }
+    }
+
+    return best;
+}
+
+Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range)
 {
     Player* bot = botAI->GetBot();
+
+    Unit* selected = nullptr;
+    if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == NPC_DETONATING_LASHER &&
+        bot->GetExactDist2d(currentTarget) <= range)
+    {
+        selected = currentTarget;
+    }
+
+    // The margin stops two lashers at similar range from trading the bot back and forth every tick.
+    constexpr float switchMargin = 10.0f;
+    for (Unit* candidate : state.detonatingLashers)
+    {
+        if (!candidate || !candidate->IsAlive() || candidate == selected)
+            continue;
+
+        if (bot->GetExactDist2d(candidate) > range)
+            continue;
+
+        if (!selected)
+        {
+            selected = candidate;
+            continue;
+        }
+
+        if (candidate->GetExactDist2d(bot) + switchMargin < selected->GetExactDist2d(bot))
+            selected = candidate;
+    }
+
+    return selected;
+}
+
+Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator)
+{
+    if (!conservator || !conservator->IsAlive())
+        return nullptr;
+
+    std::list<Creature*> found;
+    conservator->GetCreatureListWithEntryInGrid(found, NPC_HEALTHY_SPORE, ULDUAR_FREYA_SPORE_SEARCH_RADIUS);
+
+    // Nearest the Conservator, not the caller: the tank drags the boss to this spore and the melee
+    // shelter on it, and two derivations of "which spore" would disagree and oscillate. It is also
+    // self-stabilising - once parked, the spore is at distance ~0 and stays nearest until it despawns,
+    // while every new one spawns 20 yd out.
+    Creature* best = nullptr;
+    float bestDist = 0.0f;
+    for (Creature* spore : found)
+    {
+        if (!spore || !spore->IsAlive())
+            continue;
+
+        float const dist = spore->GetExactDist2d(conservator);
+        if (!best || dist < bestDist)
+        {
+            best = spore;
+            bestDist = dist;
+        }
+    }
+
+    return best;
+}
+
+// Highest health first, and never a suppressed member - see the header for why the tank goes to the
+// member furthest from the floor rather than the nearest one.
+//
+// Percent, not absolute: the floor and release thresholds are percentages, and the three members differ
+// by nearly 2x in max health, so absolute health would call the Snaplasher the furthest from dying even
+// when it is the closest.
+static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTarget)
+{
+    Unit* best = nullptr;
+    for (Unit* member : state.LivingTrio())
+    {
+        if (FreyaTrioSyncSuppress(state, member))
+            continue;
+
+        if (!best || member->GetHealthPct() > best->GetHealthPct())
+            best = member;
+    }
+
+    if (!best || !currentTarget || currentTarget == best)
+        return best;
+
+    // Hold the member the tank is already on until another is clear of it by the margin, or its own
+    // damage closing the gap makes it swap every few ticks.
+    for (Unit* member : state.LivingTrio())
+    {
+        if (member != currentTarget || FreyaTrioSyncSuppress(state, member))
+            continue;
+
+        if (best->GetHealthPct() - member->GetHealthPct() < ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT)
+            return member;
+
+        break;
+    }
+
+    return best;
+}
+
+Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget)
+{
+    Player* bot = botAI->GetBot();
+    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+
+    if (PlayerbotAI::IsMainTank(bot))
+        return freya;
+
     if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
         return nullptr;
 
@@ -1037,7 +1162,15 @@ Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state)
     if (state.conservator && state.conservator->IsAlive())
         return state.conservator;
 
-    return nullptr;
+    if (Unit* member = GetFreyaTankTrioTarget(state, currentTarget))
+        return member;
+
+    // Same local rule and leash as a melee DPS bot: hit the one standing next to it, never walk one
+    // anywhere. Collecting lashers and towing them into the raid is what killed the raid before.
+    if (Unit* lasher = GetFreyaLocalLasherTarget(botAI, state, currentTarget, ULDUAR_FREYA_MELEE_LASHER_RANGE))
+        return lasher;
+
+    return freya;
 }
 
 bool FreyaHasLivingRangedDps(PlayerbotAI* botAI)

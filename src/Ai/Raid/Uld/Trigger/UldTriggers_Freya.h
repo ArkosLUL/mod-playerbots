@@ -24,7 +24,7 @@ public:
     bool IsActive() override;
 };
 
-// Assist tank 0 holds the Snaplasher, whose Hardened Bark ramps its damage the more it is struck.
+// The main tank and assist tank 0, who both always have something on the ladder in UldBossHelper.
 class FreyaTankAddsTrigger : public Trigger
 {
 public:
@@ -32,7 +32,15 @@ public:
     bool IsActive() override;
 };
 
-// Detonating Lashers blow up for ~4-7k on death and cannot be tanked, so bots that would not
+// Hunters and rogues, for as long as Freya is up. The action decides which tank the redirect goes to.
+class FreyaRedirectThreatTrigger : public Trigger
+{
+public:
+    FreyaRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "freya redirect threat") {}
+    bool IsActive() override;
+};
+
+// Detonating Lashers blow up for ~4-5k on death and cannot be tanked, so non-tanks that would not
 // survive the blast step outside it.
 class FreyaAvoidDetonatingLasherTrigger : public Trigger
 {

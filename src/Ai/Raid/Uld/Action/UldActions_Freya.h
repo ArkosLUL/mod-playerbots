@@ -34,16 +34,24 @@ public:
 
 private:
     Unit* ResolveFreyaDpsTarget(Unit* currentTarget);
-    Unit* SelectNearestLasher(Unit* currentTarget, std::vector<Unit*> const& candidates) const;
 };
 
-// Assist tank 0 picks up the Snaplasher so the raid's Hardened Bark stacks land on a dedicated sink.
+// Main tank holds Freya; assist tank 0 works down the add ladder and, on the Conservator, walks it onto
+// a Healthy Spore so the melee sheltering there can still reach it.
 class FreyaTankAddsAction : public AttackAction
 {
 public:
     FreyaTankAddsAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya tank adds") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    bool ParkConservator(Unit* conservator);
+
+    // Latched for the spore's whole life. Fresh spores keep appearing 20 yd from wherever the
+    // Conservator currently is, so re-deriving the destination every tick can flip it mid-walk and turn
+    // the tank around.
+    ObjectGuid parkedSpore;
 };
 
 // Step outside Detonate's blast when the bot is too low to survive it.
@@ -62,6 +70,20 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+};
+
+// Feeds Misdirection / Tricks to the tank that is actually holding what the raid is hitting. Detonating
+// Lashers wipe their threat list every 10s, so nothing here can help against those - this is for the
+// Snaplasher and the Conservator, which have real threat tables.
+class FreyaRedirectThreatAction : public Action
+{
+public:
+    FreyaRedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, "freya redirect threat") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Player* GetRedirectTank();
 };
 
 // Hard mode: kill the Iron Roots creature trapping the bot - its death removes the root DoT.

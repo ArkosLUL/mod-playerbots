@@ -390,21 +390,83 @@ Priority order is Eonar's Gift > Ancient Conservator > trio slot > Detonating La
 two reorderings: once any trio member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio
 outranks the other adds, and once every member is in the release band nothing pulls a bot away at all.
 Eonar's Gift is a ranged DPS job (12s to a 30-60% Freya heal) so melee never eat the travel time both
-ways, falling back to melee when no ranged DPS is alive.
+ways, falling back to melee when no ranged DPS is alive. The Detonating Lasher rung resolves per role —
+see the lasher paragraphs below.
 
-**Conservator's Grip (62532) is a 50000 yd pacify-silence** — it cannot be outranged, so melee need a
-Healthy Spore just as much as ranged. The counter is Potent Pheromones (64321), a 6 yd ally aura on
-the spore; the trigger keys off that aura rather than distance, because a bot can be inside 6 yd of a
-spore that has not landed it yet. Tanks are excluded: walking one to a spore drags the Conservator
-into the raid.
+**Conservator's Grip (62532) pacifies the whole raid.** It is `APPLY_AREA_AURA_ENEMY` +
+`MOD_PACIFY_SILENCE` at radius index 28 = 50000 yd, cast once at 6s with no repeat
+(`boss_freya.cpp:1205`), so it cannot be outranged and it lasts the whole wave. Pacify blocks melee
+swings as well as casts, so tanks lose their damage and their taunt exactly like casters — it is not a
+caster-only mechanic.
 
-Only **assist tank 0** is claimed by the encounter, for the Snaplasher. Storm Lasher and Ancient
-Water Spirit stay with generic tank assist, because owning them would mean owning Tidal Wave
-positioning too. The main tank is fenced off `TankAssistAction` so it cannot be walked off Freya.
+The only counter is Potent Pheromones (64321), a **6 yd** ally aura on a Healthy Spore. Spores are
+summoned by the Conservator itself — 62566 is an 8s periodic triggering three directional summons
+(62582 / 62591 / 62592) at radius index 9 = **20 yd** — and despawn after 22s. So they always sit 20 yd
+away from the boss, and **melee can never be sheltered and in melee range at once unless the boss is
+brought to a spore.**
 
-Detonating Lashers fixate on random players and cannot be tanked or herded, so there is no stacking
-behaviour — bots too low to survive Detonate (62598, 15 yd) step outside it and everything else
-cleaves them down.
+That is what `FreyaTankAddsAction::ParkConservator` does, in the Ignis construct-tank shape: walk the
+Conservator onto a spore and hold it there, hysteresis at `ULDUAR_FREYA_SPORE_RADIUS - 1` so it is not
+nudged back and forth. The spore is latched in an `ObjectGuid` for its whole life, because fresh ones
+keep appearing 20 yd from wherever the boss currently is and re-deriving the destination each tick can
+flip it mid-walk.
+
+Melee then target **that** spore rather than the nearest one — `GetFreyaConservatorSpore` keys off the
+Conservator, never the calling bot, so the tank and the melee resolve the same spore without
+communicating. Sending melee to their own nearest spore is what would oscillate: they gain the aura,
+the DPS node drags them back to the boss to reach it, and they lose the aura on the way. Ranged and
+healers do use their own nearest spore — they need the aura, not melee range, and any spore is inside
+casting range of both the boss and the melee stack. Tanks are excluded from the spore node itself: the
+add tank arrives inside the aura by dragging the boss there, and the main tank never repositions Freya.
+
+Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
+whole fight, dropping 7-10 bombs in 25-man at players' feet (`boss_freya.cpp:645-660`). Dodging keeps
+its `ACTION_RAID + 4` priority — a bomb hit costs more than a few pacified seconds — and the
+"go to the parked spore" rule is what makes the raid re-converge afterwards instead of smearing across
+three spores.
+
+**Tanks.** The main tank gets Freya, assist tank 0 works down a ladder: Snaplasher (the Hardened Bark
+sink) > Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it >
+Freya. Generic `TankAssistAction` is zeroed for **every** tank for the whole encounter. Gating that on
+"the ladder has something" is what let generic assist through on a pure lasher wave, where the off-tank
+collected the wave and walked it into the raid stack.
+
+The trio rung picks the **highest-health** member on purpose: tank damage is invisible to
+`GetFreyaTrioAssignment`, which counts only DPS, so aiming it at the member furthest from the floor
+makes that unaccounted damage help convergence instead of skewing it. It is percent-based, like every
+other sync threshold, and sticky by `ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT` so the tank's own damage
+closing the gap does not make it swap every few ticks. Storm Lasher and Ancient Water Spirit are still
+never *owned* — the ladder only borrows them as a damage target — because owning them would mean owning
+Tidal Wave positioning.
+
+The taunt fires for the **Snaplasher and Conservator only** — the two adds the encounter claims. The rest
+of the ladder is borrowed for damage: taunting Freya would fight a human main tank whose raid roles are
+set differently, taunting a Storm Lasher or Water Spirit would mean owning Tidal Wave positioning, and a
+lasher drops the taunt on its next 10s threat wipe regardless.
+
+**Detonating Lashers cannot be tanked, and no threat redirect can hold them.** Every 10s each one casts
+Flame Lash, then `DoResetThreatList()` and charges a random player within 80 yd
+(`boss_freya.cpp:1257-1272`); they spawn the same way after a 5s submerge. A `GROUP_LASHERS` wave is
+**10** of them — 717k in 10-man, **2.35M in 25-man** — so the whole raid has to damage them to beat the
+60s clock.
+
+They are handled by geometry instead. Ranged focus-fire one at a time (`GetFreyaRangedLasherFocus`:
+lowest health, GUID breaking ties, which agrees raid-wide with no shared state and is self-stabilising
+since the focused add stays lowest) and never walk to it — outside their spell range they shoot whatever
+is already in reach, which keeps them clear of the 15 yd blast. Melee and tanks take only what is inside
+`ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment it runs past that, which is the leash:
+a lasher that retargets cannot tow a bot across the room, and a tank can damage one on top of it but can
+never walk one back to the raid.
+
+Detonate (62598) rolls 4162-4837 in 15 yd and has **no difficulty entry**, so it is identical in both
+sizes — the old 10-man/25-man threshold split was wrong. Non-tanks below
+`ULDUAR_FREYA_DETONATE_FLEE_HEALTH` step out, except the bot actually killing that lasher, which is
+inside 15 yd by definition. Tanks never flee; they eat it.
+
+**Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
+Snaplasher or Conservator is up, otherwise to whoever is holding Freya, falling back to the group main
+tank. `NPC_FREYA` is in `UldThreatRedirectMultiplier`'s block list so the class-generic main-tank node
+stands down. This can do nothing for lashers — their threat table is wiped every 10s.
 
 Hard mode = Elders left alive at pull (Brightleaf 32915 / Stonebark 32914 / Ironbranch 32913). Per
 living Elder, Freya gains an extra ability: Iron Roots (62862), Unstable Sun Beam (62450), or Ground
@@ -1250,9 +1312,10 @@ Ulduar boss has a dedicated redirect action yet.
 | Thorim | Raid splits into arena and gauntlet squads with a tank each, plus an Unbalancing Strike swap | boss present |
 | Algalon | Phase Punch forces an MT ↔ AT0 swap on a stack timer | boss present |
 | Razorscale — **airborne only** | The MT holds nothing while she flies; Dark Rune adds belong to assist tanks. Ground phases are single-tank and the generic node is *correct*, so this is phase-gated, not blanket | boss Z vs 440 |
+| Freya | The add tank is the sink whenever the Snaplasher or Conservator is up, and `freya redirect threat` owns the choice | boss present |
 
 **Do not veto** — the boss is main-tank-held all fight, so the generic node is right for the primary
-target and the only gain would be redirecting *adds*: Auriaya, Freya, Kologarn, Yogg-Saron, Ignis.
+target and the only gain would be redirecting *adds*: Auriaya, Kologarn, Yogg-Saron, Ignis.
 **No** — Vezax (one tank, no swap, no reset), Flame Leviathan (vehicle
 combat, neither spell castable).
 

@@ -44,13 +44,18 @@ bool FreyaTankAddsTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    if (!botAI->IsTank(bot))
+    // The ladder ends at Freya, so these two always have something - no need to gather the wave here.
+    return PlayerbotAI::IsMainTank(bot) || PlayerbotAI::IsAssistTankOfIndex(bot, 0, true);
+}
+
+bool FreyaRedirectThreatTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
         return false;
 
-    FreyaWaveState state;
-    GatherFreyaWaveState(botAI, state);
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
 
-    return GetFreyaTankTarget(botAI, state) != nullptr;
+    return boss && boss->IsAlive();
 }
 
 bool FreyaAvoidDetonatingLasherTrigger::IsActive()
@@ -59,18 +64,20 @@ bool FreyaAvoidDetonatingLasherTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    Map* map = bot->GetMap();
-    if (!map || !map->IsRaid())
+    // Tanks eat the blast. They have the health for it, and a tank running mid-wave gives up whatever
+    // it is holding.
+    if (botAI->IsTank(bot))
         return false;
 
-    // Detonate's maximum roll. Above this the blast cannot kill, so the bot stays and keeps hitting.
-    uint32 const healthThreshold = map->Is25ManRaid() ? 7200 : 4900;
-    if (bot->GetHealth() >= healthThreshold)
+    if (bot->GetHealth() >= ULDUAR_FREYA_DETONATE_FLEE_HEALTH)
         return false;
 
     Creature* lasher = bot->FindNearestCreature(NPC_DETONATING_LASHER, ULDUAR_FREYA_DETONATE_RADIUS);
+    if (!lasher || !lasher->IsAlive())
+        return false;
 
-    return lasher && lasher->IsAlive();
+    // The bot killing it is inside 15 yd by definition and cannot do its job anywhere else, so it stays.
+    return AI_VALUE(Unit*, "current target") != lasher;
 }
 
 bool FreyaMoveToHealingSporeTrigger::IsActive()
@@ -81,12 +88,15 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
         return false;
 
     // Conservator's Grip is a 50000 yd pacify-silence, so melee need a spore just as much as ranged.
-    // Tanks stay put: walking one to a spore drags the Conservator into the raid.
+    // Tanks are excluded for two different reasons: the add tank already ends up inside the aura by
+    // walking the Conservator onto a spore, and moving it here as well would oscillate it between that
+    // spore and the one nearest itself. The main tank is out because Freya is never repositioned.
     if (botAI->IsTank(bot))
         return false;
 
-    Unit* conservatory = AI_VALUE2(Unit*, "find target", "ancient conservator");
-    if (!conservatory || !conservatory->IsAlive())
+    // By entry, not "find target": that value walks only this bot's threat list, and a pacified bot that
+    // has not hit the Conservator yet is exactly the bot that needs a spore.
+    if (!GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR))
         return false;
 
     // The pheromone aura is the thing that matters, and it is exact - a bot can be inside 6 yd of a

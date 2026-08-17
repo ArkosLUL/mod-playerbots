@@ -62,6 +62,7 @@ public:
         creators["freya nature resistance action"] = &RaidUlduarActionContext::freya_nature_resistance_action;
         creators["freya set dps priority"] = &RaidUlduarActionContext::freya_set_dps_priority;
         creators["freya tank adds"] = &RaidUlduarActionContext::freya_tank_adds;
+        creators["freya redirect threat"] = &RaidUlduarActionContext::freya_redirect_threat;
         creators["freya avoid detonating lasher"] = &RaidUlduarActionContext::freya_avoid_detonating_lasher;
         creators["freya move to healing spore action"] = &RaidUlduarActionContext::freya_move_to_healing_spore_action;
         creators["freya break iron roots"] = &RaidUlduarActionContext::freya_break_iron_roots;
@@ -196,6 +197,7 @@ private:
     static Action* freya_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "freya"); }
     static Action* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityAction(ai); }
     static Action* freya_tank_adds(PlayerbotAI* ai) { return new FreyaTankAddsAction(ai); }
+    static Action* freya_redirect_threat(PlayerbotAI* ai) { return new FreyaRedirectThreatAction(ai); }
     static Action* freya_avoid_detonating_lasher(PlayerbotAI* ai) { return new FreyaAvoidDetonatingLasherAction(ai); }
     static Action* freya_move_to_healing_spore_action(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeAction(ai); }
     static Action* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsAction(ai); }

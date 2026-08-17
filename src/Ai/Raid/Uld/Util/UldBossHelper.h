@@ -518,9 +518,26 @@ constexpr float ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT = 10.0f;     // never cross whi
 // Conservator's Grip, which is a 50000 yd pacify-silence and so cannot be outranged.
 constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
 
-// Freya: Detonate (62598) radius. Detonating Lashers fixate and cannot be tanked or herded, so bots
-// too low to survive the blast step outside this instead.
+// Spores are summoned 20 yd out from the Conservator in three directions, so this only has to cover
+// that ring with room for the boss having been dragged part of the way to one.
+constexpr float ULDUAR_FREYA_SPORE_SEARCH_RADIUS = 40.0f;
+
+// Freya: Detonate (62598) radius. Every 10s a Detonating Lasher wipes its own threat list and charges
+// a random player, so it can be neither tanked nor herded - the only handling is who stands where.
 constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
+
+// Detonate rolls 4162-4837 and has no difficulty entry, so it is the same in 10- and 25-man. Ranged
+// focus one lasher at a time, which makes being inside two blasts at once the exception - it is not
+// what sets this floor.
+constexpr uint32 ULDUAR_FREYA_DETONATE_FLEE_HEALTH = 5500;
+
+// Melee never chase a lasher; past this they stay on whatever they were already hitting. Deliberately
+// tight: "nearby" has to mean the lasher came to the melee group, not that the group crosses the room.
+constexpr float ULDUAR_FREYA_MELEE_LASHER_RANGE = 12.0f;
+
+// Margin before the add tank moves between two near-equal trio members. Its own damage is what closes
+// the gap, so without this it would swap every few ticks and lose swing timers to nothing.
+constexpr float ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT = 5.0f;
 
 // Hodir. Every radius here is the real DBC value, and three of them were previously wrong.
 //
@@ -770,10 +787,33 @@ bool FreyaTrioSyncSuppress(FreyaWaveState const& state, Unit* target);
 // the floor redistribute bots instead of idling them.
 Unit* GetFreyaTrioAssignment(PlayerbotAI* botAI, FreyaWaveState const& state);
 
-// The add this tank owns. Only the Snaplasher is claimed - Hardened Bark (62663) stacks +10% damage
-// done per hit taken, so it needs a dedicated sink. The other two are left to generic tank assist
-// because owning them would mean owning Tidal Wave positioning too.
-Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state);
+// What this tank should be on. The main tank always gets Freya; the add tank gets the Snaplasher first
+// (Hardened Bark 62663 stacks +10% damage done per hit taken, so it needs a dedicated sink), then the
+// Conservator, then a trio member, then a lasher standing next to it, then Freya.
+//
+// The trio pick is the highest-health non-suppressed member, and that is deliberate: tank damage is
+// invisible to GetFreyaTrioAssignment, which only counts DPS, so aiming it at the member furthest from
+// the floor makes the unaccounted damage help convergence instead of skewing it. currentTarget is what
+// keeps that pick from flipping as the tank's own damage closes the gap.
+//
+// Lashers are reachable only through GetFreyaLocalLasherTarget, so a tank can damage one already on top
+// of it but can never walk one back into the raid.
+Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget);
+
+// The nearest living lasher inside range, sticky on currentTarget with a switch margin. Range doubles as
+// the leash - a lasher that runs past it is dropped, which stops a bot being towed across the room every
+// time the add retargets. Melee and tanks pass ULDUAR_FREYA_MELEE_LASHER_RANGE; ranged pass their spell
+// range, since for them "local" means anything they can shoot without moving.
+Unit* GetFreyaLocalLasherTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget, float range);
+
+// The lasher every ranged bot should be on. Lowest health, GUID breaking ties: raid-wide agreement with
+// no shared state, and self-stabilising, since the add being focused stays the lowest.
+Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
+
+// The Healthy Spore the Conservator is being parked on. Keyed off the Conservator and never off the
+// calling bot, so the tank doing the dragging and the melee walking to shelter resolve the same spore
+// without communicating.
+Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator);
 
 // True while any bot in the group that counts as ranged DPS is alive. Eonar's Gift is a ranged job,
 // but a melee-only raid still has to kill it or Freya heals 30-60%.

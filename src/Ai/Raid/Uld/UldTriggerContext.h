@@ -61,6 +61,7 @@ public:
         creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
         creators["freya set dps priority"] = &RaidUlduarTriggerContext::freya_set_dps_priority;
         creators["freya tank adds"] = &RaidUlduarTriggerContext::freya_tank_adds;
+        creators["freya redirect threat"] = &RaidUlduarTriggerContext::freya_redirect_threat;
         creators["freya avoid detonating lasher"] = &RaidUlduarTriggerContext::freya_avoid_detonating_lasher;
         creators["freya move to healing spore trigger"] = &RaidUlduarTriggerContext::freya_move_to_healing_spore_trigger;
         creators["freya break iron roots"] = &RaidUlduarTriggerContext::freya_break_iron_roots;
@@ -197,6 +198,7 @@ private:
     static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }
     static Trigger* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityTrigger(ai); }
     static Trigger* freya_tank_adds(PlayerbotAI* ai) { return new FreyaTankAddsTrigger(ai); }
+    static Trigger* freya_redirect_threat(PlayerbotAI* ai) { return new FreyaRedirectThreatTrigger(ai); }
     static Trigger* freya_avoid_detonating_lasher(PlayerbotAI* ai) { return new FreyaAvoidDetonatingLasherTrigger(ai); }
     static Trigger* freya_move_to_healing_spore_trigger(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeTrigger(ai); }
     static Trigger* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsTrigger(ai); }
