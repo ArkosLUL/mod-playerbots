@@ -137,12 +137,10 @@ bool CastRainOfFireAction::isUseful()
     return target && !botAI->HasSpell("seed of corruption");
 }
 
-// Checks if the "meta melee aoe" strategy is active, OR if the bot is in melee range of the target
+// Immolation Aura only ticks in Metamorphosis and only reaches 5 yards, so it is opportunistic -
+// nothing moves the bot into range for it.
 bool CastImmolationAuraAction::isUseful()
 {
-    if (botAI->HasStrategy("meta melee", BOT_STATE_COMBAT))
-        return true;
-
     Unit* target = AI_VALUE(Unit*, "current target");
     if (!target)
         return false;

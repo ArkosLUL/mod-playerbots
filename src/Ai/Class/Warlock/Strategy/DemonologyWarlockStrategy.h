@@ -7,7 +7,6 @@
 #ifndef PLAYERBOTS_DEMONOLOGYWARLOCKSTRATEGY_H
 #define PLAYERBOTS_DEMONOLOGYWARLOCKSTRATEGY_H
 
-#include "CombatStrategy.h"
 #include "GenericWarlockStrategy.h"
 
 class PlayerbotAI;
@@ -20,14 +19,5 @@ public:
     void InitTriggers(std::vector<TriggerNode*>& triggers) override;
     std::string const getName() override { return "demo"; }
     std::vector<NextAction> getDefaultActions() override;
-};
-
-class MetaMeleeAoeStrategy : public CombatStrategy
-{
-public:
-    MetaMeleeAoeStrategy(PlayerbotAI* botAI);
-
-    void InitTriggers(std::vector<TriggerNode*>& triggers) override;
-    std::string const getName() override { return "meta melee"; }
 };
 #endif

@@ -30,7 +30,6 @@ public:
         creators["boost"] = &WarlockStrategyFactoryInternal::boost;
         creators["cc"] = &WarlockStrategyFactoryInternal::cc;
         creators["pet"] = &WarlockStrategyFactoryInternal::pet;
-        creators["meta melee"] = &WarlockStrategyFactoryInternal::meta_melee_aoe;
         creators["tank"] = &WarlockStrategyFactoryInternal::tank;
         creators["aoe"] = &WarlockStrategyFactoryInternal::aoe;
     }
@@ -42,7 +41,6 @@ private:
     static Strategy* boost(PlayerbotAI* botAI) { return new WarlockBoostStrategy(botAI); }
     static Strategy* cc(PlayerbotAI* botAI) { return new WarlockCcStrategy(botAI); }
     static Strategy* pet(PlayerbotAI* botAI) { return new WarlockPetStrategy(botAI); }
-    static Strategy* meta_melee_aoe(PlayerbotAI* botAI) { return new MetaMeleeAoeStrategy(botAI); }
     static Strategy* tank(PlayerbotAI* botAI) { return new TankWarlockStrategy(botAI); }
     static Strategy* aoe(PlayerbotAI* botAI) { return new AoEWarlockStrategy(botAI); }
 };
@@ -180,10 +178,6 @@ public:
         creators["molten core"] = &WarlockTriggerFactoryInternal::molten_core;
         creators["metamorphosis"] = &WarlockTriggerFactoryInternal::metamorphosis;
         creators["demonic empowerment"] = &WarlockTriggerFactoryInternal::demonic_empowerment;
-        creators["immolation aura active"] = &WarlockTriggerFactoryInternal::immolation_aura_active;
-        creators["metamorphosis active"] = &WarlockTriggerFactoryInternal::metamorphosis_active;
-        creators["metamorphosis not active"] = &WarlockTriggerFactoryInternal::metamorphosis_not_active;
-        creators["meta melee flee check"] = &WarlockTriggerFactoryInternal::meta_melee_flee_check;
         creators["curse of agony"] = &WarlockTriggerFactoryInternal::curse_of_agony;
         creators["curse of agony on attacker"] = &WarlockTriggerFactoryInternal::curse_of_agony_on_attacker;
         creators["curse of the elements"] = &WarlockTriggerFactoryInternal::curse_of_the_elements;
@@ -234,10 +228,6 @@ private:
     static Trigger* molten_core(PlayerbotAI* ai) { return new MoltenCoreTrigger(ai); }
     static Trigger* metamorphosis(PlayerbotAI* ai) { return new MetamorphosisTrigger(ai); }
     static Trigger* demonic_empowerment(PlayerbotAI* ai) { return new DemonicEmpowermentTrigger(ai); }
-    static Trigger* immolation_aura_active(PlayerbotAI* ai) { return new ImmolationAuraActiveTrigger(ai); }
-    static Trigger* metamorphosis_active(PlayerbotAI* ai) { return new MetamorphosisActiveTrigger(ai); }
-    static Trigger* metamorphosis_not_active(PlayerbotAI* ai) { return new MetamorphosisNotActiveTrigger(ai); }
-    static Trigger* meta_melee_flee_check(PlayerbotAI* ai) { return new MetaMeleeEnemyTooCloseForSpellTrigger(ai); }
     static Trigger* curse_of_agony(PlayerbotAI* botAI) { return new CurseOfAgonyTrigger(botAI); }
     static Trigger* curse_of_agony_on_attacker(PlayerbotAI* botAI) { return new CurseOfAgonyOnAttackerTrigger(botAI); }
     static Trigger* curse_of_the_elements(PlayerbotAI* ai) { return new CurseOfTheElementsTrigger(ai); }
@@ -305,7 +295,6 @@ public:
         creators["metamorphosis"] = &WarlockAiObjectContextInternal::metamorphosis;
         creators["soul fire"] = &WarlockAiObjectContextInternal::soul_fire;
         creators["incinerate"] = &WarlockAiObjectContextInternal::incinerate;
-        creators["demon charge"] = &WarlockAiObjectContextInternal::demon_charge;
         creators["shadowburn"] = &WarlockAiObjectContextInternal::shadowburn;
         creators["shadowflame"] = &WarlockAiObjectContextInternal::shadowflame;
         creators["immolation aura"] = &WarlockAiObjectContextInternal::immolation_aura;
@@ -373,7 +362,6 @@ private:
     static Action* demonic_empowerment(PlayerbotAI* ai) { return new CastDemonicEmpowermentAction(ai); }
     static Action* metamorphosis(PlayerbotAI* ai) { return new CastMetamorphosisAction(ai); }
     static Action* soul_fire(PlayerbotAI* ai) { return new CastSoulFireAction(ai); }
-    static Action* demon_charge(PlayerbotAI* ai) { return new DemonChargeAction(ai); }
     static Action* shadowburn(PlayerbotAI* ai) { return new CastShadowburnAction(ai); }
     static Action* shadowflame(PlayerbotAI* botAI) { return new CastShadowflameAction(botAI); }
     static Action* immolation_aura(PlayerbotAI* botAI) { return new CastImmolationAuraAction(botAI); }

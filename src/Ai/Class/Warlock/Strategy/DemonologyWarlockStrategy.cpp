@@ -37,16 +37,6 @@ void DemonologyWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
             }
         )
     );
-    // Immolation Aura belongs in the single-target priority too, not just the AoE ladder - it is free
-    // damage for the whole Metamorphosis window. The action itself handles the melee-range check.
-    triggers.push_back(
-        new TriggerNode(
-            "metamorphosis active",
-            {
-                NextAction("immolation aura", 28.25f)
-            }
-        )
-    );
     triggers.push_back(
         new TriggerNode(
             "demonic empowerment",
@@ -134,28 +124,9 @@ void DemonologyWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers
 
     triggers.push_back(
         new TriggerNode(
-            "meta melee flee check",
+            "enemy too close for spell",
             {
                 NextAction("flee", 39.0f)
-            }
-        )
-    );
-}
-
-// Combat strategy to run to melee for Immolation Aura
-// Enabled by default for the Demonology spec
-// To enable, type "co +meta melee"
-// To disable, type "co -meta melee"
-MetaMeleeAoeStrategy::MetaMeleeAoeStrategy(PlayerbotAI* botAI) : CombatStrategy(botAI) {}
-
-void MetaMeleeAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
-{
-    triggers.push_back(
-        new TriggerNode(
-            "immolation aura active",
-            {
-                NextAction("reach melee", 25.5f),
-                NextAction("demon charge", 25.0f)
             }
         )
     );

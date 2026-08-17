@@ -361,12 +361,6 @@ public:
     bool IsActive() override;
 };
 
-class ImmolationAuraActiveTrigger : public HasAuraTrigger
-{
-public:
-    ImmolationAuraActiveTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "immolation aura") {}
-};
-
 class ShadowTranceTrigger : public HasAuraTrigger
 {
 public:
@@ -384,25 +378,6 @@ class MoltenCoreTrigger : public HasAuraTrigger
 {
 public:
     MoltenCoreTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "molten core") {}
-};
-
-class MetamorphosisActiveTrigger : public HasAuraTrigger
-{
-public:
-    MetamorphosisActiveTrigger(PlayerbotAI* ai) : HasAuraTrigger(ai, "metamorphosis") {}
-};
-
-class MetamorphosisNotActiveTrigger : public HasNoAuraTrigger
-{
-public:
-    MetamorphosisNotActiveTrigger(PlayerbotAI* ai) : HasNoAuraTrigger(ai, "metamorphosis") {}
-};
-
-class MetaMeleeEnemyTooCloseForSpellTrigger : public TwoTriggers
-{
-public:
-    MetaMeleeEnemyTooCloseForSpellTrigger(PlayerbotAI* ai)
-        : TwoTriggers(ai, "enemy too close for spell", "metamorphosis not active") {}
 };
 
 class RainOfFireChannelCheckTrigger : public Trigger

@@ -236,12 +236,6 @@ public:
     bool isUseful() override;
 };
 
-class DemonChargeAction : public CastSpellAction
-{
-public:
-    DemonChargeAction(PlayerbotAI* ai) : CastSpellAction(ai, "demon charge") {}
-};
-
 // Cooldown Spells
 
 class CastMetamorphosisAction : public CastBuffSpellAction

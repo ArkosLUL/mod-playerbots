@@ -91,12 +91,12 @@ Agony comes from the separate `curse of agony` strategy (18.5 on-attacker / 17.0
 
 Code order: life tap glyph 29.5, metamorphosis 28.5, demonic empowerment 28.0, corruption on attacker
 19.5, immolate on attacker 19.0, corruption 18.0, immolate 17.5, decimation → soul fire 17.0, molten
-core → incinerate 16.5, life tap 5.1, meta melee flee check 39.0.
+core → incinerate 16.5, life tap 5.1, flee 39.0.
 
 | # | Finding |
 |---|---|
 | DM1 | **Decimation → Soul Fire at 17.0 sits below corruption 18.0 and immolate 17.5.** Decimation procs (10s window) get spent on a DoT refresh, so the strongest execute button is the one that gets dropped. |
-| DM2 | Immolation Aura is reachable only through the shared `aoe` strategy or `meta melee`, so **single-target Metamorphosis windows never use it**. `CastImmolationAuraAction::isUseful` already handles the aura-47241 + 5 yd check — a node gated on a "metamorphosis active" trigger is all that is missing. |
+| DM2 | *Wont fix.* Immolation Aura is reachable only through the shared `aoe` strategy, and only when something else already put the bot inside 5 yd. Running Demonology into melee for it fights the ranged spots raid strategies assign, so the `meta melee` strategy and its Demon Charge opener were dropped along with the single-target node. |
 | DM3 | `AiFactory` gives Demonology `curse of agony`. **User decision: switch Demonology to Curse of Doom** (higher throughput on any fight over 60s) and leave Destruction on Curse of the Elements so the raid debuff still comes from somewhere. |
 | DM4 | `CorruptionTrigger` / `ImmolateTrigger` carry `needLifeTime = 0.5f` — refresh whenever the target survives another half second — so DoTs land on targets about to die. |
 | DM6 | Metamorphosis fires on a plain `BoostTrigger` at 28.5. It is burst-gated, so the tank-hold applies, but **nothing aligns it with Bloodlust.** |

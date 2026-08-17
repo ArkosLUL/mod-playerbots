@@ -384,7 +384,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
             if (tab == WARLOCK_TAB_AFFLICTION)
                 engine->addStrategiesNoInit("affli", "curse of agony", nullptr);
             else if (tab == WARLOCK_TAB_DEMONOLOGY)
-                engine->addStrategiesNoInit("demo", "curse of agony", "meta melee", nullptr);
+                engine->addStrategiesNoInit("demo", "curse of agony", nullptr);
             else // if (tab == WARLOCK_TAB_DESTRUCTION)
                 engine->addStrategiesNoInit("destro", "curse of elements", nullptr);
 
