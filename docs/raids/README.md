@@ -67,6 +67,13 @@ exactly that bug.
 Any new boss-scoped redirect action needs its matching veto entry removed or narrowed, or the two
 fight each other.
 
+Both presume threat sticks: **a mob that wipes its own threat table has no redirect and no
+taunt answer.** Look for `DoResetThreatList` / `SelectTargetFromPlayerList` in the script first —
+Freya's Detonating Lashers re-roll every 10s, so ten of them face one 30s cooldown and the answer is
+geometry (a range leash), not threat. The same test bounds a taunt: allowlist the adds the encounter
+**owns**, never the whole target ladder — taunting a rung borrowed for damage off another tank means
+owning its positioning too.
+
 ## Movement-suppression multiplier
 
 Eight encounters independently arrived at the same idiom: while a positioning action is active, zero
@@ -91,6 +98,13 @@ draining the queue down to `dps assist` at relevance 50. `GeneralFindTargetSmart
 preference**, so a fresh low-health add always outranks a boss. The bot takes the add, the boss
 action yanks it back next tick, and it flips forever without landing a cast — in-game it reads as
 bots jiggling on the spot. Noth is the case study.
+
+**Whole fight** also rules out the subtler gate: zeroing only while the encounter's own target lookup
+returns non-null. That reopens the hole exactly where the encounter node has nothing to say — on
+Freya's lasher waves generic assist took over and the off-tank towed ten detonating adds into the
+raid stack. Suppressing unconditionally is safe only if the ladder ends in a **terminal fallback**
+(the boss), so no role is left nodeless — Freya's main tank had none and held her only because it
+pulled her.
 
 ## Boss helpers
 

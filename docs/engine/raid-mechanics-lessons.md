@@ -111,11 +111,16 @@ Every distance helper measures differently, and a large-model boss inflates all 
 - **`Unit::IsWithinMeleeRange(obj, dist)`: `dist` is extra slack**, not an absolute
   (`maxdist = dist + GetMeleeRange(obj)`).
 - A target that walks needs a **sticky margin** on the reach test, or a bot on the edge of range
-  swaps target every other tick.
+  swaps target every other tick. Re-test the sticky pick against the cap anyway: stickiness alone is
+  a tow rope, and a mob that retargets drags the bot across the room until something outranks it.
+  The cap is per role — Freya's 12 yd melee leash reused for ranged put their focus permanently out
+  of reach, so they fell through to the boss.
+- **Selection units must match margin units.** Picking by `GetHealth()` while the switch margin is in
+  percentage points inverts the pick between adds with unequal max health.
 
 ## Coordinating a raid with no shared state
 
-Every bot has its own `AiObjectContext` and cannot see another bot's decision. Four mechanisms make
+Every bot has its own `AiObjectContext` and cannot see another bot's decision. Five mechanisms make
 twenty-five of them agree anyway:
 
 - **Derive, don't communicate.** A roster sorted by guid is identical on every bot. So is "rank by
@@ -130,6 +135,11 @@ twenty-five of them agree anyway:
   neither.
 - **One helper, two readers.** When a trigger and an action both need "is this bot the one", they
   call the same function. Two derivations of the same predicate will disagree.
+- **Anchor the derivation, not the bot.** "Nearest to me" gives every bot a different answer,
+  "nearest to the boss" gives one — Hodir's shelter and Freya's parked spore are the same helper.
+  Where fresh candidates keep spawning around the anchor, whoever acts on it **latches the guid**,
+  since re-deriving each tick can flip the destination mid-walk; the rest still agree, because the
+  latched one stays nearest while it closes.
 
 ## What a strategy costs per raid
 

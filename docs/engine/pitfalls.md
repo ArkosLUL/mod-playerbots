@@ -113,8 +113,9 @@ must still outrank heals while the bot is unsheltered.
 - **`"find target"` walks only the bot's own threat list** (`FindTargetValue`, via
   `GetThreatenedByMeList()`) and requires an **exact-length, case-insensitive match** against
   `creature_template.name`. A melee bot parked on Thane never resolves Zeliek, and every Auriaya
-  trigger lost the boss the same way to a Sanctum Sentry. For multi-boss
-  encounters, non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry`.
+  trigger lost the boss the same way to a Sanctum Sentry. A pacified or CC'd bot has attacked
+  nothing, so it fails for exactly the bot a rescue node exists to serve. For multi-boss encounters,
+  non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry`.
 - **`AvoidAoeAction` only sees three things**: a dynobject aura, a damaging trap GameObject, or a
   `UNIT_FLAG_NOT_SELECTABLE` trigger NPC. Mechanics outside those — Anub'rekhan's Impale and Locust
   Swarm, the Four Horsemen's Void Zone NPC 16697 (SmartAI, casts on update) — are invisible to it.
