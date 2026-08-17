@@ -4,7 +4,9 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "Spell.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
@@ -17,71 +19,83 @@
 #include <FollowMasterStrategy.h>
 #include <RtiTargetValue.h>
 
-bool VezaxCheatTrigger::IsActive()
+bool VezaxResetEncounterStateTrigger::IsActive()
 {
-    if (!botAI->HasCheat(BotCheatMask::raid))
+    if (bot->GetMapId() != ULDUAR_MAP_ID || VezaxEncounterActive(botAI))
         return false;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    if (!AI_VALUE2(bool, "has mana", "self target"))
-        return false;
-
-    return AI_VALUE2(uint8, "mana", "self target") < sPlayerbotAIConfig.lowMana;
-}
-
-bool VezaxShadowCrashTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    return bot->HasAura(SPELL_VEZAX_SHADOW_CRASH);
+    return vezaxEncounterStates.find(bot->GetInstanceId()) != vezaxEncounterStates.end();
 }
 
 bool VezaxMarkOfTheFacelessTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
-
-    // Check boss and it is alive
-    if (!boss || !boss->IsAlive())
-        return false;
-
     if (!bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
         return false;
 
-    float distance = bot->GetDistance2d(ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT.GetPositionX(),
-                                        ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT.GetPositionY());
-
-    return distance > 2.0f;
-}
-
-//
-// General Vezax
-//
-bool VezaxSaroniteVaporsTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
-    if (!boss || !boss->IsAlive())
+    if (!VezaxEncounterActive(botAI))
         return false;
 
-    TooCloseToCreatureTrigger tooCloseToSaroniteVapors(botAI);
-    return tooCloseToSaroniteVapors.TooCloseToCreature(NPC_VEZAX_SARONITE_VAPORS, 6.0f);
+    Position spot;
+    if (!TryGetVezaxMarkSpot(bot, spot))
+        return false;
+
+    return bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) >
+           ULDUAR_VEZAX_MARK_SPOT_TOLERANCE;
+}
+
+bool VezaxVaporPuddleClearTrigger::IsActive()
+{
+    if (!VezaxShouldLeaveVaporPuddle(bot))
+        return false;
+
+    return VezaxEncounterActive(botAI);
+}
+
+bool VezaxShadowCrashClearTrigger::IsActive()
+{
+    if (!bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD))
+        return false;
+
+    if (!VezaxMustLeaveShadowCrashField(bot))
+        return false;
+
+    return VezaxEncounterActive(botAI);
+}
+
+bool VezaxSearingFlamesInterruptTrigger::IsActive()
+{
+    Unit* boss = GetVezax(botAI);
+    if (!boss || !boss->HasUnitState(UNIT_STATE_CASTING))
+        return false;
+
+    // Exact spell id, not "the boss is casting something": Vezax also casts Shadow Crash and Surge of
+    // Darkness, and neither is worth an interrupt.
+    Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!spell || spell->m_spellInfo->Id != SPELL_VEZAX_SEARING_FLAMES)
+        return false;
+
+    return VezaxIsSearingFlamesInterrupter(bot, boss);
+}
+
+bool VezaxSurgeOfDarknessTrigger::IsActive()
+{
+    if (!botAI->IsTank(bot))
+        return false;
+
+    Unit* boss = GetVezax(botAI);
+    if (!boss || !boss->HasAura(SPELL_VEZAX_SURGE_OF_DARKNESS))
+        return false;
+
+    // Only the bot actually being hit for double physical damage spends a cooldown on it.
+    return boss->GetVictim() == bot;
 }
 
 bool VezaxSaroniteAnimusTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
-    if (!boss || !boss->IsAlive())
+    if (!IsVezaxHardModeActive(botAI))
         return false;
 
-    if (!IsVezaxHardModeActive(botAI))
+    if (!VezaxEncounterActive(botAI))
         return false;
 
     Unit* animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
@@ -93,19 +107,74 @@ bool VezaxSaroniteAnimusTrigger::IsActive()
     return AI_VALUE(Unit*, "current target") != animus;
 }
 
-bool VezaxProfoundDarknessTrigger::IsActive()
+bool VezaxVaporSoakTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "general vezax");
-    if (!boss || !boss->IsAlive())
+    if (IsVezaxHardModeActive(botAI) || !VezaxWantsVaporPuddleMana(bot))
         return false;
 
-    if (!IsVezaxHardModeActive(botAI))
+    if (AI_VALUE2(uint8, "mana", "self target") >= sPlayerbotAIConfig.lowMana)
         return false;
 
-    // Melee tank the Animus; only ranged/healers dodge its Profound Darkness.
-    if (!PlayerbotAI::IsRanged(bot))
+    // Already in one - VezaxShouldLeaveVaporPuddle owns the exit from here.
+    if (bot->HasAura(SPELL_VEZAX_SARONITE_VAPORS_PUDDLE))
         return false;
 
-    TooCloseToCreatureTrigger tooCloseToAnimus(botAI);
-    return tooCloseToAnimus.TooCloseToCreature(NPC_VEZAX_SARONITE_ANIMUS, ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS);
+    if (!VezaxEncounterActive(botAI))
+        return false;
+
+    std::vector<VezaxHazard> hazards;
+    GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL);
+
+    VezaxHazard puddle;
+    if (!TryGetVezaxNearestHazard(bot, hazards, false, puddle))
+        return false;
+
+    return bot->GetExactDist2d(puddle.position.GetPositionX(), puddle.position.GetPositionY()) <=
+           ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL;
+}
+
+bool VezaxKillVaporTrigger::IsActive()
+{
+    // In hard mode a dead vapor is a lost hard mode, so this node never arms.
+    if (IsVezaxHardModeActive(botAI) || !VezaxIsVaporKiller(bot))
+        return false;
+
+    if (!VezaxEncounterActive(botAI))
+        return false;
+
+    Unit* vapor = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_VAPORS);
+    if (!vapor)
+        return false;
+
+    return AI_VALUE(Unit*, "current target") != vapor;
+}
+
+bool VezaxShadowCrashSoakTrigger::IsActive()
+{
+    // Cheap tests first. GatherVezaxHazards runs two grid searches, and this is one of the two Vezax
+    // triggers that needs them - everything above it here keeps that off the common tick.
+    if (!VezaxCanSoakShadowCrashField(bot))
+        return false;
+
+    // Already inside one - the action would only re-issue a move onto a spot the bot is standing on.
+    if (bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD))
+        return false;
+
+    if (!VezaxEncounterActive(botAI))
+        return false;
+
+    std::vector<VezaxHazard> hazards;
+    GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
+
+    VezaxHazard field;
+    if (!TryGetVezaxNearestHazard(bot, hazards, true, field))
+        return false;
+
+    return bot->GetExactDist2d(field.position.GetPositionX(), field.position.GetPositionY()) <=
+           ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL;
+}
+
+bool VezaxRaidPositionTrigger::IsActive()
+{
+    return VezaxFormationActive(botAI);
 }

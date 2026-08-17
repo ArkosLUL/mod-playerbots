@@ -493,33 +493,64 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // General Vezax
     //
+    // The engine stops at the first action that returns true, so this order is a survival ranking.
+    // Mark of the Faceless leads because it is the only node whose failure heals the boss while it
+    // drains the raid. The two hazard exits come next - a bot riding a puddle past the doubling point
+    // dies to it, and a healer left in a Shadow Crash field is at a quarter of its output. Soaking
+    // that same field is the reward half of the mechanic, so it sits down in the RAID band where it
+    // cannot pre-empt anything that keeps a bot alive.
+    //
+    // The interrupt has to sit above the RAID band: every class interrupt lives at ACTION_INTERRUPT
+    // (40), and Searing Flames is 13875-16125 to the whole raid plus 75% of the tank's armour every
+    // 8s in 25-man. Position is last on purpose, and yields as soon as it is parked, so those class
+    // interrupts still get a tick.
     triggers.push_back(new TriggerNode(
-        "vezax cheat trigger",
-        { NextAction("vezax cheat action", ACTION_RAID) }));
+        "vezax reset encounter state",
+        { NextAction("vezax reset encounter state action", ACTION_EMERGENCY + 10) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax shadow crash trigger",
-        { NextAction("vezax shadow crash action", ACTION_RAID) }));
+        "vezax mark of the faceless",
+        { NextAction("vezax mark of the faceless action", ACTION_EMERGENCY + 8) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax saronite vapors trigger",
-        { NextAction("vezax saronite vapors action", ACTION_RAID + 1) }));
+        "vezax vapor puddle clear",
+        { NextAction("vezax vapor puddle clear action", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax mark of the faceless trigger",
-        { NextAction("vezax mark of the faceless action", ACTION_RAID) }));
+        "vezax shadow crash clear",
+        { NextAction("vezax shadow crash clear action", ACTION_EMERGENCY + 6) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax shadow resistance trigger",
+        "vezax searing flames interrupt",
+        { NextAction("vezax searing flames interrupt action", ACTION_EMERGENCY + 5) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax surge of darkness",
+        { NextAction("vezax surge of darkness action", ACTION_EMERGENCY + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax saronite animus",
+        { NextAction("vezax saronite animus action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax vapor soak",
+        { NextAction("vezax vapor soak action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax kill vapor",
+        { NextAction("vezax kill vapor action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax shadow crash soak",
+        { NextAction("vezax shadow crash soak action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax shadow resistance",
         { NextAction("vezax shadow resistance action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax saronite animus trigger",
-        { NextAction("vezax saronite animus action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax profound darkness trigger",
-        { NextAction("vezax profound darkness action", ACTION_RAID + 2) }));
+        "vezax raid position",
+        { NextAction("vezax raid position action", ACTION_RAID) }));
 
     //
     // Yogg-Saron
@@ -684,6 +715,10 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
+
+    // Vezax owns where the ranged half stands, so the generic movers have to stand down or the
+    // formation is re-derived and abandoned on alternate ticks.
+    multipliers.push_back(new VezaxControlMovementMultiplier(botAI));
 
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
     multipliers.push_back(new HodirGuardMultiplier(botAI));

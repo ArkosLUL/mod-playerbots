@@ -9,21 +9,14 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_Vezax.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-class VezaxCheatAction : public Action
+class VezaxResetEncounterStateAction : public Action
 {
 public:
-    VezaxCheatAction(PlayerbotAI* ai) : Action(ai, "vezax cheat action") {}
-
-    bool Execute(Event event) override;
-};
-
-class VezaxShadowCrashAction : public MovementAction
-{
-public:
-    VezaxShadowCrashAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash action") {}
+    VezaxResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, "vezax reset encounter state action") {}
 
     bool Execute(Event event) override;
 };
@@ -36,11 +29,40 @@ public:
     bool Execute(Event event) override;
 };
 
-class VezaxSaroniteVaporsAction : public MoveAwayFromCreatureAction
+class VezaxVaporPuddleClearAction : public MovementAction
 {
 public:
-    VezaxSaroniteVaporsAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "vezax saronite vapors action", NPC_VEZAX_SARONITE_VAPORS, 6.0f) {}
+    VezaxVaporPuddleClearAction(PlayerbotAI* ai) : MovementAction(ai, "vezax vapor puddle clear action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Strafe out of a field at the bot's own range band, for the roles that gain nothing from it.
+class VezaxShadowCrashClearAction : public MovementAction
+{
+public:
+    VezaxShadowCrashClearAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash clear action") {}
+
+    bool Execute(Event event) override;
+};
+
+class VezaxSearingFlamesInterruptAction : public Action
+{
+public:
+    VezaxSearingFlamesInterruptAction(PlayerbotAI* ai)
+        : Action(ai, "vezax searing flames interrupt action")
+    {
+    }
+
+    bool Execute(Event event) override;
+};
+
+class VezaxSurgeOfDarknessAction : public Action
+{
+public:
+    VezaxSurgeOfDarknessAction(PlayerbotAI* ai) : Action(ai, "vezax surge of darkness action") {}
+
+    bool Execute(Event event) override;
 };
 
 // Hard mode: switch to and kill the invulnerability-granting Saronite Animus.
@@ -52,13 +74,40 @@ public:
     bool Execute(Event event) override;
 };
 
-// Hard mode: ranged/healers step out of the Animus' Profound Darkness.
-class VezaxProfoundDarknessAction : public MoveAwayFromCreatureAction
+class VezaxVaporSoakAction : public MovementAction
 {
 public:
-    VezaxProfoundDarknessAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "vezax profound darkness action", NPC_VEZAX_SARONITE_ANIMUS,
-                                     ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS) {}
+    VezaxVaporSoakAction(PlayerbotAI* ai) : MovementAction(ai, "vezax vapor soak action") {}
+
+    bool Execute(Event event) override;
+};
+
+class VezaxKillVaporAction : public AttackAction
+{
+public:
+    VezaxKillVaporAction(PlayerbotAI* ai) : AttackAction(ai, "vezax kill vapor action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Walk into the nearest Shadow Crash field and hold it.
+class VezaxShadowCrashSoakAction : public MovementAction
+{
+public:
+    VezaxShadowCrashSoakAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash soak action") {}
+
+    bool Execute(Event event) override;
+};
+
+class VezaxRaidPositionAction : public MovementAction
+{
+public:
+    VezaxRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, "vezax raid position action") {}
+
+    bool Execute(Event event) override;
+
+private:
+    bool _slotReached = false;
 };
 
 #endif

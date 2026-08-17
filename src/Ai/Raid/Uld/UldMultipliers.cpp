@@ -18,6 +18,7 @@
 #include "RogueActions.h"
 #include "Timer.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldActions.h"
 #include "UldTriggers.h"
@@ -545,6 +546,32 @@ float AuriayaMovementGuardMultiplier::GetValue(Action* action)
 
     static std::set<std::string> const encounterMovers = {
         "auriaya raid position action", "auriaya seeping essence action", "auriaya fall from floor action"};
+
+    return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
+}
+
+float VezaxControlMovementMultiplier::GetValue(Action* action)
+{
+    if (!action || !VezaxFormationActive(botAI))
+        return 1.0f;
+
+    // Only the roles the arc actually places. The tank holds the boss and melee ride it, so both keep
+    // every generic mover.
+    if (!botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+        return 1.0f;
+
+    if (!dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // AttackAction derives from MovementAction, so a blanket zero would also kill targeting;
+    // ReachTargetAction is what walks a healer into range of someone the arc cannot reach.
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {
+        "vezax raid position action",       "vezax mark of the faceless action",
+        "vezax vapor puddle clear action",  "vezax shadow crash clear action",
+        "vezax shadow crash soak action",   "vezax vapor soak action"};
 
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
 }

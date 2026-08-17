@@ -82,11 +82,19 @@ public:
         creators["mimiron aerial command unit action"] = &RaidUlduarActionContext::mimiron_aerial_command_unit_action;
         creators["mimiron rocket strike action"] = &RaidUlduarActionContext::mimiron_rocket_strike_action;
         creators["mimiron phase 4 focus action"] = &RaidUlduarActionContext::mimiron_phase_4_focus_action;
-        creators["vezax cheat action"] = &RaidUlduarActionContext::vezax_cheat_action;
-        creators["vezax shadow crash action"] = &RaidUlduarActionContext::vezax_shadow_crash_action;
-        creators["vezax mark of the faceless action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_action;
-        creators["vezax shadow resistance action"] = &RaidUlduarActionContext::vezax_shadow_resistance_action;
         creators["sara shadow resistance action"] = &RaidUlduarActionContext::sara_shadow_resistance_action;
+        creators["vezax reset encounter state action"] = &RaidUlduarActionContext::vezax_reset_encounter_state_action;
+        creators["vezax mark of the faceless action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_action;
+        creators["vezax vapor puddle clear action"] = &RaidUlduarActionContext::vezax_vapor_puddle_clear_action;
+        creators["vezax shadow crash clear action"] = &RaidUlduarActionContext::vezax_shadow_crash_clear_action;
+        creators["vezax searing flames interrupt action"] = &RaidUlduarActionContext::vezax_searing_flames_interrupt_action;
+        creators["vezax surge of darkness action"] = &RaidUlduarActionContext::vezax_surge_of_darkness_action;
+        creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
+        creators["vezax vapor soak action"] = &RaidUlduarActionContext::vezax_vapor_soak_action;
+        creators["vezax kill vapor action"] = &RaidUlduarActionContext::vezax_kill_vapor_action;
+        creators["vezax shadow crash soak action"] = &RaidUlduarActionContext::vezax_shadow_crash_soak_action;
+        creators["vezax raid position action"] = &RaidUlduarActionContext::vezax_raid_position_action;
+        creators["vezax shadow resistance action"] = &RaidUlduarActionContext::vezax_shadow_resistance_action;
         creators["yogg-saron shadow resistance action"] = &RaidUlduarActionContext::yogg_saron_shadow_resistance_action;
         creators["yogg-saron ominous cloud cheat action"] = &RaidUlduarActionContext::yogg_saron_ominous_cloud_cheat_action;
         creators["yogg-saron guardian positioning action"] = &RaidUlduarActionContext::yogg_saron_guardian_positioning_action;
@@ -131,9 +139,6 @@ public:
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
         creators["mimiron pet control action"] = &RaidUlduarActionContext::mimiron_pet_control_action;
-        creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
-        creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
-        creators["vezax profound darkness action"] = &RaidUlduarActionContext::vezax_profound_darkness_action;
         creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
         creators["thorim sif blizzard action"] = &RaidUlduarActionContext::thorim_sif_blizzard_action;
         creators["thorim sif frost nova action"] = &RaidUlduarActionContext::thorim_sif_frost_nova_action;
@@ -217,11 +222,19 @@ private:
     static Action* mimiron_aerial_command_unit_action(PlayerbotAI* ai) { return new MimironAerialCommandUnitAction(ai); }
     static Action* mimiron_rocket_strike_action(PlayerbotAI* ai) { return new MimironRocketStrikeAction(ai); }
     static Action* mimiron_phase_4_focus_action(PlayerbotAI* ai) { return new MimironPhase4FocusAction(ai); }
-    static Action* vezax_cheat_action(PlayerbotAI* ai) { return new VezaxCheatAction(ai); }
-    static Action* vezax_shadow_crash_action(PlayerbotAI* ai) { return new VezaxShadowCrashAction(ai); }
-    static Action* vezax_mark_of_the_faceless_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessAction(ai); }
-    static Action* vezax_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "general vezax"); }
     static Action* sara_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "sara"); }
+    static Action* vezax_reset_encounter_state_action(PlayerbotAI* ai) { return new VezaxResetEncounterStateAction(ai); }
+    static Action* vezax_mark_of_the_faceless_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessAction(ai); }
+    static Action* vezax_vapor_puddle_clear_action(PlayerbotAI* ai) { return new VezaxVaporPuddleClearAction(ai); }
+    static Action* vezax_shadow_crash_clear_action(PlayerbotAI* ai) { return new VezaxShadowCrashClearAction(ai); }
+    static Action* vezax_searing_flames_interrupt_action(PlayerbotAI* ai) { return new VezaxSearingFlamesInterruptAction(ai); }
+    static Action* vezax_surge_of_darkness_action(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessAction(ai); }
+    static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
+    static Action* vezax_vapor_soak_action(PlayerbotAI* ai) { return new VezaxVaporSoakAction(ai); }
+    static Action* vezax_kill_vapor_action(PlayerbotAI* ai) { return new VezaxKillVaporAction(ai); }
+    static Action* vezax_shadow_crash_soak_action(PlayerbotAI* ai) { return new VezaxShadowCrashSoakAction(ai); }
+    static Action* vezax_raid_position_action(PlayerbotAI* ai) { return new VezaxRaidPositionAction(ai); }
+    static Action* vezax_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "general vezax"); }
     static Action* yogg_saron_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "yogg-saron"); }
     static Action* yogg_saron_ominous_cloud_cheat_action(PlayerbotAI* ai) { return new YoggSaronOminousCloudCheatAction(ai); }
     static Action* yogg_saron_guardian_positioning_action(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningAction(ai); }
@@ -266,9 +279,6 @@ private:
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
     static Action* mimiron_pet_control_action(PlayerbotAI* ai) { return new MimironPetControlAction(ai); }
-    static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }
-    static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
-    static Action* vezax_profound_darkness_action(PlayerbotAI* ai) { return new VezaxProfoundDarknessAction(ai); }
     static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
     static Action* thorim_sif_blizzard_action(PlayerbotAI* ai) { return new ThorimSifBlizzardAction(ai); }
     static Action* thorim_sif_frost_nova_action(PlayerbotAI* ai) { return new ThorimSifFrostNovaAction(ai); }

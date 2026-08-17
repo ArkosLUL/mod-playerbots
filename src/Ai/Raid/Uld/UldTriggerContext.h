@@ -82,11 +82,19 @@ public:
         creators["mimiron aerial command unit trigger"] = &RaidUlduarTriggerContext::mimiron_aerial_command_unit_trigger;
         creators["mimiron rocket strike trigger"] = &RaidUlduarTriggerContext::mimiron_rocket_strike_trigger;
         creators["mimiron phase 4 focus trigger"] = &RaidUlduarTriggerContext::mimiron_phase_4_focus_trigger;
-        creators["vezax cheat trigger"] = &RaidUlduarTriggerContext::vezax_cheat_trigger;
-        creators["vezax shadow crash trigger"] = &RaidUlduarTriggerContext::vezax_shadow_crash_trigger;
-        creators["vezax mark of the faceless trigger"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless_trigger;
-        creators["vezax shadow resistance trigger"] = &RaidUlduarTriggerContext::vezax_shadow_resistance_trigger;
         creators["sara shadow resistance trigger"] = &RaidUlduarTriggerContext::sara_shadow_resistance_trigger;
+        creators["vezax reset encounter state"] = &RaidUlduarTriggerContext::vezax_reset_encounter_state;
+        creators["vezax mark of the faceless"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless;
+        creators["vezax vapor puddle clear"] = &RaidUlduarTriggerContext::vezax_vapor_puddle_clear;
+        creators["vezax shadow crash clear"] = &RaidUlduarTriggerContext::vezax_shadow_crash_clear;
+        creators["vezax searing flames interrupt"] = &RaidUlduarTriggerContext::vezax_searing_flames_interrupt;
+        creators["vezax surge of darkness"] = &RaidUlduarTriggerContext::vezax_surge_of_darkness;
+        creators["vezax saronite animus"] = &RaidUlduarTriggerContext::vezax_saronite_animus;
+        creators["vezax vapor soak"] = &RaidUlduarTriggerContext::vezax_vapor_soak;
+        creators["vezax kill vapor"] = &RaidUlduarTriggerContext::vezax_kill_vapor;
+        creators["vezax shadow crash soak"] = &RaidUlduarTriggerContext::vezax_shadow_crash_soak;
+        creators["vezax raid position"] = &RaidUlduarTriggerContext::vezax_raid_position;
+        creators["vezax shadow resistance"] = &RaidUlduarTriggerContext::vezax_shadow_resistance;
         creators["yogg-saron shadow resistance triggerr"] = &RaidUlduarTriggerContext::yogg_saron_shadow_resistance_trigger;
         creators["yogg-saron ominous cloud cheat trigger"] = &RaidUlduarTriggerContext::yogg_saron_ominous_cloud_cheat_trigger;
         creators["yogg-saron guardian positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_positioning_trigger;
@@ -132,9 +140,6 @@ public:
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
         creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
         creators["mimiron pet control trigger"] = &RaidUlduarTriggerContext::mimiron_pet_control_trigger;
-        creators["vezax saronite vapors trigger"] = &RaidUlduarTriggerContext::vezax_saronite_vapors_trigger;
-        creators["vezax saronite animus trigger"] = &RaidUlduarTriggerContext::vezax_saronite_animus_trigger;
-        creators["vezax profound darkness trigger"] = &RaidUlduarTriggerContext::vezax_profound_darkness_trigger;
         creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
         creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
         creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
@@ -219,12 +224,20 @@ private:
     static Trigger* mimiron_aerial_command_unit_trigger(PlayerbotAI* ai) { return new MimironAerialCommandUnitTrigger(ai); }
     static Trigger* mimiron_rocket_strike_trigger(PlayerbotAI* ai) { return new MimironRocketStrikeTrigger(ai); }
     static Trigger* mimiron_phase_4_focus_trigger(PlayerbotAI* ai) { return new MimironPhase4FocusTrigger(ai); }
-    static Trigger* vezax_cheat_trigger(PlayerbotAI* ai) { return new VezaxCheatTrigger(ai); }
-    static Trigger* vezax_shadow_crash_trigger(PlayerbotAI* ai) { return new VezaxShadowCrashTrigger(ai); }
-    static Trigger* vezax_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
     static Trigger* sara_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "sara"); }
+    static Trigger* vezax_reset_encounter_state(PlayerbotAI* ai) { return new VezaxResetEncounterStateTrigger(ai); }
+    static Trigger* vezax_mark_of_the_faceless(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessTrigger(ai); }
+    static Trigger* vezax_vapor_puddle_clear(PlayerbotAI* ai) { return new VezaxVaporPuddleClearTrigger(ai); }
+    static Trigger* vezax_shadow_crash_clear(PlayerbotAI* ai) { return new VezaxShadowCrashClearTrigger(ai); }
+    static Trigger* vezax_searing_flames_interrupt(PlayerbotAI* ai) { return new VezaxSearingFlamesInterruptTrigger(ai); }
+    static Trigger* vezax_surge_of_darkness(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessTrigger(ai); }
+    static Trigger* vezax_saronite_animus(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
+    static Trigger* vezax_vapor_soak(PlayerbotAI* ai) { return new VezaxVaporSoakTrigger(ai); }
+    static Trigger* vezax_kill_vapor(PlayerbotAI* ai) { return new VezaxKillVaporTrigger(ai); }
+    static Trigger* vezax_shadow_crash_soak(PlayerbotAI* ai) { return new VezaxShadowCrashSoakTrigger(ai); }
+    static Trigger* vezax_raid_position(PlayerbotAI* ai) { return new VezaxRaidPositionTrigger(ai); }
+    static Trigger* vezax_shadow_resistance(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
     static Trigger* yogg_saron_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "yogg-saron"); }
-    static Trigger* vezax_mark_of_the_faceless_trigger(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessTrigger(ai); }
     static Trigger* yogg_saron_ominous_cloud_cheat_trigger(PlayerbotAI* ai) { return new YoggSaronOminousCloudCheatTrigger(ai); }
     static Trigger* yogg_saron_guardian_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningTrigger(ai); }
     static Trigger* yogg_saron_sanity_trigger(PlayerbotAI* ai) { return new YoggSaronSanityTrigger(ai); }
@@ -269,9 +282,6 @@ private:
     static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
     static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
     static Trigger* mimiron_pet_control_trigger(PlayerbotAI* ai) { return new MimironPetControlTrigger(ai); }
-    static Trigger* vezax_saronite_vapors_trigger(PlayerbotAI* ai) { return new VezaxSaroniteVaporsTrigger(ai); }
-    static Trigger* vezax_saronite_animus_trigger(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
-    static Trigger* vezax_profound_darkness_trigger(PlayerbotAI* ai) { return new VezaxProfoundDarknessTrigger(ai); }
     static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
     static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
     static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }

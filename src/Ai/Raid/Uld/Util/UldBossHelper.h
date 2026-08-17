@@ -151,7 +151,17 @@ enum UlduarIDs
 
     // General Vezax
     SPELL_MARK_OF_THE_FACELESS = 63276,
-    SPELL_VEZAX_SHADOW_CRASH = 63277,
+    // 62660 is the cast, 62659 the 10 yd impact, and 63277 the 8 yd field it leaves behind for 20s.
+    // Only the field is reactable - the impact resolves the instant the missile lands.
+    SPELL_VEZAX_SHADOW_CRASH_CAST = 62660,
+    SPELL_VEZAX_SHADOW_CRASH_DMG = 62659,
+    SPELL_VEZAX_SHADOW_CRASH_FIELD = 63277,
+    SPELL_VEZAX_SEARING_FLAMES = 62661,
+    SPELL_VEZAX_SURGE_OF_DARKNESS = 62662,
+    SPELL_VEZAX_SARONITE_VAPORS_PUDDLE = 63322,
+    // Cast by a dying vapor on itself, so it fires exactly once at the moment the puddle appears.
+    SPELL_VEZAX_SARONITE_VAPORS_SPAWN = 63323,
+    SPELL_VEZAX_SARONITE_BARRIER = 63364,
 
     // Yogg-Saron
     ACTION_ILLUSION_DRAGONS = 1,
@@ -239,6 +249,7 @@ enum UlduarIDs
     NPC_AURIAYA_SEEPING_FERAL_ESSENCE = 34098,
 
     // General Vezax
+    NPC_VEZAX = 33271,
     NPC_VEZAX_SARONITE_VAPORS = 33488,
     NPC_VEZAX_SARONITE_ANIMUS = 33524,
 
@@ -385,16 +396,80 @@ constexpr float ULDUAR_FL_KITE_CORNER_CHAMFER = 35.0f;
 constexpr float ULDUAR_FL_KITE_ADVANCE_DIST = 30.0f;    // switch nodes on approach, never on arrival
 constexpr float ULDUAR_FL_KITE_BOSS_CLEARANCE = 50.0f;  // a node this close to him is not a destination
 
-// Vezax hard mode: ranged/healers stay outside the Saronite Animus' Profound Darkness (63420).
-constexpr float ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f;
-
-// Shadow Crash strafe: the band each role keeps to Vezax while walking out of the puddle, and the
+// Shadow Crash strafe: the band each role keeps to Vezax while walking out of the field, and the
 // arc length of one step. Melee stay inside their reach so the dodge does not cost the whole cast.
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MIN_RANGE = 4.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MAX_RANGE = 8.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MIN_RANGE = 13.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MAX_RANGE = 17.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_STEP_YARDS = 5.0f;
+
+// Both Vezax ground hazards are 8 yd: the Shadow Crash field (63277) and the puddle a killed
+// Saronite Vapor leaves on its corpse (63322). Plus a yard of slack, since a bot that stops exactly
+// on the boundary is still taking ticks.
+constexpr float ULDUAR_VEZAX_HAZARD_RADIUS = 8.0f;
+constexpr float ULDUAR_VEZAX_HAZARD_CLEARANCE = 9.0f;
+// Wide enough to cover the whole ranged formation. Callers that only care about what is under
+// their own feet pass a tighter radius - the sweep is two grid searches and the raid runs it often.
+constexpr float ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS = 60.0f;
+constexpr float ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS = 25.0f;
+
+// The field is worth +100% magic damage, +100% cast speed and -70% mana cost for 20s, which is the
+// only real answer to Aura of Despair - so mana casters walk into it rather than out of it. Healers
+// never do: it also cuts healing done by 75%, which halves their throughput outright.
+// Capped travel, or every caster abandons its slot for one 8 yd circle and Shadow Crash catches the
+// lot of them next cast.
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 15.0f;
+
+// The puddle deals 100 * 2^stacks every 4s and hands back half as mana. Leave once the next tick
+// would take this share of current health - a fixed stack cap kills undergeared 10-man healers and
+// leaves value on the table for geared 25-man ones.
+constexpr float ULDUAR_VEZAX_VAPOR_SOAK_MAX_TICK_HP_PCT = 0.35f;
+
+// Vezax formation. He spawns dead centre of his room and the raid enters from the south door
+// (194750, y 31.5), so the arc faces the door and the whole northern half stays empty - which is
+// where the Mark of the Faceless spots go. Every radius below is navprobe-verified on map 603: the
+// floor is a WMO, flat at Z 342.378, with no holes at any bearing.
+constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = -1.5291f;
+constexpr float ULDUAR_VEZAX_ARC_WIDTH = static_cast<float>(M_PI);
+
+// Three rings, not one. Twelve ranged spread over a single arc sit 6.9 yd apart, well inside Shadow
+// Crash's 10 yd impact; splitting them across 21 and 28 yd gives 12.6 and 17.6 instead. Healers sit
+// inside both, because PartyMemberToHeal measures at GetRange("heal") = 30 yd rather than
+// healDistance, and a healer on the outer ring cannot reach the tank on the boss.
+constexpr float ULDUAR_VEZAX_HEALER_RADIUS = 15.0f;
+constexpr float ULDUAR_VEZAX_RANGED_INNER_RADIUS = 21.0f;
+constexpr float ULDUAR_VEZAX_RANGED_OUTER_RADIUS = 28.0f;
+constexpr uint8 ULDUAR_VEZAX_HEALER_SLOTS = 8;
+constexpr uint8 ULDUAR_VEZAX_RANGED_INNER_SLOTS = 6;
+constexpr uint8 ULDUAR_VEZAX_RANGED_OUTER_SLOTS = 6;
+constexpr uint8 ULDUAR_VEZAX_RANGED_SLOTS =
+    ULDUAR_VEZAX_RANGED_INNER_SLOTS + ULDUAR_VEZAX_RANGED_OUTER_SLOTS;
+constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = ULDUAR_VEZAX_HEALER_SLOTS + ULDUAR_VEZAX_RANGED_SLOTS;
+constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 2.0f;
+
+// The room door spawns at (1854.86, 31.53), just under 50 yd from the anchor, so this bubble stops
+// at the doorway. Vezax is visible from well outside his hall and the formation is worth nothing to
+// a bot that would have to path through a wall to reach it.
+constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
+constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
+
+// Melee and the tank hold the boss rather than take slots, so all they get is a nudge apart.
+constexpr float ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS = 4.0f;
+
+// Mark of the Faceless drains 5000/s from every ally within 15 yd and heals Vezax for it. Three
+// spots behind the boss where nothing else stands, nearest one wins - the debuff only lasts 10s and
+// travel is the whole cost of the mechanic.
+constexpr float ULDUAR_VEZAX_MARK_SEPARATION = 18.0f;
+constexpr float ULDUAR_VEZAX_MARK_SPOT_RADIUS = 26.0f;
+constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the arc ends
+constexpr float ULDUAR_VEZAX_MARK_SPOT_TOLERANCE = 3.0f;
+constexpr uint8 ULDUAR_VEZAX_MARK_SPOT_COUNT = 3;
+
+// Enough to drop a vapor quickly without taking the raid off the boss, and how far a bot will walk
+// for the puddle it leaves.
+constexpr uint8 ULDUAR_VEZAX_VAPOR_KILLERS = 3;
+constexpr float ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL = 25.0f;
 
 // Mimiron P3Wx2 Laser Barrage. The damage is 63293, a TARGET_UNIT_CONE_ENEMY_104 cone: 104 degrees
 // wide with a 50000 yd radius, so distance from VX-001 buys nothing and only bearing matters.
@@ -1168,7 +1243,7 @@ extern const Position ULDUAR_MIMIRON_ROOM_CENTER;
 // navprobe: this point and a 12 yd fan around it are 16/16 on mesh, flat at Z 364.31.
 extern const Position ULDUAR_MIMIRON_PHASE3_STAGE;
 extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
-extern const Position ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT;
+extern const Position ULDUAR_VEZAX_ANCHOR;
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE;
