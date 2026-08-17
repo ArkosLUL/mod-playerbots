@@ -146,12 +146,18 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   `{681.278, 1375.796}` and `{821.182, 1235.42}`. The layout is one set of signed offsets from
   centre — positive towards him — rotated onto whichever of those four is nearest to where he
   actually is:
-  - `MALYGOS_MAINTANK_OFFSET` **+42 yd** — the Exit Portal sits 43.4 yd out on bearing 133.2°, and
-    the platform GO is centred on `CenterPos`, so there is ground that far on any bearing. The portal
-    is phased out by `DATA_HIDE_IRIS_AND_PORTAL` once the fight starts. Malygos' CombatReach of 20
-    parks him ~21.5 yd short of the tank.
-  - `MALYGOS_STACK_OFFSET` **+12 yd** — melee, healers and every ranged DPS but the hunters. 30 yd
-    from the tank, inside 40 yd heal range, and behind where the boss stops, so out of the cone.
+  - `MALYGOS_MAINTANK_OFFSET` **+46 yd** — Malygos' CombatReach of 20 parks him ~21.5 yd short of
+    the tank, so he ends up ~24.5 yd out. The floor is **stepped**: **266.10 out to r 29**,
+    **267.25 from 30.5 to 47.5**, **268.25 from 48.1 to 55.5**, the last being the real edge.
+    Measured off the platform's collision mesh — `Nexus_Raid_Floating_Platform.wmo.vmo` in the
+    `ac-client-data` volume, `GMOD`/`VERT` chunks, plus the GO's 256.25 spawn Z — because **navprobe
+    cannot answer map 616**: no mmtiles, no vmap tree, terrain flat 0.0 everywhere. The GO sits 0.4 yd
+    off `CenterPos`, so those radii are about centre either way, and the `Exit Portal` GO at r 43.41,
+    z 267.23 confirms the middle tier; it is phased out by `DATA_HIDE_IRIS_AND_PORTAL` once the fight
+    starts. Ceilings: the step at **47.5**, and **48.5**, past which the boss clears
+    `MALYGOS_MELEE_HOLD_DISTANCE` from the stack and the clamp below starts firing.
+  - `MALYGOS_STACK_OFFSET` **+12 yd** — melee, healers and every ranged DPS but the hunters. 34 yd
+    from the tank, inside `HealDistance` (38.5), and behind where the boss stops, so out of the cone.
     That last part assumes his chase actually brings him to ~21.5 yd short of the tank spot; it stops
     wherever it first puts him in melee range, so coming in off-bearing can leave the melee half of
     the raid swinging at nothing. So the stack spot — and only the stack spot — is **clamped**:
@@ -162,12 +168,12 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
     front of him; it moves continuously with him rather than switching between two spots, which is
     what would set the raid bouncing; and it is off during the pull intro, when he is circling and
     untouchable anyway. With the layout rotated onto him it should rarely fire at all.
-  - `MALYGOS_HUNTER_OFFSET` **−14 yd**, i.e. past centre, ~33 yd from the boss — **hunters only**.
+  - `MALYGOS_HUNTER_OFFSET` **−14 yd**, i.e. past centre, ~38.5 yd from the boss — **hunters only**.
     `Spell::CheckRange` adds `GetMeleeRange` to a spell's minimum for `SPELL_RANGE_RANGED`, so
     Malygos' CombatReach of 20 inflates a hunter's 5 yd minimum to ~28 yd of centre-to-centre distance
     and every shot came back `SPELL_FAILED_TOO_CLOSE`. Nothing else has a minimum range, and standing
     out here is exactly what left the raid unable to reach a Power Spark closing on the boss from the
-    far side — 33 yd to the boss plus 12 more to the spark is well past `spellDistance`. So casters
+    far side — 38.5 yd to the boss plus 12 more to the spark is well past `spellDistance`. So casters
     hold the stack instead. The same reach keeps `EnemyTooCloseForSpellTrigger` (threshold ~23.5 yd)
     permanently active for anyone standing close, and every class wires that trigger to an escape at
     34–50 relevance — above `malygos position` at `ACTION_MOVE`. Bots stepped out, were dragged back
@@ -196,6 +202,28 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   still works; `AttackAction` is not, which is why the EoE attack actions have to be named. Note the
   named exemptions only ever *target* — `AttackAction::Attack` sets the target and stops nothing but a
   sub-combat-priority walk, so a melee bot peeling onto a spark still stays put.
+
+  **Only the assigned tank pulls Malygos back.** `MalygosTargetAction` puts an off-tank on the boss —
+  the Power Spark peel is gated on `IsDps`, which a tank spec fails — and parks him on the stack, so a
+  taunt from there swings the cone inward through the raid. Two paths, unequally guarded.
+  `lose aggro` → `taunt` / `hand of reckoning` / `dark command` / `growl` was mostly quiet already:
+  `HasAggroValue` counts "another tank player holds him" as having aggro for anyone but the explicitly
+  flagged main tank. `high aoe` → `challenging shout` / `challenging roar` was **ungated**, and
+  Challenging Shout is a radius taunt with the off-tank only 12.5 yd out. The multiplier now zeroes all
+  six by name for anyone who is not `IsMainTank`, but **only while a tank player is Malygos' victim** —
+  with nobody on him the taunt is the rescue and has to survive. Names rather than `dynamic_cast`,
+  which would drag four class action headers into the multiplier. Zeroing an action still pushes its
+  alternatives at 0.003 relevance, so the warrior's `heroic throw` fallback survives — damage, not a
+  taunt, and beaten by everything at that relevance.
+
+  **Threat redirects.** Hunters do redirect, and it lands: `low tank threat` →
+  `misdirection on main tank` (`ACTION_HIGH + 7`), with Misdirection (34477) reaching 100 yd against a
+  60 yd hunter-to-tank gap. It is spent for nothing whenever their current target is a Power Spark —
+  the tank has 0 threat on it, so the trigger fires anyway. Rogues could not: Tricks of the Trade
+  (57934) reaches **20 yd** against 34 yd, `TricksOfTheTradeTargetValue` range-checked only its
+  melee-DPS fallback, and `CanCastSpell` passes `SPELL_FAILED_OUT_OF_RANGE` through as castable — so
+  the cast was built and thrown away every tick. The main-tank branch now takes the same 20 yd gate,
+  in `RogueValues.cpp`, not here.
 
   There is no `avoid arcane breath` action: the cone points away from the raid, at the tank, and every
   other spot is behind it.

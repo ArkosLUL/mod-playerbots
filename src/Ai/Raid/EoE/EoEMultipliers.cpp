@@ -17,11 +17,21 @@
 #include "Timer.h"
 #include "VehicleActions.h"
 
+#include <string>
+
 namespace
 {
 // A bot's role does not change mid-fight, and re-deriving it per action was the most
 // expensive thing this strategy did.
 constexpr uint32 EOE_SNAPSHOT_CACHE_MS = 500;
+
+// Every taunt the tank specs wire up, radius ones included. Matched by name because the six of them
+// live in four class headers the EoE strategy has no other reason to pull in.
+bool IsTauntAction(std::string const& name)
+{
+    return name == "taunt" || name == "hand of reckoning" || name == "dark command" ||
+           name == "growl" || name == "challenging shout" || name == "challenging roar";
+}
 }
 
 void MalygosMultiplier::RefreshSnapshot()
@@ -39,8 +49,12 @@ void MalygosMultiplier::RefreshSnapshot()
     isHeal = botAI->IsHeal(bot);
 
     Unit* boss = MalygosTrigger::getMalygos(bot);
-    isBossVictim = boss && boss->GetVictim() == bot;
+    Unit* victim = boss ? boss->GetVictim() : nullptr;
+    isBossVictim = victim == bot;
     isBossTank = isMainTank || isBossVictim;
+
+    Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+    bossVictimIsTank = victimPlayer && botAI->IsTank(victimPlayer);
 }
 
 float MalygosMultiplier::GetValue(Action* action)
@@ -62,6 +76,14 @@ float MalygosMultiplier::GetValue(Action* action)
     {
         if (cast)
         {
+            // Arcane Breath is a frontal cone on whoever Malygos is hitting, so an off-tank taunting
+            // from the melee stack turns him inward and sweeps it through the raid. Gated on a tank
+            // already holding him: with nobody on him the taunt is the rescue, so it has to survive.
+            if (!isMainTank && bossVictimIsTank && IsTauntAction(cast->getName()))
+            {
+                return 0.0f;
+            }
+
             // "enemy too close for spell" stays active next to a 20-reach boss, and every class wires it
             // to an escape at 34-50 relevance, above MalygosPositionAction.
             if (dynamic_cast<CastBlinkBackAction*>(cast) || dynamic_cast<CastDisengageAction*>(cast))

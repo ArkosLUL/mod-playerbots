@@ -29,6 +29,7 @@ private:
     bool isHeal = false;
     bool isBossTank = false;
     bool isBossVictim = false;
+    bool bossVictimIsTank = false;
 };
 
 #endif

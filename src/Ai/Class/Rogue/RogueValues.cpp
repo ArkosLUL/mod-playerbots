@@ -35,8 +35,12 @@ Unit* TricksOfTheTradeTargetValue::Calculate()
     if (!group)
         return nullptr;
 
+    // Tricks reaches 20 yd, and CanCastSpell lets SPELL_FAILED_OUT_OF_RANGE through as castable, so
+    // without the same range gate the fallback below uses, a tank standing further out than that
+    // eats the action every tick on a cast that can never land.
     Unit* mainTank = AI_VALUE(Unit*, "main tank");
-    if (mainTank && mainTank != bot && TankNeedsRedirect(mainTank))
+    if (mainTank && mainTank != bot && bot->GetDistance(mainTank) <= REDIRECT_RANGE &&
+        TankNeedsRedirect(mainTank))
         return mainTank;
 
     Player* best = nullptr;

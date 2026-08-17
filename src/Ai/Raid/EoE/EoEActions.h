@@ -29,7 +29,9 @@ const float MALYGOS_ANTIFALL_RADIUS = 30.0f;
 const float MALYGOS_ANTIFALL_INSET = 3.0f;
 
 // P1 hold spots, as signed distances from centre along the landing bearing: positive towards Malygos.
-const float MALYGOS_MAINTANK_OFFSET = 42.0f;
+// The tank spot cannot pass 47.5: the platform floor steps up a yard there. It also cannot pass 48.5,
+// where the melee stack starts being clamped inward - Malygos parks ~21.5 yd short of his victim.
+const float MALYGOS_MAINTANK_OFFSET = 46.0f;
 const float MALYGOS_STACK_OFFSET = 12.0f;
 const float MALYGOS_HUNTER_OFFSET = -14.0f;
 const float MALYGOS_P1_POSITION_TOLERANCE = 5.0f;
