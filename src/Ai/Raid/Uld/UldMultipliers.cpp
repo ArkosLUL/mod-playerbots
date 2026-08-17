@@ -20,6 +20,7 @@
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldActions.h"
+#include "UldTriggers.h"
 #include "UldScripts.h"
 #include "VehicleActions.h"
 
@@ -417,7 +418,7 @@ float UlduarBurstWindowMultiplier::GetValue(Action* action)
         cachedValue = EvaluateWindow();
     }
 
-    std::string const& name = action->getName();
+    std::string const name = action->getName();
     bool const allowed = (name == "bloodlust" || name == "heroism") ? cachedValue.allowLust : cachedValue.allowAll;
 
     return allowed ? 1.0f : 0.0f;
@@ -586,6 +587,74 @@ float HodirGuardMultiplier::GetValue(Action* action)
 bool AuriayaAntiFearTotemGuardMultiplier::FearWindowActive() { return AuriayaFearWindowActive(botAI); }
 
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }
+
+namespace
+{
+// The Mimiron windows where taking the hit ends the bot: Shock Blast is 100000 in a 15 yd circle, the
+// Laser Barrage cone one-shots, a Rocket Strike lands on the ranged ring, and Firefighter's fire and
+// Frost Bomb both tick people down. Proximity Mines and Bomb Bots are deliberately absent - the mine
+// node was demoted below the whole ladder because eating one is healable, and letting it veto a charge
+// would contradict its own ranking.
+bool MimironLethalWindowActive(PlayerbotAI* botAI)
+{
+    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+        !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
+        !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+        return false;
+
+    MimironShockBlastTrigger shockBlast(botAI);
+    if (shockBlast.IsActive())
+        return true;
+
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (barrage.IsActive())
+        return true;
+
+    MimironRocketStrikeTrigger rocketStrike(botAI);
+    if (rocketStrike.IsActive())
+        return true;
+
+    // Both of these check the hard-mode config first, so they cost nothing on a normal clear.
+    MimironDodgeFlamesTrigger dodgeFlames(botAI);
+    if (dodgeFlames.IsActive())
+        return true;
+
+    MimironFrostBombTrigger frostBomb(botAI);
+    return frostBomb.IsActive();
+}
+}  // namespace
+
+float MimironChargeGuardMultiplier::GetValue(Action* action)
+{
+    // Cheap gate first: this only ever has an opinion about the gap-closers, and every one of them is a
+    // CastReachTargetSpellAction - Charge, Intercept and both Feral Charges, with no other subclasses.
+    if (!dynamic_cast<CastReachTargetSpellAction*>(action))
+        return 1.0f;
+
+    return MimironLethalWindowActive(botAI) ? 0.0f : 1.0f;
+}
+
+float MimironThreatRedirectGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // Every BuffOnMainTankAction names itself "<spell> on main tank". Matching the two spells rather
+    // than the type on purpose: the type would also catch every blessing and buff aimed at the tank.
+    std::string const name = action->getName();
+    if (name != "misdirection on main tank" && name != "tricks of the trade on main tank")
+        return 1.0f;
+
+    // Phase 1 only, where the two tanks trade Plasma Blast every 22 s. A taunt equalises threat for one
+    // moment; twenty seconds of a hunter's and a rogue's redirected threat undoes that long before the
+    // next cast, so the swap never sticks while these run. Nothing to swap in the later phases, so the
+    // redirects stay useful there.
+    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+                   !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
+                   !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT)
+               ? 0.0f
+               : 1.0f;
+}
 
 float MimironTargetGuardMultiplier::GetValue(Action* action)
 {

@@ -80,7 +80,7 @@ public:
         creators["mimiron arc spread action"] = &RaidUlduarActionContext::mimiron_arc_spread_action;
         creators["mimiron aerial command unit action"] = &RaidUlduarActionContext::mimiron_aerial_command_unit_action;
         creators["mimiron rocket strike action"] = &RaidUlduarActionContext::mimiron_rocket_strike_action;
-        creators["mimiron phase 4 mark dps action"] = &RaidUlduarActionContext::mimiron_phase_4_mark_dps_action;
+        creators["mimiron phase 4 focus action"] = &RaidUlduarActionContext::mimiron_phase_4_focus_action;
         creators["vezax cheat action"] = &RaidUlduarActionContext::vezax_cheat_action;
         creators["vezax shadow crash action"] = &RaidUlduarActionContext::vezax_shadow_crash_action;
         creators["vezax mark of the faceless action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_action;
@@ -129,6 +129,7 @@ public:
         creators["mimiron set dps priority action"] = &RaidUlduarActionContext::mimiron_set_dps_priority_action;
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
+        creators["mimiron pet control action"] = &RaidUlduarActionContext::mimiron_pet_control_action;
         creators["vezax saronite vapors action"] = &RaidUlduarActionContext::vezax_saronite_vapors_action;
         creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
         creators["vezax profound darkness action"] = &RaidUlduarActionContext::vezax_profound_darkness_action;
@@ -213,7 +214,7 @@ private:
     static Action* mimiron_arc_spread_action(PlayerbotAI* ai) { return new MimironArcSpreadAction(ai); }
     static Action* mimiron_aerial_command_unit_action(PlayerbotAI* ai) { return new MimironAerialCommandUnitAction(ai); }
     static Action* mimiron_rocket_strike_action(PlayerbotAI* ai) { return new MimironRocketStrikeAction(ai); }
-    static Action* mimiron_phase_4_mark_dps_action(PlayerbotAI* ai) { return new MimironPhase4MarkDpsAction(ai); }
+    static Action* mimiron_phase_4_focus_action(PlayerbotAI* ai) { return new MimironPhase4FocusAction(ai); }
     static Action* vezax_cheat_action(PlayerbotAI* ai) { return new VezaxCheatAction(ai); }
     static Action* vezax_shadow_crash_action(PlayerbotAI* ai) { return new VezaxShadowCrashAction(ai); }
     static Action* vezax_mark_of_the_faceless_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessAction(ai); }
@@ -262,6 +263,7 @@ private:
     static Action* mimiron_set_dps_priority_action(PlayerbotAI* ai) { return new MimironSetDpsPriorityAction(ai); }
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
+    static Action* mimiron_pet_control_action(PlayerbotAI* ai) { return new MimironPetControlAction(ai); }
     static Action* vezax_saronite_vapors_action(PlayerbotAI* ai) { return new VezaxSaroniteVaporsAction(ai); }
     static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
     static Action* vezax_profound_darkness_action(PlayerbotAI* ai) { return new VezaxProfoundDarknessAction(ai); }

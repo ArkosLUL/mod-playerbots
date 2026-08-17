@@ -51,10 +51,10 @@ public:
     bool IsActive() override;
 };
 
-class MimironPhase4MarkDpsTrigger : public Trigger
+class MimironPhase4FocusTrigger : public Trigger
 {
 public:
-    MimironPhase4MarkDpsTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron phase 4 mark dps trigger") {}
+    MimironPhase4FocusTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron phase 4 focus trigger") {}
     bool IsActive() override;
 };
 
@@ -90,6 +90,14 @@ class MimironBombBotTrigger : public Trigger
 {
 public:
     MimironBombBotTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron bomb bot trigger") {}
+    bool IsActive() override;
+};
+
+// The Aerial Command Unit is airborne and this bot has a pet that cannot reach it.
+class MimironPetControlTrigger : public Trigger
+{
+public:
+    MimironPetControlTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron pet control trigger") {}
     bool IsActive() override;
 };
 

@@ -49,6 +49,25 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Mimiron: a gap-closer moves the bot in a straight line and consults nothing about the ground, so it
+// must not fire while the bot is under orders to dodge something that kills.
+class MimironChargeGuardMultiplier : public Multiplier
+{
+public:
+    MimironChargeGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron charge guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Mimiron phase 1: Misdirection and Tricks of the Trade both hand their threat to the main tank by
+// name, which is the one tank the Plasma Blast swap is trying to move off.
+class MimironThreatRedirectGuardMultiplier : public Multiplier
+{
+public:
+    MimironThreatRedirectGuardMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "mimiron threat redirect guard") {}
+    float GetValue(Action* action) override;
+};
+
 // Ignis: the two places where the generic behaviour actively breaks the encounter - the Slag Pot
 // victim cannot walk, and the construct tank has to stand in the fire everyone else runs from.
 class IgnisMultiplier : public Multiplier

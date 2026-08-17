@@ -18,7 +18,9 @@
 
 bool MimironShockBlastTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "leviathan mk ii");
+    // By entry, not through "find target": that value walks the bot's own threat list, so it only ever
+    // resolves a boss this bot is already on. A bot that has not damaged the mech has to dodge it too.
+    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
 
     // Check boss and it is alive
     if (!boss || !boss->IsAlive())
@@ -35,10 +37,11 @@ bool MimironShockBlastTrigger::IsActive()
     {
         return true;
     }
-    else
-    {
-        return bot->GetDistance2d(boss) < 15.0f;
-    }
+
+    // Centre to centre. GetDistance2d would take off the MK II's combat reach of 8 and the bot's own
+    // 1.5 first, which turned a 15 yd blast into a 24.5 yd panic and had the whole ranged ring running
+    // from a spell that cannot touch it.
+    return bot->GetExactDist2d(boss) < ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
 }
 
 bool MimironPhase1PositioningTrigger::IsActive()
@@ -74,7 +77,9 @@ bool MimironPhase1PositioningTrigger::IsActive()
 
 bool MimironP3Wx2LaserBarrageTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "vx-001");
+    // By entry. VX-001 never calls DoZoneInCombat in phase 4, so "find target" leaves any bot that has
+    // not damaged it blind to a cone that kills in a single tick.
+    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
 
     // Check boss and it is alive
     if (!boss || !boss->IsAlive())
@@ -89,23 +94,22 @@ bool MimironP3Wx2LaserBarrageTrigger::IsActive()
 
 bool MimironArcSpreadTrigger::IsActive()
 {
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-        !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
-        !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
-        return false;
-
     // Stand down for the whole Spinning Up window and barrage: the dodge owns positioning then, and
     // walking a bot back to its ring slot mid-cone kills it.
     MimironP3Wx2LaserBarrageTrigger barrage(botAI);
     if (barrage.IsActive())
         return false;
 
-    // Nor while something more urgent is already moving the bot.
-    if (bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, 10.0f))
-        return false;
-
+    // No "is a mech up" gate of its own. GetMimironSpreadSlot answers false when neither a live nor a
+    // staging focus resolves, and that is also what keeps this quiet before the pull and after a wipe.
     Position slot;
     if (!GetMimironSpreadSlot(botAI, bot, slot))
+        return false;
+
+    // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
+    // ring itself, so a bot that dodged one is standing clear while its slot still has the marker
+    // burning on it - checking the bot's own surroundings would send it straight back.
+    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironSpotSafe(bot, slot))
         return false;
 
     return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) >
@@ -133,15 +137,14 @@ bool MimironAerialCommandUnitTrigger::IsActive()
         return group->GetTargetIcon(RtiTargetValue::skullIndex) != focus->GetGUID();
     }
 
-    if (!botAI->IsRanged(bot))
-        return false;
-
-    return AI_VALUE(float, "disperse distance") != 5.0f;
+    // Nothing for anyone else. Spacing in this phase comes from the staging slots, which already hold
+    // the raid ULDUAR_MIMIRON_PHASE3_SPACING apart - more than the 5 yd a Bomb Bot blast covers.
+    return false;
 }
 
 bool MimironRocketStrikeTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "vx-001");
+    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
 
     // Check boss and it is alive
     if (!boss || !boss->IsAlive())
@@ -155,27 +158,23 @@ bool MimironRocketStrikeTrigger::IsActive()
     return bot->GetDistance2d(rocketStrikeN->GetPositionX(), rocketStrikeN->GetPositionY()) <= 10.0f;
 }
 
-bool MimironPhase4MarkDpsTrigger::IsActive()
+bool MimironPhase4FocusTrigger::IsActive()
 {
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-
-    if (!leviathanMkII || !vx001 || !aerialCommandUnit)
+    if (!IsMimironPhase4(bot))
         return false;
 
     if (botAI->IsMainTank(bot))
     {
-        Unit* focus = leviathanMkII;
-        if (vx001->GetHealth() > focus->GetHealth())
-            focus = vx001;
-        if (aerialCommandUnit->GetHealth() > focus->GetHealth())
-            focus = aerialCommandUnit;
+        Unit* const focus = GetMimironPhase4Focus(botAI, bot, true);
+        Unit* const current = AI_VALUE(Unit*, "current target");
 
-        // Fires on the target as well as the icon: the mech with the most health left changes hands
-        // through the phase, and the tank has to follow it whether or not the mark is already right.
-        return AI_VALUE(Unit*, "current target") != focus ||
-               (bot->GetGroup() && bot->GetGroup()->GetTargetIcon(RtiTargetValue::skullIndex) != focus->GetGUID());
+        // A null focus means everything the tank may touch is already at the floor, so it has to stop
+        // swinging - fire once while it is still attacking so the action can. No raid target icon any
+        // more: nothing ever read it back, and a stale skull only ever misled the human raid leader.
+        if (!focus)
+            return current != nullptr || bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
+
+        return current != focus;
     }
 
     // Non-tanks only come here to be spread for Hand Pulse; their target belongs to
@@ -190,11 +189,18 @@ bool MimironProximityMineTrigger::IsActive()
 {
     TooCloseToCreatureTrigger tooCloseToProximityMine(botAI);
     return tooCloseToProximityMine.TooCloseToCreature(NPC_PROXIMITY_MINE,
-                                                     ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f);
+                                                     ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS);
 }
 
 bool MimironBombBotTrigger::IsActive()
 {
+    // A Bomb Bot runs 8.0 yd/s against a player's 7.0, so nobody outruns one - what kills it is that it
+    // also dies to almost nothing. Ranged DPS that can reach it shoot it instead ("mimiron set dps
+    // priority" hands them the target); healers and melee keep the sidestep, which is all 5 yd costs.
+    if (PlayerbotAI::IsRangedDps(bot) &&
+        bot->FindNearestCreature(NPC_BOMB_BOT, sPlayerbotAIConfig.spellDistance))
+        return false;
+
     TooCloseToCreatureTrigger tooCloseToBombBot(botAI);
     return tooCloseToBombBot.TooCloseToCreature(NPC_BOMB_BOT, ULDUAR_MIMIRON_BOMB_BOT_RADIUS);
 }
@@ -244,20 +250,22 @@ bool MimironPlasmaBlastTrigger::IsActive()
         GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
-    // The cannon is a passenger of the MK II and is what actually casts.
+    // The cannon is a passenger of the MK II and is what actually casts. Taunting while it casts is
+    // always one cast too late - the victim was resolved when the cast began and nothing moves it now -
+    // so this deliberately fires in the gaps instead, and the taunt owns the next cast 22 s out.
     Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, 100.0f);
-    if (!cannon || !cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST))
+    if (!cannon || cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST))
         return false;
 
     // Whoever is not already holding it takes it. That alternates the two tanks by itself, one taunt
-    // each per 22s cycle, which stays clear of the 15s taunt-DR reset.
+    // each per 22s cycle, so each tank only taunts every 44s and never trips the 15s taunt-DR window.
     return leviathanMkII->GetVictim() != bot;
 }
 
 bool MimironMagneticCoreTrigger::IsActive()
 {
     // One bot per instance owns this, so two carriers cannot burn two cores on the same landing.
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+    if (GetMimironCoreCarrier(botAI) != bot)
         return false;
 
     Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
@@ -271,9 +279,26 @@ bool MimironMagneticCoreTrigger::IsActive()
     if (bot->HasItemCount(ITEM_MIMIRON_MAGNETIC_CORE, 1, false))
         return true;
 
-    // Corpses linger 25s, so finding a dead Assault Bot in reach is the same test a player makes
-    // before looting one.
-    return bot->FindNearestCreature(NPC_ASSAULT_BOT, ULDUAR_MIMIRON_CORE_LOOT_RANGE, false) != nullptr;
+    // Corpses linger 25 s and the Assault Bot dies wherever the raid stopped it, so the search has to
+    // cover the room: the old 5 yd test only passed if the carrier happened to already be standing on
+    // one, which is why the core never reached the Aerial Command Unit. The walk itself is the action's.
+    return bot->FindNearestCreature(NPC_ASSAULT_BOT, ULDUAR_MIMIRON_CORE_SEARCH_RANGE, false) != nullptr;
+}
+
+bool MimironPetControlTrigger::IsActive()
+{
+    if (!bot->GetGuardianPet())
+        return false;
+
+    if (IsMimironPhase4(bot))
+        return true;
+
+    // Phase 3, tested the same way MimironAerialCommandUnitTrigger does. Not by MOVEMENTFLAG_HOVER on
+    // its own: the flag survives the phase 3 defeat and the vehicle boarding, so it says nothing about
+    // which phase this is, and keying off it used to stop every pet in the raid for all of phase 4.
+    return GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) &&
+           !GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+           !GetFirstAliveUnitByEntry(botAI, NPC_VX001);
 }
 
 bool MimironSetDpsPriorityTrigger::IsActive()

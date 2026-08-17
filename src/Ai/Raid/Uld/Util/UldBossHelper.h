@@ -397,21 +397,31 @@ constexpr float ULDUAR_VEZAX_SHADOW_CRASH_STEP_YARDS = 5.0f;
 // Mimiron P3Wx2 Laser Barrage. The damage is 63293, a TARGET_UNIT_CONE_ENEMY_104 cone: 104 degrees
 // wide with a 50000 yd radius, so distance from VX-001 buys nothing and only bearing matters.
 constexpr float ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE = 52.0f * static_cast<float>(M_PI) / 180.0f;
-constexpr float ULDUAR_MIMIRON_BARRAGE_MARGIN = 12.0f * static_cast<float>(M_PI) / 180.0f;
+// 15 rather than 12: the cone lands damage every 250 ms and turns 2.7 degrees in that time, so 12 was
+// about one bot reaction tick with nothing to spare. This still leaves a 120 degree safe wedge.
+constexpr float ULDUAR_MIMIRON_BARRAGE_MARGIN = 15.0f * static_cast<float>(M_PI) / 180.0f;
 
-// NPC 33576 laps the room every 34016 ms, so the cone sweeps clockwise at 10.6 deg/s and covers
-// about 106 degrees over the 10 s barrage. A bot escaping clockwise runs with the sweep and only
-// gains ground at the difference of the two rates, which is what makes the radius cap matter.
-constexpr float ULDUAR_MIMIRON_BARRAGE_SWEEP_RATE = 10.6f * static_cast<float>(M_PI) / 180.0f;
-constexpr float ULDUAR_MIMIRON_BARRAGE_SWEEP_TOTAL = 106.0f * static_cast<float>(M_PI) / 180.0f;
+// Waypoint velocity on path 13395. NPC 33576 laps a 707 yd polygon that a circle of radius 113.2
+// centred 2.7 yd from ULDUAR_MIMIRON_ROOM_CENTER fits, so predicting its position by rotating it
+// about the room centre lands within a couple of degrees of bearing over a whole barrage. Clockwise.
+constexpr float ULDUAR_MIMIRON_DB_TARGET_SPEED = 20.8988f;
 
-// VX-001 rides the MK II chassis in phase 4 and can sit 30 yd off centre, swinging the bearing by
-// as much as 16 degrees. Re-latch the arc once it has moved at least this far.
-constexpr float ULDUAR_MIMIRON_BARRAGE_RELATCH_DIST = 5.0f;
+// 63274 runs 10 s once 63414's single tick starts it. Only used while Spinning Up, when the barrage
+// aura does not exist yet to be read; from ignition on the live duration is preferred.
+constexpr float ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS = 10.0f;
 
-// One Spinning Up plus one barrage is 14s. A latch older than this belongs to a previous cast (or a
-// previous attempt), so it ages out on its own and no teardown pass is needed.
-constexpr time_t ULDUAR_MIMIRON_BARRAGE_LATCH_TTL = 20;
+// Rotate in bounded steps rather than aiming one move at the far side of the ring: creatures are not
+// in the navmesh, so a long chord walks straight through VX-001, and crossing the apex crosses every
+// bearing the cone covers. A 40 degree chord stays within 6% of the ring radius.
+constexpr float ULDUAR_MIMIRON_BARRAGE_STEP = 40.0f * static_cast<float>(M_PI) / 180.0f;
+
+// Added to VX-001's combat reach (8) to get the smallest ring a bot may orbit on. Melee sit inside
+// that, and an orbit at their own radius runs through the model.
+constexpr float ULDUAR_MIMIRON_BARRAGE_RING_MARGIN = 6.0f;
+
+// The phase 4 main tank orbits inside the chassis's chase range instead, so the MK II stays put and
+// the cone apex with it. It cannot simply hold its spot: 20000 per 250 ms tick kills it outright.
+constexpr float ULDUAR_MIMIRON_BARRAGE_TANK_RING_MARGIN = 1.5f;
 
 // A bot turns around VX-001 at (7.0 yd/s / radius) against a 10.6 deg/s sweep. Holding the raid
 // inside this radius makes the worst-case 52 degree rotation fit the 4 s Spinning Up warning and
@@ -423,14 +433,69 @@ constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
 
+// How far inside the bot's own spell range the farthest slot has to sit before the formation is left
+// where it is. Bots cast out to AiPlayerbot.SpellDistance, 28.5 by default, and a formation that ends
+// up past that does not self-correct: "reach spell" is ACTION_HIGH and the formation is ACTION_RAID,
+// so the formation wins every tick and walks the bot back out.
+constexpr float ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN = 4.0f;
+
+// Everything inside this of the room centre is walkable and flat at Z 364.31 (navprobe, 16 headings).
+// Past it a boss-anchored formation hangs over the edge once the MK II has been dragged to the wall.
+constexpr float ULDUAR_MIMIRON_ROOM_RADIUS = 40.0f;
+
+// Shock Blast 63631 is TARGET_SRC_CASTER with a 15 yd radius on a 4 s cast, so 18 clears it with
+// margin. Centre to centre: the flee used to be built out of GetDistance2d, which had already taken
+// off the MK II's combat reach of 8 and the bot's own 1.5, and so ran everyone out to 29.5 yd.
+constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
+
+// Phase 3 staging fan, ranged and healers only. Bomb Bots blast 5 yd, so no two bots may share one
+// and 6 keeps a detonation to a single victim.
+constexpr float ULDUAR_MIMIRON_PHASE3_SPACING = 6.0f;
+constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
+
+// Half-width of the staging wedge. The north-east and south-east arms leave the room centre at 59
+// degrees, so only a crowded outer row reaches a bearing anything walks down, and the west arm is
+// excluded outright. Narrower than this and a 25-man ranged group will not fit inside casting range.
+constexpr float ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE = 60.0f * static_cast<float>(M_PI) / 180.0f;
+
 // Loot range for an Assault Bot corpse, and how close the Magnetic Core has to be used: 64444 places
 // its summon by nearest entry, so the bot has to be standing under the Aerial Command Unit.
 constexpr float ULDUAR_MIMIRON_CORE_LOOT_RANGE = 5.0f;
 constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 
+// How far the carrier will go looking for an Assault Bot corpse. They die wherever the raid stopped
+// them, and the corpse only lasts 25 s, so the node has to start walking rather than wait for the bot
+// to happen to be standing on one.
+constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 60.0f;
+
+// Phase 4 only ends when all three parts are channelling Self Repair at once, and that cast is 15 s,
+// so they have to come down level rather than one at a time. Percent, not raw health: the Aerial
+// Command Unit's HealthModifier is 200 against 300, so ordering on raw health ranked it last every
+// tick and it never kept pace. Bots stop at 10 % and wait for the other two, because all three sit on
+// the same point server-side and melee cleave splashes every one of them.
+constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
+
+// Where melee and tanks wait out a phase handover. Eight yards puts them inside melee range of a
+// combat-reach 8 mech the moment it goes live. Staging only - see GetMimironSpreadSlot for why melee
+// never get a slot during a live phase.
+constexpr float ULDUAR_MIMIRON_STAGING_MELEE_RADIUS = 8.0f;
+
+// How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
+// between phases and a ranged bot can be another 40 out on top of that.
+constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
+
 // Proximity Mines fire on anyone inside 1.9 yd and blast for 3 yd (66351). They are non-attackable,
-// so the only handling is refusing to walk a bot into one.
-constexpr float ULDUAR_MIMIRON_MINE_CLEARANCE = 5.0f;
+// so the only handling is refusing to walk a bot into one. Ten land inside 15 yd after every Shock
+// Blast, so a wide avoid radius leaves no clear ground at all and the raid just paces; these are
+// deliberately tight, and eating the odd 3 yd blast is cheaper than losing a dodge to it.
+constexpr float ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS = 3.0f;
+constexpr float ULDUAR_MIMIRON_MINE_CLEARANCE = 3.5f;
+constexpr float ULDUAR_MIMIRON_MINE_MAX_STEP = 5.0f;
+
+// Rocket Strike markers burn a 5 s fuse and blast 3 yd, and the rocket picks its target from players
+// beyond 15 yd - that is the ranged ring. Destinations near a live marker have to be refused for as
+// long as it lives, or a bot that dodged walks straight back onto it.
+constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
 
 // Napalm Shell splashes 5 yd around its target. Bomb Bots blast 5 yd on melee contact (63801) and
 // match player run speed, so the extra yard here only buys time for ranged to kill them.
@@ -861,29 +926,65 @@ Position FlameLeviathanLeadPoint(Unit* boss);
 // Eight nodes hugging the arena walls, corners chamfered. Built once from ULDUAR_FL_ARENA_CORNERS.
 std::vector<Position> const& FlameLeviathanKiteRing();
 
-// Mimiron. The P3Wx2 Laser Barrage beams follow VX-001's facing, which the core repoints at NPC
-// 33576 on every tick of the aura, so the bearing to that NPC is the cone's centreline. Falls back
-// to VX-001's own facing when 33576 is absent (world DB update 2026_08_10_00 unapplied) - the core
-// skips the re-facing entirely in that case, leaving the cone frozen on the current facing.
-float GetMimironBarrageAngle(Player* bot, Unit* vx001);
-
 // Proximity Mines are non-selectable, so they never reach "possible targets" and pathing knows
 // nothing about them. Movement actions check their intended destination through this first.
 bool IsMimironSpotMineSafe(Player* bot, Position const& dest,
                            float clearance = ULDUAR_MIMIRON_MINE_CLEARANCE);
 
-// The latched Laser Barrage cone: centreline bearing plus where VX-001 stood when it was taken.
-struct MimironBarrageArc
+// Same idea for anywhere a bot is asked to stand rather than flee to: mines plus any Rocket Strike
+// marker still burning its fuse. Positioning that ignores markers walks a bot that just dodged one
+// straight back onto it.
+bool IsMimironSpotSafe(Player* bot, Position const& dest);
+
+// The main tank's slot in phases 1 and 4 is a boss-holding spot, not somewhere it is free to refuse:
+// the MK II parks on top of the mine field it just laid, so a tank that will not stand in one never
+// brings the boss back.
+bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot);
+
+// The mech the ranged formation is shaped around. Phase order is MK II, VX-001, Aerial Command Unit,
+// then all three together, and VX-001 is the one that stays parked once they reassemble.
+Unit* GetMimironRingFocus(PlayerbotAI* botAI);
+
+// The mech to form up on when none of them is attackable yet. A defeated mech keeps
+// UNIT_FLAG_NOT_SELECTABLE and the next one carries it until its phase starts, so "possible targets no
+// los" is blind for the whole handover - 47.75 s from phase 1 to 2, 24 s to phase 3, 31.8 s to phase 4.
+// Nothing else fires either, so the engine falls through to follow at relevance 1.0 and the raid trails
+// its master. A grid scan does see them, which is enough to walk everyone to the next phase in advance.
+Unit* GetMimironStagingFocus(Player* bot);
+
+// Phase 4, start to finish. Keyed on VX-001 riding the chassis rather than on all three being
+// attackable: a part pushed under 15000 sets UNIT_FLAG_NON_ATTACKABLE and drops out of the target list,
+// and the phase is at its most time-critical after that, not over.
+bool IsMimironPhase4(Player* bot);
+
+// What this bot should be hitting in phase 4. nullptr means hold - everything it is allowed to touch is
+// already at ULDUAR_MIMIRON_PHASE4_HOLD_PCT, and pushing a part under early costs the whole rendezvous.
+// `melee` is a parameter rather than derived from the bot so the pet node can ask for a melee answer on
+// behalf of a hunter.
+Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee);
+
+// Who fetches the Magnetic Core. Group order so every bot computes the same answer, but melee first:
+// they are already standing on the Assault Bot when it dies, whereas the plain first-bot-in-group pick
+// is usually a ranged bot 22 yd out that never comes within loot range of anything.
+Player* GetMimironCoreCarrier(PlayerbotAI* botAI);
+
+// The P3Wx2 Laser Barrage cone as it will actually be, worked out live rather than latched. The beams
+// follow VX-001's facing, which the core repoints at NPC 33576 on every tick of the barrage aura, so
+// the bearing to that NPC is the centreline - but only from the moment the barrage lands. Spinning Up
+// aims once and then holds for four seconds, during which 33576 travels another 42.6 degrees, so the
+// cone ignites well clockwise of where the boss is visibly pointing.
+struct MimironBarrageWindow
 {
-    float angle = 0.0f;
-    Position origin;
-    time_t latchedAt = 0;
+    bool valid = false;
+    float lead = 0.0f;       // world bearing of the centreline at ignition, or right now if firing
+    float sweep = 0.0f;      // clockwise radians still to come, below one full turn
+    float rate = 0.0f;       // radians per second, 0 while still spinning up
+    float untilLive = 0.0f;  // seconds until the first damage tick, 0 once firing
 };
 
-// Latched once per barrage and per instance, so every bot derives the same safe wedge rather than
-// latching a tick apart and disagreeing, and so a bot picks its spot once and lets the cone sweep
-// away instead of chasing it for ten seconds.
-MimironBarrageArc const& GetMimironLatchedBarrageArc(Player* bot, Unit* vx001);
+// Live every tick, so a moving apex, a rotating chassis and the bearing rate swinging 8.3-14.7 deg/s
+// off centre all fall out for free, and every bot derives the same cone without coordinating.
+MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001);
 
 // Where this bot stands between barrages. Ranged fan out over a full ring round the room rather than
 // around VX-001, whose facing swings to whoever it last Rapid Burst; Rapid Burst and Hand Pulse are
@@ -1001,6 +1102,11 @@ extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
 // VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
 // point holds still while the mechs turn and charge about.
 extern const Position ULDUAR_MIMIRON_ROOM_CENTER;
+// Phase 3 staging, 18 yd east of the room centre. The add summon pads sit on three arms - west,
+// north-east and south-east - so the east wedge is the one stretch of floor nothing walks down.
+// Grouping there funnels every Junk and Assault Bot into the melee instead of into a lone ranged bot.
+// navprobe: this point and a 12 yd fan around it are 16/16 on mesh, flat at Z 364.31.
+extern const Position ULDUAR_MIMIRON_PHASE3_STAGE;
 extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
 extern const Position ULDUAR_VEZAX_MARK_OF_THE_FACELESS_SPOT;
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;

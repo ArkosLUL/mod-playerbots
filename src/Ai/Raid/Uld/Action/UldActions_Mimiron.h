@@ -20,7 +20,12 @@ public:
     MimironFleeAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name) {}
 
 protected:
-    bool MoveAwayClearOfMines(Unit* from, float distance);
+    // fallbackUnfiltered takes the plain MoveAway fan when every mine-clear bearing was refused. Set
+    // it for hazards that hurt more than a mine; the mine dodge itself passes false, because
+    // escaping one mine into another is not an escape.
+    bool MoveAwayClearOfMines(Unit* from, float distance,
+                              MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
+                              bool fallbackUnfiltered = true);
 };
 
 class MimironShockBlastAction : public MimironFleeAction
@@ -79,10 +84,10 @@ public:
     bool isUseful() override;
 };
 
-class MimironPhase4MarkDpsAction : public AttackAction
+class MimironPhase4FocusAction : public AttackAction
 {
 public:
-    MimironPhase4MarkDpsAction(PlayerbotAI* ai) : AttackAction(ai, "mimiron phase 4 mark dps action") {}
+    MimironPhase4FocusAction(PlayerbotAI* ai) : AttackAction(ai, "mimiron phase 4 focus action") {}
 
     bool Execute(Event event) override;
 };
@@ -136,12 +141,17 @@ private:
     Unit* ResolveTarget(Unit* currentTarget);
 };
 
-class MimironProximityMineAction : public MoveAwayFromCreatureAction
+// Steps the shortest distance that clears every mine, rather than the safest point in the room. The
+// generic MoveAwayFromCreatureAction maximises min-distance-to-any-mine over a fan reaching 30 yd,
+// which in a fresh ten-mine field means a long run to a different answer every tick.
+class MimironProximityMineAction : public MimironFleeAction
 {
 public:
     MimironProximityMineAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "mimiron proximity mine action", NPC_PROXIMITY_MINE,
-                                     ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f) {}
+        : MimironFleeAction(ai, "mimiron proximity mine action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
 };
 
 class MimironBombBotAction : public MoveAwayFromCreatureAction
@@ -150,6 +160,16 @@ public:
     MimironBombBotAction(PlayerbotAI* ai)
         : MoveAwayFromCreatureAction(ai, "mimiron bomb bot action", NPC_BOMB_BOT,
                                      ULDUAR_MIMIRON_BOMB_BOT_RADIUS) {}
+};
+
+// Pets cannot reach the Aerial Command Unit while it hovers, so they are pointed at the adds instead.
+class MimironPetControlAction : public Action
+{
+public:
+    MimironPetControlAction(PlayerbotAI* ai) : Action(ai, "mimiron pet control action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
 };
 
 // Hard mode (Firefighter): step out of the persistent ground fire before it burns the bot down.

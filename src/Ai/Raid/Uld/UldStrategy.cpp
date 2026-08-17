@@ -414,8 +414,9 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
 
     //
-    // Mimiron. Laser Barrage outranks everything else here: its cone one-shots, while a mine, a
-    // bomb bot or a rocket is survivable.
+    // Mimiron. Laser Barrage outranks everything else here: its cone one-shots. Ranked below it by
+    // what a hit actually costs - Shock Blast is 100000 damage in a 15 yd circle, a Proximity Mine
+    // is 3 yd and healable, which is why the mine dodge sits under the whole rest of the ladder.
     //
     triggers.push_back(new TriggerNode(
         "mimiron p3wx2 laser barrage trigger",
@@ -423,7 +424,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "mimiron shock blast trigger",
-        { NextAction("mimiron shock blast action", ACTION_RAID + 2) }));
+        { NextAction("mimiron shock blast action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron fire resistance trigger",
@@ -446,8 +447,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("mimiron rocket strike action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
-        "mimiron phase 4 mark dps trigger",
-        { NextAction("mimiron phase 4 mark dps action", ACTION_RAID) }));
+        "mimiron phase 4 focus trigger",
+        { NextAction("mimiron phase 4 focus action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron magnetic core trigger",
@@ -461,13 +462,20 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron set dps priority trigger",
         { NextAction("mimiron set dps priority action", ACTION_RAID) }));
 
+    // Last of the Mimiron nodes and tied with none of them, so it only ever takes a tick no other
+    // mechanic wants. A mine can never cost the raid a dodge, a taunt or a core delivery.
     triggers.push_back(new TriggerNode(
         "mimiron proximity mine trigger",
-        { NextAction("mimiron proximity mine action", ACTION_RAID + 3) }));
+        { NextAction("mimiron proximity mine action", ACTION_RAID - 1) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron bomb bot trigger",
-        { NextAction("mimiron bomb bot action", ACTION_RAID + 3) }));
+        { NextAction("mimiron bomb bot action", ACTION_RAID + 2) }));
+
+    // The action always returns false, so this only ever redirects the pet - the bot keeps its tick.
+    triggers.push_back(new TriggerNode(
+        "mimiron pet control trigger",
+        { NextAction("mimiron pet control action", ACTION_RAID) }));
 
     // Hard mode (config-gated): step out of the persistent ground fire and clear the Frost Bomb.
     triggers.push_back(new TriggerNode(
@@ -645,6 +653,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Mimiron picks every non-tank target in code, so the generic picker has to be shut out
     multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
+    multipliers.push_back(new MimironChargeGuardMultiplier(botAI));
+    multipliers.push_back(new MimironThreatRedirectGuardMultiplier(botAI));
 
     // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));
