@@ -19,6 +19,7 @@
 #include "Timer.h"
 #include "UldBossHelper.h"
 #include "UldEncounter_IronAssembly.h"
+#include "UldEncounter_Algalon.h"
 #include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldActions.h"
@@ -27,28 +28,97 @@
 #include "VehicleActions.h"
 
 // Algalon the Observer
-// Reserve Dispersion for the designated Big Bang soaker priest. Big Bang is unavoidable raid-wide
-// damage; the soaker survives it via Dispersion (90% reduction). Blocking the normal low-mana /
-// critical-health Dispersion casts keeps the cooldown up for every Big Bang.
-float AlgalonMultiplier::GetValue(Action* action)
+//
+// Big Bang is unavoidable raid-wide damage that immunity does not stop, so whoever is holding it off
+// this cast has to still have the cooldown when it lands. Spending it on the low-mana or
+// critical-health nodes thirty seconds earlier is what turns a survivable cast into a reset: with
+// nobody left standing, CheckTargets finds no targets and Algalon ascends and evades.
+float AlgalonSoakCooldownReserveMultiplier::GetValue(Action* action)
 {
-    if (!dynamic_cast<CastDispersionAction*>(action))
+    if (!action)
         return 1.0f;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon observer");
-    if (!boss || !boss->IsAlive())
+    if (!dynamic_cast<CastDispersionAction*>(action) && action->getName() != "guardian spirit")
         return 1.0f;
 
-    // Only the designated soaker priest reserves the cooldown; other priests disperse normally.
-    if (GetAlgalonBigBangSoakerPriest(bot) != bot)
+    if (!AlgalonEncounterActive(botAI))
         return 1.0f;
 
-    // During the actual Big Bang cast the soak action must be free to spend Dispersion.
-    if (boss->HasUnitState(UNIT_STATE_CASTING) && boss->FindCurrentSpellBySpellId(SPELL_ALGALON_BIG_BANG))
+    if (GetAlgalonBigBangSoaker(botAI) != bot)
         return 1.0f;
 
-    // Otherwise block Dispersion so it is available for the next Big Bang.
-    return 0.0f;
+    // During the cast itself the soak action must be free to spend it.
+    return AlgalonBigBangCasting(botAI) ? 1.0f : 0.0f;
+}
+
+float AlgalonCollapsingStarAoeMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<DpsAoeAction*>(action) || !AlgalonEncounterActive(botAI))
+        return 1.0f;
+
+    // One star alive is the state the pacing is trying to reach, so splash is harmless there. Phase 2
+    // has no stars at all, which leaves Dark Matter cleave untouched.
+    return AlgalonAliveStarCount(botAI) >= 2 ? 0.0f : 1.0f;
+}
+
+float AlgalonTargetGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !AlgalonEncounterActive(botAI))
+        return 1.0f;
+
+    static std::set<std::string> const encounterOwned = {
+        "algalon constellation taunt action", "algalon constellation kite action",
+        "algalon dark matter tank action",    "algalon collapsing star focus action",
+        "algalon dark matter mark action"};
+
+    if (encounterOwned.count(action->getName()))
+        return 1.0f;
+
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+
+    // A Living Constellation carries 20x base health and cannot be killed inside the six minute
+    // enrage; the kite is the only way one ever leaves. Whoever is holding it still hits it, since
+    // that threat is what keeps it following.
+    if (currentTarget && currentTarget->GetEntry() == PB_NPC_LIVING_CONSTELLATION &&
+        currentTarget->GetVictim() != bot)
+    {
+        return 0.0f;
+    }
+
+    // No hole standing with a Big Bang closing in. A skull mark on the star is only advice, and the
+    // raid has to actually stop hitting the boss for the star to die in time.
+    if (currentTarget && currentTarget == GetAlgalon(botAI) && AlgalonNeedsShelterUrgently(botAI) &&
+        !botAI->IsTank(bot))
+    {
+        return 0.0f;
+    }
+
+    return 1.0f;
+}
+
+float AlgalonControlMovementMultiplier::GetValue(Action* action)
+{
+    if (!action || !AlgalonEncounterActive(botAI))
+        return 1.0f;
+
+    // Only the roles the formation actually places. Melee and the off-tank hold the boss, so both
+    // keep every generic mover.
+    if (!AlgalonTakesRingSlot(bot) && !botAI->IsMainTank(bot))
+        return 1.0f;
+
+    if (!dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // AttackAction derives from MovementAction, so a blanket zero would also kill targeting;
+    // ReachTargetAction is what walks a healer into range of someone the rings cannot reach.
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {
+        "algalon raid position action", "algalon big bang hide action", "algalon cosmic smash action",
+        "algalon leave black hole action", "algalon constellation kite action"};
+
+    return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
 }
 
 // XT-002 Deconstructor

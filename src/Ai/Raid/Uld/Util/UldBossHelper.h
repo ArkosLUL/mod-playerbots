@@ -237,8 +237,10 @@ enum UlduarIDs
     NPC_ALGALON_ASTEROID_TARGET_1 = 33104,
     NPC_ALGALON_ASTEROID_TARGET_2 = 33105,
     SPELL_ALGALON_BIG_BANG = 64443,
+    SPELL_ALGALON_BIG_BANG_25 = 64584,
     SPELL_ALGALON_PHASE_PUNCH = 64412,
-    SPELL_ALGALON_COSMIC_SMASH = 62301,
+    // The one "phased" aura in the encounter: the holes apply it, and so does the fifth Phase Punch
+    // stack through 64417. Wearing it is what makes Big Bang miss you.
     SPELL_ALGALON_BLACK_HOLE_DAMAGE = 62169,
 
     // Buffs
@@ -824,17 +826,79 @@ constexpr float ULDUAR_IGNIS_ROOM_SEARCH_RADIUS = 200.0f;
 // full, so healers only pile onto the victim once the ticks have actually opened a gap.
 constexpr float ULDUAR_IGNIS_SLAG_POT_HEAL_HP_PCT = 85.0f;
 
-// Off-tank taunts once the active tank reaches this many Phase Punch stacks
-constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 3;
+// Algalon the Observer. His room is a 47 yd disc around the home position with a floor at Z 417.32,
+// and he evades the moment he leaves it, so nothing here may pull him or a tank past the edge.
+constexpr float ULDUAR_ALGALON_ROOM_RADIUS = 47.0f;
+constexpr float ULDUAR_ALGALON_ROOM_SEARCH_RADIUS = 60.0f;
 
-// Kiter stops this far past the Black Hole (away from the constellation) to stay out of its phase/damage aura
-constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 5.0f;
+// Black Hole (62168) and Worm Hole (65250) both project a 6 yd field with no target cap, so a single
+// hole shelters the whole raid - and standing in one outside a Big Bang costs 1531 a tick.
+constexpr float ULDUAR_ALGALON_SHELTER_RADIUS = 6.0f;
 
-// Designated Big Bang soaker: the first alive Shadow Priest in the raid, who stays out and pops
-// Dispersion (90% damage reduction) to survive Big Bang instead of hiding in a hole. Big Bang is
-// unavoidable — full immunity (Paladin Divine Shield) does not prevent it, only mitigation survives.
-// Returns nullptr if the raid has no living Shadow Priest.
-Player* GetAlgalonBigBangSoakerPriest(Player* bot);
+// The kiter parks past the hole, on the far side from the constellation, so the chase drags the
+// constellation through the field. Anything under 6 yd would park the kiter inside it instead.
+constexpr float ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET = 9.0f;
+
+// With no hole to spend, the kiter just walks its constellation off the raid. Arcane Barrage is
+// capped at one target, so all this has to buy is that the one target keeps being the kiter.
+constexpr float ULDUAR_ALGALON_KITE_CROWD_RADIUS = 20.0f;
+constexpr float ULDUAR_ALGALON_KITE_LEAD_DISTANCE = 15.0f;
+
+// Phase Punch is a 45s aura refreshed every 15.5s. Swapping at 3 leaves the off-tank arriving at its
+// own third stack 46.5s after taking the boss, against a partner whose aura only fell off 45s after
+// its third - one missed tick and neither tank may taunt. Four gives ~17s of margin.
+constexpr uint32 ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS = 4;
+
+// Big Bang repeats every 90.5s, and the window the raid needs a hole standing in before one lands.
+// Dispersion is a 120s cooldown against that cadence, which is why the soak duty has to rotate.
+constexpr uint32 ULDUAR_ALGALON_BIG_BANG_INTERVAL_MS = 90500;
+constexpr uint32 ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS = 30;
+
+// Collapsing Star pacing. Each death is 16-21k unavoidable raid damage, and Collapse drains 1% of
+// max health a second, so an ignored star kills itself after ~100s. The 60s summon only tops up to
+// four alive, which is how four ignored stars end up exploding within seconds of each other.
+constexpr float ULDUAR_ALGALON_STAR_PACING_RAID_HP_PCT = 80.0f;
+constexpr uint32 ULDUAR_ALGALON_STAR_PACING_GAP_MS = 8000;
+// Below this Collapse finishes the star on its own, so the pacing gate steps aside and lets the raid
+// choose the moment rather than have it chosen for them.
+constexpr float ULDUAR_ALGALON_STAR_FINISH_HP_PCT = 15.0f;
+
+// Cosmic Smash: full damage inside 6 yd, dmg/dist*2 out to 10, dmg/dist beyond. The marker lands
+// exactly 4s before the meteor, so the clearance has to be reached in one move.
+constexpr float ULDUAR_ALGALON_COSMIC_SMASH_MARKER_RADIUS = 11.0f;
+constexpr float ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE = 12.0f;
+constexpr float ULDUAR_ALGALON_COSMIC_SMASH_SEARCH_RADIUS = 40.0f;
+
+// Algalon formation. The raid arrives from the +Y side, so the tank slot sits on the -Y edge of the
+// hole square and Algalon ends up facing away from everyone. Rings hang off that slot rather than
+// off the room centre, because the tank is what healers have to stay in range of.
+//
+// Every radius and arc below is navprobe-verified on map 603: the floor is a WMO, flat at Z 417.321,
+// 19/19 candidate points on mesh at 0.04 from poly. The arcs are trimmed rather than full half
+// circles because the two -Y worm hole spots sit level with the tank slot, 10.2 and 16.8 yd out; the
+// trims keep every slot at least 7.7 yd from all four, clear of the 6 yd field.
+constexpr float ULDUAR_ALGALON_HEALER_RADIUS = 14.0f;
+constexpr float ULDUAR_ALGALON_RANGED_INNER_RADIUS = 20.5f;
+constexpr float ULDUAR_ALGALON_RANGED_OUTER_RADIUS = 27.0f;
+constexpr uint8 ULDUAR_ALGALON_HEALER_SLOTS = 4;
+constexpr uint8 ULDUAR_ALGALON_RANGED_INNER_SLOTS = 6;
+constexpr uint8 ULDUAR_ALGALON_RANGED_OUTER_SLOTS = 8;
+constexpr uint8 ULDUAR_ALGALON_TOTAL_SLOTS =
+    ULDUAR_ALGALON_HEALER_SLOTS + ULDUAR_ALGALON_RANGED_INNER_SLOTS + ULDUAR_ALGALON_RANGED_OUTER_SLOTS;
+constexpr float ULDUAR_ALGALON_HEALER_ARC_CENTER = 1.5708f;        // +Y, 35..145 degrees
+constexpr float ULDUAR_ALGALON_HEALER_ARC_WIDTH = 1.9199f;
+constexpr float ULDUAR_ALGALON_RANGED_INNER_ARC_CENTER = 1.7977f;  // 28..178 degrees
+constexpr float ULDUAR_ALGALON_RANGED_INNER_ARC_WIDTH = 2.6180f;
+constexpr float ULDUAR_ALGALON_RANGED_OUTER_ARC_CENTER = 1.5708f;  // 0..180 degrees
+constexpr float ULDUAR_ALGALON_RANGED_OUTER_ARC_WIDTH = 3.1416f;
+constexpr float ULDUAR_ALGALON_SLOT_TOLERANCE = 2.0f;
+// Slots hold 8.9 to 12.1 yd apart, which is Cosmic Smash's cheap falloff band for the neighbours of
+// whoever gets marked. A hole that lands on a slot is only stepped around, never fled from.
+constexpr float ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS = 25.0f;
+
+// Per instance, not per bot: the state tick does two sweeps and 25 bots asking every frame is the
+// per-tick cost the raid-mechanics notes warn about.
+constexpr uint32 ULDUAR_ALGALON_STATE_TICK_MS = 250;
 
 // XT-002 Deconstructor. These use GetFirstAliveUnitByEntry rather than "find target": the Heart
 // never attacks anyone, so it never lands on a bot's threat list and "find target" cannot resolve it.
@@ -1362,6 +1426,10 @@ extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
 // boss_assembly_of_iron.cpp. navprobe: on mesh, vmap floor 427.267, and see the ring results above.
 extern const Position ULDUAR_IRON_ASSEMBLY_ANCHOR;
 extern const Position ULDUAR_VEZAX_ANCHOR;
+// Algalon's home position, and the tank slot the formation hangs off - 18.7 yd out from home on the
+// -Y edge of the hole square, 10.2 yd clear of the nearest worm hole spot.
+extern const Position ULDUAR_ALGALON_ROOM_CENTER;
+extern const Position ULDUAR_ALGALON_TANK_SLOT;
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE;

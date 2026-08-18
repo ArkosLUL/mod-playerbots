@@ -60,6 +60,10 @@ const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT = Position(2744.5754f, 2570.8657f
 const Position ULDUAR_IRON_ASSEMBLY_ANCHOR = Position(1587.18f, 121.02f, 427.27f);
 // Vezax' own spawn point, and the point the Saronite Vapors charge to when they merge.
 const Position ULDUAR_VEZAX_ANCHOR = Position(1852.78f, 81.3856f, 342.461f);
+// Algalon's home position - he evades past 47 yd from it - and the tank slot on the -Y edge of the
+// worm hole square. navprobe map 603: both on mesh at 0.04, settled Z 417.321.
+const Position ULDUAR_ALGALON_ROOM_CENTER = Position(1632.668f, -302.7656f, 417.3211f);
+const Position ULDUAR_ALGALON_TANK_SLOT = Position(1632.7f, -321.5f, 417.321f);
 const Position ULDUAR_YOGG_SARON_MIDDLE = Position(1980.28f, -25.5868f, 329.397f);
 const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE = Position(1927.1511f, 68.507256f, 242.37657f);
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE = Position(1925.6553f, -121.59296f, 239.98965f);
@@ -399,30 +403,6 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
 
     // Set current time in the cooldown map for this bot to start cooldown
     _lastRoleSwapTime[botGuid] = std::time(nullptr);
-}
-
-Player* GetAlgalonBigBangSoakerPriest(Player* bot)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
-
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != ULDUAR_MAP_ID)
-            continue;
-
-        if (member->getClass() != CLASS_PRIEST)
-            continue;
-
-        if (AiFactory::GetPlayerSpecTab(member) != PRIEST_TAB_SHADOW)
-            continue;
-
-        return member;
-    }
-
-    return nullptr;
 }
 
 bool YoggSaronInPhase2(PlayerbotAI* botAI)

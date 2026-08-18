@@ -84,6 +84,7 @@ public:
         creators["thorim arena positioning action"] = &RaidUlduarActionContext::thorim_arena_positioning_action;
         creators["thorim gauntlet positioning action"] = &RaidUlduarActionContext::thorim_gauntlet_positioning_action;
         creators["thorim phase 2 positioning action"] = &RaidUlduarActionContext::thorim_phase2_positioning_action;
+        creators["thorim fall from floor action"] = &RaidUlduarActionContext::thorim_fall_from_floor_action;
         creators["mimiron fire resistance action"] = &RaidUlduarActionContext::mimiron_fire_resistance_action;
         creators["mimiron shock blast action"] = &RaidUlduarActionContext::mimiron_shock_blast_action;
         creators["mimiron phase 1 positioning action"] = &RaidUlduarActionContext::mimiron_phase_1_positioning_action;
@@ -125,13 +126,18 @@ public:
         creators["yogg-saron guardian control action"] = &RaidUlduarActionContext::yogg_saron_guardian_control_action;
         creators["yogg-saron sanity conservation action"] = &RaidUlduarActionContext::yogg_saron_sanity_conservation_action;
         creators["yogg-saron squeeze escape action"] = &RaidUlduarActionContext::yogg_saron_squeeze_escape_action;
-        creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
+        creators["algalon reset encounter state action"] = &RaidUlduarActionContext::algalon_reset_encounter_state_action;
         creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
         creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
+        creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
+        creators["algalon leave black hole action"] = &RaidUlduarActionContext::algalon_leave_black_hole_action;
         creators["algalon phase punch swap action"] = &RaidUlduarActionContext::algalon_phase_punch_swap_action;
+        creators["algalon constellation taunt action"] = &RaidUlduarActionContext::algalon_constellation_taunt_action;
         creators["algalon constellation kite action"] = &RaidUlduarActionContext::algalon_constellation_kite_action;
+        creators["algalon collapsing star focus action"] = &RaidUlduarActionContext::algalon_collapsing_star_focus_action;
+        creators["algalon dark matter tank action"] = &RaidUlduarActionContext::algalon_dark_matter_tank_action;
         creators["algalon dark matter mark action"] = &RaidUlduarActionContext::algalon_dark_matter_mark_action;
-        creators["algalon collapsing star mark action"] = &RaidUlduarActionContext::algalon_collapsing_star_mark_action;
+        creators["algalon raid position action"] = &RaidUlduarActionContext::algalon_raid_position_action;
         creators["ignis scorched ground action"] = &RaidUlduarActionContext::ignis_scorched_ground_action;
         creators["ignis construct tank action"] = &RaidUlduarActionContext::ignis_construct_tank_action;
         creators["ignis brittle construct mark action"] = &RaidUlduarActionContext::ignis_brittle_construct_mark_action;
@@ -235,6 +241,7 @@ private:
     static Action* thorim_arena_positioning_action(PlayerbotAI* ai) { return new ThorimArenaPositioningAction(ai); }
     static Action* thorim_gauntlet_positioning_action(PlayerbotAI* ai) { return new ThorimGauntletPositioningAction(ai); }
     static Action* thorim_phase2_positioning_action(PlayerbotAI* ai) { return new ThorimPhase2PositioningAction(ai); }
+    static Action* thorim_fall_from_floor_action(PlayerbotAI* ai) { return new ThorimFallFromFloorAction(ai); }
     static Action* mimiron_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "mimiron"); }
     static Action* mimiron_shock_blast_action(PlayerbotAI* ai) { return new MimironShockBlastAction(ai); }
     static Action* mimiron_phase_1_positioning_action(PlayerbotAI* ai) { return new MimironPhase1PositioningAction(ai); }
@@ -276,13 +283,18 @@ private:
     static Action* yogg_saron_guardian_control_action(PlayerbotAI* ai) { return new YoggSaronGuardianControlAction(ai); }
     static Action* yogg_saron_sanity_conservation_action(PlayerbotAI* ai) { return new YoggSaronSanityConservationAction(ai); }
     static Action* yogg_saron_squeeze_escape_action(PlayerbotAI* ai) { return new YoggSaronSqueezeEscapeAction(ai); }
-    static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
+    static Action* algalon_reset_encounter_state_action(PlayerbotAI* ai) { return new AlgalonResetEncounterStateAction(ai); }
     static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
     static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }
+    static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
+    static Action* algalon_leave_black_hole_action(PlayerbotAI* ai) { return new AlgalonLeaveBlackHoleAction(ai); }
     static Action* algalon_phase_punch_swap_action(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapAction(ai); }
+    static Action* algalon_constellation_taunt_action(PlayerbotAI* ai) { return new AlgalonConstellationTauntAction(ai); }
     static Action* algalon_constellation_kite_action(PlayerbotAI* ai) { return new AlgalonConstellationKiteAction(ai); }
+    static Action* algalon_collapsing_star_focus_action(PlayerbotAI* ai) { return new AlgalonCollapsingStarFocusAction(ai); }
+    static Action* algalon_dark_matter_tank_action(PlayerbotAI* ai) { return new AlgalonDarkMatterTankAction(ai); }
     static Action* algalon_dark_matter_mark_action(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkAction(ai); }
-    static Action* algalon_collapsing_star_mark_action(PlayerbotAI* ai) { return new AlgalonCollapsingStarMarkAction(ai); }
+    static Action* algalon_raid_position_action(PlayerbotAI* ai) { return new AlgalonRaidPositionAction(ai); }
     static Action* ignis_scorched_ground_action(PlayerbotAI* ai) { return new IgnisScorchedGroundAction(ai); }
     static Action* ignis_construct_tank_action(PlayerbotAI* ai) { return new IgnisConstructTankAction(ai); }
     static Action* ignis_brittle_construct_mark_action(PlayerbotAI* ai) { return new IgnisBrittleConstructMarkAction(ai); }

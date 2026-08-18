@@ -18,12 +18,14 @@ Everything is wired by string. Nothing here is a compile error.
 
 Casualties found so far: `blade fury` (should be `blade flurry`), `"boost"` and `"high threat"`
 (never registered as triggers), `conflagrate`, `chaos bolt`, `freezing trap on cc`,
-`cure party member` (a base class — subclasses register under spell names).
+`cure party member` (a base class — subclasses register under spell names). All fixed.
 
-Two are **still live**: `UldTriggerContext.h:82` registers
-`"yogg-saron shadow resistance trigger**r**"`, whose node at `UldStrategy.cpp:369` never resolves;
-and `UldMultipliers.cpp:28` looks up `"algalon observer"` while every other Algalon call site uses
-`"algalon the observer"` — `"find target"` is exact-match, so that multiplier never sees the boss.
+The two most recent were both in Ulduar and both had been dead since they were written, which is the
+point: nothing anywhere reports them. `UldTriggerContext.h` registered
+`"yogg-saron shadow resistance trigger**r**"`, so the node asking for
+`"yogg-saron shadow resistance trigger"` never resolved; and `"thorim fall from floor action"` had a
+class and a trigger but no `creators[...]` entry at all, so the node resolved its trigger and then
+found nothing to run.
 
 Sweep for these by checking every `NextAction`/`TriggerNode` name against `creators[...]`. Multiplier
 `dynamic_cast` mistakes, by contrast, do fail at compile time.

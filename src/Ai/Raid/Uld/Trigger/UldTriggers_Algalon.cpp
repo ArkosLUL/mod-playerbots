@@ -1,14 +1,17 @@
 #include "UldTriggers_Algalon.h"
 
 #include "GameObject.h"
+#include "Group.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_Algalon.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
+#include "SpellAuras.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 #include <MovementActions.h>
@@ -19,170 +22,158 @@
 // Algalon the Observer
 //
 
-// Dodge the Cosmic Smash meteors that fall on the asteroid-target stalkers
-bool AlgalonCosmicSmashTrigger::IsActive()
+bool AlgalonResetEncounterStateTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
+    if (bot->GetMapId() != ULDUAR_MAP_ID || AlgalonEncounterActive(botAI))
         return false;
 
-    // Meteor damage falls off past ~10 yd; move away if we are still in the blast radius
-    Creature* asteroid = bot->FindNearestCreature(NPC_ALGALON_ASTEROID_TARGET_1, 11.0f);
-    if (!asteroid)
-        asteroid = bot->FindNearestCreature(NPC_ALGALON_ASTEROID_TARGET_2, 11.0f);
-
-    return asteroid != nullptr;
+    return algalonEncounterStates.find(bot->GetInstanceId()) != algalonEncounterStates.end();
 }
 
-// Big Bang is raid-wide lethal to anyone not phased; entering a Black/Worm Hole grants the safe phase aura
-bool AlgalonBigBangTrigger::IsActive()
+// Big Bang is 76312 on 10-man and 107249 on 25-man to everyone the spell can see, at any range.
+// Standing in a hole is not cover, it is a phase change - that is the whole mechanic.
+bool AlgalonBigBangHideTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
+    if (!AlgalonEncounterActive(botAI) || !AlgalonBigBangCasting(botAI))
         return false;
 
-    if (!boss->HasUnitState(UNIT_STATE_CASTING) || !boss->FindCurrentSpellBySpellId(SPELL_ALGALON_BIG_BANG))
-        return false;
-
-    // Already safe inside a hole
     if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
         return false;
 
-    // The designated Shadow Priest soaks Big Bang with Dispersion instead of hiding.
-    // If Dispersion is down the soak action falls back to hiding, so the exemption stays safe.
-    if (GetAlgalonBigBangSoakerPriest(bot) == bot)
+    // Somebody has to still be standing when CheckTargets runs, or the spell finds no targets and
+    // Algalon ascends and evades.
+    if (GetAlgalonBigBangSoaker(botAI) == bot)
         return false;
 
-    return true;
+    return GetAlgalonShelter(bot) != nullptr;
 }
 
-// The designated Shadow Priest stays out and pops Dispersion to survive Big Bang
 bool AlgalonBigBangSoakTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
+    if (!AlgalonEncounterActive(botAI) || !AlgalonBigBangCasting(botAI))
         return false;
 
-    if (!boss->HasUnitState(UNIT_STATE_CASTING) || !boss->FindCurrentSpellBySpellId(SPELL_ALGALON_BIG_BANG))
-        return false;
-
-    // Only the designated (first alive) Shadow Priest reacts this way
-    if (GetAlgalonBigBangSoakerPriest(bot) != bot)
-        return false;
-
-    // Already phased safely inside a hole (cooldown fallback ran)
     if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
         return false;
 
-    return true;
+    return GetAlgalonBigBangSoaker(botAI) == bot;
 }
 
-// Off-tank taunts before the active tank reaches ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS Phase Punch stacks
+bool AlgalonCosmicSmashTrigger::IsActive()
+{
+    return AlgalonEncounterActive(botAI) && GetAlgalonCosmicSmashMarker(bot) != nullptr;
+}
+
+// Phase 1 holes land wherever a Collapsing Star happened to die, so bots end up standing in one
+// without ever having run to it. Outside a Big Bang that is 1531 a tick for nothing.
+bool AlgalonLeaveBlackHoleTrigger::IsActive()
+{
+    if (!AlgalonEncounterActive(botAI) || AlgalonBigBangCasting(botAI))
+        return false;
+
+    return GetAlgalonShelterUnderfoot(bot) != nullptr;
+}
+
+// Phase Punch stacks to five and then phases the tank out for ten seconds, with nobody on the boss.
+// Two tanks trade him well before that; a raid that brought one is not supported here, because a
+// damage dealer taking Quantum Strike dies in two swings.
 bool AlgalonPhasePunchSwapTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
+    if (!AlgalonEncounterActive(botAI))
         return false;
 
-    // Only the two designated swap partners (main tank + first assist tank) trade the boss
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isFirstAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    if (!isMainTank && !isFirstAssistTank)
+    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* offTank = GetGroupAssistTank(botAI, bot, 0);
+    if (!mainTank || !offTank || mainTank == offTank)
         return false;
 
-    // The bot must be the off-tank (not the one currently holding the boss)
-    Unit* activeTank = boss->GetVictim();
+    if (bot != mainTank && bot != offTank)
+        return false;
+
+    Player* activeTank = GetAlgalonBossTank(botAI);
     if (!activeTank || activeTank == bot)
         return false;
 
-    // The active tank must be the bot's swap partner, so the taunt is symmetric both ways
-    Player* activeTankPlayer = activeTank->ToPlayer();
-    if (!activeTankPlayer)
+    if (activeTank != mainTank && activeTank != offTank)
         return false;
 
-    bool const partnerIsSwapTank = isMainTank ? PlayerbotAI::IsAssistTankOfIndex(activeTankPlayer, 0)
-                                              : PlayerbotAI::IsMainTank(activeTankPlayer);
-    if (!partnerIsSwapTank)
+    // The partner already rode to five and is phased out. Nothing is holding the boss, so taunt now
+    // and worry about our own stacks after. During a Big Bang the whole raid wears that aura, which
+    // is not the same thing at all.
+    if (activeTank->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE) && !AlgalonBigBangCasting(botAI))
+        return true;
+
+    Aura* ownStacks = bot->GetAura(SPELL_ALGALON_PHASE_PUNCH);
+    if (ownStacks && ownStacks->GetStackAmount() >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
         return false;
 
-    // Don't taunt if our own stacks are still high (they must decay first)
-    Aura* selfAura = bot->GetAura(SPELL_ALGALON_PHASE_PUNCH);
-    if (selfAura && selfAura->GetStackAmount() >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
-        return false;
-
-    // Swap once the active tank reaches the stack threshold
-    Aura* tankAura = activeTank->GetAura(SPELL_ALGALON_PHASE_PUNCH);
-    if (!tankAura || tankAura->GetStackAmount() < ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
-        return false;
-
-    return true;
+    Aura* partnerStacks = activeTank->GetAura(SPELL_ALGALON_PHASE_PUNCH);
+    return partnerStacks && partnerStacks->GetStackAmount() >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS;
 }
 
-// The designated kiter leads each active Living Constellation onto a live Black Hole (both despawn)
+// A constellation picks its victim at activation and chases it. The one bot that must not be dragged
+// anywhere is whoever is holding Algalon, so the other tank pulls that one off and kites it instead.
+bool AlgalonConstellationTauntTrigger::IsActive()
+{
+    if (!AlgalonEncounterActive(botAI))
+        return false;
+
+    if (bot != GetGroupMainTank(botAI, bot) && bot != GetGroupAssistTank(botAI, bot, 0))
+        return false;
+
+    if (bot == GetAlgalonBossTank(botAI))
+        return false;
+
+    Unit* constellation = GetAlgalonConstellationOnBossTank(botAI);
+    return constellation && constellation->GetVictim() != bot;
+}
+
 bool AlgalonConstellationKiteTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
-        return false;
-
-    // Only active constellations are selectable; passive/pre-activation ones are flagged out.
-    // Fire whether or not a Black Hole exists: with one, the action drags the constellation
-    // through it; without one, the action falls back to kiting it clear of the raid.
-    Creature* constellation = bot->FindNearestCreature(PB_NPC_LIVING_CONSTELLATION, 100.0f);
-    if (!constellation || !constellation->IsAlive() || constellation->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
-        return false;
-
-    return true;
+    return AlgalonEncounterActive(botAI) && GetAlgalonKiteTarget(bot) != nullptr;
 }
 
-// Focus-kill Unleashed Dark Matter when it spawns (phase 2)
-bool AlgalonDarkMatterTrigger::IsActive()
+bool AlgalonCollapsingStarFocusTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
+    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
         return false;
 
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+    Unit* star = GetAlgalonFocusStar(botAI);
+    if (!star || !AlgalonStarKillWindowOpen(botAI))
+        return false;
+
+    Group* group = bot->GetGroup();
+    return !group || group->GetTargetIcon(RtiTargetValue::skullIndex) != star->GetGUID();
+}
+
+// Unleashed Dark Matter runs at 1.43x player speed, so it cannot be kited - it gets picked up or it
+// eats whoever it picked. Collecting them on the boss keeps the tank in its swap position and puts
+// them where the melee already are.
+bool AlgalonDarkMatterTankTrigger::IsActive()
+{
+    if (!AlgalonEncounterActive(botAI) || bot != GetAlgalonAddTank(botAI, bot))
+        return false;
+
+    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
+    return darkMatter && darkMatter->GetVictim() != bot;
+}
+
+bool AlgalonDarkMatterMarkTrigger::IsActive()
+{
+    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
         return false;
 
     Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
     if (!darkMatter)
         return false;
 
-    // Skip if it is already the skull target
     Group* group = bot->GetGroup();
-    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == darkMatter->GetGUID())
-        return false;
-
-    return true;
+    return !group || group->GetTargetIcon(RtiTargetValue::skullIndex) != darkMatter->GetGUID();
 }
 
-//
-// Algalon the Observer
-//
-bool AlgalonCollapsingStarTrigger::IsActive()
+bool AlgalonRaidPositionTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "algalon the observer");
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
-        return false;
-
-    // Unleashed Dark Matter owns the skull marker while it is up
-    if (GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER))
-        return false;
-
-    Unit* star = GetFirstAliveUnitByEntry(botAI, PB_NPC_COLLAPSING_STAR);
-    if (!star)
-        return false;
-
-    Group* group = bot->GetGroup();
-    if (group && group->GetTargetIcon(RtiTargetValue::skullIndex) == star->GetGUID())
-        return false;
-
-    return true;
+    // Presence-gated, not combat-gated: the intro runs 26s on a first pull and that is the only free
+    // window the raid gets to put 25 bots on their spots.
+    return AlgalonEncounterActive(botAI);
 }
