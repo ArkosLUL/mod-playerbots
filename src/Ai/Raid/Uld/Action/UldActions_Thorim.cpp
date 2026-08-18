@@ -17,6 +17,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_Thorim.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "RtiValue.h"
@@ -106,8 +107,8 @@ bool ThorimMarkDpsTargetAction::Execute(Event /*event*/)
         Unit* acolyte = AI_VALUE2(Unit*, "find target", "dark rune acolyte");
         Unit* runicColossus = AI_VALUE2(Unit*, "find target", "runic colossus");
         Unit* ancientRuneGiant = AI_VALUE2(Unit*, "find target", "ancient rune giant");
-        Unit* ironHonorGuard = AI_VALUE2(Unit*, "find target", "iron ring guard");
-        Unit* ironRingGuard = AI_VALUE2(Unit*, "find target", "iron honor guard");
+        Unit* ironHonorGuard = AI_VALUE2(Unit*, "find target", "iron honor guard");
+        Unit* ironRingGuard = AI_VALUE2(Unit*, "find target", "iron ring guard");
 
         if (acolyte && acolyte->IsAlive() && (!currentCrossUnit || currentCrossUnit->GetEntry() != acolyte->GetEntry()))
             targetToMark = acolyte;
@@ -153,18 +154,64 @@ bool ThorimArenaPositioningAction::isUseful()
 
 bool ThorimArenaPositioningAction::Execute(Event /*event*/)
 {
+    Position anchor;
+    if (!GetThorimArenaAnchor(botAI, bot, anchor))
+        return false;
+
     FollowMasterStrategy followMasterStrategy(botAI);
-
-    MoveTo(bot->GetMapId(), ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionX(),
-           ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionY(), ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionZ(), false, false,
-           false, true, MovementPriority::MOVEMENT_COMBAT, true);
-
     if (botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
     {
         botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
+        ThorimNoteFollowMasterStripped(bot);
     }
 
-    return true;
+    // Reach then hold. A tight deadband has the bot sliding on its spot forever, and a moving bot
+    // casts nothing.
+    if (!ThorimArenaAnchorNeedsMove(botAI, bot, anchor))
+        return false;
+
+    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool ThorimArenaLeashAction::isUseful()
+{
+    ThorimArenaLeashTrigger thorimArenaLeashTrigger(botAI);
+    return thorimArenaLeashTrigger.IsActive();
+}
+
+bool ThorimArenaLeashAction::Execute(Event /*event*/)
+{
+    // Straying is the symptom; the master walking off down the corridor is usually the cause, so take
+    // "follow master" here as well rather than waiting for the arena node to catch a quiet moment.
+    FollowMasterStrategy followMasterStrategy(botAI);
+    if (botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
+    {
+        botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
+        ThorimNoteFollowMasterStripped(bot);
+    }
+
+    // Back to this bot's own spot, not to the middle: dragging the whole squad onto one point every
+    // time the fence trips would wreck the formation the fence exists to protect. The middle is the
+    // fallback, and never the nearest box edge - the edge is where a rounding error turns into a wipe.
+    Position anchor = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+    GetThorimArenaAnchor(botAI, bot, anchor);
+
+    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool ThorimLaneMovementAction::MoveToGauntletWaypoint(bool leftLane, uint8 index, bool forceCombatPriority)
+{
+    Position const& waypoint = GetThorimGauntletWaypoint(leftLane, index);
+
+    // The second waypoint has always moved at combat priority and without the shortened delay, in
+    // both lanes: it is the one where the squad rounds into the Colossus's line of sight.
+    bool const combat = forceCombatPriority || index == 1;
+
+    return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
+                  false, false, true,
+                  combat ? MovementPriority::MOVEMENT_COMBAT : MovementPriority::MOVEMENT_NORMAL, !combat);
 }
 
 bool ThorimGauntletPositioningAction::isUseful()
@@ -178,6 +225,8 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     FollowMasterStrategy followMasterStrategy(botAI);
 
     Unit* master = botAI->GetMaster();
+    if (!master)
+        return false;
 
     std::string const rti = AI_VALUE(std::string, "rti");
     if (rti != "cross")
@@ -200,132 +249,17 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         }
     }
 
-    if (master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1) < 6.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2) < 6.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1) < 5.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1) < 10.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2) < 10.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3) < 10.0f)
+    uint8 index = 0;
+    bool leftLane = false;
+    if (ThorimGauntletLaneIndex(master, index, leftLane))
     {
-        float distance1 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1);
-        float distance2 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2);
-        float distance3 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1);
-        float distance4 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1);
-        float distance5 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2);
-        float distance6 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3);
+        // Same progress down the corridor as the master, but in whichever lane the last Runic Smash
+        // telegraph left safe - otherwise the formation walks everyone back into the blast.
+        bool preferredLane = false;
+        if (ThorimPreferredGauntletLane(botAI, preferredLane))
+            leftLane = preferredLane;
 
-        float smallestDistance = std::min({distance1, distance2, distance3, distance4, distance5, distance6});
-
-        Position targetPosition;
-
-        if (smallestDistance == distance1)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance2)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_COMBAT);
-        }
-        else if (smallestDistance == distance3)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance4)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance5)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance6)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else
-            return false;
-    }
-
-    if (master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1) < 6.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2) < 6.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1) < 5.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1) < 10.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2) < 10.0f ||
-        master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3) < 10.0f)
-    {
-        float distance1 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1);
-        float distance2 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2);
-        float distance3 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1);
-        float distance4 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1);
-        float distance5 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2);
-        float distance6 = master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3);
-
-        float smallestDistance = std::min({distance1, distance2, distance3, distance4, distance5, distance6});
-
-        Position targetPosition;
-
-        if (smallestDistance == distance1)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance2)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_COMBAT);
-        }
-        else if (smallestDistance == distance3)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance4)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance5)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else if (smallestDistance == distance6)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3.GetPositionX(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3.GetPositionY(),
-                          ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_NORMAL, true);
-        }
-        else
-            return false;
+        return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
@@ -344,6 +278,84 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
                MovementPriority::MOVEMENT_COMBAT);
     }
 
+    return false;
+}
+
+bool ThorimRunicSmashAction::isUseful()
+{
+    ThorimRunicSmashTrigger thorimRunicSmashTrigger(botAI);
+    return thorimRunicSmashTrigger.IsActive();
+}
+
+bool ThorimRunicSmashAction::Execute(Event /*event*/)
+{
+    bool safeLane = false;
+    if (!ThorimPreferredGauntletLane(botAI, safeLane))
+        return false;
+
+    uint8 index = 0;
+    if (!ThorimResolveGauntletIndex(botAI, bot, index))
+        return false;
+
+    return MoveToGauntletWaypoint(safeLane, index, true);
+}
+
+bool ThorimRunicBarrierBailAction::isUseful()
+{
+    ThorimRunicBarrierBailTrigger thorimRunicBarrierBailTrigger(botAI);
+    return thorimRunicBarrierBailTrigger.IsActive();
+}
+
+bool ThorimRunicBarrierBailAction::Execute(Event /*event*/)
+{
+    Unit* colossus = GetThorimRunicColossus(botAI);
+    if (!colossus)
+        return false;
+
+    float const currentDistance = bot->GetDistance(colossus);
+    if (currentDistance >= ULDUAR_THORIM_BARRIER_BAIL_DISTANCE)
+        return false;
+
+    // No AttackStop here on purpose: the target stays, so everything that is not a melee swing keeps
+    // landing from out here. FleePosition is no good either - it clamps travel to
+    // AiPlayerbot.FleeDistance and would leave the bot inside the shield's reach.
+    return MoveAway(colossus, ULDUAR_THORIM_BARRIER_BAIL_DISTANCE - currentDistance);
+}
+
+bool ThorimLightningChargeAction::isUseful()
+{
+    ThorimLightningChargeTrigger thorimLightningChargeTrigger(botAI);
+    return thorimLightningChargeTrigger.IsActive();
+}
+
+bool ThorimLightningChargeAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, spot))
+        return false;
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
+{
+    // Hand "follow master" back before the record of having taken it goes with the rest of the state,
+    // or an arena squad bot never follows anyone again after the kill.
+    if (ThorimFollowMasterStripped(bot))
+    {
+        FollowMasterStrategy followMasterStrategy(botAI);
+        if (!botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
+        {
+            botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(),
+                                  BotState::BOT_STATE_NON_COMBAT);
+        }
+    }
+
+    ResetThorimEncounterState(bot, false);
+
+    // Never claims the tick: clearing state is bookkeeping, and the pull still needs every node below
+    // this one to run on the same tick.
     return false;
 }
 
@@ -366,56 +378,29 @@ bool ThorimFallFromFloorAction::isUseful()
 
 bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
 {
+    ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
+
     Position targetPosition;
-    bool backward = false;
+    if (!TryGetThorimPhase2Spot(botAI, bot, role, targetPosition))
+        return false;
 
-    if (botAI->IsMainTank(bot))
-    {
-        targetPosition = ULDUAR_THORIM_PHASE2_TANK_SPOT;
-        backward = true;
-    }
-    else
-    {
-        Group* group = bot->GetGroup();
-        if (!group)
-            return false;
+    bool const ringSlot = role == ThorimPhase2Role::OffTank || role == ThorimPhase2Role::MeleeRing;
 
-        uint32 memberPositionNumber = 0;
-        for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-        {
-            Player* member = gref->GetSource();
-            if (!member)
-                continue;
+    // Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot
+    // sliding in place forever, and a moving bot casts nothing.
+    if (ringSlot && !ThorimRingNeedsMove(botAI, bot, targetPosition))
+        return false;
 
-            if (botAI->IsRanged(member) || botAI->IsHeal(member))
-            {
-                if (bot->GetGUID() == member->GetGUID())
-                    break;
-
-                memberPositionNumber++;
-
-                if (memberPositionNumber == 3)
-                    memberPositionNumber = 0;
-            }
-        }
-
-        if (memberPositionNumber == 0)
-            targetPosition = ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
-
-        if (memberPositionNumber == 1)
-            targetPosition = ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
-
-        if (memberPositionNumber == 2)
-            targetPosition = ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
-    }
+    // The main tank backs into his spot so he keeps facing the boss he is dragging south.
+    bool const backward = role == ThorimPhase2Role::MainTank;
 
     MoveTo(bot->GetMapId(), targetPosition.GetPositionX(), targetPosition.GetPositionY(), targetPosition.GetPositionZ(),
            false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true, backward);
 
-    if (bot->GetDistance(targetPosition) > 1.0f)
-        return false;
+    if (ringSlot)
+        return true;
 
-    return true;
+    return bot->GetDistance(targetPosition) <= 1.0f;
 }
 
 bool ThorimPhase2PositioningAction::isUseful()

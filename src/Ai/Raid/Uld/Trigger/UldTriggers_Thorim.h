@@ -58,6 +58,43 @@ public:
     bool IsActive() override;
 };
 
+// A Runic Smash telegraph is up and this bot is not in the lane it spares.
+class ThorimRunicSmashTrigger : public Trigger
+{
+public:
+    ThorimRunicSmashTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim runic smash trigger") {}
+    bool IsActive() override;
+};
+
+class ThorimRunicBarrierBailTrigger : public Trigger
+{
+public:
+    ThorimRunicBarrierBailTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim runic barrier bail trigger") {}
+    bool IsActive() override;
+};
+
+class ThorimLightningChargeTrigger : public Trigger
+{
+public:
+    ThorimLightningChargeTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim lightning charge trigger") {}
+    bool IsActive() override;
+};
+
+// An arena squad member that has left the box the boss script scans, or is on its way out of it.
+class ThorimArenaLeashTrigger : public Trigger
+{
+public:
+    ThorimArenaLeashTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim arena leash trigger") {}
+    bool IsActive() override;
+};
+
+class ThorimResetEncounterStateTrigger : public Trigger
+{
+public:
+    ThorimResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim reset encounter state trigger") {}
+    bool IsActive() override;
+};
+
 // Hard mode: bot standing inside Sif's moving Blizzard ground AoE.
 class ThorimSifBlizzardTrigger : public Trigger
 {

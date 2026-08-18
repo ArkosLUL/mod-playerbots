@@ -5,6 +5,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_Thorim.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
@@ -136,99 +137,34 @@ bool ThorimGauntletPositioningTrigger::IsActive()
     if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 110.0f)
         return false;
 
-    Difficulty raidDifficulty = bot->GetRaidDifficulty();
-
-    Group* group = bot->GetGroup();
-    if (!group)
+    if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
         return false;
-    uint32 requiredAssistTankQuantity = 1;
-    uint32 requiredHealerQuantity = 0;
-    uint32 requiredDpsQuantity = 0;
-
-    if (raidDifficulty == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL)
-    {
-        requiredDpsQuantity = 3;
-        requiredHealerQuantity = 1;
-    }
-    else if (raidDifficulty == Difficulty::RAID_DIFFICULTY_25MAN_NORMAL)
-    {
-        requiredDpsQuantity = 7;
-        requiredHealerQuantity = 2;
-    }
-
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* member = gref->GetSource();
-        if (!member)
-            continue;
-
-        if (requiredDpsQuantity > 0 && botAI->IsDps(member))
-        {
-            requiredDpsQuantity--;
-            if (bot->GetGUID() == member->GetGUID())
-                break;
-        }
-
-        if (requiredAssistTankQuantity > 0 && botAI->IsAssistTankOfIndex(member, 0))
-        {
-            requiredAssistTankQuantity--;
-            if (bot->GetGUID() == member->GetGUID())
-                break;
-        }
-
-        if (requiredHealerQuantity > 0 && botAI->IsHeal(member))
-        {
-            requiredHealerQuantity--;
-            if (bot->GetGUID() == member->GetGUID())
-                break;
-        }
-
-        if (requiredDpsQuantity == 0 && requiredAssistTankQuantity == 0 && requiredHealerQuantity == 0)
-            return false;
-    }
 
     Unit* master = botAI->GetMaster();
+    if (!master)
+        return false;
+
     if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < 10.0f && (bot->GetDistance2d(master) > 5.0f))
     {
         return true;
     }
 
-    if ((master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1) < 6.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2) < 6.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1) < 5.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1) < 10.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2) < 10.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3) < 10.0f) &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1) > 6.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2) > 6.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1) > 5.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1) > 10.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2) > 10.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3) > 10.0f)
+    uint8 masterIndex = 0;
+    bool leftLane = false;
+    if (ThorimGauntletLaneIndex(master, masterIndex, leftLane))
     {
-        if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-            return false;
+        bool preferredLane = false;
+        if (ThorimPreferredGauntletLane(botAI, preferredLane))
+            leftLane = preferredLane;
 
-        return true;
-    }
+        uint8 botIndex = 0;
+        if (!ThorimGauntletLaneIndexInLane(bot, leftLane, botIndex))
+        {
+            if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+                return false;
 
-    if ((master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1) < 6.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2) < 6.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1) < 5.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1) < 10.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2) < 10.0f ||
-         master->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3) < 10.0f) &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1) > 6.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2) > 6.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1) > 5.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1) > 10.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2) > 10.0f &&
-        bot->GetDistance(ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3) > 10.0f)
-    {
-        if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-            return false;
-
-        return true;
+            return true;
+        }
     }
 
     Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
@@ -243,92 +179,21 @@ bool ThorimGauntletPositioningTrigger::IsActive()
 
 bool ThorimArenaPositioningTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
-    if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
+    Position anchor;
+    if (!GetThorimArenaAnchor(botAI, bot, anchor))
         return false;
 
-    if (!boss->IsAlive())
+    // Surviving beats standing on a spot, and letting the anchor fight a dodge is what has a bot step
+    // out of a hazard and get walked straight back into it.
+    ThorimSifBlizzardTrigger blizzard(botAI);
+    if (blizzard.IsActive())
         return false;
 
-    if (!boss->IsHostileTo(bot))
+    ThorimSifFrostNovaTrigger frostNova(botAI);
+    if (frostNova.IsActive())
         return false;
 
-    if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-        return false;
-
-    Difficulty raidDifficulty = bot->GetRaidDifficulty();
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-    uint32 requiredAssistTankQuantity = 1;
-    uint32 requiredHealerQuantity = 0;
-    uint32 requiredDpsQuantity = 0;
-
-    if (raidDifficulty == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL)
-    {
-        requiredDpsQuantity = 3;
-        requiredHealerQuantity = 1;
-    }
-    else if (raidDifficulty == Difficulty::RAID_DIFFICULTY_25MAN_NORMAL)
-    {
-        requiredDpsQuantity = 7;
-        requiredHealerQuantity = 2;
-    }
-
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* member = gref->GetSource();
-        if (!member)
-            continue;
-
-        if (requiredDpsQuantity > 0 && botAI->IsDps(member))
-        {
-            requiredDpsQuantity--;
-            if (bot->GetGUID() == member->GetGUID())
-                return false;
-        }
-
-        if (requiredAssistTankQuantity > 0 && botAI->IsAssistTankOfIndex(member, 0))
-        {
-            requiredAssistTankQuantity--;
-            if (bot->GetGUID() == member->GetGUID())
-                return false;
-        }
-
-        if (requiredHealerQuantity > 0 && botAI->IsHeal(member))
-        {
-            requiredHealerQuantity--;
-            if (bot->GetGUID() == member->GetGUID())
-                return false;
-        }
-
-        if (requiredDpsQuantity == 0 && requiredAssistTankQuantity == 0 && requiredHealerQuantity == 0)
-            break;
-    }
-
-    GuidVector targets = AI_VALUE(GuidVector, "possible targets");
-    Unit* target = nullptr;
-    for (auto i = targets.begin(); i != targets.end(); ++i)
-    {
-        target = botAI->GetUnit(*i);
-        if (!target || !target->IsAlive())
-            continue;
-
-        uint32 entry = target->GetEntry();
-
-        if (entry == NPC_DARK_RUNE_ACOLYTE_I || entry == NPC_CAPTURED_MERCENARY_SOLDIER_ALLY ||
-            entry == NPC_CAPTURED_MERCENARY_SOLDIER_HORDE || entry == NPC_CAPTURED_MERCENARY_CAPTAIN_ALLY ||
-            entry == NPC_CAPTURED_MERCENARY_CAPTAIN_HORDE || entry == NPC_JORMUNGAR_BEHEMOT ||
-            entry == NPC_DARK_RUNE_WARBRINGER || entry == NPC_DARK_RUNE_EVOKER || entry == NPC_DARK_RUNE_CHAMPION ||
-            entry == NPC_DARK_RUNE_COMMONER)
-            return false;
-    }
-
-    if (bot && bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 5.0f)
-        return true;
-
-    return false;
+    return ThorimArenaAnchorNeedsMove(botAI, bot, anchor);
 }
 
 bool ThorimFallFromFloorTrigger::IsActive()
@@ -342,63 +207,82 @@ bool ThorimFallFromFloorTrigger::IsActive()
 
 bool ThorimPhase2PositioningTrigger::IsActive()
 {
-    if (!botAI->IsRanged(bot) && !botAI->IsMainTank(bot))
+    if (!ThorimPhase2Active(botAI))
         return false;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
-    if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
+    ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
+    if (role == ThorimPhase2Role::None)
         return false;
 
-    if (!boss->IsAlive())
+    Position spot;
+    if (!TryGetThorimPhase2Spot(botAI, bot, role, spot))
         return false;
 
-    if (!boss->IsHostileTo(bot))
-        return false;
-
-    if (boss->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-        return false;
-
-    if (botAI->IsMainTank(bot))
+    if (role == ThorimPhase2Role::MainTank)
     {
-        if (bot->GetDistance(ULDUAR_THORIM_PHASE2_TANK_SPOT) > 1.0f && boss->GetVictim() == bot)
-            return true;
-
-        return false;
+        // Only the tank actually holding the boss walks him south; a second one would drag him back.
+        Unit* boss = GetThorim(botAI);
+        return boss && boss->GetVictim() == bot && bot->GetDistance(spot) > 1.0f;
     }
 
-    Group* group = bot->GetGroup();
-    if (!group)
+    if (role == ThorimPhase2Role::Ranged)
+        return bot->GetDistance(spot) > 1.0f;
+
+    return ThorimRingNeedsMove(botAI, bot, spot);
+}
+
+bool ThorimRunicSmashTrigger::IsActive()
+{
+    bool safeLane = false;
+    if (!ThorimRunicSmashImminent(botAI) || !ThorimPreferredGauntletLane(botAI, safeLane))
         return false;
 
-    uint32 memberPositionNumber = 0;
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* member = gref->GetSource();
-        if (!member)
-            continue;
+    // A bot still up on the balcony has its own node to get down and nothing to dodge up there.
+    if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
 
-        if (botAI->IsRanged(member))
-        {
-            if (bot->GetGUID() == member->GetGUID())
-                break;
+    // The centre line is inside the blast too, so this asks for the safe lane rather than "not the
+    // hot one".
+    uint8 index = 0;
+    if (ThorimGauntletLaneIndexInLane(bot, safeLane, index))
+        return false;
 
-            memberPositionNumber++;
+    return ThorimResolveGauntletIndex(botAI, bot, index);
+}
 
-            if (memberPositionNumber == 3)
-                memberPositionNumber = 0;
-        }
-    }
+bool ThorimRunicBarrierBailTrigger::IsActive()
+{
+    if (!ThorimBarrierBailLatched(botAI, bot))
+        return false;
 
-    if (memberPositionNumber == 0 && bot->GetDistance(ULDUAR_THORIM_PHASE2_RANGE1_SPOT) > 1.0f)
-        return true;
+    Unit* colossus = GetThorimRunicColossus(botAI);
+    return colossus && bot->GetDistance(colossus) < ULDUAR_THORIM_BARRIER_BAIL_DISTANCE;
+}
 
-    if (memberPositionNumber == 1 && bot->GetDistance(ULDUAR_THORIM_PHASE2_RANGE2_SPOT) > 1.0f)
-        return true;
+bool ThorimLightningChargeTrigger::IsActive()
+{
+    // Both tanks, ranged and healers hold and eat it: moving a tank drags the boss and re-anchors the
+    // whole ring, and the ranged spots are already outside anything the rotation would buy them.
+    if (GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::MeleeRing)
+        return false;
 
-    if (memberPositionNumber == 2 && bot->GetDistance(ULDUAR_THORIM_PHASE2_RANGE3_SPOT) > 1.0f)
-        return true;
+    if (!ThorimLightningChargeActive(botAI))
+        return false;
 
-    return false;
+    Position spot;
+    if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, spot))
+        return false;
+
+    // Raw distance, not the arrival latch: the dodge must not be gated by a bot that was settled on
+    // the slot the ring has just rotated away from.
+    return bot->GetDistance(spot) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
+}
+
+bool ThorimArenaLeashTrigger::IsActive() { return ThorimArenaLeashBreached(botAI, bot); }
+
+bool ThorimResetEncounterStateTrigger::IsActive()
+{
+    return ThorimBotHasEncounterState(bot) && ThorimEncounterStateIsStale(botAI);
 }
 
 //

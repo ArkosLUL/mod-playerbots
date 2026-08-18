@@ -468,6 +468,31 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim sif frost nova trigger",
         { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
 
+    // Lightning Charge is ~17k instant with only the orb lighting up as warning, and it grows 10% per
+    // stack, so it outranks the two Sif nodes. The corridor smash sits below it because the two can
+    // never be live at the same time, and the barrier bail below that: it costs health, not a life.
+    triggers.push_back(new TriggerNode(
+        "thorim lightning charge trigger",
+        { NextAction("thorim lightning charge action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim runic smash trigger",
+        { NextAction("thorim runic smash action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim runic barrier bail trigger",
+        { NextAction("thorim runic barrier bail action", ACTION_RAID + 2) }));
+
+    // Top of the Thorim ladder. An arena squad member outside the box is not a positioning problem:
+    // one 5 second scan finding nobody in there summons the Lightning Orb and kills the raid.
+    triggers.push_back(new TriggerNode(
+        "thorim arena leash trigger",
+        { NextAction("thorim arena leash action", ACTION_RAID + 5) }));
+
+    triggers.push_back(new TriggerNode(
+        "thorim reset encounter state trigger",
+        { NextAction("thorim reset encounter state action", ACTION_RAID) }));
+
     //
     // Mimiron. Laser Barrage outranks everything else here: its cone one-shots. Ranked below it by
     // what a hit actually costs - Shock Blast is 100000 damage in a 15 yd circle, a Proximity Mine
@@ -778,6 +803,14 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // a generic mover walking the bot back into the blast
     multipliers.push_back(new IronAssemblyDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new IronAssemblyMovementGuardMultiplier(botAI));
+
+    // Thorim keeps a bailing melee out of the Runic Barrier damage shield, and stops the generic
+    // movers collapsing the three phase 2 melee stacks back into one Chain Lightning arc
+    multipliers.push_back(new ThorimRunicBarrierMultiplier(botAI));
+    multipliers.push_back(new ThorimMovementGuardMultiplier(botAI));
+    multipliers.push_back(new ThorimArenaLeashMultiplier(botAI));
+    multipliers.push_back(new ThorimArenaTargetGuardMultiplier(botAI));
+    multipliers.push_back(new ThorimArenaAnchorGuardMultiplier(botAI));
 
     // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));

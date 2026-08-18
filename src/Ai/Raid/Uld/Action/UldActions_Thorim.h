@@ -48,13 +48,74 @@ public:
     bool isUseful() override;
 };
 
-class ThorimGauntletPositioningAction : public MovementAction
+// Shared by the two nodes that walk the corridor lanes, so the six-waypoint walk exists once.
+class ThorimLaneMovementAction : public MovementAction
 {
 public:
-    ThorimGauntletPositioningAction(PlayerbotAI* ai) : MovementAction(ai, "thorim gauntlet positioning action") {}
+    ThorimLaneMovementAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name) {}
+
+protected:
+    bool MoveToGauntletWaypoint(bool leftLane, uint8 index, bool forceCombatPriority);
+};
+
+class ThorimGauntletPositioningAction : public ThorimLaneMovementAction
+{
+public:
+    ThorimGauntletPositioningAction(PlayerbotAI* ai)
+        : ThorimLaneMovementAction(ai, "thorim gauntlet positioning action")
+    {
+    }
 
     bool Execute(Event event) override;
     bool isUseful() override;
+};
+
+// Cross to the same progress point in the lane the Runic Colossus is not smashing.
+class ThorimRunicSmashAction : public ThorimLaneMovementAction
+{
+public:
+    ThorimRunicSmashAction(PlayerbotAI* ai) : ThorimLaneMovementAction(ai, "thorim runic smash action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Step out of the damage shield's reach without dropping the target, so ranged and instant abilities
+// keep landing while the bot heals back up.
+class ThorimRunicBarrierBailAction : public MovementAction
+{
+public:
+    ThorimRunicBarrierBailAction(PlayerbotAI* ai) : MovementAction(ai, "thorim runic barrier bail action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class ThorimLightningChargeAction : public MovementAction
+{
+public:
+    ThorimLightningChargeAction(PlayerbotAI* ai) : MovementAction(ai, "thorim lightning charge action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Walks an arena squad member back inside the box boss_thorim.cpp scans for a living player.
+class ThorimArenaLeashAction : public MovementAction
+{
+public:
+    ThorimArenaLeashAction(PlayerbotAI* ai) : MovementAction(ai, "thorim arena leash action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+class ThorimResetEncounterStateAction : public Action
+{
+public:
+    ThorimResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, "thorim reset encounter state action") {}
+
+    bool Execute(Event event) override;
 };
 
 class ThorimFallFromFloorAction : public Action

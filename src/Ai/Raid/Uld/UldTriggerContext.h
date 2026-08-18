@@ -159,6 +159,11 @@ public:
         creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
         creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
         creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
+        creators["thorim runic smash trigger"] = &RaidUlduarTriggerContext::thorim_runic_smash_trigger;
+        creators["thorim runic barrier bail trigger"] = &RaidUlduarTriggerContext::thorim_runic_barrier_bail_trigger;
+        creators["thorim lightning charge trigger"] = &RaidUlduarTriggerContext::thorim_lightning_charge_trigger;
+        creators["thorim reset encounter state trigger"] = &RaidUlduarTriggerContext::thorim_reset_encounter_state_trigger;
+        creators["thorim arena leash trigger"] = &RaidUlduarTriggerContext::thorim_arena_leash_trigger;
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
         creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
         creators["xt002 searing light spread trigger"] = &RaidUlduarTriggerContext::xt002_searing_light_spread_trigger;
@@ -317,6 +322,11 @@ private:
     static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
     static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
     static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
+    static Trigger* thorim_runic_smash_trigger(PlayerbotAI* ai) { return new ThorimRunicSmashTrigger(ai); }
+    static Trigger* thorim_runic_barrier_bail_trigger(PlayerbotAI* ai) { return new ThorimRunicBarrierBailTrigger(ai); }
+    static Trigger* thorim_lightning_charge_trigger(PlayerbotAI* ai) { return new ThorimLightningChargeTrigger(ai); }
+    static Trigger* thorim_reset_encounter_state_trigger(PlayerbotAI* ai) { return new ThorimResetEncounterStateTrigger(ai); }
+    static Trigger* thorim_arena_leash_trigger(PlayerbotAI* ai) { return new ThorimArenaLeashTrigger(ai); }
     static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
     static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
     static Trigger* xt002_searing_light_spread_trigger(PlayerbotAI* ai) { return new XT002SearingLightSpreadTrigger(ai); }

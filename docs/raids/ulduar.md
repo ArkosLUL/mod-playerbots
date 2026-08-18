@@ -290,6 +290,121 @@ Life tower is skipped: its adds are already covered by the vehicle's kill-neares
 
 ### Thorim
 
+Two halves that share nothing: a corridor gauntlet past the Runic Colossus and the Ancient Rune Giant,
+then a stationary fight on the arena floor once Thorim drops off his balcony. `GetPositionZ() < 429.6`
+separates the two everywhere in the strategy.
+
+#### Phase 1 split
+
+The raid fights phase 1 in two halves, and the arena half must never empty out.
+`ThorimAI::GetArenaPlayer()` scans for one **living** player inside
+
+```
+x 2085..2185   y -305..-214   z < 425
+```
+
+**every 5 seconds** from the start of phase 1. The first scan that finds nobody is terminal: `SAY_WIPE`
+and a `Lightning Orb` (33138) that kills the raid. There is no grace period and no recovery, so this
+is a hard constraint rather than a preference. A separate 5 minute timer
+(`EVENT_THORIM_NOT_REACH_IN_TIME`) fires the same orb regardless, which bounds the whole of phase 1.
+
+The split is **latched once per pull** and held until Thorim drops to the floor. Recomputing it per
+tick is what let a role predicate flipping mid-fight walk the arena squad into the corridor. Quotas
+are 1 tank + 1 healer + 3 DPS (10 man) and 1 tank + 2 healers + 7 DPS (25 man); a roster that cannot
+fill them shrinks the gauntlet rather than emptying the arena, and assignment stops entirely once the
+arena would drop below 3. The main tank never leaves the arena.
+
+Every gauntlet pick is **bot-only**. A human still occupies their role but nothing here can walk them
+anywhere, so spending the single gauntlet tank slot on a human off-tank just leaves the corridor a body
+short. **Set `MEMBER_FLAG_MAINTANK` in the raid frame**: without it `GetMainTankGuid` falls back to the
+first tank in roster order, so a human tank ahead of the bot main tank silently takes the role — which
+sends the bot main tank down the corridor and leaves the arena untanked.
+
+Arena adds all land 19-24 yd from the centre and the nearest box edge is 42 yd out, so the leash is
+**30 yd from `ULDUAR_THORIM_NEAR_ARENA_CENTER`**, 15.8 yd short of the corridor mouth at the lever gate.
+Melee get a tighter **24 yd**, which is the furthest an add ever lands, so it costs no uptime. Two
+guards back it. `ThorimArenaLeashMultiplier` holds the generic movers while a bot is outside its leash
+— and, alone among the Ulduar guards, does **not** exempt `AttackAction` or `ReachTargetAction`,
+because corridor mobs sit ~92 yd out, inside the 100 yd sight cap, and the chase is exactly what walks
+a bot out of the box. `ThorimArenaTargetGuardMultiplier` drops a target outside the box, or the leash
+and the chase would take turns at the gate forever.
+
+**A fence is not a formation.** Left with only the leash, the squad diffuses outward until it is parked
+against the east edge at x ≈ 2165, which is the gateway. East is the worst direction to drift:
+`boss_thorim_arena_npcs::CanAIAttack` is `GetPositionX() < 2180 && GetPositionZ() < 425`, so a bot that
+gets there stops being attackable at all and the add re-rolls — and `SelectT()` picks a **random**
+arena-side player and gives it 500 threat, so a squad spread over 50 yd puts adds on people no healer
+is in range of. Threat is chaotic here by design; being in one place is the only counter.
+
+So the squad is anchored. `GetThorimArenaAnchor` is the single answer trigger and action both read:
+the tank holds `ULDUAR_THORIM_NEAR_ARENA_CENTER`, ranged and healers take a ring slot at 10 or 14 yd
+(clear of the Champion's Whirlwind on the pile, close enough that anything in it is in range), and
+melee get the centre only **out of combat** — in the fight they run free on the 24 yd leash. Slots come
+from the latched squad in **roster order**, not from the survivors: bots die in here, and ranking by
+who is still standing renumbers everyone behind the corpse and shuffles the formation mid-fight. Ring
+points are computed and then validated with `GetMapWaterOrGroundLevel` and
+`CheckCollisionAndGetValidCoords`, because raw ring geometry is the shape that lands off the navmesh
+and `MoveTo` fails silently there. Slot 0 sits on the bearing from the lever gate to the centre, so the
+formation opens away from the corridor. `ThorimArenaAnchorGuardMultiplier` holds the generic movers
+once a bot is settled, exempting the chase — an add at 24 yd is up to 38 yd from an outer slot, and a
+ranged bot that cannot step into range is silent.
+
+#### Runic Colossus (32872), spawned at (2227.5, -396.179, 412.176)
+
+| Spell | Id | Detail |
+|---|---|---|
+| Runic Smash, left hand | 62057 | **5s cast**, lights the left-hand bunnies (33141) at x ~2235 / 2246 |
+| Runic Smash, right hand | 62058 | **5s cast**, lights the right-hand bunnies (33140) at x ~2210 / 2221 |
+| Runic Smash damage | 62465 | 10 yd per bunny; the wave starts 1s after the cast and marches y -385 → -257 at 16 yd / 500ms |
+| Runic Barrier | 62338 | -51% damage taken **and a 2000 arcane damage shield per melee swing**; cast at t+10s, 20s duration, recast every 20s |
+
+`EVENT_RC_RUNIC_SMASH` is scheduled in `Reset()` and **cancelled in `JustEngagedWith`**, so the corridor
+smash only happens on the approach and stops the moment the Colossus is tanked. The Ancient Rune Giant
+has no damage shield — its Runic Fortification (62942) is a friendly buff on its adds.
+
+The two corridor lanes (left x ~2237-2242, right x ~2212-2219) are **index-matched by y**, so a dodge is
+a straight index map: same waypoint number, other lane. Each lane sits 2-9 yd from its own hand's bunnies
+and 15.5-22.9 yd from the other's. The bot side latches the hand it sees casting and holds the opposite
+lane until the other hand goes up — the gauntlet formation follows that preference rather than the
+master's own lane, or it would walk everyone straight back into the blast. The Colossus is 131 yd from the
+top pair of waypoints, past the 100 yd `AiPlayerbot.SightDistance` cap, so the telegraph is read through a
+targeted 150 yd creature lookup rather than the usual target values.
+
+Runic Barrier is effectively permanent, so "stop attacking while it is up" would mean never attacking.
+Non-tank melee instead back out to 14 yd below 55% health and return above 80%, keeping their target the
+whole time so ranged and instant abilities keep landing.
+
+#### Phase 2
+
+| Spell | Id | Detail |
+|---|---|---|
+| Chain Lightning | 62131 | `spell_jump_distance` sets the jump radius to **5.0 yd**, not the 10 yd DBC default; 8 bounces, chain source advances to each new victim |
+| Lightning Charge | 62466 | `spell_cone` **75 degrees**, 150 yd, 17343 base nature, **instant with no cast bar** |
+| Lightning Orb Charged | 62186 | Lands on a Thunder Orb (33378). `SpellInfoCorrections` patches the amplitude to 5000ms, so it ticks once **5s before** the cone — the entire warning |
+| Lightning Charge buff | 62279 | Permanent, one stack per cast: +15% damage and melee haste, **+10% nature damage per stack** |
+
+Positioning has to clear 5 yd between stacks. The main tank drags Thorim to `(2134.857, -287.029)` — about
+a yard from the hole in the floor south of y = -288, so nothing may be placed past it. Ranged and healers
+round-robin three fixed spots. Melee take a **dynamic ring of radius 8 around Thorim's live position**,
+three slots at the main tank's bearing +90 / +180 / +270 degrees, which leaves the whole tank side clear
+and puts the stacks 11.3 yd apart. The off-tank sits at the tank bearing +20 degrees, inside taunt range
+for the Unbalancing Strike swap. Slots are sticky per guid; the bearing is anchored on the tank so the ring
+does not rotate as the boss shuffles, and falls back to the static tank spot's bearing when no tank is
+alive. Arrival uses a 3 yd / 5 yd deadband, because a tight one against a ring recomputed from a moving
+boss leaves the bot sliding in place — and a moving bot casts nothing.
+
+When an orb lights, the **whole ring rotates rigidly** by the smallest angle that clears every occupied
+slot out of the 75 degree cone (plus a 15 degree margin). Per-bot shortest paths would swing slots on
+opposite edges toward each other and trade a Lightning Charge death for a Chain Lightning one. Both tanks,
+ranged and healers hold position and eat it by design: moving a tank drags the boss and re-anchors the ring.
+
+Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
+three stacks into one arc behind the boss the moment the ring node yields. `ThorimMovementGuardMultiplier`
+holds the generic movers, scoped to a **settled** ring holder and exempting `AttackAction`,
+`ReachTargetAction` and `AvoidAoeAction` — a permanent movement freeze is the Void Reaver failure.
+
+#### Hard mode
+
 Sif is summoned every pull and normally channels, then despawns after the 150s dominion timer. If the
 raid clears the gauntlet fast enough she joins instead and casts Frostbolt Valley (raid-wide,
 unavoidable — healed through), Blizzard (62577 → moving `NPC_SIF_BLIZZARD` 32879, respawned every
@@ -298,6 +413,14 @@ unavoidable — healed through), Blizzard (62577 → moving `NPC_SIF_BLIZZARD` 3
 **Detector: Sif (33196) alive AND `GetPositionZ() < 429.6`** — she spawns at the throne and only
 `NearTeleportTo`s onto the arena floor when she joins. This reuses the same floor threshold the
 normal-mode Thorim strategy already uses.
+
+#### Known gaps
+
+Documented, not implemented: the in-combat `SPELL_SMASH` 62339 frontal cone (60 degrees, 3s cast — a
+different spell from the corridor Runic Smash), Stormhammer 62042, Rune Detonation 62526, Stomp 62411,
+Runic Fortification 62942, arena add kill priority, and arena tank pickup — nothing taunts an add off
+whoever it rolled. Nothing recovers the fight once the arena squad is dead either; the 5 second scan
+leaves no room to walk anyone back.
 
 ### Hodir
 
@@ -1601,17 +1724,15 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 
 | Boss | Gap |
 |---|---|
-| **Thorim** | Unbalancing Strike had no real tank swap, only a cheat debuff strip |
 | **Vezax** | Saronite Vapor puddles never dodged |
 | **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt (focus and the Flame Breath cone are handled) |
 | **Freya** | Storm Lasher (Stormbolt, Lightning Lash) and Ancient Water Spirit (Tidal Wave) casts are not interrupted |
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
-Thorim Unbalancing Strike;
 Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
 (cheat instakill / teleport); Vezax no-mana-regen (cheat mana refill).
 
 Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank
-swap** — Thorim still falls back to cheats; Kologarn swaps on Crunch Armor stacks and Hodir on
-Frozen Blows instead. There is no enrage-timer awareness anywhere, which blocks every hard-mode kill-timer
-requirement.
+swap** — each rolls its own detector instead: Thorim on the Unbalancing Strike debuff, Kologarn on
+Crunch Armor stacks, Hodir on Frozen Blows. There is no enrage-timer awareness anywhere, which
+blocks every hard-mode kill-timer requirement.

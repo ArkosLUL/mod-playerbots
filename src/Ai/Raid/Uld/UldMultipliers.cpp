@@ -20,6 +20,7 @@
 #include "UldBossHelper.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldEncounter_Algalon.h"
+#include "UldEncounter_Thorim.h"
 #include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldActions.h"
@@ -266,6 +267,106 @@ float IronAssemblyMovementGuardMultiplier::GetValue(Action* action)
     // Only while this bot is actually committed to a hazard. Outside that window the generic movers
     // are what bring it back to the formation, and the position node has already yielded.
     return IronAssemblyMemberMustMove(botAI, bot) ? 0.0f : 1.0f;
+}
+
+// Thorim
+float ThorimRunicBarrierMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // Only the swing and the walk that sets it up. Casts, heals and hazard dodges are untouched: a
+    // blanket damage stop would throw away DPS the shield was never going to punish, and the gauntlet
+    // is on a 2:45 timer in hard mode.
+    if (!dynamic_cast<MeleeAction*>(action) && !dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    if (!ThorimBarrierBailLatched(botAI, bot))
+        return 1.0f;
+
+    // Gated on the current target, so a switch onto anything else releases this for free.
+    Unit* colossus = GetThorimRunicColossus(botAI);
+    return colossus && AI_VALUE(Unit*, "current target") == colossus ? 0.0f : 1.0f;
+}
+
+float ThorimArenaLeashMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // Hazard dodges stay live. Everything else, the chase included, is what this exists to stop.
+    if (dynamic_cast<AvoidAoeAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {"thorim arena leash action",
+                                                          "thorim arena positioning action",
+                                                          "thorim sif blizzard action",
+                                                          "thorim sif frost nova action"};
+
+    if (encounterMovers.count(action->getName()))
+        return 1.0f;
+
+    return ThorimArenaLeashBreached(botAI, bot) ? 0.0f : 1.0f;
+}
+
+float ThorimArenaTargetGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    if (!dynamic_cast<AttackAction*>(action) && !dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    if (!ThorimSplitActive(botAI) || GetThorimSquad(botAI, bot) != ThorimSquad::Arena)
+        return 1.0f;
+
+    // Gated on the current target, so switching to anything inside the arena releases this for free.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && !ThorimInArenaBox(target) ? 0.0f : 1.0f;
+}
+
+float ThorimArenaAnchorGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // Unlike the leash, this one exempts the chase: an add can land 24 yd from the centre, which puts
+    // it up to 38 yd from an outer ring slot, and a ranged bot that cannot step into range is silent.
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action) ||
+        dynamic_cast<AvoidAoeAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {"thorim arena positioning action",
+                                                          "thorim arena leash action",
+                                                          "thorim sif blizzard action",
+                                                          "thorim sif frost nova action"};
+
+    if (encounterMovers.count(action->getName()))
+        return 1.0f;
+
+    return ThorimArenaAnchorSettled(botAI, bot) ? 0.0f : 1.0f;
+}
+
+float ThorimMovementGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // AttackAction derives from MovementAction, so a blanket zero would also kill targeting, and a
+    // bot that cannot clear a Rune Detonation is worse off than one standing slightly out of place.
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action) ||
+        dynamic_cast<AvoidAoeAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {"thorim phase 2 positioning action",
+                                                          "thorim lightning charge action",
+                                                          "thorim sif blizzard action",
+                                                          "thorim sif frost nova action"};
+
+    if (encounterMovers.count(action->getName()))
+        return 1.0f;
+
+    return ThorimMeleeRingSettled(botAI, bot) ? 0.0f : 1.0f;
 }
 
 // Freya
