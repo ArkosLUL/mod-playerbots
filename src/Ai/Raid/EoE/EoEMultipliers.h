@@ -20,7 +20,7 @@ private:
     void RefreshSnapshot();
 
     // GetValue runs once per queued action per bot per tick, and the role lookups behind it walk
-    // the whole group. The phase deliberately stays out: getPhase has its own window, and a
+    // the whole group. The phase deliberately stays out: GetMalygosPhase has its own window, and a
     // second one on top would enforce the previous phase's rules after the actions moved on.
     uint32 snapshotAtMs = 0;
     bool isMainTank = false;

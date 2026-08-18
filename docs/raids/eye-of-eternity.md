@@ -2,6 +2,25 @@
 
 Strategy key `wotlk-eoe`. Cross-raid conventions are in [README.md](README.md).
 
+## Layout
+
+`src/Ai/Raid/EoE/`, on the `Action/` + `Trigger/` + `Util/` shape SWP and Uld use:
+
+| path | holds |
+|---|---|
+| `Util/EoEData.h` | ids and every tuning constant, data only — no functions |
+| `Util/EoEEncounter_Malygos.{h,cpp}` | creature cache, `GetMalygos` / `GetMalygosPhase`, `MalygosP1Layout`, spark / bubble / disk lookups |
+| `Util/EoEEncounter_Drakes.{h,cpp}` | P3 stack point, static fields, healer roster, drake energy, surge clock |
+| `Action/EoEActions.h` | aggregate: nothing but the four `EoEActions_*.h` includes |
+| `Action/EoEActions_Shared.{h,cpp}` | `MalygosPositionAction`, `MalygosTargetAction` — P1, P2 and P4 |
+| `Action/EoEActions_Sparks.{h,cpp}` | P1 Power Sparks |
+| `Action/EoEActions_Adds.{h,cpp}` | P2 spellsteal, bubbles, disks, surge dodge |
+| `Action/EoEActions_Drakes.{h,cpp}` | P3 flight, rotation, Flame Shield |
+| `Trigger/EoETriggers.{h,cpp}` | trigger classes only |
+
+Includes stay flat (`#include "EoEData.h"`, never a relative path): the core globs `src/**` and puts
+every source subdirectory on the include path, so a new directory needs no build file.
+
 ## Three plan assumptions were wrong — corrected in code
 
 Verified against `boss_malygos.cpp`:
@@ -46,7 +65,7 @@ P4 also catches the **pull intro**, which wants the opposite of a centre gather 
 below. Malygos is untouchable for the whole intro, so full health separates it from the two real
 transitions, which are both at 50%.
 
-`getMalygos` uses `FindNearestCreature` so detection survives the non-attackable flag.
+`GetMalygos` falls back to `FindNearestCreature` so detection survives the non-attackable flag.
 
 ## No navmesh, no vmaps, no terrain
 
@@ -97,22 +116,31 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   **The DK walks out to grip, then walks back.** Death Grip lands the spark *on the caster*, so
   where the DK stands decides both who gets the corpse's buff and whether the spark ends up inside
   the 12 yd at which `npc_power_spark` hands *its* buff to Malygos. `POWER_SPARK_GRIP_OFFSET` sits
-  ~21 yd from where Malygos parks, so a spark dropped there still has 9 yd to walk against ~12k hp
+  18.7 yd from where Malygos parks, so a spark dropped there still has 6.7 yd to walk against ~12k hp
   and the whole raid.
 
-  **Open gap — the grip spot reaches nobody.** A dying spark self-casts
+  **The offset is +4.5, and the window is only 1.5 yd wide.** A dying spark self-casts
   `SPELL_POWER_SPARK_GROUND_BUFF` (55852) and despawns after 60 s (`boss_malygos.cpp:842`). 55852 is
   a 60 s periodic-trigger aura firing **55849** once a second, and 55849 is what carries the payload:
   `EffectRadiusIndex 14` = **8 yd**, aura 79 `MOD_DAMAGE_PERCENT_DONE`, misc 127, **+50% damage
-  done** to allies in that radius. The offset is `(MALYGOS_STACK_OFFSET + MALYGOS_HUNTER_OFFSET) / 2`
-  = −1 yd from centre, i.e. **13 yd from both** the stack and the hunters, so the buff currently
-  lands on nobody. It was chosen to maximise the smaller of the two distances back when the radius
-  was unknown; that reasoning is dead.
+  done** to allies in that radius. It used to be `(MALYGOS_STACK_OFFSET + MALYGOS_HUNTER_OFFSET) / 2`
+  = −1 yd from centre — 13 yd from both the stack and the hunters, so the buff landed on nobody, and
+  37 yd from a spark walking in on Malygos' own bearing, so one spawn in four could never be gripped
+  at all.
 
-  Retuning is not a one-line change, because the two constraints collide: the corpse wants to be
-  within 8 yd of the stack, while Malygos parks only ~8.5 yd from it (~+20.5 from centre against the
-  stack's +12) and takes the buff at 12. An offset around **+5 to +6** puts the corpse ~6 yd from the
-  stack and ~15 yd from him. Unverified in game.
+  Both bounds are hard. Death Grip (49576, `RangeIndex` 4) reaches 30 yd, and `Spell::CheckRange`
+  ends in `IsWithinCombatRange`, which adds both combat reaches → **≈31.5**. A spark on his bearing
+  is spent at r ≈ 35.2, so anything below **+3.7** can never catch one. Above **+5.2** the spot is
+  closer to him than `POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE` and duty never starts. At +4.5 the grip
+  needs 30.7 of its 31.5, boss-to-spot is 18.7 against an 18 floor, and the corpse pool lands 7.5 yd
+  from the melee stack — inside its 8 yd radius.
+
+  **Deliberately no range gate on the grip.** `PlayerbotAI::CanCastSpell` passes
+  `SPELL_FAILED_OUT_OF_RANGE` through as castable (`PlayerbotAI.cpp:3446`), so a DK whose spark is
+  out of reach still builds a Death Grip and throws it away. What bounds the choice instead is
+  `GetNearestPowerSparkTo`, anchored on the grip spot rather than on the bot — asking for the spark
+  nearest the DK meant a spark sitting beside his parking spot was ignored whenever another was
+  marginally closer to him.
   The split of duties matters: **`MalygosPositionAction` owns all the walking, `PullPowerSparkAction`
   only ever casts.** Both read `IsOnPowerSparkGripDuty`, so they cannot disagree about where the DK
   should be. Duty needs the grip off cooldown (the cooldown outlasts the gap between spawns, so there
@@ -132,7 +160,7 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   sends Malygos on an intro circuit and only then drops him at `CenterPos.z`, 35 yd out from centre
   on whatever heading he was circling; `EVENT_START_FIGHT` clears his flags and he chases
   `SelectNearestTarget(250)`. That whole stretch reads as P4, and the P4 centre gather pulls the tank
-  *off* his spot — it sits 42 yd out, outside the 30 yd ring. `MalygosPositionAction` runs the P1
+  *off* his spot — it sits 46 yd out, outside the 30 yd ring. `MalygosPositionAction` runs the P1
   branch through the intro instead, so the tank is parked and facing when the boss touches down.
   During the intro only the raid's assigned main tank counts as the tank: Malygos is pacified, and
   his victim is nothing more than whoever pulled.
@@ -146,19 +174,19 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   `{681.278, 1375.796}` and `{821.182, 1235.42}`. The layout is one set of signed offsets from
   centre — positive towards him — rotated onto whichever of those four is nearest to where he
   actually is:
-  - `MALYGOS_MAINTANK_OFFSET` **+46 yd** — Malygos' CombatReach of 20 parks him ~21.5 yd short of
-    the tank, so he ends up ~24.5 yd out. The floor is **stepped**: **266.10 out to r 29**,
+  - `MALYGOS_MAINTANK_OFFSET` **+46 yd** — Malygos' CombatReach of 20 parks him ~22.8 yd short of
+    the tank, so he ends up ~23.2 yd out. The floor is **stepped**: **266.10 out to r 29**,
     **267.25 from 30.5 to 47.5**, **268.25 from 48.1 to 55.5**, the last being the real edge.
     Measured off the platform's collision mesh — `Nexus_Raid_Floating_Platform.wmo.vmo` in the
     `ac-client-data` volume, `GMOD`/`VERT` chunks, plus the GO's 256.25 spawn Z — because **navprobe
     cannot answer map 616**: no mmtiles, no vmap tree, terrain flat 0.0 everywhere. The GO sits 0.4 yd
     off `CenterPos`, so those radii are about centre either way, and the `Exit Portal` GO at r 43.41,
     z 267.23 confirms the middle tier; it is phased out by `DATA_HIDE_IRIS_AND_PORTAL` once the fight
-    starts. Ceilings: the step at **47.5**, and **48.5**, past which the boss clears
+    starts. Ceilings: the step at **47.5**, and **49.8**, past which the boss clears
     `MALYGOS_MELEE_HOLD_DISTANCE` from the stack and the clamp below starts firing.
   - `MALYGOS_STACK_OFFSET` **+12 yd** — melee, healers and every ranged DPS but the hunters. 34 yd
     from the tank, inside `HealDistance` (38.5), and behind where the boss stops, so out of the cone.
-    That last part assumes his chase actually brings him to ~21.5 yd short of the tank spot; it stops
+    That last part assumes his chase actually brings him to ~22.8 yd short of the tank spot; it stops
     wherever it first puts him in melee range, so coming in off-bearing can leave the melee half of
     the raid swinging at nothing. So the stack spot — and only the stack spot — is **clamped**:
     further than `MALYGOS_MELEE_HOLD_DISTANCE` (15 yd) from him and it slides up the line towards him
@@ -168,18 +196,18 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
     front of him; it moves continuously with him rather than switching between two spots, which is
     what would set the raid bouncing; and it is off during the pull intro, when he is circling and
     untouchable anyway. With the layout rotated onto him it should rarely fire at all.
-  - `MALYGOS_HUNTER_OFFSET` **−14 yd**, i.e. past centre, ~38.5 yd from the boss — **hunters only**.
+  - `MALYGOS_HUNTER_OFFSET` **−14 yd**, i.e. past centre, ~37 yd from the boss — **hunters only**.
     `Spell::CheckRange` adds `GetMeleeRange` to a spell's minimum for `SPELL_RANGE_RANGED`, so
     Malygos' CombatReach of 20 inflates a hunter's 5 yd minimum to ~28 yd of centre-to-centre distance
     and every shot came back `SPELL_FAILED_TOO_CLOSE`. Nothing else has a minimum range, and standing
     out here is exactly what left the raid unable to reach a Power Spark closing on the boss from the
-    far side — 38.5 yd to the boss plus 12 more to the spark is well past `spellDistance`. So casters
+    far side — 37 yd to the boss plus 12 more to the spark is well past `spellDistance`. So casters
     hold the stack instead. The same reach keeps `EnemyTooCloseForSpellTrigger` (threshold ~23.5 yd)
     permanently active for anyone standing close, and every class wires that trigger to an escape at
     34–50 relevance — above `malygos position` at `ACTION_MOVE`. Bots stepped out, were dragged back
     next tick and never finished a cast, so the P1 multiplier zeroes `FleeAction`, `RunAwayAction`,
     `CastBlinkBackAction` and `CastDisengageAction` for anyone in the encounter.
-  - `POWER_SPARK_GRIP_OFFSET` **−1 yd**, held only by a DK on spark duty — see the Power Spark
+  - `POWER_SPARK_GRIP_OFFSET` **+4.5 yd**, held only by a DK on spark duty — see the Power Spark
     bullet above.
 
   `GetMalygosP1Layout` resolves the set once and **latches it for the pull**, keyed on the instance
@@ -234,8 +262,8 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   shrink with it** — the core declares 56435 and never casts it — so apparent size says nothing and
   the only honest source is the aura's tick count, read off the `creature_template_addon` aura
   applied at spawn (no aura means brand new). The bubble NPC is
-  non-attackable, so it never shows in `"possible targets"` — scan with
-  `GetCreatureListWithEntryInGrid`. `malygos seek bubble` sits at `ACTION_EMERGENCY + 2`, above
+  non-attackable, so it never shows in `"possible targets"` — read it out of the EoE creature cache.
+  `malygos seek bubble` sits at `ACTION_EMERGENCY + 2`, above
   `avoid surge of power`, which is now only the fallback for bots that cannot reach one: it steps
   off the line running from Malygos through the surge focus (`SURGE_BEAM_CLEAR_DISTANCE` to clear
   it, `SURGE_BEAM_SIDESTEP` across), and it never fires for a disk rider or a sheltered bot, both of
@@ -551,27 +579,53 @@ multiplier, where `IsMainTank` walks every group member and each check scans tha
 list.
 
 - **One creature cache for the whole instance.** `GetEoECreatures` / `GetNearestEoECreature` /
-  `AnyEoECreature` (`EoETriggers.cpp`) answer from a `thread_local` map keyed by instance id and
-  creature entry, refilled at most every `EOE_CREATURE_CACHE_MS` (300 ms). Before this, phase 2 cost
-  eight to ten sweeps per bot per tick — the bubble trigger and the free-disk trigger duplicated each
-  other outright — for about 250 sweeps a tick that all returned the same answer. The fill sweep uses
-  `EOE_CACHE_SWEEP_RADIUS` (200 yd) rather than something tight: it is anchored on whichever bot
-  happened to refresh it but its answer goes to the whole raid, so it has to reach every creature
-  from anywhere a bot can be. **Guids are cached, not pointers** — a creature that despawns inside the
-  window drops out of the answer instead of coming back as a dangling read. Bots are only ever
-  updated from their own map's thread, so no locking.
-- **`getPhase` memoises per instance**, not per bot, for 500 ms (`EOE_PHASE_CACHE_MS`). Riding a
-  Skytalon is the one part of the answer that differs between bots, so that check runs first and
+  `AnyEoECreature` (`Util/EoEEncounter_Malygos.cpp`) answer from a `thread_local` map keyed by
+  instance id and creature entry, refilled at most every `EOE_CREATURE_CACHE_MS` (300 ms). Before
+  this, phase 2 cost eight to ten sweeps per bot per tick — the bubble trigger and the free-disk
+  trigger duplicated each other outright — for about 250 sweeps a tick that all returned the same
+  answer. The fill sweep is anchored on `MALYGOS_CENTER_POSITION`, **not on whichever bot refreshed
+  it**, which is what makes a shared answer genuinely position-independent;
+  `EOE_CACHE_SWEEP_RADIUS` (120 yd) then covers the r 107 spark spawn ring with everything else
+  inside r 56. That anchor needs a file-local check functor:
+  `Acore::AllCreaturesOfEntryInRange::operator()` always runs `IsWithinDist` from the object it was
+  constructed with, so visiting cells around a different point does not move its range test, and a
+  radius of 0 filters everything out rather than disabling it. **Guids are cached, not pointers** — a
+  creature that despawns inside the window drops out of the answer instead of coming back as a
+  dangling read. Bots are only ever updated from their own map's thread, so no locking.
+- **A killed Power Spark stays `IsAlive()` for 60 s.** `npc_power_spark::DamageTaken` zeroes the
+  damage, sets `UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_DISABLE_MOVE` and
+  despawns on a timer, so for a full minute after every spark `PowerSparkTrigger` kept firing, both
+  spark actions kept running `isUseful()`, `GetPowerSparkToKill` could return the corpse *and mask a
+  live spark* (it returns one spark, the nearest to Malygos), and a DK could spend a rune chaining
+  it. Every spark consumer goes through `GetLivePowerSparks`, which drops those flags. **The filter
+  has to stay spark-specific** — Arcane Overload, Static Field, Surge of Power and the hover disks
+  are all `UNIT_FLAG_NOT_SELECTABLE` from spawn, so the same test inside the creature cache would
+  blind the bubble seek, the surge dodge and the disk boarding.
+- **`GetMalygosPhase` memoises per instance**, not per bot, for 500 ms (`EOE_PHASE_CACHE_MS`). Riding
+  a Skytalon is the one part of the answer that differs between bots, so that check runs first and
   uncached; it is a pointer read. A phase cannot turn over inside a tick, and half a second of lag on
   a transition only affects which overrides are on.
-- `getMalygos` asks the instance script (`GetCreature(DATA_MALYGOS)`, an O(1) guid lookup) before
-  falling back to a search. `EOE_DATA_MALYGOS` mirrors the core's `Data` enum, which modules cannot
-  include.
+- `GetMalygos` asks the instance script (`GetCreature(DATA_MALYGOS)`, an O(1) guid lookup) before
+  falling back to a search, and caches the guid per instance. `EOE_DATA_MALYGOS` mirrors the core's
+  `Data` enum, which modules cannot include. **Nothing here uses
+  `AI_VALUE2(Unit*, "find target", "malygos")`** — `FindTargetValue` caches for 1 ms and then walks
+  the threat list doing `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` per entry, i.e. string allocation
+  per unit per bot per tick. It also only answers for units the bot already threatens, so a bot with
+  no threat yet got nothing back at all.
 - **`MalygosMultiplier` snapshots the bot's roles** for 500 ms instead of re-deriving them per
   action. It runs once per queued action per bot per tick, so `IsMainTank` alone was tens of thousands
   of strategy-list scans a tick across a raid. The phase deliberately stays out of the snapshot —
-  `getPhase` has its own window, and stacking a second one on top would leave the multiplier applying
-  the previous phase's rules for up to a second after the actions had moved on.
+  `GetMalygosPhase` has its own window, and stacking a second one on top would leave the multiplier
+  applying the previous phase's rules for up to a second after the actions had moved on.
+- **The P3 healer roster is cached per instance for 2 s.** `GetDrakeHealerGuids` walks the group and
+  sorts two vectors for an answer that only moves when the roster or the difficulty does, and both
+  drake actions read it every tick. `GetDrakeFlightAndHealerRank` stays uncached — it reads live
+  drake energy.
+- **Nothing evicts the `thread_local` caches, deliberately.** Phase, creatures, boss guid, P1 layout,
+  drake heading and healer roster are six maps holding one entry per instance id per worker thread,
+  tens of bytes each, never freed. What they do carry is a staleness window — `EOE_LATCH_STALE_MS`
+  (5 min), far longer than any pull — because instance ids get recycled and a latch with no window
+  eventually hands a fresh pull the previous tenant's state.
 - **The multiplier splits on action family before testing anything.** Everything it suppresses is
   either a `MovementAction` or a `CastSpellAction`, and the two are disjoint, so one `dynamic_cast`
   each way up front means a plain rotation cast pays two instead of walking a list of thirteen.

@@ -7,7 +7,8 @@
 #include "EoEMultipliers.h"
 #include "ChooseTargetActions.h"
 #include "EoEActions.h"
-#include "EoETriggers.h"
+#include "EoEData.h"
+#include "EoEEncounter_Malygos.h"
 #include "FollowActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
@@ -48,7 +49,7 @@ void MalygosMultiplier::RefreshSnapshot()
     isRanged = botAI->IsRanged(bot);
     isHeal = botAI->IsHeal(bot);
 
-    Unit* boss = MalygosTrigger::getMalygos(bot);
+    Unit* boss = GetMalygos(bot);
     Unit* victim = boss ? boss->GetVictim() : nullptr;
     isBossVictim = victim == bot;
     isBossTank = isMainTank || isBossVictim;
@@ -59,7 +60,7 @@ void MalygosMultiplier::RefreshSnapshot()
 
 float MalygosMultiplier::GetValue(Action* action)
 {
-    uint8 const phase = MalygosTrigger::getPhase(bot);
+    uint8 const phase = GetMalygosPhase(bot);
     if (phase == 0)
     {
         return 1.0f;
