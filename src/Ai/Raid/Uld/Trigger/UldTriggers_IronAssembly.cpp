@@ -1,99 +1,121 @@
 #include "UldTriggers_IronAssembly.h"
 
 #include "GameObject.h"
+#include "Group.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "Group.h"
-#include "UldBossHelper.h"
-#include "UldHardMode.h"
-#include "UldScripts.h"
 #include "RaidBossHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
-#include "Vehicle.h"
-#include <MovementActions.h>
-#include <FollowMasterStrategy.h>
-#include <RtiTargetValue.h>
+#include "UldBossHelper.h"
+#include "UldEncounter_IronAssembly.h"
+#include "UldHardMode.h"
+#include "UldScripts.h"
+#include "Unit.h"
+
+bool IronAssemblyResetEncounterStateTrigger::IsActive()
+{
+    return IronAssemblyBotHasEncounterState(bot) && IronAssemblyEncounterStateIsStale(botAI);
+}
+
+bool IronAssemblyOverwhelmingPowerRunOutTrigger::IsActive()
+{
+    if (!IronAssemblyHasOverwhelmingPower(bot))
+        return false;
+
+    // Nothing to run from once the blast would land on nobody.
+    return GetNearestPlayerInRadius(bot, ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE) != nullptr;
+}
 
 bool IronAssemblyLightningTendrilsTrigger::IsActive()
 {
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "stormcaller brundir");
-    if (!boss || !boss->IsAlive())
+    Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
+    if (!brundir || !IronAssemblyTendrilsActive(brundir))
         return false;
 
-    // Check if bot is within 35 yards of the boss
-    if (boss->GetDistance(bot) > 35.0f)
-        return false;
-
-    // Check if the boss has the Lightning Tendrils aura
-    return boss->HasAura(SPELL_LIGHTNING_TENDRILS_10_MAN) || boss->HasAura(SPELL_LIGHTNING_TENDRILS_25_MAN);
+    // Gate on the hazard itself rather than a wider round number, so the reaction distance and the
+    // radius it is protecting against can never drift apart.
+    return bot->GetDistance2d(brundir) < ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE;
 }
 
 bool IronAssemblyOverloadTrigger::IsActive()
 {
-    // Check if bot is tank
+    // Tanks hold through it. 20,000 nature is survivable in plate and lethal in cloth, and under the
+    // normal kill order Brundir dies last - so he is the only member alive during his own Overloads,
+    // his channel invincibility never applies, and a tank leaving would cost real uptime and let him
+    // drift toward the raid.
     if (botAI->IsTank(bot))
         return false;
 
-    // Check boss and it is alive
-    Unit* boss = AI_VALUE2(Unit*, "find target", "stormcaller brundir");
-    if (!boss || !boss->IsAlive())
+    Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
+    if (!brundir || !IronAssemblyOverloadActive(brundir))
         return false;
 
-    // Check if bot is within 35 yards of the boss
-    if (boss->GetDistance(bot) > 35.0f)
-        return false;
-
-    // Check if the boss has the Overload aura
-    return boss->HasAura(SPELL_OVERLOAD_10_MAN) || boss->HasAura(SPELL_OVERLOAD_25_MAN) ||
-           boss->HasAura(SPELL_OVERLOAD_10_MAN_2) || boss->HasAura(SPELL_OVERLOAD_25_MAN_2);
+    return bot->GetDistance2d(brundir) < ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE;
 }
 
-bool IronAssemblyRuneOfPowerTrigger::IsActive()
+bool IronAssemblyRuneOfDeathTrigger::IsActive()
 {
-    Unit* target = botAI->GetUnit(bot->GetTarget());
-    if (!target || !target->IsAlive())
+    if (!IronAssemblyEncounterActive(botAI))
         return false;
 
-    if (!target->HasAura(SPELL_RUNE_OF_POWER))
+    std::vector<Position> runes;
+    GatherIronAssemblyRunesOfDeath(bot, runes);
+    if (runes.empty())
         return false;
 
-    if (target->GetVictim() != bot)
-        return false;
-
-    return botAI->IsTank(bot);
+    return !IsIronAssemblyPositionClearOfRunes(bot->GetPosition(), runes);
 }
 
-bool IronAssemblyKillOrderTrigger::IsActive()
+bool IronAssemblyInterruptTrigger::IsActive()
 {
-    if (!IsIronAssemblyHardModeActive(botAI))
+    Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
+    if (!brundir)
         return false;
 
-    // One bot drives the marker to avoid contention.
-    if (!botAI->IsMainTank(bot))
+    bool const whirl = IronAssemblyLightningWhirlActive(brundir);
+    bool const chainLightning = !whirl && IronAssemblyChainLightningCasting(brundir);
+    if (!whirl && !chainLightning)
         return false;
 
-    Group* group = bot->GetGroup();
-    if (!group)
+    uint8 rank = 0;
+    if (!IronAssemblyInterruptRank(botAI, bot, brundir, rank))
         return false;
 
-    Unit* next = GetIronAssemblyNextKillTarget(botAI);
-    if (!next)
-        return false;
-
-    // Already marked - nothing to do.
-    return group->GetTargetIcon(RtiTargetValue::skullIndex) != next->GetGUID();
+    // Rank 0 owns Lightning Whirl, which is 100 yd and has no positional answer at all. Rank 1 takes
+    // Chain Lightning, so when only one interrupt is off cooldown Chain Lightning is deliberately
+    // allowed through rather than spending the cooldown that the next Whirl needs.
+    return whirl ? rank == 0 : rank == 1;
 }
 
-bool IronAssemblyFusionPunchSwapTrigger::IsActive()
+bool IronAssemblyTankAssignmentTrigger::IsActive()
+{
+    if (!IronAssemblyFormationActive(botAI))
+        return false;
+
+    Unit* boss = IronAssemblyAssignedBoss(botAI, bot);
+    if (!boss)
+        return false;
+
+    if (boss->GetVictim() != bot)
+        return true;
+
+    Position spot;
+    if (!TryGetIronAssemblyTankSpot(botAI, bot, spot))
+        return false;
+
+    return bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) >
+           ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE;
+}
+
+bool IronAssemblyOverwhelmingPowerSwapTrigger::IsActive()
 {
     if (!IsSteelbreakerEmpowered(botAI))
         return false;
 
-    Unit* steelbreaker = GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER);
+    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
     if (!steelbreaker)
         return false;
 
@@ -117,11 +139,93 @@ bool IronAssemblyFusionPunchSwapTrigger::IsActive()
     if (!partnerIsSwapTank)
         return false;
 
-    // Swap only for Overwhelming Power: it is the stacking phase-3 debuff that one-shots the
-    // tank unless it is shed by dropping threat. Fusion Punch is a short, frequently recast DoT;
-    // driving swaps off it would ping-pong the boss between the two tanks on every cast.
-    if (bot->HasAura(SPELL_OVERWHELMING_POWER))
+    if (IronAssemblyHasOverwhelmingPower(bot))
         return false;
 
-    return activeTank->HasAura(SPELL_OVERWHELMING_POWER);
+    return IronAssemblyHasOverwhelmingPower(activeTank);
+}
+
+bool IronAssemblyShieldOfRunesTrigger::IsActive()
+{
+    Unit* molgeim = GetIronAssemblyMember(botAI, NPC_MOLGEIM);
+    if (!molgeim || !IronAssemblyShieldOfRunesUp(molgeim))
+        return false;
+
+    static std::vector<std::string> const dispels = {"spellsteal", "purge", "dispel magic"};
+    for (std::string const& dispel : dispels)
+        if (botAI->CanCastSpell(dispel, molgeim))
+            return true;
+
+    return false;
+}
+
+bool IronAssemblyFusionPunchDispelTrigger::IsActive()
+{
+    if (!GetIronAssemblyMember(botAI, NPC_STEELBREAKER))
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return IronAssemblyHasFusionPunch(bot);
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != ULDUAR_MAP_ID)
+            continue;
+
+        if (IronAssemblyHasFusionPunch(member))
+            return true;
+    }
+
+    return false;
+}
+
+bool IronAssemblyRedirectThreatTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
+        return false;
+
+    return IronAssemblyFocusTarget(botAI) != nullptr;
+}
+
+bool IronAssemblyRuneOfPowerTrigger::IsActive()
+{
+    Unit* boss = IronAssemblyAssignedBoss(botAI, bot);
+    if (!boss || !boss->HasAura(SPELL_RUNE_OF_POWER))
+        return false;
+
+    // Only the tank actually holding him can walk him anywhere.
+    return boss->GetVictim() == bot;
+}
+
+bool IronAssemblyRuneOfPowerSoakTrigger::IsActive()
+{
+    Position rune;
+    if (!TryGetIronAssemblyRuneOfPowerSoakSpot(botAI, bot, rune))
+        return false;
+
+    return bot->GetExactDist2d(rune.GetPositionX(), rune.GetPositionY()) >
+           ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_RADIUS;
+}
+
+bool IronAssemblySetDpsPriorityTrigger::IsActive()
+{
+    // Tanks have their own assignment node; this one owns every other target in the fight.
+    if (botAI->IsTank(bot))
+        return false;
+
+    if (!IronAssemblyFormationActive(botAI))
+        return false;
+
+    return IronAssemblyFocusTarget(botAI) != nullptr;
+}
+
+bool IronAssemblyRaidPositionTrigger::IsActive()
+{
+    if (!IronAssemblyFormationActive(botAI))
+        return false;
+
+    Position spot;
+    return TryGetIronAssemblyRaidSpot(botAI, bot, spot);
 }

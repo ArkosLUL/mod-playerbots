@@ -32,11 +32,21 @@ public:
         creators["razorscale flame breath trigger"] = &RaidUlduarTriggerContext::razorscale_flame_breath_trigger;
         creators["razorscale fire resistance trigger"] = &RaidUlduarTriggerContext::razorscale_fire_resistance_trigger;
         creators["ignis fire resistance trigger"] = &RaidUlduarTriggerContext::ignis_fire_resistance_trigger;
+        creators["iron assembly reset encounter state trigger"] = &RaidUlduarTriggerContext::iron_assembly_reset_encounter_state_trigger;
+        creators["iron assembly overwhelming power run out trigger"] = &RaidUlduarTriggerContext::iron_assembly_overwhelming_power_run_out_trigger;
         creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
         creators["iron assembly overload trigger"] = &RaidUlduarTriggerContext::iron_assembly_overload_trigger;
+        creators["iron assembly rune of death trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_death_trigger;
+        creators["iron assembly interrupt trigger"] = &RaidUlduarTriggerContext::iron_assembly_interrupt_trigger;
+        creators["iron assembly tank assignment trigger"] = &RaidUlduarTriggerContext::iron_assembly_tank_assignment_trigger;
+        creators["iron assembly overwhelming power swap trigger"] = &RaidUlduarTriggerContext::iron_assembly_overwhelming_power_swap_trigger;
+        creators["iron assembly shield of runes trigger"] = &RaidUlduarTriggerContext::iron_assembly_shield_of_runes_trigger;
+        creators["iron assembly fusion punch dispel trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_dispel_trigger;
+        creators["iron assembly redirect threat trigger"] = &RaidUlduarTriggerContext::iron_assembly_redirect_threat_trigger;
         creators["iron assembly rune of power trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_trigger;
-        creators["iron assembly kill order trigger"] = &RaidUlduarTriggerContext::iron_assembly_kill_order_trigger;
-        creators["iron assembly fusion punch swap trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_swap_trigger;
+        creators["iron assembly rune of power soak trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_soak_trigger;
+        creators["iron assembly set dps priority trigger"] = &RaidUlduarTriggerContext::iron_assembly_set_dps_priority_trigger;
+        creators["iron assembly raid position trigger"] = &RaidUlduarTriggerContext::iron_assembly_raid_position_trigger;
         creators["kologarn body tank trigger"] = &RaidUlduarTriggerContext::kologarn_body_tank_trigger;
         creators["kologarn off tank trigger"] = &RaidUlduarTriggerContext::kologarn_off_tank_trigger;
         creators["kologarn rubble tank trigger"] = &RaidUlduarTriggerContext::kologarn_rubble_tank_trigger;
@@ -175,11 +185,21 @@ private:
     static Trigger* razorscale_flame_breath_trigger(PlayerbotAI* ai) { return new RazorscaleFlameBreathTrigger(ai); }
     static Trigger* razorscale_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "razorscale"); }
     static Trigger* ignis_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); }
+    static Trigger* iron_assembly_reset_encounter_state_trigger(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateTrigger(ai); }
+    static Trigger* iron_assembly_overwhelming_power_run_out_trigger(PlayerbotAI* ai) { return new IronAssemblyOverwhelmingPowerRunOutTrigger(ai); }
     static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
     static Trigger* iron_assembly_overload_trigger(PlayerbotAI* ai) { return new IronAssemblyOverloadTrigger(ai); }
+    static Trigger* iron_assembly_rune_of_death_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfDeathTrigger(ai); }
+    static Trigger* iron_assembly_interrupt_trigger(PlayerbotAI* ai) { return new IronAssemblyInterruptTrigger(ai); }
+    static Trigger* iron_assembly_tank_assignment_trigger(PlayerbotAI* ai) { return new IronAssemblyTankAssignmentTrigger(ai); }
+    static Trigger* iron_assembly_overwhelming_power_swap_trigger(PlayerbotAI* ai) { return new IronAssemblyOverwhelmingPowerSwapTrigger(ai); }
+    static Trigger* iron_assembly_shield_of_runes_trigger(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesTrigger(ai); }
+    static Trigger* iron_assembly_fusion_punch_dispel_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelTrigger(ai); }
+    static Trigger* iron_assembly_redirect_threat_trigger(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatTrigger(ai); }
     static Trigger* iron_assembly_rune_of_power_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerTrigger(ai); }
-    static Trigger* iron_assembly_kill_order_trigger(PlayerbotAI* ai) { return new IronAssemblyKillOrderTrigger(ai); }
-    static Trigger* iron_assembly_fusion_punch_swap_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapTrigger(ai); }
+    static Trigger* iron_assembly_rune_of_power_soak_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakTrigger(ai); }
+    static Trigger* iron_assembly_set_dps_priority_trigger(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityTrigger(ai); }
+    static Trigger* iron_assembly_raid_position_trigger(PlayerbotAI* ai) { return new IronAssemblyRaidPositionTrigger(ai); }
     static Trigger* kologarn_body_tank_trigger(PlayerbotAI* ai) { return new KologarnBodyTankTrigger(ai); }
     static Trigger* kologarn_off_tank_trigger(PlayerbotAI* ai) { return new KologarnOffTankTrigger(ai); }
     static Trigger* kologarn_rubble_tank_trigger(PlayerbotAI* ai) { return new KologarnRubbleTankTrigger(ai); }

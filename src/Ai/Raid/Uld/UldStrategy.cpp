@@ -177,26 +177,77 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Iron Assembly
     //
+    // The engine stops at the first action that returns true, so this order is a survival ranking.
+    // The Overwhelming Power carrier leads: they are already dead, and the only question left is
+    // whether Meltdown takes the melee with them - every death it causes is another permanent +25%
+    // on Steelbreaker. Then the three hazards, which are 20,000 nature, 5000 a second, and 5500 a
+    // second respectively.
+    //
+    // The interrupt has to sit above the RAID band, because every class interrupt lives at
+    // ACTION_INTERRUPT (40): Lightning Whirl reaches 100 yd and has no positional answer at all, so
+    // nothing else in the fight can substitute for stopping the cast.
+    //
+    // Below that, tanking outranks damage and damage outranks standing still. Position is last on
+    // purpose and yields as soon as it is parked, which is what leaves a bot free to take the kick.
     triggers.push_back(new TriggerNode(
-        "iron assembly lightning tendrils trigger",
-        { NextAction("iron assembly lightning tendrils action", ACTION_RAID) }));
+        "iron assembly reset encounter state trigger",
+        { NextAction("iron assembly reset encounter state action", ACTION_EMERGENCY + 10) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly overwhelming power run out trigger",
+        { NextAction("iron assembly overwhelming power run out action", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode(
         "iron assembly overload trigger",
-        { NextAction("iron assembly overload action", ACTION_RAID) }));
+        { NextAction("iron assembly overload action", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly lightning tendrils trigger",
+        { NextAction("iron assembly lightning tendrils action", ACTION_EMERGENCY + 6) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly rune of death trigger",
+        { NextAction("iron assembly rune of death action", ACTION_EMERGENCY + 5) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly interrupt trigger",
+        { NextAction("iron assembly interrupt action", ACTION_EMERGENCY + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly tank assignment trigger",
+        { NextAction("iron assembly tank assignment action", ACTION_RAID + 6) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly overwhelming power swap trigger",
+        { NextAction("iron assembly overwhelming power swap action", ACTION_RAID + 5) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly shield of runes trigger",
+        { NextAction("iron assembly shield of runes action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly fusion punch dispel trigger",
+        { NextAction("iron assembly fusion punch dispel action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly redirect threat trigger",
+        { NextAction("iron assembly redirect threat action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "iron assembly rune of power trigger",
-        { NextAction("iron assembly rune of power action", ACTION_RAID) }));
-
-    // Hard mode (config-gated): enforce Steelbreaker-last kill order and tank-swap his empowered kit.
-    triggers.push_back(new TriggerNode(
-        "iron assembly kill order trigger",
-        { NextAction("iron assembly kill order action", ACTION_RAID) }));
+        { NextAction("iron assembly rune of power action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
-        "iron assembly fusion punch swap trigger",
-        { NextAction("iron assembly fusion punch swap action", ACTION_RAID + 2) }));
+        "iron assembly rune of power soak trigger",
+        { NextAction("iron assembly rune of power soak action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly set dps priority trigger",
+        { NextAction("iron assembly set dps priority action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "iron assembly raid position trigger",
+        { NextAction("iron assembly raid position action", ACTION_RAID) }));
 
     //
     // Kologarn
@@ -694,6 +745,11 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
     multipliers.push_back(new MimironChargeGuardMultiplier(botAI));
     multipliers.push_back(new MimironThreatRedirectGuardMultiplier(botAI));
+
+    // The Iron Assembly owns every target in the fight, and its hazard dodges must not be undone by
+    // a generic mover walking the bot back into the blast
+    multipliers.push_back(new IronAssemblyDisableAutomaticTargetingMultiplier(botAI));
+    multipliers.push_back(new IronAssemblyMovementGuardMultiplier(botAI));
 
     // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));

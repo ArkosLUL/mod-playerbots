@@ -18,6 +18,7 @@
 #include "RogueActions.h"
 #include "Timer.h"
 #include "UldBossHelper.h"
+#include "UldEncounter_IronAssembly.h"
 #include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldActions.h"
@@ -152,6 +153,49 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
                                                     "xt002 redirect threat action"};
 
     return retargets.count(action->getName()) ? 1.0f : 0.0f;
+}
+
+// Iron Assembly
+float IronAssemblyDisableAutomaticTargetingMultiplier::GetValue(Action* action)
+{
+    if (botAI->GetState() != BOT_STATE_COMBAT)
+        return 1.0f;
+
+    if (!dynamic_cast<DpsAssistAction*>(action) && !dynamic_cast<TankAssistAction*>(action))
+        return 1.0f;
+
+    return IronAssemblyFormationActive(botAI) ? 0.0f : 1.0f;
+}
+
+float IronAssemblyMovementGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !IronAssemblyFormationActive(botAI))
+        return 1.0f;
+
+    if (!dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // AttackAction derives from MovementAction, so a blanket zero would also kill targeting, and
+    // ReachTargetAction is what walks a healer into range of someone the formation cannot reach.
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    static std::set<std::string> const encounterMovers = {
+        "iron assembly overload action",
+        "iron assembly lightning tendrils action",
+        "iron assembly rune of death action",
+        "iron assembly overwhelming power run out action",
+        "iron assembly rune of power action",
+        "iron assembly rune of power soak action",
+        "iron assembly raid position action",
+        "iron assembly tank assignment action"};
+
+    if (encounterMovers.count(action->getName()))
+        return 1.0f;
+
+    // Only while this bot is actually committed to a hazard. Outside that window the generic movers
+    // are what bring it back to the formation, and the position node has already yielded.
+    return IronAssemblyMemberMustMove(botAI, bot) ? 0.0f : 1.0f;
 }
 
 // Freya
@@ -369,8 +413,6 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
     static uint32 const noRedirectBosses[] = {
         // "freya redirect threat" aims at the add tank while it holds the Snaplasher or the Conservator
         NPC_FREYA,
-        // One tank per council member, and Fusion Punch then forces a swap
-        NPC_STEELBREAKER, NPC_MOLGEIM, NPC_BRUNDIR,
         // Every phase is a different creature with a fresh threat table; phase 3 splits VX-001 and
         // the Aerial Command Unit across two tanks
         NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT,

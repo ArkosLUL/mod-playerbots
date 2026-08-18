@@ -33,11 +33,21 @@ public:
         creators["razorscale flame breath action"] = &RaidUlduarActionContext::razorscale_flame_breath_action;
         creators["razorscale fire resistance action"] = &RaidUlduarActionContext::razorscale_fire_resistance_action;
         creators["ignis fire resistance action"] = &RaidUlduarActionContext::ignis_fire_resistance_action;
+        creators["iron assembly reset encounter state action"] = &RaidUlduarActionContext::iron_assembly_reset_encounter_state_action;
+        creators["iron assembly overwhelming power run out action"] = &RaidUlduarActionContext::iron_assembly_overwhelming_power_run_out_action;
         creators["iron assembly lightning tendrils action"] = &RaidUlduarActionContext::iron_assembly_lightning_tendrils_action;
         creators["iron assembly overload action"] = &RaidUlduarActionContext::iron_assembly_overload_action;
+        creators["iron assembly rune of death action"] = &RaidUlduarActionContext::iron_assembly_rune_of_death_action;
+        creators["iron assembly interrupt action"] = &RaidUlduarActionContext::iron_assembly_interrupt_action;
+        creators["iron assembly tank assignment action"] = &RaidUlduarActionContext::iron_assembly_tank_assignment_action;
+        creators["iron assembly overwhelming power swap action"] = &RaidUlduarActionContext::iron_assembly_overwhelming_power_swap_action;
+        creators["iron assembly shield of runes action"] = &RaidUlduarActionContext::iron_assembly_shield_of_runes_action;
+        creators["iron assembly fusion punch dispel action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_dispel_action;
+        creators["iron assembly redirect threat action"] = &RaidUlduarActionContext::iron_assembly_redirect_threat_action;
         creators["iron assembly rune of power action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_action;
-        creators["iron assembly kill order action"] = &RaidUlduarActionContext::iron_assembly_kill_order_action;
-        creators["iron assembly fusion punch swap action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_swap_action;
+        creators["iron assembly rune of power soak action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_soak_action;
+        creators["iron assembly set dps priority action"] = &RaidUlduarActionContext::iron_assembly_set_dps_priority_action;
+        creators["iron assembly raid position action"] = &RaidUlduarActionContext::iron_assembly_raid_position_action;
         creators["kologarn body tank action"] = &RaidUlduarActionContext::kologarn_body_tank_action;
         creators["kologarn off tank action"] = &RaidUlduarActionContext::kologarn_off_tank_action;
         creators["kologarn rubble tank action"] = &RaidUlduarActionContext::kologarn_rubble_tank_action;
@@ -174,11 +184,21 @@ private:
     static Action* razorscale_flame_breath_action(PlayerbotAI* ai) { return new RazorscaleFlameBreathAction(ai); }
     static Action* razorscale_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "razorscale"); }
     static Action* ignis_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "ignis the furnace master"); }
+    static Action* iron_assembly_reset_encounter_state_action(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateAction(ai); }
+    static Action* iron_assembly_overwhelming_power_run_out_action(PlayerbotAI* ai) { return new IronAssemblyOverwhelmingPowerRunOutAction(ai); }
     static Action* iron_assembly_lightning_tendrils_action(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsAction(ai); }
     static Action* iron_assembly_overload_action(PlayerbotAI* ai) { return new IronAssemblyOverloadAction(ai); }
+    static Action* iron_assembly_rune_of_death_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfDeathAction(ai); }
+    static Action* iron_assembly_interrupt_action(PlayerbotAI* ai) { return new IronAssemblyInterruptAction(ai); }
+    static Action* iron_assembly_tank_assignment_action(PlayerbotAI* ai) { return new IronAssemblyTankAssignmentAction(ai); }
+    static Action* iron_assembly_overwhelming_power_swap_action(PlayerbotAI* ai) { return new IronAssemblyOverwhelmingPowerSwapAction(ai); }
+    static Action* iron_assembly_shield_of_runes_action(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesAction(ai); }
+    static Action* iron_assembly_fusion_punch_dispel_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelAction(ai); }
+    static Action* iron_assembly_redirect_threat_action(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatAction(ai); }
     static Action* iron_assembly_rune_of_power_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerAction(ai); }
-    static Action* iron_assembly_kill_order_action(PlayerbotAI* ai) { return new IronAssemblyKillOrderAction(ai); }
-    static Action* iron_assembly_fusion_punch_swap_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchSwapAction(ai); }
+    static Action* iron_assembly_rune_of_power_soak_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakAction(ai); }
+    static Action* iron_assembly_set_dps_priority_action(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityAction(ai); }
+    static Action* iron_assembly_raid_position_action(PlayerbotAI* ai) { return new IronAssemblyRaidPositionAction(ai); }
     static Action* kologarn_body_tank_action(PlayerbotAI* ai) { return new KologarnBodyTankAction(ai); }
     static Action* kologarn_off_tank_action(PlayerbotAI* ai) { return new KologarnOffTankAction(ai); }
     static Action* kologarn_rubble_tank_action(PlayerbotAI* ai) { return new KologarnRubbleTankAction(ai); }

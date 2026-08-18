@@ -15,26 +15,47 @@ bool IsVezaxHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.u
 
 bool IsIronAssemblyHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarIronAssemblyHardMode; }
 
+bool IsSteelbreakerEmpowered(PlayerbotAI* /*botAI*/, Unit* steelbreaker, Unit* molgeim, Unit* brundir)
+{
+    return steelbreaker != nullptr && molgeim == nullptr && brundir == nullptr;
+}
+
 bool IsSteelbreakerEmpowered(PlayerbotAI* botAI)
 {
-    if (!IsIronAssemblyHardModeActive(botAI))
-        return false;
-
-    // Steelbreaker last alive: the other two dead means two Supercharges pushed him to phase 3.
-    return GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER) != nullptr &&
-           GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM) == nullptr &&
-           GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR) == nullptr;
+    // No hard-mode gate: this is a phase check, and Steelbreaker reaching phase 3 is a fact about the
+    // fight rather than a raid setting. Gating it meant a raid that got there without the option set
+    // lost the tank swap and chain-died to Meltdown.
+    return IsSteelbreakerEmpowered(botAI, GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER),
+                                   GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM),
+                                   GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR));
 }
 
 Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
 {
-    if (Unit* brundir = GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR))
-        return brundir;
+    Unit* steelbreaker = GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER);
+    Unit* molgeim = GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM);
+    Unit* brundir = GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR);
 
-    if (Unit* molgeim = GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM))
+    // The kill order is the only thing the hard-mode option changes. Hard mode saves Steelbreaker for
+    // last so he reaches phase 3; otherwise he dies first, which takes Fusion Punch off the tank and
+    // means Static Disruption and Overwhelming Power never happen at all. Molgeim is second in both
+    // orders, so Rune of Summoning and its untauntable Lightning Elementals are never reached.
+    if (IsIronAssemblyHardModeActive(botAI))
+    {
+        if (brundir)
+            return brundir;
+        if (molgeim)
+            return molgeim;
+
+        return steelbreaker;
+    }
+
+    if (steelbreaker)
+        return steelbreaker;
+    if (molgeim)
         return molgeim;
 
-    return GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER);
+    return brundir;
 }
 
 uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* /*botAI*/)

@@ -24,17 +24,30 @@ constexpr uint32 ULDUAR_MAP_ID = 603;
 
 enum UlduarIDs
 {
-    // Iron Assembly
+    // Iron Assembly. The council script casts through Unit::CastSpell, which difficulty-maps every
+    // id, so each pair below is 10-man then 25-man and callers test both. 63485 and 61886 used to be
+    // listed here as extra Overload ids; they are the Lightning Tendrils damage triggers and never
+    // appear as an aura on Brundir.
     SPELL_LIGHTNING_TENDRILS_10_MAN = 61887,
     SPELL_LIGHTNING_TENDRILS_25_MAN = 63486,
     SPELL_OVERLOAD_10_MAN = 61869,
     SPELL_OVERLOAD_25_MAN = 63481,
-    SPELL_OVERLOAD_10_MAN_2 = 63485,
-    SPELL_OVERLOAD_25_MAN_2 = 61886,
+    SPELL_CHAIN_LIGHTNING_10_MAN = 61879,
+    SPELL_CHAIN_LIGHTNING_25_MAN = 63479,
+    SPELL_LIGHTNING_WHIRL_10_MAN = 61915,
+    SPELL_LIGHTNING_WHIRL_25_MAN = 63483,
+    SPELL_RUNE_OF_DEATH_10_MAN = 62269,
+    SPELL_RUNE_OF_DEATH_25_MAN = 63490,
+    SPELL_SHIELD_OF_RUNES_10_MAN = 62274,
+    SPELL_SHIELD_OF_RUNES_25_MAN = 63489,
+    SPELL_FUSION_PUNCH_10_MAN = 61903,
+    SPELL_FUSION_PUNCH_25_MAN = 63493,
+    SPELL_OVERWHELMING_POWER_10_MAN = 64637,
+    SPELL_OVERWHELMING_POWER_25_MAN = 61888,
+    // The rune's ground pulse, reapplied every 0.8s to anything standing within 5 yd of it. One id
+    // for both raid sizes, and it is what marks a boss as standing in his own damage buff.
     SPELL_RUNE_OF_POWER = 64320,
     // NPC_STEELBREAKER / NPC_MOLGEIM / NPC_BRUNDIR come from core ulduar.h via UldScripts.h
-    SPELL_FUSION_PUNCH = 61903,
-    SPELL_OVERWHELMING_POWER = 64637,
 
     // Kologarn
     NPC_LEFT_ARM = 32933,
@@ -326,6 +339,71 @@ enum UlduarIDs
     NPC_FROST_BOMB = 34149,        // VX-001's Frost Bomb; detonates in a large AoE
     NPC_EMERGENCY_FIRE_BOT = 34147  // puts the flames out; three spawn every 45s
 };
+
+// Assembly of Iron. Every distance is measured against the spell that motivates it, and the whole
+// formation is bounded by what map 603 actually has floor for: from the anchor below, navprobe
+// reports 8/8 headings on mesh at 20 and 30 yd, but at 40 the 45 and 135 degree diagonals settle to
+// Z -27.7 and -438, and at 50 three of eight headings leave the mesh entirely. Nothing here sits
+// outside 30 yd, and the formation uses cardinals so no slot can drift onto a bad diagonal.
+
+// Overload 61878 is 20,000 nature plus a knockdown in 20 yd. Lightning Tendrils 61886/63485 is
+// 3000 (10-man) / 5000 (25-man) a second in 18 - not the 10 yd the written guides give, which is
+// 61884, a dummy. The extra yards are arrival slack: a bot that stops on the boundary is still in.
+constexpr float ULDUAR_IRON_ASSEMBLY_OVERLOAD_RADIUS = 20.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE = 25.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_RADIUS = 18.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE = 28.0f;
+
+// Rune of Death 62269/63490: a 13 yd persistent area aura ticking 2750 shadow every half second for
+// 30s. Search wide enough to see one dropped anywhere in the formation.
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_RADIUS = 13.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 15.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
+
+// Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on. The
+// carrier dies either way - walking this far is what stops it taking the melee with them, and every
+// death it causes is another permanent +25% on Steelbreaker via Electrical Charge.
+constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 20.0f;
+
+// Rune of Power pulses 64320 to everything within 5 yd, worth +50% damage, and the rune lives 60s.
+// Molgeim drops it on DoSelectLowestHpFriendly, which is a council member rather than a player, so
+// the tank walks his boss out of it while the ranged walk in. Capped travel matters: without the cap
+// a rune landing on Brundir would drag the entire ranged group into Overload range.
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_RADIUS = 5.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL = 25.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_DRAG_DISTANCE = 10.0f;
+
+// Formation, all on cardinal bearings from the anchor. Brundir is parked at 28 rather than the 25
+// his own Overload needs, so the stack sits 38 yd off him and never has to react to it at all -
+// which is what keeps a bot standing still and able to interrupt Lightning Whirl.
+constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING = 0.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_RADIUS = 28.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_STEELBREAKER_BEARING = 2.3562f;  // 3*pi/4
+constexpr float ULDUAR_IRON_ASSEMBLY_MOLGEIM_BEARING = 3.9270f;       // 5*pi/4
+constexpr float ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS = 16.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_STACK_BEARING = 3.1416f;         // pi
+constexpr float ULDUAR_IRON_ASSEMBLY_STACK_RADIUS = 10.0f;
+// Once Brundir is the last one up his isolation protects nothing, so the raid closes to a second
+// point 25 yd short of him: outside Overload, inside caster range of him.
+constexpr float ULDUAR_IRON_ASSEMBLY_BRUNDIR_LAST_STACK_RADIUS = 3.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_SLOT_TOLERANCE = 3.0f;
+
+// The hall's two doors spawn at (1671.31, 120.70) and (1501.49, 119.70), 84 and 86 yd from the
+// anchor, so this bubble stops short of both. Sight range is 100 yd with no line-of-sight check, so
+// without it the council drives bot behaviour from out in the corridor.
+constexpr float ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS = 78.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_ARENA_HEIGHT = 10.0f;
+// A tank that has drifted this far off its spot is walking, not parked.
+constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE = 4.0f;
+
+// Static Disruption 61912/63494 is 5000 nature in 6 yd plus +75% nature damage taken in 5, and it
+// picks a target beyond 10 yd - so it is a ranged and healer problem, never a melee one. It only
+// exists from Steelbreaker's phase 2, which the normal kill order never reaches, so this ring is
+// hard mode only and everyone stacks otherwise. 16 slots at 18 yd sit 7.0 yd apart and none of them
+// lands further than 29.4 yd from Steelbreaker's spot, inside caster range.
+constexpr float ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS = 18.0f;
+constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS = 16;
 
 // Flame Leviathan hard-mode tower bitmask, used to pick which ground hazards to dodge.
 enum FlameLeviathanTowerFlags
@@ -1280,6 +1358,9 @@ extern const Position ULDUAR_MIMIRON_ROOM_CENTER;
 // navprobe: this point and a 12 yd fan around it are 16/16 on mesh, flat at Z 364.31.
 extern const Position ULDUAR_MIMIRON_PHASE3_STAGE;
 extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
+// Assembly of Iron room centre, read off Brundir's out-of-combat channel wander in
+// boss_assembly_of_iron.cpp. navprobe: on mesh, vmap floor 427.267, and see the ring results above.
+extern const Position ULDUAR_IRON_ASSEMBLY_ANCHOR;
 extern const Position ULDUAR_VEZAX_ANCHOR;
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;

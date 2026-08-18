@@ -24,14 +24,20 @@ class Unit;
 bool IsVezaxHardModeActive(PlayerbotAI* botAI);
 
 // Assembly of Iron: the hard mode is a kill-order choice - leave Steelbreaker (32867) for last so
-// he reaches his empowered phase 3. IsSteelbreakerEmpowered is that phase check, not a hard-mode
-// one: it requires Steelbreaker alive with both Molgeim (32927) and Brundir (32857) dead, meaning
-// two Supercharges have advanced him to phase 3 (Fusion Punch DoT + Overwhelming Power on the tank).
+// he reaches his empowered phase 3.
 bool IsIronAssemblyHardModeActive(PlayerbotAI* botAI);
-bool IsSteelbreakerEmpowered(PlayerbotAI* botAI);
 
-// The council member that should die next to keep Steelbreaker for last: Brundir, then Molgeim,
-// then Steelbreaker himself. Returns nullptr if none are alive.
+// IsSteelbreakerEmpowered is a phase check and deliberately NOT gated on the option above: he is
+// empowered whenever he is alive with both Molgeim (32927) and Brundir (32857) dead, meaning two
+// Supercharges advanced him to phase 3 (Static Disruption, then Overwhelming Power on the tank). A
+// raid that reaches that state without the option set still needs the tank swap.
+bool IsSteelbreakerEmpowered(PlayerbotAI* botAI);
+// Overload for callers that already resolved the three members, so a per-tick path does not repeat
+// three grid lookups.
+bool IsSteelbreakerEmpowered(PlayerbotAI* botAI, Unit* steelbreaker, Unit* molgeim, Unit* brundir);
+
+// The council member the raid should kill next. Hard mode saves Steelbreaker for last; the normal
+// order kills him first. Returns nullptr if none are alive.
 Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI);
 
 // Flame Leviathan: hard mode = raid leaves towers standing. Each surviving tower empowers the boss
