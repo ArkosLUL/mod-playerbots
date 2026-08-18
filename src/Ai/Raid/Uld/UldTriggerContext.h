@@ -138,9 +138,11 @@ public:
         creators["algalon dark matter mark"] = &RaidUlduarTriggerContext::algalon_dark_matter_mark;
         creators["algalon raid position"] = &RaidUlduarTriggerContext::algalon_raid_position;
         creators["ignis scorched ground trigger"] = &RaidUlduarTriggerContext::ignis_scorched_ground_trigger;
+        creators["ignis main tank position trigger"] = &RaidUlduarTriggerContext::ignis_main_tank_position_trigger;
         creators["ignis construct tank trigger"] = &RaidUlduarTriggerContext::ignis_construct_tank_trigger;
-        creators["ignis brittle construct mark trigger"] = &RaidUlduarTriggerContext::ignis_brittle_construct_mark_trigger;
         creators["ignis attack brittle construct trigger"] = &RaidUlduarTriggerContext::ignis_attack_brittle_construct_trigger;
+        creators["ignis attack boss trigger"] = &RaidUlduarTriggerContext::ignis_attack_boss_trigger;
+        creators["ignis flame jets trigger"] = &RaidUlduarTriggerContext::ignis_flame_jets_trigger;
         creators["ignis molten construct avoid trigger"] = &RaidUlduarTriggerContext::ignis_molten_construct_avoid_trigger;
         creators["ignis slag pot heal trigger"] = &RaidUlduarTriggerContext::ignis_slag_pot_heal_trigger;
         creators["auriaya seeping essence trigger"] = &RaidUlduarTriggerContext::auriaya_seeping_essence_trigger;
@@ -297,9 +299,11 @@ private:
     static Trigger* algalon_dark_matter_mark(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkTrigger(ai); }
     static Trigger* algalon_raid_position(PlayerbotAI* ai) { return new AlgalonRaidPositionTrigger(ai); }
     static Trigger* ignis_scorched_ground_trigger(PlayerbotAI* ai) { return new IgnisScorchedGroundTrigger(ai); }
+    static Trigger* ignis_main_tank_position_trigger(PlayerbotAI* ai) { return new IgnisMainTankPositionTrigger(ai); }
     static Trigger* ignis_construct_tank_trigger(PlayerbotAI* ai) { return new IgnisConstructTankTrigger(ai); }
-    static Trigger* ignis_brittle_construct_mark_trigger(PlayerbotAI* ai) { return new IgnisBrittleConstructMarkTrigger(ai); }
     static Trigger* ignis_attack_brittle_construct_trigger(PlayerbotAI* ai) { return new IgnisAttackBrittleConstructTrigger(ai); }
+    static Trigger* ignis_attack_boss_trigger(PlayerbotAI* ai) { return new IgnisAttackBossTrigger(ai); }
+    static Trigger* ignis_flame_jets_trigger(PlayerbotAI* ai) { return new IgnisFlameJetsTrigger(ai); }
     static Trigger* ignis_molten_construct_avoid_trigger(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidTrigger(ai); }
     static Trigger* ignis_slag_pot_heal_trigger(PlayerbotAI* ai) { return new IgnisSlagPotHealTrigger(ai); }
     static Trigger* auriaya_seeping_essence_trigger(PlayerbotAI* ai) { return new AuriayaSeepingEssenceTrigger(ai); }

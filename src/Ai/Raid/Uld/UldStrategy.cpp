@@ -97,21 +97,27 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "ignis scorched ground trigger",
         { NextAction("ignis scorched ground action", ACTION_RAID + 2) }));
 
+    // Where the main tank stands is where every fire patch lands, so his spot outranks everything
+    // else the raid does. The construct tanks share the band because no bot is ever both.
+    //
     // An Iron Construct only dies to the Molten -> Brittle -> Shatter chain, and every one left alive
     // is another stack of Strength of the Creator on the boss, so the kite outranks the raid's damage.
-    // The mark sits above it so the raid's kill target is already current when the construct turns
-    // Brittle. Standing next to a Molten construct and sitting in a Slag Pot both kill a bot outright.
+    // Standing next to a Molten construct and sitting in a Slag Pot both kill a bot outright.
     triggers.push_back(new TriggerNode(
-        "ignis brittle construct mark trigger",
-        { NextAction("ignis brittle construct mark action", ACTION_RAID + 4) }));
+        "ignis main tank position trigger",
+        { NextAction("ignis main tank position action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "ignis construct tank trigger",
-        { NextAction("ignis construct tank action", ACTION_RAID + 3) }));
+        { NextAction("ignis construct tank action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "ignis attack brittle construct trigger",
-        { NextAction("attack rti target", ACTION_RAID + 2) }));
+        { NextAction("ignis attack brittle construct action", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis attack boss trigger",
+        { NextAction("ignis attack boss action", ACTION_RAID + 0.5f) }));
 
     triggers.push_back(new TriggerNode(
         "ignis molten construct avoid trigger",
@@ -120,6 +126,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "ignis slag pot heal trigger",
         { NextAction("ignis slag pot heal action", ACTION_EMERGENCY + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "ignis flame jets trigger",
+        { NextAction("ignis flame jets hold cast action", ACTION_EMERGENCY + 2) }));
 
     //
     // XT-002 Deconstructor
@@ -812,6 +822,9 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
     multipliers.push_back(new IgnisMultiplier(botAI));
+    multipliers.push_back(new IgnisTankMovementMultiplier(botAI));
+    multipliers.push_back(new IgnisDisableDefaultTargetingMultiplier(botAI));
+    multipliers.push_back(new IgnisFlameJetsHoldCastMultiplier(botAI));
 
     // Kologarn picks every target per role in code, so the generic pickers have to be shut out, and
     // a Stone Grip victim is a passenger who cannot walk

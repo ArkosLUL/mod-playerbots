@@ -5,6 +5,8 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "Spell.h"
+#include "SpellAuras.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
@@ -14,94 +16,124 @@
 #include "Vehicle.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
-#include <RtiTargetValue.h>
 
 //
 // Ignis the Furnace Master
 //
+static int32 GetIgnisBrittleTimeLeft(Unit* construct)
+{
+    if (!construct)
+        return 0;
+
+    if (Aura* brittle = construct->GetAura(SPELL_IGNIS_BRITTLE_10))
+        return brittle->GetDuration();
+
+    if (Aura* brittle = construct->GetAura(SPELL_IGNIS_BRITTLE_25))
+        return brittle->GetDuration();
+
+    return 0;
+}
+
 bool IgnisScorchedGroundTrigger::IsActive()
 {
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || !boss->IsAlive())
+    if (!IsIgnisEngaged(botAI))
         return false;
 
-    TooCloseToCreatureTrigger tooCloseToScorchedGround(botAI);
-    return tooCloseToScorchedGround.TooCloseToCreature(NPC_IGNIS_SCORCHED_GROUND,
-                                                       ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS);
+    // Grid lookup rather than "nearest npcs", to match the action. The cached list is LOS-filtered
+    // and capped at SightDistance, so the two disagreeing leaves a bot burning in a patch it is
+    // being told to flee.
+    Unit* patch = GetIgnisNearestScorchedGround(botAI, bot);
+
+    return patch && bot->GetExactDist2d(patch) <= ULDUAR_IGNIS_SCORCHED_GROUND_AVOID_RADIUS;
+}
+
+bool IgnisMainTankPositionTrigger::IsActive()
+{
+    if (!IsIgnisEngaged(botAI) || !botAI->IsMainTank(bot))
+        return false;
+
+    // Only once he actually holds the boss. Ignis follows his victim, so a tank without aggro walking
+    // to the anchor takes the raid's positioning with him and leaves the boss where it was.
+    Unit* boss = GetIgnis(botAI);
+    if (!boss || boss->GetVictim() != bot)
+        return false;
+
+    Position const spot = GetIgnisMainTankPosition(botAI, bot);
+
+    return bot->GetExactDist2d(&spot) > ULDUAR_IGNIS_TANK_SPOT_TOLERANCE;
 }
 
 bool IgnisConstructTankTrigger::IsActive()
 {
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || !boss->IsAlive())
+    if (!IsIgnisEngaged(botAI))
         return false;
 
-    if (GetIgnisConstructTank(botAI, bot) != bot)
+    if (GetIgnisConstructTankIndex(botAI, bot) < 0)
         return false;
 
+    // The second tank only ever finds a construct once there is one the first is not already walking,
+    // so no extra gate is needed to keep him idle through the single-construct stretches.
     return GetIgnisDrivenConstruct(botAI, bot) != nullptr;
-}
-
-bool IgnisBrittleConstructMarkTrigger::IsActive()
-{
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
-        return false;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    ObjectGuid const skull = group->GetTargetIcon(RtiTargetValue::skullIndex);
-
-    // The mark only leaves Ignis for the Brittle window - that construct dies to a single hit, so the
-    // raid swaps for one global and comes straight back.
-    if (Unit* brittle = GetIgnisBrittleConstruct(botAI))
-        return skull != brittle->GetGUID();
-
-    return skull != boss->GetGUID();
 }
 
 bool IgnisAttackBrittleConstructTrigger::IsActive()
 {
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || !boss->IsAlive())
+    if (!IsIgnisEngaged(botAI))
         return false;
 
-    // Tanks stay on what they are holding: pulling the main tank off Ignis or the construct tank off
-    // the next construct costs far more than the one hit it takes to shatter a Brittle one.
+    // Tanks stay on what they are holding: pulling the main tank off Ignis or a construct tank off a
+    // construct whose threat table Molten already wiped costs far more than the one hit it takes.
     if (botAI->IsTank(bot))
         return false;
 
-    Group* group = bot->GetGroup();
-    if (!group)
+    Unit* construct = GetIgnisBrittleConstruct(botAI);
+    if (!construct)
         return false;
 
-    // This drives "attack rti target", so it has to key off the skull itself. Keying off the nearest
-    // Brittle construct instead would never clear whenever the two disagree - no mechanic tracker in
-    // the raid, or a second construct shattering closer to this bot than the marked one.
-    Unit* marked = botAI->GetUnit(group->GetTargetIcon(RtiTargetValue::skullIndex));
-    if (!IsIgnisConstructActivated(marked) || !IsIgnisConstructBrittle(marked))
+    // Shatter deals 18850 in 13 yd, which is inside melee range of the thing they would be swinging
+    // at. Melee are only let in at the end of the window, when nobody ranged has closed it.
+    if (!botAI->IsRanged(bot) &&
+        GetIgnisBrittleTimeLeft(construct) > static_cast<int32>(ULDUAR_IGNIS_BRITTLE_MELEE_FALLBACK_MS))
+    {
+        return false;
+    }
+
+    // Stays hot once the target is already current: the action still has the designated burst spell
+    // to fire, which is what actually reaches the 5000 / 3000 the shatter needs.
+    return true;
+}
+
+bool IgnisAttackBossTrigger::IsActive()
+{
+    if (!IsIgnisEngaged(botAI))
         return false;
 
-    return AI_VALUE(Unit*, "current target") != marked;
+    // Everyone else lands here, main tank included - the generic target pickers are switched off for
+    // the whole encounter, so without this node nobody would be on the boss at all.
+    if (GetIgnisConstructTankIndex(botAI, bot) >= 0)
+        return false;
+
+    IgnisAttackBrittleConstructTrigger brittle(botAI);
+    if (brittle.IsActive())
+        return false;
+
+    Unit* boss = GetIgnis(botAI);
+
+    return boss && AI_VALUE(Unit*, "current target") != boss;
 }
 
 bool IgnisMoltenConstructAvoidTrigger::IsActive()
 {
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || !boss->IsAlive())
+    if (!IsIgnisEngaged(botAI))
         return false;
 
-    if (GetIgnisConstructTank(botAI, bot) == bot)
+    if (GetIgnisConstructTankIndex(botAI, bot) >= 0)
         return false;
 
     // Ignis' own tank stays put too. He is melee-range of a boss that follows him, so running out of
     // a construct's aura drags Ignis (and his Flame Jets) straight through the raid behind him.
-    if (boss->GetVictim() == bot)
+    Unit* boss = GetIgnis(botAI);
+    if (!boss || boss->GetVictim() == bot)
         return false;
 
     Unit* molten = GetIgnisNearestMoltenConstruct(botAI, bot);
@@ -109,10 +141,20 @@ bool IgnisMoltenConstructAvoidTrigger::IsActive()
     return molten && bot->GetExactDist2d(molten) <= ULDUAR_IGNIS_MOLTEN_AVOID_RADIUS;
 }
 
+bool IgnisFlameJetsTrigger::IsActive()
+{
+    if (!IsIgnisEngaged(botAI))
+        return false;
+
+    if (!IsIgnisFlameJetsCasting(GetIgnis(botAI)))
+        return false;
+
+    return bot->HasUnitState(UNIT_STATE_CASTING);
+}
+
 bool IgnisSlagPotHealTrigger::IsActive()
 {
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || !boss->IsAlive())
+    if (!IsIgnisEngaged(botAI))
         return false;
 
     if (!botAI->IsHeal(bot))

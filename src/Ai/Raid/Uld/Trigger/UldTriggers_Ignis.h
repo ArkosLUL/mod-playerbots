@@ -16,17 +16,17 @@ public:
     bool IsActive() override;
 };
 
+class IgnisMainTankPositionTrigger : public Trigger
+{
+public:
+    IgnisMainTankPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis main tank position trigger") {}
+    bool IsActive() override;
+};
+
 class IgnisConstructTankTrigger : public Trigger
 {
 public:
     IgnisConstructTankTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis construct tank trigger") {}
-    bool IsActive() override;
-};
-
-class IgnisBrittleConstructMarkTrigger : public Trigger
-{
-public:
-    IgnisBrittleConstructMarkTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis brittle construct mark trigger") {}
     bool IsActive() override;
 };
 
@@ -37,10 +37,24 @@ public:
     bool IsActive() override;
 };
 
+class IgnisAttackBossTrigger : public Trigger
+{
+public:
+    IgnisAttackBossTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis attack boss trigger") {}
+    bool IsActive() override;
+};
+
 class IgnisMoltenConstructAvoidTrigger : public Trigger
 {
 public:
     IgnisMoltenConstructAvoidTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis molten construct avoid trigger") {}
+    bool IsActive() override;
+};
+
+class IgnisFlameJetsTrigger : public Trigger
+{
+public:
+    IgnisFlameJetsTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis flame jets trigger") {}
     bool IsActive() override;
 };
 
