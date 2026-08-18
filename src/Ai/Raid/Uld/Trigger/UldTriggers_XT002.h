@@ -12,58 +12,33 @@
 // inert during the raid's other thirteen encounters.
 //
 
-// Another raid member within splash range carries Searing Light. The carrier itself cannot escape
-// its own splash, so it is excluded and only the neighbours move.
-class XT002SearingLightSpreadTrigger : public Trigger
+// This bot carries Searing Light, Gravity Bomb, or both. One trigger for both debuffs because one
+// action has to own the bot: a bot that draws both while two nodes share a relevance gets pulled
+// between their destinations and drops its Void Zone somewhere in the middle. Nobody steps aside for
+// a carrier either - the raid holds still and the carrier solves its own mechanic.
+class XT002DebuffCarrierTrigger : public Trigger
 {
 public:
-    XT002SearingLightSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 searing light spread trigger") {}
-    bool IsActive() override;
-};
-
-class XT002GravityBombSpreadTrigger : public Trigger
-{
-public:
-    XT002GravityBombSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 gravity bomb spread trigger") {}
-    bool IsActive() override;
-};
-
-// This bot carries Gravity Bomb: it has to clear the raid itself, both for the splash and because
-// in hard mode the Void Zone drops where the debuff expires.
-class XT002GravityBombCarrierTrigger : public Trigger
-{
-public:
-    XT002GravityBombCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 gravity bomb carrier trigger") {}
-    bool IsActive() override;
-};
-
-// This bot carries Searing Light. It leaves for a fixed spot rather than an emergent one, so the rest
-// of the raid can hold still and knows where any hard-mode Life Spark is about to appear.
-class XT002SearingLightCarrierTrigger : public Trigger
-{
-public:
-    XT002SearingLightCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 searing light carrier trigger") {}
+    XT002DebuffCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 debuff carrier trigger") {}
     bool IsActive() override;
 };
 
 // A Boombot explodes for 15-18k when it reaches XT or drops to 50% health, so melee never stand next
-// to one. Ranged kill it from outside the blast instead, via the DPS priority action.
-class XT002BoombotAvoidTrigger : public Trigger
+// to one; ranged kill it from outside the blast instead, via the DPS priority action. Void Zones are
+// the carrier action's business while the bot is carrying, so this only reports them once it is not.
+class XT002AvoidHazardTrigger : public Trigger
 {
 public:
-    XT002BoombotAvoidTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 boombot avoid trigger") {}
+    XT002AvoidHazardTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 avoid hazard trigger") {}
     bool IsActive() override;
 };
 
-class XT002VoidZoneTrigger : public Trigger
-{
-public:
-    XT002VoidZoneTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 void zone trigger") {}
-    bool IsActive() override;
-};
-
-// Anchors the main tank and ranged DPS. Goes false the moment anything the bot has to dodge is live,
-// so walking back to a spot can never compete with a mechanic.
+// Anchors the main tank, ranged DPS and healers, but only once XT is engaged: the anchors are combat
+// spots, and walking to them before the pull drags bots across the room while the raid is still
+// forming up. Goes false the moment anything the bot has to dodge is live, so a spot can never beat a
+// mechanic. The tank anchor also needs him to be holding XT - the boss is taunt-immune, so a tank
+// parked on the spot without aggro has no way of getting him back. The healer one stands down while
+// anyone is out of heal range, since it outranks the node that would go and fetch them.
 class XT002RaidPositionTrigger : public Trigger
 {
 public:
@@ -71,8 +46,10 @@ public:
     bool IsActive() override;
 };
 
-// Non-tanks pick their own target from the encounter's priority order. Nothing is marked: raid icons
-// are group-global, so setting one here would overwrite whatever the player and other bots rely on.
+// Every role picks its target from the encounter's priority order, tanks included: the generic smart
+// tank targeting ranks any add the tank lacks aggro on above the boss, which drags XT into the add
+// pile. Nothing is marked - raid icons are group-global, so setting one here would overwrite whatever
+// the player and other bots rely on.
 class XT002SetDpsPriorityTrigger : public Trigger
 {
 public:

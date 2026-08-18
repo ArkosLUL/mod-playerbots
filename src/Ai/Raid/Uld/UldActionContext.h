@@ -166,12 +166,8 @@ public:
         creators["thorim arena leash action"] = &RaidUlduarActionContext::thorim_arena_leash_action;
         creators["mimiron dodge flames action"] = &RaidUlduarActionContext::mimiron_dodge_flames_action;
         creators["mimiron frost bomb action"] = &RaidUlduarActionContext::mimiron_frost_bomb_action;
-        creators["xt002 searing light spread action"] = &RaidUlduarActionContext::xt002_searing_light_spread_action;
-        creators["xt002 gravity bomb spread action"] = &RaidUlduarActionContext::xt002_gravity_bomb_spread_action;
-        creators["xt002 gravity bomb carrier action"] = &RaidUlduarActionContext::xt002_gravity_bomb_carrier_action;
-        creators["xt002 searing light carrier action"] = &RaidUlduarActionContext::xt002_searing_light_carrier_action;
-        creators["xt002 boombot avoid action"] = &RaidUlduarActionContext::xt002_boombot_avoid_action;
-        creators["xt002 void zone action"] = &RaidUlduarActionContext::xt002_void_zone_action;
+        creators["xt002 debuff carrier action"] = &RaidUlduarActionContext::xt002_debuff_carrier_action;
+        creators["xt002 avoid hazard action"] = &RaidUlduarActionContext::xt002_avoid_hazard_action;
         creators["xt002 raid position action"] = &RaidUlduarActionContext::xt002_raid_position_action;
         creators["xt002 set dps priority action"] = &RaidUlduarActionContext::xt002_set_dps_priority_action;
         creators["xt002 pummeller taunt action"] = &RaidUlduarActionContext::xt002_pummeller_taunt_action;
@@ -328,12 +324,8 @@ private:
     static Action* thorim_arena_leash_action(PlayerbotAI* ai) { return new ThorimArenaLeashAction(ai); }
     static Action* mimiron_dodge_flames_action(PlayerbotAI* ai) { return new MimironDodgeFlamesAction(ai); }
     static Action* mimiron_frost_bomb_action(PlayerbotAI* ai) { return new MimironFrostBombAction(ai); }
-    static Action* xt002_searing_light_spread_action(PlayerbotAI* ai) { return new XT002SearingLightSpreadAction(ai); }
-    static Action* xt002_gravity_bomb_spread_action(PlayerbotAI* ai) { return new XT002GravityBombSpreadAction(ai); }
-    static Action* xt002_gravity_bomb_carrier_action(PlayerbotAI* ai) { return new XT002GravityBombCarrierAction(ai); }
-    static Action* xt002_searing_light_carrier_action(PlayerbotAI* ai) { return new XT002SearingLightCarrierAction(ai); }
-    static Action* xt002_boombot_avoid_action(PlayerbotAI* ai) { return new XT002BoombotAvoidAction(ai); }
-    static Action* xt002_void_zone_action(PlayerbotAI* ai) { return new XT002VoidZoneAction(ai); }
+    static Action* xt002_debuff_carrier_action(PlayerbotAI* ai) { return new XT002DebuffCarrierAction(ai); }
+    static Action* xt002_avoid_hazard_action(PlayerbotAI* ai) { return new XT002AvoidHazardAction(ai); }
     static Action* xt002_raid_position_action(PlayerbotAI* ai) { return new XT002RaidPositionAction(ai); }
     static Action* xt002_set_dps_priority_action(PlayerbotAI* ai) { return new XT002SetDpsPriorityAction(ai); }
     static Action* xt002_pummeller_taunt_action(PlayerbotAI* ai) { return new XT002PummellerTauntAction(ai); }

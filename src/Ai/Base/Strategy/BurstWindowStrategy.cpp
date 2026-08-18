@@ -78,6 +78,14 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
         return 1.0f;
     }
 
+    // A boss riding a vehicle has no threat table of its own - the XT-002 Heart is the case that
+    // matters - so waiting for a tank to hold it waits for something that never happens.
+    if (target->GetVehicle())
+    {
+        holdState.Reset();
+        return 1.0f;
+    }
+
     return TankHasHeldBoss(bot, target, holdState, isLust ? LUST_DWELL_MS : BURST_DWELL_MS) ? 1.0f
                                                                                             : 0.0f;
 }

@@ -775,29 +775,76 @@ constexpr float ULDUAR_HODIR_TRAPPED_ALLY_RANGE = 45.0f;
 constexpr uint32 ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS = 5;
 constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
 
-// XT-002: Searing Light and Gravity Bomb both splash around their carrier, so everyone else keeps
-// this far away. In hard mode the Gravity Bomb's Void Zone lands on the carrier's feet too.
-constexpr float ULDUAR_XT002_DEBUFF_SPREAD_RADIUS = 12.0f;
+// XT-002: how far a carrier actually walks. Twice the 12yd splash, because the raid does not step aside
+// for it - the carrier is the only one that moves, and a bomb that lands on the edge of the radius
+// still clips whoever drifted a yard the wrong way.
+constexpr float ULDUAR_XT002_DEBUFF_CLEAR_RADIUS = 25.0f;
+
+// XT-002: how far Gravity Bomb's expiry burst yanks raiders towards the carrier (63025/64233, effect
+// 1). The damage half only reaches 12 yd, but being pulled into a fresh Void Zone is what kills, so
+// this is the number a drop point has to beat when the carrier cannot make it to the lot.
+constexpr float ULDUAR_XT002_GRAVITY_BOMB_PULL_RADIUS = 20.0f;
 
 // XT-002: Boom is roughly 10 yd, and a Boombot also detonates at 50% health, so melee leave margin
 // rather than trading the hit for a few swings.
 constexpr float ULDUAR_XT002_BOOMBOT_AVOID_RADIUS = 12.0f;
 
-// XT-002 hard mode: Void Zone's Consumption pool. Exact radius is DBC, so this is a conservative
-// default to confirm in-game.
+// XT-002 hard mode: Void Zone's Consumption pool. The damage half (64208) is 5 yd and does not grow,
+// so this is a 1 yd buffer on top.
 constexpr float ULDUAR_XT002_VOID_ZONE_RADIUS = 6.0f;
 
 // XT-002: how far off its anchor a bot is allowed to sit before it walks back. The tank's is loose
 // enough to survive XT drifting a step; the ranged one is a deliberate blob rather than a point, so
-// bots settle instead of shoving each other off the same pixel.
+// bots settle instead of shoving each other off the same pixel. Healers share the ranged anchor with
+// a wider band still, so heal range and the generic disperse pick the spot inside it - six healers
+// pinned to one point would all eat the same Searing Light.
 constexpr float ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE = 3.0f;
 constexpr float ULDUAR_XT002_RANGED_SPOT_TOLERANCE = 5.0f;
+constexpr float ULDUAR_XT002_HEALER_SPOT_TOLERANCE = 10.0f;
 
-// XT-002 hard mode: Void Zone parking grid, walked +x/+y from whichever Gravity Bomb origin fits the
-// carrier's role. Step is just over the Void Zone diameter so consecutive drops cannot overlap.
+// XT-002 hard mode: Void Zone parking grid, walked +x and -y from whichever Gravity Bomb origin fits
+// the carrier's role. The origin is the corner nearest the raid and the grid runs away from it, so the
+// cells that only get used once the lot fills are the far ones. Step is just over the Void Zone
+// diameter so consecutive drops cannot overlap.
 constexpr float ULDUAR_XT002_BOMB_GRID_STEP = 6.0f;
-constexpr int ULDUAR_XT002_BOMB_GRID_ROWS = 4;
-constexpr int ULDUAR_XT002_BOMB_GRID_COLS = 3;
+constexpr int ULDUAR_XT002_BOMB_GRID_X_CELLS = 5;
+constexpr int ULDUAR_XT002_BOMB_GRID_Y_CELLS = 4;
+
+// XT-002 hard mode: arrival deadband for a parking cell, and the drift tolerated before the carrier
+// re-issues a move. A bot that re-issues every tick slides in place and cannot cast, and Gravity Bomb
+// only lasts 9s.
+constexpr float ULDUAR_XT002_BOMB_CELL_ARRIVED = 2.0f;
+constexpr float ULDUAR_XT002_BOMB_CELL_REENGAGE = 5.0f;
+
+// XT-002 hard mode: taken off the debuff before working out how far a carrier can still walk. Covers
+// the reaction delay and one engine tick, plus a little for the navmesh path being longer than the
+// straight line the reach is measured along.
+constexpr uint32 ULDUAR_XT002_BOMB_TRAVEL_MARGIN_MS = 1500;
+
+// XT-002 hard mode: clearance a parking cell is preferred to have, so a carrier that settles at the
+// edge of the arrival deadband is still outside Consumption. A preference and not a gate: as a gate
+// one puddle would block five cells of twenty and the lot would run out mid-fight.
+constexpr float ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE =
+    ULDUAR_XT002_VOID_ZONE_RADIUS + ULDUAR_XT002_BOMB_CELL_ARRIVED;
+
+// XT-002 hard mode: clearance the walk to a parking cell keeps from puddles already down. The carrier
+// action outranks "xt002 avoid hazard action", so nothing else protects a carrier on the way in.
+constexpr float ULDUAR_XT002_BOMB_APPROACH_CLEARANCE = 7.5f;
+
+// XT-002: adds spawn at toy piles 78-125yd out and walk in, and one that never paths away from its
+// pile sits there for the rest of the fight. Nothing out there needs fetching - Scrapbots and Boombots
+// come to XT, Pummellers chase whoever they aggro - so anything this far from the boss is left alone.
+// Life Sparks are exempt: they spawn on the Searing Light carrier and chase players, not XT.
+constexpr float ULDUAR_XT002_ADD_LEASH_RADIUS = 60.0f;
+
+// XT-002: how far a bot travels for an add, measured from itself. Ranged reach the Life Spark spot
+// without leaving their anchor; melee never need to move, since every add either walks to XT or chases
+// a player home. Tanks are exempt - going and getting the Pummeller is the off-tank's job.
+constexpr float ULDUAR_XT002_RANGED_ENGAGE_RANGE = 35.0f;
+constexpr float ULDUAR_XT002_MELEE_ENGAGE_RANGE = 15.0f;
+
+// Taunt, Growl, Dark Command and Hand of Reckoning are all 30yd.
+constexpr float ULDUAR_XT002_TAUNT_RANGE = 30.0f;
 
 // Anchored on XT rather than the carrier, so one lookup covers both parking origins wherever the
 // carrier happens to be standing when the debuff lands.
@@ -926,6 +973,20 @@ bool IsXT002Submerged(PlayerbotAI* botAI);
 // Difficulty-mapped debuff ids (the 10- and 25-man versions are separate spells).
 uint32 GetXT002SearingLightSpellId(Player* bot);
 uint32 GetXT002GravityBombSpellId(Player* bot);
+
+// This bot owns the Pummeller: the first assist tank, falling back to the main tank when the raid has
+// no second tank left. Both the taunt and the tank's target priority read it, so they cannot disagree
+// about who is holding the add.
+bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot);
+
+// Close enough to XT to be worth engaging. Anything further out is still sitting at its toy pile.
+// True when XT cannot be found, so the gate can never strand a bot with nothing to hit.
+bool IsXT002AddEngageable(PlayerbotAI* botAI, Unit* unit);
+
+// Nearest live add of `entry` inside the leash around XT and within `botReach` of the bot. Nearest
+// rather than first-found: GetFirstAliveUnitByEntry lets an add stuck at a pile mask the one actually
+// hitting the raid. The leash applies whatever `botReach` is passed.
+Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float botReach);
 
 // Yogg-Saron phase reads. Yogg is not reliably on a bot's threat list, so both scan for the creature
 // instead of going through "find target".

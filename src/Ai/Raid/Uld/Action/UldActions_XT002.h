@@ -1,6 +1,7 @@
 #ifndef PLAYERBOTS_ULDACTIONS_XT002_H
 #define PLAYERBOTS_ULDACTIONS_XT002_H
 
+#include <list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,93 +25,77 @@ public:
     bool isPossible() override;
 
 protected:
-    // Steps towards the nearest spot that puts every unit in `avoid` at least `range` away, or the
-    // best partial improvement when the raid is packed too tightly for that. False when nothing needs
-    // avoiding or standing still is already as good as it gets.
-    bool MoveClearOf(std::vector<Unit*> const& avoid, float range);
+    // Steps towards the nearest spot that gives every unit in `avoid` the clearance paired with it, or
+    // the best partial improvement when the raid is packed too tightly for that. Clearance is per unit
+    // so one search can mix hazards of different sizes. False when nothing needs avoiding or standing
+    // still is already as good as it gets.
+    bool MoveClearOf(std::vector<std::pair<Unit*, float>> const& avoid);
 };
 
-// Steps out of the splash of every debuffed raid member. MoveAwayFromPlayerWithDebuffAction takes a
-// single spell id fixed at construction, which cannot cover both the 10- and 25-man versions of
-// Searing Light and Gravity Bomb, so the id is resolved per tick here instead.
-class XT002MoveAwayFromDebuffedAllyAction : public XT002MoveClearAction
+// Owns every move a debuff carrier makes, with both debuffs in the one node. Two nodes at the same
+// relevance cannot share a bot: the engine ends the tick at the first action that returns true and
+// leaves the loser queued, so the pair trade the tick and the bot ends up walking the line between
+// their destinations. Gravity Bomb wins when a bot holds both - its puddle denies raid floor for 180s,
+// where the Searing Light splash lasts 9s and expires over an empty parking lot.
+class XT002DebuffCarrierAction : public XT002MoveClearAction
 {
 public:
-    XT002MoveAwayFromDebuffedAllyAction(PlayerbotAI* botAI, std::string const name, float range)
-        : XT002MoveClearAction(botAI, name), range(range)
-    {
-    }
-
-    bool Execute(Event event) override;
-
-protected:
-    virtual uint32 GetDebuffSpellId() = 0;
-
-    float range;
-};
-
-class XT002SearingLightSpreadAction : public XT002MoveAwayFromDebuffedAllyAction
-{
-public:
-    XT002SearingLightSpreadAction(PlayerbotAI* botAI)
-        : XT002MoveAwayFromDebuffedAllyAction(botAI, "xt002 searing light spread action",
-                                              ULDUAR_XT002_DEBUFF_SPREAD_RADIUS)
-    {
-    }
-
-protected:
-    uint32 GetDebuffSpellId() override { return GetXT002SearingLightSpellId(bot); }
-};
-
-class XT002GravityBombSpreadAction : public XT002MoveAwayFromDebuffedAllyAction
-{
-public:
-    XT002GravityBombSpreadAction(PlayerbotAI* botAI)
-        : XT002MoveAwayFromDebuffedAllyAction(botAI, "xt002 gravity bomb spread action",
-                                              ULDUAR_XT002_DEBUFF_SPREAD_RADIUS)
-    {
-    }
-
-protected:
-    uint32 GetDebuffSpellId() override { return GetXT002GravityBombSpellId(bot); }
-};
-
-// The carrier runs clear of the raid: the splash hurts everyone around it, and once Heartbreak is up
-// the Void Zone lands wherever the debuff expires, so from that point the run has a fixed destination.
-class XT002GravityBombCarrierAction : public XT002MoveClearAction
-{
-public:
-    XT002GravityBombCarrierAction(PlayerbotAI* botAI)
-        : XT002MoveClearAction(botAI, "xt002 gravity bomb carrier action")
-    {
-    }
+    XT002DebuffCarrierAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, "xt002 debuff carrier action") {}
 
     bool Execute(Event event) override;
 
 private:
-    // Walks the parking grid from the role's origin and moves to the first cell that is free of Void
-    // Zones and in line of sight. False when no cell qualifies, leaving the dynamic search as fallback.
-    bool ParkVoidZone(Unit* boss);
+    enum class ParkResult
+    {
+        None,        // no cell qualifies; the dynamic search is the fallback
+        OutOfReach,  // a cell was chosen, but the bomb goes off before the bot could get there
+        Moving,      // walking to a cell, so this action owns the tick
+        Parked       // standing on one, so the tick is free for casts and heals
+    };
+
+    // Picks the nearest cell of the role's parking grid that is free of Void Zones and in line of
+    // sight, preferring one the bot can still reach inside `reach` yards, then one with room to spare
+    // and a clear approach. Reports on having chosen a cell, never on whether MoveTo issued an order:
+    // MoveTo goes false while the bot is already walking there. The winner is written to
+    // `cellX`/`cellY` whether or not it turned out to be reachable.
+    ParkResult ParkVoidZone(Unit* boss, float reach, float& cellX, float& cellY);
+
+    // How far the bot can still walk before the bomb goes off. GetSpeed(MOVE_RUN) already carries
+    // Tympanic Tantrum's 50% slow, which is the case this exists for: slowed, no cell in either lot
+    // is inside a 9s debuff.
+    float TravelReach(uint32 remainingMs) const;
+
+    // Follows the bearing to a cell as far as the time budget allows and stops there, so a carrier
+    // that cannot make the lot drops its puddle on the approach instead of mid-stride in the raid.
+    // False when the stopping point is not clear of the expiry pull, which hands the tick to the
+    // dynamic search - that one maximises clearance rather than following a fixed bearing.
+    bool StopShortOf(float cellX, float cellY, float reach);
+
+    // Whether the straight line from the bot to (x, y) stays ULDUAR_XT002_BOMB_APPROACH_CLEARANCE
+    // clear of every Void Zone in `voidZones`. An approximation - the bot follows a navmesh path, not
+    // this line - but the carrier action outranks the hazard dodge, so it is the only guard there is.
+    bool ApproachIsClear(float x, float y, std::list<Creature*> const& voidZones) const;
+
+    // Whether the bot is standing in its role's parking grid. Geometry only, ignoring which cells are
+    // occupied: the case this exists for is a carrier whose bomb has just expired under its feet, so
+    // the cell it is standing on is certain to be occupied by its own fresh puddle.
+    bool InsideParkingLot() const;
+
+    // Latched once standing on a cell, so drift inside the deadband does not re-issue a move. A bot
+    // that re-issues every tick slides in place and cannot cast.
+    bool parked = false;
 };
 
-class XT002BoombotAvoidAction : public MoveAwayFromCreatureAction
+// One node for both things a bot has to step out of, for the same reason the carriers are one node:
+// two movers at the same relevance trade the tick and the bot slides between their destinations.
+// Puddles are skipped while the bot carries a debuff - the carrier action decides where a carrier
+// stands relative to those, and it is also what walks one off its own bomb.
+class XT002AvoidHazardAction : public XT002MoveClearAction
 {
 public:
-    XT002BoombotAvoidAction(PlayerbotAI* botAI)
-        : MoveAwayFromCreatureAction(botAI, "xt002 boombot avoid action", PB_NPC_XT002_BOOMBOT,
-                                     ULDUAR_XT002_BOOMBOT_AVOID_RADIUS)
-    {
-    }
-};
+    XT002AvoidHazardAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, "xt002 avoid hazard action") {}
 
-class XT002VoidZoneAction : public MoveAwayFromCreatureAction
-{
-public:
-    XT002VoidZoneAction(PlayerbotAI* botAI)
-        : MoveAwayFromCreatureAction(botAI, "xt002 void zone action", PB_NPC_XT002_VOID_ZONE,
-                                     ULDUAR_XT002_VOID_ZONE_RADIUS)
-    {
-    }
+    bool Execute(Event event) override;
 };
 
 class XT002PummellerTauntAction : public Action
@@ -134,9 +119,10 @@ private:
     Player* GetRedirectTank();
 };
 
-
-// Anchors the fight. Only the main tank and ranged DPS get a spot: healers position by heal range,
-// which a fixed point cannot track, and pinning melee costs uptime on a boss that moves.
+// Anchors the fight. The main tank and ranged DPS get a point each; healers share the ranged one but
+// with a band wide enough that heal range still picks the spot inside it, which is what stops them
+// trailing whoever is taking damage across the room. Melee are left alone - pinning them costs uptime
+// on a boss that moves.
 class XT002RaidPositionAction : public MovementAction
 {
 public:
@@ -145,21 +131,16 @@ public:
     bool Execute(Event event) override;
 };
 
-// Searing Light splashes everyone within ULDUAR_XT002_DEBUFF_SPREAD_RADIUS, and once Heartbreak is up
-// its expiry spawns a Life Spark, so the carrier always leaves from the same place.
-class XT002SearingLightCarrierAction : public MovementAction
-{
-public:
-    XT002SearingLightCarrierAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "xt002 searing light carrier action")
-    {
-    }
-
-    bool Execute(Event event) override;
-};
-
-// Owns "current target" for every non-tank while XT is up, so nothing has to be marked. Raid icons are
+// Owns "current target" for every role while XT is up, so nothing has to be marked. Raid icons are
 // group-global and stamping one here would overwrite whatever the player and the other bots are using.
+// Tanks get a list of their own: the boss, the Pummeller only for the tank that owns it while a second
+// tank is alive to hold XT, and the Heart in hard mode.
+//
+// Healers get nothing at all and have any leftover target cleared - Ulduar is in
+// RestrictedHealerDPSMaps, so they have no damage node that could use one, and all a target does there
+// is fire "reach spell". Adds are offered only once they are inside the leash around XT and within the
+// bot's own reach, so nobody walks at one that never left its toy pile. Tanks are exempt from the
+// reach gate: going and getting the Pummeller is the off-tank's job.
 class XT002SetDpsPriorityAction : public AttackAction
 {
 public:

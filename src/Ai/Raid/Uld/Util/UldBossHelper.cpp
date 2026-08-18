@@ -84,11 +84,14 @@ const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.
 // was measured in-game because a 30yd caster clipped out of range there and walked in every tick.
 const Position ULDUAR_XT002_MAINTANK_SPOT = Position(895.82f, -12.53954f, 409.68756f);
 const Position ULDUAR_XT002_RANGED_SPOT = Position(866.0f, -12.5f, 409.8f);
-// Far enough from both anchors to clear ULDUAR_XT002_DEBUFF_SPREAD_RADIUS without leaving the room.
+// 41.7yd from the tank anchor and 25.5yd from the ranged anchor: well clear of the 12yd splash, and
+// still inside spell range, so nobody has to move for the hard-mode Life Spark that spawns here.
 const Position ULDUAR_XT002_SEARING_LIGHT_SPOT = Position(862.73724f, 12.77857f, 409.8322f);
-// Two origins so melee and ranged carriers do not drop Void Zones on top of each other.
-const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE = Position(871.5199f, -54.04216f, 409.80377f);
-const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED = Position(837.0746f, -53.01061f, 409.80362f);
+// Two origins so melee and ranged carriers do not drop Void Zones on top of each other. Each is the
+// corner of its grid nearest the raid - roughly 30yd from the carrier's usual spot, which is the run
+// that has to fit inside the 9s the debuff lasts.
+const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE = Position(871.5199f, -42.04216f, 409.80377f);
+const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED = Position(837.0746f, -41.01061f, 409.80362f);
 
 // Auriaya's lane. She spawns at (1956.2, 49.32, 411.36) facing (-0.955, 0.296), which points down
 // the room and directly away from the corridor at +x, so the fight walks that bearing in 10 yd steps
@@ -1265,6 +1268,64 @@ uint32 GetXT002GravityBombSpellId(Player* bot)
 {
     return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_GRAVITY_BOMB_25
                                                                    : SPELL_XT002_GRAVITY_BOMB_10;
+}
+
+bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI->IsTank(bot))
+        return false;
+
+    // Whoever holds XT keeps holding him, so the add belongs to the first assist tank and only falls
+    // to the main tank when there is no second tank left.
+    if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+        return assistTank == bot;
+
+    if (Player* mainTank = GetGroupMainTank(botAI, bot))
+        return mainTank == bot;
+
+    // Neither resolves only when this bot is the last tank standing, so it owns the add by default.
+    return true;
+}
+
+bool IsXT002AddEngageable(PlayerbotAI* botAI, Unit* unit)
+{
+    if (!unit)
+        return false;
+
+    Unit* xt002 = GetXT002(botAI);
+    if (!xt002)
+        return true;
+
+    return unit->GetExactDist2d(xt002) <= ULDUAR_XT002_ADD_LEASH_RADIUS;
+}
+
+Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float botReach)
+{
+    Unit* nearest = nullptr;
+    float nearestDistance = 0.0f;
+
+    GuidVector const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (ObjectGuid const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != entry)
+            continue;
+
+        if (!IsXT002AddEngageable(botAI, unit))
+            continue;
+
+        float const distance = unit->GetExactDist2d(bot);
+        if (distance > botReach)
+            continue;
+
+        if (!nearest || distance < nearestDistance)
+        {
+            nearest = unit;
+            nearestDistance = distance;
+        }
+    }
+
+    return nearest;
 }
 
 // Ignis the Furnace Master
