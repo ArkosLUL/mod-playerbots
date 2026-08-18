@@ -31,13 +31,31 @@
 #include <TankAssistStrategy.h>
 
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
-                                             bool fallbackUnfiltered)
+                                             bool fallbackUnfiltered, bool interrupt)
 {
     if (!from || distance <= 0.0f)
         return false;
 
+    // A bot with a cast in flight cannot be moved at all: PointMovementGenerator discards the spline
+    // outright for anything IsMovementPreventedByCasting, and MoveTo still reports success and stamps
+    // a LastMovement delay, so it also blocks its own retries for a leg it never walked. Only the
+    // hazards that kill do this - the mine dodge would rather keep its cast than avoid 9000 damage.
+    if (interrupt)
+        botAI->InterruptSpell();
+
+    float const speed = bot->GetSpeed(MOVE_RUN);
+    float const travel = speed > 0.0f ? distance / speed : 0.0f;
     float const away = from->GetAngle(bot);
-    for (float delta = 0.0f; delta <= static_cast<float>(M_PI) / 2.0f;
+
+    // Resolved once for the whole fan: reading the window costs a grid scan for the DB Target.
+    Unit* const vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    MimironBarrageWindow const barrage =
+        vx001 ? GetMimironBarrageWindow(bot, vx001) : MimironBarrageWindow();
+
+    // Past about 120 degrees off the escape bearing the geometry turns back inward, so the fan stops
+    // short of that. It was 90; two stacked filters can empty the first quadrant, and the alternative
+    // to a wider fan is standing still in a 5000000 damage blast.
+    for (float delta = 0.0f; delta <= 5.0f * static_cast<float>(M_PI) / 8.0f + 0.001f;
          delta += static_cast<float>(M_PI) / 8.0f)
     {
         for (float sign : {1.0f, -1.0f})
@@ -60,7 +78,20 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
                 exact = false;
             }
 
-            if (!IsMimironSpotMineSafe(bot, Position(dx, dy, dz)))
+            Position const dest(dx, dy, dz);
+
+            // Collision can shorten the step enough to leave the bot no better off than it started.
+            if (dest.GetExactDist2d(from->GetPositionX(), from->GetPositionY()) <=
+                bot->GetExactDist2d(from))
+                continue;
+
+            if (!IsMimironSpotMineSafe(bot, dest))
+                continue;
+
+            // Judged at arrival, not at issue. This leg holds the movement lock for its whole
+            // duration and IsWaitingForLastMove refuses anything not strictly above it, so a spot
+            // that is only clear right now strands the bot in the beams until the leg expires.
+            if (!IsMimironSpotBarrageSafe(vx001, barrage, dest, travel))
                 continue;
 
             if (MoveTo(from->GetMapId(), dx, dy, dz, false, false, true, exact, priority))
@@ -68,7 +99,8 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
         }
     }
 
-    // Every mine-clear bearing was refused.
+    // Every bearing in the fan was refused - by a mine, by the barrage, or by collision leaving the
+    // bot no further from the hazard than it started.
     if (!fallbackUnfiltered)
         return false;
 
@@ -88,7 +120,7 @@ bool MimironShockBlastAction::Execute(Event /*event*/)
     float const gap = ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST - bot->GetExactDist2d(leviathanMkII);
     if (gap > 0.0f)
     {
-        MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED);
+        MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true);
 
         if (botAI->IsMelee(bot))
             botAI->SetNextCheckDelay(100);
@@ -224,6 +256,10 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
     float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
 
+    // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all -
+    // see the note on MoveAwayClearOfMines.
+    botAI->InterruptSpell();
+
     MoveTo(boss->GetMapId(), boss->GetPositionX() + radius * cos(heading),
            boss->GetPositionY() + radius * sin(heading), boss->GetPositionZ(), false, false, false,
            true, MovementPriority::MOVEMENT_FORCED, true);
@@ -292,7 +328,7 @@ bool MimironRocketStrikeAction::Execute(Event /*event*/)
     // 63041 blasts 3 yd; 10 covers the bot's footprint and pathing slop. The old phase 3/4 branch
     // teleported instead, off a stale pointer left over from the mech sweep. MOVEMENT_FORCED so the
     // arc-spread leg the bot is usually mid-way through cannot swallow the dodge.
-    return MoveAwayClearOfMines(rocketStrikeN, 10.0f, MovementPriority::MOVEMENT_FORCED);
+    return MoveAwayClearOfMines(rocketStrikeN, 10.0f, MovementPriority::MOVEMENT_FORCED, true, true);
 }
 
 bool MimironPhase4FocusAction::Execute(Event /*event*/)
@@ -366,7 +402,7 @@ bool MimironProximityMineAction::Execute(Event /*event*/)
     float const step = std::min(ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f - nearestDist,
                                 ULDUAR_MIMIRON_MINE_MAX_STEP);
     return MoveAwayClearOfMines(nearest, std::max(step, 2.0f), MovementPriority::MOVEMENT_COMBAT,
-                                false);
+                                false, false);
 }
 
 bool MimironPetControlAction::isUseful()
@@ -395,9 +431,20 @@ bool MimironPetControlAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Phase 3. A ground pet cannot reach a boss hovering 15 yd up, so the adds are the better target
-    // anyway. Assault Bot first: it is the only Magnetic Core source, and the core is what brings the
-    // Aerial Command Unit down.
+    // Phase 3, with a Magnetic Core down. Twenty seconds of a stationary boss on the floor taking +50%
+    // damage, and nothing new spawning for twenty-five - the one window the phase can be shortened in.
+    if (IsMimironAcuGrounded(botAI))
+    {
+        if (Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+        {
+            CommandPetAttack(botAI, aerialCommandUnit);
+            return false;
+        }
+    }
+
+    // Phase 3 otherwise. A ground pet cannot reach a boss hovering 15 yd up, so the adds are the better
+    // target anyway. Assault Bot first: it is the only Magnetic Core source, and the core is what
+    // brings the Aerial Command Unit down.
     for (uint32 entry : {NPC_ASSAULT_BOT, NPC_JUNK_BOT, NPC_BOMB_BOT})
     {
         Unit* nearest = nullptr;
@@ -480,6 +527,7 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
             spread = d;
     }
 
+    botAI->InterruptSpell();
     return FleePosition(Position(cx, cy, bot->GetPositionZ()), ULDUAR_MIMIRON_FLAMES_RADIUS + spread + 1.0f);
 }
 
@@ -487,6 +535,14 @@ bool MimironFrostBombAction::isUseful()
 {
     MimironFrostBombTrigger mimironFrostBombTrigger(botAI);
     return mimironFrostBombTrigger.IsActive();
+}
+
+bool MimironFrostBombAction::Execute(Event event)
+{
+    // The move itself is the shared MoveAwayFromCreatureAction; all this adds is the interrupt, which
+    // a casting bot needs before anything can move it at all.
+    botAI->InterruptSpell();
+    return MoveAwayFromCreatureAction::Execute(event);
 }
 
 std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriorityList()
@@ -537,6 +593,14 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
 
         priority.emplace_back(NPC_BOMB_BOT, SelectByEntry(currentTarget, NPC_BOMB_BOT, reachable));
     }
+
+    // A grounded Aerial Command Unit outranks the adds for melee. Nothing new spawns for the whole
+    // window, so the only competition is whatever survived it, and +50% damage on the boss beats any
+    // of it. Ranged keep the add order and arrive here on their own once the leftovers are dead.
+    // Tanks never reach this - "mimiron set dps priority" stands down for them - so the Assault Bot
+    // keeps its tank throughout, which is deliberate: it is the one add nobody can ignore.
+    if (aerialCommandUnit && botAI->IsMelee(bot) && IsMimironAcuGrounded(botAI))
+        priority.emplace_back(NPC_AERIAL_COMMAND_UNIT, aerialCommandUnit);
 
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
@@ -619,7 +683,7 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
             // The bar lifts once a part is already self-repairing. The rendezvous is over by then and
             // melee would otherwise have nothing to hit through the 15 s that decides the kill.
             if (!IsMimironPhase4(bot))
-                return false;
+                return IsMimironAcuGrounded(botAI);
 
             return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) == nullptr ||
                    GetFirstAliveUnitByEntry(botAI, NPC_VX001) == nullptr;
@@ -719,6 +783,23 @@ bool MimironPlasmaBlastAction::Execute(Event event)
     // cycle as long as this tank keeps swinging - which is why it has to land before the cast rather
     // than during it. "taunt spell" is registered for all four tank specs.
     return botAI->DoSpecificAction("taunt spell", event, true);
+}
+
+bool MimironSlowBombBotAction::isUseful()
+{
+    MimironSlowBombBotTrigger mimironSlowBombBotTrigger(botAI);
+    return mimironSlowBombBotTrigger.IsActive();
+}
+
+bool MimironSlowBombBotAction::Execute(Event event)
+{
+    std::string const spell = GetMimironBombBotSnare(bot);
+    if (spell.empty())
+        return false;
+
+    // Returns its own result rather than holding the tick: a bot that does not have the spell, or has
+    // it on cooldown, should drop straight through to its rotation and keep shooting.
+    return botAI->DoSpecificAction(spell, event, true);
 }
 
 bool MimironMagneticCoreAction::isUseful()

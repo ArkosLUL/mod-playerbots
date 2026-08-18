@@ -93,7 +93,7 @@ public:
     bool IsActive() override;
 };
 
-// The Aerial Command Unit is airborne and this bot has a pet that cannot reach it.
+// This bot has a pet and the encounter is in a phase where it needs telling where to go.
 class MimironPetControlTrigger : public Trigger
 {
 public:
@@ -114,6 +114,14 @@ class MimironFrostBombTrigger : public Trigger
 {
 public:
     MimironFrostBombTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron frost bomb trigger") {}
+    bool IsActive() override;
+};
+
+// This bot carries a ranged snare and is already shooting a Bomb Bot that still has ground to cover.
+class MimironSlowBombBotTrigger : public Trigger
+{
+public:
+    MimironSlowBombBotTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron slow bomb bot trigger") {}
     bool IsActive() override;
 };
 

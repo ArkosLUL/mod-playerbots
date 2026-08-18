@@ -148,6 +148,7 @@ enum UlduarIDs
     SPELL_MIMIRON_NAPALM_SHELL = 63666,
     SPELL_MIMIRON_MAGNETIC_FIELD = 64668,
     ITEM_MIMIRON_MAGNETIC_CORE = 46029,  // 100% drop from the Assault Bot; grounds the ACU
+    SPELL_MIMIRON_MAGNETIC_CORE_AURA = 64436,  // the 20s grounding itself, not the field 64668
 
     // General Vezax
     SPELL_MARK_OF_THE_FACELESS = 63276,
@@ -498,6 +499,11 @@ constexpr float ULDUAR_MIMIRON_BARRAGE_RING_MARGIN = 6.0f;
 
 // The phase 4 main tank orbits inside the chassis's chase range instead, so the MK II stays put and
 // the cone apex with it. It cannot simply hold its spot: 20000 per 250 ms tick kills it outright.
+//
+// 1.5 is chosen against Unit::GetMeleeRange - reach 8 plus a player's 1.5 plus 4/3, so 10.83 yd. A
+// tank orbiting at 9.5 never leaves that, so the chassis never chases and the apex holds still.
+// This is load-bearing for every other bot: simulation clears every bearing, radius and offset
+// against a stationary apex, and only ever fails once the apex is dragged around under the raid.
 constexpr float ULDUAR_MIMIRON_BARRAGE_TANK_RING_MARGIN = 1.5f;
 
 // A bot turns around VX-001 at (7.0 yd/s / radius) against a 10.6 deg/s sweep. Holding the raid
@@ -510,10 +516,10 @@ constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
 
-// How far inside the bot's own spell range the farthest slot has to sit before the formation is left
-// where it is. Bots cast out to AiPlayerbot.SpellDistance, 28.5 by default, and a formation that ends
-// up past that does not self-correct: "reach spell" is ACTION_HIGH and the formation is ACTION_RAID,
-// so the formation wins every tick and walks the bot back out.
+// How far inside the bot's own spell range the outermost wedge row is allowed to sit, which is what
+// caps the row count. Bots cast out to AiPlayerbot.SpellDistance, 28.5 by default, and a slot past
+// that does not self-correct: "reach spell" is ACTION_HIGH and the formation is ACTION_RAID, so the
+// formation wins every tick and walks the bot back out.
 constexpr float ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN = 4.0f;
 
 // Everything inside this of the room centre is walkable and flat at Z 364.31 (navprobe, 16 headings).
@@ -578,6 +584,10 @@ constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
 // match player run speed, so the extra yard here only buys time for ranged to kill them.
 constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
 constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
+
+// How much ground a Bomb Bot must still have to cover before a snare is worth a global. It runs
+// 8.0 yd/s and dies in about three casts, so snaring one already inside this costs more than it buys.
+constexpr float ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH = 15.0f;
 
 // Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
@@ -1076,6 +1086,22 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest);
 // brings the boss back.
 bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot);
 
+// The 20 s a Magnetic Core buys. The Aerial Command Unit is on the floor, passive, and taking +50%
+// damage, and its own UpdateAI is short-circuited for the whole aura so nothing new spawns for 25 s.
+// It is the only stretch of phase 3 in which the boss can be killed at all.
+bool IsMimironAcuGrounded(PlayerbotAI* botAI);
+
+// The ranged snare this bot can put on a Bomb Bot, or empty for a class that has none. Roots are
+// deliberately absent: Entangling Roots and Frost Nova break on the first hit, and hitting it is the
+// whole plan. Trigger and action both read this, or the two disagree about who is covered.
+std::string GetMimironBombBotSnare(Player* bot);
+
+// How far a Bomb Bot still has to run before it reaches whoever it is chasing. Measured from its own
+// victim rather than from the caster: a hunter 25 yd away would otherwise spend a global snaring one
+// that is already two yards from a healer. Falls back to the caster's own distance before it picks
+// a victim.
+float GetMimironBombBotApproach(Player* bot, Unit* bombBot);
+
 // The mech the ranged formation is shaped around. Phase order is MK II, VX-001, Aerial Command Unit,
 // then all three together, and VX-001 is the one that stays parked once they reassemble.
 Unit* GetMimironRingFocus(PlayerbotAI* botAI);
@@ -1120,6 +1146,17 @@ struct MimironBarrageWindow
 // Live every tick, so a moving apex, a rotating chassis and the bearing rate swinging 8.3-14.7 deg/s
 // off centre all fall out for free, and every bot derives the same cone without coordinating.
 MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001);
+
+// Whether `dest` is still clear of everywhere the beams will sweep, `travelSeconds` from now.
+// Predictive on purpose: a MOVEMENT_FORCED leg holds the movement lock for its whole duration - up to
+// 2.6 s for an 18 yd Shock Blast flee - and the cone turns about 10.6 degrees a second, so "clear when
+// the move was issued" is the wrong question to ask. Measured clockwise from the ignition centreline
+// and never folded to a signed angle: the band is 240 degrees wide at the room centre, wider off it.
+//
+// Takes the window rather than reading it, because GetMimironBarrageWindow runs a grid scan for the
+// DB Target and callers test a fan of a dozen bearings against the same cast.
+bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, Position const& dest,
+                              float travelSeconds);
 
 // Where this bot stands between barrages. Ranged fan out over a full ring round the room rather than
 // around VX-001, whose facing swings to whoever it last Rapid Burst; Rapid Burst and Hand Pulse are

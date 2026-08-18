@@ -140,6 +140,7 @@ public:
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
         creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
         creators["mimiron pet control trigger"] = &RaidUlduarTriggerContext::mimiron_pet_control_trigger;
+        creators["mimiron slow bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_slow_bomb_bot_trigger;
         creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
         creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
         creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
@@ -282,6 +283,7 @@ private:
     static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
     static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
     static Trigger* mimiron_pet_control_trigger(PlayerbotAI* ai) { return new MimironPetControlTrigger(ai); }
+    static Trigger* mimiron_slow_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironSlowBombBotTrigger(ai); }
     static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
     static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
     static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }

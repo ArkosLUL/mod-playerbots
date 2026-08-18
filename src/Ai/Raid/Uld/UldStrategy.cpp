@@ -476,6 +476,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron bomb bot trigger",
         { NextAction("mimiron bomb bot action", ACTION_RAID + 2) }));
 
+    triggers.push_back(new TriggerNode(
+        "mimiron slow bomb bot trigger",
+        { NextAction("mimiron slow bomb bot action", ACTION_RAID + 2) }));
+
     // The action always returns false, so this only ever redirects the pet - the bot keeps its tick.
     triggers.push_back(new TriggerNode(
         "mimiron pet control trigger",

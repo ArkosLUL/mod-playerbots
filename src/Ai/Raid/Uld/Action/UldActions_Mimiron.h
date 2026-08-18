@@ -23,9 +23,11 @@ protected:
     // fallbackUnfiltered takes the plain MoveAway fan when every mine-clear bearing was refused. Set
     // it for hazards that hurt more than a mine; the mine dodge itself passes false, because
     // escaping one mine into another is not an escape.
+    // interrupt cancels an in-flight cast first. Set it for anything that kills outright: a bot
+    // that IsMovementPreventedByCasting cannot be moved at all, so the dodge is a no-op without it.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
-                              bool fallbackUnfiltered = true);
+                              bool fallbackUnfiltered = true, bool interrupt = false);
 };
 
 class MimironShockBlastAction : public MimironFleeAction
@@ -162,7 +164,8 @@ public:
                                      ULDUAR_MIMIRON_BOMB_BOT_RADIUS) {}
 };
 
-// Pets cannot reach the Aerial Command Unit while it hovers, so they are pointed at the adds instead.
+// Where a pet goes in phases 3 and 4: the adds while the Aerial Command Unit hovers out of reach, the
+// unit itself while a Magnetic Core has it down, and whatever the melee are on in phase 4.
 class MimironPetControlAction : public Action
 {
 public:
@@ -190,6 +193,19 @@ public:
         : MoveAwayFromCreatureAction(ai, "mimiron frost bomb action", NPC_FROST_BOMB,
                                      ULDUAR_MIMIRON_FROST_BOMB_RADIUS) {}
 
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Bomb Bots are the one Mimiron add that takes a snare - immunity set -263 leaves SNARE, ROOT, STUN,
+// FREEZE, GRIP and KNOCKOUT off, all of which the Assault Bot's -285 carries. 20000 HP at 8.0 yd/s,
+// so every second of extra approach is most of a cast.
+class MimironSlowBombBotAction : public Action
+{
+public:
+    MimironSlowBombBotAction(PlayerbotAI* ai) : Action(ai, "mimiron slow bomb bot action") {}
+
+    bool Execute(Event event) override;
     bool isUseful() override;
 };
 

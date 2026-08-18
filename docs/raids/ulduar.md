@@ -942,9 +942,22 @@ beams lit. With the rate corrected it leaves by the near edge in 1.6 s and is ah
 the rest of the cast.
 
 A simulation over the real waypoint path — every combination of DB Target phase, bot bearing, orbit
-radius 14–24 yd and chassis offset out to 30 yd in eight directions — clears **497,664 of 497,664
-positions**. The same harness scores the previous model at 9.3 % of bots told to stand still while the
-cone crossed them, before counting the ones it sent the wrong way.
+radius 14–24 yd and chassis offset out to 30 yd in eight directions — clears **62,208 of 62,208
+positions**, with the committed legs and the movement lock modelled rather than assuming the bot can
+correct continuously. The same harness scores the previous model at 9.3 % of bots told to stand still
+while the cone crossed them, before counting the ones it sent the wrong way.
+
+**The step size is not a safety dial.** Re-running that sweep at 40°, 30°, 20°, 15° and 10° gives zero
+hits at every one of them, and *smaller steps are worse* under a moving apex, not better. Every failure
+the harness can produce needs the apex to be dragged around underneath the raid — at 2 yd/s of drift
+0.53 % of positions are caught, and widening the margin from 15° to 30° only takes that to 0.34 % and
+then plateaus. It is not a clearance problem and cannot be tuned away.
+
+What prevents it is the apex holding still, which is why the phase 4 main tank's tighter floor is
+load-bearing for the whole raid rather than a tank convenience. `Unit::GetMeleeRange` is
+`ownerReach + targetReach + 4/3` — 8 + 1.5 + 1.33 = **10.83 yd** — and `ChaseMovementGenerator`
+leaves the chassis alone inside that. The tank orbits at reach + 1.5 = **9.5 yd**, so it never triggers
+a chase and the cone apex stays where it is.
 
 The margin is **15°**, up from 12. The cone turns 2.7° per damage tick, so 12° was about one bot
 reaction interval with nothing spare. 15° still leaves a 120° safe wedge for a 25-man raid at 22 yd,
@@ -965,6 +978,31 @@ most 40° per tick (a 40° chord stays within 6% of the ring) and clamps the rad
 `[combat reach + 6, 24]`. VX-001's combat reach is **8**, so the floor is 14 yd: melee sit inside
 that and would otherwise try to orbit through the model. `MOVEMENT_FORCED` sequences the legs for
 free — `IsWaitingForLastMove` refuses anything not strictly above the move already in flight.
+
+### A bot mid-cast cannot be moved at all
+
+This is general, not Mimiron-specific, and it silently defeats every dodge in the module.
+`PointMovementGenerator<T>::DoInitialize` returns without launching a spline when
+`unit->IsMovementPreventedByCasting()`, and `DoUpdate` calls `StopMoving()` and returns early on the
+same test. `Unit::IsMovementPreventedByCasting` is true for any `UNIT_STATE_CASTING` except a channel
+carrying `IsActionAllowedChannel` — so instants are fine and everything else is not.
+
+Two things make it worse than "the move does nothing". `MovementAction::MoveTo` has its `CastStop` /
+`InterruptSpell` block **commented out** (`MovementActions.cpp:222-226`), so it returns `true` and
+stamps `LastMovement` with the full travel delay for a leg that never started — which then blocks the
+bot's own retries through `IsWaitingForLastMove` for the length of a walk it never took. And the
+calling action reads that `true` as success and holds the tick.
+
+A balance druid died to Rocket Strike this way. It is **5,000,000 damage in 3 yd** (63041, radius idx
+15), so one occurrence is one death.
+
+The Mimiron dodges that kill outright call `botAI->InterruptSpell()` before moving — Laser Barrage,
+Rocket Strike, Shock Blast, and the Firefighter flames and Frost Bomb. The ones that do not kill keep
+their cast: Proximity Mine is **9,000** and a Bomb Bot **12,000** (63009), both healable, and clipping
+a cast every time a mine lands costs more than the mine does. `PlayerbotAI::InterruptSpell` is free to
+call when nothing is casting, and `SpellInterrupted` has no side effect beyond a redundant interrupt,
+so the 100 ms recheck during a barrage costs nothing but a queued melee special. Kara, Gruul, Magtheridon
+and Naxxramas already did this; Mimiron did not.
 
 ### Mimiron — raid nodes must resolve bosses by entry, not by threat
 
@@ -996,6 +1034,16 @@ The node sits at `ACTION_RAID - 1`, below every other Mimiron node: Shock Blast 
 in a 15 yd circle** (63631, radius idx 18) and a mine is a healable 3 yd, so a mine must never cost
 the raid a dodge, a taunt or a core delivery. Some mine hits are the intended price.
 
+**Melee do not dodge mines at all, and nobody dodges them during a barrage.** The ten mines scatter
+inside 15 yd of the MK II (65347, radius idx 18) every 30 s, which is precisely where melee have to
+stand, so the node fired more or less continuously. Work out what it was buying: 10 mines of 3 yd blast
+inside a 707 yd² circle is about 40 % coverage, so a stationary melee expects ~0.4 hits a cycle —
+**roughly 120 dps**, against the whole of its uptime and, in phase 4, the barrage deaths that come from
+being nudged onto a cone-blind bearing. Ranged keep the sidestep; every healer spec is `IsRanged`
+(`PlayerbotAI::IsRanged` reads `STRATEGY_TYPE_RANGED`), so "melee" here means melee DPS plus warrior,
+DK, protection paladin and feral tanks. The barrage gate is a suppression rather than a filter,
+because a mine is survivable and the cone is not.
+
 **Bomb Bot (33836)** is the opposite: `speed_run` 1.14286 works out at **8.0 yd/s against a player's
 7.0**, so it is not merely un-outrunnable, it gains on you, and it detonates on melee contact
 (`SMART_EVENT_DAMAGED_TARGET` → 63801, 5 yd). `HealthModifier` is 1.5873, so ranged kill one in a few
@@ -1006,6 +1054,20 @@ inside `SpellDistance`, so the DPS list gets it instead of the flee node; healer
 sidestep, which is all a 5 yd blast is worth. Out-of-range Bomb Bots are filtered out of
 `BuildPriorityList` entirely — targeting one the bot cannot reach abandons the mech for an add
 somebody else can hit, and lands the bot in the `reach spell` versus `ACTION_RAID` deadlock below.
+
+**And it is the one Mimiron add that takes a snare.** Its immunity set is **−263**, which leaves
+`SNARE`, `ROOT`, `STUN`, `FREEZE`, `GRIP` and `KNOCKOUT` off — every one of which the Assault Bot's
+**−285** carries. At 20,000 HP and 8.0 yd/s, a second of extra approach is most of a cast.
+`mimiron slow bomb bot` puts the class snare on whichever Bomb Bot the bot is already shooting:
+hunter `concussive shot`, shaman `frost shock`, warlock `curse of exhaustion`. Roots are deliberately
+absent — Entangling Roots and Frost Nova break on the first hit, and hitting it is the plan.
+
+Two gates keep it from being a waste of a global. It reads `"current target"` rather than scanning, so
+it can only fire on a Bomb Bot `mimiron set dps priority` already handed the bot — which also means
+healers never snare. And the Bomb Bot has to be more than **15 yd from its own victim**, not from the
+caster: measured from the caster, a hunter 25 yd away would happily snare one that is already two
+yards from a healer. `ServerFacade::GetChaseTarget` answers that, falling back to the caster's own
+distance before the add has picked anyone.
 
 Both used to be handled by a main-tank `unit->Kill()` gated on `BotCheatMask::raid`. That is gone.
 
@@ -1067,12 +1129,29 @@ two bots is cheaper than half the raid unable to cast. At ±60° a 17-strong ran
 that job, and `CombatFormationMoveAction` shoving bots off slots the formation pulls them back onto is
 pure thrash.
 
-**The Aerial Command Unit is a bad anchor and a strange one.** It flies, so a formation keyed to it
-makes fifteen bots chase a hoverer; the wedge stays on the room centre and the rigid slide handles its
-drift. It also uses `AttackStartCaster(who, 30.0f)`, so it chases its threat target and **stops at
-30 yd** — just outside the 28.5 yd bots cast at — but never backs off when approached. Both halves
-matter: the first is why ranged fall out of range, the second is why the slide converges instead of
-turning into a chase.
+**The wedge is anchored on the room centre and never slides.** It used to slide toward the Aerial
+Command Unit until the outermost row was inside casting range, which sounds harmless and was not.
+`extent` was measured in every direction while the wedge only occupies 120° of one, so with
+`SpellDistance` 28.5 (margin 4 → 24.5) and a two-row wedge of extent 24 the excess came out at
+`dist − 0.5`: the anchor landed **half a yard from the boss** every tick, whatever the room centre
+said. The excess was never clamped to the distance either, so it could overshoot and place the anchor
+on the far side of the unit entirely.
+
+That closed a loop. The unit uses `AttackStartCaster(who, 30.0f)`, so it holds **30 yd** from its
+threat target — and its threat target is a ranged bot standing in the wedge the anchor is dragging
+after it. Raid and boss then circle the room together, which is what "ranged oscillate instead of
+doing damage" looks like from the floor.
+
+Holding still is also the whole Bomb Bot fix. They spawn on the unit (`SPELL_SUMMON_BOMB_BOT` is cast
+on self), so once the wedge stops chasing, the unit's own 30 yd standoff is what a Bomb Bot has to
+cross: **~3.7 s** of free fire on a 20,000 HP add at 8.0 yd/s, against approximately none while the
+raid was closing on it. Pushing `ULDUAR_MIMIRON_PHASE3_MIN_RADIUS` past 18 buys nothing here — the
+unit keeps 30 yd from its victim wherever that victim stands.
+
+Nothing is lost by not sliding, because **the phase 3 Aerial Command Unit has no attack**. Its entire
+event list is `EVENT_SUMMON_{BOMB,ASSAULT,JUNK}_BOT` plus the Firefighter fire bots; Plasma Ball is
+scheduled only in phase 4. Range on it matters for exactly one thing, the Magnetic Core window, and
+melee and pets cover that on foot.
 
 ### Mimiron — a dodge that returns false hands the tick to Charge
 
@@ -1115,6 +1194,26 @@ order, so every bot agrees without coordinating), the corpse search widened to 6
 walks to the corpse before looting it. Corpses last 25 s
 (`TEMPSUMMON_CORPSE_TIMED_DESPAWN`), which is the entire window.
 
+**What the core buys is the only killable window in the phase, and nothing was using it.** Aura 64436
+runs **20 s**, carries `MOD_DAMAGE_PERCENT_TAKEN` at base 49 (**+50 % damage taken**), and its
+`OnApply` runs `DO_DISABLE_AERIAL`: `CastStop`, `AttackStop`, `REACT_PASSIVE`, hover cleared,
+`MoveFall`, and `_events.DelayEvents(25s)`. The unit's own `UpdateAI` returns early for the whole
+aura, so **no adds spawn during it**. It carries neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`, so it
+is an ordinary target.
+
+Melee and pets switch to it for the window — `IsAllowedTarget` used to refuse melee the Aerial Command
+Unit outside phase 4 unconditionally, and the pet node only ever looked for adds, so both sat it out.
+Ranged keep the add order and arrive on their own once the leftovers are dead, since nothing replaces
+them. Tanks never reach this: `MimironSetDpsPriorityTrigger` stands down for them, so the Assault Bot
+keeps its tank throughout, which is deliberate — it is the one add nobody can ignore, and a tank
+contributes little of the burn.
+
+The core grounds the unit **wherever it happens to be**, which is usually across the room, because
+64444 places its summon by nearest entry and the carrier has to stand under it. Waiting for it to
+drift toward the raid was considered and rejected: the corpse the core is looted from lasts 25 s, the
+unit's position is driven by threat and not by anything the raid steers, and losing a core outright
+costs far more than melee jogging 30 yd into a 20 s window.
+
 ### Mimiron — pets need telling twice, in two different phases
 
 `PetAttackAction`'s trigger node is commented out globally (`CombatStrategy.cpp:53-55`), so a pet keeps
@@ -1125,7 +1224,8 @@ In phase 3 the Aerial Command Unit hovers 15 yd up and every ground pet parks un
 contributing nothing. `mimiron pet control` sends them to the nearest Assault Bot, then Junk Bot, then
 Bomb Bot, and calls `StopPet` when no add is up; the Assault Bot comes first because it is the only
 Magnetic Core source. Its action always returns **false** — it redirects the pet without consuming the
-bot's own tick.
+bot's own tick. Once a Magnetic Core lands, the unit itself outranks all of them: it is on the floor,
+stationary and taking +50 % for 20 s, and nothing new spawns during it.
 
 In phase 4 pets go where the melee go, and hold when the melee hold. A hunter's pet is about a fifth of
 that hunter's damage, and leaking that into the rendezvous is exactly what the floor exists to prevent.
@@ -1224,8 +1324,16 @@ instance strategies are added to **both** `BOT_STATE_COMBAT` and `BOT_STATE_NON_
 
 `GetMimironStagingFocus` resolves VX-001-riding-the-chassis → phase 4 shape, else the ACU → phase 3
 wedge, else VX-001 → phase 2 ring, and the existing slot generators do the rest. Melee and tanks get a
-slot **only while staging**, on an 8 yd ring around the spot the next boss will occupy: there is no
-chase for it to fight yet, and being in range when the boss goes live is the whole point.
+slot **only while staging**: there is no chase for it to fight yet, and being in range when the boss
+goes live is the whole point.
+
+**The staging anchor is the room centre, never the focus.** All three handovers converge there —
+VX-001 is summoned at it, `ACUSummonPos` is (2744.650, 2569.460, 380.0), a defeated ACU is walked back
+to (2744.65, 2569.46, 381.34), the chassis ends there, and `ULDUAR_MIMIRON_PHASE4_TANK_SPOT` is 1.4 yd
+off it. But the focus is mid-script for most of the window: in the phase 3→4 handover the chassis
+charges to (2755.77, 2574.95) at 10 s and only reaches the centre at 18.8 s, so a ring pinned to it
+walks the melee along the charge waypoints and back. The ring radius is `max(8, focus reach + 1)`,
+since a flat 8 yd would stage half the melee inside the chassis model at reach 8.
 
 Three things fall out rather than needing code. The **elevator knockback** 11 s into the first handover
 needs no guard, because VX-001 is not summoned until 17 s and it is what the staging keys off. **Eating
@@ -1253,6 +1361,23 @@ Second, quieter trap: the flee and the arc spread both issued at `MOVEMENT_COMBA
 flight. A dodge starting mid-walk was dropped with no trace. Shock Blast and Rocket Strike now issue
 at `MOVEMENT_FORCED`; the low-stakes avoids (mines, bomb bots, flames, Frost Bomb) stay at
 `MOVEMENT_COMBAT` so they cannot stomp a real emergency.
+
+**Two `MOVEMENT_FORCED` dodges in one encounter deadlock each other**, and there is no band above
+`MOVEMENT_FORCED` to escape into. The barrage dodge returns `false` for a bot that is already clear, so
+Rocket Strike and Shock Blast get the tick and flee on a bearing derived purely from the hazard they
+are escaping. That leg then holds the lock — about 1.4 s for a 10 yd rocket step, 2.6 s for an 18 yd
+Shock Blast flee, against `MaxWaitForMove` of 5000 — and *strictly above* means the barrage dodge's own
+`MOVEMENT_FORCED` move is refused for its whole duration. The barrage action ignores `MoveTo`'s return
+value and keeps holding the tick, so the bot stands in the beams at 20000 per 250 ms until the lock
+expires.
+
+The fix is to make the lower dodge cone-aware rather than to try to outrank it. `MoveAwayClearOfMines`
+now rejects any bearing whose destination is inside the swept union, and it asks that question **for
+the moment the leg lands**, not for the moment it is issued: the cone turns ~10.6 °/s, so a 2.6 s leg
+outruns the 15° margin and a spot that clears by exactly the margin is inside the beams on arrival. The
+fan also widened from ±90° to ±112.5° — two stacked filters can empty the first quadrant — with a
+guard that the destination must be strictly further from the hazard than the bot already is, because
+past roughly 120° off the escape bearing the geometry turns back inward.
 
 `IsMimironSpotSafe` covers Firefighter's ground fire on the same argument, behind the hard-mode check:
 without it the flames node at `ACTION_RAID + 4` pushes a bot out of a burning slot and the formation at

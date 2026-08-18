@@ -187,6 +187,19 @@ bool MimironPhase4FocusTrigger::IsActive()
 //
 bool MimironProximityMineTrigger::IsActive()
 {
+    // 9000 damage in 3 yd, and a mine self-destructs after 35 s whether anyone is near it or not. Ten
+    // scatter within 15 yd of the MK II every 30 s, which is where melee have to stand, so this fired
+    // more or less continuously to dodge about 120 dps - and cost them their uptime for it.
+    if (botAI->IsMelee(bot))
+        return false;
+
+    // The barrage action hands the tick to everything below it once a bot is clear, and this node
+    // knows nothing about the cone. Suppressing it beats filtering: a mine is survivable, 20000 every
+    // 250 ms is not.
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (barrage.IsActive())
+        return false;
+
     TooCloseToCreatureTrigger tooCloseToProximityMine(botAI);
     return tooCloseToProximityMine.TooCloseToCreature(NPC_PROXIMITY_MINE,
                                                      ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS);
@@ -299,6 +312,26 @@ bool MimironPetControlTrigger::IsActive()
     return GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) &&
            !GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
            !GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+}
+
+bool MimironSlowBombBotTrigger::IsActive()
+{
+    std::string const spell = GetMimironBombBotSnare(bot);
+    if (spell.empty())
+        return false;
+
+    // No target handling of its own. "mimiron set dps priority" already puts ranged DPS on a Bomb Bot
+    // once one is inside casting range, and reading the target back is what keeps this node from
+    // fighting it - which also means healers never snare, deliberately.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive() || target->GetEntry() != NPC_BOMB_BOT)
+        return false;
+
+    // Below this it is already on top of somebody and the global is better spent on damage.
+    if (GetMimironBombBotApproach(bot, target) < ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH)
+        return false;
+
+    return !botAI->HasAura(spell, target);
 }
 
 bool MimironSetDpsPriorityTrigger::IsActive()

@@ -139,6 +139,7 @@ public:
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
         creators["mimiron pet control action"] = &RaidUlduarActionContext::mimiron_pet_control_action;
+        creators["mimiron slow bomb bot action"] = &RaidUlduarActionContext::mimiron_slow_bomb_bot_action;
         creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
         creators["thorim sif blizzard action"] = &RaidUlduarActionContext::thorim_sif_blizzard_action;
         creators["thorim sif frost nova action"] = &RaidUlduarActionContext::thorim_sif_frost_nova_action;
@@ -279,6 +280,7 @@ private:
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
     static Action* mimiron_pet_control_action(PlayerbotAI* ai) { return new MimironPetControlAction(ai); }
+    static Action* mimiron_slow_bomb_bot_action(PlayerbotAI* ai) { return new MimironSlowBombBotAction(ai); }
     static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
     static Action* thorim_sif_blizzard_action(PlayerbotAI* ai) { return new ThorimSifBlizzardAction(ai); }
     static Action* thorim_sif_frost_nova_action(PlayerbotAI* ai) { return new ThorimSifFrostNovaAction(ai); }

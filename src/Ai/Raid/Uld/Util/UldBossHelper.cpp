@@ -19,6 +19,7 @@
 #include "DynamicObject.h"
 #include "Map.h"
 #include "ScriptedCreature.h"
+#include "ServerFacade.h"
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "World.h"
@@ -2079,6 +2080,60 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest)
     return true;
 }
 
+bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, Position const& dest,
+                              float travelSeconds)
+{
+    if (!vx001 || !window.valid)
+        return true;
+
+    float const clearance = ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE + ULDUAR_MIMIRON_BARRAGE_MARGIN;
+    float const twoPi = 2.0f * static_cast<float>(M_PI);
+
+    // Extend the band by the sweep the leg will not be able to react to. The band only grows on the
+    // trailing side - that is the edge coming toward a bot standing still.
+    float const grown =
+        std::min(window.sweep + window.rate * std::max(travelSeconds, 0.0f), twoPi - 2.0f * clearance);
+
+    float const cw = Position::NormalizeOrientation(
+        window.lead - vx001->GetAngle(dest.GetPositionX(), dest.GetPositionY()));
+
+    return cw > grown + clearance && cw < twoPi - clearance;
+}
+
+std::string GetMimironBombBotSnare(Player* bot)
+{
+    if (!bot)
+        return "";
+
+    switch (bot->getClass())
+    {
+        case CLASS_HUNTER:  return "concussive shot";
+        case CLASS_SHAMAN:  return "frost shock";
+        case CLASS_WARLOCK: return "curse of exhaustion";
+        default:            return "";
+    }
+}
+
+float GetMimironBombBotApproach(Player* bot, Unit* bombBot)
+{
+    if (!bot || !bombBot)
+        return 0.0f;
+
+    if (Unit* victim = ServerFacade::instance().GetChaseTarget(bombBot))
+        return bombBot->GetExactDist2d(victim);
+
+    return bombBot->GetExactDist2d(bot);
+}
+
+bool IsMimironAcuGrounded(PlayerbotAI* botAI)
+{
+    if (!botAI)
+        return false;
+
+    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    return aerialCommandUnit && aerialCommandUnit->HasAura(SPELL_MIMIRON_MAGNETIC_CORE_AURA);
+}
+
 Unit* GetMimironRingFocus(PlayerbotAI* botAI)
 {
     if (!botAI)
@@ -2243,28 +2298,19 @@ Player* GetMimironCoreCarrier(PlayerbotAI* botAI)
 
 namespace
 {
-// Slide the whole formation toward the focus until its outermost slot is inside casting range, then
-// keep it on the floor. Both bounds move the anchor and never a single slot: clamping slots one at a
-// time deforms the formation into a lopsided blob leaning at the boss, which hands Rapid Burst and the
-// Bomb Bots exactly the clumps the spread exists to prevent. Reads the config distance rather than
-// PlayerbotAI::GetRange so every bot derives the same anchor without talking to the others.
-Position AnchorMimironFormation(Position anchor, Unit* focus, float extent)
+// Keep a formation anchor on the floor. Moves the anchor and never a single slot: clamping slots one
+// at a time deforms the formation into a lopsided blob leaning at the boss, which hands Rapid Burst
+// and the Bomb Bots exactly the clumps the spread exists to prevent.
+//
+// This used to also slide the anchor toward the focus until the outermost slot was inside casting
+// range. That measured `extent` in every direction while the phase 3 wedge only occupies 120 degrees
+// of it, so with spellDistance 28.5 and a two-row wedge the slide always landed within half a yard of
+// the boss - and could overshoot past it, because the excess was never clamped to the distance. The
+// wedge then tracked the Aerial Command Unit exactly while the unit held 30 yd from a bot inside that
+// wedge, and raid and boss circled the room together.
+Position ClampMimironAnchorToRoom(Position anchor)
 {
     float const z = ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ();
-
-    if (focus)
-    {
-        float const maxRange = sPlayerbotAIConfig.spellDistance - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN;
-        float const excess =
-            anchor.GetExactDist2d(focus->GetPositionX(), focus->GetPositionY()) + extent - maxRange;
-
-        if (excess > 0.0f)
-        {
-            float const bearing = anchor.GetAngle(focus->GetPositionX(), focus->GetPositionY());
-            anchor = Position(anchor.GetPositionX() + excess * cos(bearing),
-                              anchor.GetPositionY() + excess * sin(bearing), z);
-        }
-    }
 
     float const fromCentre =
         ULDUAR_MIMIRON_ROOM_CENTER.GetExactDist2d(anchor.GetPositionX(), anchor.GetPositionY());
@@ -2326,8 +2372,10 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
                                 2.0f * ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE * slot / (size - 1);
 }
 
-// Where melee and tanks wait out a handover: a small ring on the spot the next boss will occupy, so
-// they are already in range when it goes live.
+// Where melee and tanks wait out a handover: a small ring on the room centre, which is where all three
+// handovers converge - VX-001 is summoned there, the Aerial Command Unit spawns and is walked back
+// there, and the chassis ends there. Never on the focus itself: it is mid-script for most of the
+// window, so a ring pinned to it drags the raid along the chassis charge waypoints.
 bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position& out)
 {
     uint32 index = 0;
@@ -2350,18 +2398,23 @@ bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position
     if (count == 0)
         return false;
 
+    // Outside the mech's own model. The chassis has the largest reach of the three at 8, so a flat
+    // 8 yd ring would stage half the melee inside it.
+    float const radius = focus ? std::max(ULDUAR_MIMIRON_STAGING_MELEE_RADIUS,
+                                          focus->GetCombatReach() + 1.0f)
+                              : ULDUAR_MIMIRON_STAGING_MELEE_RADIUS;
+
     float const bearing = 2.0f * static_cast<float>(M_PI) * index / count;
-    out = Position(
-        focus->GetPositionX() + ULDUAR_MIMIRON_STAGING_MELEE_RADIUS * std::cos(bearing),
-        focus->GetPositionY() + ULDUAR_MIMIRON_STAGING_MELEE_RADIUS * std::sin(bearing),
-        ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+    out = Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + radius * std::cos(bearing),
+                   ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + radius * std::sin(bearing),
+                   ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     return true;
 }
 
 // Phase 3. The raid groups in the east wedge instead of ringing the room: the summon pads sit on three
 // arms - west, north-east and south-east, each carrying pads at roughly 17, 29 and 40 yd - so a ring
 // drops lone ranged bots straight into an add's path.
-bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out)
+bool GetMimironPhase3Slot(Player* bot, Group* group, Position& out)
 {
     // Melee stand on whatever they are hitting. Every add walks in from a pad well outside the wedge,
     // so any fixed melee slot is a spot the target is not in - and this formation runs at ACTION_RAID,
@@ -2402,10 +2455,10 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out)
     float offset = 0.0f;
     MimironWedgeSlot(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS, rows, index, count, radius, offset);
 
-    // With the ACU parked over the room centre this comes out zero; it only bites once it drifts.
-    Position const anchor = AnchorMimironFormation(
-        ULDUAR_MIMIRON_ROOM_CENTER, focus,
-        ULDUAR_MIMIRON_PHASE3_MIN_RADIUS + (rows - 1) * ULDUAR_MIMIRON_PHASE3_SPACING);
+    // The room centre, and nothing else. The Aerial Command Unit has no attack in this phase - its
+    // whole event list is add summons - so there is nothing range on it buys, and holding still is
+    // what leaves a Bomb Bot spawning on it roughly 30 yd of open floor to cross at 8.0 yd/s.
+    Position const& anchor = ULDUAR_MIMIRON_ROOM_CENTER;
 
     // The centreline is the bearing to the staging point: the middle of the gap between the two east
     // arms, and the one direction nothing walks in from.
@@ -2459,7 +2512,7 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
         return GetMimironStagingMeleeSlot(bot, group, focus, out);
 
     if (focus->GetEntry() == NPC_AERIAL_COMMAND_UNIT)
-        return GetMimironPhase3Slot(bot, group, focus, out);
+        return GetMimironPhase3Slot(bot, group, out);
 
     // Phase 1 tank spot. Nothing else brings the MK II back: the tank is melee, so it flees Shock
     // Blast every 30 s and the boss follows, and over a five minute phase that walks the fight round
@@ -2493,14 +2546,15 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     if (count == 0)
         return false;
 
-    // Centred on the mech rather than the room. Both ground mechs get dragged about by their tanks,
+    // Centred on the mech while a phase is live: both ground mechs get dragged about by their tanks,
     // and a ring pinned to the room centre puts the far half of the raid past casting range after only
     // six yards of drift - which then deadlocks rather than self-correcting, because "reach spell" is
-    // ACTION_HIGH and this ring is ACTION_RAID.
-    Position const anchor =
-        AnchorMimironFormation(Position(focus->GetPositionX(), focus->GetPositionY(),
-                                        ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()),
-                               focus, ULDUAR_MIMIRON_SPREAD_RADIUS);
+    // ACTION_HIGH and this ring is ACTION_RAID. During a handover it is the room centre instead, for
+    // the same reason the melee staging ring is: the focus is mid-script and walking.
+    Position const anchor = ClampMimironAnchorToRoom(
+        staging ? ULDUAR_MIMIRON_ROOM_CENTER
+                : Position(focus->GetPositionX(), focus->GetPositionY(),
+                           ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
 
     float const angle = 2.0f * static_cast<float>(M_PI) * index / count;
     out = Position(anchor.GetPositionX() + ULDUAR_MIMIRON_SPREAD_RADIUS * cos(angle),
