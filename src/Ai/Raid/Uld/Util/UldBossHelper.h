@@ -1034,6 +1034,11 @@ bool YoggSaronFearWindowActive(PlayerbotAI* botAI);
 Unit* GetAuriaya(PlayerbotAI* botAI);
 bool AuriayaEncounterActive(PlayerbotAI* botAI);
 
+// Anything that pulls - targeting, the sentry taunt, the anchors - waits for this instead of mere
+// presence. A Sanctum Sentry's JustEngagedWith calls SetInCombatWithZone on Auriaya, so her flag is
+// the whole encounter's, however the raid opens.
+bool IsAuriayaEngaged(PlayerbotAI* botAI);
+
 // Sanctum Sentries first: they stay dead and their Strength of the Pack (64369) buffs Auriaya while
 // they live, where the Feral Defender only feigns and comes back. Feign is why the Defender goes
 // through IsDownOrFeigning - it sits at 1 HP and unselectable between lives, still "alive".
@@ -1067,6 +1072,10 @@ bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 // Hodir. By entry, not "find target": that value walks only the bot's own threat list, so any bot
 // parked on an ice block would stop seeing the boss and silently lose its Flash Freeze shelter.
 Unit* GetHodir(PlayerbotAI* botAI);
+
+// Anything that pulls - targeting, the anchors - waits for this instead of mere presence. Hodir
+// never calls SetInCombatWithZone, so his flag flips exactly when someone engages him.
+bool IsHodirEngaged(PlayerbotAI* botAI);
 
 // Whichever of the four druid helpers this raid got. Starlight is centred on it, so it is also how
 // the ring finds the zone.
@@ -1383,6 +1392,11 @@ Unit* GetMimironRingFocus(PlayerbotAI* botAI);
 // Nothing else fires either, so the engine falls through to follow at relevance 1.0 and the raid trails
 // its master. A grid scan does see them, which is enough to walk everyone to the next phase in advance.
 Unit* GetMimironStagingFocus(Player* bot);
+
+// Any of the three constructs actually fighting. Presence says nothing here: Leviathan MK II is a DB
+// spawn that sits in the room unselectable until the button is pushed, and GetFirstAliveUnitByEntry
+// does not filter selectability.
+bool IsMimironEngaged(PlayerbotAI* botAI);
 
 // Phase 4, start to finish. Keyed on VX-001 riding the chassis rather than on all three being
 // attackable: a part pushed under 15000 sets UNIT_FLAG_NON_ATTACKABLE and drops out of the target list,

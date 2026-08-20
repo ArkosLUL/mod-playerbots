@@ -442,6 +442,12 @@ Unit* GetAuriaya(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NP
 
 bool AuriayaEncounterActive(PlayerbotAI* botAI) { return GetAuriaya(botAI) != nullptr; }
 
+bool IsAuriayaEngaged(PlayerbotAI* botAI)
+{
+    Unit* boss = GetAuriaya(botAI);
+    return boss && boss->IsInCombat();
+}
+
 Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
 {
     if (Unit* sentry = GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA_SANCTUM_SENTRY))
@@ -570,6 +576,12 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tol
 }
 
 Unit* GetHodir(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_HODIR); }
+
+bool IsHodirEngaged(PlayerbotAI* botAI)
+{
+    Unit* boss = GetHodir(botAI);
+    return boss && boss->IsInCombat();
+}
 
 // Which druid this instance got, so the four-entry sweep runs once rather than on every bot every
 // tick. Guid, not a pointer, so a despawn drops out instead of dangling.
@@ -2363,6 +2375,21 @@ Unit* GetMimironStagingFocus(Player* bot)
     // Nothing before the pull or after a wipe: the MK II is NOT_SELECTABLE until it is pulled, and
     // evade despawns VX-001 and the Aerial Command Unit outright.
     return vx001;
+}
+
+bool IsMimironEngaged(PlayerbotAI* botAI)
+{
+    // Any construct, because each phase hands over to the next: the outgoing one goes passive and
+    // unselectable while the incoming one calls SetInCombatWithZone, so between the two there is
+    // nothing worth targeting anyway.
+    for (uint32 entry : {NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT})
+    {
+        Unit* construct = GetFirstAliveUnitByEntry(botAI, entry);
+        if (construct && construct->IsInCombat())
+            return true;
+    }
+
+    return false;
 }
 
 bool IsMimironPhase4(Player* bot)

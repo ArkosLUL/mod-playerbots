@@ -340,7 +340,7 @@ bool MimironSetDpsPriorityTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
-           GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
-           GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+    // Engaged, not present: the action calls Attack() directly, and MK II sits in the room from the
+    // moment the raid walks in.
+    return IsMimironEngaged(botAI);
 }

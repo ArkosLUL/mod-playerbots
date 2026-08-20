@@ -38,7 +38,9 @@ bool AuriayaSeepingEssenceTrigger::IsActive()
 
 bool AuriayaRaidPositionTrigger::IsActive()
 {
-    if (!AuriayaEncounterActive(botAI))
+    // Combat-gated: an anchor that fires on sight has the raid walking to its spots before anyone
+    // has pulled.
+    if (!IsAuriayaEngaged(botAI))
         return false;
 
     // Standing in a pool beats standing on a spot. Fear and stuns need no check here - CanFreeMove
@@ -58,7 +60,10 @@ bool AuriayaRaidPositionTrigger::IsActive()
 
 bool AuriayaSetDpsPriorityTrigger::IsActive()
 {
-    if (!AuriayaEncounterActive(botAI))
+    // The action calls Attack() directly, so without the combat gate the first bot to lay eyes on her
+    // pulls the room. Whoever pulls flips this for everyone, which is what makes the raid engage
+    // together.
+    if (!IsAuriayaEngaged(botAI))
         return false;
 
     return !botAI->IsTank(bot);
@@ -66,7 +71,8 @@ bool AuriayaSetDpsPriorityTrigger::IsActive()
 
 bool AuriayaSentryTauntTrigger::IsActive()
 {
-    if (!AuriayaEncounterActive(botAI))
+    // A taunt is a pull, so the off-tank waits for the encounter to be live like everyone else.
+    if (!IsAuriayaEngaged(botAI))
         return false;
 
     if (!botAI->IsAssistTankOfIndex(bot, 0, true))

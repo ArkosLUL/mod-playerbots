@@ -856,7 +856,9 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
 
 float AuriayaMovementGuardMultiplier::GetValue(Action* action)
 {
-    if (!action || !GetAuriaya(botAI))
+    // Engaged, not merely present: these stand-downs hand generic behaviour to encounter nodes that
+    // none of them run before the pull, so on sight alone they would leave bots rooted with no target.
+    if (!action || !IsAuriayaEngaged(botAI))
         return 1.0f;
 
     // auriaya set dps priority action owns every non-tank's target, so the generic picker stands down
@@ -913,7 +915,9 @@ float VezaxControlMovementMultiplier::GetValue(Action* action)
 
 float HodirGuardMultiplier::GetValue(Action* action)
 {
-    if (!action || !GetHodir(botAI))
+    // Engaged, not merely present: these stand-downs hand generic behaviour to encounter nodes that
+    // none of them run before the pull, so on sight alone they would leave bots rooted with no target.
+    if (!action || !IsHodirEngaged(botAI))
         return 1.0f;
 
     // hodir set dps priority action owns the target for everyone who has one. Healers are not on
@@ -1022,9 +1026,9 @@ float MimironTargetGuardMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-        !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
-        !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    // Engaged, not merely present: the stand-down hands targeting to a node that does not run before
+    // the pull, so on sight alone it would leave every non-tank with no picker at all.
+    if (!IsMimironEngaged(botAI))
         return 1.0f;
 
     // "mimiron set dps priority" owns every non-tank's target. "attack rti target" is deliberately

@@ -84,7 +84,9 @@ bool HodirIcicleDodgeTrigger::IsActive()
 
 bool HodirRaidPositionTrigger::IsActive()
 {
-    if (!GetHodir(botAI))
+    // Combat-gated: an anchor that fires on sight has the raid walking to its spots before anyone
+    // has pulled.
+    if (!IsHodirEngaged(botAI))
         return false;
 
     if (bot->HasAura(SPELL_HODIR_FLASH_FREEZE_TRAPPED))
@@ -110,7 +112,9 @@ bool HodirRaidPositionTrigger::IsActive()
 
 bool HodirSetDpsPriorityTrigger::IsActive()
 {
-    if (!GetHodir(botAI))
+    // The action calls Attack() directly, so without the combat gate the first bot to lay eyes on him
+    // pulls. Whoever pulls flips this for everyone, which is what makes the raid engage together.
+    if (!IsHodirEngaged(botAI))
         return false;
 
     return !botAI->IsTank(bot) && !botAI->IsHeal(bot);
