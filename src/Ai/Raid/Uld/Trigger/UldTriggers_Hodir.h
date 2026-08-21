@@ -10,18 +10,15 @@
 // Hodir
 //
 
-// Biting Cold only stacks on a bot that has held still through four ticks, so any movement clears
-// it. Ranged rarely reach this trigger because dodging icicles already keeps them moving; it exists
-// for the 12-24s after each Flash Freeze, when the small icicles are switched off and the Toasty
-// Fires have just been wiped, and for tanks, who are rarely icicle targets.
+// The bot is carrying Biting Cold and has no Toasty Fire to shed it for free. Deliberately holds no
+// state: the raid position trigger instantiates this one to decide whether to stand down, and
+// anything latched here would be lost by that stack-allocated copy. The stack threshold lives on the
+// action.
 class HodirBitingColdTrigger : public Trigger
 {
 public:
     HodirBitingColdTrigger(PlayerbotAI* ai) : Trigger(ai, "hodir biting cold") {}
     bool IsActive() override;
-
-private:
-    uint32 _stillSince = 0;
 };
 
 // A Snowpacked Icicle Target is up, and this bot is not inside the Safe Area it radiates. That NPC

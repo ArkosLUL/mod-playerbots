@@ -550,3 +550,448 @@ at r=6, the raid anchor at r=11 and r=15, and `path` between tank spot and ancho
   already covers Magic — confirm in game before adding a node); a real Ice Shards spread (impossible
   inside Starlight, see the packing arithmetic); Starlight for melee (decision 27).
 - Cheese the Freeze and Getting Cold in Here fall out of this work for free but are not chased.
+
+---
+
+# Repair round: the three in-game failures
+
+## Context
+
+The corner-anchor rework shipped and compiles. First live pull produced three failures:
+
+1. **Main tank died to Biting Cold stacks.**
+2. **Lots of bots died to Ice Shards**, which overlap and are handled ungracefully.
+3. **Bots oscillate constantly** instead of doing damage or healing.
+
+All three are now diagnosed to specific defects. Two of them come from DBC/script facts the original
+plan got wrong, so the fix changes design, not just code. The shipped work stays; this is a repair
+round on top of it.
+
+The original plan lives at `docs/plans/hodir-corner-anchor/hodir-corner-anchor.PLAN.md`. Fold this
+round into it at implementation time rather than creating a second directory.
+
+## Corrected facts
+
+Read from the core script and the DBC extract this session. **These override the original plan.**
+
+| Fact | Source | What the old plan said |
+|---|---|---|
+| **Biting Cold `62039` ticks every 1 s and damages `200·2^stacks` every tick** (`EffectAuraPeriod_1 = 1000`) | `spell.reference.csv` | "stacks every 4 s" — the *gain* is every 4 s, the *damage* is every 1 s |
+| **A stack comes off only on the second moving tick**: a moving tick sets `_prev = true`, the next moving tick calls `ModStackAmount(-1)`; **any stationary tick resets `_prev = false`** | `boss_hodir.cpp:1259-1273` | not modelled |
+| **A Toasty Fire aura is treated exactly like moving**, every tick, so it sheds a stack every 2 s with no movement at all | `boss_hodir.cpp:1259` | "blocks Biting Cold" — it also *removes* stacks |
+| **Ice Shards `62457` = 13,999 base points, radius index 26 = 4 yd** | `spell.reference.csv` | correct |
+| **Both icicle NPCs live exactly 7 s** (`62234`/`62462` DurationIndex 165 = 7000) | `spellduration.reference.csv` | not known |
+| **Detonation is at t = 3.7 s**, not 2 s: the AI casts the fall effect at t = 2.0 (`timer1`), and `62236`/`62460` is a 1700 ms aura whose single tick triggers the blast | `boss_hodir.cpp:605-614`; DurationIndex 487 = 1700 | "2 s telegraph" |
+| **So an icicle is inert for its last 3.3 s** and roughly half the icicles alive at any moment have already blown | derived | treated every live icicle as lethal |
+| `TempSummon::GetTimer()` is public and counts the 7000 ms down | `TemporarySummon.h:68` | — |
+| Shelter window is **t=3.7 → 15.7** against a Flash Freeze landing at t=9, i.e. **5.3 s of shelter**, not 7 | 62463 DurationIndex 29 = 12000 | "7 s of shelter" |
+| `FindNearestPositionClearOfHazards(bot, hazards, clearRadius, maxRadius, distanceStep, angleStep)` rings outward, collision-validates each candidate, and is the sanctioned replacement for `FleePosition` | `RaidBossHelpers.h:38-44`, `.cpp:308-358` | plan used a hand-rolled sweep + `FleePosition` |
+| `MOVEMENT_FORCED > MOVEMENT_COMBAT`, and `IsWaitingForLastMove` returns false only when `priority > lastMove.priority` | `MovementActions.cpp:955`; `LastMovementValue.h:18-25` | dodge and position both used `MOVEMENT_COMBAT` |
+| `Trigger` default `checkInterval = 1` → polled every engine tick | `Trigger.cpp:35-37` | — |
+
+## Diagnosis
+
+### 1. Main tank died to Biting Cold
+
+**Defect A — the jump action can never run.** `HodirBitingColdJumpAction::isUseful()`
+([UldActions_Hodir.cpp:164-168](src/Ai/Raid/Uld/Action/UldActions_Hodir.cpp#L164-L168)) constructs a
+**fresh** `HodirBitingColdTrigger` on the stack. Its `_stillSince` starts at 0, so `IsActive()` takes
+the `if (!_stillSince) { _stillSince = now; return false; }` branch and returns false **before** it
+ever reaches the aura check. `Engine` calls `isUseful()` on that fresh trigger twice per tick
+(`Engine.cpp:185`, `:336`). The node has therefore never executed once, for anybody.
+
+**Defect B — even fixed, a 2 yd jump cannot shed a stack.** `JumpTo` →
+`MoveJump(..., runSpeed, runSpeed, 1)` over 2 yd is ~0.3 s of motion, then `last movement` locks for
+1000 ms. Tick instants are 1 s apart, so two consecutive moving ticks essentially never happen and
+`_prev` is reset by every stationary tick in between. Net effect is only to slow the *gain* from one
+stack per 4 s to roughly one per 10 s. At 8 stacks the tank eats 51,200/s.
+
+**Two moving ticks with no stationary tick between them requires > 1 s of continuous motion**, i.e.
+legs of at least ~7 yd, or short legs chained back to back with no idle gap.
+
+### 2. Ice Shards deaths
+
+**Defect C — spent icicles are still treated as lethal.** `NearestHodirIcicle` and
+`CollectHodirIcicles` filter on `IsAlive()` only. An icicle blows at t=3.7 and lingers to t=7, so at
+any moment ~1.7 of the ~3.5 live icicles are harmless. This inflates the hazard set, and it is why
+bots refuse to return to a slot that is already safe.
+
+**Defect D — the dodge is all-or-nothing.** [UldActions_Hodir.cpp:95-158](src/Ai/Raid/Uld/Action/UldActions_Hodir.cpp#L95-L158)
+requires a candidate ≥ 6 yd from **every** icicle within 100 yd, inside a 10 yd leash. With phantom
+hazards from defect C plus real overlap, the union of exclusion discs covers the whole leash and
+`found` stays false. It then falls through to `FleePosition(nearest, 6.0f, 500)`, which
+`pitfalls.md:100-110` documents as clamping travel to `AiPlayerbot.FleeDistance` (5.0), reading one
+hazard only, and blacklisting reverse angles for 5 s — so the second hazard of a volley usually
+returns `false` and the bot stands in the blast.
+
+**Defect E — the dodge cannot preempt its own movement.** Both the dodge and the position action use
+`MOVEMENT_COMBAT`, so `IsWaitingForLastMove` blocks a re-dodge while a move is in flight, and the
+dodge cannot interrupt the position action walking a bot back into an icicle.
+
+**Defect F — the ring is the hazard.** 16 ranged on one r=5 ring sit 1.95 yd apart, so one 4 yd
+splash covers ~5 of them. The original plan documented this and bet on the dodge; the dodge does not
+work, so the bet lost. **User decision: fix the layout, not just the dodge.**
+
+### 3. Oscillation
+
+**Defect G (primary) — the ring-centre latch is shared per instance but validated per bot.**
+[UldBossHelper.cpp:653-690](src/Ai/Raid/Uld/Util/UldBossHelper.cpp#L653-L690):
+
+```cpp
+if (latched != _hodirRingCentres.end() && bot->HasAura(SPELL_HODIR_STARLIGHT))
+    return latched->second;
+```
+
+`_hodirRingCentres` is keyed by **instanceId** — one value for the whole raid — but the keep-it test
+is **this bot's** aura. Any bot momentarily outside Starlight (mid-dodge, walking in, an outer slot at
+the zone edge) falls through and **rewrites the shared centre** to the druid's current dynobject.
+Every other bot then reads a different centre, its slot moves, `_anchorReached` clears past 6 yd, and
+it runs. With 16 bots and constant dodging this rewrites many times per second and the whole ring
+thrashes. Compounded by `GetDynObject` returning only the first of up to four overlapping zones while
+the druid recasts every 15 s from wherever it has walked to.
+
+**Defect H — `anchorAngle` is derived from the moving centre**
+([UldBossHelper.cpp:729-730](src/Ai/Raid/Uld/Util/UldBossHelper.cpp#L729-L730)), so a centre
+translation rotates *and* translates every slot. The comment claims it prevents rotation; it does not.
+
+**Defect I — `IsHodirTrappedAllyBreaker` ranks by distance**, not guid
+([UldBossHelper.cpp:809-816](src/Ai/Raid/Uld/Util/UldBossHelper.cpp#L809-L816)), contrary to the
+original plan's decision 23. Distances change every tick, so membership of the "nearest 5" churns and
+bots flick between the ice block and Hodir.
+
+**Defect J — dead code.** `HodirRaidPositionTrigger` returns false whenever `GetHodirAnchor` returns
+false, and `GetHodirAnchor` returns false for melee, so the melee de-clump tail in
+[UldActions_Hodir.cpp:196-203](src/Ai/Raid/Uld/Action/UldActions_Hodir.cpp#L196-L203) is unreachable.
+
+**Defect K — `MoveInside` parks bots 3 yd off their slot.** It delegates to
+`MoveNear(mapId, x, y, z, distance, …)` = `MoveTo(x + cos(GetFollowAngle())·distance, …)`
+(`MovementActions.cpp:82-86`, `:1687-1694`). `GetFollowAngle()` is group-index based, so it is stable
+but unrelated to the ring — every bot rests 3 yd off-slot in an arbitrary direction, eating the
+spacing budget.
+
+## Decisions
+
+Settled with the user this round.
+
+1. **Spacing-first layout with a Starlight core.** Replace the single r=5 ring with concentric slots
+   whose minimum separation exceeds the 4 yd Ice Shards radius. One bot per icicle instead of five.
+2. **Biting Cold: shed at ≥ 2 stacks**, keep going until the aura is gone. ~33 % movement duty,
+   ~600/s average damage, casting uptime stays high. Same rule for tanks and ranged.
+3. **Melee get nothing.** Delete the unreachable de-clump; melee keep every generic mover, which the
+   multiplier already allows.
+
+Carried forward from the original plan and still correct: corner tanking, the shelter run, Starlight
+as the buff worth anchoring on, tank swap on Frozen Blows, the Storm Cloud arc, derive-don't-
+communicate, no raid icons, Berserk unhandled.
+
+## Geometry
+
+Every value navmesh-verified with `navprobe` this session, map 603. `settledZ` is **432.687** at every
+probed point; all rings 100 % on mesh.
+
+| Probe | Result |
+|---|---|
+| Ring r=4.5, 6 headings, around the raid anchor | 6/6 on mesh |
+| Ring r=11 (covered by r=15 probe), 12 headings | 12/12 on mesh |
+| Ring r=15, 12 headings | 12/12 on mesh |
+| Ring r=21, 12 headings | 12/12 on mesh |
+| Ring r=24, 12 headings | 12/12 on mesh — the room is wider than the old "x ≥ 1965" estimate |
+| Ring r=3, 8 headings, around **both** tank spots | 8/8 on mesh each |
+| Path MT shuttle `(1976.621, -277.621)` → `(1972.379, -273.379)` | 6.00 yd, direct, on mesh |
+| Path OT shuttle `(1982.121, -279.121)` → `(1977.879, -274.879)` | 6.00 yd, direct, on mesh |
+
+Both tank shuttle axes run at **315°/135°**, parallel to the SW bevel, so the shuttle never walks a
+tank toward the chamfer. Both stay well inside the boss evade band `y ∈ (-297.793, -166.259)`.
+
+Invocation, for re-verification:
+
+```
+MSYS_NO_PATHCONV=1 docker run --rm \
+  -v azerothcore-wotlk-pb_ac-client-data:/azerothcore/env/dist/data:ro \
+  --entrypoint /azerothcore/env/dist/bin/navprobe acore/ac-wotlk-build:master \
+  --map 603 ring 1986.56 -257.11 432.69 11 12
+```
+
+## The new ranged layout
+
+Slot index comes from the guid-stable roster, sorted **`(IsRangedDps ? 0 : 1, guid)`** so ranged DPS
+fill the Starlight slots first and healers take the outer ring. `n` = live ranged + healers,
+excluding tanks.
+
+```
+slot 0        r =  0.0                              (centre)
+slots 1..6    r =  4.5   step 2π/min(6, n-1)        4.50 yd apart at 6 slots
+slots 7..     r = 11.0   step 2π/outerCount         7.50 yd apart at 9 slots; 5.69 at 12
+radial gap    6.5 yd
+```
+
+- **Minimum separation 4.50 yd > the 4 yd splash** → one bot per icicle. The original plan's own
+  table puts that at **7,000 sustained HPS** instead of 35,000.
+- **Starlight (8 yd) covers slots 0-6 — seven slots.** A 10-man's whole ranged group fits; a 25-man
+  gives it to the seven highest-priority DPS. This is the deliberate reversal of the original
+  decision 5: 16 bots cannot be 4 yd apart inside an 8 yd circle, so Starlight-for-everyone and
+  icicle safety are mutually exclusive.
+- **The outer ring is at 11, not 9,** so an inner-ring bot shedding Biting Cold (see below) can move
+  3 yd outward and still be 3.5 yd clear of the outer ring, and still inside Starlight at r=7.5.
+- `base` angle = bearing from **`ULDUAR_HODIR_RAID_ANCHOR` to `ULDUAR_HODIR_MAINTANK_SPOT`**, both
+  compile-time constants, so the layout never rotates. This fixes defect H.
+
+Write the packing arithmetic into the constant's comment. It is the one number a later reader will
+want to shrink, and shrinking it re-creates defect F.
+
+## Changes
+
+### 1. `Util/UldBossHelper.h` / `.cpp`
+
+**Delete `_hodirRingCentres` entirely** and rewrite `GetHodirRingCentre` with no shared mutable state
+(fixes defect G):
+
+```cpp
+Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot)
+{
+    Creature* druid = GetHodirDruidHelper(botAI);
+    if (!druid)
+        return ULDUAR_HODIR_RAID_ANCHOR;
+
+    // Quantised so the druid shuffling a yard does not walk the whole raid. 3 yd keeps an inner
+    // slot within 6.6 yd of the druid, inside Starlight's 8.
+    float const q = ULDUAR_HODIR_CENTRE_QUANTUM;
+    Position centre(std::round(druid->GetPositionX() / q) * q,
+                    std::round(druid->GetPositionY() / q) * q,
+                    ULDUAR_HODIR_RAID_ANCHOR.GetPositionZ());
+
+    if (centre.GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR) > ULDUAR_HODIR_ZONE_ADOPT_RADIUS ||
+        centre.GetExactDist2d(&ULDUAR_HODIR_MAINTANK_SPOT) < ULDUAR_HODIR_CENTRE_MIN_TANK_GAP)
+        return ULDUAR_HODIR_RAID_ANCHOR;
+
+    return centre;
+}
+```
+
+Every bot computes the same answer from the same inputs, it self-heals across pulls, and the
+`_anchorReached` latch (which clears at `2 × tolerance` = 4 yd) absorbs a 3 yd quantum step without
+moving anyone. No dynobject read at all — Starlight sits at the druid's feet, so the druid *is* the
+zone.
+
+**Rewrite `GetHodirRingSlot`** for the concentric layout above. Keep the existing
+`GetMapWaterOrGroundLevel` + `Map::CheckCollisionAndGetValidCoords` validation — that part is right.
+Change the roster sort to `(IsRangedDps ? 0 : 1, guid)`. Compute `base` from the two fixed constants.
+
+**Add `bool IsHodirIcicleLethal(Creature* icicle)`** — the fix for defect C:
+
+```cpp
+// An icicle summon lives 7 s but detonates at 3.7 s, so its last 3.3 s are inert. Dodging a spent
+// one is what keeps bots off their slots and walking back and forth.
+TempSummon* summon = icicle->ToTempSummon();
+uint32 const remaining = summon ? summon->GetTimer() : 0;
+return !remaining || remaining > ULDUAR_HODIR_ICICLE_SPENT_MS;   // 3300
+```
+
+`remaining == 0` means the summon type carries no timer; treat it as lethal, which is the safe
+default. Use this in **both** `NearestHodirIcicle` (trigger) and `CollectHodirIcicles` (action) so the
+two cannot disagree.
+
+**Fix `IsHodirTrappedAllyBreaker`** (defect I): filter by `TRAPPED_ALLY_RANGE`, then rank by **guid
+only**. Delete the distance comparator.
+
+**Add `bool GetHodirShuttleLeg(PlayerbotAI*, Player*, Position& out)`** — where a bot goes to shed
+Biting Cold:
+
+- **Main tank / assist tank 0**: alternate between the two navprobe-verified endpoints,
+  `spot ± 3 yd` along bearing `−π/4`. Pick whichever is further from the bot, so the leg is always a
+  full 6 yd and `IsDuplicateMove` never refuses it. Hodir oscillates 6 yd along the wall; that is the
+  price and it is bounded.
+- **Everyone else**: `FindNearestPositionClearOfHazards(bot, <every other live raider within 12 yd>,
+  ULDUAR_HODIR_DECLUMP_RADIUS, 12.0f, 6.0f, M_PI/8)`. Passing `distanceStep = 6.0f` makes the helper
+  probe rings at 6 and 12 yd only, so the leg is always long enough to cover two tick instants. The
+  helper collision-validates, so the destination is never off-mesh. Empty result → retry at
+  `clearRadius = 3.0f`; still empty → return false.
+
+**Constants** — replace and add:
+
+```cpp
+constexpr float  ULDUAR_HODIR_RAID_RING_INNER      =  4.5f;  // 6 slots, 4.50 yd apart, inside Starlight
+constexpr float  ULDUAR_HODIR_RAID_RING_OUTER      = 11.0f;  // leaves 6.5 yd radial gap for a shed leg
+constexpr uint32 ULDUAR_HODIR_RAID_RING_INNER_SLOTS = 6;
+constexpr float  ULDUAR_HODIR_RING_SPOT_TOLERANCE  =  2.0f;  // re-anchor at 4 yd > the 3 yd centre quantum
+constexpr float  ULDUAR_HODIR_CENTRE_QUANTUM       =  3.0f;
+constexpr float  ULDUAR_HODIR_ZONE_ADOPT_RADIUS    = 10.0f;  // was 15
+constexpr float  ULDUAR_HODIR_CENTRE_MIN_TANK_GAP  = 18.0f;  // never centre the ring in Hodir's melee
+constexpr float  ULDUAR_HODIR_DECLUMP_RADIUS       =  4.5f;  // ICE_SHARDS_RADIUS + margin
+constexpr float  ULDUAR_HODIR_SHUTTLE_HALF_LEG     =  3.0f;
+constexpr float  ULDUAR_HODIR_SHUTTLE_BEARING      = -0.785398f;  // -pi/4, parallel to the SW bevel
+constexpr uint32 ULDUAR_HODIR_ICICLE_SPENT_MS      = 3300;   // 7000 lifespan - 3700 to detonation
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 2;
+constexpr float  ULDUAR_HODIR_DODGE_LEASH          = 12.0f;
+```
+
+Delete `ULDUAR_HODIR_RAID_RING_RADIUS` and `ULDUAR_HODIR_JUMP_HOP` / `ULDUAR_HODIR_JUMP_IDLE_MS`.
+
+### 2. `Trigger/UldTriggers_Hodir.h` / `.cpp`
+
+**Rewrite `HodirBitingColdTrigger` stateless** — delete `_stillSince` (fixes defect A at the root):
+
+```cpp
+if (!IsHodirEngaged(botAI)) return false;
+if (bot->HasAura(SPELL_HODIR_FLASH_FREEZE_TRAPPED)) return false;
+if (bot->HasAura(SPELL_HODIR_TOASTY_FIRE_AURA)) return false;   // the fire sheds a stack every 2 s for free
+return bot->HasAura(SPELL_BITING_COLD_PLAYER_AURA);
+```
+
+The ≥ 2 stack arm and the shed-until-clear hysteresis live on the **action**, which is a cached
+instance, so a stack-allocated copy can never lose them.
+
+**`HodirIcicleDodgeTrigger`** — route both entry lookups through `IsHodirIcicleLethal`.
+
+**`HodirRaidPositionTrigger`** — add `HodirBitingColdTrigger` to the stand-down list beside the
+shelter and dodge triggers, so the position node stops dragging a shedding bot back to its slot.
+
+Also fire the dodge stand-down on the **slot**, not just the bot: return false when a lethal icicle is
+within `ICE_SHARDS_CLEAR` of the anchor position. Otherwise a bot that has correctly dodged is walked
+straight back onto the icicle that is still counting down.
+
+### 3. `Action/UldActions_Hodir.h` / `.cpp`
+
+**Delete every `isUseful()` override in this file.** All three construct a trigger on the stack; one
+of them is defect A and the other two are the same footgun waiting. The trigger node is the gate.
+
+**Rename `HodirBitingColdJumpAction` → `HodirBitingColdShedAction`** (`"hodir biting cold shed"`) and
+rewrite:
+
+```cpp
+bool HodirBitingColdShedAction::Execute(Event)
+{
+    Aura* cold = bot->GetAura(SPELL_BITING_COLD_PLAYER_AURA);
+    if (!cold)
+    {
+        _shedding = false;
+        return false;
+    }
+
+    if (!_shedding && cold->GetStackAmount() < ULDUAR_HODIR_BITING_COLD_SHED_STACKS)
+        return false;
+
+    // Once started, keep moving until the aura is gone: a stack only comes off on the second moving
+    // tick, and any stationary tick in between resets that progress.
+    _shedding = true;
+
+    Position leg;
+    if (!GetHodirShuttleLeg(botAI, bot, leg))
+        return false;
+
+    return MoveTo(bot->GetMapId(), leg.GetPositionX(), leg.GetPositionY(), leg.GetPositionZ(),
+                  false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+}
+```
+
+Legs chain: `MoveTo` sets `lastdelayTime` to travel time, and the action re-fires on the next bot tick
+after it expires, so motion is near-continuous for the 2-4 s it takes to clear the aura.
+
+**Rewrite `HodirIcicleDodgeAction::Execute`** on the shared helper (fixes defects D and E):
+
+```cpp
+std::vector<Position> hazards;   // lethal icicles only, both entries, via IsHodirIcicleLethal
+...
+Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_ICE_SHARDS_CLEAR,
+                                                  ULDUAR_HODIR_DODGE_LEASH);
+if (!dest.GetPositionX() && !dest.GetPositionY())
+    // Graceful degradation: 4 yd is the actual kill radius, 6 was only margin.
+    dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
+                                             ULDUAR_HODIR_DODGE_LEASH * 2.0f);
+if (!dest.GetPositionX() && !dest.GetPositionY())
+    return false;
+
+return MoveTo(..., MovementPriority::MOVEMENT_FORCED);
+```
+
+Delete the hand-rolled 8-direction sweep, the Starlight tiering and the `FleePosition` fallback. The
+helper rings outward, so the first hit is already the shortest walk, which keeps a bot near its slot
+without a tier rule. `MOVEMENT_FORCED` lets the dodge preempt the position action.
+
+Note in a comment that a **second** icicle arriving mid-dodge still cannot preempt, because
+`IsWaitingForLastMove` only yields to a strictly higher priority. The ≥ 4.5 yd layout is what makes
+that rare; do not "fix" it by escalating priority further.
+
+**`HodirRaidPositionAction`** — delete the unreachable melee de-clump tail (decision 3, defect J).
+Replace `MoveInside` with `MoveTo` to the **exact** slot (fixes defect K); the `_anchorReached` latch
+already provides the stop condition, so the 3 yd `MoveNear` offset buys nothing and costs spacing.
+
+**`HodirSpreadStormCloudAction`** — step to the next slot on the bot's own ring, not a fixed π/4 arc,
+now that the ring radius depends on the slot.
+
+### 4. Wiring — `UldStrategy.cpp`, `UldActionContext.h`, `UldTriggerContext.h`
+
+Rename `"hodir biting cold jump"` → `"hodir biting cold shed"` in **all three** places plus the
+multiplier allowlist. A mismatch fails silently at runtime (`pitfalls.md:11-29`).
+
+Re-rank so the shed cannot starve targeting — the engine breaks on the first action that returns
+true, and the shed returns true ~33 % of ticks:
+
+```
+"hodir near snowpacked icicle"    -> "hodir move snowpacked icicle"     ACTION_RAID + 6
+"hodir icicle dodge"              -> "hodir icicle dodge action"        ACTION_RAID + 5
+"hodir frozen blows swap"         -> "hodir frozen blows swap action"   ACTION_RAID + 4
+"hodir set dps priority"          -> "hodir set dps priority action"    ACTION_RAID + 3
+"hodir spread storm cloud"        -> "hodir spread storm cloud"         ACTION_RAID + 2
+"hodir biting cold"               -> "hodir biting cold shed"           ACTION_RAID + 1
+"hodir frost resistance trigger"  -> "hodir frost resistance action"    ACTION_RAID
+"hodir raid position"             -> "hodir raid position action"       ACTION_RAID
+```
+
+Targeting is safe above the shed because `HodirSetDpsPriorityAction::Execute` returns false whenever
+the current target is already correct, so it starves nothing.
+
+### 5. `UldMultipliers.cpp`
+
+Update the `encounterMovers` allowlist name. No other change — the movement and `DpsAssistAction`
+halves are correct.
+
+### 6. Docs
+
+**Invoke `/compact-docs-writer` before editing any of these.**
+
+- `docs/raids/ulduar.md` Hodir section — the 1 s Biting Cold tick, the two-moving-ticks shed rule,
+  Toasty Fire removing stacks, the 7 s icicle lifespan with detonation at 3.7 s, the 5.3 s shelter
+  window, and the layout arithmetic that replaces the single-ring table.
+- `docs/engine/pitfalls.md` — **new entry**: *never construct a Trigger inside `Action::isUseful()`*.
+  A stack-allocated trigger loses any per-bot state the registered instance holds, and the node then
+  silently never runs. Cite `HodirBitingColdJumpAction` as the case that shipped.
+- `docs/plans/hodir-corner-anchor/hodir-corner-anchor.PLAN.md` — fold this round in and mark decision
+  5 reversed with the reason.
+
+## Verification
+
+**Static**
+
+1. `grep -rn "_stillSince\|_hodirRingCentres\|hodir biting cold jump\|ULDUAR_HODIR_RAID_RING_RADIUS" src/ conf/` → nothing.
+2. `grep -rn "Trigger [a-z]*(botAI);" src/Ai/Raid/Uld/Action/UldActions_Hodir.cpp` → nothing.
+3. Every `creators[...]` string matches a `NextAction(...)` / `TriggerNode(...)` string character for
+   character, and every multiplier allowlist name matches a registered action.
+4. `IsHodirIcicleLethal` is the only path by which either icicle entry becomes a hazard.
+5. `IsHodirTrappedAllyBreaker` has no distance comparator left.
+6. `GetHodirRingSlot` still calls both `GetMapWaterOrGroundLevel` and `CheckCollisionAndGetValidCoords`.
+
+**Build** — the user builds via Docker; paste errors back. Several classes are renamed, so expect
+link-level fallout if any wiring site is missed.
+
+**In game** (10-man exercises everything except the 12-slot outer ring)
+
+1. Ranged form the concentric layout, not a ring: one bot at the centre, up to six at 4.5 yd, the rest
+   at 11 yd. On 10-man everyone should carry `62807`; on 25-man exactly seven should.
+2. Bots **hold still and cast**. Watch specifically for the centre drifting — if slots move without
+   the druid relocating, the quantum or the `_anchorReached` threshold is wrong.
+3. Icicles: one bot moves per icicle, not five. It should step ~6 yd and **not** be walked back until
+   the icicle is spent. No bot should dodge an icicle that has already blown.
+4. Biting Cold: nobody above 2 stacks, including the main tank. The tank shuttles 6 yd along the wall
+   and Hodir never leaves the corner. Bots stop moving the moment the aura clears.
+5. Deliberately leave one bot out of a shelter: exactly **5** non-healers break its block and stay on
+   it — no flicker back to Hodir. Healers keep healing.
+6. Frozen Blows 15 s after each Flash Freeze: off-tank taunts, main tank takes him back, Hodir moves
+   ≤ 6 yd.
+7. Storm Cloud carrier laps its own ring; tanks never leave the corner to carry it.
+8. Nothing reaches `y < -297.8` or `y > -166.2`.
+
+## Out of scope
+
+Unchanged from the original plan and still deliberate: Berserk awareness, dispelling the Freeze root,
+Starlight for melee, raid icons. Melee positioning is now explicitly out too (decision 3).

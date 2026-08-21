@@ -751,27 +751,55 @@ constexpr float ULDUAR_HODIR_SAFE_AREA_TOLERANCE = 6.0f;  // park inside the 9 y
 // (25man) one-second ticks to spend, so it tours the ring rather than searching for a cluster.
 constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
 
-// Small icicles (62457) hit for 14000 in 4 yd every 2s; the drift icicle (65370) does the same in
-// 7 yd when it lands. Bots step past the edge rather than onto it.
+// Small icicles (62457) hit for 14000 in 4 yd; the drift icicle (65370) does the same in 7 yd. Bots
+// step past the edge rather than onto it.
 constexpr float ULDUAR_HODIR_ICE_SHARDS_RADIUS = 4.0f;
 constexpr float ULDUAR_HODIR_ICE_SHARDS_CLEAR = 6.0f;
 
-// The ranged ring sits inside the Starlight zone, so radius plus arrival tolerance may not exceed
-// ULDUAR_HODIR_STARLIGHT_RADIUS. Widening it silently drops the buff for the outer slots, which is
-// the whole reason the fight is anchored here - and it buys nothing against Ice Shards either: 16
-// bots cannot be 4 yd apart inside an 8 yd circle, that packing needs more area than the circle has.
-constexpr float ULDUAR_HODIR_RAID_RING_RADIUS = 5.0f;
-constexpr float ULDUAR_HODIR_RING_SPOT_TOLERANCE = 3.0f;
-constexpr float ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE = 3.0f;
-constexpr float ULDUAR_HODIR_ZONE_ADOPT_RADIUS = 15.0f;  // how far from the fixed anchor a zone may sit
-constexpr float ULDUAR_HODIR_DODGE_LEASH = 10.0f;        // max drift from the bot's anchor
-constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.0f;
+// An icicle summon lives 7000ms (62234/62462, DurationIndex 165) but detonates at 3700ms: its AI
+// casts the fall effect at 2000ms and that aura's single 1700ms tick triggers the blast. The last
+// 3300ms are inert, and at one icicle every 2s roughly half of those alive have already blown.
+constexpr uint32 ULDUAR_HODIR_ICICLE_SPENT_MS = 3300;
 
-// Biting Cold only stacks on a bot that has stood still through four 1s ticks, and a jump counts as
-// moving. The hop alternates between two points so JumpTo's duplicate-move guard cannot reject it,
-// and 2 yd keeps it inside every arrival tolerance so it never triggers a re-anchor.
-constexpr float ULDUAR_HODIR_JUMP_HOP = 2.0f;
-constexpr uint32 ULDUAR_HODIR_JUMP_IDLE_MS = 3000;
+// Ranged spacing beats Starlight coverage. 62457 splashes 4 yd, so slots are laid out concentrically
+// at a minimum separation of 4.5 yd and one icicle catches one bot instead of five. Only the seven
+// slots inside ULDUAR_HODIR_STARLIGHT_RADIUS get the buff - that is not a shortfall to fix by
+// shrinking the radii, it is arithmetic: 16 bots at 4 yd spacing need ~200 yd2 and an 8 yd circle has
+// 201, so Starlight for everyone and icicle safety cannot both hold on 25man.
+//
+// The outer ring sits 6.5 yd beyond the inner one so a bot shedding Biting Cold can step 3 yd
+// outward without closing on its neighbours.
+constexpr float ULDUAR_HODIR_RAID_RING_INNER = 4.5f;
+constexpr float ULDUAR_HODIR_RAID_RING_OUTER = 11.0f;
+constexpr uint32 ULDUAR_HODIR_RAID_RING_INNER_SLOTS = 6;
+
+// Arrival tolerance doubles as the re-anchor threshold, and it has to stay above the centre quantum
+// or a one-step druid shuffle walks the whole raid.
+constexpr float ULDUAR_HODIR_RING_SPOT_TOLERANCE = 2.0f;
+constexpr float ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE = 3.0f;
+static_assert(ULDUAR_HODIR_RAID_RING_INNER + ULDUAR_HODIR_RING_SPOT_TOLERANCE <= ULDUAR_HODIR_STARLIGHT_RADIUS,
+              "the inner ring plus its arrival tolerance has to stay inside Starlight");
+static_assert(ULDUAR_HODIR_RAID_RING_OUTER - ULDUAR_HODIR_RAID_RING_INNER > ULDUAR_HODIR_ICE_SHARDS_RADIUS,
+              "the two rings have to sit more than one Ice Shards radius apart");
+
+// The ring centre is the druid's own position, quantised. 3 yd keeps an inner slot within 6.6 yd of
+// the druid, inside Starlight's 8, while leaving the layout still for small helper movement.
+constexpr float ULDUAR_HODIR_CENTRE_QUANTUM = 3.0f;
+static_assert(ULDUAR_HODIR_CENTRE_QUANTUM < 2.0f * ULDUAR_HODIR_RING_SPOT_TOLERANCE,
+              "a one-step centre shift must not clear the re-anchor threshold");
+constexpr float ULDUAR_HODIR_ZONE_ADOPT_RADIUS = 10.0f;    // how far from the fixed anchor the druid may sit
+constexpr float ULDUAR_HODIR_CENTRE_MIN_TANK_GAP = 18.0f;  // never centre the ring inside Hodir's melee
+constexpr float ULDUAR_HODIR_DODGE_LEASH = 12.0f;
+constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
+
+// Biting Cold is 1s ticks that damage 200*2^stacks every tick. A stack comes off only on the second
+// moving tick and any stationary tick in between resets that progress, so shedding needs sustained
+// movement - a hop cannot do it. Two moving ticks means more than a second of continuous travel, so
+// legs are 6 yd and chain until the aura is gone. Arming at 2 stacks costs ~33% movement duty and
+// ~600/s; arming at 1 would cost half the raid's cast uptime for 200/s less.
+constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
+constexpr float ULDUAR_HODIR_SHUTTLE_BEARING = -0.785398f;  // -pi/4, parallel to the SW bevel
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 2;
 
 // A trapped raider dies to the next Flash Freeze 48s later, so freeing them outranks the boss - but
 // the block has little health, so only the nearest few bots leave what they were doing.
@@ -1084,25 +1112,38 @@ Creature* GetHodirDruidHelper(PlayerbotAI* botAI);
 // The Snowpacked Icicle Target the whole raid shelters at during Flash Freeze.
 Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot);
 
-// Where the ranged ring is centred: the adopted Starlight zone, or ULDUAR_HODIR_RAID_ANCHOR when no
-// zone qualifies - which is every window between the druid's 15s recasts, and the whole fight if the
-// druid is dead. The zone is latched per instance so twenty bots pick the same one of the several
-// that overlap, and re-latched only once the bot's own Starlight aura drops, which is a free and
-// exact expiry signal.
+// Where the ranged formation is centred: the druid's position quantised to ULDUAR_HODIR_CENTRE_QUANTUM,
+// or ULDUAR_HODIR_RAID_ANCHOR when the druid is dead or standing somewhere the raid cannot follow.
+// Starlight sits at the druid's feet, so the druid is the zone and no dynamic object has to be read.
+// Deriving it fresh on every call is deliberate: a cached centre shared across the raid but validated
+// against one bot's own aura gets rewritten by whichever bot has stepped out, and the formation
+// thrashes.
 Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot);
 
 // Where this bot belongs and how far it may stray. Tanks get their fixed corner spots; ranged and
-// healers get a slot on the ring. Melee are unanchored and get false. Trigger and action both go
+// healers get a formation slot. Melee are unanchored and get false. Trigger and action both go
 // through here so they cannot disagree.
 bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
 
-// This bot's slot on the ring, ranked by guid across the live ranged-and-healer set so every bot
-// derives the same layout without sharing state. The raw ring point is validated against the ground
-// and the collision mesh before it is returned - MoveTo rejects an off-mesh destination silently.
+// This bot's formation slot: centre, then an inner ring inside Starlight, then an outer ring. Ranged
+// dps are ranked ahead of healers and ties break on guid, so every bot derives the same layout
+// without sharing state. The raw point is validated against the ground and the collision mesh before
+// it is returned - MoveTo rejects an off-mesh destination silently.
 bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out);
 
-// True when this bot is one of the nearest ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS non-healers to the
-// block. Ties break on guid, so the set is identical on every bot that evaluates it.
+// Where this bot moves to shed Biting Cold. Tanks alternate between two fixed points beside their
+// spot so the boss cannot be walked out of the corner; everyone else takes the nearest point that is
+// clear of the rest of the raid. Legs are long enough to cover two aura ticks.
+bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
+
+// False once an icicle has already detonated. It lingers another 3.3s after the blast, and treating
+// that corpse as live both inflates the hazard set past what any dodge can clear and keeps bots
+// walking back and forth over a spot that is already safe.
+bool IsHodirIcicleLethal(Creature* icicle);
+
+// True when this bot is one of the ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS non-healers in range of the
+// block, ranked by guid. Ranking by distance instead would re-shuffle the set every tick and bots
+// would flick between the block and the boss.
 bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block);
 
 

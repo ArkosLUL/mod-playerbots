@@ -16,6 +16,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
@@ -25,34 +26,31 @@
 
 namespace
 {
-// Every icicle close enough to matter, of either entry. The drift entry is included because it is
-// lethal while it is still falling; the trigger decides when it has stopped being a hazard.
-std::vector<Creature*> CollectHodirIcicles(Player* bot, float radius)
+// Where every icicle that has not detonated yet is standing, both entries. The drift entry is
+// included because it is lethal on the way down; once it lands it becomes the shelter and
+// IsHodirIcicleLethal stops reporting it.
+std::vector<Position> CollectHodirIcicleHazards(Player* bot, float radius)
 {
-    std::vector<Creature*> icicles;
-    std::list<Creature*> found;
+    std::vector<Position> hazards;
 
-    bot->GetCreatureListWithEntryInGrid(found, NPC_HODIR_ICICLE_SMALL, radius);
-    for (Creature* icicle : found)
-        if (icicle && icicle->IsAlive())
-            icicles.push_back(icicle);
+    for (uint32 entry : {NPC_HODIR_ICICLE_SMALL, NPC_HODIR_ICICLE_DRIFT})
+    {
+        std::list<Creature*> found;
+        bot->GetCreatureListWithEntryInGrid(found, entry, radius);
+        for (Creature* icicle : found)
+            if (IsHodirIcicleLethal(icicle))
+                hazards.push_back(icicle->GetPosition());
+    }
 
-    found.clear();
-    bot->GetCreatureListWithEntryInGrid(found, NPC_HODIR_ICICLE_DRIFT, radius);
-    for (Creature* icicle : found)
-        if (icicle && icicle->IsAlive())
-            icicles.push_back(icicle);
+    return hazards;
+}
 
-    return icicles;
+bool IsEmptyPosition(Position const& position)
+{
+    return !position.GetPositionX() && !position.GetPositionY();
 }
 
 }  // namespace
-
-bool HodirMoveSnowpackedIcicleAction::isUseful()
-{
-    HodirNearSnowpackedIcicleTrigger trigger(botAI);
-    return trigger.IsActive();
-}
 
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
 {
@@ -65,127 +63,58 @@ bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
                       MovementPriority::MOVEMENT_COMBAT);
 }
 
-bool HodirIcicleDodgeAction::isUseful()
-{
-    HodirIcicleDodgeTrigger trigger(botAI);
-    return trigger.IsActive();
-}
-
 bool HodirIcicleDodgeAction::Execute(Event /*event*/)
 {
-    std::vector<Creature*> const icicles = CollectHodirIcicles(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
-    if (icicles.empty())
+    std::vector<Position> const hazards = CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+    if (hazards.empty())
         return false;
 
-    Position anchor;
-    float tolerance = 0.0f;
-    bool const anchored = GetHodirAnchor(botAI, bot, anchor, tolerance);
-    Position const ringCentre = GetHodirRingCentre(botAI, bot);
+    // The shared helper rings outward and validates every candidate against the collision mesh, so
+    // the first hit is both the shortest walk and somewhere MoveTo will actually accept. FleePosition
+    // is the wrong tool here: it clamps travel to AiPlayerbot.FleeDistance and reads one hazard, so
+    // the second icicle of a volley leaves the bot standing in the blast.
+    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_ICE_SHARDS_CLEAR,
+                                                      ULDUAR_HODIR_DODGE_LEASH);
 
-    // Rank candidates on staying in Starlight first, then on the smallest step. Keeping the buff is
-    // the whole reason the raid stands here, and at a 5 yd ring inside an 8 yd zone a six-yard
-    // sidestep traces a chord that lands back on the ring - so there is always an in-zone escape.
-    // Smallest step second, because maximising distance from the hazard is what walks bots out of
-    // the room.
-    Position best;
-    bool found = false;
-    bool bestInZone = false;
-    float bestStep = 0.0f;
+    // Nothing fully clear: 6 yd was margin, 4 is the radius that actually kills, and moving to the
+    // least bad spot beats holding still because the sweep found no perfect one.
+    if (IsEmptyPosition(dest))
+        dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
+                                                 ULDUAR_HODIR_DODGE_LEASH * 2.0f);
 
-    for (int ring = 1; ring * 2.0f <= ULDUAR_HODIR_DODGE_LEASH; ++ring)
+    if (IsEmptyPosition(dest))
+        return false;
+
+    // FORCED so the dodge outranks the anchor walking the bot back in. A second icicle arriving
+    // mid-dodge still cannot preempt this one - IsWaitingForLastMove only yields to a strictly higher
+    // priority - which is what the 4.5 yd formation spacing is for. Do not escalate further.
+    return MoveTo(bot->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false,
+                  false, false, false, MovementPriority::MOVEMENT_FORCED);
+}
+
+bool HodirBitingColdShedAction::Execute(Event /*event*/)
+{
+    Aura* cold = bot->GetAura(SPELL_BITING_COLD_PLAYER_AURA);
+    if (!cold)
     {
-        float const step = ring * 2.0f;
-        for (int i = 0; i < 8; ++i)
-        {
-            float const angle = static_cast<float>(i) * static_cast<float>(M_PI) / 4.0f;
-            float const x = bot->GetPositionX() + std::cos(angle) * step;
-            float const y = bot->GetPositionY() + std::sin(angle) * step;
-            float const z = bot->GetPositionZ();
-            Position const candidate(x, y, z);
-
-            bool clear = true;
-            for (Creature* icicle : icicles)
-            {
-                if (icicle->GetExactDist2d(x, y) < ULDUAR_HODIR_ICE_SHARDS_CLEAR)
-                {
-                    clear = false;
-                    break;
-                }
-            }
-
-            if (!clear)
-                continue;
-
-            if (anchored && candidate.GetExactDist2d(&anchor) > ULDUAR_HODIR_DODGE_LEASH)
-                continue;
-
-            if (!bot->IsWithinLOS(x, y, z))
-                continue;
-
-            bool const inZone = candidate.GetExactDist2d(&ringCentre) <= ULDUAR_HODIR_STARLIGHT_RADIUS;
-            bool better = !found;
-            if (!better && inZone != bestInZone)
-                better = inZone;
-            else if (!better && step < bestStep)
-                better = true;
-
-            if (!better)
-                continue;
-
-            best = candidate;
-            bestInZone = inZone;
-            bestStep = step;
-            found = true;
-        }
-
-        // Rings are searched inside out, so once an in-zone candidate exists nothing further out can
-        // beat it on either key.
-        if (found && bestInZone)
-            break;
+        _shedding = false;
+        return false;
     }
 
-    if (!found)
-    {
-        Creature* nearest = nullptr;
-        for (Creature* icicle : icicles)
-            if (!nearest || bot->GetExactDist2d(icicle) < bot->GetExactDist2d(nearest))
-                nearest = icicle;
+    if (!_shedding && cold->GetStackAmount() < ULDUAR_HODIR_BITING_COLD_SHED_STACKS)
+        return false;
 
-        if (!nearest)
-            return false;
+    // Once started, keep going until the aura is gone. A stack comes off only on the second moving
+    // tick and any stationary tick in between resets that progress, so stopping early wastes the
+    // movement already spent.
+    _shedding = true;
 
-        return FleePosition(nearest->GetPosition(), ULDUAR_HODIR_ICE_SHARDS_CLEAR, 500);
-    }
+    Position leg;
+    if (!GetHodirShuttleLeg(botAI, bot, leg))
+        return false;
 
-    return MoveTo(bot->GetMapId(), best.GetPositionX(), best.GetPositionY(), best.GetPositionZ(), false,
+    return MoveTo(bot->GetMapId(), leg.GetPositionX(), leg.GetPositionY(), leg.GetPositionZ(), false,
                   false, false, false, MovementPriority::MOVEMENT_COMBAT);
-}
-
-bool HodirBitingColdJumpAction::isUseful()
-{
-    HodirBitingColdTrigger trigger(botAI);
-    return trigger.IsActive();
-}
-
-bool HodirBitingColdJumpAction::Execute(Event /*event*/)
-{
-    Position anchor;
-    float tolerance = 0.0f;
-    if (!GetHodirAnchor(botAI, bot, anchor, tolerance))
-        anchor = bot->GetPosition();
-
-    // Alternate between the anchor and a fixed offset from it. JumpTo refuses a destination it has
-    // just used, so jumping on one exact spot would be dropped after the first hop; two yards stays
-    // inside every arrival tolerance, so the hop never reads as leaving the anchor.
-    float const bearing = static_cast<float>(bot->GetGUID().GetCounter() % 8) * static_cast<float>(M_PI) / 4.0f;
-    Position const offset(anchor.GetPositionX() + std::cos(bearing) * ULDUAR_HODIR_JUMP_HOP,
-                          anchor.GetPositionY() + std::sin(bearing) * ULDUAR_HODIR_JUMP_HOP,
-                          anchor.GetPositionZ());
-
-    Position const& target = bot->GetExactDist2d(&anchor) < bot->GetExactDist2d(&offset) ? offset : anchor;
-
-    return JumpTo(bot->GetMapId(), target.GetPositionX(), target.GetPositionY(), target.GetPositionZ(),
-                  MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool HodirRaidPositionAction::Execute(Event /*event*/)
@@ -193,19 +122,14 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
     Position anchor;
     float tolerance = 0.0f;
     if (!GetHodirAnchor(botAI, bot, anchor, tolerance))
-    {
-        // Melee have no anchor, but they still gain from not standing on each other while icicles
-        // splash 4 yd.
-        if (Player* crowd = GetNearestPlayerInRadius(bot, ULDUAR_HODIR_DECLUMP_RADIUS))
-            return FleePosition(crowd->GetPosition(), ULDUAR_HODIR_DECLUMP_RADIUS, 1000);
-
         return false;
-    }
 
     float const distance = bot->GetExactDist2d(&anchor);
 
     // Reach then hold. Without the latch the bot re-issues a move on every drift inside the
-    // tolerance, and a moving bot cannot start a cast - it slides on the spot and never casts.
+    // tolerance, and a moving bot cannot start a cast - it slides on the spot and never casts. The
+    // release threshold also has to clear the centre quantum, or a one-step druid shuffle restarts
+    // the whole formation.
     if (_anchorReached && distance > tolerance * 2.0f)
         _anchorReached = false;
 
@@ -215,8 +139,11 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    return MoveInside(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
-                      tolerance, MovementPriority::MOVEMENT_COMBAT);
+    // The exact slot, not MoveInside: that one offsets the destination by the tolerance at the bot's
+    // follow angle, which parks everyone a couple of yards off-formation in an unrelated direction
+    // and eats the spacing the layout is built on.
+    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(), false,
+                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
 }
 
 Unit* HodirSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
@@ -317,25 +244,22 @@ bool HodirFrozenBlowsSwapAction::Execute(Event /*event*/)
     return UldCastClassTaunt(botAI, GetHodir(botAI));
 }
 
-bool HodirSpreadStormCloudAction::isUseful()
-{
-    HodirSpreadStormCloudTrigger trigger(botAI);
-    if (trigger.IsActive())
-        return true;
-
-    // The lap direction is latched for one carry. Clearing it when the aura is gone is what lets the
-    // next Storm Cloud pick a fresh direction instead of inheriting the last one.
-    _direction = 0;
-    return false;
-}
-
 bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
 {
     Position const centre = GetHodirRingCentre(botAI, bot);
     uint32 const stormPower = sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot);
 
+    // Storm Cloud only sheds stacks, so a rise is a new carry and the lap direction has to be picked
+    // again rather than inherited from the last one.
+    Aura* cloud = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot));
+    uint8 const stacks = cloud ? cloud->GetStackAmount() : 0;
+    if (stacks > _lastStacks)
+        _direction = 0;
+    _lastStacks = stacks;
+
     float const botAngle = std::atan2(bot->GetPositionY() - centre.GetPositionY(),
                                       bot->GetPositionX() - centre.GetPositionX());
+    float const lapRadius = std::max(bot->GetExactDist2d(&centre), ULDUAR_HODIR_RAID_RING_INNER);
 
     // Storm Power reaches 3 yd and the carrier has only 4-6 one-second ticks, so it laps the ring
     // rather than stepping to one neighbour. The direction is chosen once, toward whichever way has
@@ -371,8 +295,10 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
     float const nextAngle = Position::NormalizeOrientation(
         botAngle + static_cast<float>(_direction) * static_cast<float>(M_PI) / 4.0f);
 
-    float const x = centre.GetPositionX() + std::cos(nextAngle) * ULDUAR_HODIR_RAID_RING_RADIUS;
-    float const y = centre.GetPositionY() + std::sin(nextAngle) * ULDUAR_HODIR_RAID_RING_RADIUS;
+    // Lap at whatever radius the carrier is already standing at, so an outer-ring carrier does not
+    // dive through the middle of the formation on its way round.
+    float const x = centre.GetPositionX() + std::cos(nextAngle) * lapRadius;
+    float const y = centre.GetPositionY() + std::sin(nextAngle) * lapRadius;
     float z = bot->GetMapWaterOrGroundLevel(x, y, centre.GetPositionZ());
     if (z <= INVALID_HEIGHT)
         z = centre.GetPositionZ();

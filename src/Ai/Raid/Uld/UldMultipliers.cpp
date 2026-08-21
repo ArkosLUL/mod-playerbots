@@ -942,7 +942,7 @@ float HodirGuardMultiplier::GetValue(Action* action)
 
     static std::set<std::string> const encounterMovers = {
         "hodir raid position action", "hodir move snowpacked icicle", "hodir icicle dodge action",
-        "hodir biting cold jump", "hodir spread storm cloud"};
+        "hodir biting cold shed", "hodir spread storm cloud"};
 
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
 }

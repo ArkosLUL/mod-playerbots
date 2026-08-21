@@ -12,6 +12,10 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
+// None of the actions in this file override isUseful. Every one of these is reached from exactly one
+// trigger node, which is already the gate, and the obvious implementation - constructing that trigger
+// on the stack - silently breaks any trigger that keeps per-bot state.
+
 // Run to the Snowpacked Icicle Target the rest of the raid is running to. Standing inside its Safe
 // Area is the only way to survive Flash Freeze.
 class HodirMoveSnowpackedIcicleAction : public MovementAction
@@ -19,29 +23,30 @@ class HodirMoveSnowpackedIcicleAction : public MovementAction
 public:
     HodirMoveSnowpackedIcicleAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir move snowpacked icicle") {}
     bool Execute(Event event) override;
-    bool isUseful() override;
 };
 
-// Step out from under a falling icicle, preferring a destination that is still inside Starlight.
+// Step out from under an icicle that has not detonated yet.
 class HodirIcicleDodgeAction : public MovementAction
 {
 public:
     HodirIcicleDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir icicle dodge action") {}
     bool Execute(Event event) override;
-    bool isUseful() override;
 };
 
-// Jump on the spot to shed Biting Cold. A jump counts as movement, which is what the aura checks,
-// and unlike walking it does not take the bot anywhere.
-class HodirBitingColdJumpAction : public MovementAction
+// Shed Biting Cold by moving. A stack only comes off on the second moving tick and any stationary
+// tick resets that progress, so this chains 6 yd legs until the aura is gone rather than hopping.
+class HodirBitingColdShedAction : public MovementAction
 {
 public:
-    HodirBitingColdJumpAction(PlayerbotAI* ai) : MovementAction(ai, "hodir biting cold jump") {}
+    HodirBitingColdShedAction(PlayerbotAI* ai) : MovementAction(ai, "hodir biting cold shed") {}
     bool Execute(Event event) override;
-    bool isUseful() override;
+
+private:
+    bool _shedding = false;
 };
 
-// Hold the bot's anchor: a fixed corner spot for the two tanks, a ring slot for ranged and healers.
+// Hold the bot's anchor: a fixed corner spot for the two tanks, a formation slot for ranged and
+// healers.
 class HodirRaidPositionAction : public MovementAction
 {
 public:
@@ -71,17 +76,18 @@ public:
     bool Execute(Event event) override;
 };
 
-// Carry Storm Cloud around the ranged ring so Storm Power lands on as much of the raid as its 4-6
-// one-second ticks reach.
+// Carry Storm Cloud around the ranged formation so Storm Power lands on as much of the raid as its
+// 4-6 one-second ticks reach.
 class HodirSpreadStormCloudAction : public MovementAction
 {
 public:
     HodirSpreadStormCloudAction(PlayerbotAI* ai) : MovementAction(ai, "hodir spread storm cloud") {}
     bool Execute(Event event) override;
-    bool isUseful() override;
 
 private:
     int8 _direction = 0;
+    // Storm Cloud only ever loses stacks, so a rise means a fresh carry and a fresh lap direction.
+    uint8 _lastStacks = 0;
 };
 
 #endif

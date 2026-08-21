@@ -336,20 +336,26 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // The engine stops at the first action that succeeds, so this order is a survival ranking, not a
     // preference. Sheltering is the only node whose failure is an outright death - Flash Freeze
     // encases everyone without the Safe Area aura, and a second one instakills whoever is still
-    // trapped. Dodging is next because an icicle lands every 2s for 14000. The jump sits above the
-    // targeting node so a bot parked on an ice block still sheds Biting Cold. Position is last on
-    // purpose: killing the block that is about to get an ally killed beats standing on a dot.
+    // trapped. Dodging is next because an icicle lands every 2s for 14000. Targeting sits above the
+    // Biting Cold shed, which moves for seconds at a time and would otherwise starve it; that costs
+    // nothing, because the targeting action returns false whenever the current target is already
+    // right. Position is last on purpose: killing the block that is about to get an ally killed beats
+    // standing on a dot.
     triggers.push_back(new TriggerNode(
         "hodir near snowpacked icicle",
-        { NextAction("hodir move snowpacked icicle", ACTION_RAID + 5) }));
+        { NextAction("hodir move snowpacked icicle", ACTION_RAID + 6) }));
 
     triggers.push_back(new TriggerNode(
         "hodir icicle dodge",
-        { NextAction("hodir icicle dodge action", ACTION_RAID + 4) }));
+        { NextAction("hodir icicle dodge action", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
         "hodir frozen blows swap",
-        { NextAction("hodir frozen blows swap action", ACTION_RAID + 3) }));
+        { NextAction("hodir frozen blows swap action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "hodir set dps priority",
+        { NextAction("hodir set dps priority action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "hodir spread storm cloud",
@@ -357,11 +363,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "hodir biting cold",
-        { NextAction("hodir biting cold jump", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir set dps priority",
-        { NextAction("hodir set dps priority action", ACTION_RAID + 1) }));
+        { NextAction("hodir biting cold shed", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "hodir frost resistance trigger",
