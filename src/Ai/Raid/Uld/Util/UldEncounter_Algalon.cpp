@@ -184,7 +184,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
         if (!state.firstBigBangMs)
             state.firstBigBangMs = state.lastTickMs;
 
-        state.bigBangSoaker.Clear();
+        state.bigBangSoaker = ObjectGuid::Empty;
     }
 
     state.bigBangCasting = casting;
@@ -294,7 +294,7 @@ Player* GetAlgalonBigBangSoaker(PlayerbotAI* botAI)
     if (CanBeSoaker(latched, tier))
         return latched;
 
-    state.bigBangSoaker.Clear();
+    state.bigBangSoaker = ObjectGuid::Empty;
 
     Player* best = nullptr;
     uint8 bestTier = 0xFF;

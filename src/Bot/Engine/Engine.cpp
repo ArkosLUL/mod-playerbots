@@ -12,6 +12,28 @@
 #include "Queue.h"
 #include "Strategy.h"
 #include "Timer.h"
+#include "RaidObs.h"
+
+#include <optional>
+
+
+namespace
+{
+// Mirrors the LogAction verdicts below into the raid trace. These take the object rather than a name
+// because getName() returns std::string by value: passing the name would build it on every verdict for
+// every bot, whether or not anything is recording.
+inline void ObsVerdict(PlayerbotAI* botAI, Action* action, float relevance, char const* verdict)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteAction(botAI->GetBot(), action->getName().c_str(), relevance, verdict);
+}
+
+inline void ObsVerdict(PlayerbotAI* botAI, ActionNode* actionNode, float relevance, char const* verdict)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteAction(botAI->GetBot(), actionNode->getName().c_str(), relevance, verdict);
+}
+}  // namespace
 
 Engine::Engine(PlayerbotAI* botAI, AiObjectContext* factory) : PlayerbotAIAware(botAI), aiObjectContext(factory)
 {
@@ -144,6 +166,12 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
 {
     LogAction("--- AI Tick ---");
 
+    // Covers the whole pass, not just action execution: triggers and values flip encounter latches
+    // too, and a latch has no guid of its own to resolve a trace from.
+    RaidObs::BotContext obsBot(botAI->GetBot());
+    if (RaidObs::Active())
+        RaidObs::BeginTick(botAI->GetBot());
+
     if (sPlayerbotAIConfig.logValuesPerTick)
         LogValues();
 
@@ -181,6 +209,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
         if (!action)
         {
             LogAction("A:%s - UNKNOWN", actionNode->getName().c_str());
+            ObsVerdict(botAI, actionNode, relevance, "UNKNOWN");
         }
         else if (action->isUseful())
         {
@@ -193,6 +222,9 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 if (relevance <= 0)
                 {
                     LogAction("Multiplier %s made action %s useless", multiplier->getName().c_str(), action->getName().c_str());
+                    if (RaidObs::Active())
+                        RaidObs::NoteVeto(botAI->GetBot(), multiplier->getName().c_str(),
+                                          action->getName().c_str());
                     break;
                 }
             }
@@ -201,23 +233,32 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
             {
                 if (!skipPrerequisites)
                 {
-                    LogAction("A:%s - PREREQ", action->getName().c_str());
-
+                    // Only a tick that actually yields to a prerequisite is a PREREQ verdict. Logging
+                    // one before the check would alternate PREREQ/OK every tick for an action with no
+                    // prerequisites at all, which defeats the change-only dedup in NoteAction.
                     if (MultiplyAndPush(actionNode->getPrerequisites(), relevance + 0.002f, false, event, "prereq"))
                     {
+                        LogAction("A:%s - PREREQ", action->getName().c_str());
+                        ObsVerdict(botAI, action, relevance, "PREREQ");
                         PushAgain(actionNode, relevance + 0.001f, event);
                         continue;
                     }
                 }
 
                 PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_ACTION, action->getName(), &aiObjectContext->performanceStack);
+                std::optional<RaidObs::ActionScope> obsAction;
+                if (RaidObs::Active())
+                    obsAction.emplace(action->getName());
+
                 actionExecuted = ListenAndExecute(action, event);
+                obsAction.reset();
                 if (pmo)
                     pmo->finish();
 
                 if (actionExecuted)
                 {
                     LogAction("A:%s - OK", action->getName().c_str());
+                    ObsVerdict(botAI, action, relevance, "OK");
                     LogMeleeApproach(debugMove, action, "won the tick", relevance);
                     MultiplyAndPush(actionNode->getContinuers(), relevance, false, event, "cont");
                     lastRelevance = relevance;
@@ -227,6 +268,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 else
                 {
                     LogAction("A:%s - FAILED", action->getName().c_str());
+                    ObsVerdict(botAI, action, relevance, "FAILED");
                     LogMeleeApproach(debugMove, action, "failed", relevance);
                     MultiplyAndPush(actionNode->getAlternatives(), relevance + 0.003f, false, event, "alt");
                 }
@@ -234,6 +276,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
             else
             {
                 LogAction("A:%s - IMPOSSIBLE", action->getName().c_str());
+                ObsVerdict(botAI, action, relevance, "IMPOSSIBLE");
                 LogMeleeApproach(debugMove, action, "impossible", relevance);
                 MultiplyAndPush(actionNode->getAlternatives(), relevance + 0.003f, false, event, "alt");
             }
@@ -241,6 +284,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
         else
         {
             LogAction("A:%s - USELESS", action->getName().c_str());
+            ObsVerdict(botAI, action, relevance, "USELESS");
             LogMeleeApproach(debugMove, action, "useless", relevance);
             lastRelevance = relevance;
         }
@@ -320,6 +364,8 @@ ActionResult Engine::ExecuteAction(std::string const name, Event event, std::str
     if (!actionNode)
         return ACTION_RESULT_UNKNOWN;
 
+    RaidObs::BotContext obsBot(botAI->GetBot());
+
     Action* action = InitializeAction(actionNode);
     if (!action)
     {
@@ -347,7 +393,13 @@ ActionResult Engine::ExecuteAction(std::string const name, Event event, std::str
 
     action->MakeVerbose();
 
+    std::optional<RaidObs::ActionScope> obsAction;
+    if (RaidObs::Active())
+        obsAction.emplace(action->getName());
+
     result = ListenAndExecute(action, event);
+    obsAction.reset();
+
     MultiplyAndPush(action->getContinuers(), 0.0f, false, event, "default");
 
     delete actionNode;

@@ -13,6 +13,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "RaidBossHelpers.h"
 #include "UldHardMode.h"
 #include "Vehicle.h"
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <functional>
 #include <ctime>
 #include <limits>
@@ -648,30 +650,35 @@ Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
         }
     }
 
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.shelter",
+                             best ? RaidObs::DescribeAssignment(best->GetGUID()) : "none");
+
     return best;
 }
 
 Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot)
 {
-    if (!bot)
-        return ULDUAR_HODIR_RAID_ANCHOR;
+    Position centre = ULDUAR_HODIR_RAID_ANCHOR;
 
-    Creature* druid = GetHodirDruidHelper(botAI);
-    if (!druid)
-        return ULDUAR_HODIR_RAID_ANCHOR;
+    if (Creature* druid = bot ? GetHodirDruidHelper(botAI) : nullptr)
+    {
+        // Quantised, so the druid shuffling a yard does not walk the whole raid. Everything here is
+        // derived, never stored: a shared centre validated against one bot's own Starlight aura gets
+        // rewritten by whichever bot has stepped out of the zone, and then nobody's slot holds still.
+        float const quantum = ULDUAR_HODIR_CENTRE_QUANTUM;
+        Position const zone(std::round(druid->GetPositionX() / quantum) * quantum,
+                            std::round(druid->GetPositionY() / quantum) * quantum,
+                            ULDUAR_HODIR_RAID_ANCHOR.GetPositionZ());
 
-    // Quantised, so the druid shuffling a yard does not walk the whole raid. Everything here is
-    // derived, never stored: a shared centre validated against one bot's own Starlight aura gets
-    // rewritten by whichever bot has stepped out of the zone, and then nobody's slot holds still.
-    float const quantum = ULDUAR_HODIR_CENTRE_QUANTUM;
-    Position const centre(std::round(druid->GetPositionX() / quantum) * quantum,
-                          std::round(druid->GetPositionY() / quantum) * quantum,
-                          ULDUAR_HODIR_RAID_ANCHOR.GetPositionZ());
+        // A druid that has wandered, or been pushed into the corner, is not somewhere the raid can form.
+        if (zone.GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR) <= ULDUAR_HODIR_ZONE_ADOPT_RADIUS &&
+            zone.GetExactDist2d(&ULDUAR_HODIR_MAINTANK_SPOT) >= ULDUAR_HODIR_CENTRE_MIN_TANK_GAP)
+            centre = zone;
+    }
 
-    // A druid that has wandered, or been pushed into the corner, is not somewhere the raid can form.
-    if (centre.GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR) > ULDUAR_HODIR_ZONE_ADOPT_RADIUS ||
-        centre.GetExactDist2d(&ULDUAR_HODIR_MAINTANK_SPOT) < ULDUAR_HODIR_CENTRE_MIN_TANK_GAP)
-        return ULDUAR_HODIR_RAID_ANCHOR;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.centre", RaidObs::DescribeDerived(centre));
 
     return centre;
 }
@@ -764,6 +771,14 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
                                                    bot->GetPositionZ(), x, y, z, false);
 
     out = Position(x, y, z);
+
+    // The slot index and the size of the ring it was cut from, so a formation that re-seated is
+    // readable without re-deriving the sort from the roster.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.slot",
+                             std::to_string(slot) + "/" + std::to_string(total) + " " +
+                                 RaidObs::DescribeDerived(out));
+
     return true;
 }
 
@@ -781,7 +796,7 @@ bool IsHodirIcicleLethal(Creature* icicle)
     return !remaining || remaining > ULDUAR_HODIR_ICICLE_SPENT_MS;
 }
 
-bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
+static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out, char const*& how)
 {
     if (!bot)
         return false;
@@ -802,6 +817,7 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
         // Whichever end is further away, so the leg is always the full 6 yd and IsDuplicateMove
         // cannot refuse it for repeating the last destination.
         out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
+        how = "tank";
         return true;
     }
 
@@ -822,6 +838,7 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
         out = Position(bot->GetPositionX() + std::cos(bearing) * 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
                        bot->GetPositionY() + std::sin(bearing) * 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
                        bot->GetPositionZ());
+        how = "solo";
         return true;
     }
 
@@ -837,10 +854,24 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
         return false;
 
     out = leg;
+    how = "crowd";
     return true;
 }
 
-bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
+bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    char const* how = "none";
+    bool const found = DeriveHodirShuttleLeg(botAI, bot, out, how);
+
+    // The rule, not the leg. The leg is already a move record with this action's name on it, and a
+    // crowd-derived one moves every tick, so latching the coordinate emitted on every tick too.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.shuttle", how);
+
+    return found;
+}
+
+static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     if (!GetHodir(botAI))
         return false;
@@ -871,44 +902,75 @@ bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& toler
     return true;
 }
 
+bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
+{
+    bool const found = DeriveHodirAnchor(botAI, bot, out, tolerance);
+
+    if (RaidObs::Active())
+    {
+        // Melee have no anchor by design, and "none" is the answer that says so - without it a melee
+        // bot standing in the corner is indistinguishable from one that never got told where to go.
+        std::string value = "none";
+        if (found)
+        {
+            char suffix[16];
+            snprintf(suffix, sizeof(suffix), " ~%.1f", tolerance);
+            value = RaidObs::DescribeDerived(out) + suffix;
+        }
+
+        RaidObs::NoteDerived(bot, "hodir.anchor", value);
+    }
+
+    return found;
+}
+
 bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)
 {
     if (!block)
         return false;
 
+    bool breaker = false;
     Group* group = bot->GetGroup();
     if (!group)
-        return true;
-
-    // Healers keep healing: the raid is taking 14000 every two seconds from icicles while this block
-    // is up, and it dies to a handful of hits anyway.
-    std::vector<Player*> candidates;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        breaker = true;
+    else
     {
-        Player* member = ref->GetSource();
-        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
-            continue;
+        // Healers keep healing: the raid is taking 14000 every two seconds from icicles while this block
+        // is up, and it dies to a handful of hits anyway.
+        std::vector<Player*> candidates;
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+                continue;
 
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || memberAI->IsHeal(member) || memberAI->IsTank(member))
-            continue;
+            PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+            if (!memberAI || memberAI->IsHeal(member) || memberAI->IsTank(member))
+                continue;
 
-        if (member->GetExactDist2d(block) > ULDUAR_HODIR_TRAPPED_ALLY_RANGE)
-            continue;
+            if (member->GetExactDist2d(block) > ULDUAR_HODIR_TRAPPED_ALLY_RANGE)
+                continue;
 
-        candidates.push_back(member);
+            candidates.push_back(member);
+        }
+
+        // Guid, not distance. Distances change every tick, so a distance rank re-shuffles the set
+        // constantly and bots drop off the block and back onto the boss between one tick and the next.
+        std::sort(candidates.begin(), candidates.end(),
+                  [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
+
+        for (size_t i = 0; i < candidates.size() && i < ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS; ++i)
+            if (candidates[i] == bot)
+            {
+                breaker = true;
+                break;
+            }
     }
 
-    // Guid, not distance. Distances change every tick, so a distance rank re-shuffles the set
-    // constantly and bots drop off the block and back onto the boss between one tick and the next.
-    std::sort(candidates.begin(), candidates.end(),
-              [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
-
-    for (size_t i = 0; i < candidates.size() && i < ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS; ++i)
-        if (candidates[i] == bot)
-            return true;
-
-    return false;
+    // Deliberately unprobed. Every block in range is asked about and a bot can come back a breaker for
+    // several of them in one pass, so a note per true answer just flaps between blocks - and the one it
+    // actually goes for is already in hodir.dpstarget.
+    return breaker;
 }
 
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target)

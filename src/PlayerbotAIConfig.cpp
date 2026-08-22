@@ -406,6 +406,29 @@ bool PlayerbotAIConfig::Initialize()
         sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotAutoJoinBGRatedArena5v5Count", 0);
     logInGroupOnly = sConfigMgr->GetOption<bool>("AiPlayerbot.LogInGroupOnly", true);
     logValuesPerTick = sConfigMgr->GetOption<bool>("AiPlayerbot.LogValuesPerTick", false);
+
+    obsEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.Obs.Enabled", true);
+    obsDir = sConfigMgr->GetOption<std::string>("AiPlayerbot.Obs.Dir", "botobs");
+    obsMaps = sConfigMgr->GetOption<std::string>("AiPlayerbot.Obs.Maps", "");
+    obsLogHeals = sConfigMgr->GetOption<bool>("AiPlayerbot.Obs.LogHeals", true);
+    obsLogAuras = sConfigMgr->GetOption<bool>("AiPlayerbot.Obs.LogAuras", true);
+
+    // Every knob below is unsigned in the struct, so a negative typo would wrap to four billion and
+    // quietly break whatever it configures - a negative snapshot interval stops snapshots entirely.
+    // Read signed, clamp, then store.
+    auto obsRange = [](char const* name, int32 fallback, int32 low, int32 high)
+    { return static_cast<uint32>(std::clamp(sConfigMgr->GetOption<int32>(name, fallback), low, high)); };
+
+    obsSnapshotIntervalMs = obsRange("AiPlayerbot.Obs.SnapshotIntervalMs", 250, 50, 60000);
+    obsPreRollSeconds = obsRange("AiPlayerbot.Obs.PreRollSeconds", 30, 0, 300);
+    obsMinDamageToLog = obsRange("AiPlayerbot.Obs.MinDamageToLog", 0, 0, 10000000);
+    obsDeathRewindMs = obsRange("AiPlayerbot.Obs.DeathRewindMs", 15000, 0, 600000);
+    obsDeathVerdictMs = obsRange("AiPlayerbot.Obs.DeathVerdictMs", 10000, 0, 600000);
+    obsIdleCloseSeconds = obsRange("AiPlayerbot.Obs.IdleCloseSeconds", 30, 0, 3600);
+    obsRetentionDays = obsRange("AiPlayerbot.Obs.RetentionDays", 7, 0, 3650);
+    obsMaxDirMB = obsRange("AiPlayerbot.Obs.MaxDirMB", 5120, 0, 1048576);
+    // Never zero: the trace is capped the moment it holds anything at all.
+    obsMaxFileMB = obsRange("AiPlayerbot.Obs.MaxFileMB", 256, 1, 65536);
     fleeingEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.FleeingEnabled", true);
     summonAtInnkeepersEnabled = sConfigMgr->GetOption<bool>("AiPlayerbot.SummonAtInnkeepersEnabled", true);
     randomBotMinLevel = sConfigMgr->GetOption<int32>("AiPlayerbot.RandomBotMinLevel", 1);

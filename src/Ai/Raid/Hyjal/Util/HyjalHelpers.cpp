@@ -74,7 +74,7 @@ std::pair<size_t, size_t> GetBotCircleIndexAndCount(PlayerbotAI* botAI, Player* 
 // Rage Winterchill
 
 const Position WINTERCHILL_TANK_POSITION = { 5031.061f, -1784.521f, 1321.626f };
-std::unordered_map<ObjectGuid, bool> hasReachedWinterchillPosition;
+RaidObs::ObsGuidMap<bool> hasReachedWinterchillPosition{"hyjal.winterchillarrived"};
 std::unordered_map<uint32, DeathAndDecayData> deathAndDecayPosition;
 
 DeathAndDecayData* GetActiveWinterchillDeathAndDecay(uint32 instanceId)
@@ -129,7 +129,7 @@ bool IsInDeathAndDecay(Player* bot, float radius)
 const Position ANETHERON_TANK_POSITION =       { 5033.177f, -1765.996f, 1324.195f };
 const Position ANETHERON_E_INFERNAL_POSITION = { 5016.578f, -1800.233f, 1323.070f };
 const Position ANETHERON_W_INFERNAL_POSITION = { 5048.911f, -1722.164f, 1321.408f };
-std::unordered_map<ObjectGuid, bool> hasReachedAnetheronPosition;
+RaidObs::ObsGuidMap<bool> hasReachedAnetheronPosition{"hyjal.anetheronarrived"};
 
 Player* GetInfernoTarget(Unit* anetheron)
 {
@@ -160,7 +160,7 @@ const Position& GetClosestInfernalTankPosition(Player* bot)
 
 const Position KAZROGAL_TANK_TRANSITION_POSITION = { 5528.792f, -2636.486f, 1481.293f };
 const Position KAZROGAL_TANK_FINAL_POSITION =      { 5511.514f, -2662.466f, 1480.288f };
-std::unordered_map<ObjectGuid, TankPositionState> kazrogalTankStep;
+RaidObs::ObsGuidMap<TankPositionState> kazrogalTankStep{"hyjal.kazrogaltank"};
 std::unordered_map<ObjectGuid, bool> isBelowManaThreshold;
 
 TankPositionState GetKazrogalTankPositionState(PlayerbotAI* botAI, Player* bot)
@@ -181,7 +181,7 @@ TankPositionState GetKazrogalTankPositionState(PlayerbotAI* botAI, Player* bot)
 const Position AZGALOR_TANK_TRANSITION_POSITION = { 5486.787f, -2696.215f, 1482.007f };
 const Position AZGALOR_TANK_FINAL_POSITION =      { 5496.379f, -2675.265f, 1481.053f };
 const Position AZGALOR_DOOMGUARD_POSITION =       { 5485.555f, -2731.659f, 1485.555f };
-std::unordered_map<ObjectGuid, TankPositionState> azgalorTankStep;
+RaidObs::ObsGuidMap<TankPositionState> azgalorTankStep{"hyjal.azgalortank"};
 std::unordered_map<uint32, RainOfFireData> rainOfFirePosition;
 
 RainOfFireData* GetActiveAzgalorRainOfFire(uint32 instanceId)

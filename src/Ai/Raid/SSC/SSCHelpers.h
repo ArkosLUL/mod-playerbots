@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_SSCHELPERS_H
 #define PLAYERBOTS_SSCHELPERS_H
 
+#include "RaidObs.h"
 #include "AiObject.h"
 #include "Position.h"
 #include "Unit.h"
@@ -127,7 +128,7 @@ namespace SerpentShrineCavernHelpers
     // The Lurker Below
     extern const Position LURKER_MAIN_TANK_POSITION;
     extern std::unordered_map<uint32, time_t> lurkerSpoutTimer;
-    extern std::unordered_map<ObjectGuid, Position> lurkerRangedPositions;
+    extern RaidObs::ObsGuidMap<Position> lurkerRangedPositions;
     bool IsLurkerCastingSpout(Unit* lurker);
 
     // Leotheras the Blind
@@ -154,16 +155,16 @@ namespace SerpentShrineCavernHelpers
     extern const Position TIDEWALKER_PHASE_TRANSITION_WAYPOINT;
     extern const Position TIDEWALKER_PHASE_2_TANK_POSITION;
     extern const Position TIDEWALKER_PHASE_2_RANGED_POSITION;
-    extern std::unordered_map<ObjectGuid, uint8> tidewalkerTankStep;
-    extern std::unordered_map<ObjectGuid, uint8> tidewalkerRangedStep;
+    extern RaidObs::ObsGuidMap<uint8> tidewalkerTankStep;
+    extern RaidObs::ObsGuidMap<uint8> tidewalkerRangedStep;
 
     // Lady Vashj <Coilfang Matron>
     constexpr float VASHJ_PLATFORM_CENTER_Z = 42.902f;
     constexpr float VASHJ_PLATFORM_EDGE_Z = 41.097f;
     extern const Position VASHJ_PLATFORM_CENTER_POSITION;
-    extern std::unordered_map<ObjectGuid, bool> hasReachedVashjRangedPosition;
+    extern RaidObs::ObsGuidMap<bool> hasReachedVashjRangedPosition;
     extern std::unordered_map<uint32, ObjectGuid> nearestTriggerGuid;
-    extern std::unordered_map<ObjectGuid, Position> intendedLineup;
+    extern RaidObs::ObsGuidMap<Position> intendedLineup;
     extern std::unordered_map<uint32, time_t> lastImbueAttempt;
     extern std::unordered_map<ObjectGuid, time_t> lastCoreInInventoryTime;
     bool IsMainTankInSameSubgroup(PlayerbotAI* botAI, Player* bot);

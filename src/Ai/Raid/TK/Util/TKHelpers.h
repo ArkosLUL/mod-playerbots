@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_TKHELPERS_H
 #define PLAYERBOTS_TKHELPERS_H
 
+#include "RaidObs.h"
 #include "AiObject.h"
 #include "Position.h"
 #include "Unit.h"
@@ -137,7 +138,7 @@ namespace TempestKeepHelpers
 
     // Void Reaver
     extern const Position VOID_REAVER_TANK_POSITION;
-    extern std::unordered_map<ObjectGuid, bool> hasReachedVoidReaverPosition;
+    extern RaidObs::ObsGuidMap<bool> hasReachedVoidReaverPosition;
     struct ArcaneOrbData
     {
         Position destination;

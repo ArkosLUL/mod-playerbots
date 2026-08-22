@@ -14,6 +14,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
+#include "RaidObs.h"
 #include "Timer.h"
 #include "Unit.h"
 #include "WorldSession.h"
@@ -71,6 +72,15 @@ ThorimEncounterState* FindState(Player const* bot)
 
     auto const itr = thorimStates.find(bot->GetInstanceId());
     return itr == thorimStates.end() ? nullptr : &itr->second;
+}
+
+// Both halves of the gate, in one place so the two cannot drift apart. Everything guarded by it
+// either sweeps the grid or writes raid-wide state, so a raid parked on another boss reaching it is
+// not free - and by distance alone Hodir's room does.
+bool NearThorimEncounter(Player const* bot)
+{
+    return bot && bot->GetPositionZ() < ULDUAR_THORIM_WING_MAX_Z &&
+           bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) <= ULDUAR_THORIM_ENCOUNTER_PROXIMITY;
 }
 
 bool MemberCounts(Player const* member, uint32 instanceId)
@@ -394,9 +404,22 @@ bool StaticMeleeSpot(Unit* boss, uint8 slot, Position& out)
     return true;
 }
 
+// The blast wave has no world object behind it, so a trace has nothing to sweep for and no way to
+// tell afterwards which lane was hot when somebody died in it. This scan is the only thing that
+// knows.
+void NoteRunicSmashLane(Player* bot, Unit* colossus, bool leftLane, uint32 spellId)
+{
+    if (!RaidObs::Active())
+        return;
+
+    RaidObs::NoteHazard(bot->GetMap(), spellId, colossus->GetPosition(), "lane",
+                        leftLane ? "\"side\":\"left\"" : "\"side\":\"right\"",
+                        ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS);
+}
+
 void TickRunicSmash(PlayerbotAI* botAI, Player* bot)
 {
-    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+    if (!NearThorimEncounter(bot))
         return;
 
     ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
@@ -404,6 +427,16 @@ void TickRunicSmash(PlayerbotAI* botAI, Player* bot)
         return;
 
     state.smashScanMs = getMSTime();
+
+    // The Colossus and the corridor adds are trash to the instance script, so nothing else opens a
+    // trace for the half of the fight that most often loses it. Named after Thorim: the gauntlet and
+    // the arena are one attempt. This has to happen before the first lane is noted below, or the
+    // hazard record has no trace to land in.
+    if (!state.gauntletTraced && bot->IsInCombat())
+    {
+        state.gauntletTraced = true;
+        RaidObs::MarkPull(bot->GetMap(), GetThorim(botAI));
+    }
 
     Unit* colossus = GetThorimRunicColossus(botAI);
 
@@ -420,11 +453,13 @@ void TickRunicSmash(PlayerbotAI* botAI, Player* bot)
     {
         state.runicSmashSide = SPELL_THORIM_RUNIC_SMASH_LEFT;
         state.runicSmashSeenMs = state.smashScanMs;
+        NoteRunicSmashLane(bot, colossus, true, SPELL_THORIM_RUNIC_SMASH_LEFT);
     }
     else if (colossus->FindCurrentSpellBySpellId(SPELL_THORIM_RUNIC_SMASH_RIGHT))
     {
         state.runicSmashSide = SPELL_THORIM_RUNIC_SMASH_RIGHT;
         state.runicSmashSeenMs = state.smashScanMs;
+        NoteRunicSmashLane(bot, colossus, false, SPELL_THORIM_RUNIC_SMASH_RIGHT);
     }
 }
 
@@ -564,7 +599,7 @@ bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)
     if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot))
         return false;
 
-    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+    if (!NearThorimEncounter(bot))
         return false;
 
     ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
@@ -598,7 +633,7 @@ bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)
 bool ThorimSplitActive(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+    if (!NearThorimEncounter(bot))
         return false;
 
     Unit* boss = GetThorim(botAI);
@@ -615,7 +650,7 @@ ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot)
     if (!botAI || !bot || bot->GetMapId() != ULDUAR_MAP_ID)
         return ThorimSquad::None;
 
-    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+    if (!NearThorimEncounter(bot))
         return ThorimSquad::None;
 
     // Deliberately not gated on combat: the corridor squad forms up at the gate before the pull, and
@@ -851,7 +886,7 @@ bool ThorimFollowMasterStripped(Player const* bot)
 bool ThorimPhase2Active(PlayerbotAI* botAI)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+    if (!NearThorimEncounter(bot))
         return false;
 
     Unit* boss = GetThorim(botAI);
@@ -1004,7 +1039,7 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI)
     }
 
     state.orbScanMs = getMSTime();
-    state.chargedOrbGuid.Clear();
+    state.chargedOrbGuid = ObjectGuid::Empty;
 
     // The orbs are non-attackable pillar props, so they never appear in the target values.
     std::list<Creature*> orbs;
@@ -1041,9 +1076,22 @@ bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
     if (!boss)
         return false;
 
+    ThorimEncounterState* state = FindState(botAI->GetBot());
+    if (!state)
+        return false;
+
     // Full health alone is a trap: he watches the whole gauntlet from his balcony untouched.
     // JustEngagedWith fires at the pull, so combat state is what separates the two.
-    return boss->GetHealth() >= boss->GetMaxHealth() && !boss->IsInCombat();
+    if (boss->GetHealth() < boss->GetMaxHealth() || boss->IsInCombat())
+    {
+        state->engagedSeen = true;
+        return false;
+    }
+
+    // Idle before the raid has ever pulled him is the gate, not a reset. Reading it as one clears the
+    // squad split the corridor just formed and the next tick forms it again: 178 rounds of it during a
+    // single Hodir pull, which is where this was found.
+    return state->engagedSeen;
 }
 
 bool ThorimBotHasEncounterState(Player* bot)
@@ -1084,7 +1132,8 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->runicSmashSide = 0;
     state->runicSmashSeenMs = 0;
     state->smashScanMs = 0;
-    state->chargedOrbGuid.Clear();
+    state->gauntletTraced = false;
+    state->chargedOrbGuid = ObjectGuid::Empty;
     state->orbScanMs = 0;
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;
@@ -1092,4 +1141,8 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     // Raid-wide too, and it has to go together with the flag or the next pull reuses the old split.
     state->squads.clear();
     state->squadsAssigned = false;
+
+    // Back to "never pulled him", so the state this just cleared does not read as stale all over again
+    // on the next tick.
+    state->engagedSeen = false;
 }

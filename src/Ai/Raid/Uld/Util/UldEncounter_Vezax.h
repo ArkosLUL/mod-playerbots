@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ULDENCOUNTERVEZAX_H
 
 #include "Position.h"
+#include "RaidObs.h"
 #include "UldBossHelper.h"
 
 #include "ObjectGuid.h"
@@ -46,10 +47,10 @@ struct VezaxEncounterTargets
 // the two ranged rings.
 struct VezaxEncounterState
 {
-    std::unordered_map<ObjectGuid, uint8> slotAssignments;
+    RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
     // Where a bot stands while its own slot is buried under a hazard. Cleared as soon as the real
     // slot is clear again.
-    std::unordered_map<ObjectGuid, uint8> displacedAssignments;
+    RaidObs::ObsGuidMap<uint8> displacedAssignments{"vezax.displaced"};
 };
 
 extern std::unordered_map<uint32 /*instanceId*/, VezaxEncounterState> vezaxEncounterStates;

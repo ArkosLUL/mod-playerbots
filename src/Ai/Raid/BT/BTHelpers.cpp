@@ -37,7 +37,7 @@ bool HasSupremusVolcanoNearby(PlayerbotAI*, Player* bot)
 // Shade of Akama
 const Position AKAMA_CHANNELER_POSITION = { 467.851f, 401.622f, 118.538f };
 
-std::unordered_set<ObjectGuid> hasReachedAkamaChannelerPosition;
+RaidObs::ObsGuidSet hasReachedAkamaChannelerPosition{"bt.akamaarrived"};
 
 // Teron Gorefiend
 const Position GOREFIEND_TANK_POSITION  = { 597.653f, 402.284f, 187.090f };
@@ -100,7 +100,7 @@ int GetGurtoggActiveRotationGroup(Unit* gurtogg)
 const Position SHAHRAZ_TANK_POSITION       = { 960.438f, 178.989f, 192.826f };
 const Position SHAHRAZ_TRANSITION_POSITION = { 951.327f, 179.550f, 192.550f };
 const Position SHAHRAZ_RANGED_POSITION     = { 935.267f, 175.459f, 192.821f };
-std::unordered_map<ObjectGuid, TankPositionState> shahrazTankStep;
+RaidObs::ObsGuidMap<TankPositionState> shahrazTankStep{"bt.shahraztank"};
 
 TankPositionState GetShahrazTankPositionState(PlayerbotAI* botAI, Player* bot)
 {
@@ -130,8 +130,8 @@ const std::array<Position, 2> ZEREVOR_HEALER_POSITIONS = {{
 const Position MALANDE_TANK_POSITION = { 690.590f, 299.790f, 277.443f };
 
 std::unordered_map<uint32, time_t> councilDpsWaitTimer;
-std::unordered_map<ObjectGuid, uint8> gathiosTankStep;
-std::unordered_map<ObjectGuid, uint8> zerevorHealStep;
+RaidObs::ObsGuidMap<uint8> gathiosTankStep{"bt.gathiostank"};
+RaidObs::ObsGuidMap<uint8> zerevorHealStep{"bt.zerevorheal"};
 
 // (1) First priority is an assistant Mage (real player or bot)
 // (2) If no assistant Mage, then look for any Mage bot
@@ -211,8 +211,8 @@ const std::array<Position, 7> W_GLAIVE_TANK_POSITIONS = {{
 }};
 
 std::unordered_map<ObjectGuid, size_t> flameTankWaypointIndex;
-std::unordered_map<ObjectGuid, ObjectGuid> illidanShadowTrapGuid;
-std::unordered_map<ObjectGuid, Position> illidanShadowTrapDestination;
+RaidObs::ObsGuidMap<ObjectGuid> illidanShadowTrapGuid{"bt.illidantrap"};
+RaidObs::ObsGuidMap<Position> illidanShadowTrapDestination{"bt.illidantrapdest"};
 std::unordered_map<uint32, int> illidanLastPhase;
 std::unordered_map<uint32, time_t> illidanBossDpsWaitTimer;
 std::unordered_map<uint32, time_t> illidanFlameDpsWaitTimer;

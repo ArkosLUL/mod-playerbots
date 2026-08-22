@@ -2990,3 +2990,63 @@ AiPlayerbot.TargetPosRecalcDistance = 0.1
 
 # Allow bots to be summoned near innkeepers
 AiPlayerbot.SummonAtInnkeepersEnabled = 1
+
+###############################################################################
+# RAID OBSERVABILITY (RaidObs)
+#
+# Writes one NDJSON trace per boss pull to <LogsDir>/<Obs.Dir>/, covering bot
+# positions, action verdicts, movement commands, damage, heals, auras, hazards
+# and deaths. Read a trace with tools/botobs/postmortem.py.
+# Schema and probe guide: docs/systems/observability.md
+###############################################################################
+
+# Master switch for trace recording.
+AiPlayerbot.Obs.Enabled = 1
+
+# Output subdirectory, relative to the core's LogsDir.
+AiPlayerbot.Obs.Dir = "botobs"
+
+# Comma-separated map ids to record. Empty records every raid map. A 5-man has to
+# be named here explicitly: tracked maps are sampled for as long as anyone stands
+# on them, which is not worth paying for every dungeon on the server.
+AiPlayerbot.Obs.Maps = ""
+
+# Snapshot period in milliseconds. Two samples per oscillation cycle is the
+# minimum needed to tell a bouncing bot from a stationary one. Clamped to 50-60000.
+AiPlayerbot.Obs.SnapshotIntervalMs = 250
+
+# Seconds of snapshots kept in memory before a pull and flushed into the trace
+# when one starts, so pre-pull misplacement is visible. Capped at 300. Pre-roll
+# samples positions only - the hazard sweep runs once a pull is open.
+AiPlayerbot.Obs.PreRollSeconds = 30
+
+# Record incoming heals on raid members. Needed to tell "stood in fire" apart
+# from "nobody healed it".
+AiPlayerbot.Obs.LogHeals = 1
+
+# Record aura applications and removals on raid members.
+AiPlayerbot.Obs.LogAuras = 1
+
+# Skip damage events below this amount. 0 records everything.
+AiPlayerbot.Obs.MinDamageToLog = 0
+
+# Milliseconds of damage history replayed into each death record.
+AiPlayerbot.Obs.DeathRewindMs = 15000
+
+# Milliseconds of unfiltered action verdicts replayed into each death record.
+# Outside this window only verdict changes are written.
+AiPlayerbot.Obs.DeathVerdictMs = 10000
+
+# Seconds without a raid member in combat before an open trace is closed.
+AiPlayerbot.Obs.IdleCloseSeconds = 30
+
+# Delete traces older than this many days at startup. 0 disables.
+AiPlayerbot.Obs.RetentionDays = 7
+
+# Trim oldest traces at startup once the directory exceeds this size. 0 disables.
+AiPlayerbot.Obs.MaxDirMB = 5120
+
+# Stop writing to a single trace once it reaches this size, so a stuck session
+# cannot fill the disk. The end record is still written, so a capped trace does
+# not read as one cut short by a crash. Minimum 1.
+AiPlayerbot.Obs.MaxFileMB = 256

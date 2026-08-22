@@ -309,7 +309,7 @@ Player* GetSecondEmberTank(PlayerbotAI* botAI)
 
 const Position VOID_REAVER_TANK_POSITION =  { 423.845f, 371.733f, 14.897f };
 
-std::unordered_map<ObjectGuid, bool> hasReachedVoidReaverPosition;
+RaidObs::ObsGuidMap<bool> hasReachedVoidReaverPosition{"tk.voidreaverarrived"};
 std::unordered_map<uint32, std::vector<ArcaneOrbData>> voidReaverArcaneOrbs;
 
 // Kael'thas Sunstrider <Lord of the Blood Elves>

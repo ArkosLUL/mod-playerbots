@@ -269,6 +269,23 @@ public:
     uint32 randomBotTeleLowerLevel, randomBotTeleHigherLevel;
     std::map<uint32, std::pair<uint32, uint32>> zoneBrackets;
     bool logInGroupOnly, logValuesPerTick;
+
+    // Raid observability. Traces are written per pull; see docs/systems/observability.md.
+    bool obsEnabled;
+    std::string obsDir;
+    // Comma-separated map ids, or empty for every map that has an instance strategy.
+    std::string obsMaps;
+    uint32 obsSnapshotIntervalMs;
+    uint32 obsPreRollSeconds;
+    bool obsLogHeals;
+    bool obsLogAuras;
+    uint32 obsMinDamageToLog;
+    uint32 obsDeathRewindMs;
+    uint32 obsDeathVerdictMs;
+    uint32 obsIdleCloseSeconds;
+    uint32 obsRetentionDays;
+    uint32 obsMaxDirMB;
+    uint32 obsMaxFileMB;
     bool fleeingEnabled;
     bool summonAtInnkeepersEnabled;
     std::string combatStrategies, nonCombatStrategies;

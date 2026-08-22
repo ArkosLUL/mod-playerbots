@@ -9,6 +9,7 @@
 
 #include "ObjectGuid.h"
 #include "Position.h"
+#include "RaidObs.h"
 #include "UldBossHelper.h"
 
 #include <unordered_map>
@@ -34,39 +35,47 @@ struct ThorimEncounterState
 {
     // Held rather than re-derived, for the reason Vezax holds his: ranking the raid by guid every
     // tick means one death renumbers everyone behind the corpse and the ring shuffles mid-fight.
-    std::unordered_map<ObjectGuid, uint8> meleeSlots;
+    RaidObs::ObsGuidMap<uint8> meleeSlots{"thorim.slot"};
 
     // 0 = nothing seen yet, otherwise SPELL_THORIM_RUNIC_SMASH_LEFT / _RIGHT. The side is sticky and
     // the timestamp is not: the timestamp says the wave is still rolling, the side says which lane
     // the squad now walks, and that has to outlive the wave or the formation walks straight back.
-    uint32 runicSmashSide = 0;
+    RaidObs::ObsValue<uint32> runicSmashSide{"thorim.smashside"};
     uint32 runicSmashSeenMs = 0;
     uint32 smashScanMs = 0;
 
-    ObjectGuid chargedOrbGuid;
+    RaidObs::ObsValue<ObjectGuid> chargedOrbGuid{"thorim.chargedorb"};
     uint32 orbScanMs = 0;
 
     ObjectGuid colossusGuid;
     uint32 colossusScanMs = 0;
 
-    std::unordered_set<ObjectGuid> barrierBailing;
+    RaidObs::ObsGuidSet barrierBailing{"thorim.barrierbail"};
 
     // Which half of the raid each member belongs to, struck once and then left alone. Recomputing it
     // per tick is what let a role predicate flipping mid-fight walk the arena squad into the corridor.
-    std::unordered_map<ObjectGuid, uint8> squads;
-    bool squadsAssigned = false;
+    RaidObs::ObsGuidMap<uint8> squads{"thorim.squad"};
+    RaidObs::ObsValue<bool> squadsAssigned{"thorim.squadsassigned"};
 
     // Bots the arena node took "follow master" away from, so the reset can hand it back.
-    std::unordered_set<ObjectGuid> followMasterStripped;
+    RaidObs::ObsGuidSet followMasterStripped{"thorim.followstripped"};
 
     // Phase 1 arrival latch. Its own set rather than ringArrived below: the two phases are mutually
     // exclusive on the z threshold today, and sharing a latch across that is a trap waiting for the
     // first time it stops being true.
-    std::unordered_set<ObjectGuid> arenaAnchorArrived;
+    RaidObs::ObsGuidSet arenaAnchorArrived{"thorim.arenaarrived"};
 
     // Reach-then-hold latch. A bot that has arrived stops issuing moves until it drifts past the
     // wider tolerance, because a moving bot casts nothing.
-    std::unordered_set<ObjectGuid> ringArrived;
+    RaidObs::ObsGuidSet ringArrived{"thorim.ringarrived"};
+
+    // The corridor fight is trash to the instance script, so nothing else opens a trace for it.
+    bool gauntletTraced = false;
+
+    // Whether this raid has ever had him in combat. An untouched Thorim looks identical to one that
+    // has just reset, and the reset path clears the squad split that the corridor forms up on before
+    // the pull - so without the latch the two fight each other every tick.
+    bool engagedSeen = false;
 };
 
 enum class ThorimSquad : uint8

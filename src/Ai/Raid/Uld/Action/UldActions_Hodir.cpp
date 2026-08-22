@@ -15,6 +15,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "Position.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
@@ -225,6 +226,9 @@ bool HodirSetDpsPriorityAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.dpstarget", RaidObs::DescribeAssignment(target->GetGUID()));
+
     // No threat wipe in this fight, and it is a race - nobody should be throttling.
     if (target == GetHodir(botAI))
         context->GetValue<bool>("neglect threat")->Set(true);
@@ -241,6 +245,9 @@ bool HodirSetDpsPriorityAction::Execute(Event /*event*/)
 
 bool HodirFrozenBlowsSwapAction::Execute(Event /*event*/)
 {
+    // Deliberately unprobed. Every taunt is an OK verdict on this action and every failed one a FAILED,
+    // both already in the act stream with a repeat count - and all four class taunts share an 8s
+    // cooldown, so a swap that has to wait for it retries at tick rate until it lands.
     return UldCastClassTaunt(botAI, GetHodir(botAI));
 }
 

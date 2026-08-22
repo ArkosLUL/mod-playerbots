@@ -1527,10 +1527,12 @@ constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 12.0f;
 constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 
-// Cheap first gate for everything Thorim owns. The corridor runs out to ~162 yd from the arena
-// centre, and Ulduar's other wings are thousands of yards away, so this keeps a raid on another boss
-// out of the grid sweeps below for the price of two float compares.
+// Cheap first gate for everything Thorim owns, and it takes both halves. Distance alone does not
+// separate the wings: Hodir's room sits 136-176 yd from the arena centre against a corridor that runs
+// out to 126 yd, and a radius through that 10 yd gap would be luck rather than a gate. Height does -
+// the gauntlet is at z 412, the arena floor at 420, and Hodir's floor at 433.
 constexpr float ULDUAR_THORIM_ENCOUNTER_PROXIMITY = 200.0f;
+constexpr float ULDUAR_THORIM_WING_MAX_Z = 425.0f;
 
 // AiPlayerbot.SightDistance caps the "possible targets" values at 100 yd, and the Colossus is 131 yd
 // from the top pair of corridor waypoints - so its telegraph needs a wider, targeted grid lookup or

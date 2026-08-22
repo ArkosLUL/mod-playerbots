@@ -63,7 +63,7 @@ bool HasNoMarkOfCorruption(Player* bot)
 const Position LURKER_MAIN_TANK_POSITION = { 23.706f, -406.038f, -19.686f };
 
 std::unordered_map<uint32, time_t> lurkerSpoutTimer;
-std::unordered_map<ObjectGuid, Position> lurkerRangedPositions;
+RaidObs::ObsGuidMap<Position> lurkerRangedPositions{"ssc.lurkerspot"};
 
 bool IsLurkerCastingSpout(Unit* lurker)
 {
@@ -168,16 +168,16 @@ const Position TIDEWALKER_PHASE_TRANSITION_WAYPOINT = { 407.035f, -759.479f, -7.
 const Position TIDEWALKER_PHASE_2_TANK_POSITION = { 446.571f, -767.155f, -7.144f };
 const Position TIDEWALKER_PHASE_2_RANGED_POSITION = { 432.595f, -766.288f, -7.145f };
 
-std::unordered_map<ObjectGuid, uint8> tidewalkerTankStep;
-std::unordered_map<ObjectGuid, uint8> tidewalkerRangedStep;
+RaidObs::ObsGuidMap<uint8> tidewalkerTankStep{"ssc.tidewalkertank"};
+RaidObs::ObsGuidMap<uint8> tidewalkerRangedStep{"ssc.tidewalkerranged"};
 
 // Lady Vashj <Coilfang Matron>
 
 const Position VASHJ_PLATFORM_CENTER_POSITION = { 29.634f, -923.541f, 42.902f };
 
-std::unordered_map<ObjectGuid, bool> hasReachedVashjRangedPosition;
+RaidObs::ObsGuidMap<bool> hasReachedVashjRangedPosition{"ssc.vashjarrived"};
 std::unordered_map<uint32, ObjectGuid> nearestTriggerGuid;
-std::unordered_map<ObjectGuid, Position> intendedLineup;
+RaidObs::ObsGuidMap<Position> intendedLineup{"ssc.lineup"};
 std::unordered_map<uint32, time_t> lastImbueAttempt;
 std::unordered_map<ObjectGuid, time_t> lastCoreInInventoryTime;
 

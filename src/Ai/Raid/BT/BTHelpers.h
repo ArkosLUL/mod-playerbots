@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_BTHELPERS_H
 #define PLAYERBOTS_BTHELPERS_H
 
+#include "RaidObs.h"
 #include "Common.h"
 #include "ObjectGuid.h"
 #include "Position.h"
@@ -143,7 +144,7 @@ bool HasSupremusVolcanoNearby(PlayerbotAI* botAI, Player* bot);
 
 // Shade of Akama
 extern const Position AKAMA_CHANNELER_POSITION;
-extern std::unordered_set<ObjectGuid> hasReachedAkamaChannelerPosition;
+extern RaidObs::ObsGuidSet hasReachedAkamaChannelerPosition;
 
 // Teron Gorefiend
 extern const Position GOREFIEND_TANK_POSITION;
@@ -161,7 +162,7 @@ int GetGurtoggActiveRotationGroup(Unit* gurtogg);
 extern const Position SHAHRAZ_TANK_POSITION;
 extern const Position SHAHRAZ_TRANSITION_POSITION;
 extern const Position SHAHRAZ_RANGED_POSITION;
-extern std::unordered_map<ObjectGuid, TankPositionState> shahrazTankStep;
+extern RaidObs::ObsGuidMap<TankPositionState> shahrazTankStep;
 TankPositionState GetShahrazTankPositionState(PlayerbotAI* botAI, Player* bot);
 
 // Illidari Council
@@ -171,8 +172,8 @@ extern const Position MALANDE_TANK_POSITION;
 extern const Position ZEREVOR_TANK_POSITION;
 extern const std::array<Position, 2> ZEREVOR_HEALER_POSITIONS;
 extern std::unordered_map<uint32, time_t> councilDpsWaitTimer;
-extern std::unordered_map<ObjectGuid, uint8> gathiosTankStep;
-extern std::unordered_map<ObjectGuid, uint8> zerevorHealStep;
+extern RaidObs::ObsGuidMap<uint8> gathiosTankStep;
+extern RaidObs::ObsGuidMap<uint8> zerevorHealStep;
 Player* GetZerevorMageTank(Player* bot);
 bool HasDangerousCouncilAura(Unit* unit);
 
@@ -187,8 +188,8 @@ extern const std::array<Position, 7> E_GLAIVE_TANK_POSITIONS;
 extern const Position ILLIDAN_W_GLAIVE_WAITING_POSITION;
 extern const std::array<Position, 7> W_GLAIVE_TANK_POSITIONS;
 extern std::unordered_map<ObjectGuid, size_t> flameTankWaypointIndex;
-extern std::unordered_map<ObjectGuid, ObjectGuid> illidanShadowTrapGuid;
-extern std::unordered_map<ObjectGuid, Position> illidanShadowTrapDestination;
+extern RaidObs::ObsGuidMap<ObjectGuid> illidanShadowTrapGuid;
+extern RaidObs::ObsGuidMap<Position> illidanShadowTrapDestination;
 extern std::unordered_map<uint32, int> illidanLastPhase;
 extern std::unordered_map<uint32, time_t> illidanBossDpsWaitTimer;
 extern std::unordered_map<uint32, time_t> illidanFlameDpsWaitTimer;

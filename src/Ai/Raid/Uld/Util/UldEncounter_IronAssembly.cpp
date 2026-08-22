@@ -5,6 +5,7 @@
  */
 
 #include "UldEncounter_IronAssembly.h"
+#include "RaidObs.h"
 
 #include "Creature.h"
 #include "Group.h"
@@ -32,7 +33,7 @@ namespace
 // mid-fight.
 struct IronAssemblyEncounterState
 {
-    std::unordered_map<ObjectGuid, uint8> spreadSlots;
+    RaidObs::ObsGuidMap<uint8> spreadSlots{"ironassembly.slot"};
 };
 
 // One map per map-update thread, keyed by instance: a bot is only ever updated from its own map's

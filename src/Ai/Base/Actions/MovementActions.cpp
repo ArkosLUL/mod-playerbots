@@ -5,6 +5,7 @@
  */
 
 #include "MovementActions.h"
+#include "RaidObs.h"
 #include "Corpse.h"
 #include "Event.h"
 #include "FleeManager.h"
@@ -39,6 +40,20 @@
 #include <iomanip>
 #include <string>
 
+namespace
+{
+// Follow and Chase hand the MotionMaster a unit, not a point, so the trace records where that unit
+// stood when the command was issued and lets NoteMove latch on the target instead of the coordinates.
+void NoteTracking(Player* bot, RaidObs::MoveKind kind, WorldObject* obj, RaidObs::MoveOutcome outcome)
+{
+    if (!RaidObs::Active() || !obj)
+        return;
+
+    RaidObs::NoteMove(bot, kind, obj->GetPositionX(), obj->GetPositionY(), obj->GetPositionZ(), obj->GetGUID(),
+                      outcome);
+}
+}  // namespace
+
 MovementAction::MovementAction(PlayerbotAI* botAI, std::string const name) : Action(botAI, name)
 {
     bot = botAI->GetBot();
@@ -62,21 +77,28 @@ void MovementAction::CreateWp(Player* wpOwner, float x, float y, float z, float 
 bool MovementAction::JumpTo(uint32 mapId, float x, float y, float z, MovementPriority priority)
 {
     UpdateMovementState();
+
+    RaidObs::MoveOutcome outcome = RaidObs::MoveOutcome::Issued;
     if (!IsMovingAllowed())
-        return false;
+        outcome = RaidObs::MoveOutcome::NotAllowed;
+    else if (IsDuplicateMove(x, y, z))
+        outcome = RaidObs::MoveOutcome::Duplicate;
+    else if (IsWaitingForLastMove(priority))
+        outcome = RaidObs::MoveOutcome::Waiting;
 
-    if (IsDuplicateMove(x, y, z))
-        return false;
+    if (outcome == RaidObs::MoveOutcome::Issued)
+    {
+        float speed = bot->GetSpeed(MOVE_RUN);
+        MotionMaster& mm = *bot->GetMotionMaster();
+        mm.Clear();
+        mm.MoveJump(x, y, z, speed, speed, 1);
+        AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), 1000, priority);
+    }
 
-    if (IsWaitingForLastMove(priority))
-        return false;
+    if (RaidObs::Active())
+        RaidObs::NoteMove(bot, RaidObs::MoveKind::Jump, x, y, z, ObjectGuid::Empty, outcome);
 
-    float speed = bot->GetSpeed(MOVE_RUN);
-    MotionMaster& mm = *bot->GetMotionMaster();
-    mm.Clear();
-    mm.MoveJump(x, y, z, speed, speed, 1);
-    AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), 1000, priority);
-    return true;
+    return outcome == RaidObs::MoveOutcome::Issued;
 }
 
 bool MovementAction::MoveNear(uint32 mapId, float x, float y, float z, float distance, MovementPriority priority)
@@ -166,21 +188,36 @@ bool MovementAction::MoveToLOS(WorldObject* target, bool ranged)
     return false;
 }
 
-bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool /*idle*/, bool /*react*/, bool normal_only,
+// Records every destination a bot is handed, attributed to the action that issued it. "Two actions
+// steering the same MotionMaster" is invisible without that attribution.
+bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool idle, bool react, bool normal_only,
                             bool exact_waypoint, MovementPriority priority, bool lessDelay, bool backwards)
+{
+    RaidObs::MoveOutcome const outcome =
+        MoveToImpl(mapId, x, y, z, idle, react, normal_only, exact_waypoint, priority, lessDelay, backwards);
+
+    if (RaidObs::Active())
+        RaidObs::NoteMove(bot, RaidObs::MoveKind::Point, x, y, z, ObjectGuid::Empty, outcome);
+
+    return outcome == RaidObs::MoveOutcome::Issued;
+}
+
+RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, float z, bool /*idle*/,
+                                                bool /*react*/, bool normal_only, bool exact_waypoint,
+                                                MovementPriority priority, bool lessDelay, bool backwards)
 {
     UpdateMovementState();
     if (!IsMovingAllowed())
     {
-        return false;
+        return RaidObs::MoveOutcome::NotAllowed;
     }
     if (IsDuplicateMove(x, y, z))
     {
-        return false;
+        return RaidObs::MoveOutcome::Duplicate;
     }
     if (IsWaitingForLastMove(priority))
     {
-        return false;
+        return RaidObs::MoveOutcome::Waiting;
     }
 
     bool generatePath = !bot->IsFlying() && !bot->isSwimming();
@@ -193,7 +230,7 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool /*idle
         Unit* vehicleBase = vehicle->GetBase();
         generatePath = !vehicleBase || !vehicleBase->CanFly();
         if (!vehicleBase || !seat || !seat->CanControl())  // is passenger and cant move anyway
-            return false;
+            return RaidObs::MoveOutcome::NotAllowed;
 
         float distance = vehicleBase->GetExactDist(x, y, z);  // use vehicle distance, not bot
         if (distance > 0.01f)
@@ -208,7 +245,7 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool /*idle
             delay = std::max(.0f, delay);
             delay = std::min((float)sPlayerbotAIConfig.maxWaitForMove, delay);
             AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), delay, priority);
-            return true;
+            return RaidObs::MoveOutcome::Issued;
         }
     }
     else if (exact_waypoint || disableMoveSplinePath || !generatePath)
@@ -233,7 +270,7 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool /*idle
             delay = std::max(.0f, delay);
             delay = std::min((float)sPlayerbotAIConfig.maxWaitForMove, delay);
             AI_VALUE(LastMovement&, "last movement").Set(mapId, x, y, z, bot->GetOrientation(), delay, priority);
-            return true;
+            return RaidObs::MoveOutcome::Issued;
         }
     }
     else
@@ -242,7 +279,7 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool /*idle
         Movement::PointsArray path =
             SearchForBestPath(x, y, z, modifiedZ, sPlayerbotAIConfig.maxMovementSearchTime, normal_only);
         if (modifiedZ == INVALID_HEIGHT)
-            return false;
+            return RaidObs::MoveOutcome::NoPath;
         float distance = bot->GetExactDist(x, y, modifiedZ);
         if (distance > 0.01f)
         {
@@ -264,11 +301,12 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool /*idle
             delay = std::min((float)sPlayerbotAIConfig.maxWaitForMove, delay);
             AI_VALUE(LastMovement&, "last movement")
                 .Set(mapId, x, y, modifiedZ, bot->GetOrientation(), delay, priority);
-            return true;
+            return RaidObs::MoveOutcome::Issued;
         }
     }
 
-    return false;
+    // Every branch above reaches here only when the bot already stands on the destination.
+    return RaidObs::MoveOutcome::AlreadyThere;
     //
     // // LOG_DEBUG("playerbots", "IsMovingAllowed {}", IsMovingAllowed());
     // bot->AddUnitMovementFlag()
@@ -1299,13 +1337,17 @@ bool MovementAction::Follow(Unit* target, float distance, float angle)
     {
         Unit* currentTarget = ServerFacade::instance().GetChaseTarget(bot);
         if (currentTarget && currentTarget->GetGUID() == target->GetGUID())
+        {
+            NoteTracking(bot, RaidObs::MoveKind::Follow, target, RaidObs::MoveOutcome::Duplicate);
             return false;
+        }
     }
 
     if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE)
         bot->GetMotionMaster()->Clear();
 
     bot->GetMotionMaster()->MoveFollow(target, distance, angle);
+    NoteTracking(bot, RaidObs::MoveKind::Follow, target, RaidObs::MoveOutcome::Issued);
     return true;
 }
 
@@ -1313,6 +1355,7 @@ bool MovementAction::ChaseTo(WorldObject* obj, float distance)
 {
     if (!IsMovingAllowed())
     {
+        NoteTracking(bot, RaidObs::MoveKind::Chase, obj, RaidObs::MoveOutcome::NotAllowed);
         return false;
     }
 
@@ -1320,10 +1363,14 @@ bool MovementAction::ChaseTo(WorldObject* obj, float distance)
     {
         VehicleSeatEntry const* seat = vehicle->GetSeatForPassenger(bot);
         if (!seat || !seat->CanControl())
+        {
+            NoteTracking(bot, RaidObs::MoveKind::Chase, obj, RaidObs::MoveOutcome::NotAllowed);
             return false;
+        }
 
         // vehicle->GetMotionMaster()->Clear();
         vehicle->GetBase()->GetMotionMaster()->MoveChase((Unit*)obj, 30.0f);
+        NoteTracking(bot, RaidObs::MoveKind::Chase, obj, RaidObs::MoveOutcome::Issued);
         return true;
     }
 
@@ -1340,6 +1387,7 @@ bool MovementAction::ChaseTo(WorldObject* obj, float distance)
 
     // bot->GetMotionMaster()->Clear();
     bot->GetMotionMaster()->MoveChase((Unit*)obj, distance);
+    NoteTracking(bot, RaidObs::MoveKind::Chase, obj, RaidObs::MoveOutcome::Issued);
 
     // TODO shouldnt this use "last movement" value?
     WaitForReach(bot->GetExactDist2d(obj) - distance);

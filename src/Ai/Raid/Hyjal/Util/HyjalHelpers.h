@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_HYJALHELPERS_H
 #define PLAYERBOTS_HYJALHELPERS_H
 
+#include "RaidObs.h"
 #include "AiObject.h"
 #include "Position.h"
 #include "Unit.h"
@@ -74,7 +75,7 @@ namespace HyjalSummitHelpers
 
     // Rage Winterchill
     extern const Position WINTERCHILL_TANK_POSITION;
-    extern std::unordered_map<ObjectGuid, bool> hasReachedWinterchillPosition;
+    extern RaidObs::ObsGuidMap<bool> hasReachedWinterchillPosition;
     constexpr uint32 DEATH_AND_DECAY_DURATION = 15000;
     constexpr uint32 DEATH_AND_DECAY_REACQUIRE_DELAY = 20000;
     constexpr float DEATH_AND_DECAY_SAFE_RADIUS = 22.0f; // 20y radius + 1.5y player hitbox + 0.5y buffer
@@ -91,14 +92,14 @@ namespace HyjalSummitHelpers
     extern const Position ANETHERON_TANK_POSITION;
     extern const Position ANETHERON_E_INFERNAL_POSITION;
     extern const Position ANETHERON_W_INFERNAL_POSITION;
-    extern std::unordered_map<ObjectGuid, bool> hasReachedAnetheronPosition;
+    extern RaidObs::ObsGuidMap<bool> hasReachedAnetheronPosition;
     Player* GetInfernoTarget(Unit* anetheron);
     const Position& GetClosestInfernalTankPosition(Player* bot);
 
     // Kaz'rogal
     extern const Position KAZROGAL_TANK_TRANSITION_POSITION;
     extern const Position KAZROGAL_TANK_FINAL_POSITION;
-    extern std::unordered_map<ObjectGuid, TankPositionState> kazrogalTankStep;
+    extern RaidObs::ObsGuidMap<TankPositionState> kazrogalTankStep;
     extern std::unordered_map<ObjectGuid, bool> isBelowManaThreshold;
     TankPositionState GetKazrogalTankPositionState(PlayerbotAI* botAI, Player* bot);
 
@@ -106,7 +107,7 @@ namespace HyjalSummitHelpers
     extern const Position AZGALOR_TANK_TRANSITION_POSITION;
     extern const Position AZGALOR_TANK_FINAL_POSITION;
     extern const Position AZGALOR_DOOMGUARD_POSITION;
-    extern std::unordered_map<ObjectGuid, TankPositionState> azgalorTankStep;
+    extern RaidObs::ObsGuidMap<TankPositionState> azgalorTankStep;
     constexpr uint32 RAIN_OF_FIRE_DURATION = 10000;
     constexpr uint32 RAIN_OF_FIRE_REACQUIRE_DELAY = 15000;
     constexpr float RAIN_OF_FIRE_RADIUS = 17.0f; // 15y radius + 1.5y player hitbox + 0.5y buffer

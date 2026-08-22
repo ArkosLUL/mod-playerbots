@@ -9,6 +9,7 @@
 
 #include "ObjectGuid.h"
 #include "Position.h"
+#include "RaidObs.h"
 #include "UldBossHelper.h"
 
 #include <unordered_map>
@@ -25,16 +26,16 @@ class Unit;
 // everyone behind the corpse and the formation shuffles mid-fight.
 struct AlgalonEncounterState
 {
-    std::unordered_map<ObjectGuid, uint8> slotAssignments;
+    RaidObs::ObsGuidMap<uint8> slotAssignments{"algalon.slot"};
 
     // Where each bot is running for Big Bang, and which hole each kiter is dragging its
     // constellation through. Latched so a walk cannot flip destination mid-spline.
-    std::unordered_map<ObjectGuid, ObjectGuid> shelterAssignments;
-    std::unordered_map<ObjectGuid, ObjectGuid> kiteHoleAssignments;
+    RaidObs::ObsGuidMap<ObjectGuid> shelterAssignments{"algalon.shelter"};
+    RaidObs::ObsGuidMap<ObjectGuid> kiteHoleAssignments{"algalon.kitehole"};
 
     // One soaker per cast. Trigger and action both read this, so a per-tick re-derivation would
     // strand whoever was exempted from hiding half a second ago.
-    ObjectGuid bigBangSoaker;
+    RaidObs::ObsValue<ObjectGuid> bigBangSoaker{"algalon.soaker"};
 
     // The clock is latched from the first cast we actually see, not from pull: the encounter's own
     // timers are offset by an intro that is 26s on the first pull and 8.5s on every one after.

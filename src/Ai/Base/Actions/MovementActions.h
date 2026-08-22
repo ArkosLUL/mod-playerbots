@@ -10,6 +10,7 @@
 #include "Action.h"
 #include "LastMovementValue.h"
 #include "PlayerbotAIConfig.h"
+#include "RaidObs.h"
 #include <cmath>
 
 class Player;
@@ -37,6 +38,14 @@ protected:
                 bool normal_only = false, bool exact_waypoint = false,
                 MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, bool lessDelay = false,
                 bool backwards = false);
+
+    // The real mover. Call MoveTo instead: it wraps this so the destination reaches the raid trace.
+    // Returns why the command did or did not reach the MotionMaster - the trace has to tell a refusal
+    // apart from the ordinary "still walking to the last destination".
+    RaidObs::MoveOutcome MoveToImpl(uint32 mapId, float x, float y, float z, bool idle = false,
+                                    bool react = false, bool normal_only = false, bool exact_waypoint = false,
+                                    MovementPriority priority = MovementPriority::MOVEMENT_NORMAL,
+                                    bool lessDelay = false, bool backwards = false);
     bool MoveTo(WorldObject* target, float distance = 0.0f,
                 MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
     bool MoveNear(WorldObject* target, float distance = sPlayerbotAIConfig.contactDistance,

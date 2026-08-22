@@ -10,9 +10,34 @@
 #include "PerfMonitor.h"
 #include "PlayerbotMgr.h"
 #include "RandomPlayerbotMgr.h"
+#include "RaidObs.h"
 #include "ScriptMgr.h"
+#include <string>
+#include <vector>
 
 using namespace Acore::ChatCommands;
+
+namespace
+{
+// SendSysMessage takes one line at a time; RaidObs::Status reports one trace per line.
+std::vector<std::string> SplitLines(std::string const& text)
+{
+    std::vector<std::string> lines;
+    std::size_t start = 0;
+    while (start <= text.size())
+    {
+        std::size_t const nl = text.find('\n', start);
+        lines.push_back(text.substr(start, nl == std::string::npos ? std::string::npos : nl - start));
+        if (nl == std::string::npos)
+            break;
+
+        start = nl + 1;
+    }
+
+    return lines;
+}
+}  // namespace
+
 
 class playerbots_commandscript : public CommandScript
 {
@@ -23,6 +48,7 @@ public:
     {
         static ChatCommandTable playerbotsDebugCommandTable = {
             {"bg", HandleDebugBGCommand, SEC_GAMEMASTER, Console::Yes},
+            {"obs", HandleObsCommand, SEC_GAMEMASTER, Console::Yes},
         };
 
         static ChatCommandTable playerbotsAccountCommandTable = {
@@ -46,6 +72,15 @@ public:
         };
 
         return commandTable;
+    }
+
+    // Reports which raid traces are recording and where they are being written.
+    static bool HandleObsCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        for (std::string const& line : SplitLines(RaidObs::Status()))
+            handler->SendSysMessage(line.c_str());
+
+        return true;
     }
 
     static bool HandlePlayerbotCommand(ChatHandler* handler, char const* args)
