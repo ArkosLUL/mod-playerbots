@@ -8,6 +8,7 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidRedirectThreat.h"
 #include "UldBossHelper.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
@@ -22,6 +23,16 @@ class HodirMoveSnowpackedIcicleAction : public MovementAction
 {
 public:
     HodirMoveSnowpackedIcicleAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir move snowpacked icicle") {}
+    bool Execute(Event event) override;
+};
+
+// Raise Frost Resistance Aura. Cast directly rather than through ChangeStrategy: the shared boss
+// resistance node adds "rfrost" and nothing anywhere removes it, so the pick outlives the encounter
+// and is wrong on the next pull. HodirPaladinAuraMultiplier holds the slot open while this runs.
+class HodirFrostResistanceAction : public Action
+{
+public:
+    HodirFrostResistanceAction(PlayerbotAI* botAI) : Action(botAI, "hodir frost resistance action") {}
     bool Execute(Event event) override;
 };
 
@@ -52,9 +63,6 @@ class HodirRaidPositionAction : public MovementAction
 public:
     HodirRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, "hodir raid position action") {}
     bool Execute(Event event) override;
-
-private:
-    bool _anchorReached = false;
 };
 
 // Trapped raiders, then flash-frozen helpers, then the boss.
@@ -65,7 +73,7 @@ public:
     bool Execute(Event event) override;
 
 private:
-    Unit* ResolveTarget(Unit* currentTarget);
+    Unit* ResolveTarget();
 };
 
 // Taunt Hodir off the tank Frozen Blows would kill, and take him back when it drops.
@@ -74,6 +82,19 @@ class HodirFrozenBlowsSwapAction : public AttackAction
 public:
     HodirFrozenBlowsSwapAction(PlayerbotAI* ai) : AttackAction(ai, "hodir frozen blows swap action") {}
     bool Execute(Event event) override;
+};
+
+// Feed Misdirection and Tricks of the Trade to whichever tank is holding Hodir right now. A taunt
+// sets threat equal to the top of the table rather than above it, so the swap leaves the incoming
+// tank at parity with the best DPS every time and the redirect is what buys back a lead.
+class HodirRedirectThreatAction : public RaidRedirectThreatAction
+{
+public:
+    HodirRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, "hodir redirect threat action") {}
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
 };
 
 // Carry Storm Cloud around the ranged formation so Storm Power lands on as much of the raid as its

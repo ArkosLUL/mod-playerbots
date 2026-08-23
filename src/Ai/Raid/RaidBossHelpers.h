@@ -7,6 +7,9 @@
 #ifndef PLAYERBOTS_RAIDBOSSHELPERS_H
 #define PLAYERBOTS_RAIDBOSSHELPERS_H
 
+#include <utility>
+#include <vector>
+
 #include "AiObject.h"
 #include "Position.h"
 #include "Unit.h"
@@ -35,12 +38,20 @@ Player* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
 bool IsMechanicTrackerBot(Player* bot, uint32 mapId);
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId);
+// A hazard and the distance a bot has to keep from it.
+using HazardCircle = std::pair<Position, float>;
+
 // Nearest spot at least clearRadius from every hazard. Use instead of MovementAction::FleePosition
 // for anything wider than a few yards: that one silently clamps its travel to
 // AiPlayerbot.FleeDistance and cannot clear a large blast. Returns Position() when nothing inside
 // maxRadius is clear.
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
                                            float maxRadius, float distanceStep = 2.0f,
+                                           float angleStep = static_cast<float>(M_PI) / 8.0f);
+// Same sweep with a clear radius per hazard, for an encounter that drops pools of two different
+// sizes: clearing them all to the larger one buys safety with movement, and a moving bot cannot cast.
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
+                                           float distanceStep = 2.0f,
                                            float angleStep = static_cast<float>(M_PI) / 8.0f);
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);

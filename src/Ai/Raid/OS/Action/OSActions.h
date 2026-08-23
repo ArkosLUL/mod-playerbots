@@ -9,10 +9,10 @@
 
 #include "AttackAction.h"
 #include "MovementActions.h"
-#include "NaxxActions.h"
 #include "OSHelpers.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidRedirectThreat.h"
 
 // Every positioning action here anchors on a constant (Sartharion's home X, a drake landing coord)
 // plus the raid-wide corridor Y, never on a moving reference, so there is nothing to freeze into slot
@@ -145,10 +145,10 @@ public:
     bool Execute(Event event) override;
 };
 
-class OsRedirectThreatAction : public NaxxRedirectThreatAction
+class OsRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    OsRedirectThreatAction(PlayerbotAI* botAI) : NaxxRedirectThreatAction(botAI, "os redirect threat") {}
+    OsRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, "os redirect threat") {}
 
 protected:
     Player* GetRedirectTank() override;

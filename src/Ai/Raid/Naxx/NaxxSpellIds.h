@@ -117,8 +117,6 @@ namespace NaxxSpellIds
     static constexpr uint32 FrostBoltMulti = 28479;
     // 25-man single-target Frost Bolt id from spelldifficulty_dbc (28478->55802).
     static constexpr uint32 FrostBoltSingle25 = 55802;
-    // Proc aura left on the hunter after casting Misdirection (34477); consumed by the next 3 shots.
-    static constexpr uint32 Misdirection = 35079;
     // Druid Cyclone - used to lock down a raider charmed by Chains of Kel'Thuzad.
     static constexpr uint32 Cyclone = 33786;
 

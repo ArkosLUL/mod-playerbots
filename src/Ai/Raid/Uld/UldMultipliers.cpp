@@ -18,6 +18,7 @@
 #include "RaidBossHelpers.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
+#include "SharedDefines.h"
 #include "Spell.h"
 #include "SpellMgr.h"
 #include "Timer.h"
@@ -924,7 +925,12 @@ float HodirGuardMultiplier::GetValue(Action* action)
     // that node at all - they keep healing while the raid takes 14000 every two seconds - so they
     // keep the generic picker too. "attack rti target" is deliberately left alone: bots set no marks
     // here, but a mark the player sets should still win.
-    if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && dynamic_cast<DpsAssistAction*>(action))
+    //
+    // Both pickers, because the encounter node now hands tanks the boss as well. Suppressing it
+    // unconditionally is safe here for the reason docs/raids/README.md sets out: the ladder ends in a
+    // terminal fallback, so no role is left with no target.
+    if (!botAI->IsHeal(bot) &&
+        (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action)))
         return 0.0f;
 
     // Only the two tanks and the ranged half stand on a spot. Melee ride the boss in the corner, so
@@ -945,6 +951,25 @@ float HodirGuardMultiplier::GetValue(Action* action)
         "hodir biting cold shed", "hodir spread storm cloud"};
 
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
+}
+
+float HodirPaladinAuraMultiplier::GetValue(Action* action)
+{
+    if (!action || bot->getClass() != CLASS_PALADIN)
+        return 1.0f;
+
+    static std::set<std::string> const competingAuras = {
+        "devotion aura", "retribution aura", "concentration aura", "crusader aura",
+        "sanctity aura", "shadow resistance aura", "fire resistance aura"};
+
+    // Name first: this runs for every action in the queue, and the paladin lookup walks the group.
+    if (!competingAuras.count(action->getName()))
+        return 1.0f;
+
+    if (!IsHodirEngaged(botAI) || GetHodirResistancePaladin(botAI, bot) != bot)
+        return 1.0f;
+
+    return 0.0f;
 }
 
 // Both of these run behind the base class's shaman and totem-action checks, so the encounter lookup

@@ -53,11 +53,11 @@ Three timing flavours cover everything seen so far, all from the Black Temple pa
 above 95% health), **phase transition** (timer- or state-based), and **multi-tank assignment** (index
 the living hunters/rogues and map each to a tank).
 
-`NaxxRedirectThreatAction` (`Action/NaxxActions.h`, body in `NaxxActions_Shared.cpp`) is the **only
-redirect base covering hunters *and* rogues** — every BT/SSC/TK/SWP/Hyjal/ZA action is hunter-only. A
-rogue casts Tricks of the Trade and stops there (it redirects everything for 6s); a hunter casts
-Misdirection then dumps `steady shot` to spend the three charges. Subclasses implement only
-`GetRedirectTank()` and `GetThreatDumpTarget()`.
+`RaidRedirectThreatAction` (`Raid/RaidRedirectThreat.{h,cpp}`) is the **only redirect base covering
+hunters *and* rogues** — every BT/SSC/TK/SWP/Hyjal/ZA action is hunter-only. A rogue casts Tricks of
+the Trade and stops there (it redirects everything for 6s); a hunter casts Misdirection then dumps
+`steady shot` to spend the three charges. Subclasses implement only `GetRedirectTank()` and
+`GetThreatDumpTarget()`; Naxx, OS, VoA and Hodir do.
 
 Vetoes must `dynamic_cast` to the **concrete** actions (`CastMisdirectionOnMainTankAction`,
 `CastTricksOfTheTradeOnMainTankAction`) — never the shared `BuffOnMainTankAction` base, which also

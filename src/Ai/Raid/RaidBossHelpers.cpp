@@ -305,11 +305,20 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
     return dynObjs;
 }
 
-Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
-                                           float maxRadius, float distanceStep, float angleStep)
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
+                                           float distanceStep, float angleStep)
 {
     if (hazards.empty() || distanceStep <= 0.0f || angleStep <= 0.0f)
         return Position();
+
+    auto const clearOf = [&hazards](float x, float y)
+    {
+        for (HazardCircle const& hazard : hazards)
+            if (hazard.first.GetExactDist2d(x, y) < hazard.second)
+                return false;
+
+        return true;
+    };
 
     // Rings outward, so the first hit is also the shortest walk. Nothing checks the path: a bot that
     // has to cross a hazard to leave one is still better off out the far side than standing still.
@@ -321,17 +330,7 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> co
             float y = bot->GetPositionY() + distance * std::sin(angle);
             float z = bot->GetPositionZ();
 
-            bool clear = true;
-            for (Position const& hazard : hazards)
-            {
-                if (hazard.GetExactDist2d(x, y) < clearRadius)
-                {
-                    clear = false;
-                    break;
-                }
-            }
-
-            if (!clear)
+            if (!clearOf(x, y))
                 continue;
 
             if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
@@ -339,22 +338,23 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> co
                 continue;
 
             // The collision check can pull the spot back short of the hazard it was clearing.
-            bool stillClear = true;
-            for (Position const& hazard : hazards)
-            {
-                if (hazard.GetExactDist2d(x, y) < clearRadius)
-                {
-                    stillClear = false;
-                    break;
-                }
-            }
-
-            if (stillClear)
+            if (clearOf(x, y))
                 return Position(x, y, z, 0.0f);
         }
     }
 
     return Position();
+}
+
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
+                                           float maxRadius, float distanceStep, float angleStep)
+{
+    std::vector<HazardCircle> circles;
+    circles.reserve(hazards.size());
+    for (Position const& hazard : hazards)
+        circles.emplace_back(hazard, clearRadius);
+
+    return FindNearestPositionClearOfHazards(bot, circles, maxRadius, distanceStep, angleStep);
 }
 
 // Return the shortest-rotation spot just outside source's frontal cone, at the bot's current

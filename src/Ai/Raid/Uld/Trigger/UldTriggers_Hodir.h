@@ -30,6 +30,17 @@ public:
     bool IsActive() override;
 };
 
+// This bot is the paladin that should be running Frost Resistance Aura, and is not running it yet.
+// The shared BossFrostResistanceTrigger is deliberately not used here: it takes the first paladin in
+// group order whatever its spec, so a three-paladin raid can lose Devotion off the tank or
+// Concentration off a healer, and it raises the aura through a ChangeStrategy that nothing removes.
+class HodirFrostResistanceTrigger : public Trigger
+{
+public:
+    HodirFrostResistanceTrigger(PlayerbotAI* ai) : Trigger(ai, "hodir frost resistance trigger") {}
+    bool IsActive() override;
+};
+
 // An icicle is about to land on or beside this bot. Small icicles always count; a drift icicle only
 // counts while it is still falling, because once it lands it becomes the shelter everyone needs.
 class HodirIcicleDodgeTrigger : public Trigger
@@ -70,6 +81,15 @@ class HodirSpreadStormCloudTrigger : public Trigger
 {
 public:
     HodirSpreadStormCloudTrigger(PlayerbotAI* ai) : Trigger(ai, "hodir spread storm cloud") {}
+    bool IsActive() override;
+};
+
+// A hunter or rogue that could hand its threat to a tank. Screened here as well as in the action's
+// isUseful so the other twenty bots never reach the node.
+class HodirRedirectThreatTrigger : public Trigger
+{
+public:
+    HodirRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "hodir redirect threat") {}
     bool IsActive() override;
 };
 

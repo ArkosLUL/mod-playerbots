@@ -319,6 +319,18 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Holds the paladin aura slot open for Frost Resistance. The slot is exclusive, so without this the
+// paladin's own buff strategy re-casts Retribution or Devotion on the next GCD and the two trade the
+// slot for the whole fight - the same failure RaidAntiFearTotemGuardMultiplier exists to prevent for
+// the shaman earth totem. Only the one chosen paladin is held; the rest keep their own auras.
+class HodirPaladinAuraMultiplier : public Multiplier
+{
+public:
+    HodirPaladinAuraMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "hodir paladin aura multiplier") {}
+
+    float GetValue(Action* action) override;
+};
+
 // Thorim: Runic Barrier answers every melee swing with 2000 arcane, so a bot that has backed out on
 // the health band must not keep walking back in. Only the swing and the chase are held - the target
 // is deliberately kept, and everything that is not a melee hit carries on from out there.

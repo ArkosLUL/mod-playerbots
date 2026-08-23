@@ -438,7 +438,7 @@ bool KelthuzadMisdirectBossToMainTankAction::Execute(Event event)
     }
 
     // Threat transfer shot: P2 dumps onto the boss, P1 onto whatever active add we already fight.
-    if (bot->HasAura(NaxxSpellIds::Misdirection))
+    if (bot->HasAura(SPELL_MISDIRECTION_PROC))
     {
         Unit* target = helper.IsPhaseTwo() ? helper.GetBoss() : AI_VALUE(Unit*, "current target");
         if (target && botAI->CanCastSpell("steady shot", target))

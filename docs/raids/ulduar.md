@@ -500,8 +500,45 @@ Biting Cold answer, so ringed bots rarely need the jump.
   melee haste too, and confirmed: the only fix is dragging him to the druid, which costs the corner.
 - The Storm Cloud carrier **laps the ring**, direction latched for one carry; tanks never run it and
   are never buff targets. Greedy re-targeting is the Auriaya corridor dance.
-- Healers are excluded from the targeting node entirely, and only the nearest **5** non-healers break
-  an ice block.
+- Healers are excluded from the targeting node entirely, and **5** non-healers break each ice block —
+  raider and helper alike, picked by a GUID window offset per block so several blocks draw disjoint
+  sets instead of the same five.
+
+#### The anchor and the dodge will thrash unless three invariants hold
+
+Traced on 2026-08-23: two wipes at 67% HP, both tanks dead inside two minutes, healers at 0-10% cast
+uptime and ~70% moving. 934 anchor/dodge reversals — 21% of every accepted move, median gap 321 ms,
+15,240 yd walked — roughly **43% of the raid's fight time spent walking between two destinations**.
+Three separate causes, all of them still easy to reintroduce.
+
+- **The anchor stand-down tests the whole walk back, not just the anchor.** The dodge trigger goes
+  false the moment the bot is clear, but the icicle stays lethal for another ~3.7 s
+  (`ULDUAR_HODIR_ICICLE_SPENT_MS` of a 7000 ms life). Checking only the destination lets the anchor
+  walk the bot back under the blast, where the dodge re-arms — about 11 round trips per icicle, one
+  icicle every 2 s. `HodirRaidPositionTrigger` projects each lethal icicle onto the bot→anchor
+  segment for exactly this reason.
+- **Do not "fix" this by widening the arrival tolerance.** A dodge always displaces further than the
+  tolerance — by design, not the bug. Widening it stops the *return*, and at one icicle every 2 s the
+  formation becomes an unbounded random walk out of Starlight inside a minute. What works instead:
+  `HodirRaidPositionTrigger` is reactive for ranged, firing only on a broken constraint (inside
+  `ULDUAR_HODIR_RANGED_MIN_BOSS_GAP` with a clear slot to reach, no Starlight, clumped under
+  `ULDUAR_HODIR_DECLUMP_RADIUS`, past `ULDUAR_HODIR_RETURN_LEASH`), so it issues one destination and
+  goes quiet. `HodirRaidPositionAction` holds no arrival latch on purpose — one would swallow those
+  re-anchors, which fire well inside twice the tolerance. Tanks keep the spring: Hodir follows
+  whoever holds him.
+- **Ring slots are indexed over the whole ranged roster, dead included.** Indexing over the living
+  shifts every bot after a corpse, so one death re-seats the entire formation and `total` moves the
+  inner/outer split with it. Eleven ranged deaths, nine of them in a 30 s window, re-anchored every
+  survivor each time — which is what turned a bad pull into a cascade.
+- **Tanks do not run the icicle dodge.** They ate a ~50 yd walk around the room and took Hodir with
+  them; Bulwark ended up 70 yd from the boss while alive. Tanks eat the 14,000 instead, and the
+  Biting Cold shuttle already gives them the movement they need without leaving the corner.
+
+Two things that look broken in a Hodir trace and are not: `hodir frozen blows swap action` logging
+~95% `FAILED` is the stateless trigger retrying every ~110 ms while the taunt is on cooldown — count
+the `OK` records instead, one per cooldown per Frozen Blows window is correct. And a
+`thorim.squadsassigned` note inside a Hodir pull is `ThorimResetEncounterStateTrigger` clearing stale
+state from an earlier attempt, which is cleanup working.
 
 ### Freya
 
@@ -1772,9 +1809,10 @@ stateless `boss->GetHealthPct() > 95.0f` idiom rather than building a combat clo
 state and doubles as the fresh-spawn / fresh-phase test. And use `GetFirstAliveUnitByEntry`, not
 `"find target"`, for multi-tank detection: a bot parked on boss A never resolves boss B.
 
-Per decision, `NaxxRedirectThreatAction` stays where it is rather than being promoted to a shared
-raid-level base. Known cost: the Misdirection proc-aura id `35079` is already duplicated across nine
-per-raid helper headers, and Ulduar would make ten.
+`RaidRedirectThreatAction` lives in `Raid/RaidRedirectThreat.{h,cpp}`; Hodir subclasses it as
+`HodirRedirectThreatAction`, feeding whichever tank currently holds him. The proc-aura id `35079`
+still sits in nine per-raid helper headers including `UldBossHelper.h`; `SPELL_MISDIRECTION_PROC` on
+the shared header is the one to converge on.
 
 ## Normal-mode gaps still open
 

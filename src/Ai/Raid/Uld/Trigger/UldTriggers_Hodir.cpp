@@ -1,6 +1,9 @@
 #include "UldTriggers_Hodir.h"
 
+#include <algorithm>
+#include <cmath>
 #include <list>
+#include <utility>
 
 #include "Object.h"
 #include "PlayerbotAI.h"
@@ -19,6 +22,29 @@ static Creature* NearestHodirIcicle(Player* bot, uint32 entry, float radius)
 {
     Creature* icicle = bot->FindNearestCreature(entry, radius);
     return IsHodirIcicleLethal(icicle) ? icicle : nullptr;
+}
+
+// 2D distance from a point to the walk between two positions, endpoints included, so one test
+// covers where the bot is, where it is headed, and everything it crosses on the way.
+static float DistToSegment2d(Position const& point, Position const& from, Position const& to)
+{
+    float const dx = to.GetPositionX() - from.GetPositionX();
+    float const dy = to.GetPositionY() - from.GetPositionY();
+    float const lengthSq = dx * dx + dy * dy;
+
+    float t = 0.0f;
+    if (lengthSq > 0.0f)
+    {
+        t = ((point.GetPositionX() - from.GetPositionX()) * dx +
+             (point.GetPositionY() - from.GetPositionY()) * dy) /
+            lengthSq;
+        t = std::clamp(t, 0.0f, 1.0f);
+    }
+
+    float const nearestX = from.GetPositionX() + dx * t;
+    float const nearestY = from.GetPositionY() + dy * t;
+    return std::sqrt((point.GetPositionX() - nearestX) * (point.GetPositionX() - nearestX) +
+                     (point.GetPositionY() - nearestY) * (point.GetPositionY() - nearestY));
 }
 
 bool HodirBitingColdTrigger::IsActive()
@@ -54,17 +80,38 @@ bool HodirNearSnowpackedIcicleTrigger::IsActive()
     return bot->GetExactDist2d(shelter) > ULDUAR_HODIR_SAFE_AREA_TOLERANCE;
 }
 
+bool HodirFrostResistanceTrigger::IsActive()
+{
+    if (!IsHodirEngaged(botAI))
+        return false;
+
+    if (botAI->HasAura("frost resistance aura", bot))
+        return false;
+
+    return GetHodirResistancePaladin(botAI, bot) == bot;
+}
+
 bool HodirIcicleDodgeTrigger::IsActive()
 {
     if (!GetHodir(botAI))
         return false;
 
-    if (NearestHodirIcicle(bot, NPC_HODIR_ICICLE_SMALL, ULDUAR_HODIR_ICE_SHARDS_CLEAR))
+    // Tanks eat the icicle. Hodir follows, so a tank that steps 12 yd off its corner drags him with
+    // it and the ranged formation is suddenly standing in melee. The Biting Cold shuttle already
+    // gives them the movement they need without leaving the spot.
+    if (botAI->IsTank(bot))
+        return false;
+
+    // Leaving is decided on the radius that kills; the clear is margin for where the bot lands, and
+    // testing it at both ends had bots stepping out of pools they were never standing in.
+    if (NearestHodirIcicle(bot, NPC_HODIR_ICICLE_SMALL,
+                           ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
         return true;
 
     // A drift icicle is worth dodging only until it lands. After that the Snowpacked Icicle Target
     // it leaves behind is the shelter, and dodging would push the bot out of the one safe spot.
-    Creature* drift = NearestHodirIcicle(bot, NPC_HODIR_ICICLE_DRIFT, ULDUAR_HODIR_ICE_SHARDS_CLEAR);
+    Creature* drift = NearestHodirIcicle(bot, NPC_HODIR_ICICLE_DRIFT,
+                                         ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN);
     if (!drift)
         return false;
 
@@ -100,18 +147,69 @@ bool HodirRaidPositionTrigger::IsActive()
     if (!GetHodirAnchor(botAI, bot, anchor, tolerance))
         return false;
 
-    // The dodge stands down once the bot itself is clear, but the icicle is still counting down on
-    // the spot it left. Without this the anchor walks it straight back under the blast.
-    for (uint32 entry : {NPC_HODIR_ICICLE_SMALL, NPC_HODIR_ICICLE_DRIFT})
+    // The dodge stands down the moment the bot is clear, but the icicle it stepped out of stays lethal
+    // for another 3.7s. Testing the whole walk back and not just the spot at the end of it is what
+    // stops the anchor and the dodge trading the bot back and forth for the rest of that window.
+    Position const self = bot->GetPosition();
+    for (auto const& entry : {std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_SMALL),
+                                             ULDUAR_HODIR_ICE_SHARDS_CLEAR),
+                              std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_DRIFT),
+                                             ULDUAR_HODIR_BIG_SHARDS_CLEAR)})
     {
         std::list<Creature*> icicles;
-        bot->GetCreatureListWithEntryInGrid(icicles, entry, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+        bot->GetCreatureListWithEntryInGrid(icicles, entry.first, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
         for (Creature* icicle : icicles)
-            if (IsHodirIcicleLethal(icicle) && icicle->GetExactDist2d(&anchor) < ULDUAR_HODIR_ICE_SHARDS_CLEAR)
+            if (IsHodirIcicleLethal(icicle) &&
+                DistToSegment2d(icicle->GetPosition(), self, anchor) < entry.second)
                 return false;
     }
 
-    return bot->GetExactDist2d(&anchor) > tolerance;
+    // Reactive, not restoring. Walking to the slot whenever the bot is off it makes the anchor a
+    // spring: every dodge displaces further than the tolerance, so every dodge buys a return trip and
+    // the two actions trade the bot for the rest of the icicle's life. Firing only on a broken
+    // constraint issues one destination and then goes quiet, and the movement layer walks it out.
+    if (bot->GetExactDist2d(&anchor) <= tolerance)
+        return false;
+
+    // Tanks keep the spring. Their anchor is a fixed corner and Hodir follows whoever holds him, so a
+    // tank that drifts takes the boss with it and lands him on the ranged formation. They also never
+    // run the generic dodge, so nothing is fighting them for the spot.
+    if (botAI->IsTank(bot))
+        return true;
+
+    // Home regardless. Without a hard leash nothing pulls a bot back that dodged its way out of heal
+    // range, because none of the constraints below care how far from the raid it ended up.
+    if (bot->GetExactDist2d(&anchor) > ULDUAR_HODIR_RETURN_LEASH)
+        return true;
+
+    // Standing in his melee with Frozen Blows up is one swing from dead. Gated on the slot being
+    // clear as well: when he has walked onto the formation the slot is no better than here, and
+    // firing anyway just slides the bot around inside his reach.
+    Unit* hodir = GetHodir(botAI);
+    if (hodir && bot->GetExactDist2d(hodir) < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP &&
+        anchor.GetExactDist2d(hodir) >= ULDUAR_HODIR_RANGED_MIN_BOSS_GAP)
+        return true;
+
+    // Nothing here tests Starlight. 62807 reaches about 4 yd, not the 8 its DBC row claims, so a bot
+    // is outside every zone almost all of the time and a constraint on it can never be satisfied -
+    // it just walks. GetHodirAnchor hands a zone to the one bot whose slot is already beside it.
+
+    // Clumped. One icicle splashes 4 yd, so neighbours inside the declump radius mean one landing
+    // catches both.
+    for (auto const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
+    {
+        Unit* ally = botAI->GetUnit(guid);
+        if (!ally || ally == bot || !ally->IsAlive() || !ally->IsPlayer())
+            continue;
+
+        if (!PlayerbotAI::IsRanged(ally->ToPlayer()) && !PlayerbotAI::IsHeal(ally->ToPlayer()))
+            continue;
+
+        if (bot->GetExactDist2d(ally) < ULDUAR_HODIR_DECLUMP_RADIUS)
+            return true;
+    }
+
+    return false;
 }
 
 bool HodirSetDpsPriorityTrigger::IsActive()
@@ -121,7 +219,9 @@ bool HodirSetDpsPriorityTrigger::IsActive()
     if (!IsHodirEngaged(botAI))
         return false;
 
-    return !botAI->IsTank(bot) && !botAI->IsHeal(bot);
+    // Tanks are on this node too, for Hodir only - the action hands them the boss and nothing else.
+    // Healers keep the generic picker so nothing pulls them off healing.
+    return !botAI->IsHeal(bot);
 }
 
 bool HodirFrozenBlowsSwapTrigger::IsActive()
@@ -141,6 +241,14 @@ bool HodirFrozenBlowsSwapTrigger::IsActive()
         return !frozenBlows && !holding;
 
     return false;
+}
+
+bool HodirRedirectThreatTrigger::IsActive()
+{
+    if (!IsHodirEngaged(botAI))
+        return false;
+
+    return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;
 }
 
 bool HodirSpreadStormCloudTrigger::IsActive()

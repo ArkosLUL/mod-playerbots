@@ -11,8 +11,8 @@
 #include "AttackAction.h"
 #include "Event.h"
 #include "MovementActions.h"
-#include "NaxxActions.h"
 #include "PlayerbotAI.h"
+#include "RaidRedirectThreat.h"
 #include "VoAHelpers.h"
 
 //
@@ -76,10 +76,10 @@ public:
     bool Execute(Event event) override;
 };
 
-class EmalonRedirectThreatAction : public NaxxRedirectThreatAction
+class EmalonRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    EmalonRedirectThreatAction(PlayerbotAI* botAI) : NaxxRedirectThreatAction(botAI, "emalon redirect threat action") {}
+    EmalonRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, "emalon redirect threat action") {}
 
 protected:
     Player* GetRedirectTank() override;

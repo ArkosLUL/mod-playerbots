@@ -353,6 +353,13 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "hodir frozen blows swap",
         { NextAction("hodir frozen blows swap action", ACTION_RAID + 4) }));
 
+    // Shares the swap's relevance because the two can never contend: the swap only fires for the two
+    // tanks and the redirect only for hunters and rogues. It has to outrank targeting, or a bot
+    // switches to a block before spending charges the tank is waiting on.
+    triggers.push_back(new TriggerNode(
+        "hodir redirect threat",
+        { NextAction("hodir redirect threat action", ACTION_RAID + 4) }));
+
     triggers.push_back(new TriggerNode(
         "hodir set dps priority",
         { NextAction("hodir set dps priority action", ACTION_RAID + 3) }));
@@ -847,6 +854,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
     multipliers.push_back(new HodirGuardMultiplier(botAI));
+    multipliers.push_back(new HodirPaladinAuraMultiplier(botAI));
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));

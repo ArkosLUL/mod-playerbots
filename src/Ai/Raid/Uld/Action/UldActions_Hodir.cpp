@@ -27,20 +27,22 @@
 
 namespace
 {
-// Where every icicle that has not detonated yet is standing, both entries. The drift entry is
-// included because it is lethal on the way down; once it lands it becomes the shelter and
-// IsHodirIcicleLethal stops reporting it.
-std::vector<Position> CollectHodirIcicleHazards(Player* bot, float radius)
+// Where every icicle that has not detonated yet is standing, each carrying the distance its own pool
+// needs. The drift entry is included because it is lethal on the way down; once it lands it marks the
+// shelter and IsHodirIcicleLethal stops reporting it. The two clears are passed in because the dodge
+// sweeps twice: once for real margin, once tightened to the radius that actually kills.
+std::vector<HazardCircle> CollectHodirIcicleHazards(Player* bot, float radius, float smallClear, float bigClear)
 {
-    std::vector<Position> hazards;
+    std::vector<HazardCircle> hazards;
 
-    for (uint32 entry : {NPC_HODIR_ICICLE_SMALL, NPC_HODIR_ICICLE_DRIFT})
+    for (auto const& entry : {std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_SMALL), smallClear),
+                              std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_DRIFT), bigClear)})
     {
         std::list<Creature*> found;
-        bot->GetCreatureListWithEntryInGrid(found, entry, radius);
+        bot->GetCreatureListWithEntryInGrid(found, entry.first, radius);
         for (Creature* icicle : found)
             if (IsHodirIcicleLethal(icicle))
-                hazards.push_back(icicle->GetPosition());
+                hazards.emplace_back(icicle->GetPosition(), entry.second);
     }
 
     return hazards;
@@ -64,9 +66,15 @@ bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
                       MovementPriority::MOVEMENT_COMBAT);
 }
 
+bool HodirFrostResistanceAction::Execute(Event /*event*/)
+{
+    return botAI->DoSpecificAction("frost resistance aura", Event(), true);
+}
+
 bool HodirIcicleDodgeAction::Execute(Event /*event*/)
 {
-    std::vector<Position> const hazards = CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+    std::vector<HazardCircle> const hazards = CollectHodirIcicleHazards(
+        bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR);
     if (hazards.empty())
         return false;
 
@@ -74,14 +82,16 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
     // the first hit is both the shortest walk and somewhere MoveTo will actually accept. FleePosition
     // is the wrong tool here: it clamps travel to AiPlayerbot.FleeDistance and reads one hazard, so
     // the second icicle of a volley leaves the bot standing in the blast.
-    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_ICE_SHARDS_CLEAR,
-                                                      ULDUAR_HODIR_DODGE_LEASH);
+    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH);
 
-    // Nothing fully clear: 6 yd was margin, 4 is the radius that actually kills, and moving to the
-    // least bad spot beats holding still because the sweep found no perfect one.
+    // Nothing fully clear: the clears above were margin, these are the radii that actually kill, and
+    // moving to the least bad spot beats holding still because the sweep found no perfect one.
     if (IsEmptyPosition(dest))
-        dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
-                                                 ULDUAR_HODIR_DODGE_LEASH * 2.0f);
+        dest = FindNearestPositionClearOfHazards(
+            bot,
+            CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
+                                      ULDUAR_HODIR_BIG_SHARDS_RADIUS + 0.5f),
+            ULDUAR_HODIR_DODGE_LEASH * 2.0f);
 
     if (IsEmptyPosition(dest))
         return false;
@@ -125,20 +135,12 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
     if (!GetHodirAnchor(botAI, bot, anchor, tolerance))
         return false;
 
-    float const distance = bot->GetExactDist2d(&anchor);
-
-    // Reach then hold. Without the latch the bot re-issues a move on every drift inside the
-    // tolerance, and a moving bot cannot start a cast - it slides on the spot and never casts. The
-    // release threshold also has to clear the centre quantum, or a one-step druid shuffle restarts
-    // the whole formation.
-    if (_anchorReached && distance > tolerance * 2.0f)
-        _anchorReached = false;
-
-    if (_anchorReached || distance <= tolerance)
-    {
-        _anchorReached = true;
+    // No arrival latch here. The trigger stands down inside the tolerance, which is what the latch
+    // used to be for, and holding one across ticks would swallow the reactive re-anchors: a bot that
+    // has to move because it is clumped or standing in Hodir's melee is usually still well inside
+    // twice the tolerance, so a latched action would refuse the move the trigger just asked for.
+    if (bot->GetExactDist2d(&anchor) <= tolerance)
         return false;
-    }
 
     // The exact slot, not MoveInside: that one offsets the destination by the tolerance at the bot's
     // follow angle, which parks everyone a couple of yards off-formation in an unrelated direction
@@ -147,11 +149,16 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
                   false, false, false, MovementPriority::MOVEMENT_COMBAT);
 }
 
-Unit* HodirSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
+Unit* HodirSetDpsPriorityAction::ResolveTarget()
 {
     Unit* hodir = GetHodir(botAI);
     if (!hodir)
         return nullptr;
+
+    // Tanks never break ice. He follows whoever holds him, so a tank that walks 20 yd to a block puts
+    // him on the ranged formation, and a freed helper is worth a lot less than that costs.
+    if (botAI->IsTank(bot))
+        return hodir;
 
     Unit* trappedAlly = nullptr;
     Unit* helperBlock = nullptr;
@@ -177,6 +184,12 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         }
         else if (unit->GetEntry() == NPC_HODIR_FLASH_FREEZE_BLOCK)
         {
+            // Capped like a trapped raider. Uncapped, every non-tank non-healer in 45 yd takes the
+            // nearest helper block, and Flash Freeze puts five or six of them up every 48s - the
+            // whole roster ends up breaking ice instead of hitting the boss.
+            if (!IsHodirTrappedAllyBreaker(botAI, bot, unit))
+                continue;
+
             if (!helperBlock || bot->GetExactDist2d(unit) + 10.0f < bot->GetExactDist2d(helperBlock))
                 helperBlock = unit;
         }
@@ -197,22 +210,10 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         }
     }
 
-    auto const priorityIndex = [&priority](Unit* unit) -> size_t
-    {
-        if (!unit || !unit->IsAlive())
-            return priority.size();
-
-        for (size_t i = 0; i < priority.size(); ++i)
-            if (priority[i].first == unit->GetEntry())
-                return i;
-
-        return priority.size();
-    };
-
-    // Sticky across entries: hold what we have while it is at least as important as the new pick.
-    if (currentTarget && priorityIndex(currentTarget) <= priorityIndex(target))
-        target = currentTarget;
-
+    // No stickiness across entries. Holding a block because it outranks the boss on this list is what
+    // parked the raid on helper ice for the rest of the fight: the block outranks Hodir for as long as
+    // it lives, whether or not this bot is still assigned to it. The 10 yd margin in the scan above
+    // already stops two bots ping-ponging between adjacent blocks, which is all the hysteresis needed.
     if (!target)
         target = AI_VALUE(Unit*, "dps target");
 
@@ -222,7 +223,7 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 bool HodirSetDpsPriorityAction::Execute(Event /*event*/)
 {
     Unit* currentTarget = context->GetValue<Unit*>("current target")->Get();
-    Unit* target = ResolveTarget(currentTarget);
+    Unit* target = ResolveTarget();
     if (!target)
         return false;
 
@@ -250,6 +251,20 @@ bool HodirFrozenBlowsSwapAction::Execute(Event /*event*/)
     // cooldown, so a swap that has to wait for it retries at tick rate until it lands.
     return UldCastClassTaunt(botAI, GetHodir(botAI));
 }
+
+Player* HodirRedirectThreatAction::GetRedirectTank()
+{
+    // Follow the swap rather than mirroring its state: whoever is holding him is the one who needs
+    // the lead, and that is the off-tank for the length of a Frozen Blows window.
+    if (Player* holding = GetTankHolding(GetHodir(botAI)))
+        return holding;
+
+    // Hodir is on somebody who is not a tank, which is the case the redirect exists for. Feed the
+    // main tank so the taunt that follows has something to hold.
+    return GetGroupMainTank(botAI, bot);
+}
+
+Unit* HodirRedirectThreatAction::GetThreatDumpTarget() { return GetHodir(botAI); }
 
 bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
 {

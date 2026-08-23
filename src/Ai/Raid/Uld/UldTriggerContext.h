@@ -66,6 +66,7 @@ public:
         creators["hodir raid position"] = &RaidUlduarTriggerContext::hodir_raid_position;
         creators["hodir set dps priority"] = &RaidUlduarTriggerContext::hodir_set_dps_priority;
         creators["hodir frozen blows swap"] = &RaidUlduarTriggerContext::hodir_frozen_blows_swap;
+        creators["hodir redirect threat"] = &RaidUlduarTriggerContext::hodir_redirect_threat;
         creators["freya near nature bomb"] = &RaidUlduarTriggerContext::freya_near_nature_bomb;
         creators["freya fire resistance trigger"] = &RaidUlduarTriggerContext::freya_fire_resistance_trigger;
         creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
@@ -221,12 +222,13 @@ private:
     static Trigger* auriaya_fall_from_floor_trigger(PlayerbotAI* ai) { return new AuriayaFallFromFloorTrigger(ai); }
     static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
-    static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "hodir"); }
+    static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new HodirFrostResistanceTrigger(ai); }
     static Trigger* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudTrigger(ai); }
     static Trigger* hodir_icicle_dodge(PlayerbotAI* ai) { return new HodirIcicleDodgeTrigger(ai); }
     static Trigger* hodir_raid_position(PlayerbotAI* ai) { return new HodirRaidPositionTrigger(ai); }
     static Trigger* hodir_set_dps_priority(PlayerbotAI* ai) { return new HodirSetDpsPriorityTrigger(ai); }
     static Trigger* hodir_frozen_blows_swap(PlayerbotAI* ai) { return new HodirFrozenBlowsSwapTrigger(ai); }
+    static Trigger* hodir_redirect_threat(PlayerbotAI* ai) { return new HodirRedirectThreatTrigger(ai); }
     static Trigger* freya_near_nature_bomb(PlayerbotAI* ai) { return new FreyaNearNatureBombTrigger(ai); }
     static Trigger* freya_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "freya"); }
     static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }
