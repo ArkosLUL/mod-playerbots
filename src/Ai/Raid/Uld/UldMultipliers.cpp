@@ -914,12 +914,33 @@ float VezaxControlMovementMultiplier::GetValue(Action* action)
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
 }
 
+namespace
+{
+
+// Every taunt the tank specs wire up. Matched by name because they live across four class headers, and
+// righteous defense has to be in the list: it is the alternative Hand of Reckoning falls back to on
+// cooldown, so leaving it out lets half of them through.
+bool IsHodirTauntAction(std::string const& name)
+{
+    return name == "taunt" || name == "hand of reckoning" || name == "righteous defense" ||
+           name == "dark command" || name == "growl" || name == "challenging shout" ||
+           name == "challenging roar";
+}
+
+}  // namespace
+
 float HodirGuardMultiplier::GetValue(Action* action)
 {
     // Engaged, not merely present: these stand-downs hand generic behaviour to encounter nodes that
     // none of them run before the pull, so on sight alone they would leave bots rooted with no target.
     if (!action || !IsHodirEngaged(botAI))
         return 1.0f;
+
+    // The class "lose aggro" node taunts on the 8s cooldown for as long as somebody else holds the
+    // boss, and it knows nothing about Frozen Blows. Name first: this runs for every action in the
+    // queue and the predicate behind it walks the boss lookup.
+    if (IsHodirTauntAction(action->getName()) && HodirTauntWouldBeSuicide(botAI, bot))
+        return 0.0f;
 
     // hodir set dps priority action owns the target for everyone who has one. Healers are not on
     // that node at all - they keep healing while the raid takes 14000 every two seconds - so they

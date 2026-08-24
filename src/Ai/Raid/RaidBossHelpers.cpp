@@ -306,7 +306,7 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
 }
 
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
-                                           float distanceStep, float angleStep)
+                                           float distanceStep, float angleStep, Position const* preferNear)
 {
     if (hazards.empty() || distanceStep <= 0.0f || angleStep <= 0.0f)
         return Position();
@@ -324,6 +324,10 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
     // has to cross a hazard to leave one is still better off out the far side than standing still.
     for (float distance = distanceStep; distance <= maxRadius; distance += distanceStep)
     {
+        Position best;
+        float bestScore = 0.0f;
+        bool found = false;
+
         for (float angle = 0.0f; angle < 2.0f * static_cast<float>(M_PI); angle += angleStep)
         {
             float x = bot->GetPositionX() + distance * std::cos(angle);
@@ -338,9 +342,25 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
                 continue;
 
             // The collision check can pull the spot back short of the hazard it was clearing.
-            if (clearOf(x, y))
+            if (!clearOf(x, y))
+                continue;
+
+            if (!preferNear)
                 return Position(x, y, z, 0.0f);
+
+            float const score = preferNear->GetExactDist2d(x, y);
+            if (!found || score < bestScore)
+            {
+                best = Position(x, y, z, 0.0f);
+                bestScore = score;
+                found = true;
+            }
         }
+
+        // Ring by ring, so preferNear only ever reorders spots that are the same walk away and can
+        // never talk the bot into a longer one.
+        if (found)
+            return best;
     }
 
     return Position();

@@ -42,6 +42,11 @@ class HodirIcicleDodgeAction : public MovementAction
 public:
     HodirIcicleDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir icicle dodge action") {}
     bool Execute(Event event) override;
+
+private:
+    Position _dest;
+    // Closest the bot has got to _dest so far, so a drag away from it can be told from ordinary walking.
+    float _destDist = 0.0f;
 };
 
 // Shed Biting Cold by moving. A stack only comes off on the second moving tick and any stationary

@@ -233,12 +233,14 @@ bool HodirFrozenBlowsSwapTrigger::IsActive()
     if (!boss)
         return false;
 
-    bool const frozenBlows = boss->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_FROZEN_BLOWS, bot));
+    bool const frozenBlows = HodirFrozenBlowsActive(botAI, bot);
     bool const holding = boss->GetVictim() == bot;
 
-    // The off-tank takes him for the 20s window; the main tank takes him back once it drops.
+    // The off-tank takes him for the 20s window; the main tank takes him back once it drops. Taking the
+    // window under the floor is a death rather than a swap - two hits of 63511 arrive 2.4s apart and
+    // either one is most of a tank's pool.
     if (botAI->IsAssistTankOfIndex(bot, 0, true))
-        return frozenBlows && !holding;
+        return frozenBlows && !holding && bot->GetHealthPct() >= ULDUAR_HODIR_TAUNT_HEALTH_FLOOR;
 
     if (botAI->IsMainTank(bot))
         return !frozenBlows && !holding;

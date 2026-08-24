@@ -50,9 +50,14 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> co
                                            float angleStep = static_cast<float>(M_PI) / 8.0f);
 // Same sweep with a clear radius per hazard, for an encounter that drops pools of two different
 // sizes: clearing them all to the larger one buys safety with movement, and a moving bot cannot cast.
+//
+// preferNear breaks the tie inside whichever ring first has a clear spot. Without it the sweep takes
+// the first angle that passes, which is a fixed compass direction and has nothing to do with where the
+// bot wants to end up - on Hodir that walked melee a yard further out of melee range per hop.
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
                                            float distanceStep = 2.0f,
-                                           float angleStep = static_cast<float>(M_PI) / 8.0f);
+                                           float angleStep = static_cast<float>(M_PI) / 8.0f,
+                                           Position const* preferNear = nullptr);
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
 void StopPet(PlayerbotAI* botAI);

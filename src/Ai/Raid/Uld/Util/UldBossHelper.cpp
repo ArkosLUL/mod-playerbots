@@ -23,6 +23,7 @@
 #include "ServerFacade.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "SpellMgr.h"
 #include "TemporarySummon.h"
 #include "World.h"
 
@@ -596,6 +597,28 @@ bool IsHodirFlashFreezeIncoming(PlayerbotAI* botAI)
            boss->FindCurrentSpellBySpellId(SPELL_FLASH_FREEZE) != nullptr;
 }
 
+bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot)
+{
+    Unit* boss = GetHodir(botAI);
+    return boss && bot && boss->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_FROZEN_BLOWS, bot));
+}
+
+bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot || bot->GetHealthPct() >= ULDUAR_HODIR_TAUNT_HEALTH_FLOOR)
+        return false;
+
+    if (!HodirFrozenBlowsActive(botAI, bot))
+        return false;
+
+    // Somebody else has to already be holding him. With nobody on him the taunt is the rescue and has
+    // to survive whatever shape the bot is in, and a taunt at a creature victim is how the boss comes
+    // off a pet.
+    Unit* boss = GetHodir(botAI);
+    Unit* victim = boss ? boss->GetVictim() : nullptr;
+    return victim && victim != bot && victim->IsPlayer() && victim->IsAlive();
+}
+
 Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || !GetHodir(botAI))
@@ -1156,6 +1179,97 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)
     // several of them in one pass, so a note per true answer just flaps between blocks - and the one it
     // actually goes for is already in hodir.dpstarget.
     return breaker;
+}
+
+Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
+{
+    Unit* boss = GetHodir(botAI);
+    if (!bot || !boss)
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    // Ranged carry this. A melee that leaves the boss for a block makes a 21 yd round trip and gives up
+    // its whole uptime for it, while a ranged bot can shoot one from nearer where it already stands.
+    // Falls back to the rest when the raid has no ranged at all, or nobody would be freed.
+    std::vector<Player*> ranged;
+    std::vector<Player*> rest;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || memberAI->IsHeal(member) || memberAI->IsTank(member))
+            continue;
+
+        if (PlayerbotAI::IsRanged(member))
+            ranged.push_back(member);
+        else
+            rest.push_back(member);
+    }
+
+    std::vector<Player*>& candidates = ranged.empty() ? rest : ranged;
+
+    // Before the sweep, not after: the group walk above is free next to a grid pass, and on a raid with
+    // ranged this drops every melee out before it costs one.
+    if (std::find(candidates.begin(), candidates.end(), bot) == candidates.end())
+        return nullptr;
+
+    // Swept from the boss rather than from the bot, and only as far as the room the fight happens in.
+    // A bot-centred sweep hands every bot a different block set and so a different assignment, and the
+    // raid then disagrees about who owns what.
+    std::list<Creature*> found;
+    boss->GetCreatureListWithEntryInGrid(found, NPC_HODIR_FLASH_FREEZE_BLOCK, ULDUAR_HODIR_TRAPPED_ALLY_RANGE);
+
+    std::vector<Creature*> blocks;
+    for (Creature* candidate : found)
+        if (candidate && candidate->IsAlive())
+            blocks.push_back(candidate);
+
+    if (blocks.empty())
+        return nullptr;
+
+    // Guid, not distance, on both lists. Distances change every tick, so a distance rank re-shuffles the
+    // assignment constantly and bots drop off a block and back onto the boss between one tick and the
+    // next. Sorted, both lists read the same to every bot, which is what lets the greedy pass below
+    // agree across the raid without any shared state.
+    std::sort(candidates.begin(), candidates.end(),
+              [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
+    std::sort(blocks.begin(), blocks.end(),
+              [](Creature* left, Creature* right) { return left->GetGUID() < right->GetGUID(); });
+
+    size_t const total = candidates.size();
+    size_t budget = std::min<size_t>(ULDUAR_HODIR_HELPER_BLOCK_BREAKERS, blocks.size());
+    if (total > ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE)
+        budget = std::min(budget, total - ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE);
+    else
+        budget = std::min<size_t>(budget, 1);
+
+    // One breaker each, in block-guid order, each block starting its search at an offset derived from
+    // its own guid so a later Flash Freeze draws different bots instead of always the lowest guids.
+    std::vector<bool> taken(total, false);
+    for (size_t i = 0; i < budget; ++i)
+    {
+        size_t const offset = blocks[i]->GetGUID().GetCounter() % total;
+        for (size_t step = 0; step < total; ++step)
+        {
+            size_t const slot = (offset + step) % total;
+            if (taken[slot])
+                continue;
+
+            taken[slot] = true;
+            if (candidates[slot] == bot)
+                return blocks[i];
+
+            break;
+        }
+    }
+
+    return nullptr;
 }
 
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target)

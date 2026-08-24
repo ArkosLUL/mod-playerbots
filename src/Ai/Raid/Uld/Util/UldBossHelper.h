@@ -821,6 +821,12 @@ constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
 // the small one triggers over 2.25x the area it kills in.
 constexpr float ULDUAR_HODIR_DODGE_TRIGGER_MARGIN = 0.5f;
 
+// The dodge holds one destination rather than deriving a new one every tick. Inside ARRIVE it has got
+// there and picks again; slip further than SLIP back from its closest approach and something else is
+// steering the bot, so it re-issues from where the bot actually is and takes the movement slot back.
+constexpr float ULDUAR_HODIR_DODGE_ARRIVE = 1.5f;
+constexpr float ULDUAR_HODIR_DODGE_SLIP = 1.0f;
+
 // How far the Starlight step looks for zones. Deliberately short of the room radius: it runs per bot
 // per tick and sweeps every world object in range, and a zone beyond this is out of reach of any slot
 // the bot could be on.
@@ -862,6 +868,21 @@ constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 2;
 // the block has little health, so only the nearest few bots leave what they were doing.
 constexpr float ULDUAR_HODIR_TRAPPED_ALLY_RANGE = 45.0f;
 constexpr uint32 ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS = 5;
+
+// A helper block is the same creature but a very different problem: one Flash Freeze freezes every
+// helper at once - measured at 8 blocks a cycle, 11 cycles out of 11 - so a per-block cap multiplies
+// by that. 8 x 5 slots over 18 eligible bots put every dps on ice, up to 11 of them on one block a
+// median 21 yd from the boss. This is the ceiling across every block that is up, one breaker each.
+constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_BREAKERS = 8;
+
+// Never empty the ranged group for ice. Sized off who is actually there rather than off raid size,
+// so eight blocks against a 10-man's three ranged still leaves someone on the boss.
+constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE = 2;
+
+// Frozen Blows' melee add-on lands 12645-28929 on a 45287 hp tank in 25man - a max roll is 64% of
+// the pool - and two arrive about 2.4s apart. Below this, taunting into an open window is a death.
+constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
+
 constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
 
 // XT-002: how far a carrier actually walks. Twice the 12yd splash, because the raid does not step aside
@@ -1167,6 +1188,16 @@ bool IsHodirEngaged(PlayerbotAI* botAI);
 // leaves the shelter behind, and closes exactly when the freeze resolves.
 bool IsHodirFlashFreezeIncoming(PlayerbotAI* botAI);
 
+// True while Hodir carries Frozen Blows. Shared so the swap trigger and the taunt guard cannot
+// disagree about whether the window is open. The server's spelldifficulty_dbc maps 62478 -> 63512
+// for 25man, which the client DBC does not, so the difficulty lookup has to stay.
+bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot);
+
+// True when taunting Hodir right now would kill this bot: Frozen Blows is up, the bot is under
+// ULDUAR_HODIR_TAUNT_HEALTH_FLOOR, and somebody else is already holding him. That last clause is the
+// rescue valve - with nobody on him the taunt is the save and has to survive.
+bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot);
+
 // The Snowpacked Icicle Target the whole raid shelters at during Flash Freeze.
 Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot);
 
@@ -1214,6 +1245,12 @@ Player* GetHodirResistancePaladin(PlayerbotAI* botAI, Player* bot);
 // block, ranked by guid. Ranking by distance instead would re-shuffle the set every tick and bots
 // would flick between the block and the boss.
 bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block);
+
+// The flash-frozen helper this bot should break, or nullptr. Budgeted across every block that is up
+// rather than per block, and drawn from the ranged only - a melee that leaves makes a 21 yd round trip
+// for a block a ranged bot can shoot from nearer where it already stands. Asked once per bot rather
+// than once per block, because the sweep it needs is not cheap and one Flash Freeze puts up eight.
+Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot);
 
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action

@@ -53,6 +53,34 @@ bool IsEmptyPosition(Position const& position)
     return !position.GetPositionX() && !position.GetPositionY();
 }
 
+bool IsClearOfHazards(Position const& position, std::vector<HazardCircle> const& hazards)
+{
+    for (HazardCircle const& hazard : hazards)
+        if (hazard.first.GetExactDist2d(&position) < hazard.second)
+            return false;
+
+    return true;
+}
+
+// Which of several equally short dodge spots the bot would rather have. Melee want the boss; ranged and
+// healers want the ring slot they were pulled off. Tanks never reach here - the dodge trigger excludes
+// them - and a bot with no anchor gets no preference, which is the old behaviour.
+bool GetHodirDodgePreference(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!PlayerbotAI::IsMelee(bot))
+    {
+        float tolerance = 0.0f;
+        return GetHodirAnchor(botAI, bot, out, tolerance);
+    }
+
+    Unit* boss = GetHodir(botAI);
+    if (!boss)
+        return false;
+
+    out = boss->GetPosition();
+    return true;
+}
+
 }  // namespace
 
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
@@ -76,13 +104,38 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
     std::vector<HazardCircle> const hazards = CollectHodirIcicleHazards(
         bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR);
     if (hazards.empty())
+    {
+        _dest = Position();
         return false;
+    }
+
+    // Keep walking to the spot already chosen. The sweep below searches out from wherever the bot is
+    // standing, so deriving it again every tick chases its own answer outward - measured at a fresh
+    // destination every 420ms, each 2 yd past the last, 89% of them further from the boss, and every
+    // accepted MoveTo clearing the MotionMaster so the walk never finished. Re-offering the same point
+    // answers Duplicate and returns false, which is correct: the forced walk still holds the slot.
+    if (!IsEmptyPosition(_dest) && IsClearOfHazards(_dest, hazards))
+    {
+        float const remaining = bot->GetExactDist2d(&_dest);
+        if (remaining <= ULDUAR_HODIR_DODGE_ARRIVE)
+            _dest = Position();
+        else if (remaining <= _destDist + ULDUAR_HODIR_DODGE_SLIP)
+        {
+            _destDist = std::min(_destDist, remaining);
+            return MoveTo(bot->GetMapId(), _dest.GetPositionX(), _dest.GetPositionY(), _dest.GetPositionZ(),
+                          false, false, false, false, MovementPriority::MOVEMENT_FORCED);
+        }
+    }
+
+    Position preference;
+    Position const* preferNear = GetHodirDodgePreference(botAI, bot, preference) ? &preference : nullptr;
 
     // The shared helper rings outward and validates every candidate against the collision mesh, so
     // the first hit is both the shortest walk and somewhere MoveTo will actually accept. FleePosition
     // is the wrong tool here: it clamps travel to AiPlayerbot.FleeDistance and reads one hazard, so
     // the second icicle of a volley leaves the bot standing in the blast.
-    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH);
+    Position dest = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_HODIR_DODGE_LEASH, 2.0f,
+                                                      static_cast<float>(M_PI) / 8.0f, preferNear);
 
     // Nothing fully clear: the clears above were margin, these are the radii that actually kill, and
     // moving to the least bad spot beats holding still because the sweep found no perfect one.
@@ -91,10 +144,16 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
             bot,
             CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
                                       ULDUAR_HODIR_BIG_SHARDS_RADIUS + 0.5f),
-            ULDUAR_HODIR_DODGE_LEASH * 2.0f);
+            ULDUAR_HODIR_DODGE_LEASH * 2.0f, 2.0f, static_cast<float>(M_PI) / 8.0f, preferNear);
 
     if (IsEmptyPosition(dest))
+    {
+        _dest = Position();
         return false;
+    }
+
+    _dest = dest;
+    _destDist = bot->GetExactDist2d(&_dest);
 
     // FORCED so the dodge outranks the anchor walking the bot back in. A second icicle arriving
     // mid-dodge still cannot preempt this one - IsWaitingForLastMove only yields to a strictly higher
@@ -161,7 +220,6 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
         return hodir;
 
     Unit* trappedAlly = nullptr;
-    Unit* helperBlock = nullptr;
 
     for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
     {
@@ -169,31 +227,29 @@ Unit* HodirSetDpsPriorityAction::ResolveTarget()
         if (!unit || !unit->IsAlive())
             continue;
 
+        if (unit->GetEntry() != NPC_HODIR_FLASH_FREEZE_PLAYER)
+            continue;
+
         if (bot->GetExactDist2d(unit) > ULDUAR_HODIR_TRAPPED_ALLY_RANGE)
             continue;
 
-        // Sticky per entry: switch blocks only when another is clearly closer, or two bots standing
-        // either side of a pair ping-pong between them.
-        if (unit->GetEntry() == NPC_HODIR_FLASH_FREEZE_PLAYER)
-        {
-            if (!IsHodirTrappedAllyBreaker(botAI, bot, unit))
-                continue;
+        if (!IsHodirTrappedAllyBreaker(botAI, bot, unit))
+            continue;
 
-            if (!trappedAlly || bot->GetExactDist2d(unit) + 10.0f < bot->GetExactDist2d(trappedAlly))
-                trappedAlly = unit;
-        }
-        else if (unit->GetEntry() == NPC_HODIR_FLASH_FREEZE_BLOCK)
-        {
-            // Capped like a trapped raider. Uncapped, every non-tank non-healer in 45 yd takes the
-            // nearest helper block, and Flash Freeze puts five or six of them up every 48s - the
-            // whole roster ends up breaking ice instead of hitting the boss.
-            if (!IsHodirTrappedAllyBreaker(botAI, bot, unit))
-                continue;
-
-            if (!helperBlock || bot->GetExactDist2d(unit) + 10.0f < bot->GetExactDist2d(helperBlock))
-                helperBlock = unit;
-        }
+        // Sticky: switch only when another is clearly closer, or two bots standing either side of a
+        // pair ping-pong between them.
+        if (!trappedAlly || bot->GetExactDist2d(unit) + 10.0f < bot->GetExactDist2d(trappedAlly))
+            trappedAlly = unit;
     }
+
+    // Helper blocks are assigned, not searched for: one breaker each across every block that is up.
+    // A per-block cap multiplies by the eight helpers one Flash Freeze puts up at once, which is how
+    // the whole raid ended up on ice with as many as eleven bots on a single block. No stickiness
+    // needed either - the assignment is guid-ordered, so it does not move on its own.
+    //
+    // Skipped when a trapped raider is already in hand, since that outranks a helper below and the
+    // assignment costs a grid pass.
+    Unit* helperBlock = trappedAlly ? nullptr : GetHodirAssignedHelperBlock(botAI, bot);
 
     std::vector<std::pair<uint32, Unit*>> const priority = {
         {static_cast<uint32>(NPC_HODIR_FLASH_FREEZE_PLAYER), trappedAlly},
