@@ -14,6 +14,7 @@
 
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 class Player;
 class PlayerbotAI;
@@ -57,6 +58,15 @@ struct ThorimEncounterState
     RaidObs::ObsGuidMap<uint8> squads{"thorim.squad"};
     RaidObs::ObsValue<bool> squadsAssigned{"thorim.squadsassigned"};
 
+    // The split is struck before the pull, and RaidObs has no session open until the pull, so the
+    // change-only emit above lands in a trace that does not exist yet - which is why no Thorim trace
+    // has ever carried the one assignment that decides the fight. Re-noted once a session is up.
+    bool squadsNoted = false;
+
+    // Which add each bot was told to burn. The trace can otherwise only show GetVictim(), which is
+    // where a bot ended up rather than where it was sent.
+    RaidObs::ObsGuidMap<ObjectGuid> dpsTargets{"thorim.dpstarget"};
+
     // Bots the arena node took "follow master" away from, so the reset can hand it back.
     RaidObs::ObsGuidSet followMasterStripped{"thorim.followstripped"};
 
@@ -71,6 +81,10 @@ struct ThorimEncounterState
 
     // The corridor fight is trash to the instance script, so nothing else opens a trace for it.
     bool gauntletTraced = false;
+
+    // Raid icons are cleared once per pull rather than every tick: a human is free to re-mark something
+    // mid-fight and having the bots wipe it back off would be worse than the stale mark ever was.
+    RaidObs::ObsValue<bool> marksCleared{"thorim.markscleared"};
 
     // Whether this raid has ever had him in combat. An untouched Thorim looks identical to one that
     // has just reset, and the reset path clears the squad split that the corridor forms up on before
@@ -101,6 +115,41 @@ Unit* GetThorim(PlayerbotAI* botAI);
 // Wider, targeted lookup rather than the sight-capped target values: the Colossus is 131 yd from the
 // top pair of corridor waypoints, and that is exactly where its telegraph has to be visible.
 Unit* GetThorimRunicColossus(PlayerbotAI* botAI);
+
+//
+// Target priority
+//
+// The encounter's own creatures, bucketed by entry in one sweep, for the same reason GetThorim reads
+// by entry.
+struct ThorimEncounterTargets
+{
+    std::vector<Unit*> acolytes;
+    std::vector<Unit*> evokers;
+    std::vector<Unit*> champions;
+    std::vector<Unit*> warbringers;
+    std::vector<Unit*> commoners;
+    std::vector<Unit*> guards;  // Iron Ring and Iron Honor Guard, the corridor's own trash
+    Unit* colossus = nullptr;
+    Unit* runeGiant = nullptr;
+};
+
+void GatherThorimEncounterTargets(PlayerbotAI* botAI, ThorimEncounterTargets& out);
+
+// Whether a bot may hold this target at all. False for Thorim and Sif while he still holds the
+// balcony: both are untouchable up there, and ThorimArenaTargetGuardMultiplier reads a target outside
+// the arena box as a reason to stop acting, so a bot that picks one stops doing anything at all.
+bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target);
+
+// What this bot should be attacking, or nullptr to leave the generic picker alone. This is deliberately
+// not a raid icon: an icon is a sticky override - RtiTargetValue hands it back before the smart picker
+// runs and IsHighPriority pins it - so a wrong mark cannot be corrected until the bot leaves combat.
+Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget);
+
+// Drops the icons and the pinned target left over from an earlier pull or an earlier target. Both
+// outlive the thing they were set for: an icon sits on the group until somebody overwrites it, and
+// "prioritized targets" is only reset when a bot leaves combat, so until this runs a bot can be held
+// on a corpse or on the balcony for the rest of the fight. Raid-wide half latched to run once.
+void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot);
 
 //
 // Corridor gauntlet

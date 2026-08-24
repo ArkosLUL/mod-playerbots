@@ -30,10 +30,13 @@ public:
     bool isUseful() override;
 };
 
-class ThorimMarkDpsTargetAction : public Action
+// Attacks the add the encounter wants dead, rather than putting a raid icon on it. An icon is a sticky
+// override that RtiTargetValue hands back before the smart picker ever runs, and nothing clears it
+// until the bot leaves combat, so a mark that lands on the wrong unit cannot be taken back.
+class ThorimDpsPriorityAction : public AttackAction
 {
 public:
-    ThorimMarkDpsTargetAction(PlayerbotAI* ai) : Action(ai, "thorim mark dps target action") {}
+    ThorimDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, "thorim dps priority action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

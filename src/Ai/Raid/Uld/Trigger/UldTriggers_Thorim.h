@@ -23,10 +23,10 @@ public:
     bool IsActive() override;
 };
 
-class ThorimMarkDpsTargetTrigger : public Trigger
+class ThorimDpsPriorityTrigger : public Trigger
 {
 public:
-    ThorimMarkDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim mark dps target trigger") {}
+    ThorimDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim dps priority trigger") {}
     bool IsActive() override;
 };
 

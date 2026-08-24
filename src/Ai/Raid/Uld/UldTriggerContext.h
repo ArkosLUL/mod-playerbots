@@ -80,7 +80,7 @@ public:
         creators["thorim frost resistance trigger"] = &RaidUlduarTriggerContext::thorim_frost_resistance_trigger;
         creators["thorim nature resistance trigger"] = &RaidUlduarTriggerContext::thorim_nature_resistance_trigger;
         creators["thorim unbalancing strike trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_trigger;
-        creators["thorim mark dps target trigger"] = &RaidUlduarTriggerContext::thorim_mark_dps_target_trigger;
+        creators["thorim dps priority trigger"] = &RaidUlduarTriggerContext::thorim_dps_priority_trigger;
         creators["thorim arena positioning trigger"] = &RaidUlduarTriggerContext::thorim_arena_positioning_trigger;
         creators["thorim gauntlet positioning trigger"] = &RaidUlduarTriggerContext::thorim_gauntlet_positioning_trigger;
         creators["thorim fall from floor trigger"] = &RaidUlduarTriggerContext::thorim_fall_from_floor_trigger;
@@ -242,7 +242,7 @@ private:
     static Trigger* thorim_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_unbalancing_strike_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeTrigger(ai); }
-    static Trigger* thorim_mark_dps_target_trigger(PlayerbotAI* ai) { return new ThorimMarkDpsTargetTrigger(ai); }
+    static Trigger* thorim_dps_priority_trigger(PlayerbotAI* ai) { return new ThorimDpsPriorityTrigger(ai); }
     static Trigger* thorim_arena_positioning_trigger(PlayerbotAI* ai) { return new ThorimArenaPositioningTrigger(ai); }
     static Trigger* thorim_gauntlet_positioning_trigger(PlayerbotAI* ai) { return new ThorimGauntletPositioningTrigger(ai); }
     static Trigger* thorim_fall_from_floor_trigger(PlayerbotAI* ai) { return new ThorimFallFromFloorTrigger(ai); }

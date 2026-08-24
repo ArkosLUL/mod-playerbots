@@ -1675,6 +1675,16 @@ constexpr float ULDUAR_THORIM_OFFTANK_BEARING_OFFSET = 0.3491f;  // 20 degrees
 constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
 constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
 
+// How far out the add priority will reach. Arena adds land 19-24 yd from the centre and a ranged bot
+// sits up to 14 yd the other side of it, so 50 covers the room without letting an arena bot lock onto
+// something down the corridor.
+constexpr float ULDUAR_THORIM_DPS_TARGET_RANGE = 50.0f;
+
+// Within one priority tier, how much closer a candidate has to be before the bot drops what it is
+// already swinging at. Without a margin the pick oscillates between two adds that are the same
+// distance away and the bot never finishes a cast.
+constexpr float ULDUAR_THORIM_TARGET_SWITCH_MARGIN = 8.0f;
+
 // spell_cone gives 62466 a 75 degree arc at 150 yd. The margin covers Thorim re-orienting onto the
 // orb between the tick that picks a rotation and the tick the bot finishes walking it.
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;   // 75 degrees

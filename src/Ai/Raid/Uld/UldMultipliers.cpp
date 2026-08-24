@@ -312,6 +312,18 @@ float IronAssemblyMovementGuardMultiplier::GetValue(Action* action)
 }
 
 // Thorim
+//
+// The nodes that pick what to attack, as opposed to the ones that act on what is already picked. They
+// all derive from AttackAction, so a guard that zeroes AttackAction wholesale also zeroes the only
+// thing that could correct a bad target, and a bot holding one is stuck on it for the rest of the
+// pull. Thorim's balcony sits above the arena box, which is exactly how that happened.
+static bool ThorimIsTargetSelectionAction(Action* action)
+{
+    return dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<DpsAoeAction*>(action) ||
+           dynamic_cast<TankAssistAction*>(action) || dynamic_cast<AggressiveTargetAction*>(action) ||
+           dynamic_cast<AttackAnythingAction*>(action) || dynamic_cast<AttackLeastHpTargetAction*>(action);
+}
+
 float ThorimRunicBarrierMultiplier::GetValue(Action* action)
 {
     if (!action)
@@ -340,6 +352,11 @@ float ThorimArenaLeashMultiplier::GetValue(Action* action)
     if (dynamic_cast<AvoidAoeAction*>(action))
         return 1.0f;
 
+    // Picking a target is not walking anywhere. A bot outside the leash still has to be able to
+    // choose one while the leash action carries it back, or it arrives with nothing to do.
+    if (ThorimIsTargetSelectionAction(action))
+        return 1.0f;
+
     static std::set<std::string> const encounterMovers = {"thorim arena leash action",
                                                           "thorim arena positioning action",
                                                           "thorim sif blizzard action",
@@ -359,10 +376,14 @@ float ThorimArenaTargetGuardMultiplier::GetValue(Action* action)
     if (!dynamic_cast<AttackAction*>(action) && !dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 
+    // The escape hatch. Zeroing these too is a deadlock: the guard fires because the target is wrong,
+    // and the action it kills is the one that would pick a different one.
+    if (ThorimIsTargetSelectionAction(action))
+        return 1.0f;
+
     if (!ThorimSplitActive(botAI) || GetThorimSquad(botAI, bot) != ThorimSquad::Arena)
         return 1.0f;
 
-    // Gated on the current target, so switching to anything inside the arena releases this for free.
     Unit* target = AI_VALUE(Unit*, "current target");
     return target && !ThorimInArenaBox(target) ? 0.0f : 1.0f;
 }

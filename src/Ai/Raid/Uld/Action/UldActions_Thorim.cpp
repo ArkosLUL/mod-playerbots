@@ -20,12 +20,10 @@
 #include "UldEncounter_Thorim.h"
 #include "UldScripts.h"
 #include "RaidBossHelpers.h"
-#include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"
 #include "Vehicle.h"
-#include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
 
 const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
@@ -45,105 +43,41 @@ bool ThorimUnbalancingStrikeAction::Execute(Event /*event*/)
     return true;
 }
 
-bool ThorimMarkDpsTargetAction::isUseful()
+bool ThorimDpsPriorityAction::isUseful()
 {
-    ThorimMarkDpsTargetTrigger thorimMarkDpsTargetTrigger(botAI);
-    return thorimMarkDpsTargetTrigger.IsActive();
+    ThorimDpsPriorityTrigger thorimDpsPriorityTrigger(botAI);
+    return thorimDpsPriorityTrigger.IsActive();
 }
 
-bool ThorimMarkDpsTargetAction::Execute(Event /*event*/)
+bool ThorimDpsPriorityAction::Execute(Event /*event*/)
 {
-    Unit* targetToMark = nullptr;
+    // Before anything is read: a pinned target outranks every pick made below, so clearing has to
+    // happen first or this action spends the pull losing to a mark it already replaced.
+    ThorimClearStaleMarks(botAI, bot);
 
-    Group* group = bot->GetGroup();
-    if (!group)
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
+
+    // Dropping the forbidden target is worth doing even when nothing better is in reach: holding it is
+    // what the arena target guard shuts the bot down for, and an empty target lets the generic picker
+    // have another go next tick.
+    if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
+    {
+        bot->AttackStop();
+        bot->InterruptNonMeleeSpells(true);
+        bot->SetTarget(ObjectGuid::Empty);
+        bot->SetSelection(ObjectGuid());
+        currentTarget = nullptr;
+        context->GetValue<Unit*>("current target")->Set(nullptr);
+    }
+
+    Unit* target = GetThorimDpsTarget(botAI, bot, currentTarget);
+    if (!target || !ThorimDpsTargetAllowed(botAI, target))
         return false;
 
-    ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
-    Unit* currentMoonUnit = botAI->GetUnit(currentMoonTarget);
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
-    if (!currentMoonUnit && boss && boss->IsAlive() && boss->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-    {
-        group->SetTargetIcon(RtiTargetValue::moonIndex, bot->GetGUID(), boss->GetGUID());
-    }
+    if (target == currentTarget && (!PlayerbotAI::IsMelee(bot) || bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING)))
+        return false;
 
-    if (currentMoonUnit && boss && currentMoonUnit->GetEntry() == boss->GetEntry() &&
-        boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-    {
-        group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), boss->GetGUID());
-        return true;
-    }
-
-    if (botAI->IsMainTank(bot))
-    {
-        ObjectGuid currentSkullTarget = group->GetTargetIcon(RtiTargetValue::skullIndex);
-        Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
-        if (currentSkullUnit && !currentSkullUnit->IsAlive())
-        {
-            currentSkullUnit = nullptr;
-        }
-
-        Unit* acolyte = AI_VALUE2(Unit*, "find target", "dark rune acolyte");
-        Unit* evoker = AI_VALUE2(Unit*, "find target", "dark rune evoker");
-
-        if (acolyte && acolyte->IsAlive() && bot->GetDistance(acolyte) < 50.0f &&
-            (!currentSkullUnit || currentSkullUnit->GetEntry() != acolyte->GetEntry()))
-            targetToMark = acolyte;
-        else if (evoker && evoker->IsAlive() && bot->GetDistance(evoker) < 50.0f &&
-                 (!currentSkullUnit || currentSkullUnit->GetEntry() != evoker->GetEntry()))
-            targetToMark = evoker;
-        else
-            return false;
-    }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
-    {
-        ObjectGuid currentCrossTarget = group->GetTargetIcon(RtiTargetValue::crossIndex);
-        Unit* currentCrossUnit = botAI->GetUnit(currentCrossTarget);
-        if (currentCrossUnit && !currentCrossUnit->IsAlive())
-        {
-            currentCrossUnit = nullptr;
-        }
-
-        Unit* acolyte = AI_VALUE2(Unit*, "find target", "dark rune acolyte");
-        Unit* runicColossus = AI_VALUE2(Unit*, "find target", "runic colossus");
-        Unit* ancientRuneGiant = AI_VALUE2(Unit*, "find target", "ancient rune giant");
-        Unit* ironHonorGuard = AI_VALUE2(Unit*, "find target", "iron honor guard");
-        Unit* ironRingGuard = AI_VALUE2(Unit*, "find target", "iron ring guard");
-
-        if (acolyte && acolyte->IsAlive() && (!currentCrossUnit || currentCrossUnit->GetEntry() != acolyte->GetEntry()))
-            targetToMark = acolyte;
-        else if (runicColossus && runicColossus->IsAlive() &&
-                 (!currentCrossUnit || currentCrossUnit->GetEntry() != runicColossus->GetEntry()))
-            targetToMark = runicColossus;
-        else if (ancientRuneGiant && ancientRuneGiant->IsAlive() &&
-                 (!currentCrossUnit || currentCrossUnit->GetEntry() != ancientRuneGiant->GetEntry()))
-            targetToMark = ancientRuneGiant;
-        else if (ironHonorGuard && ironHonorGuard->IsAlive() &&
-                 (!currentCrossUnit || currentCrossUnit->GetEntry() != ironHonorGuard->GetEntry()))
-            targetToMark = ironHonorGuard;
-        else if (ironRingGuard && ironRingGuard->IsAlive() &&
-                 (!currentCrossUnit || currentCrossUnit->GetEntry() != ironRingGuard->GetEntry()))
-            targetToMark = ironRingGuard;
-        else
-            return false;
-    }
-
-    if (!targetToMark)
-        return false;  // No target to mark
-
-    if (botAI->IsMainTank(bot))
-    {
-        group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), targetToMark->GetGUID());
-        return true;
-    }
-
-    if (botAI->IsAssistTankOfIndex(bot, 0))
-    {
-        group->SetTargetIcon(RtiTargetValue::crossIndex, bot->GetGUID(), targetToMark->GetGUID());
-        return true;
-    }
-
-    return false;
+    return Attack(target);
 }
 
 bool ThorimArenaPositioningAction::isUseful()
@@ -228,12 +162,6 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
     if (!master)
         return false;
 
-    std::string const rti = AI_VALUE(std::string, "rti");
-    if (rti != "cross")
-    {
-        botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("cross");
-    }
-
     if (master->GetDistance(ULDUAR_THORIM_NEAR_ENTRANCE_POSITION) < 10.0f && (bot->GetDistance2d(master) > 5.0f))
     {
         if (MoveTo(bot->GetMapId(), master->GetPositionX(), master->GetPositionY(), master->GetPositionZ(), false,
@@ -262,7 +190,7 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    Unit* boss = GetThorim(botAI);
     if (boss && boss->IsAlive() && bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD &&
         boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
     {
@@ -417,7 +345,7 @@ bool ThorimUnbalancingStrikeSwapAction::isUseful()
 
 bool ThorimUnbalancingStrikeSwapAction::Execute(Event event)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    Unit* boss = GetThorim(botAI);
     if (!boss || !boss->IsAlive())
         return false;
 

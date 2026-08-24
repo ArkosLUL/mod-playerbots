@@ -15,6 +15,7 @@
 #include "Playerbots.h"
 #include "RaidBossHelpers.h"
 #include "RaidObs.h"
+#include "RtiTargetValue.h"
 #include "Timer.h"
 #include "Unit.h"
 #include "WorldSession.h"
@@ -184,6 +185,13 @@ void AssignThorimSquads(Player* bot)
     if (roster.empty())
         return;
 
+    // The whole split hangs off which tank holds the arena, and GetMainTankGuid's fallback only sees
+    // tanks that are already alive and in the instance. Latch while the raid is still being summoned
+    // in and the main tank reads as nobody, which sends the raid's only tank down the corridor and
+    // leaves the arena untanked.
+    if (PlayerbotAI::GetMainTankGuid(group).IsEmpty())
+        return;
+
     bool const twentyFive = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_25MAN_NORMAL;
     uint32 healerQuota = twentyFive ? 2 : 1;
     uint32 dpsQuota = twentyFive ? 7 : 3;
@@ -217,9 +225,17 @@ void AssignThorimSquads(Player* bot)
                 break;
             }
 
+    // A one-tank raid has no tank to spare. The IsMainTank guard below is only as good as whatever
+    // GetMainTankGuid resolves to, and when that reads wrong this is what still keeps the arena
+    // tanked - the adds spread onto the ranged and healers within seconds otherwise.
+    size_t tankCount = 0;
+    for (Player* member : roster)
+        if (PlayerbotAI::IsTank(member))
+            ++tankCount;
+
     // The main tank holds the arena whatever the quota says: he is the one thing the adds and the
     // phase 2 pickup both need to still be standing there.
-    if (gauntletTank && !PlayerbotAI::IsMainTank(gauntletTank))
+    if (gauntletTank && tankCount > 1 && !PlayerbotAI::IsMainTank(gauntletTank))
         take(gauntletTank);
     else
         ++dpsQuota;
@@ -492,6 +508,204 @@ Unit* GetThorimRunicColossus(PlayerbotAI* botAI)
     return colossus;
 }
 
+void GatherThorimEncounterTargets(PlayerbotAI* botAI, ThorimEncounterTargets& out)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot)
+        return;
+
+    // No-LOS, because the arena pile routinely puts an add behind another one and a bot that cannot
+    // see the Evoker this tick still has to count it as the thing to kill.
+    GuidVector const& units = botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+    for (ObjectGuid const& guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || !unit->IsHostileTo(bot))
+            continue;
+
+        if (bot->GetDistance(unit) > ULDUAR_THORIM_DPS_TARGET_RANGE)
+            continue;
+
+        switch (unit->GetEntry())
+        {
+            case NPC_DARK_RUNE_ACOLYTE_I:
+            case NPC_DARK_RUNE_ACOLYTE_G:
+                out.acolytes.push_back(unit);
+                break;
+            case NPC_DARK_RUNE_EVOKER:
+                out.evokers.push_back(unit);
+                break;
+            case NPC_DARK_RUNE_CHAMPION:
+                out.champions.push_back(unit);
+                break;
+            case NPC_DARK_RUNE_WARBRINGER:
+                out.warbringers.push_back(unit);
+                break;
+            case NPC_DARK_RUNE_COMMONER:
+                out.commoners.push_back(unit);
+                break;
+            case NPC_IRON_RING_GUARD:
+            case NPC_IRON_HONOR_GUARD:
+                out.guards.push_back(unit);
+                break;
+            case NPC_RUNIC_COLOSSUS:
+                out.colossus = unit;
+                break;
+            case NPC_ANCIENT_RUNE_GIANT:
+                out.runeGiant = unit;
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target)
+{
+    if (!target || !target->IsAlive())
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    if (!boss || boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return true;
+
+    // Phase 1. He and Sif fight from the balcony and neither can be touched from the floor, so holding
+    // either is pure lost throughput - and worse than that, the balcony is above the arena box, which
+    // is the state the arena target guard shuts a bot down for.
+    return target != boss && target->GetEntry() != NPC_SIF;
+}
+
+namespace
+{
+
+// One priority tier. Holds whatever the bot already has if it is still in this tier, and only trades
+// it for something meaningfully closer to `pivot` - the arena centre for the pile, the bot itself in
+// the corridor.
+Unit* SelectThorimTierTarget(Unit* currentTarget, std::vector<Unit*> const& candidates, Position const& pivot)
+{
+    Unit* selected = nullptr;
+    for (Unit* candidate : candidates)
+        if (candidate && candidate == currentTarget)
+        {
+            selected = candidate;
+            break;
+        }
+
+    for (Unit* candidate : candidates)
+    {
+        if (!candidate || candidate == selected)
+            continue;
+
+        if (!selected)
+        {
+            selected = candidate;
+            continue;
+        }
+
+        float const held = selected->GetExactDist2d(pivot.GetPositionX(), pivot.GetPositionY());
+        float const offered = candidate->GetExactDist2d(pivot.GetPositionX(), pivot.GetPositionY());
+        if (offered + ULDUAR_THORIM_TARGET_SWITCH_MARGIN < held)
+            selected = candidate;
+    }
+
+    return selected;
+}
+
+}  // namespace
+
+namespace
+{
+
+Unit* NoteThorimDpsTarget(Player* bot, Unit* target)
+{
+    if (bot)
+        if (ThorimEncounterState* state = FindState(bot))
+            state->dpsTargets[bot->GetGUID()] = target ? target->GetGUID() : ObjectGuid::Empty;
+
+    return target;
+}
+
+}  // namespace
+
+Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
+{
+    if (!botAI || !bot || !NearThorimEncounter(bot))
+        return nullptr;
+
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsAlive() || !boss->IsHostileTo(bot))
+        return nullptr;
+
+    // Phase 2 is one target and nothing else matters.
+    if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return NoteThorimDpsTarget(bot, boss);
+
+    ThorimEncounterTargets targets;
+    GatherThorimEncounterTargets(botAI, targets);
+
+    if (GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet)
+    {
+        // Acolytes heal the pack, then whatever is already swinging, then the two the corridor is
+        // gated on.
+        std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.guards};
+        for (auto const* tier : tiers)
+            if (Unit* pick = SelectThorimTierTarget(currentTarget, *tier, *bot))
+                return NoteThorimDpsTarget(bot, pick);
+
+        if (targets.colossus)
+            return NoteThorimDpsTarget(bot, targets.colossus);
+
+        return NoteThorimDpsTarget(bot, targets.runeGiant);
+    }
+
+    // Arena. Acolyte and Evoker first because they heal and shield the wave back up; Champion and
+    // Warbringer next because between them they are most of the damage the squad takes; Commoner last,
+    // because it barely hits and killing one buys nothing.
+    std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.evokers,
+                                                          &targets.champions, &targets.warbringers,
+                                                          &targets.commoners};
+
+    for (auto const* tier : tiers)
+    {
+        std::vector<Unit*> inside;
+        for (Unit* candidate : *tier)
+            if (ThorimInArenaBox(candidate))
+                inside.push_back(candidate);
+
+        if (Unit* pick = SelectThorimTierTarget(currentTarget, inside, ULDUAR_THORIM_NEAR_ARENA_CENTER))
+            return NoteThorimDpsTarget(bot, pick);
+    }
+
+    return NoteThorimDpsTarget(bot, nullptr);
+}
+
+void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+        return;
+
+    // Per bot and unlatched, because this is the half that pins: IsHighPriority short-circuits every
+    // find-target strategy for anything in here, so one stale entry outranks the whole priority list
+    // below it.
+    botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({});
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    if (state.marksCleared)
+        return;
+
+    state.marksCleared = true;
+
+    // Skull, cross and moon are the three this encounter used to set. RtiTargetValue hands an icon
+    // back before the smart picker runs, so a leftover one silently outranks everything chosen here.
+    for (int8 const icon : {RtiTargetValue::skullIndex, RtiTargetValue::crossIndex, RtiTargetValue::moonIndex})
+        if (group->GetTargetIcon(icon))
+            group->SetTargetIcon(icon, bot->GetGUID(), ObjectGuid::Empty);
+}
+
 Position const& GetThorimGauntletWaypoint(bool leftLane, uint8 index)
 {
     return *LaneWaypoints(leftLane)[std::min<uint8>(index, ULDUAR_THORIM_GAUNTLET_WAYPOINTS - 1)].position;
@@ -660,6 +874,16 @@ ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot)
 
     AssignThorimSquads(bot);
 
+    // The assignment above almost always happens before the pull, and RaidObs drops a note when no
+    // session is open, so the split has to be written out again once there is a trace to write it to.
+    if (ThorimEncounterState* live = FindState(bot); live && live->squadsAssigned && !live->squadsNoted &&
+        RaidObs::Active())
+    {
+        live->squadsNoted = true;
+        for (auto const& assignment : live->squads)
+            RaidObs::NoteAssignment(assignment.first, "thorim.squad", std::to_string(assignment.second));
+    }
+
     ThorimEncounterState const* state = FindState(bot);
     if (!state)
         return ThorimSquad::None;
@@ -791,6 +1015,18 @@ bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                    bot->GetPositionZ(), x, y, z, false);
 
+    // The collision walk drags the destination back towards the bot, so a bot standing outside the pit
+    // - at the gate, or up on the north rim - gets handed its own position as its ring slot. That spot
+    // then latches as "arrived", which frees the anchor guard to stop every mover, while still being
+    // outside the leash, which stops the chase and the target pick. The bot never acts again. The
+    // centre is always inside the box and always reachable, so it is the safe answer.
+    if (Position(x, y, z).GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) >
+        ULDUAR_THORIM_ARENA_LEASH_RADIUS)
+    {
+        out = centre;
+        return true;
+    }
+
     out = Position(x, y, z);
     return true;
 }
@@ -840,16 +1076,24 @@ bool ThorimArenaAnchorNeedsMove(PlayerbotAI* /*botAI*/, Player* bot, Position co
     ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
 
+    // Arriving is what lets the anchor guard switch the movers off, so a spot the leash would reject
+    // must never count as arrival - otherwise the bot is frozen and out of bounds at the same time,
+    // and nothing left running can fix either half.
+    bool const spotIsLeashed =
+        spot.GetExactDist2d(ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionX(),
+                            ULDUAR_THORIM_NEAR_ARENA_CENTER.GetPositionY()) <=
+        ULDUAR_THORIM_ARENA_LEASH_RADIUS;
+
     if (state.arenaAnchorArrived.count(bot->GetGUID()))
     {
-        if (distance <= ULDUAR_THORIM_RING_REPOSITION_TOLERANCE)
+        if (spotIsLeashed && distance <= ULDUAR_THORIM_RING_REPOSITION_TOLERANCE)
             return false;
 
         state.arenaAnchorArrived.erase(bot->GetGUID());
         return true;
     }
 
-    if (distance > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE)
+    if (!spotIsLeashed || distance > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE)
         return true;
 
     state.arenaAnchorArrived.insert(bot->GetGUID());
@@ -1141,6 +1385,9 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     // Raid-wide too, and it has to go together with the flag or the next pull reuses the old split.
     state->squads.clear();
     state->squadsAssigned = false;
+    state->squadsNoted = false;
+    state->marksCleared = false;
+    state->dpsTargets.erase(bot->GetGUID());
 
     // Back to "never pulled him", so the state this just cleared does not read as stale all over again
     // on the next tick.

@@ -16,11 +16,10 @@
 #include "Vehicle.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
-#include <RtiTargetValue.h>
 
 bool ThorimUnbalancingStrikeTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    Unit* boss = GetThorim(botAI);
     if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
         return false;
 
@@ -33,103 +32,25 @@ bool ThorimUnbalancingStrikeTrigger::IsActive()
     return bot->HasAura(SPELL_UNBALANCING_STRIKE);
 }
 
-bool ThorimMarkDpsTargetTrigger::IsActive()
+bool ThorimDpsPriorityTrigger::IsActive()
 {
+    // Cheap gate first. This node runs for every bot in the instance on every tick, and everything
+    // below it walks the nearby-unit list.
     if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 110.0f)
         return false;
 
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    if (botAI->IsMainTank(bot))
-    {
-        ObjectGuid currentSkullTarget = group->GetTargetIcon(RtiTargetValue::skullIndex);
-        Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
-        if (currentSkullUnit && !currentSkullUnit->IsAlive())
-        {
-            currentSkullUnit = nullptr;
-        }
+    // A healer's target drives its wand and its offensive dispels rather than a rotation, so steering
+    // it every tick would fight the healing. Pull it off something it must not be holding, no more.
+    if (botAI->IsHeal(bot))
+        return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
-        Unit* acolyte = AI_VALUE2(Unit*, "find target", "dark rune acolyte");
-        Unit* evoker = AI_VALUE2(Unit*, "find target", "dark rune evoker");
+    if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
+        return true;
 
-        if (acolyte && acolyte->IsAlive() && bot->GetDistance(acolyte) < 50.0f &&
-            (!currentSkullUnit || currentSkullUnit->GetEntry() != acolyte->GetEntry()))
-            return true;
-
-        if (evoker && evoker->IsAlive() && bot->GetDistance(evoker) < 50.0f &&
-            (!currentSkullUnit || currentSkullUnit->GetEntry() != evoker->GetEntry()))
-            return true;
-
-        Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
-
-        if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
-            return false;
-
-        if (!boss->IsAlive())
-            return false;
-
-        if (!boss->IsHostileTo(bot))
-            return false;
-
-        if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && (!currentSkullUnit || !currentSkullUnit->IsAlive()))
-        {
-            group->SetTargetIcon(RtiTargetValue::skullIndex, bot->GetGUID(), boss->GetGUID());
-            return true;
-        }
-
-        return false;
-    }
-    else if (botAI->IsAssistTankOfIndex(bot, 0))
-    {
-        Player* mainTank = nullptr;
-        for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-        {
-            Player* member = gref->GetSource();
-            if (member && botAI->IsMainTank(member))
-            {
-                mainTank = member;
-                break;
-            }
-        }
-
-        if (mainTank && bot->GetDistance(mainTank) < 30.0f)
-            return false;
-
-        ObjectGuid currentCrossTarget = group->GetTargetIcon(RtiTargetValue::crossIndex);
-        Unit* currentCrossUnit = botAI->GetUnit(currentCrossTarget);
-        if (currentCrossUnit && !currentCrossUnit->IsAlive())
-        {
-            currentCrossUnit = nullptr;
-        }
-
-        Unit* acolyte = AI_VALUE2(Unit*, "find target", "dark rune acolyte");
-        if (currentCrossUnit && currentCrossUnit->GetEntry() == NPC_DARK_RUNE_ACOLYTE_I)
-            return false;
-
-        Unit* runicColossus = AI_VALUE2(Unit*, "find target", "runic colossus");
-        Unit* ancientRuneGiant = AI_VALUE2(Unit*, "find target", "ancient rune giant");
-
-        if (acolyte && acolyte->IsAlive() && (!currentCrossUnit || currentCrossUnit->GetEntry() != acolyte->GetEntry()))
-            return true;
-
-        if (currentCrossUnit && currentCrossUnit->GetEntry() == NPC_RUNIC_COLOSSUS)
-            return false;
-        if (runicColossus && runicColossus->IsAlive() &&
-            (!currentCrossUnit || currentCrossUnit->GetEntry() != runicColossus->GetEntry()))
-            return true;
-
-        if (currentCrossUnit && currentCrossUnit->GetEntry() == NPC_ANCIENT_RUNE_GIANT)
-            return false;
-        if (ancientRuneGiant && ancientRuneGiant->IsAlive() &&
-            (!currentCrossUnit || currentCrossUnit->GetEntry() != ancientRuneGiant->GetEntry()))
-            return true;
-
-        return false;
-    }
-
-    return false;
+    Unit* target = GetThorimDpsTarget(botAI, bot, currentTarget);
+    return target && target != currentTarget;
 }
 
 bool ThorimGauntletPositioningTrigger::IsActive()
@@ -167,7 +88,7 @@ bool ThorimGauntletPositioningTrigger::IsActive()
         }
     }
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    Unit* boss = GetThorim(botAI);
     if (boss && boss->IsAlive() && bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD &&
         boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
     {
@@ -241,6 +162,12 @@ bool ThorimRunicSmashTrigger::IsActive()
     if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
         return false;
 
+    // Only the corridor squad has a lane to be in. Without this an arena bot answers the telegraph
+    // too: ThorimResolveGauntletIndex falls back to the master's waypoint, and the master is down the
+    // corridor, so the dodge walks it 110 yd out of the arena and it never comes back.
+    if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
     // The centre line is inside the blast too, so this asks for the safe lane rather than "not the
     // hot one".
     uint8 index = 0;
@@ -290,7 +217,7 @@ bool ThorimResetEncounterStateTrigger::IsActive()
 //
 bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "thorim");
+    Unit* boss = GetThorim(botAI);
     if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
         return false;
 
