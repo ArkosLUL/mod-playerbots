@@ -273,8 +273,7 @@ action's movement on nobody. Construct it only under `Active()`: it copies the n
 
 **This module no longer builds against upstream AzerothCore.** The `Send*Log` and
 `OnAuraApplicationClientUpdate` hooks are local core additions (commit `208764946`), absent from
-`mod-playerbots/azerothcore-wotlk`, so module CI cannot compile it. Deliberate — see
-[docs/plans/raid-observability/](../plans/raid-observability/).
+`mod-playerbots/azerothcore-wotlk`, so module CI cannot compile it. Deliberate.
 
 Probes in `Engine.cpp` (`BeginTick` plus seven verdict sites) and in `MovementActions.cpp` (the
 `MoveTo` wrapper plus `JumpTo`, `Follow` and `ChaseTo`) will conflict on upstream merges. They sit

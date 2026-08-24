@@ -104,6 +104,22 @@ must still outrank heals while the bot is unsheltered.
   `FindNearestPositionClearOfHazards` (`RaidBossHelpers.cpp`), which rings outward to the nearest spot
   clear of *every* hazard. Freya's Nature Bombs, Detonating Lashers and Unstable Sun Beams were all
   silently undodgeable until they moved onto it.
+- **A movement lock refuses anything not *strictly* above it.** `IsWaitingForLastMove`
+  (`MovementActions.cpp:951-963`) compares priorities with `>`, so a move already in flight refuses
+  the next move of the *same* priority until its lock expires — `distance / speed`, capped at
+  `AiPlayerbot.MaxWaitForMove` (5000 ms). `ACTION_*` relevance decides which action runs and has no
+  bearing on whether its `MoveTo` is accepted, so an emergency dodge issued at the same priority as
+  the routine hold that just fired is silently dropped while the bot walks on to the old destination.
+  Obsidian Sanctum lost most of a Flame Tsunami's 3.6 s budget to a 2.9 s hold lock exactly this way.
+  Emergency dodges want `MOVEMENT_FORCED` — and two of those in one encounter then deadlock each
+  other, with no band above to escape into, so precedence between them has to be settled at the
+  multiplier layer instead.
+- **`IsDuplicateMove` is not the anti-oscillation guard it looks like.** It needs the request within
+  **0.01 yd** of `lastMoveShort` (`MovementActions.cpp:939-949`), so any caller passing
+  `bot->GetPositionZ()` re-issues a different point as soon as the bot moves on a sloped floor, and
+  the pathfinding branch stores the navmesh-resolved Z rather than the requested one. What actually
+  throttles a re-issuing action is the arrival tolerance plus the movement lock above.
+
 - **`MoveInside(..., distance = 0)` effectively never returns false** — `MovementActions.cpp:1692`
   returns false only when `GetDistance2d <= distance`. The action then succeeds every tick,
   out-prioritises combat, and pins every melee on one exact point at zero DPS. `MoveNear` offsets by

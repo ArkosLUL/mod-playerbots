@@ -9,7 +9,7 @@ changelog — git history covers that.
 | Directory | Holds |
 |---|---|
 | [engine/](engine/) | How the bot picks an ability, the trap catalogue, and cross-encounter lessons |
-| [systems/](systems/) | Cross-cutting subsystems: itemization, loot, consumables and burst |
+| [systems/](systems/) | Cross-cutting subsystems: itemization, loot, gear maintenance, consumables and burst |
 | [classes/](classes/) | Per-class rotation state: current ladders, decisions, open gaps |
 | [raids/](raids/) | Per-raid encounter knowledge, plus shared raid conventions |
 | [plans/](plans/) | In-flight work only — see below |

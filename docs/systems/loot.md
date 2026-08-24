@@ -56,10 +56,9 @@ these items rather than only rolling on them:
 - **Melee on a statless ranged weapon.** A rogue uses the MELEE collector, so a ranged weapon scored
   nonzero twice: base ranged DPS added unconditionally (`STATS_TYPE_RANGED_DPS`, weight 0.01) and its
   `ITEM_SPELLTRIGGER_CHANCE_ON_HIT` proc scored as melee AP. A melee never makes ranged attacks, so
-  both are worthless. The spec net missed it too — `BuildItemStatProfile` only scans ON_EQUIP/ON_USE
-  spells, so the proc is invisible, and `IsFallbackNeedReasonableForSpec` has a "no stats →
-  reasonable" shortcut. Fix: for `IsRangedWeapon() && (type_ & MELEE)`, skip both. Hunters use the
-  RANGED collector and are untouched.
+  both are worthless. The spec net missed it too, because `IsFallbackNeedReasonableForSpec` has a
+  "no stats → reasonable" shortcut. Fix: for `IsRangedWeapon() && (type_ & MELEE)`, skip both.
+  Hunters use the RANGED collector and are untouched.
 - **Healer on spell-penetration armour.** Real INT/SP score positive → EQUIP.
   `ITEM_MOD_SPELL_PENETRATION` is collected but carries **zero weight** and is not read by
   `BuildItemStatProfile`, so nothing flags the piece as caster-DPS/PvP itemisation.

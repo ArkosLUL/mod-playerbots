@@ -59,9 +59,9 @@ towers are up, where `GetData(DATA_GET_TOWER_COUNT)` gives only a count.
 
 Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** spawns; Vezax gains an
 invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark —
-each bot `Attack()`s directly); ranged and healers move out of its Profound Darkness (63420).
-`ULDUAR_VEZAX_PROFOUND_DARKNESS_RADIUS = 15.0f` is a conservative guess — the radius is DBC, not in
-the script.
+each bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420): radius index 28 is
+**50,000 yd**, so the stacking shadow-damage debuff is room-wide and the only answer is killing the
+Animus faster. Full encounter facts are under [Vezax](#vezax).
 
 ### Assembly of Iron
 
@@ -432,21 +432,36 @@ the deepest point with 6 yd of floor all round, not the visual corner, which has
 nothing behind it. Off-tank `(1980.00, -277.00)` sits deeper in rather than toward the raid, so a
 taunt never walks him at the stack. All spots are navprobe-verified.
 
-**Starlight is the anchor, and it is the least guessable fact in the fight.** `62807` is aura **193
+**Starlight measures 4 yd, whatever its DBC row says.** `62807` is aura **193
 `SPELL_AURA_MELEE_SLOW`**, whose handler `HandleModCombatSpeedPct` applies `ApplyCastTimePercentMod`
-as well as all three attack timers, amount 50 — **+50% haste to casting and swinging**. 8 yd zone at
-the druid helper's feet, 60s, recast every 15s, so several overlap.
+as well as all three attack timers, amount 50 — **+50% haste to casting and swinging**, the biggest
+throughput lever in the fight. The row says 8, but across two traces bots holding the aura sit a
+median **2.0 yd** from the zone (p90 3.3) while bots without it are already at 7.6 by the tenth
+percentile. 4 yd holds *one* bot at the 4.5 yd spacing icicles force, so Starlight is a **per-bot
+opportunity, never something to build a formation on**: `ULDUAR_HODIR_STARLIGHT_STAND_RADIUS` 2.0 plus
+1.0 tolerance, `static_assert`ed to stay inside it, and a 30 yd search radius because the step runs
+per bot per tick.
 
-**Toasty Fire grants no Flash-Freeze exemption.** `62821` is 11 yd and only blocks Biting Cold. The only exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off
-`65705` on **NPC 33174**, radius 9 yd.
+**The formation rides a Toasty Fire instead.** `62821` measures true to its 11 yd (with-aura p90
+11.9) and stops Biting Cold, which is otherwise a tenth of the raid's time spent walking. Slots sit on
+two concentric rings, `ULDUAR_HODIR_RAID_RING_INNER` 4.5 and `_OUTER` 9.0 with six inner slots — 4.5 yd
+minimum separation, so Ice Shards' 4 yd splash catches one bot instead of five, and a bot shedding
+Biting Cold can step outward without closing on its neighbours. Outer ring plus its 2 yd arrival
+tolerance is exactly 11, `static_assert`ed to stay inside the fire. The mage drops fires 6.8-33 yd
+out; `_FIRE_ADOPT_RADIUS` 25 is where roughly four fifths of them are still closer than the shuttle
+they save. The centre is gated 15 yd off **Hodir himself**, not the tank spot he leaves — he drifts
+10-25 yd, and a fixed-point gate once let the centre land 6.8 yd from him.
+
+**Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
+exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
 
 | Mechanic | Ids | Numbers that drive the code |
 |---|---|---|
 | Flash Freeze | 61968 | **9s cast**, every 48-49s, 200 yd. Spares only 62464 carriers and pets |
-| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift lands at T+2 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands T+9: **7s of shelter** |
+| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift lands at T+3.8 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands T+9: **6.3s of shelter** to cross the room |
 | Trapped player | 61969 / 62226 | **300s**, and the *next* Flash Freeze **instakills**. Free by killing NPC **32926** (helpers: 32938) |
 | Small icicles | 62227 → 63545 → 33169 → `62457` | **Every 2s** on 1 random player, falls after 2s, **14,000 Frost in 4 yd** + knockback. Off for 12s (25m) / 24s (10m) after each Flash Freeze |
-| Biting Cold | 62038 / 62039 | Stacks every 4s on anyone **not moving**, `200 · 2^stacks`. A jump counts as moving — `MOVEMENTFLAG_FALLING` is in `MOVEMENTFLAG_MASK_MOVING` |
+| Biting Cold | 62038 / 62039 | Stacks every 4s on anyone **not moving**, `200 · 2^stacks`. Sheds only on the **second consecutive** moving tick, so a hop cannot clear it |
 | Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing plus a 3,999 raid tick |
 | Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
 | Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** stacks, one per second — **4-6 seconds of use**. Storm Power is **3 yd**, +134% crit damage |
@@ -458,30 +473,79 @@ behaviour: the helpers *are* the raid's damage, the fire is the Biting Cold answ
 is the biggest buff in the fight, so all three run on every pull. `AiPlayerbot.UlduarHodirHardMode`
 and `IsHodirHardModeActive` were deleted rather than left gating nothing.
 
-#### The packing arithmetic, which decides three things
+#### The Flash Freeze window is nine seconds and the shelter exists for six
 
-16 ranged and healers on a ring of radius `r` inside the 8 yd Starlight zone:
+The drift lands ~3.8s into the 9s cast, so the shelter covers only the last **6.3s** — the whole
+budget for crossing the room, against a measured 30 yd median run at ~7 yd/s costing 4.3s of it.
 
-| `r` | Slot spacing | Bots in a 4 yd splash | Raid damage / 2s | Sustained HPS |
-|---|---|---|---|---|
-| 5 (largest that fits) | 1.95 yd | 5 | 70,000 | 35,000 |
-| 7 | 2.73 yd | 3 | 42,000 | 21,000 |
-| target only | ≥ 4 yd apart | 1 | 14,000 | 7,000 |
+- **The run parks at 6 yd and releases at 8** (`ULDUAR_HODIR_SAFE_AREA_TOLERANCE` / `_RELEASE`, both
+  `static_assert`ed inside the 9 yd Safe Area). `MoveInside` → `MoveNear` lands the bot at *exactly*
+  the tolerance, so testing one number at both ends stood the trigger down the tick it arrived and
+  handed the next tick to the ring anchor — measured walking bots 18-22 yd back out with the freeze
+  2s away.
+- **Every other mover stands down for the whole cast, every role.** `HodirGuardMultiplier` zeroes
+  gap-closers (`CastReachTargetSpellAction` — Charge, Intercept, both Feral Charges) and every
+  `MovementAction` bar the shelter run and the icicle dodge. `ReachTargetAction` is in scope;
+  `AttackAction` is exempt because it only sets a target. Measured before the gate: 68 of 125
+  bot-freeze pairs had their last accepted move come from something else, 36 of them the ring anchor
+  and 25 `reach melee` / `reach spell`.
+- **Do not instead return `true` from the shelter action.** `MoveTo` answers Duplicate for a
+  destination it already issued, so from the second tick of a run `Execute` returns false and the
+  engine descends past `ACTION_RAID + 6` — that descent is correct, and holding the tick would
+  silence the bot's casting for six seconds, seven times a pull. The movers below are what has to be
+  off.
+- **The window is gated on the cast, not a timer.** `IsHodirFlashFreezeIncoming` tests
+  `UNIT_STATE_CASTING` plus `FindCurrentSpellBySpellId` over **every** cast slot rather than
+  `CURRENT_GENERIC_SPELL`: which slot a scripted boss cast lands in is the script's business, and
+  guessing wrong opens the window on nothing. `UldTriggers_Mimiron.cpp:31` is the same shape.
+- **The shelter run keys off 33174 existing**, not off the boss casting. Starting when the drift
+  spawns puts the raid under a 14,000 / 7 yd detonation.
+- Everyone converges on the drift nearest the **ring centre**, not `ULDUAR_HODIR_RAID_ANCHOR` — the
+  ring rides a fire and sits a median 9.5 yd off that fixed point (p90 17.6), so measuring from a spot
+  nobody stands on picked drifts 25 yd away with three closer candidates on the floor. Trigger and
+  action share one helper; two derivations would oscillate. It answers "none" before deriving the
+  centre, since a shelter exists for ~6s of every 49s cycle and the centre costs a second grid sweep.
+- **The anchor is abandoned every 48s and that is correct** — tanks included. He is encased otherwise.
+- **Residual, still open:** the dodge issues `MOVEMENT_FORCED` and the shelter run `MOVEMENT_COMBAT`,
+  and `IsWaitingForLastMove` only yields to a strictly higher priority, so a dodge firing late in the
+  window can hold the slot until the freeze lands. Raising the run trades a ≤300s lockout for one Ice
+  Shards hit at ~41% of a health pool — worth doing, but it needs its own before/after trace.
 
-**16 bots cannot be 4 yd apart inside an 8 yd circle** — that needs ~200 yd² and the circle is 201.
-So splash is structural, heal-through is a wipe, and **icicles are dodged rather than out-spread**.
-And for every slot to sit in *both* zones, with the druid 22 yd out and the mage 30: `8 + 2(r + t) ≤
-19` → `r + t ≤ 5.5` → `r ≤ 2.5` at tolerance 3. Both auras for everyone is unreachable, so Starlight
-wins and Toasty Fire is a bonus for whichever slots happen to fall inside one. **Do not widen
-`ULDUAR_HODIR_RAID_RING_RADIUS`** — it silently drops the buff and buys nothing against Ice Shards.
+#### Frost Resistance Aura belongs on a tank
 
-The dodge stays *inside* Starlight: at `r = 5`, a 6 yd sidestep traces a 74° chord and lands back on
-the ring, so there is always an in-zone escape. Candidates are ranked in-zone first, then smallest
-displacement — maximising distance from the hazard is what walked Auriaya's bots into the corridor.
+**Frozen Blows is 71% of everything the raid takes** — 3.93M of ~5.5M in one 25-man trace, against
+929k for Biting Cold, Freeze and Ice Shards combined. `63511` is 39,999 base and lands a median
+23,691 after resists into a 34-45k tank pool, so the aura is the margin between a survivable swing
+and a killing blow. Every tank killing blow in that trace landed with it **off**, the retribution
+paladin carrying it 44-60 yd away, two of the tanks resisting nothing at all.
 
-**Cost, measured and accepted:** five bots move per icicle and one lands every 2s, so each bot is
-moving ~26% of the time. That is the price of Starlight, and it is not pure loss — it doubles as the
-Biting Cold answer, so ringed bots rarely need the jump.
+`GetHodirResistancePaladin` therefore prefers a **paladin tank**, then any non-healer, then whoever
+is left. The aura reaches 40 yd (`48945`, radius index 23) and a tank never leaves the corner, so it
+covers the two bots that need it 100% of the time against 82% for a DPS paladin running the dodge and
+the shelter. The raid loses about ten points of coverage, which is the right trade: a resist point is
+~6,000 off a swing that kills a tank and ~700 off a tick the healers already cover.
+
+#### Two icicle pools, and a dodge that leaves on one radius and lands on another
+
+Icicle **33169** leaves Ice Shards `62457` in **4 yd**; the drift **33173** leaves `65370` in **7 yd**.
+Both hit for 13-14,000. The dodge leaves on the radius that actually kills and lands on a clear
+carrying 2 yd of margin over it (`_ICE_SHARDS_CLEAR` 6, `_BIG_SHARDS_CLEAR` 9) — clearing everything
+to 6 stepped bots onto the edge of the big pool and killed four in one pull. `_DODGE_TRIGGER_MARGIN`
+is 0.5 for the same reason in reverse: testing the *clear* at both ends had bots stepping out of pools
+they were never in, since the small one would trigger over 2.25× the area it kills in. Candidates are
+ranked smallest displacement first and leashed to `_DODGE_LEASH` 12 — maximising distance from the
+hazard is what walked Auriaya's bots into the corridor.
+
+An icicle summon lives 7,000 ms (`62234`/`62462`, DurationIndex 165) but **detonates at 3,700 ms**:
+its AI casts the fall effect at 2,000 ms and that aura's single 1,700 ms tick triggers the blast. The
+last `ULDUAR_HODIR_ICICLE_SPENT_MS` = 3,300 ms are inert, so at one icicle every 2s roughly half of
+those on the floor have already blown.
+
+**Biting Cold sheds on sustained movement only.** A stack comes off on the second *consecutive*
+moving tick and any stationary tick between resets that progress, so the shuttle walks 6 yd legs
+(`_SHUTTLE_HALF_LEG` 3.0) on bearing −π/4, parallel to the SW bevel, chaining until the aura is gone.
+It arms at 2 stacks: ~33% movement duty for ~600/s, where arming at 1 would cost half the raid's cast
+uptime to save 200/s.
 
 #### Traps
 
@@ -489,11 +553,6 @@ Biting Cold answer, so ringed bots rarely need the jump.
   always. 33173 is the drift, dodged **only while falling** — the dodge stands down once a 33174
   exists within 9 yd of it, because 33174 is the shelter everyone is running to. 33174 is never
   dodged.
-- **The shelter run keys off 33174 existing**, not off the boss casting. Starting when the drift
-  spawns puts the raid under a 14,000 / 7 yd detonation.
-- Everyone shelters at the drift nearest the **raid anchor**, through one shared helper, so the raid
-  converges on one and re-forms cleanly. Trigger and action calling it separately would oscillate.
-- **The anchor is abandoned every 48s and that is correct** — tanks included. He is encased otherwise.
 - The anchor is **not combat-gated**: `MoveInLineOfSight` is a no-op, so bots pre-position in the
   corner and the tank pulls from there instead of dragging him 75 yd.
 - **Melee get no anchor, no fire and no Starlight.** Re-examined once Starlight turned out to be +50%
@@ -502,7 +561,8 @@ Biting Cold answer, so ringed bots rarely need the jump.
   are never buff targets. Greedy re-targeting is the Auriaya corridor dance.
 - Healers are excluded from the targeting node entirely, and **5** non-healers break each ice block —
   raider and helper alike, picked by a GUID window offset per block so several blocks draw disjoint
-  sets instead of the same five.
+  sets instead of the same five. Freeing outranks the boss (the trapped raider dies to the next
+  freeze) but the block has little health, so only bots within 45 yd leave what they were doing.
 
 #### The anchor and the dodge will thrash unless three invariants hold
 
@@ -512,20 +572,19 @@ uptime and ~70% moving. 934 anchor/dodge reversals — 21% of every accepted mov
 Three separate causes, all of them still easy to reintroduce.
 
 - **The anchor stand-down tests the whole walk back, not just the anchor.** The dodge trigger goes
-  false the moment the bot is clear, but the icicle stays lethal for another ~3.7 s
-  (`ULDUAR_HODIR_ICICLE_SPENT_MS` of a 7000 ms life). Checking only the destination lets the anchor
-  walk the bot back under the blast, where the dodge re-arms — about 11 round trips per icicle, one
-  icicle every 2 s. `HodirRaidPositionTrigger` projects each lethal icicle onto the bot→anchor
-  segment for exactly this reason.
+  false the moment the bot is clear, but the icicle stays lethal until it detonates at 3.7s. Checking
+  only the destination lets the anchor walk the bot back under the blast, where the dodge re-arms —
+  about 11 round trips per icicle, one icicle every 2 s. `HodirRaidPositionTrigger` projects each
+  lethal icicle onto the bot→anchor segment for exactly this reason.
 - **Do not "fix" this by widening the arrival tolerance.** A dodge always displaces further than the
   tolerance — by design, not the bug. Widening it stops the *return*, and at one icicle every 2 s the
-  formation becomes an unbounded random walk out of Starlight inside a minute. What works instead:
+  formation becomes an unbounded random walk out of the fire inside a minute. What works instead:
   `HodirRaidPositionTrigger` is reactive for ranged, firing only on a broken constraint (inside
-  `ULDUAR_HODIR_RANGED_MIN_BOSS_GAP` with a clear slot to reach, no Starlight, clumped under
-  `ULDUAR_HODIR_DECLUMP_RADIUS`, past `ULDUAR_HODIR_RETURN_LEASH`), so it issues one destination and
-  goes quiet. `HodirRaidPositionAction` holds no arrival latch on purpose — one would swallow those
-  re-anchors, which fire well inside twice the tolerance. Tanks keep the spring: Hodir follows
-  whoever holds him.
+  `ULDUAR_HODIR_RANGED_MIN_BOSS_GAP` 15 with a clear slot to reach, no fire, clumped under
+  `ULDUAR_HODIR_DECLUMP_RADIUS` 4.5, past `ULDUAR_HODIR_RETURN_LEASH` 20), so it issues one
+  destination and goes quiet. `HodirRaidPositionAction` holds no arrival latch on purpose — one would
+  swallow those re-anchors, which fire well inside twice the tolerance. Tanks keep the spring: Hodir
+  follows whoever holds him.
 - **Ring slots are indexed over the whole ranged roster, dead included.** Indexing over the living
   shifts every bot after a corpse, so one death re-seats the entire formation and `total` moves the
   inner/outer split with it. Eleven ranged deaths, nine of them in a 30 s window, re-anchored every
@@ -538,7 +597,14 @@ Two things that look broken in a Hodir trace and are not: `hodir frozen blows sw
 ~95% `FAILED` is the stateless trigger retrying every ~110 ms while the taunt is on cooldown — count
 the `OK` records instead, one per cooldown per Frozen Blows window is correct. And a
 `thorim.squadsassigned` note inside a Hodir pull is `ThorimResetEncounterStateTrigger` clearing stale
-state from an earlier attempt, which is cleanup working.
+state from an earlier attempt, which is cleanup working — Thorim nodes in a Hodir trace issue zero
+accepted moves and zero `OK` verdicts, and `NearThorimEncounter` excludes his floor by height
+(`z < ULDUAR_THORIM_WING_MAX_Z` 425 against 432.687).
+
+**Still open here:** no tank defensive cooldown is tied to a Frozen Blows window — the tanks spent
+four and six in six minutes, unprompted. And the raid was at 42.9% boss health after six minutes,
+roughly half the pace hard mode needs; the movement-economy work is aimed at that and wants
+re-measuring before anything else is tried.
 
 ### Freya
 
@@ -762,12 +828,16 @@ Killing the Heart during its 30s exposed window (63849) sets XT to full health, 
 (65737) permanently**, and stops rescheduling the phase check — so there are no further Heart phases.
 Heartbreak is a reliable runtime signal that hard mode is live, but there is no signal *before* the
 kill, so the config declares intent: on, bots burn the Heart to zero on the first window; off, they
-stop at 15% so the fight stays in normal mode.
+stop at `ULDUAR_XT002_HEART_SAFE_HP_PCT` (15%) so the fight stays in normal mode. In hard mode the
+Heart goes to the top of the non-tank target list and tanks join the burn; in normal mode neither
+happens, because a stray tank hit is exactly what flips the raid by accident.
 
 **Fork quirk, deliberate:** `npc_xt_toy_pile::SummonDistance = 90.0f` with the check
 `if (!xt002 || xt002->IsWithinDist(me, SummonDistance)) return;` — **adds only spawn when XT is more
 than 90 yd from a pile**, so tanked in place they essentially never appear on this core. Add handling
-is written to work whenever adds do spawn; tank positioning is deliberately untouched.
+is written to work whenever adds do spawn; tank positioning is deliberately untouched. There are also
+**no adds after Heartbreak**: toy piles summon only when hit by the Heart's energy orb, and
+`RescheduleEvents` omits `EVENT_PHASE_CHECK` once `_hardMode`.
 
 Boombots explode for 15-18k on reaching XT **or at 50% health**, so melee must never touch them.
 Scrapbots walk to XT and heal him, so they must die en route.
@@ -780,8 +850,7 @@ in `boss_xt002.cpp`). So anything reacting to a Void Zone or a Life Spark must k
 only correct where the code states intent ahead of the Heart dying, such as the 15% Heart floor.
 
 **Searing Light and Gravity Bomb each repeat on a 16 s (25-man) / 20 s (10-man) timer**, longer than
-the debuff lasts, so there is never more than one carrier of either type at a time — a single fixed
-drop spot per debuff is safe.
+the debuff lasts, so there is never more than one carrier of either type at a time.
 
 XT spawns at `(886.28, -12.05, 409.6)` facing −x (orientation 3.13) and is the only DB-spawned
 creature in the room; every add is script-summoned, so room geometry cannot be checked from the world
@@ -793,8 +862,124 @@ coordinates.
 redeclare them.**
 
 Use the `IsBurstCooldownAction` registry rather than hand-rolling a `dynamic_cast` list the way
-BT and SWP do. Note `MoveAwayFromPlayerWithDebuffAction` takes a **single** spell id fixed at
-construction, so it cannot cover both the 10 and 25-man ids of Searing Light or Gravity Bomb.
+BT and SWP do.
+
+#### Anchors, and why nothing pre-positions
+
+The tank spot and the ranged anchor `(866.0, -12.5, 409.8)` stay; the pre-pull walk to them does not.
+`XT002RaidPositionTrigger` requires `xt002->IsInCombat()`, and the ranged-DPS generic-mover stand-down
+carries the same gate, so a ranged bot near XT before the pull can still follow its master.
+
+- **The tank anchor yields whenever XT has a victim that is not this bot**, matching Ignis. "No
+  victim" deliberately keeps the anchor — that is the Heart window, where standing on the spot is
+  right. There is no boss-taunt node because XT is taunt-immune at the core level; recovery is threat
+  from damage, which is what unpinning restores.
+- **The tank holding XT taunts the Pummeller but never targets it.** Taunt reaches 30 yd, so the add
+  walks to the tank instead of the tank walking 80 yd to the add. Taunt ownership and target
+  ownership are deliberately different things. The gate is "is there a second alive tank"
+  (`GetGroupTankNum(bot) > 1`), not "am I the main tank" — a dead flagged main tank leaves
+  `IsMainTank` false for the survivor, who would then chase with the boss in tow.
+- **Healers share the ranged anchor with a 10 yd band** and keep their generic movers. The anchor is
+  29.8 yd from the tank spot, ~20 yd from the melee stack and 30 yd from the nearest melee parking
+  cell — inside heal range, clear of the 20 yd Gravity Bomb pull. It sits at `ACTION_RAID` so it
+  outranks `reach party member to heal` and reels drifting healers in, while heal range and disperse
+  still choose where inside the band they stand; six healers pinned to a point would all eat the same
+  Searing Light. It **stands down while a heal target is out of spell range**, or a healer could
+  never close on a carrier parked in the lot (far cells are 55.6 yd from the anchor against 40 yd of
+  heal range).
+- **The Heart is hidden, not despawned**, when its window shuts (`UNIT_FLAG_NOT_SELECTABLE`,
+  `ACTION_DISPOSE_HEART`). `IsAllowedTarget` checking only `IsAlive()` left a bot stuck on it for the
+  rest of the fight with every queued spell failing; it now rejects untargetable units and requires
+  the Exposed Heart aura, and the sticky rule in `ResolveTarget` no longer holds a target the gates
+  just rejected.
+
+#### One mover per bot: the carrier and hazard nodes are each merged
+
+Two nodes that can both move the same bot will tie on relevance and fight over the queue, so
+`xt002 debuff carrier` fires on either debuff and resolves one destination per tick, and
+`xt002 avoid hazard` clears Boombots and Void Zones in one move.
+
+- **Carriers are held by the multiplier, not by returning `true`.** Both carrier actions return
+  `false` on arrival, so the tick continued and `reach melee` at `ACTION_HIGH + 1` walked the carrier
+  back mid-debuff. `XT002TargetGuardMultiplier` now zeroes generic movers for anyone carrying either
+  debuff, any role, while the encounter's own movers and every cast keep running — a carrier action
+  returning `true` would starve everything below `ACTION_EMERGENCY + 1` for 9-10 s and mute a
+  debuffed healer. `AttackAction` stays exempt: it never moves the bot, and zeroing it kills the
+  encounter's own targeting.
+- **Gravity Bomb outranks Searing Light on a double carrier.** The puddle denies raid floor for 180 s;
+  the 12 yd splash lasts 9 s and expires over an empty lot. The Life Spark then spawns out there and
+  walks in by itself. Reversed, a 180 s puddle lands on the one spot reserved for sparks.
+- **The carrier keeps ownership while it holds either debuff.** When the bomb expires with Searing
+  Light still ticking, the bot is standing in its own fresh puddle — which makes its old cell test
+  occupied, so the picker moves it 6-12 yd to the next free one.
+- **The hazard node ignores Void Zones while the bot carries a debuff** and always honours Boombots.
+  Cell selection already owns where a carrier stands relative to puddles; letting the generic dodge
+  fire would fling it up to 30 yd in whatever direction was emptiest.
+- **Hazard moves take the nearest sufficient point, not the furthest** — `MoveClearOf`'s ring search
+  stops at the first spot that clears everything, unlike `MoveAwayFromCreatureAction`'s
+  maximise-distance sweep. It takes per-unit clearances, so one search serves the pre-Heartbreak ally
+  spread at 25 yd and the mixed hazard list of Boombots at 12 and Void Zones at 6.
+- **`avoid aoe` is zeroed for everyone during XT's combat.** Nothing is lost: Tympanic Tantrum is
+  room-wide so it exceeds `maxAoeAvoidRadius`, and the Life Spark has no damage aura.
+
+#### The parking lot is a time budget, not a coordinate
+
+The grid is 5×4 from a raid-facing origin, walking +x / −y so every added cell is further out; all 40
+cells are navprobe-verified on mesh. Step is just over the Void Zone diameter, so consecutive drops
+cannot overlap.
+
+- **Ranking is reachability first**, inside the aura's remaining duration at the bot's current speed,
+  then room, then a clear approach. `GetSpeed(MOVE_RUN)` already carries the tantrum slow, so no
+  encounter code has to know the tantrum exists. Only a bot actually holding the bomb is budgeted —
+  stepping off its own puddle is a short hop with no deadline.
+- **When nothing is reachable the carrier stops short**, keeping the bearing to the best cell and
+  walking as far as the budget allows, but only if that point is at least
+  `ULDUAR_XT002_GRAVITY_BOMB_PULL_RADIUS` (20 yd, the real pull radius) from every living raider — so
+  the puddle lands on the approach instead of in the raid. Otherwise the ring search takes the tick.
+  The point needs no latch: as the bot advances, reach and distance to the cell shrink together.
+- **Approach clearance is a preference, not a gate** (`_BOMB_CELL_PREFERRED_CLEARANCE` 8.0, falling
+  back to 6.0, approach margin 7.5). As a hard gate one puddle would block five cells of twenty and
+  exhaust the lot. There is no puddle dodging on the way in — the carrier sits at
+  `ACTION_EMERGENCY + 1` and starves the Void Zone node — and the segment test is an approximation,
+  since `MoveTo` follows a navmesh path rather than the line measured.
+- **`ParkVoidZone` returns a tri-state and never `MoveTo`'s value** — "already walking there" is not
+  "nowhere to go". Sapphiron's `ShelterResult` shape: latch on arrival, `StopMoving()`, deadband 2.0,
+  re-engage 5.0, tighter than Sapphiron's because the puddle lands at the carrier's feet and the
+  destination is static. The parked carrier then yields the tick, so a healer can heal and a hunter
+  can shoot XT from the lot.
+
+#### Traps
+
+- **A bubble drops the puddle early.** Divine Shield (642) and Ice Block (45438) both apply
+  `SPELL_AURA_SCHOOL_IMMUNITY` over every magic school with `SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`, and
+  `spell_xt002_gravity_bomb_aura::OnRemove` has no removal-mode check — so a paladin or mage that
+  bubbles while carrying summons its Void Zone on the spot. Bots cast both from "critical health" at
+  relevance 90, which arrives during a Tympanic Tantrum: exactly when the carrier is still in the raid
+  and cannot walk out. `XT002TargetGuardMultiplier` zeroes both while the bot carries either debuff;
+  Searing Light is in the same school mask and drops its Life Spark the same way. Hand of Protection
+  (1022) is physical-only and strips neither; Anti-Magic Shell blocks the bomb landing rather than
+  dropping one.
+- **Hand of Freedom cannot help a carrier outrun the tantrum.** 62775 carries `Mechanic = 0` and no
+  effect mechanic, while Hand of Freedom is keyed to `MECHANIC_ROOT` and `MECHANIC_SNARE` — same for
+  the PvP trinket, Every Man for Himself and shapeshift. Flat speed buffs do work (Sprint gives
+  5.25 y/s against 3.5), but only some classes carry one and the carrier is whoever the boss picked.
+- **Bots do not dodge Life Sparks and cannot.** Static Charged (64227) is an enemy area aura at radius
+  index 30 — **500 yd** — so position changes nothing, and no avoid node can match it. What looked
+  like dodging was melee making the 34 yd round trip to the spark.
+- **Searing Light stays carrier-only, and bystanders eat it.** It damages allies within 8 yd every
+  second for 9 s, nothing steps out of it, and generic `avoid aoe` cannot see it — its dynobj branch
+  needs a `DYNOBJ_AURA_TYPE` and its unit branch a `NOT_SELECTABLE` trigger NPC, and a player is
+  neither. The carrier needs 4-6 s to clear, and a Pummeller off-tank irradiates the melee stack for
+  the whole debuff because tanks never move for it. Accepted: 25 bots scattering costs more than the
+  damage.
+- **Tanks do not reposition for Searing Light** — dragging XT or abandoning a Pummeller costs more
+  than the splash — but they do park for Gravity Bomb, and a Pummeller following an off-tank into the
+  lot is fine. The main tank can hold neither debuff anyway.
+- `MoveAwayFromPlayerWithDebuffAction` takes a **single** spell id fixed at construction, so it cannot
+  cover both the 10 and 25-man ids of Searing Light or Gravity Bomb.
+- **Two carriers can pick the same cell** — there is no reservation. Bombs are 16 s apart against a
+  9 s duration so two bomb carriers never overlap, and the only bot that can collide is one sitting
+  out a Searing Light, which drops nothing.
 
 ## Algalon
 
@@ -1094,6 +1279,16 @@ onto.
 Rubble duty is **derived, never stored** — the off-tank is whoever is not holding the body — so it
 follows the taunt swap on its own.
 
+**Nothing engages before the boss does.** Every Kologarn trigger resolves him through
+`GetFirstAliveUnitByEntry`, a pure `AiPlayerbot.SightDistance` proximity scan — 100 yd, no line of
+sight — that answers "is he nearby", never "is he engaged", and `AttackAction::Attack()` has no
+out-of-combat guard, so the raid used to pull itself from up to 100 yd out. `KologarnEncounterActive`
+is `kologarn && kologarn->IsInCombat()`, the VoA `EmalonEncounterActive` shape, and gates the triggers
+and the targeting multiplier alike. Resolving by entry rather than through `find target` — which walks
+only the bot's own threatened-by-me list and therefore cannot fire before engagement — is deliberate:
+a tank parked on the body never has the arms on its threat list, so the per-role focus split
+collapses without it.
+
 ### Facts that contradict the retail guides
 
 | | |
@@ -1151,6 +1346,76 @@ alive hunter raises it, and Aspect of the Wild 49071 is `APPLY_AREA_AURA_RAID` +
   pit is where bots fall in.
 - **Fall-from-floor teleport kept** — a pathing workaround, not a mechanic: a bot under the walkway
   is in the kill box and dies within a second, so there is no walk-back to attempt.
+
+## Vezax
+
+Facts below come from the script, the DBC CSVs and `acore_world`. **They override the public guides
+where they disagree, and they do disagree.**
+
+| Spell | Id | Effect |
+|---|---|---|
+| Aura of Despair | 62692 → 64848 | No mana regen, −20% melee attack speed. On aggro |
+| Shadow Crash (cast) | 62660 | Every 10s from 13s. Random player **beyond combat reach**, falling back to *any* target — it can land on the tank |
+| Shadow Crash (impact) | 62659 | 11,310 + knockback, **10 yd**. Instant on missile landing — unreactable |
+| Shadow Crash (field) | 63277 → 65269 | **8 yd, 20s.** +100% magic and +75% shadow damage done, +100% cast speed, −70% mana cost, **−75% healing done**. A `SPELL_EFFECT_PERSISTENT_AREA_AURA`, so it exists as a `DynamicObject` |
+| Searing Flames | 62661 | On the tank, **radius 100 yd** = the whole raid. 13,875-16,125 fire, −75% armour 10s, every **8s (25m) / 15s (10m)**. **2000 ms cast, `PreventionType = 1`** — genuinely interruptible |
+| Surge of Darkness | 62662 | 63s from pull, repeats 63s. +100% physical damage, −55% move speed, 10s. Delays the Searing Flames group 10s |
+| Mark of the Faceless | 63276 → 63278 | 20s from pull, repeats 40s, lasts 10s. Drains 5,000 hp/s from allies **within 15 yd** and heals Vezax. Prefers a player **beyond 15 yd** when ≥9 (25m) / ≥4 (10m) are out there, else someone inside |
+| Saronite Vapors (NPC 33488) | summon 63081 | Every 30s. `NullCreatureAI`, no addon auras, `MoveRandom(4.0f)` — **the living cloud is harmless** |
+| Saronite Vapors (puddle) | 63323 (30s) → 63322 | Dropped on the **corpse**. 8 yd, reapplied every 4s. Deals `100 · 2^stacks` and returns **half as mana** — stack 5 is 3,200, stack 8 is 25,600 |
+| Saronite Animus | NPC 33524 | Hard mode. At vapor #6 with none killed, every vapor charges the anchor and merges |
+| Saronite Barrier | 63364 | −99% damage taken on Vezax until the Animus dies |
+| Profound Darkness | 63420 | Animus self-cast every 2s. 749 damage plus **+10% shadow damage taken per stack, 180s**. **Radius index 28 = 50,000 yd — room-wide and unavoidable** |
+| Berserk | 26662 | 10 min, and instantly if the boss leaves `x ∈ [1720,1940]`, `y ∈ [20,210]` |
+
+Two guide instructions that are wrong on this core: keep interrupting Searing Flames during the
+Animus — **you do not**, `boss_general_vezax.cpp:228` skips the cast entirely while the Barrier is up;
+and kill a vapor if mana is fine — **any single vapor kill calls `DoAction(1)` and disables hard mode
+permanently** for that pull.
+
+**The mana cheat is gone, not kept as a fallback**, following the Mimiron rebuild. The vapor puddle is
+the raid's only mana source: healers first, non-mana classes never soak, and the exit is
+HP-predictive — leave when the next tick (`100 · 2^(stacks+1)`) would exceed
+`ULDUAR_VEZAX_VAPOR_SOAK_MAX_TICK_HP_PCT` (0.35) of current health, which self-tunes across gear and
+raid size. If the soak underperforms, tune it; do not reinstate the cheat.
+
+**The formation is a fixed arc, Sunwell-style.** Anchor `(1852.78, 81.3856, 342.461)`,
+navprobe-verified, `ULDUAR_VEZAX_ARC_WIDTH` = π at orientation −1.5291. Healers take an inner band of
+**8 slots at 15 yd** so `PartyMemberToHeal`'s 30 yd measurement always reaches the tank; ranged take
+**6 at 21 yd** and **6 at 28 yd**. Two rings rather than one because a single 25-man ring gives 6.9 yd
+of spacing against Shadow Crash's 8 yd field — the split gives 12.6 and 17.6. The arc ends are 39 yd
+apart, but every DPS slot has a healer slot within ~13 yd, and aggregate coverage is what the heal
+engine needs. Slots persist per instance, pruned when their holder goes invalid; Ulduar's other
+bosses re-derive from a GUID rank every tick, which reshuffles the whole formation on a death.
+
+**Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40),
+below `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every
+interrupt that tick — and Searing Flames is the one cast in Ulduar that genuinely rewards
+interrupting. Duty is GUID-ranked among bots that are both *capable and ready*, recomputed per cast so
+cooldowns rotate it naturally.
+
+**Field soak is bounded.** Only casters whose slot is within about one ring spacing of a live field
+move to it (`_SHADOW_CRASH_SOAK_MAX_TRAVEL` 15). Unbounded chasing collapses the arc into one 8 yd
+circle. Puddles are killed **in place** — slot-safety reassignment handles a covered slot, and a
+puddle on the healer band is convenient. Mark of the Faceless walks to whichever of three spots
+derived off the arc bearing is nearest, all navprobe-verified; travel time is the whole cost of the
+mechanic.
+
+**Hard mode needs four separate guards, and the DoT one is the easy miss.** Targeting is zeroed
+(`DpsAssistAction`, `TankAssistAction`), plus `CastDebuffSpellOnAttackerAction` on a vapor target and
+every AoE-threat-type cast while a live vapor is in range, plus **explicit pet control** — a hunter
+pet off passive will chew a wandering vapor with nobody noticing. A DoT ticking a vapor to death is
+the quietest way to lose hard mode. Bloodlust arms only once the Animus is alive and only with hard
+mode on. Assist tank 0 taunts the Animus; the main tank keeps Vezax inside the berserk bounds.
+
+**Positioning is gated on the room, not just on presence.** Vezax is visible from outside his hall,
+and a presence gate had bots prepositioning through walls before the pull while their generic movers
+were already zeroed. `VezaxFormationActive` requires the bot inside a 45 yd bubble around the anchor
+plus a 10 yd height band — the room door spawns at `(1854.86, 31.53)`, 49.9 yd out. Resistance and
+state reset stay presence-gated; everything else is combat-gated.
+
+Shadow Crash landing in the melee stack, and the strafe that answers it, is covered under
+[Core behaviours](#core-behaviours-the-strategies-key-off).
 
 ## Core behaviours the strategies key off
 
@@ -1820,13 +2085,13 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 
 | Boss | Gap |
 |---|---|
-| **Vezax** | Saronite Vapor puddles never dodged |
 | **Razorscale** | Dark Rune Watcher/Guardian adds have no interrupt (focus and the Flame Breath cone are handled) |
 | **Freya** | Storm Lasher (Stormbolt, Lightning Lash) and Ancient Water Spirit (Tidal Wave) casts are not interrupted |
+| **Auriaya** | `AuriayaEncounterActive` is presence-only (`GetAuriaya(botAI) != nullptr`), so bots pull her on sight from up to 100 yd. Kologarn had the same defect and now gates on `IsInCombat()` |
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
 Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
-(cheat instakill / teleport); Vezax no-mana-regen (cheat mana refill).
+(cheat instakill / teleport).
 
 Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank
 swap** — each rolls its own detector instead: Thorim on the Unbalancing Strike debuff, Kologarn on

@@ -487,8 +487,50 @@ drake it is hitting.
 Two tanks are a hard requirement. With no assist tank, `RequireOffTank` logs once per pull and every
 off-tank behaviour stays inert — no pseudo-promotion, no MT-takes-everything fallback.
 
+## Movement priority is a second ladder, and OS needs both
+
+`ACTION_*` relevance decides which action *runs*; `MovementPriority` decides whether that action's
+`MoveTo` is *accepted at all*, because `IsWaitingForLastMove` compares with a strict `>` (see
+[../engine/pitfalls.md](../engine/pitfalls.md)). Every OS `MoveTo` once issued at `MOVEMENT_COMBAT`,
+so a hold that had just stamped its lock silently refused the tsunami dodge for longer than the 3.6 s
+the wave gives — the bot kept walking to the old destination and died on schedule.
+
+The three emergency-band actions — `os return to platform`, `os avoid twilight fissure`,
+`os tsunami corridor` — issue at **`MOVEMENT_FORCED`**. Holds, drake landing, flank and drake rear stay
+at `MOVEMENT_COMBAT`. Both portal actions pass `MOVEMENT_COMBAT` explicitly, because the
+`MoveTo(WorldObject*, distance, priority)` overload defaults to `MOVEMENT_NORMAL` — below every hold,
+which left the walk to the portal perpetually preempted. All four `MoveToClamped` sites pass
+`lessDelay = true`, subtracting the react delay from the stamped lock.
+
+**Three `FORCED` dodges cannot preempt each other** (`FORCED > FORCED` is false), so precedence moves
+to the multiplier layer. `OsMechanicPriorityMultiplier` ranks **off-platform > tsunami > fissure** —
+off the platform is unrecoverable, a tsunami is lethal, a Void Blast is survivable. Each mechanic
+whitelists its own action, passes non-movers through, and zeroes every other `MovementAction` while it
+is live and nothing above it is. It is kept out of `SartharionMultiplier`, which is already ~140 lines
+of generic-mover suppression and a different concern.
+
+**`IsDuplicateMove` never fires here**, so do not lean on it. It needs the request within **0.01 yd**
+of the last one, and every OS destination carries a Z that moves: passing `bot->GetPositionZ()` on a
+platform floor running 58.6→59.6 makes the "same" destination a different point, and the pathfinding
+branch stores the navmesh-resolved Z rather than the requested one. What actually throttles a
+re-issuing action is the arrival tolerance plus the movement lock.
+
+**Destination Z is derived at runtime, never surveyed.** `IssueMove` resolves the destination's own
+ground level with an `INVALID_HEIGHT` fallback to the bot's Z, then validates with
+`CheckCollisionAndGetValidCoords` — rejecting on failure for the dodges, where a blocked path means
+try elsewhere, and accepting the clamped coordinates for routine holds, which just walk. OS
+destinations are computed rather than measured, so a surveyed constant would not survive the slope.
+
 ## Known-open gaps
 
+- **Trigger release and action arrival share one constant in three of the four pairs**, so a bot
+  sitting at the edge of its tolerance can oscillate between "arrived" and "go again". The drake-rear
+  pair is the only one built with a deliberate gap — a 140° gate against a 30° draw. Designed bands,
+  never built: corridor Y 2.0/3.5 (stays well inside the 8.5 yd tsunami kill half-width), tank hold
+  1.0/2.0 (the spots are tight and both are measured points), raid line X 8.0/12.0 (X is not a lethal
+  axis, so a wide release is free).
+- **Melee DPS have no post-pull hold.** A 5 s hold from `fightStartMs`, holding only the player's own
+  attacks and casts while pets keep going, was specified and never built.
 - **The raid's south-west corner clears Tail Lash by 1.24yd** while the tank is on his right hold —
   roughly 7s of every right wave, one cast at its 11s cooldown. Moving the raid south makes it worse.
   The mitigation, if it bites: `RAID_CORRIDOR_RIGHT_Y` 535.5 → 537.
