@@ -359,6 +359,7 @@ float ThorimArenaLeashMultiplier::GetValue(Action* action)
 
     static std::set<std::string> const encounterMovers = {"thorim arena leash action",
                                                           "thorim arena positioning action",
+                                                          "thorim charged orb action",
                                                           "thorim sif blizzard action",
                                                           "thorim sif frost nova action"};
 
@@ -401,6 +402,7 @@ float ThorimArenaAnchorGuardMultiplier::GetValue(Action* action)
 
     static std::set<std::string> const encounterMovers = {"thorim arena positioning action",
                                                           "thorim arena leash action",
+                                                          "thorim charged orb action",
                                                           "thorim sif blizzard action",
                                                           "thorim sif frost nova action"};
 

@@ -108,6 +108,26 @@ bool ThorimArenaPositioningAction::Execute(Event /*event*/)
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool ThorimChargedOrbAction::isUseful()
+{
+    ThorimChargedOrbTrigger thorimChargedOrbTrigger(botAI);
+    return thorimChargedOrbTrigger.IsActive();
+}
+
+bool ThorimChargedOrbAction::Execute(Event /*event*/)
+{
+    Position escape;
+    if (!ThorimChargedOrbEscape(botAI, bot, escape))
+        return false;
+
+    ThorimNoteOrbEscape(bot, escape);
+
+    // No arrival latch here, unlike the anchor: the escape point stops being offered the moment the
+    // bot is out of the field, so there is nothing for a deadband to damp.
+    return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
 bool ThorimArenaLeashAction::isUseful()
 {
     ThorimArenaLeashTrigger thorimArenaLeashTrigger(botAI);

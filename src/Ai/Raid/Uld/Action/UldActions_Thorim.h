@@ -103,6 +103,16 @@ public:
     bool isUseful() override;
 };
 
+// Steps out of the charged Thunder Orb's field, by the shortest way out rather than across the room.
+class ThorimChargedOrbAction : public MovementAction
+{
+public:
+    ThorimChargedOrbAction(PlayerbotAI* ai) : MovementAction(ai, "thorim charged orb action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 // Walks an arena squad member back inside the box boss_thorim.cpp scans for a living player.
 class ThorimArenaLeashAction : public MovementAction
 {

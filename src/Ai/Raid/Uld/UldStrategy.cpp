@@ -483,6 +483,13 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim lightning charge trigger",
         { NextAction("thorim lightning charge action", ACTION_RAID + 4) }));
 
+    // Charge Orb shares that rank, and can: it only ever fires while Thorim is still on the balcony,
+    // and Lightning Charge only after he has come down. 3k a second for 15s across a 32 yd circle is
+    // phase 1's largest avoidable damage source, so it has to beat the ring and the add chase both.
+    triggers.push_back(new TriggerNode(
+        "thorim charged orb trigger",
+        { NextAction("thorim charged orb action", ACTION_RAID + 4) }));
+
     triggers.push_back(new TriggerNode(
         "thorim runic smash trigger",
         { NextAction("thorim runic smash action", ACTION_RAID + 3) }));

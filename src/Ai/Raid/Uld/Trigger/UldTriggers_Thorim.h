@@ -80,6 +80,15 @@ public:
     bool IsActive() override;
 };
 
+// A bot standing under the Thunder Orb Thorim has charged. The orb pulses for 15s at ~3k a second and
+// the field is far wider than it looks, so this is the largest avoidable damage source in phase 1.
+class ThorimChargedOrbTrigger : public Trigger
+{
+public:
+    ThorimChargedOrbTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim charged orb trigger") {}
+    bool IsActive() override;
+};
+
 // An arena squad member that has left the box the boss script scans, or is on its way out of it.
 class ThorimArenaLeashTrigger : public Trigger
 {

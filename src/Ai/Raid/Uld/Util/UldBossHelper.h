@@ -151,6 +151,9 @@ enum UlduarIDs
     // Lightning Charge has no cast bar. The only warning is this aura landing on a Thunder Orb;
     // SpellInfoCorrections patches its amplitude to 5000ms, so it ticks once, 5s before the cone.
     SPELL_THORIM_LIGHTNING_ORB_VISUAL = 62186,
+    // Phase 1's orb marker, the counterpart to the visual above. It sits on one Thunder Orb for 15s
+    // and triggers Lightning Shock (62017) once a second: ~3k nature at 35 yd, measured in 3D.
+    SPELL_THORIM_CHARGE_ORB = 62016,
 
     // Mimiron
     NPC_LEVIATHAN_MKII = 33432,
@@ -1711,9 +1714,21 @@ constexpr uint32 ULDUAR_THORIM_ARENA_MIN_MEMBERS = 3;
 // The phase 1 arena formation. The tank and the melee on him hold the centre; ranged and healers ring
 // them from outside the Dark Rune Champion's Whirlwind, close enough that an add anywhere in the pile
 // is still in range. Two radii rather than one so a 25 man ring is not shoulder to shoulder.
-constexpr float ULDUAR_THORIM_ARENA_RING_INNER = 10.0f;
-constexpr float ULDUAR_THORIM_ARENA_RING_OUTER = 14.0f;
+//
+// These are as wide as the room allows. Arena adds jump to 19-24 yd from the centre, so anything at
+// or past 19 drops ranged into the landing zone, and the navmesh gives out past ~26 yd on the south
+// side. Wider matters twice over: Whirlwind is an 8 yd circle on an add standing on the tank, and
+// Deafening Thunder is a 15 yd blast centred on whoever the Stormhammer hit, so a tight ring hands
+// one hammer the whole squad's cast speed.
+constexpr float ULDUAR_THORIM_ARENA_RING_INNER = 13.0f;
+constexpr float ULDUAR_THORIM_ARENA_RING_OUTER = 18.0f;
 constexpr uint8 ULDUAR_THORIM_ARENA_RING_INNER_SLOTS = 5;
+
+// Charge Orb hangs on a Thunder Orb 13.5 yd above the floor and its 35 yd radius is measured in 3D,
+// so the field cuts the floor as a 32.3 yd circle - which is why a bot three yards from a victim
+// never took a tick. The margin covers the bot still walking when the next tick lands.
+constexpr float ULDUAR_THORIM_CHARGED_ORB_RADIUS = 32.3f;
+constexpr float ULDUAR_THORIM_CHARGED_ORB_MARGIN = 4.0f;
 
 // Melee are leashed to the tank spot rather than to the box: 24 yd is the furthest an arena add ever
 // lands from the centre, so it costs no uptime, and it keeps the pile 21 yd short of the lever gate.

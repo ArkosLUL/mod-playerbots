@@ -325,7 +325,7 @@ bool RingRotation(PlayerbotAI* botAI, Player* bot, Unit* boss, float& rotation)
 {
     rotation = 0.0f;
 
-    Unit* orb = ThorimChargedThunderOrb(botAI);
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
     if (!orb)
         return false;
 
@@ -932,7 +932,9 @@ namespace
 // Drawn from the latched arena squad in group roster order, never from the survivors: bots die in
 // here, and ranking by who is still standing means one death renumbers everyone behind the corpse and
 // the whole formation shuffles mid-fight.
-bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+//
+// Shared by the ring and by the Charge Orb dodge, so the two can never disagree about who is slot 3.
+bool ThorimArenaRingOrder(PlayerbotAI* botAI, Player* bot, size_t& slot, size_t& total)
 {
     Group* group = bot->GetGroup();
     ThorimEncounterState const* state = FindState(bot);
@@ -971,12 +973,49 @@ bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
         return left->GetGUID() < right->GetGUID();
     });
 
-    size_t slot = ringMembers.size();
     for (size_t i = 0; i < ringMembers.size(); ++i)
         if (ringMembers[i] == bot)
+        {
             slot = i;
+            total = ringMembers.size();
+            return true;
+        }
 
-    if (slot >= ringMembers.size())
+    return false;
+}
+
+// Settles a computed arena destination onto ground the bot can reach, and says whether it is still a
+// usable spot. Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would
+// then fail without telling anyone.
+//
+// False means "use the centre instead". The collision walk drags the destination back towards the
+// bot, so a bot standing outside the pit - at the gate, or up on the north rim - gets handed its own
+// position. That spot then latches as "arrived", which frees the anchor guard to stop every mover,
+// while still being outside the leash, which stops the chase and the target pick. The bot never acts
+// again.
+bool ThorimSettleArenaPoint(Player* bot, Position& spot)
+{
+    Position const& centre = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+
+    float x = spot.GetPositionX();
+    float y = spot.GetPositionY();
+    float z = bot->GetMapWaterOrGroundLevel(x, y, centre.GetPositionZ());
+    if (z <= INVALID_HEIGHT)
+        z = centre.GetPositionZ();
+
+    bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                   bot->GetPositionZ(), x, y, z, false);
+
+    spot = Position(x, y, z);
+    return spot.GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) <=
+           ULDUAR_THORIM_ARENA_LEASH_RADIUS;
+}
+
+bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    size_t slot = 0;
+    size_t total = 0;
+    if (!ThorimArenaRingOrder(botAI, bot, slot, total))
         return false;
 
     // Bearing from the gate to the centre, so slot 0 lands on the far side of the room from the
@@ -986,7 +1025,6 @@ bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     float const baseAngle = std::atan2(centre.GetPositionY() - gate.GetPositionY(),
                                        centre.GetPositionX() - gate.GetPositionX());
 
-    size_t const total = ringMembers.size();
     size_t const inner = std::min<size_t>(ULDUAR_THORIM_ARENA_RING_INNER_SLOTS, total);
 
     // Nobody stands on the centre itself: that is the tank's spot and the pile of adds on him.
@@ -1003,31 +1041,49 @@ bool GetThorimArenaRingSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 
     angle = Position::NormalizeOrientation(angle);
 
-    float x = centre.GetPositionX() + std::cos(angle) * radius;
-    float y = centre.GetPositionY() + std::sin(angle) * radius;
+    Position spot(centre.GetPositionX() + std::cos(angle) * radius,
+                  centre.GetPositionY() + std::sin(angle) * radius, centre.GetPositionZ());
 
-    // Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
-    // without telling anyone.
-    float z = bot->GetMapWaterOrGroundLevel(x, y, centre.GetPositionZ());
-    if (z <= INVALID_HEIGHT)
-        z = centre.GetPositionZ();
+    out = ThorimSettleArenaPoint(bot, spot) ? spot : centre;
+    return true;
+}
 
-    bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
-                                                   bot->GetPositionZ(), x, y, z, false);
+// Writes the nearest spot clear of the charged Thunder Orb, or returns false when `from` is already
+// clear and there is nothing to do.
+//
+// Straight out from the orb rather than across the room: the shortest way out costs the fewest casts,
+// and it keeps each bot's bearing, so the ring comes out of this still spread.
+bool ThorimPushOutOfOrbField(PlayerbotAI* botAI, Player* bot, Position const& from, Position& out)
+{
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_CHARGE_ORB);
+    if (!orb)
+        return false;
 
-    // The collision walk drags the destination back towards the bot, so a bot standing outside the pit
-    // - at the gate, or up on the north rim - gets handed its own position as its ring slot. That spot
-    // then latches as "arrived", which frees the anchor guard to stop every mover, while still being
-    // outside the leash, which stops the chase and the target pick. The bot never acts again. The
-    // centre is always inside the box and always reachable, so it is the safe answer.
-    if (Position(x, y, z).GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) >
-        ULDUAR_THORIM_ARENA_LEASH_RADIUS)
-    {
-        out = centre;
-        return true;
-    }
+    // Measured in 2D on purpose. Lightning Shock's 35 yd is a 3D radius from an orb hanging 13.5 yd
+    // overhead, so what has to be cleared on the floor is the circle underneath it, not the sphere.
+    float const danger = ULDUAR_THORIM_CHARGED_ORB_RADIUS + ULDUAR_THORIM_CHARGED_ORB_MARGIN;
+    float const gap = from.GetExactDist2d(orb->GetPositionX(), orb->GetPositionY());
+    if (gap > danger)
+        return false;
 
-    out = Position(x, y, z);
+    Position const& centre = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+    float bearing = std::atan2(centre.GetPositionY() - orb->GetPositionY(),
+                               centre.GetPositionX() - orb->GetPositionX());
+    if (gap > 1.0f)
+        bearing = std::atan2(from.GetPositionY() - orb->GetPositionY(),
+                             from.GetPositionX() - orb->GetPositionX());
+
+    Position spot(orb->GetPositionX() + std::cos(bearing) * danger,
+                  orb->GetPositionY() + std::sin(bearing) * danger, centre.GetPositionZ());
+
+    // Every orb is 42 yd from the centre, so the centre clears the field by 5.7 yd and is always a
+    // usable fallback - both for a spot the leash rejects and for one the collision walk dragged back
+    // inside the field on the way into a wall.
+    bool safe = ThorimSettleArenaPoint(bot, spot);
+    if (safe && spot.GetExactDist2d(orb->GetPositionX(), orb->GetPositionY()) < ULDUAR_THORIM_CHARGED_ORB_RADIUS)
+        safe = false;
+
+    out = safe ? spot : centre;
     return true;
 }
 
@@ -1052,19 +1108,30 @@ bool GetThorimArenaAnchor(PlayerbotAI* botAI, Player* bot, Position& out)
     if (botAI->IsTank(bot))
     {
         out = ULDUAR_THORIM_NEAR_ARENA_CENTER;
-        return true;
     }
-
-    if (botAI->IsRanged(bot))
-        return GetThorimArenaRingSlot(botAI, bot, out);
-
+    else if (botAI->IsRanged(bot))
+    {
+        if (!GetThorimArenaRingSlot(botAI, bot, out))
+            return false;
+    }
     // Melee form up on the tank spot before the pull and run free once the fight starts: adds land up
     // to 24 yd out and pinning melee would cost every one of those swings. The tighter melee leash is
     // what keeps them near the pile instead.
-    if (botAI->GetState() == BOT_STATE_COMBAT)
+    else if (botAI->GetState() == BOT_STATE_COMBAT)
+    {
         return false;
+    }
+    else
+    {
+        out = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+    }
 
-    out = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+    // The anchor is cleared of the orb field, not just the bot: the field burns for 15s, and an anchor
+    // left inside it walks the bot straight back in the moment the dodge lets go.
+    Position moved;
+    if (ThorimPushOutOfOrbField(botAI, bot, out, moved))
+        out = moved;
+
     return true;
 }
 
@@ -1111,6 +1178,37 @@ bool ThorimArenaAnchorSettled(PlayerbotAI* botAI, Player* bot)
 
     ThorimEncounterState const* state = FindState(bot);
     return state && state->arenaAnchorArrived.count(bot->GetGUID()) > 0;
+}
+
+bool ThorimChargedOrbEscape(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!botAI || !bot || GetThorimSquad(botAI, bot) != ThorimSquad::Arena)
+        return false;
+
+    // Phase 1 only. Charge Orb stops firing once Thorim drops to the floor, and the orb that lights up
+    // after that is Lightning Charge, which has its own node and its own answer.
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsAlive() || boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
+    Position const here(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ());
+    return ThorimPushOutOfOrbField(botAI, bot, here, out);
+}
+
+void ThorimNoteOrbEscape(Player* bot, Position const& spot)
+{
+    if (!bot)
+        return;
+
+    // Deadbanded, because the escape point is derived from the bot's own drifting coordinates: latched
+    // at full precision it would note a new destination on every tick of the walk.
+    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    auto const noted = state.orbEscapes.find(bot->GetGUID());
+    if (noted != state.orbEscapes.end() &&
+        noted->second.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= 1.0f)
+        return;
+
+    state.orbEscapes[bot->GetGUID()] = spot;
 }
 
 void ThorimNoteFollowMasterStripped(Player* bot)
@@ -1266,23 +1364,28 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
     return state && state->ringArrived.count(bot->GetGUID()) > 0;
 }
 
-Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI)
+Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
     if (!bot)
         return nullptr;
 
+    // One 150 yd grid sweep per instance per interval, shared by every bot, so no two of them
+    // disagree about which orb is lit. The two markers never overlap - Charge Orb only fires while
+    // Thorim is on the balcony - so keying the cache on the marker costs nothing in practice.
     ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
-    if (state.orbScanMs && GetMSTimeDiffToNow(state.orbScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+    if (state.orbScanMs && state.orbScanSpell == markerSpell &&
+        GetMSTimeDiffToNow(state.orbScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
     {
         Unit* cached = botAI->GetUnit(state.chargedOrbGuid);
-        if (cached && cached->HasAura(SPELL_THORIM_LIGHTNING_ORB_VISUAL))
+        if (cached && cached->HasAura(markerSpell))
             return cached;
 
         return nullptr;
     }
 
     state.orbScanMs = getMSTime();
+    state.orbScanSpell = markerSpell;
     state.chargedOrbGuid = ObjectGuid::Empty;
 
     // The orbs are non-attackable pillar props, so they never appear in the target values.
@@ -1290,7 +1393,7 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI)
     bot->GetCreatureListWithEntryInGrid(orbs, NPC_THORIM_THUNDER_ORB, ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE);
     for (Creature* orb : orbs)
     {
-        if (!orb || !orb->HasAura(SPELL_THORIM_LIGHTNING_ORB_VISUAL))
+        if (!orb || !orb->HasAura(markerSpell))
             continue;
 
         state.chargedOrbGuid = orb->GetGUID();
@@ -1379,6 +1482,8 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->gauntletTraced = false;
     state->chargedOrbGuid = ObjectGuid::Empty;
     state->orbScanMs = 0;
+    state->orbScanSpell = 0;
+    state->orbEscapes.erase(bot->GetGUID());
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;
 

@@ -106,6 +106,10 @@ bool ThorimArenaPositioningTrigger::IsActive()
 
     // Surviving beats standing on a spot, and letting the anchor fight a dodge is what has a bot step
     // out of a hazard and get walked straight back into it.
+    ThorimChargedOrbTrigger chargedOrb(botAI);
+    if (chargedOrb.IsActive())
+        return false;
+
     ThorimSifBlizzardTrigger blizzard(botAI);
     if (blizzard.IsActive())
         return false;
@@ -203,6 +207,12 @@ bool ThorimLightningChargeTrigger::IsActive()
     // Raw distance, not the arrival latch: the dodge must not be gated by a bot that was settled on
     // the slot the ring has just rotated away from.
     return bot->GetDistance(spot) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
+}
+
+bool ThorimChargedOrbTrigger::IsActive()
+{
+    Position spot;
+    return ThorimChargedOrbEscape(botAI, bot, spot);
 }
 
 bool ThorimArenaLeashTrigger::IsActive() { return ThorimArenaLeashBreached(botAI, bot); }

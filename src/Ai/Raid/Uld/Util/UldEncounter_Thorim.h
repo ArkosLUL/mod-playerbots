@@ -47,6 +47,13 @@ struct ThorimEncounterState
 
     RaidObs::ObsValue<ObjectGuid> chargedOrbGuid{"thorim.chargedorb"};
     uint32 orbScanMs = 0;
+    // Which marker the cached guid was found by. Phase 1 asks for Charge Orb and phase 2 for the
+    // Lightning Charge visual, so a hit found under one must not be handed back to the other.
+    uint32 orbScanSpell = 0;
+
+    // Where each bot was sent to get out of the Charge Orb field. A trace otherwise only shows that a
+    // bot moved, not which hazard moved it.
+    RaidObs::ObsGuidMap<Position> orbEscapes{"thorim.orbescape"};
 
     ObjectGuid colossusGuid;
     uint32 colossusScanMs = 0;
@@ -242,10 +249,16 @@ bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 // movers are what bring a bot back, and freezing them permanently is the Void Reaver failure.
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
 
-// The orb Thorim is about to fire at, or nullptr. Lightning Charge itself is instant with no cast
-// bar; the aura landing on a Thunder Orb is the entire 5 second warning.
-Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI);
+// The Thunder Orb carrying markerSpell, or nullptr. Both orb mechanics announce themselves the same
+// way and neither has a cast bar the bots can read: SPELL_THORIM_LIGHTNING_ORB_VISUAL is the 5 second
+// warning before phase 2's Lightning Charge, SPELL_THORIM_CHARGE_ORB is phase 1's 15 second field.
+Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell);
 bool ThorimLightningChargeActive(PlayerbotAI* botAI);
+
+// Where this bot should stand to be clear of the Charge Orb field, or false if it is already clear.
+// Pure, so the trigger can ask as often as it likes; the action records the answer separately.
+bool ThorimChargedOrbEscape(PlayerbotAI* botAI, Player* bot, Position& out);
+void ThorimNoteOrbEscape(Player* bot, Position const& spot);
 
 void ResetThorimEncounterState(Player* bot, bool clearInstance);
 bool ThorimEncounterStateIsStale(PlayerbotAI* botAI);
