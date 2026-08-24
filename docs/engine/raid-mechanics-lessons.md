@@ -118,6 +118,22 @@ Every distance helper measures differently, and a large-model boss inflates all 
 - **Selection units must match margin units.** Picking by `GetHealth()` while the switch margin is in
   percentage points inverts the pick between adds with unequal max health.
 
+## Crowd control and threat on adds
+
+What lands on a raid add is not what PvP experience predicts.
+
+- **Roots and CC do not break on damage in 3.3.5.** `Unit::DealDamage` removes exactly one thing: auras
+  carrying `AURA_INTERRUPT_FLAG_TAKE_DAMAGE` (`Unit.cpp:1032`). Frost Nova and Entangling Roots do not
+  carry it, so they hold their full duration through raid AoE; Freezing Trap does, so it never survives
+  one. Read the flag, not the reputation.
+- **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
+  `DRTYPE_ALL` group — stun, taunt, cyclone, charge — or one carrying `CREATURE_FLAG_EXTRA_ALL_DIMINISH`.
+  Root, fear and disorient are `DRTYPE_PLAYER`, so on an add with `flags_extra = 0` they land at full
+  duration every time. The 10s PvP duration cap is gated the same way.
+- **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
+  Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
+  random player every 10s, which leaves geometry plus a snare as the only handling.
+
 ## Coordinating a raid with no shared state
 
 Every bot has its own `AiObjectContext` and cannot see another bot's decision. Five mechanisms make

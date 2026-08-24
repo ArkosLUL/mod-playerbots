@@ -393,6 +393,24 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya avoid detonating lasher",
         { NextAction("freya avoid detonating lasher", ACTION_RAID + 3) }));
 
+    // Detonating Lasher corral. Order matters: nova the pile, then leave it, and only drag toward it
+    // from below both - an arrived dragger has to be able to step back out of what it just delivered.
+    triggers.push_back(new TriggerNode(
+        "freya frost nova lashers",
+        { NextAction("freya frost nova lashers", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya lasher pack step out",
+        { NextAction("freya lasher pack step out", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya drag lasher to corral",
+        { NextAction("freya drag lasher to corral", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya trap lasher corral",
+        { NextAction("freya trap lasher corral", ACTION_RAID + 2) }));
+
     // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
     // pacified bot cannot swing at anything anyway.
     triggers.push_back(new TriggerNode(

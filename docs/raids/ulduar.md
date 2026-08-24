@@ -723,24 +723,59 @@ set differently, taunting a Storm Lasher or Water Spirit would mean owning Tidal
 lasher drops the taunt on its next 10s threat wipe regardless.
 
 **Detonating Lashers cannot be tanked, and no threat redirect can hold them.** Every 10s each one casts
-Flame Lash, then `DoResetThreatList()` and charges a random player within 80 yd
-(`boss_freya.cpp:1257-1272`); they spawn the same way after a 5s submerge. A `GROUP_LASHERS` wave is
-**10** of them — 717k in 10-man, **2.35M in 25-man** — so the whole raid has to damage them to beat the
-60s clock.
+Flame Lash, then `DoResetThreatList()` and charges a **uniformly random** player within 80 yd
+(`boss_freya.cpp:1256-1262`); they spawn the same way after a 5s submerge, and one that finds nobody
+inside 80 yd despawns and still counts as cleared. A `GROUP_LASHERS` wave is **10** of them — 717k in
+10-man, **2.35M in 25-man** — so the whole raid has to damage them to beat the 60s clock. They run at
+**8.0 yd/s** against a player's 7.0: a bot can lead one anywhere and can never shake it.
 
-They are handled by geometry instead. Ranged focus-fire one at a time (`GetFreyaRangedLasherFocus`:
-lowest health, GUID breaking ties, which agrees raid-wide with no shared state and is self-stabilising
-since the focused add stays lowest) and never walk to it — outside their spell range they shoot whatever
-is already in reach, which keeps them clear of the 15 yd blast. Melee and tanks take only what is inside
-`ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the moment it runs past that, which is the leash:
-a lasher that retargets cannot tow a bot across the room, and a tank can damage one on top of it but can
-never walk one back to the raid.
+Detonate (62598) rolls 4162-4837 in 15 yd **on death**, not on a timer, and has **no difficulty entry**,
+so it is identical in both sizes — the old 10-man/25-man threshold split was wrong.
 
-Detonate (62598) rolls 4162-4837 in 15 yd and has **no difficulty entry**, so it is identical in both
-sizes — the old 10-man/25-man threshold split was wrong. Non-tanks below
-`ULDUAR_FREYA_DETONATE_FLEE_HEALTH` step out, except the bot actually killing that lasher, which is
-inside 15 yd by definition; the step clears *every* lasher in range, since ten roam at once. Tanks
-never flee; they eat it.
+**The corral.** `GetFreyaLasherCorral` is 35 yd behind Freya, taken from `GetHomePosition()` — she never
+walks but she pivots to face her tank, so the live orientation would swing the spot around the room.
+Every bot derives the same point. navprobe puts all 16 headings of that ring on mesh; at 50 yd the
+southern ones stop settling, which is what sets the distance. Height only, no collision raycast: several
+triggers read it per bot per tick and that floor is open.
+
+Ranged and healers a lasher has picked walk it in, and that trip is the **only** walk they make: they
+still never move toward the focused lasher, and outside spell range they shoot whatever is already in
+reach. **Melee never ferry** — a melee bot that did would then be standing in the pile the blasts go off
+in — and neither does the trap hunter, which has a post of its own. A lasher chases whoever it picked,
+so a bot cannot hand one over and walk away; without two brakes the drag ferries in, the step-out pushes
+the bot straight back out, and it shuttles the same add all wave. Nothing is ferried into a pile this
+bot would itself have to flee, and nothing is ferried to a corral already holding
+`ULDUAR_FREYA_LASHER_PACK_MIN_COUNT` (6) — a cap that lifts itself as the pile dies. `freya lasher pack
+step out` is the return leg, so there is no walk-back node, and it clears
+`ULDUAR_FREYA_LASHER_PACK_CLEAR` (16 yd) of *every* lasher, since ten roam at once.
+
+**A snare and a root hold the pack, not threat.** One hunter — lowest GUID, so every bot agrees — posts
+`ULDUAR_FREYA_LASHER_TRAP_OFFSET` (16 yd) short of the corral, where its 10 yd Frost Trap patch covers
+the lane back to the raid while it stays outside the blast; a 30s patch on a 30s cooldown is a continuous
+**-50%**. A mage with 6 lashers inside Frost Nova's 10 yd roots them for a full **8s** — no DR, no damage
+break ([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md)) — and novas above the
+step-out, so it roots first and leaves second. It casts on **self**, not through the class `frost nova`
+node, which gates on the *current target* being within 10 yd and so never fires for a ranged mage.
+
+Assist tank 0 parks at the corral once its ladder is empty (`HoldLasherCorral`) and taunts what wanders
+off. Every branch there owns the tick: falling through hands the tank back to the ladder, whose last rung
+is Freya, and walks it straight off the corral. A taunt is worth under 10s — the next threat wipe re-rolls
+regardless — so it holds one add at a time, plus one Challenging Shout / Challenging Roar at 6+.
+Righteous Defense is excluded: it taunts attackers of a friendly target, not an area.
+
+Ten Detonates in one pile would be ~45k inside 15 yd. It stays survivable because ranged focus-fire one
+lasher at a time (`GetFreyaRangedLasherFocus`: lowest health, GUID breaking ties, which agrees raid-wide
+with no shared state and is self-stabilising since the focused add stays lowest), so deaths stagger and
+the off-tank at the corral eats them one at a time. Raid AoE bringing several low together is the residual
+risk, deliberately untuned.
+
+Melee and tanks still take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the
+moment it runs past that, which is the leash: a lasher that retargets cannot tow a bot across the room,
+and a tank can damage one on top of it but can never walk one back to the raid. Non-tanks below
+`ULDUAR_FREYA_DETONATE_FLEE_HEALTH` step out of the blast, clearing *every* lasher in range rather than
+the nearest, except the bot actually killing that lasher, which is inside 15 yd by definition, and except
+a dragger inside `ULDUAR_FREYA_LASHER_CORRAL_COMMIT` (12 yd) of the corral, which commits rather than
+waste the trip. Tanks never flee; they eat it.
 
 **Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
 Snaplasher or Conservator is up, otherwise to whoever is holding Freya, falling back to the group main

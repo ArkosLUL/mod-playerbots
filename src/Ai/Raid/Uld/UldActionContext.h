@@ -78,6 +78,10 @@ public:
         creators["freya move to healing spore action"] = &RaidUlduarActionContext::freya_move_to_healing_spore_action;
         creators["freya break iron roots"] = &RaidUlduarActionContext::freya_break_iron_roots;
         creators["freya dodge unstable sun beam"] = &RaidUlduarActionContext::freya_dodge_unstable_sun_beam;
+        creators["freya drag lasher to corral"] = &RaidUlduarActionContext::freya_drag_lasher_to_corral;
+        creators["freya lasher pack step out"] = &RaidUlduarActionContext::freya_lasher_pack_step_out;
+        creators["freya frost nova lashers"] = &RaidUlduarActionContext::freya_frost_nova_lashers;
+        creators["freya trap lasher corral"] = &RaidUlduarActionContext::freya_trap_lasher_corral;
         creators["thorim frost resistance action"] = &RaidUlduarActionContext::thorim_frost_resistance_action;
         creators["thorim nature resistance action"] = &RaidUlduarActionContext::thorim_nature_resistance_action;
         creators["thorim unbalancing strike action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_action;
@@ -241,6 +245,10 @@ private:
     static Action* freya_move_to_healing_spore_action(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeAction(ai); }
     static Action* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsAction(ai); }
     static Action* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamAction(ai); }
+    static Action* freya_drag_lasher_to_corral(PlayerbotAI* ai) { return new FreyaDragLasherToCorralAction(ai); }
+    static Action* freya_lasher_pack_step_out(PlayerbotAI* ai) { return new FreyaLasherPackStepOutAction(ai); }
+    static Action* freya_frost_nova_lashers(PlayerbotAI* ai) { return new FreyaFrostNovaLashersAction(ai); }
+    static Action* freya_trap_lasher_corral(PlayerbotAI* ai) { return new FreyaTrapLasherCorralAction(ai); }
     static Action* thorim_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "thorim"); }
     static Action* thorim_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "thorim"); }
     static Action* thorim_unbalancing_strike_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeAction(ai); }

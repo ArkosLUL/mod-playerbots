@@ -710,8 +710,9 @@ constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
 // that ring with room for the boss having been dragged part of the way to one.
 constexpr float ULDUAR_FREYA_SPORE_SEARCH_RADIUS = 40.0f;
 
-// Freya: Detonate (62598) radius. Every 10s a Detonating Lasher wipes its own threat list and charges
-// a random player, so it can be neither tanked nor herded - the only handling is who stands where.
+// Freya: Detonate (62598) radius, and it fires on death, not on a timer. Every 10s a Detonating
+// Lasher wipes its own threat list and charges a random player, so no amount of threat holds one -
+// see the corral constants below for what replaces tanking it.
 constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
 
 // Detonate rolls 4162-4837 and has no difficulty entry, so it is the same in 10- and 25-man. Ranged
@@ -740,6 +741,25 @@ constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
 // bomb per player, ten lashers, overlapping sun beams - so stepping clear of the nearest is not
 // enough; the whole cluster has to be visible or the bot walks out of one and into the next.
 constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
+
+// Detonating Lasher corral. Threat cannot hold one - every 10s it wipes its threat list and charges a
+// uniformly random player within 80 yd - so the pack is gathered by walking it somewhere and pinned
+// there with a snare patch and a periodic root instead. 35 yd behind Freya, measured from her *home*
+// orientation because she turns to face whoever tanks her. The whole 35 yd ring around her spawn
+// probes on-mesh; at 50 yd the southern headings stop settling on the floor.
+constexpr float ULDUAR_FREYA_LASHER_CORRAL_DISTANCE = 35.0f;
+constexpr float ULDUAR_FREYA_LASHER_CORRAL_ARRIVE = 5.0f;   // close enough to count as delivered
+constexpr float ULDUAR_FREYA_LASHER_CORRAL_COMMIT = 12.0f;  // inside this a hurt dragger finishes the trip
+constexpr float ULDUAR_FREYA_LASHER_PACK_CLEAR = 16.0f;     // one yard past Detonate
+
+// Frost Nova is a 10 yd sphere centred on the caster, so this is also how close the mage has to stand
+// to the pack - inside Detonate range, which is why the nova node is followed out by the step-out one.
+constexpr float ULDUAR_FREYA_FROST_NOVA_RADIUS = 10.0f;
+constexpr uint32 ULDUAR_FREYA_LASHER_PACK_MIN_COUNT = 6;
+
+// Frost Trap lays its patch at the hunter's feet and the patch is 10 yd, so posting one Detonate
+// radius short of the corral covers the lane back to the raid while keeping the hunter out of the blast.
+constexpr float ULDUAR_FREYA_LASHER_TRAP_OFFSET = 16.0f;
 
 // Hodir.
 //
@@ -1327,6 +1347,26 @@ bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
 // shows up in the npc value lists.
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
 
+// Where a Detonating Lasher wave is gathered: ULDUAR_FREYA_LASHER_CORRAL_DISTANCE behind Freya. Read
+// from Creature::GetHomePosition, never the live orientation - she pivots to face whoever is tanking
+// her, which would swing the corral around the room. Returns Position() before Freya is found.
+Position GetFreyaLasherCorral(PlayerbotAI* botAI);
+
+// Where the trap hunter stands: on the line from the corral back toward Freya, one Detonate radius
+// short of it, so the Frost Trap patch covers the lane back to the raid from outside the blast.
+Position GetFreyaLasherTrapPost(PlayerbotAI* botAI);
+
+// Takes a point rather than a bot: the same count is wanted both around a bot (is this pile lethal)
+// and around the corral (is it full enough that nobody else should be ferrying to it).
+uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius);
+
+// The live lasher currently chasing this bot, or nullptr. The one bot it can actually walk somewhere.
+Unit* GetFreyaLasherChasing(Player* bot, FreyaWaveState const& state);
+
+// The one hunter that holds the trap post. Lowest GUID among living hunter bots in the group, the same
+// tie-break GetFreyaRangedLasherFocus uses, so every bot agrees on it without any shared state.
+bool IsFreyaLasherTrapHunter(PlayerbotAI* botAI);
+
 
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
 // Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
@@ -1522,8 +1562,10 @@ bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot);
 bool IsMimironAcuGrounded(PlayerbotAI* botAI);
 
 // The ranged snare this bot can put on a Bomb Bot, or empty for a class that has none. Roots are
-// deliberately absent: Entangling Roots and Frost Nova break on the first hit, and hitting it is the
-// whole plan. Trigger and action both read this, or the two disagree about who is covered.
+// deliberately absent, but not because they break: neither Entangling Roots nor Frost Nova carries
+// AURA_INTERRUPT_FLAG_TAKE_DAMAGE in 3.3.5. They are absent because a Bomb Bot has to be stopped
+// while it is still approaching, and both of those land only at or around the caster.
+// Trigger and action both read this, or the two disagree about who is covered.
 std::string GetMimironBombBotSnare(Player* bot);
 
 // How far a Bomb Bot still has to run before it reaches whoever it is chasing. Measured from its own

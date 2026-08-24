@@ -72,6 +72,13 @@ bool FreyaAvoidDetonatingLasherTrigger::IsActive()
     if (bot->GetHealth() >= ULDUAR_FREYA_DETONATE_FLEE_HEALTH)
         return false;
 
+    // A dragger this close has all but delivered its lasher. Pulling it off now wastes the whole trip
+    // and leaves the add loose next to the corral, so it commits and the pack step-out takes over on
+    // arrival.
+    Position const corral = GetFreyaLasherCorral(botAI);
+    if (corral != Position() && bot->GetExactDist2d(corral) <= ULDUAR_FREYA_LASHER_CORRAL_COMMIT)
+        return false;
+
     Creature* lasher = bot->FindNearestCreature(NPC_DETONATING_LASHER, ULDUAR_FREYA_DETONATE_RADIUS);
     if (!lasher || !lasher->IsAlive())
         return false;
@@ -145,4 +152,110 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     }
 
     return false;
+}
+
+bool FreyaDragLasherToCorralTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRanged(bot) || botAI->IsHeal(bot)))
+        return false;
+
+    // The trap hunter has a post of its own, 16 yd short of the corral. Letting it ferry as well would
+    // shuttle it between the two spots and leave the snare patch to lapse.
+    if (IsFreyaLasherTrapHunter(botAI))
+        return false;
+
+    Position const corral = GetFreyaLasherCorral(botAI);
+    if (corral == Position())
+        return false;
+
+    if (bot->GetExactDist2d(corral) <= ULDUAR_FREYA_LASHER_CORRAL_ARRIVE)
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    if (!GetFreyaLasherChasing(bot, state))
+        return false;
+
+    // Two brakes, both against the same failure. A lasher chases whoever it picked, so a bot can never
+    // hand one over and walk away - it can only stand with it. Without these the bot ferries in, the
+    // pack step-out pushes it straight back out, and it shuttles the same add in and out all wave.
+    //
+    // Nothing is ferried into a pile this bot would have to flee.
+    if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_DETONATE_RADIUS) >=
+        ULDUAR_FREYA_LASHER_PACK_MIN_COUNT)
+    {
+        return false;
+    }
+
+    // And nothing is ferried to a corral that already holds enough. The cap lifts itself as the pile
+    // dies, so the last few lashers still get collected.
+    return CountFreyaLashersNear(corral, state, ULDUAR_FREYA_DETONATE_RADIUS) <
+           ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+}
+
+bool FreyaLasherPackStepOutTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Tanks hold the corral; the off-tank being there is the point of it.
+    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRanged(bot) || botAI->IsHeal(bot)))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_DETONATE_RADIUS) >=
+           ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+}
+
+bool FreyaFrostNovaLashersTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (bot->getClass() != CLASS_MAGE)
+        return false;
+
+    if (!botAI->CanCastSpell("frost nova", bot))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) >=
+           ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+}
+
+bool FreyaTrapLasherCorralTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!IsFreyaLasherTrapHunter(botAI))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+    if (state.detonatingLashers.empty())
+        return false;
+
+    Position const post = GetFreyaLasherTrapPost(botAI);
+    if (post == Position())
+        return false;
+
+    // Walking to the post counts as work, so the node stays active while out of place even with the
+    // trap on cooldown - otherwise the hunter only ever starts the trip on the tick the trap comes up.
+    if (bot->GetExactDist2d(post) > ULDUAR_FREYA_LASHER_CORRAL_ARRIVE)
+        return true;
+
+    return botAI->CanCastSpell("frost trap", bot);
 }

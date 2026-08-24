@@ -172,6 +172,10 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     GatherFreyaWaveState(botAI, state);
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
+
+    if (HoldLasherCorral(state, currentTarget))
+        return true;
+
     Unit* target = GetFreyaTankTarget(botAI, state, currentTarget);
     if (!target)
         return false;
@@ -188,6 +192,70 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
         return Attack(target);
 
     return target == state.conservator ? ParkConservator(target) : false;
+}
+
+bool FreyaTankAddsAction::HoldLasherCorral(FreyaWaveState const& state, Unit* currentTarget)
+{
+    // Only the add tank, and only once its ladder is empty - a lasher wave carries nothing else, and
+    // stepping away from a Snaplasher or Conservator to chase lashers would drop the one add on this
+    // encounter that does have a threat table.
+    if (!PlayerbotAI::IsAssistTankOfIndex(bot, 0, true))
+        return false;
+
+    // LivingTrio covers the Snaplasher; GatherFreyaWaveState only ever fills these slots with live adds.
+    if (state.conservator || !state.LivingTrio().empty())
+        return false;
+
+    if (state.detonatingLashers.empty())
+        return false;
+
+    Position const corral = GetFreyaLasherCorral(botAI);
+    if (corral == Position())
+        return false;
+
+    // Every branch below owns the tick. Falling through would hand the tank back to the ladder, whose
+    // last rung is Freya, and walk it straight off the corral.
+    if (bot->GetExactDist2d(corral) > ULDUAR_FREYA_LASHER_CORRAL_ARRIVE)
+    {
+        MoveTo(bot->GetMapId(), corral.GetPositionX(), corral.GetPositionY(), corral.GetPositionZ(), false, false,
+               false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+        return true;
+    }
+
+    // A taunt here is worth less than ten seconds - the lasher wipes its threat list and rolls a fresh
+    // random player on its next tick regardless. It is still one add held off the raid at a time.
+    Unit* loose = nullptr;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive() || lasher->GetVictim() == bot)
+            continue;
+
+        if (!loose || bot->GetExactDist2d(lasher) < bot->GetExactDist2d(loose))
+            loose = lasher;
+    }
+
+    if (loose && UldCastClassTaunt(botAI, loose))
+        return true;
+
+    // One shout a pull, spent when the corral is at its fullest. Nothing else on this encounter uses it
+    // and it is the only taunt that reaches the whole pile at once. Righteous Defense is absent on
+    // purpose: it taunts attackers of a friendly target, not an area.
+    if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) >=
+        ULDUAR_FREYA_LASHER_PACK_MIN_COUNT)
+    {
+        if (bot->getClass() == CLASS_WARRIOR && botAI->CastSpell("challenging shout", bot))
+            return true;
+
+        if (bot->getClass() == CLASS_DRUID && botAI->CastSpell("challenging roar", bot))
+            return true;
+    }
+
+    // Same leash as everyone else: hit what is standing on the corral, never walk out to one.
+    Unit* local = GetFreyaLocalLasherTarget(botAI, state, currentTarget, ULDUAR_FREYA_MELEE_LASHER_RANGE);
+    if (local && local != currentTarget)
+        Attack(local);
+
+    return true;
 }
 
 bool FreyaTankAddsAction::ParkConservator(Unit* conservator)
@@ -406,4 +474,83 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
                   true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool FreyaDragLasherToCorralAction::isUseful()
+{
+    FreyaDragLasherToCorralTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaDragLasherToCorralAction::Execute(Event /*event*/)
+{
+    Position const corral = GetFreyaLasherCorral(botAI);
+    if (corral == Position())
+        return false;
+
+    return MoveTo(bot->GetMapId(), corral.GetPositionX(), corral.GetPositionY(), corral.GetPositionZ(), false,
+                  false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool FreyaLasherPackStepOutAction::isUseful()
+{
+    FreyaLasherPackStepOutTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaLasherPackStepOutAction::Execute(Event /*event*/)
+{
+    std::vector<Position> blasts;
+    std::list<Creature*> lashers;
+    bot->GetCreatureListWithEntryInGrid(lashers, NPC_DETONATING_LASHER, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    for (Creature* lasher : lashers)
+    {
+        if (lasher && lasher->IsAlive())
+            blasts.push_back(lasher->GetPosition());
+    }
+
+    if (blasts.empty())
+        return false;
+
+    Position safe = FindNearestPositionClearOfHazards(bot, blasts, ULDUAR_FREYA_LASHER_PACK_CLEAR,
+                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    if (safe == Position())
+        return false;
+
+    return MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool FreyaFrostNovaLashersAction::isUseful()
+{
+    FreyaFrostNovaLashersTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaFrostNovaLashersAction::Execute(Event /*event*/)
+{
+    // Cast on self rather than through "frost nova": that action gates on the *current target* being
+    // within 10 yd, and a ranged mage's current target is the focused lasher, usually across the room.
+    // Frost Nova is a sphere on the caster, so the pack standing on the mage is what it actually needs.
+    return botAI->CastSpell("frost nova", bot);
+}
+
+bool FreyaTrapLasherCorralAction::isUseful()
+{
+    FreyaTrapLasherCorralTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaTrapLasherCorralAction::Execute(Event /*event*/)
+{
+    Position const post = GetFreyaLasherTrapPost(botAI);
+    if (post == Position())
+        return false;
+
+    if (bot->GetExactDist2d(post) > ULDUAR_FREYA_LASHER_CORRAL_ARRIVE)
+        return MoveTo(bot->GetMapId(), post.GetPositionX(), post.GetPositionY(), post.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+
+    // The trap drops at the hunter's feet, so being on the post is the whole placement.
+    return botAI->CastSpell("frost trap", bot);
 }

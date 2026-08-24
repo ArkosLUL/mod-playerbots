@@ -64,6 +64,43 @@ public:
     bool IsActive() override;
 };
 
+// Ranged and healers walk a lasher that has picked them out to the corral behind Freya. Melee are
+// excluded: a melee bot that ferried one would then be standing in the pile the blasts go off in.
+class FreyaDragLasherToCorralTrigger : public Trigger
+{
+public:
+    FreyaDragLasherToCorralTrigger(PlayerbotAI* ai) : Trigger(ai, "freya drag lasher to corral") {}
+    bool IsActive() override;
+};
+
+// The corral has enough lashers on it to be lethal. Doubles as the return leg of the drag - there is
+// no separate walk-back node - and as the mage's exit after it novas.
+class FreyaLasherPackStepOutTrigger : public Trigger
+{
+public:
+    FreyaLasherPackStepOutTrigger(PlayerbotAI* ai) : Trigger(ai, "freya lasher pack step out") {}
+    bool IsActive() override;
+};
+
+// Frost Nova roots the pack for a full 8s: it carries no AURA_INTERRUPT_FLAG_TAKE_DAMAGE, so raid
+// damage does not break it, and the lasher has no CREATURE_FLAG_EXTRA_ALL_DIMINISH, so it never
+// diminishes either.
+class FreyaFrostNovaLashersTrigger : public Trigger
+{
+public:
+    FreyaFrostNovaLashersTrigger(PlayerbotAI* ai) : Trigger(ai, "freya frost nova lashers") {}
+    bool IsActive() override;
+};
+
+// One hunter keeps a Frost Trap on the lane out of the corral. 30s patch on a 30s cooldown, so the
+// -50% snare is up continuously.
+class FreyaTrapLasherCorralTrigger : public Trigger
+{
+public:
+    FreyaTrapLasherCorralTrigger(PlayerbotAI* ai) : Trigger(ai, "freya trap lasher corral") {}
+    bool IsActive() override;
+};
+
 // Hard mode: bot is standing in an Unstable Sun Beam and must step out before it detonates.
 class FreyaDodgeUnstableSunBeamTrigger : public Trigger
 {

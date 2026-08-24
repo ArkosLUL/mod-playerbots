@@ -48,6 +48,10 @@ public:
 private:
     bool ParkConservator(Unit* conservator);
 
+    // Pure lasher wave: park at the corral and taunt whatever wanders off it. True means it owned the
+    // tick and the add ladder must not run, or the tank walks back to Freya.
+    bool HoldLasherCorral(FreyaWaveState const& state, Unit* currentTarget);
+
     // Latched for the spore's whole life. Fresh spores keep appearing 20 yd from wherever the
     // Conservator currently is, so re-deriving the destination every tick can flip it mid-walk and turn
     // the tank around.
@@ -84,6 +88,43 @@ public:
 
 private:
     Player* GetRedirectTank();
+};
+
+// Walk a lasher that has picked this bot out to the corral behind Freya. No threat handling: the add
+// is faster than the bot and follows on its own until its next 10s retarget.
+class FreyaDragLasherToCorralAction : public MovementAction
+{
+public:
+    FreyaDragLasherToCorralAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya drag lasher to corral") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Get out of a lethal pile of lashers. Also the return leg of the drag and the mage's exit after a nova.
+class FreyaLasherPackStepOutAction : public MovementAction
+{
+public:
+    FreyaLasherPackStepOutAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya lasher pack step out") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Root the corral. Runs above the step-out so the mage novas first and leaves second.
+class FreyaFrostNovaLashersAction : public Action
+{
+public:
+    FreyaFrostNovaLashersAction(PlayerbotAI* botAI) : Action(botAI, "freya frost nova lashers") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Keep a Frost Trap on the lane out of the corral.
+class FreyaTrapLasherCorralAction : public MovementAction
+{
+public:
+    FreyaTrapLasherCorralAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya trap lasher corral") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
 };
 
 // Hard mode: kill the Iron Roots creature trapping the bot - its death removes the root DoT.

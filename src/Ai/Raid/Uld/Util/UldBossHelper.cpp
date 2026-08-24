@@ -1661,6 +1661,103 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
     return positions;
 }
 
+Position GetFreyaLasherCorral(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    Creature* creature = freya ? freya->ToCreature() : nullptr;
+    if (!creature)
+        return Position();
+
+    // Home position, not the live one. Freya never walks, but she pivots to face her tank, and reading
+    // GetOrientation() would swing the corral around the room every time the tank stepped.
+    Position const& home = creature->GetHomePosition();
+    float const angle = home.GetOrientation() + static_cast<float>(M_PI);
+
+    float x = home.GetPositionX() + ULDUAR_FREYA_LASHER_CORRAL_DISTANCE * std::cos(angle);
+    float y = home.GetPositionY() + ULDUAR_FREYA_LASHER_CORRAL_DISTANCE * std::sin(angle);
+    float z = home.GetPositionZ();
+
+    // Height only, no collision raycast. Several triggers read this every tick for every bot, and the
+    // Conservatory floor is open: all 16 headings of the 35 yd ring around her spawn probe on-mesh, so
+    // the raycast would cost a path generation per bot per tick to confirm what the terrain already is.
+    bot->UpdateAllowedPositionZ(x, y, z);
+
+    return Position(x, y, z);
+}
+
+Position GetFreyaLasherTrapPost(PlayerbotAI* botAI)
+{
+    Position const corral = GetFreyaLasherCorral(botAI);
+    if (corral == Position())
+        return Position();
+
+    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    Creature* creature = freya ? freya->ToCreature() : nullptr;
+    if (!creature)
+        return Position();
+
+    Player* bot = botAI->GetBot();
+    Position const& home = creature->GetHomePosition();
+    float const angle = corral.GetAngle(&home);
+
+    float x = corral.GetPositionX() + ULDUAR_FREYA_LASHER_TRAP_OFFSET * std::cos(angle);
+    float y = corral.GetPositionY() + ULDUAR_FREYA_LASHER_TRAP_OFFSET * std::sin(angle);
+    float z = corral.GetPositionZ();
+    bot->UpdateAllowedPositionZ(x, y, z);
+
+    return Position(x, y, z);
+}
+
+uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius)
+{
+    uint32 count = 0;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (lasher && lasher->IsAlive() && centre.GetExactDist2d(lasher->GetPosition()) <= radius)
+            ++count;
+    }
+
+    return count;
+}
+
+Unit* GetFreyaLasherChasing(Player* bot, FreyaWaveState const& state)
+{
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (lasher && lasher->IsAlive() && lasher->GetVictim() == bot)
+            return lasher;
+    }
+
+    return nullptr;
+}
+
+bool IsFreyaLasherTrapHunter(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->getClass() != CLASS_HUNTER)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->getClass() != CLASS_HUNTER)
+            continue;
+
+        if (!GET_PLAYERBOT_AI(member) || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (member->GetGUID() < bot->GetGUID())
+            return false;
+    }
+
+    return true;
+}
+
 // Lowest health first, so two Sentinels up do not split the raid's damage and the skull does not flip
 // between them as the marking bot moves. Entry order alone is resolved per bot and is not stable.
 static Unit* GetLowestHealthUnitByEntry(PlayerbotAI* botAI, uint32 entry)
