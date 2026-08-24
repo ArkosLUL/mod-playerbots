@@ -19,11 +19,11 @@ import pathlib
 import sys
 from collections import defaultdict
 
-SUPPORTED_SCHEMA = 5
+SUPPORTED_SCHEMA = 6
 
-# Old traces stay readable: every v5 addition is a new field or a new record, so the only thing a v4
-# file loses is the detail those carry.
-READABLE_SCHEMAS = (4, 5)
+# Old traces stay readable: every addition since v4 is a new field or a new record, so an older file
+# only loses the detail those carry.
+READABLE_SCHEMAS = (4, 5, 6)
 
 
 def clock(ms: int) -> str:
@@ -255,6 +255,21 @@ def hazards_at(trace: Trace, death: dict) -> tuple[list, list, list, list]:
 REFUSALS = {"blocked", "nopath"}
 
 
+def note_text(trace: Trace, rec: dict) -> str:
+    """A note's payload is free text, so a guid written into one arrives as a bare number.
+
+    Joined here rather than at the recorder because the unit records are already in the file and only
+    the join is missing, the same way every other guid in the schema is resolved on read. Substitutes
+    only when the whole payload is a guid the trace knows, so counters like hodir.slot and coordinate
+    strings like hodir.anchor are left alone.
+    """
+    txt = str(rec.get("txt", ""))
+    body = txt.strip()
+    if body.isdigit() and int(body) in trace.names:
+        return trace.name(int(body))
+    return txt
+
+
 def move_line(trace: Trace, rec: dict) -> str:
     reason = rec.get("r", "")
     if not reason:
@@ -263,6 +278,18 @@ def move_line(trace: Trace, rec: dict) -> str:
         status = f"REFUSED: {reason}"
     else:
         status = reason
+
+    # The gate yields only to a strictly higher priority, so a "wait" is a contest and the holder is
+    # the other half of it. Absent before v6, and absent on Follow and Chase, which never face the gate.
+    priority = rec.get("pr")
+    if priority:
+        status = f"{status}, {priority}"
+    elif priority == "":
+        status = f"{status}, no priority"
+
+    holder = rec.get("hpr")
+    if holder:
+        status = f"{status}, held by {holder} {rec.get('hms', 0) / 1000:.1f}s"
 
     where = f"({rec['x']}, {rec['y']}, {rec['z']})"
     target = rec.get("tgt")
@@ -453,7 +480,7 @@ def show_bot(trace: Trace, name: str) -> int:
         elif event == "move" and rec.get("g") == guid:
             print(f"{stamp}  move   {move_line(trace, rec)}")
         elif event == "note" and rec.get("g") == guid:
-            print(f"{stamp}  note   {rec['k']} = {rec['txt']}")
+            print(f"{stamp}  note   {rec['k']} = {note_text(trace, rec)}")
         elif event == "dmg" and rec.get("d") == guid:
             print(f"{stamp}  dmg    {rec['a']:>7} from {trace.name(rec['s'])} {trace.spell(rec['sp'])} -> {rec['hp']}%")
         elif event == "heal" and rec.get("d") == guid:
@@ -515,7 +542,9 @@ def show_notes(trace: Trace, prefix: str | None = None) -> int:
             detail = rec.get("boss") or rec.get("out")
             print(f"{clock(rec['t']):>9}  {event.upper():<6} {detail}")
         elif event == "note":
-            print(f"{clock(rec['t']):>9}  note   {trace.name(rec.get('g')):<16} {rec['k']} = {rec['txt']}")
+            print(
+                f"{clock(rec['t']):>9}  note   {trace.name(rec.get('g')):<16} {rec['k']} = {note_text(trace, rec)}"
+            )
         elif event == "haz":
             shape = rec.get("shape", "?")
             # Shape fields differ per shape, so print whatever the probe attached rather than a

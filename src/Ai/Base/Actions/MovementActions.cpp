@@ -52,6 +52,43 @@ void NoteTracking(Player* bot, RaidObs::MoveKind kind, WorldObject* obj, RaidObs
     RaidObs::NoteMove(bot, kind, obj->GetPositionX(), obj->GetPositionY(), obj->GetPositionZ(), obj->GetGUID(),
                       outcome);
 }
+
+// RaidObs mirrors MovementPriority rather than including it, so Bot/Obs does not depend on Ai. These
+// hold the two in step - reorder either enum and this stops compiling instead of quietly mislabelling
+// every move in the trace. RaidObs adds None in front, which is why each pair is offset by one.
+static_assert(static_cast<uint8>(RaidObs::MovePriority::Idle) ==
+                  static_cast<uint8>(MovementPriority::MOVEMENT_IDLE) + 1,
+              "RaidObs::MovePriority is out of step with MovementPriority");
+static_assert(static_cast<uint8>(RaidObs::MovePriority::Wander) ==
+                  static_cast<uint8>(MovementPriority::MOVEMENT_WANDER) + 1,
+              "RaidObs::MovePriority is out of step with MovementPriority");
+static_assert(static_cast<uint8>(RaidObs::MovePriority::Normal) ==
+                  static_cast<uint8>(MovementPriority::MOVEMENT_NORMAL) + 1,
+              "RaidObs::MovePriority is out of step with MovementPriority");
+static_assert(static_cast<uint8>(RaidObs::MovePriority::Combat) ==
+                  static_cast<uint8>(MovementPriority::MOVEMENT_COMBAT) + 1,
+              "RaidObs::MovePriority is out of step with MovementPriority");
+static_assert(static_cast<uint8>(RaidObs::MovePriority::Forced) ==
+                  static_cast<uint8>(MovementPriority::MOVEMENT_FORCED) + 1,
+              "RaidObs::MovePriority is out of step with MovementPriority");
+
+RaidObs::MovePriority ObsPriority(MovementPriority priority)
+{
+    return static_cast<RaidObs::MovePriority>(static_cast<uint8>(priority) + 1);
+}
+
+// What the in-flight walk is, for a command the gate turned down. Safe to read after the fact: a
+// refused move never reaches LastMovement::Set, so nothing has touched it since the gate looked.
+void NoteRefusedByGate(Player* bot, RaidObs::MoveKind kind, float x, float y, float z,
+                       MovementPriority priority, LastMovement const& lastMove)
+{
+    uint32 const now = getMSTime();
+    uint32 const until = lastMove.msTime + static_cast<uint32>(lastMove.lastdelayTime);
+
+    RaidObs::NoteMove(bot, kind, x, y, z, ObjectGuid::Empty, RaidObs::MoveOutcome::Waiting,
+                      ObsPriority(priority), ObsPriority(lastMove.priority),
+                      until > now ? until - now : 0);
+}
 }  // namespace
 
 MovementAction::MovementAction(PlayerbotAI* botAI, std::string const name) : Action(botAI, name)
@@ -96,7 +133,14 @@ bool MovementAction::JumpTo(uint32 mapId, float x, float y, float z, MovementPri
     }
 
     if (RaidObs::Active())
-        RaidObs::NoteMove(bot, RaidObs::MoveKind::Jump, x, y, z, ObjectGuid::Empty, outcome);
+    {
+        if (outcome == RaidObs::MoveOutcome::Waiting)
+            NoteRefusedByGate(bot, RaidObs::MoveKind::Jump, x, y, z, priority,
+                              AI_VALUE(LastMovement&, "last movement"));
+        else
+            RaidObs::NoteMove(bot, RaidObs::MoveKind::Jump, x, y, z, ObjectGuid::Empty, outcome,
+                              ObsPriority(priority));
+    }
 
     return outcome == RaidObs::MoveOutcome::Issued;
 }
@@ -197,7 +241,14 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool idle, 
         MoveToImpl(mapId, x, y, z, idle, react, normal_only, exact_waypoint, priority, lessDelay, backwards);
 
     if (RaidObs::Active())
-        RaidObs::NoteMove(bot, RaidObs::MoveKind::Point, x, y, z, ObjectGuid::Empty, outcome);
+    {
+        if (outcome == RaidObs::MoveOutcome::Waiting)
+            NoteRefusedByGate(bot, RaidObs::MoveKind::Point, x, y, z, priority,
+                              AI_VALUE(LastMovement&, "last movement"));
+        else
+            RaidObs::NoteMove(bot, RaidObs::MoveKind::Point, x, y, z, ObjectGuid::Empty, outcome,
+                              ObsPriority(priority));
+    }
 
     return outcome == RaidObs::MoveOutcome::Issued;
 }

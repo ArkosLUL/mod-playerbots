@@ -57,7 +57,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 a `reset` or `idle` as `wipe`. Hodir's script reports `NOT_STARTED` on release, which filed a 23-of-24
 wipe as `reset`.
 
-## Schema (`v: 5`)
+## Schema (`v: 6`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -79,7 +79,7 @@ else `7`. `0` still means no unit.
 | `cast` | `s`,`sp`,`tgt`,`ct` cast time — cast **start**, the reaction window; roster, its pets and watched creatures only |
 | `act` | `g`,`a`,`rel`,`vd`: OK, FAILED, IMPOSSIBLE, USELESS, PREREQ, UNKNOWN |
 | `veto` | `g`,`m` multiplier,`a` action it zeroed |
-| `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action |
+| `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
 | `note` | `g`,`k` kind,`txt` — assignments, latches, phases, derived state |
 | `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object |
 | `death` | `g`,`killer`,`x`,`y`,`z`,`dist{}`,`auras[]`,`rewind[]`,`blow[]`,`hplast[]`,`acts[]`,`lastmove{}` |
@@ -92,7 +92,10 @@ else `7`. `0` still means no unit.
 
 **Name every id in the file.** `unit` and `spell` are written once each, so later records carry a bare
 number and the trace still reads standalone: `spell 63511` needs a DBC open beside it, `Frozen Blows
-63511` does not.
+63511` does not. Call `EnsureUnit`/`EnsureSpell` from *every* field that emits an id, not just the
+obvious one — `aura.s` and `cast.tgt` stayed unnamed for a release because only the caster was covered,
+and a death block read `Flash Freeze from #1:1925`. A guid inside `note.txt` is the exception: that is
+free text the recorder cannot inspect, so `postmortem.py` joins it on read.
 
 **Emit per engine pass, not per verdict.** A pass walks several action nodes and reports a verdict for
 each, so no single verdict is news on its own. `act` and `veto` buffer until `BeginTick` closes the
@@ -129,7 +132,9 @@ Every damage hook is a `Send*Log` hook, so a fall or a script kill reaches none 
 rewind empty. `NoteKillingBlow` fills `death.blow` from `Unit::DealDamage`, which all of them pass
 through, taking only the blow that lands with the bot's health or more — emitting the rest from there
 would double every hit the log hooks already see. `death.hplast` carries the last sampled health and
-when, so the record states the drop even when nothing caught the blow.
+when, so the record states the drop even when nothing caught the blow. `blow` names no spell and cannot:
+`OnDamage` carries no `SpellInfo`, and the hooks that do are modifiers rather than the funnel, missing
+the environmental and script damage `blow` exists for. The debuff list answers that instead.
 
 Same instance is not the same pull: gating `cast` on the session alone picked up 253 casts from a mob
 two rooms away and none at all from the raid.
@@ -160,6 +165,15 @@ re-offers every tick, and `there` means it already stands on it. A non-issued de
 second and never latched into `death.lastmove`, whose `arrived` would otherwise be measured against a
 position no MotionMaster saw. `follow` and `chase` are left out of that latch for the same reason:
 neither has a destination to arrive at.
+
+**A `wait` is a contest, so record both sides.** `IsWaitingForLastMove` yields only to a *strictly*
+higher priority, so an equal-priority command waits out the whole walk already in flight. `pr` is what
+this command was issued at, `hpr`/`hms` what beat it and for how long. Without them a trace reports two
+thirds of moves refused and cannot say what won: Hodir's shelter move lands 12.7% of the time purely
+because it sits at `combat` alongside `reach melee`. `follow` and `chase` never reach the gate and carry
+`pr` empty — worth seeing: they steer without outranking anything. Names, not ordinals:
+`RaidObs::MovePriority` mirrors `MovementPriority` so `Bot/Obs` stays off `Ai`, and
+`MovementActions.cpp` static_asserts the two in step.
 
 Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `postmortem.py` on any field change; an
 additive one keeps the old version in `READABLE_SCHEMAS` so traces already on disk still read.

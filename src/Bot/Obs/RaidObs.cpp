@@ -184,6 +184,21 @@ char const* MoveReason(MoveOutcome outcome)
     }
 }
 
+// Spelled out rather than written as the enum's ordinal, for the same reason the spell dictionary
+// exists: a trace that needs the enum to hand is not self-contained.
+char const* MovePriorityName(MovePriority priority)
+{
+    switch (priority)
+    {
+        case MovePriority::Idle:   return "idle";
+        case MovePriority::Wander: return "wander";
+        case MovePriority::Normal: return "normal";
+        case MovePriority::Combat: return "combat";
+        case MovePriority::Forced: return "forced";
+        default:                   return "";
+    }
+}
+
 std::string SlugOf(std::string const& name)
 {
     std::string out;
@@ -1615,6 +1630,10 @@ void NoteAura(Unit* target, Aura* aura, bool removed)
 
     EnsureSpell(s, spellId);
 
+    // Null once the caster is gone, which EnsureUnit handles. The guid below stays valid either way,
+    // so a caster that despawned before this fired keeps its bare number - the honest answer.
+    EnsureUnit(s, aura->GetCaster());
+
     std::string fields = "\"d\":" + std::to_string(key);
     fields += ",\"s\":" + std::to_string(state.caster);
     fields += ",\"sp\":" + std::to_string(spellId);
@@ -1652,6 +1671,7 @@ void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTim
         return;
 
     EnsureUnit(s, caster);
+    EnsureUnit(s, target);
     EnsureSpell(s, spell->Id);
 
     std::string fields = "\"s\":" + std::to_string(GuidKey(caster->GetGUID()));
@@ -1710,7 +1730,8 @@ void NoteVeto(Player* bot, char const* multiplier, char const* action)
     trace.tick.push_back({getMSTime(), true, action, 0.0f, multiplier});
 }
 
-void NoteMove(Player* bot, MoveKind kind, float x, float y, float z, ObjectGuid target, MoveOutcome outcome)
+void NoteMove(Player* bot, MoveKind kind, float x, float y, float z, ObjectGuid target, MoveOutcome outcome,
+              MovePriority priority, MovePriority holder, uint32 holdMs)
 {
     if (!Active() || !bot)
         return;
@@ -1778,6 +1799,14 @@ void NoteMove(Player* bot, MoveKind kind, float x, float y, float z, ObjectGuid 
     fields += ",\"ok\":" + std::string(issued ? "1" : "0");
     fields += ",\"r\":\"" + std::string(MoveReason(outcome)) + "\"";
     fields += ",\"by\":" + Quoted(by);
+    fields += ",\"pr\":\"" + std::string(MovePriorityName(priority)) + "\"";
+
+    // Only on a refusal the gate actually made. Everywhere else there is no walk in flight to name.
+    if (outcome == MoveOutcome::Waiting)
+    {
+        fields += ",\"hpr\":\"" + std::string(MovePriorityName(holder)) + "\"";
+        fields += ",\"hms\":" + std::to_string(holdMs);
+    }
 
     Emit(s, now, "move", fields);
 }

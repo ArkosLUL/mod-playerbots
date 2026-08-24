@@ -32,7 +32,7 @@ class Unit;
 namespace RaidObs
 {
 // Bumped whenever a record's field layout changes, so the analyzer can still read older traces.
-constexpr uint32 SCHEMA_VERSION = 5;
+constexpr uint32 SCHEMA_VERSION = 6;
 
 // True only while at least one trace is open. Probes on shared hot paths test this before doing
 // anything else, so with nothing recording the framework costs one predictable branch.
@@ -112,7 +112,27 @@ enum class MoveOutcome : uint8
     AlreadyThere,
 };
 
-void NoteMove(Player* bot, MoveKind kind, float x, float y, float z, ObjectGuid target, MoveOutcome outcome);
+// Mirrors MovementPriority in Ai/Base/Value/LastMovementValue.h. Mirrored rather than included
+// because Bot/Obs must not depend on Ai; MovementActions.cpp static_asserts that the two agree.
+//
+// None is not a tier. Follow and Chase steer the MotionMaster without passing the priority gate at
+// all, and recording that is the point: a bot can be held in place by a walk it never had to outrank.
+enum class MovePriority : uint8
+{
+    None,
+    Idle,
+    Wander,
+    Normal,
+    Combat,
+    Forced,
+};
+
+// `holder` and `holdMs` describe the walk already in flight, and only mean anything when the outcome
+// is Waiting: the gate yields to a strictly higher priority, so without them a refusal says a command
+// lost without saying to what or for how long.
+void NoteMove(Player* bot, MoveKind kind, float x, float y, float z, ObjectGuid target, MoveOutcome outcome,
+              MovePriority priority = MovePriority::None, MovePriority holder = MovePriority::None,
+              uint32 holdMs = 0);
 
 // Publishes the action the engine is currently executing. A movement command carries no hint of who
 // issued it, and "two actions steering the same MotionMaster" is only visible once it does.
