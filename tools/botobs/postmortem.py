@@ -19,11 +19,12 @@ import pathlib
 import sys
 from collections import defaultdict
 
-SUPPORTED_SCHEMA = 6
+SUPPORTED_SCHEMA = 7
 
-# Old traces stay readable: every addition since v4 is a new field or a new record, so an older file
-# only loses the detail those carry.
-READABLE_SCHEMAS = (4, 5, 6)
+# Old traces stay readable: every addition through v6 is a new field or a new record, so an older file
+# only loses the detail those carry. v7 gave an existing column a -1 sentinel, but what it replaces was
+# nonsense in older files too, so one render serves both.
+READABLE_SCHEMAS = (4, 5, 6, 7)
 
 
 def clock(ms: int) -> str:
@@ -157,13 +158,16 @@ def is_debuff(row: list) -> bool:
 
 def aura_line(trace: Trace, row: list, death_t: int) -> str:
     spell, stacks, duration, caster, applied, removed = row[:6]
-    held = (death_t - applied) / 1000.0
+
+    # -1 means the recorder never saw the apply, which is every raid buff cast before the pull. Older
+    # traces wrote -startMs there instead; both are unknown, and a made-up duration is worse than none.
+    held = f"{'?':>6}" if applied < 0 else f"{(death_t - applied) / 1000:5.1f}s"
     left = "-" if duration < 0 else f"{duration / 1000:.1f}s left"
     if removed < 0 or death_t - removed <= STRIP_AT_DEATH_MS:
         gone = ""
     else:
         gone = f", fell off {(death_t - removed) / 1000:.1f}s before"
-    return f"{trace.spell(spell)} x{stacks:<3} {left:>10}  held {held:5.1f}s  from {trace.name(caster)}{gone}"
+    return f"{trace.spell(spell)} x{stacks:<3} {left:>10}  held {held}  from {trace.name(caster)}{gone}"
 
 
 def held_to_death(row: list, death_t: int) -> bool:

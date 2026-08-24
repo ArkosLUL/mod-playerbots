@@ -57,7 +57,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 a `reset` or `idle` as `wipe`. Hodir's script reports `NOT_STARTED` on release, which filed a 23-of-24
 wipe as `reset`.
 
-## Schema (`v: 6`)
+## Schema (`v: 7`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -81,11 +81,12 @@ else `7`. `0` still means no unit.
 | `veto` | `g`,`m` multiplier,`a` action it zeroed |
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
 | `note` | `g`,`k` kind,`txt` — assignments, latches, phases, derived state |
-| `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object |
+| `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object; timeline only, never tested against a death |
 | `death` | `g`,`killer`,`x`,`y`,`z`,`dist{}`,`auras[]`,`rewind[]`,`blow[]`,`hplast[]`,`acts[]`,`lastmove{}` |
 | `truncated` | file hit `MaxFileMB`; the `end` record is still written past it |
 
-`death.auras` rows are `[sp,stacks,dur,caster,appliedT,removedT,positive]`, `removedT` −1 while held;
+`death.auras` rows are `[sp,stacks,dur,caster,appliedT,removedT,positive]`, `removedT` −1 while held
+and `appliedT` −1 when the recorder never saw the apply;
 `death.rewind` rows are `[t,source,sp,amount]`; `death.blow` is `[source,amount]` and `death.hplast`
 `[hp%,t]`; `death.acts` rows are `[firstT,lastT,action,rel,verdict,repeats]`, a veto's verdict reading
 `VETO:<multiplier>`.
@@ -94,8 +95,10 @@ else `7`. `0` still means no unit.
 number and the trace still reads standalone: `spell 63511` needs a DBC open beside it, `Frozen Blows
 63511` does not. Call `EnsureUnit`/`EnsureSpell` from *every* field that emits an id, not just the
 obvious one — `aura.s` and `cast.tgt` stayed unnamed for a release because only the caster was covered,
-and a death block read `Flash Freeze from #1:1925`. A guid inside `note.txt` is the exception: that is
-free text the recorder cannot inspect, so `postmortem.py` joins it on read.
+and a death block read `Flash Freeze from #1:1925`. A new *emitter* needs the sweep as much as a new
+field: `NoteHazard` went unswept until Thorim became its first caller, then wrote 121 rows of bare
+`62057`. A guid inside `note.txt` is the exception: that is free text the recorder cannot inspect, so
+`postmortem.py` joins it on read.
 
 **Emit per engine pass, not per verdict.** A pass walks several action nodes and reports a verdict for
 each, so no single verdict is news on its own. `act` and `veto` buffer until `BeginTick` closes the
@@ -118,6 +121,11 @@ death-persistent auras are still applied — v3 death records listed 57 talents 
 cannot also empty every death record, and stamps `removedT` rather than erasing, because the strip runs
 through that same hook. Anything dropped within 2 s of the death is still reported, flagged. The strip
 stamps the death's own timestamp, so a `removedT` that close means held to death, not worn off.
+
+**An unknown timestamp gets a sentinel, never arithmetic.** `NoteAura` leaves `appliedMs` 0 when the
+first event it sees for a spell is a removal — anything buffed before the pull — and stamping 0 yields
+`−startMs`, one constant across every bot. `postmortem.py` renders the sentinel `?`: a fabricated
+`held 1740.7s` in a 155 s fight is worse than no answer.
 
 **Helps or hurts comes from the spell, not the caster.** `p` is `SpellInfo::IsPositive`. The caster is
 wrong both ways — totems and pets buff from a creature guid, and Biting Cold is applied to the player
@@ -148,6 +156,11 @@ raid's own Death and Decay. What is lethal there is a creature, so hazard units 
 object that never enter combat are swept into `snap.u` instead, capped at `OBS_MAX_WATCHED` (40) so a
 trash-heavy pull cannot blow the row count up.
 
+`haz` is the other channel and the two never meet — `snap.hz` is what a sweep found, `haz` what nothing
+can sweep for. Only `snap.hz` feeds the death block's containment test, so a `haz` mechanic reaches the
+timeline and never a `STOOD IN` line. A `lane` carries no geometry to test anyway: an origin, no heading
+or width, so only `side` separates Thorim's two.
+
 **Derive a side from a guid, never from a sampled unit.** `foe` comes from the dynamic object's caster
 guid, which outlives the caster. Asking a live roster member `IsHostileTo` flipped the same puddle
 mid-fight, twice over: the member sampled was whichever the map iterated first, and a caster that had
@@ -175,8 +188,10 @@ because it sits at `combat` alongside `reach melee`. `follow` and `chase` never 
 `RaidObs::MovePriority` mirrors `MovementPriority` so `Bot/Obs` stays off `Ai`, and
 `MovementActions.cpp` static_asserts the two in step.
 
-Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `postmortem.py` on any field change; an
-additive one keeps the old version in `READABLE_SCHEMAS` so traces already on disk still read.
+Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `postmortem.py` on any field *or value*
+change; an additive one keeps the old version in `READABLE_SCHEMAS` so traces already on disk still
+read. A new sentinel in an existing column is not additive — a reader that does not know it computes a
+wrong number.
 
 ## Adding a probe
 
@@ -228,6 +243,8 @@ it, so the helper that derives the geometry must say so (Thorim's Runic Smash la
 RaidObs::NoteHazardCircle(map, spellId, pos, radius, ttlMs);
 RaidObs::NoteHazard(map, spellId, origin, "sweep", "\"lead\":1.2,\"rate\":0.5", ttlMs);
 ```
+
+It lands on the timeline only, so give the shape enough fields to reconstruct it by hand.
 
 Anything else: `RaidObs::Note(bot, kind, text)`, which emits every call rather than on change. Reserve
 it for something that happens once and is in no other stream; nothing uses it today.

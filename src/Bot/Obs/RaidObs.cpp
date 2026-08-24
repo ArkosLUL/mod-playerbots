@@ -1899,6 +1899,10 @@ void NoteHazard(Map* map, uint32 spellId, Position const& origin, char const* sh
     if (!session)
         return;
 
+    // A hazard with no world object is the one spell nothing else in the trace has to mention, so this
+    // is the only chance to name it.
+    EnsureSpell(*session, spellId);
+
     std::string fields = "\"sp\":" + std::to_string(spellId);
     fields += ",\"shape\":\"" + std::string(shape) + "\"";
     fields += ",\"x\":" + Num(origin.GetPositionX());
@@ -1974,7 +1978,7 @@ void NoteDeath(Unit* unit, Unit* killer)
         auras += "," + std::to_string(state.stacks);
         auras += "," + std::to_string(state.duration);
         auras += "," + std::to_string(state.caster);
-        auras += "," + std::to_string(s.Stamp(state.appliedMs));
+        auras += "," + std::to_string(state.appliedMs ? s.Stamp(state.appliedMs) : int64(-1));
         auras += "," + std::to_string(state.removedMs ? s.Stamp(state.removedMs) : int64(-1));
         auras += "," + std::string(state.positive ? "1" : "0");
         auras += "]";
