@@ -72,12 +72,15 @@ bool HodirNearSnowpackedIcicleTrigger::IsActive()
 
     // Keyed on the shelter existing, not on the boss casting: the drift detonates for 14000 in 7 yd
     // at 3.7s, so running at it early is what the raid must not do. The shelter it leaves lives 12s
-    // and the freeze lands at 9s, which is 5.3s to cross the room.
+    // and the freeze lands 6.3s after it appears, which is the budget for crossing the room.
     Creature* shelter = GetHodirSharedShelter(botAI, bot);
     if (!shelter)
         return false;
 
-    return bot->GetExactDist2d(shelter) > ULDUAR_HODIR_SAFE_AREA_TOLERANCE;
+    // Release, not the park distance the action aims for. Testing the same number at both ends stands
+    // this trigger down the tick the bot arrives, and the ring anchor - which is suppressed only while
+    // this is active - takes the very next tick and walks it back out of the shelter.
+    return bot->GetExactDist2d(shelter) > ULDUAR_HODIR_SAFE_AREA_RELEASE;
 }
 
 bool HodirFrostResistanceTrigger::IsActive()

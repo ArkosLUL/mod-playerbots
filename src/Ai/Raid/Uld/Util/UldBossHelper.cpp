@@ -586,6 +586,16 @@ bool IsHodirEngaged(PlayerbotAI* botAI)
     return boss && boss->IsInCombat();
 }
 
+bool IsHodirFlashFreezeIncoming(PlayerbotAI* botAI)
+{
+    Unit* boss = GetHodir(botAI);
+
+    // Every cast slot, not CURRENT_GENERIC_SPELL: which slot a scripted boss cast lands in is the
+    // script's business, and guessing wrong here silently opens the window on nothing.
+    return boss && boss->HasUnitState(UNIT_STATE_CASTING) &&
+           boss->FindCurrentSpellBySpellId(SPELL_FLASH_FREEZE) != nullptr;
+}
+
 Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || !GetHodir(botAI))
@@ -594,9 +604,25 @@ Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
     std::list<Creature*> found;
     bot->GetCreatureListWithEntryInGrid(found, NPC_SNOWPACKED_ICICLE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
 
-    // Nearest the raid anchor rather than nearest the bot, so the whole raid converges on one drift
+    // Before the centre, not after: a shelter only exists for about 6s of every 49s cycle, and the
+    // centre costs a second grid sweep to find the fire.
+    if (found.empty())
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "hodir.shelter", "none");
+
+        return nullptr;
+    }
+
+    // Nearest the ring centre rather than nearest the bot, so the whole raid converges on one drift
     // and re-forms cleanly instead of splitting across the two or three that spawn. Trigger and
     // action both call this: two derivations of "which shelter" would disagree and oscillate.
+    //
+    // The centre, not ULDUAR_HODIR_RAID_ANCHOR: the ring rides a Toasty Fire now and sits a median
+    // 9.5 yd off that fixed point, p90 17.6. Measuring from a spot the raid is not standing on was
+    // picking a drift 25 yd away with three other candidates on the floor.
+    Position const centre = GetHodirRingCentre(botAI, bot);
+
     Creature* best = nullptr;
     float bestDist = 0.0f;
     for (Creature* shelter : found)
@@ -604,7 +630,7 @@ Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
         if (!shelter || !shelter->IsAlive())
             continue;
 
-        float const dist = shelter->GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR);
+        float const dist = shelter->GetExactDist2d(&centre);
         if (!best || dist < bestDist)
         {
             best = shelter;
@@ -1025,7 +1051,18 @@ Player* GetHodirResistancePaladin(PlayerbotAI* /*botAI*/, Player* bot)
                                    SPELL_FROST_RESISTANCE_AURA_RANK_3, SPELL_FROST_RESISTANCE_AURA_RANK_2,
                                    SPELL_FROST_RESISTANCE_AURA_RANK_1};
 
-    Player* fallback = nullptr;
+    // A paladin tank first, then any non-healer, then whoever is left. The aura reaches 40 yd (48945,
+    // radius index 23) and the two people it has to cover are the ones eating Frozen Blows melee -
+    // 63511 is 39999 base and lands a median 23691 after resists, against a 34-45k tank pool. A tank
+    // never leaves the corner, so it holds them at 100% against 82% for a retribution paladin who runs
+    // the dodge and the shelter; every tank killing blow in 603_3_hodir_1787590072 landed with the aura
+    // off and the retribution paladin 44-60 yd away, two of them resisting nothing at all.
+    //
+    // The raid loses about ten points of coverage for it, which is the right trade: a resist point on
+    // the tank is ~6000 off a swing that kills, and on the raid ~700 off a tick the healers cover.
+    Player* tank = nullptr;
+    Player* dps = nullptr;
+    Player* healer = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -1044,14 +1081,26 @@ Player* GetHodirResistancePaladin(PlayerbotAI* /*botAI*/, Player* bot)
         if (!knows)
             continue;
 
-        if (!PlayerbotAI::IsTank(member) && !PlayerbotAI::IsHeal(member))
-            return member;
-
-        if (!fallback)
-            fallback = member;
+        if (PlayerbotAI::IsTank(member))
+        {
+            if (!tank)
+                tank = member;
+        }
+        else if (PlayerbotAI::IsHeal(member))
+        {
+            if (!healer)
+                healer = member;
+        }
+        else if (!dps)
+        {
+            dps = member;
+        }
     }
 
-    return fallback;
+    if (tank)
+        return tank;
+
+    return dps ? dps : healer;
 }
 
 bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block)

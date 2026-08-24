@@ -754,7 +754,16 @@ constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
 constexpr float ULDUAR_HODIR_STARLIGHT_RADIUS = 4.0f;
 constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 11.0f;
 constexpr float ULDUAR_HODIR_SAFE_AREA_RADIUS = 9.0f;
-constexpr float ULDUAR_HODIR_SAFE_AREA_TOLERANCE = 6.0f;  // park inside the 9 yd with margin
+// The run parks at TOLERANCE and only releases at RELEASE. MoveInside lands the bot at exactly
+// TOLERANCE from the centre, so testing the same number at both ends means arriving in the shelter
+// releases the bot the same tick and the ring anchor walks it straight back out - measured at 18-22
+// yd out with the freeze 2 s away. Both rings stay inside the 9 yd Safe Area (62464, radius index 40).
+constexpr float ULDUAR_HODIR_SAFE_AREA_TOLERANCE = 6.0f;
+constexpr float ULDUAR_HODIR_SAFE_AREA_RELEASE = 8.0f;
+static_assert(ULDUAR_HODIR_SAFE_AREA_RELEASE < ULDUAR_HODIR_SAFE_AREA_RADIUS,
+              "the release ring has to stay inside what Safe Area actually covers");
+static_assert(ULDUAR_HODIR_SAFE_AREA_TOLERANCE < ULDUAR_HODIR_SAFE_AREA_RELEASE,
+              "the park ring has to sit inside the release ring or arriving releases the bot");
 
 // Storm Power lands on allies within 3 yd of the carrier, and the carrier only has 4 (10man) / 6
 // (25man) one-second ticks to spend, so it tours the ring rather than searching for a cluster.
@@ -1152,6 +1161,11 @@ Unit* GetHodir(PlayerbotAI* botAI);
 // Anything that pulls - targeting, the anchors - waits for this instead of mere presence. Hodir
 // never calls SetInCombatWithZone, so his flag flips exactly when someone engages him.
 bool IsHodirEngaged(PlayerbotAI* botAI);
+
+// True while Hodir is casting Flash Freeze. 61968 is a 9 s cast and the trace measures cast-to-land at
+// 9.03 s, so this is the whole window and nothing but it: it opens 3.8 s before the drift lands and
+// leaves the shelter behind, and closes exactly when the freeze resolves.
+bool IsHodirFlashFreezeIncoming(PlayerbotAI* botAI);
 
 // The Snowpacked Icicle Target the whole raid shelters at during Flash Freeze.
 Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot);

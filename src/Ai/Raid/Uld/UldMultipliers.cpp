@@ -933,6 +933,39 @@ float HodirGuardMultiplier::GetValue(Action* action)
         (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action)))
         return 0.0f;
 
+    // Everyone, every role, for the whole 9s Flash Freeze cast: the shelter run is the only thing that
+    // matters and only the dodge may interrupt it. Nothing else gets to touch the bot's feet.
+    //
+    // The shelter action cannot defend itself. MoveTo answers Duplicate for the destination it already
+    // issued, so from the second tick of a run its Execute returns false and the engine descends past
+    // ACTION_RAID + 6 to whatever is below - which then takes the movement slot at equal priority and
+    // clears the MotionMaster. Measured: 68 of 125 bot-freeze pairs had their last accepted move
+    // before the freeze come from something else, 36 of them the ring anchor and 21 reach melee, and
+    // bots that had already reached the shelter were walked 18-22 yd back out of it.
+    //
+    // Returning true from the shelter action instead would silence its casting for six seconds, seven
+    // times a pull. The descent is fine; the movers below it are what has to be off.
+    if (IsHodirFlashFreezeIncoming(botAI))
+    {
+        // Charge, Intercept and both Feral Charges, the only subclasses - a warrior charging back to
+        // the boss mid-run is how the one melee catch in 603_3_hodir_1787590072 happened.
+        if (dynamic_cast<CastReachTargetSpellAction*>(action))
+            return 0.0f;
+
+        if (!dynamic_cast<MovementAction*>(action))
+            return 1.0f;
+
+        // AttackAction only sets a target, so it stays exempt. ReachTargetAction does not: "reach
+        // melee" and "reach spell" are 25 of those 68 thefts.
+        if (dynamic_cast<AttackAction*>(action))
+            return 1.0f;
+
+        static std::set<std::string> const freezeMovers = {"hodir move snowpacked icicle",
+                                                           "hodir icicle dodge action"};
+
+        return freezeMovers.count(action->getName()) ? 1.0f : 0.0f;
+    }
+
     // Only the two tanks and the ranged half stand on a spot. Melee ride the boss in the corner, so
     // they keep every generic mover - SetBehindTargetAction in particular.
     if (!botAI->IsMainTank(bot) && !botAI->IsAssistTankOfIndex(bot, 0, true) && !botAI->IsRanged(bot))
