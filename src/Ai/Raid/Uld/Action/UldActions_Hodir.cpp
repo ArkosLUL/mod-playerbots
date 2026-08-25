@@ -171,7 +171,13 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
         return false;
     }
 
-    if (!_shedding && cold->GetStackAmount() < ULDUAR_HODIR_BITING_COLD_SHED_STACKS)
+    // The aura, not a zone lookup: it is what the bot is actually paid for, it costs no grid sweep,
+    // and it is the thing about to be lost. The leg the shuttle picks stays inside the zone, so the
+    // extra stack buys uninterrupted haste rather than an uninterrupted stand.
+    uint32 const arm = bot->HasAura(SPELL_HODIR_STARLIGHT) ? ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT
+                                                           : ULDUAR_HODIR_BITING_COLD_SHED_STACKS;
+
+    if (!_shedding && cold->GetStackAmount() < arm)
         return false;
 
     // Once started, keep going until the aura is gone. A stack comes off only on the second moving

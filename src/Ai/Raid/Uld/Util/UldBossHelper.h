@@ -806,10 +806,11 @@ constexpr float ULDUAR_HODIR_BIG_SHARDS_CLEAR = 9.0f;
 // 3300ms are inert, and at one icicle every 2s roughly half of those alive have already blown.
 constexpr uint32 ULDUAR_HODIR_ICICLE_SPENT_MS = 3300;
 
-// The formation rides a Toasty Fire, not Starlight. 62457 splashes 4 yd, so slots are laid out
-// concentrically at a minimum separation of 4.5 yd and one icicle catches one bot instead of five.
-// The whole ring has to fit inside the fire, because a slot outside it is a bot that has to walk a
-// Biting Cold shuttle instead of standing still and casting.
+// Slots are laid out concentrically at a minimum separation of 4.5 yd, because 62457 splashes 4, so
+// one icicle catches one bot instead of five. The ring is sized to fit inside a Toasty Fire - a slot
+// outside one is a bot walking a Biting Cold shuttle instead of standing still and casting - but it
+// only ever sits in a fire that lands inside the caster band, and this mage drops them 33 to 43 yd
+// from Hodir, so in practice the ring forms on the fixed anchor and pays the shuttle.
 //
 // The outer ring sits 4.5 yd beyond the inner one so a bot shedding Biting Cold can step outward
 // without closing on its neighbours.
@@ -827,15 +828,23 @@ static_assert(ULDUAR_HODIR_RAID_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE <=
 static_assert(ULDUAR_HODIR_RAID_RING_OUTER - ULDUAR_HODIR_RAID_RING_INNER > ULDUAR_HODIR_ICE_SHARDS_RADIUS,
               "the two rings have to sit more than one Ice Shards radius apart");
 
-// How far from the fixed anchor a Toasty Fire may sit and still be worth forming on. The mage drops
-// them all over the room - measured 6.8 to 33 yd out - and 25 is where roughly four fifths of the
-// ones that exist are still close enough that walking there costs less than the shuttle it saves.
-constexpr float ULDUAR_HODIR_FIRE_ADOPT_RADIUS = 25.0f;
 // Measured against Hodir himself, not the tank spot, which he leaves: he drifted 10-25 yd off it and
 // a fixed-point gate let the centre land 6.8 yd from him with a 4.5 yd inner ring. The gap does not
 // have to clear the whole ring - a slot that still lands close to him simply never gets walked to,
 // because the position trigger checks that the slot is clear before it fires.
 constexpr float ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP = 15.0f;
+
+// The far end of the same band: how far from Hodir a caster may stand and still reach him. A Shadow
+// Bolt is 30 and that is the shortest range in the raid. Both the fire and the Starlight zone are
+// tested against this, because both are reasons to stand somewhere other than the ring slot, and a
+// spot that cannot reach the boss is worth nothing whatever else it gives.
+//
+// Picking fires off the fixed anchor instead let the centre drift to a p75 of 29 yd from him and a
+// max of 52, with the ring's far side 45 out and the casters walking a reach spell back in.
+constexpr float ULDUAR_HODIR_CASTER_MAX_BOSS_GAP = 30.0f;
+static_assert(ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
+              "the caster band has to have room between its ends");
+
 constexpr float ULDUAR_HODIR_DODGE_LEASH = 12.0f;
 constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
 
@@ -868,6 +877,18 @@ static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND
                   ULDUAR_HODIR_STARLIGHT_RADIUS,
               "a bot at the edge of its tolerance has to still be inside Starlight");
 
+// Where the two ends of the shed shuttle sit when the bot is standing in Starlight. Both ends and the
+// straight line between them stay inside the zone, so the aura survives the shuttle that would
+// otherwise walk the bot out of it. Sized off the p90 of 3.3 that bots actually holding the aura
+// measure at rather than off the 4 the radius nominally reaches, so both ends keep a yard of margin.
+//
+// 5 yd end to end is a yard shorter than the declump leg, which is the shortest single move that
+// spans two aura ticks - but the shuttle chains, alternating ends until the aura is gone, so the bot
+// never stops and it is the chain rather than the leg that covers the ticks.
+constexpr float ULDUAR_HODIR_STARLIGHT_SHED_RADIUS = 2.5f;
+static_assert(ULDUAR_HODIR_STARLIGHT_SHED_RADIUS < ULDUAR_HODIR_STARLIGHT_RADIUS,
+              "both ends of the shed shuttle have to stay inside Starlight");
+
 // Ranged and healers hold at least this far from Hodir. His combat reach plus a raider's is roughly
 // 13 yd, and Frozen Blows turns one of his swings into 20000-30000, so a caster inside this is one
 // swing from dead whether or not it has aggro.
@@ -886,6 +907,11 @@ constexpr float ULDUAR_HODIR_RETURN_LEASH = 20.0f;
 constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
 constexpr float ULDUAR_HODIR_SHUTTLE_BEARING = -0.785398f;  // -pi/4, parallel to the SW bevel
 constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 2;
+
+// Standing in Starlight is worth a stack: +50% to every cast and swing against 1600 a tick. Only 36
+// of 3298 stack applications in a six minute kill ever reached 3, so this mostly just stops the shed
+// interrupting a zone rather than actually letting stacks run.
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 3;
 
 // A trapped raider dies to the next Flash Freeze 48s later, so freeing them outranks the boss - but
 // the block has little health, so only the nearest few bots leave what they were doing.
@@ -1224,17 +1250,22 @@ bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot);
 // The Snowpacked Icicle Target the whole raid shelters at during Flash Freeze.
 Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot);
 
-// The Toasty Fire the ranged formation forms on, or nullptr. Picked nearest the fixed anchor rather
-// than nearest the bot, for the same reason the shelter is: two derivations of "which fire" disagree
-// and the formation oscillates between them.
+// The Toasty Fire the ranged formation forms on, or nullptr. Picked nearest Hodir rather than nearest
+// the bot, for the same reason the shelter is: two derivations of "which fire" disagree and the
+// formation oscillates between them. Only a fire that leaves the whole ring inside the caster band
+// qualifies, so on most pulls there is none and this returns nullptr all fight.
 Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot);
 
-// Where the ranged formation is centred: a Toasty Fire when one is close enough and clear of Hodir,
+// Where the ranged formation is centred: a Toasty Fire when one sits inside the caster band,
 // otherwise ULDUAR_HODIR_RAID_ANCHOR. The fire is what the ring wants to be inside - it stops Biting
 // Cold, which is the difference between standing still and walking a shuttle. Deriving it fresh on
 // every call is deliberate: a cached centre shared across the raid but validated against one bot's
 // own state gets rewritten by whichever bot has stepped out, and the formation thrashes.
-Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot);
+//
+// onFire says whether the centre is a fire rather than the anchor. Callers need it because the rules
+// that only hold inside a fire cannot be told from the position alone, and asking again would cost a
+// second grid sweep.
+Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot, bool* onFire = nullptr);
 
 // Where this bot belongs and how far it may stray. Tanks get their fixed corner spots; ranged and
 // healers get a formation slot, swapped for a spot inside a Starlight zone whenever one has landed
@@ -1248,9 +1279,14 @@ bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& toler
 // it is returned - MoveTo rejects an off-mesh destination silently.
 bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out);
 
+// The Starlight zone this bot is standing in, or false. The centre, not the bot's own spot, so the
+// shuttle can be laid out around it.
+bool GetHodirStarlightZoneAt(PlayerbotAI* botAI, Player* bot, Position& out);
+
 // Where this bot moves to shed Biting Cold. Tanks alternate between two fixed points beside their
-// spot so the boss cannot be walked out of the corner; everyone else takes the nearest point that is
-// clear of the rest of the raid. Legs are long enough to cover two aura ticks.
+// spot so the boss cannot be walked out of the corner; a bot in a Starlight zone shuttles across the
+// zone so it keeps the aura; everyone else takes the nearest point that is clear of the rest of the
+// raid. Legs are long enough to cover two aura ticks.
 bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // False once an icicle has already detonated. It lingers another 3.3s after the blast, and treating

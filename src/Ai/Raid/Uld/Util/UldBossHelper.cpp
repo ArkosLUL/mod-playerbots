@@ -684,18 +684,22 @@ Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot)
         if (!fire || !fire->IsAlive())
             continue;
 
-        float const dist = fire->GetExactDist2d(&ULDUAR_HODIR_RAID_ANCHOR);
-        if (dist > ULDUAR_HODIR_FIRE_ADOPT_RADIUS)
+        // Measured from Hodir, not from the fixed anchor: he drifts and the anchor does not, so a fire
+        // picked off the anchor put the far side of the ring 45 yd from him and the casters walked a
+        // reach spell back in. A fire the boss is standing on is no good either, however close.
+        float const gap = fire->GetExactDist2d(hodir);
+        if (gap < ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP)
             continue;
 
-        // A fire the boss is standing on is not somewhere the raid can form, however close it is.
-        if (fire->GetExactDist2d(hodir) < ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP)
+        // The whole ring has to reach him from it, not just the centre.
+        if (gap + ULDUAR_HODIR_RAID_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE >
+            ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
             continue;
 
-        if (!best || dist < bestDist)
+        if (!best || gap < bestDist)
         {
             best = fire;
-            bestDist = dist;
+            bestDist = gap;
         }
     }
 
@@ -706,15 +710,21 @@ Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot)
     return best;
 }
 
-Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot)
+Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot, bool* onFire)
 {
     Position centre = ULDUAR_HODIR_RAID_ANCHOR;
 
     // Unquantised. The fire does not move, so there is nothing for a quantum to smooth out, and
     // rounding would only push the centre off the one point the whole ring is sized around.
-    if (Creature* fire = bot ? GetHodirRaidFire(botAI, bot) : nullptr)
+    Creature* fire = bot ? GetHodirRaidFire(botAI, bot) : nullptr;
+    if (fire)
         centre = Position(fire->GetPositionX(), fire->GetPositionY(),
                           ULDUAR_HODIR_RAID_ANCHOR.GetPositionZ());
+
+    // Reported rather than re-derived: the fire sweep is the expensive half of this call, and a
+    // centre that happens to sit near a fire is not the same as a centre that is one.
+    if (onFire)
+        *onFire = fire != nullptr;
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "hodir.centre", RaidObs::DescribeDerived(centre));
@@ -853,10 +863,10 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
 // two heals rather than two lives. Any number may share a zone; what each gets is a bearing of its
 // own, taken from the slot it came from, so they spread around it instead of piling on a point.
 //
-// Usable means the resulting spot is still inside the fire and still out of Hodir's reach; the
-// nearest zone to the slot wins among those, so the detour stays short.
+// Usable means the resulting spot still reaches Hodir and is still out of his reach; the nearest zone
+// to the slot wins among those, so the detour stays short.
 static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position const& centre,
-                                    Position const& slot, Position& out)
+                                    bool onFire, Position const& slot, Position& out)
 {
     // Bounded rather than the room radius: this runs per bot per tick, and a zone further out than
     // this cannot be within reach of any slot the bot could be standing on anyway.
@@ -869,8 +879,11 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
     // zones on the floor are ones no caster can use.
     Unit* hodir = GetHodir(botAI);
 
-    // Staying inside the fire is not optional: a bot outside it starts shedding Biting Cold, and that
-    // node outranks this one, so it would shuttle straight back out of the zone it just walked to.
+    // Staying inside the fire is not optional while there is one: a bot outside it starts shedding
+    // Biting Cold, and that node outranks this one, so it would shuttle straight back out of the zone
+    // it just walked to. Off a fire there is nothing to stay inside - the bot is shedding wherever it
+    // stands - and applying the leash anyway drew a 10 yd box round the anchor that rejected 89% of
+    // the zones on the floor, which is why only 1.40 dps of 18 were ever standing in one.
     float const fireLeash = ULDUAR_HODIR_TOASTY_FIRE_RADIUS - ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE;
 
     bool found = false;
@@ -890,15 +903,48 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
                           zone.GetPositionY() + std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_STAND_RADIUS,
                           zone.GetPositionZ()));
 
-        if (centre.GetExactDist2d(&stand) > fireLeash)
+        if (onFire && centre.GetExactDist2d(&stand) > fireLeash)
             continue;
 
-        if (hodir && stand.GetExactDist2d(hodir) < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP)
-            continue;
+        // Both ends of the caster band. A zone the bot cannot shoot the boss from is not a throughput
+        // lever, whatever haste it carries.
+        if (hodir)
+        {
+            float const gap = stand.GetExactDist2d(hodir);
+            if (gap < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+                continue;
+        }
 
         out = stand;
         bestWalk = walk;
         found = true;
+    }
+
+    return found;
+}
+
+bool GetHodirStarlightZoneAt(PlayerbotAI* /*botAI*/, Player* bot, Position& out)
+{
+    if (!bot)
+        return false;
+
+    std::vector<Position> const zones =
+        GetDynamicObjectPositions(bot, ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS, SPELL_HODIR_STARLIGHT);
+
+    bool found = false;
+    float bestDist = 0.0f;
+    for (Position const& zone : zones)
+    {
+        float const dist = bot->GetExactDist2d(&zone);
+        if (dist > ULDUAR_HODIR_STARLIGHT_RADIUS)
+            continue;
+
+        if (!found || dist < bestDist)
+        {
+            out = zone;
+            bestDist = dist;
+            found = true;
+        }
     }
 
     return found;
@@ -940,6 +986,30 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         // cannot refuse it for repeating the last destination.
         out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
         how = "tank";
+        return true;
+    }
+
+    // A bot holding Starlight sheds across the zone rather than out of it. Same shape as the tank
+    // shuttle and for the same reason: two opposite points through a centre, taking whichever end is
+    // further so the leg is always the full length and IsDuplicateMove cannot refuse it for repeating
+    // the last destination. Both ends sit inside the zone, so the aura survives the shuttle - which is
+    // the whole point, because the shed outranks the anchor and would otherwise walk the bot out of
+    // the biggest throughput buff in the fight to save 800 a tick.
+    Position zone;
+    if (GetHodirStarlightZoneAt(botAI, bot, zone))
+    {
+        float const bearing = std::atan2(bot->GetPositionY() - zone.GetPositionY(),
+                                         bot->GetPositionX() - zone.GetPositionX());
+        float const dx = std::cos(bearing) * ULDUAR_HODIR_STARLIGHT_SHED_RADIUS;
+        float const dy = std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_SHED_RADIUS;
+
+        Position const legA = ValidateHodirFloorPoint(
+            bot, Position(zone.GetPositionX() + dx, zone.GetPositionY() + dy, zone.GetPositionZ()));
+        Position const legB = ValidateHodirFloorPoint(
+            bot, Position(zone.GetPositionX() - dx, zone.GetPositionY() - dy, zone.GetPositionZ()));
+
+        out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
+        how = "starlight";
         return true;
     }
 
@@ -1019,7 +1089,8 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
 
     // Derived once and passed down. The slot and the Starlight step both need it, and every call
     // sweeps the grid for the fire and writes a note.
-    Position const centre = GetHodirRingCentre(botAI, bot);
+    bool onFire = false;
+    Position const centre = GetHodirRingCentre(botAI, bot, &onFire);
     if (!GetHodirRingSlot(botAI, bot, centre, out))
         return false;
 
@@ -1033,7 +1104,7 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
     // the moment the buff landed, walk it out of the zone, and start the whole trip again. The anchor
     // stays on the zone until the zone expires.
     Position stand;
-    if (FindHodirStarlightStand(botAI, bot, centre, out, stand))
+    if (FindHodirStarlightStand(botAI, bot, centre, onFire, out, stand))
     {
         out = stand;
         tolerance = ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE;
@@ -1233,10 +1304,10 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     if (blocks.empty())
         return nullptr;
 
-    // Guid, not distance, on both lists. Distances change every tick, so a distance rank re-shuffles the
-    // assignment constantly and bots drop off a block and back onto the boss between one tick and the
-    // next. Sorted, both lists read the same to every bot, which is what lets the greedy pass below
-    // agree across the raid without any shared state.
+    // Guid, not live distance, on both lists. Distances to the bot change every tick, so ranking on
+    // them re-shuffles the assignment constantly and bots drop off a block and back onto the boss
+    // between one tick and the next. Sorted, both lists read the same to every bot, which is what lets
+    // the greedy pass below agree across the raid without any shared state.
     std::sort(candidates.begin(), candidates.end(),
               [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); });
     std::sort(blocks.begin(), blocks.end(),
@@ -1249,24 +1320,56 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     else
         budget = std::min<size_t>(budget, 1);
 
-    // One breaker each, in block-guid order, each block starting its search at an offset derived from
-    // its own guid so a later Flash Freeze draws different bots instead of always the lowest guids.
+    // Rank on the formation slot, not on where the bot happens to be. The slot comes out of the same
+    // guid-sorted roster and a fixed centre, so it reads identically on every bot and holds still
+    // between ticks - the stability the guid rotation was buying - while still handing each block to
+    // the bot that stands nearest it. Bots were spending 61.6% of their time on ice walking to it.
+    //
+    // The anchor rather than the adopted centre: this is a ranking key, not a spot anyone walks to,
+    // and asking for the real centre would cost a second fire sweep every tick for nothing.
+    std::vector<Player*> ringMembers;
+    BuildHodirRingMembers(bot, ringMembers);
+
+    std::vector<Position> spots(total);
+    for (size_t i = 0; i < total; ++i)
+    {
+        size_t slot = ringMembers.size();
+        for (size_t r = 0; r < ringMembers.size(); ++r)
+            if (ringMembers[r] == candidates[i])
+                slot = r;
+
+        // Only the melee fallback lands here, and it has no slot to rank from. Its own position is
+        // still the same number on every bot that reads it, so the raid keeps agreeing.
+        spots[i] = slot < ringMembers.size()
+                       ? HodirRingSlotPoint(ULDUAR_HODIR_RAID_ANCHOR, slot, ringMembers.size())
+                       : candidates[i]->GetPosition();
+    }
+
+    // One breaker each, in block-guid order, every block taking the nearest slot still free.
     std::vector<bool> taken(total, false);
     for (size_t i = 0; i < budget; ++i)
     {
-        size_t const offset = blocks[i]->GetGUID().GetCounter() % total;
-        for (size_t step = 0; step < total; ++step)
+        size_t best = total;
+        float bestDist = 0.0f;
+        for (size_t j = 0; j < total; ++j)
         {
-            size_t const slot = (offset + step) % total;
-            if (taken[slot])
+            if (taken[j])
                 continue;
 
-            taken[slot] = true;
-            if (candidates[slot] == bot)
-                return blocks[i];
-
-            break;
+            float const dist = blocks[i]->GetExactDist2d(&spots[j]);
+            if (best == total || dist < bestDist)
+            {
+                best = j;
+                bestDist = dist;
+            }
         }
+
+        if (best == total)
+            break;
+
+        taken[best] = true;
+        if (candidates[best] == bot)
+            return blocks[i];
     }
 
     return nullptr;
