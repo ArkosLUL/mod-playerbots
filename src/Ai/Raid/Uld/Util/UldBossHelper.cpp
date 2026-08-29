@@ -25,6 +25,7 @@
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
+#include "Timer.h"
 #include "World.h"
 
 #include <algorithm>
@@ -2564,13 +2565,107 @@ std::vector<Position> const ULDUAR_FL_ARENA_CORNERS = {
 
 Unit* FlameLeviathanBoss(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_FLAME_LEVIATHAN); }
 
+namespace
+{
+// Raid-wide answers, folded once per instance per tick rather than once per bot - and sharing the
+// result is what stops two vehicles disagreeing about whose channel it is.
+struct FlameLeviathanState
+{
+    // boss_flame_leviathan never sets IN_PROGRESS (only SPECIAL / NOT_STARTED / DONE) and the unit
+    // it engages is a vehicle rather than a roster player, so neither RaidObs opener fires and this
+    // fight has never left a trace.
+    bool pullTraced = false;
+
+    // Who has already fired into the channel now running. Cleared the moment he stops channelling,
+    // so the next channel starts unclaimed - the 10 s gap between channels guarantees we see one.
+    RaidObs::ObsValue<ObjectGuid> ventClaimedBy{"fl.interrupter"};
+
+    // The vehicle currently wearing Pursued, and when it last changed. EVENT_PURSUE repeats on 31s,
+    // so the switch is predictable and the fleet can be out of his front before he turns.
+    RaidObs::ObsValue<ObjectGuid> pursuedVehicle{"fl.pursued"};
+    uint32 pursueSeenMs = 0;
+
+    uint32 scanMs = 0;
+};
+
+thread_local std::unordered_map<uint32 /*instanceId*/, FlameLeviathanState> flStates;
+
+// Long enough that the scan is cheap, short enough that a 31s Pursued cycle is never missed.
+constexpr uint32 ULDUAR_FL_SCAN_INTERVAL_MS = 200;
+
+FlameLeviathanState& FlameLeviathanStateFor(Player* bot) { return flStates[bot->GetInstanceId()]; }
+
+// Everything that has to be true once per instance per tick rather than once per bot: open the
+// trace, expire a vent claim, and notice a Pursued switch.
+void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
+{
+    FlameLeviathanState& state = FlameLeviathanStateFor(bot);
+    if (state.scanMs && GetMSTimeDiffToNow(state.scanMs) < ULDUAR_FL_SCAN_INTERVAL_MS)
+        return;
+
+    state.scanMs = getMSTime();
+
+    // Off the boss, never off the calling bot: one bot dropping combat is not the pull ending, and
+    // without this reset a wipe would leave the latch set and the re-pull would open no trace.
+    if (!boss || !boss->IsInCombat())
+    {
+        state.pullTraced = false;
+        state.ventClaimedBy = ObjectGuid::Empty;
+        state.pursuedVehicle = ObjectGuid::Empty;
+        state.pursueSeenMs = 0;
+        return;
+    }
+
+    if (!state.pullTraced)
+    {
+        state.pullTraced = true;
+        RaidObs::MarkPull(bot->GetMap(), boss);
+    }
+
+    if (!FlameLeviathanIsVentChanneling(boss))
+        state.ventClaimedBy = ObjectGuid::Empty;
+
+    // Pursued is read off the vehicles rather than the players: the aura lands on whichever unit the
+    // boss's spell picked, and a gunner's own guid never carries it.
+    ObjectGuid pursued;
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+        {
+            Player* member = gref->GetSource();
+            if (!member || !member->IsAlive())
+                continue;
+
+            if (Unit* base = FlameLeviathanRiddenVehicle(member))
+                if (base->HasAura(SPELL_FL_PURSUED))
+                {
+                    pursued = base->GetGUID();
+                    break;
+                }
+        }
+    }
+
+    if (pursued && pursued != state.pursuedVehicle.Get())
+        state.pursueSeenMs = getMSTime();
+
+    state.pursuedVehicle = pursued;
+}
+}  // namespace
+
 bool FlameLeviathanEngaged(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    if (!bot || !bot->IsInCombat())
+    if (!bot || bot->GetMapId() != ULDUAR_MAP_ID)
         return false;
 
     Unit* boss = FlameLeviathanBoss(botAI);
+
+    // Ahead of the combat test, because the housekeeping it drives includes the wipe reset.
+    TickFlameLeviathan(botAI, bot, boss);
+
+    if (!bot->IsInCombat())
+        return false;
+
     return boss && !boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 }
 
@@ -2622,11 +2717,38 @@ bool FlameLeviathanIsVentChanneling(Unit* boss)
 
 // Electroshock is a 25 yd frontal cone, so a siege engine parked across the arena would win the
 // ranking and then land nothing. Range is part of eligibility, not an afterthought.
+//
+// IsWithinCombatRange adds *both* combat reaches, and his is 15, so asking it for 25 yd answered yes
+// out to 47.7 - roughly twice what the cone covers. The cone check adds only the target's reach
+// (WorldObject::GetObjectSize), so that is what this mirrors.
+static bool FlameLeviathanInConeRange(Unit* caster, Unit* target, float radius)
+{
+    return caster && target && caster->GetExactDist(target) <= radius + target->GetObjectSize();
+}
+
 static bool FlameLeviathanCanElectroshock(Unit* siegeEngine, Unit* boss)
 {
     return siegeEngine && boss && !siegeEngine->HasSpellCooldown(SPELL_FL_ELECTROSHOCK) &&
            siegeEngine->GetPower(POWER_ENERGY) >= ULDUAR_FL_ELECTROSHOCK_COST &&
-           siegeEngine->IsWithinCombatRange(boss, ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS);
+           FlameLeviathanInConeRange(siegeEngine, boss, ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS);
+}
+
+bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius)
+{
+    if (!vehicleBase || !target)
+        return false;
+
+    if (!FlameLeviathanInConeRange(vehicleBase, target, radius))
+        return false;
+
+    // HasInArc splits what it is handed, so the full cone width goes in.
+    if (vehicleBase->HasInArc(halfAngle * 2.0f, target))
+        return true;
+
+    // Outside the cone but inside CAST_ANGLE_IN_FRONT, so CastVehicleSpell would not have turned and
+    // the shot would have gone nowhere. Spend the tick turning and let a later one fire.
+    vehicleBase->SetFacingToObject(target);
+    return false;
 }
 
 bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot)
@@ -2638,6 +2760,13 @@ bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot)
     Unit* boss = FlameLeviathanBoss(botAI);
     if (!FlameLeviathanCanElectroshock(base, boss))
         return false;
+
+    // One shot per channel. Without this the ranking below re-elects on every tick of the channel:
+    // the winner spends 20 energy casting, which promotes whoever is now highest, and the whole line
+    // of siege engines empties into a single channel milliseconds apart.
+    ObjectGuid const claimed = FlameLeviathanStateFor(bot).ventClaimedBy.Get();
+    if (claimed)
+        return claimed == bot->GetGUID();
 
     Group* group = bot->GetGroup();
     if (!group)
@@ -2662,12 +2791,74 @@ bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot)
         uint32 const energy = memberBase->GetPower(POWER_ENERGY);
 
         // Highest energy wins, guid breaks ties. Casting spends 20, which drops the caster to the
-        // back of its own queue, so the duty rotates with nobody having to be told.
+        // back of its own queue, so the duty rotates across channels with nobody having to be told.
         if (energy > myEnergy || (energy == myEnergy && member->GetGUID() < myGuid))
             return false;
     }
 
     return true;
+}
+
+void FlameLeviathanClaimVentChannel(Player* bot)
+{
+    if (bot)
+        FlameLeviathanStateFor(bot).ventClaimedBy = bot->GetGUID();
+}
+
+uint32 FlameLeviathanMsSincePursue(Player* bot)
+{
+    if (!bot)
+        return 0;
+
+    uint32 const seen = FlameLeviathanStateFor(bot).pursueSeenMs;
+    return seen ? GetMSTimeDiffToNow(seen) : 0;
+}
+
+bool FlameLeviathanPursueSwitchImminent(Player* bot)
+{
+    uint32 const since = FlameLeviathanMsSincePursue(bot);
+    if (!since)
+        return false;
+
+    // Nothing seen for longer than a full cycle means the timing is lost - a re-pull, or a switch
+    // the scan missed. Treat that as imminent rather than safe: being wrong the cautious way costs
+    // a few yards, being wrong the other way costs the fleet a Battering Ram.
+    if (since >= ULDUAR_FL_PURSUE_PERIOD_MS)
+        return true;
+
+    return since >= ULDUAR_FL_PURSUE_PERIOD_MS - ULDUAR_FL_PURSUE_CLEAR_LEAD_MS;
+}
+
+bool FlameLeviathanInBatteringRamArc(Unit* vehicleBase, Unit* boss)
+{
+    if (!vehicleBase || !boss)
+        return false;
+
+    if (vehicleBase->GetExactDist2d(boss) > ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize())
+        return false;
+
+    // Measured from him outwards: the blast lands on a point in front of him, so what matters is
+    // whether this vehicle is the thing he is facing.
+    return boss->HasInArc(float(M_PI), vehicleBase);
+}
+
+bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot)
+{
+    // Being in front of him is the pursued vehicle's whole job, and it is already kiting.
+    if (!bot || FlameLeviathanIsPursued(bot))
+        return false;
+
+    // The ridden vehicle, not the seat: a gunner's GetVehicleBase is the bolted-on turret, whose
+    // position is the parent's anyway but whose object size is not.
+    Unit* vehicleBase = FlameLeviathanRiddenVehicle(bot);
+    Unit* boss = FlameLeviathanBoss(botAI);
+    if (!vehicleBase || !boss)
+        return false;
+
+    if (vehicleBase->GetExactDist2d(boss) > ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize())
+        return false;
+
+    return FlameLeviathanInBatteringRamArc(vehicleBase, boss) || FlameLeviathanPursueSwitchImminent(bot);
 }
 
 bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)

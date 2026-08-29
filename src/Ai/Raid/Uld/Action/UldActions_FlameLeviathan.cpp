@@ -2,6 +2,7 @@
 #include "UldActions_Shared.h"
 
 #include <cmath>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "RaidBossHelpers.h"
+#include "RaidObs.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "UldBossHelper.h"
@@ -141,6 +143,13 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
     Aura* own = target->GetAura(SPELL_FL_BLUE_PYRITE_DOT, vehicleBase_->GetGUID());
     bool const needBarrel = !own || own->GetDuration() <= 5000 || own->GetStackAmount() < 10;
 
+    // Stacks only, never the duration: the duration ticks every pass and would emit a note a tick.
+    // Read off the aura rather than inferred from tick damage, which is what made the first pass at
+    // this report stacks dropping one at a time - they cannot; the aura refreshes or it falls off
+    // whole, and partially resisted ticks were rounding into the wrong bucket.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "fl.pyrite", std::to_string(own ? own->GetStackAmount() : 0));
+
     // The demolisher does not regenerate, so a full tank is 20 barrels. Below the reserve it drops
     // to free boulders and keeps enough pyrite for the gunner's Increased Speed when Pursued lands.
     if (needBarrel && vehicleBase_->GetPower(POWER_ENERGY) >= ULDUAR_FL_PYRITE_RESERVE)
@@ -195,8 +204,11 @@ bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
     if (!target)
         return false;
 
-    // Ram is an 18 yd frontal cone, so standing off means the energy buys nothing.
-    if (!vehicleBase_->IsWithinCombatRange(target, ULDUAR_FL_RAM_CONE_RADIUS))
+    // Ram is a 100 degree, 18 yd frontal cone. Range alone is not the test - a siege engine pointed
+    // 55 degrees off him is in range, passes CastVehicleSpell's 120 degree turn gate, and lands
+    // nothing. Turning costs the tick, which is cheaper than the 40 energy.
+    if (!FlameLeviathanFaceForCone(vehicleBase_, target, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
+                                   ULDUAR_FL_RAM_CONE_RADIUS))
         return false;
 
     // Earmark what this vehicle still owes: the interrupt duty travels with its fuel, and a pursued
@@ -245,6 +257,11 @@ bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
     if (!target || vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_SONIC_HORN_COST)
         return false;
 
+    // The narrowest cone on the fight at 50 degrees, so it needs the facing more than the others do.
+    if (!FlameLeviathanFaceForCone(vehicleBase_, target, ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE,
+                                   ULDUAR_FL_SONIC_HORN_CONE_RADIUS))
+        return false;
+
     return CastVehicle(SPELL_FL_SONIC_HORN, target);
 }
 
@@ -258,13 +275,34 @@ bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
     if (!boss || !FlameLeviathanIsVentChanneling(boss))
         return false;
 
+    // Turning is progress, so this owns the tick either way: Electroshock's cone is 60 degrees and
+    // CastVehicleSpell only turns for something outside 120, so nothing else will ever point the
+    // vehicle at him and the shot would go out into empty air.
+    if (!FlameLeviathanFaceForCone(vehicleBase, boss, ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE,
+                                   ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS))
+        return true;
+
     if (!botAI->CanCastVehicleSpell(SPELL_FL_ELECTROSHOCK, boss))
         return false;
 
     if (!botAI->CastVehicleSpell(SPELL_FL_ELECTROSHOCK, boss))
         return false;
 
-    vehicleBase->AddSpellCooldown(SPELL_FL_ELECTROSHOCK, 0, 10000);
+    // Take the channel off the queue whichever way the shot goes, so the rest of the line does not
+    // empty into it behind us.
+    FlameLeviathanClaimVentChannel(bot);
+
+    // CastVehicleSpell reports success even when CheckCast rejected, so the channel stopping is the
+    // only honest confirmation. Electroshock is instant and resolves inline, so by now it has either
+    // interrupted him or it has not. Charging the full cooldown for a miss is what left every siege
+    // engine firing 10 s out of step with a 20 s vent cycle.
+    if (FlameLeviathanIsVentChanneling(boss))
+    {
+        vehicleBase->AddSpellCooldown(SPELL_FL_ELECTROSHOCK, 0, ULDUAR_FL_ELECTROSHOCK_RETRY_MS);
+        return true;
+    }
+
+    vehicleBase->AddSpellCooldown(SPELL_FL_ELECTROSHOCK, 0, ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS);
     return true;
 }
 
@@ -290,6 +328,9 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
         if (Unit* hazard =
                 GetFlameLeviathanNearestTowerHazard(botAI, vehicleBase_, towerMask, ULDUAR_FL_TOWER_HAZARD_RADIUS))
             return ClearHazard(hazard);
+
+    if (ClearBatteringRam(boss))
+        return true;
 
     if (vehicleBase_->GetEntry() == NPC_SALVAGED_DEMOLISHER &&
         vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_PYRITE_RESERVE)
@@ -338,8 +379,19 @@ bool FlameLeviathanDriveAction::DetourToCrate(Unit* /*boss*/)
 
 bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard)
 {
-    float const angle = hazard->GetAngle(vehicleBase_);
-    float const fleeDist = ULDUAR_FL_TOWER_HAZARD_RADIUS - vehicleBase_->GetExactDist2d(hazard) + 5.0f;
+    float const away = hazard->GetAngle(vehicleBase_);
+
+    // Thorim's Hammer and Mimiron's Inferno are static marks, so straight out is the shortest way
+    // off them. Hodir's Fury is not a mark - it follows somebody - and running down its line just
+    // gives it a longer straight to cover. Break across it instead and it has to turn.
+    bool const chases = hazard->GetEntry() == NPC_FL_HODIRS_FURY_TARGET;
+    float const angle = chases ? away + float(M_PI) / 2.0f : away;
+
+    // Perpendicular travel buys distance as the hypotenuse, not one for one, so the sidestep has to
+    // be the whole radius rather than the shortfall a radial flee needs.
+    float const fleeDist = chases ? ULDUAR_FL_TOWER_HAZARD_RADIUS + 5.0f
+                                  : ULDUAR_FL_TOWER_HAZARD_RADIUS - vehicleBase_->GetExactDist2d(hazard) + 5.0f;
+
     Position const goal(vehicleBase_->GetPositionX() + std::cos(angle) * fleeDist,
                         vehicleBase_->GetPositionY() + std::sin(angle) * fleeDist, vehicleBase_->GetPositionZ());
 
@@ -347,24 +399,59 @@ bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard)
     return true;
 }
 
+bool FlameLeviathanDriveAction::ClearBatteringRam(Unit* boss)
+{
+    // Sitting in the blast is survivable while he is pointed elsewhere; what is not is being there
+    // when he picks again, because his current facing then tells you nothing about where the blast
+    // will land. Two fifths of every Battering Ram hit came in the five seconds after a switch,
+    // catching seven to thirteen vehicles at once.
+    if (!FlameLeviathanShouldClearBatteringRam(botAI, bot))
+        return false;
+
+    float const safeDist = ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase_->GetObjectSize();
+
+    // Straight out from him. Circling to his back is the intuitive move and the wrong one - it keeps
+    // the vehicle at blast range for the whole trip, and he turns faster than a demolisher orbits.
+    // Twice the arrival deadband of overshoot, because DriveTo parks anywhere within one of it and
+    // a single deadband of margin lets the vehicle stop back on the edge of the blast.
+    float const angle = boss->GetAngle(vehicleBase_);
+    float const step = safeDist - vehicleBase_->GetExactDist2d(boss) + 2.0f * ULDUAR_FL_ARRIVE_TOLERANCE;
+    Position const goal(vehicleBase_->GetPositionX() + std::cos(angle) * step,
+                        vehicleBase_->GetPositionY() + std::sin(angle) * step,
+                        vehicleBase_->GetPositionZ());
+
+    DriveTo(goal, boss, false, MovementPriority::MOVEMENT_FORCED);
+    return true;
+}
+
 bool FlameLeviathanDriveAction::HoldStation(Unit* boss)
 {
     float standDist = ULDUAR_FL_SIEGE_STAND_DIST;
+    char const* how = "siege";
     switch (vehicleBase_->GetEntry())
     {
         case NPC_VEHICLE_CHOPPER:
             // The lead chopper runs ahead of him instead, back turned, so its tar pool lands in his path.
             if (FlameLeviathanIsTarLead(botAI, bot))
+            {
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "fl.station", "tar-lead");
                 return DriveTo(FlameLeviathanLeadPoint(boss), boss, true);
+            }
             standDist = ULDUAR_FL_CHOPPER_STAND_DIST;
+            how = "chopper";
             break;
         case NPC_SALVAGED_DEMOLISHER:
             // Demolishers hurl from 10-70 yd and never close, which also keeps them off Battering Ram.
             standDist = ULDUAR_FL_DEMOLISHER_BAND;
+            how = "demolisher";
             break;
         default:
             break;
     }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "fl.station", how);
 
     return DriveTo(FlameLeviathanRearPoint(boss, standDist), boss, false);
 }

@@ -201,13 +201,26 @@ despite the name**, and never ignites anything.
   `InterruptNonMeleeSpells`, which always cancels a channel, so **the interrupt is real**. He is
   `MECHANIC_INTERRUPT`-immune, but only Electroshock's effect 1 carries that mechanic; effect 2
   (8489 damage) lands, the spell hits, and the script hook fires.
-- **Ram, Electroshock and Sonic Horn are `TARGET_UNIT_CONE_ENEMY_104`.** `Spell::CheckRange` returns
-  OK immediately for `RangeEntry->ID == 1` and waves all three through, so the **effect radius is the
-  real limit**: Ram 18 yd, Electroshock 25 yd, Sonic Horn 35 yd. The interrupt rotation gates on
-  range for exactly this reason — a siege engine parked across the arena would otherwise win the
-  ranking and land nothing.
+- **Ram, Electroshock and Sonic Horn are `TARGET_UNIT_CONE_ENEMY_104`**, and a cone is two limits.
+  `Spell::CheckRange` returns OK immediately for `RangeEntry->ID == 1`, so the **effect radius** is
+  the reach — Ram 18 yd, Electroshock 25, Sonic Horn 35 — and `world.spell_cone` is the **width**:
+  Ram 100°, Electroshock 60°, Sonic Horn 50° (no row = 60°). `isInFront` passes no target radius, so
+  his 15 yd reach widens the arc by nothing, and `CAST_ANGLE_IN_FRONT` is 120° — wider than all
+  three, so `CastVehicleSpell` never turns the vehicle for them. Gate on both limits and turn the
+  vehicle yourself, or the energy buys nothing and the interrupt election picks an engine that lands
+  nothing: five wipes fired 71 Electroshocks, landed **one**, interrupted **0 of 40** channels.
+- **Never measure a cone with `IsWithinCombatRange`** — it adds *both* combat reaches, and his is 15,
+  so asking for 25 answers yes out to 47.7. The cone check adds only the target's
+  (`GetObjectSize`); `FlameLeviathanInConeRange` mirrors that.
 - **Pursued 62374** picks a random vehicle every 31s and lasts 35s; he then drives at it and uses
-  `Battering Ram 62376` inside 15 yd. The aura is a far better signal than `GetVictim()`.
+  `Battering Ram 62376` inside 15 yd — a **25 yd blast on a point in front of him**, not a hit on one
+  target. Everything in his frontal arc is caught: 40% of every Battering Ram landed within 5s of a
+  switch, 7–13 vehicles at a time. Only the pursued vehicle belongs in front of him, and the 31s
+  cadence makes the switch predictable enough to vacate before it. The aura beats `GetVictim()`.
+- **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
+  `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
+  opener fires and five wipes left no trace at all. `FlameLeviathanEngaged` calls `MarkPull` to cover
+  it, latched per instance and released when he leaves combat so a re-pull opens a fresh one.
 - **He accelerates all fight.** `Gathering Speed 62375` is `MOD_SPEED_ALWAYS +5%`, **stacks to 20**,
   600s, re-applied every 15s and cleared only on reset. Against `speed_run`: he goes 5.0 → **10.0**
   yd/s, a siege engine or demolisher is a flat 7.0, a chopper 14.0. He out-runs a siege engine after
@@ -222,7 +235,12 @@ despite the name**, and never ignites anything.
   free, not because it matters.
 - **Hurl Pyrite Barrel needs no ammo** — no `CasterAuraSpell`, 5 energy is the only gate. It triggers
   `62489` (54000 AoE) which applies stacking `68605 Blue Pyrite` (10s, 10 stacks). Each demolisher
-  carries its **own** aura instance, so the refresh check reads the caster-scoped overload.
+  carries its **own** aura instance, so the refresh check reads the caster-scoped overload. **Do not
+  infer the stack count from tick damage**: ticks arrive partially reduced (a parallel series at
+  0.8×), so `amount / 12120` rounds a full stack into a lower bucket and invents one-stack drops the
+  aura cannot produce — it refreshes whole or falls off whole. Use `amount + resisted`, or read the
+  `fl.pyrite` probe, which emits `GetStackAmount`. Tick *count* needs no correction and is the number
+  that matters: uptime, one tick per second, measured at 20–75% per demolisher over five wipes.
 
 #### Vehicle spells that must be self-cast
 

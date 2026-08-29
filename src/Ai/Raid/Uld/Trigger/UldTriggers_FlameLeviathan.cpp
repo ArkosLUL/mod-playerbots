@@ -71,6 +71,11 @@ bool FlameLeviathanDriveUrgentTrigger::IsActive()
     if (FlameLeviathanIsPursued(bot))
         return true;
 
+    // Getting out of Battering Ram outranks holding station, same as a tower hazard does: both are
+    // "you are standing somewhere that is about to hurt" rather than positioning preferences.
+    if (FlameLeviathanShouldClearBatteringRam(botAI, bot))
+        return true;
+
     uint32 towerMask = FlameLeviathanActiveTowerMask(botAI);
     if (!towerMask)
         return false;

@@ -448,8 +448,14 @@ extern std::vector<Position> const ULDUAR_FL_ARENA_CORNERS;
 
 // Where each vehicle parks relative to the boss. Measured surface-to-surface (added to his combat
 // reach), because he has a large model and a raw centre distance would put melee inside him.
-constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;    // Ram reaches 15 yd; leave headroom
-constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 6.0f;
+// Ram's 18 yd cone is measured with the boss's 15 yd combat reach added, so 8 here is comfortably
+// inside it. Distance was never what made Ram miss - facing was.
+constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;
+
+// Sonic Horn is a 35 yd cone and his reach adds another 15, so a chopper has no reason to sit on top
+// of him - 6 yd put it 21 yd from his centre, permanently inside Battering Ram's 25. Out here it
+// keeps every shot and is only in the blast while it chooses to be, i.e. on the tar lead.
+constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 20.0f;
 constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;    // inside the 10-70 yd hurl band, outside Battering Ram
 constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
 
@@ -480,6 +486,33 @@ constexpr uint32 ULDUAR_FL_PYRITE_BARREL_COST = 5;
 // waves them all through, so these radii are the real limit and nothing else enforces them.
 constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS = 25.0f;
 constexpr float ULDUAR_FL_RAM_CONE_RADIUS = 18.0f;
+constexpr float ULDUAR_FL_SONIC_HORN_CONE_RADIUS = 35.0f;
+
+// Each cone also has its own width, from world.spell_cone; Spell::SelectImplicitConeTargets falls
+// back to 60 degrees for a spell with no row. These are half-widths already, because HasInArc
+// splits the arc it is handed. Nothing widens them at cast time: isInFront passes no target radius,
+// so the boss's 15 yd combat reach buys no slack, and CAST_ANGLE_IN_FRONT (120 degrees) is wider
+// than all three - which means CastVehicleSpell will not turn the vehicle for these on its own.
+// A siege engine 45 degrees off him passes that gate, casts, and Electroshock's 30 degrees finds
+// nothing: 71 casts landed once over five pulls.
+constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_HALF_ANGLE = 30.0f * float(M_PI) / 180.0f;
+constexpr float ULDUAR_FL_RAM_CONE_HALF_ANGLE = 50.0f * float(M_PI) / 180.0f;
+constexpr float ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE = 25.0f * float(M_PI) / 180.0f;
+
+// Cooldowns the module keeps itself, because Spell::SendSpellCooldown returns early for a creature
+// caster and nothing enforces Electroshock's 10 s otherwise. The short one is for a shot that went
+// out and did not stop the channel: retry, but not at tick rate - each attempt costs 20 energy.
+constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS = 10000;
+constexpr uint32 ULDUAR_FL_ELECTROSHOCK_RETRY_MS = 3000;
+
+// Battering Ram is a 25 yd blast centred in front of him, so a vehicle parked at his rear is inside
+// it the moment he turns onto a new Pursued target. Two thirds of the fleet took one every switch.
+constexpr float ULDUAR_FL_BATTERING_RAM_RADIUS = 25.0f;
+
+// EVENT_PURSUE reschedules itself for 31s, so the switch is predictable to within a tick. Vehicles
+// that are not the target start clearing his front this long before the next one is due.
+constexpr uint32 ULDUAR_FL_PURSUE_PERIOD_MS = 31000;
+constexpr uint32 ULDUAR_FL_PURSUE_CLEAR_LEAD_MS = 5000;
 
 // A pyrite crate energizes for 25, so grabbing one above this wastes part of it.
 constexpr uint32 ULDUAR_FL_CRATE_GRAB_CEILING = 75;
@@ -1560,10 +1593,34 @@ bool FlameLeviathanIsPursued(Player* bot);
 
 bool FlameLeviathanIsVentChanneling(Unit* boss);
 
-// True for exactly one siege engine at a time: highest energy, guid breaking ties. Casting drops
-// the actor to the back of its own queue, so the duty rotates with no shared state. The Ram energy
-// reserve reads this too, so the fuel travels with the duty.
+// True for exactly one siege engine per channel: highest energy, guid breaking ties, and then the
+// channel is claimed so nobody else fires into it. Ranking alone is not enough - casting spends 20
+// energy, which promotes the next engine in the same tick, and four of them emptied 80 energy into
+// one channel 30 ms apart. The Ram energy reserve reads this too, so the fuel travels with the duty.
 bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot);
+
+// Claims the channel now being cast at, so the ranking above stops handing it to the next engine.
+// Called once the interrupt has actually gone out.
+void FlameLeviathanClaimVentChannel(Player* bot);
+
+// A cone spell lands nothing unless the vehicle is genuinely pointed at him, and CastVehicleSpell
+// only turns for targets outside 120 degrees - wider than any of these cones. Returns true when the
+// shot is on; otherwise starts the turn and leaves the cast for a later tick.
+bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius);
+
+// Milliseconds since Pursued last landed on anyone, and whether the next switch is close enough that
+// a vehicle sitting in his frontal arc should be somewhere else by the time he turns.
+uint32 FlameLeviathanMsSincePursue(Player* bot);
+bool FlameLeviathanPursueSwitchImminent(Player* bot);
+
+// True while this vehicle is inside Battering Ram's blast, i.e. close enough and in front of him.
+bool FlameLeviathanInBatteringRamArc(Unit* vehicleBase, Unit* boss);
+
+// The whole "get out of the blast" test in one place, because the urgent-drive trigger and the drive
+// action both ask it and a trigger that fires wider than its action just demotes the cast node for
+// nothing. True when this vehicle is in the blast and either he is already facing it or he is about
+// to pick a new target - his current facing predicts nothing once the switch lands.
+bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot);
 
 // Lowest-guid chopper driver that is not currently Pursued. It runs ahead of the boss dropping tar
 // in his path; a Pursued chopper is already driving away from him and drops tar for free.

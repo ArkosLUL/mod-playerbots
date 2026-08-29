@@ -74,6 +74,7 @@ public:
 protected:
     bool Kite(Unit* boss);
     bool ClearHazard(Unit* hazard);
+    bool ClearBatteringRam(Unit* boss);
     bool DetourToCrate(Unit* boss);
     bool HoldStation(Unit* boss);
 
