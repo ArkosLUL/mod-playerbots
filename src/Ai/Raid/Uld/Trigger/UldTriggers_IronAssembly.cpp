@@ -77,19 +77,9 @@ bool IronAssemblyInterruptTrigger::IsActive()
     if (!brundir)
         return false;
 
-    bool const whirl = IronAssemblyLightningWhirlActive(brundir);
-    bool const chainLightning = !whirl && IronAssemblyChainLightningCasting(brundir);
-    if (!whirl && !chainLightning)
-        return false;
-
-    uint8 rank = 0;
-    if (!IronAssemblyInterruptRank(botAI, bot, brundir, rank))
-        return false;
-
-    // Rank 0 owns Lightning Whirl, which is 100 yd and has no positional answer at all. Rank 1 takes
-    // Chain Lightning, so when only one interrupt is off cooldown Chain Lightning is deliberately
-    // allowed through rather than spending the cooldown that the next Whirl needs.
-    return whirl ? rank == 0 : rank == 1;
+    // Which cast is up and who owes it are one decision, made in the encounter helper so the trigger
+    // and the trace cannot end up describing different elections.
+    return IronAssemblyInterruptDuty(botAI, bot, brundir) != nullptr;
 }
 
 bool IronAssemblyTankAssignmentTrigger::IsActive()

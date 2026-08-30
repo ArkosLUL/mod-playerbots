@@ -120,6 +120,15 @@ applies); **Electrical Charge is not handled positionally** — a stacking damag
 problem, not a movement one; **ranged spread only in hard mode**, since Static Disruption needs
 Steelbreaker's phase 2; and **bots never set the skull**, so a human's mark wins.
 
+**Reading a pull:** `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
+Molgeim, 2 Brundir), `focus` (what the raid is killing, and whether a human's skull beat the order),
+`tank` (the boss a tank owns, or the branch that left it none), `interrupt` (the duty a bot holds
+for Brundir's current cast), `spot` (the formation branch), `slot` (its index on the spread ring),
+`soak` (whether it reached Rune of Power, and what stopped it). Overload, Lightning Tendrils and
+Meltdown have no world object, so they also write `haz` circles with the spell radius and the
+clearance; Rune of Death and Rune of Power do, and are swept instead — only a swept hazard is tested
+against a death.
+
 Core-version assumption: the strategy relies on recent upstream fixes — `#26470` (Rune of Death
 restricted to players), `#26449` (Brundir surviving Tendrils), `#26200` (Static Disruption preferring
 ranged) and `#25029` (Overload invincibility). An older AzerothCore behaves differently.

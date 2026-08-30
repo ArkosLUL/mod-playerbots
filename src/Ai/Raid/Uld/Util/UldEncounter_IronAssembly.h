@@ -25,6 +25,20 @@ class Unit;
 //
 // Kill order is the raid's choice, and it is the only thing the hard-mode config flag changes:
 // Steelbreaker first normally, Steelbreaker last for the hard mode.
+//
+// Reading a pull back: postmortem.py <file> --notes ironassembly.
+//
+//   ironassembly.alive      which members are up - bit 0 Steelbreaker, 1 Molgeim, 2 Brundir
+//   ironassembly.focus      what the raid is killing, and whether a human's skull beat the order
+//   ironassembly.tank       the boss a tank owns, or the branch that left it without one
+//   ironassembly.interrupt  the duty a bot holds for Brundir's current cast
+//   ironassembly.spot       the formation branch that put a bot where it stands
+//   ironassembly.slot       its index on the hard-mode spread ring
+//   ironassembly.soak       whether it walked into Rune of Power, and what stopped it
+//
+// Overload, Lightning Tendrils and Meltdown also write haz circles, because none of the three has a
+// world object for the snapshot sweep to find. Rune of Death and Rune of Power do, and are left to
+// it - only a swept hazard is tested against a death.
 
 struct IronAssemblyTargets
 {
@@ -92,11 +106,12 @@ bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member);
 // any of it, which is why only Brundir has an interrupt node.
 char const* IronAssemblyReadyInterrupt(Player* bot, Unit* target);
 
-// Rank among the bots that could interrupt right now, lowest guid first. Rank 0 owns Lightning
-// Whirl, rank 1 owns Chain Lightning, and nobody else acts - so when only one interrupt is off
-// cooldown Chain Lightning is deliberately allowed through, which is what the written strategies
-// mean by "let some of them cast". Returns false when this bot has no duty.
-bool IronAssemblyInterruptRank(PlayerbotAI* botAI, Player* bot, Unit* brundir, uint8& rank);
+// Which of Brundir's two casts this bot is on the hook for right now - "whirl", "chain", or nullptr
+// for no duty. Ranked by guid among the bots whose interrupt is off cooldown: rank 0 owns Lightning
+// Whirl, rank 1 owns Chain Lightning, and nobody else acts, so with only one interrupt available
+// Chain Lightning is deliberately allowed through rather than spending the cooldown the next Whirl
+// needs. That is what the written strategies mean by "let some of them cast".
+char const* IronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* bot, Unit* brundir);
 
 bool IronAssemblyLightningWhirlActive(Unit* brundir);
 bool IronAssemblyChainLightningCasting(Unit* brundir);

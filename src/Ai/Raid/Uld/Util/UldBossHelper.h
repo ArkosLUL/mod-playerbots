@@ -25,9 +25,9 @@ constexpr uint32 ULDUAR_MAP_ID = 603;
 enum UlduarIDs
 {
     // Iron Assembly. The council script casts through Unit::CastSpell, which difficulty-maps every
-    // id, so each pair below is 10-man then 25-man and callers test both. 63485 and 61886 used to be
-    // listed here as extra Overload ids; they are the Lightning Tendrils damage triggers and never
-    // appear as an aura on Brundir.
+    // id, so each pair below is 10-man then 25-man and callers test both. The auras come first, the
+    // damage they trigger after them - 63485 and 61886 are the Tendrils damage triggers and were
+    // once mislabelled here as extra Overload auras, which they never are.
     SPELL_LIGHTNING_TENDRILS_10_MAN = 61887,
     SPELL_LIGHTNING_TENDRILS_25_MAN = 63486,
     SPELL_OVERLOAD_10_MAN = 61869,
@@ -47,6 +47,14 @@ enum UlduarIDs
     // The rune's ground pulse, reapplied every 0.8s to anything standing within 5 yd of it. One id
     // for both raid sizes, and it is what marks a boss as standing in his own damage buff.
     SPELL_RUNE_OF_POWER = 64320,
+    // The damage the auras above trigger. Nothing here is ever cast or tested for - these name the
+    // hazard in a trace, where the row has to join onto the damage record that explains it. Only
+    // Tendrils is a pair: both Overload auras trigger 61878 and both Overwhelming Power auras
+    // trigger 61889.
+    SPELL_OVERLOAD_DAMAGE = 61878,
+    SPELL_LIGHTNING_TENDRILS_DAMAGE_10_MAN = 61886,
+    SPELL_LIGHTNING_TENDRILS_DAMAGE_25_MAN = 63485,
+    SPELL_MELTDOWN = 61889,
     // NPC_STEELBREAKER / NPC_MOLGEIM / NPC_BRUNDIR come from core ulduar.h via UldScripts.h
 
     // Kologarn
@@ -441,6 +449,12 @@ constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE = 4.0f;
 // lands further than 29.4 yd from Steelbreaker's spot, inside caster range.
 constexpr float ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS = 18.0f;
 constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS = 16;
+
+// Overload, Lightning Tendrils and Meltdown have no world object behind them, so a trace can only
+// know their geometry if the encounter writes it. RaidObs::NoteHazard emits on every call, so this
+// paces the rows per instance and doubles as their ttl. A second is fine for a 6s channel and tracks
+// Brundir closely enough as he drifts through a 16s Tendrils.
+constexpr uint32 ULDUAR_IRON_ASSEMBLY_HAZARD_NOTE_INTERVAL_MS = 1000;
 
 // Flame Leviathan hard-mode tower bitmask, used to pick which ground hazards to dodge.
 enum FlameLeviathanTowerFlags
