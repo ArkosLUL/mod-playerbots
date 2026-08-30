@@ -521,6 +521,32 @@ ground level with an `INVALID_HEIGHT` fallback to the bot's Z, then validates wi
 try elsewhere, and accepting the clamped coordinates for routine holds, which just walk. OS
 destinations are computed rather than measured, so a surveyed constant would not survive the slope.
 
+## Diagnosing a pull
+
+Each pull writes `<LogsDir>/botobs/615_<inst>_sartharion_<epoch>.ndjson`; `postmortem.py <file>
+--notes sartharion.` replays what the raid decided. Schema and probe rules:
+[../systems/observability.md](../systems/observability.md).
+
+| key | answers |
+|---|---|
+| `sartharion.wave` | the pattern that can still reach this bot - `none`/`left`/`right` |
+| `sartharion.corridor` | the profile it was sorted into and the hold that follows - `tank 513.0` |
+| `sartharion.offtank` | which drake set his anchor, and whether a wave took the spot's own Y |
+| `sartharion.target` | where a bot was *sent*; `GetVictim()` only says where it ended up |
+| `sartharion.defensive` | which of the nine buttons the cooldown node picked, or `covered`/`none` |
+| `sartharion.drag` | `walking` / `onpoint` / `settled` / `timeout` |
+| `sartharion.realm` | `enter` / `notworth` / `noportal` |
+| `.dragdone`, `.burstwindow`, `.tankcdwindow` | the three one-way latches, written on the flip |
+| `sartharion.portalsquad` | the squad, struck once at the pull |
+
+`wave` and `corridor` are derived per bot against that bot's own X, so bots legitimately disagree -
+two of one group on different holds at the same `t` is the half-and-half split that wipes the raid.
+
+**Waves reach the trace only as `haz` rows**, written once each by `NoteTsunamiHazards`. Nothing else
+records them: a wave never enters combat so the watch list skips it, its damage is an aura on the
+creature rather than a dynamic object so there is no swept-hazard row, and the 40-slot snapshot sweep
+is spent on Onyx Sanctum trash and 52 cosmetic Twilight Eggs before it reaches one.
+
 ## Known-open gaps
 
 - **Trigger release and action arrival share one constant in three of the four pairs**, so a bot

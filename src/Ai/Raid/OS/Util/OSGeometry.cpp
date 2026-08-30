@@ -10,11 +10,14 @@
 #include "GroupReference.h"
 #include "Map.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "Unit.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <list>
+#include <string>
 
 namespace OsHelpers
 {
@@ -43,6 +46,10 @@ constexpr float TSUNAMI_LETHAL_HALF_WIDTH = 8.5f;
 // still parked at its spawn X and very much coming.
 constexpr float TSUNAMI_SPENT_SCALE = 0.5f;
 
+// How long a wave's lane is worth drawing on a trace timeline: the damage aura goes on 3.6s after the
+// summon and comes off 7.4s later, in the same call that shrinks the wave.
+constexpr uint32 TSUNAMI_HAZARD_TTL_MS = 11000;
+
 // Base flight speed 7.0 at the rate the script sets right before MovePoint(POINT_LANDING).
 constexpr float DRAKE_LANDING_SPEED = 21.0f;
 
@@ -60,6 +67,32 @@ float NearestWaveLine(float y, std::array<int32, N> const& lines)
         best = std::min(best, std::fabs(y - static_cast<float>(line)));
 
     return best;
+}
+
+char const* WaveName(TsunamiWave wave)
+{
+    switch (wave)
+    {
+        case TsunamiWave::Left:
+            return "left";
+        case TsunamiWave::Right:
+            return "right";
+        default:
+            return "none";
+    }
+}
+
+char const* CorridorGroupName(CorridorGroup group)
+{
+    switch (group)
+    {
+        case CorridorGroup::Tank:
+            return "tank";
+        case CorridorGroup::Melee:
+            return "melee";
+        default:
+            return "raid";
+    }
 }
 
 TsunamiWave WaveSideOf(Creature const* tsunami)
@@ -124,6 +157,7 @@ TsunamiWave ClassifyTsunamiWave(Player* bot)
     std::list<Creature*> tsunamis;
     CollectTsunamis(bot, tsunamis);
 
+    TsunamiWave live = TsunamiWave::None;
     for (Creature* tsunami : tsunamis)
     {
         if (!tsunami || !tsunami->IsAlive() || tsunami->GetObjectScale() < TSUNAMI_SPENT_SCALE)
@@ -139,17 +173,52 @@ TsunamiWave ClassifyTsunamiWave(Player* bot)
         {
             case TsunamiWave::Left:
                 if (tsunami->GetPositionX() <= bot->GetPositionX() + TSUNAMI_LETHAL_HALF_WIDTH)
-                    return TsunamiWave::Left;
+                    live = TsunamiWave::Left;
                 break;
             case TsunamiWave::Right:
                 if (tsunami->GetPositionX() >= bot->GetPositionX() - TSUNAMI_LETHAL_HALF_WIDTH)
-                    return TsunamiWave::Right;
+                    live = TsunamiWave::Right;
                 break;
             default:
                 break;
         }
+
+        if (live != TsunamiWave::None)
+            break;
     }
-    return TsunamiWave::None;
+
+    // What this bot believes, which is not the same as what the lane records say: the reach test runs
+    // against the bot's own X, so two bots on the same hold can legitimately disagree, and that
+    // disagreement is what a half-and-half corridor split looks like from inside a trace.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "sartharion.wave", WaveName(live));
+
+    return live;
+}
+
+void NoteTsunamiHazards(Player* bot, std::unordered_set<ObjectGuid>& traced)
+{
+    std::list<Creature*> tsunamis;
+    CollectTsunamis(bot, tsunamis);
+
+    for (Creature* tsunami : tsunamis)
+    {
+        if (!tsunami || !tsunami->IsAlive() || !traced.insert(tsunami->GetGUID()).second)
+            continue;
+
+        TsunamiWave const side = WaveSideOf(tsunami);
+        if (side == TsunamiWave::None)
+            continue;
+
+        // Enough to redraw the lane by hand: the line it stands on, which pattern it belongs to, and
+        // the half width every hold on the platform was measured against.
+        char params[64];
+        snprintf(params, sizeof(params), "\"y\":%d,\"side\":\"%s\",\"half\":%.1f",
+                 int32(tsunami->GetPositionY()), WaveName(side), TSUNAMI_LETHAL_HALF_WIDTH);
+
+        RaidObs::NoteHazard(bot->GetMap(), SpellId::FlameTsunamiDamageAura, tsunami->GetPosition(),
+                            "wave", params, TSUNAMI_HAZARD_TTL_MS);
+    }
 }
 
 bool WaveClearsY(float y, TsunamiWave wave)
@@ -220,22 +289,29 @@ float SafeCorridorY(Player* bot)
     CorridorGroup const group = CorridorGroupFor(bot);
     TsunamiWave const wave = ClassifyTsunamiWave(bot);
 
+    float y;
+
     // Melee keep the tank's lane except under a right wave, where they take the raid's. It costs them
     // the ~11s a wave is in the air - 31yd from the boss is well outside melee range - and buys them
     // the only Y under a right wave that is neither in one of his cones nor out of heal range.
     if (group == CorridorGroup::Melee)
-        return wave == TsunamiWave::Right ? RAID_CORRIDOR_RIGHT_Y : TANK_CORRIDOR_LEFT_Y;
+        y = wave == TsunamiWave::Right ? RAID_CORRIDOR_RIGHT_Y : TANK_CORRIDOR_LEFT_Y;
+    else if (group == CorridorGroup::Tank)
+        y = wave == TsunamiWave::Right ? TANK_CORRIDOR_RIGHT_Y : TANK_CORRIDOR_LEFT_Y;
+    else
+        y = wave == TsunamiWave::Left ? RAID_CORRIDOR_LEFT_Y : RAID_CORRIDOR_RIGHT_Y;
 
-    bool const tank = group == CorridorGroup::Tank;
-    switch (wave)
+    // The group is the rule and the Y names which of its two holds the wave picked. The coordinate on
+    // its own is already a move record; what it cannot say is which profile the bot was sorted into,
+    // and a bot in the wrong profile holds the wrong lane all fight without ever missing a dodge.
+    if (RaidObs::Active())
     {
-        case TsunamiWave::Left:
-            return tank ? TANK_CORRIDOR_LEFT_Y : RAID_CORRIDOR_LEFT_Y;
-        case TsunamiWave::Right:
-            return tank ? TANK_CORRIDOR_RIGHT_Y : RAID_CORRIDOR_RIGHT_Y;
-        default:
-            return tank ? TANK_CORRIDOR_LEFT_Y : RAID_CORRIDOR_RIGHT_Y;
+        char note[32];
+        snprintf(note, sizeof(note), "%s %.1f", CorridorGroupName(group), y);
+        RaidObs::NoteDerived(bot, "sartharion.corridor", note);
     }
+
+    return y;
 }
 
 float TankHoldX(Player* bot)
@@ -570,8 +646,17 @@ Position OffTankAnchor(Player* bot)
     // The spot gives way only to a wave that can actually reach it. Shadron's clears every right line
     // and Vesperon's every left one, and walking 28yd to a corridor that is no safer costs the trip
     // twice.
-    float const y = WaveClearsY(spot->GetPositionY(), ClassifyTsunamiWave(bot)) ? spot->GetPositionY()
-                                                                               : SafeCorridorY(bot);
+    bool const onSpot = WaveClearsY(spot->GetPositionY(), ClassifyTsunamiWave(bot));
+    float const y = onSpot ? spot->GetPositionY() : SafeCorridorY(bot);
+
+    // Which drake put him there, and whether a wave took the spot's own Y off him. A handover walks him
+    // 35.5yd, and the move record alone cannot say which of the two drakes he is walking to.
+    if (RaidObs::Active())
+    {
+        std::string const anchor = std::string(drake ? drake->GetName() : "none") +
+                                   (onSpot ? " spot" : " corridor");
+        RaidObs::NoteDerived(bot, "sartharion.offtank", anchor);
+    }
 
     return Position(spot->GetPositionX(), y, bot->GetPositionZ(), 0.0f);
 }

@@ -8,6 +8,7 @@
 #include "OSTriggers.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "RaidObs.h"
 #include "Random.h"
 #include "Timer.h"
 #include <algorithm>
@@ -79,6 +80,22 @@ bool OsMainTankHoldAction::Execute(Event /*event*/)
         bool const dwellDone = arrivedMs && getMSTimeDiff(arrivedMs, now) >= MAIN_TANK_DRAG_DWELL_MS &&
                                boss->GetExactDist2d(bot) <= bot->GetMeleeRange(boss);
         bool const timedOut = getMSTimeDiff(dragStartedMs, now) > MAIN_TANK_DRAG_TIMEOUT_MS;
+
+        // Four branches whose only other output is the one-line warning below, which reaches the
+        // server log and never the trace - so a pull that ended on the timeout reads the same as one
+        // that settled.
+        if (RaidObs::Active())
+        {
+            char const* phase = "walking";
+            if (dwellDone)
+                phase = "settled";
+            else if (timedOut)
+                phase = "timeout";
+            else if (onPoint)
+                phase = "onpoint";
+
+            RaidObs::NoteDerived(bot, "sartharion.drag", phase);
+        }
 
         if (dwellDone || timedOut)
         {

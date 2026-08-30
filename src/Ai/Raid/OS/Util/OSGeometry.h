@@ -8,7 +8,9 @@
 #define _PLAYERBOT_OSGEOMETRY_H
 
 #include "OSData.h"
+#include "ObjectGuid.h"
 #include "Position.h"
+#include <unordered_set>
 #include <vector>
 
 class Player;
@@ -30,6 +32,12 @@ namespace OsHelpers
 // side is a property of the wave, and the reach test is against the caller's own X, which phase 16 does
 // not change.
 TsunamiWave ClassifyTsunamiWave(Player* bot);
+// Puts each wave's lethal lane on the RaidObs timeline, once per wave, tracked in `traced`. Nothing
+// else can: a wave never enters combat so the watch list never claims it, its lethality is an aura on
+// the creature rather than a dynamic object so there is no swept-hazard row either, and the 150yd
+// snapshot sweep fills its 40 slots with Onyx Sanctum trash and 52 cosmetic Twilight Eggs long before
+// it reaches one. Caller gates on RaidObs::Active() and picks one bot per instance.
+void NoteTsunamiHazards(Player* bot, std::unordered_set<ObjectGuid>& traced);
 // True while a wave of this side cannot reach a bot holding this Y, margin included. The corridor
 // holds are the fallback rather than the only safe ground: the off-tank's drake spots and melee behind
 // a drake clear some of the lines outright, and a 28yd walk to ground that is no safer costs the trip

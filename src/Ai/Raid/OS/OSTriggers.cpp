@@ -6,6 +6,7 @@
 
 #include "OSTriggers.h"
 #include "EncounterHelpers.h"
+#include "RaidObs.h"
 #include "SharedDefines.h"
 
 #include <cmath>
@@ -186,9 +187,22 @@ bool TwilightPortalEnterTrigger::IsActive()
     // Both acolytes are worth the trip and Tenebron's eggs are not, and the portal itself cannot say
     // which of them is on the other side.
     if (!TwilightRealmWorthEntering(bot))
-        return false;
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "sartharion.realm", "notworth");
 
-    return bot->FindNearestGameObject(GoId::TwilightPortal, 100.0f) != nullptr;
+        return false;
+    }
+
+    bool const portal = bot->FindNearestGameObject(GoId::TwilightPortal, 100.0f) != nullptr;
+
+    // Squad membership is a note of its own and both auras behind "worth entering" are in the aura
+    // stream, but whether a portal was in reach is in no stream at all - and a trigger that says no
+    // writes nothing, so a squad standing on the platform leaves no record of why.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "sartharion.realm", portal ? "enter" : "noportal");
+
+    return portal;
 }
 
 bool TwilightPortalExitTrigger::IsActive()

@@ -10,6 +10,7 @@
 #include "GroupReference.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "RaidObs.h"
 #include "Unit.h"
 #include <algorithm>
 #include <array>
@@ -17,6 +18,7 @@
 #include <list>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 using namespace EncounterHelpers;
 
@@ -62,19 +64,22 @@ struct EncounterState
     uint32 fightStartMs = 0;
     uint32 lastSeenMs = 0;
     // One-way. Set when the pull drag has actually landed Sartharion, so it never runs twice.
-    bool mainTankDragged = false;
+    RaidObs::ObsValue<bool> mainTankDragged{"sartharion.dragdone"};
     // When the tank reached the drag corner, 0 while he is off it.
     uint32 mainTankDragArrivedMs = 0;
     // When the drag itself began, so its timeout does not ride on the encounter clock.
     uint32 mainTankDragStartedMs = 0;
     // One-way. Set the first tick Shadron is seen on the ground.
-    bool burstWindowOpen = false;
+    RaidObs::ObsValue<bool> burstWindowOpen{"sartharion.burstwindow"};
     // One-way. Set the first tick Shadron is seen at or below MAIN_TANK_COOLDOWN_SHADRON_PCT, or once
     // he is gone for good. The panic escape hatch is not latched and rides on top of this.
-    bool tankCooldownWindowOpen = false;
+    RaidObs::ObsValue<bool> tankCooldownWindowOpen{"sartharion.tankcdwindow"};
     bool assignmentsResolved = false;
-    std::vector<ObjectGuid> portalSquad;
+    RaidObs::ObsGuidSet portalSquad{"sartharion.portalsquad"};
     bool offTankWarned = false;
+    // Wave creatures whose lane has already been drawn on the trace. Bookkeeping, so it stays bare -
+    // dropping it on the reset below is what re-arms the lanes for the next pull.
+    std::unordered_set<ObjectGuid> tsunamiTraced;
 };
 
 // One state per instance, shared by every bot and by every trigger/action/multiplier: they each hold
@@ -95,6 +100,10 @@ EncounterState& StateFor(Unit* boss)
     // latch below re-arms on a wipe. The staleness check cannot do that on its own: PortalSquadMember
     // resolves through here with no encounter gate, and the boss is already inside the 200yd search
     // from the instance entrance, so lastSeenMs is refreshed from the moment the raid zones in.
+    //
+    // Member-wise, so the traced latches snap back without writing a note. That is what is wanted: a
+    // reset is not an assignment, and this runs every tick he is out of combat, so an emitting one
+    // would cost a note per tick per bot for the whole run-back.
     if (state.bossGuid != boss->GetGUID() || !boss->IsInCombat() ||
         (state.lastSeenMs && getMSTimeDiff(state.lastSeenMs, now) > STALE_STATE_MS))
     {
@@ -143,7 +152,14 @@ bool SartharionEncounterActive(Player* bot)
     if (!boss || !boss->IsInCombat())
         return false;
 
-    StateFor(boss);
+    EncounterState& state = StateFor(boss);
+
+    // Here because this is the one predicate every trigger runs every tick and it already holds the
+    // state the dedupe set lives in. One bot per instance does the sweep - it costs a grid search, and
+    // ClassifyTsunamiWave already spends ten of those per bot per tick.
+    if (RaidObs::Active() && IsMechanicTrackerBot(bot, OS_MAP_ID))
+        NoteTsunamiHazards(bot, state.tsunamiTraced);
+
     return true;
 }
 
@@ -404,15 +420,15 @@ void ResolveAssignments(EncounterState& state, Player* bot)
     std::sort(dps.begin(), dps.end(), byGuid);
 
     for (size_t i = 0; i < healers.size() && i < PORTAL_SQUAD_HEALERS; ++i)
-        state.portalSquad.push_back(healers[i]->GetGUID());
+        state.portalSquad.insert(healers[i]->GetGUID());
 
     // Every one of them, melee included. The acolyte is what the trip is for and it dies to whatever
     // the raid brings; leaving half the damage on the platform only lengthens the immunity.
     for (Player const* member : dps)
-        state.portalSquad.push_back(member->GetGUID());
+        state.portalSquad.insert(member->GetGUID());
 
     if (secondOffTank)
-        state.portalSquad.push_back(secondOffTank->GetGUID());
+        state.portalSquad.insert(secondOffTank->GetGUID());
 
     state.assignmentsResolved = true;
 }
@@ -428,8 +444,7 @@ bool PortalSquadMember(Player* bot)
     EncounterState& state = StateFor(boss);
     ResolveAssignments(state, bot);
 
-    return std::find(state.portalSquad.begin(), state.portalSquad.end(), bot->GetGUID()) !=
-           state.portalSquad.end();
+    return state.portalSquad.count(bot->GetGUID()) != 0;
 }
 
 bool TwilightAddsAlive(Player* bot)
@@ -509,6 +524,7 @@ char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot)
         return nullptr;
 
     char const* weakest = nullptr;
+    bool covered = false;
     for (TankDefensive const& entry : TANK_DEFENSIVES)
     {
         if (entry.playerClass != bot->getClass())
@@ -517,11 +533,24 @@ char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot)
         // One at a time: anything still running means the tank is already covered, and stacking the
         // next one on top spends two buttons on one window.
         if (bot->HasAura(entry.auraId))
-            return nullptr;
+        {
+            covered = true;
+            weakest = nullptr;
+            break;
+        }
 
         if (!weakest && botAI->CanCastSpell(entry.castName, bot))
             weakest = entry.castName;
     }
+
+    // Which button, which the act stream cannot answer: "os main tank cooldown" is one action name
+    // whichever of the nine it ends up casting, and the order it casts them in is the whole point.
+    if (RaidObs::Active())
+    {
+        char const* picked = weakest ? weakest : (covered ? "covered" : "none");
+        RaidObs::NoteDerived(bot, "sartharion.defensive", picked);
+    }
+
     return weakest;
 }
 
@@ -573,12 +602,23 @@ Unit* PriorityTarget(Player* bot)
         { NpcId::Sartharion, NpcId::SartharionH },
     };
 
+    Unit* target = nullptr;
     for (std::vector<uint32> const& tier : priority)
     {
-        if (Unit* target = FindUnitByEntries(bot, tier, ROOM_SEARCH_RADIUS))
-            return target;
+        target = FindUnitByEntries(bot, tier, ROOM_SEARCH_RADIUS);
+        if (target)
+            break;
     }
-    return nullptr;
+
+    // Where the bot was sent. A trace can otherwise only show GetVictim(), which is where it ended up -
+    // and the two differ for exactly as long as a bot is failing to switch.
+    if (RaidObs::Active())
+    {
+        RaidObs::NoteDerived(bot, "sartharion.target",
+                             target ? RaidObs::DescribeAssignment(target->GetGUID()) : "none");
+    }
+
+    return target;
 }
 
 Unit* TranquilizeTargetFor(Player* bot)
