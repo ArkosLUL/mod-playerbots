@@ -121,6 +121,8 @@ public:
     AutoPartyBuffMode autoPartyBuffs;
     bool tellWhenMissingBuffReagents;
     uint32 missingBuffReagentMessageCooldown;
+    bool forceRebuffOnReadyCheck;
+    uint32 forceRebuffMarginSecs;
     bool autoAvoidAoe;
     float maxAoeAvoidRadius;
     std::set<uint32> aoeAvoidSpellWhitelist;
@@ -452,14 +454,12 @@ public:
     int32 enableRandomBotTrading;
     uint32 tweakValue;  // Debugging config
 
-    uint32 randomBotArenaTeamCount;
     uint32 randomBotArenaTeamMaxRating;
     uint32 randomBotArenaTeamMinRating;
     uint32 randomBotArenaTeam2v2Count;
     uint32 randomBotArenaTeam3v3Count;
     uint32 randomBotArenaTeam5v5Count;
     bool deleteRandomBotArenaTeams;
-    std::vector<uint32> randomBotArenaTeams;
 
     uint32 selfBotLevel;
     bool downgradeMaxLevelBot;
@@ -525,7 +525,7 @@ public:
         auto it = logFiles.find(fileName);
         return it != logFiles.end() && it->second.second;
     }
-    void log(std::string const fileName, const char* str, ...);
+    void log(std::string const fileName, char const* str, ...);
 
     void loadWorldBuff();
 
@@ -573,8 +573,8 @@ private:
     PlayerbotAIConfig() = default;
     ~PlayerbotAIConfig() = default;
 
-    PlayerbotAIConfig(const PlayerbotAIConfig&) = delete;
-    PlayerbotAIConfig& operator=(const PlayerbotAIConfig&) = delete;
+    PlayerbotAIConfig(PlayerbotAIConfig const&) = delete;
+    PlayerbotAIConfig& operator=(PlayerbotAIConfig const&) = delete;
 
     PlayerbotAIConfig(PlayerbotAIConfig&&) = delete;
     PlayerbotAIConfig& operator=(PlayerbotAIConfig&&) = delete;

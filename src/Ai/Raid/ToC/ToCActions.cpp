@@ -1,13 +1,14 @@
 #include "ToCActions.h"
 #include "ToCHelpers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Unit.h"
 #include "Creature.h"
 #include "WorldSession.h"
 #include "WorldPacket.h"
 
 using namespace TrialOfTheCrusaderHelpers;
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -65,7 +66,7 @@ bool GormokMainTankHoldBossAction::Execute(Event /*event*/)
     // Keep the boss near the centre of the arena so ranged can spread and melee have room
     if (gormok->GetVictim() == bot)
     {
-        const Position& position = ARENA_CENTER;
+        Position const& position = ARENA_CENTER;
         const float distToPosition =
             bot->GetExactDist2d(position.GetPositionX(), position.GetPositionY());
 
@@ -164,7 +165,7 @@ bool WormsSpreadAction::Execute(Event /*event*/)
 bool WormsKeepMovingAction::Execute(Event /*event*/)
 {
     // Burning damage ramps up while standing still, so keep the bot in motion around the arena
-    const Position& center = ARENA_CENTER;
+    Position const& center = ARENA_CENTER;
     const float distToCenter = bot->GetExactDist2d(center.GetPositionX(), center.GetPositionY());
 
     float destX;
@@ -196,7 +197,7 @@ bool AvoidCreatureClusterAction::FleeFromCreatureCluster(uint32 entry)
     if (!GetCreatureClusterCenter(bot, entry, clusterRadius, center))
         return false;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     constexpr float fleeDistance = 12.0f;
     constexpr uint32 minInterval = 500;
@@ -229,7 +230,7 @@ bool WormsAvoidSweepAction::Execute(Event /*event*/)
     const float escapeX = dirY * side;
     const float escapeY = -dirX * side;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     constexpr float clearance = 12.0f;
     const float destX = bot->GetPositionX() + escapeX * clearance;
@@ -255,7 +256,7 @@ bool IcehowlMainTankHoldBossAction::Execute(Event /*event*/)
 
     if (icehowl->GetVictim() == bot)
     {
-        const Position& position = ARENA_CENTER;
+        Position const& position = ARENA_CENTER;
         const float distToPosition =
             bot->GetExactDist2d(position.GetPositionX(), position.GetPositionY());
 
@@ -304,7 +305,7 @@ bool IcehowlClearChargePathAction::Execute(Event /*event*/)
     // Inside the corridor (guaranteed by the guard above), so this is always positive
     const float clearance = corridorHalfWidth - std::fabs(perpendicular) + 3.0f;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     const float destX = bot->GetPositionX() + escapeX * clearance;
     const float destY = bot->GetPositionY() + escapeY * clearance;
@@ -330,7 +331,7 @@ bool JaraxxusMainTankHoldBossAction::Execute(Event /*event*/)
     // Keep the boss anchored near the centre so ranged can spread and adds stay grouped
     if (jaraxxus->GetVictim() == bot)
     {
-        const Position& position = ARENA_CENTER;
+        Position const& position = ARENA_CENTER;
         const float distToPosition =
             bot->GetExactDist2d(position.GetPositionX(), position.GetPositionY());
 
@@ -492,7 +493,7 @@ bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
     // and the spike-chase target has space to kite
     if (anubarak->GetVictim() == bot)
     {
-        const Position& position = ANUBARAK_PIT_CENTER;
+        Position const& position = ANUBARAK_PIT_CENTER;
         const float distToPosition =
             bot->GetExactDist2d(position.GetPositionX(), position.GetPositionY());
 
@@ -561,7 +562,7 @@ bool AnubarakFocusScarabAction::Execute(Event /*event*/)
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 {
     // Stop casting so the kite is never rooted in place by a channel
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     // Locate the chasing spike up front: it is needed both to pick a safe Permafrost patch and for
     // the flee fallback below.
@@ -607,7 +608,7 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
     if (!spike)
         return false;
 
-    const Position& center = ANUBARAK_PIT_CENTER;
+    Position const& center = ANUBARAK_PIT_CENTER;
     // Direction away from the spike
     float fleeX = bot->GetPositionX() - spike->GetPositionX();
     float fleeY = bot->GetPositionY() - spike->GetPositionY();
@@ -677,7 +678,7 @@ bool FactionChampionsFocusPriorityAction::Execute(Event /*event*/)
 
     // One designated bot owns the raid markers so they do not flicker between bots: skull on the kill
     // target (the shared focus mark), moon on a second healer for the per-class "cc" strategy to lock.
-    if (IsMechanicTrackerBot(botAI, bot, TRIAL_OF_THE_CRUSADER_MAP_ID))
+    if (IsMechanicTrackerBot(bot, TRIAL_OF_THE_CRUSADER_MAP_ID))
     {
         MarkTargetWithSkull(bot, priority);
         SetRtiTarget(botAI, "skull", priority);
@@ -711,7 +712,7 @@ bool TwinValkyrMainTankHoldLightTwinAction::Execute(Event /*event*/)
     // Anchor the boss near the arena centre so melee stack there and ranged have room
     if (fjola->GetVictim() == bot)
     {
-        const Position& position = ARENA_CENTER;
+        Position const& position = ARENA_CENTER;
         const float distToPosition =
             bot->GetExactDist2d(position.GetPositionX(), position.GetPositionY());
 
@@ -771,7 +772,7 @@ bool TwinValkyrEssenceActionBase::AcquireEssence(bool wantLight)
     // In range: trigger the portal's gossip-hello hook directly. The essence effect lives in the
     // creature's C++ OnGossipHello override, so HandleGossipHelloOpcode fires it (and casts the essence
     // aura) regardless of whether the NPC has DB gossip-menu items.
-    botAI->InterruptSpell();
+    bot->CastStop();
     bot->SetFacingToObject(portal);
 
     WorldPacket packet;

@@ -12,13 +12,14 @@
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SpellAuras.h"
 #include "Unit.h"
 #include "VoAHelpers.h"
 #include "VoATriggers.h"
 
 using namespace VoaHelpers;
+using namespace EncounterHelpers;
 
 const Position VOA_EMALON_RESTORE_POSITION = Position(-221.8f, -243.8f, 96.8f, 4.7f);
 
@@ -266,7 +267,7 @@ bool KoralonBurningBreathAction::Execute(Event /*event*/)
     const float escapeX = dirY * side;
     const float escapeY = -dirX * side;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     constexpr float clearance = 12.0f;
     float destX = bot->GetPositionX() + escapeX * clearance;

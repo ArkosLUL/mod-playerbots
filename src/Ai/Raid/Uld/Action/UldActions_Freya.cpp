@@ -18,12 +18,14 @@
 #include "Position.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"
 #include "Vehicle.h"
 #include <TankAssistStrategy.h>
+
+using namespace EncounterHelpers;
 
 bool FreyaMoveAwayNatureBombAction::isUseful()
 {
@@ -369,7 +371,7 @@ Player* FreyaRedirectThreatAction::GetRedirectTank()
     // threat every 10s, so no redirect can ever help there.
     if (GetFirstAliveUnitByEntry(botAI, NPC_SNAPLASHER) || GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR))
     {
-        if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+        if (Player* assistTank = GetGroupAssistTank(bot, 0))
             return assistTank;
     }
 
@@ -390,7 +392,7 @@ Player* FreyaRedirectThreatAction::GetRedirectTank()
         }
     }
 
-    return GetGroupMainTank(botAI, bot);
+    return GetGroupMainTank(bot);
 }
 
 bool FreyaRedirectThreatAction::Execute(Event /*event*/)

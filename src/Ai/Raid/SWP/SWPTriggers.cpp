@@ -6,7 +6,7 @@
 
 #include "SWPTriggers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SWPEncounter_Brut.h"
 #include "SWPEncounter_Felmyst.h"
 #include "SWPEncounter_Kalec.h"
@@ -15,6 +15,7 @@
 #include "SWPEncounter_Twins.h"
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 // General
 
@@ -206,7 +207,7 @@ bool FelmystPullingBossTrigger::IsActive()
     if (felmyst->IsFlying())
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = GetGroupMainTank(bot);
     if (mainTank && felmyst->GetVictim() != mainTank)
         return true;
 

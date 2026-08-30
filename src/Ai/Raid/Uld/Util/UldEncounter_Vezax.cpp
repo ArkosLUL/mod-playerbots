@@ -11,7 +11,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SpellAuras.h"
 #include "Unit.h"
 
@@ -19,6 +19,8 @@
 #include <limits>
 #include <array>
 #include <list>
+
+using namespace EncounterHelpers;
 
 std::unordered_map<uint32, VezaxEncounterState> vezaxEncounterStates;
 

@@ -5,7 +5,7 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
@@ -14,6 +14,8 @@
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
+
+using namespace EncounterHelpers;
 
 bool IronAssemblyResetEncounterStateTrigger::IsActive()
 {

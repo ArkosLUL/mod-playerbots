@@ -4,7 +4,6 @@
  * or (at your option) any later version.
  */
 
-
 #include "OSHelpers.h"
 #include "Creature.h"
 #include "Group.h"

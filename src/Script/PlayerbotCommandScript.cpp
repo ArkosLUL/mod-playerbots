@@ -38,7 +38,6 @@ std::vector<std::string> SplitLines(std::string const& text)
 }
 }  // namespace
 
-
 class playerbots_commandscript : public CommandScript
 {
 public:

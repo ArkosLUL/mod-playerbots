@@ -52,4 +52,13 @@ public:
     bool isUseful() override;
 };
 
+class MeleeAction : public AttackAction
+{
+public:
+    MeleeAction(PlayerbotAI* botAI) : AttackAction(botAI, "melee") {}
+
+    std::string const GetTargetName() override { return "current target"; }
+    bool isUseful() override;
+};
+
 #endif

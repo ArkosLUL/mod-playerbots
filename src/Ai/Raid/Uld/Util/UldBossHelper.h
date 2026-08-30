@@ -1256,7 +1256,6 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tol
 // Class taunt, mirroring ICC's IccCastClassTaunt. Non-tank classes return false.
 bool UldCastClassTaunt(PlayerbotAI* botAI, Unit* target);
 
-
 // Hodir. By entry, not "find target": that value walks only the bot's own threat list, so any bot
 // parked on an ice block would stop seeing the boss and silently lose its Flash Freeze shelter.
 Unit* GetHodir(PlayerbotAI* botAI);
@@ -1343,7 +1342,6 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block);
 // for a block a ranged bot can shoot from nearer where it already stands. Asked once per bot rather
 // than once per block, because the sweep it needs is not cheap and one Flash Freeze puts up eight.
 Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot);
-
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
@@ -1435,7 +1433,6 @@ Unit* GetFreyaLasherChasing(Player* bot, FreyaWaveState const& state);
 // The one hunter that holds the trap post. Lowest GUID among living hunter bots in the group, the same
 // tie-break GetFreyaRangedLasherFocus uses, so every bot agrees on it without any shared state.
 bool IsFreyaLasherTrapHunter(PlayerbotAI* botAI);
-
 
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
 // Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
@@ -2071,7 +2068,7 @@ public:
     static void SetHarpoonOnCooldown(GameObject* harpoonGO);
     GameObject* FindNearestHarpoon(float x, float y, float z) const;
 
-    static const std::vector<HarpoonData>& GetHarpoonData();
+    static std::vector<HarpoonData> const& GetHarpoonData();
 
     void AssignRolesBasedOnHealth();
     bool AreRolesAssigned() const;

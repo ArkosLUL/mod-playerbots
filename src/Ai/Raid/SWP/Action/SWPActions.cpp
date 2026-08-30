@@ -7,7 +7,7 @@
 #include "SWPActions.h"
 #include "CreatureAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SWPData.h"
 #include "SWPEncounter_Brut.h"
 #include "SWPEncounter_Felmyst.h"
@@ -18,6 +18,7 @@
 #include <list>
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 bool SunwellPlateauResetEncounterStatesAction::Execute(Event /*event*/)
 {
@@ -168,7 +169,7 @@ bool VolatileFiendKeepEnemyAwayFromGroupAction::Execute(Event /*event*/)
         float const currentDistance = bot->GetDistance(volatileFiend);
         if (currentDistance < safeDistance)
         {
-            botAI->InterruptSpell();
+            bot->CastStop();
             return MoveAway(volatileFiend, safeDistance - currentDistance);
         }
     }

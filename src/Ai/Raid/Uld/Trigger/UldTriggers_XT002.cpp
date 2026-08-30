@@ -2,7 +2,7 @@
 
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RangeTriggers.h"
 #include "UldBossHelper.h"
 #include "UldHardMode.h"

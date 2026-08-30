@@ -337,6 +337,7 @@ public:
 
 public:
     std::string const GetTargetName() override { return "self target"; }
+    bool IsBuffTrigger() override { return true; }
     bool IsActive() override;
 
 protected:
@@ -405,6 +406,7 @@ public:
         : BuffTrigger(botAI, spell, checkInterval, checkIsOwner, false, beforeDuration), needLifeTime(needLifeTime) {}
 
     std::string const GetTargetName() override { return "current target"; }
+    bool IsDebuffTrigger() override { return true; }
     bool IsActive() override;
 
 protected:
@@ -702,6 +704,9 @@ public:
     HasCcTargetTrigger(PlayerbotAI* botAI, std::string const name) : Trigger(botAI, name) {}
 
     bool IsActive() override;
+
+protected:
+    bool IsCcTargetFree(Unit* ccTarget, Unit* rtiCcTarget);
 };
 
 class NoMovementTrigger : public Trigger
@@ -985,6 +990,14 @@ public:
 private:
     ObjectGuid lastPetGuid;
     bool triggered;
+};
+
+class ForceRebuffPendingTrigger : public Trigger
+{
+public:
+    ForceRebuffPendingTrigger(PlayerbotAI* botAI) : Trigger(botAI, "force rebuff pending") {}
+
+    bool IsActive() override;
 };
 
 #endif

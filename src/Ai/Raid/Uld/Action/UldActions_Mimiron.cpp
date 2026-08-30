@@ -21,7 +21,7 @@
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
@@ -29,6 +29,8 @@
 #include "Vehicle.h"
 #include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
+
+using namespace EncounterHelpers;
 
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
                                              bool fallbackUnfiltered, bool interrupt)
@@ -41,7 +43,7 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
     // a LastMovement delay, so it also blocks its own retries for a leg it never walked. Only the
     // hazards that kill do this - the mine dodge would rather keep its cast than avoid 9000 damage.
     if (interrupt)
-        botAI->InterruptSpell();
+        bot->CastStop();
 
     float const speed = bot->GetSpeed(MOVE_RUN);
     float const travel = speed > 0.0f ? distance / speed : 0.0f;
@@ -258,7 +260,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 
     // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all -
     // see the note on MoveAwayClearOfMines.
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     MoveTo(boss->GetMapId(), boss->GetPositionX() + radius * cos(heading),
            boss->GetPositionY() + radius * sin(heading), boss->GetPositionZ(), false, false, false,
@@ -306,7 +308,7 @@ bool MimironAerialCommandUnitAction::Execute(Event /*event*/)
         // The mark is for the human raid leader only - nothing reads it back. Bots pick their own
         // target through "mimiron set dps priority", so a stale icon can no longer strand the raid.
         Unit* focus = assaultBot ? assaultBot : boss;
-        if (focus && IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+        if (focus && IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
             MarkTargetWithSkull(bot, focus);
     }
 
@@ -527,7 +529,7 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
             spread = d;
     }
 
-    botAI->InterruptSpell();
+    bot->CastStop();
     return FleePosition(Position(cx, cy, bot->GetPositionZ()), ULDUAR_MIMIRON_FLAMES_RADIUS + spread + 1.0f);
 }
 
@@ -541,7 +543,7 @@ bool MimironFrostBombAction::Execute(Event event)
 {
     // The move itself is the shared MoveAwayFromCreatureAction; all this adds is the interrupt, which
     // a casting bot needs before anything can move it at all.
-    botAI->InterruptSpell();
+    bot->CastStop();
     return MoveAwayFromCreatureAction::Execute(event);
 }
 

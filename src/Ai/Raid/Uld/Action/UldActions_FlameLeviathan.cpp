@@ -16,7 +16,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RaidObs.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"

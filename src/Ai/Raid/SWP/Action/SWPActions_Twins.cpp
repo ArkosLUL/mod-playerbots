@@ -7,10 +7,11 @@
 #include "SWPActions.h"
 #include "SWPEncounter_Twins.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include <vector>
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 bool EredarTwinsMeleeJumpDownFromBalconyAction::Execute(Event /*event*/)
 {
@@ -73,17 +74,17 @@ bool EredarTwinsMisdirectBossesToTanksAction::Execute(Event /*event*/)
     if (hunterIndex == 0)
     {
         bossTarget = AI_VALUE2(Unit*, "find target", "grand warlock alythess");
-        tankTarget = GetGroupAssistTank(botAI, bot, 0);
+        tankTarget = GetGroupAssistTank(bot, 0);
     }
     else if (hunterIndex == 1)
     {
         bossTarget = AI_VALUE2(Unit*, "find target", "lady sacrolash");
-        tankTarget = GetGroupMainTank(botAI, bot);
+        tankTarget = GetGroupMainTank(bot);
     }
     else if (hunterIndex == 2)
     {
         bossTarget = AI_VALUE2(Unit*, "find target", "lady sacrolash");
-        tankTarget = GetGroupAssistTank(botAI, bot, 1);
+        tankTarget = GetGroupAssistTank(bot, 1);
     }
 
     if (!tankTarget || !tankTarget->IsAlive())
@@ -358,7 +359,7 @@ bool EredarTwinsConflagratedBotMoveFromGroupAction::Execute(Event /*event*/)
             if (distanceToPlayer >= safeDistance)
                 return false;
 
-            botAI->InterruptSpell();
+            bot->CastStop();
             return MoveAway(nearestPlayer, safeDistance - distanceToPlayer);
         }
     }
@@ -380,6 +381,6 @@ bool EredarTwinsMoveFromConflagSacrolashVictimAction::Execute(Event /*event*/)
     if (bot->GetDistance2d(victim) >= safeDistance)
         return false;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
     return MoveFromGroup(safeDistance);
 }

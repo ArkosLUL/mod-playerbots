@@ -21,12 +21,14 @@
 #include "Position.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"
 #include "Vehicle.h"
 #include <TankAssistStrategy.h>
+
+using namespace EncounterHelpers;
 
 bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
 {

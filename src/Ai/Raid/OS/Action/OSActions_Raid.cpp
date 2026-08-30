@@ -4,11 +4,10 @@
  * or (at your option) any later version.
  */
 
-
 #include "OSActions.h"
 #include "OSTriggers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Random.h"
 #include "Timer.h"
 #include <algorithm>
@@ -17,6 +16,7 @@
 #include <utility>
 
 using namespace OsHelpers;
+using namespace EncounterHelpers;
 
 // Everyone else: wave and fissure dodges, the raid line, melee positioning, target selection
 // and the threat redirect.

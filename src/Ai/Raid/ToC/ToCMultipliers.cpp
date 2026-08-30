@@ -4,11 +4,12 @@
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ReachTargetActions.h"
 #include "ShamanActions.h"
 
 using namespace TrialOfTheCrusaderHelpers;
+using namespace EncounterHelpers;
 
 float IcehowlSuppressMovementDuringChargeMultiplier::GetValue(Action* action)
 {

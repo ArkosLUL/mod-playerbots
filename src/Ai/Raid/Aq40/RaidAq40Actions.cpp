@@ -53,8 +53,6 @@ bool Aq40UseResistanceBuffsAction::Execute(Event event)
     return false;
 }
 
-
-
 // 88072: The Master's Eye for positioning maybe
 
 // bool Aq40MoveFromOtherEmperorAction::Execute(Event event)
@@ -146,7 +144,6 @@ bool Aq40MeleeViscidusAction::Execute(Event event)
 //     if (current && (current->GetName() == "qiraji scarab" || current->GetName() == "qiraji scorpion"))
 //         return false;
 
-
 //     Unit* pest1 = AI_VALUE2(Unit*, "find target", "qiraji scarab");
 //     Unit* pest2 = AI_VALUE2(Unit*, "find target", "qiraji scorpion");
 //     Unit* pest;
@@ -167,7 +164,6 @@ bool Aq40MeleeViscidusAction::Execute(Event event)
 
 //     else
 //         return false;
-
 
 //     ObjectGuid guid = pest->GetGUID();
 //     botAI->GetAiObjectContext()->GetValue<GuidVector>("prioritized targets")->Set({guid});
@@ -290,7 +286,6 @@ bool Aq40OuroBurrowedFleeAction::Execute(Event event)
     }
     */
 
-
     if (doFlee)
     {
         if (!botAI->HasStrategy("move from group", BotState::BOT_STATE_COMBAT))
@@ -369,7 +364,6 @@ bool Aq40Cthun1PositionAction::Execute(Event event)
     // boss_cthun.cpp
     const int SPELL_GREEN_BEAM                            = 26134;
     const int SPELL_RED_COLORATION                        = 22518;        //Probably not the right spell but looks similar
-
 
     ObjectGuid botGuid = bot->GetGUID();
 
@@ -503,7 +497,6 @@ bool Aq40Cthun2PositionAction::Execute(Event event)
     const int SPELL_RUBBLE_ROCKY                          = 26271;
 
     const int SPELL_CARAPACE_CTHUN                        = 26156;     // Server-side
-
 
     // temple_of_ahn_quiraj.h
     const int NPC_CLAW_TENTACLE       = 15725;

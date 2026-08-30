@@ -1,10 +1,11 @@
 #include "ToCTriggers.h"
 #include "ToCHelpers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Creature.h"
 
 using namespace TrialOfTheCrusaderHelpers;
+using namespace EncounterHelpers;
 
 // Gormok the Impaler
 

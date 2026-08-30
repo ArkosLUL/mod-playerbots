@@ -71,7 +71,7 @@ void EquipAction::EquipItem(Item* item)
 {
     uint8 bagIndex = item->GetBagSlot();
     uint8 slot = item->GetSlot();
-    const ItemTemplate* itemProto = item->GetTemplate();
+    ItemTemplate const* itemProto = item->GetTemplate();
     uint32 itemId = itemProto->ItemId;
     uint8 invType = itemProto->InventoryType;
 
@@ -196,7 +196,7 @@ void EquipAction::EquipItem(Item* item)
             bool mainHandCanGoOff = false;
             if (mainHandItem)
             {
-                const ItemTemplate* mhProto = mainHandItem->GetTemplate();
+                ItemTemplate const* mhProto = mainHandItem->GetTemplate();
                 bool mhIsValidTG = false;
                 if (canTitanGrip && mhProto->InventoryType == INVTYPE_2HWEAPON)
                 {
@@ -233,7 +233,7 @@ void EquipAction::EquipItem(Item* item)
                 // Try moving old main hand weapon to offhand if beneficial
                 if (mainHandItem && mainHandCanGoOff && (!offHandItem || mainHandScore > offHandScore))
                 {
-                    const ItemTemplate* oldMHProto = mainHandItem->GetTemplate();
+                    ItemTemplate const* oldMHProto = mainHandItem->GetTemplate();
 
                     WorldPacket offhandPacket(CMSG_AUTOEQUIP_ITEM_SLOT, 2);
                     ObjectGuid oldMHGuid = mainHandItem->GetGUID();

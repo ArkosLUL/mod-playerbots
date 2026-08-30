@@ -8,9 +8,11 @@
 
 #include "Group.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ShamanActions.h"
 #include "ShamanTriggers.h"
+
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -35,7 +37,7 @@ Player* GetAntiFearWardTarget(PlayerbotAI* botAI, Player* bot)
     if (!spellId || bot->HasSpellCooldown(spellId))
         return nullptr;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = GetGroupMainTank(bot);
     if (CanWardTarget(botAI, bot, mainTank))
         return mainTank;
 

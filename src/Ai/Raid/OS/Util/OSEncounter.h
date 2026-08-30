@@ -4,7 +4,6 @@
  * or (at your option) any later version.
  */
 
-
 #ifndef _PLAYERBOT_OSENCOUNTER_H
 #define _PLAYERBOT_OSENCOUNTER_H
 

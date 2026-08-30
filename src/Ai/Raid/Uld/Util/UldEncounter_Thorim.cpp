@@ -13,7 +13,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RaidObs.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
@@ -26,6 +26,8 @@
 #include <limits>
 #include <list>
 #include <vector>
+
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -295,7 +297,7 @@ bool MeleeSlotOf(Player* bot, uint8& slot)
 float RingAnchorBearing(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     Position anchor = ULDUAR_THORIM_PHASE2_TANK_SPOT;
-    if (Player* mainTank = GetGroupMainTank(botAI, bot))
+    if (Player* mainTank = GetGroupMainTank(bot))
         if (mainTank->IsAlive())
             anchor = mainTank->GetPosition();
 

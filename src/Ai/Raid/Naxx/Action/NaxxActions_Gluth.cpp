@@ -7,8 +7,10 @@
 #include "NaxxActions.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SharedDefines.h"
+
+using namespace EncounterHelpers;
 
 bool GluthChooseTargetAction::Execute(Event event)
 {
@@ -232,7 +234,7 @@ std::pair<Player*, Unit*> GluthRedirectThreatAction::GetAssignment()
         Unit* target = AI_VALUE(Unit*, "current target");
         if (helper.IsZombieChow(target))
         {
-            if (Player* zombieTank = GetGroupAssistTank(botAI, bot, 1))
+            if (Player* zombieTank = GetGroupAssistTank(bot, 1))
             {
                 return {zombieTank, target};
             }
@@ -242,7 +244,7 @@ std::pair<Player*, Unit*> GluthRedirectThreatAction::GetAssignment()
     Unit* boss = AI_VALUE2(Unit*, "find target", "gluth");
     // Mortal Wound stacks swap the boss between the two tanks, so aim at whoever holds him now.
     Player* tank = boss ? GetTankHolding(boss) : nullptr;
-    return {tank ? tank : GetGroupMainTank(botAI, bot), boss};
+    return {tank ? tank : GetGroupMainTank(bot), boss};
 }
 
 Player* GluthRedirectThreatAction::GetRedirectTank() { return GetAssignment().first; }

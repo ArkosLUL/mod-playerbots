@@ -6,7 +6,9 @@
 
 #include "NaxxActions.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
+
+using namespace EncounterHelpers;
 
 bool HorsemanAttractAlternativelyAction::Execute(Event event)
 {
@@ -49,12 +51,12 @@ std::pair<Player*, Unit*> FourhorsemanRedirectThreatAction::GetAssignment()
 
     if (index % 2 == 1)
     {
-        if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+        if (Player* assistTank = GetGroupAssistTank(bot, 0))
         {
             return {assistTank, baron};
         }
     }
-    return {GetGroupMainTank(botAI, bot), thane};
+    return {GetGroupMainTank(bot), thane};
 }
 
 Player* FourhorsemanRedirectThreatAction::GetRedirectTank()

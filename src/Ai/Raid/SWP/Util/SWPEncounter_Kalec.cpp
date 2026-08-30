@@ -8,7 +8,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PlayerbotTextMgr.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Timer.h"
 #include <algorithm>
 #include <map>
@@ -46,7 +46,7 @@ void ClearExpiredKalecgosActiveRift(KalecgosEncounterState& state, uint32 now)
     state.activeRiftOutgoingTankGuid = ObjectGuid::Empty;
 }
 
-uint8 GetKalecgosAssignedGroup(const KalecgosEncounterState& state, ObjectGuid playerGuid)
+uint8 GetKalecgosAssignedGroup(KalecgosEncounterState const& state, ObjectGuid playerGuid)
 {
     auto const assignment = state.playerToGroup.find(playerGuid);
     return assignment != state.playerToGroup.end() ?
@@ -84,7 +84,7 @@ KalecgosEncounterState& GetPreparedKalecgosEncounterState(Player* player)
     return state;
 }
 
-bool IsKalecgosActiveRiftCandidate(Player* candidate, const KalecgosEncounterState& state)
+bool IsKalecgosActiveRiftCandidate(Player* candidate, KalecgosEncounterState const& state)
 {
     if (!candidate || !candidate->IsAlive() || candidate->GetMapId() != SWP_MAP_ID ||
         !state.activeRiftOpenedMs || state.activeRiftGroup == KALECGOS_INVALID_GROUP)
@@ -276,7 +276,7 @@ Player* GetNextKalecgosSurfaceTankInOrder(
 }
 
 Player* GetFirstKalecgosSurfaceTankInPortalRotation(
-    Group* group, const KalecgosEncounterState& state,
+    Group* group, KalecgosEncounterState const& state,
     ObjectGuid firstExcludedGuid = ObjectGuid::Empty,
     ObjectGuid secondExcludedGuid = ObjectGuid::Empty)
 {
@@ -314,7 +314,7 @@ Player* GetKalecgosSurfaceTankAfterCurrentHandOff(
 }
 
 Player* GetKalecgosBlastAnnouncementCurrentTank(
-    Group* group, const KalecgosEncounterState& state)
+    Group* group, KalecgosEncounterState const& state)
 {
     if (Player* replacementTank = GetKalecgosSurfaceTankAfterCurrentHandOff(group, state))
         return replacementTank;
@@ -322,7 +322,7 @@ Player* GetKalecgosBlastAnnouncementCurrentTank(
     return GetKalecgosSurfaceAssignedTank(group, state.currentTankGuid);
 }
 
-uint8 CountKalecgosSurfaceAssignedTanks(Group* group, const KalecgosEncounterState& state)
+uint8 CountKalecgosSurfaceAssignedTanks(Group* group, KalecgosEncounterState const& state)
 {
     uint8 count = 0;
     for (ObjectGuid guid : state.tankAssignmentGuids)
@@ -335,7 +335,7 @@ uint8 CountKalecgosSurfaceAssignedTanks(Group* group, const KalecgosEncounterSta
 }
 
 Player* GetKalecgosCurrentVictimTank(
-    Player* player, Group* group, const KalecgosEncounterState& state)
+    Player* player, Group* group, KalecgosEncounterState const& state)
 {
     Unit* kalecgos = nullptr;
 
@@ -363,7 +363,7 @@ Player* GetKalecgosCurrentVictimTank(
 }
 
 Player* SelectKalecgosOutgoingTankForRift(
-    Group* group, const KalecgosEncounterState& state)
+    Group* group, KalecgosEncounterState const& state)
 {
     if (!state.activeRiftOpenedMs ||
         HasKalecgosTankAssignment(state.tankAssignmentGuids, state.blastedPlayerGuid) ||
@@ -425,7 +425,7 @@ void AdvanceKalecgosTankPortalRotation(KalecgosEncounterState& state, ObjectGuid
         rotationGuids, state.tankAssignmentGuids);
 }
 
-Player* GetKalecgosOutgoingTank(Group* group, const KalecgosEncounterState& state)
+Player* GetKalecgosOutgoingTank(Group* group, KalecgosEncounterState const& state)
 {
     if (!state.activeRiftOpenedMs || state.activeRiftOutgoingTankGuid == ObjectGuid::Empty)
         return nullptr;
@@ -433,7 +433,7 @@ Player* GetKalecgosOutgoingTank(Group* group, const KalecgosEncounterState& stat
     return GetKalecgosSurfaceAssignedTank(group, state.activeRiftOutgoingTankGuid);
 }
 
-uint8 GetNextAvailableKalecgosGroup(Group* group, const KalecgosEncounterState& state)
+uint8 GetNextAvailableKalecgosGroup(Group* group, KalecgosEncounterState const& state)
 {
     if (!group)
         return KALECGOS_INVALID_GROUP;
@@ -457,7 +457,7 @@ uint8 GetNextAvailableKalecgosGroup(Group* group, const KalecgosEncounterState& 
     return KALECGOS_INVALID_GROUP;
 }
 
-uint8 ResolveKalecgosActiveRiftGroup(Group* group, const KalecgosEncounterState& state)
+uint8 ResolveKalecgosActiveRiftGroup(Group* group, KalecgosEncounterState const& state)
 {
     if (state.blastedPlayerGuid != ObjectGuid::Empty)
     {

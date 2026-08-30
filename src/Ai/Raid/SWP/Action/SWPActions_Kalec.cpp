@@ -7,11 +7,12 @@
 #include "SWPActions.h"
 #include "SWPEncounter_Kalec.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "TargetValue.h"
 #include <algorithm>
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 bool KalecgosTankPositionBossAction::Execute(Event event)
 {

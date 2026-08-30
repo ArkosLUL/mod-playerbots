@@ -19,7 +19,7 @@
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
@@ -27,6 +27,8 @@
 #include "Vehicle.h"
 #include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
+
+using namespace EncounterHelpers;
 
 const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, -24.871964f, 324.88956f, 6.247805f);
 
@@ -130,7 +132,7 @@ bool YoggSaronMarkTargetAction::Execute(Event /*event*/)
 
         int lowestHealth = std::numeric_limits<int>::max();
         Unit* lowestHealthUnit = nullptr;
-        for (const ObjectGuid& guid : targets)
+        for (ObjectGuid const& guid : targets)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (!unit || !unit->IsAlive())
@@ -569,7 +571,7 @@ bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
     GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
     Unit* looseGuardian = nullptr;
     float nearestDistance = std::numeric_limits<float>::max();
-    for (const ObjectGuid& guid : targets)
+    for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())

@@ -11,7 +11,7 @@
 #include "GroupReference.h"
 #include "NaxxBossHelper.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -19,6 +19,8 @@
 #include <list>
 #include <mutex>
 #include <unordered_set>
+
+using namespace EncounterHelpers;
 
 namespace VoaHelpers
 {
@@ -183,7 +185,7 @@ bool InsideChamber(WorldObject const* object)
 
 Player* GetOffTank(PlayerbotAI* botAI, Player* bot)
 {
-    return GetGroupAssistTank(botAI, bot, 0);
+    return GetGroupAssistTank(bot, 0);
 }
 
 bool IsOffTank(Player* bot)
@@ -223,7 +225,7 @@ Player* RedirectTarget(PlayerbotAI* botAI, Player* bot)
             return offTank;
     }
 
-    return GetGroupMainTank(botAI, bot);
+    return GetGroupMainTank(bot);
 }
 
 void ClampToChamber(float& x, float& y)

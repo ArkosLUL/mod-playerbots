@@ -4,11 +4,10 @@
  * or (at your option) any later version.
  */
 
-
 #include "OSActions.h"
 #include "OSTriggers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Random.h"
 #include "Timer.h"
 #include <algorithm>

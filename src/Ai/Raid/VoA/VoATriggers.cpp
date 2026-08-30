@@ -10,11 +10,12 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SpellMgr.h"
 #include "VoAHelpers.h"
 
 using namespace VoaHelpers;
+using namespace EncounterHelpers;
 
 namespace
 {

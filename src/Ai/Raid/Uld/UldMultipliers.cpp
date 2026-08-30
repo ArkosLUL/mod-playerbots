@@ -6,7 +6,7 @@
 #include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
 #include "FollowActions.h"
-#include "GenericActions.h"
+#include "AttackAction.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "MageActions.h"
@@ -15,7 +15,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -32,6 +32,8 @@
 #include "UldTriggers.h"
 #include "UldScripts.h"
 #include "VehicleActions.h"
+
+using namespace EncounterHelpers;
 
 // Algalon the Observer
 //

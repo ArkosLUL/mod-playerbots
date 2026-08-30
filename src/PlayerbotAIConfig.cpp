@@ -164,6 +164,8 @@ bool PlayerbotAIConfig::Initialize()
     tellWhenMissingBuffReagents = sConfigMgr->GetOption<bool>("AiPlayerbot.TellWhenMissingBuffReagents", true);
     missingBuffReagentMessageCooldown = sConfigMgr->GetOption<uint32>(
         "AiPlayerbot.MissingBuffReagentMessageCooldown", 300);
+    forceRebuffOnReadyCheck = sConfigMgr->GetOption<bool>("AiPlayerbot.ForceRebuffOnReadyCheck", false);
+    forceRebuffMarginSecs = std::min(sConfigMgr->GetOption<uint32>("AiPlayerbot.ForceRebuffMarginSecs", 60), 3600u);
     autoAvoidAoe = sConfigMgr->GetOption<bool>("AiPlayerbot.AutoAvoidAoe", true);
     maxAoeAvoidRadius = sConfigMgr->GetOption<float>("AiPlayerbot.MaxAoeAvoidRadius", 15.0f);
     LoadSet<std::set<uint32>>(sConfigMgr->GetOption<std::string>("AiPlayerbot.AoeAvoidSpellWhitelist", "50759,57491,13810,29946"),
@@ -836,6 +838,7 @@ bool PlayerbotAIConfig::Initialize()
     }
 
     PlayerbotGuildMgr::instance().Init();
+    sRandomPlayerbotMgr.InitArenaTeams();
     sRandomItemMgr.Init();
     sRandomItemMgr.InitAfterAhBot();
     sBisListMgr->LoadAll();
@@ -1051,7 +1054,9 @@ std::string const PlayerbotAIConfig::GetTimestampStr()
     //       HH     hour (2 digits 00-23)
     //       MM     minutes (2 digits 00-59)
     //       SS     seconds (2 digits 00-59)
-    char buf[32];
+    // Sized for the widest output snprintf can produce for these int conversions, so the
+    // result is never truncated.
+    char buf[128];
     snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d-%02d-%02d", aTm->tm_year + 1900, aTm->tm_mon + 1, aTm->tm_mday, aTm->tm_hour,
              aTm->tm_min, aTm->tm_sec);
     return std::string(buf);
@@ -1173,7 +1178,7 @@ void PlayerbotAIConfig::loadWorldBuff()
     }
 }
 
-static std::vector<std::string> split(const std::string& str, const std::string& pattern)
+static std::vector<std::string> split(std::string const& str, std::string const& pattern)
 {
     std::vector<std::string> res;
     if (str == "")

@@ -13,7 +13,6 @@
 #include "DruidBearActions.h"
 #include "DruidShapeshiftActions.h"
 #include "FollowActions.h"
-#include "GenericActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
 #include "MageActions.h"

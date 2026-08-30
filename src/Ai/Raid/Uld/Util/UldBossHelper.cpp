@@ -14,7 +14,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "UldHardMode.h"
 #include "Vehicle.h"
 #include "DynamicObject.h"
@@ -38,6 +38,8 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+using namespace EncounterHelpers;
 
 // Room centre, midway between the two water pools. The whole fight is fought here: it is the only
 // spot from which the patch fan clears both pools by the 25 yd the core needs to light them.
@@ -300,7 +302,7 @@ GameObject* RazorscaleBossHelper::FindNearestHarpoon(float x, float y, float z) 
     return nearestHarpoon;
 }
 
-const std::vector<RazorscaleBossHelper::HarpoonData>& RazorscaleBossHelper::GetHarpoonData()
+std::vector<RazorscaleBossHelper::HarpoonData> const& RazorscaleBossHelper::GetHarpoonData()
 {
     // Only two of these exist in 10-man; the missing entries simply never resolve to a GameObject.
     static const std::vector<HarpoonData> harpoonData =
@@ -1944,10 +1946,10 @@ bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot)
 
     // Whoever holds XT keeps holding him, so the add belongs to the first assist tank and only falls
     // to the main tank when there is no second tank left.
-    if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+    if (Player* assistTank = GetGroupAssistTank(bot, 0))
         return assistTank == bot;
 
-    if (Player* mainTank = GetGroupMainTank(botAI, bot))
+    if (Player* mainTank = GetGroupMainTank(bot))
         return mainTank == bot;
 
     // Neither resolves only when this bot is the last tank standing, so it owns the add by default.
@@ -2215,10 +2217,10 @@ Unit* GetIgnisAssignedScorchedGround(PlayerbotAI* /*botAI*/, WorldObject const* 
 
 int8 GetIgnisConstructTankIndex(PlayerbotAI* botAI, Player* bot)
 {
-    if (GetGroupAssistTank(botAI, bot, 0) == bot)
+    if (GetGroupAssistTank(bot, 0) == bot)
         return 0;
 
-    if (GetGroupAssistTank(botAI, bot, 1) == bot)
+    if (GetGroupAssistTank(bot, 1) == bot)
         return 1;
 
     return -1;

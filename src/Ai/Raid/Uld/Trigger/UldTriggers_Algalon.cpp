@@ -8,7 +8,7 @@
 #include "UldBossHelper.h"
 #include "UldEncounter_Algalon.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "SpellAuras.h"
@@ -17,6 +17,8 @@
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
 #include <RtiTargetValue.h>
+
+using namespace EncounterHelpers;
 
 //
 // Algalon the Observer
@@ -82,8 +84,8 @@ bool AlgalonPhasePunchSwapTrigger::IsActive()
     if (!AlgalonEncounterActive(botAI))
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
-    Player* offTank = GetGroupAssistTank(botAI, bot, 0);
+    Player* mainTank = GetGroupMainTank(bot);
+    Player* offTank = GetGroupAssistTank(bot, 0);
     if (!mainTank || !offTank || mainTank == offTank)
         return false;
 
@@ -118,7 +120,7 @@ bool AlgalonConstellationTauntTrigger::IsActive()
     if (!AlgalonEncounterActive(botAI))
         return false;
 
-    if (bot != GetGroupMainTank(botAI, bot) && bot != GetGroupAssistTank(botAI, bot, 0))
+    if (bot != GetGroupMainTank(bot) && bot != GetGroupAssistTank(bot, 0))
         return false;
 
     if (bot == GetAlgalonBossTank(botAI))
@@ -135,7 +137,7 @@ bool AlgalonConstellationKiteTrigger::IsActive()
 
 bool AlgalonCollapsingStarFocusTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
         return false;
 
     Unit* star = GetAlgalonFocusStar(botAI);
@@ -160,7 +162,7 @@ bool AlgalonDarkMatterTankTrigger::IsActive()
 
 bool AlgalonDarkMatterMarkTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
         return false;
 
     Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);

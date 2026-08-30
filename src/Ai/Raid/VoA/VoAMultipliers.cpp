@@ -9,7 +9,6 @@
 #include "DKActions.h"
 #include "DruidBearActions.h"
 #include "FollowActions.h"
-#include "GenericActions.h"
 #include "HunterActions.h"
 #include "MovementActions.h"
 #include "PaladinActions.h"

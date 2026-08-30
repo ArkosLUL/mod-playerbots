@@ -19,7 +19,7 @@
 #include "UldBossHelper.h"
 #include "UldEncounter_Thorim.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"

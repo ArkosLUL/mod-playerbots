@@ -5,7 +5,7 @@
  */
 
 #include "OSTriggers.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "SharedDefines.h"
 
 #include <cmath>

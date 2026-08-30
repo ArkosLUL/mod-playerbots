@@ -7,12 +7,13 @@
 #include "SWPActions.h"
 #include "SWPEncounter_Felmyst.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Timer.h"
 #include <array>
 #include <cmath>
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 bool FelmystMisdirectBossToMainTankAction::Execute(Event /*event*/)
 {
@@ -20,7 +21,7 @@ bool FelmystMisdirectBossToMainTankAction::Execute(Event /*event*/)
     if (!felmyst)
         return false;
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = GetGroupMainTank(bot);
     if (!mainTank)
         return false;
 
@@ -209,7 +210,7 @@ bool FelmystAvoidDemonicVaporAction::Execute(Event /*event*/)
     if (currentDistance > safeDistFromVapor)
         return false;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
     return MoveAway(hazard, safeDistFromVapor - currentDistance);
 }
 
@@ -373,7 +374,7 @@ bool FelmystMoveToSafeFogLaneAction::TryTeleportStuckBotOntoCrate(
     Position const onCratePosition = { 1482.181f, 591.253f, 24.545f };
 
     _fogCrateStuckSampleMs = 0;
-    botAI->InterruptSpell();
+    bot->CastStop();
     return bot->TeleportTo(
         SWP_MAP_ID, onCratePosition.GetPositionX(),onCratePosition.GetPositionY(),
         onCratePosition.GetPositionZ(), bot->GetOrientation());
@@ -381,7 +382,7 @@ bool FelmystMoveToSafeFogLaneAction::TryTeleportStuckBotOntoCrate(
 
 bool FelmystMeleeClearTargetAction::Execute(Event /*event*/)
 {
-    botAI->InterruptSpell();
+    bot->CastStop();
     bot->AttackStop();
     context->GetValue<Unit*>("current target")->Set(nullptr);
     bot->SetSelection(ObjectGuid());

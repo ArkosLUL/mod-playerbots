@@ -9,7 +9,7 @@
 #include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RangeTriggers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
@@ -18,6 +18,8 @@
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
 #include <RtiTargetValue.h>
+
+using namespace EncounterHelpers;
 
 bool VezaxResetEncounterStateTrigger::IsActive()
 {

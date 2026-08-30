@@ -7,7 +7,7 @@
 #include "Playerbots.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"

@@ -83,7 +83,7 @@ public:
 // public:
 //     Aq40MoveTowardsEmperorVekLorAction(PlayerbotAI* botAI)
 //         : Aq40MoveTowardsEmperorAction(botAI, "aq40 move towards emperor vek'lor") {}
-    
+
 //     std::string const WhichEmperor() override { return "emperor vek'lor"; }
 // };
 
@@ -92,7 +92,7 @@ public:
 // public:
 //     Aq40MoveTowardsEmperorVekNilashAction(PlayerbotAI* botAI)
 //         : Aq40MoveTowardsEmperorAction(botAI, "aq40 move towards emperor vek'nilash") {}
-    
+
 //     std::string const WhichEmperor() override { return "emperor vek'nilash"; }
 // };
 

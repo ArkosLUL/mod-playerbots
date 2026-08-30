@@ -21,7 +21,7 @@
 #include "Position.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
@@ -30,6 +30,8 @@
 #include "Vehicle.h"
 #include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
+
+using namespace EncounterHelpers;
 
 RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFlameAction::Scan()
 {
@@ -513,7 +515,7 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
         return false;
 
     // Retrieve harpoon data from the helper
-    const std::vector<RazorscaleBossHelper::HarpoonData>& harpoonData = razorscaleHelper.GetHarpoonData();
+    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = razorscaleHelper.GetHarpoonData();
 
     GameObject* closestHarpoon = nullptr;
     float minDistance = std::numeric_limits<float>::max();
@@ -600,7 +602,7 @@ bool RazorscaleHarpoonAction::isUseful()
     if (!boss || !boss->IsAlive())
         return false;
 
-    const std::vector<RazorscaleBossHelper::HarpoonData>& harpoonData = razorscaleHelper.GetHarpoonData();
+    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = razorscaleHelper.GetHarpoonData();
 
     for (auto const& harpoon : harpoonData)
     {

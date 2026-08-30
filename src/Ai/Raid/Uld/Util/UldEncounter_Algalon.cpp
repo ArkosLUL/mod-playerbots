@@ -11,13 +11,15 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Timer.h"
 #include "Unit.h"
 
 #include <array>
 #include <cmath>
 #include <limits>
+
+using namespace EncounterHelpers;
 
 std::unordered_map<uint32, AlgalonEncounterState> algalonEncounterStates;
 
@@ -326,10 +328,10 @@ Player* GetAlgalonBossTank(PlayerbotAI* botAI)
 
 Player* GetAlgalonAddTank(PlayerbotAI* botAI, Player* bot)
 {
-    if (Player* thirdTank = GetGroupAssistTank(botAI, bot, 1))
+    if (Player* thirdTank = GetGroupAssistTank(bot, 1))
         return thirdTank;
 
-    return GetGroupAssistTank(botAI, bot, 0);
+    return GetGroupAssistTank(bot, 0);
 }
 
 Unit* GetAlgalonKiteTarget(Player* bot)

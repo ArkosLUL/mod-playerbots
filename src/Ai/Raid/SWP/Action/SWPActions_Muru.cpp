@@ -9,7 +9,7 @@
 #include "CharmInfo.h"
 #include "CreatureAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "TargetValue.h"
 #include <algorithm>
 #include <array>
@@ -18,6 +18,7 @@
 #include <vector>
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 bool MuruMisdirectEnemiesToTanksAction::Execute(Event /*event*/)
 {
@@ -27,13 +28,13 @@ bool MuruMisdirectEnemiesToTanksAction::Execute(Event /*event*/)
     if (Unit* voidSentinel = AI_VALUE2(Unit*, "find target", "void sentinel"))
     {
         targetEnemy = voidSentinel;
-        if (Player* firstAssistTank = GetGroupAssistTank(botAI, bot, 0))
+        if (Player* firstAssistTank = GetGroupAssistTank(bot, 0))
             targetTank = firstAssistTank;
     }
     else if (Unit* entropius = AI_VALUE2(Unit*, "find target", "entropius"))
     {
         targetEnemy = entropius;
-        if (Player* mainTank = GetGroupMainTank(botAI, bot))
+        if (Player* mainTank = GetGroupMainTank(bot))
             targetTank = mainTank;
     }
 
@@ -639,7 +640,7 @@ bool MuruCastStunOnShadowswordBerserkerAction::Execute(Event /*event*/)
     if (!berserker || berserker->HasUnitState(UNIT_STATE_STUNNED))
         return false;
 
-    auto const castStun = [&](const char* spell)
+    auto const castStun = [&](char const* spell)
     {
         return botAI->CanCastSpell(spell, berserker) && botAI->CastSpell(spell, berserker);
     };
@@ -673,7 +674,7 @@ bool MuruInterruptFelFireballAction::Execute(Event /*event*/)
     if (!furyMage)
         return false;
 
-    auto const castInterrupt = [&](const char* spell)
+    auto const castInterrupt = [&](char const* spell)
     {
         return botAI->CanCastSpell(spell, furyMage) && botAI->CastSpell(spell, furyMage);
     };

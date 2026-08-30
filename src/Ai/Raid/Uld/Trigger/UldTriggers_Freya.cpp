@@ -7,13 +7,15 @@
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
+
+using namespace EncounterHelpers;
 
 bool FreyaNearNatureBombTrigger::IsActive()
 {
@@ -111,7 +113,7 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (bot->HasAura(SPELL_POTENT_PHEROMONES))
         return false;
 
-    for (const ObjectGuid& guid : AI_VALUE(GuidVector, "nearest npcs"))
+    for (ObjectGuid const& guid : AI_VALUE(GuidVector, "nearest npcs"))
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && unit->IsAlive() && unit->GetEntry() == NPC_HEALTHY_SPORE)

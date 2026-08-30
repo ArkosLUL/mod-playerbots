@@ -8,7 +8,7 @@
 #include "UldEncounter_Thorim.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RangeTriggers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
@@ -16,6 +16,8 @@
 #include "Vehicle.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
+
+using namespace EncounterHelpers;
 
 bool ThorimUnbalancingStrikeTrigger::IsActive()
 {

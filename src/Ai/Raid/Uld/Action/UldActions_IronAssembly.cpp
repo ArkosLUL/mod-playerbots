@@ -10,13 +10,15 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ServerFacade.h"
 #include "UldBossHelper.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
+
+using namespace EncounterHelpers;
 
 bool IronAssemblyResetEncounterStateAction::Execute(Event /*event*/)
 {
@@ -267,7 +269,7 @@ Player* IronAssemblyRedirectThreatAction::GetRedirectTank()
         }
     }
 
-    return GetGroupMainTank(botAI, bot);
+    return GetGroupMainTank(bot);
 }
 
 bool IronAssemblyRedirectThreatAction::Execute(Event /*event*/)

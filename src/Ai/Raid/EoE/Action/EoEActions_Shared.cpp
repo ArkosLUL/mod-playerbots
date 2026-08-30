@@ -8,12 +8,14 @@
 #include "EoEData.h"
 #include "EoEEncounter_Malygos.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ServerFacade.h"
 #include "Vehicle.h"
 
 #include <limits>
 #include <utility>
+
+using namespace EncounterHelpers;
 
 bool MalygosPositionAction::Execute(Event /*event*/)
 {

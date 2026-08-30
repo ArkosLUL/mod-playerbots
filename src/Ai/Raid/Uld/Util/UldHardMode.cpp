@@ -6,10 +6,12 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
 #include "Unit.h"
+
+using namespace EncounterHelpers;
 
 bool IsVezaxHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarVezaxHardMode; }
 

@@ -63,6 +63,7 @@ public:
     RogueTriggerFactoryInternal()
     {
         creators["kick"] = &RogueTriggerFactoryInternal::kick;
+        creators["riposte"] = &RogueTriggerFactoryInternal::riposte;
         creators["rupture"] = &RogueTriggerFactoryInternal::rupture;
         creators["assassination rupture"] = &RogueTriggerFactoryInternal::assassination_rupture;
         creators["slice and dice"] = &RogueTriggerFactoryInternal::slice_and_dice;
@@ -93,6 +94,7 @@ private:
     static Trigger* killing_spree(PlayerbotAI* botAI) { return new KillingSpreeTrigger(botAI); }
     static Trigger* envenom(PlayerbotAI* botAI) { return new EnvenomTrigger(botAI); }
     static Trigger* kick(PlayerbotAI* botAI) { return new KickInterruptSpellTrigger(botAI); }
+    static Trigger* riposte(PlayerbotAI* botAI) { return new RiposteAvailableTrigger(botAI); }
     static Trigger* rupture(PlayerbotAI* botAI) { return new RuptureTrigger(botAI); }
     static Trigger* assassination_rupture(PlayerbotAI* botAI) { return new AssassinationRuptureTrigger(botAI); }
     static Trigger* slice_and_dice(PlayerbotAI* botAI) { return new SliceAndDiceTrigger(botAI); }

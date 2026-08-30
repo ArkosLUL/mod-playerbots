@@ -24,7 +24,7 @@
 #include "PaladinActions.h"
 #include "PartyMemberToDispel.h"
 #include "PriestActions.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "ShamanActions.h"
@@ -36,6 +36,7 @@
 #include <ctime>
 
 using namespace SwpHelpers;
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -910,15 +911,15 @@ float KiljaedenTanksFocusAssignedHandOnlyMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // Apply this multiplier only if there are 3 bot tanks
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = GetGroupMainTank(bot);
     if (!mainTank || !GET_PLAYERBOT_AI(mainTank))
         return 1.0f;
 
-    Player* firstAssistTank = GetGroupAssistTank(botAI, bot, 0);
+    Player* firstAssistTank = GetGroupAssistTank(bot, 0);
     if (!firstAssistTank || !GET_PLAYERBOT_AI(firstAssistTank))
         return 1.0f;
 
-    Player* secondAssistTank = GetGroupAssistTank(botAI, bot, 1);
+    Player* secondAssistTank = GetGroupAssistTank(bot, 1);
     if (!secondAssistTank || !GET_PLAYERBOT_AI(secondAssistTank))
         return 1.0f;
 

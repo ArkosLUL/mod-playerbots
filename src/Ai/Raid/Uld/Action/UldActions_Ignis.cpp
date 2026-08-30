@@ -19,7 +19,7 @@
 #include "Spell.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
 #include "Unit.h"
@@ -231,7 +231,7 @@ bool IgnisFlameJetsHoldCastAction::Execute(Event /*event*/)
     if (own->GetCastTimeRemaining() < jets->GetCastTimeRemaining())
         return false;
 
-    botAI->InterruptSpell();
+    bot->CastStop();
 
     return true;
 }

@@ -20,12 +20,13 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Spell.h"
 #include "Timer.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <list>
@@ -33,6 +34,8 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+class Aura;
 
 const uint32 NAXX_MAP_ID = 533;
 
@@ -1463,7 +1466,7 @@ public:
         if (!_unit)
         {
             // A bot that battle-rezzed or arrived after the pull never made that threat list.
-            _unit = GetFirstAliveUnitByEntry(botAI, NaxxSpellIds::GothikEntry);
+            _unit = EncounterHelpers::GetFirstAliveUnitByEntry(botAI, NaxxSpellIds::GothikEntry);
         }
         return _unit != nullptr;
     }
@@ -2451,12 +2454,12 @@ public:
         // follow-master for anyone walking past the room.
         if (!stalagg)
         {
-            if (Unit* found = GetFirstAliveUnitByEntry(botAI, NPC_STALAGG); found && found->IsInCombat())
+            if (Unit* found = EncounterHelpers::GetFirstAliveUnitByEntry(botAI, NPC_STALAGG); found && found->IsInCombat())
                 stalagg = found;
         }
         if (!feugen)
         {
-            if (Unit* found = GetFirstAliveUnitByEntry(botAI, NPC_FEUGEN); found && found->IsInCombat())
+            if (Unit* found = EncounterHelpers::GetFirstAliveUnitByEntry(botAI, NPC_FEUGEN); found && found->IsInCombat())
                 feugen = found;
         }
 
@@ -2472,7 +2475,7 @@ public:
         stalagg = ResolvePrepullPet(_prepullStalaggGuid, NPC_STALAGG);
         feugen = ResolvePrepullPet(_prepullFeugenGuid, NPC_FEUGEN);
 
-        return !IsDownOrFeigning(stalagg) && !IsDownOrFeigning(feugen);
+        return !EncounterHelpers::IsDownOrFeigning(stalagg) && !EncounterHelpers::IsDownOrFeigning(feugen);
     }
 
     // Doubles as the slime bailout: a bot that falls off the platforms drops below ROOM_FLOOR_Z,
@@ -2545,7 +2548,7 @@ public:
 
     // Both pets feign death on their "kill" and only really die 12s later, when Thaddius'
     // overload finishes them off - so the pet phase has to end on the feign, not on IsAlive().
-    bool IsPhasePet() { return !IsDownOrFeigning(feugen) || !IsDownOrFeigning(stalagg); }
+    bool IsPhasePet() { return !EncounterHelpers::IsDownOrFeigning(feugen) || !EncounterHelpers::IsDownOrFeigning(stalagg); }
     bool IsPhaseTransition()
     {
         if (IsPhasePet())
@@ -2575,11 +2578,11 @@ public:
     Unit* GetNearestPet()
     {
         Unit* unit = nullptr;
-        if (!IsDownOrFeigning(feugen))
+        if (!EncounterHelpers::IsDownOrFeigning(feugen))
         {
             unit = feugen;
         }
-        if (!IsDownOrFeigning(stalagg) && (!feugen || bot->GetDistance(stalagg) < bot->GetDistance(feugen)))
+        if (!EncounterHelpers::IsDownOrFeigning(stalagg) && (!feugen || bot->GetDistance(stalagg) < bot->GetDistance(feugen)))
         {
             unit = stalagg;
         }
@@ -2619,7 +2622,7 @@ public:
     Unit* GetMarkedPet(uint8 iconIndex)
     {
         Unit* unit = GetMarkedUnitRaw(iconIndex);
-        return IsPet(unit) && !IsDownOrFeigning(unit) ? unit : nullptr;
+        return IsPet(unit) && !EncounterHelpers::IsDownOrFeigning(unit) ? unit : nullptr;
     }
 
     // Decide which RTI pair is used for phase 1.
@@ -2882,9 +2885,9 @@ public:
 
         Unit* preferred = primary ? stalagg : feugen;
         Unit* sibling   = primary ? feugen : stalagg;
-        if (!IsDownOrFeigning(preferred))
+        if (!EncounterHelpers::IsDownOrFeigning(preferred))
             return preferred;
-        if (allowSiblingFallback && !IsDownOrFeigning(sibling))
+        if (allowSiblingFallback && !EncounterHelpers::IsDownOrFeigning(sibling))
             return sibling;
         return nullptr;
     }
@@ -2907,7 +2910,7 @@ public:
             return false;
         // Once one pet is down the window is over: it sits at 1 HP feigning and would drag the
         // sibling's damage to a halt.
-        if (IsDownOrFeigning(feugen) || IsDownOrFeigning(stalagg))
+        if (EncounterHelpers::IsDownOrFeigning(feugen) || EncounterHelpers::IsDownOrFeigning(stalagg))
             return false;
 
         float targetPct = target->GetHealthPct();
@@ -2945,8 +2948,8 @@ public:
                     return pet;
             }
 
-            Unit* feugenAlive = !IsDownOrFeigning(feugen) ? feugen : nullptr;
-            Unit* stalaggAlive = !IsDownOrFeigning(stalagg) ? stalagg : nullptr;
+            Unit* feugenAlive = !EncounterHelpers::IsDownOrFeigning(feugen) ? feugen : nullptr;
+            Unit* stalaggAlive = !EncounterHelpers::IsDownOrFeigning(stalagg) ? stalagg : nullptr;
 
             if (feugenAlive || stalaggAlive)
             {
@@ -3013,7 +3016,7 @@ protected:
             cached.Clear();
         }
 
-        Unit* found = GetFirstAliveUnitByEntry(botAI, entry);
+        Unit* found = EncounterHelpers::GetFirstAliveUnitByEntry(botAI, entry);
         if (!found)
         {
             // Marks resolve at any range, unlike the grid search.

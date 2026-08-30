@@ -7,11 +7,13 @@
 #include "Group.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
+
+using namespace EncounterHelpers;
 
 bool XT002MoveClearAction::isPossible() { return bot->CanFreeMove(); }
 
@@ -433,7 +435,7 @@ Player* XT002RedirectThreatAction::GetRedirectTank()
     // still out at a toy pile is nobody's, so the leash decides whether there is really one in play.
     if (GetXT002EngageableAdd(botAI, bot, PB_NPC_XT002_PUMMELLER, ULDUAR_XT002_ADD_LEASH_RADIUS))
     {
-        if (Player* assistTank = GetGroupAssistTank(botAI, bot, 0))
+        if (Player* assistTank = GetGroupAssistTank(bot, 0))
             return assistTank;
     }
 
@@ -455,7 +457,7 @@ Player* XT002RedirectThreatAction::GetRedirectTank()
         }
     }
 
-    return GetGroupMainTank(botAI, bot);
+    return GetGroupMainTank(bot);
 }
 
 bool XT002RedirectThreatAction::Execute(Event /*event*/)

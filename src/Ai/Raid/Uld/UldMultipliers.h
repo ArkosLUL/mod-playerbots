@@ -305,7 +305,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-
 // Stands the generic pickers down so Hodir's own nodes own targeting and, for the anchored roles,
 // movement. Both halves are load-bearing: without the targeting half DpsTargetValue is never null,
 // so the generic node retakes the target every other tick and bots drift off the ice block that is

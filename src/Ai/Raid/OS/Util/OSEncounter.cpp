@@ -4,13 +4,12 @@
  * or (at your option) any later version.
  */
 
-
 #include "OSHelpers.h"
 #include "Creature.h"
 #include "Group.h"
 #include "GroupReference.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Unit.h"
 #include <algorithm>
 #include <array>
@@ -18,6 +17,8 @@
 #include <list>
 #include <mutex>
 #include <unordered_map>
+
+using namespace EncounterHelpers;
 
 namespace OsHelpers
 {
@@ -249,7 +250,7 @@ bool NeedsFissureDodge(Player* bot)
 
 Player* GetOffTank(PlayerbotAI* botAI, Player* bot)
 {
-    return GetGroupAssistTank(botAI, bot, 0);
+    return GetGroupAssistTank(bot, 0);
 }
 
 bool IsOffTank(Player* bot)
@@ -278,7 +279,7 @@ bool RequireOffTank(PlayerbotAI* botAI, Player* bot)
 
 Player* RedirectTarget(PlayerbotAI* botAI, Player* bot)
 {
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = GetGroupMainTank(bot);
 
     if (EncounterElapsedMs(bot) < PULL_WINDOW_MS)
         return mainTank;
@@ -309,7 +310,7 @@ Player* RedirectTankFor(PlayerbotAI* botAI, Player* bot)
         return GetOffTank(botAI, bot);
 
     Unit* boss = GetSartharion(bot);
-    return boss && victim == boss ? GetGroupMainTank(botAI, bot) : nullptr;
+    return boss && victim == boss ? GetGroupMainTank(bot) : nullptr;
 }
 
 Unit* OffTankTauntTarget(Player* bot)

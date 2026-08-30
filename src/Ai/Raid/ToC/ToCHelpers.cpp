@@ -1,8 +1,10 @@
 #include "ToCHelpers.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "Creature.h"
 #include "Unit.h"
+
+using namespace EncounterHelpers;
 
 namespace TrialOfTheCrusaderHelpers
 {

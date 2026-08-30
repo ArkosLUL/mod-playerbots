@@ -8,12 +8,14 @@
 #include "AiFactory.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
+
+using namespace EncounterHelpers;
 
 bool KelthuzadChooseTargetAction::Execute(Event event)
 {
@@ -426,7 +428,7 @@ bool KelthuzadMisdirectBossToMainTankAction::Execute(Event event)
         return false;
     }
 
-    Player* mainTank = GetGroupMainTank(botAI, bot);
+    Player* mainTank = GetGroupMainTank(bot);
     if (!mainTank || mainTank == bot)
     {
         return false;

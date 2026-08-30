@@ -8,7 +8,9 @@
 #include "NaxxSpellIds.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
+
+using namespace EncounterHelpers;
 
 bool ThaddiusPrepullSplitAction::isUseful() { return helper.IsPrepullStagingUsable(); }
 
@@ -130,12 +132,12 @@ Player* ThaddiusRedirectThreatAction::GetRedirectTank()
         {
             return tank;
         }
-        return helper.IsAssignedToPrimarySide(bot) ? GetGroupMainTank(botAI, bot)
-                                                   : GetGroupAssistTank(botAI, bot, 0);
+        return helper.IsAssignedToPrimarySide(bot) ? GetGroupMainTank(bot)
+                                                   : GetGroupAssistTank(bot, 0);
     }
 
     // Thaddius wakes up with an empty threat table - nobody owns him until the tank rebuilds it.
-    return GetGroupMainTank(botAI, bot);
+    return GetGroupMainTank(bot);
 }
 
 Unit* ThaddiusRedirectThreatAction::GetThreatDumpTarget()

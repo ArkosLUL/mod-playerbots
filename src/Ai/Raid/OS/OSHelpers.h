@@ -4,7 +4,6 @@
  * or (at your option) any later version.
  */
 
-
 #ifndef PLAYERBOTS_OSHELPERS_H
 #define PLAYERBOTS_OSHELPERS_H
 

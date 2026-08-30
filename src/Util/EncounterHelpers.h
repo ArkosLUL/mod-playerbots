@@ -4,15 +4,23 @@
  * or (at your option) any later version.
  */
 
-#ifndef PLAYERBOTS_RAIDBOSSHELPERS_H
-#define PLAYERBOTS_RAIDBOSSHELPERS_H
+#ifndef PLAYERBOTS_ENCOUNTERHELPERS_H
+#define PLAYERBOTS_ENCOUNTERHELPERS_H
 
+#include "Common.h"
+#include "Position.h"
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "AiObject.h"
-#include "Position.h"
-#include "Unit.h"
+class Action;
+class Player;
+class PlayerbotAI;
+class Unit;
+
+namespace EncounterHelpers
+
+{
 
 bool MarkTargetWithIcon(Player* bot, Unit* target, uint8 iconId);
 bool MarkTargetWithSkull(Player* bot, Unit* target);
@@ -24,19 +32,22 @@ bool MarkTargetWithTriangle(Player* bot, Unit* target);
 bool MarkTargetWithCross(Player* bot, Unit* target);
 bool MarkTargetWithMoon(Player* bot, Unit* target);
 bool ClearTargetIcon(Player* bot, uint8 iconId);
-void SetRtiTarget(PlayerbotAI* botAI, const std::string& rtiName, Unit* target);
-void SetRtiCcTarget(PlayerbotAI* botAI, const std::string& rtiName, Unit* target);
-bool IsMechanicTrackerBot(PlayerbotAI* botAI, Player* bot, uint32 mapId, Player* exclude = nullptr);
-Player* GetGroupMainTank(PlayerbotAI* botAI, Player* bot);
-Player* GetGroupAssistTank(PlayerbotAI* botAI, Player* bot, uint8 index);
-Unit* GetFirstAliveUnitByEntry(
-    PlayerbotAI* botAI, uint32 entry);
+void SetRtiTarget(PlayerbotAI* botAI, std::string const& rtiName);
+// Points "rti target" at an explicit unit as well as setting the mark, for an encounter that has to
+// keep the focus on one creature rather than on whatever the bot is hitting.
+void SetRtiTarget(PlayerbotAI* botAI, std::string const& rtiName, Unit* target);
+// Drives the parallel "rti cc" value the per-class "cc" strategy reads, so a skull-marked kill target
+// and a moon-marked CC target never compete for the same value.
+void SetRtiCcTarget(PlayerbotAI* botAI, std::string const& rtiName, Unit* target);
+bool IsMechanicTrackerBot(Player* bot, uint32 mapId);
+Player* GetGroupMainTank(Player* bot);
+Player* GetGroupAssistTank(Player* bot, uint8 index);
+Unit* GetFirstAliveUnitByEntry(PlayerbotAI* botAI, uint32 entry);
 // Feign death (Stalagg/Feugen) keeps the creature alive at 1 HP but unselectable and lying down,
 // so IsAlive() on its own no longer means "still up".
 bool IsDownOrFeigning(Unit const* unit);
 Player* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
-bool IsMechanicTrackerBot(Player* bot, uint32 mapId);
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId);
 // A hazard and the distance a bot has to keep from it.
 using HazardCircle = std::pair<Position, float>;
@@ -61,5 +72,10 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
 void StopPet(PlayerbotAI* botAI);
+bool IsDpsCooldownAction(Player* bot, Action* action);
+bool IsTauntAction(Player* bot, Action* action);
+bool IsAoeThreatAction(Player* bot, Action* action);
+
+}
 
 #endif

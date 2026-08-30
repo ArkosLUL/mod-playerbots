@@ -19,6 +19,7 @@ public:
 public:
     float GetValue(Action* action) override;
 };
+
 class HeiganDanceMultiplier : public Multiplier
 {
 public:

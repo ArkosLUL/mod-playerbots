@@ -21,9 +21,11 @@
 #include "SpellMgr.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "Unit.h"
+
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -323,7 +325,7 @@ Player* HodirRedirectThreatAction::GetRedirectTank()
 
     // Hodir is on somebody who is not a tank, which is the case the redirect exists for. Feed the
     // main tank so the taunt that follows has something to hold.
-    return GetGroupMainTank(botAI, bot);
+    return GetGroupMainTank(bot);
 }
 
 Unit* HodirRedirectThreatAction::GetThreatDumpTarget() { return GetHodir(botAI); }

@@ -6,7 +6,7 @@
 #include "Playerbots.h"
 #include "UldBossHelper.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
@@ -14,6 +14,8 @@
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
 #include <RtiTargetValue.h>
+
+using namespace EncounterHelpers;
 
 bool RazorscaleFlyingAloneTrigger::IsActive()
 {
@@ -138,7 +140,7 @@ bool RazorscaleGroundedTrigger::IsActive()
 bool RazorscaleHarpoonAvailableTrigger::IsActive()
 {
     // Get harpoon data from the helper
-    const std::vector<RazorscaleBossHelper::HarpoonData>& harpoonData = RazorscaleBossHelper::GetHarpoonData();
+    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = RazorscaleBossHelper::GetHarpoonData();
 
     // Get the boss entity
     Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
@@ -207,7 +209,7 @@ bool RazorscaleFuseArmorTrigger::IsActive()
 bool RazorscaleKillTargetTrigger::IsActive()
 {
     // One bot drives the marking to avoid the whole raid fighting over the icon
-    if (!IsMechanicTrackerBot(botAI, bot, ULDUAR_MAP_ID))
+    if (!IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
         return false;
 
     Unit* target = GetRazorscaleKillTarget(botAI);

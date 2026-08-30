@@ -13,7 +13,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RtiTargetValue.h"
 #include "Spell.h"
 #include "UldHardMode.h"
@@ -24,6 +24,8 @@
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
+
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -80,11 +82,11 @@ void GatherIronAssemblyTankOrder(IronAssemblyTargets const& targets, std::vector
 
 void GatherIronAssemblyTanks(PlayerbotAI* botAI, Player* bot, std::vector<Player*>& tanks)
 {
-    if (Player* mainTank = GetGroupMainTank(botAI, bot))
+    if (Player* mainTank = GetGroupMainTank(bot))
         tanks.push_back(mainTank);
 
     for (uint8 index = 0; index < 2; ++index)
-        if (Player* assist = GetGroupAssistTank(botAI, bot, index))
+        if (Player* assist = GetGroupAssistTank(bot, index))
             tanks.push_back(assist);
 }
 

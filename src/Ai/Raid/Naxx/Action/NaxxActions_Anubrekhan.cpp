@@ -9,12 +9,14 @@
 #include "NaxxSpellIds.h"
 #include "ObjectGuid.h"
 #include "Playerbots.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 
 #include <algorithm>
 #include <cmath>
 #include <utility>
 #include <vector>
+
+using namespace EncounterHelpers;
 
 namespace
 {
@@ -319,7 +321,7 @@ Player* AnubrekhanRedirectThreatAction::GetRedirectTank()
     }
     Unit* boss = helper.GetBoss();
     Player* tank = boss ? GetTankHolding(boss) : nullptr;
-    return tank ? tank : GetGroupMainTank(botAI, bot);
+    return tank ? tank : GetGroupMainTank(bot);
 }
 
 Unit* AnubrekhanRedirectThreatAction::GetThreatDumpTarget()

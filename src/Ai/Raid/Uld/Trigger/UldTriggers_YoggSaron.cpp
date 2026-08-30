@@ -7,7 +7,7 @@
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SpellMgr.h"
 #include "SharedDefines.h"
@@ -16,6 +16,8 @@
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
 #include <RtiTargetValue.h>
+
+using namespace EncounterHelpers;
 
 const std::vector<uint32> illusionMobs =
 {
@@ -175,7 +177,7 @@ Unit* YoggSaronTrigger::GetNextIllusionRoomRtiTarget()
 
     if (botAI->HasCheat(BotCheatMask::raid))
     {
-        for (const ObjectGuid& guid : targets)
+        for (ObjectGuid const& guid : targets)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (unit && unit->IsAlive() && unit->GetEntry() == NPC_LAUGHING_SKULL)
@@ -186,9 +188,9 @@ Unit* YoggSaronTrigger::GetNextIllusionRoomRtiTarget()
     float nearestDistance = std::numeric_limits<float>::max();
     Unit* nextIllusionRoomRtiTarget = nullptr;
 
-    for (const uint32& creatureId : illusionMobs)
+    for (uint32 const& creatureId : illusionMobs)
     {
-        for (const ObjectGuid& guid : targets)
+        for (ObjectGuid const& guid : targets)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (unit && unit->IsAlive() && unit->GetEntry() == creatureId)
@@ -247,7 +249,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
     bool thereIsAnyGuardian = false;
 
-    for (const ObjectGuid& guid : targets)
+    for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())
@@ -357,7 +359,7 @@ bool YoggSaronMarkTargetTrigger::IsActive()
         }
 
         GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-        for (const ObjectGuid& guid : targets)
+        for (ObjectGuid const& guid : targets)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (!unit || !unit->IsAlive())
@@ -596,7 +598,7 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
         GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
         bool thereIsAnyGuardian = false;
 
-        for (const ObjectGuid& guid : targets)
+        for (ObjectGuid const& guid : targets)
         {
             Unit* unit = botAI->GetUnit(guid);
             if (!unit || !unit->IsAlive())
@@ -650,7 +652,7 @@ bool YoggSaronGuardianControlTrigger::IsActive()
 
     // Fire while any guardian is loose - alive and not yet held by a tank.
     GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-    for (const ObjectGuid& guid : targets)
+    for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())

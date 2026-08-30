@@ -548,7 +548,7 @@ void EnsureSpell(ObsSession& s, uint32 spellId)
 // arrival gets one.
 bool TracksPlayer(ObsSession& s, Unit* unit)
 {
-    if (!unit || unit->GetTypeId() != TYPEID_PLAYER || unit->GetMap() != s.map)
+    if (!unit || !unit->IsPlayer() || unit->GetMap() != s.map)
         return false;
 
     EnsureUnit(s, unit);
@@ -684,7 +684,7 @@ bool HazardIsFriendly(DynamicObject* dyn)
 
     Unit* caster = dyn->GetCaster();
     Unit* owner = caster ? caster->GetOwner() : nullptr;
-    return owner && owner->GetTypeId() == TYPEID_PLAYER;
+    return owner && owner->IsPlayer();
 }
 
 // Hazards and the hostile units standing among them, from a single grid visit - a searcher each would
@@ -1458,7 +1458,7 @@ void OnBossState(uint32 bossId, Map* map)
 
 void OnCreatureEngage(Unit* creature, Unit* victim)
 {
-    if (!g_cfg.enabled || !creature || !victim || victim->GetTypeId() != TYPEID_PLAYER)
+    if (!g_cfg.enabled || !creature || !victim || !victim->IsPlayer())
         return;
 
     Creature* asCreature = creature->ToCreature();
@@ -1660,12 +1660,12 @@ void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTim
     // rooms away and none at all from its own raid. The roster, its pets and totems, and whatever is
     // being watched are the pull; everything else on the map is somebody else's.
     bool relevant = false;
-    if (caster->GetTypeId() == TYPEID_PLAYER)
+    if (caster->IsPlayer())
         relevant = TracksPlayer(s, caster);
     else if (s.watched.count(caster->GetGUID()))
         relevant = true;
     else if (Unit* owner = caster->GetOwner())
-        relevant = owner->GetTypeId() == TYPEID_PLAYER && TracksPlayer(s, owner);
+        relevant = owner->IsPlayer() && TracksPlayer(s, owner);
 
     if (!relevant)
         return;
@@ -1922,7 +1922,7 @@ void NoteHazardCircle(Map* map, uint32 spellId, Position const& pos, float radiu
 
 void NoteDeath(Unit* unit, Unit* killer)
 {
-    if (!Active() || !unit || unit->GetTypeId() != TYPEID_PLAYER)
+    if (!Active() || !unit || !unit->IsPlayer())
         return;
 
     ObsSession* session = SessionFor(unit);

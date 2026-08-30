@@ -145,6 +145,15 @@ void DpsRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(
         new TriggerNode(
+            "riposte",
+            {
+                NextAction("riposte", ACTION_HIGH + 4.5f)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
             "rupture",
             {
                 NextAction("rupture", ACTION_HIGH + 4)
@@ -371,7 +380,7 @@ void RogueAoeStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "light aoe",
             {
-                NextAction("blade flurry", ACTION_HIGH)
+                NextAction("blade flurry", ACTION_HIGH + 4)
             }
         )
     );
@@ -392,6 +401,15 @@ void RogueBoostStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
             "adrenaline rush",
             {
                 NextAction("adrenaline rush", ACTION_HIGH + 2)
+            }
+        )
+    );
+
+    triggers.push_back(
+        new TriggerNode(
+            "blade flurry",
+            {
+                NextAction("blade flurry", ACTION_HIGH + 4)
             }
         )
     );

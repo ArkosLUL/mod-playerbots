@@ -20,7 +20,7 @@
 #include "UldBossHelper.h"
 #include "UldEncounter_Vezax.h"
 #include "UldScripts.h"
-#include "RaidBossHelpers.h"
+#include "EncounterHelpers.h"
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
@@ -28,6 +28,8 @@
 #include "Vehicle.h"
 #include <RtiTargetValue.h>
 #include <TankAssistStrategy.h>
+
+using namespace EncounterHelpers;
 
 bool VezaxResetEncounterStateAction::Execute(Event /*event*/)
 {

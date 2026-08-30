@@ -5,10 +5,8 @@
  */
 
 #include "NaxxActions.h"
-#include "NaxxSpellIds.h"
+#include "LastMovementValue.h"
 #include "Playerbots.h"
-#include "Spell.h"
-#include "Timer.h"
 
 namespace
 {
@@ -95,7 +93,7 @@ bool HeiganDanceRangedAction::Execute(Event event)
     std::pair<float, float> const& safe = helper.waypoints[helper.SafeIndex()];
     if (bot->GetDistance2d(safe.first, safe.second) > SafeZoneSpread)
     {
-        botAI->InterruptSpell();
+        bot->CastStop();
     }
     return MoveToSafeZone(SafeZoneSpread);
 }
