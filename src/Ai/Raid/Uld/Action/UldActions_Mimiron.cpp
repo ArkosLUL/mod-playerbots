@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 
 #include "AiObjectContext.h"
@@ -17,6 +18,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 #include "Position.h"
 #include "UldBossHelper.h"
 #include "UldHardMode.h"
@@ -33,10 +35,17 @@
 using namespace EncounterHelpers;
 
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
-                                             bool fallbackUnfiltered, bool interrupt)
+                                             bool fallbackUnfiltered, bool interrupt, char const* what)
 {
     if (!from || distance <= 0.0f)
         return false;
+
+    // Why the fan emptied, for the trace. A bearing that is never issued reaches no MotionMaster and
+    // so writes no move record, which makes a flee that refuses everything indistinguishable from one
+    // that was never asked - and that is exactly the case that kills a bot.
+    uint32 refusedBack = 0;
+    uint32 refusedMine = 0;
+    uint32 refusedCone = 0;
 
     // A bot with a cast in flight cannot be moved at all: PointMovementGenerator discards the spline
     // outright for anything IsMovementPreventedByCasting, and MoveTo still reports success and stamps
@@ -85,28 +94,64 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
             // Collision can shorten the step enough to leave the bot no better off than it started.
             if (dest.GetExactDist2d(from->GetPositionX(), from->GetPositionY()) <=
                 bot->GetExactDist2d(from))
+            {
+                ++refusedBack;
                 continue;
+            }
 
             if (!IsMimironSpotMineSafe(bot, dest))
+            {
+                ++refusedMine;
                 continue;
+            }
 
             // Judged at arrival, not at issue. This leg holds the movement lock for its whole
             // duration and IsWaitingForLastMove refuses anything not strictly above it, so a spot
             // that is only clear right now strands the bot in the beams until the leg expires.
             if (!IsMimironSpotBarrageSafe(vx001, barrage, dest, travel))
+            {
+                ++refusedCone;
                 continue;
+            }
 
             if (MoveTo(from->GetMapId(), dx, dy, dz, false, false, true, exact, priority))
+            {
+                float const taken = sign * delta;
+                NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone);
                 return true;
+            }
         }
     }
 
     // Every bearing in the fan was refused - by a mine, by the barrage, or by collision leaving the
     // bot no further from the hazard than it started.
     if (!fallbackUnfiltered)
+    {
+        NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone);
         return false;
+    }
 
+    NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone);
     return MoveAway(from, distance);
+}
+
+// `taken` is the bearing that won, in radians off straight away from the hazard, and is null for the
+// two outcomes where no bearing won at all.
+void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
+                                        uint32 refusedBack, uint32 refusedMine, uint32 refusedCone)
+{
+    if (!RaidObs::Active())
+        return;
+
+    char bearing[16] = "";
+    if (taken)
+        snprintf(bearing, sizeof(bearing), " %+.0f", *taken * 180.0f / static_cast<float>(M_PI));
+
+    char line[96];
+    snprintf(line, sizeof(line), "%s %s%s (back%u mine%u cone%u)", what, outcome, bearing,
+             refusedBack, refusedMine, refusedCone);
+
+    RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
 
 bool MimironShockBlastAction::Execute(Event /*event*/)
@@ -122,7 +167,8 @@ bool MimironShockBlastAction::Execute(Event /*event*/)
     float const gap = ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST - bot->GetExactDist2d(leviathanMkII);
     if (gap > 0.0f)
     {
-        MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true);
+        MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true,
+                             "shock");
 
         if (botAI->IsMelee(bot))
             botAI->SetNextCheckDelay(100);
@@ -157,6 +203,23 @@ bool MimironPhase1PositioningAction::isUseful()
     return mimironPhase1PositioningTrigger.IsActive();
 }
 
+// Which rule the dodge applied, not where it went: the destination is already a move record naming
+// this action. What that record cannot say is whether the bot thought it was clear, ahead of the
+// beams, inside them, or being carried out by the sweep - and picking the wrong one of those is what
+// leaves a body on the floor. `cw` is where the bot stands clockwise of the cone centreline.
+void MimironP3Wx2LaserBarrageAction::NoteBarrageDecision(char const* branch, char const* direction,
+                                                        float cw, float radius)
+{
+    if (!RaidObs::Active())
+        return;
+
+    char line[64];
+    snprintf(line, sizeof(line), "%s%s%s %.0f r%.0f", branch, direction ? " " : "",
+             direction ? direction : "", cw * 180.0f / static_cast<float>(M_PI), radius);
+
+    RaidObs::NoteDerived(bot, "mimiron.barrage", line);
+}
+
 bool MimironP3Wx2LaserBarrageAction::isUseful()
 {
     MimironP3Wx2LaserBarrageTrigger mimironP3Wx2LaserBarrageTrigger(botAI);
@@ -185,7 +248,10 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     // Two fringes: ahead of the leading edge, and behind where the trailing edge finishes. Returning
     // false rather than true is deliberate - bots that were never in danger keep casting.
     if (cw > window.sweep + clearance && cw < twoPi - clearance)
+    {
+        NoteBarrageDecision("clear", nullptr, cw, 0.0f);
         return false;
+    }
 
     // Distance does not affect safety - the cone is 50000 yd long - so change bearing and leave the
     // radius alone, which is the shortest bearing change there is. The floor is the exception: melee
@@ -218,6 +284,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     // made a bot inside the ignition cone pick the far edge and still be there when the beams lit.
     float const sweepRate = window.untilLive > 0.0f ? 0.0f : window.rate;
 
+    char const* branch = "trailing";
     bool goClockwise = false;
     if (cw <= window.sweep + clearance)
     {
@@ -225,10 +292,12 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         {
             // The beams have not reached this bearing yet. Clockwise keeps it that way and costs
             // nothing; turning back would walk the bot into a cone it is currently in front of.
+            branch = "ahead";
             goClockwise = true;
         }
         else
         {
+            branch = "inside";
             // Inside the cone, on the leading side. Leave by whichever edge is sooner: counter-
             // clockwise rides the sweep out through the trailing edge, clockwise pushes out through
             // the leading edge against it. The crossover sits around 30 degrees off the centreline.
@@ -248,7 +317,10 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 
     // Under a yard of travel left; call it arrived rather than issuing a move nothing can act on.
     if (std::fabs(remaining) * radius < 1.0f)
+    {
+        NoteBarrageDecision("hold", nullptr, cw, radius);
         return false;
+    }
 
     // Walk the ring one bounded step at a time. Aiming a single move at the far side draws a chord
     // that cuts through VX-001 - creatures are not in the navmesh - and a chord across the apex
@@ -257,6 +329,8 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     float const stepped =
         std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
     float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
+
+    NoteBarrageDecision(branch, goClockwise ? "cw" : "ccw", cw, radius);
 
     // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all -
     // see the note on MoveAwayClearOfMines.
@@ -330,7 +404,8 @@ bool MimironRocketStrikeAction::Execute(Event /*event*/)
     // 63041 blasts 3 yd; 10 covers the bot's footprint and pathing slop. The old phase 3/4 branch
     // teleported instead, off a stale pointer left over from the mech sweep. MOVEMENT_FORCED so the
     // arc-spread leg the bot is usually mid-way through cannot swallow the dodge.
-    return MoveAwayClearOfMines(rocketStrikeN, 10.0f, MovementPriority::MOVEMENT_FORCED, true, true);
+    return MoveAwayClearOfMines(rocketStrikeN, 10.0f, MovementPriority::MOVEMENT_FORCED, true, true,
+                                "rocket");
 }
 
 bool MimironPhase4FocusAction::Execute(Event /*event*/)
@@ -404,7 +479,7 @@ bool MimironProximityMineAction::Execute(Event /*event*/)
     float const step = std::min(ULDUAR_MIMIRON_MINE_CLEARANCE + 1.0f - nearestDist,
                                 ULDUAR_MIMIRON_MINE_MAX_STEP);
     return MoveAwayClearOfMines(nearest, std::max(step, 2.0f), MovementPriority::MOVEMENT_COMBAT,
-                                false, false);
+                                false, false, "mine");
 }
 
 bool MimironPetControlAction::isUseful()
@@ -696,6 +771,26 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
     }
 }
 
+// Short name for the trace. The entry number alone would do, but a note stream is read by eye and
+// "assaultbot" beats looking 33343 up in the header.
+char const* MimironSetDpsPriorityAction::DescribeTargetRule(Unit* unit)
+{
+    if (!unit)
+        return "none";
+
+    switch (unit->GetEntry())
+    {
+        case NPC_BOMB_BOT:            return "bombbot";
+        case NPC_ASSAULT_BOT:         return "assaultbot";
+        case NPC_EMERGENCY_FIRE_BOT:  return "firebot";
+        case NPC_JUNK_BOT:            return "junkbot";
+        case NPC_AERIAL_COMMAND_UNIT: return "acu";
+        case NPC_VX001:               return "vx001";
+        case NPC_LEVIATHAN_MKII:      return "mkii";
+        default:                      return "other";
+    }
+}
+
 Unit* MimironSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 {
     std::vector<std::pair<uint32, Unit*>> const priority = BuildPriorityList();
@@ -726,10 +821,32 @@ Unit* MimironSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     // Hold what the bot is already on unless something strictly more urgent is up, so a churn of
     // Junk Bots cannot keep resetting swing and cast timers.
+    bool held = false;
     if (currentTarget && priorityIndex(currentTarget) <= priorityIndex(target))
+    {
+        held = target != currentTarget;
         target = currentTarget;
+    }
 
-    return target ? target : AI_VALUE(Unit*, "dps target");
+    if (target)
+    {
+        // The rule, not the guid: snap.u already samples every bot's target four times a second.
+        // What it cannot say is whether the list picked this one or the hold kept it, which is the
+        // difference between a priority bug and a bot that simply never re-evaluated.
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "mimiron.dpsrule",
+                                 held ? std::string("held:") + DescribeTargetRule(target)
+                                      : std::string(DescribeTargetRule(target)));
+
+        return target;
+    }
+
+    // Nothing on the list is allowed, so the generic picker answers instead - which is the state
+    // worth seeing, because it means this node stopped steering.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "mimiron.dpsrule", "fallback");
+
+    return AI_VALUE(Unit*, "dps target");
 }
 
 bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
@@ -746,6 +863,9 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
     if (IsMimironPhase4(bot) && !botAI->IsHeal(bot) &&
         !GetMimironPhase4Focus(botAI, bot, botAI->IsMelee(bot)))
     {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "mimiron.dpsrule", "p4hold");
+
         bot->AttackStop();
         return true;
     }
@@ -810,11 +930,22 @@ bool MimironMagneticCoreAction::isUseful()
     return mimironMagneticCoreTrigger.IsActive();
 }
 
+// Which of the five steps the carrier is on. The act stream only says the node ran; when a core never
+// reaches the Aerial Command Unit, the answer is always which step it stopped at.
+void MimironMagneticCoreAction::NoteCoreStep(char const* step)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "mimiron.corestep", step);
+}
+
 bool MimironMagneticCoreAction::Execute(Event /*event*/)
 {
     Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
     if (!aerialCommandUnit)
+    {
+        NoteCoreStep("no-acu");
         return false;
+    }
 
     Item* core = bot->GetItemByEntry(ITEM_MIMIRON_MAGNETIC_CORE);
     if (!core)
@@ -822,15 +953,21 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         Creature* corpse =
             bot->FindNearestCreature(NPC_ASSAULT_BOT, ULDUAR_MIMIRON_CORE_SEARCH_RANGE, false);
         if (!corpse)
+        {
+            NoteCoreStep("no-corpse");
             return false;
+        }
 
         // Go and get it. The corpse lasts 25 s and the Assault Bot dies wherever the raid stopped it,
         // so the node has to walk: the old version only ever fired if the carrier happened to already
         // be standing on one, which is why the core never reached the Aerial Command Unit.
         if (bot->GetExactDist2d(corpse) > ULDUAR_MIMIRON_CORE_LOOT_RANGE)
+        {
+            NoteCoreStep("walk-corpse");
             return MoveTo(corpse->GetMapId(), corpse->GetPositionX(), corpse->GetPositionY(),
                           corpse->GetPositionZ(), false, false, false, true,
                           MovementPriority::MOVEMENT_COMBAT, true);
+        }
 
         // Bots have no in-combat loot path - looting is only wired into LootNonCombatStrategy - and
         // 46029 is a white consumable the loot strategies discard as junk even when one is open. The
@@ -839,23 +976,31 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         // to do: kill the bot, stand on the corpse, and not already be carrying one.
         ItemPosCountVec dest;
         if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, ITEM_MIMIRON_MAGNETIC_CORE, 1) != EQUIP_ERR_OK)
+        {
+            NoteCoreStep("bags-full");
             return false;
+        }
 
         bot->StoreNewItem(dest, ITEM_MIMIRON_MAGNETIC_CORE, true,
                           Item::GenerateItemRandomPropertyId(ITEM_MIMIRON_MAGNETIC_CORE));
+        NoteCoreStep("loot");
         return true;
     }
 
     // 64444 places its summon by nearest entry, so the core only reaches the ACU from underneath it.
     if (bot->GetExactDist2d(aerialCommandUnit) > ULDUAR_MIMIRON_CORE_USE_RANGE)
     {
+        NoteCoreStep("walk-acu");
         return MoveTo(aerialCommandUnit->GetMapId(), aerialCommandUnit->GetPositionX(),
                       aerialCommandUnit->GetPositionY(), bot->GetPositionZ(), false, false, false,
                       true, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
     if (bot->CanUseItem(core) != EQUIP_ERR_OK || bot->IsNonMeleeSpellCast(false))
+    {
+        NoteCoreStep("blocked");
         return false;
+    }
 
     uint32 spellId = 0;
     for (uint8 i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
@@ -868,7 +1013,12 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     }
 
     if (!spellId)
+    {
+        NoteCoreStep("blocked");
         return false;
+    }
+
+    NoteCoreStep("use");
 
     uint8 const bagIndex = core->GetBagSlot();
     uint8 const slot = core->GetSlot();

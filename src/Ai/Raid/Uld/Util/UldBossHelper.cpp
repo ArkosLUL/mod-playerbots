@@ -3516,17 +3516,136 @@ Unit* GetMimironStagingFocus(Player* bot)
     return vx001;
 }
 
+namespace
+{
+// Which constructs are up. Read against this enum, not guessed from the number: a trace records the
+// raw value, and the handover is the state that matters most and is not a phase number at all.
+enum MimironTracedPhase : uint32
+{
+    MIMIRON_TRACE_NONE = 0,      // nothing in the room - before the pull, or after a wipe
+    MIMIRON_TRACE_MKII = 1,      // phase 1
+    MIMIRON_TRACE_VX001 = 2,     // phase 2
+    MIMIRON_TRACE_ACU = 3,       // phase 3
+    MIMIRON_TRACE_ALL = 4,       // phase 4, all three assembled
+    MIMIRON_TRACE_HANDOVER = 5,  // a construct exists but nothing is attackable yet
+};
+
+// Raid-wide answers, folded once per instance per tick rather than once per bot. All three are
+// derived fresh everywhere else and stored nowhere, so without this a trace has no phase timeline,
+// no Magnetic Core window and no way to say who was supposed to be carrying the core.
+struct MimironObsState
+{
+    RaidObs::ObsValue<uint32> phase{"mimiron.phase"};
+
+    // Aura 64436 sits on the Aerial Command Unit, and RaidObs records auras for roster players only,
+    // so the one window phase 3 can be shortened in is otherwise invisible.
+    RaidObs::ObsValue<bool> acuGrounded{"mimiron.core"};
+
+    RaidObs::ObsValue<ObjectGuid> coreCarrier{"mimiron.carrier"};
+
+    uint32 scanMs = 0;
+};
+
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, so
+// per-thread copies hand the same instance a fresh state whenever the pool reassigns it, which
+// silently resets every latch mid-pull. References into an unordered_map survive rehashing, so the
+// lock only has to cover the lookup.
+std::mutex mimironObsStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, MimironObsState> mimironObsStates;
+
+MimironObsState& MimironObsStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(mimironObsStatesMutex);
+    return mimironObsStates[bot->GetInstanceId()];
+}
+
+// Everything the trace needs once per instance per tick rather than once per bot: the phase, the
+// Magnetic Core window, who holds the core, and the Laser Barrage cone.
+void TickMimironObs(PlayerbotAI* botAI, Player* bot, Unit* leviathanMkII, Unit* vx001,
+                    Unit* aerialCommandUnit)
+{
+    if (!bot || bot->GetMapId() != ULDUAR_MAP_ID)
+        return;
+
+    MimironObsState& state = MimironObsStateFor(bot);
+    if (state.scanMs && GetMSTimeDiffToNow(state.scanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
+        return;
+
+    state.scanMs = getMSTime();
+
+    // Off the constructs, never off the calling bot's combat state: one bot dropping combat is not a
+    // wipe, and a latch left set would leave the re-pull with nothing to emit.
+    if (!leviathanMkII && !vx001 && !aerialCommandUnit)
+    {
+        // Nothing attackable is either a handover or an empty room, and telling those apart is the
+        // whole point of the row - the handovers are where the raid paces. GetMimironStagingFocus
+        // scans for the creature rather than the target list, so it still finds a NOT_SELECTABLE
+        // mech mid-script, and both constructs it looks for are despawned by an evade.
+        state.phase = GetMimironStagingFocus(bot) ? MIMIRON_TRACE_HANDOVER : MIMIRON_TRACE_NONE;
+        state.acuGrounded = false;
+        state.coreCarrier = ObjectGuid::Empty;
+        return;
+    }
+
+    if (leviathanMkII && vx001 && aerialCommandUnit)
+        state.phase = MIMIRON_TRACE_ALL;
+    else if (aerialCommandUnit)
+        state.phase = MIMIRON_TRACE_ACU;
+    else if (vx001)
+        state.phase = MIMIRON_TRACE_VX001;
+    else
+        state.phase = MIMIRON_TRACE_MKII;
+
+    state.acuGrounded = IsMimironAcuGrounded(botAI);
+
+    // Past here the work is only worth doing for a trace: the carrier election walks the group, and
+    // reading the barrage window costs a grid scan for the DB Target.
+    if (!RaidObs::Active())
+        return;
+
+    Player* carrier = GetMimironCoreCarrier(botAI);
+    state.coreCarrier = carrier ? carrier->GetGUID() : ObjectGuid::Empty;
+
+    if (!vx001)
+        return;
+
+    // The cone has no world object behind it, so the snapshot sweep has nothing to find and a death
+    // inside the beams reads as damage from nowhere. The DB Target it aims at is not hostile either,
+    // so the sweep skips that too - this helper is the only thing that knows where the cone points.
+    MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
+    if (!window.valid)
+        return;
+
+    char params[96];
+    snprintf(params, sizeof(params), "\"lead\":%.2f,\"sweep\":%.2f,\"rate\":%.2f,\"live\":%.1f",
+             window.lead, window.sweep, window.rate, window.untilLive);
+
+    // Two spell ids rather than one, so the 4 s Spinning Up warning and the 10 s barrage read as
+    // separate stages on the timeline. The origin is resampled every pass because in phase 4 VX-001
+    // rides the chassis, and the apex drifting under the raid is the thing worth seeing.
+    RaidObs::NoteHazard(bot->GetMap(),
+                        window.untilLive > 0.0f ? SPELL_SPINNING_UP : SPELL_P3WX2_LASER_BARRAGE_AURA_1,
+                        vx001->GetPosition(), "sweep", params, ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS);
+}
+}  // namespace
+
 bool IsMimironEngaged(PlayerbotAI* botAI)
 {
     // Any construct, because each phase hands over to the next: the outgoing one goes passive and
     // unselectable while the incoming one calls SetInCombatWithZone, so between the two there is
     // nothing worth targeting anyway.
-    for (uint32 entry : {NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT})
-    {
-        Unit* construct = GetFirstAliveUnitByEntry(botAI, entry);
+    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+
+    // Ahead of the combat test, because the housekeeping it drives includes the wipe reset. Every
+    // non-tank reaches here every tick through MimironTargetGuardMultiplier, and the pass throttles
+    // itself, so this is the one place a raid-wide fold is guaranteed to run.
+    TickMimironObs(botAI, botAI->GetBot(), leviathanMkII, vx001, aerialCommandUnit);
+
+    for (Unit* construct : {leviathanMkII, vx001, aerialCommandUnit})
         if (construct && construct->IsInCombat())
             return true;
-    }
 
     return false;
 }
@@ -3736,10 +3855,11 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
 // handovers converge - VX-001 is summoned there, the Aerial Command Unit spawns and is walked back
 // there, and the chassis ends there. Never on the focus itself: it is mid-script for most of the
 // window, so a ring pinned to it drags the raid along the chassis charge waypoints.
-bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position& out)
+bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position& out, uint32& index,
+                                uint32& count)
 {
-    uint32 index = 0;
-    uint32 count = 0;
+    index = 0;
+    count = 0;
 
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -3774,7 +3894,7 @@ bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position
 // Phase 3. The raid groups in the east wedge instead of ringing the room: the summon pads sit on three
 // arms - west, north-east and south-east, each carrying pads at roughly 17, 29 and 40 yd - so a ring
 // drops lone ranged bots straight into an add's path.
-bool GetMimironPhase3Slot(Player* bot, Group* group, Position& out)
+bool GetMimironPhase3Slot(Player* bot, Group* group, Position& out, uint32& index, uint32& count)
 {
     // Melee stand on whatever they are hitting. Every add walks in from a pad well outside the wedge,
     // so any fixed melee slot is a spot the target is not in - and this formation runs at ACTION_RAID,
@@ -3782,8 +3902,8 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Position& out)
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
-    uint32 index = 0;
-    uint32 count = 0;
+    index = 0;
+    count = 0;
 
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
@@ -3831,10 +3951,17 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Position& out)
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     return true;
 }
-}  // namespace
 
-bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+// `branch` names which of the five shapes answered, and is what a trace records: the coordinate on
+// its own cannot tell a wedge slot from a staging ring slot that happens to land near it, and which
+// shape a bot was given is the thing that goes wrong.
+bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, char const*& branch,
+                             uint32& index, uint32& count)
 {
+    branch = "none";
+    index = 0;
+    count = 0;
+
     if (!botAI || !bot)
         return false;
 
@@ -3862,6 +3989,7 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 
     if (PlayerbotAI::IsMainTank(bot) && phase4)
     {
+        branch = "p4tank";
         out = ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
         return true;
     }
@@ -3869,10 +3997,16 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     // Melee only get a spot while staging, where there is no chase for it to fight and arriving in
     // melee range before the boss goes live is the whole point.
     if (staging && !PlayerbotAI::IsRanged(bot))
-        return GetMimironStagingMeleeSlot(bot, group, focus, out);
+    {
+        branch = "stagemelee";
+        return GetMimironStagingMeleeSlot(bot, group, focus, out, index, count);
+    }
 
     if (focus->GetEntry() == NPC_AERIAL_COMMAND_UNIT)
-        return GetMimironPhase3Slot(bot, group, out);
+    {
+        branch = "p3wedge";
+        return GetMimironPhase3Slot(bot, group, out, index, count);
+    }
 
     // Phase 1 tank spot. Nothing else brings the MK II back: the tank is melee, so it flees Shock
     // Blast every 30 s and the boss follows, and over a five minute phase that walks the fight round
@@ -3880,6 +4014,7 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     // itself charges the MK II to.
     if (PlayerbotAI::IsMainTank(bot) && focus->GetEntry() == NPC_LEVIATHAN_MKII)
     {
+        branch = "p1tank";
         out = ULDUAR_MIMIRON_ROOM_CENTER;
         return true;
     }
@@ -3888,8 +4023,6 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
-    uint32 index = 0;
-    uint32 count = 0;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -3916,9 +4049,40 @@ bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
                 : Position(focus->GetPositionX(), focus->GetPositionY(),
                            ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
 
+    branch = staging ? "stagering" : "ring";
+
     float const angle = 2.0f * static_cast<float>(M_PI) * index / count;
     out = Position(anchor.GetPositionX() + ULDUAR_MIMIRON_SPREAD_RADIUS * cos(angle),
                    anchor.GetPositionY() + ULDUAR_MIMIRON_SPREAD_RADIUS * sin(angle),
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     return true;
+}
+}  // namespace
+
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    char const* branch = "none";
+    uint32 index = 0;
+    uint32 count = 0;
+    bool const found = DeriveMimironSpreadSlot(botAI, bot, out, branch, index, count);
+
+    if (RaidObs::Active())
+    {
+        // "none" covers both a bot the formation has nothing for - melee outside a handover, by
+        // design - and one whose shape refused it. Without the row those two are the same silence,
+        // and the second is a bug.
+        std::string value = "none";
+        if (found)
+        {
+            value = branch;
+            if (count)
+                value += " " + std::to_string(index) + "/" + std::to_string(count);
+
+            value += " " + RaidObs::DescribeDerived(out);
+        }
+
+        RaidObs::NoteDerived(bot, "mimiron.slot", value);
+    }
+
+    return found;
 }

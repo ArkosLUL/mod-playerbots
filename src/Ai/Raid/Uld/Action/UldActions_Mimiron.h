@@ -24,9 +24,16 @@ protected:
     // escaping one mine into another is not an escape.
     // interrupt cancels an in-flight cast first. Set it for anything that kills outright: a bot
     // that IsMovementPreventedByCasting cannot be moved at all, so the dodge is a no-op without it.
+    // what names the hazard for the trace, because a refused bearing writes no movement record and a
+    // flee that finds none is otherwise a silent gap.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
-                              bool fallbackUnfiltered = true, bool interrupt = false);
+                              bool fallbackUnfiltered = true, bool interrupt = false,
+                              char const* what = "flee");
+
+private:
+    void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
+                         uint32 refusedMine, uint32 refusedCone);
 };
 
 class MimironShockBlastAction : public MimironFleeAction
@@ -54,6 +61,9 @@ public:
         : MovementAction(ai, "mimiron p3wx2 laser barrage action") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    void NoteBarrageDecision(char const* branch, char const* direction, float cw, float radius);
 };
 
 // Rapid Burst and Hand Pulse are both 104 degree cones, so no arrangement dodges them; what helps is
@@ -102,6 +112,9 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    void NoteCoreStep(char const* step);
 };
 
 // Plasma Blast is a 3s cast on whoever is holding the MK II, every 22s, and it does not stack. The
@@ -140,6 +153,8 @@ private:
     bool IsAllowedTarget(Unit* unit) const;
 
     Unit* ResolveTarget(Unit* currentTarget);
+
+    static char const* DescribeTargetRule(Unit* unit);
 };
 
 // Steps the shortest distance that clears every mine, rather than the safest point in the room. The

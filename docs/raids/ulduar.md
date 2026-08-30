@@ -2152,6 +2152,35 @@ past roughly 120° off the escape bearing the geometry turns back inward.
 without it the flames node at `ACTION_RAID + 4` pushes a bot out of a burning slot and the formation at
 `ACTION_RAID` pulls it straight back, and it paces on the edge until it burns down.
 
+### Mimiron — what a trace answers
+
+Position, verdicts and movement commands come from the raid-agnostic streams. The Mimiron rows, under
+`--notes mimiron.`:
+
+| Key | Says |
+|---|---|
+| `phase` | 0 none, 1-4 the phase, 5 a handover. Per instance |
+| `core` | The Magnetic Core window is open. Per instance |
+| `carrier` | Who is fetching the core. Per instance |
+| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse`, `walk-corpse`, `loot`, `bags-full`, `walk-acu`, `blocked`, `use` |
+| `slot` | Which formation shape answered — `p4tank`, `stagemelee`, `p3wedge`, `p1tank`, `stagering`, `ring`, `none` — with index/count and the point |
+| `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`, and how many bearings each filter refused (`back`, `mine`, `cone`) |
+| `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, or `p4hold` |
+
+`flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,
+which leaves a dodge that refuses all twelve completely silent.
+
+The Laser Barrage cone is a `haz` `sweep` row every 250 ms — `lead`, `sweep`, `rate`, `live`,
+originated on VX-001, which in phase 4 is the chassis, so a drifting apex shows. Written by hand
+because the cone has no world object, and neither has the DB Target it aims at: that one is not
+hostile, so the snapshot sweep skips it too.
+
+Still invisible: **creature auras**, because `NoteAura` is roster-gated, so 64436 on the Aerial
+Command Unit never appears and `mimiron.core` is the only record of the window; and **mines under
+Firefighter**, because the sweep caps hostile creatures at 40 in grid order and fire nodes spread all
+fight, so a Proximity Mine can drop out of the containment test a death is measured against.
+
 ### Yogg-Saron — Squeeze breaks on immunity
 
 Removing the Squeeze aura (64125 / 64126) kills the Constrictor Tentacle and drops the passenger, so

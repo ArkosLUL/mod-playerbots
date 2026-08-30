@@ -770,6 +770,11 @@ constexpr float ULDUAR_MIMIRON_BOMB_BOT_RADIUS = 8.0f;
 // 8.0 yd/s and dies in about three casts, so snaring one already inside this costs more than it buys.
 constexpr float ULDUAR_MIMIRON_BOMB_BOT_SNARE_MIN_APPROACH = 15.0f;
 
+// How often the raid-wide observability pass folds its answers, and the lifetime it stamps on a
+// barrage hazard row. 250 matches the default Obs.SnapshotIntervalMs, so every snapshot has a cone
+// row beside it, and it is also the barrage's own damage tick.
+constexpr uint32 ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS = 250;
+
 // Freya hard mode: bots step this far out of an Unstable Sun Beam before it detonates. Exact beam
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
 constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
