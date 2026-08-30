@@ -54,6 +54,13 @@ enum UlduarNPCs
     NPC_SALVAGED_DEMOLISHER_TURRET   = 33167
 };
 
+// Boss ids for InstanceScript::GetCreature, mirrored from the core's ulduar.h for the same reason as
+// the entries above. Index into that file's BossIds enum, not an NPC entry.
+enum UlduarBossData
+{
+    ULD_DATA_VEZAX = 11
+};
+
 enum UlduarPersistentData
 {
     PERSISTENT_DATA_WATCHERS_MASK = 0

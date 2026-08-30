@@ -606,60 +606,64 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // General Vezax
     //
-    // The engine stops at the first action that returns true, so this order is a survival ranking.
-    // Mark of the Faceless leads because it is the only node whose failure heals the boss while it
-    // drains the raid. The two hazard exits come next - a bot riding a puddle past the doubling point
-    // dies to it, and a healer left in a Shadow Crash field is at a quarter of its output. Soaking
-    // that same field is the reward half of the mechanic, so it sits down in the RAID band where it
-    // cannot pre-empt anything that keeps a bot alive.
+    // The engine stops at the first action that returns true, so this order is a survival ranking,
+    // and no two nodes share a number - a tie falls to vector insertion order, which is not a
+    // decision anyone made.
     //
-    // The interrupt has to sit above the RAID band: every class interrupt lives at ACTION_INTERRUPT
-    // (40), and Searing Flames is 13875-16125 to the whole raid plus 75% of the tank's armour every
-    // 8s in 25-man. Position is last on purpose, and yields as soon as it is parked, so those class
-    // interrupts still get a tick.
+    // The dodge leads: Shadow Crash is 11310 plus a knockback, and it is the only hazard here with a
+    // deadline, about 1.8-2.6s of missile flight. The interrupt comes next and outranks the puddle
+    // exit, because losing a kick costs the whole raid 13875-16125 fire while riding one more puddle
+    // tick costs one bot a survivable hit - the interrupt trigger yields on its own when the next
+    // tick is not survivable. Mark of the Faceless is the only node whose failure heals the boss, but
+    // it drains over 10s rather than landing at once, so it sits under both.
+    //
+    // The RAID band is the reward half. Soaking a field or a puddle is worth nothing to a bot that is
+    // already dying, and kill-vapor outranks the field soak because the handler is by definition out
+    // of mana and a cost reduction buys it nothing. Position is last on purpose, and yields as soon as
+    // it is parked, so the class interrupts at ACTION_INTERRUPT (40) still get a tick.
     triggers.push_back(new TriggerNode(
         "vezax reset encounter state",
         { NextAction("vezax reset encounter state action", ACTION_EMERGENCY + 10) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax mark of the faceless",
-        { NextAction("vezax mark of the faceless action", ACTION_EMERGENCY + 8) }));
+        "vezax shadow crash dodge",
+        { NextAction("vezax shadow crash dodge action", ACTION_EMERGENCY + 9) }));
+
+    triggers.push_back(new TriggerNode(
+        "vezax searing flames interrupt",
+        { NextAction("vezax searing flames interrupt action", ACTION_EMERGENCY + 8) }));
 
     triggers.push_back(new TriggerNode(
         "vezax vapor puddle clear",
         { NextAction("vezax vapor puddle clear action", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax shadow crash clear",
-        { NextAction("vezax shadow crash clear action", ACTION_EMERGENCY + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax searing flames interrupt",
-        { NextAction("vezax searing flames interrupt action", ACTION_EMERGENCY + 5) }));
+        "vezax mark of the faceless",
+        { NextAction("vezax mark of the faceless action", ACTION_EMERGENCY + 6) }));
 
     triggers.push_back(new TriggerNode(
         "vezax surge of darkness",
-        { NextAction("vezax surge of darkness action", ACTION_EMERGENCY + 4) }));
+        { NextAction("vezax surge of darkness action", ACTION_EMERGENCY + 5) }));
 
     triggers.push_back(new TriggerNode(
         "vezax saronite animus",
-        { NextAction("vezax saronite animus action", ACTION_RAID + 3) }));
+        { NextAction("vezax saronite animus action", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
         "vezax vapor soak",
-        { NextAction("vezax vapor soak action", ACTION_RAID + 2) }));
+        { NextAction("vezax vapor soak action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "vezax kill vapor",
-        { NextAction("vezax kill vapor action", ACTION_RAID + 1) }));
+        { NextAction("vezax kill vapor action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "vezax shadow crash soak",
-        { NextAction("vezax shadow crash soak action", ACTION_RAID + 1) }));
+        { NextAction("vezax shadow crash soak action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "vezax shadow resistance",
-        { NextAction("vezax shadow resistance action", ACTION_RAID) }));
+        { NextAction("vezax shadow resistance action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "vezax raid position",

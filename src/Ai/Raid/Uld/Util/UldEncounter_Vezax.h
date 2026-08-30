@@ -42,9 +42,9 @@ struct VezaxEncounterTargets
 };
 
 // Slots are held, not re-derived. Ranking the raid by guid every tick means one death renumbers
-// everyone behind the corpse and the whole arc shuffles mid-fight, so an assignment is kept until
-// its holder is gone. Index space is one range: [0, HEALER_SLOTS) is the healer ring, the rest are
-// the two ranged rings.
+// everyone behind the corpse and the whole formation shuffles mid-fight, so an assignment is kept
+// until its holder is gone. The index space is laid out in UldBossHelper.h next to the radii:
+// [0,6) healers, [6,12) group L, [12,18) group R, [18,21) L overflow, [21,24) R overflow.
 struct VezaxEncounterState
 {
     RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
@@ -55,9 +55,10 @@ struct VezaxEncounterState
 
 extern std::unordered_map<uint32 /*instanceId*/, VezaxEncounterState> vezaxEncounterStates;
 
-// By entry, not "find target": that value walks only the bot's own threat list, so any bot that
-// switched to the Animus or a vapor would stop seeing the boss and every Vezax trigger would
-// silently go inert.
+// From the instance script rather than a target sweep. "find target" walks only the bot's own threat
+// list, so a bot that switched to the Animus or a vapor would stop seeing the boss; the entry sweep
+// that replaced it recalculates a 100 yd search on every call, and the movement multiplier asks once
+// per action per pass.
 Unit* GetVezax(PlayerbotAI* botAI);
 bool VezaxEncounterActive(PlayerbotAI* botAI);
 
@@ -80,8 +81,9 @@ bool TryGetVezaxNearestHazard(Player* bot, std::vector<VezaxHazard> const& hazar
 // what counts as dangerous depends on who is asking.
 bool IsVezaxSpotSafe(Position const& spot, std::vector<Position> const& avoid, float clearance);
 
-// Mana casters only. The field boosts magic damage and cuts mana cost, so it does nothing for
-// physical melee, and its 75% healing penalty makes it actively wrong for a healer.
+// Anything with a mana bar that is not a healer. The field's -70% cost is MOD_POWER_COST_SCHOOL_PCT
+// with a school mask of 127, so it covers physical too and a hunter's shots get it as readily as a
+// mage's bolts - only the damage half is magic-only. Healers stay out: it cuts healing done by 75%.
 bool VezaxCanSoakShadowCrashField(Player* bot);
 
 // Only healers are actually hurt by the field. Melee and tanks gain nothing from it either, but
@@ -92,23 +94,41 @@ bool VezaxMustLeaveShadowCrashField(Player* bot);
 // damage for no return and should be out of it from the first tick.
 bool VezaxWantsVaporPuddleMana(Player* bot);
 
+// Who may stand in a vapor puddle at all. Vapors spawn on the boss and wander 4 yd, so an 8 yd puddle
+// covers the tank, the melee and most of the healer ring: ungated, one puddle puts 100 * 2^stacks on
+// thirteen bots. The handlers went and made it; anyone else has to be low enough to need it.
+bool VezaxMayStandInVaporPuddle(Player* bot);
+
 // The puddle deals 100 * 2^stacks every 4s. Leaving is a prediction about the next tick, not a
 // stack count: the same cap kills a 10-man healer and wastes mana for a geared 25-man one.
 bool VezaxShouldLeaveVaporPuddle(Player* bot);
 
 // What this particular bot has to stay out of. A mana caster wants to be standing in a Shadow Crash
-// field, so for it only the vapor puddles count.
+// field, so for it only the vapor puddles count - and only those it is not entitled to.
 void VezaxBuildAvoidPositions(Player* bot, std::vector<VezaxHazard> const& hazards,
                               std::vector<Position>& avoid);
 
-bool TryGetVezaxSlotPosition(uint8 slotIndex, Position& position);
+// Takes the bot because the healer ring is centred on the boss, not the anchor.
+bool TryGetVezaxSlotPosition(Player* bot, uint8 slotIndex, Position& position);
+// Ranged pack at 3.7 yd, healers hold a 2.25 yd band and the tank only has to be on the anchor, so
+// one tolerance cannot serve all three.
+float VezaxSlotTolerance(Player* bot);
 void EnsureVezaxSlotAssignments(Player* bot);
 
-// The spot this bot should be standing on, hazards taken into account. False for tanks and melee,
-// who hold the boss instead.
+// The spot this bot should be standing on, hazards taken into account. False for melee, who hold the
+// boss instead; the main tank is answered here too, from the anchor, because a tank standing on
+// Vezax's spawn is what keeps him there for everyone else's radii.
 bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Position& position);
 
 bool TryGetVezaxMarkSpot(Player* bot, Position& position);
+
+// Where the missile now in flight will land, or false when none is. Instant cast plus Speed 10 means
+// the boss is never in UNIT_STATE_CASTING for it - the delayed spell is what stays current, and its
+// destination was frozen when it went out, which is what makes the thing dodgeable at all.
+bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact);
+
+// Somewhere clear of that impact and still inside the band this bot's role is allowed to stand in.
+bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);
 
 // Drop this instance's assignments once Vezax is gone, or they survive into the next pull and bots
 // walk to slots nobody is standing in.
@@ -124,8 +144,9 @@ char const* VezaxReadyInterrupt(Player* bot, Unit* target);
 // rotates the duty for free as cooldowns come and go.
 bool VezaxIsSearingFlamesInterrupter(Player* bot, Unit* boss);
 
-// A handful of ranged, not the whole raid: a skull mark would pull 25 bots off the boss every 30s
-// against a 10 minute berserk.
-bool VezaxIsVaporKiller(Player* bot);
+// Whoever the puddle's mana would actually help: non-tanks under 10%, healers ranked first, two of
+// them. Nobody low means nobody kills, and the vapor despawns on its own - which is the right answer,
+// because the puddle is paid for in health.
+bool VezaxIsVaporHandler(Player* bot);
 
 #endif

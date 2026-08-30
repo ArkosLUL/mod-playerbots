@@ -36,11 +36,13 @@ public:
     bool Execute(Event event) override;
 };
 
-// Strafe out of a field at the bot's own range band, for the roles that gain nothing from it.
-class VezaxShadowCrashClearAction : public MovementAction
+// Step out of where the missile in flight will land. Per bot rather than as a group: clearing a
+// 8 yd block from a 10 yd blast by moving it as one needs about 18 yd, which is the whole 2.6s of
+// flight with nothing left for the walk back.
+class VezaxShadowCrashDodgeAction : public MovementAction
 {
 public:
-    VezaxShadowCrashClearAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash clear action") {}
+    VezaxShadowCrashDodgeAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash dodge action") {}
 
     bool Execute(Event event) override;
 };

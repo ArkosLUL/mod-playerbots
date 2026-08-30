@@ -102,7 +102,7 @@ public:
         creators["vezax reset encounter state action"] = &RaidUlduarActionContext::vezax_reset_encounter_state_action;
         creators["vezax mark of the faceless action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_action;
         creators["vezax vapor puddle clear action"] = &RaidUlduarActionContext::vezax_vapor_puddle_clear_action;
-        creators["vezax shadow crash clear action"] = &RaidUlduarActionContext::vezax_shadow_crash_clear_action;
+        creators["vezax shadow crash dodge action"] = &RaidUlduarActionContext::vezax_shadow_crash_dodge_action;
         creators["vezax searing flames interrupt action"] = &RaidUlduarActionContext::vezax_searing_flames_interrupt_action;
         creators["vezax surge of darkness action"] = &RaidUlduarActionContext::vezax_surge_of_darkness_action;
         creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
@@ -269,7 +269,7 @@ private:
     static Action* vezax_reset_encounter_state_action(PlayerbotAI* ai) { return new VezaxResetEncounterStateAction(ai); }
     static Action* vezax_mark_of_the_faceless_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessAction(ai); }
     static Action* vezax_vapor_puddle_clear_action(PlayerbotAI* ai) { return new VezaxVaporPuddleClearAction(ai); }
-    static Action* vezax_shadow_crash_clear_action(PlayerbotAI* ai) { return new VezaxShadowCrashClearAction(ai); }
+    static Action* vezax_shadow_crash_dodge_action(PlayerbotAI* ai) { return new VezaxShadowCrashDodgeAction(ai); }
     static Action* vezax_searing_flames_interrupt_action(PlayerbotAI* ai) { return new VezaxSearingFlamesInterruptAction(ai); }
     static Action* vezax_surge_of_darkness_action(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessAction(ai); }
     static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }

@@ -70,38 +70,26 @@ bool VezaxVaporPuddleClearAction::Execute(Event /*event*/)
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
-bool VezaxShadowCrashClearAction::Execute(Event /*event*/)
+bool VezaxShadowCrashDodgeAction::Execute(Event /*event*/)
 {
-    Unit* boss = GetVezax(botAI);
-    if (!boss)
+    Position impact;
+    if (!TryGetVezaxShadowCrashImpact(botAI, impact))
         return false;
 
-    float bossX = boss->GetPositionX();
-    float bossY = boss->GetPositionY();
-    float bossZ = boss->GetPositionZ();
+    Position spot;
+    if (!TryGetVezaxDodgeSpot(bot, impact, spot))
+        return false;
 
-    float currentAngle = atan2(bot->GetPositionY() - bossY, bot->GetPositionX() - bossX);
-    float currentDistance = bot->GetDistance2d(boss);
+    // Already clear. Yielding here is what lets the soak walk the bot back into the field the missile
+    // leaves, and lets a class interrupt through on the ticks in between.
+    if (bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >
+        ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+    {
+        return false;
+    }
 
-    // Strafe at the bot's own range rather than dragging it to a fixed radius. A paladin healer can
-    // answer IsMelee, which is why the melee band is still here.
-    bool const stayInMelee = botAI->IsMelee(bot) || botAI->IsTank(bot);
-    float const minDistance = stayInMelee ? ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MIN_RANGE
-                                          : ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MIN_RANGE;
-    float const maxDistance = stayInMelee ? ULDUAR_VEZAX_SHADOW_CRASH_MELEE_MAX_RANGE
-                                          : ULDUAR_VEZAX_SHADOW_CRASH_RANGED_MAX_RANGE;
-    float const desiredDistance = std::clamp(currentDistance, minDistance, maxDistance);
-
-    // Constant step length around the boss, so a bot on a tight radius still clears the field in as
-    // few ticks as one further out.
-    float const angleIncrement = ULDUAR_VEZAX_SHADOW_CRASH_STEP_YARDS / std::max(desiredDistance, 1.0f);
-    float newAngle = currentAngle + angleIncrement;
-
-    float newX = bossX + desiredDistance * cos(newAngle);
-    float newY = bossY + desiredDistance * sin(newAngle);
-
-    return MoveTo(boss->GetMapId(), newX, newY, bossZ, false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT, true);
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
+                  false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
 bool VezaxSearingFlamesInterruptAction::Execute(Event /*event*/)
@@ -169,6 +157,15 @@ bool VezaxKillVaporAction::Execute(Event /*event*/)
     if (!vapor)
         return false;
 
+    // Close first, then kill. The puddle drops on the corpse, so a handler that shoots one from
+    // 30 yd has to walk that far afterwards to stand in what it came for.
+    if (bot->GetExactDist2d(vapor) > ULDUAR_VEZAX_VAPOR_KILL_RANGE)
+    {
+        return MoveTo(bot->GetMapId(), vapor->GetPositionX(), vapor->GetPositionY(),
+                      vapor->GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
     return Attack(vapor);
 }
 
@@ -180,6 +177,17 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
     VezaxHazard field;
     if (!TryGetVezaxNearestHazard(bot, hazards, true, field))
         return false;
+
+    // Never walk into a spot a missile is about to land on. Fields overlap - one lands every 10s and
+    // lasts 20 - so the field worth soaking can sit exactly where the next crash is aimed, and
+    // without this the bot bounces between here and the dodge until it lands.
+    Position impact;
+    if (TryGetVezaxShadowCrashImpact(botAI, impact) &&
+        field.position.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
+            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+    {
+        return false;
+    }
 
     // Stop short of the centre. Arriving anywhere inside the 8 yard radius is the whole point, and
     // walking to the exact middle costs cast time for nothing.
@@ -202,8 +210,9 @@ bool VezaxRaidPositionAction::Execute(Event /*event*/)
     Position slot;
     if (!TryGetVezaxSlot(bot, hazards, slot))
     {
-        // Tanks and melee hold the boss instead of taking a slot. All they need is not to be stacked
-        // on each other, so one Shadow Crash impact does not catch the whole group.
+        // Melee hold the boss instead of taking a slot. All they need is not to be stacked on each
+        // other; no Shadow Crash can reach them, because SelectTarget skips everyone within 12.5 yd
+        // of Vezax and the nearest impact therefore lands 14.5 yd out.
         _slotReached = false;
         if (Player* crowd = GetNearestPlayerInRadius(bot, ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS))
             return FleePosition(crowd->GetPosition(), ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS);
@@ -211,15 +220,27 @@ bool VezaxRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
+    // Do not walk a bot into a spot a missile is already aimed at. The dodge node owns the bot until
+    // it lands; without this the two fight each other for the whole flight and it never casts.
+    Position impact;
+    if (TryGetVezaxShadowCrashImpact(botAI, impact) &&
+        slot.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
+            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+    {
+        _slotReached = false;
+        return false;
+    }
+
     float const distance = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY());
+    float const tolerance = VezaxSlotTolerance(bot);
 
     // Reach then hold, with a deadband. Re-issuing a move on every yard of drift restarts the spline,
     // and a moving bot cannot start a cast - it slides on the spot and never casts. Yielding once
     // parked also matters because every class interrupt sits below this node at ACTION_INTERRUPT.
-    if (_slotReached && distance > ULDUAR_VEZAX_SLOT_TOLERANCE * 2.0f)
+    if (_slotReached && distance > tolerance * 2.0f)
         _slotReached = false;
 
-    if (_slotReached || distance <= ULDUAR_VEZAX_SLOT_TOLERANCE)
+    if (_slotReached || distance <= tolerance)
     {
         _slotReached = true;
         return false;

@@ -923,22 +923,24 @@ float VezaxControlMovementMultiplier::GetValue(Action* action)
     if (!action || !VezaxFormationActive(botAI))
         return 1.0f;
 
-    // Only the roles the arc actually places. The tank holds the boss and melee ride it, so both keep
-    // every generic mover.
-    if (!botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+    // Only the roles the formation actually places. Melee ride the boss and keep every generic mover.
+    // The main tank is not one of them any more: it holds the anchor slot, and FollowAction would
+    // drag it off the spawn point that every other radius here is measured from.
+    if (!botAI->IsRanged(bot) && !botAI->IsMainTank(bot))
         return 1.0f;
 
     if (!dynamic_cast<MovementAction*>(action))
         return 1.0f;
 
     // AttackAction derives from MovementAction, so a blanket zero would also kill targeting;
-    // ReachTargetAction is what walks a healer into range of someone the arc cannot reach.
+    // ReachTargetAction is what keeps the tank in melee and walks a healer into range of someone the
+    // formation cannot reach.
     if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 
     static std::set<std::string> const encounterMovers = {
         "vezax raid position action",       "vezax mark of the faceless action",
-        "vezax vapor puddle clear action",  "vezax shadow crash clear action",
+        "vezax vapor puddle clear action",  "vezax shadow crash dodge action",
         "vezax shadow crash soak action",   "vezax vapor soak action"};
 
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;

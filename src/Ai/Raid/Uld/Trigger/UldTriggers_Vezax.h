@@ -34,12 +34,13 @@ public:
     bool IsActive() override;
 };
 
-// Healer standing in a field. Melee and tanks are deliberately left alone: the field cannot hurt
-// them, so moving them out would only cost uptime.
-class VezaxShadowCrashClearTrigger : public Trigger
+// A Shadow Crash missile in flight with this bot standing where it will land. Melee and the tank are
+// left out: SelectTarget skips everyone within 12.5 yd of Vezax, so no impact lands nearer than
+// 14.5 yd and neither of them can be caught by one.
+class VezaxShadowCrashDodgeTrigger : public Trigger
 {
 public:
-    VezaxShadowCrashClearTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax shadow crash clear") {}
+    VezaxShadowCrashDodgeTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax shadow crash dodge") {}
     bool IsActive() override;
 };
 

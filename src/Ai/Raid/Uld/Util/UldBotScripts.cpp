@@ -22,7 +22,8 @@ namespace
 // way through a cast cannot move, so without this it finishes the cast standing in the effect -
 // which on a puddle is one more doubling of 100 * 2^stacks. Nothing is stored; both hooks fire once,
 // at the instant the effect is created.
-void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, bool (*needsToLeave)(Player*))
+void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float radius,
+                               bool (*needsToLeave)(Player*))
 {
     if (!reference || !needsToLeave)
         return;
@@ -43,17 +44,21 @@ void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, bool (*n
         if (!needsToLeave(player))
             continue;
 
-        if (player->GetExactDist2d(hazard.GetPositionX(), hazard.GetPositionY()) >
-            ULDUAR_VEZAX_HAZARD_RADIUS)
-        {
+        if (player->GetExactDist2d(hazard.GetPositionX(), hazard.GetPositionY()) > radius)
             continue;
-        }
 
         botAI->RequestSpellInterrupt();
     }
 }
 
-bool GainsNothingFromVaporPuddle(Player* bot) { return !VezaxWantsVaporPuddleMana(bot); }
+bool GainsNothingFromVaporPuddle(Player* bot) { return !VezaxMayStandInVaporPuddle(bot); }
+
+// Everyone the dodge node will move. Melee and the tank are not on it: SelectTarget skips anything
+// within 12.5 yd of Vezax, so no impact ever lands near enough to reach them.
+bool DodgesShadowCrash(Player* bot)
+{
+    return bot && PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsMainTank(bot);
+}
 
 }  // namespace
 
@@ -78,13 +83,36 @@ public:
             if (!target)
                 return;
 
-            InterruptVezaxCastersNear(caster, target->GetPosition(),
-                                      &VezaxMustLeaveShadowCrashField);
+            // TARGET_DEST_TARGET_ENEMY freezes the destination here, at cast time, so this position
+            // is where the missile lands however far the target walks in the meantime.
+            Position const impact = target->GetPosition();
+
+            InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,
+                                      &DodgesShadowCrash);
+
+            // Nothing sweeps for this: the field's DynamicObject only exists once the missile has
+            // landed, so the ~2s of flight - the only window a bot can act in - would otherwise be
+            // invisible in the trace. This hook already fires exactly once per cast, server-side,
+            // which is why the record is written here and not in the per-bot helper.
+            if (RaidObs::Active())
+            {
+                // Straight from distance over Speed rather than Spell::GetDelayMoment, which the core
+                // fills in during the same cast this hook runs inside. Both are milliseconds.
+                float const speed = spellInfo->Speed;
+                uint32 const flightMs =
+                    speed > 0.0f
+                        ? static_cast<uint32>(caster->GetExactDist(&impact) / speed * 1000.0f)
+                        : 0;
+
+                RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SHADOW_CRASH_DMG, impact,
+                                          ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS, flightMs);
+            }
+
             return;
         }
 
         if (spellInfo->Id == SPELL_VEZAX_SARONITE_VAPORS_SPAWN)
-            InterruptVezaxCastersNear(caster, caster->GetPosition(),
+            InterruptVezaxCastersNear(caster, caster->GetPosition(), ULDUAR_VEZAX_HAZARD_RADIUS,
                                       &GainsNothingFromVaporPuddle);
     }
 };

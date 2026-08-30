@@ -53,15 +53,22 @@ bool VezaxVaporPuddleClearTrigger::IsActive()
     return VezaxEncounterActive(botAI);
 }
 
-bool VezaxShadowCrashClearTrigger::IsActive()
+bool VezaxShadowCrashDodgeTrigger::IsActive()
 {
-    if (!bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD))
+    // Melee and the tank hold the boss instead. Moving them would drag him, and nothing aimed at a
+    // ranged slot reaches the ball they stand in anyway.
+    if (!botAI->IsRanged(bot) || botAI->IsMainTank(bot))
         return false;
 
-    if (!VezaxMustLeaveShadowCrashField(bot))
+    if (!VezaxFormationActive(botAI))
         return false;
 
-    return VezaxEncounterActive(botAI);
+    Position impact;
+    if (!TryGetVezaxShadowCrashImpact(botAI, impact))
+        return false;
+
+    return bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <=
+           ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS + 1.0f;
 }
 
 bool VezaxSearingFlamesInterruptTrigger::IsActive()
@@ -74,6 +81,12 @@ bool VezaxSearingFlamesInterruptTrigger::IsActive()
     // Darkness, and neither is worth an interrupt.
     Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
     if (!spell || spell->m_spellInfo->Id != SPELL_VEZAX_SEARING_FLAMES)
+        return false;
+
+    // This node outranks the puddle clear, so an interrupter standing in one spends the 2s cast there
+    // rather than stepping out - which is the right trade while the tick is survivable, and a lethal
+    // one at stack 8. The predicate that owns leaving is the same one, so the two cannot disagree.
+    if (VezaxShouldLeaveVaporPuddle(bot))
         return false;
 
     return VezaxIsSearingFlamesInterrupter(bot, boss);
@@ -138,7 +151,7 @@ bool VezaxVaporSoakTrigger::IsActive()
 bool VezaxKillVaporTrigger::IsActive()
 {
     // In hard mode a dead vapor is a lost hard mode, so this node never arms.
-    if (IsVezaxHardModeActive(botAI) || !VezaxIsVaporKiller(bot))
+    if (IsVezaxHardModeActive(botAI) || !VezaxIsVaporHandler(bot))
         return false;
 
     if (!VezaxEncounterActive(botAI))
