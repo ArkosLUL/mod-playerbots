@@ -759,6 +759,7 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
     std::string units = "[";
     bool first = true;
     Unit* anchor = nullptr;
+    std::unordered_set<ObjectGuid> ridden;
 
     for (ObjectGuid guid : roster)
     {
@@ -768,6 +769,29 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
 
         if (!anchor)
             anchor = player;
+
+        // A passenger reports its vehicle's coordinates, so without the vehicle itself a trace cannot
+        // say what the raid was actually riding: its health, its facing, or whether it was moving.
+        // Climb to the root, because a gunner rides a turret that rides the real vehicle and the
+        // turret is only a weapon mount - the hull is the thing that takes the damage.
+        Unit* vehicle = player->GetVehicleBase();
+        for (int depth = 0; vehicle && depth < 4; ++depth)
+        {
+            Unit* parent = vehicle->GetVehicleBase();
+            if (!parent)
+                break;
+            vehicle = parent;
+        }
+
+        if (vehicle && vehicle->IsInWorld() && vehicle->GetMap() == map && ridden.insert(vehicle->GetGUID()).second)
+        {
+            if (!first)
+                units += ",";
+            first = false;
+            units += UnitRow(vehicle);
+            if (session)
+                EnsureUnit(*session, vehicle);
+        }
 
         // The last health this bot was seen at, so a death the damage hooks never saw can still say
         // what it fell from and how long ago that reading was.

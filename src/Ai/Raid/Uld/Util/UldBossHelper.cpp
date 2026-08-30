@@ -35,6 +35,7 @@
 #include <ctime>
 #include <limits>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -2752,23 +2753,36 @@ struct FlameLeviathanState
     // so the next channel starts unclaimed - the 10 s gap between channels guarantees we see one.
     RaidObs::ObsValue<ObjectGuid> ventClaimedBy{"fl.interrupter"};
 
-    // The vehicle currently wearing Pursued, and when it last changed. EVENT_PURSUE repeats on 31s,
-    // so the switch is predictable and the fleet can be out of his front before he turns.
+    // The vehicle currently wearing Pursued. Battering Ram is a 25 yd sphere centred on it, so this
+    // is the thing every other vehicle measures itself against.
     RaidObs::ObsValue<ObjectGuid> pursuedVehicle{"fl.pursued"};
-    uint32 pursueSeenMs = 0;
+
+    // Vehicles that cannot move. Hodir's Fury carries an undispellable 60 s stun, and a frozen
+    // vehicle has to be counted out rather than waited on - it still holds roles otherwise.
+    RaidObs::ObsGuidMap<bool> frozen{"fl.frozen"};
 
     uint32 scanMs = 0;
 };
 
-thread_local std::unordered_map<uint32 /*instanceId*/, FlameLeviathanState> flStates;
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
+// pool reassigns it - which silently resets the vent claim and made fl.pursued flap 199 times in a
+// pull that switched target twelve times. References into an unordered_map survive rehashing, so the
+// lock only has to cover the lookup.
+std::mutex flStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, FlameLeviathanState> flStates;
 
 // Long enough that the scan is cheap, short enough that a 31s Pursued cycle is never missed.
 constexpr uint32 ULDUAR_FL_SCAN_INTERVAL_MS = 200;
 
-FlameLeviathanState& FlameLeviathanStateFor(Player* bot) { return flStates[bot->GetInstanceId()]; }
+FlameLeviathanState& FlameLeviathanStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(flStatesMutex);
+    return flStates[bot->GetInstanceId()];
+}
 
 // Everything that has to be true once per instance per tick rather than once per bot: open the
-// trace, expire a vent claim, and notice a Pursued switch.
+// trace, expire a vent claim, notice a Pursued switch, and record which vehicles are frozen.
 void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     FlameLeviathanState& state = FlameLeviathanStateFor(bot);
@@ -2784,7 +2798,7 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         state.pullTraced = false;
         state.ventClaimedBy = ObjectGuid::Empty;
         state.pursuedVehicle = ObjectGuid::Empty;
-        state.pursueSeenMs = 0;
+        state.frozen.clear();
         return;
     }
 
@@ -2798,7 +2812,8 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         state.ventClaimedBy = ObjectGuid::Empty;
 
     // Pursued is read off the vehicles rather than the players: the aura lands on whichever unit the
-    // boss's spell picked, and a gunner's own guid never carries it.
+    // boss's spell picked, and a gunner's own guid never carries it. Keyed on the vehicle for the
+    // same reason, which also folds a crew of four into the one entry that matters.
     ObjectGuid pursued;
     if (Group* group = bot->GetGroup())
     {
@@ -2808,17 +2823,21 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
             if (!member || !member->IsAlive())
                 continue;
 
-            if (Unit* base = FlameLeviathanRiddenVehicle(member))
-                if (base->HasAura(SPELL_FL_PURSUED))
-                {
-                    pursued = base->GetGUID();
-                    break;
-                }
+            Unit* base = FlameLeviathanRiddenVehicle(member);
+            if (!base)
+                continue;
+
+            if (!pursued && base->HasAura(SPELL_FL_PURSUED))
+                pursued = base->GetGUID();
+
+            state.frozen.Set(base->GetGUID(), base->HasUnitState(UNIT_STATE_NOT_MOVE));
+
+            // A claim held by an engine that froze mid-channel would block the re-election for the
+            // rest of it, and the channel is only ten seconds long. Hand it back instead.
+            if (state.ventClaimedBy.Get() == member->GetGUID() && !FlameLeviathanCrewUsable(member))
+                state.ventClaimedBy = ObjectGuid::Empty;
         }
     }
-
-    if (pursued && pursued != state.pursuedVehicle.Get())
-        state.pursueSeenMs = getMSTime();
 
     state.pursuedVehicle = pursued;
 }
@@ -2933,6 +2952,10 @@ bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot)
     if (!FlameLeviathanCanElectroshock(base, boss))
         return false;
 
+    // A stunned engine cannot fire the interrupt, and claiming the channel would waste it.
+    if (!FlameLeviathanCrewUsable(bot))
+        return false;
+
     // One shot per channel. Without this the ranking below re-elects on every tick of the channel:
     // the winner spends 20 energy casting, which promotes whoever is now highest, and the whole line
     // of siege engines empties into a single channel milliseconds apart.
@@ -2950,7 +2973,7 @@ bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot)
     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
     {
         Player* member = gref->GetSource();
-        if (!member || member == bot || !member->IsAlive())
+        if (!member || member == bot || !FlameLeviathanCrewUsable(member))
             continue;
 
         Unit* memberBase = member->GetVehicleBase();
@@ -2977,60 +3000,90 @@ void FlameLeviathanClaimVentChannel(Player* bot)
         FlameLeviathanStateFor(bot).ventClaimedBy = bot->GetGUID();
 }
 
-uint32 FlameLeviathanMsSincePursue(Player* bot)
+bool FlameLeviathanCrewUsable(Player* member)
 {
-    if (!bot)
-        return 0;
+    if (!member || !member->IsAlive())
+        return false;
 
-    uint32 const seen = FlameLeviathanStateFor(bot).pursueSeenMs;
-    return seen ? GetMSTimeDiffToNow(seen) : 0;
+    // Hodir's Fury's stun runs 60s, carries no mechanic and no dispel type, so nothing shortens it.
+    // A role elected on guid order would otherwise sit with a frozen vehicle for a third of the
+    // fight - UNIT_STATE_NOT_MOVE is ROOT|STUNNED|DIED|DISTRACTED, and the stun sets it on both the
+    // hull and the crew.
+    Unit* base = FlameLeviathanRiddenVehicle(member);
+    return base && !base->HasUnitState(UNIT_STATE_NOT_MOVE) && !member->HasUnitState(UNIT_STATE_NOT_MOVE);
 }
 
-bool FlameLeviathanPursueSwitchImminent(Player* bot)
+Unit* FlameLeviathanFrozenVehicle(Player* bot, Unit* from, float minRange, float maxRange)
 {
-    uint32 const since = FlameLeviathanMsSincePursue(bot);
-    if (!since)
-        return false;
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group || !from)
+        return nullptr;
 
-    // Nothing seen for longer than a full cycle means the timing is lost - a re-pull, or a switch
-    // the scan missed. Treat that as imminent rather than safe: being wrong the cautious way costs
-    // a few yards, being wrong the other way costs the fleet a Battering Ram.
-    if (since >= ULDUAR_FL_PURSUE_PERIOD_MS)
-        return true;
+    Unit* best = nullptr;
+    float bestDist = maxRange;
 
-    return since >= ULDUAR_FL_PURSUE_PERIOD_MS - ULDUAR_FL_PURSUE_CLEAR_LEAD_MS;
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+
+        Unit* base = FlameLeviathanRiddenVehicle(member);
+        if (!base || base == from || !base->HasAura(SPELL_FL_HODIRS_FURY_STUN))
+            continue;
+
+        float const dist = from->GetExactDist2d(base);
+        if (dist < minRange || dist > bestDist)
+            continue;
+
+        best = base;
+        bestDist = dist;
+    }
+
+    return best;
 }
 
-bool FlameLeviathanInBatteringRamArc(Unit* vehicleBase, Unit* boss)
+Unit* FlameLeviathanPursuedVehicle(PlayerbotAI* botAI, Player* bot)
 {
-    if (!vehicleBase || !boss)
+    if (!botAI || !bot)
+        return nullptr;
+
+    ObjectGuid const guid = FlameLeviathanStateFor(bot).pursuedVehicle.Get();
+    return guid ? botAI->GetUnit(guid) : nullptr;
+}
+
+bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* pursued)
+{
+    if (!vehicleBase || !pursued || vehicleBase == pursued)
         return false;
 
-    if (vehicleBase->GetExactDist2d(boss) > ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize())
-        return false;
-
-    // Measured from him outwards: the blast lands on a point in front of him, so what matters is
-    // whether this vehicle is the thing he is facing.
-    return boss->HasInArc(float(M_PI), vehicleBase);
+    // Battering Ram is TARGET_DEST_TARGET_ENEMY with a 25 yd radius, cast on the boss's victim. The
+    // blast is a sphere around the Pursued vehicle, so his facing has nothing to do with it - the
+    // frontal-arc test this replaced was reading the wrong object and missed two thirds of the hits.
+    return vehicleBase->GetExactDist2d(pursued) <= ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize();
 }
 
 bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot)
 {
-    // Being in front of him is the pursued vehicle's whole job, and it is already kiting.
+    // Standing in his own blast is the pursued vehicle's whole job, and it is already kiting.
     if (!bot || FlameLeviathanIsPursued(bot))
         return false;
 
     // The ridden vehicle, not the seat: a gunner's GetVehicleBase is the bolted-on turret, whose
     // position is the parent's anyway but whose object size is not.
     Unit* vehicleBase = FlameLeviathanRiddenVehicle(bot);
+    Unit* pursued = FlameLeviathanPursuedVehicle(botAI, bot);
     Unit* boss = FlameLeviathanBoss(botAI);
-    if (!vehicleBase || !boss)
+    if (!vehicleBase || !pursued || !boss)
         return false;
 
-    if (vehicleBase->GetExactDist2d(boss) > ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize())
+    // He only fires inside his own cast test, so outside it the blast cannot land however close the
+    // fleet is packed. Borrowed verbatim from the script rather than reconstructed, because
+    // IsWithinCombatRange adds both combat reaches and a hand-rolled 15 yd would be far too tight.
+    if (!boss->IsWithinCombatRange(pursued, ULDUAR_FL_BATTERING_RAM_CAST_RANGE))
         return false;
 
-    return FlameLeviathanInBatteringRamArc(vehicleBase, boss) || FlameLeviathanPursueSwitchImminent(bot);
+    return FlameLeviathanInBatteringRamBlast(vehicleBase, pursued);
 }
 
 bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)
@@ -3044,6 +3097,11 @@ bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)
     if (FlameLeviathanIsPursued(bot))
         return false;
 
+    // A frozen chopper cannot lead anything, so it must not win the election either - it would hold
+    // the slot for the full 60 s and nobody else would lay tar.
+    if (!FlameLeviathanCrewUsable(bot))
+        return false;
+
     Group* group = bot->GetGroup();
     if (!group)
         return true;
@@ -3052,7 +3110,7 @@ bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)
     for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
     {
         Player* member = gref->GetSource();
-        if (!member || member == bot || !member->IsAlive())
+        if (!member || member == bot || !FlameLeviathanCrewUsable(member))
             continue;
 
         Unit* memberBase = member->GetVehicleBase();
@@ -3095,14 +3153,82 @@ static Position FlameLeviathanOffsetPoint(Unit* boss, float bearing, float stand
                     boss->GetPositionY() + std::sin(bearing) * dist, boss->GetPositionZ());
 }
 
-Position FlameLeviathanRearPoint(Unit* boss, float standDist)
+float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius)
 {
-    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation() + M_PI, standDist);
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group || !vehicleBase || radius <= 0.0f)
+        return 0.0f;
+
+    uint32 const entry = vehicleBase->GetEntry();
+    ObjectGuid const myGuid = vehicleBase->GetGUID();
+
+    // Rank among the live vehicles of my own class, by guid so every crew member computes the same
+    // answer. Deduped on the vehicle: four riders in one hull are one slot, not four. A frozen
+    // vehicle keeps its slot on purpose - dropping it would renumber everyone else's and swing the
+    // whole fan across the arena for 60 s.
+    std::vector<ObjectGuid> seen;
+    int32 index = 0;
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+
+        Unit* base = FlameLeviathanRiddenVehicle(member);
+        if (!base || base->GetEntry() != entry)
+            continue;
+
+        ObjectGuid const guid = base->GetGUID();
+        if (std::find(seen.begin(), seen.end(), guid) != seen.end())
+            continue;
+
+        seen.push_back(guid);
+        if (guid < myGuid)
+            ++index;
+    }
+
+    int32 const count = static_cast<int32>(seen.size());
+    if (count < 2)
+        return 0.0f;
+
+    // A chord of ULDUAR_FL_STATION_SPACING at this radius, as an angle - which is what actually has to
+    // hold, because the thing being avoided is a circle on the ground and not an angular sector.
+    float spread = 2.0f * std::asin(std::min(1.0f, ULDUAR_FL_STATION_SPACING / (2.0f * radius)));
+
+    // A tight radius wants a wide angle, and five of those would wrap the fan around him and put the
+    // far slots back in his front. Cap the whole fan instead and accept less spacing when it bites.
+    spread = std::min(spread, ULDUAR_FL_STATION_MAX_ARC / static_cast<float>(count - 1));
+
+    return (static_cast<float>(index) - static_cast<float>(count - 1) * 0.5f) * spread;
 }
 
-Position FlameLeviathanLeadPoint(Unit* boss)
+Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffset)
 {
-    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation(), ULDUAR_FL_TAR_LEAD_DIST);
+    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation() + M_PI + bearingOffset, standDist);
+}
+
+Position FlameLeviathanLeadPoint(Unit* boss, float standDist)
+{
+    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation(), standDist);
+}
+
+float FlameLeviathanTarLeadDistance(Unit* boss, Unit* pursued, float size)
+{
+    if (!boss)
+        return 0.0f;
+
+    // Nobody being chased means no blast to stay out of, so take the whole lead.
+    if (!pursued)
+        return ULDUAR_FL_TAR_LEAD_DIST;
+
+    // His path is the line to whoever he is chasing, so leading him means driving that line - and the
+    // far end of it is the centre of Battering Ram. Stop short of the sphere rather than crossing it;
+    // the tar still lands in front of him, which is the entire point of the slot. Measured from his
+    // centre because the offset point adds his combat reach back on.
+    float const room = boss->GetExactDist2d(pursued) - boss->GetCombatReach() -
+                       ULDUAR_FL_BATTERING_RAM_RADIUS - size;
+
+    return room <= 0.0f ? 0.0f : std::min(ULDUAR_FL_TAR_LEAD_DIST, room);
 }
 
 std::vector<Position> const& FlameLeviathanKiteRing()

@@ -294,7 +294,10 @@ enum UlduarIDs
     // spawns that tower's periodic ground hazard).
     NPC_FL_THORIM_HAMMER_TARGET = 33364,     // Storm: static lightning-strike marks
     NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,  // Flame: moving fire trail
-    NPC_FL_HODIRS_FURY_TARGET = 33108,       // Frost: chases a random player then drops frost
+    // Frost: walks to a target, roots itself on arrival, then fires 5s later where it stopped. The
+    // strike carries a 60s stun (62297) with no mechanic and no dispel type, so a vehicle that eats
+    // one is out of the fight for a minute and nothing can shorten it.
+    NPC_FL_HODIRS_FURY_TARGET = 33108,
 
     // Flame Leviathan. Vehicle entries come from core ulduar.h via UldScripts.h; these are the
     // boss's own spells and the units the vehicles interact with.
@@ -324,7 +327,15 @@ enum UlduarIDs
     SPELL_FL_TAR = 62286,              // pool spawns 9 yd BEHIND the chopper
     SPELL_FL_SPEED_BOOST = 62299,
 
+    // Hodir's Fury's 60s stun, on the vehicle as well as the crew. Cleared by fire, see
+    // ULDUAR_FL_HURL_BOULDER_MAX_RANGE.
+    SPELL_FL_HODIRS_FURY_STUN = 62297,
+
     // Salvaged Demolisher (33109) driver seat.
+    // Hurl Boulder triggers Boulder 62307, whose third effect triggers Flames 65045; Mortar 62634
+    // triggers 62635, whose third triggers Flames 65044. spell_linked_spell maps both Flames to
+    // -62297 ("Flames remove ice"), so either one thaws a frozen vehicle. Free, and the boulder's
+    // own damage is enemy-only, so aiming one at a frozen ally costs nothing.
     SPELL_FL_HURL_BOULDER = 62306,
     SPELL_FL_HURL_PYRITE_BARREL = 62490,
     SPELL_FL_DEMOLISHER_RAM = 62308,
@@ -444,6 +455,11 @@ enum FlameLeviathanTowerFlags
 // Vehicle keeps this clear of any active-tower ground hazard (strike / fire / frost).
 constexpr float ULDUAR_FL_TOWER_HAZARD_RADIUS = 18.0f;
 
+// What the strike itself actually covers, which is smaller than the band above: Hodir's Fury 10 yd
+// (62297), Mimiron's Inferno 9 (62910), Thorim's Hammer 7 (62912). The scan radius is the warning;
+// this is the circle a vehicle has to be out of.
+constexpr float ULDUAR_FL_TOWER_BLAST_RADIUS = 10.0f;
+
 // Flame Leviathan arena corners, taken from the four NPC_FREYA_WARD_TARGET spawn points in
 // boss_flame_leviathan.cpp's SummonTowerHelpers. The kite ring and every "is this inside the
 // arena" test are derived from these, so nothing else hardcodes arena geometry.
@@ -508,14 +524,28 @@ constexpr float ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE = 25.0f * float(M_PI) / 180
 constexpr uint32 ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS = 10000;
 constexpr uint32 ULDUAR_FL_ELECTROSHOCK_RETRY_MS = 3000;
 
-// Battering Ram is a 25 yd blast centred in front of him, so a vehicle parked at his rear is inside
-// it the moment he turns onto a new Pursued target. Two thirds of the fleet took one every switch.
+// Battering Ram is TARGET_DEST_TARGET_ENEMY at radius index 20: a 25 yd sphere centred on whoever he
+// is pursuing, not a cone off his front. Distance to him tells you nothing; distance to the Pursued
+// vehicle is the whole answer.
 constexpr float ULDUAR_FL_BATTERING_RAM_RADIUS = 25.0f;
 
-// EVENT_PURSUE reschedules itself for 31s, so the switch is predictable to within a tick. Vehicles
-// that are not the target start clearing his front this long before the next one is due.
-constexpr uint32 ULDUAR_FL_PURSUE_PERIOD_MS = 31000;
-constexpr uint32 ULDUAR_FL_PURSUE_CLEAR_LEAD_MS = 5000;
+// He only casts it inside IsWithinCombatRange(victim, 15.0f), which adds both combat reaches on top.
+constexpr float ULDUAR_FL_BATTERING_RAM_CAST_RANGE = 15.0f;
+
+// Hurl Boulder is a lobbed shot with a real minimum range (RangeIndex 164), so a demolisher parked
+// on top of a frozen ally cannot thaw it and has to back off first. Mortar (RangeIndex 37) has no
+// minimum but only reaches 50.
+constexpr float ULDUAR_FL_HURL_BOULDER_MIN_RANGE = 10.0f;
+constexpr float ULDUAR_FL_HURL_BOULDER_MAX_RANGE = 70.0f;
+constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;
+
+// Gap to hold between vehicles of one class: Hodir's Fury's 10 yd blast plus enough that a vehicle
+// drifting inside its arrival deadband does not close it. Half the fight ran with four or more
+// vehicles inside one such circle, so a single reticle could freeze a whole class for 60 s.
+constexpr float ULDUAR_FL_STATION_SPACING = 12.0f;
+
+// The widest the fan may open. Past this the outer slots stop being "behind him" at all.
+constexpr float ULDUAR_FL_STATION_MAX_ARC = 2.0f * float(M_PI) / 3.0f;
 
 // A pyrite crate energizes for 25, so grabbing one above this wastes part of it.
 constexpr uint32 ULDUAR_FL_CRATE_GRAB_CEILING = 75;
@@ -1654,28 +1684,44 @@ void FlameLeviathanClaimVentChannel(Player* bot);
 // shot is on; otherwise starts the turn and leaves the cast for a later tick.
 bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius);
 
-// Milliseconds since Pursued last landed on anyone, and whether the next switch is close enough that
-// a vehicle sitting in his frontal arc should be somewhere else by the time he turns.
-uint32 FlameLeviathanMsSincePursue(Player* bot);
-bool FlameLeviathanPursueSwitchImminent(Player* bot);
+// Alive, mounted, and neither the hull nor the driver frozen. Any role handed out by election has to
+// ask this, or a 60 s Hodir's Fury stun takes the role with the vehicle.
+bool FlameLeviathanCrewUsable(Player* member);
 
-// True while this vehicle is inside Battering Ram's blast, i.e. close enough and in front of him.
-bool FlameLeviathanInBatteringRamArc(Unit* vehicleBase, Unit* boss);
+// Nearest crewed vehicle held by Hodir's Fury's stun, inside the casting band of whatever will thaw
+// it. `from` is excluded, so a driver never aims at the hull it is sitting in - it could not cast
+// anyway. A gunner passes its turret instead, which deliberately leaves its own demolisher eligible:
+// the seat is not stunned when only the hull is, and Mortar has no minimum range.
+Unit* FlameLeviathanFrozenVehicle(Player* bot, Unit* from, float minRange, float maxRange);
+
+// The vehicle currently wearing Pursued, or null. Everything Battering Ram is measured against.
+Unit* FlameLeviathanPursuedVehicle(PlayerbotAI* botAI, Player* bot);
+
+// True while this vehicle is inside the 25 yd sphere Battering Ram drops on the Pursued vehicle.
+bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* pursued);
 
 // The whole "get out of the blast" test in one place, because the urgent-drive trigger and the drive
 // action both ask it and a trigger that fires wider than its action just demotes the cast node for
-// nothing. True when this vehicle is in the blast and either he is already facing it or he is about
-// to pick a new target - his current facing predicts nothing once the switch lands.
+// nothing. True when this vehicle shares the blast with the Pursued one and he is close enough to
+// fire. No switch prediction: the rule re-aims itself the moment the Pursued guid changes.
 bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot);
 
-// Lowest-guid chopper driver that is not currently Pursued. It runs ahead of the boss dropping tar
-// in his path; a Pursued chopper is already driving away from him and drops tar for free.
+// Lowest-guid chopper driver that is neither Pursued nor frozen. It runs ahead of the boss dropping
+// tar in his path; a Pursued chopper is already driving away from him and drops tar for free.
 bool FlameLeviathanIsTarLead(PlayerbotAI* botAI, Player* bot);
 
 bool FlameLeviathanInArena(Position const& pos, float margin = 0.0f);
 
-Position FlameLeviathanRearPoint(Unit* boss, float standDist);
-Position FlameLeviathanLeadPoint(Unit* boss);
+Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffset = 0.0f);
+
+// Where this vehicle sits in its class's fan, as an angle off the class bearing. One station point
+// per class stacked the whole class on one spot, and a single Hodir's Fury then froze all of it.
+float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius);
+Position FlameLeviathanLeadPoint(Unit* boss, float standDist);
+
+// How far ahead of him the lead chopper can sit without parking inside Battering Ram's sphere.
+// Zero when there is no room at all, which means the slot has to be given up for now.
+float FlameLeviathanTarLeadDistance(Unit* boss, Unit* pursued, float size);
 
 // Eight nodes hugging the arena walls, corners chamfered. Built once from ULDUAR_FL_ARENA_CORNERS.
 std::vector<Position> const& FlameLeviathanKiteRing();

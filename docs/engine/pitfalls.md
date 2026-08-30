@@ -114,6 +114,13 @@ must still outrank heals while the bot is unsheltered.
   Emergency dodges want `MOVEMENT_FORCED` — and two of those in one encounter then deadlock each
   other, with no band above to escape into, so precedence between them has to be settled at the
   multiplier layer instead.
+- **A registered POINT generator does not mean the unit is moving.**
+  `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
+  `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it
+  calls `MovePoint`. A stunned unit therefore accepts move orders forever and never travels — in a
+  trace, a bot holding one coordinate while its action keeps issuing accepted moves.
+  `postmortem.py --stalls` is that query; it found a Flame Leviathan siege engine frozen for exactly
+  60s with goals 122 yd away.
 - **`IsDuplicateMove` is not the anti-oscillation guard it looks like.** It needs the request within
   **0.01 yd** of `lastMoveShort` (`MovementActions.cpp:939-949`), so any caller passing
   `bot->GetPositionZ()` re-issues a different point as soon as the bot moves on a sloped floor, and
@@ -273,6 +280,22 @@ starved the melee rotation for the whole ground phase.
 `IsBotInFrontalCone` forwards to `HasInArc`, which takes the **full** arc, not the half-angle — an
 `M_PI / 2` argument leaves everyone between 45° and 60° off-centre inside a cone they believe they
 cleared.
+
+**An aura's removal conditions are not all in the DBC.** `spell_linked_spell` can strip one on hit: a
+negative `spell_effect` at `type 1` (`SPELL_LINK_HIT`) becomes `RemoveAurasDueToSpell` in
+`Spell::DoAllEffectOnTarget`. Flame Leviathan's Hodir's Fury stun reads as permanent from `Mechanic`,
+`DispelType` and `AuraInterruptFlags` — all zero — and is in fact removed by "Flames" (65044/65045),
+which a demolisher throws every time it uses Hurl Boulder. Searching for what *casts* the remover
+also finds nothing: it is an `EffectTriggerSpell` two levels below the spellbook entry
+(`62306 → 62307 → 65045`). Follow the trigger chain and check the link table before calling anything
+undispellable.
+
+**A spell's shape is its implicit target type, not what the boss appears to be doing.**
+`TARGET_UNIT_CONE_ENEMY_*` is a cone off the caster; `TARGET_DEST_TARGET_ENEMY` (53) centres the blast
+on the **victim**, wherever that is, and the caster's facing is irrelevant. Flame Leviathan's Battering
+Ram is the second and was modelled as the first: the resulting "stay out of his front" test saw a
+third of the real hits while over half of what it did fire on dragged a vehicle off station for
+nothing.
 
 Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` returns
 `UNIT_FIELD_COMBATREACH` (`Object.cpp:2888`), `IsWithinCombatRange` is `dist3d < d + reachSum`, and

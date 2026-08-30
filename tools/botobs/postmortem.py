@@ -9,6 +9,8 @@ pre-roll). Schema and field meanings live in docs/systems/observability.md.
     postmortem.py <file> --bot NAME      that bot's timeline
     postmortem.py <file> --track NAME    position track, with distance to each boss
     postmortem.py <file> --notes [KEY]   pull/phase/note/end records, optionally one key prefix
+    postmortem.py <file> --stalls [MS]   held still while still asking to move - i.e. stuck
+    postmortem.py <file> --clump [YARDS] how stacked the raid was, largest group in one circle
 """
 from __future__ import annotations
 
@@ -39,6 +41,9 @@ class Trace:
         self.header: dict = {}
         self.records: list[dict] = []
         self.names: dict[int, str] = {}
+        # creature_template entry per guid. Names repeat across unrelated creatures and change with
+        # locale, so anything keying off "which creature is this" wants the entry instead.
+        self.entries: dict[int, int] = {}
         self.spells: dict[int, str] = {}
         self.roles: dict[int, str] = {}
         self.humans: set[int] = set()
@@ -72,6 +77,8 @@ class Trace:
 
                 if rec.get("e") == "unit":
                     self.names[rec["g"]] = rec.get("n", "?")
+                    if rec.get("en"):
+                        self.entries[rec["g"]] = rec["en"]
                     # Players carry a role; a creature does not. Somebody who zoned in after the
                     # header was written only ever appears here.
                     if "r" in rec:
@@ -564,6 +571,127 @@ def show_notes(trace: Trace, prefix: str | None = None) -> int:
     return 0
 
 
+ANSWERED_MOVE_YD = 5.0
+
+
+def roster_guids(trace: Trace) -> set:
+    return {member["g"] for member in trace.header.get("roster", [])}
+
+
+def position_runs(track: list, tol: float, min_ms: int) -> list:
+    """Maximal windows in which the unit never left a `tol`-yard disc."""
+    runs = []
+    index, count = 0, len(track)
+    while index < count:
+        end = index + 1
+        x0, y0 = track[index][1], track[index][2]
+        while end < count and math.hypot(track[end][1] - x0, track[end][2] - y0) <= tol:
+            end += 1
+        span = track[end - 1][0] - track[index][0]
+        if span >= min_ms:
+            runs.append((track[index][0], track[end - 1][0], x0, y0))
+        index = end if end > index + 1 else index + 1
+    return runs
+
+
+def show_stalls(trace: Trace, min_ms: int) -> int:
+    """Ordered to move and didn't.
+
+    A bot that has *arrived* is also motionless, so standing still is not the signal on its own. The
+    discriminator is that a mover which parks returns before it ever calls MoveTo and so leaves no
+    `move` record at all: a stationary window that still contains accepted moves is one where the
+    engine asked for a walk and the unit ignored it. That is what a spline-less POINT generator looks
+    like from outside - PointMovementGenerator::DoInitialize returns without launching one while the
+    unit is in UNIT_STATE_NOT_MOVE, so `ok` means "MovePoint was called", never "the unit moved".
+    """
+    roster = roster_guids(trace)
+    dead_at: dict = {}
+    for rec in trace.of("death"):
+        dead_at.setdefault(rec["g"], rec["t"])
+
+    tracks = defaultdict(list)
+    for snap in trace.of("snap"):
+        if snap["t"] < 0:
+            continue
+        for row in snap.get("u", []):
+            if row[0] in roster:
+                tracks[row[0]].append((snap["t"], row[1], row[2], row[5]))
+
+    moves = defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok"):
+            moves[rec.get("g")].append(rec)
+
+    print(f"stationary windows of at least {min_ms / 1000:.0f}s that still contain accepted moves\n")
+    total = 0
+    for guid, track in sorted(tracks.items(), key=lambda kv: trace.name(kv[0])):
+        for start, end, x0, y0 in position_runs(track, 1.0, min_ms):
+            if guid in dead_at and end > dead_at[guid]:
+                continue
+            issued = [m for m in moves[guid] if start <= m["t"] <= end]
+            if not issued:
+                continue
+            # A goal only a few yards out is indistinguishable from having arrived: every mover has an
+            # arrival deadband, and a walk that ends inside it looks identical to one never taken.
+            furthest = max(math.hypot(m["x"] - x0, m["y"] - y0) for m in issued)
+            if furthest <= ANSWERED_MOVE_YD:
+                continue
+            total += end - start
+            owners = sorted({m.get("by") or "?" for m in issued})
+            print(
+                f"{trace.name(guid):<16} {clock(start):>9} -> {clock(end):>9}"
+                f"  {(end - start) / 1000:6.1f}s at ({x0:7.1f},{y0:7.1f})"
+                f"  {len(issued)} move(s) accepted, furthest goal {furthest:.0f} yd"
+            )
+            print(f"{'':16} {'':9}    {'':9}  wanted by: {', '.join(owners)}")
+
+    print(f"\ntotal: {total / 1000:.0f}s")
+    return 0
+
+
+def show_clump(trace: Trace, radius: float) -> int:
+    """How much of the pull had the raid stacked inside one AoE.
+
+    Counts distinct *positions*, not bodies: passengers share their vehicle's coordinates exactly, so
+    five riders in one siege engine are one thing an area spell can hit, not five.
+    """
+    roster = roster_guids(trace)
+    dead_at: dict = {}
+    for rec in trace.of("death"):
+        dead_at.setdefault(rec["g"], rec["t"])
+
+    histogram: dict = defaultdict(int)
+    for snap in trace.of("snap"):
+        if snap["t"] < 0:
+            continue
+        spots = {
+            (round(row[1], 1), round(row[2], 1))
+            for row in snap.get("u", [])
+            if row[0] in roster and not (row[0] in dead_at and snap["t"] >= dead_at[row[0]])
+        }
+        if len(spots) < 2:
+            continue
+        biggest = max(
+            sum(1 for x, y in spots if math.hypot(x - cx, y - cy) <= radius) for cx, cy in spots
+        )
+        histogram[biggest] += 1
+
+    frames = sum(histogram.values())
+    if not frames:
+        print("no snapshots with two or more live positions")
+        return 0
+
+    print(f"most distinct positions inside one {radius:.0f} yd circle, per snapshot\n")
+    running = 0
+    for size in sorted(histogram, reverse=True):
+        running += histogram[size]
+        print(
+            f"  {size:3d} together  {histogram[size]:6d} frames  {100 * histogram[size] / frames:5.1f}%"
+            f"     >= {size}: {100 * running / frames:5.1f}% of the pull"
+        )
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Explain a RaidObs trace.")
     parser.add_argument("file", type=pathlib.Path)
@@ -576,6 +704,22 @@ def main() -> int:
         const="",
         metavar="KEY",
         help="pull/note/hazard/end records only; pass a key prefix such as hodir. to narrow it",
+    )
+    parser.add_argument(
+        "--stalls",
+        nargs="?",
+        type=int,
+        const=6000,
+        metavar="MS",
+        help="windows where a bot held station while still issuing accepted moves (default 6000ms)",
+    )
+    parser.add_argument(
+        "--clump",
+        nargs="?",
+        type=float,
+        const=10.0,
+        metavar="YARDS",
+        help="how stacked the raid was, as the largest group inside one circle (default 10 yd)",
     )
     args = parser.parse_args()
 
@@ -593,6 +737,10 @@ def main() -> int:
         return show_track(trace, args.track)
     if args.notes is not None:
         return show_notes(trace, args.notes or None)
+    if args.stalls is not None:
+        return show_stalls(trace, args.stalls)
+    if args.clump is not None:
+        return show_clump(trace, args.clump)
 
     summarise(trace)
     return 0

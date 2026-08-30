@@ -212,11 +212,15 @@ despite the name**, and never ignites anything.
 - **Never measure a cone with `IsWithinCombatRange`** — it adds *both* combat reaches, and his is 15,
   so asking for 25 answers yes out to 47.7. The cone check adds only the target's
   (`GetObjectSize`); `FlameLeviathanInConeRange` mirrors that.
-- **Pursued 62374** picks a random vehicle every 31s and lasts 35s; he then drives at it and uses
-  `Battering Ram 62376` inside 15 yd — a **25 yd blast on a point in front of him**, not a hit on one
-  target. Everything in his frontal arc is caught: 40% of every Battering Ram landed within 5s of a
-  switch, 7–13 vehicles at a time. Only the pursued vehicle belongs in front of him, and the 31s
-  cadence makes the switch predictable enough to vacate before it. The aura beats `GetVictim()`.
+- **Pursued 62374** picks a random vehicle every 31s and lasts 35s; he drives at it and casts
+  `Battering Ram 62376` on `GetVictim()` inside `IsWithinCombatRange(victim, 15)`. Its target is
+  `TARGET_DEST_TARGET_ENEMY` at radius index 20, so the blast is a **25 yd sphere centred on the
+  pursued vehicle** and his facing is irrelevant. Measuring it off *him* caught only a third of real
+  exposure while over half its activations were false alarms — and the lead chopper, parked 45 yd
+  ahead, never tripped that test at all yet sat in the sphere 15–32% of the time. Distance to the
+  pursued vehicle is the whole rule, and needs no switch prediction: it re-aims itself the moment the
+  aura moves. Predicting the 31s cadence instead was tried, and was where those false alarms came
+  from. The aura beats `GetVictim()`.
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
   `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
   opener fires and five wipes left no trace at all. `FlameLeviathanEngaged` calls `MarkPull` to cover
@@ -262,8 +266,9 @@ action is wired to two trigger nodes, `drive urgent` at `ACTION_RAID + 3` and th
 destination.
 
 Positioning: siege engines and non-lead choppers hold his **rear arc**; demolishers hold a 50 yd band
-and never close; one designated chopper (lowest guid, not currently Pursued) runs *ahead* of him,
-back turned, so its tar pool lands in his path.
+and never close; one chopper (lowest guid, neither Pursued nor frozen) runs *ahead* of him, back
+turned, so its tar pool lands in his path — clamped to stop short of the Battering Ram sphere, and
+giving the slot up entirely when the chase leaves no room. Each class fans out by guid rank.
 
 `FlameLeviathanVehicleMovementMultiplier` zeroes every other `MovementAction` while a bot is on an FL
 vehicle, exempting only the drive action, boarding and `LeaveVehicleAction` — and it stays **inert
@@ -291,10 +296,41 @@ periodic ground event:
 |---|---|---|---|
 | Storm | 65076 | 33364 (8 spawn) | Static lightning strikes at 8 fixed marks, ~5s telegraph |
 | Flame | 65075 | 33369 | Escort-path **moving** fire trail, drops fire every 2s |
-| Frost | 65077 | 33108 (2 spawn) | **Chases** a random player, stuns, drops frost AoE at the catch point |
+| Frost | 65077 | 33108 (2 spawn) | Walks to a target, roots itself, fires 5s later where it stopped |
 | Life | 64482 | 33367 | Spawns attacking adds — kill, not dodge |
 
 Life tower is skipped: its adds are already covered by the vehicle's kill-nearest-attacker loop.
+
+**Hodir's Fury is a telegraph, not a chase.** `npc_hodirs_fury` *walks* (`SetWalk(true)`) after
+`MoveFollow(target, 0, 0)`; on arrival `MovementInform` roots it and starts a **5000 ms fuse**, then
+the strike lands where it stopped. It is harmless while moving and a static mark once it matters, so
+dodge **radially** — breaking sideways is what you do to a chaser and buys nothing here. The strike
+carries `62297`: 10 yd, **60s stun**, `Mechanic 0` and no dispel type, so no dispel, trinket or
+mechanic-clear touches it. Blast radii are Hodir's Fury 10 yd, Mimiron's Inferno 9 (62910), Thorim's
+Hammer 7 (62912) — the 18 yd scan is a warning band, not the circle to leave.
+
+**Fire frees a frozen vehicle, and the demolisher already carries it.** `Hurl Boulder 62306` triggers
+`Boulder 62307`, whose third effect triggers `Flames 65045`; the gunner's `Mortar 62634` → `62635`
+triggers `Flames 65044`. `spell_linked_spell` maps both to `-62297`, comment *"Flames remove ice"*,
+and a negative effect at `type 1` (`SPELL_LINK_HIT`) becomes `RemoveAurasDueToSpell` in
+`Spell::DoAllEffectOnTarget`. **Aim either one at the frozen ally.** All three vehicle spells are
+`TARGET_FLAG_DEST_LOCATION`, so the "target" only supplies a destination and a friendly one passes
+every check, while Boulder's own damage is `TARGET_UNIT_DEST_AREA_ENEMY` and cannot hurt it — the
+blast is enemy-only and the Flames are not. Both are free. Hurl Boulder has a **10 yd minimum**
+(RangeIndex 164, 10–70); Mortar has no minimum but reaches only 50, so the gunner covers what the
+driver's floor cannot. Freeing outranks damage: the stun is a full minute of nothing.
+
+The trap that hid this for a session: `62297` has `Mechanic 0`, `DispelType 0` **and
+`AuraInterruptFlags 0`**, so the DBC alone says nothing removes it, and grepping for what casts
+`65044`/`65045` finds no `creature_template_spell` row, no `smart_scripts` action and no code
+reference — because the cast is an `EffectTriggerSpell` two levels down from a spellbook entry.
+
+**One station point per class stacked the fleet.** `FlameLeviathanRearPoint` gave a whole class one
+spot, so four or more vehicles shared a single 10 yd circle for **50–90%** of a pull and six bots took
+`62297` in the same millisecond. Stations now fan out by guid rank across an arc at the **same
+radius**, so Ram, Sonic Horn and the pyrite band keep their geometry and one strike costs one vehicle.
+A frozen vehicle keeps its slot — renumbering would swing the whole fan for 60s — but hands back the
+tar-lead and vent-interrupt roles, which are elected on guid order and would otherwise go with it.
 
 #### Known gaps
 
