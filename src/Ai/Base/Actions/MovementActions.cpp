@@ -234,8 +234,9 @@ bool MovementAction::MoveToLOS(WorldObject* target, bool ranged)
 
 // Records every destination a bot is handed, attributed to the action that issued it. "Two actions
 // steering the same MotionMaster" is invisible without that attribution.
-bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool idle, bool react, bool normal_only,
-                            bool exact_waypoint, MovementPriority priority, bool lessDelay, bool backwards)
+RaidObs::MoveOutcome MovementAction::TryMoveTo(uint32 mapId, float x, float y, float z, bool idle, bool react,
+                                               bool normal_only, bool exact_waypoint, MovementPriority priority,
+                                               bool lessDelay, bool backwards)
 {
     RaidObs::MoveOutcome const outcome =
         MoveToImpl(mapId, x, y, z, idle, react, normal_only, exact_waypoint, priority, lessDelay, backwards);
@@ -250,7 +251,14 @@ bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool idle, 
                               ObsPriority(priority));
     }
 
-    return outcome == RaidObs::MoveOutcome::Issued;
+    return outcome;
+}
+
+bool MovementAction::MoveTo(uint32 mapId, float x, float y, float z, bool idle, bool react, bool normal_only,
+                            bool exact_waypoint, MovementPriority priority, bool lessDelay, bool backwards)
+{
+    return TryMoveTo(mapId, x, y, z, idle, react, normal_only, exact_waypoint, priority, lessDelay, backwards) ==
+           RaidObs::MoveOutcome::Issued;
 }
 
 RaidObs::MoveOutcome MovementAction::MoveToImpl(uint32 mapId, float x, float y, float z, bool /*idle*/,

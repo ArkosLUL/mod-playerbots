@@ -878,7 +878,8 @@ sanity-conservation behaviour (stand behind Yogg facing away below 15 stacks) **
 
 Ulduar is 10/25-man only, so **"hard mode" here is the Heartbreak split, not a difficulty flag**.
 Killing the Heart during its 30s exposed window (63849) sets XT to full health, grants **Heartbreak
-(65737) permanently**, and stops rescheduling the phase check — so there are no further Heart phases.
+permanently (65737 on 10-man, 64193 on 25-man)**, and stops rescheduling the phase check — so there
+are no further Heart phases.
 Heartbreak is a reliable runtime signal that hard mode is live, but there is no signal *before* the
 kill, so the config declares intent: on, bots burn the Heart to zero on the first window; off, they
 stop at `ULDUAR_XT002_HEART_SAFE_HP_PCT` (15%) so the fight stays in normal mode. In hard mode the
@@ -902,13 +903,18 @@ in `boss_xt002.cpp`). So anything reacting to a Void Zone or a Life Spark must k
 `IsXT002HeartbreakActive`, which reads that aura; `IsXT002HardModeActive` is the *config* flag and is
 only correct where the code states intent ahead of the Heart dying, such as the 15% Heart floor.
 
+**`aurEff->GetAmount()` is the difficulty-correct id**, so read Heartbreak through
+`GetXT002HeartbreakSpellId`, never a constant. Hardcoded to the 10-man 65737 it is false for a whole
+25-man pull, taking the parking lot, both Void Zone filters and the burst window with it while
+puddles and sparks spawn normally. Silent, and only on 25-man; the trace tell is burst-window vetoes
+still firing long after the Heart died.
+
 **Searing Light and Gravity Bomb each repeat on a 16 s (25-man) / 20 s (10-man) timer**, longer than
 the debuff lasts, so there is never more than one carrier of either type at a time.
 
 XT spawns at `(886.28, -12.05, 409.6)` facing −x (orientation 3.13) and is the only DB-spawned
 creature in the room; every add is script-summoned, so room geometry cannot be checked from the world
-DB. The Void Zone parking grid therefore LOS-tests each candidate cell rather than trusting the
-coordinates.
+DB. Verify a destination with navprobe instead - never with `IsWithinLOS`, see below.
 
 `NPC_XT002` (33293), `NPC_XT_TOY_PILE` (33337), `NPC_XS013_SCRAPBOT` (33343) and
 `NPC_HEART_OF_DECONSTRUCTOR` (33329) come from core `ulduar.h` via `UldScripts.h` — **do not
@@ -920,8 +926,8 @@ BT and SWP do.
 #### Anchors, and why nothing pre-positions
 
 The tank spot and the ranged anchor `(866.0, -12.5, 409.8)` stay; the pre-pull walk to them does not.
-`XT002RaidPositionTrigger` requires `xt002->IsInCombat()`, and the ranged-DPS generic-mover stand-down
-carries the same gate, so a ranged bot near XT before the pull can still follow its master.
+`XT002RaidPositionTrigger` requires `xt002->IsInCombat()`, and the generic-mover stand-down carries the
+same gate, so a ranged bot near XT before the pull can still follow its master.
 
 - **The tank anchor yields whenever XT has a victim that is not this bot**, matching Ignis. "No
   victim" deliberately keeps the anchor — that is the Heart window, where standing on the spot is
@@ -932,14 +938,19 @@ carries the same gate, so a ranged bot near XT before the pull can still follow 
   ownership are deliberately different things. The gate is "is there a second alive tank"
   (`GetGroupTankNum(bot) > 1`), not "am I the main tank" — a dead flagged main tank leaves
   `IsMainTank` false for the survivor, who would then chase with the boss in tow.
-- **Healers share the ranged anchor with a 10 yd band** and keep their generic movers. The anchor is
-  29.8 yd from the tank spot, ~20 yd from the melee stack and 30 yd from the nearest melee parking
-  cell — inside heal range, clear of the 20 yd Gravity Bomb pull. It sits at `ACTION_RAID` so it
-  outranks `reach party member to heal` and reels drifting healers in, while heal range and disperse
-  still choose where inside the band they stand; six healers pinned to a point would all eat the same
-  Searing Light. It **stands down while a heal target is out of spell range**, or a healer could
-  never close on a carrier parked in the lot (far cells are 55.6 yd from the anchor against 40 yd of
-  heal range).
+- **Ranged and healers get a slot each, never the anchor itself.** Sharing one coordinate put 13
+  living bots inside 3 yd of it, four dying on the exact point — Searing Light is 8 yd, so that is the
+  whole group. `GetXT002RangedSlot` deals slots off an ellipse (half-axes 6×8 inner, 9×12 outer),
+  wider north-south because east-west is the line to XT and to the tank spot, so spreading along it
+  costs range and across it costs nothing. It is centred **6 yd north of the anchor**: on the anchor,
+  the southern slots sit 14 yd from the nearest parking cell, inside Gravity Bomb's 20 yd pull, and an
+  expiring puddle would drag those bots into it. Offset, every slot is inside 30 yd of XT and 39 yd of
+  the tank and 23 yd clear of the nearest cell. Sorted healers-first then guid, so healers take the
+  centre and inner ring and every bot derives the same layout untold. Slots in Consumption are dealt
+  *out of the list*, not stepped around, or two bots pick the same one. Sitting at `ACTION_RAID` the
+  node outranks `reach party member to heal`, so the healer branch **stands down while a heal target
+  is out of spell range** or a healer could never close on a carrier parked in the lot (far cells are
+  55.6 yd from the anchor against 40 yd of heal range).
 - **The Heart is hidden, not despawned**, when its window shuts (`UNIT_FLAG_NOT_SELECTABLE`,
   `ACTION_DISPOSE_HEART`). `IsAllowedTarget` checking only `IsAlive()` left a bot stuck on it for the
   rest of the fight with every queued spell failing; it now rejects untargetable units and requires
@@ -971,9 +982,46 @@ Two nodes that can both move the same bot will tie on relevance and fight over t
 - **Hazard moves take the nearest sufficient point, not the furthest** — `MoveClearOf`'s ring search
   stops at the first spot that clears everything, unlike `MoveAwayFromCreatureAction`'s
   maximise-distance sweep. It takes per-unit clearances, so one search serves the pre-Heartbreak ally
-  spread at 25 yd and the mixed hazard list of Boombots at 12 and Void Zones at 6.
+  spread at 25 yd and the mixed hazard list of Boombots at 12 and Void Zones at 8.
 - **`avoid aoe` is zeroed for everyone during XT's combat.** Nothing is lost: Tympanic Tantrum is
   room-wide so it exceeds `maxAoeAvoidRadius`, and the Life Spark has no damage aura.
+- **Healers are in the generic-mover stand-down too.** `follow` lives on the non-combat engine and a
+  healer with nothing to heal drops combat constantly — 973 of 2857 actions in one pull, against 1.7%
+  for ranged — so it out-issued the anchor three to one and walked them to the master all fight.
+  Their disperse goes with it; the anchor's slots are what spreads them now.
+- **Healers keep a target, and nothing here may clear it.** A bot with no target never attacks, never
+  enters combat, and so runs the non-combat engine — for a priest that is renew, penance and greater
+  heal, with no Power Word: Shield, Prayer of Mending, Pain Suppression, Shadowfiend or Hymn of Hope,
+  and for a paladin no Beacon of Light. Clearing healer targets left all four targetless for 100% of
+  a pull against ~33% on other Ulduar bosses, with not one shield or Beacon even evaluated. Ulduar is
+  in `RestrictedHealerDPSMaps` so the target costs no GCD; what it buys is `Attack`'s
+  `ChangeEngine(BOT_STATE_COMBAT)`. `dps assist` is exempted for healers for the same reason.
+
+#### Nothing here is reachable just because it is on the mesh
+
+Two silent failures, both measured from one wipe trace: the parking lot was chosen **0 times in 161
+carrier moves**, and Searing Light dealt 1.53M damage to bystanders against 298k to carriers.
+
+- **`IsWithinLOS` rejects the entire parking lot.** The building geometry ends at y ≈ −29 (vmap
+  surface ~404 under the raid, none south of it) and the lot sits past that edge on bare terrain, so
+  a ray from the raid clips the rim while the path to every cell is `PATHFIND_NORMAL`. **No XT-002
+  mover has an LOS test any more** — the lot, the ring search and the stop-short point are all
+  validated by `MoveTo`'s outcome instead. On the ring search the gate was pruning 820 of 823 ticks
+  down to one candidate, which leaves the retry loop nothing to retry.
+- **The flakiness has a direction.** From the melee stack every point north of the raid answers
+  `NOPATH` and every point south-west answers `NORMAL`. North of the formation is open floor and
+  unreachable, which is why the Searing Light spot sits south-west instead.
+- **`findSmoothPath` refuses walkable points, and refuses the same ones every tick.** The Searing
+  Light spot returns `PATHFIND_SHORTCUT|PATHFIND_NOPATH` from anywhere in the melee stack; on a 34 yd
+  ring around XT, headings 0/45/60/135° fail and 30/90/120/150/180° succeed with the mesh 8/8 present.
+  `SearchForBestPath` accepts only `PATHFIND_NORMAL|INCOMPLETE`, so `MoveTo` returns false and the bot
+  does not move **at all** — for the full 9 s debuff, since re-offering one winner re-offers the same
+  refusal.
+
+So every mover here ranks its candidates and offers them in turn, up to
+`ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS`, through `MovementAction::TryMoveTo`: `MoveTo`'s bool collapses
+`NoPath` into the same false as `Duplicate` and `Waiting`, and reading those as failure turns a
+carrier around mid-run. Only `NoPath` earns another candidate; `NotAllowed` means yield the tick.
 
 #### The parking lot is a time budget, not a coordinate
 
@@ -995,11 +1043,22 @@ cannot overlap.
   exhaust the lot. There is no puddle dodging on the way in — the carrier sits at
   `ACTION_EMERGENCY + 1` and starves the Void Zone node — and the segment test is an approximation,
   since `MoveTo` follows a navmesh path rather than the line measured.
-- **`ParkVoidZone` returns a tri-state and never `MoveTo`'s value** — "already walking there" is not
-  "nowhere to go". Sapphiron's `ShelterResult` shape: latch on arrival, `StopMoving()`, deadband 2.0,
-  re-engage 5.0, tighter than Sapphiron's because the puddle lands at the carrier's feet and the
-  destination is static. The parked carrier then yields the tick, so a healer can heal and a hunter
-  can shoot XT from the lot.
+- **`ParkVoidZone` reports on cells, not on `MoveTo`** — "already walking there" is not "nowhere to
+  go", and "no path to there" is a fourth answer meaning try the next cell. Sapphiron's
+  `ShelterResult` shape otherwise: latch on arrival, `StopMoving()`, deadband 2.0, re-engage 5.0,
+  tighter than Sapphiron's because the puddle lands at the carrier's feet and the destination is
+  static. Arrival is measured against the nearest free cell, not the best-ranked one, so a bot on a
+  cell has parked whatever the ranking prefers elsewhere. The parked carrier then yields the tick, so
+  a healer can heal and a hunter can shoot XT from the lot.
+- **The Searing Light spot needs alternates, ranked away from the raid.** A Void Zone parked 2.1 yd
+  from it and stayed for the last 133 s of a pull, and carriers kept being sent in. The spot is
+  `(846, −22, 409.6)`, south-west: 15.7 yd from the nearest formation slot and 19.2 yd from the
+  nearest parking cell, so the 8 yd splash reaches neither. The carrier takes it, or a point on a
+  10 yd ring that is puddle-free, pathable, and `ULDUAR_XT002_SEARING_LIGHT_SLOT_CLEARANCE` (12 yd)
+  clear of every slot. **Rank by clearance, never by distance from the bot**: nearest-first returns
+  the headings pointing back at the raid, and carriers took those 132 times in one pull with 4–6
+  raiders inside the splash every time. A fixed destination here is checked against the formation as
+  well as against puddles — the two are laid out independently and will drift into each other.
 
 #### Traps
 
@@ -1030,6 +1089,14 @@ cannot overlap.
   lot is fine. The main tank can hold neither debuff anyway.
 - `MoveAwayFromPlayerWithDebuffAction` takes a **single** spell id fixed at construction, so it cannot
   cover both the 10 and 25-man ids of Searing Light or Gravity Bomb.
+- **A trigger and its action must measure a hazard the same way.** `TooCloseToCreature` asks
+  `FindNearestCreature`, whose range test subtracts both object sizes; `MoveClearOf` scores centre to
+  centre and caps at zero. In the gap between them the trigger says "too close" while no candidate
+  beats standing still, so the action fails every tick — and `XT002RaidPositionTrigger` yields to that
+  trigger, so the anchor cannot recover the bot either. One ranged bot sat 64.7 yd from XT for 125 s
+  that way, casting nothing, until it died. So the dodge clears to Void Zone radius + 2, leaving
+  headroom, and the anchor yields only while the bot is inside the raw radius by the action's own
+  measure.
 - **Two carriers can pick the same cell** — there is no reservation. Bombs are 16 s apart against a
   9 s duration so two bomb carriers never overlap, and the only bot that can collide is one sitting
   out a Searing Light, which drops nothing.

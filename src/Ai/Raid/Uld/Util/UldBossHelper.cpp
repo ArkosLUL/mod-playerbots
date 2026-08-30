@@ -95,9 +95,11 @@ const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.
 // was measured in-game because a 30yd caster clipped out of range there and walked in every tick.
 const Position ULDUAR_XT002_MAINTANK_SPOT = Position(895.82f, -12.53954f, 409.68756f);
 const Position ULDUAR_XT002_RANGED_SPOT = Position(866.0f, -12.5f, 409.8f);
-// 41.7yd from the tank anchor and 25.5yd from the ranged anchor: well clear of the 12yd splash, and
-// still inside spell range, so nobody has to move for the hard-mode Life Spark that spawns here.
-const Position ULDUAR_XT002_SEARING_LIGHT_SPOT = Position(862.73724f, 12.77857f, 409.8322f);
+// South-west of the raid, 15.6yd from the nearest formation slot and 19.2yd from the nearest Gravity
+// Bomb cell, so an 8yd Searing Light reaches neither. North of the raid looks tempting and is not:
+// findSmoothPath answers PATHFIND_NOPATH there from every melee position probed, while every point
+// out here paths normally from all of them. 38yd from the melee stack, inside a 9s run.
+const Position ULDUAR_XT002_SEARING_LIGHT_SPOT = Position(846.0f, -22.0f, 409.597f);
 // Two origins so melee and ranged carriers do not drop Void Zones on top of each other. Each is the
 // corner of its grid nearest the raid - roughly 30yd from the carrier's usual spot, which is the run
 // that has to fit inside the 9s the debuff lasts.
@@ -818,7 +820,7 @@ static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t t
 
 // Raw formation geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
 // without telling anyone.
-static Position ValidateHodirFloorPoint(Player* bot, Position const& point)
+static Position ValidateFloorPoint(Player* bot, Position const& point)
 {
     float x = point.GetPositionX();
     float y = point.GetPositionY();
@@ -848,7 +850,7 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
         return false;
 
     size_t const total = ringMembers.size();
-    out = ValidateHodirFloorPoint(bot, HodirRingSlotPoint(centre, slot, total));
+    out = ValidateFloorPoint(bot, HodirRingSlotPoint(centre, slot, total));
 
     // The slot index and the size of the ring it was cut from, so a formation that re-seated is
     // readable without re-deriving the sort from the roster.
@@ -901,7 +903,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
         float const bearing = std::atan2(slot.GetPositionY() - zone.GetPositionY(),
                                          slot.GetPositionX() - zone.GetPositionX());
 
-        Position const stand = ValidateHodirFloorPoint(
+        Position const stand = ValidateFloorPoint(
             bot, Position(zone.GetPositionX() + std::cos(bearing) * ULDUAR_HODIR_STARLIGHT_STAND_RADIUS,
                           zone.GetPositionY() + std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_STAND_RADIUS,
                           zone.GetPositionZ()));
@@ -1006,9 +1008,9 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         float const dx = std::cos(bearing) * ULDUAR_HODIR_STARLIGHT_SHED_RADIUS;
         float const dy = std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_SHED_RADIUS;
 
-        Position const legA = ValidateHodirFloorPoint(
+        Position const legA = ValidateFloorPoint(
             bot, Position(zone.GetPositionX() + dx, zone.GetPositionY() + dy, zone.GetPositionZ()));
-        Position const legB = ValidateHodirFloorPoint(
+        Position const legB = ValidateFloorPoint(
             bot, Position(zone.GetPositionX() - dx, zone.GetPositionY() - dy, zone.GetPositionZ()));
 
         out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
@@ -1933,6 +1935,12 @@ uint32 GetXT002SearingLightSpellId(Player* bot)
                                                                    : SPELL_XT002_SEARING_LIGHT_10;
 }
 
+uint32 GetXT002HeartbreakSpellId(Player* bot)
+{
+    return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_HEARTBREAK_25
+                                                                    : SPELL_XT002_HEARTBREAK_10;
+}
+
 uint32 GetXT002GravityBombSpellId(Player* bot)
 {
     return bot->GetRaidDifficulty() == RAID_DIFFICULTY_25MAN_NORMAL ? SPELL_XT002_GRAVITY_BOMB_25
@@ -1995,6 +2003,168 @@ Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float
     }
 
     return nearest;
+}
+
+// The formation roster, in the order every bot derives identically. Same rule as Hodir's ring: the
+// dead keep their slots, since indexing by the living shifts everyone behind a corpse and re-seats the
+// whole formation mid-fight.
+static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    out.clear();
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!memberAI || memberAI->IsTank(member))
+            continue;
+
+        if (!memberAI->IsRangedDps(member) && !memberAI->IsHeal(member))
+            continue;
+
+        out.push_back(member);
+    }
+
+    if (out.empty())
+        return false;
+
+    // Healers ahead of ranged dps, then guid. Both keys read the same on every bot, so nobody has to be
+    // told which slot is theirs - and healers land on the centre and inner ring, the slots still inside
+    // 40 yd of the tank spot.
+    std::sort(out.begin(), out.end(), [](Player* left, Player* right)
+    {
+        bool const leftHeal = GET_PLAYERBOT_AI(left)->IsHeal(left);
+        bool const rightHeal = GET_PLAYERBOT_AI(right)->IsHeal(right);
+        if (leftHeal != rightHeal)
+            return leftHeal;
+        return left->GetGUID() < right->GetGUID();
+    });
+
+    return true;
+}
+
+// Raw formation geometry for one slot, no ground or collision pass.
+static Position XT002RingSlotPoint(size_t slot, size_t total)
+{
+    // Bearing between two fixed points, so the layout never rotates, and it runs towards the tank spot
+    // so slot 1 is the one nearest both XT and the tank.
+    float const baseAngle =
+        std::atan2(ULDUAR_XT002_MAINTANK_SPOT.GetPositionY() - ULDUAR_XT002_RANGED_SPOT.GetPositionY(),
+                   ULDUAR_XT002_MAINTANK_SPOT.GetPositionX() - ULDUAR_XT002_RANGED_SPOT.GetPositionX());
+
+    size_t const inner = std::min<size_t>(ULDUAR_XT002_RANGED_RING_INNER_SLOTS, total > 0 ? total - 1 : 0);
+
+    float radiusX = 0.0f;
+    float radiusY = 0.0f;
+    float angle = baseAngle;
+
+    // Slot 0 stands on the centre, the point with the tank spot and the melee stack both nearest - so
+    // it goes to a healer.
+    if (slot && slot <= inner)
+    {
+        radiusX = ULDUAR_XT002_RANGED_RING_INNER_X;
+        radiusY = ULDUAR_XT002_RANGED_RING_INNER_Y;
+        angle = baseAngle + 2.0f * static_cast<float>(M_PI) * static_cast<float>(slot - 1) / static_cast<float>(inner);
+    }
+    else if (slot)
+    {
+        size_t const outerCount = total - inner - 1;
+        size_t const outerSlot = slot - inner - 1;
+        radiusX = ULDUAR_XT002_RANGED_RING_OUTER_X;
+        radiusY = ULDUAR_XT002_RANGED_RING_OUTER_Y;
+        angle = baseAngle +
+                2.0f * static_cast<float>(M_PI) * static_cast<float>(outerSlot) / static_cast<float>(outerCount);
+    }
+
+    angle = Position::NormalizeOrientation(angle);
+
+    return Position(ULDUAR_XT002_RANGED_SPOT.GetPositionX() + std::cos(angle) * radiusX,
+                    ULDUAR_XT002_RANGED_SPOT.GetPositionY() + ULDUAR_XT002_RANGED_RING_OFFSET_Y +
+                        std::sin(angle) * radiusY,
+                    ULDUAR_XT002_RANGED_SPOT.GetPositionZ());
+}
+
+bool GetXT002RangedSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    std::vector<Player*> members;
+    if (!BuildXT002RingMembers(bot, members))
+        return false;
+
+    size_t slot = members.size();
+    for (size_t i = 0; i < members.size(); ++i)
+        if (members[i] == bot)
+            slot = i;
+
+    if (slot >= members.size())
+        return false;
+
+    size_t const total = members.size();
+
+    // Every ranged bot and healer asks for this every tick, so the grid scan waits until puddles can
+    // actually exist - nothing drops one until XT carries Heartbreak.
+    std::list<Creature*> voidZones;
+    if (IsXT002HeartbreakActive(botAI))
+        bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
+
+    // Deal out the slots that are not sitting in Consumption and index into those, rather than letting
+    // a displaced bot walk forward to the next slot: every bot sees the same puddles, so this way they
+    // all agree on the new layout instead of two of them stepping onto one spot. A bot with no slot
+    // left keeps its own - "xt002 avoid hazard action" outranks the anchor and moves it off the puddle.
+    std::vector<Position> clear;
+    for (size_t i = 0; i < total; ++i)
+    {
+        Position const candidate = XT002RingSlotPoint(i, total);
+        bool blocked = false;
+        for (Creature* voidZone : voidZones)
+        {
+            if (voidZone->GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY()) <
+                ULDUAR_XT002_VOID_ZONE_RADIUS)
+            {
+                blocked = true;
+                break;
+            }
+        }
+
+        if (!blocked)
+            clear.push_back(candidate);
+    }
+
+    out = ValidateFloorPoint(bot, slot < clear.size() ? clear[slot] : XT002RingSlotPoint(slot, total));
+
+    // The slot index and the size of the formation it was cut from, so a layout that re-seated is
+    // readable without re-deriving the sort from the roster.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "xt002.slot",
+                             std::to_string(slot) + "/" + std::to_string(total) + " " +
+                                 RaidObs::DescribeDerived(out));
+
+    return true;
+}
+
+// Tested against where the formation says bots belong, not where they are standing: a carrier picks
+// its destination while the raid is still walking, so the slots are what it has to miss.
+bool XT002PointClearOfFormation(Player* bot, float x, float y, float clearance)
+{
+    std::vector<Player*> members;
+    if (!BuildXT002RingMembers(bot, members))
+        return true;
+
+    for (size_t i = 0; i < members.size(); ++i)
+    {
+        if (members[i] == bot)
+            continue;
+
+        if (XT002RingSlotPoint(i, members.size()).GetExactDist2d(x, y) < clearance)
+            return false;
+    }
+
+    return true;
 }
 
 // Ignis the Furnace Master

@@ -13,6 +13,36 @@
 // XT-002 Deconstructor
 //
 
+namespace
+{
+// Centre to centre against the raw radii, which is how the hazard dodge scores its candidates.
+// XT002AvoidHazardTrigger asks FindNearestCreature instead, and that subtracts both object sizes.
+bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
+{
+    GuidVector const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (ObjectGuid const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() == PB_NPC_XT002_VOID_ZONE &&
+            unit->GetExactDist2d(bot) < ULDUAR_XT002_VOID_ZONE_RADIUS)
+        {
+            return true;
+        }
+
+        if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && botAI->IsMelee(bot) &&
+            unit->GetExactDist2d(bot) < ULDUAR_XT002_BOOMBOT_AVOID_RADIUS)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+}  // namespace
+
 bool XT002DebuffCarrierTrigger::IsActive()
 {
     if (!GetXT002(botAI))
@@ -60,8 +90,13 @@ bool XT002RaidPositionTrigger::IsActive()
     if (bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot)))
         return false;
 
+    // Standing down for the hazard dodge, but only while the bot is really in a puddle by the same
+    // centre-to-centre measure the dodge scores with. FindNearestCreature subtracts object sizes, so
+    // it calls a bot too close that MoveClearOf already considers clear, and in that gap the dodge
+    // fails every tick while this node keeps yielding to it. One bot rode that out 64 yd from the
+    // boss for the rest of a fight.
     XT002AvoidHazardTrigger avoidHazard(botAI);
-    if (avoidHazard.IsActive())
+    if (avoidHazard.IsActive() && InsideXT002Hazard(botAI, bot))
         return false;
 
     if (botAI->IsMainTank(bot))
@@ -77,9 +112,6 @@ bool XT002RaidPositionTrigger::IsActive()
         return bot->GetExactDist(ULDUAR_XT002_MAINTANK_SPOT) > ULDUAR_XT002_MAINTANK_SPOT_TOLERANCE;
     }
 
-    if (botAI->IsRangedDps(bot))
-        return bot->GetExactDist(ULDUAR_XT002_RANGED_SPOT) > ULDUAR_XT002_RANGED_SPOT_TOLERANCE;
-
     if (botAI->IsHeal(bot))
     {
         // Stands down while anything is out of heal range. This node outranks "reach party member to
@@ -88,13 +120,15 @@ bool XT002RaidPositionTrigger::IsActive()
         PartyMemberToHealOutOfSpellRangeTrigger outOfHealRange(botAI);
         if (outOfHealRange.IsActive())
             return false;
-
-        // Healers share the ranged anchor but with a wide band, so heal range and the generic
-        // disperse still choose the spot inside it.
-        return bot->GetExactDist(ULDUAR_XT002_RANGED_SPOT) > ULDUAR_XT002_HEALER_SPOT_TOLERANCE;
     }
 
-    return false;
+    // Same call the action makes, so the two cannot disagree about which slot is this bot's - and it
+    // answers false for anyone who is neither ranged dps nor a healer, which is what leaves melee out.
+    Position slot;
+    if (!GetXT002RangedSlot(botAI, bot, slot))
+        return false;
+
+    return bot->GetExactDist(slot) > ULDUAR_XT002_RANGED_SPOT_TOLERANCE;
 }
 
 bool XT002SetDpsPriorityTrigger::IsActive()

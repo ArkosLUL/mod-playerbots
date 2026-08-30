@@ -214,17 +214,22 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
         // rather than pulling bots back onto whatever is nearest. The tank one matters most: it ranks
         // any add the tank has no aggro on above the boss, so it walks the tank into the add pile and
         // XT follows. "attack rti target" is deliberately left alone: bots no longer set marks, but a
-        // player's mark should still win.
-        if (!botAI->IsTank(bot) && dynamic_cast<DpsAssistAction*>(action))
+        // player's mark should still win. Healers are out: a healer the encounter action has not
+        // reached yet would be left with no target at all, and a bot that never attacks never enters
+        // combat, which costs it every heal that lives on the combat engine.
+        if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) && dynamic_cast<DpsAssistAction*>(action))
             return 0.0f;
 
         if (botAI->IsTank(bot) && dynamic_cast<TankAssistAction*>(action))
             return 0.0f;
 
-        // Two roles are pinned. Ranged DPS are anchored to a fixed spot, and a debuff carrier has to
-        // stay put until the splash falls off it - without this both get walked back by the generic
-        // movers, and the carrier drops its splash on the raid it just left. Melee and healers keep
-        // every generic mover unless they are carrying.
+        // Ranged dps, healers and any carrier are pinned: each has a destination of its own, and a
+        // generic mover walking them off it is either a bot back in the splash or a carrier dropping
+        // one on the raid it just left. Healers are in the sweep because "follow" lives on the
+        // non-combat engine and a healer with nothing to do drops combat constantly - it out-issued
+        // the anchor three to one and walked them to the master all fight. Nothing is lost by taking
+        // their disperse with it: the anchor hands out a slot per bot now, so it is the thing doing
+        // the spreading. Melee keep every generic mover unless they are carrying.
         //
         // AttackAction derives from MovementAction but never moves the bot, so leaving it in the sweep
         // only zeroes the encounter's own targeting and leaves the bot standing with nothing to shoot.
@@ -233,7 +238,7 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
             bool const carryingDebuff = bot->HasAura(GetXT002SearingLightSpellId(bot)) ||
                                         bot->HasAura(GetXT002GravityBombSpellId(bot));
 
-            if (carryingDebuff || botAI->IsRangedDps(bot))
+            if (carryingDebuff || botAI->IsRangedDps(bot) || botAI->IsHeal(bot))
             {
                 static std::set<std::string> const encounterMovers = {
                     "xt002 raid position action", "xt002 debuff carrier action", "xt002 avoid hazard action"};

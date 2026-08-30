@@ -17,6 +17,22 @@ using namespace EncounterHelpers;
 
 bool XT002MoveClearAction::isPossible() { return bot->CanFreeMove(); }
 
+XT002MoveClearAction::MoveIssue XT002MoveClearAction::IssueMove(float x, float y, float z)
+{
+    switch (TryMoveTo(bot->GetMapId(), x, y, z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true))
+    {
+        case RaidObs::MoveOutcome::NoPath:
+            return MoveIssue::NoPath;
+        case RaidObs::MoveOutcome::NotAllowed:
+            return MoveIssue::Refused;
+        default:
+            // Issued, or one of the two states that mean the bot is already headed there: Duplicate
+            // for this exact destination and Waiting for a command of at least this priority still in
+            // flight. Re-picking on either is what makes a bot slide in place.
+            return MoveIssue::Taken;
+    }
+}
+
 bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> const& avoid)
 {
     if (avoid.empty())
@@ -42,16 +58,21 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
 
     int const directions = 8;
     float const increment = 3.0f;
-    float bestX = 0.0f;
-    float bestY = 0.0f;
-    float bestZ = 0.0f;
-    bool found = false;
 
     // A packed 25-man often leaves no spot inside the search ring that clears everyone. Starting from
     // the bot's own score means any improvement is taken instead - most of the raid still gets out of
     // the splash - and only a move that gains nothing is rejected.
-    float bestScore = score(bot->GetPositionX(), bot->GetPositionY());
+    float const standingScore = score(bot->GetPositionX(), bot->GetPositionY());
 
+    struct Candidate
+    {
+        float x;
+        float y;
+        float score;
+        float distance;
+    };
+
+    std::vector<Candidate> candidates;
     for (int i = 0; i < directions; ++i)
     {
         float const angle = (i * 2 * M_PI) / directions;
@@ -59,25 +80,44 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
         {
             float const moveX = bot->GetPositionX() + distance * cos(angle);
             float const moveY = bot->GetPositionY() + distance * sin(angle);
-            float const moveZ = bot->GetPositionZ();
 
+            // No line-of-sight test, for the reason ParkVoidZone has none: the Ulduar geometry ends
+            // at y = -29 and a ray from the raid clips its rim, so LOS rejects most of the ring while
+            // the path to it is clean. It left 820 of 823 ticks holding one candidate, and a tick
+            // whose one candidate is unreachable does not move the bot at all.
             float const candidate = score(moveX, moveY);
-            if (candidate > bestScore && bot->IsWithinLOS(moveX, moveY, moveZ))
-            {
-                bestScore = candidate;
-                bestX = moveX;
-                bestY = moveY;
-                bestZ = moveZ;
-                found = true;
-            }
+            if (candidate > standingScore)
+                candidates.push_back({moveX, moveY, candidate, distance});
         }
     }
 
-    if (!found)
+    if (candidates.empty())
         return false;
 
-    return MoveTo(bot->GetMapId(), bestX, bestY, bestZ, false, false, false, false,
-                  MovementPriority::MOVEMENT_COMBAT, true);
+    // Best clearance first, nearest among equals: every spot that clears the whole list scores the
+    // same, so this walks out from the bot rather than running further than the mechanic needs.
+    std::sort(candidates.begin(), candidates.end(), [](Candidate const& left, Candidate const& right)
+    {
+        if (left.score != right.score)
+            return left.score > right.score;
+        return left.distance < right.distance;
+    });
+
+    size_t const attempts = std::min<size_t>(ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS, candidates.size());
+    for (size_t i = 0; i < attempts; ++i)
+    {
+        switch (IssueMove(candidates[i].x, candidates[i].y, bot->GetPositionZ()))
+        {
+            case MoveIssue::Taken:
+                return true;
+            case MoveIssue::Refused:
+                return false;
+            case MoveIssue::NoPath:
+                break;
+        }
+    }
+
+    return false;
 }
 
 bool XT002DebuffCarrierAction::ApproachIsClear(float x, float y, std::list<Creature*> const& voidZones) const
@@ -146,9 +186,9 @@ bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach
     float const stopY = bot->GetPositionY() + runY * scale;
     float const stopZ = bot->GetPositionZ();
 
-    if (!bot->IsWithinLOS(stopX, stopY, stopZ))
-        return false;
-
+    // No line-of-sight test here either. The stopping point lies on the bearing into the lot, which
+    // is the one direction where a ray clips the building rim while the path is clean, and the
+    // IssueMove at the end already rejects a point the pathfinder will not take.
     Group* group = bot->GetGroup();
     if (!group)
         return false;
@@ -165,11 +205,103 @@ bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach
             return false;
     }
 
-    // Same reason ParkVoidZone ignores it: MoveTo goes false while the bot is already walking to this
-    // exact point, and reading that would hand the tick to the dynamic search mid-run.
-    MoveTo(bot->GetMapId(), stopX, stopY, stopZ, false, false, false, false,
-           MovementPriority::MOVEMENT_COMBAT, true);
-    return true;
+    return IssueMove(stopX, stopY, stopZ) == MoveIssue::Taken;
+}
+
+float XT002DebuffCarrierAction::RaidClearance(float x, float y) const
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return std::numeric_limits<float>::max();
+
+    float nearest = std::numeric_limits<float>::max();
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        nearest = std::min(nearest, member->GetExactDist2d(x, y));
+    }
+
+    return nearest;
+}
+
+bool XT002DebuffCarrierAction::MoveToSearingLightSpot()
+{
+    // Nothing drops a puddle before XT carries Heartbreak, so normal mode skips the grid scan entirely.
+    std::list<Creature*> voidZones;
+    if (IsXT002HeartbreakActive(botAI))
+        bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
+
+    auto clearOfPuddles = [&voidZones](float x, float y)
+    {
+        for (Creature* voidZone : voidZones)
+            if (voidZone->GetExactDist2d(x, y) < ULDUAR_XT002_VOID_ZONE_RADIUS)
+                return false;
+
+        return true;
+    };
+
+    float const spotX = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionX();
+    float const spotY = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionY();
+    float const spotZ = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionZ();
+
+    auto usable = [this, &clearOfPuddles](float x, float y)
+    {
+        return clearOfPuddles(x, y) &&
+               XT002PointClearOfFormation(bot, x, y, ULDUAR_XT002_SEARING_LIGHT_SLOT_CLEARANCE);
+    };
+
+    if (bot->GetExactDist(ULDUAR_XT002_SEARING_LIGHT_SPOT) < 1.0f && usable(spotX, spotY))
+        return false;
+
+    // The spot itself, then a ring of alternates around it. The headings that point back at the
+    // formation are what the clearance test drops.
+    struct Candidate
+    {
+        float x;
+        float y;
+        float clearance;
+    };
+
+    std::vector<Candidate> candidates;
+    if (usable(spotX, spotY))
+        candidates.push_back({spotX, spotY, RaidClearance(spotX, spotY)});
+
+    int const directions = 8;
+    for (int i = 0; i < directions; ++i)
+    {
+        float const angle = (i * 2 * M_PI) / directions;
+        float const ringX = spotX + ULDUAR_XT002_SEARING_LIGHT_DETOUR * cos(angle);
+        float const ringY = spotY + ULDUAR_XT002_SEARING_LIGHT_DETOUR * sin(angle);
+
+        if (usable(ringX, ringY))
+            candidates.push_back({ringX, ringY, RaidClearance(ringX, ringY)});
+    }
+
+    // Roomiest first, not nearest. Nearest hands the bot whichever alternate lies back towards the
+    // raid, and those were taken 132 times in one pull with 4 to 6 raiders inside the splash.
+    std::sort(candidates.begin(), candidates.end(), [](Candidate const& left, Candidate const& right)
+    {
+        return left.clearance > right.clearance;
+    });
+
+    size_t const attempts = std::min<size_t>(ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS, candidates.size());
+    for (size_t i = 0; i < attempts; ++i)
+    {
+        switch (IssueMove(candidates[i].x, candidates[i].y, spotZ))
+        {
+            case MoveIssue::Taken:
+                return true;
+            case MoveIssue::Refused:
+                return false;
+            case MoveIssue::NoPath:
+                break;
+        }
+    }
+
+    return false;
 }
 
 XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit* boss, float reach,
@@ -184,23 +316,21 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
     std::list<Creature*> voidZones;
     boss->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
 
-    // Nearest qualifying cell rather than the first in index order. The grid runs away from the raid,
-    // so index order always picked the furthest cell - 44yd for melee, against a debuff that lasts 9s.
-    float bestX = 0.0f;
-    float bestY = 0.0f;
-    float bestDistance = 0.0f;
-    int bestRank = 0;
-    bool found = false;
+    struct Cell
+    {
+        float x;
+        float y;
+        int rank;
+        float distance;
+    };
+
+    std::vector<Cell> cells;
+    float nearestDistance = std::numeric_limits<float>::max();
 
     for (int cell = 0; cell < ULDUAR_XT002_BOMB_GRID_X_CELLS * ULDUAR_XT002_BOMB_GRID_Y_CELLS; ++cell)
     {
         float const candidateX = originX + (cell % ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
         float const candidateY = originY - (cell / ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
-
-        // Room geometry is script-summoned rather than spawned, so the grid cannot be checked against
-        // the map offline - the LOS test is what keeps a cell behind a wall from being picked.
-        if (!bot->IsWithinLOS(candidateX, candidateY, originZ))
-            continue;
 
         // Measured against where the puddles actually are rather than the cells they were aimed at, so
         // a drop that landed off-centre blocks whatever it is really near.
@@ -223,36 +353,32 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
                          (nearestVoidZone >= ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE ? 2 : 0) +
                          (ApproachIsClear(candidateX, candidateY, voidZones) ? 1 : 0);
 
-        if (found && (rank < bestRank || (rank == bestRank && distance >= bestDistance)))
-            continue;
-
-        bestX = candidateX;
-        bestY = candidateY;
-        bestDistance = distance;
-        bestRank = rank;
-        found = true;
+        cells.push_back({candidateX, candidateY, rank, distance});
+        nearestDistance = std::min(nearestDistance, distance);
     }
 
-    if (!found)
+    if (cells.empty())
     {
         parked = false;
         return ParkResult::None;
     }
 
-    cellX = bestX;
-    cellY = bestY;
-
-    // Nothing in the lot is close enough. A parked bot never lands here - it is standing on its cell,
-    // and one whose cell was just taken by its own puddle is a single grid step from the next.
-    if (bestRank < 4)
+    std::sort(cells.begin(), cells.end(), [](Cell const& left, Cell const& right)
     {
-        parked = false;
-        return ParkResult::OutOfReach;
-    }
+        if (left.rank != right.rank)
+            return left.rank > right.rank;
+        return left.distance < right.distance;
+    });
 
-    // Hold through drift once parked instead of re-issuing. The re-engage band is under one grid step,
-    // so a cell taken by a fresh puddle still drops the latch and sends the carrier to the next one.
-    if (parked && bestDistance <= ULDUAR_XT002_BOMB_CELL_REENGAGE)
+    cellX = cells.front().x;
+    cellY = cells.front().y;
+
+    // Arrival is measured against the nearest free cell rather than the best-ranked one: a bot that is
+    // standing on a cell has parked whatever the ranking prefers elsewhere in the lot. Cells sit a grid
+    // step apart and both bands are under that, so only one cell can ever answer. Holding through drift
+    // matters because a bot that re-issues every tick slides in place and cannot cast - and a cell
+    // taken by a fresh puddle drops out of the list entirely, which drops the latch with it.
+    if (parked && nearestDistance <= ULDUAR_XT002_BOMB_CELL_REENGAGE)
     {
         if (bot->isMoving())
             bot->StopMoving();
@@ -262,7 +388,7 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
 
     parked = false;
 
-    if (bestDistance <= ULDUAR_XT002_BOMB_CELL_ARRIVED)
+    if (nearestDistance <= ULDUAR_XT002_BOMB_CELL_ARRIVED)
     {
         parked = true;
         if (bot->isMoving())
@@ -271,12 +397,31 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
         return ParkResult::Parked;
     }
 
-    // Deliberately not MoveTo's return value: it goes false while the bot is already walking to this
-    // exact cell, and Execute would read that as "nowhere to park" and hand the tick to the dynamic
-    // search, which turns the carrier around mid-run.
-    MoveTo(bot->GetMapId(), bestX, bestY, originZ, false, false, false, false,
-           MovementPriority::MOVEMENT_COMBAT, true);
-    return ParkResult::Moving;
+    // Nothing in the lot is close enough to walk to inside the debuff.
+    if (cells.front().rank < 4)
+        return ParkResult::OutOfReach;
+
+    size_t attempts = 0;
+    for (Cell const& candidate : cells)
+    {
+        if (candidate.rank < 4 || attempts >= ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS)
+            break;
+
+        ++attempts;
+        switch (IssueMove(candidate.x, candidate.y, originZ))
+        {
+            case MoveIssue::Taken:
+                return ParkResult::Moving;
+            case MoveIssue::Refused:
+                return ParkResult::None;
+            case MoveIssue::NoPath:
+                break;
+        }
+    }
+
+    // Every reachable cell was refused. The bearing to the best of them still points out of the raid,
+    // so hand it to the stop-short fallback rather than to the ring search.
+    return ParkResult::OutOfReach;
 }
 
 bool XT002DebuffCarrierAction::Execute(Event /*event*/)
@@ -348,13 +493,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         if (botAI->IsTank(bot))
             return false;
 
-        if (bot->GetExactDist(ULDUAR_XT002_SEARING_LIGHT_SPOT) < 1.0f)
-            return false;
-
-        return MoveTo(bot->GetMapId(), ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionX(),
-                      ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionY(),
-                      ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionZ(), false, false, false, false,
-                      MovementPriority::MOVEMENT_COMBAT, true);
+        return MoveToSearingLightSpot();
     }
 
     Group* group = bot->GetGroup();
@@ -392,8 +531,13 @@ bool XT002AvoidHazardAction::Execute(Event /*event*/)
         // Ranged already stand outside the blast, so pulling them out too would only break their casts.
         if (unit->GetEntry() == PB_NPC_XT002_BOOMBOT && botAI->IsMelee(bot))
             hazards.emplace_back(unit, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS);
+        // A margin over the radius the trigger fires on, because the two do not measure the same
+        // thing: FindNearestCreature subtracts both object sizes, MoveClearOf works centre to centre
+        // and caps its score at zero. Without the margin a bot sitting in that gap is told it is too
+        // close every tick while no candidate can beat where it stands - one spent 125s frozen 64 yd
+        // from the boss, since the anchor stands down for as long as the hazard trigger holds.
         else if (unit->GetEntry() == PB_NPC_XT002_VOID_ZONE && !carryingDebuff)
-            hazards.emplace_back(unit, ULDUAR_XT002_VOID_ZONE_RADIUS);
+            hazards.emplace_back(unit, ULDUAR_XT002_VOID_ZONE_RADIUS + ULDUAR_XT002_BOMB_CELL_ARRIVED);
     }
 
     return MoveClearOf(hazards);
@@ -499,18 +643,14 @@ bool XT002RaidPositionAction::Execute(Event /*event*/)
                       false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
-    if (botAI->IsRangedDps(bot) || botAI->IsHeal(bot))
+    Position slot;
+    if (GetXT002RangedSlot(botAI, bot, slot))
     {
-        // Ranged first, the same order the trigger uses: a spec that answered to both would otherwise
-        // be sent here on one band and turned away on the other, burning the tick every time.
-        float const tolerance = botAI->IsRangedDps(bot) ? ULDUAR_XT002_RANGED_SPOT_TOLERANCE
-                                                        : ULDUAR_XT002_HEALER_SPOT_TOLERANCE;
-        if (bot->GetExactDist(ULDUAR_XT002_RANGED_SPOT) <= tolerance)
+        if (bot->GetExactDist(slot) <= ULDUAR_XT002_RANGED_SPOT_TOLERANCE)
             return false;
 
-        return MoveTo(bot->GetMapId(), ULDUAR_XT002_RANGED_SPOT.GetPositionX(),
-                      ULDUAR_XT002_RANGED_SPOT.GetPositionY(), ULDUAR_XT002_RANGED_SPOT.GetPositionZ(),
-                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
+        return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(), false,
+                      false, false, false, MovementPriority::MOVEMENT_COMBAT, true);
     }
 
     return false;
@@ -745,22 +885,13 @@ bool XT002SetDpsPriorityAction::Execute(Event /*event*/)
 {
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    // Ulduar is in RestrictedHealerDPSMaps, so a healer here has no damage node that could use a
-    // target - all one does is keep "enemy out of spell" true and walk them at whatever add is
-    // furthest out. Declining to hand one over is not enough, because a leftover from the last wave
-    // does the same thing. Not the generic "drop target": that also switches the bot to the
-    // non-combat engine, which would stop it healing.
-    if (botAI->IsHeal(bot))
-    {
-        if (!currentTarget)
-            return false;
-
-        context->GetValue<Unit*>("current target")->Set(nullptr);
-        bot->SetTarget(ObjectGuid::Empty);
-        bot->AttackStop();
-        return true;
-    }
-
+    // Healers are handed a target like everyone else. Ulduar is in RestrictedHealerDPSMaps so they
+    // will not spend a GCD on it, but a bot with no target never attacks and so never enters combat,
+    // and out of combat it runs the non-combat engine - which has no Power Word: Shield, Beacon of
+    // Light, Prayer of Mending, Pain Suppression, Shadowfiend or Hymn of Hope. Clearing it left all
+    // four healers targetless for a whole pull, against a third of one elsewhere. What the clearing
+    // was really guarding against is a healer walking at an add, and XT002TargetGuardMultiplier's
+    // mover sweep covers that: it pins healers to their formation slot and zeroes "reach spell".
     Unit* target = ResolveTarget(currentTarget);
     if (!target)
         return false;

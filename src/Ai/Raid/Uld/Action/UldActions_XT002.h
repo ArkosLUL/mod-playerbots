@@ -25,10 +25,26 @@ public:
     bool isPossible() override;
 
 protected:
+    // What offering a destination to the pathfinder achieved.
+    enum class MoveIssue
+    {
+        Taken,    // the command reached the MotionMaster, or the bot is already on its way there
+        NoPath,   // this destination is refused; a different one may not be
+        Refused   // the bot is not moving this tick whatever it is offered
+    };
+
+    // One destination, reported precisely enough to decide whether trying another is worth the tick.
+    // Plain MoveTo cannot answer that: it returns false both for a genuine refusal and for the
+    // ordinary "already walking there", and treating the second as failure turns a carrier around
+    // mid-run.
+    MoveIssue IssueMove(float x, float y, float z);
+
     // Steps towards the nearest spot that gives every unit in `avoid` the clearance paired with it, or
     // the best partial improvement when the raid is packed too tightly for that. Clearance is per unit
-    // so one search can mix hazards of different sizes. False when nothing needs avoiding or standing
-    // still is already as good as it gets.
+    // so one search can mix hazards of different sizes. Walks its ranked candidates until the
+    // pathfinder accepts one - this room refuses plainly walkable points, and it refuses the same one
+    // every tick, so a search that offered only its winner left carriers standing in the raid for the
+    // whole debuff. False when nothing needs avoiding or standing still is already as good as it gets.
     bool MoveClearOf(std::vector<std::pair<Unit*, float>> const& avoid);
 };
 
@@ -53,11 +69,13 @@ private:
         Parked       // standing on one, so the tick is free for casts and heals
     };
 
-    // Picks the nearest cell of the role's parking grid that is free of Void Zones and in line of
-    // sight, preferring one the bot can still reach inside `reach` yards, then one with room to spare
-    // and a clear approach. Reports on having chosen a cell, never on whether MoveTo issued an order:
-    // MoveTo goes false while the bot is already walking there. The winner is written to
-    // `cellX`/`cellY` whether or not it turned out to be reachable.
+    // Picks a cell of the role's parking grid that is free of Void Zones, preferring one the bot can
+    // still reach inside `reach` yards, then one with room to spare, then a clear approach, then the
+    // shortest walk. Offers its ranked cells to the pathfinder in turn and reports Moving on the first
+    // one accepted. There is deliberately no line-of-sight test: the lot sits past the edge of the
+    // Ulduar building geometry, so a ray from the raid clips the rim and rejects all twenty cells,
+    // while the navmesh path to every one of them is clean. The best cell is written to
+    // `cellX`/`cellY` whether or not it turned out to be usable.
     ParkResult ParkVoidZone(Unit* boss, float reach, float& cellX, float& cellY);
 
     // How far the bot can still walk before the bomb goes off. GetSpeed(MOVE_RUN) already carries
@@ -67,9 +85,21 @@ private:
 
     // Follows the bearing to a cell as far as the time budget allows and stops there, so a carrier
     // that cannot make the lot drops its puddle on the approach instead of mid-stride in the raid.
-    // False when the stopping point is not clear of the expiry pull, which hands the tick to the
-    // dynamic search - that one maximises clearance rather than following a fixed bearing.
+    // False when the stopping point is not clear of the expiry pull or the pathfinder will not take
+    // it, which hands the tick to the dynamic search - that one maximises clearance rather than
+    // following a fixed bearing.
     bool StopShortOf(float cellX, float cellY, float reach);
+
+    // The Searing Light spot, or the nearest alternate around it that is clear of Void Zones and that
+    // the pathfinder accepts. Neither guard is optional: a puddle sat 2 yd from the spot for half a
+    // fight, and findSmoothPath refuses the spot outright from most of the melee stack, which left
+    // carriers irradiating the raid for the full 9s.
+    bool MoveToSearingLightSpot();
+
+    // Distance from (x, y) to the nearest living raider, this bot aside. Ranks Searing Light
+    // alternates: they are all far enough from the raid on paper, and this picks the one that is
+    // actually roomiest once the raid has drifted off its slots.
+    float RaidClearance(float x, float y) const;
 
     // Whether the straight line from the bot to (x, y) stays ULDUAR_XT002_BOMB_APPROACH_CLEARANCE
     // clear of every Void Zone in `voidZones`. An approximation - the bot follows a navmesh path, not
@@ -119,10 +149,10 @@ private:
     Player* GetRedirectTank();
 };
 
-// Anchors the fight. The main tank and ranged DPS get a point each; healers share the ranged one but
-// with a band wide enough that heal range still picks the spot inside it, which is what stops them
-// trailing whoever is taking damage across the room. Melee are left alone - pinning them costs uptime
-// on a boss that moves.
+// Anchors the fight. The main tank gets a point; ranged DPS and healers get a slot each in the
+// formation around the ranged anchor, rather than the anchor itself - sharing one coordinate put
+// thirteen bots inside 3 yd of it and let a single Searing Light take the group. Melee are left alone,
+// since pinning them costs uptime on a boss that moves.
 class XT002RaidPositionAction : public MovementAction
 {
 public:

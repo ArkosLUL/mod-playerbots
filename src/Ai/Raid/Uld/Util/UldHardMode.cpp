@@ -111,8 +111,9 @@ bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.u
 
 bool IsXT002HeartbreakActive(PlayerbotAI* botAI)
 {
+    Player* bot = botAI->GetBot();
     Unit* xt002 = GetXT002(botAI);
-    return xt002 != nullptr && xt002->HasAura(SPELL_XT002_HEARTBREAK);
+    return bot != nullptr && xt002 != nullptr && xt002->HasAura(GetXT002HeartbreakSpellId(bot));
 }
 
 bool IsYoggSaronHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarYoggSaronHardMode; }

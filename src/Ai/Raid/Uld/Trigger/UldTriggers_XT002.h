@@ -37,7 +37,8 @@ public:
 // spots, and walking to them before the pull drags bots across the room while the raid is still
 // forming up. Goes false the moment anything the bot has to dodge is live, so a spot can never beat a
 // mechanic. The tank anchor also needs him to be holding XT - the boss is taunt-immune, so a tank
-// parked on the spot without aggro has no way of getting him back. The healer one stands down while
+// parked on the spot without aggro has no way of getting him back. Ranged and healers each answer for
+// their own slot in the formation rather than a shared point; the healer branch stands down while
 // anyone is out of heal range, since it outranks the node that would go and fetch them.
 class XT002RaidPositionTrigger : public Trigger
 {

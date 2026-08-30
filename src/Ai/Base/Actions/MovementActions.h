@@ -39,7 +39,16 @@ protected:
                 MovementPriority priority = MovementPriority::MOVEMENT_NORMAL, bool lessDelay = false,
                 bool backwards = false);
 
-    // The real mover. Call MoveTo instead: it wraps this so the destination reaches the raid trace.
+    // MoveTo, but reporting why the command did or did not take. Code holding more than one candidate
+    // destination needs "there is no path to there" apart from "already walking to it": only the first
+    // is worth spending the tick on a different candidate for, and the bool hides which one happened.
+    RaidObs::MoveOutcome TryMoveTo(uint32 mapId, float x, float y, float z, bool idle = false, bool react = false,
+                                   bool normal_only = false, bool exact_waypoint = false,
+                                   MovementPriority priority = MovementPriority::MOVEMENT_NORMAL,
+                                   bool lessDelay = false, bool backwards = false);
+
+    // The real mover. Call MoveTo or TryMoveTo instead: they wrap this so the destination reaches the
+    // raid trace.
     // Returns why the command did or did not reach the MotionMaster - the trace has to tell a refusal
     // apart from the ordinary "still walking to the last destination".
     RaidObs::MoveOutcome MoveToImpl(uint32 mapId, float x, float y, float z, bool idle = false,
