@@ -1043,34 +1043,6 @@ bool ArchimondeMoveBossToInitialPositionAction::Execute(Event /*event*/)
     return false;
 }
 
-bool ArchimondeCastFearImmunitySpellAction::Execute(Event /*event*/)
-{
-    if (bot->getClass() == CLASS_PRIEST)
-        return CastFearWardOnMainTank();
-    else
-        return UseTremorTotemStrategy();
-}
-
-bool ArchimondeCastFearImmunitySpellAction::CastFearWardOnMainTank()
-{
-    Player* mainTank = GetGroupMainTank(bot);
-    if (mainTank && botAI->CanCastSpell("fear ward", mainTank))
-        return botAI->CastSpell("fear ward", mainTank);
-
-    return false;
-}
-
-bool ArchimondeCastFearImmunitySpellAction::UseTremorTotemStrategy()
-{
-    if (!botAI->HasStrategy("tremor", BOT_STATE_COMBAT))
-    {
-        botAI->ChangeStrategy("+tremor", BOT_STATE_COMBAT);
-        return botAI->HasStrategy("tremor", BOT_STATE_COMBAT);
-    }
-
-    return false;
-}
-
 // (1) Try to run away from the Air Burst target
 // (2) At the beginning of the fight, spread ranged in anticipation of Air Burst
 bool ArchimondeSpreadToAvoidAirBurstAction::Execute(Event /*event*/)
