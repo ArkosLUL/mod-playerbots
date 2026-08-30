@@ -340,6 +340,7 @@ struct ObsSession
     uint32 sinceRosterMs = 0;
     uint32 sinceFlushMs = 0;
     uint32 lastCombatMs = 0;
+    bool sawMostlyDead = false;
 
     std::vector<ObjectGuid> roster;
     std::unordered_set<uint64> seenUnits;
@@ -1137,9 +1138,11 @@ void CloseSession(uint32 instanceId, char const* outcome)
         FlushTick(*session, entry.first, entry.second);
 
     // Hodir's script reports NOT_STARTED when the raid releases, so a 23-of-24 wipe was filed under
-    // `reset`. What the roster looks like at the close outranks what the script settled on.
+    // `reset`. What the roster looked like outranks what the script settled on - taken from the latch
+    // first, since by the time an idle close runs the raid has had 30 seconds to run back alive.
     char const* result = outcome;
-    if ((!strcmp(outcome, "reset") || !strcmp(outcome, "idle")) && RosterMostlyDead(*session))
+    if ((!strcmp(outcome, "reset") || !strcmp(outcome, "idle")) &&
+        (session->sawMostlyDead || RosterMostlyDead(*session)))
         result = "wipe";
 
     Emit(*session, getMSTime(), "end", std::string("\"out\":\"") + result + "\"", true);
@@ -1427,7 +1430,14 @@ void OnMapUpdate(Map* map, uint32 diff)
     }
 
     if (AnyRaidMemberInCombat(s))
+    {
         s.lastCombatMs = now;
+
+        // Sampled during the fight rather than at the close, where idleCloseMs has already given the
+        // raid 30 seconds to release and run back - long enough that the check in CloseSession sees a
+        // healthy roster and files a 31-death attempt as `idle`.
+        s.sawMostlyDead = s.sawMostlyDead || RosterMostlyDead(s);
+    }
     else if (g_cfg.idleCloseMs && getMSTimeDiff(s.lastCombatMs, now) > g_cfg.idleCloseMs)
         CloseSession(instanceId, "idle");
 }
@@ -1582,6 +1592,39 @@ void NoteAbsorb(Unit* victim, Unit* absorbCaster, SpellInfo const* absorbSpell, 
     fields += ",\"a\":" + std::to_string(amount);
 
     Emit(*session, getMSTime(), "abs", fields);
+}
+
+// Runs inside Unit::_ApplyAura, so it gets the stamp the client-update hook below cannot: that one
+// only fires on an apply once Unit::_UpdateSpells flushes the pending flag, while a removal goes out
+// synchronously. Hodir's Fury lands and kills in the same tick, so without this the death record has
+// only a removal to build from and falls back to the -1 sentinel. Fires twice on a stack refresh,
+// which is harmless here because the stamp is idempotent and nothing is emitted.
+void NoteAuraApplied(Unit* target, Aura* aura)
+{
+    if (!Active() || !target || !aura)
+        return;
+
+    ObsSession* session = SessionFor(target);
+    if (!session || !TracksPlayer(*session, target))
+        return;
+
+    // Same guard as NoteAura: appliedMs is the first application of the current uninterrupted run, not
+    // the last refresh. The two feeds must not disagree about that.
+    AuraState& state = session->bots[GuidKey(target->GetGUID())].auras[aura->GetId()];
+    uint32 const now = getMSTime();
+    if (!state.appliedMs || state.removedMs)
+        state.appliedMs = now;
+
+    state.removedMs = 0;
+
+    // Also filled in NoteAura, but an aura that finds no free visible slot fires neither client update,
+    // so this is the only place a complete row for it gets written.
+    SpellInfo const* info = aura->GetSpellInfo();
+
+    state.caster = GuidKey(aura->GetCasterGUID());
+    state.stacks = aura->GetStackAmount();
+    state.duration = aura->GetDuration();
+    state.positive = info && info->IsPositive();
 }
 
 void NoteAura(Unit* target, Aura* aura, bool removed)

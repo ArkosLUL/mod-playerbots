@@ -69,6 +69,10 @@ void NoteHeal(Unit* healer, Unit* target, SpellInfo const* spell, uint32 amount,
 // Which shield ate the hit, so "the bubble was up but too small" reads differently from "no bubble".
 void NoteAbsorb(Unit* victim, Unit* absorbCaster, SpellInfo const* absorbSpell, uint32 amount);
 void NoteAura(Unit* target, Aura* aura, bool removed);
+// State only, no record. The client-update hook NoteAura rides on only sees an apply once
+// Unit::_UpdateSpells flushes the pending flag, while a removal goes out synchronously, so an aura
+// that lands and kills inside one tick arrives as a removal with nothing behind it.
+void NoteAuraApplied(Unit* target, Aura* aura);
 void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTimeMs);
 // Every other damage hook here is a combat-log hook, so damage that sends no log packet - a fall, a
 // script kill - is invisible to them and a bot dying to one leaves a death record with an empty

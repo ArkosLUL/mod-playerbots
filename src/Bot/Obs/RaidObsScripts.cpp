@@ -60,7 +60,7 @@ public:
                      {UNITHOOK_ON_SEND_SPELL_NON_MELEE_DAMAGE_LOG, UNITHOOK_ON_SEND_ATTACK_STATE_UPDATE,
                       UNITHOOK_ON_SEND_PERIODIC_AURA_LOG, UNITHOOK_ON_SEND_HEAL_SPELL_LOG,
                       UNITHOOK_ON_SCHOOL_ABSORB_APPLIED, UNITHOOK_ON_DAMAGE, UNITHOOK_ON_UNIT_DEATH,
-                      UNITHOOK_ON_UNIT_ENTER_COMBAT})
+                      UNITHOOK_ON_UNIT_ENTER_COMBAT, UNITHOOK_ON_AURA_APPLY})
     {
     }
 
@@ -143,6 +143,10 @@ public:
 
     void OnUnitDeath(Unit* unit, Unit* killer) override { RaidObs::NoteDeath(unit, killer); }
 
+    // Only the apply time is taken from here; the aura record itself still comes from the client-update
+    // hook below, which does not fire twice on a stack refresh.
+    void OnAuraApply(Unit* unit, Aura* aura) override { RaidObs::NoteAuraApplied(unit, aura); }
+
     void OnUnitEnterCombat(Unit* unit, Unit* victim) override { RaidObs::OnCreatureEngage(unit, victim); }
 };
 
@@ -155,7 +159,8 @@ public:
     {
     }
 
-    // Preferred over UnitScript::OnAuraApply, which fires twice for a stack refresh.
+    // Carries the aura record. UnitScript::OnAuraApply fires twice for a stack refresh, so it feeds
+    // the apply time only.
     void OnAuraApplicationClientUpdate(Unit* target, Aura* aura, bool remove) override
     {
         RaidObs::NoteAura(target, aura, remove);

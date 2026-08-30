@@ -53,9 +53,10 @@ While a raid sits on a tracked map with no session, snapshots go to a `PreRollSe
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull
 records carry a **negative** `t`. That is what makes a bad squad latch visible.
 
-`end.out` follows the roster at the close, not the instance script: more than half the raid dead files
-a `reset` or `idle` as `wipe`. Hodir's script reports `NOT_STARTED` on release, which filed a 23-of-24
-wipe as `reset`.
+`end.out` follows the roster, not the instance script: more than half the raid dead files a `reset` or
+`idle` as `wipe`. Hodir's script reports `NOT_STARTED` on release, which filed a 23-of-24 wipe as
+`reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
+everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
 ## Schema (`v: 7`)
 
@@ -86,7 +87,7 @@ else `7`. `0` still means no unit.
 | `truncated` | file hit `MaxFileMB`; the `end` record is still written past it |
 
 `death.auras` rows are `[sp,stacks,dur,caster,appliedT,removedT,positive]`, `removedT` −1 while held
-and `appliedT` −1 when the recorder never saw the apply;
+and `appliedT` −1 when the aura was applied before the session opened;
 `death.rewind` rows are `[t,source,sp,amount]`; `death.blow` is `[source,amount]` and `death.hplast`
 `[hp%,t]`; `death.acts` rows are `[firstT,lastT,action,rel,verdict,repeats]`, a veto's verdict reading
 `VETO:<multiplier>`.
@@ -122,10 +123,18 @@ cannot also empty every death record, and stamps `removedT` rather than erasing,
 through that same hook. Anything dropped within 2 s of the death is still reported, flagged. The strip
 stamps the death's own timestamp, so a `removedT` that close means held to death, not worn off.
 
-**An unknown timestamp gets a sentinel, never arithmetic.** `NoteAura` leaves `appliedMs` 0 when the
-first event it sees for a spell is a removal — anything buffed before the pull — and stamping 0 yields
-`−startMs`, one constant across every bot. `postmortem.py` renders the sentinel `?`: a fabricated
-`held 1740.7s` in a 155 s fight is worse than no answer.
+**Two hooks, because one cannot see a same-tick apply.** `_Apply` only flags the client update and
+`Unit::_UpdateSpells` flushes it a tick later, while `_Remove` fires it synchronously — so Hodir's
+Fury, which lands and kills in one tick, reached `NoteAura` as a removal with no apply behind it.
+`NoteAuraApplied` runs inside `Unit::_ApplyAura` on `UNITHOOK_ON_AURA_APPLY`, stamping `appliedMs` and
+emitting nothing: that hook double-fires on a stack refresh, and is the only one to see an aura that
+found no free visible slot. Keep its guard identical to `NoteAura`'s, or the feeds disagree on what a
+refresh means.
+
+**An unknown timestamp gets a sentinel, never arithmetic.** `appliedMs` stays 0 for anything applied
+before the session opened, and stamping 0 yields `−startMs`, one constant across every bot.
+`postmortem.py` renders the sentinel `?`: a fabricated `held 1740.7s` in a 155 s fight is worse than no
+answer.
 
 **Helps or hurts comes from the spell, not the caster.** `p` is `SpellInfo::IsPositive`. The caster is
 wrong both ways — totems and pets buff from a creature guid, and Biting Cold is applied to the player
