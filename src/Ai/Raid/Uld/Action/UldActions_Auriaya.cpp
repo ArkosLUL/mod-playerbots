@@ -69,9 +69,9 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    // Wide enough that any pool able to invalidate a candidate inside the leash is in the list.
-    std::vector<Unit*> const pools =
-        CollectAuriayaEssencePools(bot, ULDUAR_AURIAYA_ESSENCE_LEASH + ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS);
+    // Off the boss and room-wide, so every pool that can foul a candidate is in the list however far
+    // the bot has drifted from its anchor. There are at most nine of them.
+    std::vector<Unit*> const pools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
     if (pools.empty())
         return false;
 
@@ -85,70 +85,73 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     constexpr float increment = 3.0f;
 
     bool found = false;
+    bool bestIsCurrent = false;
     float bestX = 0.0f;
     float bestY = 0.0f;
+    int bestFouling = std::numeric_limits<int>::max();
+    float bestClearance = -1.0f;
     float bestDisplacement = std::numeric_limits<float>::max();
+
+    // Nothing here can pick a point outside the leash, so a boxed-in bot settles for the least bad
+    // ground rather than running across the room to find clean ground.
+    auto const consider = [&](float candX, float candY, bool isCurrent)
+    {
+        if (anchor.GetExactDist2d(candX, candY) > ULDUAR_AURIAYA_ESSENCE_LEASH ||
+            !bot->IsWithinLOS(candX, candY, bot->GetPositionZ()))
+        {
+            return;
+        }
+
+        int fouling = 0;
+        float clearance = std::numeric_limits<float>::max();
+        for (Unit* pool : pools)
+        {
+            float const distance = pool->GetExactDist2d(candX, candY);
+            if (distance < ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
+                ++fouling;
+
+            clearance = std::min(clearance, distance);
+        }
+
+        // Clearing the most pools wins; standing furthest from what is left breaks that tie; the
+        // shortest walk breaks the rest, so a bot already on the best ground stays put.
+        float const displacement = bot->GetExactDist2d(candX, candY);
+        bool const better = fouling != bestFouling      ? fouling < bestFouling
+                            : clearance != bestClearance ? clearance > bestClearance
+                                                         : displacement < bestDisplacement;
+
+        if (found && !better)
+            return;
+
+        found = true;
+        bestIsCurrent = isCurrent;
+        bestX = candX;
+        bestY = candY;
+        bestFouling = fouling;
+        bestClearance = clearance;
+        bestDisplacement = displacement;
+    };
+
+    consider(bot->GetPositionX(), bot->GetPositionY(), true);
+    consider(anchor.GetPositionX(), anchor.GetPositionY(), false);
 
     for (int i = 0; i < directions; ++i)
     {
         float const angle = (i * 2.0f * static_cast<float>(M_PI)) / directions;
         for (float distance = increment; distance <= ULDUAR_AURIAYA_ESSENCE_LEASH; distance += increment)
         {
-            float const candX = bot->GetPositionX() + distance * std::cos(angle);
-            float const candY = bot->GetPositionY() + distance * std::sin(angle);
-
-            if (anchor.GetExactDist2d(candX, candY) > ULDUAR_AURIAYA_ESSENCE_LEASH)
-                continue;
-
-            bool clear = true;
-            for (Unit* pool : pools)
-            {
-                if (pool->GetExactDist2d(candX, candY) < ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
-                {
-                    clear = false;
-                    break;
-                }
-            }
-
-            if (!clear || !bot->IsWithinLOS(candX, candY, bot->GetPositionZ()))
-                continue;
-
-            // Smallest step that clears, not the furthest one from the pools - maximising distance is
-            // what walks bots out of the room once the pools have piled up.
-            if (distance < bestDisplacement)
-            {
-                bestDisplacement = distance;
-                bestX = candX;
-                bestY = candY;
-                found = true;
-            }
+            consider(bot->GetPositionX() + distance * std::cos(angle),
+                     bot->GetPositionY() + distance * std::sin(angle), false);
         }
     }
 
-    if (found)
-    {
-        return MoveTo(bot->GetMapId(), bestX, bestY, bot->GetPositionZ(), false, false, false, false,
-                      MovementPriority::MOVEMENT_COMBAT);
-    }
-
-    // Boxed in. FleePosition is navmesh-validated and refuses to reverse a recent flee, so it will not
-    // start a ping-pong the way a raw MoveTo would.
-    Unit* nearest = nullptr;
-    float nearestDistance = std::numeric_limits<float>::max();
-    for (Unit* pool : pools)
-    {
-        float const distance = bot->GetExactDist2d(pool);
-        if (distance < nearestDistance)
-        {
-            nearestDistance = distance;
-            nearest = pool;
-        }
-    }
-
-    if (!nearest)
+    // Already standing on the best ground it can reach - hand the tick back to the rotation instead
+    // of burning it on a move that goes nowhere.
+    if (!found || bestIsCurrent)
         return false;
 
-    return FleePosition(nearest->GetPosition(), ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS, 500);
+    return MoveTo(bot->GetMapId(), bestX, bestY, bot->GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool AuriayaSentryTauntAction::isUseful()

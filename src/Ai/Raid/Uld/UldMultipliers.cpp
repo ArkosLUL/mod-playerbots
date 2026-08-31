@@ -873,9 +873,15 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
 
     // P1 damage lands on Sara and is wasted; P3 is the body burn, with no Shadow Barrier and no
     // Guardian soaking it up. Sara has to be part of the check because Yogg himself is not summoned
-    // until the P2 transition, so P1 would otherwise fall through ungated.
-    if (bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true) ||
-        bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true))
+    // until the P2 transition, so P1 would otherwise fall through ungated. Presence is not the
+    // encounter though: Sara is a static spawn that LoadAllGrids() makes findable from instance
+    // creation, and she stands 114yd from Auriaya's room and 167yd from Vezax, so matching on sight
+    // alone shut the gate for two unrelated bosses. She only enters combat when JustEngagedWith
+    // calls SetInCombatWithZone().
+    Unit* const yoggSaron = bot->FindNearestCreature(NPC_YOGG_SARON, sPlayerbotAIConfig.sightDistance, true);
+    Unit* const saraPhaseOne = bot->FindNearestCreature(NPC_SARA_PHASE_1, sPlayerbotAIConfig.sightDistance, true);
+
+    if ((yoggSaron && yoggSaron->IsInCombat()) || (saraPhaseOne && saraPhaseOne->IsInCombat()))
     {
         bool const phaseThree = YoggSaronInPhase3(botAI);
 

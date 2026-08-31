@@ -55,6 +55,14 @@ bool AuriayaRaidPositionTrigger::IsActive()
     if (!GetAuriayaAnchor(botAI, bot, anchor, tolerance))
         return false;
 
+    // A fouled anchor is worth nothing. Without this the dodge and the anchor take turns: the bot
+    // steps clear, the essence trigger goes quiet, and this one walks it straight back into the pool.
+    // Searching off the boss rather than the bot, because the bot is by definition off its anchor
+    // here and the pool that fouls it can be out of its own reach.
+    for (Unit* pool : CollectAuriayaEssencePools(GetAuriaya(botAI), ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS))
+        if (pool->GetExactDist2d(&anchor) < ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
+            return false;
+
     return bot->GetExactDist2d(&anchor) > tolerance;
 }
 

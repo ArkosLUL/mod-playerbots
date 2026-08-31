@@ -2052,8 +2052,9 @@ constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 12.0f;
 constexpr float ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
-// Seeping Feral Essence's radius is DBC, so 10 yd is a conservative guess.
-constexpr float ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS = 10.0f;
+// 64458 on the stalker is a 1s periodic trigger of 64459, whose radius index (8) is 5 yd in both
+// difficulties. Two yards on top for tick granularity and position lag.
+constexpr float ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS = 7.0f;
 
 // Sonic Screech (64422 / 64688) carries SPELL_ATTR0_CU_SHARE_DAMAGE, so its 60k (10man) / 200k
 // (25man) is divided among everyone in the 120-degree cone. Nobody dodges it: the raid stacks in the
@@ -2071,10 +2072,17 @@ constexpr float ULDUAR_AURIAYA_HEALER_SPOT_TOLERANCE = 8.0f;
 
 // Every Feral Defender life leaves a Seeping Feral Essence pool, the summon has no duration, and
 // nothing despawns them until the boss dies - up to 9 per pull. So the fight walks west in fixed
-// steps as they pile up, and a station is retired once a pool lands this close to either of its two
-// spots. Three is what the confirmed floor supports; a fourth would put the stack past x 1908.
+// steps as they pile up, and the station in use is the one with the fewest pools this close to
+// either of its two spots. Three is what the confirmed floor supports; a fourth would put the stack
+// past x 1908.
+//
+// 15 yd is the raid's real footprint around a station point - up to 8 yd of arrival tolerance plus
+// the pool radius. The metric is a count rather than a clear/fouled verdict on purpose: counts
+// against fixed geometry only ever grow, so the chosen station slides west monotonically. Anything
+// derived from the boss's live position oscillates instead, because the boss follows the main tank
+// and the main tank follows this verdict.
 constexpr int ULDUAR_AURIAYA_STATION_COUNT = 3;
-constexpr float ULDUAR_AURIAYA_STATION_CLEAR_RADIUS = 12.0f;
+constexpr float ULDUAR_AURIAYA_STATION_FOUL_RADIUS = 15.0f;
 constexpr float ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS = 100.0f;
 
 // How far a bot may drift off its anchor to clear a pool, and how close the Feral Defender has to be

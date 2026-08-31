@@ -502,22 +502,9 @@ std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius)
     return pools;
 }
 
-// A station is dead once a pool sits inside ULDUAR_AURIAYA_STATION_CLEAR_RADIUS of either of its two
-// spots. In practice the raid point is what retires it, since the Defender dies wherever it aggroed.
-static bool AuriayaStationClear(std::vector<Unit*> const& pools, int index)
-{
-    for (Unit* pool : pools)
-    {
-        if (pool->GetExactDist2d(&ULDUAR_AURIAYA_MAINTANK_SPOTS[index]) < ULDUAR_AURIAYA_STATION_CLEAR_RADIUS ||
-            pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[index]) < ULDUAR_AURIAYA_STATION_CLEAR_RADIUS)
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
+// Score every station by how many pools foul it and take the lowest, ties to the lowest index. A
+// count over fixed geometry can only grow while the fight runs, so the station slides west and never
+// comes back east.
 int GetAuriayaStationIndex(PlayerbotAI* botAI)
 {
     Unit* boss = GetAuriaya(botAI);
@@ -526,24 +513,24 @@ int GetAuriayaStationIndex(PlayerbotAI* botAI)
 
     std::vector<Unit*> const pools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
 
-    for (int i = 0; i < ULDUAR_AURIAYA_STATION_COUNT; ++i)
-        if (AuriayaStationClear(pools, i))
-            return i;
-
-    // Every station is polluted, so take the least bad one. Pools never expire, so this only changes
-    // when a new one drops and cannot flip back and forth between ticks.
-    int best = ULDUAR_AURIAYA_STATION_COUNT - 1;
-    float bestClearance = -1.0f;
+    int best = 0;
+    int bestFouling = std::numeric_limits<int>::max();
 
     for (int i = 0; i < ULDUAR_AURIAYA_STATION_COUNT; ++i)
     {
-        float clearance = std::numeric_limits<float>::max();
+        int fouling = 0;
         for (Unit* pool : pools)
-            clearance = std::min(clearance, pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[i]));
-
-        if (clearance > bestClearance)
         {
-            bestClearance = clearance;
+            if (pool->GetExactDist2d(&ULDUAR_AURIAYA_MAINTANK_SPOTS[i]) < ULDUAR_AURIAYA_STATION_FOUL_RADIUS ||
+                pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[i]) < ULDUAR_AURIAYA_STATION_FOUL_RADIUS)
+            {
+                ++fouling;
+            }
+        }
+
+        if (fouling < bestFouling)
+        {
+            bestFouling = fouling;
             best = i;
         }
     }
