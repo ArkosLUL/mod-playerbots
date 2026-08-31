@@ -402,8 +402,22 @@ constexpr float ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE = 28.0f;
 // Rune of Death 62269/63490: a 13 yd persistent area aura ticking 2750 shadow every half second for
 // 30s. Search wide enough to see one dropped anywhere in the formation.
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_RADIUS = 13.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 15.0f;
+
+// 13 is the DBC radius, but the searcher that applies the aura adds object size on both ends and two
+// traces measured applications out to 15.4 yd. Run when inside DANGER, stand at CLEARANCE: without
+// the gap a bot parks exactly on the boundary, because the escape search returns the nearest spot
+// that clears it, and re-takes the rune on every yard of drift.
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS = 16.0f;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 21.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
+
+// Where the raid stands when a rune covers the stack point. Molgeim drops it on a random member, so
+// with the raid stacked it lands on the stack nearly every time - this is the common path, not an
+// edge case. A fixed candidate set rather than free geometry because every bot picks its own and they
+// have to agree: the eight anchor headings at 25 yd, which navprobe reports 8/8 on mesh with settledZ
+// on the floor (20 and 30 are clean too, so the ring has room either side).
+constexpr uint8 ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_HEADINGS = 8;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_RADIUS = 25.0f;
 
 // Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on. The
 // carrier dies either way - walking this far is what stops it taking the melee with them, and every

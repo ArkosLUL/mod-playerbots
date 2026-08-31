@@ -488,17 +488,80 @@ bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& posit
     }
 }
 
+// Molgeim drops Rune of Death on a random member, so on a stacked raid it lands on the stack point
+// itself. Without this the raid-position action keeps ordering everyone back into it while the escape
+// action pulls them out, and the two cancel each other every tick: nobody travels, nobody parks, and
+// because a moving bot holds no interrupt duty Lightning Whirl goes unanswered as well.
+//
+// Reads the stack point and the runes and nothing else - never the calling bot. Every bot derives
+// this on its own, so an answer that depended on where the caller stood would scatter the raid
+// instead of moving it.
+static Position DisplaceIronAssemblyStackPointOffRunes(Player* bot, Position const& stack, bool& displaced)
+{
+    displaced = false;
+
+    std::vector<Position> swept;
+    GatherIronAssemblyRunesOfDeath(bot, swept);
+
+    // Kept against the stack rather than the caller: the sweep is centred on whoever asked, so two
+    // bots standing apart would otherwise weigh different runes. It cannot conjure one a distant bot
+    // never swept, but with the raid stacked around this point they all sweep the same ground.
+    std::vector<Position> runes;
+    for (Position const& rune : swept)
+        if (rune.GetExactDist2d(stack.GetPositionX(), stack.GetPositionY()) <
+            ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS)
+            runes.push_back(rune);
+
+    if (IsIronAssemblyPositionClearOfRunes(stack, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE))
+        return stack;
+
+    // Nearest clear heading, so the raid gives up as little range on the bosses as it can. Both the
+    // ring and a dropped rune hold still, so the winner does not change while the rune lasts and the
+    // raid parks instead of drifting between candidates.
+    Position best;
+    float bestTravel = 0.0f;
+    for (uint8 heading = 0; heading < ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_HEADINGS; ++heading)
+    {
+        float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(heading) /
+                              static_cast<float>(ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_HEADINGS);
+        Position const candidate = IronAssemblyPositionAt(bearing, ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_RADIUS);
+
+        if (!IsIronAssemblyPositionClearOfRunes(candidate, runes,
+                                                ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE))
+            continue;
+
+        float const travel = stack.GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY());
+        if (!displaced || travel < bestTravel)
+        {
+            best = candidate;
+            bestTravel = travel;
+            displaced = true;
+        }
+    }
+
+    // Every heading covered: hold formation and let the escape action walk each bot out on its own.
+    // Scattering the raid to chase a spot that does not exist costs more than the ticks do.
+    return displaced ? best : stack;
+}
+
 static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, char const*& how)
 {
     bool brundirLast = false;
-    Position const stack = IronAssemblyStackPoint(botAI, brundirLast);
+    Position const opening = IronAssemblyStackPoint(botAI, brundirLast);
+
+    bool displaced = false;
+    Position const stack = DisplaceIronAssemblyStackPointOffRunes(bot, opening, displaced);
 
     // Static Disruption is the only reason to spread and it does not exist before Steelbreaker's
     // phase 2, which the normal kill order never reaches. Everywhere else the raid stacks, which is
     // what keeps healers in range and makes Rune of Power worth soaking.
     if (!IsSteelbreakerEmpowered(botAI))
     {
-        how = brundirLast ? "stack-late" : "stack";
+        if (displaced)
+            how = brundirLast ? "stack-late-rune" : "stack-rune";
+        else
+            how = brundirLast ? "stack-late" : "stack";
+
         position = stack;
         return true;
     }
@@ -509,7 +572,7 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     auto const assignment = state.spreadSlots.find(bot->GetGUID());
     if (assignment == state.spreadSlots.end() || assignment->second >= ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS)
     {
-        how = "overflow";
+        how = displaced ? "overflow-rune" : "overflow";
         position = stack;
         return true;
     }
@@ -517,7 +580,9 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(assignment->second) /
                           static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS);
 
-    how = "spread";
+    // The ring rides the displaced centre, so a rune moves the whole formation rather than leaving
+    // half the slots inside it.
+    how = displaced ? "spread-rune" : "spread";
     position =
         Position(stack.GetPositionX() + std::cos(bearing) * ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS,
                  stack.GetPositionY() + std::sin(bearing) * ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS,
@@ -580,16 +645,12 @@ void GatherIronAssemblyRunesOfDeath(Player* bot, std::vector<Position>& runes)
     }
 }
 
-bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Position> const& runes)
+bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Position> const& runes,
+                                        float radius)
 {
     for (Position const& rune : runes)
-    {
-        if (rune.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <
-            ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE)
-        {
+        if (rune.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < radius)
             return false;
-        }
-    }
 
     return true;
 }
@@ -630,7 +691,7 @@ static Unit* DeriveIronAssemblyRuneOfPowerSoakSpot(PlayerbotAI* botAI, Player* b
 
     std::vector<Position> runes;
     GatherIronAssemblyRunesOfDeath(bot, runes);
-    if (!IsIronAssemblyPositionClearOfRunes(rune, runes))
+    if (!IsIronAssemblyPositionClearOfRunes(rune, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS))
     {
         how = "none:rune";
         return nullptr;
@@ -682,7 +743,8 @@ bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
     std::vector<Position> runes;
     GatherIronAssemblyRunesOfDeath(member, runes);
 
-    return !IsIronAssemblyPositionClearOfRunes(member->GetPosition(), runes);
+    return !IsIronAssemblyPositionClearOfRunes(member->GetPosition(), runes,
+                                               ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS);
 }
 
 char const* IronAssemblyReadyInterrupt(Player* bot, Unit* target)

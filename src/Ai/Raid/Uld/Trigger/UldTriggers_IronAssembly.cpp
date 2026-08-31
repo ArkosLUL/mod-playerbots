@@ -68,7 +68,10 @@ bool IronAssemblyRuneOfDeathTrigger::IsActive()
     if (runes.empty())
         return false;
 
-    return !IsIronAssemblyPositionClearOfRunes(bot->GetPosition(), runes);
+    // DANGER, not CLEARANCE: this asks whether the bot is being ticked, and the escape action it
+    // fires takes it the extra yards. Testing at the clearance would re-fire on every yard of drift.
+    return !IsIronAssemblyPositionClearOfRunes(bot->GetPosition(), runes,
+                                               ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS);
 }
 
 bool IronAssemblyInterruptTrigger::IsActive()

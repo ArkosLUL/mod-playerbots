@@ -109,6 +109,22 @@ ranged stack: more than his Overload needs, so the stack never reacts to it and 
 parked and free to kick. **Tanks stand rather than drag**, so a boss follows its tank to the spot
 instead of being towed through the raid.
 
+**Rune of Death lands on the raid.** `DoCastRandomTarget` puts it on a random member, so on a
+stacked raid it covers the stack point — four of four did in one traced pull, one exactly on it —
+and it repeats every 30–40s for ~30s from Molgeim's phase 2. So the **raid spot answers it**: a
+covered stack shifts to the nearest clear of the eight anchor headings at 25 yd (navprobe 8/8 on
+mesh). Derived from the stack and the runes alone, never the caller — every bot computes it, and
+reading the caller's position would scatter the raid instead of moving it.
+
+**Two radii, not one.** DBC says 13, but the searcher applying the aura adds object size at both
+ends and traces measured applications to **15.4 yd**: bots run inside **16**, stand at **21**. One
+radius put the escape spot exactly on the boundary — the search returns the nearest point that
+clears — and the aura came straight back, 31 times on one bot. The gap buys the invariant: every
+raid-spot candidate is ≥21 from every rune and 21 > 16, so **arriving at the raid spot never
+re-fires the escape**. Without it the two actions cancelled every tick; nobody travelled, nobody
+parked, and a permanently-moving bot holds no interrupt duty, so Lightning Whirl took 15 of 29
+killing blows.
+
 Rune of Power lands on `DoSelectLowestHpFriendly`, i.e. on a **member**, not a player — so both
 halves apply at once: the tank walks his boss off it while ranged and healers walk in. The soak is
 capped at 25 yd, which admits every rune on Steelbreaker or Molgeim and rejects every one on Brundir
@@ -123,11 +139,11 @@ Steelbreaker's phase 2; and **bots never set the skull**, so a human's mark wins
 **Reading a pull:** `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
 Molgeim, 2 Brundir), `focus` (what the raid is killing, and whether a human's skull beat the order),
 `tank` (the boss a tank owns, or the branch that left it none), `interrupt` (the duty a bot holds
-for Brundir's current cast), `spot` (the formation branch), `slot` (its index on the spread ring),
-`soak` (whether it reached Rune of Power, and what stopped it). Overload, Lightning Tendrils and
-Meltdown have no world object, so they also write `haz` circles with the spell radius and the
-clearance; Rune of Death and Rune of Power do, and are swept instead — only a swept hazard is tested
-against a death.
+for Brundir's current cast), `spot` (the formation branch — a `-rune` suffix means the stack shifted
+off a Rune of Death), `slot` (its index on the spread ring), `soak` (whether it reached Rune of
+Power, and what stopped it). Overload, Lightning Tendrils and Meltdown have no world object, so they
+also write `haz` circles with the spell radius and the clearance; Rune of Death and Rune of Power
+do, and are swept instead — only a swept hazard is tested against a death.
 
 Core-version assumption: the strategy relies on recent upstream fixes — `#26470` (Rune of Death
 restricted to players), `#26449` (Brundir surviving Tendrils), `#26200` (Static Disruption preferring

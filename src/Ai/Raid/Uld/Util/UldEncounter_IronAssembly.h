@@ -32,7 +32,8 @@ class Unit;
 //   ironassembly.focus      what the raid is killing, and whether a human's skull beat the order
 //   ironassembly.tank       the boss a tank owns, or the branch that left it without one
 //   ironassembly.interrupt  the duty a bot holds for Brundir's current cast
-//   ironassembly.spot       the formation branch that put a bot where it stands
+//   ironassembly.spot       the formation branch that put a bot where it stands - a `-rune` suffix
+//                           means a Rune of Death covered the stack point and the raid shifted off it
 //   ironassembly.slot       its index on the hard-mode spread ring
 //   ironassembly.soak       whether it walked into Rune of Power, and what stopped it
 //
@@ -86,7 +87,12 @@ bool IronAssemblyTendrilsActive(Unit* brundir);
 // Rune of Death is a persistent area aura, so it is a DynamicObject and AvoidAoeAction cannot see
 // it. Both difficulty ids are swept.
 void GatherIronAssemblyRunesOfDeath(Player* bot, std::vector<Position>& runes);
-bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Position> const& runes);
+
+// Callers pass the radius they mean: DANGER to ask whether a bot has to move, CLEARANCE to ask
+// whether a spot is somewhere to stand. Asking both questions at one radius is what left bots
+// parked on the rune's edge.
+bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Position> const& runes,
+                                        float radius);
 
 // The council member currently standing in Molgeim's Rune of Power, if any. Molgeim casts it on
 // DoSelectLowestHpFriendly, so it lands on a boss rather than a player - which is why the tank has
