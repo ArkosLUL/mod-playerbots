@@ -738,8 +738,8 @@ Priority order is Eonar's Gift > Ancient Conservator > trio slot > Detonating La
 two reorderings: once any trio member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio
 outranks the other adds, and once every member is in the release band nothing pulls a bot away at all.
 Eonar's Gift is a ranged DPS job (12s to a 30-60% Freya heal) so melee never eat the travel time both
-ways, falling back to melee when no ranged DPS is alive. The Detonating Lasher rung resolves per role —
-see the lasher paragraphs below.
+ways, falling back to melee when no ranged DPS is alive. The Detonating Lasher rung resolves per role,
+and for ranged in two phases — see the lasher paragraphs below.
 
 **Conservator's Grip (62532) pacifies the whole raid.** It is `APPLY_AREA_AURA_ENEMY` +
 `MOD_PACIFY_SILENCE` at radius index 28 = 50000 yd, cast once at 6s with no repeat
@@ -801,60 +801,63 @@ of the ladder is borrowed for damage: taunting Freya would fight a human main ta
 set differently, taunting a Storm Lasher or Water Spirit would mean owning Tidal Wave positioning, and a
 lasher drops the taunt on its next 10s threat wipe regardless.
 
-**Detonating Lashers cannot be tanked, and no threat redirect can hold them.** Every 10s each one casts
-Flame Lash, then `DoResetThreatList()` and charges a **uniformly random** player within 80 yd
+**Detonating Lashers cannot be tanked, ferried, or held by any threat redirect.** Every 10s each one
+casts Flame Lash, then `DoResetThreatList()` and charges a **uniformly random** player within 80 yd
 (`boss_freya.cpp:1256-1262`); they spawn the same way after a 5s submerge, and one that finds nobody
-inside 80 yd despawns and still counts as cleared. A `GROUP_LASHERS` wave is **10** of them — 717k in
-10-man, **2.35M in 25-man** — so the whole raid has to damage them to beat the 60s clock. They run at
-**8.0 yd/s** against a player's 7.0: a bot can lead one anywhere and can never shake it.
+inside 80 yd despawns and still counts as cleared. They run at **8.0 yd/s** (`speed_run` 1.14286)
+against a player's 7.0, so a bot can neither shake one nor lead one — it can only stand with it.
 
-Detonate (62598) rolls 4162-4837 in 15 yd **on death**, not on a timer, and has **no difficulty entry**,
-so it is identical in both sizes — the old 10-man/25-man threshold split was wrong.
+A `GROUP_LASHERS` wave is **10** of them — 717k in 10-man, **2.35M in 25-man** — for **2** stacks
+each. That is 150.6k HP per stack, the **worst rate in the fight** (Water Spirit 66.9k · Storm Lasher
+100.4k · Conservator 113.8k · Snaplasher 125.5k). Waves come at 10s then **every 60s, six of them**;
+clearing one early pulls the next in after **5s**, and after the sixth the aura drops regardless — so
+the wave is a survival check, not a DPS race.
 
-**The corral.** `GetFreyaLasherCorral` is 35 yd behind Freya, taken from `GetHomePosition()` — she never
-walks but she pivots to face her tank, so the live orientation would swing the spot around the room.
-Every bot derives the same point. navprobe puts all 16 headings of that ring on mesh; at 50 yd the
-southern ones stop settling, which is what sets the distance. Height only, no collision raycast: several
-triggers read it per bot per tick and that floor is open.
+Detonate fires in 15 yd **on death**, not on a timer. It has two difficulty ids — **62598** in 10-man
+(base 4162), **62937** in 25-man (base 6824) — but both carry `EffectRadiusIndex 18`, so the radius is
+identical either way. In practice it is **melee-only**: over a 132s pull, 89% of its damage landed on
+the eight melee bots and **zero** on ranged.
 
-Ranged and healers a lasher has picked walk it in, and that trip is the **only** walk they make: they
-still never move toward the focused lasher, and outside spell range they shoot whatever is already in
-reach. **Melee never ferry** — a melee bot that did would then be standing in the pile the blasts go off
-in — and neither does the trap hunter, which has a post of its own. A lasher chases whoever it picked,
-so a bot cannot hand one over and walk away; without two brakes the drag ferries in, the step-out pushes
-the bot straight back out, and it shuttles the same add all wave. Nothing is ferried into a pile this
-bot would itself have to flee, and nothing is ferried to a corral already holding
-`ULDUAR_FREYA_LASHER_PACK_MIN_COUNT` (6) — a cap that lifts itself as the pile dies. `freya lasher pack
-step out` is the return leg, so there is no walk-back node, and it clears
-`ULDUAR_FREYA_LASHER_PACK_CLEAR` (16 yd) of *every* lasher, since ten roam at once.
+**Detonate is also not what kills anyone.** In that pull lashers were 57.7% of all raid damage, but
+melee (34.4%) and Flame Lash (12.9%) outweighed Detonate (10.4%) **4.6 : 1**. Any design that spends
+the raid's positioning budget on dodging Detonate is optimising the smallest slice.
 
-**A snare and a root hold the pack, not threat.** One hunter — lowest GUID, so every bot agrees — posts
-`ULDUAR_FREYA_LASHER_TRAP_OFFSET` (16 yd) short of the corral, where its 10 yd Frost Trap patch covers
-the lane back to the raid while it stays outside the blast; a 30s patch on a 30s cooldown is a continuous
-**-50%**. A mage with 6 lashers inside Frost Nova's 10 yd roots them for a full **8s** — no DR, no damage
-break ([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md)) — and novas above the
-step-out, so it roots first and leaves second. It casts on **self**, not through the class `frost nova`
-node, which gates on the *current target* being within 10 yd and so never fires for a ranged mage.
+**Doctrine: stack, AoE, then step out** — what real raids do, and the opposite of the corral this
+replaced (see [Crowd control and threat on adds](../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)
+for why ferrying an add faster than a player cannot work).
 
-Assist tank 0 parks at the corral once its ladder is empty (`HoldLasherCorral`) and taunts what wanders
-off. Every branch there owns the tick: falling through hands the tank back to the ladder, whose last rung
-is Freya, and walks it straight off the corral. A taunt is worth under 10s — the next threat wipe re-rolls
-regardless — so it holds one add at a time, plus one Challenging Shout / Challenging Roar at 6+.
-Righteous Defense is excluded: it taunts attackers of a friendly target, not an area.
+1. **Gather.** Ranged DPS and healers hold one camp on `GetFreyaRangedCampAnchor` — lowest-GUID living
+   ranged-DPS bot, so every bot picks the same one with no shared state. An anchor *bot*, not a
+   coordinate: the camp is then always on mesh and always in reach of what the raid is shooting.
+   Tolerance is `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd), `_HEALER_` (15 yd) — healers get slack
+   because they also have to reach the melee group and the tanks. The lashers do the walking.
+2. **AoE.** Ranged focus `GetFreyaLasherPackFocus`, the lasher with the most lashers within
+   `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd). Pointing at the middle of the pile is what makes class AoE
+   fire at all: `AoeTrigger` counts attackers within 8 yd of the ***current target***, not of the bot,
+   and `ULDUAR_FREYA_LASHER_PACK_MIN_COUNT` (3) is `MediumAoeTrigger`'s own threshold.
+3. **Finish.** Below `ULDUAR_FREYA_LASHER_FINISH_PCT` (20%) with 3+ in the pile,
+   `FreyaLasherFinishAoeMultiplier` shuts AoE off (heals exempt), the mage novas, ranged and healers
+   clear `ULDUAR_FREYA_LASHER_PACK_CLEAR` (16 yd, one past Detonate) of *every* lasher in range rather
+   than the nearest, the hunter's trap lands on the lane they just left, and `GetFreyaRangedLasherFocus`
+   (lowest health, GUID breaking ties — self-stabilising, since the focused add stays lowest) picks them
+   off one at a time. Ten Detonates at once is ~45k in 15 yd; staggered, it is a healing burst.
 
-Ten Detonates in one pile would be ~45k inside 15 yd. It stays survivable because ranged focus-fire one
-lasher at a time (`GetFreyaRangedLasherFocus`: lowest health, GUID breaking ties, which agrees raid-wide
-with no shared state and is self-stabilising since the focused add stays lowest), so deaths stagger and
-the off-tank at the corral eats them one at a time. Raid AoE bringing several low together is the residual
-risk, deliberately untuned.
+Node order is load-bearing: nova (`ACTION_RAID + 4`) → step out (`+3`) → trap (`+2`) → camp
+(`ACTION_RAID`). The trap sits *below* the step-out on purpose — the hunter has already moved when it
+fires, which is what puts the 10 yd patch between the pack and the raid without any post to walk to.
+All three read `GetFreyaFinishingPackNear`, which measures from the **pack's** centre rather than the
+bot's, so the finish stays visible to a bot that has just stepped out of it.
 
-Melee and tanks still take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the
+The mage novas on **self**, not through the class `frost nova` node, which gates on the *current
+target* being within 10 yd and so never fires for a ranged mage. Frost Nova holds the full **8s** — no
+DR, no damage break ([../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md)). One
+hunter lays the trap — lowest GUID, so every bot agrees — for a continuous **-50%** (30s patch, 30s
+cooldown).
+
+Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the
 moment it runs past that, which is the leash: a lasher that retargets cannot tow a bot across the room,
-and a tank can damage one on top of it but can never walk one back to the raid. Non-tanks below
-`ULDUAR_FREYA_DETONATE_FLEE_HEALTH` step out of the blast, clearing *every* lasher in range rather than
-the nearest, except the bot actually killing that lasher, which is inside 15 yd by definition, and except
-a dragger inside `ULDUAR_FREYA_LASHER_CORRAL_COMMIT` (12 yd) of the corral, which commits rather than
-waste the trip. Tanks never flee; they eat it.
+and a tank can damage one on top of it but can never walk one back to the raid. Tanks never flee the
+blast; they eat it, and the add tank works its normal ladder through a lasher wave.
 
 **Threat redirect.** `freya redirect threat` feeds Misdirection / Tricks to assist tank 0 while the
 Snaplasher or Conservator is up, otherwise to whoever is holding Freya, falling back to the group main
@@ -863,7 +866,24 @@ stands down. This can do nothing for lashers — their threat table is wiped eve
 
 Hard mode = Elders left alive at pull (Brightleaf 32915 / Stonebark 32914 / Ironbranch 32913). Per
 living Elder, Freya gains an extra ability: Iron Roots (62862), Unstable Sun Beam (62450), or Ground
-Tremor (62437, raid-wide knockback — not handled, undodgeable).
+Tremor (**62437** 10-man / **62859** 25-man).
+
+**Ground Tremor is a raid-wide interrupt, not a knockback.** Alongside its 7599 physical damage it
+carries `Effect_2 = 68` `SPELL_EFFECT_INTERRUPT_CAST` (`EffectMechanic_2 = 26`) at radius index 28 =
+**50000 yd**, so there is nothing to dodge, and `DurationIndex 1` makes `ProhibitSpellSchool` a **10s
+school lockout** on whoever it cuts. Measured over 7 volleys: 31 of 37 casts in flight were
+`SPELL_PREVENTION_TYPE_SILENCE` and got cut, and **71% of those never landed a same-school cast inside
+the next 10s**. Healers pay it hardest. Hunters are exempt — Steady Shot is `PreventionType` PACIFY,
+which never reaches the lockout branch.
+
+It is fully telegraphed: a **2000 ms** cast, repeating `25s..35s` (a range, so no timer predicts it).
+So the handling is Ignis's Flame Jets trio, ported. `FreyaGroundTremorCastGateMultiplier` caches the
+remaining window per millisecond and blocks any candidate whose `CalcCastTime` would not land first;
+`freya ground tremor hold cast` (`ACTION_EMERGENCY + 2`) stops a cast already in flight. Unlike Ignis,
+**heals are gated too, and that is the point** — holding a Chain Heal for under 2s beats losing Nature
+for 10. Bots blocked here fall through to the instants already in their rotation. Stopping first also
+dodges the lockout outright: `Spell::EffectInterruptCast` applies `ProhibitSpellSchool` **only if it
+finds a cast to cut**. Outside hard mode the gate is inert — the window is 0 unless Freya is casting.
 
 **Critical: the empower events are scheduled once at pull and repeat unconditionally — they keep
 firing for the whole fight even after the Elder dies.** So hard-mode reactions must key off the

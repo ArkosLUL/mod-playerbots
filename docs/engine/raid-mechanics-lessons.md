@@ -133,6 +133,12 @@ What lands on a raid add is not what PvP experience predicts.
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
   Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
   random player every 10s, which leaves geometry plus a snare as the only handling.
+- **Read `speed_run` before designing any relocation.** An add faster than a player can be neither
+  kited nor ferried: the bot walks the whole distance taking uninterrupted melee, out of healer range,
+  dealing nothing, and still arrives with the add on top of it. Freya's lasher is 8.0 yd/s against 7.0,
+  and the corral built on ferrying it was the single leading cause of death in the encounter
+  ([../raids/ulduar.md](../raids/ulduar.md)). Where the add is faster, **stack the raid and let it
+  come**; geometry is the only lever left.
 
 ## Coordinating a raid with no shared state
 
@@ -224,5 +230,13 @@ scripted raid encounters.
 - **A phase heuristic must separate the pull intro from a mid-fight transition.** Both read as "in
   combat, boss non-attackable". Full health separates them whenever the real transitions are
   health-gated.
+- **Confirm which spell id the difficulty in play actually uses.** A rule built on the wrong twin is
+  built on the wrong numbers, and a clean lookup on one id proves nothing about the other. Freya's
+  Detonate is 62598 in 10-man and 62937 in 25-man; Ground Tremor 62437 and 62859.
+- **Read a boss spell's full effect list, not its damage.** "Damage" spells carry riders that decide
+  the whole reaction: Freya's Ground Tremor is `Effect_1` damage plus `Effect_2 = 68`
+  `SPELL_EFFECT_INTERRUPT_CAST`, which silences the raid's school for 10s — the damage number says
+  nothing about the mechanic that matters. Read `EffectRadiusIndex` on every effect too; index 28 is
+  50000 yd, i.e. raid-wide and undodgeable.
 - **Flags beat `GetData`.** `UNIT_FLAG_PACIFIED | UNIT_FLAG_DISABLE_MOVE` on a boss is an exact,
   lag-free statement that he is now a fixed point worth anchoring geometry on.

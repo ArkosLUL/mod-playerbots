@@ -241,6 +241,33 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Freya: the lasher pack is AoE'd down together right up to the finish, and then the AoE has to stop
+// or the whole pile detonates at once. This is the "stop at low health" half of that - single-target
+// damage keeps running, which is what staggers the blasts.
+class FreyaLasherFinishAoeMultiplier : public Multiplier
+{
+public:
+    FreyaLasherFinishAoeMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya lasher finish aoe") {}
+    float GetValue(Action* action) override;
+};
+
+// Freya hard mode: Ground Tremor interrupts the whole raid on a 2s telegraph and school-locks whoever
+// it cuts for 10s, so a cast that cannot land inside the telegraph is thrown away. Heals are held too,
+// unlike at Ignis: a Chain Heal delayed under 2s beats a resto shaman with no Nature for 10.
+class FreyaGroundTremorCastGateMultiplier : public Multiplier
+{
+public:
+    FreyaGroundTremorCastGateMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya ground tremor cast gate") {}
+    float GetValue(Action* action) override;
+
+private:
+    // Runs against every candidate action, so the boss lookup is memoised for the rest of the tick.
+    int32 EvaluateWindow();
+
+    uint32 cachedAtMs = 0;
+    int32 cachedRemainingMs = 0;
+};
+
 // The class-generic Misdirection / Tricks nodes always redirect at the group main tank. On the
 // encounters below he is not the tank holding what the raid is hitting, so the redirect is held.
 class UldThreatRedirectMultiplier : public Multiplier

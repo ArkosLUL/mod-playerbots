@@ -40,15 +40,6 @@ public:
     bool IsActive() override;
 };
 
-// Detonating Lashers blow up for ~4-5k on death and cannot be tanked, so non-tanks that would not
-// survive the blast step outside it.
-class FreyaAvoidDetonatingLasherTrigger : public Trigger
-{
-public:
-    FreyaAvoidDetonatingLasherTrigger(PlayerbotAI* ai) : Trigger(ai, "freya avoid detonating lasher") {}
-    bool IsActive() override;
-};
-
 class FreyaMoveToHealingSporeTrigger : public Trigger
 {
 public:
@@ -64,17 +55,17 @@ public:
     bool IsActive() override;
 };
 
-// Ranged and healers walk a lasher that has picked them out to the corral behind Freya. Melee are
-// excluded: a melee bot that ferried one would then be standing in the pile the blasts go off in.
-class FreyaDragLasherToCorralTrigger : public Trigger
+// Ranged and healers hold one camp on the anchor bot so the lashers gather themselves into a pile the
+// raid can AoE. Nothing is walked anywhere: a lasher moves at 8.0 yd/s against a player's 7.0.
+class FreyaRangedCampTrigger : public Trigger
 {
 public:
-    FreyaDragLasherToCorralTrigger(PlayerbotAI* ai) : Trigger(ai, "freya drag lasher to corral") {}
+    FreyaRangedCampTrigger(PlayerbotAI* ai) : Trigger(ai, "freya ranged camp") {}
     bool IsActive() override;
 };
 
-// The corral has enough lashers on it to be lethal. Doubles as the return leg of the drag - there is
-// no separate walk-back node - and as the mage's exit after it novas.
+// The pack near this bot is down to the finish, so the AoE phase is over and everyone squishy leaves
+// before it is picked apart. Also the mage's exit after it novas.
 class FreyaLasherPackStepOutTrigger : public Trigger
 {
 public:
@@ -92,12 +83,21 @@ public:
     bool IsActive() override;
 };
 
-// One hunter keeps a Frost Trap on the lane out of the corral. 30s patch on a 30s cooldown, so the
-// -50% snare is up continuously.
-class FreyaTrapLasherCorralTrigger : public Trigger
+// One hunter snares the pack as the finish starts. 30s patch on a 30s cooldown, so the -50% is up
+// continuously once the wave reaches this point.
+class FreyaTrapLashersTrigger : public Trigger
 {
 public:
-    FreyaTrapLasherCorralTrigger(PlayerbotAI* ai) : Trigger(ai, "freya trap lasher corral") {}
+    FreyaTrapLashersTrigger(PlayerbotAI* ai) : Trigger(ai, "freya trap lashers") {}
+    bool IsActive() override;
+};
+
+// Hard mode: Freya is 2s into Ground Tremor and this bot has a cast in flight that it would eat, along
+// with the 10s school lockout that comes with being cut.
+class FreyaGroundTremorHoldCastTrigger : public Trigger
+{
+public:
+    FreyaGroundTremorHoldCastTrigger(PlayerbotAI* ai) : Trigger(ai, "freya ground tremor hold cast") {}
     bool IsActive() override;
 };
 

@@ -117,6 +117,14 @@ enum UlduarIDs
     // adds have taken it off her, so damage on her before then is wasted.
     SPELL_ATTUNED_TO_NATURE = 62519,
 
+    // Freya's only telegraph worth reacting to, and hard mode only. A 2s cast carrying Effect_2 = 68
+    // SPELL_EFFECT_INTERRUPT_CAST alongside its damage, at radius index 28 = 50000 yd: raid-wide, so
+    // there is nothing to dodge, and it school-locks whoever it cuts for 10s. 62437 is 10-man, 62859
+    // is 25-man. Hunters are exempt - Steady Shot is PreventionType PACIFY, which never reaches the
+    // lockout branch.
+    SPELL_FREYA_GROUND_TREMOR_10 = 62437,
+    SPELL_FREYA_GROUND_TREMOR_25 = 62859,
+
     // Freya hard mode: Elders left alive permanently empower Freya with an extra ability each.
     // NPC_FREYA comes from core ulduar.h via UldScripts.h.
     NPC_FREYA_IRON_ROOTS = 33088,               // Ironbranch's Iron Roots trap (selectable)
@@ -802,6 +810,13 @@ constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 60.0f;
 // the same point server-side and melee cleave splashes every one of them.
 constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
 
+// Health band the phase 4 focus is ranked on. Twenty-five bots burn two parts down within a tenth of a
+// percent of each other, so comparing raw percent hands every one of them a new target on each
+// crossing - a kill traced 1380 of 1564 target notes as a VX-001/MK II flip, roughly five a second per
+// bot, each resetting a swing or a cast. Two percent is about 2.4 s of raid damage, and five bands
+// still fit inside ULDUAR_MIMIRON_PHASE4_HOLD_PCT.
+constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
+
 // Where melee and tanks wait out a phase handover. Eight yards puts them inside melee range of a
 // combat-reach 8 mech the moment it goes live. Staging only - see GetMimironSpreadSlot for why melee
 // never get a slot during a live phase.
@@ -858,15 +873,12 @@ constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
 // that ring with room for the boss having been dragged part of the way to one.
 constexpr float ULDUAR_FREYA_SPORE_SEARCH_RADIUS = 40.0f;
 
-// Freya: Detonate (62598) radius, and it fires on death, not on a timer. Every 10s a Detonating
-// Lasher wipes its own threat list and charges a random player, so no amount of threat holds one -
-// see the corral constants below for what replaces tanking it.
+// Freya: Detonate radius, and it fires on death, not on a timer. Two difficulty ids - 62598 in 10-man
+// (base 4162) and 62937 in 25-man (base 6824) - but both carry EffectRadiusIndex 18, so the radius is
+// the same either way. Every 10s a Detonating Lasher wipes its own threat list and charges a random
+// player, so no amount of threat holds one, and speed_run 1.14286 puts it at 8.0 yd/s against a
+// player's 7.0, so nothing can walk one anywhere either.
 constexpr float ULDUAR_FREYA_DETONATE_RADIUS = 15.0f;
-
-// Detonate rolls 4162-4837 and has no difficulty entry, so it is the same in 10- and 25-man. Ranged
-// focus one lasher at a time, which makes being inside two blasts at once the exception - it is not
-// what sets this floor.
-constexpr uint32 ULDUAR_FREYA_DETONATE_FLEE_HEALTH = 5500;
 
 // Melee never chase a lasher; past this they stay on whatever they were already hitting. Deliberately
 // tight: "nearby" has to mean the lasher came to the melee group, not that the group crosses the room.
@@ -890,24 +902,26 @@ constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
 // enough; the whole cluster has to be visible or the bot walks out of one and into the next.
 constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
 
-// Detonating Lasher corral. Threat cannot hold one - every 10s it wipes its threat list and charges a
-// uniformly random player within 80 yd - so the pack is gathered by walking it somewhere and pinned
-// there with a snare patch and a periodic root instead. 35 yd behind Freya, measured from her *home*
-// orientation because she turns to face whoever tanks her. The whole 35 yd ring around her spawn
-// probes on-mesh; at 50 yd the southern headings stop settling on the floor.
-constexpr float ULDUAR_FREYA_LASHER_CORRAL_DISTANCE = 35.0f;
-constexpr float ULDUAR_FREYA_LASHER_CORRAL_ARRIVE = 5.0f;   // close enough to count as delivered
-constexpr float ULDUAR_FREYA_LASHER_CORRAL_COMMIT = 12.0f;  // inside this a hurt dragger finishes the trip
-constexpr float ULDUAR_FREYA_LASHER_PACK_CLEAR = 16.0f;     // one yard past Detonate
+// Detonating Lasher wave. Nothing is tanked and nothing is ferried: the raid holds one camp, the
+// lashers come to it on their own, and the pack is AoE'd down together. Below FINISH_PCT the AoE stops
+// and the pack is picked off one at a time, so the 15 yd blasts land one by one instead of at once.
+//
+// PACK_RADIUS is MediumAoeTrigger's own 8 yd / 3 attackers, which is what actually decides whether
+// class AoE fires; PACK_CLEAR is one yard past Detonate, so a bot that steps out is clear of the whole
+// pile going off behind it.
+constexpr float ULDUAR_FREYA_LASHER_PACK_RADIUS = 8.0f;
+constexpr float ULDUAR_FREYA_LASHER_PACK_CLEAR = 16.0f;
+constexpr uint32 ULDUAR_FREYA_LASHER_PACK_MIN_COUNT = 3;
+constexpr float ULDUAR_FREYA_LASHER_FINISH_PCT = 20.0f;
 
 // Frost Nova is a 10 yd sphere centred on the caster, so this is also how close the mage has to stand
 // to the pack - inside Detonate range, which is why the nova node is followed out by the step-out one.
 constexpr float ULDUAR_FREYA_FROST_NOVA_RADIUS = 10.0f;
-constexpr uint32 ULDUAR_FREYA_LASHER_PACK_MIN_COUNT = 6;
 
-// Frost Trap lays its patch at the hunter's feet and the patch is 10 yd, so posting one Detonate
-// radius short of the corral covers the lane back to the raid while keeping the hunter out of the blast.
-constexpr float ULDUAR_FREYA_LASHER_TRAP_OFFSET = 16.0f;
+// How tight the camp holds. Ranged are pulled in harder because the ball has to fit inside one AoE;
+// healers get the slack, since they also have to stay in range of the melee group and the tanks.
+constexpr float ULDUAR_FREYA_RANGED_CAMP_TOLERANCE = 10.0f;
+constexpr float ULDUAR_FREYA_HEALER_CAMP_TOLERANCE = 15.0f;
 
 // Hodir.
 //
@@ -1575,25 +1589,36 @@ bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
 // shows up in the npc value lists.
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
 
-// Where a Detonating Lasher wave is gathered: ULDUAR_FREYA_LASHER_CORRAL_DISTANCE behind Freya. Read
-// from Creature::GetHomePosition, never the live orientation - she pivots to face whoever is tanking
-// her, which would swing the corral around the room. Returns Position() before Freya is found.
-Position GetFreyaLasherCorral(PlayerbotAI* botAI);
+// The bot the ranged half and the healers gather on: lowest-GUID living ranged DPS in the group on this
+// map, the same tie-break IsFreyaLasherTrapHunter uses, so every bot picks the same one with no shared
+// state. A live bot rather than a fixed point, so the camp is always on the mesh and always within
+// reach of what the raid is already shooting.
+Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI);
 
-// Where the trap hunter stands: on the line from the corral back toward Freya, one Detonate radius
-// short of it, so the Frost Trap patch covers the lane back to the raid from outside the blast.
-Position GetFreyaLasherTrapPost(PlayerbotAI* botAI);
+// The lasher with the most living lashers around it, lowest GUID breaking ties. The AoE-phase focus,
+// and the reason it is a focus at all: AoeTrigger counts attackers within 8 yd of the *current target*,
+// not of the bot, so the raid pointing at the middle of the pile is what makes class AoE fire.
+Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state);
 
-// Takes a point rather than a bot: the same count is wanted both around a bot (is this pile lethal)
-// and around the corral (is it full enough that nobody else should be ferrying to it).
+// Whether the pack around this point is ready for the staggered finish: at least PACK_MIN_COUNT lashers
+// inside PACK_RADIUS and every one of them at or below FINISH_PCT.
+bool IsFreyaLasherPackFinishing(FreyaWaveState const& state, Position const& centre);
+
+// The finishing pack within radius of this bot, or nullptr. Measured from the pack's own centre rather
+// than from the bot, which is what keeps the finish visible to a bot that has already stepped out of
+// it - the hunter's trap and the AoE hold both have to survive the step-out that precedes them.
+Unit* GetFreyaFinishingPackNear(PlayerbotAI* botAI, FreyaWaveState const& state, float radius);
+
+// Takes a point rather than a bot: the same count is wanted around a bot, around a candidate focus and
+// around the camp anchor.
 uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius);
 
-// The live lasher currently chasing this bot, or nullptr. The one bot it can actually walk somewhere.
-Unit* GetFreyaLasherChasing(Player* bot, FreyaWaveState const& state);
-
-// The one hunter that holds the trap post. Lowest GUID among living hunter bots in the group, the same
+// The one hunter that lays the Frost Trap. Lowest GUID among living hunter bots in the group, the same
 // tie-break GetFreyaRangedLasherFocus uses, so every bot agrees on it without any shared state.
 bool IsFreyaLasherTrapHunter(PlayerbotAI* botAI);
+
+// Freya is mid-cast on Ground Tremor. Matches both difficulty ids, since 62437 is the 10-man twin.
+bool IsFreyaGroundTremorCasting(Unit* boss);
 
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
 // Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
@@ -1841,6 +1866,13 @@ std::string GetMimironBombBotSnare(Player* bot);
 // a victim.
 float GetMimironBombBotApproach(Player* bot, Unit* bombBot);
 
+// The Bomb Bot chasing this bot, if any. It runs 8.0 yd/s against a player's 7.0 and detonates on
+// contact, so the one it is after cannot leave and has to shoot it down, while anyone else inside the
+// blast can step out and should. The DPS list and the sidestep both read this because each used to
+// defer to the other - one dropped the Bomb Bot below the blast radius, the other stood down whenever
+// one was in spell range - and a ranged bot inside 8 yd therefore did neither.
+Unit* GetMimironBombBotChasing(PlayerbotAI* botAI, Player* bot);
+
 // The mech the ranged formation is shaped around. Phase order is MK II, VX-001, Aerial Command Unit,
 // then all three together, and VX-001 is the one that stays parked once they reassemble.
 Unit* GetMimironRingFocus(PlayerbotAI* botAI);
@@ -1872,6 +1904,12 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee);
 // they are already standing on the Assault Bot when it dies, whereas the plain first-bot-in-group pick
 // is usually a ranged bot 22 yd out that never comes within loot range of anything.
 Player* GetMimironCoreCarrier(PlayerbotAI* botAI);
+
+// Seconds until the Laser Barrage ignites, or -1 when VX-001 is not spinning up. Spinning Up is a 4 s
+// channel on VX-001 and leaves no aura on it: 63414 sends effect 0 to the DB Target and effect 1 to the
+// MK II, and its third effect does nothing, so HasAura never answers true and the whole telegraph reads
+// as nothing at all. FindCurrentSpellBySpellId is what the encounter script itself polls.
+float GetMimironSpinningUpSeconds(Unit* vx001);
 
 // The P3Wx2 Laser Barrage cone as it will actually be, worked out live rather than latched. The beams
 // follow VX-001's facing, which the core repoints at NPC 33576 on every tick of the barrage aura, so

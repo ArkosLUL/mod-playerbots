@@ -389,12 +389,9 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya near nature bomb",
         { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
 
-    triggers.push_back(new TriggerNode(
-        "freya avoid detonating lasher",
-        { NextAction("freya avoid detonating lasher", ACTION_RAID + 3) }));
-
-    // Detonating Lasher corral. Order matters: nova the pile, then leave it, and only drag toward it
-    // from below both - an arrived dragger has to be able to step back out of what it just delivered.
+    // Detonating Lasher wave. Order is the doctrine: root the pile before anyone leaves it, then leave,
+    // then drop the snare - the trap below the step-out is what lands the patch on the exit lane rather
+    // than under the pack - and gather last, only when nothing urgent is asking.
     triggers.push_back(new TriggerNode(
         "freya frost nova lashers",
         { NextAction("freya frost nova lashers", ACTION_RAID + 4) }));
@@ -404,12 +401,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("freya lasher pack step out", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
-        "freya drag lasher to corral",
-        { NextAction("freya drag lasher to corral", ACTION_RAID + 2) }));
+        "freya trap lashers",
+        { NextAction("freya trap lashers", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
-        "freya trap lasher corral",
-        { NextAction("freya trap lasher corral", ACTION_RAID + 2) }));
+        "freya ranged camp",
+        { NextAction("freya ranged camp", ACTION_RAID) }));
 
     // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
     // pacified bot cannot swing at anything anyway.
@@ -446,6 +443,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "freya dodge unstable sun beam",
         { NextAction("freya dodge unstable sun beam", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya ground tremor hold cast",
+        { NextAction("freya ground tremor hold cast", ACTION_EMERGENCY + 2) }));
 
     //
     // Thorim
@@ -873,6 +874,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // floor stops a stray hit killing one member well ahead of the other two
     multipliers.push_back(new FreyaDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new FreyaTrioSyncMultiplier(botAI));
+    multipliers.push_back(new FreyaLasherFinishAoeMultiplier(botAI));
+    multipliers.push_back(new FreyaGroundTremorCastGateMultiplier(botAI));
 
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));

@@ -47,23 +47,10 @@ public:
 private:
     bool ParkConservator(Unit* conservator);
 
-    // Pure lasher wave: park at the corral and taunt whatever wanders off it. True means it owned the
-    // tick and the add ladder must not run, or the tank walks back to Freya.
-    bool HoldLasherCorral(FreyaWaveState const& state, Unit* currentTarget);
-
     // Latched for the spore's whole life. Fresh spores keep appearing 20 yd from wherever the
     // Conservator currently is, so re-deriving the destination every tick can flip it mid-walk and turn
     // the tank around.
     ObjectGuid parkedSpore;
-};
-
-// Step outside Detonate's blast when the bot is too low to survive it.
-class FreyaAvoidDetonatingLasherAction : public MovementAction
-{
-public:
-    FreyaAvoidDetonatingLasherAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya avoid detonating lasher") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
 };
 
 class FreyaMoveToHealingSporeAction : public MovementAction
@@ -89,17 +76,17 @@ private:
     Player* GetRedirectTank();
 };
 
-// Walk a lasher that has picked this bot out to the corral behind Freya. No threat handling: the add
-// is faster than the bot and follows on its own until its next 10s retarget.
-class FreyaDragLasherToCorralAction : public MovementAction
+// Gather the ranged half and the healers on the anchor bot so the lashers pile onto one spot the raid
+// can AoE. The lashers do the walking - a player cannot outrun one, let alone lead one.
+class FreyaRangedCampAction : public MovementAction
 {
 public:
-    FreyaDragLasherToCorralAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya drag lasher to corral") {}
+    FreyaRangedCampAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya ranged camp") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
 
-// Get out of a lethal pile of lashers. Also the return leg of the drag and the mage's exit after a nova.
+// Leave the pack once it is down to the finish, so the blasts land behind the bot one at a time.
 class FreyaLasherPackStepOutAction : public MovementAction
 {
 public:
@@ -108,7 +95,7 @@ public:
     bool isUseful() override;
 };
 
-// Root the corral. Runs above the step-out so the mage novas first and leaves second.
+// Root the pack for the finish. Runs above the step-out so the mage novas first and leaves second.
 class FreyaFrostNovaLashersAction : public Action
 {
 public:
@@ -117,11 +104,23 @@ public:
     bool isUseful() override;
 };
 
-// Keep a Frost Trap on the lane out of the corral.
-class FreyaTrapLasherCorralAction : public MovementAction
+// Snare the pack for the finish. Below the step-out on purpose: the hunter has already moved by the
+// time this fires, so the patch lands on the lane between the pack and the raid.
+class FreyaTrapLashersAction : public Action
 {
 public:
-    FreyaTrapLasherCorralAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya trap lasher corral") {}
+    FreyaTrapLashersAction(PlayerbotAI* botAI) : Action(botAI, "freya trap lashers") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Hard mode: stop a cast Ground Tremor is about to eat. Worth more than the mana it saves -
+// Spell::EffectInterruptCast only applies the 10s school lockout if it finds a cast to cut, so
+// stopping first dodges the lockout outright.
+class FreyaGroundTremorHoldCastAction : public Action
+{
+public:
+    FreyaGroundTremorHoldCastAction(PlayerbotAI* botAI) : Action(botAI, "freya ground tremor hold cast") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

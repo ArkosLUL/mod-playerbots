@@ -485,6 +485,74 @@ float FreyaTrioSyncMultiplier::GetValue(Action* action)
     return FreyaTrioSyncSuppress(state, AI_VALUE(Unit*, "current target")) ? 0.0f : 1.0f;
 }
 
+float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)
+{
+    if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
+        return 1.0f;
+
+    // Healing AoE is never held: the finish is exactly when the raid is topping up between blasts.
+    if (dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    if (!freya || !freya->IsAlive())
+        return 1.0f;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    // Held for as long as the bot is within a Detonate radius of the finish, which outlasts its own
+    // step-out: a bot that walked clear and kept casting Blizzard onto the pile would blow the whole
+    // pack up at once anyway, which is the thing this exists to stop.
+    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) ? 0.0f : 1.0f;
+}
+
+float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
+{
+    CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+    if (!spellAction || dynamic_cast<CastMeleeSpellAction*>(action) || bot->GetMapId() != ULDUAR_MAP_ID)
+        return 1.0f;
+
+    // The encounter's own hold action is what stops a cast already in flight; this only decides what
+    // is allowed to start.
+    if (action->getName() == "freya ground tremor hold cast")
+        return 1.0f;
+
+    uint32 const now = getMSTime();
+    if (now != cachedAtMs || !cachedAtMs)
+    {
+        cachedAtMs = now;
+        cachedRemainingMs = EvaluateWindow();
+    }
+
+    if (cachedRemainingMs <= 0)
+        return 1.0f;
+
+    uint32 const spellId = AI_VALUE2(uint32, "spell id", spellAction->getSpell());
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    if (!spellInfo)
+        return 1.0f;
+
+    // Anything that still lands before the tremor is worth starting, so the instants a locked-out bot
+    // would fall through to are never held - only the casts the interrupt would eat.
+    uint32 const castTime = spellInfo->CalcCastTime();
+    if (castTime == 0 && !spellInfo->IsChanneled())
+        return 1.0f;
+
+    return static_cast<int32>(castTime) < cachedRemainingMs ? 1.0f : 0.0f;
+}
+
+int32 FreyaGroundTremorCastGateMultiplier::EvaluateWindow()
+{
+    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    if (!IsFreyaGroundTremorCasting(boss))
+        return 0;
+
+    Spell* tremor = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+
+    return tremor ? tremor->GetCastTimeRemaining() : 0;
+}
+
 // Ignis the Furnace Master
 float IgnisMultiplier::GetValue(Action* action)
 {

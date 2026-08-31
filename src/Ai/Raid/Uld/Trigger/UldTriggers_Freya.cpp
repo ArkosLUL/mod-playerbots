@@ -60,35 +60,6 @@ bool FreyaRedirectThreatTrigger::IsActive()
     return boss && boss->IsAlive();
 }
 
-bool FreyaAvoidDetonatingLasherTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
-    if (!boss || !boss->IsAlive())
-        return false;
-
-    // Tanks eat the blast. They have the health for it, and a tank running mid-wave gives up whatever
-    // it is holding.
-    if (botAI->IsTank(bot))
-        return false;
-
-    if (bot->GetHealth() >= ULDUAR_FREYA_DETONATE_FLEE_HEALTH)
-        return false;
-
-    // A dragger this close has all but delivered its lasher. Pulling it off now wastes the whole trip
-    // and leaves the add loose next to the corral, so it commits and the pack step-out takes over on
-    // arrival.
-    Position const corral = GetFreyaLasherCorral(botAI);
-    if (corral != Position() && bot->GetExactDist2d(corral) <= ULDUAR_FREYA_LASHER_CORRAL_COMMIT)
-        return false;
-
-    Creature* lasher = bot->FindNearestCreature(NPC_DETONATING_LASHER, ULDUAR_FREYA_DETONATE_RADIUS);
-    if (!lasher || !lasher->IsAlive())
-        return false;
-
-    // The bot killing it is inside 15 yd by definition and cannot do its job anywhere else, so it stays.
-    return AI_VALUE(Unit*, "current target") != lasher;
-}
-
 bool FreyaMoveToHealingSporeTrigger::IsActive()
 {
     // Check for the Freya boss
@@ -156,48 +127,32 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     return false;
 }
 
-bool FreyaDragLasherToCorralTrigger::IsActive()
+bool FreyaRangedCampTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
         return false;
 
-    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRanged(bot) || botAI->IsHeal(bot)))
+    // Melee and tanks are already stacked on whatever they are hitting, and a tank that left the camp
+    // would take the boss or the Conservator with it.
+    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
         return false;
 
-    // The trap hunter has a post of its own, 16 yd short of the corral. Letting it ferry as well would
-    // shuttle it between the two spots and leave the snare patch to lapse.
-    if (IsFreyaLasherTrapHunter(botAI))
-        return false;
-
-    Position const corral = GetFreyaLasherCorral(botAI);
-    if (corral == Position())
-        return false;
-
-    if (bot->GetExactDist2d(corral) <= ULDUAR_FREYA_LASHER_CORRAL_ARRIVE)
+    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+    if (!anchor || anchor == bot)
         return false;
 
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
-
-    if (!GetFreyaLasherChasing(bot, state))
+    if (state.detonatingLashers.empty())
         return false;
 
-    // Two brakes, both against the same failure. A lasher chases whoever it picked, so a bot can never
-    // hand one over and walk away - it can only stand with it. Without these the bot ferries in, the
-    // pack step-out pushes it straight back out, and it shuttles the same add in and out all wave.
-    //
-    // Nothing is ferried into a pile this bot would have to flee.
-    if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_DETONATE_RADIUS) >=
-        ULDUAR_FREYA_LASHER_PACK_MIN_COUNT)
-    {
-        return false;
-    }
+    // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
+    // and pulling them all the way into the ball would leave the far half of the raid unhealed.
+    float const tolerance =
+        botAI->IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
 
-    // And nothing is ferried to a corral that already holds enough. The cap lifts itself as the pile
-    // dies, so the last few lashers still get collected.
-    return CountFreyaLashersNear(corral, state, ULDUAR_FREYA_DETONATE_RADIUS) <
-           ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+    return bot->GetExactDist2d(anchor) > tolerance;
 }
 
 bool FreyaLasherPackStepOutTrigger::IsActive()
@@ -206,15 +161,17 @@ bool FreyaLasherPackStepOutTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Tanks hold the corral; the off-tank being there is the point of it.
+    // Tanks stay: they survive the blasts, and a tank that ran mid-wave would drop whatever it holds.
     if (botAI->IsTank(bot) || !(PlayerbotAI::IsRanged(bot) || botAI->IsHeal(bot)))
         return false;
 
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_DETONATE_RADIUS) >=
-           ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+    // Only once the pack is at the finish. Leaving while it is still healthy would break the camp the
+    // AoE phase depends on, which is exactly what the old flee node did. PACK_CLEAR is where the action
+    // aims, so the node keeps asking until the bot is actually a Detonate radius clear.
+    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) != nullptr;
 }
 
 bool FreyaFrostNovaLashersTrigger::IsActive()
@@ -232,11 +189,12 @@ bool FreyaFrostNovaLashersTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) >=
-           ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+    // The nova is a sphere on the caster, so the mage has to be inside its own radius of the pack for
+    // this to reach anything.
+    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_FROST_NOVA_RADIUS) != nullptr;
 }
 
-bool FreyaTrapLasherCorralTrigger::IsActive()
+bool FreyaTrapLashersTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
@@ -245,19 +203,24 @@ bool FreyaTrapLasherCorralTrigger::IsActive()
     if (!IsFreyaLasherTrapHunter(botAI))
         return false;
 
+    if (!botAI->CanCastSpell("frost trap", bot))
+        return false;
+
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
-    if (state.detonatingLashers.empty())
+
+    // PACK_CLEAR, not the pack's own radius: this node sits below the step-out, so by the time it fires
+    // the hunter has left the pile - and dropping the patch where it now stands is the whole point.
+    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) != nullptr;
+}
+
+bool FreyaGroundTremorHoldCastTrigger::IsActive()
+{
+    if (!IsFreyaHardModeActive(botAI))
         return false;
 
-    Position const post = GetFreyaLasherTrapPost(botAI);
-    if (post == Position())
+    if (!IsFreyaGroundTremorCasting(GetFirstAliveUnitByEntry(botAI, NPC_FREYA)))
         return false;
 
-    // Walking to the post counts as work, so the node stays active while out of place even with the
-    // trap on cooldown - otherwise the hunter only ever starts the trip on the tick the trap comes up.
-    if (bot->GetExactDist2d(post) > ULDUAR_FREYA_LASHER_CORRAL_ARRIVE)
-        return true;
-
-    return botAI->CanCastSpell("frost trap", bot);
+    return bot->HasUnitState(UNIT_STATE_CASTING);
 }

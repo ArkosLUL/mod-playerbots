@@ -1757,52 +1757,28 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
     return positions;
 }
 
-Position GetFreyaLasherCorral(PlayerbotAI* botAI)
+Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
-    Creature* creature = freya ? freya->ToCreature() : nullptr;
-    if (!creature)
-        return Position();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return PlayerbotAI::IsRangedDps(bot) ? bot : nullptr;
 
-    // Home position, not the live one. Freya never walks, but she pivots to face her tank, and reading
-    // GetOrientation() would swing the corral around the room every time the tank stepped.
-    Position const& home = creature->GetHomePosition();
-    float const angle = home.GetOrientation() + static_cast<float>(M_PI);
+    Player* anchor = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
 
-    float x = home.GetPositionX() + ULDUAR_FREYA_LASHER_CORRAL_DISTANCE * std::cos(angle);
-    float y = home.GetPositionY() + ULDUAR_FREYA_LASHER_CORRAL_DISTANCE * std::sin(angle);
-    float z = home.GetPositionZ();
+        if (!GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsRangedDps(member))
+            continue;
 
-    // Height only, no collision raycast. Several triggers read this every tick for every bot, and the
-    // Conservatory floor is open: all 16 headings of the 35 yd ring around her spawn probe on-mesh, so
-    // the raycast would cost a path generation per bot per tick to confirm what the terrain already is.
-    bot->UpdateAllowedPositionZ(x, y, z);
+        if (!anchor || member->GetGUID() < anchor->GetGUID())
+            anchor = member;
+    }
 
-    return Position(x, y, z);
-}
-
-Position GetFreyaLasherTrapPost(PlayerbotAI* botAI)
-{
-    Position const corral = GetFreyaLasherCorral(botAI);
-    if (corral == Position())
-        return Position();
-
-    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
-    Creature* creature = freya ? freya->ToCreature() : nullptr;
-    if (!creature)
-        return Position();
-
-    Player* bot = botAI->GetBot();
-    Position const& home = creature->GetHomePosition();
-    float const angle = corral.GetAngle(&home);
-
-    float x = corral.GetPositionX() + ULDUAR_FREYA_LASHER_TRAP_OFFSET * std::cos(angle);
-    float y = corral.GetPositionY() + ULDUAR_FREYA_LASHER_TRAP_OFFSET * std::sin(angle);
-    float z = corral.GetPositionZ();
-    bot->UpdateAllowedPositionZ(x, y, z);
-
-    return Position(x, y, z);
+    return anchor;
 }
 
 uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius)
@@ -1817,15 +1793,72 @@ uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state
     return count;
 }
 
-Unit* GetFreyaLasherChasing(Player* bot, FreyaWaveState const& state)
+Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state)
 {
+    Unit* best = nullptr;
+    uint32 bestCount = 0;
+
     for (Unit* lasher : state.detonatingLashers)
     {
-        if (lasher && lasher->IsAlive() && lasher->GetVictim() == bot)
-            return lasher;
+        if (!lasher || !lasher->IsAlive())
+            continue;
+
+        uint32 const count = CountFreyaLashersNear(lasher->GetPosition(), state, ULDUAR_FREYA_LASHER_PACK_RADIUS);
+
+        // GUID breaks the tie so a wave of evenly spread lashers does not resolve differently per bot,
+        // which would split the raid's AoE across two piles and fire neither.
+        if (!best || count > bestCount || (count == bestCount && lasher->GetGUID() < best->GetGUID()))
+        {
+            best = lasher;
+            bestCount = count;
+        }
     }
 
-    return nullptr;
+    return best;
+}
+
+bool IsFreyaLasherPackFinishing(FreyaWaveState const& state, Position const& centre)
+{
+    uint32 count = 0;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive())
+            continue;
+
+        if (centre.GetExactDist2d(lasher->GetPosition()) > ULDUAR_FREYA_LASHER_PACK_RADIUS)
+            continue;
+
+        // One healthy lasher in the pile means the raid is still in the AoE phase: novaing and walking
+        // out now would leave it alive behind the snare with nobody near enough to finish it.
+        if (lasher->GetHealthPct() > ULDUAR_FREYA_LASHER_FINISH_PCT)
+            return false;
+
+        ++count;
+    }
+
+    return count >= ULDUAR_FREYA_LASHER_PACK_MIN_COUNT;
+}
+
+Unit* GetFreyaFinishingPackNear(PlayerbotAI* botAI, FreyaWaveState const& state, float radius)
+{
+    Unit* focus = GetFreyaLasherPackFocus(state);
+    if (!focus || botAI->GetBot()->GetExactDist2d(focus) > radius)
+        return nullptr;
+
+    return IsFreyaLasherPackFinishing(state, focus->GetPosition()) ? focus : nullptr;
+}
+
+bool IsFreyaGroundTremorCasting(Unit* boss)
+{
+    if (!boss || !boss->HasUnitState(UNIT_STATE_CASTING))
+        return false;
+
+    Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!spell)
+        return false;
+
+    return spell->m_spellInfo->Id == SPELL_FREYA_GROUND_TREMOR_10 ||
+           spell->m_spellInfo->Id == SPELL_FREYA_GROUND_TREMOR_25;
 }
 
 bool IsFreyaLasherTrapHunter(PlayerbotAI* botAI)
@@ -3308,18 +3341,33 @@ Position MimironOrbitAhead(Position const& now, float seconds)
 }
 }  // namespace
 
+float GetMimironSpinningUpSeconds(Unit* vx001)
+{
+    if (!vx001)
+        return -1.0f;
+
+    Spell* spinningUp = vx001->FindCurrentSpellBySpellId(SPELL_SPINNING_UP);
+    if (!spinningUp)
+        return -1.0f;
+
+    // Clamped. The channel timer is decremented before the tick that ends the channel, so the last pass
+    // can read a negative, and a negative here would predict the ignition backwards.
+    return std::max(0.0f, static_cast<float>(spinningUp->GetCastTimeRemaining()) / 1000.0f);
+}
+
 MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001)
 {
     MimironBarrageWindow window;
     if (!bot || !vx001)
         return window;
 
-    // Spinning Up is a 4 s aura whose single tick starts the barrage, and the barrage aura then runs
-    // 10 s. Reading both durations rather than assuming them is what makes the model survive a bot
-    // joining the fight mid-cast.
+    // Spinning Up is a 4 s channel that ends by starting the barrage, and the barrage aura then runs
+    // 10 s. Reading both live rather than assuming them is what makes the model survive a bot joining
+    // the fight mid-cast.
     float fire = ULDUAR_MIMIRON_BARRAGE_FIRE_SECONDS;
-    if (Aura* spinningUp = vx001->GetAura(SPELL_SPINNING_UP))
-        window.untilLive = static_cast<float>(spinningUp->GetDuration()) / 1000.0f;
+    float const spinning = GetMimironSpinningUpSeconds(vx001);
+    if (spinning >= 0.0f)
+        window.untilLive = spinning;
     else if (Aura* barrage = vx001->GetAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1))
         fire = static_cast<float>(barrage->GetDuration()) / 1000.0f;
     else
@@ -3422,9 +3470,14 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
     float const twoPi = 2.0f * static_cast<float>(M_PI);
 
     // Extend the band by the sweep the leg will not be able to react to. The band only grows on the
-    // trailing side - that is the edge coming toward a bot standing still.
+    // trailing side - that is the edge coming toward a bot standing still. Nothing to add while the
+    // boss is still spinning up: the band is fixed in world space until it ignites and `sweep` already
+    // spans the whole fire, so growing it again would refuse bearings that are clear. The dodge zeroes
+    // its own sweep rate for the same window, and the two have to agree or a flee walks into a spot the
+    // dodge just called safe.
+    float const rate = window.untilLive > 0.0f ? 0.0f : window.rate;
     float const grown =
-        std::min(window.sweep + window.rate * std::max(travelSeconds, 0.0f), twoPi - 2.0f * clearance);
+        std::min(window.sweep + rate * std::max(travelSeconds, 0.0f), twoPi - 2.0f * clearance);
 
     float const cw = Position::NormalizeOrientation(
         window.lead - vx001->GetAngle(dest.GetPositionX(), dest.GetPositionY()));
@@ -3444,6 +3497,24 @@ std::string GetMimironBombBotSnare(Player* bot)
         case CLASS_WARLOCK: return "curse of exhaustion";
         default:            return "";
     }
+}
+
+Unit* GetMimironBombBotChasing(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+        return nullptr;
+
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_BOMB_BOT)
+            continue;
+
+        if (ServerFacade::instance().GetChaseTarget(unit) == bot)
+            return unit;
+    }
+
+    return nullptr;
 }
 
 float GetMimironBombBotApproach(Player* bot, Unit* bombBot)
@@ -3678,11 +3749,18 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (parts.empty())
         return nullptr;
 
+    // Banded, and ties broken by the fixed entry order the parts are collected in. Both halves matter:
+    // the band stops the two ground mechs trading the lead several times a second while the raid burns
+    // them level, and deriving the answer from state alone is what keeps the tank node, this node and
+    // the pets on the same part - a per-bot "what was I on last tick" would let the three disagree.
     auto const highest = [](std::vector<Unit*> const& candidates) -> Unit*
     {
+        auto const band = [](Unit* unit)
+        { return static_cast<int32>(unit->GetHealthPct() / ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT); };
+
         Unit* best = nullptr;
         for (Unit* candidate : candidates)
-            if (!best || candidate->GetHealthPct() > best->GetHealthPct())
+            if (!best || band(candidate) > band(best))
                 best = candidate;
 
         return best;
@@ -3987,6 +4065,19 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     {
         branch = "stagemelee";
         return GetMimironStagingMeleeSlot(bot, group, focus, out, index, count);
+    }
+
+    // Phase 3 tank spot, and the reason is the Magnetic Core rather than the tanking. The Aerial
+    // Command Unit hovers directly over whoever holds it and the core summons underneath the unit
+    // rather than under the player who places it, so wherever the tank stands when a core lands is
+    // where the raid spends the next 20 s. Left to chase, tank and unit converge wherever the last
+    // Bomb Bot sidestep happened to leave them: one kill grounded it 16.8 yd off centre and put 7 to
+    // 12 of 25 past casting range for both windows.
+    if (PlayerbotAI::IsMainTank(bot) && focus->GetEntry() == NPC_AERIAL_COMMAND_UNIT)
+    {
+        branch = "p3tank";
+        out = ULDUAR_MIMIRON_ROOM_CENTER;
+        return true;
     }
 
     if (focus->GetEntry() == NPC_AERIAL_COMMAND_UNIT)

@@ -74,14 +74,14 @@ public:
         creators["freya set dps priority"] = &RaidUlduarActionContext::freya_set_dps_priority;
         creators["freya tank adds"] = &RaidUlduarActionContext::freya_tank_adds;
         creators["freya redirect threat"] = &RaidUlduarActionContext::freya_redirect_threat;
-        creators["freya avoid detonating lasher"] = &RaidUlduarActionContext::freya_avoid_detonating_lasher;
         creators["freya move to healing spore action"] = &RaidUlduarActionContext::freya_move_to_healing_spore_action;
         creators["freya break iron roots"] = &RaidUlduarActionContext::freya_break_iron_roots;
         creators["freya dodge unstable sun beam"] = &RaidUlduarActionContext::freya_dodge_unstable_sun_beam;
-        creators["freya drag lasher to corral"] = &RaidUlduarActionContext::freya_drag_lasher_to_corral;
+        creators["freya ranged camp"] = &RaidUlduarActionContext::freya_ranged_camp;
         creators["freya lasher pack step out"] = &RaidUlduarActionContext::freya_lasher_pack_step_out;
         creators["freya frost nova lashers"] = &RaidUlduarActionContext::freya_frost_nova_lashers;
-        creators["freya trap lasher corral"] = &RaidUlduarActionContext::freya_trap_lasher_corral;
+        creators["freya trap lashers"] = &RaidUlduarActionContext::freya_trap_lashers;
+        creators["freya ground tremor hold cast"] = &RaidUlduarActionContext::freya_ground_tremor_hold_cast;
         creators["thorim frost resistance action"] = &RaidUlduarActionContext::thorim_frost_resistance_action;
         creators["thorim nature resistance action"] = &RaidUlduarActionContext::thorim_nature_resistance_action;
         creators["thorim unbalancing strike action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_action;
@@ -241,14 +241,14 @@ private:
     static Action* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityAction(ai); }
     static Action* freya_tank_adds(PlayerbotAI* ai) { return new FreyaTankAddsAction(ai); }
     static Action* freya_redirect_threat(PlayerbotAI* ai) { return new FreyaRedirectThreatAction(ai); }
-    static Action* freya_avoid_detonating_lasher(PlayerbotAI* ai) { return new FreyaAvoidDetonatingLasherAction(ai); }
     static Action* freya_move_to_healing_spore_action(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeAction(ai); }
     static Action* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsAction(ai); }
     static Action* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamAction(ai); }
-    static Action* freya_drag_lasher_to_corral(PlayerbotAI* ai) { return new FreyaDragLasherToCorralAction(ai); }
+    static Action* freya_ranged_camp(PlayerbotAI* ai) { return new FreyaRangedCampAction(ai); }
     static Action* freya_lasher_pack_step_out(PlayerbotAI* ai) { return new FreyaLasherPackStepOutAction(ai); }
     static Action* freya_frost_nova_lashers(PlayerbotAI* ai) { return new FreyaFrostNovaLashersAction(ai); }
-    static Action* freya_trap_lasher_corral(PlayerbotAI* ai) { return new FreyaTrapLasherCorralAction(ai); }
+    static Action* freya_trap_lashers(PlayerbotAI* ai) { return new FreyaTrapLashersAction(ai); }
+    static Action* freya_ground_tremor_hold_cast(PlayerbotAI* ai) { return new FreyaGroundTremorHoldCastAction(ai); }
     static Action* thorim_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "thorim"); }
     static Action* thorim_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "thorim"); }
     static Action* thorim_unbalancing_strike_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeAction(ai); }
