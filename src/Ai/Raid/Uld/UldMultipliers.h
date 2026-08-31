@@ -379,6 +379,22 @@ public:
     float GetValue(Action* action) override;
 };
 
+// The encounter picks every non-tank target in phase 1, so the generic pickers have to stand down.
+// Without this they do not lose - they alternate: the trigger below goes quiet the moment the bot
+// already holds the pick, the engine falls through to "dps assist" at 50, and that retargets. Next
+// tick the raid node wins it back. A traced arena squad switched target twice a second all fight and
+// its melee were in range of their own target 30-46% of the time, against 59-60% in the corridor,
+// where the two happen to agree and nothing oscillates.
+class ThorimDisableAutomaticTargetingMultiplier : public Multiplier
+{
+public:
+    ThorimDisableAutomaticTargetingMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "thorim disable automatic targeting")
+    {
+    }
+    float GetValue(Action* action) override;
+};
+
 // Without this the leash and the chase take turns: the leash walks the bot back, the picker still
 // holds the corridor mob, and it walks straight out again. Zeroing the attack drops the target instead.
 class ThorimArenaTargetGuardMultiplier : public Multiplier

@@ -471,6 +471,11 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim dps priority trigger",
         { NextAction("thorim dps priority action", ACTION_RAID) }));
 
+    // Recalls a pet, not the bot, so it competes with nothing and sits at the base rank.
+    triggers.push_back(new TriggerNode(
+        "thorim pet leash trigger",
+        { NextAction("thorim pet leash action", ACTION_RAID) }));
+
     triggers.push_back(new TriggerNode(
         "thorim gauntlet positioning trigger",
         { NextAction("thorim gauntlet positioning action", ACTION_RAID) }));
@@ -842,9 +847,11 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new IronAssemblyDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new IronAssemblyMovementGuardMultiplier(botAI));
 
-    // Thorim keeps a bailing melee out of the Runic Barrier damage shield, and stops the generic
-    // movers collapsing the three phase 2 melee stacks back into one Chain Lightning arc
+    // Thorim keeps a bailing melee out of the Runic Barrier damage shield, picks every non-tank
+    // target in code so the generic pickers have to be shut out, and stops the generic movers
+    // collapsing the three phase 2 melee stacks back into one Chain Lightning arc
     multipliers.push_back(new ThorimRunicBarrierMultiplier(botAI));
+    multipliers.push_back(new ThorimDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new ThorimMovementGuardMultiplier(botAI));
     multipliers.push_back(new ThorimArenaLeashMultiplier(botAI));
     multipliers.push_back(new ThorimArenaTargetGuardMultiplier(botAI));

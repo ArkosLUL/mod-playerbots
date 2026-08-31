@@ -172,6 +172,7 @@ public:
         creators["thorim lightning charge action"] = &RaidUlduarActionContext::thorim_lightning_charge_action;
         creators["thorim reset encounter state action"] = &RaidUlduarActionContext::thorim_reset_encounter_state_action;
         creators["thorim charged orb action"] = &RaidUlduarActionContext::thorim_charged_orb_action;
+        creators["thorim pet leash action"] = &RaidUlduarActionContext::thorim_pet_leash_action;
         creators["thorim arena leash action"] = &RaidUlduarActionContext::thorim_arena_leash_action;
         creators["mimiron dodge flames action"] = &RaidUlduarActionContext::mimiron_dodge_flames_action;
         creators["mimiron frost bomb action"] = &RaidUlduarActionContext::mimiron_frost_bomb_action;
@@ -339,6 +340,7 @@ private:
     static Action* thorim_lightning_charge_action(PlayerbotAI* ai) { return new ThorimLightningChargeAction(ai); }
     static Action* thorim_reset_encounter_state_action(PlayerbotAI* ai) { return new ThorimResetEncounterStateAction(ai); }
     static Action* thorim_charged_orb_action(PlayerbotAI* ai) { return new ThorimChargedOrbAction(ai); }
+    static Action* thorim_pet_leash_action(PlayerbotAI* ai) { return new ThorimPetLeashAction(ai); }
     static Action* thorim_arena_leash_action(PlayerbotAI* ai) { return new ThorimArenaLeashAction(ai); }
     static Action* mimiron_dodge_flames_action(PlayerbotAI* ai) { return new MimironDodgeFlamesAction(ai); }
     static Action* mimiron_frost_bomb_action(PlayerbotAI* ai) { return new MimironFrostBombAction(ai); }

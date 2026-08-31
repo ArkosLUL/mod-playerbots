@@ -2035,6 +2035,12 @@ constexpr float ULDUAR_THORIM_DPS_TARGET_RANGE = 50.0f;
 // distance away and the bot never finishes a cast.
 constexpr float ULDUAR_THORIM_TARGET_SWITCH_MARGIN = 8.0f;
 
+// How far a melee bot will go for a higher-priority add before settling for the next tier down. Arena
+// adds land 19-24 yd from the centre and a Champion is on somebody a second or two later, so anything
+// past this has moved twice by the time the bot arrives. Ranged have no such limit - they hit an
+// Evoker from where they already stand, and it is melee that were measured spending the fight running.
+constexpr float ULDUAR_THORIM_MELEE_TARGET_REACH = 15.0f;
+
 // spell_cone gives 62466 a 75 degree arc at 150 yd. The margin covers Thorim re-orienting onto the
 // orb between the tick that picks a rotation and the tick the bot finishes walking it.
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;   // 75 degrees

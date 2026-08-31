@@ -102,6 +102,16 @@ public:
     bool isUseful() override;
 };
 
+// Sends a strayed pet back to the arena. Not a MovementAction: it moves the pet, not the bot, so it
+// has no business in the movement guards or the leash exemption lists.
+class ThorimPetLeashAction : public Action
+{
+public:
+    ThorimPetLeashAction(PlayerbotAI* ai) : Action(ai, "thorim pet leash action") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 // Steps out of the charged Thunder Orb's field, by the shortest way out rather than across the room.
 class ThorimChargedOrbAction : public MovementAction
 {

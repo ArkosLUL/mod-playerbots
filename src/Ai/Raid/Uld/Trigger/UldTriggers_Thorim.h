@@ -89,6 +89,15 @@ public:
     bool IsActive() override;
 };
 
+// An arena squad member whose pet has left the room. Pets are under no leash of their own and nothing
+// recalls them, so one that wanders down the corridor opens packs the gauntlet squad has not reached.
+class ThorimPetLeashTrigger : public Trigger
+{
+public:
+    ThorimPetLeashTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim pet leash trigger") {}
+    bool IsActive() override;
+};
+
 // An arena squad member that has left the box the boss script scans, or is on its way out of it.
 class ThorimArenaLeashTrigger : public Trigger
 {

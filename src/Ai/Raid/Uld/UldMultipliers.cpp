@@ -376,6 +376,31 @@ float ThorimArenaLeashMultiplier::GetValue(Action* action)
     return ThorimArenaLeashBreached(botAI, bot) ? 0.0f : 1.0f;
 }
 
+float ThorimDisableAutomaticTargetingMultiplier::GetValue(Action* action)
+{
+    if (!action || botAI->GetState() != BOT_STATE_COMBAT)
+        return 1.0f;
+
+    // TankAssistAction is deliberately not in scope, even though ThorimIsTargetSelectionAction covers
+    // it: the encounter has no tank-targeting node to put in its place, and a tank steered onto the
+    // ranged pick is worse than a tank on whatever is currently hitting the raid.
+    if (!dynamic_cast<DpsAssistAction*>(action) && !dynamic_cast<DpsAoeAction*>(action) &&
+        !dynamic_cast<AggressiveTargetAction*>(action) && !dynamic_cast<AttackAnythingAction*>(action) &&
+        !dynamic_cast<AttackLeastHpTargetAction*>(action))
+        return 1.0f;
+
+    // The two roles the picker does not steer. A healer's target drives its wand and its offensive
+    // dispels, and the trigger leaves it alone for that reason, so taking the generic picker away too
+    // would leave it with nothing to hold.
+    if (botAI->IsHeal(bot) || botAI->IsTank(bot))
+        return 1.0f;
+
+    // Only while the encounter actually has an answer. GetThorimDpsTarget returns nothing whenever no
+    // tier has a candidate inside the arena box, and zeroing every picker in that state strands the
+    // bot with no target source at all.
+    return ThorimHasDpsTarget(botAI, bot) ? 0.0f : 1.0f;
+}
+
 float ThorimArenaTargetGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

@@ -10,6 +10,8 @@
 #include "DBCEnums.h"
 #include "Group.h"
 #include "Map.h"
+#include "MotionMaster.h"
+#include "PetDefines.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -660,25 +662,71 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
         return NoteThorimDpsTarget(bot, targets.runeGiant);
     }
 
-    // Arena. Acolyte and Evoker first because they heal and shield the wave back up; Champion and
-    // Warbringer next because between them they are most of the damage the squad takes; Commoner last,
-    // because it barely hits and killing one buys nothing.
-    std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.evokers,
-                                                          &targets.champions, &targets.warbringers,
-                                                          &targets.commoners};
+    // Arena. Acolytes first whoever is asking - they come with the wave and heal it back up. After
+    // that the roles part company: a caster kills an Evoker from where it already stands, while a
+    // melee sent across the room at one walks straight past the Champion doing 41% of the damage the
+    // squad takes. Commoner is last either way; it barely hits and killing one buys nothing.
+    bool const melee = PlayerbotAI::IsMelee(bot);
+    using TierOrder = std::array<std::vector<Unit*> const*, 5>;
+    TierOrder const meleeTiers = {&targets.acolytes, &targets.champions, &targets.warbringers,
+                                  &targets.evokers, &targets.commoners};
+    TierOrder const rangedTiers = {&targets.acolytes, &targets.evokers, &targets.champions,
+                                   &targets.warbringers, &targets.commoners};
+    TierOrder const& tiers = melee ? meleeTiers : rangedTiers;
 
-    for (auto const* tier : tiers)
+    // Melee measure from themselves, exactly as the corridor branch above does, so a tier hands back
+    // its nearest rather than whichever one is deepest in the pile. Ranged keep the centre, and that
+    // shared pivot is what has them all focus the same unit.
+    Position const& pivot = melee ? static_cast<Position const&>(*bot) : ULDUAR_THORIM_NEAR_ARENA_CENTER;
+
+    // Two passes for melee. The first skips any tier with nothing within reach, so a Champion standing
+    // on the bot beats an Evoker across the room; the second drops that test, so a melee bot with an
+    // empty patch around it still commits to the raid's focus rather than standing idle. Ranged run
+    // one pass - they have no reach limit to relax.
+    for (int pass = 0; pass < (melee ? 2 : 1); ++pass)
     {
-        std::vector<Unit*> inside;
-        for (Unit* candidate : *tier)
-            if (ThorimInArenaBox(candidate))
-                inside.push_back(candidate);
+        bool const limitReach = melee && pass == 0;
 
-        if (Unit* pick = SelectThorimTierTarget(currentTarget, inside, ULDUAR_THORIM_NEAR_ARENA_CENTER))
-            return NoteThorimDpsTarget(bot, pick);
+        for (auto const* tier : tiers)
+        {
+            std::vector<Unit*> inside;
+            for (Unit* candidate : *tier)
+            {
+                if (!ThorimInArenaBox(candidate))
+                    continue;
+
+                if (limitReach && bot->GetExactDist2d(candidate) > ULDUAR_THORIM_MELEE_TARGET_REACH)
+                    continue;
+
+                inside.push_back(candidate);
+            }
+
+            if (Unit* pick = SelectThorimTierTarget(currentTarget, inside, pivot))
+                return NoteThorimDpsTarget(bot, pick);
+        }
     }
 
     return NoteThorimDpsTarget(bot, nullptr);
+}
+
+bool ThorimHasDpsTarget(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !NearThorimEncounter(bot))
+        return false;
+
+    // Both gates matter for a cached read: the entry survives the pull that wrote it, so without them
+    // a stale guid from the last attempt would shut the generic picker down on a bot the encounter is
+    // no longer steering.
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    auto const itr = state->dpsTargets.find(bot->GetGUID());
+    return itr != state->dpsTargets.end() && !itr->second.IsEmpty();
 }
 
 void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot)
@@ -905,6 +953,96 @@ bool ThorimInArenaBox(WorldObject const* who)
     return x > ULDUAR_THORIM_ARENA_BOX_MIN_X && x < ULDUAR_THORIM_ARENA_BOX_MAX_X &&
            y > ULDUAR_THORIM_ARENA_BOX_MIN_Y && y < ULDUAR_THORIM_ARENA_BOX_MAX_Y &&
            who->GetPositionZ() < ULDUAR_THORIM_ARENA_BOX_MAX_Z;
+}
+
+namespace
+{
+
+// How long before a pet that is still outside may be told again. MoveFollow restarts the walk, so a
+// command every tick leaves the pet running on the spot and never arriving.
+constexpr uint32 ULDUAR_THORIM_PET_RECALL_INTERVAL_MS = 2000;
+
+}  // namespace
+
+bool ThorimStrayArenaPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out)
+{
+    out.clear();
+
+    if (!botAI || !bot || !ThorimSplitActive(botAI))
+        return false;
+
+    if (GetThorimSquad(botAI, bot) != ThorimSquad::Arena)
+        return false;
+
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    Position const& centre = ULDUAR_THORIM_NEAR_ARENA_CENTER;
+
+    for (Unit* pet : bot->m_Controlled)
+    {
+        // GetPet() would miss most of what matters here: a Frost death knight's Raise Dead, Feral
+        // Spirits and Army are guardians, not pets. Totems are skipped the other way - a shaman drops
+        // four, none of them move, and none of them can pull anything.
+        if (!pet || !pet->IsAlive() || pet->IsTotem())
+            continue;
+
+        if (!pet->IsPet() && !pet->IsGuardian())
+            continue;
+
+        if (!pet->IsInWorld() || pet->GetMapId() != bot->GetMapId())
+            continue;
+
+        // The same boundary the owner is held to. A pet chasing an add that landed 24 yd out is doing
+        // its job; this only catches the ones that have left the room.
+        if (ThorimInArenaBox(pet) &&
+            pet->GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) <= ULDUAR_THORIM_ARENA_LEASH_RADIUS)
+            continue;
+
+        // Time-based rather than a "already told it" latch, which would never fire twice for a pet
+        // that strays, comes home and strays again.
+        auto const sent = state->petRecallMs.find(pet->GetGUID());
+        if (sent != state->petRecallMs.end() &&
+            GetMSTimeDiffToNow(sent->second) < ULDUAR_THORIM_PET_RECALL_INTERVAL_MS)
+            continue;
+
+        out.push_back(pet);
+    }
+
+    return !out.empty();
+}
+
+void ThorimRecallPet(Player* bot, Unit* pet)
+{
+    if (!bot || !pet)
+        return;
+
+    ThorimEncounterState* state = FindState(bot);
+    if (!state)
+        return;
+
+    state->petRecallMs[pet->GetGUID()] = getMSTime();
+    state->petRecalls[bot->GetGUID()] = pet->GetGUID();
+
+    pet->AttackStop();
+    pet->CastStop();
+    pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
+
+    // A guardian can have no CharmInfo at all, and for those the stop and the walk above are the whole
+    // recall. PetAI::CanAttack reads COMMAND_FOLLOW as "attack nothing while returning" and lets the
+    // pet fight again the moment IsReturning clears, so this holds it only for the walk home.
+    CharmInfo* charmInfo = pet->GetCharmInfo();
+    if (!charmInfo)
+        return;
+
+    charmInfo->SetCommandState(COMMAND_FOLLOW);
+    charmInfo->SetIsCommandAttack(false);
+    charmInfo->SetIsAtStay(false);
+    charmInfo->SetIsReturning(true);
+    charmInfo->SetIsCommandFollow(true);
+    charmInfo->SetIsFollowing(false);
+    charmInfo->RemoveStayPosition();
 }
 
 bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot)
@@ -1486,6 +1624,13 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->orbScanMs = 0;
     state->orbScanSpell = 0;
     state->orbEscapes.erase(bot->GetGUID());
+    state->petRecalls.erase(bot->GetGUID());
+
+    // Per pet rather than clearing the map: the rest of it belongs to the other bots in the instance,
+    // who are not resetting.
+    for (Unit* pet : bot->m_Controlled)
+        if (pet)
+            state->petRecallMs.erase(pet->GetGUID());
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;
 

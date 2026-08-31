@@ -77,6 +77,15 @@ struct ThorimEncounterState
     // Bots the arena node took "follow master" away from, so the reset can hand it back.
     RaidObs::ObsGuidSet followMasterStripped{"thorim.followstripped"};
 
+    // Which pet was last sent back to its owner. Keyed by owner, because that is what a reader has:
+    // pets carry no snapshot row, so this note is the only place a trace says a pet left the arena.
+    RaidObs::ObsGuidMap<ObjectGuid> petRecalls{"thorim.petrecall"};
+
+    // When each pet was last told to come home. Re-issuing MoveFollow every tick restarts the walk and
+    // the pet never arrives, and a plain "already commanded" latch would never fire twice for a pet
+    // that strays, comes back and strays again. Keyed by pet, so one stray pet cannot mute another.
+    std::unordered_map<ObjectGuid, uint32> petRecallMs;
+
     // Phase 1 arrival latch. Its own set rather than ringArrived below: the two phases are mutually
     // exclusive on the z threshold today, and sharing a latch across that is a trap waiting for the
     // first time it stops being true.
@@ -152,6 +161,11 @@ bool ThorimDpsTargetAllowed(PlayerbotAI* botAI, Unit* target);
 // runs and IsHighPriority pins it - so a wrong mark cannot be corrected until the bot leaves combat.
 Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget);
 
+// Whether the encounter had a target for this bot on its last pass. Reads the answer GetThorimDpsTarget
+// already cached rather than working it out again: the targeting guard asks per action per tick, and
+// re-walking the candidate list that often is a grid-list walk nobody needs.
+bool ThorimHasDpsTarget(PlayerbotAI* botAI, Player* bot);
+
 // Drops the icons and the pinned target left over from an earlier pull or an earlier target. Both
 // outlive the thing they were set for: an icon sits on the group until somebody overwrites it, and
 // "prioritized targets" is only reset when a bot leaves combat, so until this runs a bot can be held
@@ -213,6 +227,18 @@ bool ThorimInArenaBox(WorldObject const* who);
 // Melee are held to the tank spot and everyone else to the wider box radius, because melee are the
 // only ones who have to walk out to an add at all.
 bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot);
+
+// Pets of an arena-squad bot that have left the room, and are not already walking back. Nothing in
+// this codebase ever recalls a pet, so one that ends up chasing something down the corridor stays
+// there, pulling packs the gauntlet squad has not reached.
+//
+// A boundary and nothing else: this asks where the pet is, never what is standing on it. Pets have
+// the resistances and damage reduction to eat this fight, and none of this steers one around a hazard.
+bool ThorimStrayArenaPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
+
+// Sends one strayed pet home and records it. Recall only - it never commands an attack, so it cannot
+// undo a stay or a follow the way the pet-attack trigger CombatStrategy dropped used to.
+void ThorimRecallPet(Player* bot, Unit* pet);
 
 // Where this bot stands in the arena. The tank holds the centre, ranged and healers get a ring slot
 // around him, and melee get the centre only while out of combat - pinning them in the fight would

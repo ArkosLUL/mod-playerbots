@@ -171,6 +171,7 @@ public:
         creators["thorim lightning charge trigger"] = &RaidUlduarTriggerContext::thorim_lightning_charge_trigger;
         creators["thorim reset encounter state trigger"] = &RaidUlduarTriggerContext::thorim_reset_encounter_state_trigger;
         creators["thorim charged orb trigger"] = &RaidUlduarTriggerContext::thorim_charged_orb_trigger;
+        creators["thorim pet leash trigger"] = &RaidUlduarTriggerContext::thorim_pet_leash_trigger;
         creators["thorim arena leash trigger"] = &RaidUlduarTriggerContext::thorim_arena_leash_trigger;
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
         creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
@@ -338,6 +339,7 @@ private:
     static Trigger* thorim_lightning_charge_trigger(PlayerbotAI* ai) { return new ThorimLightningChargeTrigger(ai); }
     static Trigger* thorim_reset_encounter_state_trigger(PlayerbotAI* ai) { return new ThorimResetEncounterStateTrigger(ai); }
     static Trigger* thorim_charged_orb_trigger(PlayerbotAI* ai) { return new ThorimChargedOrbTrigger(ai); }
+    static Trigger* thorim_pet_leash_trigger(PlayerbotAI* ai) { return new ThorimPetLeashTrigger(ai); }
     static Trigger* thorim_arena_leash_trigger(PlayerbotAI* ai) { return new ThorimArenaLeashTrigger(ai); }
     static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
     static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }

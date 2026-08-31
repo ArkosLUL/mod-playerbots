@@ -108,6 +108,26 @@ bool ThorimArenaPositioningAction::Execute(Event /*event*/)
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
+bool ThorimPetLeashAction::isUseful()
+{
+    ThorimPetLeashTrigger thorimPetLeashTrigger(botAI);
+    return thorimPetLeashTrigger.IsActive();
+}
+
+bool ThorimPetLeashAction::Execute(Event /*event*/)
+{
+    std::vector<Unit*> stray;
+    if (!ThorimStrayArenaPets(botAI, bot, stray))
+        return false;
+
+    // All of them in one pass. A bot can have a pet and a guardian up at once, and leaving the second
+    // one out there for another tick is a pack pulled for no reason.
+    for (Unit* pet : stray)
+        ThorimRecallPet(bot, pet);
+
+    return true;
+}
+
 bool ThorimChargedOrbAction::isUseful()
 {
     ThorimChargedOrbTrigger thorimChargedOrbTrigger(botAI);

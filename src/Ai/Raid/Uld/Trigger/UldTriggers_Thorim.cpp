@@ -48,6 +48,12 @@ bool ThorimDpsPriorityTrigger::IsActive()
     if (botAI->IsHeal(bot))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
+    // Same for a tank, and for the same reason: "tank assist" keeps it on whatever is swinging at the
+    // raid, ThorimDisableAutomaticTargetingMultiplier deliberately leaves that action alone, and two
+    // live pickers on one bot is the oscillation this node exists to end.
+    if (botAI->IsTank(bot))
+        return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
+
     if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
         return true;
 
@@ -209,6 +215,12 @@ bool ThorimLightningChargeTrigger::IsActive()
     // Raw distance, not the arrival latch: the dodge must not be gated by a bot that was settled on
     // the slot the ring has just rotated away from.
     return bot->GetDistance(spot) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
+}
+
+bool ThorimPetLeashTrigger::IsActive()
+{
+    std::vector<Unit*> stray;
+    return ThorimStrayArenaPets(botAI, bot, stray);
 }
 
 bool ThorimChargedOrbTrigger::IsActive()
