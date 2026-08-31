@@ -206,16 +206,21 @@ bool MimironPhase1PositioningAction::isUseful()
 // Which rule the dodge applied, not where it went: the destination is already a move record naming
 // this action. What that record cannot say is whether the bot thought it was clear, ahead of the
 // beams, inside them, or being carried out by the sweep - and picking the wrong one of those is what
-// leaves a body on the floor. `cw` is where the bot stands clockwise of the cone centreline.
+// leaves a body on the floor. `cw` is where the bot stands clockwise of the cone centreline, bucketed
+// to 15 degrees: at whole degrees it changes every tick, so NoteDerived's change test suppressed
+// nothing and one kill wrote 2300 of these. The orbit radius is left out for the same reason and
+// because snap.u samples the bot's position four times a second beside the hazard row's apex.
 void MimironP3Wx2LaserBarrageAction::NoteBarrageDecision(char const* branch, char const* direction,
-                                                        float cw, float radius)
+                                                        float cw)
 {
     if (!RaidObs::Active())
         return;
 
+    int const bucket = static_cast<int>(cw * 180.0f / static_cast<float>(M_PI) / 15.0f) * 15;
+
     char line[64];
-    snprintf(line, sizeof(line), "%s%s%s %.0f r%.0f", branch, direction ? " " : "",
-             direction ? direction : "", cw * 180.0f / static_cast<float>(M_PI), radius);
+    snprintf(line, sizeof(line), "%s%s%s %d", branch, direction ? " " : "",
+             direction ? direction : "", bucket);
 
     RaidObs::NoteDerived(bot, "mimiron.barrage", line);
 }
@@ -249,7 +254,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     // false rather than true is deliberate - bots that were never in danger keep casting.
     if (cw > window.sweep + clearance && cw < twoPi - clearance)
     {
-        NoteBarrageDecision("clear", nullptr, cw, 0.0f);
+        NoteBarrageDecision("clear", nullptr, cw);
         return false;
     }
 
@@ -318,7 +323,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     // Under a yard of travel left; call it arrived rather than issuing a move nothing can act on.
     if (std::fabs(remaining) * radius < 1.0f)
     {
-        NoteBarrageDecision("hold", nullptr, cw, radius);
+        NoteBarrageDecision("hold", nullptr, cw);
         return false;
     }
 
@@ -330,7 +335,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
     float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
 
-    NoteBarrageDecision(branch, goClockwise ? "cw" : "ccw", cw, radius);
+    NoteBarrageDecision(branch, goClockwise ? "cw" : "ccw", cw);
 
     // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all -
     // see the note on MoveAwayClearOfMines.
@@ -742,10 +747,15 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
     switch (unit->GetEntry())
     {
         case NPC_BOMB_BOT:
-            // Melee cannot reach one without setting it off, and ranged only from outside the blast:
-            // closer than that the avoid action should own the bot, not this one holding it still.
-            return !botAI->IsMelee(bot) &&
-                   unit->GetExactDist2d(bot) >= ULDUAR_MIMIRON_BOMB_BOT_RADIUS;
+            // Melee cannot reach one without setting it off. Ranged shoot it from outside the blast,
+            // and keep shooting it inside the blast when it is the one chasing them: at 8.0 yd/s
+            // against 7.0 they cannot leave, so dropping it there left them neither shooting nor
+            // stepping out, which is how two of them died standing on one at full health.
+            if (botAI->IsMelee(bot))
+                return false;
+
+            return unit->GetExactDist2d(bot) >= ULDUAR_MIMIRON_BOMB_BOT_RADIUS ||
+                   GetMimironBombBotChasing(botAI, bot) == unit;
 
         case NPC_AERIAL_COMMAND_UNIT:
         {

@@ -63,7 +63,7 @@ public:
     bool isUseful() override;
 
 private:
-    void NoteBarrageDecision(char const* branch, char const* direction, float cw, float radius);
+    void NoteBarrageDecision(char const* branch, char const* direction, float cw);
 };
 
 // Rapid Burst and Hand Pulse are both 104 degree cones, so no arrangement dodges them; what helps is

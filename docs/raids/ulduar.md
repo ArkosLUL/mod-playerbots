@@ -1765,27 +1765,37 @@ So **distance from VX-001 buys nothing** — the cone outreaches the room. Only 
 
 Aim comes from `FaceBarrageArc`: VX-001 is repointed at NPC 33576 every tick of the aura, and 33576
 laps the room on a fixed spline every 34016 ms — 10.6°/s, clockwise, ~106° over the 10 s barrage.
-Warning is 4 s of Spinning Up (63414); cadence is 60 s. **NPC 33576 is spawned by world DB update
-`2026_08_10_00.sql`; without it `FaceBarrageArc` returns early and the cone never moves.**
+Cadence is 60 s. **NPC 33576 is spawned by world DB update `2026_08_10_00.sql`; without it
+`FaceBarrageArc` returns early and the cone never moves.**
 
-#### The cone ignites 42.6° clockwise of where the boss is pointing
+#### Spinning Up is a channel on VX-001, and no aura at all
 
-The single biggest correction to the above. **Spinning Up does not track.** `EVENT_SPELL_SPINNING_UP`
-calls `FaceBarrageArc` once and then casts 63414, a 4 s aura whose single 4000 ms tick triggers 63274.
-Only 63274 carries the re-aiming script, on `AfterEffectApply` and every 250 ms after. So the boss
-aims once, holds that facing for four seconds while 33576 travels another **42.6°**, and the cone then
-snaps to the live bearing and starts firing from there.
+63414 puts **nothing on VX-001**. Effect 0 lands on 33576 and effect 1 on the MK II, both by
+`conditions` row; effect 2 has no effect. On VX-001 it exists only as a **4 s channel**
+(`SPELL_ATTR1_IS_CHANNELED`, duration index 35), which is why the encounter script polls
+`FindCurrentSpellBySpellId`. So `HasAura(SPELL_SPINNING_UP)` never answers true — and for a release both
+the window and the trigger asked exactly that. The raid's first barrage decision landed **0.1 s after
+the beams were already live**, and one kill lost 12 bots to a mechanic that telegraphs for 4.16 s. Test
+the channel, and read `GetCastTimeRemaining` for the time left, clamped at zero: the timer goes negative
+on the pass that ends the channel.
 
-An arc latched at Spinning Up start is therefore 42.6° stale for the entire cast. Measured against it,
-the real danger band is `(−213.7°, +21.2°)` while the old model treated `(−170.9°, +64°)` as unsafe —
-so 43° of genuinely lethal floor was reported safe, and bots fleeing clockwise stopped 43° short, in
-the exact slice where the trailing edge finishes. At **20000 damage every 250 ms** that is fatal.
+#### The cone ignites where 33576 will be, not where the boss points now
 
-There is no latch any more. `GetMimironBarrageWindow` reads the two aura durations off VX-001 and
-predicts where 33576 will be at ignition and at the last tick, by rotating its live position clockwise
-about the room centre. Everything is recomputed each tick, so a moving apex, a rotating chassis and a
-bot joining mid-cast all fall out for free, and every bot still derives the same cone without
+Since core `8f68451bb` the boss re-faces every 400 ms for the whole channel, so its facing is live
+rather than stale. Prediction is still the point: 33576 travels **42.6°** during the windup, so a bot
+deciding now has to aim at the bearing the cone will ignite on, not the one it can see. At **20000
+damage every 250 ms**, being 42.6° out is fatal.
+
+`GetMimironBarrageWindow` reads the channel timer while spinning up and the barrage aura's own duration
+once firing, then rotates 33576's live position clockwise about the room centre to get the bearing at
+ignition and at the last tick. Everything is recomputed each tick, so a moving apex, a rotating chassis
+and a bot joining mid-cast all fall out for free, and every bot still derives the same cone without
 coordinating because every input is world state.
+
+The danger band is the sweep plus a clearance at each end — 106° plus 2 × (52° + 15°) ≈ **240°** at the
+room centre, wider off it — so barely a third of the room is safe. Measure it clockwise from the
+ignition bearing and never fold it to a signed angle: folded, part of the band lands past π on the wrong
+side, which is how the far side of the room used to report safe while the beams swept across it.
 
 #### The orbit, measured rather than assumed
 
@@ -1937,11 +1947,15 @@ because a mine is survivable and the cone is not.
 (`SMART_EVENT_DAMAGED_TARGET` → 63801, 5 yd). `HealthModifier` is 1.5873, so ranged kill one in a few
 globals — it sits at the top of the ranged priority list.
 
-**Range decides who shoots it.** `MimironBombBotTrigger` stands down for a ranged DPS with a Bomb Bot
-inside `SpellDistance`, so the DPS list gets it instead of the flee node; healers and melee keep the
-sidestep, which is all a 5 yd blast is worth. Out-of-range Bomb Bots are filtered out of
-`BuildPriorityList` entirely — targeting one the bot cannot reach abandons the mech for an add
-somebody else can hit, and lands the bot in the `reach spell` versus `ACTION_RAID` deadlock below.
+**The chase target decides who shoots it.** The bot it is chasing cannot leave, so that bot keeps
+shooting at any range; everyone else inside the blast steps out, which is all a 5 yd blast is worth, and
+healers and melee always sidestep. Both rules read `GetMimironBombBotChasing`. They used to split on
+distance and each deferred to the other — the trigger stood a ranged DPS down for any Bomb Bot inside
+`SpellDistance`, while `IsAllowedTarget` dropped one closer than 8 yd — so inside 8 yd a ranged bot
+neither shot nor moved, and one kill lost two of them at full health standing on one. Out-of-range Bomb
+Bots are still filtered out of `BuildPriorityList` entirely — targeting one the bot cannot reach
+abandons the mech for an add somebody else can hit, and lands the bot in the `reach spell` versus
+`ACTION_RAID` deadlock below.
 
 **And it is the one Mimiron add that takes a snare.** Its immunity set is **−263**, which leaves
 `SNARE`, `ROOT`, `STUN`, `FREEZE`, `GRIP` and `KNOCKOUT` off — every one of which the Assault Bot's
@@ -2096,11 +2110,14 @@ them. Tanks never reach this: `MimironSetDpsPriorityTrigger` stands down for the
 keeps its tank throughout, which is deliberate — it is the one add nobody can ignore, and a tank
 contributes little of the burn.
 
-The core grounds the unit **wherever it happens to be**, which is usually across the room, because
-64444 places its summon by nearest entry and the carrier has to stand under it. Waiting for it to
-drift toward the raid was considered and rejected: the corpse the core is looted from lasts 25 s, the
-unit's position is driven by threat and not by anything the raid steers, and losing a core outright
-costs far more than melee jogging 30 yd into a 20 s window.
+**The core grounds the unit where the unit already is, and the main tank is what decides that.** 64444
+summons by nearest entry conditioned on the Aerial Command Unit, so it lands under the unit and never
+under the placer: in one trace both cores spawned **0.00 yd** from the unit's x/y while the carrier stood
+12 yd away, and the unit then descended vertically. The tank decides it instead, because the unit hovers
+directly over its threat target — and phase 3 gave the tank no slot, only a chase. After a Bomb Bot
+sidestep pushed it 30 yd out, tank and unit converged **16.8 yd** off the room centre and stayed there
+45 s, leaving 7 to 12 of 25 past casting range for both 20 s windows. `p3tank` pins the main tank to the
+room centre, the same way `p1tank` does for the MK II and for the same reason.
 
 ### Mimiron — pets need telling twice, in two different phases
 
@@ -2136,7 +2153,11 @@ are not down before the cast completes, `SpellHit` brings it back aggressive and
 So the three have to come down **level**, and the old ordering could not do it. It sorted on
 `GetHealth()` descending, but `HealthModifier` is 300 / 300 / **200** — the Aerial Command Unit is the
 smallest absolute pool in the room and so ranked last on every tick, whatever its actual percentage.
-Ordering is on `GetHealthPct()` now.
+Ordering is on `GetHealthPct()` now, in **2 % bands**. Raw percent has no hysteresis and 25 bots burn two
+parts down within a tenth of a percent of each other: one kill logged 1380 of 1564 target notes as a
+VX-001/MK II flip, about five a second per bot, each resetting a swing or a cast. The band comes from
+health alone, so the tank node, the DPS node and the pets still agree, and five fit inside the 10 %
+floor.
 
 **All three occupy the same point server-side.** VehicleSeat 3886 (VX-001 on the chassis) and 3806 (the
 ACU on VX-001) both carry `AttachmentOffsetX/Y/Z = 0,0,0`, `Vehicle::AddPassenger` relocates by exactly

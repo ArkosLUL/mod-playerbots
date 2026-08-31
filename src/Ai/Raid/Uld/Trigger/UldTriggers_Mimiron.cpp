@@ -87,10 +87,12 @@ bool MimironP3Wx2LaserBarrageTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Spinning Up is the 4s warning, 63274/63300 the 10s barrage itself, and all three are auras on
-    // VX-001. Current-spell checks miss the whole thing: Spinning Up is cast triggered, and the
-    // damage retriggers every 100ms are instant, so they clear m_currentSpells in the same update.
-    return boss->HasAura(SPELL_SPINNING_UP) || boss->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1) ||
+    // Spinning Up is the 4s warning and 63274/63300 the 10s barrage itself, but only the latter two
+    // are auras on VX-001 - 63414 puts its effects on the DB Target and the MK II, so asking VX-001 for
+    // it comes back empty and the raid first hears about a barrage once the beams are already firing.
+    // It is a channel on VX-001, which is how the encounter script tracks it too.
+    return GetMimironSpinningUpSeconds(boss) >= 0.0f ||
+           boss->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1) ||
            boss->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_2);
 }
 
@@ -209,11 +211,12 @@ bool MimironProximityMineTrigger::IsActive()
 
 bool MimironBombBotTrigger::IsActive()
 {
-    // A Bomb Bot runs 8.0 yd/s against a player's 7.0, so nobody outruns one - what kills it is that it
-    // also dies to almost nothing. Ranged DPS that can reach it shoot it instead ("mimiron set dps
-    // priority" hands them the target); healers and melee keep the sidestep, which is all 5 yd costs.
-    if (PlayerbotAI::IsRangedDps(bot) &&
-        bot->FindNearestCreature(NPC_BOMB_BOT, sPlayerbotAIConfig.spellDistance))
+    // A Bomb Bot runs 8.0 yd/s against a player's 7.0, so the one it is chasing cannot outrun it -
+    // what kills it is that it also dies to almost nothing, and "mimiron set dps priority" hands that
+    // bot the target. Everyone else steps out, which is all 5 yd costs. The test used to be any Bomb
+    // Bot in spell range, which stood down bystanders the DPS list had already dropped for being too
+    // close: inside the blast they neither shot nor moved.
+    if (PlayerbotAI::IsRangedDps(bot) && GetMimironBombBotChasing(botAI, bot))
         return false;
 
     TooCloseToCreatureTrigger tooCloseToBombBot(botAI);
