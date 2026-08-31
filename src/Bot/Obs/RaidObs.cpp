@@ -281,6 +281,10 @@ struct BotTrace
     uint32 killBlowAmount = 0;
     float lastHpPct = 0.0f;
     uint32 lastHpMs = 0;
+    // Everything this bot has landed on something outside the raid, running total. Cumulative rather
+    // than a per-snapshot delta, so a coalesced or dropped sample costs nothing and any window still
+    // differences cleanly out of two snapshots.
+    uint64 damageDealt = 0;
     // The pass being buffered, and the run-length-encoded history a death record replays.
     std::vector<TickEntry> tick;
     std::deque<TickRecord> ticks;
@@ -617,7 +621,10 @@ std::string RosterJson(ObsSession& s)
 
 // --- snapshots ----------------------------------------------------------------
 
-std::string UnitRow(Unit* unit)
+// `dealt` is the running damage total for a roster member and 0 for everything else. Passed in rather
+// than looked up here, because only BuildSnapshotPayload knows which rows are bots and it is already
+// holding the BotTrace it comes from.
+std::string UnitRow(Unit* unit, uint64 dealt = 0)
 {
     uint32 castingId = 0;
     for (uint32 type = 0; type < CURRENT_MAX_SPELL; ++type)
@@ -642,6 +649,7 @@ std::string UnitRow(Unit* unit)
     row += "," + std::string(unit->isMoving() ? "1" : "0");
     row += "," + std::to_string(static_cast<uint32>(unit->GetMotionMaster()->GetCurrentMovementGeneratorType()));
     row += "," + std::to_string(castingId);
+    row += "," + std::to_string(dealt);
     row += "]";
 
     return row;
@@ -701,7 +709,7 @@ std::string SweepArea(ObsSession& s, Unit* anchor, std::string& units, bool& fir
 
     std::string out = "[";
     bool firstHazard = true;
-    std::size_t swept = 0;
+    std::vector<Creature*> sweptUnits;
 
     for (WorldObject* obj : objs)
     {
@@ -732,13 +740,30 @@ std::string SweepArea(ObsSession& s, Unit* anchor, std::string& units, bool& fir
         // Hazard units carry no dynamic object and never enter combat, so nothing else would put them
         // in the trace: Hodir's icicles are creatures that damage whatever is under where they land.
         Creature* creature = obj->ToCreature();
-        if (!creature || !creature->IsAlive() || swept >= OBS_MAX_WATCHED)
+        if (!creature || !creature->IsAlive())
             continue;
 
         if (s.watched.count(creature->GetGUID()) || !anchor->IsHostileTo(creature))
             continue;
 
-        ++swept;
+        sweptUnits.push_back(creature);
+    }
+
+    // Nearest first, because the cap decides who makes it into the row set and grid order is not a
+    // ranking. A Hodir pull reaches Thorim's arena, whose parked trash starts 74 yd out and by itself
+    // outnumbers the cap: taken in grid order it filled every slot on three traces running, and not one
+    // ice block, Toasty Fire or icicle was ever sampled - the units the sweep exists for.
+    if (sweptUnits.size() > OBS_MAX_WATCHED)
+    {
+        std::partial_sort(sweptUnits.begin(), sweptUnits.begin() + static_cast<std::ptrdiff_t>(OBS_MAX_WATCHED),
+                          sweptUnits.end(),
+                          [anchor](Creature const* left, Creature const* right)
+                          { return anchor->GetExactDist2dSq(left) < anchor->GetExactDist2dSq(right); });
+        sweptUnits.resize(OBS_MAX_WATCHED);
+    }
+
+    for (Creature* creature : sweptUnits)
+    {
         EnsureUnit(s, creature);
 
         if (!firstUnit)
@@ -795,17 +820,19 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
 
         // The last health this bot was seen at, so a death the damage hooks never saw can still say
         // what it fell from and how long ago that reading was.
+        uint64 dealt = 0;
         if (session)
         {
             BotTrace& trace = session->bots[GuidKey(guid)];
             trace.lastHpPct = player->GetHealthPct();
             trace.lastHpMs = getMSTime();
+            dealt = trace.damageDealt;
         }
 
         if (!first)
             units += ",";
         first = false;
-        units += UnitRow(player);
+        units += UnitRow(player, dealt);
     }
 
     for (ObjectGuid guid : watched)
@@ -1302,6 +1329,37 @@ void ApplyRetention()
         LOG_INFO("playerbots", "RaidObs: retention removed {} trace(s)", removed);
 }
 
+// What the raid puts out, as a running total per bot rather than a record each. The incoming stream
+// is one record per hit because a death has to be rewound blow by blow; outgoing damage is only ever
+// read as a rate, and a record per swing and tick would be tens of thousands of lines for a number the
+// snapshot already carries four times a second.
+//
+// A pet, totem or guardian is credited to its owner, the way NoteCast resolves relevance: the bot
+// chose to have it out, and its damage is the bot's throughput.
+void AccrueDamageDealt(Unit* attacker, Unit* victim, uint32 amount)
+{
+    if (!attacker)
+        return;
+
+    ObsSession* session = SessionFor(attacker);
+    if (!session)
+        return;
+
+    Player* owner = attacker->ToPlayer();
+    if (!owner)
+        owner = attacker->GetOwner() ? attacker->GetOwner()->ToPlayer() : nullptr;
+
+    if (!owner || !TracksPlayer(*session, owner))
+        return;
+
+    // Raid on raid is friendly fire or a duel, not throughput, and the incoming stream already has it.
+    // TracksPlayer refuses a non-player before it can name one, so a boss victim costs nothing here.
+    if (TracksPlayer(*session, victim))
+        return;
+
+    session->bots[GuidKey(owner->GetGUID())].damageDealt += amount;
+}
+
 thread_local char const* t_currentAction = nullptr;
 thread_local Player* t_currentBot = nullptr;
 }  // namespace
@@ -1527,6 +1585,8 @@ void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amo
     if (!Active() || !victim || amount < g_cfg.minDamage)
         return;
 
+    AccrueDamageDealt(attacker, victim, amount);
+
     ObsSession* session = SessionFor(victim);
     if (!session || !TracksPlayer(*session, victim))
         return;
@@ -1712,7 +1772,7 @@ void NoteAura(Unit* target, Aura* aura, bool removed)
     Emit(s, now, "aura", fields);
 }
 
-void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTimeMs)
+void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTimeMs, bool triggered)
 {
     if (!Active() || !caster || !spell)
         return;
@@ -1745,6 +1805,10 @@ void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTim
     fields += ",\"sp\":" + std::to_string(spell->Id);
     fields += ",\"tgt\":" + std::to_string(target ? GuidKey(target->GetGUID()) : 0);
     fields += ",\"ct\":" + std::to_string(castTimeMs);
+    // Written only when set, the way a move omits hpr/hms off anything but a wait, so the ability
+    // casts this channel exists for stay the cheap case.
+    if (triggered)
+        fields += ",\"tr\":1";
 
     Emit(s, getMSTime(), "cast", fields);
 }

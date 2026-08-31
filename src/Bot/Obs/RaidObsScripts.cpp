@@ -191,8 +191,12 @@ public:
         if (!RaidObs::Active() || !spell || !caster || !spellInfo)
             return;
 
+        // Two signals, because neither covers the other: IsTriggered reads the cast flags, which a proc
+        // fired straight off an aura does not always carry.
+        bool const triggered = spell->IsTriggered() || spell->GetTriggeredByAuraSpellInfo() != nullptr;
+
         RaidObs::NoteCast(caster, spellInfo, spell->m_targets.GetUnitTarget(),
-                          static_cast<uint32>(std::max(0, spell->GetCastTime())));
+                          static_cast<uint32>(std::max(0, spell->GetCastTime())), triggered);
     }
 };
 

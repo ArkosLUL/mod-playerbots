@@ -21,12 +21,13 @@ import pathlib
 import sys
 from collections import defaultdict
 
-SUPPORTED_SCHEMA = 7
+SUPPORTED_SCHEMA = 8
 
 # Old traces stay readable: every addition through v6 is a new field or a new record, so an older file
 # only loses the detail those carry. v7 gave an existing column a -1 sentinel, but what it replaces was
-# nonsense in older files too, so one render serves both.
-READABLE_SCHEMAS = (4, 5, 6, 7)
+# nonsense in older files too, so one render serves both. v8 appends to the end of a snapshot row and
+# adds an optional cast field, so a pre-v8 row is just a short one.
+READABLE_SCHEMAS = (4, 5, 6, 7, 8)
 
 
 def clock(ms: int) -> str:

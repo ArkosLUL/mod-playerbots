@@ -32,7 +32,7 @@ class Unit;
 namespace RaidObs
 {
 // Bumped whenever a record's field layout changes, so the analyzer can still read older traces.
-constexpr uint32 SCHEMA_VERSION = 7;
+constexpr uint32 SCHEMA_VERSION = 8;
 
 // True only while at least one trace is open. Probes on shared hot paths test this before doing
 // anything else, so with nothing recording the framework costs one predictable branch.
@@ -73,7 +73,11 @@ void NoteAura(Unit* target, Aura* aura, bool removed);
 // Unit::_UpdateSpells flushes the pending flag, while a removal goes out synchronously, so an aura
 // that lands and kills inside one tick arrives as a removal with nothing behind it.
 void NoteAuraApplied(Unit* target, Aura* aura);
-void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTimeMs);
+// `triggered` separates a proc from an ability the bot chose to use. Two thirds of a Hodir trace's
+// cast records were passives firing off swings and heals - Judgement of Wisdom, Fel Synergy, Biting
+// Cold - so counting the channel as throughput measured procs as much as casts. Recorded rather than
+// filtered out: 814 Blood Presence procs in six minutes is itself worth seeing.
+void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTimeMs, bool triggered);
 // Every other damage hook here is a combat-log hook, so damage that sends no log packet - a fall, a
 // script kill - is invisible to them and a bot dying to one leaves a death record with an empty
 // rewind. Fed instead from Unit::DealDamage, which all of them pass through, and only for the blow

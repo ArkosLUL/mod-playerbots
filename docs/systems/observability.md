@@ -58,7 +58,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 7`)
+## Schema (`v: 8`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -72,12 +72,12 @@ else `7`. `0` still means no unit.
 | `pull` / `end` | `boss`,`src` / `out`: kill, wipe, reset, idle, mapgone, shutdown |
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
-| `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell]`; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
+| `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt]`, `dealt` cumulative damage to non-raid targets, 0 off the roster; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
 | `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` after |
 | `heal` | `s`,`d`,`sp`,`a`,`oh` overheal,`hp` after |
 | `abs` | `d`,`s` shield caster,`sp`,`a` |
 | `aura` | `d`,`s` caster,`sp`,`r` 1=removed,`st` stacks,`dur` ms left,`p` 1=positive |
-| `cast` | `s`,`sp`,`tgt`,`ct` cast time — cast **start**, the reaction window; roster, its pets and watched creatures only |
+| `cast` | `s`,`sp`,`tgt`,`ct` cast time,`tr` 1 when triggered, else absent — cast **start**, the reaction window; roster, its pets and watched creatures only |
 | `act` | `g`,`a`,`rel`,`vd`: OK, FAILED, IMPOSSIBLE, USELESS, PREREQ, UNKNOWN |
 | `veto` | `g`,`m` multiplier,`a` action it zeroed |
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
@@ -153,6 +153,11 @@ when, so the record states the drop even when nothing caught the blow. `blow` na
 `OnDamage` carries no `SpellInfo`, and the hooks that do are modifiers rather than the funnel, missing
 the environmental and script damage `blow` exists for. The debuff list answers that instead.
 
+**Damage out is a running total, not a record each.** `dmg` is one row per hit because a death is
+rewound blow by blow. Outgoing damage is only ever read as a rate, so a row per swing and tick would be
+tens of thousands of lines for what `snap.u`'s `dealt` already carries four times a second. A pet,
+totem or guardian credits its owner.
+
 Same instance is not the same pull: gating `cast` on the session alone picked up 253 casts from a mob
 two rooms away and none at all from the raid.
 
@@ -162,8 +167,11 @@ no radius in the DBC to fall back to. A zero-radius row is a marker — where so
 area to test a position against — so `postmortem.py` reads it by proximity and keeps containment for
 the rest. `foe` separates raid AoE from boss AoE: two thirds of a Hodir trace's rows were the
 raid's own Death and Decay. What is lethal there is a creature, so hazard units carrying no dynamic
-object that never enter combat are swept into `snap.u` instead, capped at `OBS_MAX_WATCHED` (40) so a
-trash-heavy pull cannot blow the row count up.
+object that never enter combat are swept into `snap.u` instead, capped at the **nearest**
+`OBS_MAX_WATCHED` (40) so a trash-heavy pull cannot blow the row count up. Nearest, because the cap
+decides who makes the row set and grid order is not a ranking: at Hodir it binds in 94-96% of
+snapshots, and in grid order every slot went to Thorim arena trash parked 74+ yd out, so across three
+traces not one ice block, Toasty Fire or icicle was ever sampled — the units the sweep exists for.
 
 `haz` is the other channel and the two never meet — `snap.hz` is what a sweep found, `haz` what nothing
 can sweep for. Only `snap.hz` feeds the death block's containment test, so a `haz` mechanic reaches the
