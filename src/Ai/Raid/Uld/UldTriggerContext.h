@@ -9,6 +9,7 @@
 
 #include "BossAuraTriggers.h"
 #include "NamedObjectContext.h"
+#include "UldEncounterGate.h"
 #include "UldTriggers.h"
 
 class RaidUlduarTriggerContext : public NamedObjectContext<Trigger>
@@ -181,6 +182,19 @@ public:
         creators["xt002 set dps priority trigger"] = &RaidUlduarTriggerContext::xt002_set_dps_priority_trigger;
         creators["xt002 pummeller taunt trigger"] = &RaidUlduarTriggerContext::xt002_pummeller_taunt_trigger;
         creators["xt002 redirect threat trigger"] = &RaidUlduarTriggerContext::xt002_redirect_threat_trigger;
+
+        // Applied over the whole table rather than in 165 trigger classes: every name here carries its
+        // encounter, so one pass can gate them all. UldEncounterGate.h has what it closes and why.
+        for (auto& entry : creators)
+        {
+            uint32 bossId = 0;
+            if (!UldEncounterOfTrigger(entry.first, bossId))
+                continue;
+
+            ObjectCreator inner = entry.second;
+            entry.second = [inner, bossId](PlayerbotAI* ai) -> Trigger*
+            { return new UldGatedTrigger(ai, inner(ai), bossId); };
+        }
     }
 
 private:

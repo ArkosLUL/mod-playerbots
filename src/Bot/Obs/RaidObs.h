@@ -32,7 +32,7 @@ class Unit;
 namespace RaidObs
 {
 // Bumped whenever a record's field layout changes, so the analyzer can still read older traces.
-constexpr uint32 SCHEMA_VERSION = 8;
+constexpr uint32 SCHEMA_VERSION = 9;
 
 // True only while at least one trace is open. Probes on shared hot paths test this before doing
 // anything else, so with nothing recording the framework costs one predictable branch.
@@ -83,6 +83,10 @@ void NoteCast(Unit* caster, SpellInfo const* spell, Unit* target, uint32 castTim
 // rewind. Fed instead from Unit::DealDamage, which all of them pass through, and only for the blow
 // that takes the bot under: emitting the rest from there would double every hit the log hooks see.
 void NoteKillingBlow(Unit* attacker, Unit* victim, uint32 amount);
+// WipeAction answers the master's `wipe` command with Unit::Kill, which never reaches DealDamage, so
+// the death behind it carries no killing blow and names the bot as its own killer. Flagged here or a
+// reset reads as a screen of unexplained combat deaths - 16 of one Freya attempt's 29.
+void NoteScriptedWipe(Player* bot);
 void NoteDeath(Unit* unit, Unit* killer);
 
 // --- Engine probes ---

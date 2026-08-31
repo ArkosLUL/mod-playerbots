@@ -21,13 +21,13 @@ import pathlib
 import sys
 from collections import defaultdict
 
-SUPPORTED_SCHEMA = 8
+SUPPORTED_SCHEMA = 9
 
 # Old traces stay readable: every addition through v6 is a new field or a new record, so an older file
 # only loses the detail those carry. v7 gave an existing column a -1 sentinel, but what it replaces was
 # nonsense in older files too, so one render serves both. v8 appends to the end of a snapshot row and
 # adds an optional cast field, so a pre-v8 row is just a short one.
-READABLE_SCHEMAS = (4, 5, 6, 7, 8)
+READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9)
 
 
 def clock(ms: int) -> str:
@@ -314,7 +314,11 @@ def move_line(trace: Trace, rec: dict) -> str:
 def summarise(trace: Trace) -> None:
     hdr = trace.header
     print(f"trace   {trace.path.name}")
-    print(f"boss    {hdr.get('boss', '?')}  map {hdr.get('map')} instance {hdr.get('inst')} diff {hdr.get('diff')}")
+    # hdr.boss is line one of a file that is only appended to, so a session that opened before its boss
+    # was engaged still carries the map name there. The rename record is the corrected one.
+    renames = [p for p in trace.of("pull") if p.get("src") == "rename"]
+    boss = renames[-1].get("boss") if renames else hdr.get("boss", "?")
+    print(f"boss    {boss}  map {hdr.get('map')} instance {hdr.get('inst')} diff {hdr.get('diff')}")
 
     roster = hdr.get("roster", [])
     by_role: dict[str, int] = defaultdict(int)
@@ -326,7 +330,10 @@ def summarise(trace: Trace) -> None:
     pulls = trace.of("pull")
     ends = trace.of("end")
     if pulls:
-        print(f"pull    {pulls[0].get('boss')} via {pulls[0].get('src')}")
+        line = f"pull    {pulls[0].get('boss')} via {pulls[0].get('src')}"
+        if renames:
+            line += f", renamed to {renames[-1].get('boss')}"
+        print(line)
     if ends:
         print(f"outcome {ends[0].get('out')} at {clock(ends[0]['t'])}")
     else:
@@ -339,11 +346,12 @@ def summarise(trace: Trace) -> None:
     if trace.truncated:
         print("        *** trace hit the size cap and stopped early ***")
 
-    deaths = trace.of("death")
-    print(f"deaths  {len(deaths)}")
+    combat = combat_deaths(trace)
+    reset = len(trace.of("death")) - len(combat)
+    print(f"deaths  {len(combat)}" + (f"  (+{reset} to a wipe command)" if reset else ""))
     print()
 
-    for index, death in enumerate(deaths):
+    for index, death in enumerate(combat):
         death_block(trace, death, index, brief=True)
 
 
@@ -362,10 +370,24 @@ def damage_summary(trace: Trace, rewind: list[list]) -> list[tuple[str, int, int
     return rows
 
 
+def combat_deaths(trace: Trace) -> list[dict]:
+    """Deaths worth reading. The master's `wipe` command kills through Unit::Kill, which never reaches
+    DealDamage, so those records carry no blow and name the bot as its own killer - 16 of one Freya
+    attempt's 29. Numbering over these keeps --death N pointing at deaths that have a cause."""
+    return [d for d in trace.of("death") if d.get("cause") != "reset"]
+
+
 def death_block(trace: Trace, death: dict, index: int, brief: bool) -> None:
     guid = death["g"]
     print(f"[{index}] {trace.name(guid)} ({trace.roles.get(guid, '?')}) died at {clock(death['t'])}")
-    print(f"     killed by {trace.name(death.get('killer'))}")
+    cause = death.get("cause")
+    if cause == "reset":
+        print("     killed by the wipe command")
+    elif cause == "self":
+        # Environmental damage bypasses the combat log, so there is no blow and no rewind entry either.
+        print("     died to self or environmental damage, no killing blow recorded")
+    else:
+        print(f"     killed by {trace.name(death.get('killer'))}")
     print(f"     at ({death.get('x')}, {death.get('y')}, {death.get('z')})")
 
     # First, because it is the answer far more often than anything else in the block: the core strips
@@ -454,7 +476,7 @@ def death_block(trace: Trace, death: dict, index: int, brief: bool) -> None:
 
 
 def show_death(trace: Trace, index: int) -> int:
-    deaths = trace.of("death")
+    deaths = combat_deaths(trace)
     if index < 0 or index >= len(deaths):
         print(f"no death {index} (trace has {len(deaths)})", file=sys.stderr)
         return 1

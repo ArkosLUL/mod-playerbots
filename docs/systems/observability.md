@@ -49,6 +49,12 @@ hook only queues the boss id; the next map update reads the state that stuck. Th
 engage hook name the trace after the creature rather than the map — the core runs `SetBossState`
 before `OnUnitEnterCombat`.
 
+**A trace can rename itself.** Opened by `bossstate` or `MarkPull` with nothing engaged yet, it has
+only the map name to use — two of ten traces on 2026-08-31 were filed `ulduar`, an Iron Assembly wipe
+and a Thorim wipe. The first boss to engage renames the file and emits a second `pull`, `src`
+`rename`, carrying `was`. `hdr.boss` stays stale, line one being long written, so **prefer the rename
+record**. Only the map-name fallback is ever upgraded.
+
 While a raid sits on a tracked map with no session, snapshots go to a `PreRollSeconds` ring that is
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull
 records carry a **negative** `t`. That is what makes a bad squad latch visible.
@@ -58,7 +64,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 8`)
+## Schema (`v: 9`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -69,7 +75,7 @@ else `7`. `0` still means no unit.
 | `e` | Fields |
 |---|---|
 | `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
-| `pull` / `end` | `boss`,`src` / `out`: kill, wipe, reset, idle, mapgone, shutdown |
+| `pull` / `end` | `boss`,`src`: bossstate, mark, engage, rename (then `was`) / `out`: kill, wipe, reset, idle, mapgone, shutdown |
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
 | `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt]`, `dealt` cumulative damage to non-raid targets, 0 off the roster; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
@@ -83,7 +89,7 @@ else `7`. `0` still means no unit.
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
 | `note` | `g`,`k` kind,`txt` — assignments, latches, phases, derived state |
 | `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object; timeline only, never tested against a death |
-| `death` | `g`,`killer`,`x`,`y`,`z`,`dist{}`,`auras[]`,`rewind[]`,`blow[]`,`hplast[]`,`acts[]`,`lastmove{}` |
+| `death` | `g`,`killer`,`x`,`y`,`z`,`dist{}`,`auras[]`,`rewind[]`,`blow[]`,`hplast[]`,`acts[]`,`lastmove{}`,`cause` |
 | `truncated` | file hit `MaxFileMB`; the `end` record is still written past it |
 
 `death.auras` rows are `[sp,stacks,dur,caster,appliedT,removedT,positive]`, `removedT` −1 while held
@@ -91,6 +97,12 @@ and `appliedT` −1 when the aura was applied before the session opened;
 `death.rewind` rows are `[t,source,sp,amount]`; `death.blow` is `[source,amount]` and `death.hplast`
 `[hp%,t]`; `death.acts` rows are `[firstT,lastT,action,rel,verdict,repeats]`, a veto's verdict reading
 `VETO:<multiplier>`.
+
+**`cause` explains a death with no `blow`.** `Unit::Kill` called directly never reaches `DealDamage`,
+so the hook feeding `blow` never fires and `killer` is the victim itself: `reset` is the master's
+`wipe` command (`WipeAction`), `self` is environmental damage. Absent whenever there is a `blow`. 32
+of 201 deaths on 2026-08-31 — 16 of one Freya attempt's 29 — read as unexplained combat deaths without
+it. `postmortem.py` numbers `--death N` over the others and counts resets separately.
 
 **Name every id in the file.** `unit` and `spell` are written once each, so later records carry a bare
 number and the trace still reads standalone: `spell 63511` needs a DBC open beside it, `Frozen Blows

@@ -279,6 +279,9 @@ struct BotTrace
     // script kill - and a bot that dies to one of those otherwise leaves no trace of what did it.
     uint64 killBlowSource = 0;
     uint32 killBlowAmount = 0;
+    // Set by NoteScriptedWipe when the master's `wipe` command is what killed the bot, so the death
+    // record can say so instead of naming the bot as its own killer with nothing behind it.
+    bool scriptedWipe = false;
     float lastHpPct = 0.0f;
     uint32 lastHpMs = 0;
     // Everything this bot has landed on something outside the raid, running total. Cumulative rather
@@ -1548,6 +1551,61 @@ void OnBossState(uint32 bossId, Map* map)
         pending.push_back(bossId);
 }
 
+// A session opened off a boss state change, or off a MarkPull whose boss lookup came back empty, can
+// only name itself after the map - two of ten traces on 2026-08-31 were filed as `ulduar`, one an Iron
+// Assembly wipe and one a Thorim wipe. The filename and hdr.boss are the only way to pick a trace, so
+// the first boss that actually swings fixes both. Only ever upgrades the map-name fallback: a session
+// that already named itself after a creature is never renamed.
+void UpgradeBossName(ObsSession& s, Creature* boss)
+{
+    if (!s.map || !boss || s.path.empty())
+        return;
+
+    if (s.bossSlug != SlugOf(s.map->GetMapName()))
+        return;
+
+    std::string const slug = SlugOf(ResolveBossName(s.map, boss));
+    if (slug.empty() || slug == s.bossSlug)
+        return;
+
+    std::filesystem::path const from(s.path);
+    std::filesystem::path to = from;
+    // Same stem apart from the slug, so the timestamp that pairs a trace with a server log survives.
+    to.replace_filename(std::to_string(s.mapId) + "_" + std::to_string(s.instanceId) + "_" + slug + "_" +
+                        from.stem().string().substr(from.stem().string().find_last_of('_') + 1) + ".ndjson");
+
+    Flush(s);
+    s.file.close();
+
+    std::error_code ec;
+    std::filesystem::rename(from, to, ec);
+    if (ec)
+    {
+        // Reopen the original and carry on under the map name. A trace that keeps recording under a
+        // poor name beats one that stops.
+        s.file.open(s.path, std::ios::out | std::ios::app);
+        LOG_ERROR("playerbots", "RaidObs: cannot rename trace {} -> {}", s.path, to.string());
+        return;
+    }
+
+    s.path = to.string();
+    s.file.open(s.path, std::ios::out | std::ios::app);
+    if (!s.file.is_open())
+    {
+        LOG_ERROR("playerbots", "RaidObs: lost trace {} after rename", s.path);
+        return;
+    }
+
+    std::string const was = s.bossSlug;
+    s.bossSlug = slug;
+
+    // hdr.boss is on line one of a file that is only ever appended to, so the correction goes in the
+    // stream instead. Readers that trust the header get the old name; the filename is right either way.
+    Emit(s, getMSTime(), "pull", "\"boss\":" + Quoted(s.bossSlug) + ",\"src\":\"rename\",\"was\":" + Quoted(was));
+
+    LOG_INFO("playerbots", "RaidObs: renamed {} -> {}", was, s.path);
+}
+
 void OnCreatureEngage(Unit* creature, Unit* victim)
 {
     if (!g_cfg.enabled || !creature || !victim || !victim->IsPlayer())
@@ -1573,6 +1631,9 @@ void OnCreatureEngage(Unit* creature, Unit* victim)
         if (!session)
             return;
     }
+
+    if (isBoss)
+        UpgradeBossName(*session, asCreature);
 
     WatchCreature(*session, asCreature);
 }
@@ -1635,6 +1696,20 @@ void NoteKillingBlow(Unit* attacker, Unit* victim, uint32 amount)
     BotTrace& trace = session->bots[GuidKey(victim->GetGUID())];
     trace.killBlowSource = attacker ? GuidKey(attacker->GetGUID()) : 0;
     trace.killBlowAmount = amount;
+}
+
+void NoteScriptedWipe(Player* bot)
+{
+    if (!Active() || !bot)
+        return;
+
+    ObsSession* session = SessionFor(bot);
+    if (!session || !TracksPlayer(*session, bot))
+        return;
+
+    // Cleared in NoteDeath alongside the kill blow. If the command misses - the bot is already dead,
+    // or out of the master's party - the flag simply waits for a death that never uses it.
+    session->bots[GuidKey(bot->GetGUID())].scriptedWipe = true;
 }
 
 void NoteHeal(Unit* healer, Unit* target, SpellInfo const* spell, uint32 amount, uint32 overheal)
@@ -2153,8 +2228,15 @@ void NoteDeath(Unit* unit, Unit* killer)
         fields += "," + std::to_string(trace.killBlowAmount) + "]";
     }
 
+    // Both of these reach Unit::Kill without passing DealDamage, so there is no blow to point at and
+    // `killer` is the bot itself. Saying which one it was is the difference between a death worth
+    // reading and one that should never have been counted.
+    if (!trace.killBlowAmount && killer == unit)
+        fields += trace.scriptedWipe ? ",\"cause\":\"reset\"" : ",\"cause\":\"self\"";
+
     trace.killBlowSource = 0;
     trace.killBlowAmount = 0;
+    trace.scriptedWipe = false;
 
     if (trace.lastHpMs)
     {

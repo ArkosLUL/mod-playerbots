@@ -6,6 +6,7 @@
 
 #include "WipeAction.h"
 #include "PlayerbotAI.h"
+#include "RaidObs.h"
 
 bool WipeAction::Execute(Event event)
 {
@@ -14,6 +15,10 @@ bool WipeAction::Execute(Event event)
 
     if (owner != nullptr && master != nullptr && master->GetGUID() != owner->GetGUID())
         return false;
+
+    // Before the kill: Unit::Kill runs the death hook inline, so the flag has to be set by the time
+    // it does or the record is already written.
+    RaidObs::NoteScriptedWipe(bot);
 
     bot->Kill(bot, bot);
 
