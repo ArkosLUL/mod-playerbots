@@ -14,6 +14,8 @@
 #include "UldBossHelper.h"
 #include "UldEncounter_Vezax.h"
 
+#include <algorithm>
+
 namespace
 {
 
@@ -112,8 +114,19 @@ public:
         }
 
         if (spellInfo->Id == SPELL_VEZAX_SARONITE_VAPORS_SPAWN)
-            InterruptVezaxCastersNear(caster, caster->GetPosition(), ULDUAR_VEZAX_HAZARD_RADIUS,
+        {
+            Position const puddle = caster->GetPosition();
+            InterruptVezaxCastersNear(caster, puddle, ULDUAR_VEZAX_HAZARD_RADIUS,
                                       &GainsNothingFromVaporPuddle);
+
+            // 63322 applies a periodic aura rather than a persistent area aura, so it is never a
+            // DynamicObject for the snapshot sweep to find, and the corpse holding it leaves the
+            // watched set the moment it dies. Without this the puddle is nowhere in the trace.
+            // 63323's own duration is the corpse aura's life, and so the puddle's.
+            uint32 const ttlMs = static_cast<uint32>(std::max<int32>(0, spellInfo->GetDuration()));
+            RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SARONITE_VAPORS_PUDDLE, puddle,
+                                      ULDUAR_VEZAX_HAZARD_RADIUS, ttlMs);
+        }
     }
 };
 

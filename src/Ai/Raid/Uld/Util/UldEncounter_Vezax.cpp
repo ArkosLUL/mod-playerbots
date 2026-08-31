@@ -216,8 +216,19 @@ bool VezaxFormationActive(PlayerbotAI* botAI)
     bool const active = vezax && vezax->IsInCombat();
 
     // Probed here rather than at the call sites: the trigger and the movement multiplier both route
-    // through this, and a bot standing still with no slot is the symptom this answer explains.
-    RaidObs::NoteDerived(bot, "vezax.formation", active ? "1" : "0");
+    // through this, and a bot standing still with no slot is the symptom this answer explains. The
+    // reason carries as much as the answer does - "outside" before the raid walks in is the design
+    // working, while "noboss" means the instance lookup came back empty and every gate below it is
+    // shut with nothing else in the trace to say so.
+    char const* reason = "on";
+    if (!inRoom)
+        reason = "outside";
+    else if (!vezax)
+        reason = "noboss";
+    else if (!active)
+        reason = "idle";
+
+    RaidObs::NoteDerived(bot, "vezax.formation", reason);
 
     return active;
 }
@@ -481,10 +492,15 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
     if (!bot)
         return false;
 
+    // vezax.block is written at each way out rather than once in the middle, because a displaced bot
+    // resolves twice in one call: probing early would emit its assigned block and then the fallback,
+    // and NoteDerived's emit-on-change would read that as a flap every tick.
+
     // The main tank holds the anchor, which is Vezax's own spawn: he is already in melee range of a
     // tank standing there, so he never walks, and every radius measured from that point stays true.
     if (PlayerbotAI::IsMainTank(bot))
     {
+        RaidObs::NoteDerived(bot, "vezax.block", "tank");
         position = ULDUAR_VEZAX_ANCHOR;
         return true;
     }
@@ -501,9 +517,12 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
     VezaxEncounterState& state = stateItr->second;
     auto const assignmentItr = state.slotAssignments.find(bot->GetGUID());
     if (assignmentItr == state.slotAssignments.end())
+    {
+        // Every slot of this bot's kind is taken - 7 or more healers, or 19 or more other ranged. It
+        // holds no position at all from here on, which nothing else in the trace would show.
+        RaidObs::NoteDerived(bot, "vezax.block", "unslotted");
         return false;
-
-    RaidObs::NoteDerived(bot, "vezax.block", VezaxSlotBlockName(assignmentItr->second));
+    }
 
     std::vector<Position> avoid;
     VezaxBuildAvoidPositions(bot, hazards, avoid);
@@ -516,6 +535,7 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
 
     if (avoid.empty() || IsVezaxSpotSafe(ownSlot, avoid, tolerance))
     {
+        RaidObs::NoteDerived(bot, "vezax.block", VezaxSlotBlockName(assignmentItr->second));
         state.displacedAssignments.erase(bot->GetGUID());
         position = ownSlot;
         return true;
@@ -567,12 +587,19 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
         Position const clear = FindNearestPositionClearOfHazards(
             bot, avoid, ULDUAR_VEZAX_HAZARD_CLEARANCE, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
         if (clear == Position())
+        {
+            RaidObs::NoteDerived(bot, "vezax.block", "stuck");
             return false;
+        }
 
+        // Off the formation entirely, on a spot no slot table knows about.
+        RaidObs::NoteDerived(bot, "vezax.block", "loose");
         position = clear;
         return true;
     }
 
+    // The displaced slot, not the assigned one: that is where the bot is actually walking.
+    RaidObs::NoteDerived(bot, "vezax.block", VezaxSlotBlockName(displaced));
     state.displacedAssignments[bot->GetGUID()] = displaced;
     return TryGetVezaxSlotPosition(bot, displaced, position);
 }
@@ -665,14 +692,25 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
     Position const candidate = FindNearestPositionClearOfHazards(
         bot, avoid, ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE,
         ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS);
+
+    // vezax.dodge is which rule produced the destination: the move record carries the coordinate and
+    // the action that issued it, but nothing that separates these four. "none" is the search coming
+    // up empty, "blast" the band being given up because the clamp landed back inside the impact.
     if (candidate == Position())
+    {
+        RaidObs::NoteDerived(bot, "vezax.dodge", "none");
         return false;
+    }
+
+    char const* branch = "band";
 
     // The helper answers with the nearest clear spot in any direction, which for a bot standing on
     // the impact is as likely to point into the melee ball as out of it. Healers get pulled back
     // inside the boss's target-exclusion radius instead: leaving it is what puts them in the pool.
     if (PlayerbotAI::IsHeal(bot))
     {
+        branch = "heal";
+
         PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
         Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
         spot = vezax ? VezaxClampRadius(vezax->GetPosition(), candidate, 0.0f,
@@ -690,9 +728,11 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
     if (spot.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <
         ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
     {
+        branch = "blast";
         spot = candidate;
     }
 
+    RaidObs::NoteDerived(bot, "vezax.dodge", branch);
     return true;
 }
 
