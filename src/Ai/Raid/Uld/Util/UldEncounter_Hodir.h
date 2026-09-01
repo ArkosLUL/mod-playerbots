@@ -66,7 +66,11 @@ enum UlduarHodirIds
 // it stops Biting Cold, which is otherwise a tenth of the raid's time spent walking. It grants no
 // Flash Freeze exemption, whatever the old comment here claimed - only the Snowpacked Icicle Target
 // does that, through 65705 -> 62464.
-constexpr float ULDUAR_HODIR_STARLIGHT_RADIUS = 4.0f;
+//
+// 3, not the 8 the DBC row carries and not the 4 two traces of medians suggested. Binned by distance,
+// the hold rate is 94/90/78% across the first three yards and falls off a cliff to 21% in the fourth,
+// so the edge is at 3 and the 4th yard was sampling blur - bots cover 1.75 yd between snapshots.
+constexpr float ULDUAR_HODIR_STARLIGHT_RADIUS = 3.0f;
 constexpr float ULDUAR_HODIR_TOASTY_FIRE_RADIUS = 11.0f;
 constexpr float ULDUAR_HODIR_SAFE_AREA_RADIUS = 9.0f;
 // The run parks at TOLERANCE and only releases at RELEASE. MoveInside lands the bot at exactly
@@ -146,9 +150,13 @@ constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
 constexpr float ULDUAR_HODIR_DODGE_TRIGGER_MARGIN = 0.5f;
 
 // The dodge holds one destination rather than deriving a new one every tick. Inside ARRIVE it has got
-// there and picks again; slip further than SLIP back from its closest approach and something else is
+// there and stops issuing; slip further than SLIP back from its closest approach and something else is
 // steering the bot, so it re-issues from where the bot actually is and takes the movement slot back.
-constexpr float ULDUAR_HODIR_DODGE_ARRIVE = 1.5f;
+//
+// ARRIVE has to stay well short of the sweep's own step. The sweep rings outward in 2 yd hops, so at
+// 1.5 a bot counted as arrived a fifth of the way into the leg, still inside the radius that re-arms
+// the trigger, and dodged again immediately.
+constexpr float ULDUAR_HODIR_DODGE_ARRIVE = 0.8f;
 constexpr float ULDUAR_HODIR_DODGE_SLIP = 1.0f;
 
 // How far the Starlight step looks for zones. Deliberately short of the room radius: it runs per bot
@@ -161,9 +169,13 @@ constexpr float ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS = 30.0f;
 // on a point. Any number may share a zone - one Ice Shards hit is 41% of a health pool (p90 54%), so
 // an icicle catching two of them is two heals, and +50% to every cast and swing is worth that.
 //
-// Stand radius plus arrival tolerance has to stay inside what Starlight reaches: 2 + 1 = 3, against a
-// measured p90 of 3.3 for bots actually holding the aura.
-constexpr float ULDUAR_HODIR_STARLIGHT_STAND_RADIUS = 2.0f;
+// Stand radius plus arrival tolerance has to stay inside what Starlight reaches, with room to spare.
+// At 2 + 1 the sum landed exactly on the 3 yd edge, so a bot that reported arrived was standing where
+// the aura holds one tick in five and any nudge dropped it.
+//
+// The margin comes out of the stand radius, never the tolerance. Tolerance is also what stands the
+// position trigger down, so trimming it would just move the churn from the dodge to the anchor.
+constexpr float ULDUAR_HODIR_STARLIGHT_STAND_RADIUS = 1.5f;
 constexpr float ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE = 1.0f;
 static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE <=
                   ULDUAR_HODIR_STARLIGHT_RADIUS,
@@ -171,13 +183,13 @@ static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND
 
 // Where the two ends of the shed shuttle sit when the bot is standing in Starlight. Both ends and the
 // straight line between them stay inside the zone, so the aura survives the shuttle that would
-// otherwise walk the bot out of it. Sized off the p90 of 3.3 that bots actually holding the aura
-// measure at rather than off the 4 the radius nominally reaches, so both ends keep a yard of margin.
+// otherwise walk the bot out of it. A yard inside the 3 yd edge at both ends, because an end sitting
+// on it sheds the buff the shuttle is being routed this way to keep.
 //
-// 5 yd end to end is a yard shorter than the declump leg, which is the shortest single move that
-// spans two aura ticks - but the shuttle chains, alternating ends until the aura is gone, so the bot
-// never stops and it is the chain rather than the leg that covers the ticks.
-constexpr float ULDUAR_HODIR_STARLIGHT_SHED_RADIUS = 2.5f;
+// 4 yd end to end is short of the declump leg, which is the shortest single move that spans two aura
+// ticks - but the shuttle chains, alternating ends until the aura is gone, so the bot never stops and
+// it is the chain rather than the leg that covers the ticks.
+constexpr float ULDUAR_HODIR_STARLIGHT_SHED_RADIUS = 2.0f;
 static_assert(ULDUAR_HODIR_STARLIGHT_SHED_RADIUS < ULDUAR_HODIR_STARLIGHT_RADIUS,
               "both ends of the shed shuttle have to stay inside Starlight");
 
@@ -294,6 +306,16 @@ bool GetHodirStarlightZoneAt(PlayerbotAI* botAI, Player* bot, Position& out);
 // zone so it keeps the aura; everyone else takes the nearest point that is clear of the rest of the
 // raid. Legs are long enough to cover two aura ticks.
 bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
+
+// True when the shed would start walking a bot that is currently standing still: it holds at least
+// the stacks the shuttle arms at, and it is not in a fire that sheds them for free. Says nothing
+// about a shed already running - the action latches that itself and carries it down to zero, which
+// is why HodirBitingColdTrigger still fires on any stack.
+//
+// Anything that steps aside for the shed has to ask this rather than the trigger. 87% of the time a
+// bot holds Biting Cold it holds exactly one stack, 32.8% of the fight each, and in that window the
+// shuttle does nothing - so a node that stood down for the trigger stood down for nothing.
+bool IsHodirBitingColdShedArmed(Player* bot);
 
 // False once an icicle has already detonated. It lingers another 3.3s after the blast, and treating
 // that corpse as live both inflates the hazard set past what any dodge can clear and keeps bots

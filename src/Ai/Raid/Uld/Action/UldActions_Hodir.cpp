@@ -111,17 +111,21 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Keep walking to the spot already chosen. The sweep below searches out from wherever the bot is
-    // standing, so deriving it again every tick chases its own answer outward - measured at a fresh
-    // destination every 420ms, each 2 yd past the last, 89% of them further from the boss, and every
-    // accepted MoveTo clearing the MotionMaster so the walk never finished. Re-offering the same point
-    // answers Duplicate and returns false, which is correct: the forced walk still holds the slot.
+    // Hold the spot already chosen, arrival included, and re-validate it against the live hazard list
+    // rather than sweeping again. The sweep below rings outward from wherever the bot is standing in
+    // 2 yd steps, so deriving every tick just hands it another 2 yd hop - 4197 forced moves in a six
+    // minute pull, a fresh destination every 410ms, 71% under half a second apart, each accepted MoveTo
+    // clearing the MotionMaster so the walk never finished. Clearing the spot on arrival dropped
+    // through to that sweep in the same tick, which is where the loop came from. Only a spot that has
+    // stopped being clear is worth a new one; re-offering the same point answers Duplicate and returns
+    // false, which is correct, because the forced walk still holds the slot.
     if (!IsEmptyPosition(_dest) && IsClearOfHazards(_dest, hazards))
     {
         float const remaining = bot->GetExactDist2d(&_dest);
         if (remaining <= ULDUAR_HODIR_DODGE_ARRIVE)
-            _dest = Position();
-        else if (remaining <= _destDist + ULDUAR_HODIR_DODGE_SLIP)
+            return false;
+
+        if (remaining <= _destDist + ULDUAR_HODIR_DODGE_SLIP)
         {
             _destDist = std::min(_destDist, remaining);
             return MoveTo(bot->GetMapId(), _dest.GetPositionX(), _dest.GetPositionY(), _dest.GetPositionZ(),
@@ -173,13 +177,10 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
         return false;
     }
 
-    // The aura, not a zone lookup: it is what the bot is actually paid for, it costs no grid sweep,
-    // and it is the thing about to be lost. The leg the shuttle picks stays inside the zone, so the
-    // extra stack buys uninterrupted haste rather than an uninterrupted stand.
-    uint32 const arm = bot->HasAura(SPELL_HODIR_STARLIGHT) ? ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT
-                                                           : ULDUAR_HODIR_BITING_COLD_SHED_STACKS;
-
-    if (!_shedding && cold->GetStackAmount() < arm)
+    // Shared with everything that steps aside for the shed, so the two cannot disagree about whether
+    // one is coming. It reads the aura rather than a zone lookup: that is what the bot is actually
+    // paid for, it costs no grid sweep, and it is the thing about to be lost.
+    if (!_shedding && !IsHodirBitingColdShedArmed(bot))
         return false;
 
     // Once started, keep going until the aura is gone. A stack comes off only on the second moving

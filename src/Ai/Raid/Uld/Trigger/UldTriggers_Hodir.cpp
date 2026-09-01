@@ -141,8 +141,12 @@ bool HodirRaidPositionTrigger::IsActive()
     if (dodge.IsActive())
         return false;
 
-    HodirBitingColdTrigger bitingCold(botAI);
-    if (bitingCold.IsActive())
+    // The arm threshold, not HodirBitingColdTrigger. That one fires on any stack because the action
+    // owns the shed-to-zero latch, but 87% of the time a bot holds Biting Cold it holds exactly one -
+    // 32.8% of the fight each - and there the shuttle does nothing at all. Standing the anchor down
+    // for it is what kept the ranged out of Starlight: a usable zone was in range on 85% of their
+    // ticks and they were standing in one for 22%.
+    if (IsHodirBitingColdShedArmed(bot))
         return false;
 
     Position anchor;

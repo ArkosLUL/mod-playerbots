@@ -8,25 +8,33 @@ the deepest point with 6 yd of floor all round, not the visual corner, which has
 nothing behind it. Off-tank `(1980.00, -277.00)` sits deeper in rather than toward the raid, so a
 taunt never walks him at the stack. All spots are navprobe-verified.
 
-**Starlight measures 4 yd, whatever its DBC row says.** `62807` is aura **193
+**Starlight measures 3 yd, whatever its DBC row says.** `62807` is aura **193
 `SPELL_AURA_MELEE_SLOW`**, whose handler `HandleModCombatSpeedPct` applies `ApplyCastTimePercentMod`
 as well as all three attack timers, amount 50 — **+50% haste to casting and swinging**, the biggest
-throughput lever in the fight. The row says 8, but across two traces bots holding the aura sit a
-median **2.0 yd** from the zone (p90 3.3) while bots without it are already at 7.6 by the tenth
-percentile. 4 yd holds *one* bot at the 4.5 yd spacing icicles force, so Starlight is a **per-bot
-opportunity, never something to build a formation on**: `ULDUAR_HODIR_STARLIGHT_STAND_RADIUS` 2.0 plus
-1.0 tolerance, `static_assert`ed to stay inside it, and a 30 yd search radius because the step runs
-per bot per tick.
+throughput lever in the fight. The row says 8. Binned by distance the hold rate is 94/90/78% across
+the first three yards and 21% in the fourth, so the edge is 3 and the medians that once read as 4 were
+sampling blur — bots cover 1.75 yd between snapshots. 3 yd holds *one* bot at the 4.5 yd spacing
+icicles force, so Starlight is a **per-bot opportunity, never something to build a formation on**:
+`ULDUAR_HODIR_STARLIGHT_STAND_RADIUS` 1.5 plus 1.0 tolerance, `static_assert`ed to stay inside it, and
+a 30 yd search radius because the step runs per bot per tick. **Take the margin out of the stand
+radius, never the tolerance** — tolerance also stands the position trigger down, so trimming it just
+moves churn from the dodge to the anchor.
 
-**The formation rides a Toasty Fire instead.** `62821` measures true to its 11 yd (with-aura p90
+**The formation is built to ride a Toasty Fire.** `62821` measures true to its 11 yd (with-aura p90
 11.9) and stops Biting Cold, which is otherwise a tenth of the raid's time spent walking. Slots sit on
 two concentric rings, `ULDUAR_HODIR_RAID_RING_INNER` 4.5 and `_OUTER` 9.0 with six inner slots — 4.5 yd
 minimum separation, so Ice Shards' 4 yd splash catches one bot instead of five, and a bot shedding
 Biting Cold can step outward without closing on its neighbours. Outer ring plus its 2 yd arrival
-tolerance is exactly 11, `static_assert`ed to stay inside the fire. The mage drops fires 6.8-33 yd
-out; `_FIRE_ADOPT_RADIUS` 25 is where roughly four fifths of them are still closer than the shuttle
-they save. The centre is gated 15 yd off **Hodir himself**, not the tank spot he leaves — he drifts
-10-25 yd, and a fixed-point gate once let the centre land 6.8 yd from him.
+tolerance is exactly 11, `static_assert`ed to stay inside the fire. The centre is gated 15 yd off
+**Hodir himself**, not the tank spot he leaves — he drifts 10-25 yd, and a fixed-point gate once let
+the centre land 6.8 yd from him.
+
+**In practice it never does.** A fire must also leave the whole outer ring inside
+`_CASTER_MAX_BOSS_GAP` 30, so it has to sit 15-19 yd from him, and **0 of 556** sampled fires did
+(p50 26.4, p10 23.2). `hodir.fire` reads `none` for every bot all fight, the centre stays
+`ULDUAR_HODIR_RAID_ANCHOR`, and the raid pays the shuttle instead. That is geometry, not a bad
+constant: a 12-bot ring cannot sit on a fire 26 yd out and keep its far side within 30 of the
+boss, so widening the band just walks the far half out of casting range.
 
 **Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
 exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
@@ -81,11 +89,12 @@ budget for crossing the room, against a measured 30 yd median run at ~7 yd/s cos
   guessing wrong opens the window on nothing. `UldTriggers_Mimiron.cpp:31` is the same shape.
 - **The shelter run keys off 33174 existing**, not off the boss casting. Starting when the drift
   spawns puts the raid under a 14,000 / 7 yd detonation.
-- Everyone converges on the drift nearest the **ring centre**, not `ULDUAR_HODIR_RAID_ANCHOR` — the
-  ring rides a fire and sits a median 9.5 yd off that fixed point (p90 17.6), so measuring from a spot
-  nobody stands on picked drifts 25 yd away with three closer candidates on the floor. Trigger and
-  action share one helper; two derivations would oscillate. It answers "none" before deriving the
-  centre, since a shelter exists for ~6s of every 49s cycle and the centre costs a second grid sweep.
+- Everyone converges on the drift nearest the **ring centre**, not `ULDUAR_HODIR_RAID_ANCHOR`. The
+  two are the same point while no fire is adopted, but when one was the fixed point sat a median
+  9.5 yd off the ring (p90 17.6) and picked drifts 25 yd away with three closer candidates on the
+  floor. Trigger and action share one helper; two derivations would oscillate. It answers "none"
+  before deriving the centre, since a shelter exists for ~6s of every 49s cycle and the centre costs
+  a second grid sweep.
 - **The anchor is abandoned every 48s and that is correct** — tanks included. He is encased otherwise.
 - **Residual, still open:** the dodge issues `MOVEMENT_FORCED` and the shelter run `MOVEMENT_COMBAT`,
   and `IsWaitingForLastMove` only yields to a strictly higher priority, so a dodge firing late in the
@@ -125,8 +134,15 @@ those on the floor have already blown.
 **Biting Cold sheds on sustained movement only.** A stack comes off on the second *consecutive*
 moving tick and any stationary tick between resets that progress, so the shuttle walks 6 yd legs
 (`_SHUTTLE_HALF_LEG` 3.0) on bearing −π/4, parallel to the SW bevel, chaining until the aura is gone.
-It arms at 2 stacks: ~33% movement duty for ~600/s, where arming at 1 would cost half the raid's cast
-uptime to save 200/s.
+It arms at 2 stacks, 3 in Starlight: ~33% movement duty for ~600/s, where arming at 1 would cost half
+the raid's cast uptime to save 200/s.
+
+**Ask `IsHodirBitingColdShedArmed`, never `HodirBitingColdTrigger`, before standing a node down for
+the shed.** The trigger fires on *any* stack because the action owns the shed-to-zero latch — but 87%
+of the time a bot holds Biting Cold it holds exactly one, **32.8% of the fight each**, and there the
+shuttle does nothing at all. `HodirRaidPositionTrigger` deferring to the trigger is what kept the
+ranged out of Starlight: a usable zone was in range on **85%** of their ticks while they stood in one
+for **22%**.
 
 ## Traps
 
@@ -137,9 +153,14 @@ uptime to save 200/s.
 - The anchor is **not combat-gated**: `MoveInLineOfSight` is a no-op, so bots pre-position in the
   corner and the tank pulls from there instead of dragging him 75 yd.
 - **Melee get no anchor, no fire and no Starlight.** Re-examined once Starlight turned out to be +50%
-  melee haste too, and confirmed: the only fix is dragging him to the druid, which costs the corner.
-- The Storm Cloud carrier **laps the ring**, direction latched for one carry; tanks never run it and
-  are never buff targets. Greedy re-targeting is the Auriaya corridor dance.
+  melee haste too, and confirmed: zones sit a median **21.6 yd** from him, so melee are inside one
+  **1.8%** of ticks and within 10 yd for 7.7%. The only fix is dragging him to the druid, which costs
+  the corner.
+- The Storm Cloud carrier **laps the ring**, direction latched for one carry. Tanks never lap — the
+  trigger refuses, since leaving the corner mid-Frozen-Blows costs more than the buff — but the boss
+  still picks them: **14 of 53** carries in one pull went to a tank and 6 more to healers, every one a
+  dead window. Collecting those would mean walking the receivers to the carrier. Greedy re-targeting
+  is the Auriaya corridor dance.
 - Healers are excluded from the targeting node entirely, and **5** non-healers break each ice block —
   raider and helper alike, picked by a GUID window offset per block so several blocks draw disjoint
   sets instead of the same five. Freeing outranks the boss (the trapped raider dies to the next
@@ -173,6 +194,14 @@ Three separate causes, all of them still easy to reintroduce.
 - **Tanks do not run the icicle dodge.** They ate a ~50 yd walk around the room and took Hodir with
   them; Bulwark ended up 70 yd from the boss while alive. Tanks eat the 14,000 instead, and the
   Biting Cold shuttle already gives them the movement they need without leaving the corner.
+- **The dodge holds its destination through arrival.** `FindNearestPositionClearOfHazards` rings
+  outward in 2 yd steps from wherever the bot is standing, so clearing `_dest` on arrival dropped
+  through to a fresh sweep in the same tick and bought another 2 yd hop — **4,197** forced moves in
+  one pull, a new destination every **410 ms**, 71% of them under half a second apart, 1,000-1,700 yd
+  walked for 15-55 yd of displacement. Hold the spot and re-validate it against the live hazard list
+  instead; sweep only once it stops being clear. `_DODGE_ARRIVE` is 0.8 for the same reason: at 1.5 a
+  bot counted as arrived a fifth of the way into a 2 yd leg, still inside the radius that re-arms the
+  trigger.
 
 Two things that look broken in a Hodir trace and are not: `hodir frozen blows swap action` logging
 ~95% `FAILED` is the stateless trigger retrying every ~110 ms while the taunt is on cooldown — count
@@ -183,8 +212,10 @@ accepted moves and zero `OK` verdicts, and `NearThorimEncounter` excludes his fl
 (`z < ULDUAR_THORIM_WING_MAX_Z` 425 against 432.687).
 
 **Still open here:** no tank defensive cooldown is tied to a Frozen Blows window — the tanks spent
-four and six in six minutes, unprompted. And the raid was at 42.9% boss health after six minutes,
-roughly half the pace hard mode needs; the movement-economy work is aimed at that and wants
+four and six in six minutes, unprompted. And the pace is still about half what the deadline needs:
+**92k dps** on the boss across a 5:57 wipe that left him at **14.93%**, against the **214k** a 38.57M
+pool wants in 180 s. Even the opening minute only reaches 117k, so this is not a fight that falls off
+after cooldowns — it starts short. The movement economy is the lever aimed at it and wants
 re-measuring before anything else is tried.
 
 **The taunt floor may be set too low.** `ULDUAR_HODIR_TAUNT_HEALTH_FLOOR` ships at **50.0f**, but a

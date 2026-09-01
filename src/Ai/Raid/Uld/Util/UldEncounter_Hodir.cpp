@@ -14,6 +14,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
+#include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
 #include "UldScripts.h"
@@ -316,11 +317,21 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
     std::vector<Position> const zones =
         GetDynamicObjectPositions(bot, ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS, SPELL_HODIR_STARLIGHT);
     if (zones.empty())
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "hodir.starlight", "none");
+
         return false;
+    }
 
     // The druid casts where it is standing, which is usually next to Hodir, so a good share of the
     // zones on the floor are ones no caster can use.
     Unit* hodir = GetHodir(botAI);
+
+    // Which rule kept the bot out, not which zone. A zone passed every gate on 85% of ranged ticks
+    // while they stood in one for 22%, so "was there one to have" and "was it offered" have to be
+    // separable from position alone.
+    char const* how = "none";
 
     // Staying inside the fire is not optional while there is one: a bot outside it starts shedding
     // Biting Cold, and that node outranks this one, so it would shuttle straight back out of the zone
@@ -347,7 +358,12 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
                           zone.GetPositionZ()));
 
         if (onFire && centre.GetExactDist2d(&stand) > fireLeash)
+        {
+            if (!found)
+                how = "fire";
+
             continue;
+        }
 
         // Both ends of the caster band. A zone the bot cannot shoot the boss from is not a throughput
         // lever, whatever haste it carries.
@@ -355,13 +371,22 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
         {
             float const gap = stand.GetExactDist2d(hodir);
             if (gap < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+            {
+                if (!found)
+                    how = "noreach";
+
                 continue;
+            }
         }
 
         out = stand;
         bestWalk = walk;
         found = true;
     }
+
+    // The point itself is already hodir.anchor, which this becomes when it is found.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.starlight", found ? "stand" : how);
 
     return found;
 }
@@ -504,6 +529,27 @@ bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out)
         RaidObs::NoteDerived(bot, "hodir.shuttle", how);
 
     return found;
+}
+
+bool IsHodirBitingColdShedArmed(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    // A fire counts as movement on every tick, so a bot in one sheds without the shuttle ever running.
+    if (bot->HasAura(SPELL_HODIR_TOASTY_FIRE_AURA))
+        return false;
+
+    Aura* cold = bot->GetAura(SPELL_BITING_COLD_PLAYER_AURA);
+    if (!cold)
+        return false;
+
+    // The extra stack in Starlight buys uninterrupted haste rather than an uninterrupted stand, and it
+    // has to be the same number the action arms at or the two disagree about whether a shed is coming.
+    uint32 const arm = bot->HasAura(SPELL_HODIR_STARLIGHT) ? ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT
+                                                           : ULDUAR_HODIR_BITING_COLD_SHED_STACKS;
+
+    return cold->GetStackAmount() >= arm;
 }
 
 static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
