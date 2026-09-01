@@ -84,6 +84,16 @@ constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 constexpr float ULDUAR_THORIM_ENCOUNTER_PROXIMITY = 200.0f;
 constexpr float ULDUAR_THORIM_WING_MAX_Z = 425.0f;
 
+// The one part of the encounter that ceiling cannot admit: the ramp and the upper hallway run
+// z 425-438, over Hodir's 433. Height cannot separate those two and neither can distance - the far
+// end of the hallway is 177 yd out, inside Hodir's own 136-176 band - so this half of the gate is a
+// box. X does the work: Hodir sits at x 1980, and nothing else in Ulduar is in here.
+constexpr float ULDUAR_THORIM_BALCONY_BOX_MIN_X = 2100.0f;
+constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_X = 2205.0f;
+constexpr float ULDUAR_THORIM_BALCONY_BOX_MIN_Y = -455.0f;
+constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_Y = -280.0f;
+constexpr float ULDUAR_THORIM_BALCONY_BOX_MAX_Z = 450.0f;
+
 // AiPlayerbot.SightDistance caps the "possible targets" values at 100 yd, and the Colossus is 131 yd
 // from the top pair of corridor waypoints - so its telegraph needs a wider, targeted grid lookup or
 // bots at the head of the corridor never see the hand go up.
@@ -197,6 +207,17 @@ extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2;
 extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3;
+// The upper hallway, from the second doors to Thorim's platform. Chained in order, and deliberately
+// not down the middle: two Paralytic Field bunnies sit on the centre line at (2134.9, -390.8) and
+// (2134.9, -339.7), each a 12 yd circle that stuns for 15s with no cast bar and no world object to
+// see. The chamber between the two doorways is ~40 yd wide, so the way past is to hug the east side
+// and come back to the middle for the north doorway. Worst leg clears a bunny by 15.8 yd.
+extern const Position ULDUAR_THORIM_BALCONY_1;
+extern const Position ULDUAR_THORIM_BALCONY_2;
+extern const Position ULDUAR_THORIM_BALCONY_3;
+extern const Position ULDUAR_THORIM_BALCONY_4;
+extern const Position ULDUAR_THORIM_BALCONY_5;
+extern const Position ULDUAR_THORIM_JUMP_START_POINT;
 extern const Position ULDUAR_THORIM_JUMP_END_POINT;
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
@@ -238,12 +259,20 @@ struct ThorimEncounterState
     ObjectGuid colossusGuid;
     uint32 colossusScanMs = 0;
 
+    ObjectGuid runeGiantGuid;
+    uint32 runeGiantScanMs = 0;
+
     RaidObs::ObsGuidSet barrierBailing{"thorim.barrierbail"};
 
     // Which half of the raid each member belongs to, struck once and then left alone. Recomputing it
     // per tick is what let a role predicate flipping mid-fight walk the arena squad into the corridor.
     RaidObs::ObsGuidMap<uint8> squads{"thorim.squad"};
     RaidObs::ObsValue<bool> squadsAssigned{"thorim.squadsassigned"};
+
+    // When the humans' entries in the map above were last refreshed. They are not struck with the
+    // rest: the split only ever picks bots, so a human who walks the corridor would otherwise be
+    // filed under the arena for the whole trace. Read from position, and only for the label.
+    uint32 humanSquadScanMs = 0;
 
     // The split is struck before the pull, and RaidObs has no session open until the pull, so the
     // change-only emit above lands in a trace that does not exist yet - which is why no Thorim trace
@@ -259,6 +288,11 @@ struct ThorimEncounterState
 
     // Which pet was last sent back to its owner. Keyed by owner, because that is what a reader has:
     // pets carry no snapshot row, so this note is the only place a trace says a pet left the arena.
+    // How far along the upper hallway each bot has walked. Monotonic on purpose: derived purely from
+    // position it would hand back the nearest waypoint, and the nearest one behind you is exactly how
+    // a squad ends up walking the corridor a second time.
+    RaidObs::ObsGuidMap<uint8> balconyStep{"thorim.balcony"};
+
     RaidObs::ObsGuidMap<ObjectGuid> petRecalls{"thorim.petrecall"};
 
     // When each pet was last told to come home. Re-issuing MoveFollow every tick restarts the walk and
@@ -378,6 +412,34 @@ bool ThorimPreferredGauntletLane(PlayerbotAI* botAI, bool& useLeftLane);
 // True only while a wave is still rolling, which is what separates the urgent dodge from the
 // standing lane preference.
 bool ThorimRunicSmashImminent(PlayerbotAI* botAI);
+
+//
+// Upper hallway
+//
+constexpr uint8 ULDUAR_THORIM_BALCONY_WAYPOINTS = 6;
+
+// How close counts as standing at a balcony waypoint. Wider than the corridor's 5-6 yd because
+// nothing up here is dodging anything - the point is only to keep the squad off the centre line.
+constexpr float ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE = 6.0f;
+
+// Close enough to jump. The old drop asked for 0.5 yd, which an exact-waypoint MoveTo will not
+// reliably hit, so a bot could circle the jump start for the rest of the fight.
+constexpr float ULDUAR_THORIM_JUMP_START_TOLERANCE = 3.0f;
+
+Position const& GetThorimBalconyWaypoint(uint8 index);
+
+// The Ancient Rune Giant, while it is still worth walking to. Its death opens the second doors and
+// sets _isHitAllowed on Thorim, so "gone" is what says the hallway is the squad's next job.
+Unit* GetThorimAncientRuneGiant(PlayerbotAI* botAI);
+
+// True once the hallway is open: the Giant is dead and Thorim is not, so there is a platform to walk
+// to and a boss to hit when the squad gets there.
+bool ThorimBalconyOpen(PlayerbotAI* botAI, Player* bot);
+
+// The waypoint this bot should be heading for, advancing the latch when it arrives. Counts a
+// waypoint reached on tolerance or on having passed its y, because the hallway runs one way and a
+// bot shoved sideways past a point should not turn around for it.
+uint8 ThorimAdvanceBalconyStep(Player* bot);
 
 // Runic Barrier is recast every 20s for its own 20s duration, so "stop attacking while it is up"
 // would mean never attacking. Non-tank melee back out on a health band instead and keep their

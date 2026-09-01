@@ -72,6 +72,17 @@ public:
     bool isUseful() override;
 };
 
+// Walks the upper hallway to Thorim's platform, then drops into the arena behind him. Owns the jump
+// outright - the corridor node used to, behind a 0.5 yd arrival test it could never reliably meet.
+class ThorimBalconyAdvanceAction : public MovementAction
+{
+public:
+    ThorimBalconyAdvanceAction(PlayerbotAI* ai) : MovementAction(ai, "thorim balcony advance action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
 // Cross to the same progress point in the lane the Runic Colossus is not smashing.
 class ThorimRunicSmashAction : public ThorimLaneMovementAction
 {

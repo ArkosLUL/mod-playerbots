@@ -88,6 +88,7 @@ public:
         creators["thorim dps priority trigger"] = &RaidUlduarTriggerContext::thorim_dps_priority_trigger;
         creators["thorim arena positioning trigger"] = &RaidUlduarTriggerContext::thorim_arena_positioning_trigger;
         creators["thorim gauntlet positioning trigger"] = &RaidUlduarTriggerContext::thorim_gauntlet_positioning_trigger;
+        creators["thorim balcony advance trigger"] = &RaidUlduarTriggerContext::thorim_balcony_advance_trigger;
         creators["thorim fall from floor trigger"] = &RaidUlduarTriggerContext::thorim_fall_from_floor_trigger;
         creators["thorim phase 2 positioning trigger"] = &RaidUlduarTriggerContext::thorim_phase2_positioning_trigger;
         creators["mimiron fire resistance trigger"] = &RaidUlduarTriggerContext::mimiron_fire_resistance_trigger;
@@ -269,6 +270,7 @@ private:
     static Trigger* thorim_dps_priority_trigger(PlayerbotAI* ai) { return new ThorimDpsPriorityTrigger(ai); }
     static Trigger* thorim_arena_positioning_trigger(PlayerbotAI* ai) { return new ThorimArenaPositioningTrigger(ai); }
     static Trigger* thorim_gauntlet_positioning_trigger(PlayerbotAI* ai) { return new ThorimGauntletPositioningTrigger(ai); }
+    static Trigger* thorim_balcony_advance_trigger(PlayerbotAI* ai) { return new ThorimBalconyAdvanceTrigger(ai); }
     static Trigger* thorim_fall_from_floor_trigger(PlayerbotAI* ai) { return new ThorimFallFromFloorTrigger(ai); }
     static Trigger* thorim_phase2_positioning_trigger(PlayerbotAI* ai) { return new ThorimPhase2PositioningTrigger(ai); }
     static Trigger* mimiron_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "mimiron"); }

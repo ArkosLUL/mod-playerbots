@@ -88,6 +88,7 @@ public:
         creators["thorim dps priority action"] = &RaidUlduarActionContext::thorim_dps_priority_action;
         creators["thorim arena positioning action"] = &RaidUlduarActionContext::thorim_arena_positioning_action;
         creators["thorim gauntlet positioning action"] = &RaidUlduarActionContext::thorim_gauntlet_positioning_action;
+        creators["thorim balcony advance action"] = &RaidUlduarActionContext::thorim_balcony_advance_action;
         creators["thorim phase 2 positioning action"] = &RaidUlduarActionContext::thorim_phase2_positioning_action;
         creators["thorim fall from floor action"] = &RaidUlduarActionContext::thorim_fall_from_floor_action;
         creators["mimiron fire resistance action"] = &RaidUlduarActionContext::mimiron_fire_resistance_action;
@@ -256,6 +257,7 @@ private:
     static Action* thorim_dps_priority_action(PlayerbotAI* ai) { return new ThorimDpsPriorityAction(ai); }
     static Action* thorim_arena_positioning_action(PlayerbotAI* ai) { return new ThorimArenaPositioningAction(ai); }
     static Action* thorim_gauntlet_positioning_action(PlayerbotAI* ai) { return new ThorimGauntletPositioningAction(ai); }
+    static Action* thorim_balcony_advance_action(PlayerbotAI* ai) { return new ThorimBalconyAdvanceAction(ai); }
     static Action* thorim_phase2_positioning_action(PlayerbotAI* ai) { return new ThorimPhase2PositioningAction(ai); }
     static Action* thorim_fall_from_floor_action(PlayerbotAI* ai) { return new ThorimFallFromFloorAction(ai); }
     static Action* mimiron_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "mimiron"); }

@@ -239,6 +239,31 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
             units += ",";
         first = false;
         units += UnitRow(player, dealt);
+
+        // Pets are in nothing else: the sweep only keeps units hostile to the anchor and the watched
+        // set is seeded from attackers, so a trace could say a pet cast something but never where it
+        // was standing. Guardians count - a death knight's ghoul and a shaman's wolves are not pets.
+        // Totems are skipped the other way: four of them, none of which ever move.
+        if (!g_cfg.logPets)
+            continue;
+
+        for (Unit* pet : player->m_Controlled)
+        {
+            if (!pet || !pet->IsAlive() || pet->IsTotem())
+                continue;
+
+            if (!pet->IsPet() && !pet->IsGuardian())
+                continue;
+
+            if (!pet->IsInWorld() || pet->GetMap() != map || !ridden.insert(pet->GetGUID()).second)
+                continue;
+
+            // No damage column. AccrueDamageDealt already folds a pet's damage into its owner's total,
+            // and a second copy here would double any window differenced out of two snapshots.
+            units += "," + UnitRow(pet);
+            if (session)
+                session->EnsureUnit(pet);
+        }
     }
 
     for (ObjectGuid guid : watched)

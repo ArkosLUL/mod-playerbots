@@ -9,13 +9,14 @@ import json
 import pathlib
 import sys
 
-SUPPORTED_SCHEMA = 9
+SUPPORTED_SCHEMA = 10
 
 # Old traces stay readable: every addition through v6 is a new field or a new record, so an older file
 # only loses the detail those carry. v7 gave an existing column a -1 sentinel, but what it replaces was
 # nonsense in older files too, so one render serves both. v8 appends to the end of a snapshot row and
-# adds an optional cast field, so a pre-v8 row is just a short one.
-READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9)
+# adds an optional cast field, so a pre-v8 row is just a short one. v10 adds pet rows to the snapshot
+# and an owner field on unit, so a pre-v10 file simply has no pets in it.
+READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10)
 
 
 def clock(ms: int) -> str:
@@ -35,6 +36,9 @@ class Trace:
         self.entries: dict[int, int] = {}
         self.spells: dict[int, str] = {}
         self.roles: dict[int, str] = {}
+        # Owner guid per pet/guardian/totem, v10 and up. Pet names are picked at summon time and repeat
+        # across owners, so this is the only reliable way to say whose Wolf a row belongs to.
+        self.owners: dict[int, int] = {}
         self.humans: set[int] = set()
         self.bosses: set[int] = set()
         self.truncated = False
@@ -74,6 +78,8 @@ class Trace:
                         self.roles[rec["g"]] = rec["r"]
                     if rec.get("h"):
                         self.humans.add(rec["g"])
+                    if rec.get("own"):
+                        self.owners[rec["g"]] = rec["own"]
                     if rec.get("b"):
                         self.bosses.add(rec["g"])
                     continue
@@ -106,6 +112,10 @@ class Trace:
         if not guid:
             return "-"
         if guid in self.names:
+            owner = self.owners.get(guid)
+            # Owner in parentheses, because "Wolf did 40k" is useless and "Wolf (Trueshot)" is not.
+            if owner and owner in self.names:
+                return f"{self.names[guid]} ({self.names[owner]})"
             return self.names[guid]
         # A guid is a type tag in the high half plus the counter. Printing the bare counter would make
         # a creature and a player that share one look like the same unit.

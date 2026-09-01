@@ -36,6 +36,16 @@ public:
     bool IsActive() override;
 };
 
+// A corridor squad member up in the hallway with the Rune Giant dead. Nothing else covers this leg:
+// the lane waypoints are all down at z 412, so up here the squad falls through to plain follow, and
+// follow walks it straight over two Paralytic Field bunnies sitting on the centre line.
+class ThorimBalconyAdvanceTrigger : public Trigger
+{
+public:
+    ThorimBalconyAdvanceTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim balcony advance trigger") {}
+    bool IsActive() override;
+};
+
 class ThorimArenaPositioningTrigger : public Trigger
 {
 public:

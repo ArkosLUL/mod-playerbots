@@ -99,6 +99,7 @@ void LoadConfig()
     g_cfg.preRollMs = sPlayerbotAIConfig.obsPreRollSeconds * 1000;
     g_cfg.logHeals = sPlayerbotAIConfig.obsLogHeals;
     g_cfg.logAuras = sPlayerbotAIConfig.obsLogAuras;
+    g_cfg.logPets = sPlayerbotAIConfig.obsLogPets;
     g_cfg.minDamage = sPlayerbotAIConfig.obsMinDamageToLog;
     g_cfg.deathRewindMs = sPlayerbotAIConfig.obsDeathRewindMs;
     g_cfg.deathVerdictMs = sPlayerbotAIConfig.obsDeathVerdictMs;

@@ -86,9 +86,9 @@ else `7`. `0` still means no unit.
 |---|---|
 | `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
 | `pull` / `end` | `boss`,`src`: bossstate, mark, engage, rename (then `was`) / `out`: kill, wipe, reset, idle, mapgone, shutdown |
-| `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss, plus `c`,`r`,`h` for a player — once per guid |
+| `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss,`own` owner guid when it has one, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
-| `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt]`, `dealt` cumulative damage to non-raid targets, 0 off the roster; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
+| `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt]`, `dealt` cumulative damage to non-raid targets, 0 off the roster and on pet rows; roster players, their pets and guardians, ridden vehicles and the swept creatures; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
 | `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` after |
 | `heal` | `s`,`d`,`sp`,`a`,`oh` overheal,`hp` after |
 | `abs` | `d`,`s` shield caster,`sp`,`a` |
@@ -178,7 +178,15 @@ the environmental and script damage `blow` exists for. The debuff list answers t
 **Damage out is a running total, not a record each.** `dmg` is one row per hit because a death is
 rewound blow by blow. Outgoing damage is only ever read as a rate, so a row per swing and tick would be
 tens of thousands of lines for what `snap.u`'s `dealt` already carries four times a second. A pet,
-totem or guardian credits its owner.
+totem or guardian credits its owner, and its own row carries 0 so differencing a window cannot count
+the same damage twice.
+
+**Pets are sampled, totems are not.** Nothing else in the file can place one: the sweep keeps only
+units hostile to the anchor and the watched set is seeded from attackers, so before v10 a trace could
+say a pet cast something but never where it went — and half of all pet casts carry no target at all,
+which is exactly the window a pet spends running somewhere. Guardians count, because a death knight's
+ghoul and a shaman's wolves are guardians rather than pets. Totems are skipped: a shaman drops four,
+none of them move, and none of them can pull anything. `AiPlayerbot.Obs.LogPets` turns it off.
 
 Same instance is not the same pull: gating `cast` on the session alone picked up 253 casts from a mob
 two rooms away and none at all from the raid.

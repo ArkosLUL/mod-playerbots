@@ -46,6 +46,15 @@ const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1 = Position(2217.8877f
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1 = Position(2212.193f, -307.44992f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2 = Position(2212.1353f, -318.20795f, 412.1348f);
 const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3 = Position(2212.1956f, -328.0144f, 412.1348f);
+// Both doorways are only ~18 yd wide (x 2126-2144), so 1 and 5 stay near the middle; 2 to 4 run up
+// the east side of the chamber, which is where the mesh smooths to anyway. Z is what navprobe
+// settles each point to, since the walk moves on exact waypoints and does not correct height.
+const Position ULDUAR_THORIM_BALCONY_1 = Position(2141.0f, -408.0f, 438.247f);
+const Position ULDUAR_THORIM_BALCONY_2 = Position(2151.0f, -396.0f, 438.247f);
+const Position ULDUAR_THORIM_BALCONY_3 = Position(2152.0f, -365.0f, 438.744f);
+const Position ULDUAR_THORIM_BALCONY_4 = Position(2151.0f, -332.0f, 438.247f);
+const Position ULDUAR_THORIM_BALCONY_5 = Position(2137.5f, -318.0f, 438.222f);
+const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
 const Position ULDUAR_THORIM_JUMP_END_POINT = Position(2137.8818f, -278.18942f, 419.66653f);
 const Position ULDUAR_THORIM_PHASE2_TANK_SPOT = Position(2134.8572f, -287.0291f, 419.4935f);
 const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2112.8752f, -267.69305f, 419.52814f);
@@ -95,6 +104,16 @@ std::array<GauntletWaypoint, ULDUAR_THORIM_GAUNTLET_WAYPOINTS> const& LaneWaypoi
     return leftLane ? leftLaneWaypoints : rightLaneWaypoints;
 }
 
+// Walked north, so y rises across the chain and the last entry is the jump start.
+std::array<Position const*, ULDUAR_THORIM_BALCONY_WAYPOINTS> const balconyWaypoints = {{
+    &ULDUAR_THORIM_BALCONY_1,
+    &ULDUAR_THORIM_BALCONY_2,
+    &ULDUAR_THORIM_BALCONY_3,
+    &ULDUAR_THORIM_BALCONY_4,
+    &ULDUAR_THORIM_BALCONY_5,
+    &ULDUAR_THORIM_JUMP_START_POINT,
+}};
+
 ThorimEncounterState* FindState(Player const* bot)
 {
     if (!bot)
@@ -107,10 +126,29 @@ ThorimEncounterState* FindState(Player const* bot)
 // Both halves of the gate, in one place so the two cannot drift apart. Everything guarded by it
 // either sweeps the grid or writes raid-wide state, so a raid parked on another boss reaching it is
 // not free - and by distance alone Hodir's room does.
+bool OnThorimBalcony(WorldObject const* who)
+{
+    if (!who)
+        return false;
+
+    float const x = who->GetPositionX();
+    float const y = who->GetPositionY();
+    float const z = who->GetPositionZ();
+
+    return z >= ULDUAR_THORIM_WING_MAX_Z && z <= ULDUAR_THORIM_BALCONY_BOX_MAX_Z &&
+           x >= ULDUAR_THORIM_BALCONY_BOX_MIN_X && x <= ULDUAR_THORIM_BALCONY_BOX_MAX_X &&
+           y >= ULDUAR_THORIM_BALCONY_BOX_MIN_Y && y <= ULDUAR_THORIM_BALCONY_BOX_MAX_Y;
+}
+
 bool NearThorimEncounter(Player const* bot)
 {
-    return bot && bot->GetPositionZ() < ULDUAR_THORIM_WING_MAX_Z &&
-           bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) <= ULDUAR_THORIM_ENCOUNTER_PROXIMITY;
+    if (!bot || bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+        return false;
+
+    // Under the wing ceiling covers the arena and the corridor. Above it, only the box does - which is
+    // the half that was missing, and why every node keyed off this one went quiet the moment the squad
+    // climbed the ramp.
+    return bot->GetPositionZ() < ULDUAR_THORIM_WING_MAX_Z || OnThorimBalcony(bot);
 }
 
 bool MemberCounts(Player const* member, uint32 instanceId)
@@ -297,11 +335,44 @@ void AssignThorimSquads(Player* bot)
         --dpsQuota;
     }
 
+    // Bots only. A human is never picked above, so filing them here would file every one of them under
+    // the arena - including one who walks the whole corridor. TickHumanSquads reads theirs off
+    // position instead.
     for (Player* member : roster)
-        state.squads[member->GetGUID()] =
-            static_cast<uint8>(gauntlet.count(member->GetGUID()) ? ThorimSquad::Gauntlet : ThorimSquad::Arena);
+        if (IsBotPlayer(member))
+            state.squads[member->GetGUID()] =
+                static_cast<uint8>(gauntlet.count(member->GetGUID()) ? ThorimSquad::Gauntlet : ThorimSquad::Arena);
 
     state.squadsAssigned = true;
+}
+
+// Where the humans in the raid actually are, for the trace and nothing else - every consumer of
+// GetThorimSquad runs inside a trigger or an action, which only ever evaluate for a bot. The split
+// itself is still struck once and left alone; this only labels the people it cannot place.
+void TickHumanSquads(Player* bot)
+{
+    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    if (state.humanSquadScanMs &&
+        GetMSTimeDiffToNow(state.humanSquadScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+        return;
+
+    state.humanSquadScanMs = getMSTime();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || IsBotPlayer(member) || member->GetMapId() != ULDUAR_MAP_ID)
+            continue;
+
+        // The same boundary the arena leash and the pet leash use, so "in the arena" means one thing
+        // across the encounter. Anywhere else near Thorim is the corridor or the hallway above it.
+        state.squads[member->GetGUID()] =
+            static_cast<uint8>(ThorimInArenaBox(member) ? ThorimSquad::Arena : ThorimSquad::Gauntlet);
+    }
 }
 
 bool MeleeSlotOf(Player* bot, uint8& slot)
@@ -684,7 +755,17 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
         if (targets.colossus)
             return NoteThorimDpsTarget(bot, targets.colossus);
 
-        return NoteThorimDpsTarget(bot, targets.runeGiant);
+        if (targets.runeGiant)
+            return NoteThorimDpsTarget(bot, targets.runeGiant);
+
+        // Thorim is the last thing in the gauntlet, and hitting him is what ends phase 1 - boss_thorim
+        // starts the jump on DamageTaken from a player above z 430. Without this the squad runs out of
+        // targets the moment the Rune Giant dies and phase 2 waits on a human. Gated on the bot's own
+        // height, not the squad, or a corridor bot at z 412 gets pulled 150 yd out of its lane.
+        if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+            return NoteThorimDpsTarget(bot, boss);
+
+        return NoteThorimDpsTarget(bot, nullptr);
     }
 
     // Arena. Acolytes first whoever is asking - they come with the wave and heal it back up. After
@@ -880,6 +961,88 @@ bool ThorimRunicSmashImminent(PlayerbotAI* botAI)
     return GetMSTimeDiffToNow(state->runicSmashSeenMs) < ULDUAR_THORIM_RUNIC_SMASH_LATCH_MS;
 }
 
+Position const& GetThorimBalconyWaypoint(uint8 index)
+{
+    return *balconyWaypoints[std::min<uint8>(index, ULDUAR_THORIM_BALCONY_WAYPOINTS - 1)];
+}
+
+Unit* GetThorimAncientRuneGiant(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot)
+        return nullptr;
+
+    // Cached the same way the Colossus is, and for the same reason: the balcony trigger asks once per
+    // bot per tick and a 150 yd grid sweep at that rate is not worth one boolean.
+    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    if (state.runeGiantScanMs && GetMSTimeDiffToNow(state.runeGiantScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+    {
+        Unit* cached = botAI->GetUnit(state.runeGiantGuid);
+        return cached && cached->IsAlive() ? cached : nullptr;
+    }
+
+    state.runeGiantScanMs = getMSTime();
+    state.runeGiantGuid.Clear();
+
+    Unit* giant = bot->FindNearestCreature(NPC_ANCIENT_RUNE_GIANT, ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE, true);
+    if (giant)
+        state.runeGiantGuid = giant->GetGUID();
+
+    return giant;
+}
+
+bool ThorimBalconyOpen(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !NearThorimEncounter(bot))
+        return false;
+
+    // Above the floor line, which up here means the hallway and Thorim's platform rather than the
+    // corridor. The corridor squad has its own node and must not be dragged into this one.
+    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // The Giant's death opens the second doors and sets _isHitAllowed, so it is the one event that
+    // turns the hallway into the squad's next job. While it lives, killing it is.
+    return GetThorimAncientRuneGiant(botAI) == nullptr;
+}
+
+uint8 ThorimAdvanceBalconyStep(Player* bot)
+{
+    ThorimEncounterState* state = FindState(bot);
+    if (!state)
+        return 0;
+
+    auto const& steps = state->balconyStep;
+    auto const itr = steps.find(bot->GetGUID());
+    uint8 step = itr == steps.end() ? 0 : itr->second;
+
+    // Runs one past the last waypoint. ULDUAR_THORIM_BALCONY_WAYPOINTS means arrived, and arrived has
+    // to be a latch rather than a distance test: once the squad is on the platform it is fighting
+    // Thorim and drifting off the mark, and re-anchoring it there every tick would fight "reach melee"
+    // exactly the way the arena picker used to fight "dps assist".
+    while (step < ULDUAR_THORIM_BALCONY_WAYPOINTS)
+    {
+        Position const& here = GetThorimBalconyWaypoint(step);
+
+        // Passing the waypoint's y counts as reaching it. The hallway runs one way, so a bot shoved
+        // north of a point by a knockback or by the pile is already done with it, and sending it back
+        // south is how the squad ends up walking the same ground twice.
+        bool const reached = bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
+                             bot->GetPositionY() > here.GetPositionY();
+        if (!reached)
+            break;
+
+        ++step;
+    }
+
+    state->balconyStep[bot->GetGUID()] = step;
+    return step;
+}
+
 bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot || bot->GetMapId() != ULDUAR_MAP_ID)
@@ -948,6 +1111,7 @@ ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot)
         return ThorimSquad::None;
 
     AssignThorimSquads(bot);
+    TickHumanSquads(bot);
 
     // The assignment above almost always happens before the pull, and RaidObs drops a note when no
     // session is open, so the split has to be written out again once there is a trace to write it to.
@@ -1426,6 +1590,12 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     if (!botAI || !bot)
         return false;
 
+    // Nothing up on the balcony has a spot down here yet. There is no walkable link between the two,
+    // so handing one out sends the bot back through the hallway, down the ramp and the whole corridor
+    // - about 300 yards - instead of over the edge. The balcony node drops it; this waits for that.
+    if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
     if (role == ThorimPhase2Role::MainTank)
     {
         position = ULDUAR_THORIM_PHASE2_TANK_SPOT;
@@ -1658,11 +1828,15 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
             state->petRecallMs.erase(pet->GetGUID());
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;
+    state->runeGiantGuid.Clear();
+    state->runeGiantScanMs = 0;
+    state->balconyStep.erase(bot->GetGUID());
 
     // Raid-wide too, and it has to go together with the flag or the next pull reuses the old split.
     state->squads.clear();
     state->squadsAssigned = false;
     state->squadsNoted = false;
+    state->humanSquadScanMs = 0;
     state->marksCleared = false;
     state->dpsTargets.erase(bot->GetGUID());
 

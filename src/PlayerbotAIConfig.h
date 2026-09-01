@@ -281,6 +281,7 @@ public:
     uint32 obsPreRollSeconds;
     bool obsLogHeals;
     bool obsLogAuras;
+    bool obsLogPets;
     uint32 obsMinDamageToLog;
     uint32 obsDeathRewindMs;
     uint32 obsDeathVerdictMs;

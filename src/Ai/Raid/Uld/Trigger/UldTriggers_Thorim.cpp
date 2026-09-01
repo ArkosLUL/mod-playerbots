@@ -95,14 +95,18 @@ bool ThorimGauntletPositioningTrigger::IsActive()
         }
     }
 
-    Unit* boss = GetThorim(botAI);
-    if (boss && boss->IsAlive() && bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD &&
-        boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-    {
-        return true;
-    }
-
     return false;
+}
+
+bool ThorimBalconyAdvanceTrigger::IsActive()
+{
+    if (GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
+    // Deliberately no master check. The corridor leg follows whoever is leading it, but the hallway is
+    // the last thing between the squad and phase 2, and it has to get walked whether or not there is a
+    // human up here to walk behind.
+    return ThorimBalconyOpen(botAI, bot);
 }
 
 bool ThorimArenaPositioningTrigger::IsActive()

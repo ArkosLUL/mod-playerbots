@@ -283,6 +283,12 @@ void ObsSession::EnsureUnit(Unit* unit)
     fields += ",\"mhp\":" + std::to_string(unit->GetMaxHealth());
     fields += ",\"b\":" + std::string(creature && (creature->isWorldBoss() || creature->IsDungeonBoss()) ? "1" : "0");
 
+    // Who owns it, for pets, guardians and totems. Without this a reader has to guess ownership from
+    // the pet's spell list, which is how a hunter's wolf and a warlock's felguard end up attributed to
+    // whoever was standing nearest.
+    if (Unit* owner = unit->GetOwner())
+        fields += ",\"own\":" + std::to_string(GuidKey(owner->GetGUID()));
+
     // Class and role for a player, so somebody who zoned in after the header was written still reads
     // as a name and a role rather than a bare guid.
     if (Player* player = unit->ToPlayer())

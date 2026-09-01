@@ -414,6 +414,7 @@ bool PlayerbotAIConfig::Initialize()
     obsMaps = sConfigMgr->GetOption<std::string>("AiPlayerbot.Obs.Maps", "");
     obsLogHeals = sConfigMgr->GetOption<bool>("AiPlayerbot.Obs.LogHeals", true);
     obsLogAuras = sConfigMgr->GetOption<bool>("AiPlayerbot.Obs.LogAuras", true);
+    obsLogPets = sConfigMgr->GetOption<bool>("AiPlayerbot.Obs.LogPets", true);
 
     // Every knob below is unsigned in the struct, so a negative typo would wrap to four billion and
     // quietly break whatever it configures - a negative snapshot interval stops snapshots entirely.

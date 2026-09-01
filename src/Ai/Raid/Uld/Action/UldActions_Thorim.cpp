@@ -25,8 +25,6 @@
 #include "Vehicle.h"
 #include <TankAssistStrategy.h>
 
-const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
-
 bool ThorimUnbalancingStrikeAction::isUseful()
 {
     ThorimUnbalancingStrikeTrigger thorimUnbalancingStrikeTrigger(botAI);
@@ -229,23 +227,47 @@ bool ThorimGauntletPositioningAction::Execute(Event /*event*/)
         return MoveToGauntletWaypoint(leftLane, index, false);
     }
 
+    return false;
+}
+
+bool ThorimBalconyAdvanceAction::isUseful()
+{
+    ThorimBalconyAdvanceTrigger thorimBalconyAdvanceTrigger(botAI);
+    return thorimBalconyAdvanceTrigger.IsActive();
+}
+
+bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
+{
     Unit* boss = GetThorim(botAI);
-    if (boss && boss->IsAlive() && bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD &&
-        boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // He has dropped for phase 2 and the bot has not. Everything up here is done, so follow him over
+    // the edge rather than letting the movers find the only walkable route - which runs back down the
+    // hallway, down the ramp and the length of the corridor, about 300 yards the wrong way.
+    if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
     {
-        MoveTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_START_POINT.GetPositionX(),
-               ULDUAR_THORIM_JUMP_START_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_START_POINT.GetPositionZ(), false,
-               false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
+        if (bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) > ULDUAR_THORIM_JUMP_START_TOLERANCE)
+        {
+            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_START_POINT.GetPositionX(),
+                          ULDUAR_THORIM_JUMP_START_POINT.GetPositionY(),
+                          ULDUAR_THORIM_JUMP_START_POINT.GetPositionZ(), false, false, false, true,
+                          MovementPriority::MOVEMENT_COMBAT, true);
+        }
 
-        if (bot->GetDistance(ULDUAR_THORIM_JUMP_START_POINT) > 0.5f)
-            return false;
-
-        JumpTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionX(),
-               ULDUAR_THORIM_JUMP_END_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionZ(),
-               MovementPriority::MOVEMENT_COMBAT);
+        return JumpTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionX(),
+                      ULDUAR_THORIM_JUMP_END_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionZ(),
+                      MovementPriority::MOVEMENT_COMBAT);
     }
 
-    return false;
+    uint8 const step = ThorimAdvanceBalconyStep(bot);
+    if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS)
+        return false;
+
+    Position const& waypoint = GetThorimBalconyWaypoint(step);
+
+    return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
+                  false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
 }
 
 bool ThorimRunicSmashAction::isUseful()

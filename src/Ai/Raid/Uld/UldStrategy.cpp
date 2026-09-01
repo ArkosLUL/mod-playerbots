@@ -480,6 +480,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim gauntlet positioning trigger",
         { NextAction("thorim gauntlet positioning action", ACTION_RAID) }));
 
+    // Above the corridor walk, because on the balcony that one has no waypoint to offer and the
+    // hallway is where the two Paralytic Field bunnies are.
+    triggers.push_back(new TriggerNode(
+        "thorim balcony advance trigger",
+        { NextAction("thorim balcony advance action", ACTION_RAID + 2) }));
+
     triggers.push_back(new TriggerNode(
         "thorim arena positioning trigger",
         { NextAction("thorim arena positioning action", ACTION_RAID) }));

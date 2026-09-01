@@ -63,6 +63,7 @@ struct ObsConfig
     uint32 preRollMs = 30000;
     bool logHeals = true;
     bool logAuras = true;
+    bool logPets = true;
     uint32 minDamage = 0;
     uint32 deathRewindMs = 15000;
     uint32 deathVerdictMs = 10000;

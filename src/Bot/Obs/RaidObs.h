@@ -32,7 +32,7 @@ class Unit;
 namespace RaidObs
 {
 // Bumped whenever a record's field layout changes, so the analyzer can still read older traces.
-constexpr uint32 SCHEMA_VERSION = 9;
+constexpr uint32 SCHEMA_VERSION = 10;
 
 // True only while at least one trace is open. Probes on shared hot paths test this before doing
 // anything else, so with nothing recording the framework costs one predictable branch.

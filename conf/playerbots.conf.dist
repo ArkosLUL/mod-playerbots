@@ -3045,6 +3045,10 @@ AiPlayerbot.Obs.LogHeals = 1
 # Record aura applications and removals on raid members.
 AiPlayerbot.Obs.LogAuras = 1
 
+# Snapshot pets and guardians alongside their owner. Without it a trace can say a
+# pet cast something but never where it went. Totems are never included.
+AiPlayerbot.Obs.LogPets = 1
+
 # Skip damage events below this amount. 0 records everything.
 AiPlayerbot.Obs.MinDamageToLog = 0
 
