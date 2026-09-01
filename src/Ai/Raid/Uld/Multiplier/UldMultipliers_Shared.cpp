@@ -17,6 +17,7 @@
 #include "MovementActions.h"
 #include "PaladinActions.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
 #include "ReachTargetActions.h"

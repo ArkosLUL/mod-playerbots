@@ -15,6 +15,7 @@
 #include "Playerbots.h"
 #include "RaidObs.h"
 #include "SpellMgr.h"
+#include "TemporarySummon.h"
 #include "UldScripts.h"
 #include "Unit.h"
 

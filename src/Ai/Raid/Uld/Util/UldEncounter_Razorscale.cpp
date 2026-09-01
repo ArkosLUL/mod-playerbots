@@ -13,6 +13,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "SpellAuras.h"
 #include "UldScripts.h"
 #include "Unit.h"
 

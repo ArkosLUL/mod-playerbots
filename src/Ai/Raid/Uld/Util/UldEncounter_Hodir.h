@@ -10,6 +10,7 @@
 #include "Position.h"
 #include "UldData.h"
 
+class Creature;
 class Player;
 class PlayerbotAI;
 class Unit;
