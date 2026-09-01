@@ -50,3 +50,6 @@ local.properties
 .cproject
 .vscode
 .idea
+
+# Python bytecode from the botobs reader modules
+__pycache__/
