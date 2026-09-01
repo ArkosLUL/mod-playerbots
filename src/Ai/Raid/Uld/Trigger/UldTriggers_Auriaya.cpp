@@ -4,7 +4,7 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Auriaya.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"

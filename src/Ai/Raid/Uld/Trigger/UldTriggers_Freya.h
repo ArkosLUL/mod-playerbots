@@ -3,7 +3,6 @@
 
 #include "EventMap.h"
 #include "GenericTriggers.h"
-#include "UldBossHelper.h"
 #include "Trigger.h"
 
 //
@@ -24,7 +23,7 @@ public:
     bool IsActive() override;
 };
 
-// The main tank and assist tank 0, who both always have something on the ladder in UldBossHelper.
+// The main tank and assist tank 0, who both always have something on GetFreyaTankTarget's ladder.
 class FreyaTankAddsTrigger : public Trigger
 {
 public:

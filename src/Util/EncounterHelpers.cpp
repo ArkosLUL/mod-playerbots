@@ -626,4 +626,39 @@ bool IsAoeThreatAction(Player* bot, Action* action)
     }
 }
 
+Position ValidateFloorPoint(Player* bot, Position const& point)
+{
+    float x = point.GetPositionX();
+    float y = point.GetPositionY();
+
+    float z = bot->GetMapWaterOrGroundLevel(x, y, point.GetPositionZ());
+    if (z <= INVALID_HEIGHT)
+        z = point.GetPositionZ();
+
+    bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                   bot->GetPositionZ(), x, y, z, false);
+
+    return Position(x, y, z);
+}
+
+bool CastClassTaunt(PlayerbotAI* botAI, Unit* target)
+{
+    if (!target)
+        return false;
+
+    switch (botAI->GetBot()->getClass())
+    {
+        case CLASS_WARRIOR:
+            return botAI->CastSpell("taunt", target);
+        case CLASS_PALADIN:
+            return botAI->CastSpell("hand of reckoning", target);
+        case CLASS_DEATH_KNIGHT:
+            return botAI->CastSpell("dark command", target);
+        case CLASS_DRUID:
+            return botAI->CastSpell("growl", target);
+        default:
+            return false;
+    }
+}
+
 }

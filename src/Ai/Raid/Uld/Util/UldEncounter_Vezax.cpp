@@ -25,6 +25,9 @@
 
 using namespace EncounterHelpers;
 
+// Vezax' own spawn point, and the point the Saronite Vapors charge to when they merge.
+const Position ULDUAR_VEZAX_ANCHOR = Position(1852.78f, 81.3856f, 342.461f);
+
 std::unordered_map<uint32, VezaxEncounterState> vezaxEncounterStates;
 
 namespace

@@ -4,7 +4,7 @@
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
 #include "RangeTriggers.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_XT002.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"

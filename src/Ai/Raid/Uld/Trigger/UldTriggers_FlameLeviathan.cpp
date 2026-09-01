@@ -8,7 +8,7 @@
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_FlameLeviathan.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Vehicle.h"

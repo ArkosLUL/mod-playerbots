@@ -8,7 +8,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "RaidAntiFear.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_YoggSaron.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 

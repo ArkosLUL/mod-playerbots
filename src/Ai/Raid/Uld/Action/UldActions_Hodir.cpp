@@ -19,7 +19,7 @@
 #include "Position.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Hodir.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
@@ -313,7 +313,7 @@ bool HodirFrozenBlowsSwapAction::Execute(Event /*event*/)
     // Deliberately unprobed. Every taunt is an OK verdict on this action and every failed one a FAILED,
     // both already in the act stream with a repeat count - and all four class taunts share an 8s
     // cooldown, so a swap that has to wait for it retries at tick rate until it lands.
-    return UldCastClassTaunt(botAI, GetHodir(botAI));
+    return CastClassTaunt(botAI, GetHodir(botAI));
 }
 
 Player* HodirRedirectThreatAction::GetRedirectTank()

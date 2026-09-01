@@ -24,7 +24,7 @@ and assist 0 trade him on **Overwhelming Power only** — Fusion Punch recurs fa
 swapping on it would ping-pong the boss between them.
 
 **Every ability is difficulty-mapped through `Unit::CastSpell`**, so each id is a 10/25 pair and
-callers test both (`UldBossHelper.h`). Two corrections to the written guides: Lightning Tendrils is
+callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the written guides: Lightning Tendrils is
 **18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power (64637/61888) is
 `DispelType 0`**, not dispellable. Its carrier dies to Meltdown (61889, 29,250 in 15 yd) regardless,
 so the node walks them clear of the raid instead — every death it causes is another permanent +25%

@@ -5,7 +5,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "Spell.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 #include "UldEncounter_Vezax.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"

@@ -76,6 +76,12 @@ bool IsDpsCooldownAction(Player* bot, Action* action);
 bool IsTauntAction(Player* bot, Action* action);
 bool IsAoeThreatAction(Player* bot, Action* action);
 
+// Snaps a point onto walkable ground and clears the path to it. Raw formation geometry is exactly
+// the shape that lands off the navmesh, and MoveTo would then fail without telling anyone.
+Position ValidateFloorPoint(Player* bot, Position const& point);
+// Class taunt. Non-tank classes return false.
+bool CastClassTaunt(PlayerbotAI* botAI, Unit* target);
+
 }
 
 #endif

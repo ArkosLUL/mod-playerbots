@@ -17,7 +17,7 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "Spell.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Ignis.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"

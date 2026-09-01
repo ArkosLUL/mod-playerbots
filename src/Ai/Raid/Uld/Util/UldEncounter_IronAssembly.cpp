@@ -30,6 +30,8 @@
 
 using namespace EncounterHelpers;
 
+const Position ULDUAR_IRON_ASSEMBLY_ANCHOR = Position(1587.18f, 121.02f, 427.27f);
+
 namespace
 {
 

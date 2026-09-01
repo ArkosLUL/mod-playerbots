@@ -21,6 +21,11 @@
 
 using namespace EncounterHelpers;
 
+// Algalon's home position - he evades past 47 yd from it - and the tank slot on the -Y edge of the
+// worm hole square. navprobe map 603: both on mesh at 0.04, settled Z 417.321.
+const Position ULDUAR_ALGALON_ROOM_CENTER = Position(1632.668f, -302.7656f, 417.3211f);
+const Position ULDUAR_ALGALON_TANK_SLOT = Position(1632.7f, -321.5f, 417.321f);
+
 std::unordered_map<uint32, AlgalonEncounterState> algalonEncounterStates;
 
 namespace

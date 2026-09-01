@@ -19,7 +19,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Auriaya.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
@@ -162,7 +162,7 @@ bool AuriayaSentryTauntAction::isUseful()
 
 bool AuriayaSentryTauntAction::Execute(Event /*event*/)
 {
-    return UldCastClassTaunt(botAI, GetAuriayaLooseSentry(botAI, bot));
+    return CastClassTaunt(botAI, GetAuriayaLooseSentry(botAI, bot));
 }
 
 bool AuriayaRaidPositionAction::isUseful()

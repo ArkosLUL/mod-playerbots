@@ -9,7 +9,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "SpellMgr.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Hodir.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"

@@ -4,7 +4,7 @@
 #include "EventMap.h"
 #include "GenericTriggers.h"
 #include "RaidAntiFear.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Auriaya.h"
 #include "Trigger.h"
 
 //

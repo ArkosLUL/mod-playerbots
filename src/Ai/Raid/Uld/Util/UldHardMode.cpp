@@ -7,7 +7,8 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_FlameLeviathan.h"
+#include "UldEncounter_XT002.h"
 #include "UldScripts.h"
 #include "Unit.h"
 

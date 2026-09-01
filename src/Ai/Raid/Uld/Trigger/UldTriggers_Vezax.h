@@ -3,7 +3,6 @@
 
 #include "EventMap.h"
 #include "GenericTriggers.h"
-#include "UldBossHelper.h"
 #include "UldEncounter_Vezax.h"
 #include "Trigger.h"
 

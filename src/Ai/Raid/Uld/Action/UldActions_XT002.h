@@ -10,7 +10,7 @@
 #include "AttackAction.h"
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_XT002.h"
 
 //
 // XT-002 Deconstructor

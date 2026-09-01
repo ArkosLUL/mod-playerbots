@@ -17,7 +17,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 #include "UldEncounter_Algalon.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -122,7 +122,7 @@ bool AlgalonPhasePunchSwapAction::Execute(Event /*event*/)
         return Attack(boss);
 
     if (boss->GetVictim() != bot)
-        return UldCastClassTaunt(botAI, boss);
+        return CastClassTaunt(botAI, boss);
 
     return false;
 }
@@ -133,7 +133,7 @@ bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
     if (!constellation)
         return false;
 
-    if (UldCastClassTaunt(botAI, constellation))
+    if (CastClassTaunt(botAI, constellation))
         return true;
 
     // Between taunts, hold it with threat. Killing it is not the point - 20x base health against a
@@ -213,7 +213,7 @@ bool AlgalonDarkMatterTankAction::Execute(Event /*event*/)
     if (!darkMatter)
         return false;
 
-    if (darkMatter->GetVictim() != bot && UldCastClassTaunt(botAI, darkMatter))
+    if (darkMatter->GetVictim() != bot && CastClassTaunt(botAI, darkMatter))
         return true;
 
     if (AI_VALUE(Unit*, "current target") != darkMatter)

@@ -8,7 +8,6 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "UldBossHelper.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 

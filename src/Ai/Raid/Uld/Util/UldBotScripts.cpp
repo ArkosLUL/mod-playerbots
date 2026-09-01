@@ -11,7 +11,7 @@
 #include "Playerbots.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 #include "UldEncounter_Vezax.h"
 
 #include <algorithm>

@@ -7,7 +7,6 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "UldBossHelper.h"
 #include "UldEncounter_Vezax.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"

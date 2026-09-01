@@ -20,7 +20,7 @@
 #include "RaidObs.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_FlameLeviathan.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"

@@ -9,7 +9,7 @@
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
 #include "Trigger.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"

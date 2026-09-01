@@ -10,7 +10,7 @@
 #include "ObjectGuid.h"
 #include "Position.h"
 #include "RaidObs.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +28,186 @@ class WorldObject;
 // swing with 2000 arcane. Phase 2 is a stationary fight on the arena floor where Chain Lightning
 // arcs 5 yd from victim to victim and Lightning Charge fires a 75 degree cone at whichever pillar
 // orb just lit up.
+
+enum UlduarThorimIds
+{
+    // Thorim
+    NPC_DARK_RUNE_ACOLYTE_I = 32886,
+    NPC_CAPTURED_MERCENARY_SOLDIER_ALLY = 32885,
+    NPC_CAPTURED_MERCENARY_SOLDIER_HORDE = 32883,
+    NPC_CAPTURED_MERCENARY_CAPTAIN_ALLY = 32908,
+    NPC_CAPTURED_MERCENARY_CAPTAIN_HORDE = 32907,
+    NPC_JORMUNGAR_BEHEMOT = 32882,
+    NPC_DARK_RUNE_WARBRINGER = 32877,
+    NPC_DARK_RUNE_EVOKER = 32878,
+    NPC_DARK_RUNE_CHAMPION = 32876,
+    NPC_DARK_RUNE_COMMONER = 32904,
+    NPC_IRON_RING_GUARD = 32874,
+    NPC_RUNIC_COLOSSUS = 32872,
+    NPC_ANCIENT_RUNE_GIANT = 32873,
+    NPC_DARK_RUNE_ACOLYTE_G = 33110,
+    NPC_IRON_HONOR_GUARD = 32875,
+    NPC_THORIM_THUNDER_ORB = 33378,  // the pillar orb that lights up 5s before Lightning Charge
+    SPELL_UNBALANCING_STRIKE = 62130,
+
+    // The Runic Colossus corridor smash: a 5s cast that lights one row of hand bunnies, then rolls a
+    // 10 yd blast wave up the corridor on that side. Cancelled the moment the Colossus is engaged.
+    SPELL_THORIM_RUNIC_SMASH_LEFT = 62057,
+    SPELL_THORIM_RUNIC_SMASH_RIGHT = 62058,
+    // -51% damage taken plus a 2000 arcane damage shield on every melee swing. Recast every 20s for
+    // its own 20s duration, so it is up for effectively the whole approach.
+    SPELL_THORIM_RUNIC_BARRIER = 62338,
+    // Lightning Charge has no cast bar. The only warning is this aura landing on a Thunder Orb;
+    // SpellInfoCorrections patches its amplitude to 5000ms, so it ticks once, 5s before the cone.
+    SPELL_THORIM_LIGHTNING_ORB_VISUAL = 62186,
+    // Phase 1's orb marker, the counterpart to the visual above. It sits on one Thunder Orb for 15s
+    // and triggers Lightning Shock (62017) once a second: ~3k nature at 35 yd, measured in 3D.
+    SPELL_THORIM_CHARGE_ORB = 62016,
+
+    // Thorim hard mode (arena gauntlet cleared fast enough that Sif joins the fight).
+    NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
+    NPC_SIF_BLIZZARD = 32879,     // moving Blizzard ground AoE, only ever exists in hard mode
+};
+
+constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
+constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
+
+// Thorim hard mode: bots clear Sif's moving Blizzard, and ranged/healers keep this far from
+// Sif herself so her point-blank Frost Nova (cast after she teleports next to a target) misses.
+constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 12.0f;
+constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
+
+// Cheap first gate for everything Thorim owns, and it takes both halves. Distance alone does not
+// separate the wings: Hodir's room sits 136-176 yd from the arena centre against a corridor that runs
+// out to 126 yd, and a radius through that 10 yd gap would be luck rather than a gate. Height does -
+// the gauntlet is at z 412, the arena floor at 420, and Hodir's floor at 433.
+constexpr float ULDUAR_THORIM_ENCOUNTER_PROXIMITY = 200.0f;
+constexpr float ULDUAR_THORIM_WING_MAX_Z = 425.0f;
+
+// AiPlayerbot.SightDistance caps the "possible targets" values at 100 yd, and the Colossus is 131 yd
+// from the top pair of corridor waypoints - so its telegraph needs a wider, targeted grid lookup or
+// bots at the head of the corridor never see the hand go up.
+constexpr float ULDUAR_THORIM_COLOSSUS_SEARCH_RANGE = 150.0f;
+
+// One telegraph is worth 5s of cast, 1s of delay and 3.5s of wave travel. Held a little past that so
+// the lane does not flip back while the last bunny is still firing.
+constexpr uint32 ULDUAR_THORIM_RUNIC_SMASH_LATCH_MS = 10000;
+
+// Both grid sweeps below are raid-wide answers, so they are computed once per instance per interval
+// rather than once per bot. Sharing the result also guarantees no two bots disagree about which lane
+// is hot or which orb is lit.
+constexpr uint32 ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS = 500;
+
+// Runic Barrier's damage shield only punishes melee swings, so the bail is a health band rather than
+// a hard stop: below the first, step out of melee range; above the second, walk back in.
+constexpr float ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT = 55.0f;
+constexpr float ULDUAR_THORIM_BARRIER_RESUME_HEALTH_PCT = 80.0f;
+constexpr float ULDUAR_THORIM_BARRIER_BAIL_DISTANCE = 14.0f;  // clear of the 9.1 yd melee reach
+
+// Thorim's combat reach is 6.25 and a player's is 1.5, so melee connects out to 9.1 yd centre to
+// centre. A radius 8 ring is inside that, and puts its three slots 11.3 yd apart - clear of Chain
+// Lightning, whose jump radius is 5.0 here (spell_jump_distance overrides the 10 yd DBC default).
+constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.0f;
+constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
+
+// The off-tank sits just off the main tank's bearing: close enough to taunt through the Unbalancing
+// Strike swap, far enough that Chain Lightning does not treat the pair as one clump.
+constexpr float ULDUAR_THORIM_OFFTANK_BEARING_OFFSET = 0.3491f;  // 20 degrees
+
+// Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot sliding
+// in place forever, and a moving bot casts nothing - the Sapphiron air phase failure.
+constexpr float ULDUAR_THORIM_RING_ARRIVE_TOLERANCE = 3.0f;
+constexpr float ULDUAR_THORIM_RING_REPOSITION_TOLERANCE = 5.0f;
+
+// How far out the add priority will reach. Arena adds land 19-24 yd from the centre and a ranged bot
+// sits up to 14 yd the other side of it, so 50 covers the room without letting an arena bot lock onto
+// something down the corridor.
+constexpr float ULDUAR_THORIM_DPS_TARGET_RANGE = 50.0f;
+
+// Within one priority tier, how much closer a candidate has to be before the bot drops what it is
+// already swinging at. Without a margin the pick oscillates between two adds that are the same
+// distance away and the bot never finishes a cast.
+constexpr float ULDUAR_THORIM_TARGET_SWITCH_MARGIN = 8.0f;
+
+// How far a melee bot will go for a higher-priority add before settling for the next tier down. Arena
+// adds land 19-24 yd from the centre and a Champion is on somebody a second or two later, so anything
+// past this has moved twice by the time the bot arrives. Ranged have no such limit - they hit an
+// Evoker from where they already stand, and it is melee that were measured spending the fight running.
+constexpr float ULDUAR_THORIM_MELEE_TARGET_REACH = 15.0f;
+
+// spell_cone gives 62466 a 75 degree arc at 150 yd. The margin covers Thorim re-orienting onto the
+// orb between the tick that picks a rotation and the tick the bot finishes walking it.
+constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;   // 75 degrees
+constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN = 0.2618f;       // 15 degrees
+constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE = 150.0f;
+
+// The box boss_thorim.cpp scans every 5s for a living player. Find nobody in it and Thorim summons
+// the Lightning Orb, which wipes the raid outright - so these are copied from GetArenaPlayer() and
+// must never be widened.
+constexpr float ULDUAR_THORIM_ARENA_BOX_MIN_X = 2085.0f;
+constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_X = 2185.0f;
+constexpr float ULDUAR_THORIM_ARENA_BOX_MIN_Y = -305.0f;
+constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_Y = -214.0f;
+constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_Z = 425.0f;
+
+// Arena adds all land 19-24 yd from the centre and the nearest box edge is 42 yd out, so this holds
+// the arena squad well inside the scan while still letting them chase anything that spawns. The
+// corridor mouth is 45.8 yd away, which is what makes the radius alone enough to keep them out of it.
+constexpr float ULDUAR_THORIM_ARENA_LEASH_RADIUS = 30.0f;
+
+// The gauntlet stops taking bodies once the arena would drop this low.
+constexpr uint32 ULDUAR_THORIM_ARENA_MIN_MEMBERS = 3;
+
+// The phase 1 arena formation. The tank and the melee on him hold the centre; ranged and healers ring
+// them from outside the Dark Rune Champion's Whirlwind, close enough that an add anywhere in the pile
+// is still in range. Two radii rather than one so a 25 man ring is not shoulder to shoulder.
+//
+// These are as wide as the room allows. Arena adds jump to 19-24 yd from the centre, so anything at
+// or past 19 drops ranged into the landing zone, and the navmesh gives out past ~26 yd on the south
+// side. Wider matters twice over: Whirlwind is an 8 yd circle on an add standing on the tank, and
+// Deafening Thunder is a 15 yd blast centred on whoever the Stormhammer hit, so a tight ring hands
+// one hammer the whole squad's cast speed.
+constexpr float ULDUAR_THORIM_ARENA_RING_INNER = 13.0f;
+constexpr float ULDUAR_THORIM_ARENA_RING_OUTER = 18.0f;
+constexpr uint8 ULDUAR_THORIM_ARENA_RING_INNER_SLOTS = 5;
+
+// Charge Orb hangs on a Thunder Orb 13.5 yd above the floor and its 35 yd radius is measured in 3D,
+// so the field cuts the floor as a 32.3 yd circle - which is why a bot three yards from a victim
+// never took a tick. The margin covers the bot still walking when the next tick lands.
+constexpr float ULDUAR_THORIM_CHARGED_ORB_RADIUS = 32.3f;
+constexpr float ULDUAR_THORIM_CHARGED_ORB_MARGIN = 4.0f;
+
+// Melee are leashed to the tank spot rather than to the box: 24 yd is the furthest an arena add ever
+// lands from the centre, so it costs no uptime, and it keeps the pile 21 yd short of the lever gate.
+// Standing at the gate is worse than it looks - boss_thorim_arena_npcs::CanAIAttack drops any target
+// past x 2180, so a bot that drifts there stops being attackable and the add re-rolls onto a healer.
+constexpr float ULDUAR_THORIM_ARENA_MELEE_LEASH = 24.0f;
+
+extern const Position ULDUAR_THORIM_NEAR_ARENA_CENTER;
+extern const Position ULDUAR_THORIM_NEAR_ENTRANCE_POSITION;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_1;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_6_YARDS_2;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_5_YARDS_1;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_1;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_2;
+extern const Position ULDUAR_THORIM_GAUNTLET_LEFT_SIDE_10_YARDS_3;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_1;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_6_YARDS_2;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_5_YARDS_1;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_1;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_2;
+extern const Position ULDUAR_THORIM_GAUNTLET_RIGHT_SIDE_10_YARDS_3;
+extern const Position ULDUAR_THORIM_JUMP_END_POINT;
+extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
+// Only used when Thorim's live position cannot produce a ring point. The arena floor has a hole south
+// of y = -288, so nothing here sits past the tank spot.
+extern const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT;
 
 // Both scans below are raid-wide answers, so they are folded once per instance per interval instead
 // of once per bot - and sharing the result is also what guarantees no two bots disagree about which

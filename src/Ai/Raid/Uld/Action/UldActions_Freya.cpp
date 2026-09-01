@@ -17,7 +17,8 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "Spell.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
+#include "UldEncounter_Freya.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
@@ -196,7 +197,7 @@ bool FreyaTankAddsAction::Execute(Event /*event*/)
     // Lasher or Water Spirit would mean owning Tidal Wave positioning, and a lasher drops the taunt again
     // on its next 10s threat wipe anyway.
     bool const owned = target == state.snaplasher || target == state.conservator;
-    if (owned && target->GetVictim() != bot && UldCastClassTaunt(botAI, target))
+    if (owned && target->GetVictim() != bot && CastClassTaunt(botAI, target))
         return true;
 
     if (currentTarget != target)

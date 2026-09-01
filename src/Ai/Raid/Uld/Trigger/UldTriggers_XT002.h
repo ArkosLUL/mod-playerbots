@@ -3,7 +3,6 @@
 
 #include "GenericTriggers.h"
 #include "Trigger.h"
-#include "UldBossHelper.h"
 
 //
 // XT-002 Deconstructor

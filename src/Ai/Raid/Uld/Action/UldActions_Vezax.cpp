@@ -17,7 +17,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 #include "UldEncounter_Vezax.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"

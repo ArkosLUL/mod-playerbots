@@ -12,7 +12,7 @@
 #include "Position.h"
 #include "EncounterHelpers.h"
 #include "ServerFacade.h"
-#include "UldBossHelper.h"
+#include "UldData.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -160,7 +160,7 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
 
     // Stand, do not drag. The tank walks to its spot and the boss follows it there, which never
     // routes a boss through the ranged stack the way a dragged pull does.
-    if (boss->GetVictim() != bot && UldCastClassTaunt(botAI, boss))
+    if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
         return true;
 
     Position spot;

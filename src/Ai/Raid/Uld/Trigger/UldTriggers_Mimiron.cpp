@@ -4,7 +4,7 @@
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Mimiron.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"

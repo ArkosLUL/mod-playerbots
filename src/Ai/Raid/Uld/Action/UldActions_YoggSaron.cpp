@@ -16,7 +16,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_YoggSaron.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"

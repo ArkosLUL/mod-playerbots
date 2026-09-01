@@ -7,7 +7,7 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "UldBossHelper.h"
+#include "UldEncounter_Mimiron.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 

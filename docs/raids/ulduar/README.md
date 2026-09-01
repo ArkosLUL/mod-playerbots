@@ -160,7 +160,7 @@ state and doubles as the fresh-spawn / fresh-phase test. And use `GetFirstAliveU
 
 `RaidRedirectThreatAction` lives in `Raid/RaidRedirectThreat.{h,cpp}`; Hodir subclasses it as
 `HodirRedirectThreatAction`, feeding whichever tank currently holds him. The proc-aura id `35079`
-still sits in nine per-raid helper headers including `UldBossHelper.h`; `SPELL_MISDIRECTION_PROC` on
+still sits in nine per-raid helper headers including Ulduar's `UldData.h`; `SPELL_MISDIRECTION_PROC` on
 the shared header is the one to converge on.
 
 ## Normal-mode gaps still open
