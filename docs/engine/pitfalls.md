@@ -104,10 +104,19 @@ than the hazard does. Kara, Gruul, Magtheridon and Naxxramas already do this.
   **` line once the drop exceeds 1 yd); in the ring sweep and the JSON it is the **`settledZ`**
   column.
 
-- **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`,
-  `PathGenerator.cpp:764-767`), so a destination the navmesh flags as magma is **reachable, not
-  rejected**. Do not discard a hand-measured point for sitting on lava — Obsidian Sanctum's pull-drag
-  corner is exactly that.
+- **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
+  navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for
+  sitting on lava — Obsidian Sanctum's pull-drag corner is exactly that.
+
+- **Bots do not path like players.** `CreateFilter` has a `MOD_PLAYERBOTS` branch giving a bot
+  `NAV_GROUND | NAV_WATER` **minus `NAV_GROUND_STEEP`**, plus `setAreaCost(NAV_WATER, 20.0f)`; humans
+  and creatures keep the wider filter at no cost. Poly flags hold a single `NavTerrain` value and
+  Recast merges overlapping spans by **max** area, so a shallow stream over a sloped bed collapses to
+  `NAV_GROUND_STEEP` (0x10, the highest value) and walls off bots alone. `navprobe` ports the **human**
+  branch and models no liquid at all, so every "navprobe-verified" coordinate in `docs/raids/**` was
+  checked against the wrong filter. `--nav 0x09` approximates the bot one (a `NAV_GROUND_STEEP` poly
+  then fails the include test); the 20x cost cannot be reproduced. To settle it live, `.mmap path`
+  with **the bot selected** builds the path on that unit's own filter.
 
 - **This fork names mmap files with a 3-digit map id**, not upstream's `%04i`:
   `"{}/mmaps/{:03}.mmap"` and `"{}/mmaps/{:03}{:02}{:02}.mmtile"` (`MMapMgr.h:48-49`). Any external
@@ -154,6 +163,21 @@ than the hazard does. Kara, Gruul, Magtheridon and Naxxramas already do this.
   `bot->GetPositionZ()` re-issues a different point as soon as the bot moves on a sloped floor, and
   the pathfinding branch stores the navmesh-resolved Z rather than the requested one. What actually
   throttles a re-issuing action is the arrival tolerance plus the movement lock above.
+
+- **Every `MoveTo` calls `mm->Clear()`.** So a high-priority node that re-derives its destination each
+  tick cancels whatever walk a lower node had in flight, even when its own answer moved the bot a yard.
+  Two such nodes alternate at tick rate and neither ever arrives: the bot logs tens of yards of travel
+  inside a 5 yd strip, which reads in-game as "it refuses to cross". Freya's Sun Beam dodge and spore
+  node did exactly this, 584 flips in one pull. Latch the destination and, while the walk is still in
+  flight and still valid, **return true without calling `MoveTo`** — the engine ends the tick at the
+  first action returning true, so claiming it is what protects the spline. Give the latch a ceiling, or
+  a bot rooted mid-move holds the tick indefinitely.
+
+- **A dodge must clear more than its own trigger radius.** `FindNearestPositionClearOfHazards` rings
+  outward and returns the *first* clear spot, so a bot on the rim of a hazard it clears by one yard
+  gets a ~2 yd step: it leaves by a hair, the next spawn puts it back inside the trigger, and the node
+  re-fires forever at `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards
+  past the trigger radius, and fall back to the tight value only where overlap leaves nothing wider.
 
 - **`MoveInside(..., distance = 0)` effectively never returns false** — `MovementActions.cpp:1692`
   returns false only when `GetDistance2d <= distance`. The action then succeeds every tick,

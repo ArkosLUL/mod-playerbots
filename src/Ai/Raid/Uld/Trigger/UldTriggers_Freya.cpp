@@ -84,14 +84,14 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (bot->HasAura(SPELL_POTENT_PHEROMONES))
         return false;
 
-    for (ObjectGuid const& guid : AI_VALUE(GuidVector, "nearest npcs"))
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (unit && unit->IsAlive() && unit->GetEntry() == NPC_HEALTHY_SPORE)
-            return true;
-    }
+    Unit* spore = GetFreyaTargetSpore(botAI);
+    if (!spore)
+        return false;
 
-    return false;
+    // Distance stands the node down as well as the aura does. Waiting on the aura alone leaves a window
+    // where the bot is already standing on the spore and the node keeps ordering moves onto it, and each
+    // of those clears the motion master out from under whatever else was walking somewhere.
+    return bot->GetExactDist2d(spore) > ULDUAR_FREYA_SPORE_RADIUS - 1.0f;
 }
 
 bool FreyaBreakIronRootsTrigger::IsActive()

@@ -67,6 +67,16 @@ enum UlduarFreyaIds
 // radius is DBC, not in the server script, so this is a conservative default to confirm in-game.
 constexpr float ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f;
 
+// The escape aims past the radius, not at it. FindNearestPositionClearOfHazards rings outward and takes
+// the first clear spot, so clearing by a single yard answers a bot on the rim with a ~2 yd step, and the
+// next beam spawn puts it back inside the trigger radius immediately. Three yards of hysteresis is what
+// lets the trigger stand down after one move instead of re-firing for the rest of the wave.
+constexpr float ULDUAR_FREYA_SUN_BEAM_CLEARANCE = 15.0f;
+
+// Ceiling on the escape latch. Long enough to walk the clearance at 7 yd/s, short enough that a bot
+// rooted mid-dodge hands the tick back instead of holding it for the rest of the wave.
+constexpr uint32 ULDUAR_FREYA_SUN_BEAM_LATCH_MS = 3000;
+
 // Freya trio wave (Snaplasher / Storm Lasher / Ancient Water Spirit). Each member starts its own 11s
 // revive timer on death and comes back unless all three are down when it expires, so they have to die
 // together. The band only covers the last tenth of the wave - about 6s of raid damage out of the 60s
@@ -78,6 +88,11 @@ constexpr float ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT = 10.0f;     // never cross whi
 // Freya: Potent Pheromones (64321) is a 6 yd ally aura on a Healthy Spore. It is the only counter to
 // Conservator's Grip, which is a 50000 yd pacify-silence and so cannot be outranged.
 constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
+
+// Where a bot actually stops. Inside the aura with room to spare, and clear of the spore's own
+// collision - aiming at the centre gives MoveTo a point the bot can never occupy, so it re-issues the
+// same rejected move forever. The trigger stands down a yard further out, which is the hysteresis.
+constexpr float ULDUAR_FREYA_SPORE_STAND_RANGE = 4.0f;
 
 // Spores are summoned 20 yd out from the Conservator in three directions, so this only has to cover
 // that ring with room for the boss having been dragged part of the way to one.
@@ -195,6 +210,11 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 // calling bot, so the tank doing the dragging and the melee walking to shelter resolve the same spore
 // without communicating.
 Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator);
+
+// The spore this bot should be sheltering on. Melee get the parked one, everyone else their own
+// nearest. One derivation for both the trigger and the action: resolving it twice let a bot be woken
+// by a spore in line of sight and then walked at a different one behind the Conservator.
+Unit* GetFreyaTargetSpore(PlayerbotAI* botAI);
 
 // True while any bot in the group that counts as ranged DPS is alive. Eonar's Gift is a ranged job,
 // but a melee-only raid still has to kill it or Freya heals 30-60%.

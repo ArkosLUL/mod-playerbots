@@ -236,38 +236,24 @@ bool FreyaMoveToHealingSporeAction::isUseful()
 
 bool FreyaMoveToHealingSporeAction::Execute(Event /*event*/)
 {
-    Unit* target = nullptr;
-
-    // Melee go to the spore the Conservator is parked on, not the nearest one - anywhere else and the
-    // DPS node drags them back out of the aura to reach the boss, and the two nodes fight all wave.
-    if (PlayerbotAI::IsMelee(bot))
-        target = GetFreyaConservatorSpore(botAI, GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR));
-
-    // Ranged and healers only need the aura, not melee range, and every spore sits 20 yd from the
-    // Conservator - inside casting range of it and of the melee stack. No reason to join the pile.
-    if (!target)
-    {
-        float nearestDistance = std::numeric_limits<float>::max();
-        for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_HEALTHY_SPORE)
-                continue;
-
-            float const distance = bot->GetDistance2d(unit);
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-                target = unit;
-            }
-        }
-    }
-
+    Unit* target = GetFreyaTargetSpore(botAI);
     if (!target)
         return false;
 
-    return MoveTo(target->GetMapId(), target->GetPositionX(), target->GetPositionY(), target->GetPositionZ(), false,
-                  false, false, true, MovementPriority::MOVEMENT_COMBAT);
+    float const distance = bot->GetExactDist2d(target);
+    if (distance <= ULDUAR_FREYA_SPORE_STAND_RANGE)
+        return false;
+
+    // Stop on the near edge of the aura rather than the spore's centre. The centre is inside the spore's
+    // own collision, so the bot can never occupy it: MoveTo then re-issues the same unreachable point,
+    // IsDuplicateMove rejects it from the second tick on, and the tick falls through to the DPS chase
+    // which walks the bot straight back out of the aura.
+    float const ratio = ULDUAR_FREYA_SPORE_STAND_RANGE / distance;
+    float const x = target->GetPositionX() + (bot->GetPositionX() - target->GetPositionX()) * ratio;
+    float const y = target->GetPositionY() + (bot->GetPositionY() - target->GetPositionY()) * ratio;
+
+    return MoveTo(target->GetMapId(), x, y, target->GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool FreyaRedirectThreatAction::isUseful()
@@ -381,15 +367,51 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     }
 
     if (beams.empty())
+    {
+        dodgeSpotMs = 0;
         return false;
+    }
 
-    Position safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS + 1.0f,
+    auto const stillClear = [&beams](Position const& spot)
+    {
+        for (Position const& beam : beams)
+            if (beam.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_SUN_BEAM_CLEARANCE)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+
+    // Claim the tick without touching the motion master while the escape is already in flight. Returning
+    // true is the point: the engine stops here, so no lower node gets to re-aim the bot mid-dodge, and
+    // the spline that is actually carrying it out of the beam survives.
+    if (dodgeSpotMs && getMSTimeDiff(dodgeSpotMs, now) < ULDUAR_FREYA_SUN_BEAM_LATCH_MS && stillClear(dodgeSpot) &&
+        bot->GetExactDist2d(dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    dodgeSpotMs = 0;
+
+    Position safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_SUN_BEAM_CLEARANCE,
                                                       ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    // Overlapping beams can leave nowhere that clears all of them by the full margin. Barely outside
+    // beats standing in one, so fall back to the radius itself before giving up.
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS + 1.0f,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
     if (safe == Position())
         return false;
 
-    return MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
-                  true, MovementPriority::MOVEMENT_FORCED, true, false);
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    dodgeSpot = safe;
+    dodgeSpotMs = now;
+
+    return true;
 }
 
 bool FreyaRangedCampAction::isUseful()

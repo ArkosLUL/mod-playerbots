@@ -140,6 +140,13 @@ public:
     FreyaDodgeUnstableSunBeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya dodge unstable sun beam") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    // Beams keep spawning, so re-deriving the escape every tick answers with a spot a yard or two away,
+    // and every MoveTo clears the motion master - the bot never travels, and whatever walk a lower node
+    // had in flight dies with it. Hold the first answer until it stops being safe or the bot arrives.
+    Position dodgeSpot;
+    uint32 dodgeSpotMs = 0;
 };
 
 #endif

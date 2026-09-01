@@ -17,6 +17,7 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <limits>
 #include <list>
 #include <vector>
 
@@ -270,6 +271,37 @@ Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator)
     }
 
     return best;
+}
+
+Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    // Melee take the spore the Conservator is parked on, not their own nearest - anywhere else and the
+    // DPS node drags them back out of the aura to reach the boss, and the two nodes fight all wave.
+    if (PlayerbotAI::IsMelee(bot))
+        if (Unit* parked = GetFreyaConservatorSpore(botAI, GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR)))
+            return parked;
+
+    // Ranged and healers only need the aura, not melee range, and every spore sits 20 yd from the
+    // Conservator - inside casting range of it and of the melee stack. No reason to join the pile.
+    Unit* nearest = nullptr;
+    float nearestDistance = std::numeric_limits<float>::max();
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_HEALTHY_SPORE)
+            continue;
+
+        float const distance = bot->GetDistance2d(unit);
+        if (distance < nearestDistance)
+        {
+            nearestDistance = distance;
+            nearest = unit;
+        }
+    }
+
+    return nearest;
 }
 
 // Highest health first, and never a suppressed member - see the header for why the tank goes to the

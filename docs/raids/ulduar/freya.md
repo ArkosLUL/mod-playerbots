@@ -79,6 +79,16 @@ the DPS node drags them back to the boss to reach it, and they lose the aura on 
 healers do use their own nearest spore — they need the aura, not melee range, and any spore is inside
 casting range of both the boss and the melee stack. Tanks are excluded from the spore node itself: the
 add tank arrives inside the aura by dragging the boss there, and the main tank never repositions Freya.
+`GetFreyaTargetSpore` is that whole rule in one call, and **the trigger and the action must both use
+it**: deriving the spore twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while the
+unfiltered grid search walked it at another.
+
+**Never aim a bot at a creature's centre.** It sits inside the model's collision, so the bot can never
+occupy it, `IsDuplicateMove` rejects the identical unreachable point from the second tick on, and the
+tick falls through to the DPS chase, which walks the bot back out of the aura it just reached — 840
+of 1865 spore move requests in one pull. Bots stop at `ULDUAR_FREYA_SPORE_STAND_RANGE` (4 yd) instead,
+and the trigger stands down at `ULDUAR_FREYA_SPORE_RADIUS - 1` as well as on the aura, since the aura
+is exact and lands a moment after the bot is already inside 6 yd.
 
 Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
 whole fight, dropping one bomb per player at their own feet — 7-10 in 25-man, 3-4 in 10-man
@@ -214,4 +224,17 @@ Breaking Iron Roots sits at `ACTION_RAID + 5`, above the Sun Beam dodge at `+4`,
 bot cannot move**, so it must free itself before it can step out of anything. The beam dodge rings
 outward to a spot clear of every beam in range, not away from the nearest one.
 `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is a DBC guess.
+
+**The dodge clears by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (15 yd), not by the radius.** Clearing by the
+radius plus a yard answered a bot on the rim with a ~2 yd step — measured median **1.9 yd** over 694
+orders, 95% under 12 yd, so not one left the beam — and the next spawn put it straight back inside the
+trigger. Three yards of hysteresis is what lets the trigger stand down after one move. Where
+overlapping beams leave nothing that clear it falls back to radius + 1 rather than giving up: barely
+outside beats standing in one.
+
+The escape is also **latched** (`dodgeSpot`, ceiling `ULDUAR_FREYA_SUN_BEAM_LATCH_MS`). While a walk to
+a still-clear spot is in flight the action returns true **without calling `MoveTo`** — claiming the
+tick is the point, since that both stops the re-aim clearing the bot's own motion master and stops any
+lower node re-pointing it mid-dodge. Unlatched, this node alone produced 584 of the raid's 1055
+direction flips, fighting the spore node at ~3 Hz while the raid stood still.
 
