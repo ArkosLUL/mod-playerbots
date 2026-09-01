@@ -8,6 +8,7 @@
 
 #include "Creature.h"
 #include "DBCEnums.h"
+#include "EncounterHelpers.h"
 #include "Group.h"
 #include "Map.h"
 #include "MotionMaster.h"
@@ -15,10 +16,10 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "EncounterHelpers.h"
 #include "RaidObs.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
+#include "UldScripts.h"
 #include "Unit.h"
 #include "WorldSession.h"
 

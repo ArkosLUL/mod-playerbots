@@ -7,14 +7,15 @@
 #include "UldEncounter_Vezax.h"
 
 #include "Creature.h"
+#include "EncounterHelpers.h"
 #include "Group.h"
 #include "InstanceScript.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "EncounterHelpers.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "UldScripts.h"
 #include "Unit.h"
 
 #include <algorithm>
