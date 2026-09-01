@@ -26,7 +26,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from postmortem import Trace, clock, roster_guids  # noqa: E402
+from analysis import roster_guids  # noqa: E402
+from obstrace import Trace  # noqa: E402
 
 BOSS_ENTRY = 33113
 RETICLE_ENTRY = 33108
