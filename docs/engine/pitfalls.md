@@ -30,6 +30,11 @@ found nothing to run.
 Sweep for these by checking every `NextAction`/`TriggerNode` name against `creators[...]`. Multiplier
 `dynamic_cast` mistakes, by contrast, do fail at compile time.
 
+Registration is not activation, and that fails just as quietly. `DpsAoeStrategy` is defined
+(`src/Ai/Base/Strategy/DpsAssistStrategy.h:23`) and has a creator (`StrategyContext.h:245`), but no
+`addStrategies*` call anywhere adds `"dps aoe"` — only the unrelated `"aoe"` — so it can never run.
+Check for both the `creators[...]` entry **and** an `addStrategies*` mention.
+
 ## A moving bot cannot cast
 
 `PlayerbotAI::CanCastSpell` / `CastSpell` refuse **any** spell with a non-zero cast time while
@@ -48,6 +53,26 @@ The fix shape is **reach-then-hold with hysteresis**: accept a generous arrival 
 `true` while actually moving (the action owns the tick; heals could not fire anyway) and yield only
 once stopped. Do **not** lower the action's priority or widen the multiplier whitelist — the mechanic
 must still outrank heals while the bot is unsheltered.
+
+## A bot mid-cast cannot be moved at all
+
+The mirror of the rule above, and it silently defeats every dodge in the module.
+`PointMovementGenerator<T>::DoInitialize` returns without launching a spline when
+`unit->IsMovementPreventedByCasting()`, and `DoUpdate` calls `StopMoving()` and returns early on the
+same test. `Unit::IsMovementPreventedByCasting` is true for any `UNIT_STATE_CASTING` except a channel
+carrying `IsActionAllowedChannel` — so instants are fine and everything else is not.
+
+Two things make it worse than "the move does nothing". `MovementAction::MoveTo` has its `CastStop` /
+`InterruptSpell` block **commented out** (`MovementActions.cpp:222-226`), so it returns `true` and
+stamps `LastMovement` with the full travel delay for a leg that never started — which then blocks the
+bot's own retries through `IsWaitingForLastMove` for the length of a walk it never took. And the
+calling action reads that `true` as success and holds the tick.
+
+A dodge that must not be missed calls `botAI->InterruptSpell()` before moving.
+`PlayerbotAI::InterruptSpell` is free to call when nothing is casting, and `SpellInterrupted` has no
+side effect beyond a redundant interrupt, so a 100 ms recheck costs nothing but a queued melee
+special. Decide it per mechanic: clipping a cast every time a *survivable* hazard lands costs more
+than the hazard does. Kara, Gruul, Magtheridon and Naxxramas already do this.
 
 ## Movement that silently no-ops
 
@@ -73,8 +98,11 @@ must still outrank heals while the bot is unsheltered.
   Docker volume — **not** in the host's `env/dist/data`:
   `MSYS_NO_PATHCONV=1 docker run --rm -v azerothcore-wotlk-pb_ac-client-data:/azerothcore/env/dist/data:ro --entrypoint /azerothcore/env/dist/bin/navprobe acore/ac-wotlk-build:master --map <id> coverage`
   (without `MSYS_NO_PATHCONV=1`, Git Bash mangles the entrypoint into a Windows path). Read the
-  **`settledZ`** column, never the trailing "N/N on mesh" line — a point can report a nearest poly
-  within 2 yd and still settle to terrain, which is off the floor.
+  **settled Z**, never the trailing "N/N on mesh" line — a point can report a nearest poly within
+  2 yd and still settle to terrain, which is off the floor. The same value carries two labels: for a
+  single point it prints as **`UpdateAllowedPositionZ`** (plus a `** Z would be rewritten by N yards
+  **` line once the drop exceeds 1 yd); in the ring sweep and the JSON it is the **`settledZ`**
+  column.
 
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`,
   `PathGenerator.cpp:764-767`), so a destination the navmesh flags as magma is **reachable, not
@@ -246,6 +274,23 @@ For a per-instance clock (shared across bots), use the `PhaseStateFor` pattern: 
 `GenericBossHelper<BossAiType>` is **unusable** when the boss AI class is file-local to its `.cpp`
 (Anub'rekhan, Gothik, Heigan) or when the script is `TaskScheduler`-driven with no `events` member.
 Fall back to the plain-`AiObject` + timer-model pattern (`GluthBossHelper`, `HeiganBossHelper`).
+
+## A targeting mark never clears inside a pull
+
+`prioritized targets` is written by `AttackMyTargetAction` (`src/Ai/Base/Actions/AttackAction.cpp:47`)
+and `AttackRtiTargetAction` (`src/Ai/Base/Actions/ChooseTargetActions.cpp:168`), and cleared **only**
+by `PlayerbotAI::Reset` — that is, on leaving combat. Inside one pull the mark never lets go, and a
+wrong mark is unrecoverable: `FindTargetStrategy::IsHighPriority`
+(`src/Ai/Base/Value/TargetValue.cpp:124`) returns true for the skull icon *and* for anything in
+`prioritized targets`, which trips `foundHighPriority` and short-circuits every smart strategy.
+`DpsTargetValue` (`src/Ai/Base/Value/DpsTargetValue.cpp:281`) compounds it by calling
+`RtiTargetValue::Calculate()` first and returning it unconditionally on a hit — alive, LOS and sight
+distance are the only checks.
+
+This is a base-engine trap, not a boss-specific one. **Any encounter with an untargetable phase hits
+it**: the bot is held on a dead or wrong target for the rest of the fight. An encounter that retargets
+mid-pull must clear the mark itself — Thorim sets both the group icon and its own `prioritized
+targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
 
 ## Role and index traps
 

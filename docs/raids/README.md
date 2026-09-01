@@ -136,7 +136,7 @@ serves both. What actually differs per mode:
 - **Some mechanics exist only in 25-man** (Noth's Blink/Cripple).
 
 Ulduar hard modes are the exception to all of this: they are a **raid choice, not the 10/25 flag**,
-so the "heroic comes free" reasoning does not apply. See [ulduar.md](ulduar.md).
+so the "heroic comes free" reasoning does not apply. See [ulduar/README.md](ulduar/README.md).
 
 ## Anti-fear (`RaidAntiFear.h`)
 
@@ -186,6 +186,8 @@ working behaviour.
 
 ## Recording new work
 
-Durable encounter knowledge goes into the matching `<raid>.md` here. An in-flight plan lives in
+Durable encounter knowledge goes into the matching `<raid>.md` here, or into `<raid>/<boss>.md`
+where the raid has outgrown one file — Ulduar has, and its per-boss files mirror
+`src/Ai/Raid/Uld/Action/UldActions_<Boss>.cpp`. An in-flight plan lives in
 [../plans/](../plans/) only while the work is unfinished; when it ships, fold its durable content
 into the raid file and delete the plan.

@@ -11,7 +11,7 @@ changelog — git history covers that.
 | [engine/](engine/) | How the bot picks an ability, the trap catalogue, and cross-encounter lessons |
 | [systems/](systems/) | Cross-cutting subsystems: itemization, loot, gear maintenance, consumables and burst |
 | [classes/](classes/) | Per-class rotation state: current ladders, decisions, open gaps |
-| [raids/](raids/) | Per-raid encounter knowledge, plus shared raid conventions |
+| [raids/](raids/) | Per-raid encounter knowledge, plus shared raid conventions. A raid too big for one file becomes a directory with a file per boss — see [raids/ulduar/](raids/ulduar/) |
 | [plans/](plans/) | In-flight work only — see below |
 
 **Start with [engine/pitfalls.md](engine/pitfalls.md)** if something silently does nothing. Most

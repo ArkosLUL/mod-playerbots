@@ -137,7 +137,7 @@ What lands on a raid add is not what PvP experience predicts.
   kited nor ferried: the bot walks the whole distance taking uninterrupted melee, out of healer range,
   dealing nothing, and still arrives with the add on top of it. Freya's lasher is 8.0 yd/s against 7.0,
   and the corral built on ferrying it was the single leading cause of death in the encounter
-  ([../raids/ulduar.md](../raids/ulduar.md)). Where the add is faster, **stack the raid and let it
+  ([../raids/ulduar/freya.md](../raids/ulduar/freya.md)). Where the add is faster, **stack the raid and let it
   come**; geometry is the only lever left.
 
 ## Coordinating a raid with no shared state

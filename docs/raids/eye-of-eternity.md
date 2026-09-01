@@ -651,5 +651,5 @@ Skytalon, full stop. `EnterVehicleAction` is IOC-scoped and does not help with t
 ## Threat redirect
 
 Three phases, three different right answers, which is why the generic main-tank node is not simply
-vetoed here. See the per-raid verdicts in [ulduar.md](ulduar.md), which shares the same
+vetoed here. See the per-raid verdicts in [ulduar/README.md](ulduar/README.md), which shares the same
 investigation.

@@ -6,7 +6,7 @@ the table. Item ids absent from item_template are skipped, so custom-realm ids n
 
   python generate_bis.py --addon-dir "A:/WOW/.../Interface/AddOns/Bistooltip"
 
-See docs/plans/bis-multi-expansion/bis-multi-expansion.PLAN.md for where the transforms come from.
+How the ranks are consumed is in docs/systems/itemization.md, under "Ranked BiS lists".
 """
 
 import argparse
