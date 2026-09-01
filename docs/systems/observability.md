@@ -7,7 +7,15 @@ Answers what video cannot: position over time, and the action that produced it.
 does not replace it — it records what a combat log has no field for: **position and bot intent**. It
 duplicates enough damage/heal/aura data that a pull file stands alone.
 
-Code: [src/Bot/Obs/](../../src/Bot/Obs/). Reader: [tools/botobs/postmortem.py](../../tools/botobs/postmortem.py).
+Code: [src/Bot/Obs/](../../src/Bot/Obs/). `RaidObs.h` is the public contract; `RaidObsSession.h` is
+private to the directory, holding the session type and shared helpers. One
+`RaidObs*.cpp` per concern: `Session` (registry, write path, roster), `Snapshot` (rows, hazard sweep,
+watched set), `Lifecycle` (open/close, map and script events), `Config` (config, retention,
+`Status`), `Combat` (damage, heal, aura, cast, death), `Engine` (verdict ticks, moves, notes),
+`Scripts` (ScriptMgr hooks).
+
+Reader: [tools/botobs/postmortem.py](../../tools/botobs/postmortem.py) — the CLI over `obstrace`
+(load), `records` (one row), `analysis` (many), `deathreport` and `views` (print).
 
 ## Reading a trace
 
@@ -15,11 +23,13 @@ Traces land in `<LogsDir>/botobs/<map>_<instance>_<boss>_<epoch>.ndjson`, named 
 engaged. `.playerbots debug obs` lists what is open.
 
 ```
-postmortem.py <file>               summary + a block per death
-postmortem.py <file> --death N     full rewind for one death
-postmortem.py <file> --bot NAME    one bot's timeline
-postmortem.py <file> --track NAME  position track + distance to each boss
-postmortem.py <file> --notes [KEY] pull/note/hazard/end only; KEY narrows to one note-key prefix
+postmortem.py <file>                 summary + a block per death
+postmortem.py <file> --death N       full rewind for one death
+postmortem.py <file> --bot NAME      one bot's timeline
+postmortem.py <file> --track NAME    position track + distance to each boss
+postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to one note-key prefix
+postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
+postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
 ```
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
@@ -223,6 +233,9 @@ read. A new sentinel in an existing column is not additive — a reader that doe
 wrong number.
 
 ## Adding a probe
+
+Declare a probe in `RaidObs.h`, define it in the `RaidObs*.cpp` that owns its concern.
+`RaidObsSession.h` is shared state, never public API.
 
 Store assignment state in the traced containers and it records itself — instrumentation follows the
 data, not the call sites, so a new boss is covered without further work:
