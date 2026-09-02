@@ -165,6 +165,11 @@ constexpr float ULDUAR_THORIM_ARENA_BOX_MAX_Z = 425.0f;
 // corridor mouth is 45.8 yd away, which is what makes the radius alone enough to keep them out of it.
 constexpr float ULDUAR_THORIM_ARENA_LEASH_RADIUS = 30.0f;
 
+// What holds a corridor bot's pet, which has no room to be held to. Matches the range the picker
+// looks for a target in, so a pet further out than this is past anything its owner could even see
+// to kill. Wide enough for a real chase: pets sit 15-21 yd out normally and peak around 50.
+constexpr float ULDUAR_THORIM_PET_OWNER_LEASH_RADIUS = ULDUAR_THORIM_DPS_TARGET_RANGE;
+
 // The gauntlet stops taking bodies once the arena would drop this low.
 constexpr uint32 ULDUAR_THORIM_ARENA_MIN_MEMBERS = 3;
 
@@ -359,6 +364,7 @@ struct ThorimEncounterTargets
     std::vector<Unit*> warbringers;
     std::vector<Unit*> commoners;
     std::vector<Unit*> guards;  // Iron Ring and Iron Honor Guard, the corridor's own trash
+    std::vector<Unit*> trash;   // the six the raid walks in on, before Thorim starts the waves
     Unit* colossus = nullptr;
     Unit* runeGiant = nullptr;
 };
@@ -470,13 +476,14 @@ bool ThorimInArenaBox(WorldObject const* who);
 // only ones who have to walk out to an add at all.
 bool ThorimArenaLeashBreached(PlayerbotAI* botAI, Player* bot);
 
-// Pets of an arena-squad bot that have left the room, and are not already walking back. Nothing in
-// this codebase ever recalls a pet, so one that ends up chasing something down the corridor stays
-// there, pulling packs the gauntlet squad has not reached.
+// Pets that have left the boundary their owner's squad is held to, and are not already walking back.
+// Nothing in this codebase ever recalls a pet, so one that ends up chasing something down the corridor
+// stays there, pulling packs the gauntlet squad has not reached. The arena squad is held to the room;
+// the corridor squad has no room, so it is held to the owner.
 //
 // A boundary and nothing else: this asks where the pet is, never what is standing on it. Pets have
 // the resistances and damage reduction to eat this fight, and none of this steers one around a hazard.
-bool ThorimStrayArenaPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
+bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
 
 // Sends one strayed pet home and records it. Recall only - it never commands an attack, so it cannot
 // undo a stay or a follow the way the pet-attack trigger CombatStrategy dropped used to.

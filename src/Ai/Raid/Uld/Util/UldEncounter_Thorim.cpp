@@ -648,6 +648,13 @@ void GatherThorimEncounterTargets(PlayerbotAI* botAI, ThorimEncounterTargets& ou
             case NPC_IRON_HONOR_GUARD:
                 out.guards.push_back(unit);
                 break;
+            case NPC_CAPTURED_MERCENARY_SOLDIER_ALLY:
+            case NPC_CAPTURED_MERCENARY_SOLDIER_HORDE:
+            case NPC_CAPTURED_MERCENARY_CAPTAIN_ALLY:
+            case NPC_CAPTURED_MERCENARY_CAPTAIN_HORDE:
+            case NPC_JORMUNGAR_BEHEMOT:
+                out.trash.push_back(unit);
+                break;
             case NPC_RUNIC_COLOSSUS:
                 out.colossus = unit;
                 break;
@@ -746,8 +753,10 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
     if (GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet)
     {
         // Acolytes heal the pack, then whatever is already swinging, then the two the corridor is
-        // gated on.
-        std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.guards};
+        // gated on. Walk-in trash last - it is only ever alive before the corridor opens, and the
+        // range filter has already dropped anything 50 yd away.
+        std::vector<std::vector<Unit*> const*> const tiers = {&targets.acolytes, &targets.guards,
+                                                              &targets.trash};
         for (auto const* tier : tiers)
             if (Unit* pick = SelectThorimTierTarget(currentTarget, *tier, *bot))
                 return NoteThorimDpsTarget(bot, pick);
@@ -773,11 +782,11 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
     // melee sent across the room at one walks straight past the Champion doing 41% of the damage the
     // squad takes. Commoner is last either way; it barely hits and killing one buys nothing.
     bool const melee = PlayerbotAI::IsMelee(bot);
-    using TierOrder = std::array<std::vector<Unit*> const*, 5>;
+    using TierOrder = std::array<std::vector<Unit*> const*, 6>;
     TierOrder const meleeTiers = {&targets.acolytes, &targets.champions, &targets.warbringers,
-                                  &targets.evokers, &targets.commoners};
+                                  &targets.evokers, &targets.commoners, &targets.trash};
     TierOrder const rangedTiers = {&targets.acolytes, &targets.evokers, &targets.champions,
-                                   &targets.warbringers, &targets.commoners};
+                                   &targets.warbringers, &targets.commoners, &targets.trash};
     TierOrder const& tiers = melee ? meleeTiers : rangedTiers;
 
     // Melee measure from themselves, exactly as the corridor branch above does, so a tier hands back
@@ -1153,14 +1162,15 @@ constexpr uint32 ULDUAR_THORIM_PET_RECALL_INTERVAL_MS = 2000;
 
 }  // namespace
 
-bool ThorimStrayArenaPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out)
+bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out)
 {
     out.clear();
 
     if (!botAI || !bot || !ThorimSplitActive(botAI))
         return false;
 
-    if (GetThorimSquad(botAI, bot) != ThorimSquad::Arena)
+    ThorimSquad const squad = GetThorimSquad(botAI, bot);
+    if (squad == ThorimSquad::None)
         return false;
 
     ThorimEncounterState const* state = FindState(bot);
@@ -1185,8 +1195,19 @@ bool ThorimStrayArenaPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& o
 
         // The same boundary the owner is held to. A pet chasing an add that landed 24 yd out is doing
         // its job; this only catches the ones that have left the room.
-        if (ThorimInArenaBox(pet) &&
-            pet->GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) <= ULDUAR_THORIM_ARENA_LEASH_RADIUS)
+        //
+        // The corridor squad has no room to be held to - it walks 300 yd of gauntlet - so its pets get
+        // the owner instead. Without this a pet sent at something it cannot reach walks the whole
+        // corridor to get there and never comes back.
+        bool home;
+        if (squad == ThorimSquad::Arena)
+            home = ThorimInArenaBox(pet) && pet->GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) <=
+                                                ULDUAR_THORIM_ARENA_LEASH_RADIUS;
+        else
+            home = pet->GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <=
+                   ULDUAR_THORIM_PET_OWNER_LEASH_RADIUS;
+
+        if (home)
             continue;
 
         // Time-based rather than a "already told it" latch, which would never fire twice for a pet

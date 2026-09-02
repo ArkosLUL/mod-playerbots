@@ -223,7 +223,7 @@ bool ThorimLightningChargeTrigger::IsActive()
 bool ThorimPetLeashTrigger::IsActive()
 {
     std::vector<Unit*> stray;
-    return ThorimStrayArenaPets(botAI, bot, stray);
+    return ThorimStrayPets(botAI, bot, stray);
 }
 
 bool ThorimChargedOrbTrigger::IsActive()

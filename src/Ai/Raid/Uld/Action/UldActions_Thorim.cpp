@@ -114,7 +114,7 @@ bool ThorimPetLeashAction::isUseful()
 bool ThorimPetLeashAction::Execute(Event /*event*/)
 {
     std::vector<Unit*> stray;
-    if (!ThorimStrayArenaPets(botAI, bot, stray))
+    if (!ThorimStrayPets(botAI, bot, stray))
         return false;
 
     // All of them in one pass. A bot can have a pet and a guardian up at once, and leaving the second
@@ -122,7 +122,9 @@ bool ThorimPetLeashAction::Execute(Event /*event*/)
     for (Unit* pet : stray)
         ThorimRecallPet(bot, pet);
 
-    return true;
+    // False on purpose, same as the Razorscale and Mimiron pet nodes: this walked a pet, not the bot,
+    // so the bot still needs whatever node was going to act this tick.
+    return false;
 }
 
 bool ThorimChargedOrbAction::isUseful()

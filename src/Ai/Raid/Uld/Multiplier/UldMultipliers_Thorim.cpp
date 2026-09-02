@@ -45,9 +45,14 @@ using namespace EncounterHelpers;
 // pull. Thorim's balcony sits above the arena box, which is exactly how that happened.
 static bool ThorimIsTargetSelectionAction(Action* action)
 {
-    return dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<DpsAoeAction*>(action) ||
-           dynamic_cast<TankAssistAction*>(action) || dynamic_cast<AggressiveTargetAction*>(action) ||
-           dynamic_cast<AttackAnythingAction*>(action) || dynamic_cast<AttackLeastHpTargetAction*>(action);
+    // The encounter's own picker belongs here too, and it is an AttackAction rather than one of the
+    // generic siblings, so nothing below catches it. Leaving it out deadlocks the arena target guard
+    // against itself: the guard fires on a target outside the box, and the node it kills is the one
+    // that drops that target.
+    return dynamic_cast<ThorimDpsPriorityAction*>(action) || dynamic_cast<DpsAssistAction*>(action) ||
+           dynamic_cast<DpsAoeAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
+           dynamic_cast<AggressiveTargetAction*>(action) || dynamic_cast<AttackAnythingAction*>(action) ||
+           dynamic_cast<AttackLeastHpTargetAction*>(action);
 }
 
 float ThorimRunicBarrierMultiplier::GetValue(Action* action)
@@ -114,10 +119,12 @@ float ThorimDisableAutomaticTargetingMultiplier::GetValue(Action* action)
     if (botAI->IsHeal(bot) || botAI->IsTank(bot))
         return 1.0f;
 
-    // Only while the encounter actually has an answer. GetThorimDpsTarget returns nothing whenever no
-    // tier has a candidate inside the arena box, and zeroing every picker in that state strands the
-    // bot with no target source at all.
-    return ThorimHasDpsTarget(botAI, bot) ? 0.0f : 1.0f;
+    // Inside the encounter the picker is the only target source, so nothing from it means nothing
+    // legal to hit and standing still is the right answer. Releasing the generic pickers here instead
+    // has bots latch onto Thorim through the gaps between add waves: he is untouchable on the balcony,
+    // ThorimDpsPriorityAction drops him, and the generic picker hands him straight back next tick.
+    // Needs the walk-in trash in GetThorimDpsTarget's tiers, or this silences the raid for the pull.
+    return (ThorimHasDpsTarget(botAI, bot) || ThorimSplitActive(botAI)) ? 0.0f : 1.0f;
 }
 
 float ThorimArenaTargetGuardMultiplier::GetValue(Action* action)
