@@ -45,7 +45,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift lands at T+3.8 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands T+9: **6.3s of shelter** to cross the room |
 | Trapped player | 61969 / 62226 | **300s**, and the *next* Flash Freeze **instakills**. Free by killing NPC **32926** (helpers: 32938) |
 | Small icicles | 62227 → 63545 → 33169 → `62457` | **Every 2s** on 1 random player, falls after 2s, **14,000 Frost in 4 yd** + knockback. Off for 12s (25m) / 24s (10m) after each Flash Freeze |
-| Biting Cold | 62038 / 62039 | Stacks every 4s on anyone **not moving**, `200 · 2^stacks`. Sheds only on the **second consecutive** moving tick, so a hop cannot clear it |
+| Biting Cold | 62038 / 62039 | **1005 ms ticks**, `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
 | Frozen Blows | 62478 / 63512 | 20s, **15s after each Flash Freeze**; +31,061 / +39,999 per swing (the damage itself is `63511`) plus a 3,999 raid tick (`64545`). All four rows are named "Frozen Blows"; the aura ids apply, the damage ids hit |
 | Freeze | 62469 | Random player in 50 yd every 17-20s, 5,549 + root in 10 yd, **dispellable (Magic)** |
 | Storm Cloud → Storm Power | 65123/65133 → 63711/65134 | Carrier holds **4 (10m) / 6 (25m)** stacks, one per second — **4-6 seconds of use**. Storm Power is **3 yd**, +134% crit damage |
@@ -131,11 +131,28 @@ its AI casts the fall effect at 2,000 ms and that aura's single 1,700 ms tick tr
 last `ULDUAR_HODIR_ICICLE_SPENT_MS` = 3,300 ms are inert, so at one icicle every 2s roughly half of
 those on the floor have already blown.
 
-**Biting Cold sheds on sustained movement only.** A stack comes off on the second *consecutive*
-moving tick and any stationary tick between resets that progress, so the shuttle walks 6 yd legs
+**Biting Cold sheds on sustained movement only, and jumping cannot fake it.** A stack comes off on the
+second *consecutive* tick where the server reads `isMoving()`, and any stationary tick between resets
+that progress, so it needs more than a second of unbroken travel: the shuttle walks 6 yd legs
 (`_SHUTTLE_HALF_LEG` 3.0) on bearing −π/4, parallel to the SW bevel, chaining until the aura is gone.
 It arms at 2 stacks, 3 in Starlight: ~33% movement duty for ~600/s, where arming at 1 would cost half
 the raid's cast uptime to save 200/s.
+
+`isMoving()` is the raw `MOVEMENTFLAG_MASK_MOVING` and does include the flags a jump raises, but
+`MotionMaster::MoveJump` splines to its point and takes the duration from `length / speedXY` — an
+in-place 0.01 yd hop is airborne **~1.4 ms** and never covers a tick, which is what
+`IntenseColdJumpAction` (the Nexus answer to the same mechanic) reports in its own comment.
+`IsDuplicateMove` also refuses a repeat within 0.01 yd, and `JumpTo` books the slot for 1,000 ms. A
+hop long enough to span two ticks is a 7 yd walk at run speed, which is the leg already. Only an
+optional `speedXY` on `JumpTo` would change that: 2 yd at 2 yd/s lasts a second.
+
+**The shed holds each leg**, latched like the dodge — re-derived on arrival, on the leg stopping being
+clear of icicles, or on slipping past `_DODGE_SLIP`, and on arrival it derives the *next* leg rather
+than stopping, because the chain is what covers consecutive ticks. Stateless it issued **6,686 moves
+against 4,122 refusals**, the largest single source of churn in the fight. Its sweep takes allies at
+`_DECLUMP_RADIUS`, live icicles at their clears, and —
+for ranged and healers only — **Hodir at `_RANGED_MIN_BOSS_GAP`**. Allies alone put three raiders on
+an icicle inside fourteen seconds and left a warlock dead at 7.7 yd from the boss.
 
 **Ask `IsHodirBitingColdShedArmed`, never `HodirBitingColdTrigger`, before standing a node down for
 the shed.** The trigger fires on *any* stack because the action owns the shed-to-zero latch — but 87%
@@ -156,22 +173,37 @@ for **22%**.
   melee haste too, and confirmed: zones sit a median **21.6 yd** from him, so melee are inside one
   **1.8%** of ticks and within 10 yd for 7.7%. The only fix is dragging him to the druid, which costs
   the corner.
-- The Storm Cloud carrier **laps the ring**, direction latched for one carry. Tanks never lap — the
-  trigger refuses, since leaving the corner mid-Frozen-Blows costs more than the buff — but the boss
-  still picks them: **14 of 53** carries in one pull went to a tank and 6 more to healers, every one a
-  dead window. Collecting those would mean walking the receivers to the carrier. Greedy re-targeting
-  is the Auriaya corridor dance.
+- The Storm Cloud carrier **laps the formation ring**, with centre, radius, bearing and direction all
+  latched for one carry and keyed on the aura's **apply time** — stack counts repeat across carries,
+  so a rise cannot tell them apart. Read them off the bot each tick instead and the target sits 45°
+  ahead of a moving bot forever while `std::max` locks in every yard of outward drift: one carry
+  walked **213 yd** and ended **142 yd** from the boss, outside the room, and died there alone. The
+  radius is clamped to the 4.5-9 yd ring rather than the carrier's own distance, because Storm Power
+  is 3 yd and has to be carried *through* the raid — a carrier 30 yd out toured a circle nobody stood
+  on, 23 yd a step against 4-6 one-second ticks. Tanks never lap — the trigger refuses, since leaving
+  the corner mid-Frozen-Blows costs more than the buff — but the boss still picks them: **14 of 53**
+  carries in one pull went to a tank and 6 more to healers, every one a dead window. Collecting those
+  would mean walking the receivers to the carrier. Greedy re-targeting is the Auriaya corridor dance.
 - Healers are excluded from the targeting node entirely, and **5** non-healers break each ice block —
   raider and helper alike, picked by a GUID window offset per block so several blocks draw disjoint
   sets instead of the same five. Freeing outranks the boss (the trapped raider dies to the next
   freeze) but the block has little health, so only bots within 45 yd leave what they were doing.
 
-## The anchor and the dodge will thrash unless three invariants hold
+## Every mover here thrashes unless it latches
 
 Traced on 2026-08-23: two wipes at 67% HP, both tanks dead inside two minutes, healers at 0-10% cast
 uptime and ~70% moving. 934 anchor/dodge reversals — 21% of every accepted move, median gap 321 ms,
 15,240 yd walked — roughly **43% of the raid's fight time spent walking between two destinations**.
-Three separate causes, all of them still easy to reintroduce.
+
+Traced 2026-09-02, with the dodge latched and the shed, Starlight and Storm Cloud not yet: bots move
+**58.7%** of their alive time and **50.6%** of the distance walked is undone within five seconds
+(36,799 yd walked, 18,187 net). Of destination changes landing within four seconds of the last,
+**90.5% are turn-arounds** — 2,421 of 2,676: shed on shed 454 of 485 at a median 879 ms, shed against
+the icicle dodge 487 flips at 230-403 ms, and **every one** of the 100 times the dodge followed
+`reach melee`. The four Hodir movers own **82.8%** of movement time, `reach melee` gets 8.3%, and
+melee are within 8 yd of the boss only 49.8% of the fight.
+
+Each cause below is separate, and all of them are still easy to reintroduce.
 
 - **The anchor stand-down tests the whole walk back, not just the anchor.** The dodge trigger goes
   false the moment the bot is clear, but the icicle stays lethal until it detonates at 3.7s. Checking
@@ -202,6 +234,12 @@ Three separate causes, all of them still easy to reintroduce.
   instead; sweep only once it stops being clear. `_DODGE_ARRIVE` is 0.8 for the same reason: at 1.5 a
   bot counted as arrived a fifth of the way into a 2 yd leg, still inside the radius that re-arms the
   trigger.
+- **The Starlight stand is latched per bot too.** Zones are ranked against the ring slot and the stand
+  bearing is taken from it, so any centre change rewrites all 14 slots and with them the answer.
+  Stateless that came out as **739 anchor changes** across 23 bots at a median 3,896 ms, an 11 yd jump
+  each, and Starlight windows lasting 1.6 s against zones that live a minute. Hold the chosen zone
+  until it leaves the sweep and re-validate the stored point against the fire leash and the caster
+  band, rather than re-picking under a moving slot.
 
 Two things that look broken in a Hodir trace and are not: `hodir frozen blows swap action` logging
 ~95% `FAILED` is the stateless trigger retrying every ~110 ms while the taunt is on cooldown — count
@@ -212,11 +250,12 @@ accepted moves and zero `OK` verdicts, and `NearThorimEncounter` excludes his fl
 (`z < ULDUAR_THORIM_WING_MAX_Z` 425 against 432.687).
 
 **Still open here:** no tank defensive cooldown is tied to a Frozen Blows window — the tanks spent
-four and six in six minutes, unprompted. And the pace is still about half what the deadline needs:
-**92k dps** on the boss across a 5:57 wipe that left him at **14.93%**, against the **214k** a 38.57M
-pool wants in 180 s. Even the opening minute only reaches 117k, so this is not a fight that falls off
-after cooldowns — it starts short. The movement economy is the lever aimed at it and wants
-re-measuring before anything else is tried.
+four and six in six minutes, unprompted. And the pace is still about half what the deadline needs. The
+first kill ran **6:20.4** at **115k** dps on the boss, against the **214k** a 38.57M pool wants in
+180 s; the opening minute reaches 128k, so this is not a fight that falls off after cooldowns, it
+starts short. Survival is not the constraint either — 23 of 25 lived, and **64.3%** of the 17,309/s
+the raid takes is the raid-wide `64545` tick that no positioning avoids. The movement economy is the
+lever, and it wants re-measuring after each latch rather than all at once.
 
 **The taunt floor may be set too low.** `ULDUAR_HODIR_TAUNT_HEALTH_FLOOR` ships at **50.0f**, but a
 max-roll `63511` is 28,929 against Bulwark's 45,287 pool — **63.9%** — and two land about 2.4s apart.

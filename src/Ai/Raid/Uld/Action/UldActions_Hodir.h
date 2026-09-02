@@ -47,8 +47,9 @@ private:
     float _destDist = 0.0f;
 };
 
-// Shed Biting Cold by moving. A stack only comes off on the second moving tick and any stationary
-// tick resets that progress, so this chains 6 yd legs until the aura is gone rather than hopping.
+// Shed Biting Cold by moving. A stack only comes off on the second consecutive tick the server reads
+// the bot as moving, so this chains 6 yd legs until the aura is gone, holding each one until it is
+// walked rather than deriving a new one under its own walk.
 class HodirBitingColdShedAction : public MovementAction
 {
 public:
@@ -57,6 +58,10 @@ public:
 
 private:
     bool _shedding = false;
+    // The leg being walked, and the closest the bot has got to it, so a drag away from it can be told
+    // from ordinary walking.
+    Position _leg;
+    float _legDist = 0.0f;
 };
 
 // Hold the bot's anchor: a fixed corner spot for the two tanks, a formation slot for ranged and
@@ -110,8 +115,14 @@ public:
 
 private:
     int8 _direction = 0;
-    // Storm Cloud only ever loses stacks, so a rise means a fresh carry and a fresh lap direction.
-    uint8 _lastStacks = 0;
+    // Which carry the lap below belongs to. Stack counts repeat across carries; apply times do not.
+    time_t _carryApplied = 0;
+    // The lap itself, latched once per carry. Re-reading the centre, radius or angle off the bot makes
+    // the target recede ahead of it, which walked one carrier clean out of the room.
+    Position _lapCentre;
+    float _lapRadius = 0.0f;
+    float _lapAngle = 0.0f;
+    Position _step;
 };
 
 #endif

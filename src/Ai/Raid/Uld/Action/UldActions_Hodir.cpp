@@ -3,8 +3,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <list>
-#include <utility>
 #include <vector>
 
 #include "AiObjectContext.h"
@@ -29,27 +27,6 @@ using namespace EncounterHelpers;
 
 namespace
 {
-// Where every icicle that has not detonated yet is standing, each carrying the distance its own pool
-// needs. The drift entry is included because it is lethal on the way down; once it lands it marks the
-// shelter and IsHodirIcicleLethal stops reporting it. The two clears are passed in because the dodge
-// sweeps twice: once for real margin, once tightened to the radius that actually kills.
-std::vector<HazardCircle> CollectHodirIcicleHazards(Player* bot, float radius, float smallClear, float bigClear)
-{
-    std::vector<HazardCircle> hazards;
-
-    for (auto const& entry : {std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_SMALL), smallClear),
-                              std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_DRIFT), bigClear)})
-    {
-        std::list<Creature*> found;
-        bot->GetCreatureListWithEntryInGrid(found, entry.first, radius);
-        for (Creature* icicle : found)
-            if (IsHodirIcicleLethal(icicle))
-                hazards.emplace_back(icicle->GetPosition(), entry.second);
-    }
-
-    return hazards;
-}
-
 bool IsEmptyPosition(Position const& position)
 {
     return !position.GetPositionX() && !position.GetPositionY();
@@ -61,25 +38,6 @@ bool IsClearOfHazards(Position const& position, std::vector<HazardCircle> const&
         if (hazard.first.GetExactDist2d(&position) < hazard.second)
             return false;
 
-    return true;
-}
-
-// Which of several equally short dodge spots the bot would rather have. Melee want the boss; ranged and
-// healers want the ring slot they were pulled off. Tanks never reach here - the dodge trigger excludes
-// them - and a bot with no anchor gets no preference, which is the old behaviour.
-bool GetHodirDodgePreference(PlayerbotAI* botAI, Player* bot, Position& out)
-{
-    if (!PlayerbotAI::IsMelee(bot))
-    {
-        float tolerance = 0.0f;
-        return GetHodirAnchor(botAI, bot, out, tolerance);
-    }
-
-    Unit* boss = GetHodir(botAI);
-    if (!boss)
-        return false;
-
-    out = boss->GetPosition();
     return true;
 }
 
@@ -174,6 +132,7 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
     if (!cold)
     {
         _shedding = false;
+        _leg = Position();
         return false;
     }
 
@@ -188,9 +147,38 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
     // movement already spent.
     _shedding = true;
 
+    // The walk holds one leg instead of re-deriving under its own walk. Stateless it issued 6686 moves
+    // against 4122 refusals and turned the bot around a median 879ms apart, which is the movement slot
+    // the rest of the raid never got. On arrival it derives the next leg rather than stopping, because
+    // it is the chain that covers consecutive aura ticks - one leg cannot.
+    if (!IsEmptyPosition(_leg))
+    {
+        float const remaining = bot->GetExactDist2d(&_leg);
+        bool const clear = IsClearOfHazards(
+            _leg, CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR,
+                                            ULDUAR_HODIR_BIG_SHARDS_CLEAR));
+
+        if (clear && remaining > ULDUAR_HODIR_DODGE_ARRIVE && remaining <= _legDist + ULDUAR_HODIR_DODGE_SLIP)
+        {
+            _legDist = std::min(_legDist, remaining);
+
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "hodir.shuttle", "held");
+
+            return MoveTo(bot->GetMapId(), _leg.GetPositionX(), _leg.GetPositionY(), _leg.GetPositionZ(),
+                          false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+        }
+    }
+
     Position leg;
     if (!GetHodirShuttleLeg(botAI, bot, leg))
+    {
+        _leg = Position();
         return false;
+    }
+
+    _leg = leg;
+    _legDist = bot->GetExactDist2d(&_leg);
 
     return MoveTo(bot->GetMapId(), leg.GetPositionX(), leg.GetPositionY(), leg.GetPositionZ(), false,
                   false, false, false, MovementPriority::MOVEMENT_COMBAT);
@@ -336,17 +324,20 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
     Position const centre = GetHodirRingCentre(botAI, bot);
     uint32 const stormPower = sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot);
 
-    // Storm Cloud only sheds stacks, so a rise is a new carry and the lap direction has to be picked
-    // again rather than inherited from the last one.
     Aura* cloud = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot));
-    uint8 const stacks = cloud ? cloud->GetStackAmount() : 0;
-    if (stacks > _lastStacks)
+    if (!cloud)
+        return false;
+
+    // Apply time rather than the stack count, because Storm Cloud only ever sheds stacks: a carry that
+    // ended on one stack and a new one that starts on one are the same number, and the lap would then
+    // inherit a centre and a bearing from wherever the bot was standing a minute ago.
+    time_t const applied = cloud->GetApplyTime();
+    if (applied != _carryApplied)
         _direction = 0;
-    _lastStacks = stacks;
+    _carryApplied = applied;
 
     float const botAngle = std::atan2(bot->GetPositionY() - centre.GetPositionY(),
                                       bot->GetPositionX() - centre.GetPositionX());
-    float const lapRadius = std::max(bot->GetExactDist2d(&centre), ULDUAR_HODIR_RAID_RING_INNER);
 
     // Storm Power reaches 3 yd and the carrier has only 4-6 one-second ticks, so it laps the ring
     // rather than stepping to one neighbour. The direction is chosen once, toward whichever way has
@@ -377,18 +368,70 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
         }
 
         _direction = ahead >= behind ? 1 : -1;
+
+        // Latched with the direction and never read off the bot again. Both used to be sampled from
+        // wherever the carrier had drifted to, so the target sat 45 degrees ahead of a moving bot and
+        // could never be reached, and the std::max on the radius locked in every yard of outward
+        // drift: one carrier walked 213 yd in a 30 s carry, ended 142 yd from the boss outside the
+        // room, and died there alone.
+        //
+        // Clamped to the formation ring rather than the carrier's own distance from it. Storm Power
+        // reaches 3 yd, so the lap has to run where the raid is actually standing - a carrier 30 yd
+        // out was touring a circle nobody was on, 23 yd a step against 4-6 one-second ticks. It also
+        // bounds the whole carry inside the outer ring, which is what makes a runaway impossible
+        // rather than merely unlikely.
+        _lapCentre = centre;
+        _lapRadius = std::clamp(bot->GetExactDist2d(&centre), ULDUAR_HODIR_RAID_RING_INNER,
+                                ULDUAR_HODIR_RAID_RING_OUTER);
+        _lapAngle = botAngle;
+        _step = Position();
     }
 
-    float const nextAngle = Position::NormalizeOrientation(
-        botAngle + static_cast<float>(_direction) * static_cast<float>(M_PI) / 4.0f);
+    // Advance a step only on arrival. Deriving one every tick is what made the target recede.
+    if (IsEmptyPosition(_step) || bot->GetExactDist2d(&_step) <= ULDUAR_HODIR_DODGE_ARRIVE)
+    {
+        Unit* hodir = GetHodir(botAI);
 
-    // Lap at whatever radius the carrier is already standing at, so an outer-ring carrier does not
-    // dive through the middle of the formation on its way round.
-    float const x = centre.GetPositionX() + std::cos(nextAngle) * lapRadius;
-    float const y = centre.GetPositionY() + std::sin(nextAngle) * lapRadius;
-    float z = bot->GetMapWaterOrGroundLevel(x, y, centre.GetPositionZ());
-    if (z <= INVALID_HEIGHT)
-        z = centre.GetPositionZ();
+        for (uint8 attempt = 0; attempt < 2; ++attempt)
+        {
+            float const nextAngle = Position::NormalizeOrientation(
+                _lapAngle + static_cast<float>(_direction) * static_cast<float>(M_PI) / 4.0f);
 
-    return MoveTo(bot->GetMapId(), x, y, z, false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+            float const x = _lapCentre.GetPositionX() + std::cos(nextAngle) * _lapRadius;
+            float const y = _lapCentre.GetPositionY() + std::sin(nextAngle) * _lapRadius;
+            float z = bot->GetMapWaterOrGroundLevel(x, y, _lapCentre.GetPositionZ());
+            if (z <= INVALID_HEIGHT)
+                z = _lapCentre.GetPositionZ();
+
+            Position const step(x, y, z);
+
+            // A step out of casting range turns the lap round instead of walking it out. With the
+            // radius clamped this should never fire; it is here so leaving the room is impossible
+            // rather than improbable, and the second pass is taken whatever it costs, because a
+            // carrier that stops moving sheds nothing and buffs nobody.
+            if (!attempt && hodir && step.GetExactDist2d(hodir) > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+            {
+                _direction = -_direction;
+
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "hodir.stormcloud", "flip");
+
+                continue;
+            }
+
+            _lapAngle = nextAngle;
+            _step = step;
+            break;
+        }
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "hodir.stormcloud", "lap");
+    }
+    else if (RaidObs::Active())
+    {
+        RaidObs::NoteDerived(bot, "hodir.stormcloud", "held");
+    }
+
+    return MoveTo(bot->GetMapId(), _step.GetPositionX(), _step.GetPositionY(), _step.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT);
 }

@@ -10,6 +10,7 @@
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "Group.h"
+#include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -24,6 +25,7 @@
 #include <cmath>
 #include <list>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 using namespace EncounterHelpers;
@@ -309,15 +311,32 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
 //
 // Usable means the resulting spot still reaches Hodir and is still out of his reach; the nearest zone
 // to the slot wins among those, so the detour stays short.
+//
+// The pick is latched per bot and held until the zone expires, because both of its inputs move. Zones
+// are ranked against the slot and the bearing is taken from the slot, so every centre change - 3
+// distinct ones in a six minute kill - rewrites all 14 slots and with them the answer here. Stateless,
+// that came out as 739 anchor changes across 23 bots, a median 11 yd jump every 3.4s, and Starlight
+// windows lasting 1.6s against zones that live a minute.
 static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position const& centre,
                                     bool onFire, Position const& slot, Position& out)
 {
+    // Keyed on the bot: its guid is stable and bounded by the population on this thread, and a bot
+    // only ever reads or writes its own entry on its own map thread, so no lock.
+    struct StarlightLatch
+    {
+        Position zone;
+        Position stand;
+    };
+    thread_local std::unordered_map<ObjectGuid, StarlightLatch> latched;
+
     // Bounded rather than the room radius: this runs per bot per tick, and a zone further out than
     // this cannot be within reach of any slot the bot could be standing on anyway.
     std::vector<Position> const zones =
         GetDynamicObjectPositions(bot, ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS, SPELL_HODIR_STARLIGHT);
     if (zones.empty())
     {
+        latched.erase(bot->GetGUID());
+
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "hodir.starlight", "none");
 
@@ -340,8 +359,56 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
     // the zones on the floor, which is why only 1.40 dps of 18 were ever standing in one.
     float const fireLeash = ULDUAR_HODIR_TOASTY_FIRE_RADIUS - ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE;
 
+    // The rule that keeps a bot off a stand point, or nullptr when it passes. Shared so a latched
+    // point is re-checked against exactly what a fresh pick faces - the fire and the boss both move,
+    // and a point that was good when it was picked can stop being either.
+    auto standRejects = [&](Position const& stand) -> char const*
+    {
+        if (onFire && centre.GetExactDist2d(&stand) > fireLeash)
+            return "fire";
+
+        // Both ends of the caster band. A zone the bot cannot shoot the boss from is not a throughput
+        // lever, whatever haste it carries.
+        if (hodir)
+        {
+            float const gap = stand.GetExactDist2d(hodir);
+            if (gap < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+                return "noreach";
+        }
+
+        return nullptr;
+    };
+
+    auto held = latched.find(bot->GetGUID());
+    if (held != latched.end())
+    {
+        bool stillUp = false;
+        for (Position const& zone : zones)
+        {
+            if (zone.GetExactDist2d(&held->second.zone) <= ULDUAR_HODIR_STARLIGHT_ZONE_MATCH)
+            {
+                stillUp = true;
+                break;
+            }
+        }
+
+        if (stillUp && !standRejects(held->second.stand))
+        {
+            out = held->second.stand;
+
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "hodir.starlight", "stand");
+
+            return true;
+        }
+
+        // The zone expired or the point stopped qualifying, so the next sweep is the one that counts.
+        latched.erase(held);
+    }
+
     bool found = false;
     float bestWalk = 0.0f;
+    Position bestZone;
 
     for (Position const& zone : zones)
     {
@@ -357,32 +424,22 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
                           zone.GetPositionY() + std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_STAND_RADIUS,
                           zone.GetPositionZ()));
 
-        if (onFire && centre.GetExactDist2d(&stand) > fireLeash)
+        if (char const* reject = standRejects(stand))
         {
             if (!found)
-                how = "fire";
+                how = reject;
 
             continue;
         }
 
-        // Both ends of the caster band. A zone the bot cannot shoot the boss from is not a throughput
-        // lever, whatever haste it carries.
-        if (hodir)
-        {
-            float const gap = stand.GetExactDist2d(hodir);
-            if (gap < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
-            {
-                if (!found)
-                    how = "noreach";
-
-                continue;
-            }
-        }
-
         out = stand;
+        bestZone = zone;
         bestWalk = walk;
         found = true;
     }
+
+    if (found)
+        latched[bot->GetGUID()] = StarlightLatch{bestZone, out};
 
     // The point itself is already hodir.anchor, which this becomes when it is found.
     if (RaidObs::Active())
@@ -430,6 +487,39 @@ bool IsHodirIcicleLethal(Creature* icicle)
     // leaves it parked at its start value and every icicle reads live, which is the safe way to be
     // wrong.
     return !remaining || remaining > ULDUAR_HODIR_ICICLE_SPENT_MS;
+}
+
+std::vector<HazardCircle> CollectHodirIcicleHazards(Player* bot, float radius, float smallClear, float bigClear)
+{
+    std::vector<HazardCircle> hazards;
+
+    for (auto const& entry : {std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_SMALL), smallClear),
+                              std::make_pair(static_cast<uint32>(NPC_HODIR_ICICLE_DRIFT), bigClear)})
+    {
+        std::list<Creature*> found;
+        bot->GetCreatureListWithEntryInGrid(found, entry.first, radius);
+        for (Creature* icicle : found)
+            if (IsHodirIcicleLethal(icicle))
+                hazards.emplace_back(icicle->GetPosition(), entry.second);
+    }
+
+    return hazards;
+}
+
+bool GetHodirDodgePreference(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!PlayerbotAI::IsMelee(bot))
+    {
+        float tolerance = 0.0f;
+        return GetHodirAnchor(botAI, bot, out, tolerance);
+    }
+
+    Unit* boss = GetHodir(botAI);
+    if (!boss)
+        return false;
+
+    out = boss->GetPosition();
+    return true;
 }
 
 static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out, char const*& how)
@@ -481,40 +571,65 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         return true;
     }
 
-    // Everyone else steps to the nearest point clear of the rest of the raid. distanceStep is the
-    // leg length, not a probe granularity: the helper rings outward from it, so 6 yd is the shortest
-    // move it can return and a shorter one would not span two aura ticks.
-    std::vector<Position> crowd;
-    for (auto const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest friendly players")->Get())
+    // Everyone else steps to the nearest point clear of the rest of the raid, of every live icicle,
+    // and - for anyone who has to shoot from range - of Hodir himself. Sweeping for allies alone put
+    // three raiders on top of an icicle inside fourteen seconds and left a warlock dead at 7.7 yd from
+    // the boss, and the old no-allies branch was a blind 6 yd hop on a guid-derived bearing with no
+    // sweep and no floor check at all.
+    //
+    // distanceStep is the leg length, not a probe granularity: the helper rings outward from it, so
+    // 6 yd is the shortest move it can return and a shorter one would not span two aura ticks.
+    bool crowded = false;
+    auto sweepFor = [&](float declump, float smallClear, float bigClear)
     {
-        Unit* ally = botAI->GetUnit(guid);
-        if (ally && ally->IsAlive() && ally != bot && bot->GetExactDist2d(ally) <= ULDUAR_HODIR_DODGE_LEASH)
-            crowd.push_back(ally->GetPosition());
-    }
+        std::vector<HazardCircle> hazards;
 
-    if (crowd.empty())
-    {
-        float const bearing = static_cast<float>(bot->GetGUID().GetCounter() % 8) * static_cast<float>(M_PI) / 4.0f;
-        out = Position(bot->GetPositionX() + std::cos(bearing) * 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
-                       bot->GetPositionY() + std::sin(bearing) * 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
-                       bot->GetPositionZ());
-        how = "solo";
-        return true;
-    }
+        for (auto const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest friendly players")->Get())
+        {
+            Unit* ally = botAI->GetUnit(guid);
+            if (ally && ally->IsAlive() && ally != bot && bot->GetExactDist2d(ally) <= ULDUAR_HODIR_DODGE_LEASH)
+            {
+                hazards.emplace_back(ally->GetPosition(), declump);
+                crowded = true;
+            }
+        }
 
-    Position leg = FindNearestPositionClearOfHazards(bot, crowd, ULDUAR_HODIR_DECLUMP_RADIUS,
-                                                     ULDUAR_HODIR_DODGE_LEASH,
-                                                     2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG);
+        for (HazardCircle const& icicle :
+             CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, smallClear, bigClear))
+            hazards.push_back(icicle);
+
+        // Melee belong inside this, so only the bots the gap is protecting get it.
+        if (!PlayerbotAI::IsMelee(bot))
+            if (Unit* hodir = GetHodir(botAI))
+                hazards.emplace_back(hodir->GetPosition(), ULDUAR_HODIR_RANGED_MIN_BOSS_GAP);
+
+        return hazards;
+    };
+
+    Position preference;
+    Position const* preferNear = GetHodirDodgePreference(botAI, bot, preference) ? &preference : nullptr;
+
+    Position leg = FindNearestPositionClearOfHazards(
+        bot, sweepFor(ULDUAR_HODIR_DECLUMP_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR),
+        ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG, static_cast<float>(M_PI) / 8.0f,
+        preferNear);
+
+    // Nothing clear with margin. The clears carry 2 yd over the radius that actually kills and the
+    // declump only stops two bots sharing one icicle, so both are worth giving up before standing
+    // still: a bot that cannot move sheds nothing.
     if (!leg.GetPositionX() && !leg.GetPositionY())
-        leg = FindNearestPositionClearOfHazards(bot, crowd, ULDUAR_HODIR_SHUTTLE_HALF_LEG,
-                                                ULDUAR_HODIR_DODGE_LEASH,
-                                                2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG);
+        leg = FindNearestPositionClearOfHazards(
+            bot,
+            sweepFor(ULDUAR_HODIR_SHUTTLE_HALF_LEG, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
+                     ULDUAR_HODIR_BIG_SHARDS_RADIUS + 0.5f),
+            2.0f * ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
+            static_cast<float>(M_PI) / 8.0f, preferNear);
 
     if (!leg.GetPositionX() && !leg.GetPositionY())
         return false;
 
     out = leg;
-    how = "crowd";
+    how = crowded ? "crowd" : "solo";
     return true;
 }
 

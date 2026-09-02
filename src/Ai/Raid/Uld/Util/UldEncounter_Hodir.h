@@ -7,8 +7,11 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERHODIR_H
 #define PLAYERBOTS_ULDENCOUNTERHODIR_H
 
+#include "EncounterHelpers.h"
 #include "Position.h"
 #include "UldData.h"
+
+#include <vector>
 
 class Creature;
 class Player;
@@ -177,6 +180,10 @@ constexpr float ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS = 30.0f;
 // position trigger down, so trimming it would just move the churn from the dodge to the anchor.
 constexpr float ULDUAR_HODIR_STARLIGHT_STAND_RADIUS = 1.5f;
 constexpr float ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE = 1.0f;
+
+// How close two sweeps have to agree before the second is the same zone as the first. Starlight zones
+// are static dynamic objects, so this only has to absorb float noise, not movement.
+constexpr float ULDUAR_HODIR_STARLIGHT_ZONE_MATCH = 1.0f;
 static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE <=
                   ULDUAR_HODIR_STARLIGHT_RADIUS,
               "a bot at the edge of its tolerance has to still be inside Starlight");
@@ -203,11 +210,18 @@ constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
 // dodge after another ends up out of heal range with nothing pulling it back.
 constexpr float ULDUAR_HODIR_RETURN_LEASH = 20.0f;
 
-// Biting Cold is 1s ticks that damage 200*2^stacks every tick. A stack comes off only on the second
-// moving tick and any stationary tick in between resets that progress, so shedding needs sustained
-// movement - a hop cannot do it. Two moving ticks means more than a second of continuous travel, so
-// legs are 6 yd and chain until the aura is gone. Arming at 2 stacks costs ~33% movement duty and
-// ~600/s; arming at 1 would cost half the raid's cast uptime for 200/s less.
+// Biting Cold ticks every second (measured 1005ms) for 200*2^stacks. The server takes a stack off on
+// the second consecutive tick that reads target->isMoving(), and any stationary tick in between
+// resets that progress - spell_hodir_biting_cold_player_aura in boss_hodir.cpp. So shedding needs
+// more than a second of unbroken travel, which is why legs are 6 yd and chain until the aura is gone.
+//
+// isMoving() is the raw MOVEMENTFLAG_MASK_MOVING and does include the flags a jump raises, but an
+// in-place jump cannot use that: MotionMaster::MoveJump splines to the point and takes its duration
+// from length/speedXY, so a 0.01 yd hop is airborne for about 1.4ms and never covers a tick, let
+// alone two. A jump long enough to span two ticks is a 7 yd walk, which is what this already does.
+//
+// Arming at 2 stacks costs ~33% movement duty and ~600/s; arming at 1 would cost half the raid's cast
+// uptime for 200/s less.
 constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
 constexpr float ULDUAR_HODIR_SHUTTLE_BEARING = -0.785398f;  // -pi/4, parallel to the SW bevel
 constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 2;
@@ -301,10 +315,11 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
 // shuttle can be laid out around it.
 bool GetHodirStarlightZoneAt(PlayerbotAI* botAI, Player* bot, Position& out);
 
-// Where this bot moves to shed Biting Cold. Tanks alternate between two fixed points beside their
-// spot so the boss cannot be walked out of the corner; a bot in a Starlight zone shuttles across the
-// zone so it keeps the aura; everyone else takes the nearest point that is clear of the rest of the
-// raid. Legs are long enough to cover two aura ticks.
+// Where this bot walks to shed Biting Cold when jumping on the spot has not shed it. Tanks alternate
+// between two fixed points beside their spot so the boss cannot be walked out of the corner; a bot in
+// a Starlight zone shuttles across the zone so it keeps the aura; everyone else takes the nearest
+// point clear of the rest of the raid, of every live icicle, and - if it has to shoot from range - of
+// Hodir. Legs are long enough to cover two aura ticks.
 bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // True when the shed would start walking a bot that is currently standing still: it holds at least
@@ -321,6 +336,18 @@ bool IsHodirBitingColdShedArmed(Player* bot);
 // that corpse as live both inflates the hazard set past what any dodge can clear and keeps bots
 // walking back and forth over a spot that is already safe.
 bool IsHodirIcicleLethal(Creature* icicle);
+
+// Where every icicle that has not detonated yet is standing, each carrying the distance its own pool
+// needs. The drift entry is included because it is lethal on the way down; once it lands it marks the
+// shelter and IsHodirIcicleLethal stops reporting it. The two clears are passed in because the dodge
+// sweeps twice: once for real margin, once tightened to the radius that actually kills.
+std::vector<EncounterHelpers::HazardCircle> CollectHodirIcicleHazards(Player* bot, float radius, float smallClear,
+                                                                     float bigClear);
+
+// Which of several equally short spots a bot stepping aside would rather have. Melee want the boss;
+// ranged and healers want the ring slot they were pulled off. A bot with no anchor gets no preference,
+// which is the old behaviour.
+bool GetHodirDodgePreference(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The paladin that carries Frost Resistance Aura for this fight, or nullptr. Every point of the
 // damage that kills this raid is frost, so the aura is worth a paladin's slot - but the slot is
