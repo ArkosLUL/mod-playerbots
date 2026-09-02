@@ -261,6 +261,11 @@ struct ThorimEncounterState
     // bot moved, not which hazard moved it.
     RaidObs::ObsGuidMap<Position> orbEscapes{"thorim.orbescape"};
 
+    // Struck once and then read straight out of the map. The sight-list lookup it replaces stops at
+    // AiPlayerbot.SightDistance, and the upper hallway is 100-145 yd from the platform, so every node
+    // keyed on the boss went dark the moment the corridor squad climbed the ramp.
+    ObjectGuid bossGuid;
+
     ObjectGuid colossusGuid;
     uint32 colossusScanMs = 0;
 
@@ -471,6 +476,11 @@ ThorimSquad GetThorimSquad(PlayerbotAI* botAI, Player* bot);
 
 // The boss script's own box, so the two sides cannot disagree about what counts as "in the arena".
 bool ThorimInArenaBox(WorldObject const* who);
+
+// The whole wing, arena and corridor and the hallway above them. Distance alone reaches Hodir's room,
+// so above the wing ceiling only the balcony box counts. Every node here is gated on it, which is why
+// it is the right shape for a cheap first test.
+bool NearThorimEncounter(Player const* bot);
 
 // Melee are held to the tank spot and everyone else to the wider box radius, because melee are the
 // only ones who have to walk out to an add at all.

@@ -36,8 +36,10 @@ bool ThorimUnbalancingStrikeTrigger::IsActive()
 bool ThorimDpsPriorityTrigger::IsActive()
 {
     // Cheap gate first. This node runs for every bot in the instance on every tick, and everything
-    // below it walks the nearby-unit list.
-    if (bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > 110.0f)
+    // below it walks the nearby-unit list. The wing rather than a flat 110 yd: the upper hallway is
+    // 105-176 yd out, and this is the only node that takes a forbidden target back off a bot, so a
+    // radius that stops short of the platform leaves the corridor squad stuck on the boss up there.
+    if (!NearThorimEncounter(bot))
         return false;
 
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
@@ -244,6 +246,11 @@ bool ThorimResetEncounterStateTrigger::IsActive()
 //
 bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
 {
+    // The only tank node that reads the boss without an aura on the bot to prove it is at him, so it
+    // needs the wing test of its own now that the handle answers from anywhere on the map.
+    if (!NearThorimEncounter(bot))
+        return false;
+
     Unit* boss = GetThorim(botAI);
     if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
         return false;

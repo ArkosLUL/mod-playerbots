@@ -268,8 +268,12 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
 
     Position const& waypoint = GetThorimBalconyWaypoint(step);
 
+    // Combat priority, because the hallway is walked in combat with a boss nothing up here can reach.
+    // At normal priority every step lost to "reach melee", which holds the mover for up to 5s and
+    // aims straight up the middle - which is where the two Paralytic Field bunnies sit. This route
+    // goes up the east wall and clears both by 16 yd, but only if it is the one issuing the walk.
     return MoveTo(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(), false,
-                  false, false, true, MovementPriority::MOVEMENT_NORMAL, true);
+                  false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
 bool ThorimRunicSmashAction::isUseful()

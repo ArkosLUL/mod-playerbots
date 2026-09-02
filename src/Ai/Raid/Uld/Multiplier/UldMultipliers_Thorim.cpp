@@ -147,6 +147,48 @@ float ThorimArenaTargetGuardMultiplier::GetValue(Action* action)
     return target && !ThorimInArenaBox(target) ? 0.0f : 1.0f;
 }
 
+float ThorimBalconyGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<MovementAction*>(action))
+        return 1.0f;
+
+    // Above the floor line and in the corridor half. The arena squad never gets up here, and a bot
+    // that has already dropped for phase 2 is the phase 2 nodes' business.
+    if (bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD ||
+        GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return 1.0f;
+
+    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
+    {
+        // Same escape hatch the arena guard needs: the node this would kill is the one that drops the
+        // bad target.
+        if (ThorimIsTargetSelectionAction(action))
+            return 1.0f;
+
+        if (!ThorimSplitActive(botAI))
+            return 1.0f;
+
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (!target)
+            return 1.0f;
+
+        Unit* boss = GetThorim(botAI);
+        return (target == boss || target->GetEntry() == NPC_SIF) ? 0.0f : 1.0f;
+    }
+
+    // Only while the walk has somewhere to go. The instant the hallway is not the job any more this
+    // lets go, so nothing can leave a bot up here with no mover at all.
+    ThorimBalconyAdvanceTrigger balconyAdvance(botAI);
+    if (!balconyAdvance.IsActive())
+        return 1.0f;
+
+    // Rune Detonation lands up here, so the dodge stays.
+    if (dynamic_cast<AvoidAoeAction*>(action))
+        return 1.0f;
+
+    return action->getName() == "thorim balcony advance action" ? 1.0f : 0.0f;
+}
+
 float ThorimArenaAnchorGuardMultiplier::GetValue(Action* action)
 {
     if (!action || !dynamic_cast<MovementAction*>(action))

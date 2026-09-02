@@ -57,6 +57,21 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Thorim: the corridor squad once it is up on the platform. Two jobs, one window. It holds Thorim as
+// a target from 130 yd out - the generic picker reads threat, not range, so an untouchable boss is
+// still in the list - and then "reach melee" walks it up the middle of the hallway into the Paralytic
+// Field bunnies. And when nothing else is driving, "follow" walks it the only walkable way down to
+// the master, which is 300 yd back through the corridor rather than over the edge.
+//
+// The movement half is gated on the balcony node being live, so a bot up here always has one mover
+// left and cannot be stranded.
+class ThorimBalconyGuardMultiplier : public Multiplier
+{
+public:
+    ThorimBalconyGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thorim balcony guard") {}
+    float GetValue(Action* action) override;
+};
+
 // Thorim: the phase 1 arena formation, once a bot has reached its spot. Same shape as the phase 2
 // guard and for the same reason - the generic movers are what smear the squad east across the arena
 // until it is standing in the corridor mouth, where boss_thorim_arena_npcs::CanAIAttack stops seeing

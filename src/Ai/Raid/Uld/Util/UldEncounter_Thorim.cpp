@@ -140,17 +140,6 @@ bool OnThorimBalcony(WorldObject const* who)
            y >= ULDUAR_THORIM_BALCONY_BOX_MIN_Y && y <= ULDUAR_THORIM_BALCONY_BOX_MAX_Y;
 }
 
-bool NearThorimEncounter(Player const* bot)
-{
-    if (!bot || bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
-        return false;
-
-    // Under the wing ceiling covers the arena and the corridor. Above it, only the box does - which is
-    // the half that was missing, and why every node keyed off this one went quiet the moment the squad
-    // climbed the ramp.
-    return bot->GetPositionZ() < ULDUAR_THORIM_WING_MAX_Z || OnThorimBalcony(bot);
-}
-
 bool MemberCounts(Player const* member, uint32 instanceId)
 {
     return member && member->IsAlive() && member->GetMapId() == ULDUAR_MAP_ID &&
@@ -581,7 +570,46 @@ void TickRunicSmash(PlayerbotAI* botAI, Player* bot)
 
 }  // namespace
 
-Unit* GetThorim(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_THORIM); }
+bool NearThorimEncounter(Player const* bot)
+{
+    if (!bot || bot->GetDistance(ULDUAR_THORIM_NEAR_ARENA_CENTER) > ULDUAR_THORIM_ENCOUNTER_PROXIMITY)
+        return false;
+
+    // Under the wing ceiling covers the arena and the corridor. Above it, only the box does - which is
+    // the half that was missing, and why every node keyed off this one went quiet the moment the squad
+    // climbed the ramp.
+    return bot->GetPositionZ() < ULDUAR_THORIM_WING_MAX_Z || OnThorimBalcony(bot);
+}
+
+Unit* GetThorim(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    if (!bot)
+        return nullptr;
+
+    // Cached because the sight list it falls back to stops at AiPlayerbot.SightDistance, and the boss
+    // is 100-145 yd from the upper hallway and up to 176 yd from the ramp - so a corridor bot on the
+    // balcony could not see him, and with him went the split, the squad label and the walk down.
+    // ObjectAccessor has no range of its own, so once the guid is struck the answer holds anywhere in
+    // the wing. NearThorimEncounter is what still bounds the callers.
+    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    if (state.bossGuid)
+    {
+        Unit* cached = botAI->GetUnit(state.bossGuid);
+        if (cached && cached->IsAlive())
+            return cached;
+
+        state.bossGuid.Clear();
+    }
+
+    // Only until it is struck: the raid pulls from inside the arena, so this runs for the first tick
+    // and then never again.
+    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_THORIM);
+    if (boss)
+        state.bossGuid = boss->GetGUID();
+
+    return boss;
+}
 
 Unit* GetThorimRunicColossus(PlayerbotAI* botAI)
 {
@@ -1775,6 +1803,12 @@ bool ThorimLightningChargeActive(PlayerbotAI* botAI)
 
 bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
 {
+    // The gate used to come free: GetThorim was sight-limited, so a raid parked on Hodir never found
+    // him. It is not any more, and without this that raid reads an idle full-health Thorim as a reset
+    // on every tick.
+    if (!NearThorimEncounter(botAI ? botAI->GetBot() : nullptr))
+        return false;
+
     Unit* boss = GetThorim(botAI);
     if (!boss)
         return false;
@@ -1847,6 +1881,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     for (Unit* pet : bot->m_Controlled)
         if (pet)
             state->petRecallMs.erase(pet->GetGUID());
+    state->bossGuid.Clear();
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;
     state->runeGiantGuid.Clear();
