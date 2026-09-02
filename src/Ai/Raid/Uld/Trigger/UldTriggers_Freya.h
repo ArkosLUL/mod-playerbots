@@ -54,27 +54,19 @@ public:
     bool IsActive() override;
 };
 
-// Ranged and healers hold one camp on the anchor bot so the lashers gather themselves into a pile the
-// raid can AoE. Nothing is walked anywhere: a lasher moves at 8.0 yd/s against a player's 7.0.
-class FreyaRangedCampTrigger : public Trigger
+// Everyone but the main tank holds a lattice slot for the length of a Detonating Lasher wave, so that
+// a blast reaches one bot instead of the ten it used to. Nothing is walked anywhere: a lasher moves at
+// 8.0 yd/s against a player's 7.0.
+class FreyaLasherSpreadTrigger : public Trigger
 {
 public:
-    FreyaRangedCampTrigger(PlayerbotAI* ai) : Trigger(ai, "freya ranged camp") {}
+    FreyaLasherSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "freya lasher spread") {}
     bool IsActive() override;
 };
 
-// The pack near this bot is down to the finish, so the AoE phase is over and everyone squishy leaves
-// before it is picked apart. Also the mage's exit after it novas.
-class FreyaLasherPackStepOutTrigger : public Trigger
-{
-public:
-    FreyaLasherPackStepOutTrigger(PlayerbotAI* ai) : Trigger(ai, "freya lasher pack step out") {}
-    bool IsActive() override;
-};
-
-// Frost Nova roots the pack for a full 8s: it carries no AURA_INTERRUPT_FLAG_TAKE_DAMAGE, so raid
-// damage does not break it, and the lasher has no CREATURE_FLAG_EXTRA_ALL_DIMINISH, so it never
-// diminishes either.
+// Frost Nova roots whatever has closed on the mage for a full 8s: it carries no
+// AURA_INTERRUPT_FLAG_TAKE_DAMAGE, so raid damage does not break it, and the lasher has no
+// CREATURE_FLAG_EXTRA_ALL_DIMINISH, so it never diminishes either.
 class FreyaFrostNovaLashersTrigger : public Trigger
 {
 public:
@@ -82,12 +74,24 @@ public:
     bool IsActive() override;
 };
 
-// One hunter snares the pack as the finish starts. 30s patch on a 30s cooldown, so the -50% is up
-// continuously once the wave reaches this point.
+// Every hunter snares what is running at it. 30s patch on a 30s cooldown, so with two hunters the
+// -50% is up for the whole wave.
 class FreyaTrapLashersTrigger : public Trigger
 {
 public:
     FreyaTrapLashersTrigger(PlayerbotAI* ai) : Trigger(ai, "freya trap lashers") {}
+    bool IsActive() override;
+};
+
+// Army of the Dead on the lasher wave. Eight ghouls that AoE-taunt (43263, which filters only world
+// bosses) are worth more here than the damage they do, and two lasher waves a pull fit its 10 min
+// cooldown. Its own name is deliberately not "army of the dead": IsBurstCooldownAction matches on the
+// action name, and the Ulduar burst gates hold everything on that list until Attuned to Nature drops,
+// which is the whole add phase.
+class FreyaSummonArmyTrigger : public Trigger
+{
+public:
+    FreyaSummonArmyTrigger(PlayerbotAI* ai) : Trigger(ai, "freya summon army") {}
     bool IsActive() override;
 };
 

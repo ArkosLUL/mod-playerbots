@@ -127,19 +127,10 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     return false;
 }
 
-bool FreyaRangedCampTrigger::IsActive()
+bool FreyaLasherSpreadTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
-        return false;
-
-    // Melee and tanks are already stacked on whatever they are hitting, and a tank that left the camp
-    // would take the boss or the Conservator with it.
-    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
-        return false;
-
-    Player* anchor = GetFreyaRangedCampAnchor(botAI);
-    if (!anchor || anchor == bot)
         return false;
 
     FreyaWaveState state;
@@ -147,31 +138,14 @@ bool FreyaRangedCampTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
-    // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
-    // and pulling them all the way into the ball would leave the far half of the raid unhealed.
-    float const tolerance =
-        botAI->IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
-
-    return bot->GetExactDist2d(anchor) > tolerance;
-}
-
-bool FreyaLasherPackStepOutTrigger::IsActive()
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
-    if (!boss || !boss->IsAlive())
+    Position slot;
+    if (!GetFreyaLasherSpreadSlot(botAI, bot, slot))
         return false;
 
-    // Tanks stay: they survive the blasts, and a tank that ran mid-wave would drop whatever it holds.
-    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRanged(bot) || botAI->IsHeal(bot)))
-        return false;
-
-    FreyaWaveState state;
-    GatherFreyaWaveState(botAI, state);
-
-    // Only once the pack is at the finish. Leaving while it is still healthy would break the camp the
-    // AoE phase depends on, which is exactly what the old flee node did. PACK_CLEAR is where the action
-    // aims, so the node keeps asking until the bot is actually a Detonate radius clear.
-    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) != nullptr;
+    // Distance is the whole gate, and it is also the arrival latch: standing down inside the tolerance
+    // is what stops the node re-issuing a move onto a slot the bot is already holding, and every
+    // re-issue would clear the motion master out from under whatever else was walking somewhere.
+    return bot->GetExactDist2d(&slot) > ULDUAR_FREYA_LASHER_SPREAD_TOLERANCE;
 }
 
 bool FreyaFrostNovaLashersTrigger::IsActive()
@@ -189,9 +163,11 @@ bool FreyaFrostNovaLashersTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // The nova is a sphere on the caster, so the mage has to be inside its own radius of the pack for
-    // this to reach anything.
-    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_FROST_NOVA_RADIUS) != nullptr;
+    // The nova is a sphere on the caster, so what matters is how many lashers have closed on the mage,
+    // not what state a pile somewhere else is in. Two, so a single lasher the mage is already killing
+    // does not spend the cooldown.
+    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) >=
+           ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS;
 }
 
 bool FreyaTrapLashersTrigger::IsActive()
@@ -200,7 +176,7 @@ bool FreyaTrapLashersTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    if (!IsFreyaLasherTrapHunter(botAI))
+    if (bot->getClass() != CLASS_HUNTER)
         return false;
 
     if (!botAI->CanCastSpell("frost trap", bot))
@@ -209,9 +185,27 @@ bool FreyaTrapLashersTrigger::IsActive()
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // PACK_CLEAR, not the pack's own radius: this node sits below the step-out, so by the time it fires
-    // the hunter has left the pile - and dropping the patch where it now stands is the whole point.
-    return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) != nullptr;
+    // Wider than the trap's own 10 yd field, deliberately: the patch needs to be down and armed before
+    // the lasher arrives, and one that has picked this bot is coming here at 8 yd/s whatever it does.
+    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_TRAP_ARM_RANGE) > 0;
+}
+
+bool FreyaSummonArmyTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (bot->getClass() != CLASS_DEATH_KNIGHT)
+        return false;
+
+    if (!botAI->CanCastSpell("army of the dead", bot))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return !state.detonatingLashers.empty();
 }
 
 bool FreyaGroundTremorHoldCastTrigger::IsActive()

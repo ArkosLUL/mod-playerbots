@@ -75,26 +75,19 @@ private:
     Player* GetRedirectTank();
 };
 
-// Gather the ranged half and the healers on the anchor bot so the lashers pile onto one spot the raid
-// can AoE. The lashers do the walking - a player cannot outrun one, let alone lead one.
-class FreyaRangedCampAction : public MovementAction
+// Take the lattice slot for the length of the wave. The lashers do the walking - a player cannot
+// outrun one, let alone lead one - so what the raid controls is only how far apart it stands when one
+// of them dies.
+class FreyaLasherSpreadAction : public MovementAction
 {
 public:
-    FreyaRangedCampAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya ranged camp") {}
+    FreyaLasherSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya lasher spread") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
 
-// Leave the pack once it is down to the finish, so the blasts land behind the bot one at a time.
-class FreyaLasherPackStepOutAction : public MovementAction
-{
-public:
-    FreyaLasherPackStepOutAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya lasher pack step out") {}
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
-// Root the pack for the finish. Runs above the step-out so the mage novas first and leaves second.
+// Root whatever has closed on the mage. Above the trap so a hunter standing next to it drops the patch
+// under an already-rooted pair rather than under one still moving.
 class FreyaFrostNovaLashersAction : public Action
 {
 public:
@@ -103,12 +96,23 @@ public:
     bool isUseful() override;
 };
 
-// Snare the pack for the finish. Below the step-out on purpose: the hunter has already moved by the
-// time this fires, so the patch lands on the lane between the pack and the raid.
+// Snare what is running at this hunter. -50% takes a lasher from 8.0 yd/s to 4.0, under a player's
+// 7.0, which is the only thing on the encounter that makes one of them slower than the raid.
 class FreyaTrapLashersAction : public Action
 {
 public:
     FreyaTrapLashersAction(PlayerbotAI* botAI) : Action(botAI, "freya trap lashers") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Eight ghouls with an AoE taunt, held for the wave that has no tank. Not named "army of the dead" on
+// purpose: that string is on IsBurstCooldownAction's list, and the Ulduar burst gate holds everything
+// on it until Attuned to Nature comes off Freya, which is the whole add phase.
+class FreyaSummonArmyAction : public Action
+{
+public:
+    FreyaSummonArmyAction(PlayerbotAI* botAI) : Action(botAI, "freya summon army") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

@@ -414,54 +414,31 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     return true;
 }
 
-bool FreyaRangedCampAction::isUseful()
+bool FreyaLasherSpreadAction::isUseful()
 {
-    FreyaRangedCampTrigger trigger(botAI);
+    FreyaLasherSpreadTrigger trigger(botAI);
     return trigger.IsActive();
 }
 
-bool FreyaRangedCampAction::Execute(Event /*event*/)
+bool FreyaLasherSpreadAction::Execute(Event /*event*/)
 {
-    Player* anchor = GetFreyaRangedCampAnchor(botAI);
-    if (!anchor || anchor == bot)
+    Position slot;
+    if (!GetFreyaLasherSpreadSlot(botAI, bot, slot))
         return false;
 
-    // No arrival latch: the trigger standing down inside the tolerance is what stops the churn, and a
-    // latch held across ticks would swallow the re-anchor when the anchor bot itself moves.
+    // No arrival latch: the trigger standing down inside the tolerance is what the latch would have
+    // been for, and one held across ticks would swallow the re-anchor when the formation shifts.
+    if (bot->GetExactDist2d(&slot) <= ULDUAR_FREYA_LASHER_SPREAD_TOLERANCE)
+        return false;
+
+    // The exact slot, not MoveInside: that one offsets the destination by the tolerance at the bot's
+    // follow angle, which parks it a couple of yards off-lattice in an unrelated direction and eats
+    // the single yard of margin the spacing has over the blast.
     //
-    // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb, a Sun Beam or the step-out still outrank it -
-    // gathering is the lowest-value thing a bot can be doing on this encounter.
-    return MoveTo(bot->GetMapId(), anchor->GetPositionX(), anchor->GetPositionY(), anchor->GetPositionZ(), false,
-                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
-}
-
-bool FreyaLasherPackStepOutAction::isUseful()
-{
-    FreyaLasherPackStepOutTrigger trigger(botAI);
-    return trigger.IsActive();
-}
-
-bool FreyaLasherPackStepOutAction::Execute(Event /*event*/)
-{
-    std::vector<Position> blasts;
-    std::list<Creature*> lashers;
-    bot->GetCreatureListWithEntryInGrid(lashers, NPC_DETONATING_LASHER, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    for (Creature* lasher : lashers)
-    {
-        if (lasher && lasher->IsAlive())
-            blasts.push_back(lasher->GetPosition());
-    }
-
-    if (blasts.empty())
-        return false;
-
-    Position safe = FindNearestPositionClearOfHazards(bot, blasts, ULDUAR_FREYA_LASHER_PACK_CLEAR,
-                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
-    if (safe == Position())
-        return false;
-
-    return MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
-                  true, MovementPriority::MOVEMENT_FORCED, true, false);
+    // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb or a Sun Beam still outranks it: those kill a bot
+    // inside seconds, and a slot is worth holding only until something more urgent asks.
+    return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool FreyaFrostNovaLashersAction::isUseful()
@@ -486,10 +463,23 @@ bool FreyaTrapLashersAction::isUseful()
 
 bool FreyaTrapLashersAction::Execute(Event /*event*/)
 {
-    // No walk to a post. The trap drops at the hunter's feet, and this node sits below the step-out, so
-    // by the time it fires the hunter is already on its way out - which is what puts the patch on the
-    // lane between the pack and the raid.
+    // No walk to a post. The trap drops at the hunter's feet, which is exactly where the lasher that
+    // picked this bot is heading, so it arms in the one place something is guaranteed to walk over.
     return botAI->CastSpell("frost trap", bot);
+}
+
+bool FreyaSummonArmyAction::isUseful()
+{
+    FreyaSummonArmyTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaSummonArmyAction::Execute(Event /*event*/)
+{
+    // Cast by name rather than through the class node, which is what keeps the burst gates off it: the
+    // Ulduar window multiplier holds anything IsBurstCooldownAction recognises until Attuned to Nature
+    // is gone, and it matches on the action name.
+    return botAI->CastSpell("army of the dead", bot);
 }
 
 bool FreyaGroundTremorHoldCastAction::isUseful()

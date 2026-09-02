@@ -77,8 +77,8 @@ public:
         creators["freya move to healing spore trigger"] = &RaidUlduarTriggerContext::freya_move_to_healing_spore_trigger;
         creators["freya break iron roots"] = &RaidUlduarTriggerContext::freya_break_iron_roots;
         creators["freya dodge unstable sun beam"] = &RaidUlduarTriggerContext::freya_dodge_unstable_sun_beam;
-        creators["freya ranged camp"] = &RaidUlduarTriggerContext::freya_ranged_camp;
-        creators["freya lasher pack step out"] = &RaidUlduarTriggerContext::freya_lasher_pack_step_out;
+        creators["freya lasher spread"] = &RaidUlduarTriggerContext::freya_lasher_spread;
+        creators["freya summon army"] = &RaidUlduarTriggerContext::freya_summon_army;
         creators["freya frost nova lashers"] = &RaidUlduarTriggerContext::freya_frost_nova_lashers;
         creators["freya trap lashers"] = &RaidUlduarTriggerContext::freya_trap_lashers;
         creators["freya ground tremor hold cast"] = &RaidUlduarTriggerContext::freya_ground_tremor_hold_cast;
@@ -259,8 +259,8 @@ private:
     static Trigger* freya_move_to_healing_spore_trigger(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeTrigger(ai); }
     static Trigger* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsTrigger(ai); }
     static Trigger* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamTrigger(ai); }
-    static Trigger* freya_ranged_camp(PlayerbotAI* ai) { return new FreyaRangedCampTrigger(ai); }
-    static Trigger* freya_lasher_pack_step_out(PlayerbotAI* ai) { return new FreyaLasherPackStepOutTrigger(ai); }
+    static Trigger* freya_lasher_spread(PlayerbotAI* ai) { return new FreyaLasherSpreadTrigger(ai); }
+    static Trigger* freya_summon_army(PlayerbotAI* ai) { return new FreyaSummonArmyTrigger(ai); }
     static Trigger* freya_frost_nova_lashers(PlayerbotAI* ai) { return new FreyaFrostNovaLashersTrigger(ai); }
     static Trigger* freya_trap_lashers(PlayerbotAI* ai) { return new FreyaTrapLashersTrigger(ai); }
     static Trigger* freya_ground_tremor_hold_cast(PlayerbotAI* ai) { return new FreyaGroundTremorHoldCastTrigger(ai); }

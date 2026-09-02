@@ -389,24 +389,29 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya near nature bomb",
         { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
 
-    // Detonating Lasher wave. Order is the doctrine: root the pile before anyone leaves it, then leave,
-    // then drop the snare - the trap below the step-out is what lands the patch on the exit lane rather
-    // than under the pack - and gather last, only when nothing urgent is asking.
+    // Detonating Lasher wave. Order is the doctrine: nothing here can be tanked, kited or outrun, so
+    // taking the slot comes first - Detonate is 15 yd flat and spacing is the only lever the raid has.
+    // Then root what has already closed, then snare what has not, then the ghouls, which are the one
+    // thing on the encounter that takes a lasher off a bot at all.
+    //
+    // The slot sits above the spore below it on purpose, and that decides the overlap where the 60s
+    // wave clock lands lashers on top of a Conservator: Grip is a pacify a bot lives through, and a
+    // spore gathers six of them into one 15 yd blast.
     triggers.push_back(new TriggerNode(
-        "freya frost nova lashers",
-        { NextAction("freya frost nova lashers", ACTION_RAID + 4) }));
+        "freya lasher spread",
+        { NextAction("freya lasher spread", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
-        "freya lasher pack step out",
-        { NextAction("freya lasher pack step out", ACTION_RAID + 3) }));
+        "freya frost nova lashers",
+        { NextAction("freya frost nova lashers", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
         "freya trap lashers",
         { NextAction("freya trap lashers", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
-        "freya ranged camp",
-        { NextAction("freya ranged camp", ACTION_RAID) }));
+        "freya summon army",
+        { NextAction("freya summon army", ACTION_RAID + 2) }));
 
     // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
     // pacified bot cannot swing at anything anyway.
@@ -888,6 +893,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new FreyaDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new FreyaTrioSyncMultiplier(botAI));
     multipliers.push_back(new FreyaLasherFinishAoeMultiplier(botAI));
+    multipliers.push_back(new FreyaLasherSpreadHoldMultiplier(botAI));
+    multipliers.push_back(new FreyaLasherTrapReserveMultiplier(botAI));
     multipliers.push_back(new FreyaGroundTremorCastGateMultiplier(botAI));
 
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster

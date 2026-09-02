@@ -138,44 +138,71 @@ the wave is a survival check, not a DPS race.
 
 Detonate fires in 15 yd **on death**, not on a timer. It has two difficulty ids — **62598** in 10-man
 (base 4162), **62937** in 25-man (base 6824) — but both carry `EffectRadiusIndex 18`, so the radius is
-identical either way. In practice it is **melee-only**: over a 132s pull, 89% of its damage landed on
-the eight melee bots and **zero** on ranged.
+identical either way. Measured over six 25-man pulls: mean **6366** a hit, max **10582** (crit), victims
+out to **15.5 yd** — the searcher adds the object size at both ends — and **no falloff**, the 12-15 yd
+bucket averaging as much as 0-3 yd.
 
-**Detonate is also not what kills anyone.** In that pull lashers were 57.7% of all raid damage, but
-melee (34.4%) and Flame Lash (12.9%) outweighed Detonate (10.4%) **4.6 : 1**. Any design that spends
-the raid's positioning budget on dodging Detonate is optimising the smallest slice.
+**Detonate is a raid killer exactly when the raid is stacked.** Those six pulls lost **120 of 161** bots
+to lashers, standing at a median **0.7 yd** nearest-neighbour with ~10 mates inside 15 yd: **6.7-10.4
+victims a blast**, ten blasts a wave, ~64k on every bot in a 40k pool. The older 132s-pull reading —
+melee-only, 4.6:1 under lasher melee — is what justified the gather doctrine this replaced, and it was
+measuring a raid that died before it ate a full wave.
 
-**Doctrine: stack, AoE, then step out** — what real raids do, and the opposite of the corral this
-replaced (see [Crowd control and threat on adds](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)
-for why ferrying an add faster than a player cannot work).
+**Doctrine: spread, one bot per blast** (see
+[Crowd control and threat on adds](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)
+for why ferrying an add faster than a player cannot work). Spacing is the only lever, and it is a **step
+function**: at 16 yd a lattice slot's four orthogonal neighbours sit outside the blast and one death
+costs one bot, while anything under 15.5 brings all four back at once. Nothing in between.
 
-1. **Gather.** Ranged DPS and healers hold one camp on `GetFreyaRangedCampAnchor` — lowest-GUID living
-   ranged-DPS bot, so every bot picks the same one with no shared state. An anchor *bot*, not a
-   coordinate: the camp is then always on mesh and always in reach of what the raid is shooting.
-   Tolerance is `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd), `_HEALER_` (15 yd) — healers get slack
-   because they also have to reach the melee group and the tanks. The lashers do the walking.
-2. **AoE.** Ranged focus `GetFreyaLasherPackFocus`, the lasher with the most lashers within
-   `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd). Pointing at the middle of the pile is what makes class AoE
-   fire at all: `AoeTrigger` counts attackers within 8 yd of the ***current target***, not of the bot,
-   and `ULDUAR_FREYA_LASHER_PACK_MIN_COUNT` (3) is `MediumAoeTrigger`'s own threshold.
-3. **Finish.** Below `ULDUAR_FREYA_LASHER_FINISH_PCT` (20%) with 3+ in the pile,
-   `FreyaLasherFinishAoeMultiplier` shuts AoE off (heals exempt), the mage novas, ranged and healers
-   clear `ULDUAR_FREYA_LASHER_PACK_CLEAR` (16 yd, one past Detonate) of *every* lasher in range rather
-   than the nearest, the hunter's trap lands on the lane they just left, and `GetFreyaRangedLasherFocus`
-   (lowest health, GUID breaking ties — self-stabilising, since the focused add stays lowest) picks them
-   off one at a time. Ten Detonates at once is ~45k in 15 yd; staggered, it is a healing burst.
+1. **Slot.** `GetFreyaLasherSpreadSlot` — a rectangular lattice at `ULDUAR_FREYA_LASHER_SPREAD_SPACING`
+   (16 yd), `_COLUMNS` (7), rows from the roster. Centre is Freya snapped to `_ANCHOR_GRID` (5 yd) and
+   clamped by the half-footprint into the navprobe-verified `ULDUAR_FREYA_ROOM_{X,Y}_{MIN,MAX}`, with
+   `_FALLBACK` (2357.83, -52.33, 425.76) for an unresolvable Freya. Snapping keeps the anchor piecewise
+   constant: unsnapped, a yard of tank drift slides all 25 slots, and two bots deriving it a tick apart
+   would disagree.
+2. **Seat.** Roster order is healers then GUID, and the cell order hands out the **quarter points**
+   first: the footprint's 101 yd diagonal is past a 40 yd heal, so healers seated together reach neither
+   end, while quartering puts every bot within ~36 yd of one. The dead keep their slots — indexing by
+   the living re-seats the formation on every corpse. The main tank has none; it holds Freya wherever
+   the pull left her.
+3. **Hold.** `FreyaLasherSpreadHoldMultiplier` zeroes `ReachTargetAction` and
+   `CombatFormationMoveAction` for everyone but the main tank while a lasher lives. The load-bearing
+   half: the spread node returns false once the bot is inside `_TOLERANCE` (3 yd), and the generic chase
+   underneath would walk it straight back to Freya. Reaching a heal or resurrect target is exempt — the
+   main tank stands off-lattice and has to stay reachable.
 
-Node order is load-bearing: nova (`ACTION_RAID + 4`) → step out (`+3`) → trap (`+2`) → camp
-(`ACTION_RAID`). The trap sits *below* the step-out on purpose — the hunter has already moved when it
-fires, which is what puts the 10 yd patch between the pack and the raid without any post to walk to.
-All three read `GetFreyaFinishingPackNear`, which measures from the **pack's** centre rather than the
-bot's, so the finish stays visible to a bot that has just stepped out of it.
+Node order: spread (`ACTION_RAID + 3`) → nova · trap · army (`+2`). The spread sits **above** the
+Healthy Spore node, which decides the overlap the 60s wave clock creates: Grip is a pacify a bot lives
+through, and a spore gathers six of them into one blast.
 
-The mage novas on **self**, not through the class `frost nova` node, which gates on the *current
-target* being within 10 yd and so never fires for a ranged mage. Frost Nova holds the full **8s** — no
-DR, no damage break ([../../engine/raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md)). One
-hunter lays the trap — lowest GUID, so every bot agrees — for a continuous **-50%** (30s patch, 30s
-cooldown).
+The mage novas on **self**, not through the class `frost nova` node, which gates on the *current target*
+being within 10 yd and so never fires for a ranged mage. A sphere on the caster, so it wants
+`ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS` (2) inside `_RADIUS` (10 yd), and it holds the full **8s** — no
+DR, no damage break ([../../engine/raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md)).
+
+**Every** hunter traps, with a lasher inside `ULDUAR_FREYA_FROST_TRAP_ARM_RANGE` (20 yd) so the patch
+arms before it arrives — at the hunter's feet, which is where the one that picked this bot is heading
+anyway. Frost Trap 13809 lays 13810: 10 yd, 30s, **-50%**, taking a lasher to 4.0 yd/s against a
+player's 7.0, the only thing here that makes one slower than the raid. It lands because Detonating
+Lasher has **no `creature_immunities` row**. `FreyaLasherTrapReserveMultiplier` zeroes the generic
+Explosive Trap for the wave: traps share a **30s category cooldown** and only one may be down, so the
+damage node was spending the snare.
+
+`freya summon army` opens Army of the Dead on the wave. Its ghouls AoE-taunt through **43263**, whose
+script filters only `isWorldBoss()` targets, and in trace they held **12.5-18.9%** of all lasher
+attention — the only thing that takes a lasher off a bot at all. Deliberately **not** named `army of the
+dead`: `IsBurstCooldownAction` matches on the action name, and the Ulduar burst gate holds that list
+until Attuned to Nature drops, which is the whole add phase.
+
+The pack helpers survive for the piles the spread does not prevent — overlapping waves, or a raid too
+small to fill the lattice. Ranged focus `GetFreyaLasherPackFocus`, the lasher with the most lashers
+within `ULDUAR_FREYA_LASHER_PACK_RADIUS` (8 yd): `AoeTrigger` counts attackers within 8 yd of the
+***current target***, not of the bot, so pointing at the middle of a pile is what makes class AoE fire
+at all, and `_MIN_COUNT` (3) is `MediumAoeTrigger`'s own threshold. Below `_FINISH_PCT` (20%) with 3 up,
+`FreyaLasherFinishAoeMultiplier` shuts non-healing AoE off inside `_PACK_CLEAR` (16 yd, one past
+Detonate) and `GetFreyaRangedLasherFocus` — lowest health, GUID breaking ties, self-stabilising since
+the focused add stays lowest — picks them off one at a time so the blasts stagger. Both gates read
+`GetFreyaFinishingPackNear`, which measures from the **pack's** centre rather than the bot's.
 
 Melee and tanks take only what is inside `ULDUAR_FREYA_MELEE_LASHER_RANGE` (12 yd) and drop it the
 moment it runs past that, which is the leash: a lasher that retargets cannot tow a bot across the room,
