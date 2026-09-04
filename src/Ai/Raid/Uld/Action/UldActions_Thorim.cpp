@@ -244,25 +244,26 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    // He has dropped for phase 2 and the bot has not. Everything up here is done, so follow him over
-    // the edge rather than letting the movers find the only walkable route - which runs back down the
-    // hallway, down the ramp and the length of the corridor, about 300 yards the wrong way.
-    if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-    {
-        if (bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) > ULDUAR_THORIM_JUMP_START_TOLERANCE)
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_START_POINT.GetPositionX(),
-                          ULDUAR_THORIM_JUMP_START_POINT.GetPositionY(),
-                          ULDUAR_THORIM_JUMP_START_POINT.GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_COMBAT, true);
-        }
+    // He has dropped for phase 2 and the bot has not, so the job up here is now the edge. Still walked
+    // as the chain though: the edge is on the centre line and so are both Paralytic Field bunnies, so
+    // a straight line to it from anywhere south of the second doors goes over one of them. Whole squad
+    // ate that once - ten bots, 5 to 12 yd off a bunny, stunned for up to 15s. The jump point is the
+    // last waypoint in the chain anyway, so the chain already ends where the jump starts.
+    bool const bossDown = boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 
+    // Before the jump test, or the latch never reaches the end and a bot on the edge never jumps.
+    uint8 const step = ThorimAdvanceBalconyStep(bot);
+
+    // The arrive tolerance is 6 yd and the jump tolerance 3, so the step latch is what covers a bot
+    // parked in the gap between them. Without it that bot reads as arrived and then does nothing.
+    if (bossDown && (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS ||
+                     bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) <= ULDUAR_THORIM_JUMP_START_TOLERANCE))
+    {
         return JumpTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionX(),
                       ULDUAR_THORIM_JUMP_END_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionZ(),
                       MovementPriority::MOVEMENT_COMBAT);
     }
 
-    uint8 const step = ThorimAdvanceBalconyStep(bot);
     if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS)
         return false;
 

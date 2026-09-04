@@ -250,7 +250,12 @@ void AssignThorimSquads(Player* bot)
 
     bool const twentyFive = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_25MAN_NORMAL;
     uint32 healerQuota = twentyFive ? 2 : 1;
-    uint32 dpsQuota = twentyFive ? 7 : 3;
+
+    // The corridor is a race: Sif's channel runs 150s and phase 1 opens 20s after the pull, so the
+    // squad has about 170s to get a hit on Thorim from up top or hard mode is gone. Seven dps put ten
+    // bodies down there measuring 23.4k dps against roughly 3.9M of health the walk is gated on, which
+    // does not finish in time. Arena keeps the rest and the cap below still floors it.
+    uint32 dpsQuota = twentyFive ? 9 : 4;
 
     size_t const floorSize = static_cast<size_t>(ULDUAR_THORIM_ARENA_MIN_MEMBERS);
     size_t const cap = roster.size() > floorSize ? roster.size() - floorSize : 0;
