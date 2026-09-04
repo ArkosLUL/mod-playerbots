@@ -74,7 +74,10 @@ constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
 // Thorim hard mode: bots clear Sif's moving Blizzard, and ranged/healers keep this far from
 // Sif herself so her point-blank Frost Nova (cast after she teleports next to a target) misses.
-constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 12.0f;
+// DBC radius is 13, and the searcher applies through IsWithinDistInMap, which adds both object sizes
+// on top - Rune of Death is 13 in the DBC and was measured landing at 15.4. At 12 the dodge stopped
+// while still standing in it.
+constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 
 // Cheap first gate for everything Thorim owns, and it takes both halves. Distance alone does not
@@ -119,6 +122,9 @@ constexpr float ULDUAR_THORIM_BARRIER_BAIL_DISTANCE = 14.0f;  // clear of the 9.
 // Lightning, whose jump radius is 5.0 here (spell_jump_distance overrides the 10 yd DBC default).
 constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.0f;
 constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
+
+// Five, so ten ranged and healers stand two deep instead of the three to four the old trio piled up.
+constexpr uint8 ULDUAR_THORIM_RANGED_SLOTS = 5;
 
 // The off-tank sits just off the main tank's bearing: close enough to taunt through the Unbalancing
 // Strike swap, far enough that Chain Lightning does not treat the pair as one clump.
@@ -225,9 +231,26 @@ extern const Position ULDUAR_THORIM_BALCONY_5;
 extern const Position ULDUAR_THORIM_JUMP_START_POINT;
 extern const Position ULDUAR_THORIM_JUMP_END_POINT;
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
+// Five spots on an arc north of him, 14 to 26 yd out. Two things pin them.
+//
+// Sif's Blizzard bunny walks a fixed loop round the outside of the room, so anything on the east or
+// west edge sits under it. The old three had two of them 6.4 and 8.1 yd off that walk and took every
+// yard of Blizzard damage in the hard mode trace; these clear it by 16.2 yd at worst.
+//
+// Five rather than three because ten ranged and healers on three points stand three and four deep -
+// one trace has a healer dying to Chain Lightning with two more bodies 2.1 and 2.2 yd off it, and the
+// jump range here is 5. The tightest pair on these is 10.8 yd, and the closest to the melee ring at
+// radius 8 is 6.1 yd out from it.
+//
+// Not placed against Lightning Charge, which is the bigger source: its 105 degree cone off whichever
+// orb is lit, seven orbs, covers every bearing but due south. No parked layout survives it - stepping
+// out and back is the only answer, and that costs more cast time than the damage is worth outside
+// hard mode. See docs/plans/thorim-phase2-positioning-and-state-reset.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT;
 // Only used when Thorim's live position cannot produce a ring point. The arena floor has a hole south
 // of y = -288, so nothing here sits past the tank spot.
 extern const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT;
@@ -244,6 +267,18 @@ struct ThorimEncounterState
     // tick means one death renumbers everyone behind the corpse and the ring shuffles mid-fight.
     RaidObs::ObsGuidMap<uint8> meleeSlots{"thorim.slot"};
 
+    // Each melee bot's bearing off Thorim, struck the first time it needs a phase 2 spot. The point
+    // was derived live from the tank's bearing and a rotation re-solved every call, and between them
+    // six melee spent 74 to 92% of phase 2 walking - 950 to 1430 yd each, at 58% of the ranged dps.
+    std::unordered_map<ObjectGuid, float> ringBearings;
+
+    // The rotation that clears the ring of the Lightning Charge cone, solved once per lit orb and
+    // held. Re-solving per tick had a 5 degree search answering 30 degrees differently between two
+    // ticks, and every melee walked the difference.
+    ObjectGuid ringRotationOrb;
+    float ringRotation = 0.0f;
+    bool ringRotationHeld = false;
+
     // 0 = nothing seen yet, otherwise SPELL_THORIM_RUNIC_SMASH_LEFT / _RIGHT. The side is sticky and
     // the timestamp is not: the timestamp says the wave is still rolling, the side says which lane
     // the squad now walks, and that has to outlive the wave or the formation walks straight back.
@@ -251,11 +286,16 @@ struct ThorimEncounterState
     uint32 runicSmashSeenMs = 0;
     uint32 smashScanMs = 0;
 
+    // Phase 1's Charge Orb and phase 2's Lightning Charge visual, cached apart. They used to share one
+    // slot keyed on the marker, so either caller evicted the other and nearly every call re-swept the
+    // grid - 78 turnovers in 15s in one trace, each a 150 yd sweep, with the guid flapping in step.
+    // The melee ring rotation hangs off that guid, which is what put six melee on a 90 degree bearing
+    // flip several times a second.
     RaidObs::ObsValue<ObjectGuid> chargedOrbGuid{"thorim.chargedorb"};
     uint32 orbScanMs = 0;
-    // Which marker the cached guid was found by. Phase 1 asks for Charge Orb and phase 2 for the
-    // Lightning Charge visual, so a hit found under one must not be handed back to the other.
-    uint32 orbScanSpell = 0;
+
+    RaidObs::ObsValue<ObjectGuid> lightningOrbGuid{"thorim.lightningorb"};
+    uint32 lightningOrbScanMs = 0;
 
     // Where each bot was sent to get out of the Charge Orb field. A trace otherwise only shows that a
     // bot moved, not which hazard moved it.
@@ -330,6 +370,13 @@ struct ThorimEncounterState
     // has just reset, and the reset path clears the squad split that the corridor forms up on before
     // the pull - so without the latch the two fight each other every tick.
     bool engagedSeen = false;
+
+    // Who has already had their own latches cleared since he was last in combat. The reset used to be
+    // gated on engagedSeen alone, which is raid-wide, so the first bot through closed the gate on the
+    // other 24 and they carried ringArrived, balconyStep and their melee slot into the next pull. One
+    // trace had ten of thirteen corridor bots start on a step they earned two attempts earlier.
+    // Cleared while he is engaged, so every pull gets a fresh round of resets.
+    std::unordered_set<ObjectGuid> resetDone;
 };
 
 enum class ThorimSquad : uint8
@@ -429,13 +476,12 @@ bool ThorimRunicSmashImminent(PlayerbotAI* botAI);
 //
 constexpr uint8 ULDUAR_THORIM_BALCONY_WAYPOINTS = 6;
 
-// How close counts as standing at a balcony waypoint. Wider than the corridor's 5-6 yd because
-// nothing up here is dodging anything - the point is only to keep the squad off the centre line.
+// How close counts as standing at a balcony waypoint, and at the last one, close enough to jump.
+// Wider than the corridor's 5-6 yd because nothing up here is dodging anything - the point is only to
+// keep the squad off the centre line. The drop used to ask for 0.5 yd of its own, which an
+// exact-waypoint MoveTo will not reliably hit, and a bot could circle the edge for the rest of the
+// fight.
 constexpr float ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE = 6.0f;
-
-// Close enough to jump. The old drop asked for 0.5 yd, which an exact-waypoint MoveTo will not
-// reliably hit, so a bot could circle the jump start for the rest of the fight.
-constexpr float ULDUAR_THORIM_JUMP_START_TOLERANCE = 3.0f;
 
 Position const& GetThorimBalconyWaypoint(uint8 index);
 

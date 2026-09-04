@@ -254,19 +254,26 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     // Before the jump test, or the latch never reaches the end and a bot on the edge never jumps.
     uint8 const step = ThorimAdvanceBalconyStep(bot);
 
-    // The arrive tolerance is 6 yd and the jump tolerance 3, so the step latch is what covers a bot
-    // parked in the gap between them. Without it that bot reads as arrived and then does nothing.
-    if (bossDown && (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS ||
-                     bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) <= ULDUAR_THORIM_JUMP_START_TOLERANCE))
+    // Distance, never the latch alone. A latch that says "past the last waypoint" used to be enough
+    // to fire the jump, and a step carried in from an earlier pull then fired it from the top of the
+    // ramp: one bot flew a 180 yd arc across the whole hallway. Arrive tolerance rather than the jump
+    // one, so a bot parked in the 3 to 6 yd gap between the two still goes.
+    bool const atEdge =
+        bot->GetExactDist2d(&ULDUAR_THORIM_JUMP_START_POINT) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE;
+
+    if (bossDown && atEdge)
     {
         return JumpTo(bot->GetMapId(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionX(),
                       ULDUAR_THORIM_JUMP_END_POINT.GetPositionY(), ULDUAR_THORIM_JUMP_END_POINT.GetPositionZ(),
                       MovementPriority::MOVEMENT_COMBAT);
     }
 
-    if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS)
+    // Standing on the edge with him still up: done walking, and the tick belongs to whatever shoots him.
+    if (step >= ULDUAR_THORIM_BALCONY_WAYPOINTS && atEdge)
         return false;
 
+    // Clamps to the last waypoint, which is the edge - so a bot knocked past the end walks back to it
+    // instead of stalling. Nothing to cross from up there, both bunnies are well south.
     Position const& waypoint = GetThorimBalconyWaypoint(step);
 
     // Combat priority, because the hallway is walked in combat with a boss nothing up here can reach.

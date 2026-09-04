@@ -148,6 +148,17 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     if (!ThorimPhase2Active(botAI))
         return false;
 
+    // Same stand-down the arena node carries. Without it the anchor walks a bot straight back into
+    // the hazard it just dodged: the four ranged who took the most Blizzard damage in the hard mode
+    // trace were also the four who ran the furthest, in and out of it.
+    ThorimSifBlizzardTrigger blizzard(botAI);
+    if (blizzard.IsActive())
+        return false;
+
+    ThorimSifFrostNovaTrigger frostNova(botAI);
+    if (frostNova.IsActive())
+        return false;
+
     ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
     if (role == ThorimPhase2Role::None)
         return false;
@@ -205,8 +216,10 @@ bool ThorimRunicBarrierBailTrigger::IsActive()
 
 bool ThorimLightningChargeTrigger::IsActive()
 {
-    // Both tanks, ranged and healers hold and eat it: moving a tank drags the boss and re-anchors the
-    // whole ring, and the ranged spots are already outside anything the rotation would buy them.
+    // Melee only. Both tanks hold and eat it, because moving one drags the boss and re-anchors the
+    // whole ring behind him. Ranged and healers hold too, and that one is a trade rather than a free
+    // call: the cone put 647k on them in one 191s phase 2, but stepping the whole formation out and
+    // back costs most of a 10s charge cycle in cast time, against healing that had 3.5x the margin.
     if (GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::MeleeRing)
         return false;
 

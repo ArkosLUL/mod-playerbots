@@ -223,8 +223,12 @@ float ThorimMovementGuardMultiplier::GetValue(Action* action)
         dynamic_cast<AvoidAoeAction*>(action))
         return 1.0f;
 
+    // The balcony node is in here because it is the one mover a bot that has not made it down yet has
+    // left. Everything else on this list is a phase 2 mover and cannot fire up there anyway, which is
+    // exactly why nothing caught the gap.
     static std::set<std::string> const encounterMovers = {"thorim phase 2 positioning action",
                                                           "thorim lightning charge action",
+                                                          "thorim balcony advance action",
                                                           "thorim sif blizzard action",
                                                           "thorim sif frost nova action"};
 

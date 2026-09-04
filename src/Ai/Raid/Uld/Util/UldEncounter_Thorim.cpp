@@ -57,9 +57,11 @@ const Position ULDUAR_THORIM_BALCONY_5 = Position(2137.5f, -318.0f, 438.222f);
 const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
 const Position ULDUAR_THORIM_JUMP_END_POINT = Position(2137.8818f, -278.18942f, 419.66653f);
 const Position ULDUAR_THORIM_PHASE2_TANK_SPOT = Position(2134.8572f, -287.0291f, 419.4935f);
-const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2112.8752f, -267.69305f, 419.52814f);
-const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2134.1296f, -257.3316f, 419.8462f);
-const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2156.798f, -267.57434f, 419.52722f);
+const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2147.0f, -261.0f, 419.736f);
+const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2137.0f, -254.0f, 419.800f);
+const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2126.0f, -260.0f, 419.798f);
+const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT = Position(2123.0f, -272.0f, 419.684f);
+const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT = Position(2135.0f, -266.0f, 419.846f);
 const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT = Position(2142.9f, -278.0f, 419.64f);
 const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT = Position(2134.9f, -270.0f, 419.85f);
 const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT = Position(2126.9f, -278.0f, 419.64f);
@@ -146,6 +148,14 @@ bool MemberCounts(Player const* member, uint32 instanceId)
            member->GetInstanceId() == instanceId;
 }
 
+// Who counts when handing out a formation slot. In the instance, alive or not - liveness is left out
+// on purpose. Both pickers number their members in group order, so a member dropping out of the count
+// renumbers everyone behind them and the whole formation shuffles over one death.
+bool HoldsFormationSlot(Player const* member, uint32 instanceId)
+{
+    return member && member->GetMapId() == ULDUAR_MAP_ID && member->GetInstanceId() == instanceId;
+}
+
 // One predicate for the trigger and the action alike. PlayerbotAI::IsRanged() already reports true
 // for healers, but the two sides used to test different things and could hand a healer two different
 // slots on alternating ticks.
@@ -181,7 +191,10 @@ void EnsureMeleeSlot(Player* bot)
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (MemberCounts(member, instanceId) && TakesMeleeSlot(member))
+
+        // Not MemberCounts: a slot dropped while a bot is dead comes back as whichever is least
+        // loaded, which swings its bearing a quarter turn the moment it is rezzed.
+        if (HoldsFormationSlot(member, instanceId) && TakesMeleeSlot(member))
             present.insert(member->GetGUID());
     }
 
@@ -383,17 +396,13 @@ bool MeleeSlotOf(Player* bot, uint8& slot)
     return true;
 }
 
-// Anchoring the ring on the bearing to the tank stops it rotating as the boss shuffles, so a
-// recompute does not shuffle everyone. With no living main tank the static tank spot stands in,
-// rather than letting the ring spin the instant a tank dies.
-float RingAnchorBearing(PlayerbotAI* botAI, Player* bot, Unit* boss)
+// Anchoring the ring on the tank's bearing stops it rotating as the boss shuffles, so a recompute
+// does not shuffle everyone. The spot, not the tank standing on it: he is walked there and parked,
+// and reading him live means a step sideways or a death swings the whole ring behind him.
+float RingAnchorBearing(Unit* boss)
 {
-    Position anchor = ULDUAR_THORIM_PHASE2_TANK_SPOT;
-    if (Player* mainTank = GetGroupMainTank(bot))
-        if (mainTank->IsAlive())
-            anchor = mainTank->GetPosition();
-
-    return std::atan2(anchor.GetPositionY() - boss->GetPositionY(), anchor.GetPositionX() - boss->GetPositionX());
+    return std::atan2(ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionY() - boss->GetPositionY(),
+                      ULDUAR_THORIM_PHASE2_TANK_SPOT.GetPositionX() - boss->GetPositionX());
 }
 
 float SlotBearing(float anchor, uint8 slot)
@@ -412,6 +421,19 @@ float AbsAngleDelta(float first, float second)
     return delta;
 }
 
+float BearingFromBoss(Unit* boss, float x, float y)
+{
+    return std::atan2(y - boss->GetPositionY(), x - boss->GetPositionX());
+}
+
+// The margin on top of the spell's own 75 degree arc covers Thorim re-orienting onto the orb between
+// the tick that picks a way out and the tick a bot finishes walking it.
+bool InLightningChargeCone(float bearing, float coneBearing)
+{
+    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN;
+    return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
+}
+
 // Smallest rotation of the whole ring that clears every occupied slot out of the cone. Rigid, never
 // per-bot: letting each slot take its own shortest way out swings the two on opposite edges toward
 // each other, which trades a Lightning Charge death for a Chain Lightning one.
@@ -423,9 +445,27 @@ bool RingRotation(PlayerbotAI* botAI, Player* bot, Unit* boss, float& rotation)
     if (!orb)
         return false;
 
-    ThorimEncounterState const* state = FindState(bot);
+    ThorimEncounterState* state = FindState(bot);
     if (!state)
         return false;
+
+    // Answered once per lit orb and then held. The search steps 5 degrees and its input drifts, so
+    // re-solving every call handed back answers 30 degrees apart on consecutive ticks and the whole
+    // ring walked the difference. Nothing about the cone changes while the same orb is up.
+    if (state->ringRotationOrb == orb->GetGUID())
+    {
+        rotation = state->ringRotation;
+        return state->ringRotationHeld;
+    }
+
+    auto const hold = [state, orb, &rotation](float answer, bool held)
+    {
+        state->ringRotationOrb = orb->GetGUID();
+        state->ringRotation = answer;
+        state->ringRotationHeld = held;
+        rotation = answer;
+        return held;
+    };
 
     std::vector<uint8> occupied;
     for (auto const& assignment : state->meleeSlots)
@@ -434,24 +474,22 @@ bool RingRotation(PlayerbotAI* botAI, Player* bot, Unit* boss, float& rotation)
             occupied.push_back(assignment.second);
 
     if (occupied.empty())
-        return false;
+        return hold(0.0f, false);
 
-    float const coneBearing =
-        std::atan2(orb->GetPositionY() - boss->GetPositionY(), orb->GetPositionX() - boss->GetPositionX());
-    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN;
-    float const anchor = RingAnchorBearing(botAI, bot, boss);
+    float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
+    float const anchor = RingAnchorBearing(boss);
 
     auto clears = [&](float candidate)
     {
         for (uint8 slot : occupied)
-            if (AbsAngleDelta(SlotBearing(anchor + candidate, slot), coneBearing) <= halfWidth)
+            if (InLightningChargeCone(SlotBearing(anchor + candidate, slot), coneBearing))
                 return false;
 
         return true;
     };
 
     if (clears(0.0f))
-        return false;
+        return hold(0.0f, false);
 
     // The three slots span 180 degrees and leave the tank side open, so the 105 degree blocked arc
     // always fits somewhere and this search always terminates with an answer.
@@ -459,19 +497,13 @@ bool RingRotation(PlayerbotAI* botAI, Player* bot, Unit* boss, float& rotation)
     for (float magnitude = step; magnitude <= static_cast<float>(M_PI) + step; magnitude += step)
     {
         if (clears(magnitude))
-        {
-            rotation = magnitude;
-            return true;
-        }
+            return hold(magnitude, true);
 
         if (clears(-magnitude))
-        {
-            rotation = -magnitude;
-            return true;
-        }
+            return hold(-magnitude, true);
     }
 
-    return false;
+    return hold(0.0f, false);
 }
 
 // Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
@@ -494,6 +526,30 @@ bool RingPoint(Player* bot, Unit* boss, float bearing, Position& out)
 
     out = candidate;
     return true;
+}
+
+Position const& RangedSpot(uint8 slot)
+{
+    static Position const* const spots[ULDUAR_THORIM_RANGED_SLOTS] = {
+        &ULDUAR_THORIM_PHASE2_RANGE1_SPOT, &ULDUAR_THORIM_PHASE2_RANGE2_SPOT, &ULDUAR_THORIM_PHASE2_RANGE3_SPOT,
+        &ULDUAR_THORIM_PHASE2_RANGE4_SPOT, &ULDUAR_THORIM_PHASE2_RANGE5_SPOT};
+
+    return *spots[std::min<uint8>(slot, ULDUAR_THORIM_RANGED_SLOTS - 1)];
+}
+
+// The slot's bearing off Thorim, struck the first time the bot asks and then left alone for the phase.
+// Anchored on the tank's spot rather than the tank himself: he is walked there and parked, and reading
+// him live only hands the ring one more input that moves.
+float LatchedRingBearing(Player* bot, Unit* boss, uint8 slot)
+{
+    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    auto const itr = state.ringBearings.find(bot->GetGUID());
+    if (itr != state.ringBearings.end())
+        return itr->second;
+
+    float const bearing = SlotBearing(RingAnchorBearing(boss), slot);
+    state.ringBearings[bot->GetGUID()] = bearing;
+    return bearing;
 }
 
 // A melee bot parked 25 yd from the boss at zero DPS is worse off than an unspread one, so the static
@@ -1062,24 +1118,30 @@ uint8 ThorimAdvanceBalconyStep(Player* bot)
     auto const itr = steps.find(bot->GetGUID());
     uint8 step = itr == steps.end() ? 0 : itr->second;
 
+    // Passing the waypoint's y counts as reaching it. The hallway runs one way, so a bot shoved north
+    // of a point by a knockback or by the pile is already done with it, and sending it back south is
+    // how the squad ends up walking the same ground twice.
+    auto const reached = [bot](uint8 index)
+    {
+        Position const& here = GetThorimBalconyWaypoint(index);
+        return bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
+               bot->GetPositionY() > here.GetPositionY();
+    };
+
+    // Down first. Going up is a judgement call and the latch exists to make it stick, but going down
+    // is not one: standing 40 yd south of the point you claim to have passed means you have not passed
+    // it. Without this a step held over from an earlier pull hands a bot a waypoint from the middle of
+    // the chain while it is still on the ramp, and the straight line there crosses a Paralytic Field
+    // bunny - ten of thirteen corridor bots in one trace, x 2141 up the middle instead of x 2151.
+    while (step > 0 && !reached(step - 1))
+        --step;
+
     // Runs one past the last waypoint. ULDUAR_THORIM_BALCONY_WAYPOINTS means arrived, and arrived has
     // to be a latch rather than a distance test: once the squad is on the platform it is fighting
     // Thorim and drifting off the mark, and re-anchoring it there every tick would fight "reach melee"
     // exactly the way the arena picker used to fight "dps assist".
-    while (step < ULDUAR_THORIM_BALCONY_WAYPOINTS)
-    {
-        Position const& here = GetThorimBalconyWaypoint(step);
-
-        // Passing the waypoint's y counts as reaching it. The hallway runs one way, so a bot shoved
-        // north of a point by a knockback or by the pile is already done with it, and sending it back
-        // south is how the squad ends up walking the same ground twice.
-        bool const reached = bot->GetExactDist2d(&here) <= ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE ||
-                             bot->GetPositionY() > here.GetPositionY();
-        if (!reached)
-            break;
-
+    while (step < ULDUAR_THORIM_BALCONY_WAYPOINTS && reached(step))
         ++step;
-    }
 
     state->balconyStep[bot->GetGUID()] = step;
     return step;
@@ -1662,23 +1724,24 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         if (!group)
             return false;
 
+        uint32 const instanceId = bot->GetInstanceId();
         uint32 slot = 0;
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (!member || !TakesRangedSpot(member))
+
+            // Somebody who never zoned in was still eating a spot here. Filter on the instance the
+            // same way the melee picker does, and for the same reason leave liveness out of it.
+            if (!HoldsFormationSlot(member, instanceId) || !TakesRangedSpot(member))
                 continue;
 
             if (member->GetGUID() == bot->GetGUID())
                 break;
 
-            slot = (slot + 1) % 3;
+            slot = (slot + 1) % ULDUAR_THORIM_RANGED_SLOTS;
         }
 
-        static Position const* const rangedSpots[3] = {&ULDUAR_THORIM_PHASE2_RANGE1_SPOT,
-                                                       &ULDUAR_THORIM_PHASE2_RANGE2_SPOT,
-                                                       &ULDUAR_THORIM_PHASE2_RANGE3_SPOT};
-        position = *rangedSpots[slot];
+        position = RangedSpot(slot);
         return true;
     }
 
@@ -1690,7 +1753,7 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     {
         // Just off the main tank's bearing: inside taunt range for the Unbalancing Strike swap, and
         // deliberately not rotated for Lightning Charge - moving a tank drags the boss.
-        float const bearing = Position::NormalizeOrientation(RingAnchorBearing(botAI, bot, boss) +
+        float const bearing = Position::NormalizeOrientation(RingAnchorBearing(boss) +
                                                              ULDUAR_THORIM_OFFTANK_BEARING_OFFSET);
         if (RingPoint(bot, boss, bearing, position))
             return true;
@@ -1708,10 +1771,15 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     if (!MeleeSlotOf(bot, slot))
         return false;
 
+    // Bearing latched, rotation held per lit orb, and the boss is the only live term left - so the
+    // point only moves when the cone does. It used to be recomputed from four things that all drifted
+    // on their own, and the destination flipped between six points several times a second.
+    float const bearing = LatchedRingBearing(bot, boss, slot);
+
     float rotation = 0.0f;
     RingRotation(botAI, bot, boss, rotation);
 
-    if (RingPoint(bot, boss, SlotBearing(RingAnchorBearing(botAI, bot, boss) + rotation, slot), position))
+    if (RingPoint(bot, boss, Position::NormalizeOrientation(bearing + rotation), position))
         return true;
 
     return StaticMeleeSpot(boss, slot, position);
@@ -1749,6 +1817,12 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
     if (!ThorimPhase2Active(botAI))
         return false;
 
+    // Same floor test TryGetThorimPhase2Spot uses to refuse a spot: a bot still up on the balcony is
+    // not settled in a ring it cannot be standing in. The guard this feeds zeroes nearly every mover,
+    // so a stale latch up there froze two bots on the hallway for three minutes.
+    if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
     ThorimEncounterState const* state = FindState(bot);
     return state && state->ringArrived.count(bot->GetGUID()) > 0;
 }
@@ -1760,36 +1834,38 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
         return nullptr;
 
     // One 150 yd grid sweep per instance per interval, shared by every bot, so no two of them
-    // disagree about which orb is lit. The two markers never overlap - Charge Orb only fires while
-    // Thorim is on the balcony - so keying the cache on the marker costs nothing in practice.
+    // disagree about which orb is lit. A slot each, because a single one keyed on the marker turns
+    // into a rescan on every call the moment both markers are being asked for.
     ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
-    if (state.orbScanMs && state.orbScanSpell == markerSpell &&
-        GetMSTimeDiffToNow(state.orbScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
-    {
-        Unit* cached = botAI->GetUnit(state.chargedOrbGuid);
-        if (cached && cached->HasAura(markerSpell))
-            return cached;
+    bool const lightning = markerSpell == SPELL_THORIM_LIGHTNING_ORB_VISUAL;
+    RaidObs::ObsValue<ObjectGuid>& cachedGuid = lightning ? state.lightningOrbGuid : state.chargedOrbGuid;
+    uint32& scanMs = lightning ? state.lightningOrbScanMs : state.orbScanMs;
 
-        return nullptr;
+    if (scanMs && GetMSTimeDiffToNow(scanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+    {
+        Unit* cached = botAI->GetUnit(cachedGuid);
+        return cached && cached->HasAura(markerSpell) ? cached : nullptr;
     }
 
-    state.orbScanMs = getMSTime();
-    state.orbScanSpell = markerSpell;
-    state.chargedOrbGuid = ObjectGuid::Empty;
+    scanMs = getMSTime();
 
     // The orbs are non-attackable pillar props, so they never appear in the target values.
+    Unit* found = nullptr;
     std::list<Creature*> orbs;
     bot->GetCreatureListWithEntryInGrid(orbs, NPC_THORIM_THUNDER_ORB, ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE);
     for (Creature* orb : orbs)
     {
-        if (!orb || !orb->HasAura(markerSpell))
-            continue;
-
-        state.chargedOrbGuid = orb->GetGUID();
-        return orb;
+        if (orb && orb->HasAura(markerSpell))
+        {
+            found = orb;
+            break;
+        }
     }
 
-    return nullptr;
+    // Written once. Clearing it before the sweep and putting it back after emitted a pair of notes
+    // every rescan even when the answer had not moved.
+    cachedGuid = found ? found->GetGUID() : ObjectGuid::Empty;
+    return found;
 }
 
 bool ThorimLightningChargeActive(PlayerbotAI* botAI)
@@ -1827,13 +1903,21 @@ bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
     if (boss->GetHealth() < boss->GetMaxHealth() || boss->IsInCombat())
     {
         state->engagedSeen = true;
+
+        // A live pull is what arms the next round of resets. Nobody clears anything while he is up,
+        // so this is empty on all but the first tick after a wipe.
+        state->resetDone.clear();
         return false;
     }
 
     // Idle before the raid has ever pulled him is the gate, not a reset. Reading it as one clears the
     // squad split the corridor just formed and the next tick forms it again: 178 rounds of it during a
     // single Hodir pull, which is where this was found.
-    return state->engagedSeen;
+    if (!state->engagedSeen)
+        return false;
+
+    // Per bot, not raid-wide. Every member has its own latches to drop and each has to get a turn.
+    return state->resetDone.count(botAI->GetBot()->GetGUID()) == 0;
 }
 
 bool ThorimBotHasEncounterState(Player* bot)
@@ -1842,10 +1926,15 @@ bool ThorimBotHasEncounterState(Player* bot)
     if (!state)
         return false;
 
+    // Everything the reset below drops. Leave one out and a bot holding only that never trips the
+    // trigger, which is how balconyStep got to ride into the next pull unnoticed.
     return state->meleeSlots.count(bot->GetGUID()) || state->ringArrived.count(bot->GetGUID()) ||
            state->barrierBailing.count(bot->GetGUID()) || state->squads.count(bot->GetGUID()) ||
            state->followMasterStripped.count(bot->GetGUID()) ||
-           state->arenaAnchorArrived.count(bot->GetGUID()) || state->runicSmashSide;
+           state->arenaAnchorArrived.count(bot->GetGUID()) || state->balconyStep.count(bot->GetGUID()) ||
+           state->ringBearings.count(bot->GetGUID()) ||
+           state->orbEscapes.count(bot->GetGUID()) || state->dpsTargets.count(bot->GetGUID()) ||
+           state->petRecalls.count(bot->GetGUID()) || state->runicSmashSide;
 }
 
 void ResetThorimEncounterState(Player* bot, bool clearInstance)
@@ -1863,45 +1952,54 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     if (!state)
         return;
 
+    // Two halves, and they run on different schedules. This one is this bot's own latches and it has
+    // to run for every member: they are what decide where a bot thinks it already walked to.
     state->meleeSlots.erase(bot->GetGUID());
     state->ringArrived.erase(bot->GetGUID());
     state->barrierBailing.erase(bot->GetGUID());
     state->followMasterStripped.erase(bot->GetGUID());
     state->arenaAnchorArrived.erase(bot->GetGUID());
-
-    // The lane preference is raid-wide, so it goes with the first bot that notices the encounter is
-    // back at its start rather than surviving into the next pull.
-    state->runicSmashSide = 0;
-    state->runicSmashSeenMs = 0;
-    state->smashScanMs = 0;
-    state->gauntletTraced = false;
-    state->chargedOrbGuid = ObjectGuid::Empty;
-    state->orbScanMs = 0;
-    state->orbScanSpell = 0;
     state->orbEscapes.erase(bot->GetGUID());
     state->petRecalls.erase(bot->GetGUID());
+    state->balconyStep.erase(bot->GetGUID());
+    state->dpsTargets.erase(bot->GetGUID());
+    state->ringBearings.erase(bot->GetGUID());
 
     // Per pet rather than clearing the map: the rest of it belongs to the other bots in the instance,
     // who are not resetting.
     for (Unit* pet : bot->m_Controlled)
         if (pet)
             state->petRecallMs.erase(pet->GetGUID());
+
+    // Marks this bot done for the cycle. ThorimEncounterStateIsStale reads it, and wipes it the next
+    // time he is in combat.
+    bool const firstThisCycle = state->resetDone.empty();
+    state->resetDone.insert(bot->GetGUID());
+    if (!firstThisCycle)
+        return;
+
+    // The other half is one answer for the whole instance - the lane the squad walks, the split, the
+    // scan caches - so it goes with whichever bot notices first. Running it per bot would clear the
+    // squad split 25 times and AssignThorimSquads would re-form it 25 times behind us.
+    state->runicSmashSide = 0;
+    state->runicSmashSeenMs = 0;
+    state->smashScanMs = 0;
+    state->gauntletTraced = false;
+    state->chargedOrbGuid = ObjectGuid::Empty;
+    state->orbScanMs = 0;
+    state->lightningOrbGuid = ObjectGuid::Empty;
+    state->lightningOrbScanMs = 0;
+    state->ringRotationOrb.Clear();
+    state->ringRotation = 0.0f;
+    state->ringRotationHeld = false;
     state->bossGuid.Clear();
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;
     state->runeGiantGuid.Clear();
     state->runeGiantScanMs = 0;
-    state->balconyStep.erase(bot->GetGUID());
-
-    // Raid-wide too, and it has to go together with the flag or the next pull reuses the old split.
     state->squads.clear();
     state->squadsAssigned = false;
     state->squadsNoted = false;
     state->humanSquadScanMs = 0;
     state->marksCleared = false;
-    state->dpsTargets.erase(bot->GetGUID());
-
-    // Back to "never pulled him", so the state this just cleared does not read as stale all over again
-    // on the next tick.
-    state->engagedSeen = false;
 }
