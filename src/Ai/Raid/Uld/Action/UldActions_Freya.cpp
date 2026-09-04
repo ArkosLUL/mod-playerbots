@@ -29,6 +29,20 @@
 
 using namespace EncounterHelpers;
 
+namespace
+{
+// A point move never launches its spline while the bot is casting: PointMovementGenerator::DoInitialize
+// bails on IsMovementPreventedByCasting and DoUpdate calls StopMoving every tick until the cast ends,
+// while MoveTo still reports success. A channeled Blizzard or Volley therefore pins a bot inside the
+// blast it was just told to leave. Only bites when movement is genuinely blocked, so the rotation
+// survives the ticks where the bot could have walked anyway.
+void FreyaClearCastBlockingMove(Player* bot)
+{
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+}
+}  // namespace
+
 bool FreyaMoveAwayNatureBombAction::isUseful()
 {
     FreyaNearNatureBombTrigger trigger(botAI);
@@ -385,8 +399,11 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 
     // Claim the tick without touching the motion master while the escape is already in flight. Returning
     // true is the point: the engine stops here, so no lower node gets to re-aim the bot mid-dodge, and
-    // the spline that is actually carrying it out of the beam survives.
+    // the spline that is actually carrying it out of the beam survives. A bot whose cast is blocking
+    // movement is not in flight and never will be, so it falls through to the interrupt below instead
+    // of sitting out the whole latch inside the beam.
     if (dodgeSpotMs && getMSTimeDiff(dodgeSpotMs, now) < ULDUAR_FREYA_SUN_BEAM_LATCH_MS && stillClear(dodgeSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;
 
@@ -404,12 +421,78 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     if (safe == Position())
         return false;
 
+    FreyaClearCastBlockingMove(bot);
+
     if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
                 true, MovementPriority::MOVEMENT_FORCED, true, false))
         return false;
 
     dodgeSpot = safe;
     dodgeSpotMs = now;
+
+    return true;
+}
+
+bool FreyaLasherAboutToBlowAction::isUseful()
+{
+    FreyaLasherAboutToBlowTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaLasherAboutToBlowAction::Execute(Event /*event*/)
+{
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    std::vector<Position> blasts =
+        GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    if (blasts.empty())
+    {
+        bailSpotMs = 0;
+        return false;
+    }
+
+    auto const stillClear = [&blasts](Position const& spot)
+    {
+        for (Position const& blast : blasts)
+            if (blast.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_LASHER_PACK_CLEAR)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+
+    // Claim the tick without touching the motion master while the walk is already in flight, so no
+    // lower node re-aims the bot back onto the pile mid-step. A bot whose cast is blocking movement is
+    // not in flight and never will be, so it falls through to the interrupt below.
+    if (bailSpotMs && getMSTimeDiff(bailSpotMs, now) < ULDUAR_FREYA_LASHER_BAIL_LATCH_MS && stillClear(bailSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(bailSpot.GetPositionX(), bailSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    bailSpotMs = 0;
+
+    Position safe = FindNearestPositionClearOfHazards(bot, blasts, ULDUAR_FREYA_LASHER_PACK_CLEAR,
+                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    // At the finish half the pile is under the bail line at once, and nowhere in the room clears all of
+    // them by the full margin. Barely outside the blast beats standing in the middle of it.
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, blasts, ULDUAR_FREYA_DETONATE_RADIUS + 1.0f,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        return false;
+
+    FreyaClearCastBlockingMove(bot);
+
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    bailSpot = safe;
+    bailSpotMs = now;
 
     return true;
 }
@@ -422,17 +505,20 @@ bool FreyaRangedCampAction::isUseful()
 
 bool FreyaRangedCampAction::Execute(Event /*event*/)
 {
-    Player* anchor = GetFreyaRangedCampAnchor(botAI);
-    if (!anchor || anchor == bot)
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    Position const camp = GetFreyaLasherCampSpot(botAI, state);
+    if (camp == Position())
         return false;
 
     // No arrival latch: the trigger standing down inside the tolerance is what stops the churn, and a
-    // latch held across ticks would swallow the re-anchor when the anchor bot itself moves.
+    // latch held across ticks would swallow the re-aim when the pack moves.
     //
     // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb or a Sun Beam still outranks it - gathering is the
     // lowest-value thing a bot can be doing on this encounter.
-    return MoveTo(bot->GetMapId(), anchor->GetPositionX(), anchor->GetPositionY(), anchor->GetPositionZ(), false,
-                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(bot->GetMapId(), camp.GetPositionX(), camp.GetPositionY(), camp.GetPositionZ(), false, false, false,
+                  false, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool FreyaFrostNovaLashersAction::isUseful()

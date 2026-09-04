@@ -75,8 +75,26 @@ private:
     Player* GetRedirectTank();
 };
 
-// Gather the ranged half and the healers on the anchor bot so the lashers pile onto one spot the raid
-// can AoE. The lashers do the walking - a player cannot outrun one, let alone lead one.
+// Step a melee bot out of the blast of the lashers that are about to detonate. Only those, not the
+// whole pack: clearing every lasher would park melee outside the fight, which is what the 16 yd
+// lattice did before it was reverted.
+class FreyaLasherAboutToBlowAction : public MovementAction
+{
+public:
+    FreyaLasherAboutToBlowAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya lasher about to blow") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    // Lashers die one by one, so re-deriving the exit every tick answers with a spot a yard along and
+    // clears the motion master doing it - the bot resets its walk instead of finishing it. Hold the
+    // first answer until it stops being clear or the bot arrives.
+    Position bailSpot;
+    uint32 bailSpotMs = 0;
+};
+
+// Gather the ranged half and the healers a fixed standoff from the pack so the lashers pile onto one
+// spot the raid can AoE. The lashers do the walking - a player cannot outrun one, let alone lead one.
 class FreyaRangedCampAction : public MovementAction
 {
 public:

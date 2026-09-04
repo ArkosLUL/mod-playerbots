@@ -169,18 +169,50 @@ nulls any lasher past that reach, leaving it no add target at all. The wave stop
 Gift healed the survivors from ~5% back to ~65%, and sixteen living bots finished the pull on 9.5k
 raid DPS between them.
 
-**Doctrine: one camp, AoE the pile** (see
+**Doctrine: one camp a fixed standoff from the pile, and step off what is about to blow** (see
 [Crowd control and threat on adds](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)
-for why ferrying an add faster than a player cannot work). `freya ranged camp` pulls ranged DPS and
-healers onto `GetFreyaRangedCampAnchor` — the lowest-GUID living ranged DPS in the group on this map,
-so every bot picks the same one with no shared state, and a live bot rather than a fixed point keeps
-the camp on the mesh. `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside one AoE;
+for why ferrying an add faster than a player cannot work). `freya ranged camp` puts ranged DPS and
+healers `ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (20 yd) out from the pack's centre, on the bearing the raid
+is already on so nobody crosses the pile to reach it — outside Detonate, inside `AiPlayerbot.SpellDistance`
+(28.5), so they keep hitting the near edge. `GetFreyaLasherCampSpot` sweeps bearings when collision
+blocks the first, and falls back to `GetFreyaRangedCampAnchor` — the lowest-GUID living ranged DPS, so
+every bot picks the same one with no shared state — because a live bot is always on the mesh and a
+computed point is not. `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside one AoE;
 `_HEALER_CAMP_TOLERANCE` (15 yd) gives healers the slack to also cover the melee group and the tanks.
 Tanks and melee are excluded: they are already stacked on what they are hitting, and a tank that left
 would take Freya or the Conservator with it.
 
-Node order: nova · trap · army (`ACTION_RAID + 2`) → camp (`ACTION_RAID`). The camp is the lowest-value
-thing a bot can be doing here, so it sits under the Healthy Spore node and under the tank ladder, and
+The anchor used to be the bot itself, which is why the camp had no fixed relationship to anything: in
+`1788559467` it sat 23.8-35.7 yd from Freya and 16.3-25.5 yd from the pile, and moved **27.5 yd between
+waves** because that one warlock walked. It also re-picks from the *living*, so the camp jumped twice in
+0.3s as bots died at the `1788558567` wipe.
+
+`freya lasher about to blow` steps melee out of the blast of the lashers that are nearly dead, which is
+the only warning this wave gives. A lasher under `ULDUAR_FREYA_LASHER_BAIL_PCT` (**15%**) sits there a
+median **2.6s** (p25 1.5, p75 4.3) before it detonates — 18 yd of walking, enough to clear 15 yd. Melee
+spend **26%** of the wave outside at that gate, which is the price; it clears only the *low* lashers,
+never the whole pack, because clearing all ten is the lattice failure again. Tanks are excluded for the
+same reason as the camp. The gate is per-lasher on purpose: the older `freya lasher pack step out` asked
+for 3+ under 20% inside one 8 yd pack and fired **once in six pulls**.
+
+**A dodge that never moves reports success.** Both escapes call `FreyaClearCastBlockingMove` before
+`MoveTo`: `PointMovementGenerator` refuses to launch a spline while the bot is casting, and `MoveTo`
+returns `Issued` anyway, so a channel pins a bot inside the blast it was just told to leave. In
+`1788559467` the Sun Beam dodge logged **158 accepted moves** and bots channelling Volley or Mind Sear
+went nowhere on **57-67%** of them; `Nightwarrior` held one coordinate for 3.0s, 2.4 yd inside the beam,
+through four move orders. Both latches also break on `IsMovementPreventedByCasting()`, or a pinned bot
+sits out the full hold. See [pitfalls](../../engine/pitfalls.md) for the general rule.
+
+`FreyaAvoidAoeHoldMultiplier` zeroes the generic `avoid aoe`, which sits at `ACTION_EMERGENCY` (90),
+outranks every Freya node, and replaces a 15 yd escape with a flat `AiPlayerbot.FleeDistance` (5 yd) hop
+on a bearing of its own — it took the tick back from Nightwarrior's dodge 1.9s before it died. Freya
+answers all three of its hazards with nodes that read every hazard at once, so the generic one has
+nothing to add. XT-002 and Razorscale suppress it the same way. **Movement only**: nothing here zeroes
+`ReachTargetAction`.
+
+Node order: bail (`ACTION_RAID + 3`) → nova · trap · army (`+ 2`) → camp (`ACTION_RAID`). A dead bot
+does no crowd control, so leaving a blast outranks laying one; the camp is the lowest-value thing a bot
+can be doing here, so it sits under the Healthy Spore node and under the tank ladder, and
 `MOVEMENT_COMBAT` rather than `FORCED` keeps the Nature Bomb and Sun Beam escapes above it.
 
 The mage novas on **self**, not through the class `frost nova` node, which gates on the *current target*

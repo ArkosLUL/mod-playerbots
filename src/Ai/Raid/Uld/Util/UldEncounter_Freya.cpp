@@ -10,6 +10,7 @@
 #include "EncounterHelpers.h"
 #include "GameObject.h"
 #include "Group.h"
+#include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -17,6 +18,7 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <list>
 #include <vector>
@@ -435,6 +437,86 @@ uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state
     }
 
     return count;
+}
+
+std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float maxPct,
+                                                 float radius)
+{
+    Player* bot = botAI->GetBot();
+    std::vector<Position> low;
+
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= maxPct)
+            continue;
+
+        if (bot->GetExactDist2d(lasher) <= radius)
+            low.push_back(lasher->GetPosition());
+    }
+
+    return low;
+}
+
+Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
+{
+    Player* bot = botAI->GetBot();
+
+    Position centre;
+    uint32 count = 0;
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    float sumZ = 0.0f;
+    for (Unit* lasher : state.detonatingLashers)
+    {
+        if (!lasher || !lasher->IsAlive())
+            continue;
+
+        sumX += lasher->GetPositionX();
+        sumY += lasher->GetPositionY();
+        sumZ += lasher->GetPositionZ();
+        ++count;
+    }
+
+    if (!count)
+        return Position();
+
+    centre.Relocate(sumX / count, sumY / count, sumZ / count);
+
+    // Bearing from the pile toward where the raid already is, so the walk to the camp never crosses
+    // the pack. The anchor bot is what defines "already is": every bot picks the same one, so every
+    // bot derives the same spot without shared state.
+    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+    float bearing = anchor && anchor->GetExactDist2d(&centre) > CONTACT_DISTANCE
+                        ? centre.GetAngle(anchor)
+                        : centre.GetAngle(bot);
+
+    // The first bearing is the one that keeps the raid where it stands; the sweep only runs when a
+    // tree trunk or the room edge is in the way.
+    for (float delta = 0.0f; delta <= static_cast<float>(M_PI); delta += static_cast<float>(M_PI) / 8.0f)
+    {
+        for (float sign : {1.0f, -1.0f})
+        {
+            float const angle = bearing + sign * delta;
+            float x = centre.GetPositionX() + std::cos(angle) * ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
+            float y = centre.GetPositionY() + std::sin(angle) * ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
+            float z = centre.GetPositionZ();
+
+            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, centre.GetPositionX(), centre.GetPositionY(),
+                                                                centre.GetPositionZ(), x, y, z))
+                continue;
+
+            // Collision can pull the spot back toward the pile, which would park the camp inside the
+            // blasts it exists to stay out of.
+            if (centre.GetExactDist2d(x, y) < ULDUAR_FREYA_DETONATE_RADIUS)
+                continue;
+
+            return Position(x, y, z, 0.0f);
+        }
+    }
+
+    // Trees and the room edge can box in every bearing. A live bot is always on the mesh, which is the
+    // whole reason the anchor is a bot and not a fixed point, so fall back to standing on it.
+    return anchor ? anchor->GetPosition() : Position();
 }
 
 Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state)

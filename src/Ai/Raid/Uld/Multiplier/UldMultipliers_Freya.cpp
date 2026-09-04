@@ -118,6 +118,18 @@ float FreyaLasherTrapReserveMultiplier::GetValue(Action* action)
     return state.detonatingLashers.empty() ? 1.0f : 0.0f;
 }
 
+float FreyaAvoidAoeHoldMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<AvoidAoeAction*>(action))
+        return 1.0f;
+
+    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    if (!freya || !freya->IsAlive())
+        return 1.0f;
+
+    return 0.0f;
+}
+
 float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);

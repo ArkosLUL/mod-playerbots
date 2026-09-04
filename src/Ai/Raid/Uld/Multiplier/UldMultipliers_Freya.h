@@ -54,6 +54,17 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Freya: this fight answers every hazard it has with a node that reads all of them at once - Nature
+// Bomb, the Unstable Sun Beam, and the lashers about to detonate. The generic avoid-aoe sits at
+// ACTION_EMERGENCY, outranks all three, and replaces their answer with a flat AiPlayerbot.FleeDistance
+// hop in a bearing of its own picking, which is not enough to clear any of them.
+class FreyaAvoidAoeHoldMultiplier : public Multiplier
+{
+public:
+    FreyaAvoidAoeHoldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya avoid aoe hold") {}
+    float GetValue(Action* action) override;
+};
+
 // Freya hard mode: Ground Tremor interrupts the whole raid on a 2s telegraph and school-locks whoever
 // it cuts for 10s, so a cast that cannot land inside the telegraph is thrown away. Heals are held too,
 // unlike at Ignis: a Chain Heal delayed under 2s beats a resto shaman with no Nature for 10.

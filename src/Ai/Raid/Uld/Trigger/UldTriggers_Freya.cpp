@@ -127,6 +127,24 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     return false;
 }
 
+bool FreyaLasherAboutToBlowTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Tanks stay: one that walked would take Freya or the Conservator with it, and it survives the
+    // blasts anyway. Ranged and healers are already a camp's width clear.
+    if (botAI->IsTank(bot) || !PlayerbotAI::IsMelee(bot))
+        return false;
+
+    FreyaWaveState state;
+    GatherFreyaWaveState(botAI, state);
+
+    return !GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_DETONATE_RADIUS)
+                .empty();
+}
+
 bool FreyaRangedCampTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
@@ -138,13 +156,13 @@ bool FreyaRangedCampTrigger::IsActive()
     if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
         return false;
 
-    Player* anchor = GetFreyaRangedCampAnchor(botAI);
-    if (!anchor || anchor == bot)
-        return false;
-
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
     if (state.detonatingLashers.empty())
+        return false;
+
+    Position const camp = GetFreyaLasherCampSpot(botAI, state);
+    if (camp == Position())
         return false;
 
     // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
@@ -152,7 +170,7 @@ bool FreyaRangedCampTrigger::IsActive()
     float const tolerance =
         botAI->IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
 
-    return bot->GetExactDist2d(anchor) > tolerance;
+    return bot->GetExactDist2d(camp.GetPositionX(), camp.GetPositionY()) > tolerance;
 }
 
 bool FreyaFrostNovaLashersTrigger::IsActive()

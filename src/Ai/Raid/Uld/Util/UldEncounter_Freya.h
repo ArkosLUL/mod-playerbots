@@ -156,6 +156,21 @@ constexpr uint32 ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS = 2;
 // walks onto it - that is the whole trigger condition, since one that charged this bot arrives here.
 constexpr float ULDUAR_FREYA_FROST_TRAP_ARM_RANGE = 20.0f;
 
+// A lasher this low is about to detonate: measured across twelve pulls, one below this sits there a
+// median 2.6s before it blows, which at 7.0 yd/s is the walk out of a 15 yd blast. Higher costs more
+// damage than it saves - melee already spend a quarter of the wave stepping out at this number.
+constexpr float ULDUAR_FREYA_LASHER_BAIL_PCT = 15.0f;
+
+// How long the step-out holds its answer. Lashers die one at a time, so without this the exit is
+// re-derived every tick a yard along and every MoveTo clears the motion master, which resets the walk
+// instead of finishing it. Roughly the time the walk itself takes at 7.0 yd/s.
+constexpr uint32 ULDUAR_FREYA_LASHER_BAIL_LATCH_MS = 3000;
+
+// Where the camp sits relative to the pack rather than relative to whichever bot happened to be
+// standing somewhere. Outside Detonate and inside AiPlayerbot.SpellDistance (28.5), so ranged keep
+// hitting the near edge of the pile without eating the blasts.
+constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 20.0f;
+
 // How tight the camp holds. Ranged are pulled in harder because the ball has to fit inside one AoE;
 // healers get the slack, since they also have to stay in range of the melee group and the tanks.
 constexpr float ULDUAR_FREYA_RANGED_CAMP_TOLERANCE = 10.0f;
@@ -241,6 +256,18 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
 // this map, so every bot picks the same one with no shared state. A live bot rather than a fixed
 // point, so the camp is always on the mesh and always within reach of what the raid is shooting.
 Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI);
+
+// Where the ranged half stands during the wave: STANDOFF out from the pack's centre on the bearing the
+// raid is already on, so nobody crosses the pile to reach it. Empty when there is no wave up or no
+// bearing clears collision, and GetFreyaRangedCampAnchor is the fallback - a live bot is always on the
+// mesh, which a computed point is not.
+Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state);
+
+// Living detonating lashers under maxPct within radius of the bot. The health filter is the point:
+// clearing every lasher would push melee out of the fight, clearing only the ones about to blow costs
+// a quarter of the wave.
+std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveState const& state, float maxPct,
+                                                 float radius);
 
 // The lasher with the most living lashers around it, lowest GUID breaking ties. The AoE-phase focus,
 // and the reason it is a focus at all: AoeTrigger counts attackers within 8 yd of the *current target*,

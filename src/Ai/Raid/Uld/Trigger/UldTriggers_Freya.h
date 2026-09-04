@@ -54,8 +54,18 @@ public:
     bool IsActive() override;
 };
 
-// Ranged and healers hold one camp on the anchor bot so the lashers gather themselves into a pile the
-// raid can AoE. Nothing is walked anywhere: a lasher moves at 8.0 yd/s against a player's 7.0.
+// A Detonating Lasher next to this bot is about to blow. Melee only: they are the ones standing on the
+// pile, and one below the bail line gives them about 2.6s to clear its 15 yd blast.
+class FreyaLasherAboutToBlowTrigger : public Trigger
+{
+public:
+    FreyaLasherAboutToBlowTrigger(PlayerbotAI* ai) : Trigger(ai, "freya lasher about to blow") {}
+    bool IsActive() override;
+};
+
+// Ranged and healers hold one camp a fixed standoff from the pack so the lashers gather themselves
+// into a pile the raid can AoE. Nothing is walked anywhere: a lasher moves at 8.0 yd/s against a
+// player's 7.0.
 class FreyaRangedCampTrigger : public Trigger
 {
 public:

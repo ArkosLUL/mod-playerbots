@@ -63,16 +63,23 @@ same test. `Unit::IsMovementPreventedByCasting` is true for any `UNIT_STATE_CAST
 carrying `IsActionAllowedChannel` — so instants are fine and everything else is not.
 
 Two things make it worse than "the move does nothing". `MovementAction::MoveTo` has its `CastStop` /
-`InterruptSpell` block **commented out** (`MovementActions.cpp:222-226`), so it returns `true` and
+`InterruptSpell` block **commented out** (`MovementActions.cpp:318`, `:345`), so it returns `true` and
 stamps `LastMovement` with the full travel delay for a leg that never started — which then blocks the
 bot's own retries through `IsWaitingForLastMove` for the length of a walk it never took. And the
-calling action reads that `true` as success and holds the tick.
+calling action reads that `true` as success and holds the tick. Nothing upstream can see this: the
+node's verdict, the accepted-move record and the registered POINT generator all say it worked. Judge a
+positioning node by measured displacement instead — Freya's Sun Beam dodge logged 158 accepted moves in
+one pull while bots channelling Volley or Mind Sear went nowhere on 57-67% of them and died standing in
+the beam.
 
-A dodge that must not be missed calls `botAI->InterruptSpell()` before moving.
-`PlayerbotAI::InterruptSpell` is free to call when nothing is casting, and `SpellInterrupted` has no
-side effect beyond a redundant interrupt, so a 100 ms recheck costs nothing but a queued melee
-special. Decide it per mechanic: clipping a cast every time a *survivable* hazard lands costs more
-than the hazard does. Kara, Gruul, Magtheridon and Naxxramas already do this.
+A dodge that must not be missed interrupts **before** it moves, and the two calls are not
+interchangeable. `bot->InterruptNonMeleeSpells(true)` is immediate: the cast ends inside the call, so
+the `MovePoint` on the same tick launches its spline. `botAI->RequestSpellInterrupt()` only sets a flag
+for a later `UpdateAIInternal`, so the move issued this tick is still pinned — it is for scripts
+reacting to a boss event, not for an action that has to travel now. Gate the interrupt on
+`IsMovementPreventedByCasting()` so it only fires when the bot is genuinely stuck, and decide it per
+mechanic: clipping a cast every time a *survivable* hazard lands costs more than the hazard does.
+Kara, Gruul, Magtheridon and Naxxramas already do this.
 
 ## Movement that silently no-ops
 

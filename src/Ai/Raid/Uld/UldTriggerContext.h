@@ -77,6 +77,7 @@ public:
         creators["freya move to healing spore trigger"] = &RaidUlduarTriggerContext::freya_move_to_healing_spore_trigger;
         creators["freya break iron roots"] = &RaidUlduarTriggerContext::freya_break_iron_roots;
         creators["freya dodge unstable sun beam"] = &RaidUlduarTriggerContext::freya_dodge_unstable_sun_beam;
+        creators["freya lasher about to blow"] = &RaidUlduarTriggerContext::freya_lasher_about_to_blow;
         creators["freya ranged camp"] = &RaidUlduarTriggerContext::freya_ranged_camp;
         creators["freya summon army"] = &RaidUlduarTriggerContext::freya_summon_army;
         creators["freya frost nova lashers"] = &RaidUlduarTriggerContext::freya_frost_nova_lashers;
@@ -259,6 +260,7 @@ private:
     static Trigger* freya_move_to_healing_spore_trigger(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeTrigger(ai); }
     static Trigger* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsTrigger(ai); }
     static Trigger* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamTrigger(ai); }
+    static Trigger* freya_lasher_about_to_blow(PlayerbotAI* ai) { return new FreyaLasherAboutToBlowTrigger(ai); }
     static Trigger* freya_ranged_camp(PlayerbotAI* ai) { return new FreyaRangedCampTrigger(ai); }
     static Trigger* freya_summon_army(PlayerbotAI* ai) { return new FreyaSummonArmyTrigger(ai); }
     static Trigger* freya_frost_nova_lashers(PlayerbotAI* ai) { return new FreyaFrostNovaLashersTrigger(ai); }

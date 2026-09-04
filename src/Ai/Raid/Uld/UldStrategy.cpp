@@ -390,9 +390,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
 
     // Detonating Lasher wave. Order is the doctrine: nothing here can be tanked, kited or outrun, so
-    // the raid answers the wave with crowd control and a camp it can AoE. Root what has already
+    // the raid answers the wave with crowd control and a camp it can AoE. Leave the blast of anything
+    // about to go off first - a bot that is dead does no crowd control - then root what has already
     // closed, then snare what has not, then the ghouls, which are the one thing on the encounter that
     // takes a lasher off a bot at all - and gather last, only when nothing urgent is asking.
+    triggers.push_back(new TriggerNode(
+        "freya lasher about to blow",
+        { NextAction("freya lasher about to blow", ACTION_RAID + 3) }));
+
     triggers.push_back(new TriggerNode(
         "freya frost nova lashers",
         { NextAction("freya frost nova lashers", ACTION_RAID + 2) }));
@@ -892,6 +897,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new FreyaLasherFinishAoeMultiplier(botAI));
     multipliers.push_back(new FreyaLasherTrapReserveMultiplier(botAI));
     multipliers.push_back(new FreyaGroundTremorCastGateMultiplier(botAI));
+    multipliers.push_back(new FreyaAvoidAoeHoldMultiplier(botAI));
 
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
