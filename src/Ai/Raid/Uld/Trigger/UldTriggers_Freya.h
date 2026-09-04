@@ -54,13 +54,12 @@ public:
     bool IsActive() override;
 };
 
-// Everyone but the main tank holds a lattice slot for the length of a Detonating Lasher wave, so that
-// a blast reaches one bot instead of the ten it used to. Nothing is walked anywhere: a lasher moves at
-// 8.0 yd/s against a player's 7.0.
-class FreyaLasherSpreadTrigger : public Trigger
+// Ranged and healers hold one camp on the anchor bot so the lashers gather themselves into a pile the
+// raid can AoE. Nothing is walked anywhere: a lasher moves at 8.0 yd/s against a player's 7.0.
+class FreyaRangedCampTrigger : public Trigger
 {
 public:
-    FreyaLasherSpreadTrigger(PlayerbotAI* ai) : Trigger(ai, "freya lasher spread") {}
+    FreyaRangedCampTrigger(PlayerbotAI* ai) : Trigger(ai, "freya ranged camp") {}
     bool IsActive() override;
 };
 

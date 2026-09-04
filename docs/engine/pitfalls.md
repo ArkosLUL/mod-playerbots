@@ -179,18 +179,25 @@ than the hazard does. Kara, Gruul, Magtheridon and Naxxramas already do this.
   re-fires forever at `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards
   past the trigger radius, and fall back to the tight value only where overlap leaves nothing wider.
 
-- **A gather node is a damage amplifier whenever the AoE it faces is wider than the camp.** Freya's
-  ranged camp pulled the raid into a 10 yd ball for the Detonating Lasher wave, and Detonate reaches
-  15.5 yd: each of the ten deaths in a wave hit ~10 bots, and six pulls lost 120 of 161 that way.
-  Compare the two radii before writing a gather at all. Victims per blast is a **step function** of
-  spacing, not a slope — a yard either side of the AoE radius is the whole difference between one
-  victim and seven — so a spread is sized past the radius or it buys nothing.
+- **A gather node is a damage amplifier whenever the AoE it faces is wider than the camp — and the
+  spread that fixes it usually costs more.** Freya's ranged camp pulls the raid into a 10 yd ball for
+  the Detonating Lasher wave and Detonate reaches 15.5 yd: each of the ten deaths in a wave hits ~10
+  bots, and six pulls lost 120 of 161 that way. Compare the two radii before writing a gather at all.
+  Victims per blast is a **step function** of spacing, not a slope, so a spread is sized past the AoE
+  radius or it buys nothing — which at Freya meant 16 yd slots, and the raid then stopped killing the
+  wave: melee DPS halved, two of ten adds died, and the wipe came earlier than any camp pull. Weigh
+  the AoE against everything else that kills, not against zero: Detonate was only 4.6-16.3% of the
+  damage taken.
 
-- **A positioning node that stands down on arrival hands the tick to whatever walks the bot away.**
-  Returning false inside the tolerance is the right anti-churn shape, but the engine then keeps going,
-  and `ReachTargetAction` / `CombatFormationMoveAction` walk the bot back to its target, which fires
-  the node again next tick. A formation holds only if a multiplier zeroes the generic chase for as
-  long as the formation is meant to last. Exempt the heal and resurrect reaches, or anyone standing
+- **`ReachTargetAction` is the only generic way a bot closes on a hostile target, so a multiplier that
+  zeroes it strands everyone out of range.** It is the base class of both `reach melee` and
+  `reach spell`; every other generic mover retreats (`flee`, `runaway`), backs out of a hitbox, or
+  follows the leader, and `CastSpellAction` out of range passes `isUseful`/`isPossible` and then fails
+  silently inside `Spell::prepare` without asking for movement. The tempting reason to zero it: a
+  positioning node returning false inside its tolerance — the right anti-churn shape — hands the tick
+  to the generic chase, which walks the bot back to its target and re-fires the node next tick.
+  Zeroing the chase does hold the formation, but a formation spaced wider than the bots' own reach
+  cannot fight from its slots. Exempt the heal and resurrect reaches at minimum, or anyone standing
   outside the formation — a tank on the boss — stops being reachable.
 
 - **A conjunctive gate can be dead code for a dozen pulls.** Freya's step-out, frost nova and trap all

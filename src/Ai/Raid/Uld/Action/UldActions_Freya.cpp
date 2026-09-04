@@ -414,31 +414,25 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     return true;
 }
 
-bool FreyaLasherSpreadAction::isUseful()
+bool FreyaRangedCampAction::isUseful()
 {
-    FreyaLasherSpreadTrigger trigger(botAI);
+    FreyaRangedCampTrigger trigger(botAI);
     return trigger.IsActive();
 }
 
-bool FreyaLasherSpreadAction::Execute(Event /*event*/)
+bool FreyaRangedCampAction::Execute(Event /*event*/)
 {
-    Position slot;
-    if (!GetFreyaLasherSpreadSlot(botAI, bot, slot))
+    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+    if (!anchor || anchor == bot)
         return false;
 
-    // No arrival latch: the trigger standing down inside the tolerance is what the latch would have
-    // been for, and one held across ticks would swallow the re-anchor when the formation shifts.
-    if (bot->GetExactDist2d(&slot) <= ULDUAR_FREYA_LASHER_SPREAD_TOLERANCE)
-        return false;
-
-    // The exact slot, not MoveInside: that one offsets the destination by the tolerance at the bot's
-    // follow angle, which parks it a couple of yards off-lattice in an unrelated direction and eats
-    // the single yard of margin the spacing has over the blast.
+    // No arrival latch: the trigger standing down inside the tolerance is what stops the churn, and a
+    // latch held across ticks would swallow the re-anchor when the anchor bot itself moves.
     //
-    // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb or a Sun Beam still outranks it: those kill a bot
-    // inside seconds, and a slot is worth holding only until something more urgent asks.
-    return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(), false, false, false,
-                  false, MovementPriority::MOVEMENT_COMBAT);
+    // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb or a Sun Beam still outranks it - gathering is the
+    // lowest-value thing a bot can be doing on this encounter.
+    return MoveTo(bot->GetMapId(), anchor->GetPositionX(), anchor->GetPositionY(), anchor->GetPositionZ(), false,
+                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool FreyaFrostNovaLashersAction::isUseful()

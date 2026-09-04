@@ -21,9 +21,8 @@ class Unit;
 //
 // Waves of adds define the fight. The trio wave - Snaplasher, Storm Lasher, Ancient Water Spirit -
 // has to die within seconds of each other or the survivors heal back, so the trio is killed in sync
-// rather than one at a time. The Detonating Lasher wave is answered by spreading rather than by
-// gathering, since each death is a 15 yd blast; and the Ancient Conservator is answered with Healthy
-// Spores rather than by out-damaging its Grip.
+// rather than one at a time. Lasher packs are stacked and AoE'd instead of walked down, and the
+// Ancient Conservator is answered with Healthy Spores rather than by out-damaging its Grip.
 //
 // Everything the encounter needs comes from one grid pass (FreyaWaveState) so the priority action,
 // the tank action and both multipliers cannot disagree about what is up.
@@ -128,8 +127,15 @@ constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
 // enough; the whole cluster has to be visible or the bot walks out of one and into the next.
 constexpr float ULDUAR_FREYA_HAZARD_SEARCH_RADIUS = 30.0f;
 
-// Detonating Lasher wave. Nothing is tanked and nothing is ferried, and nothing gathers either: the
-// raid spreads so that one blast reaches one bot, and each bot kills whatever charged it.
+// Detonating Lasher wave. Nothing is tanked and nothing is ferried: the raid holds one camp, the
+// lashers come to it on their own, and the pack is AoE'd down together. Below FINISH_PCT the AoE stops
+// and the pack is picked off one at a time, so the 15 yd blasts land one by one instead of at once.
+//
+// The camp is 10 yd inside a 15 yd blast, so the raid does eat each detonation whole. That is the
+// trade, and it is the cheaper half: standing further apart than a bot's own reach is worse, because
+// ReachTargetAction is the only generic way any bot closes on a target, so bots that cannot reach
+// what charged them stop killing the wave - and a wave that does not die outlasts every cooldown the
+// raid has. See docs/raids/ulduar/freya.md for the measurements.
 //
 // PACK_RADIUS is MediumAoeTrigger's own 8 yd / 3 attackers, which is what actually decides whether
 // class AoE fires; PACK_CLEAR is one yard past Detonate, so the AoE hold covers a bot standing at the
@@ -150,38 +156,10 @@ constexpr uint32 ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS = 2;
 // walks onto it - that is the whole trigger condition, since one that charged this bot arrives here.
 constexpr float ULDUAR_FREYA_FROST_TRAP_ARM_RANGE = 20.0f;
 
-// Detonate reaches 15.5 yd in practice - DBC radius index 18 is 15.0 and the searcher adds the object
-// size at both ends - and it does not fall off with distance. So spacing is the only lever the raid
-// has, and it is a step function, not a slope: at 16 yd the four orthogonal neighbours of a lattice
-// slot sit outside the blast and one death costs one bot, while anything under 15.5 brings all four
-// back inside at once. There is no useful value in between.
-constexpr float ULDUAR_FREYA_LASHER_SPREAD_SPACING = 16.0f;
-
-// Seven columns is what the Conservatory floor holds at that spacing - 96 of the ~108 walkable yards
-// between the walls. Rows come from the roster, and 25 bots need four of them, which is the other 48.
-constexpr uint32 ULDUAR_FREYA_LASHER_SPREAD_COLUMNS = 7;
-
-// Close enough that the slot's spacing still holds. Anything wider spends the single yard of margin
-// the spacing has over the blast.
-constexpr float ULDUAR_FREYA_LASHER_SPREAD_TOLERANCE = 3.0f;
-
-// The formation centre is snapped to this grid before anything is derived from it. Freya drifts a
-// yard at a time as the tank adjusts, and unsnapped every drift slides all 25 slots and walks the
-// whole raid again; snapped, the anchor is piecewise constant, which is also what lets two bots
-// deriving it a tick apart agree without any shared state.
-constexpr float ULDUAR_FREYA_LASHER_SPREAD_ANCHOR_GRID = 5.0f;
-
-// Walkable floor of the Conservatory, from a navprobe grid over map 603. The formation is clamped
-// into it: at 16 yd spacing the footprint nearly fills the room, so an anchor taken from wherever the
-// tank happened to drag Freya would otherwise hang half the slots through a wall.
-constexpr float ULDUAR_FREYA_ROOM_X_MIN = 2300.0f;
-constexpr float ULDUAR_FREYA_ROOM_X_MAX = 2408.0f;
-constexpr float ULDUAR_FREYA_ROOM_Y_MIN = -78.0f;
-constexpr float ULDUAR_FREYA_ROOM_Y_MAX = -24.0f;
-
-// Formation centre when Freya cannot be resolved. Middle of the same floor, and navprobe-verified:
-// nearest poly 1.17 yd, settled Z 425.76.
-extern const Position ULDUAR_FREYA_LASHER_SPREAD_FALLBACK;
+// How tight the camp holds. Ranged are pulled in harder because the ball has to fit inside one AoE;
+// healers get the slack, since they also have to stay in range of the melee group and the tanks.
+constexpr float ULDUAR_FREYA_RANGED_CAMP_TOLERANCE = 10.0f;
+constexpr float ULDUAR_FREYA_HEALER_CAMP_TOLERANCE = 15.0f;
 
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
@@ -259,14 +237,10 @@ bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
 // shows up in the npc value lists.
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
 
-// Where this bot stands out the Detonating Lasher wave. A lattice slot at SPREAD_SPACING, centred on
-// Freya snapped to the anchor grid and clamped into the room, assigned by the bot's index in a roster
-// order every bot derives identically. Healers take the quarter points rather than the middle: the
-// footprint's 101 yd diagonal is well past a 40 yd heal, so healers seated together reach neither end.
-//
-// One derivation for the trigger and the action, like GetFreyaTargetSpore: resolving it twice is how
-// a bot ends up woken by one slot and walked to another.
-bool GetFreyaLasherSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
+// The bot the ranged half and the healers gather on: lowest-GUID living ranged DPS in the group on
+// this map, so every bot picks the same one with no shared state. A live bot rather than a fixed
+// point, so the camp is always on the mesh and always within reach of what the raid is shooting.
+Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI);
 
 // The lasher with the most living lashers around it, lowest GUID breaking ties. The AoE-phase focus,
 // and the reason it is a focus at all: AoeTrigger counts attackers within 8 yd of the *current target*,
@@ -278,8 +252,7 @@ Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state);
 bool IsFreyaLasherPackFinishing(FreyaWaveState const& state, Position const& centre);
 
 // The finishing pack within radius of this bot, or nullptr. Measured from the pack's own centre rather
-// than from the bot, which is what keeps the finish visible to a bot that has already stepped out of
-// it - the hunter's trap and the AoE hold both have to survive the step-out that precedes them.
+// than from the bot, so a bot standing at the edge of the pile still sees the finish it is feeding.
 Unit* GetFreyaFinishingPackNear(PlayerbotAI* botAI, FreyaWaveState const& state, float radius);
 
 // Takes a point rather than a bot: the same count is wanted around a candidate pack focus, and around

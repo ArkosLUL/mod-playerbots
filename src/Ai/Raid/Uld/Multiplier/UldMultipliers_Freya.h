@@ -44,18 +44,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Freya: the spread node only owns the tick until the bot reaches its slot - it returns false once it
-// is standing on one, and the generic chase underneath then walks it straight back to whatever it is
-// attacking, which on a lasher wave is usually Freya on the far side of the room. Holding the slot is
-// the half of the spread that actually keeps the raid apart. Heals are exempt: the main tank has no
-// slot and stands wherever the pull left the boss, so a healer that cannot step toward it loses it.
-class FreyaLasherSpreadHoldMultiplier : public Multiplier
-{
-public:
-    FreyaLasherSpreadHoldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya lasher spread hold") {}
-    float GetValue(Action* action) override;
-};
-
 // Freya: a hunter holds one trap at a time and they share a 30s category cooldown, so the generic
 // Explosive Trap node is what stops Frost Trap ever going down. Damage is not what the wave needs;
 // -50% movement on something that outruns the raid at 8.0 yd/s is.

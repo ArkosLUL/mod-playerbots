@@ -13,21 +13,15 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "RaidObs.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 #include <list>
-#include <string>
-#include <utility>
 #include <vector>
 
 using namespace EncounterHelpers;
-
-const Position ULDUAR_FREYA_LASHER_SPREAD_FALLBACK = Position(2357.83f, -52.33f, 425.76f);
 
 std::vector<Unit*> FreyaWaveState::LivingTrio() const
 {
@@ -407,154 +401,28 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
     return positions;
 }
 
-// The formation roster, in the order every bot derives identically. The dead keep their slots: index
-// by the living instead and one corpse shifts everyone behind it, which re-seats the whole formation
-// mid-wave - and a vacant slot costs nothing here, since what the spacing protects is the neighbours.
-//
-// Healers first because the cell order hands out the quarter points first, then guid. Both keys read
-// the same on every bot, so nobody has to be told which slot is theirs.
-static bool BuildFreyaSpreadMembers(Player* bot, std::vector<Player*>& out)
+Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI)
 {
+    Player* bot = botAI->GetBot();
     Group* group = bot->GetGroup();
     if (!group)
-        return false;
+        return PlayerbotAI::IsRangedDps(bot) ? bot : nullptr;
 
-    out.clear();
+    Player* anchor = nullptr;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
-        if (!member || member->GetMapId() != bot->GetMapId())
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
             continue;
 
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI)
+        if (!GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsRangedDps(member))
             continue;
 
-        // The main tank is the one bot that cannot leave: it is holding Freya, and a tank survives the
-        // blasts that kill everyone else.
-        if (PlayerbotAI::IsMainTank(member))
-            continue;
-
-        out.push_back(member);
+        if (!anchor || member->GetGUID() < anchor->GetGUID())
+            anchor = member;
     }
 
-    if (out.empty())
-        return false;
-
-    std::sort(out.begin(), out.end(), [](Player* left, Player* right)
-    {
-        bool const leftHeal = GET_PLAYERBOT_AI(left)->IsHeal(left);
-        bool const rightHeal = GET_PLAYERBOT_AI(right)->IsHeal(right);
-        if (leftHeal != rightHeal)
-            return leftHeal;
-        return left->GetGUID() < right->GetGUID();
-    });
-
-    return true;
-}
-
-// Fill order to lattice position: 0 lands in the middle and the rest alternate outward, so the bots
-// sorted first get the centre and the formation grows symmetrically instead of off one edge.
-// For a count of 7 this walks 3, 4, 2, 5, 1, 6, 0.
-static uint32 FreyaSpreadLatticeIndex(uint32 fillOrder, uint32 count)
-{
-    uint32 const centre = (count - 1) / 2;
-    uint32 const step = (fillOrder + 1) / 2;
-
-    return (fillOrder % 2) ? centre + step : centre - step;
-}
-
-// Lattice cells in the order they are handed out. The quarter points come first, so the healers
-// sorted to the front of the roster land one per quadrant: the footprint is 96x48 yd, which is 50 yd
-// from its centre to a corner and past a 40 yd heal, so healers seated together in the middle cover
-// neither end. Quartering brings the worst bot-to-nearest-healer distance down to about 36 yd.
-// Everything after that fills middle-out, which keeps a short roster compact.
-static void BuildFreyaSpreadCellOrder(uint32 columns, uint32 rows, std::vector<std::pair<uint32, uint32>>& out)
-{
-    out.clear();
-    out.reserve(static_cast<size_t>(columns) * rows);
-
-    auto push = [&out](uint32 row, uint32 column)
-    {
-        for (auto const& cell : out)
-            if (cell.first == row && cell.second == column)
-                return;
-
-        out.emplace_back(row, column);
-    };
-
-    for (uint32 row : {rows / 4, rows - 1 - rows / 4})
-        for (uint32 column : {columns / 4, columns - 1 - columns / 4})
-            push(row, column);
-
-    for (uint32 fill = 0; fill < rows * columns; ++fill)
-        push(FreyaSpreadLatticeIndex(fill / columns, rows), FreyaSpreadLatticeIndex(fill % columns, columns));
-}
-
-static float ClampToRoom(float value, float low, float high)
-{
-    // A lattice wider than the room inverts the bounds, and clamping to an inverted range would pin it
-    // hard against one wall with everything past the far one. Centre it instead and let the per-slot
-    // floor pass deal with the overhang.
-    if (low > high)
-        return (low + high) * 0.5f;
-
-    return std::max(low, std::min(high, value));
-}
-
-bool GetFreyaLasherSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
-{
-    std::vector<Player*> members;
-    if (!BuildFreyaSpreadMembers(bot, members))
-        return false;
-
-    size_t slot = members.size();
-    for (size_t i = 0; i < members.size(); ++i)
-        if (members[i] == bot)
-            slot = i;
-
-    if (slot >= members.size())
-        return false;
-
-    uint32 const columns = ULDUAR_FREYA_LASHER_SPREAD_COLUMNS;
-    uint32 const rows = (static_cast<uint32>(members.size()) + columns - 1) / columns;
-
-    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
-    Position anchor = freya ? freya->GetPosition() : ULDUAR_FREYA_LASHER_SPREAD_FALLBACK;
-
-    float const grid = ULDUAR_FREYA_LASHER_SPREAD_ANCHOR_GRID;
-    float anchorX = std::round(anchor.GetPositionX() / grid) * grid;
-    float anchorY = std::round(anchor.GetPositionY() / grid) * grid;
-
-    // Clamp the centre by the half-footprint rather than the raw room, so it is the whole lattice that
-    // stays on the floor and not just the slot this bot happens to own.
-    float const halfWidth = (columns - 1) * ULDUAR_FREYA_LASHER_SPREAD_SPACING * 0.5f;
-    float const halfHeight = (rows - 1) * ULDUAR_FREYA_LASHER_SPREAD_SPACING * 0.5f;
-    anchorX = ClampToRoom(anchorX, ULDUAR_FREYA_ROOM_X_MIN + halfWidth, ULDUAR_FREYA_ROOM_X_MAX - halfWidth);
-    anchorY = ClampToRoom(anchorY, ULDUAR_FREYA_ROOM_Y_MIN + halfHeight, ULDUAR_FREYA_ROOM_Y_MAX - halfHeight);
-
-    std::vector<std::pair<uint32, uint32>> cells;
-    BuildFreyaSpreadCellOrder(columns, rows, cells);
-    if (slot >= cells.size())
-        return false;
-
-    uint32 const row = cells[slot].first;
-    uint32 const column = cells[slot].second;
-
-    Position const point(anchorX + (static_cast<float>(column) - (columns - 1) * 0.5f) * ULDUAR_FREYA_LASHER_SPREAD_SPACING,
-                         anchorY + (static_cast<float>(row) - (rows - 1) * 0.5f) * ULDUAR_FREYA_LASHER_SPREAD_SPACING,
-                         anchor.GetPositionZ());
-
-    out = ValidateFloorPoint(bot, point);
-
-    // The slot index and the size of the lattice it was cut from, so a formation that re-seated is
-    // readable without re-deriving the sort from the roster.
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "freya.spread",
-                             std::to_string(slot) + "/" + std::to_string(members.size()) + " " +
-                                 RaidObs::DescribeDerived(out));
-
-    return true;
+    return anchor;
 }
 
 uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius)

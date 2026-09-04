@@ -1,5 +1,11 @@
 # Freya: survive the Detonating Lasher wave
 
+> **Superseded.** The spread doctrine below shipped as `45d9a3e36`, was tested in trace
+> `1788552829`, and was reverted: it cut Detonate damage to 1.9% of the total but halved melee DPS
+> and left the raid unable to kill the wave, wiping earlier than any camp pull. See
+> [freya-lasher-spread-revert](../freya-lasher-spread-revert/freya-lasher-spread-revert.PLAN.md).
+> The frost trap, frost nova and Army of the Dead changes from that commit were kept.
+
 ## Context
 
 Six Freya 25 hard-mode pulls on 2026-09-02

@@ -75,13 +75,12 @@ private:
     Player* GetRedirectTank();
 };
 
-// Take the lattice slot for the length of the wave. The lashers do the walking - a player cannot
-// outrun one, let alone lead one - so what the raid controls is only how far apart it stands when one
-// of them dies.
-class FreyaLasherSpreadAction : public MovementAction
+// Gather the ranged half and the healers on the anchor bot so the lashers pile onto one spot the raid
+// can AoE. The lashers do the walking - a player cannot outrun one, let alone lead one.
+class FreyaRangedCampAction : public MovementAction
 {
 public:
-    FreyaLasherSpreadAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya lasher spread") {}
+    FreyaRangedCampAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya ranged camp") {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

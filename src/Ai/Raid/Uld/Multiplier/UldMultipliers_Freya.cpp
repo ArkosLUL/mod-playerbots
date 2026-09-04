@@ -98,35 +98,9 @@ float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    // Held for as long as the bot is within a Detonate radius of the finish, which outlasts its own
-    // step-out: a bot that walked clear and kept casting Blizzard onto the pile would blow the whole
-    // pack up at once anyway, which is the thing this exists to stop.
+    // A Detonate radius rather than the pack's own: a bot at the edge of the pile that keeps casting
+    // Blizzard onto it blows the whole pack up at once, which is the thing this exists to stop.
     return GetFreyaFinishingPackNear(botAI, state, ULDUAR_FREYA_LASHER_PACK_CLEAR) ? 0.0f : 1.0f;
-}
-
-float FreyaLasherSpreadHoldMultiplier::GetValue(Action* action)
-{
-    bool const isChase = dynamic_cast<ReachTargetAction*>(action) &&
-                         !dynamic_cast<ReachPartyMemberToHealAction*>(action) &&
-                         !dynamic_cast<ReachPartyMemberToResurrectAction*>(action);
-
-    if (!isChase && !dynamic_cast<CombatFormationMoveAction*>(action))
-        return 1.0f;
-
-    // Only the bots that have a slot to hold. The main tank has none, and it is the one that has to
-    // keep chasing: it is holding Freya wherever the pull left her. Asked here rather than by deriving
-    // the slot, which runs a group sort and a floor pass this would pay for on every candidate action.
-    if (PlayerbotAI::IsMainTank(bot))
-        return 1.0f;
-
-    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
-    if (!freya || !freya->IsAlive())
-        return 1.0f;
-
-    FreyaWaveState state;
-    GatherFreyaWaveState(botAI, state);
-
-    return state.detonatingLashers.empty() ? 1.0f : 0.0f;
 }
 
 float FreyaLasherTrapReserveMultiplier::GetValue(Action* action)

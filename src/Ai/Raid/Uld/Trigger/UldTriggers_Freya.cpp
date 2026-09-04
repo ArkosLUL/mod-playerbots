@@ -127,10 +127,19 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     return false;
 }
 
-bool FreyaLasherSpreadTrigger::IsActive()
+bool FreyaRangedCampTrigger::IsActive()
 {
     Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
     if (!boss || !boss->IsAlive())
+        return false;
+
+    // Melee and tanks are already stacked on whatever they are hitting, and a tank that left the camp
+    // would take the boss or the Conservator with it.
+    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
+        return false;
+
+    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+    if (!anchor || anchor == bot)
         return false;
 
     FreyaWaveState state;
@@ -138,14 +147,12 @@ bool FreyaLasherSpreadTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
-    Position slot;
-    if (!GetFreyaLasherSpreadSlot(botAI, bot, slot))
-        return false;
+    // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
+    // and pulling them all the way into the ball would leave the far half of the raid unhealed.
+    float const tolerance =
+        botAI->IsHeal(bot) ? ULDUAR_FREYA_HEALER_CAMP_TOLERANCE : ULDUAR_FREYA_RANGED_CAMP_TOLERANCE;
 
-    // Distance is the whole gate, and it is also the arrival latch: standing down inside the tolerance
-    // is what stops the node re-issuing a move onto a slot the bot is already holding, and every
-    // re-issue would clear the motion master out from under whatever else was walking somewhere.
-    return bot->GetExactDist2d(&slot) > ULDUAR_FREYA_LASHER_SPREAD_TOLERANCE;
+    return bot->GetExactDist2d(anchor) > tolerance;
 }
 
 bool FreyaFrostNovaLashersTrigger::IsActive()
