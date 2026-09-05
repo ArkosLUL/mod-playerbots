@@ -34,121 +34,84 @@ std::unordered_map<uint32, VezaxEncounterState> vezaxEncounterStates;
 namespace
 {
 
-// Slot 0 sits on the row centre and later slots alternate outwards, so an under-filled row stays
-// centred and keeps its spacing instead of bunching at one end.
-float VezaxArcSlotAngleOffset(uint8 slotIndex, uint8 slotCount, float arcWidth)
-{
-    if (slotCount <= 1)
-        return 0.0f;
-
-    float const angleStep = arcWidth / static_cast<float>(slotCount - 1);
-
-    if (slotCount % 2 == 1)
-    {
-        if (slotIndex == 0)
-            return 0.0f;
-
-        float const angleOffset = angleStep * static_cast<float>((slotIndex + 1) / 2);
-        return slotIndex % 2 == 0 ? -angleOffset : angleOffset;
-    }
-
-    float const angleOffset = angleStep / 2.0f + angleStep * static_cast<float>(slotIndex / 2);
-    return slotIndex % 2 == 1 ? -angleOffset : angleOffset;
-}
-
 Position VezaxPositionAt(Position const& centre, float bearing, float radius)
 {
     return Position(centre.GetPositionX() + std::cos(bearing) * radius,
                     centre.GetPositionY() + std::sin(bearing) * radius, centre.GetPositionZ());
 }
 
-// One row of the formation. The arc width is not stored because it falls out of the spacing: a row
-// three slots wide at 3.7 yd covers the same ground whatever radius it sits at.
-struct VezaxSlotRow
+// A point in the camp frame: radius outward from the boss along the camp bearing, tangential offset
+// across it. One helper because the resting slot and the strafe target differ only in that offset -
+// keeping them on the same axes is what makes the strafe a pure sideways step.
+Position VezaxCampPosition(Position const& boss, float radius, float tangentialOffset)
 {
-    uint8 firstSlot;
-    uint8 slotCount;
-    float centreOffset;  // from ULDUAR_VEZAX_ARC_ORIENTATION
-    float radius;
-    float spacing;
-    bool bossRelative;
-};
+    float const forward = ULDUAR_VEZAX_ARC_ORIENTATION;
+    float const across = ULDUAR_VEZAX_ARC_ORIENTATION + static_cast<float>(M_PI) / 2.0f;
 
-constexpr float VEZAX_GROUP_OFFSET = ULDUAR_VEZAX_RANGED_GROUP_OFFSET;
-constexpr uint8 VEZAX_ROW = ULDUAR_VEZAX_BLOCK_ROW_SLOTS;
+    return Position(
+        boss.GetPositionX() + std::cos(forward) * radius + std::cos(across) * tangentialOffset,
+        boss.GetPositionY() + std::sin(forward) * radius + std::sin(across) * tangentialOffset,
+        boss.GetPositionZ());
+}
 
-// Healers get one row of six; each ranged group gets a near row, a far row and an overflow row.
-constexpr std::array<VezaxSlotRow, 7> VEZAX_SLOT_ROWS = {{
-    {0, ULDUAR_VEZAX_HEALER_SLOTS, 0.0f, ULDUAR_VEZAX_HEALER_RADIUS, ULDUAR_VEZAX_HEALER_SPACING,
-     true},
-    {6, VEZAX_ROW, VEZAX_GROUP_OFFSET, ULDUAR_VEZAX_RANGED_NEAR_RADIUS, ULDUAR_VEZAX_RANGED_SPACING,
-     false},
-    {9, VEZAX_ROW, VEZAX_GROUP_OFFSET, ULDUAR_VEZAX_RANGED_FAR_RADIUS, ULDUAR_VEZAX_RANGED_SPACING,
-     false},
-    {12, VEZAX_ROW, -VEZAX_GROUP_OFFSET, ULDUAR_VEZAX_RANGED_NEAR_RADIUS,
-     ULDUAR_VEZAX_RANGED_SPACING, false},
-    {15, VEZAX_ROW, -VEZAX_GROUP_OFFSET, ULDUAR_VEZAX_RANGED_FAR_RADIUS, ULDUAR_VEZAX_RANGED_SPACING,
-     false},
-    {18, VEZAX_ROW, VEZAX_GROUP_OFFSET, ULDUAR_VEZAX_RANGED_OVERFLOW_RADIUS,
-     ULDUAR_VEZAX_RANGED_SPACING, false},
-    {21, VEZAX_ROW, -VEZAX_GROUP_OFFSET, ULDUAR_VEZAX_RANGED_OVERFLOW_RADIUS,
-     ULDUAR_VEZAX_RANGED_SPACING, false},
-}};
+// Which group a slot belongs to, and where inside it. Rows run outward from the boss, files across
+// the camp; the index packs them so a group's slots stay contiguous and the trace reads L or R
+// straight off the number.
+bool VezaxSlotIsRightGroup(uint8 slotIndex) { return slotIndex >= ULDUAR_VEZAX_GROUP_SLOTS; }
+
+uint8 VezaxSlotRow(uint8 slotIndex)
+{
+    return static_cast<uint8>((slotIndex % ULDUAR_VEZAX_GROUP_SLOTS) / ULDUAR_VEZAX_CAMP_FILES);
+}
+
+uint8 VezaxSlotFile(uint8 slotIndex)
+{
+    return static_cast<uint8>(slotIndex % ULDUAR_VEZAX_CAMP_FILES);
+}
+
+// Tangential offset of a slot from the camp centre line, signed: negative is group L. File 0 is the
+// inner one of its group, so the two inner files end up 2 * GROUP_OFFSET - FILE_SPACING apart.
+float VezaxSlotTangentialOffset(uint8 slotIndex)
+{
+    float const fromGroupCentre =
+        (static_cast<float>(VezaxSlotFile(slotIndex)) - 0.5f) * ULDUAR_VEZAX_CAMP_FILE_SPACING;
+    float const magnitude = ULDUAR_VEZAX_CAMP_GROUP_OFFSET + fromGroupCentre;
+
+    return VezaxSlotIsRightGroup(slotIndex) ? magnitude : -magnitude;
+}
+
+// Radius of a slot from the boss. Row 0 is nearest, and the rows straddle the camp radius so the
+// middle of the camp sits where CAMP_RADIUS says it does.
+float VezaxSlotRadius(uint8 slotIndex)
+{
+    float const centred =
+        static_cast<float>(VezaxSlotRow(slotIndex)) - (ULDUAR_VEZAX_CAMP_ROWS - 1) * 0.5f;
+
+    return ULDUAR_VEZAX_CAMP_RADIUS + centred * ULDUAR_VEZAX_CAMP_ROW_SPACING;
+}
 
 // Claim order, not index order. Taking the lowest free index would fill group L completely before
-// group R started, and eight ranged would end up 6/2 across a split whose whole point is that a
-// Shadow Crash on one side leaves the other working.
+// group R started, and eight bots would end up 10/0 across a split whose whole point is that a Shadow
+// Crash on one side leaves the other working. Near rows first, so an under-filled camp is short at
+// the back rather than missing its front rank.
 constexpr std::array<uint8, ULDUAR_VEZAX_TOTAL_SLOTS> VEZAX_SLOT_FILL_ORDER = {{
-    0, 1, 2, 3, 4, 5,        // healers, already centred by the offset above
-    6, 12, 7, 13, 8, 14,     // near rows, alternating groups
-    9, 15, 10, 16, 11, 17,   // far rows
-    18, 21, 19, 22, 20, 23,  // overflow, only once both groups are full
+    0, 10, 1, 11,  // row 0, alternating groups
+    2, 12, 3, 13,  // row 1
+    4, 14, 5, 15,  // row 2
+    6, 16, 7, 17,  // row 3
+    8, 18, 9, 19,  // row 4
 }};
-
-bool TryGetVezaxSlotRow(uint8 slotIndex, VezaxSlotRow& row)
-{
-    for (VezaxSlotRow const& candidate : VEZAX_SLOT_ROWS)
-    {
-        if (slotIndex >= candidate.firstSlot && slotIndex < candidate.firstSlot + candidate.slotCount)
-        {
-            row = candidate;
-            return true;
-        }
-    }
-
-    return false;
-}
 
 bool VezaxTakesSlot(Player* member)
 {
     return member && PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsMainTank(member);
 }
 
-bool VezaxSlotIsHealerSlot(uint8 slotIndex) { return slotIndex < ULDUAR_VEZAX_HEALER_SLOTS; }
-
-bool VezaxSlotSuitsBot(Player* bot, uint8 slotIndex)
-{
-    return VezaxSlotIsHealerSlot(slotIndex) == PlayerbotAI::IsHeal(bot);
-}
-
-float VezaxSlotToleranceFor(uint8 slotIndex)
-{
-    return VezaxSlotIsHealerSlot(slotIndex) ? ULDUAR_VEZAX_HEALER_SLOT_TOLERANCE
-                                            : ULDUAR_VEZAX_SLOT_TOLERANCE;
-}
-
-// Which block a slot belongs to, for the trace. The index alone is readable only against the table
+// Which group a slot belongs to, for the trace. The index alone is readable only against the layout
 // above, and a postmortem is read without the source next to it.
 char const* VezaxSlotBlockName(uint8 slotIndex)
 {
-    if (VezaxSlotIsHealerSlot(slotIndex))
-        return "heal";
-    if (slotIndex < 12)
-        return "left";
-    if (slotIndex < 18)
-        return "right";
-
-    return slotIndex < 21 ? "left-overflow" : "right-overflow";
+    return VezaxSlotIsRightGroup(slotIndex) ? "R" : "L";
 }
 
 uint8 VezaxManaPct(Player* bot)
@@ -160,6 +123,24 @@ uint8 VezaxManaPct(Player* bot)
     return static_cast<uint8>(bot->GetPower(POWER_MANA) * 100 / maxMana);
 }
 
+// The slot a bot dodges from, which is its assigned one even while it is standing on a displaced
+// spot: the strafe has to keep the group's shape, and a bot that walks its own displacement into the
+// strafe arrives somewhere the rest of the group is not.
+bool TryGetVezaxDodgeSlot(Player* bot, uint8& slotIndex)
+{
+    auto const stateItr = bot ? vezaxEncounterStates.find(bot->GetInstanceId())
+                              : vezaxEncounterStates.end();
+    if (stateItr == vezaxEncounterStates.end())
+        return false;
+
+    auto const assignmentItr = stateItr->second.slotAssignments.find(bot->GetGUID());
+    if (assignmentItr == stateItr->second.slotAssignments.end())
+        return false;
+
+    slotIndex = assignmentItr->second;
+    return true;
+}
+
 // Split out of VezaxIsVaporHandler so the ranking loop can ask about other members without recursing
 // back into the ranking itself.
 bool VezaxIsVaporHandlerCandidate(Player* member)
@@ -168,21 +149,6 @@ bool VezaxIsVaporHandlerCandidate(Player* member)
         return false;
 
     return VezaxManaPct(member) < ULDUAR_VEZAX_VAPOR_HANDLER_MANA_PCT;
-}
-
-Position VezaxClampRadius(Position const& centre, Position const& spot, float minRadius,
-                          float maxRadius)
-{
-    float const distance = centre.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
-    if (distance >= minRadius && distance <= maxRadius)
-        return spot;
-
-    float const bearing =
-        distance > 0.01f ? std::atan2(spot.GetPositionY() - centre.GetPositionY(),
-                                      spot.GetPositionX() - centre.GetPositionX())
-                         : ULDUAR_VEZAX_ARC_ORIENTATION;
-
-    return VezaxPositionAt(centre, bearing, distance < minRadius ? minRadius : maxRadius);
 }
 
 }  // namespace
@@ -336,8 +302,6 @@ bool VezaxCanSoakShadowCrashField(Player* bot)
     return bot->GetMaxPower(POWER_MANA) > 0;
 }
 
-bool VezaxMustLeaveShadowCrashField(Player* bot) { return bot && PlayerbotAI::IsHeal(bot); }
-
 bool VezaxWantsVaporPuddleMana(Player* bot)
 {
     if (!bot)
@@ -378,42 +342,29 @@ void VezaxBuildAvoidPositions(Player* bot, std::vector<VezaxHazard> const& hazar
 {
     avoid.clear();
 
-    bool const avoidFields = VezaxMustLeaveShadowCrashField(bot);
-    bool const avoidPuddles = !VezaxMayStandInVaporPuddle(bot);
+    if (VezaxMayStandInVaporPuddle(bot))
+        return;
 
     for (VezaxHazard const& hazard : hazards)
-        if (hazard.isShadowCrashField ? avoidFields : avoidPuddles)
+        if (!hazard.isShadowCrashField)
             avoid.push_back(hazard.position);
 }
 
 bool TryGetVezaxSlotPosition(Player* bot, uint8 slotIndex, Position& position)
 {
-    VezaxSlotRow row;
-    if (!TryGetVezaxSlotRow(slotIndex, row))
+    if (slotIndex >= ULDUAR_VEZAX_TOTAL_SLOTS)
         return false;
 
-    Position centre = ULDUAR_VEZAX_ANCHOR;
-    if (row.bossRelative)
-    {
-        // The healer ring hangs off the boss because the Shadow Crash exclusion is measured from him,
-        // and a ranged pull can settle him yards off his spawn. With him gone there is no ring.
-        PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
-        Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
-        if (!vezax)
-            return false;
+    // Boss-relative, not anchor-relative: every distance the camp is built on - the flight time the
+    // strafe has to beat, and the exclusion that keeps crashes off the melee - is measured from him,
+    // and a ranged pull can settle him yards off his spawn. With him gone there is no camp.
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
+    if (!vezax)
+        return false;
 
-        centre = vezax->GetPosition();
-    }
-
-    float const arcWidth = row.slotCount > 1 ? static_cast<float>(row.slotCount - 1) * row.spacing /
-                                                   row.radius
-                                             : 0.0f;
-
-    float const bearing = Position::NormalizeOrientation(
-        ULDUAR_VEZAX_ARC_ORIENTATION + row.centreOffset +
-        VezaxArcSlotAngleOffset(slotIndex - row.firstSlot, row.slotCount, arcWidth));
-
-    position = VezaxPositionAt(centre, bearing, row.radius);
+    position = VezaxCampPosition(vezax->GetPosition(), VezaxSlotRadius(slotIndex),
+                                 VezaxSlotTangentialOffset(slotIndex));
     return true;
 }
 
@@ -422,11 +373,8 @@ float VezaxSlotTolerance(Player* bot)
     if (!bot)
         return ULDUAR_VEZAX_SLOT_TOLERANCE;
 
-    if (PlayerbotAI::IsMainTank(bot))
-        return ULDUAR_VEZAX_TANK_SLOT_TOLERANCE;
-
-    return PlayerbotAI::IsHeal(bot) ? ULDUAR_VEZAX_HEALER_SLOT_TOLERANCE
-                                    : ULDUAR_VEZAX_SLOT_TOLERANCE;
+    return PlayerbotAI::IsMainTank(bot) ? ULDUAR_VEZAX_TANK_SLOT_TOLERANCE
+                                        : ULDUAR_VEZAX_SLOT_TOLERANCE;
 }
 
 void EnsureVezaxSlotAssignments(Player* bot)
@@ -452,11 +400,8 @@ void EnsureVezaxSlotAssignments(Player* bot)
             }
         }
 
-        if (!holder || holder->GetMapId() != ULDUAR_MAP_ID || !VezaxTakesSlot(holder) ||
-            !VezaxSlotSuitsBot(holder, assignment.second))
-        {
+        if (!holder || holder->GetMapId() != ULDUAR_MAP_ID || !VezaxTakesSlot(holder))
             stale.push_back(assignment.first);
-        }
     }
 
     for (ObjectGuid const& guid : stale)
@@ -481,7 +426,7 @@ void EnsureVezaxSlotAssignments(Player* bot)
 
         for (uint8 slotIndex : VEZAX_SLOT_FILL_ORDER)
         {
-            if (used[slotIndex] || !VezaxSlotSuitsBot(member, slotIndex))
+            if (used[slotIndex])
                 continue;
 
             state.slotAssignments[member->GetGUID()] = slotIndex;
@@ -522,8 +467,8 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
     auto const assignmentItr = state.slotAssignments.find(bot->GetGUID());
     if (assignmentItr == state.slotAssignments.end())
     {
-        // Every slot of this bot's kind is taken - 7 or more healers, or 19 or more other ranged. It
-        // holds no position at all from here on, which nothing else in the trace would show.
+        // The camp is full - 21 or more healers and ranged between them. It holds no position at all
+        // from here on, which nothing else in the trace would show.
         RaidObs::NoteDerived(bot, "vezax.block", "unslotted");
         return false;
     }
@@ -535,7 +480,7 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
     if (!TryGetVezaxSlotPosition(bot, assignmentItr->second, ownSlot))
         return false;
 
-    float const tolerance = VezaxSlotToleranceFor(assignmentItr->second);
+    float const tolerance = ULDUAR_VEZAX_SLOT_TOLERANCE;
 
     if (avoid.empty() || IsVezaxSpotSafe(ownSlot, avoid, tolerance))
     {
@@ -545,15 +490,16 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
         return true;
     }
 
-    // The slot is buried. Take the nearest slot of the same kind that is clear and unclaimed, rather
-    // than fleeing to somewhere the formation does not know about.
+    // The slot is buried. Take the nearest clear unclaimed slot rather than fleeing to somewhere the
+    // camp does not know about. Only vapor puddles get here - a Shadow Crash field is not on anyone's
+    // avoid list, so a field landing on the camp displaces nobody.
     uint8 displaced = assignmentItr->second;
     float bestDistance = std::numeric_limits<float>::max();
     bool found = false;
 
     for (uint8 slotIndex = 0; slotIndex < ULDUAR_VEZAX_TOTAL_SLOTS; ++slotIndex)
     {
-        if (slotIndex == assignmentItr->second || !VezaxSlotSuitsBot(bot, slotIndex))
+        if (slotIndex == assignmentItr->second)
             continue;
 
         bool claimed = false;
@@ -573,7 +519,7 @@ bool TryGetVezaxSlot(Player* bot, std::vector<VezaxHazard> const& hazards, Posit
         if (!TryGetVezaxSlotPosition(bot, slotIndex, candidate))
             continue;
 
-        if (!IsVezaxSpotSafe(candidate, avoid, VezaxSlotToleranceFor(slotIndex)))
+        if (!IsVezaxSpotSafe(candidate, avoid, ULDUAR_VEZAX_SLOT_TOLERANCE))
             continue;
 
         float const distance = bot->GetExactDist2d(candidate.GetPositionX(), candidate.GetPositionY());
@@ -613,28 +559,9 @@ bool TryGetVezaxMarkSpot(Player* bot, Position& position)
     if (!bot)
         return false;
 
-    float const ownRadius =
-        ULDUAR_VEZAX_ANCHOR.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY());
-
-    // Ranged walk straight outward along the bearing they already hold. That clears the 15 yd drain
-    // in 18 yd of travel instead of the 40-odd it takes to reach the far side of the room, and the
-    // debuff only lasts 10s. The cap keeps them inside the arena bubble - past it the formation gate
-    // goes false and the movement multiplier hands their generic movers back mid-run.
-    if (VezaxTakesSlot(bot) && !PlayerbotAI::IsHeal(bot) && ownRadius > 1.0f)
-    {
-        float const bearing = std::atan2(bot->GetPositionY() - ULDUAR_VEZAX_ANCHOR.GetPositionY(),
-                                         bot->GetPositionX() - ULDUAR_VEZAX_ANCHOR.GetPositionX());
-        float const radius = std::min(ownRadius + ULDUAR_VEZAX_MARK_SEPARATION,
-                                      ULDUAR_VEZAX_MARK_MAX_RADIUS);
-
-        position = VezaxPositionAt(ULDUAR_VEZAX_ANCHOR, Position::NormalizeOrientation(bearing),
-                                   radius);
-        return true;
-    }
-
-    // Everyone else takes the nearest of the three spots behind the boss. The core prefers a target
-    // further than 15 yd out whenever enough players are there, and the ranged always are, so this is
-    // the rare branch rather than the common one.
+    // The nearest of three spots south of the boss, opposite the camp. Stepping outward along the
+    // bot's own bearing is what a spread raid can afford; one camp cannot, because the walk ends
+    // inside 15 yd of the back rows and drains them for the rest of the debuff.
     std::array<float, ULDUAR_VEZAX_MARK_SPOT_COUNT> const bearings = {
         ULDUAR_VEZAX_ARC_ORIENTATION + ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET,
         ULDUAR_VEZAX_ARC_ORIENTATION - ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET,
@@ -692,51 +619,49 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
     if (!bot)
         return false;
 
+    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
+
+    // The whole group steps the same way, so the impact keeps its bearing relative to everyone and
+    // the camp arrives intact on the other side. A per-bot search for the nearest clear spot cannot
+    // do that: it points each bot wherever its own footprint happens to be emptiest, which scatters
+    // the group and lands several of them back under the next crash.
+    uint8 slotIndex = 0;
+    if (vezax && TryGetVezaxDodgeSlot(bot, slotIndex))
+    {
+        float const strafe = VezaxSlotIsRightGroup(slotIndex) ? ULDUAR_VEZAX_CAMP_STRAFE
+                                                              : -ULDUAR_VEZAX_CAMP_STRAFE;
+        Position const strafed =
+            VezaxCampPosition(vezax->GetPosition(), VezaxSlotRadius(slotIndex),
+                              VezaxSlotTangentialOffset(slotIndex) + strafe);
+
+        // Worth checking rather than assuming: the strafe clears the impact by design, but the impact
+        // is only where the crash went - a puddle already sitting on the far lane is not.
+        if (strafed.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >=
+            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+        {
+            RaidObs::NoteDerived(bot, "vezax.dodge", "strafe");
+            spot = strafed;
+            return true;
+        }
+    }
+
+    // No slot, no boss, or the lane is buried. Anything out of the blast beats standing in it.
     std::vector<Position> const avoid = {impact};
     Position const candidate = FindNearestPositionClearOfHazards(
         bot, avoid, ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE,
         ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS);
 
     // vezax.dodge is which rule produced the destination: the move record carries the coordinate and
-    // the action that issued it, but nothing that separates these four. "none" is the search coming
-    // up empty, "blast" the band being given up because the clamp landed back inside the impact.
+    // the action that issued it, but nothing that separates the three.
     if (candidate == Position())
     {
         RaidObs::NoteDerived(bot, "vezax.dodge", "none");
         return false;
     }
 
-    char const* branch = "band";
-
-    // The helper answers with the nearest clear spot in any direction, which for a bot standing on
-    // the impact is as likely to point into the melee ball as out of it. Healers get pulled back
-    // inside the boss's target-exclusion radius instead: leaving it is what puts them in the pool.
-    if (PlayerbotAI::IsHeal(bot))
-    {
-        branch = "heal";
-
-        PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
-        Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
-        spot = vezax ? VezaxClampRadius(vezax->GetPosition(), candidate, 0.0f,
-                                        ULDUAR_VEZAX_HEALER_DODGE_BAND_MAX)
-                     : candidate;
-    }
-    else
-    {
-        spot = VezaxClampRadius(ULDUAR_VEZAX_ANCHOR, candidate, ULDUAR_VEZAX_DODGE_BAND_MIN,
-                                ULDUAR_VEZAX_DODGE_BAND_MAX);
-    }
-
-    // Clamping moves the spot, so it can land back inside the blast. When it does, the unclamped
-    // answer is the safer of the two - the band is a preference, the impact is 11310 and a knockback.
-    if (spot.GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) <
-        ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
-    {
-        branch = "blast";
-        spot = candidate;
-    }
-
-    RaidObs::NoteDerived(bot, "vezax.dodge", branch);
+    RaidObs::NoteDerived(bot, "vezax.dodge", "search");
+    spot = candidate;
     return true;
 }
 

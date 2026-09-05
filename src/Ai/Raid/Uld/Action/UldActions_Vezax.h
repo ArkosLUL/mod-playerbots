@@ -35,9 +35,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Step out of where the missile in flight will land. Per bot rather than as a group: clearing a
-// 8 yd block from a 10 yd blast by moving it as one needs about 18 yd, which is the whole 2.6s of
-// flight with nothing left for the walk back.
+// Step out of where the missile in flight will land. Each bot walks its own group's strafe, so the
+// group arrives with its shape intact and the impact keeps its bearing relative to all of them.
 class VezaxShadowCrashDodgeAction : public MovementAction
 {
 public:

@@ -34,8 +34,9 @@ public:
 };
 
 // A Shadow Crash missile in flight with this bot standing where it will land. Melee and the tank are
-// left out: SelectTarget skips everyone within 12.5 yd of Vezax, so no impact lands nearer than
-// 14.5 yd and neither of them can be caught by one.
+// left out because they hold the boss, not because they are safe: SelectTarget only skips what is
+// inside 3 yd plus both combat reaches, about 12.5 yd, and a melee bot sits right on that line - one
+// traced pull crashed a rogue at 16.1 yd and caught three more melee with it.
 class VezaxShadowCrashDodgeTrigger : public Trigger
 {
 public:

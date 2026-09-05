@@ -211,8 +211,8 @@ bool VezaxRaidPositionAction::Execute(Event /*event*/)
     if (!TryGetVezaxSlot(bot, hazards, slot))
     {
         // Melee hold the boss instead of taking a slot. All they need is not to be stacked on each
-        // other; no Shadow Crash can reach them, because SelectTarget skips everyone within 12.5 yd
-        // of Vezax and the nearest impact therefore lands 14.5 yd out.
+        // other - a crash can still reach them, but walking them off it would take them off the
+        // boss, which is the one thing the camp's radii depend on.
         _slotReached = false;
         if (Player* crowd = GetNearestPlayerInRadius(bot, ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS))
             return FleePosition(crowd->GetPosition(), ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS);

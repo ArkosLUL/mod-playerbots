@@ -5,7 +5,6 @@
  */
 
 #include "Map.h"
-#include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -55,8 +54,8 @@ void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float ra
 
 bool GainsNothingFromVaporPuddle(Player* bot) { return !VezaxMayStandInVaporPuddle(bot); }
 
-// Everyone the dodge node will move. Melee and the tank are not on it: SelectTarget skips anything
-// within 12.5 yd of Vezax, so no impact ever lands near enough to reach them.
+// Everyone the dodge node will move. Melee and the tank are not on it: they hold the boss, and the
+// camp's radii are all measured from him.
 bool DodgesShadowCrash(Player* bot)
 {
     return bot && PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsMainTank(bot);
@@ -77,17 +76,17 @@ public:
 
         if (spellInfo->Id == SPELL_VEZAX_SHADOW_CRASH_CAST)
         {
-            std::list<TargetInfo> const& targets = *spell->GetUniqueTargetInfo();
-            if (targets.empty())
+            // Both effects are TRIGGER_MISSILE aimed at TARGET_DEST_TARGET_ENEMY, so the spell
+            // carries a destination and no unit target - GetUniqueTargetInfo is empty for it. The
+            // destination is frozen at cast time, so this is where the missile lands however far the
+            // target walks in the meantime.
+            Position impact;
+            if (WorldLocation const* dst = spell->m_targets.GetDstPos())
+                impact.Relocate(dst->GetPositionX(), dst->GetPositionY(), dst->GetPositionZ());
+            else if (Unit* target = spell->m_targets.GetUnitTarget())
+                impact = target->GetPosition();
+            else
                 return;
-
-            Player* target = ObjectAccessor::GetPlayer(*caster, targets.front().targetGUID);
-            if (!target)
-                return;
-
-            // TARGET_DEST_TARGET_ENEMY freezes the destination here, at cast time, so this position
-            // is where the missile lands however far the target walks in the meantime.
-            Position const impact = target->GetPosition();
 
             InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,
                                       &DodgesShadowCrash);

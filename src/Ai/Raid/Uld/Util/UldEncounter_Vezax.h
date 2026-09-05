@@ -52,20 +52,10 @@ enum UlduarVezaxIds
 
 // Shadow Crash lands as a missile: 62660 is instant with Speed 10, so its destination is fixed at
 // cast time and a bot 26 yd out has ~2.6s to leave it. The impact (62659) is 10 yd and knocks back,
-// so standing still is not an option either way. 12 yd of travel is about 1.7s and leaves time to
-// walk back into the field the missile drops.
+// so standing still is not an option either way.
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS = 10.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
-
-// FindNearestPositionClearOfHazards answers with the nearest clear spot, which for a caster standing
-// on the impact is as likely to point inward as outward. Ranged keep to the band their blocks live
-// in, so a dodge never dumps one in the melee ball. Healers get their own ceiling instead of that
-// floor: stepping past 12.5 yd from the boss puts them back in the Shadow Crash target pool, which is
-// the whole reason they stand where they do.
-constexpr float ULDUAR_VEZAX_DODGE_BAND_MIN = 16.0f;
-constexpr float ULDUAR_VEZAX_DODGE_BAND_MAX = 36.0f;
-constexpr float ULDUAR_VEZAX_HEALER_DODGE_BAND_MAX = 12.0f;
 
 // Both Vezax ground hazards are 8 yd: the Shadow Crash field (63277) and the puddle a killed
 // Saronite Vapor leaves on its corpse (63322). Plus a yard of slack, since a bot that stops exactly
@@ -78,64 +68,66 @@ constexpr float ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS = 60.0f;
 constexpr float ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS = 25.0f;
 
 // The field is worth +100% magic damage, +100% cast speed and -70% mana cost for 20s, which is the
-// only real answer to Aura of Despair - so mana casters walk into it rather than out of it. Healers
-// never do: it also cuts healing done by 75%, which halves their throughput outright.
+// only real answer to Aura of Despair - so mana casters walk into it rather than out of it. Only the
+// damage and healing halves are on 63277 itself; the cast speed and mana cost ride 65269, linked to
+// it through spell_linked_spell, so reading the DBC row alone says the field does nothing for mana.
+//
+// Healers never travel to one: it also cuts healing done by 75%, so a healer in a field heals for
+// 0.25x per cast and 0.83x per point of mana. They stand in whichever one lands on the camp because
+// the camp is where crashes land, not because it is worth walking to.
 // Capped travel, or every caster abandons its slot for one 8 yd circle and Shadow Crash catches the
 // lot of them next cast.
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 15.0f;
 
-// The puddle deals 100 * 2^stacks every 4s and hands back half as mana. Leave once the next tick
-// would take this share of current health - a fixed stack cap kills undergeared 10-man healers and
-// leaves value on the table for geared 25-man ones.
+// 63323 re-applies the puddle aura every 2s, and each re-apply deals 100 * 2^stacks and hands back
+// half of it as mana. Leave once the next tick would take this share of current health - a fixed
+// stack cap kills undergeared 10-man healers and leaves value on the table for geared 25-man ones.
 constexpr float ULDUAR_VEZAX_VAPOR_SOAK_MAX_TICK_HP_PCT = 0.35f;
 
 // Vezax formation. He spawns dead centre of his room facing north (o 1.658) and the raid comes down
 // from the north: the trash pack sits at y 109-137, and the only door - 194750 at y 31.5 - is
 // DOOR_TYPE_PASSAGE, so it opens when he dies, on the way to Yogg. Everything the raid stands on goes
 // north of the anchor, leaving the southern half for the Mark of the Faceless spots. Every radius
-// below is navprobe-verified on map 603: the floor is a WMO, flat at Z 342.378, with no holes at any
-// bearing inside 45 yd.
+// below is navprobe-verified on map 603: the floor is a WMO with no holes at any bearing inside
+// 45 yd. It is flat at Z 342.378 out to about 24 yd north and then settles half a yard lower on WMO
+// rubble, which UpdateAllowedPositionZ absorbs - the camp spans that seam and nothing there is off
+// mesh.
 constexpr float ULDUAR_VEZAX_ARC_ORIENTATION = 1.5708f;
 
-// Three blocks, not three arcs. A block is a centre bearing, two rows, and three slots per row at a
-// fixed chord spacing; each row's arc width is derived from that spacing, so the shape holds at any
-// radius.
+// One camp for every healer and ranged bot, split into two groups that dodge in opposite directions.
+// A group is two files of five: files are the tangential axis, rows the radial one, and both are
+// measured from the boss so a ranged pull that leaves him off his spawn carries the whole camp with
+// him.
 //
-// Ranged take two of them because the field is 8 yd and the impact is 10. At 3.7 yd spacing a group's
-// furthest pair sits 7.97 yd apart, so a field landing on any slot covers the other five - and two
-// groups 43.8 yd apart cannot both be caught by one impact.
+// The files are what set the strafe distance. Everyone in a group moves by the same vector, so the
+// member on the far side of the target has to cross the impact and ends up STRAFE minus the group's
+// own width away from it. 15 - 3 = 12 yd against a 10 yd impact, the same 2 yd of margin the search
+// dodge aimed for. Widen the files and the strafe has to grow with them.
 //
-// Healers sit at 11.25 because SelectTarget skips anything within 3 yd of Vezax plus *both* combat
-// reaches - 3 + 8 + 1.5 = 12.5 - so a healer inside that line is never a Shadow Crash target, and no
-// crash then lands nearer the boss than 14.5 yd. Their ring is measured from the boss, not the
-// anchor: the exclusion is his, and a ranged pull can leave him yards off his spawn.
-constexpr float ULDUAR_VEZAX_RANGED_GROUP_OFFSET = 1.0f;
-constexpr float ULDUAR_VEZAX_HEALER_RADIUS = 11.25f;
-constexpr float ULDUAR_VEZAX_HEALER_SPACING = 4.5f;
-constexpr float ULDUAR_VEZAX_RANGED_NEAR_RADIUS = 24.5f;
-constexpr float ULDUAR_VEZAX_RANGED_FAR_RADIUS = 27.5f;
-// A thirteenth ranged bot would otherwise get no slot and fall through to the melee de-clump, which
-// walks it onto the boss. This row is deliberately 9 yd off the near one, outside the one-field
-// guarantee: overflow is somewhere to stand, not somewhere to soak.
-constexpr float ULDUAR_VEZAX_RANGED_OVERFLOW_RADIUS = 33.5f;
-constexpr float ULDUAR_VEZAX_RANGED_SPACING = 3.7f;
-constexpr uint8 ULDUAR_VEZAX_BLOCK_ROW_SLOTS = 3;
+// The near row is what the flight time binds, and only the near row: the missile covers boss to
+// impact at 10 yd/s, so a front rank at 22 yd gives 2.2s. The worst bot is the inner-file one of the
+// group that got hit, which has to cross past the impact and needs 13 yd - 1.9s at run speed - to be
+// clear of it. That leaves about a third of a second, and every row behind the first has more.
+// Pulling the camp inward is what spends it; the strafe distance does not, because a bot is out of
+// the blast long before it finishes walking.
+constexpr float ULDUAR_VEZAX_CAMP_RADIUS = 28.0f;
+constexpr float ULDUAR_VEZAX_CAMP_ROW_SPACING = 3.0f;
+constexpr float ULDUAR_VEZAX_CAMP_FILE_SPACING = 3.0f;
+// Half the gap between the two groups' inner files. 4.0 puts them 5 yd apart, close enough that one
+// set of heals and one Bloodlust covers the camp, far enough that they are not one clump.
+constexpr float ULDUAR_VEZAX_CAMP_GROUP_OFFSET = 4.0f;
+constexpr float ULDUAR_VEZAX_CAMP_STRAFE = 15.0f;
+constexpr uint8 ULDUAR_VEZAX_CAMP_ROWS = 5;
+constexpr uint8 ULDUAR_VEZAX_CAMP_FILES = 2;
 
-// Slot index space, which a RaidObs trace writes as a bare number: [0,6) healers, [6,12) group L,
-// [12,18) group R, [18,21) L overflow, [21,24) R overflow. The main tank is not in here - it has
-// exactly one holder and comes straight off IsMainTank.
-constexpr uint8 ULDUAR_VEZAX_HEALER_SLOTS = 6;
-constexpr uint8 ULDUAR_VEZAX_RANGED_GROUP_SLOTS = 6;
-constexpr uint8 ULDUAR_VEZAX_RANGED_OVERFLOW_SLOTS = 3;
-constexpr uint8 ULDUAR_VEZAX_RANGED_SLOTS =
-    2 * (ULDUAR_VEZAX_RANGED_GROUP_SLOTS + ULDUAR_VEZAX_RANGED_OVERFLOW_SLOTS);
-constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = ULDUAR_VEZAX_HEALER_SLOTS + ULDUAR_VEZAX_RANGED_SLOTS;
+// Slot index space, which a RaidObs trace writes as a bare number: [0,10) group L, [10,20) group R.
+// The main tank is not in here - it has exactly one holder and comes straight off IsMainTank.
+constexpr uint8 ULDUAR_VEZAX_GROUP_SLOTS = ULDUAR_VEZAX_CAMP_ROWS * ULDUAR_VEZAX_CAMP_FILES;
+constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
 
-// Per band, because the packing differs. The arrival deadband is twice the tolerance, so the old 2.0
-// was wider than the 3.7 yd gap between ranged neighbours. Healers have 2.25 yd of room between the
-// melee ring at 10.25 and the target-exclusion line at 12.5, and 0.8 is what keeps them inside both.
+// The arrival deadband is twice the tolerance, so anything at or above 1.5 would be wider than the
+// 3 yd gap between neighbours and let a bot settle on someone else's slot.
 constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 1.2f;
-constexpr float ULDUAR_VEZAX_HEALER_SLOT_TOLERANCE = 0.8f;
 constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 
 // The hall runs 70 yd north and west of the anchor, so this stops well short of any wall. It is not
@@ -148,19 +140,13 @@ constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
 // Melee and the tank hold the boss rather than take slots, so all they get is a nudge apart.
 constexpr float ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS = 4.0f;
 
-// Mark of the Faceless drains 5000/s from every ally within 15 yd and heals Vezax for it. Ranged step
-// straight outward along their own bearing, an 18 yd walk rather than the 40-odd it takes to reach
-// the far side of the room - the debuff lasts 10s and travel is the whole cost of the mechanic.
-// Capped inside the arena bubble: past it the formation gate goes false, the movement multiplier
-// hands the generic movers back, and the bot wanders instead of coming home.
-//
-// Everyone else keeps the three fixed spots behind the boss. The core only marks someone inside 15 yd
-// when fewer than 9 (25m) / 4 (10m) players are further out, and the twelve ranged always clear that
-// bar, so that path is the corner case rather than the common one.
-constexpr float ULDUAR_VEZAX_MARK_SEPARATION = 18.0f;
-constexpr float ULDUAR_VEZAX_MARK_MAX_RADIUS = 44.0f;
+// Mark of the Faceless drains 5000/s from every ally within 15 yd and heals Vezax for it, which
+// makes it the one mechanic a single camp cannot absorb: the whole camp is inside 15 yd of anyone in
+// it. The marked bot leaves for one of three fixed spots south of the boss, opposite the camp - a
+// step outward along its own bearing is not enough, because 18 yd from the front row lands 6 yd short
+// of the back row and drains it anyway.
 constexpr float ULDUAR_VEZAX_MARK_SPOT_RADIUS = 26.0f;
-constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the blocks
+constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the camp
 constexpr float ULDUAR_VEZAX_MARK_SPOT_TOLERANCE = 3.0f;
 constexpr uint8 ULDUAR_VEZAX_MARK_SPOT_COUNT = 3;
 
@@ -193,13 +179,14 @@ struct VezaxEncounterTargets
 
 // Slots are held, not re-derived. Ranking the raid by guid every tick means one death renumbers
 // everyone behind the corpse and the whole formation shuffles mid-fight, so an assignment is kept
-// until its holder is gone. The index space is laid out above next to the radii:
-// [0,6) healers, [6,12) group L, [12,18) group R, [18,21) L overflow, [21,24) R overflow.
+// until its holder is gone. The index space is laid out above next to the radii: [0,10) group L,
+// [10,20) group R, packed row-major inside each so the low bit is the file.
 struct VezaxEncounterState
 {
     RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
-    // Where a bot stands while its own slot is buried under a hazard. Cleared as soon as the real
-    // slot is clear again.
+    // Where a bot stands while its own slot is buried under a vapor puddle. Cleared as soon as the
+    // real slot is clear again. A Shadow Crash field never puts anyone here - the camp stands in
+    // those - so this is rare, and a bot dodges from its assigned slot rather than this one.
     RaidObs::ObsGuidMap<uint8> displacedAssignments{"vezax.displaced"};
 };
 
@@ -233,28 +220,27 @@ bool IsVezaxSpotSafe(Position const& spot, std::vector<Position> const& avoid, f
 
 // Anything with a mana bar that is not a healer. The field's -70% cost is MOD_POWER_COST_SCHOOL_PCT
 // with a school mask of 127, so it covers physical too and a hunter's shots get it as readily as a
-// mage's bolts - only the damage half is magic-only. Healers stay out: it cuts healing done by 75%.
+// mage's bolts - only the damage half is magic-only. Healers stay out of this list: they stand in
+// whichever field lands on the camp, but the -75% healing means one is never worth walking to.
 bool VezaxCanSoakShadowCrashField(Player* bot);
-
-// Only healers are actually hurt by the field. Melee and tanks gain nothing from it either, but
-// nothing in it damages them, so walking them out would spend uptime to avoid a buff they cannot use.
-bool VezaxMustLeaveShadowCrashField(Player* bot);
 
 // Anything with a mana bar that is not already full. Everyone else takes the puddle's doubling
 // damage for no return and should be out of it from the first tick.
 bool VezaxWantsVaporPuddleMana(Player* bot);
 
-// Who may stand in a vapor puddle at all. Vapors spawn on the boss and wander 4 yd, so an 8 yd puddle
-// covers the tank, the melee and most of the healer ring: ungated, one puddle puts 100 * 2^stacks on
-// thirteen bots. The handlers went and made it; anyone else has to be low enough to need it.
+// Who may stand in a vapor puddle at all. A vapor spawns at a random point 45 yd out from Vezax and
+// wanders 4 yd from there on a NullCreatureAI, so it never comes to the raid and cannot be dragged:
+// the puddle lands where it died and the raid walks to it. The handlers went and made it; anyone else
+// has to be low enough to need it.
 bool VezaxMayStandInVaporPuddle(Player* bot);
 
-// The puddle deals 100 * 2^stacks every 4s. Leaving is a prediction about the next tick, not a
+// The puddle deals 100 * 2^stacks every 2s. Leaving is a prediction about the next tick, not a
 // stack count: the same cap kills a 10-man healer and wastes mana for a geared 25-man one.
 bool VezaxShouldLeaveVaporPuddle(Player* bot);
 
-// What this particular bot has to stay out of. A mana caster wants to be standing in a Shadow Crash
-// field, so for it only the vapor puddles count - and only those it is not entitled to.
+// What this particular bot has to stay out of. Nobody avoids a Shadow Crash field - the camp is
+// where they land and the raid stands in them - so this is vapor puddles, and only those the bot is
+// not entitled to.
 void VezaxBuildAvoidPositions(Player* bot, std::vector<VezaxHazard> const& hazards,
                               std::vector<Position>& avoid);
 
