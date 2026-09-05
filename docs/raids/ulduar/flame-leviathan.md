@@ -76,9 +76,15 @@ despite the name**, and never ignites anything.
   `MECHANIC_INTERRUPT`-immune, but only Electroshock's effect 1 carries that mechanic; effect 2
   (8489 damage) lands, the spell hits, and the script hook fires.
 - **Ram, Electroshock and Sonic Horn are `TARGET_UNIT_CONE_ENEMY_104`**, and a cone is two limits.
-  `Spell::CheckRange` returns OK immediately for `RangeEntry->ID == 1`, so the **effect radius** is
-  the reach — Ram 18 yd, Electroshock 25, Sonic Horn 35 — and `world.spell_cone` is the **width**:
-  Ram 100°, Electroshock 60°, Sonic Horn 50° (no row = 60°). `isInFront` passes no target radius, so
+  `Spell::CheckRange` returns OK immediately for `RangeEntry->ID == 1`, which is what Electroshock
+  and Sonic Horn carry, so for those two the **effect radius** is the reach: 25 and 35 yd. **Ram is
+  not one of them** — its `RangeIndex` is 11, a real 0–15 entry, so `CheckRange` enforces **15 yd**
+  and the 18 yd effect radius never applies. Reading 18 off the radius index cost a release of casts
+  rejected on range; it stayed invisible while Ram only ever pointed at a boss with 15 yd of combat
+  reach to hide the gap. `world.spell_cone` is the **width**: Ram 100°, Electroshock 60°, Sonic Horn
+  50°, and the demolisher's Ram 62308 also 100° — check the **live** table, because
+  `data/sql/base/db_world/spell_cone.sql` has no row for any of them and reads as "engine default".
+  `isInFront` passes no target radius, so
   his 15 yd reach widens the arc by nothing, and `CAST_ANGLE_IN_FRONT` is 120° — wider than all
   three, so `CastVehicleSpell` never turns the vehicle for them. Gate on both limits and turn the
   vehicle yourself, or the energy buys nothing and the interrupt election picks an engine that lands
@@ -171,9 +177,53 @@ periodic ground event:
 | Storm | 65076 | 33364 (8 spawn) | Static lightning strikes at 8 fixed marks, ~5s telegraph |
 | Flame | 65075 | 33369 | Escort-path **moving** fire trail, drops fire every 2s |
 | Frost | 65077 | 33108 (2 spawn) | Walks to a target, roots itself, fires 5s later where it stopped |
-| Life | 64482 | 33367 | Spawns attacking adds — kill, not dodge |
+| Life | 64482 | 33367 (4 spawn) | Spawns adds that never despawn — kill, not dodge |
 
-Life tower is skipped: its adds are already covered by the vehicle's kill-nearest-attacker loop.
+**The Life tower adds were never being shot, and "the kill-nearest-attacker loop covers it" was
+wrong.** `FlameLeviathanVehicleAction` chose `boss ? boss : add`, so an add was only ever considered
+with the boss dead or off-grid, and the `add` it fell back to came from the bot's own `"attackers"`
+list — which is empty inside a vehicle, because threat here belongs to the vehicle creature. Every
+seat fired at the boss and nothing else. On 2026-09-05, 72 adds spawned in one 287 s pull, the field
+was never clear after 32 s, and the only damage they took came from bots' personal rotations leaking
+past the movement multiplier: **22 s to kill one add**.
+
+**The wards fire forever and the adds never leave.** `ActivateTowers` schedules `EVENT_FREYA` **once**
+at 30 s and that case has no `events.Repeat`, so the four wards spawn a single time, one per arena
+corner — the same four points as `ULDUAR_FL_ARENA_CORNERS`. Each ward then runs its own 29 s timer
+for the rest of the pull, ungated on combat. On every wave `npc_freya_ward` walks **all** existing
+summons, not just the new ones, forcing `TEMPSUMMON_MANUAL_DESPAWN` (so nothing times out — only
+`Reset()`, `JustDied()` or `ACTION_DESPAWN_ADDS` clears them) and re-running
+`SelectNearestTarget(200.0f)` + `AttackStart`. That re-target is why they do not stay in their
+corner: measured, they travel a **median 124 yd** from spawn and only 4% stay within 30 yd.
+`SelectNearestTarget` is not player-only and the raid rides vehicles, so **they attack hulls, not
+people** — which is also why they cost so much: hull health fell 1.96%/5 s clean against 2.57%/5 s
+with an add in melee, and adds were 20% of all raid damage taken.
+
+| Add | Entry | Health | AI |
+|---|---|---|---|
+| Writhing Lasher | 33387 | 190,260 | one `smart_scripts` row: melee + `Lash 65062` on its victim every 2 s |
+| Ward of Life | 34275 | 504,000 | same |
+
+Against 230,498,304 boss health those pools are a rounding error, so **an add in a weapon's band
+outranks the boss**. The guns that matter, all verified from `Spell.dbc`: **Fire Cannon 62358**
+(siege *turret*, 10–70 yd, its missile 62357 lands **76k in a 20 yd sphere**) is the heaviest and
+widest — it alone covers 60% of add-frames from station; **Mortar 62634** (demolisher gunner, 0–50,
+11 yd splash) is free and has no minimum, covering what Fire Cannon's 10 yd floor cannot; both **Ram
+62345** and **Ram 62308** are 15 yd cones that *knock back* (Effect 98). 82% of add-frames are inside
+some band with nobody moving, so target selection does most of the work and repositioning little.
+
+**One siege engine per corner, and never all of them.** Ranks 1–4 of the live crewed siege hulls post
+`ULDUAR_FL_CORNER_STANDOFF` (12 yd) inside their corner facing out, so Ram's knockback drives what it
+catches deeper in rather than back at the fleet, and Fire Cannon still clears its 10 yd minimum.
+**Rank 0 never posts**: `FlameLeviathanIsVentInterrupter` requires `FlameLeviathanCanElectroshock`, a
+25 yd cone test against the boss, and a corner is ~90 yd from where he actually roams — post every
+engine and Flame Vents becomes uninterruptible. The posting stays off until a ward or add is actually
+sighted, so a pull with the Life tower down never sends anyone to a corner.
+
+**A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
+turned, while `DriveTo`'s park block re-faces the boss every tick. `HoldStation` therefore faces
+whatever the cast node is about to shoot, using the same bands — including the exclusion, since the
+tar lead never shoots adds and so never turns for one.
 
 **Hodir's Fury is a telegraph, not a chase.** `npc_hodirs_fury` *walks* (`SetWalk(true)`) after
 `MoveFollow(target, 0, 0)`; on arrival `MovementInform` roots it and starts a **5000 ms fuse**, then
@@ -234,11 +284,28 @@ chopper never trips it** — it sat inside the blast 15.8% (A) / 30.3% (B) of th
 
 **Hodir's Fury** (`--fury`): A 27 commits, 16 of 19 cleared 10 yd in 5 s, **3 caught**; B 20 commits,
 34 of 36 cleared, **2 caught**. Median distance from the centre at +5 s: 18.3 / 17.6 yd.
+## Baseline to beat — 2026-09-05, before the Freya-adds fixes
+
+Three wipes with the Storm and Life towers live, boss floors 76.0% / 72.2% / **27.4%**. Full numbers
+and the per-trace tables are in
+[docs/plans/flame-leviathan-freya-adds/flame-leviathan-freya-adds.BASELINE.md](../../plans/flame-leviathan-freya-adds/flame-leviathan-freya-adds.BASELINE.md);
+reproduce any of them with `flame_leviathan.py <trace> --adds`.
+
+Worth carrying forward from that set: the Battering Ram fix above **worked** — the backoff went from
+catching 27–30% of real exposure to **64.6%**, with false alarms down from 71%/59% to **47.6%**. No
+`62297` landed in any of the three, so the thaw is still unverified in the field.
+
 ## Known gaps
 
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
   `master->GetVehicle()` — the Oculus `GroupFlyingTrigger` defect, where one human who has not
   mounted freezes the whole raid.
+- **The tar lead is never actually elected.** No `fl.station` note read `tar-lead` in any of the
+  three 2026-09-05 traces. `FlameLeviathanTarLeadDistance` clamps the lead to
+  `dist(boss, pursued) − bossReach(15) − BATTERING_RAM_RADIUS(25) − size`, so the pursued vehicle has
+  to be more than ~40 yd from the boss for the slot to exist at all — and while he is chasing it, it
+  rarely is. The clamp that protects the lead from Battering Ram appears to have closed the role.
+  Tar still lands, but only from `ChopperAction`'s incidental "he is behind us" branch.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**

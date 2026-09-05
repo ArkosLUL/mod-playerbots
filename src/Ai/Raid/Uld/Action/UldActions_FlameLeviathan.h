@@ -11,6 +11,8 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
+#include <optional>
+
 //
 //  Flame Leviathan
 //
@@ -80,6 +82,14 @@ protected:
     // lower-priority nodes still run and a silently failing move shows up as a stationary vehicle.
     bool DriveTo(Position const& goal, Unit* faceTarget, bool faceAway,
                  MovementPriority priority = MovementPriority::MOVEMENT_COMBAT);
+
+    // Same, facing a fixed point. A posted siege engine faces its corner, which is a place and not
+    // a unit, and there is nothing standing there to aim at.
+    bool DriveTo(Position const& goal, Position const& facePoint,
+                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT);
+
+    // The orientation, if any, is applied only once parked. Empty means "hold what you are on".
+    bool DriveToImpl(Position const& goal, std::optional<float> facing, MovementPriority priority);
 
     Unit* NearestCrate(float radius);
     void ResetKite();

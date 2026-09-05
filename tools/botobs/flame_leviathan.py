@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Score the two things that decide a Flame Leviathan pull, from a RaidObs trace.
+"""Score the three things that decide a Flame Leviathan pull, from a RaidObs trace.
 
-    flame_leviathan.py <file>          both sections
+    flame_leviathan.py <file>          every section
     flame_leviathan.py <file> --ram    Battering Ram exposure only
     flame_leviathan.py <file> --fury   Hodir's Fury only
+    flame_leviathan.py <file> --adds   Freya's Ward adds only
 
 **Battering Ram (62376)** is cast `me->CastSpell(me->GetVictim(), ...)` when the boss is
 `IsWithinCombatRange(victim, 15.0f)`, and its ImplicitTargetA is 53 = TARGET_DEST_TARGET_ENEMY with
@@ -15,6 +16,19 @@ distance-to-boss gate the module uses, so the two can be compared directly.
 MoveFollow(target, 0, 0); on arrival it roots itself and runs a 5 s fuse, then drops a 10 yd blast
 carrying an undispellable 60 s stun (62297) **where it stopped**. So the dodge window is the 5 s the
 reticle spends stationary, and `--fury` measures who cleared 10 yd inside it.
+
+**Freya's Ward** spawns four wards once, 30 s in, at the arena corners; each fires a wave every 29 s
+for the rest of the pull, and the adds carry TEMPSUMMON_MANUAL_DESPAWN so they never time out. Every
+wave also re-runs SelectNearestTarget(200) over the whole standing population, which is why they do
+not stay in their corner. `--adds` scores what the fleet did about them.
+
+Two things this file will not tell you, both of which have already fooled a reading of these traces:
+
+- **The snapshot cast column only catches spells with a cast time.** Ram, Mortar and Fire Cannon are
+  instant, so they never appear in it. Absence there is not evidence a seat held its fire - judge
+  that from the add health deltas below.
+- **Riders are not at their vehicle's exact coordinates.** A turret gunner sits 0.20 yd off its
+  hull, so matching rider to hull on equal positions reports a crewed bot as dismounted.
 """
 from __future__ import annotations
 
@@ -41,6 +55,26 @@ RAM_RADIUS = 25.0
 RAM_CAST_RANGE = 15.0       # boss_flame_leviathan.cpp: IsWithinCombatRange(victim, 15.0f)
 FURY_RADIUS = 10.0          # EffectRadiusIndex 13
 FURY_FUSE_MS = 5000
+
+ADD_ENTRIES = {33387: "Writhing Lasher", 34275: "Ward of Life"}
+LASH_SPELL = 65062
+
+# The four NPC_FREYA_WARD_TARGET spawn points, boss_flame_leviathan.cpp SummonTowerHelpers.
+ARENA_CORNERS = [(159.4, 64.1), (382.9, 74.0), (374.0, -141.0), (157.7, -140.3)]
+
+# Weapon bands off Spell.dbc, as (vehicle entry, min, max, label). A cone is scored on range alone,
+# so the cone rows are an upper bound - facing is the action's problem, not this table's.
+WEAPON_BANDS = [
+    (33060, 10.0, 70.0, "siege turret, Fire Cannon"),
+    (33060, 0.0, 15.0, "siege driver, Ram cone"),
+    (33109, 0.0, 50.0, "demo gunner, Mortar"),
+    (33109, 10.0, 70.0, "demo driver, Hurl Boulder"),
+    (33109, 0.0, 15.0, "demo driver, Ram cone"),
+    (33062, 0.0, 35.0, "chopper, Sonic Horn cone"),
+]
+SPLASH_YD = 20.0            # Fire Cannon and Hurl Boulder, EffectRadiusIndex 9
+MELEE_YD = 8.0              # close enough for Lash (0-5 yd) plus a snapshot's worth of travel
+ATTRITION_WINDOW_MS = 5000
 
 
 def boss_guid(ents: dict):
@@ -73,6 +107,8 @@ class Frame:
         self.boss = None
         self.reticles = []
         self.vehicles = {}      # (x, y) -> [size, station, is_real_vehicle_row]
+        self.adds = []          # (guid, x, y, hp) - Freya's Ward spawns
+        self.hulls = {}         # guid -> (x, y, hp, entry); identity, which self.vehicles drops
 
         rows = snap.get("u", [])
         for row in rows:
@@ -81,11 +117,14 @@ class Frame:
                 self.boss = (row[1], row[2], row[4], row[7])
             elif entry == RETICLE_ENTRY:
                 self.reticles.append((row[0], row[1], row[2]))
+            elif entry in ADD_ENTRIES:
+                self.adds.append((row[0], row[1], row[2], row[5]))
             elif entry in VEHICLE_SIZE:
                 # A trace written after vehicles joined the snapshot roster: use the real unit.
                 self.vehicles[(round(row[1], 1), round(row[2], 1))] = [
                     VEHICLE_SIZE[entry], VEHICLE_NAME[entry], True
                 ]
+                self.hulls[row[0]] = (row[1], row[2], row[5], entry)
 
         if self.vehicles:
             return
@@ -292,11 +331,142 @@ def show_fury(trace: Trace) -> int:
     return 0
 
 
+def pick(seq, quantile):
+    return seq[min(int(len(seq) * quantile), len(seq) - 1)]
+
+
+def nearest_corner(x, y):
+    return min(((math.hypot(x - cx, y - cy), i) for i, (cx, cy) in enumerate(ARENA_CORNERS)))
+
+
+def show_adds(trace: Trace) -> int:
+    snapshots = list(frames(trace))
+    if not snapshots:
+        return 0
+
+    tracks = collections.defaultdict(list)      # add guid -> [(t, x, y, hp)]
+    population = []
+    for frame in snapshots:
+        for guid, x, y, hp in frame.adds:
+            tracks[guid].append((frame.t, x, y, hp))
+        population.append((frame.t, sum(1 for a in frame.adds if a[3] > 0)))
+
+    print("Freya's Ward: four wards at the corners, a wave every 29 s, adds that never despawn\n")
+    if not tracks:
+        print("  no adds in this trace - the Tower of Life was down.")
+        return 0
+
+    # ---- where they spawn, and whether they stay there -------------------------------
+    corners = collections.Counter()
+    wander = []
+    for points in tracks.values():
+        _, x0, y0, _ = points[0]
+        corners[nearest_corner(x0, y0)[1]] += 1
+        wander.append(max(math.hypot(p[1] - x0, p[2] - y0) for p in points))
+    wander.sort()
+    print(f"  adds seen: {len(tracks)}   spawn corner: "
+          + "  ".join(f"{i}:{corners[i]}" for i in range(len(ARENA_CORNERS))))
+    print(f"  travelled from spawn: median {pick(wander, .5):.0f} yd  p90 {pick(wander, .9):.0f}"
+          f"  max {wander[-1]:.0f}")
+    for band in (10, 30, 80):
+        near = sum(1 for w in wander if w <= band)
+        print(f"     never left {band:2d} yd of it: {near}/{len(wander)}"
+              f" ({100 * near / len(wander):.0f}%)")
+
+    # ---- population, and how fast one dies -------------------------------------------
+    buckets = collections.defaultdict(int)
+    for t, alive in population:
+        buckets[t // 20000] = max(buckets[t // 20000], alive)
+    print("\n  most alive at once, per 20 s:")
+    cells = [f"{k * 20:3d}s:{v}" for k, v in sorted(buckets.items())]
+    for start in range(0, len(cells), 10):
+        print("     " + "  ".join(cells[start:start + 10]))
+    zeroed = sum(1 for k, v in sorted(buckets.items()) if v == 0 and k * 20000 > 40000)
+    print(f"     20 s windows with the field clear after 40 s: {zeroed}")
+
+    rates = []
+    for points in tracks.values():
+        span = (points[-1][0] - points[0][0]) / 1000.0
+        if len(points) >= 8 and span > 5:
+            rates.append((points[0][3] - points[-1][3]) / span)
+    rates = sorted(r for r in rates if r > 0)
+    if rates:
+        print(f"  health lost per second: median {pick(rates, .5):.2f}%"
+              f"  ->  median time to kill one add {100 / pick(rates, .5):.0f} s")
+
+    # ---- what could have shot them, without anyone moving ----------------------------
+    in_band = collections.Counter()
+    reachable = 0
+    add_frames = 0
+    clump = []
+    for frame in snapshots:
+        if not frame.hulls:
+            continue
+        live = [(x, y) for _g, x, y, hp in frame.adds if hp > 0]
+        for ax, ay in live:
+            add_frames += 1
+            clump.append(sum(1 for bx, by in live if math.hypot(ax - bx, ay - by) <= SPLASH_YD))
+            covered = False
+            for entry, low, high, label in WEAPON_BANDS:
+                near = [math.hypot(ax - hx, ay - hy)
+                        for hx, hy, _hp, he in frame.hulls.values() if he == entry]
+                if near and low <= min(near) <= high:
+                    in_band[label] += 1
+                    covered = True
+            reachable += covered
+
+    if add_frames:
+        print(f"\n  add-frames in a weapon band with nobody moving ({add_frames} scored):")
+        for _entry, _low, _high, label in WEAPON_BANDS:
+            hits = in_band[label]
+            print(f"     {label:28s} {hits:6d}  {100 * hits / add_frames:5.1f}%")
+        print(f"     {'>> reachable by something':28s} {reachable:6d}"
+              f"  {100 * reachable / add_frames:5.1f}%")
+        clump.sort()
+        print(f"  adds inside one {SPLASH_YD:.0f} yd splash: median {pick(clump, .5)}"
+              f"  p75 {pick(clump, .75)}  max {clump[-1]}")
+
+    # ---- do they actually cost the fleet anything? -----------------------------------
+    windows = collections.defaultdict(lambda: [None, None, 0, 0])
+    for frame in snapshots:
+        live = [(x, y) for _g, x, y, hp in frame.adds if hp > 0]
+        for guid, (hx, hy, hp, _entry) in frame.hulls.items():
+            cell = windows[(guid, frame.t // ATTRITION_WINDOW_MS)]
+            if cell[0] is None:
+                cell[0] = hp
+            cell[1] = hp
+            cell[2] += sum(1 for ax, ay in live if math.hypot(ax - hx, ay - hy) <= MELEE_YD)
+            cell[3] += 1
+
+    clean, engaged = [], []
+    for first, last, adds, samples in windows.values():
+        if samples < 5:
+            continue
+        (engaged if adds / samples >= 1.0 else clean).append(first - last)
+    if clean and engaged:
+        print(f"\n  hull health lost per {ATTRITION_WINDOW_MS // 1000} s:")
+        print(f"     with no add within {MELEE_YD:.0f} yd : {sum(clean) / len(clean):5.2f}%"
+              f"   ({len(clean)} windows)")
+        print(f"     with one or more    : {sum(engaged) / len(engaged):5.2f}%"
+              f"   ({len(engaged)} windows)")
+
+    # ---- and what share of the raid's damage taken is theirs? ------------------------
+    taken = collections.Counter()
+    for rec in trace.of("dmg"):
+        taken[rec.get("sp")] += rec.get("a", 0)
+    total = sum(taken.values())
+    if total:
+        print(f"\n  Lash {LASH_SPELL} share of raid damage taken: "
+              f"{100 * taken[LASH_SPELL] / total:.1f}% ({taken[LASH_SPELL]:,} of {total:,})")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("file", type=pathlib.Path)
     parser.add_argument("--ram", action="store_true", help="Battering Ram exposure only")
     parser.add_argument("--fury", action="store_true", help="Hodir's Fury only")
+    parser.add_argument("--adds", action="store_true", help="Freya's Ward adds only")
     args = parser.parse_args()
 
     if not args.file.is_file():
@@ -304,13 +474,17 @@ def main() -> int:
         return 1
 
     trace = Trace(args.file)
-    both = not (args.ram or args.fury)
-    if args.ram or both:
+    every = not (args.ram or args.fury or args.adds)
+    if args.ram or every:
         show_ram(trace)
-    if both:
+    if every:
         print()
-    if args.fury or both:
+    if args.fury or every:
         show_fury(trace)
+    if every:
+        print()
+    if args.adds or every:
+        show_adds(trace)
     return 0
 
 

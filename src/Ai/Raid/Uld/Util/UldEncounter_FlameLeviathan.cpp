@@ -60,6 +60,12 @@ struct FlameLeviathanState
     // vehicle has to be counted out rather than waited on - it still holds roles otherwise.
     RaidObs::ObsGuidMap<bool> frozen{"fl.frozen"};
 
+    // Whether the Life tower is standing, latched the first time anyone sees a ward or one of its
+    // spawns. FlameLeviathanActiveTowerMask cannot answer this - it reports every tower whenever the
+    // hard-mode config flag is on - and the corner posting must not send engines 90 yd out on a pull
+    // where no adds are coming. Latches on only; the reset below clears it with the rest.
+    bool lifeTowerStanding = false;
+
     uint32 scanMs = 0;
 };
 
@@ -98,6 +104,7 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         state.ventClaimedBy = ObjectGuid::Empty;
         state.pursuedVehicle = ObjectGuid::Empty;
         state.frozen.clear();
+        state.lifeTowerStanding = false;
         return;
     }
 
@@ -109,6 +116,27 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
 
     if (!FlameLeviathanIsVentChanneling(boss))
         state.ventClaimedBy = ObjectGuid::Empty;
+
+    // One bot's sighting settles it for the instance: the corners are up to 220 yd apart, so no
+    // single vehicle can see all four wards, but every wave sends adds at the raid and somebody
+    // meets them. Until then the posting stays off and the fleet just fights him.
+    if (!state.lifeTowerStanding && botAI)
+    {
+        for (auto const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets")->Get())
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit)
+                continue;
+
+            uint32 const entry = unit->GetEntry();
+            if (entry == NPC_FL_WRITHING_LASHER || entry == NPC_FL_WARD_OF_LIFE ||
+                entry == NPC_FL_FREYA_WARD || entry == NPC_FL_FREYA_WARD_TARGET)
+            {
+                state.lifeTowerStanding = true;
+                break;
+            }
+        }
+    }
 
     // Pursued is read off the vehicles rather than the players: the aura lands on whichever unit the
     // boss's spell picked, and a gunner's own guid never carries it. Keyed on the vehicle for the
@@ -223,6 +251,13 @@ static bool FlameLeviathanCanElectroshock(Unit* siegeEngine, Unit* boss)
            FlameLeviathanInConeRange(siegeEngine, boss, ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS);
 }
 
+bool FlameLeviathanInCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius)
+{
+    // HasInArc splits what it is handed, so the full cone width goes in.
+    return vehicleBase && target && FlameLeviathanInConeRange(vehicleBase, target, radius) &&
+           vehicleBase->HasInArc(halfAngle * 2.0f, target);
+}
+
 bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius)
 {
     if (!vehicleBase || !target)
@@ -231,7 +266,6 @@ bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle,
     if (!FlameLeviathanInConeRange(vehicleBase, target, radius))
         return false;
 
-    // HasInArc splits what it is handed, so the full cone width goes in.
     if (vehicleBase->HasInArc(halfAngle * 2.0f, target))
         return true;
 
@@ -342,6 +376,53 @@ Unit* FlameLeviathanFrozenVehicle(Player* bot, Unit* from, float minRange, float
     return best;
 }
 
+Unit* FlameLeviathanBestAdd(PlayerbotAI* botAI, Unit* from, float minRange, float maxRange,
+                            float splash)
+{
+    if (!botAI || !from)
+        return nullptr;
+
+    std::vector<Unit*> adds;
+    for (auto const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        uint32 const entry = unit->GetEntry();
+        if (entry == NPC_FL_WRITHING_LASHER || entry == NPC_FL_WARD_OF_LIFE)
+            adds.push_back(unit);
+    }
+
+    Unit* best = nullptr;
+    uint32 bestCluster = 0;
+    float bestDist = 0.0f;
+
+    for (Unit* add : adds)
+    {
+        float const dist = from->GetExactDist2d(add);
+        if (dist < minRange || dist > maxRange)
+            continue;
+
+        // Counts itself, which is what makes a lone add score 1 and keeps the comparison honest
+        // against a pair. Skipped entirely for a single-target pick, where it would decide nothing.
+        uint32 cluster = 0;
+        if (splash > 0.0f)
+            for (Unit* other : adds)
+                if (add->GetExactDist2d(other) <= splash)
+                    ++cluster;
+
+        if (!best || cluster > bestCluster || (cluster == bestCluster && dist < bestDist))
+        {
+            best = add;
+            bestCluster = cluster;
+            bestDist = dist;
+        }
+    }
+
+    return best;
+}
+
 Unit* FlameLeviathanPursuedVehicle(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot)
@@ -424,6 +505,85 @@ bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)
     }
 
     return true;
+}
+
+int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
+{
+    if (!bot || !FlameLeviathanIsDriver(bot))
+        return -1;
+
+    Unit* base = bot->GetVehicleBase();
+    if (!base || base->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
+        return -1;
+
+    // A pursued engine is kiting and a frozen one cannot drive, so neither can hold a post - and
+    // both must drop out of the ranking too, or the corner they own goes unmanned.
+    if (FlameLeviathanIsPursued(bot) || !FlameLeviathanCrewUsable(bot))
+        return -1;
+
+    if (!FlameLeviathanStateFor(bot).lifeTowerStanding)
+        return -1;
+
+    // One driver per hull, so ranking over drivers needs no dedupe: a gunner's GetVehicleBase is the
+    // bolted-on turret, which FlameLeviathanIsDriver already rejects.
+    uint8 rank = 0;
+    ObjectGuid const myGuid = base->GetGUID();
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+        {
+            Player* member = gref->GetSource();
+            if (!member || member == bot || !FlameLeviathanIsDriver(member))
+                continue;
+
+            Unit* memberBase = member->GetVehicleBase();
+            if (!memberBase || memberBase->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
+                continue;
+
+            if (FlameLeviathanIsPursued(member) || !FlameLeviathanCrewUsable(member))
+                continue;
+
+            if (memberBase->GetGUID() < myGuid)
+                ++rank;
+        }
+    }
+
+    // Rank 0 never posts. A corner is ~90 yd from where he actually roams, which puts a posted
+    // engine outside FlameLeviathanCanElectroshock's 25 yd cone test - so it drops out of the vent
+    // interrupter election, and posting all of them would leave Flame Vents uninterruptible.
+    if (rank == 0 || rank > static_cast<uint8>(ULDUAR_FL_ARENA_CORNERS.size()))
+        return -1;
+
+    return static_cast<int8>(rank - 1);
+}
+
+Position FlameLeviathanCornerPostPoint(uint8 index)
+{
+    Position const& corner = ULDUAR_FL_ARENA_CORNERS[index % ULDUAR_FL_ARENA_CORNERS.size()];
+
+    float centreX = 0.0f;
+    float centreY = 0.0f;
+    for (Position const& each : ULDUAR_FL_ARENA_CORNERS)
+    {
+        centreX += each.GetPositionX();
+        centreY += each.GetPositionY();
+    }
+    centreX /= static_cast<float>(ULDUAR_FL_ARENA_CORNERS.size());
+    centreY /= static_cast<float>(ULDUAR_FL_ARENA_CORNERS.size());
+
+    // Toward the middle, so the engine ends up between the spawn point and the raid and Ram's
+    // knockback drives what it catches back into the corner instead of out at the fleet.
+    float dx = centreX - corner.GetPositionX();
+    float dy = centreY - corner.GetPositionY();
+    float const len = std::sqrt(dx * dx + dy * dy);
+    if (len > 0.0f)
+    {
+        dx /= len;
+        dy /= len;
+    }
+
+    return Position(corner.GetPositionX() + dx * ULDUAR_FL_CORNER_STANDOFF,
+                    corner.GetPositionY() + dy * ULDUAR_FL_CORNER_STANDOFF, corner.GetPositionZ());
 }
 
 bool FlameLeviathanInArena(Position const& pos, float margin)

@@ -165,6 +165,21 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
         if (CastVehicle(SPELL_FL_HURL_PYRITE_BARREL, target))
             return true;
 
+    // Pyrite is this seat's job, so adds only get what the barrel does not want. Ram is the
+    // exception: it is free, it knocks back, and it covers the 15 yd an add has to be inside to be
+    // chewing on the hull - which is also the band Hurl Boulder's 10 yd floor cannot fire into.
+    if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f, ULDUAR_FL_RAM_CONE_RADIUS, 0.0f))
+        if (FlameLeviathanFaceForCone(vehicleBase_, add, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
+                                      ULDUAR_FL_RAM_CONE_RADIUS))
+            if (CastVehicle(SPELL_FL_DEMOLISHER_RAM, add, 4000))
+                return true;
+
+    if (!needBarrel)
+        if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, ULDUAR_FL_HURL_BOULDER_MIN_RANGE,
+                                              ULDUAR_FL_HURL_BOULDER_MAX_RANGE, ULDUAR_FL_CANNON_SPLASH))
+            if (CastVehicle(SPELL_FL_HURL_BOULDER, add))
+                return true;
+
     return CastVehicle(SPELL_FL_HURL_BOULDER, target);
 }
 
@@ -211,20 +226,21 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
         if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET, lift, 250))
             return true;
 
+    // Mortar is free and already the gunner's every-tick cast, so pointing it at an add is a target
+    // swap rather than new spend. It also has no minimum range, which covers the adds that walk in
+    // under Fire Cannon's 10 yd floor.
+    if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f, ULDUAR_FL_MORTAR_MAX_RANGE,
+                                          ULDUAR_FL_MORTAR_SPLASH))
+        if (CastVehicle(SPELL_FL_MORTAR, add, 1000))
+            return true;
+
     return CastVehicle(SPELL_FL_MORTAR, target, 1000);
 }
 
 bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
 {
-    if (!target)
-        return false;
-
-    // Ram is a 100 degree, 18 yd frontal cone. Range alone is not the test - a siege engine pointed
-    // 55 degrees off him is in range, passes CastVehicleSpell's 120 degree turn gate, and lands
-    // nothing. Turning costs the tick, which is cheaper than the 40 energy.
-    if (!FlameLeviathanFaceForCone(vehicleBase_, target, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
-                                   ULDUAR_FL_RAM_CONE_RADIUS))
-        return false;
+    // No early return on a null target: a posted engine is 90 yd from him and shoots adds, so it has
+    // work to do whether or not he is alive and reachable.
 
     // Earmark what this vehicle still owes: the interrupt duty travels with its fuel, and a pursued
     // driver needs Steam Rush more than it needs a Ram.
@@ -237,7 +253,31 @@ bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
     if (vehicleBase_->GetPower(POWER_ENERGY) < needed)
         return false;
 
-    return CastVehicle(SPELL_FL_RAM, target);
+    // An add in the cone outranks him: 190k against his 230M, and unlike him they accumulate. Picked
+    // once rather than tried and fallen through, because falling back to him mid-turn would just
+    // turn the engine round again and it would spend the fight pointed at neither.
+    Unit* shot = FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f, ULDUAR_FL_RAM_CONE_RADIUS, 0.0f);
+    if (!shot)
+        shot = target;
+
+    if (!shot)
+        return false;
+
+    // Range alone is not the test - a siege engine pointed 55 degrees off him is in range, passes
+    // CastVehicleSpell's 120 degree turn gate, and lands nothing. Turning costs the tick, which is
+    // cheaper than the 40 energy. A posted engine owes its facing to its corner, so it never turns
+    // at all and fires only at what the corner already points at.
+    if (FlameLeviathanCornerPost(botAI, bot) >= 0)
+    {
+        if (!FlameLeviathanInCone(vehicleBase_, shot, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
+                                  ULDUAR_FL_RAM_CONE_RADIUS))
+            return false;
+    }
+    else if (!FlameLeviathanFaceForCone(vehicleBase_, shot, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
+                                        ULDUAR_FL_RAM_CONE_RADIUS))
+        return false;
+
+    return CastVehicle(SPELL_FL_RAM, shot);
 }
 
 bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
@@ -255,7 +295,18 @@ bool FlameLeviathanVehicleAction::SiegeEngineTurretAction(Unit* target)
         if (CastVehicle(SPELL_FL_ANTI_AIR_ROCKET_SIEGE, lift, 250))
             return true;
 
-    if (!target || vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_FIRE_CANNON_COST)
+    if (vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_FIRE_CANNON_COST)
+        return false;
+
+    // Fire Cannon is the heaviest gun the raid owns and the widest add coverage it has - 76k in a
+    // 20 yd sphere against a 190k lasher, and it reaches four fifths of the arena from station. The
+    // boss carries 230M, so the damage this costs him is noise next to adds that never despawn.
+    if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, ULDUAR_FL_FIRE_CANNON_MIN_RANGE,
+                                          ULDUAR_FL_FIRE_CANNON_MAX_RANGE, ULDUAR_FL_CANNON_SPLASH))
+        if (CastVehicle(SPELL_FL_FIRE_CANNON, add))
+            return true;
+
+    if (!target)
         return false;
 
     return CastVehicle(SPELL_FL_FIRE_CANNON, target);
@@ -269,15 +320,26 @@ bool FlameLeviathanVehicleAction::ChopperAction(Unit* target)
         if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_TAR, 0, 15000))
             return true;
 
-    if (!target || vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_SONIC_HORN_COST)
+    if (vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_SONIC_HORN_COST)
         return false;
+
+    // Everything but the lead helps clear adds. The lead is excluded outright rather than trusted to
+    // come back: it has to keep its back to him for the tar to land in his path, and one turn toward
+    // an add costs a pool. Same single pick as the siege engine, for the same reason - alternating
+    // between an add and him would leave the chopper facing neither.
+    Unit* shot = FlameLeviathanIsTarLead(botAI, bot)
+                     ? nullptr
+                     : FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f,
+                                             ULDUAR_FL_SONIC_HORN_CONE_RADIUS, 0.0f);
+    if (!shot)
+        shot = target;
 
     // The narrowest cone on the fight at 50 degrees, so it needs the facing more than the others do.
-    if (!FlameLeviathanFaceForCone(vehicleBase_, target, ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE,
-                                   ULDUAR_FL_SONIC_HORN_CONE_RADIUS))
+    if (!shot || !FlameLeviathanFaceForCone(vehicleBase_, shot, ULDUAR_FL_SONIC_HORN_CONE_HALF_ANGLE,
+                                            ULDUAR_FL_SONIC_HORN_CONE_RADIUS))
         return false;
 
-    return CastVehicle(SPELL_FL_SONIC_HORN, target);
+    return CastVehicle(SPELL_FL_SONIC_HORN, shot);
 }
 
 bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
@@ -350,6 +412,17 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
 
     if (ClearBatteringRam(boss))
         return true;
+
+    // Below the two dodges on purpose: a posted engine still has to get out of a tower blast and out
+    // of Battering Ram, and the corner will still be there afterwards.
+    if (int8 const corner = FlameLeviathanCornerPost(botAI, bot); corner >= 0)
+    {
+        uint8 const slot = static_cast<uint8>(corner);
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "fl.corner", std::to_string(static_cast<uint32>(slot)));
+
+        return DriveTo(FlameLeviathanCornerPostPoint(slot), ULDUAR_FL_ARENA_CORNERS[slot]);
+    }
 
     if (vehicleBase_->GetEntry() == NPC_SALVAGED_DEMOLISHER &&
         vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_PYRITE_RESERVE)
@@ -484,7 +557,32 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss)
 
     float const offset =
         FlameLeviathanStationBearingOffset(bot, vehicleBase_, boss->GetCombatReach() + standDist);
-    return DriveTo(FlameLeviathanRearPoint(boss, standDist, offset), boss, false);
+    Position const goal = FlameLeviathanRearPoint(boss, standDist, offset);
+
+    // Ram and Sonic Horn are cones, so a driver that engages an add has to turn - and the park block
+    // below re-faces him every tick. Point at whatever the cast node is about to shoot instead, or
+    // the two spend the fight undoing each other and the vehicle ends up aimed at neither. The bands
+    // mirror the cast node exactly, tar lead included: it never shoots adds, so it never turns.
+    float coneRadius = 0.0f;
+    switch (vehicleBase_->GetEntry())
+    {
+        case NPC_SALVAGED_SIEGE_ENGINE:
+        case NPC_SALVAGED_DEMOLISHER:
+            coneRadius = ULDUAR_FL_RAM_CONE_RADIUS;
+            break;
+        case NPC_VEHICLE_CHOPPER:
+            if (!FlameLeviathanIsTarLead(botAI, bot))
+                coneRadius = ULDUAR_FL_SONIC_HORN_CONE_RADIUS;
+            break;
+        default:
+            break;
+    }
+
+    if (coneRadius > 0.0f)
+        if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, 0.0f, coneRadius, 0.0f))
+            return DriveTo(goal, add, false);
+
+    return DriveTo(goal, boss, false);
 }
 
 bool FlameLeviathanDriveAction::Kite(Unit* boss)
@@ -558,6 +656,22 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss)
 
 bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Unit* faceTarget, bool faceAway, MovementPriority priority)
 {
+    std::optional<float> facing;
+    if (faceTarget)
+        facing = faceAway ? faceTarget->GetAngle(vehicleBase_) : vehicleBase_->GetAngle(faceTarget);
+
+    return DriveToImpl(goal, facing, priority);
+}
+
+bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Position const& facePoint, MovementPriority priority)
+{
+    return DriveToImpl(goal, vehicleBase_->GetAngle(facePoint.GetPositionX(), facePoint.GetPositionY()),
+                       priority);
+}
+
+bool FlameLeviathanDriveAction::DriveToImpl(Position const& goal, std::optional<float> facing,
+                                            MovementPriority priority)
+{
     if (vehicleBase_->GetExactDist2d(goal) <= ULDUAR_FL_ARRIVE_TOLERANCE)
     {
         if (!parked_)
@@ -570,17 +684,15 @@ bool FlameLeviathanDriveAction::DriveTo(Position const& goal, Unit* faceTarget, 
         // burns a tick turning before every shot. Park facing him and the casts go out immediately.
         // Only correct a facing that has actually drifted: SetFacingTo launches a spline, and one
         // re-issued every tick makes the vehicle jitter and read as still moving.
-        if (faceTarget)
+        if (facing)
         {
-            float const wanted =
-                faceAway ? faceTarget->GetAngle(vehicleBase_) : vehicleBase_->GetAngle(faceTarget);
             // NormalizeOrientation lands in [0, 2PI), so fold the far half back into [0, PI].
-            float error = Position::NormalizeOrientation(wanted - vehicleBase_->GetOrientation());
+            float error = Position::NormalizeOrientation(*facing - vehicleBase_->GetOrientation());
             if (error > float(M_PI))
                 error = 2.0f * float(M_PI) - error;
 
             if (error > ULDUAR_FL_FACING_TOLERANCE)
-                vehicleBase_->SetFacingTo(wanted);
+                vehicleBase_->SetFacingTo(*facing);
         }
 
         // Yield once parked, so the rotation runs and a move that silently failed shows up as a

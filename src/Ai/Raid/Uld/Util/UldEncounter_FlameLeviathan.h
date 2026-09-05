@@ -49,6 +49,17 @@ enum UlduarFlameLeviathanIds
     NPC_FL_PYRITE_CONTAINER = 33189,   // grabbable crate, +25 energy to a demolisher
     NPC_FL_MECHANOLIFT = 33214,        // shot down with Anti-Air Rocket to drop a crate
 
+    // Life tower. Four wards spawn once, 30s in, one per arena corner, and each fires a wave every
+    // 29s for the rest of the pull whether or not anyone is in combat. The summons are forced to
+    // TEMPSUMMON_MANUAL_DESPAWN, so they only ever leave on a boss reset or kill, and every wave
+    // re-runs SelectNearestTarget(200) over the whole standing population - which is why they do not
+    // stay in the corner they spawned in. SelectNearestTarget is not player-only and the raid rides
+    // vehicles, so they chew on hulls rather than on people.
+    NPC_FL_FREYA_WARD_TARGET = 33366,  // reticle at the corner; its presence means the tower stands
+    NPC_FL_FREYA_WARD = 33367,         // the summoner itself, parked 40 yd overhead
+    NPC_FL_WRITHING_LASHER = 33387,    // 190k hp, melees and Lashes its victim every 2s
+    NPC_FL_WARD_OF_LIFE = 34275,       // 504k hp, same one-row SmartAI
+
     // Salvaged Siege Engine (33060) driver seat.
     SPELL_FL_RAM = 62345,
     SPELL_FL_ELECTROSHOCK = 62522,
@@ -111,7 +122,7 @@ extern std::vector<Position> const ULDUAR_FL_ARENA_CORNERS;
 
 // Where each vehicle parks relative to the boss. Measured surface-to-surface (added to his combat
 // reach), because he has a large model and a raw centre distance would put melee inside him.
-// Ram's 18 yd cone is measured with the boss's 15 yd combat reach added, so 8 here is comfortably
+// Ram's 15 yd cone is measured with the boss's 15 yd combat reach added, so 8 here is comfortably
 // inside it. Distance was never what made Ram miss - facing was.
 constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;
 
@@ -145,10 +156,15 @@ constexpr uint32 ULDUAR_FL_INCREASED_SPEED_COST = 25;
 constexpr uint32 ULDUAR_FL_PYRITE_BARREL_COST = 5;
 
 // Ram, Electroshock and Sonic Horn are TARGET_UNIT_CONE_ENEMY_104: a frontal cone whose reach is
-// the effect radius, not the spell range. Spell::CheckRange short-circuits on RangeEntry ID 1 and
-// waves them all through, so these radii are the real limit and nothing else enforces them.
+// the effect radius, not the spell range. Electroshock and Sonic Horn carry RangeEntry ID 1, which
+// Spell::CheckRange short-circuits, so for those two the effect radius is the only limit there is.
+//
+// Ram is the exception and cost a release of missed casts: its RangeIndex is 11, a real 0-15 yd
+// entry, so CheckRange does enforce it and the effective reach is the 15, not the 18 yd effect
+// radius. FlameLeviathanInConeRange adds the target's object size on top, which hid the gap against
+// a boss with 15 yd of combat reach and does not hide it against a 1 yd lasher.
 constexpr float ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS = 25.0f;
-constexpr float ULDUAR_FL_RAM_CONE_RADIUS = 18.0f;
+constexpr float ULDUAR_FL_RAM_CONE_RADIUS = 15.0f;
 constexpr float ULDUAR_FL_SONIC_HORN_CONE_RADIUS = 35.0f;
 
 // Each cone also has its own width, from world.spell_cone; Spell::SelectImplicitConeTargets falls
@@ -182,6 +198,23 @@ constexpr float ULDUAR_FL_BATTERING_RAM_CAST_RANGE = 15.0f;
 constexpr float ULDUAR_FL_HURL_BOULDER_MIN_RANGE = 10.0f;
 constexpr float ULDUAR_FL_HURL_BOULDER_MAX_RANGE = 70.0f;
 constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;
+
+// Fire Cannon shares Hurl Boulder's 10-70 yd band (RangeIndex 164) and is the heaviest gun the raid
+// has: its missile 62357 lands 76k in a 20 yd sphere, against 190k and 504k add health pools.
+constexpr float ULDUAR_FL_FIRE_CANNON_MIN_RANGE = 10.0f;
+constexpr float ULDUAR_FL_FIRE_CANNON_MAX_RANGE = 70.0f;
+
+// Splash of the shot being aimed, used only to rank which add is worth hitting. Fire Cannon and
+// Hurl Boulder both land at radius index 9; Mortar's 62635 is index 42. Adds arrive in twos and
+// threes inside one 20 yd circle, so picking the densest one is worth the scan.
+constexpr float ULDUAR_FL_CANNON_SPLASH = 20.0f;
+constexpr float ULDUAR_FL_MORTAR_SPLASH = 11.0f;
+
+// Where a posted siege engine sits relative to its corner: far enough out that the spawn point is
+// past Fire Cannon's 10 yd minimum, close enough that it is inside Ram's 15 yd cone. Ram
+// knocks back (Effect 98), and the engine parks on the arena side of the corner, so what it hits
+// goes deeper into the corner rather than out toward the raid.
+constexpr float ULDUAR_FL_CORNER_STANDOFF = 12.0f;
 
 // Gap to hold between vehicles of one class: Hodir's Fury's 10 yd blast plus enough that a vehicle
 // drifting inside its arrival deadband does not close it. Half the fight ran with four or more
@@ -248,6 +281,11 @@ void FlameLeviathanClaimVentChannel(Player* bot);
 // shot is on; otherwise starts the turn and leaves the cast for a later tick.
 bool FlameLeviathanFaceForCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius);
 
+// The same test without the turn, for a vehicle whose facing is owed to something else - a posted
+// siege engine points at its corner, and turning it to chase an add off to one side would both undo
+// the post and throw the knockback sideways instead of into the corner.
+bool FlameLeviathanInCone(Unit* vehicleBase, Unit* target, float halfAngle, float radius);
+
 // Alive, mounted, and neither the hull nor the driver frozen. Any role handed out by election has to
 // ask this, or a 60 s Hodir's Fury stun takes the role with the vehicle.
 bool FlameLeviathanCrewUsable(Player* member);
@@ -273,6 +311,27 @@ bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot);
 // Lowest-guid chopper driver that is neither Pursued nor frozen. It runs ahead of the boss dropping
 // tar in his path; a Pursued chopper is already driving away from him and drops tar for free.
 bool FlameLeviathanIsTarLead(PlayerbotAI* botAI, Player* bot);
+
+// Best Freya's Ward add for a shot from `from`, or null. Ranked by how many other adds sit inside
+// `splash` of it, nearest breaking ties, because they arrive two or three to a circle and the guns
+// that matter are all area shots. Pass splash 0 for a single-target pick.
+//
+// Reads "possible targets" rather than the bot's own "attackers": threat on this fight belongs to
+// the vehicle creature, so a crewed bot's attacker list is empty and the old add fallback built
+// from it never fired. The adds are ordinary attackable creatures, so unlike the tower reticles
+// they need no "nearest npcs" escape hatch.
+Unit* FlameLeviathanBestAdd(PlayerbotAI* botAI, Unit* from, float minRange, float maxRange,
+                            float splash);
+
+// Corner this siege engine is posted to, or -1 for none. Ranks live crewed siege hulls by guid and
+// hands ranks 1..4 a corner each; rank 0 is deliberately left on station, because a posted engine is
+// ~90 yd from the boss and so fails FlameLeviathanCanElectroshock - post every engine and nothing
+// interrupts Flame Vents ever again. Returns -1 until an add or ward has actually been seen, so a
+// pull with the Life tower down never sends anybody to a corner.
+int8 FlameLeviathanCornerPost(PlayerbotAI* botAI, Player* bot);
+
+// Where that engine parks: ULDUAR_FL_CORNER_STANDOFF in from the corner, toward the arena centre.
+Position FlameLeviathanCornerPostPoint(uint8 index);
 
 bool FlameLeviathanInArena(Position const& pos, float margin = 0.0f);
 
