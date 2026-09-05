@@ -212,13 +212,16 @@ widest — it alone covers 60% of add-frames from station; **Mortar 62634** (dem
 62345** and **Ram 62308** are 15 yd cones that *knock back* (Effect 98). 82% of add-frames are inside
 some band with nobody moving, so target selection does most of the work and repositioning little.
 
-**One siege engine per corner, and never all of them.** Ranks 1–4 of the live crewed siege hulls post
+**One siege engine per corner, and never all of them.** Ranks 1–4 of the live siege hulls post
 `ULDUAR_FL_CORNER_STANDOFF` (12 yd) inside their corner facing out, so Ram's knockback drives what it
-catches deeper in rather than back at the fleet, and Fire Cannon still clears its 10 yd minimum.
+catches deeper in rather than back at the fleet, and Fire Cannon still clears its 10 yd minimum. Rank
+counts every live hull, pursued and stunned included — dropping them renumbers everyone below and
+swaps all four corners on every Pursued switch, about once every 31 s.
 **Rank 0 never posts**: `FlameLeviathanIsVentInterrupter` requires `FlameLeviathanCanElectroshock`, a
 25 yd cone test against the boss, and a corner is ~90 yd from where he actually roams — post every
-engine and Flame Vents becomes uninterruptible. The posting stays off until a ward or add is actually
-sighted, so a pull with the Life tower down never sends anyone to a corner.
+engine and Flame Vents becomes uninterruptible. It also keeps its facing on the boss rather than
+turning for a Ram, being the only engine left inside that cone. The posting stays off until a ward or
+add is actually sighted, so a pull with the Life tower down never sends anyone to a corner.
 
 **A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
 turned, while `DriveTo`'s park block re-faces the boss every tick. `HoldStation` therefore faces
@@ -255,6 +258,13 @@ spot, so four or more vehicles shared a single 10 yd circle for **50–90%** of 
 radius**, so Ram, Sonic Horn and the pyrite band keep their geometry and one strike costs one vehicle.
 A frozen vehicle keeps its slot — renumbering would swing the whole fan for 60s — but hands back the
 tar-lead and vent-interrupt roles, which are elected on guid order and would otherwise go with it.
+
+**Never ask a rider whether it can move.** Every vehicle passenger carries `UNIT_STATE_ROOT`, so
+`FlameLeviathanCrewUsable`'s `UNIT_STATE_NOT_MOVE` test on the crew reported the whole fleet unusable
+and switched the tar lead, the vent interrupt and the corner posting off together — from `e41a0e89a`
+until it was found six pulls later, with nothing in the traces naming the gate. The rider is now
+checked for `UNIT_STATE_STUNNED` only; the hull keeps the full test. `fl.vent` and `fl.lifetower`
+exist so the next silent election failure is visible.
 
 
 ## Baseline to beat — 2026-08-30, before the blast/freeze fixes
@@ -300,12 +310,10 @@ catching 27–30% of real exposure to **64.6%**, with false alarms down from 71%
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
   `master->GetVehicle()` — the Oculus `GroupFlyingTrigger` defect, where one human who has not
   mounted freezes the whole raid.
-- **The tar lead is never actually elected.** No `fl.station` note read `tar-lead` in any of the
-  three 2026-09-05 traces. `FlameLeviathanTarLeadDistance` clamps the lead to
-  `dist(boss, pursued) − bossReach(15) − BATTERING_RAM_RADIUS(25) − size`, so the pursued vehicle has
-  to be more than ~40 yd from the boss for the slot to exist at all — and while he is chasing it, it
-  rarely is. The clamp that protects the lead from Battering Ram appears to have closed the role.
-  Tar still lands, but only from `ChopperAction`'s incidental "he is behind us" branch.
+- **The tar lead is untested.** It was never elected before the crew-usable fix, so
+  `FlameLeviathanTarLeadDistance`'s clamp — lead capped at
+  `dist(boss, pursued) − bossReach(15) − BATTERING_RAM_RADIUS(25) − size`, needing the pursued
+  vehicle more than ~40 yd out — has never run and may still close the role on its own.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**

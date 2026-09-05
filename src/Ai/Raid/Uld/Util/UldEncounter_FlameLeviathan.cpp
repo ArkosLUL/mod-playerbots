@@ -133,6 +133,13 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
                 entry == NPC_FL_FREYA_WARD || entry == NPC_FL_FREYA_WARD_TARGET)
             {
                 state.lifeTowerStanding = true;
+
+                // Traced because it is the only gate on the corner posting that depends on the
+                // pull rather than on the code: without it an empty fl.corner cannot be told apart
+                // from a pull where the tower was already down.
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "fl.lifetower", "1");
+
                 break;
             }
         }
@@ -338,12 +345,14 @@ bool FlameLeviathanCrewUsable(Player* member)
     if (!member || !member->IsAlive())
         return false;
 
-    // Hodir's Fury's stun runs 60s, carries no mechanic and no dispel type, so nothing shortens it.
-    // A role elected on guid order would otherwise sit with a frozen vehicle for a third of the
-    // fight - UNIT_STATE_NOT_MOVE is ROOT|STUNNED|DIED|DISTRACTED, and the stun sets it on both the
-    // hull and the crew.
+    // Hodir's Fury's stun runs 60s, carries no mechanic and no dispel type, so nothing shortens it,
+    // and a role elected on guid order would sit with a frozen vehicle for a third of the fight.
+    //
+    // The rider is checked for the stun only. Vehicle::AddPassenger roots every passenger, driver
+    // included, so UNIT_STATE_NOT_MOVE on a rider is just "is seated" and asking it here reported
+    // the whole fleet unusable - no tar lead, no vent interrupter, no corner post.
     Unit* base = FlameLeviathanRiddenVehicle(member);
-    return base && !base->HasUnitState(UNIT_STATE_NOT_MOVE) && !member->HasUnitState(UNIT_STATE_NOT_MOVE);
+    return base && !base->HasUnitState(UNIT_STATE_NOT_MOVE) && !member->HasUnitState(UNIT_STATE_STUNNED);
 }
 
 Unit* FlameLeviathanFrozenVehicle(Player* bot, Unit* from, float minRange, float maxRange)
@@ -507,7 +516,15 @@ bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)
     return true;
 }
 
-int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
+// Where this bot's siege engine sits in hull-guid order, or -1 if it is not driving one.
+//
+// Every live hull counts, pursued and stunned ones included. Skipping them would renumber everyone
+// below on a Pursued switch - about once every 31s - and all four corners would swap engines. An
+// engine that cannot hold its post just does not drive to it; its slot waits.
+//
+// One driver per hull, so ranking over drivers needs no dedupe: a gunner's GetVehicleBase is the
+// bolted-on turret, which FlameLeviathanIsDriver already rejects.
+static int32 FlameLeviathanSiegeRank(Player* bot)
 {
     if (!bot || !FlameLeviathanIsDriver(bot))
         return -1;
@@ -516,31 +533,18 @@ int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
     if (!base || base->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
         return -1;
 
-    // A pursued engine is kiting and a frozen one cannot drive, so neither can hold a post - and
-    // both must drop out of the ranking too, or the corner they own goes unmanned.
-    if (FlameLeviathanIsPursued(bot) || !FlameLeviathanCrewUsable(bot))
-        return -1;
-
-    if (!FlameLeviathanStateFor(bot).lifeTowerStanding)
-        return -1;
-
-    // One driver per hull, so ranking over drivers needs no dedupe: a gunner's GetVehicleBase is the
-    // bolted-on turret, which FlameLeviathanIsDriver already rejects.
-    uint8 rank = 0;
+    int32 rank = 0;
     ObjectGuid const myGuid = base->GetGUID();
     if (Group* group = bot->GetGroup())
     {
         for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
         {
             Player* member = gref->GetSource();
-            if (!member || member == bot || !FlameLeviathanIsDriver(member))
+            if (!member || member == bot || !member->IsAlive() || !FlameLeviathanIsDriver(member))
                 continue;
 
             Unit* memberBase = member->GetVehicleBase();
             if (!memberBase || memberBase->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
-                continue;
-
-            if (FlameLeviathanIsPursued(member) || !FlameLeviathanCrewUsable(member))
                 continue;
 
             if (memberBase->GetGUID() < myGuid)
@@ -548,13 +552,33 @@ int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
         }
     }
 
+    return rank;
+}
+
+int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
+{
+    if (!bot || !FlameLeviathanStateFor(bot).lifeTowerStanding)
+        return -1;
+
+    // A pursued engine is kiting and a frozen one cannot drive, so neither drives to its corner.
+    if (FlameLeviathanIsPursued(bot) || !FlameLeviathanCrewUsable(bot))
+        return -1;
+
     // Rank 0 never posts. A corner is ~90 yd from where he actually roams, which puts a posted
     // engine outside FlameLeviathanCanElectroshock's 25 yd cone test - so it drops out of the vent
     // interrupter election, and posting all of them would leave Flame Vents uninterruptible.
-    if (rank == 0 || rank > static_cast<uint8>(ULDUAR_FL_ARENA_CORNERS.size()))
+    int32 const rank = FlameLeviathanSiegeRank(bot);
+    if (rank <= 0 || rank > static_cast<int32>(ULDUAR_FL_ARENA_CORNERS.size()))
         return -1;
 
     return static_cast<int8>(rank - 1);
+}
+
+bool FlameLeviathanIsVentReserve(Player* bot)
+{
+    // Only while the others are actually posting. With the tower down all five engines hold station
+    // and the interrupter election picks among them as it always did.
+    return bot && FlameLeviathanStateFor(bot).lifeTowerStanding && FlameLeviathanSiegeRank(bot) == 0;
 }
 
 Position FlameLeviathanCornerPostPoint(uint8 index)

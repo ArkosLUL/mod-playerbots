@@ -5,6 +5,7 @@
     flame_leviathan.py <file> --ram    Battering Ram exposure only
     flame_leviathan.py <file> --fury   Hodir's Fury only
     flame_leviathan.py <file> --adds   Freya's Ward adds only
+    flame_leviathan.py <file> --vents  Flame Vents channels and interrupts only
 
 **Battering Ram (62376)** is cast `me->CastSpell(me->GetVictim(), ...)` when the boss is
 `IsWithinCombatRange(victim, 15.0f)`, and its ImplicitTargetA is 53 = TARGET_DEST_TARGET_ENEMY with
@@ -21,6 +22,11 @@ reticle spends stationary, and `--fury` measures who cleared 10 yd inside it.
 for the rest of the pull, and the adds carry TEMPSUMMON_MANUAL_DESPAWN so they never time out. Every
 wave also re-runs SelectNearestTarget(200) over the whole standing population, which is why they do
 not stay in their corner. `--adds` scores what the fleet did about them.
+
+**Flame Vents (62396)** is a 10 s self-channel every 20 s that ticks 63847 eleven times. Only
+Electroshock stops it (`boss_flame_leviathan.cpp` breaks the channel on spell 62522 hitting him), so
+a channel with fewer than eleven ticks is an interrupt. `--vents` counts those and prices them
+against hull attrition, and reads the `fl.vent` notes when the trace carries them.
 
 Two things this file will not tell you, both of which have already fooled a reading of these traces:
 
@@ -58,6 +64,10 @@ FURY_FUSE_MS = 5000
 
 ADD_ENTRIES = {33387: "Writhing Lasher", 34275: "Ward of Life"}
 LASH_SPELL = 65062
+
+VENT_TICK = 63847           # SPELL_FLAME_VENTS_TRIGGER, one cast per tick of the 62396 channel
+VENT_TICKS_FULL = 11        # what a channel that runs its whole 10 s emits
+VENT_GAP_MS = 4000          # ticks are ~1 s apart, so a longer gap is a new channel
 
 # The four NPC_FREYA_WARD_TARGET spawn points, boss_flame_leviathan.cpp SummonTowerHelpers.
 ARENA_CORNERS = [(159.4, 64.1), (382.9, 74.0), (374.0, -141.0), (157.7, -140.3)]
@@ -461,12 +471,83 @@ def show_adds(trace: Trace) -> int:
     return 0
 
 
+def vent_channels(trace: Trace):
+    """Flame Vents channels as (start, end, ticks). Electroshock is the only thing that ends one early."""
+    ticks = sorted(rec["t"] for rec in trace.of("cast") if rec.get("sp") == VENT_TICK)
+    out, cur = [], []
+    for t in ticks:
+        if cur and t - cur[-1] > VENT_GAP_MS:
+            out.append((cur[0], cur[-1], len(cur)))
+            cur = []
+        cur.append(t)
+    if cur:
+        out.append((cur[0], cur[-1], len(cur)))
+    return out
+
+
+def show_vents(trace: Trace) -> int:
+    channels = vent_channels(trace)
+    print("Flame Vents: a 10 s channel every 20 s, 11 damage ticks if nothing stops it")
+    print()
+    if not channels:
+        print("  no 63847 ticks in this trace")
+        return 0
+
+    ends = trace.of("end")
+    pull_end = ends[-1]["t"] if ends else channels[-1][1] + VENT_GAP_MS + 1
+
+    # A channel the pull ended under is short for a reason that is not an interrupt, so only score
+    # the ones that started with a full ten seconds of pull left.
+    scored = [c for c in channels if pull_end - c[0] >= VENT_TICKS_FULL * 1000]
+    short = [c for c in scored if c[2] < VENT_TICKS_FULL]
+    held = sum(c[1] - c[0] for c in channels) / 1000.0
+
+    print(f"  channels seen    : {len(channels)}, {held:.0f} s of channel out of {pull_end / 1000.0:.0f} s")
+    print(f"  ticks per channel: {[c[2] for c in channels]}")
+    print(f"  cut short        : {len(short)} of {len(scored)} that had room to finish")
+
+    shots = [rec for rec in trace.of("note") if rec.get("k") == "fl.vent"]
+    if shots:
+        hit = sum(1 for rec in shots if rec.get("txt") == "hit")
+        print(f"  Electroshock     : {len(shots)} cast, {hit} stopped the channel")
+    else:
+        print("  Electroshock     : no fl.vent notes - nothing fired, or the trace predates the probe")
+
+    # Same window shape as the add attrition above, so the two numbers can be read side by side.
+    def venting(t):
+        return any(a - 500 <= t <= b + 1500 for a, b, _ in channels)
+
+    windows = collections.defaultdict(lambda: [None, None, 0, 0])
+    for frame in frames(trace):
+        under = venting(frame.t)
+        for guid, (_hx, _hy, hp, _entry) in frame.hulls.items():
+            cell = windows[(guid, frame.t // ATTRITION_WINDOW_MS)]
+            if cell[0] is None:
+                cell[0] = hp
+            cell[1] = hp
+            cell[2] += 1 if under else 0
+            cell[3] += 1
+
+    inside, outside = [], []
+    for first, last, under, samples in windows.values():
+        if samples < 5:
+            continue
+        (inside if under * 2 >= samples else outside).append(first - last)
+
+    if inside and outside:
+        print(f"\n  hull health lost per {ATTRITION_WINDOW_MS // 1000} s:")
+        print(f"     while it is channelling: {sum(inside) / len(inside):5.2f}%   ({len(inside)} windows)")
+        print(f"     otherwise              : {sum(outside) / len(outside):5.2f}%   ({len(outside)} windows)")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("file", type=pathlib.Path)
     parser.add_argument("--ram", action="store_true", help="Battering Ram exposure only")
     parser.add_argument("--fury", action="store_true", help="Hodir's Fury only")
     parser.add_argument("--adds", action="store_true", help="Freya's Ward adds only")
+    parser.add_argument("--vents", action="store_true", help="Flame Vents channels and interrupts only")
     args = parser.parse_args()
 
     if not args.file.is_file():
@@ -474,7 +555,7 @@ def main() -> int:
         return 1
 
     trace = Trace(args.file)
-    every = not (args.ram or args.fury or args.adds)
+    every = not (args.ram or args.fury or args.adds or args.vents)
     if args.ram or every:
         show_ram(trace)
     if every:
@@ -485,6 +566,10 @@ def main() -> int:
         print()
     if args.adds or every:
         show_adds(trace)
+    if every:
+        print()
+    if args.vents or every:
+        show_vents(trace)
     return 0
 
 

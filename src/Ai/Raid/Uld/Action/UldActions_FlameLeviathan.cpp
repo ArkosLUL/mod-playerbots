@@ -265,9 +265,12 @@ bool FlameLeviathanVehicleAction::SiegeEngineAction(Unit* target)
 
     // Range alone is not the test - a siege engine pointed 55 degrees off him is in range, passes
     // CastVehicleSpell's 120 degree turn gate, and lands nothing. Turning costs the tick, which is
-    // cheaper than the 40 energy. A posted engine owes its facing to its corner, so it never turns
-    // at all and fires only at what the corner already points at.
-    if (FlameLeviathanCornerPost(botAI, bot) >= 0)
+    // cheaper than the 40 energy.
+    //
+    // Two engines never turn: a posted one owes its facing to its corner, and the vent reserve owes
+    // its facing to the boss. Both fire only at whatever is already in front of them. HoldStation
+    // makes the same two exceptions, so the drive and the shot cannot disagree.
+    if (FlameLeviathanCornerPost(botAI, bot) >= 0 || FlameLeviathanIsVentReserve(bot))
     {
         if (!FlameLeviathanInCone(vehicleBase_, shot, ULDUAR_FL_RAM_CONE_HALF_ANGLE,
                                   ULDUAR_FL_RAM_CONE_RADIUS))
@@ -373,12 +376,16 @@ bool FlameLeviathanInterruptVentsAction::Execute(Event /*event*/)
     // only honest confirmation. Electroshock is instant and resolves inline, so by now it has either
     // interrupted him or it has not. Charging the full cooldown for a miss is what left every siege
     // engine firing 10 s out of step with a 20 s vent cycle.
+    //
+    // Note, not NoteDerived: every shot has to show up, and a run of hits carries the same value.
     if (FlameLeviathanIsVentChanneling(boss))
     {
+        RaidObs::Note(bot, "fl.vent", "miss");
         vehicleBase->AddSpellCooldown(SPELL_FL_ELECTROSHOCK, 0, ULDUAR_FL_ELECTROSHOCK_RETRY_MS);
         return true;
     }
 
+    RaidObs::Note(bot, "fl.vent", "hit");
     vehicleBase->AddSpellCooldown(SPELL_FL_ELECTROSHOCK, 0, ULDUAR_FL_ELECTROSHOCK_COOLDOWN_MS);
     return true;
 }
@@ -552,6 +559,10 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss)
             break;
     }
 
+    bool const ventReserve = FlameLeviathanIsVentReserve(bot);
+    if (ventReserve)
+        how = "vent";
+
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "fl.station", how);
 
@@ -563,19 +574,25 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss)
     // below re-faces him every tick. Point at whatever the cast node is about to shoot instead, or
     // the two spend the fight undoing each other and the vehicle ends up aimed at neither. The bands
     // mirror the cast node exactly, tar lead included: it never shoots adds, so it never turns.
+    //
+    // The vent reserve is the other exception. Electroshock's cone is 25 yd and 60 degrees, so an
+    // engine turned onto an add has to spend a tick turning back every time the channel starts.
     float coneRadius = 0.0f;
-    switch (vehicleBase_->GetEntry())
+    if (!ventReserve)
     {
-        case NPC_SALVAGED_SIEGE_ENGINE:
-        case NPC_SALVAGED_DEMOLISHER:
-            coneRadius = ULDUAR_FL_RAM_CONE_RADIUS;
-            break;
-        case NPC_VEHICLE_CHOPPER:
-            if (!FlameLeviathanIsTarLead(botAI, bot))
-                coneRadius = ULDUAR_FL_SONIC_HORN_CONE_RADIUS;
-            break;
-        default:
-            break;
+        switch (vehicleBase_->GetEntry())
+        {
+            case NPC_SALVAGED_SIEGE_ENGINE:
+            case NPC_SALVAGED_DEMOLISHER:
+                coneRadius = ULDUAR_FL_RAM_CONE_RADIUS;
+                break;
+            case NPC_VEHICLE_CHOPPER:
+                if (!FlameLeviathanIsTarLead(botAI, bot))
+                    coneRadius = ULDUAR_FL_SONIC_HORN_CONE_RADIUS;
+                break;
+            default:
+                break;
+        }
     }
 
     if (coneRadius > 0.0f)

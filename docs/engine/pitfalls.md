@@ -385,6 +385,16 @@ targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
   `dispelAuraDuration` (default 700 ms) remaining.
 - Class dispel nodes sit **below** `ACTION_RAID`: mage `remove curse on party` at 40, druid at 57
   against `ACTION_RAID` 60. Any raid positioning node outranks them.
+- **Boarding changes what a rider is, in two ways that break tests written for a bot on foot.**
+  `Vehicle::AddPassenger` roots every passenger, driver included — `SetControlled(true,
+  UNIT_STATE_ROOT)` (`Vehicle.cpp:437`), cleared only on exit — so `UNIT_STATE_NOT_MOVE` on a rider
+  means "seated", not "disabled", and a role gated on it elects nobody. That switched off Flame
+  Leviathan's tar lead, vent interrupt and corner posting at once, silently, for six pulls. Test
+  `UNIT_STATE_STUNNED` on the rider and `UNIT_STATE_NOT_MOVE` on the hull. A seat carrying
+  `VEHICLE_SEAT_FLAG_PASSENGER_NOT_SELECTABLE` also sets `UNIT_FLAG_NOT_SELECTABLE`
+  (`Vehicle.cpp:395`), which every AoE searcher skips (`GridNotifiers.h:1154`): a crewed bot is
+  invisible to boss AoE and a dismounted one absorbs all of it, so on a vehicle fight hull loss is
+  the death, not the damage that follows it.
 
 ## Arc and geometry defaults
 

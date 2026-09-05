@@ -323,12 +323,16 @@ bool FlameLeviathanIsTarLead(PlayerbotAI* botAI, Player* bot);
 Unit* FlameLeviathanBestAdd(PlayerbotAI* botAI, Unit* from, float minRange, float maxRange,
                             float splash);
 
-// Corner this siege engine is posted to, or -1 for none. Ranks live crewed siege hulls by guid and
-// hands ranks 1..4 a corner each; rank 0 is deliberately left on station, because a posted engine is
+// Corner this siege engine is posted to, or -1 for none. Ranks live siege hulls by guid and hands
+// ranks 1..4 a corner each; rank 0 is deliberately left on station, because a posted engine is
 // ~90 yd from the boss and so fails FlameLeviathanCanElectroshock - post every engine and nothing
 // interrupts Flame Vents ever again. Returns -1 until an add or ward has actually been seen, so a
 // pull with the Life tower down never sends anybody to a corner.
 int8 FlameLeviathanCornerPost(PlayerbotAI* botAI, Player* bot);
+
+// The rank 0 engine above, once the others are posting. It is the only one left inside Electroshock's
+// cone, so it keeps its facing on the boss instead of turning for a Ram.
+bool FlameLeviathanIsVentReserve(Player* bot);
 
 // Where that engine parks: ULDUAR_FL_CORNER_STANDOFF in from the corner, toward the arena centre.
 Position FlameLeviathanCornerPostPoint(uint8 index);

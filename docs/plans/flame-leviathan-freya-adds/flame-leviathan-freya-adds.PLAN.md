@@ -329,3 +329,76 @@ the Tower of Life standing. Today's three traces are the baseline.
    - **Vehicles chasing adds.** The facing rule is the guard against it. Compare each class's
      distance-to-boss distribution against the baseline; a chopper or siege engine drifting off
      station means facing and station are fighting again.
+
+---
+
+# Iteration 2 — one dead helper switched off three roles
+
+The first trace carrying the work above, `603_1_flame-leviathan_1788628796.ndjson`, is in
+`.BASELINE.md` under "Second baseline". The add targeting landed. Nothing gated on
+`FlameLeviathanCrewUsable` ran, and none of it has since 2026-08-30.
+
+## Root cause
+
+`FlameLeviathanCrewUsable` tested `!member->HasUnitState(UNIT_STATE_NOT_MOVE)` on the **player**.
+`Vehicle::AddPassenger` calls `unit->SetControlled(true, UNIT_STATE_ROOT)` on every passenger, driver
+included (`Vehicle.cpp:437`), clearing it only on exit (`Unit.cpp:15834`), and `UNIT_STATE_NOT_MOVE`
+is `ROOT | STUNNED | DIED | DISTRACTED`. So the test was false for every crewed bot, always. The hull
+half of the same predicate is fine — a hull is not a passenger, and `fl.frozen` has never emitted.
+
+Introduced by `e41a0e89a` to keep a Hodir's Fury stun from holding a role. Right intent, too wide a
+predicate. It killed `FlameLeviathanIsVentInterrupter` (no Electroshock ever cast),
+`FlameLeviathanIsTarLead` (no lead chopper) and `FlameLeviathanCornerPost` (no engine ever posted).
+
+## Changes
+
+1. **`FlameLeviathanCrewUsable`** — the rider is checked for `UNIT_STATE_STUNNED` only, the hull
+   keeps `UNIT_STATE_NOT_MOVE`. Boarding sets `ROOT` and nothing else, so a stun-only test keeps the
+   original intent at no cost.
+2. **`fl.vent`** (`RaidObs::Note`, not `NoteDerived` — a run of hits carries the same value) on every
+   Electroshock, valued `hit` or `miss` from whether the channel stopped. **`fl.lifetower`** once
+   when the tower latch flips, so an empty `fl.corner` separates "tower was down" from "election
+   failed". **`fl.station = vent`** for the reserved engine.
+3. **Stable corner ranking.** `FlameLeviathanSiegeRank` ranks every live siege hull by guid; pursued
+   and stunned engines keep their slot and simply do not drive to it. The old ranking skipped them,
+   so a Pursued switch (~every 31 s) renumbered everyone and swapped all four corners.
+4. **`FlameLeviathanIsVentReserve`** — the rank 0 engine, once the others are posting. `HoldStation`
+   and `SiegeEngineAction` both except it from add-facing, so its facing stays on the boss and inside
+   Electroshock's 25 yd / 60° cone. With the tower down it returns false and all five engines behave
+   as before.
+5. **`flame_leviathan.py --vents`** — channels, ticks each, how many were cut short with room to
+   finish, the `fl.vent` notes, and hull attrition inside versus outside a channel.
+
+## Verification
+
+Not compiled. Needs a hand-off build, then a re-pull with the Life and Frost towers standing.
+Baseline is `1788628796`.
+
+| measure | now | target |
+|---|---|---|
+| `fl.corner` notes | 0 | 4, stable for the pull |
+| `fl.station = tar-lead` | 0 | 1 throughout |
+| `fl.vent` casts | n/a, new note | one per channel |
+| Flame Vents channels cut short | 2 of 13 | most of them |
+| hull hp lost per 5 s while venting | 2.53 % | toward the 1.99 % clean rate |
+| mean hull hp at 180 s | 22 % | above the 28 % of 1788624223 |
+| first bot on foot | 80 s | as late as possible |
+| deaths | 31 | fewer |
+| boss floor | 36.4 % | below 27.4 % |
+| median time to kill one add | 13 s | hold it |
+| `Lash` share of damage taken | 4.4 % | hold it |
+
+Watch, because the corner posting has still never actually run:
+
+- **Four engines leaving station at once** when the tower latches, and what that does to Battering
+  Ram exposure and boss uptime.
+- **Corner churn** — `fl.corner` should not change value for a bot mid-pull.
+- **The reserve drifting** out of Electroshock's cone while it chases its own station offset.
+
+## Left alone
+
+- **Boss floor got worse, 27.4 % to 36.4 %.** Both gunners prefer an add whenever one is in range,
+  which is what was asked for, and an add now dies in 13 s instead of 22 s. Re-measure once the
+  interrupt is back before touching the priority: the fleet living longer may pay for it.
+- `stations()` in `flame_leviathan.py` still keeps only the last `fl.station` per bot, so it cannot
+  show a role that was held and then lost.
