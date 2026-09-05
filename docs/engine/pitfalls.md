@@ -6,6 +6,19 @@ just quietly does nothing. Check this list before debugging "the trigger doesn't
 Vehicle riders, oscillating movement, reach maths, coordination and per-raid cost have their own
 doc: [raid-mechanics-lessons.md](raid-mechanics-lessons.md).
 
+## A trace only proves what the build behind it did
+
+A pull recorded before a fix landed looks exactly like a pull where the fix did nothing. Three Freya
+pulls on 2026-09-05 were read as evidence against code the running worldserver had never been built
+with; the binary predated the commit by two hours.
+
+Establish the build from inside the trace before reading anything else out of it: a node the change
+added has to appear at least once, and an action a new multiplier zeroes has to show that multiplier's
+label in a `veto` record instead of running at its own relevance. `AzerothCore rev.` in `Server.log` is
+the *core* hash and says nothing about a module. The worldserver binary's mtime does
+(`docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver`) — it is UTC, so
+convert before comparing it against a local commit time.
+
 ## Names fail silently at runtime
 
 Everything is wired by string. Nothing here is a compile error.

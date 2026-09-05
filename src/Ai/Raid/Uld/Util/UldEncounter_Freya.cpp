@@ -427,6 +427,33 @@ Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI)
     return anchor;
 }
 
+uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!PlayerbotAI::IsRangedDps(bot))
+        return std::numeric_limits<uint32>::max();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return 0;
+
+    uint32 rank = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (!GET_PLAYERBOT_AI(member) || !PlayerbotAI::IsRangedDps(member))
+            continue;
+
+        if (member->GetGUID() < bot->GetGUID())
+            ++rank;
+    }
+
+    return rank;
+}
+
 uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state, float radius)
 {
     uint32 count = 0;
@@ -497,20 +524,28 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
         for (float sign : {1.0f, -1.0f})
         {
             float const angle = bearing + sign * delta;
-            float x = centre.GetPositionX() + std::cos(angle) * ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
-            float y = centre.GetPositionY() + std::sin(angle) * ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
-            float z = centre.GetPositionZ();
 
-            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, centre.GetPositionX(), centre.GetPositionY(),
-                                                                centre.GetPositionZ(), x, y, z))
-                continue;
+            // Walked outward rather than fixed, because the clearance is owed to the nearest lasher and
+            // the pack is wider than its centre: a wave spreads over a 17 yd radius, so the first
+            // candidate off the middle usually has a lasher standing on it.
+            for (float radius = ULDUAR_FREYA_LASHER_CAMP_STANDOFF; radius <= ULDUAR_FREYA_LASHER_CAMP_MAX_STANDOFF;
+                 radius += ULDUAR_FREYA_LASHER_CAMP_STEP)
+            {
+                float x = centre.GetPositionX() + std::cos(angle) * radius;
+                float y = centre.GetPositionY() + std::sin(angle) * radius;
+                float z = centre.GetPositionZ();
 
-            // Collision can pull the spot back toward the pile, which would park the camp inside the
-            // blasts it exists to stay out of.
-            if (centre.GetExactDist2d(x, y) < ULDUAR_FREYA_DETONATE_RADIUS)
-                continue;
+                if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, centre.GetPositionX(), centre.GetPositionY(),
+                                                                    centre.GetPositionZ(), x, y, z))
+                    continue;
 
-            return Position(x, y, z, 0.0f);
+                // Collision can pull the spot back toward the pile, which would park the camp inside the
+                // blasts it exists to stay out of.
+                if (CountFreyaLashersNear(Position(x, y, z, 0.0f), state, ULDUAR_FREYA_LASHER_CAMP_STANDOFF))
+                    continue;
+
+                return Position(x, y, z, 0.0f);
+            }
         }
     }
 

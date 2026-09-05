@@ -165,6 +165,11 @@ bool FreyaRangedCampTrigger::IsActive()
     if (camp == Position())
         return false;
 
+    // The tolerance exists to stop churn, not to license standing in a blast, and a healer's 15 yd of
+    // slack is the whole Detonate radius. Anything already inside it moves whatever the tolerance says.
+    if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_DETONATE_RADIUS))
+        return true;
+
     // Healers get the wider band: they also have to stay in range of the melee group and the tanks,
     // and pulling them all the way into the ball would leave the far half of the raid unhealed.
     float const tolerance =

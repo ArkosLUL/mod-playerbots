@@ -166,10 +166,25 @@ constexpr float ULDUAR_FREYA_LASHER_BAIL_PCT = 15.0f;
 // instead of finishing it. Roughly the time the walk itself takes at 7.0 yd/s.
 constexpr uint32 ULDUAR_FREYA_LASHER_BAIL_LATCH_MS = 3000;
 
-// Where the camp sits relative to the pack rather than relative to whichever bot happened to be
-// standing somewhere. Outside Detonate and inside AiPlayerbot.SpellDistance (28.5), so ranged keep
-// hitting the near edge of the pile without eating the blasts.
-constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 20.0f;
+// Clearance from the nearest living lasher, not from the middle of the pack. A wave spreads over a
+// 17 yd radius, so a standoff measured off the centroid parks the camp on whatever walked out in front
+// of it: measured across four waves, the back line sat a median 5.5-15.5 yd from the nearest lasher
+// and spent 43-85% of the wave inside Detonate. 18 is where it sat on the one wave nobody died to.
+constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 18.0f;
+
+// How far out the search may push a camp before giving up on a bearing. Past this the far side of the
+// pile is outside AiPlayerbot.SpellDistance (28.5) and the camp stops being a firing position.
+constexpr float ULDUAR_FREYA_LASHER_CAMP_MAX_STANDOFF = 28.0f;
+constexpr float ULDUAR_FREYA_LASHER_CAMP_STEP = 2.0f;
+
+// Eonar's Gift heals Freya 30-60% if it lives 12s, and ten bots take one from full to dead in about 5s.
+// Five clear it well inside that, which leaves the rest of the ranged on the lasher pack instead of
+// emptying it for six seconds in the middle of a wave.
+constexpr uint32 ULDUAR_FREYA_GIFT_SHARE = 5;
+
+// If the share has not finished the Gift by now, every ranged bot joins it. Leaves about 3s of margin
+// on the 12s.
+constexpr uint32 ULDUAR_FREYA_GIFT_SHARE_MS = 5000;
 
 // How tight the camp holds. Ranged are pulled in harder because the ball has to fit inside one AoE;
 // healers get the slack, since they also have to stay in range of the melee group and the tanks.
@@ -257,10 +272,14 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
 // point, so the camp is always on the mesh and always within reach of what the raid is shooting.
 Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI);
 
-// Where the ranged half stands during the wave: STANDOFF out from the pack's centre on the bearing the
-// raid is already on, so nobody crosses the pile to reach it. Empty when there is no wave up or no
-// bearing clears collision, and GetFreyaRangedCampAnchor is the fallback - a live bot is always on the
-// mesh, which a computed point is not.
+// This bot's place in the GUID order of the living ranged DPS, so a job can be handed to the first few
+// of them without shared state. UINT32_MAX for anyone who is not ranged DPS.
+uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI);
+
+// Where the ranged half stands during the wave: the nearest point on the bearing the raid is already
+// on that keeps every living lasher STANDOFF away, so nobody crosses the pile to reach it. Empty when
+// there is no wave up or no bearing clears collision, and GetFreyaRangedCampAnchor is the fallback - a
+// live bot is always on the mesh, which a computed point is not.
 Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state);
 
 // Living detonating lashers under maxPct within radius of the bot. The health filter is the point:

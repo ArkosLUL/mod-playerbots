@@ -93,6 +93,37 @@ bool FreyaSetDpsPriorityAction::Execute(Event /*event*/)
     return needsAttack ? Attack(target) : false;
 }
 
+bool FreyaSetDpsPriorityAction::TakesEonarsGift(FreyaWaveState const& state)
+{
+    if (!state.eonarsGift || !state.eonarsGift->IsAlive())
+    {
+        giftGuid.Clear();
+        return false;
+    }
+
+    bool packUp = false;
+    for (Unit* lasher : state.detonatingLashers)
+        packUp = packUp || (lasher && lasher->IsAlive());
+
+    // Nothing is competing for the ranged, so the Gift takes all of them as it always did.
+    if (!packUp)
+        return true;
+
+    uint32 const now = getMSTime();
+    if (giftGuid != state.eonarsGift->GetGUID())
+    {
+        giftGuid = state.eonarsGift->GetGUID();
+        giftSeenMs = now;
+    }
+
+    // A head start, not a hand-off: whatever the share has managed by now, the rest of the ranged join
+    // it with time left on the 12s.
+    if (getMSTimeDiff(giftSeenMs, now) >= ULDUAR_FREYA_GIFT_SHARE_MS)
+        return true;
+
+    return GetFreyaRangedDpsRank(botAI) < ULDUAR_FREYA_GIFT_SHARE;
+}
+
 Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 {
     FreyaWaveState state;
@@ -100,7 +131,8 @@ Unit* FreyaSetDpsPriorityAction::ResolveFreyaDpsTarget(Unit* currentTarget)
 
     // Eonar's Gift heals Freya for 30-60% if it lives 12s. Ranged burn it from where they stand, so
     // melee never eat the travel time both ways - unless there is no ranged DPS left to do it.
-    bool const takesGift = PlayerbotAI::IsRangedDps(bot) || !FreyaHasLivingRangedDps(botAI);
+    bool const takesGift =
+        (PlayerbotAI::IsRangedDps(bot) || !FreyaHasLivingRangedDps(botAI)) && TakesEonarsGift(state);
 
     // Once the trio is low, leaving it costs the whole wave: a member abandoned above the floor
     // revives 11s later, and the 60s until the next wave spawns is gone.

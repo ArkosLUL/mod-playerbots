@@ -51,8 +51,12 @@ Priority order is Eonar's Gift > Ancient Conservator > trio slot > Detonating La
 two reorderings: once any trio member is below `ULDUAR_FREYA_TRIO_SYNC_WINDOW_PCT` (30%) the trio
 outranks the other adds, and once every member is in the release band nothing pulls a bot away at all.
 Eonar's Gift is a ranged DPS job (12s to a 30-60% Freya heal) so melee never eat the travel time both
-ways, falling back to melee when no ranged DPS is alive. The Detonating Lasher rung resolves per role,
-and for ranged in two phases — see the lasher paragraphs below.
+ways, falling back to melee when no ranged DPS is alive. While a lasher pack is up only the first
+`ULDUAR_FREYA_GIFT_SHARE` (5) ranged by GUID take it, and after `ULDUAR_FREYA_GIFT_SHARE_MS` (5s) the
+rest join: ten bots take a Gift from full to dead in 4.2-6.3s, so five clear it inside the 12s while
+the pack keeps the other half. Sending every ranged emptied the pack for 4.7-6.5s at 84% and 86% pack
+health in the two waves that wiped, against 10% in the one that did not. The Detonating Lasher rung
+resolves per role, and for ranged in two phases — see the lasher paragraphs below.
 
 **Conservator's Grip (62532) pacifies the whole raid.** It is `APPLY_AREA_AURA_ENEMY` +
 `MOD_PACIFY_SILENCE` at radius index 28 = 50000 yd, cast once at 6s with no repeat
@@ -172,20 +176,45 @@ raid DPS between them.
 **Doctrine: one camp a fixed standoff from the pile, and step off what is about to blow** (see
 [Crowd control and threat on adds](../../engine/raid-mechanics-lessons.md#crowd-control-and-threat-on-adds)
 for why ferrying an add faster than a player cannot work). `freya ranged camp` puts ranged DPS and
-healers `ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (20 yd) out from the pack's centre, on the bearing the raid
-is already on so nobody crosses the pile to reach it — outside Detonate, inside `AiPlayerbot.SpellDistance`
-(28.5), so they keep hitting the near edge. `GetFreyaLasherCampSpot` sweeps bearings when collision
-blocks the first, and falls back to `GetFreyaRangedCampAnchor` — the lowest-GUID living ranged DPS, so
-every bot picks the same one with no shared state — because a live bot is always on the mesh and a
-computed point is not. `ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside one AoE;
-`_HEALER_CAMP_TOLERANCE` (15 yd) gives healers the slack to also cover the melee group and the tanks.
-Tanks and melee are excluded: they are already stacked on what they are hitting, and a tank that left
-would take Freya or the Conservator with it.
+healers `ULDUAR_FREYA_LASHER_CAMP_STANDOFF` (18 yd) clear of the **nearest** living lasher, on the
+bearing the raid is already on so nobody crosses the pile to reach it. `GetFreyaLasherCampSpot` walks
+outward from the centroid in `_CAMP_STEP` (2 yd) until the whole pack clears, capped at
+`_CAMP_MAX_STANDOFF` (28 yd) because past `AiPlayerbot.SpellDistance` (28.5) the far side of the pile
+is unreachable; it sweeps bearings when collision blocks the first, and falls back to
+`GetFreyaRangedCampAnchor` — the lowest-GUID living ranged DPS, so every bot picks the same one with no
+shared state — because a live bot is always on the mesh and a computed point is not.
+`ULDUAR_FREYA_RANGED_CAMP_TOLERANCE` (10 yd) has to fit inside one AoE; `_HEALER_CAMP_TOLERANCE`
+(15 yd) gives healers the slack to also cover the melee group and the tanks. Neither survives a lasher
+inside Detonate range: the trigger fires whatever the tolerance says, since a healer's slack is the
+whole blast. Tanks and melee are excluded: they are already stacked on what they are hitting, and a
+tank that left would take Freya or the Conservator with it.
 
 The anchor used to be the bot itself, which is why the camp had no fixed relationship to anything: in
 `1788559467` it sat 23.8-35.7 yd from Freya and 16.3-25.5 yd from the pile, and moved **27.5 yd between
 waves** because that one warlock walked. It also re-picks from the *living*, so the camp jumped twice in
 0.3s as bots died at the `1788558567` wipe.
+
+**Measured off the centroid the camp was never far enough out.** A pack spreads over a 16.8-21.4 yd
+radius, so a spot 20 yd from the middle sits on whatever walked out in front of it. Four waves on
+2026-09-05, distance from each ranged bot or healer to the *nearest* lasher:
+
+| wave | median | share of the wave inside Detonate | deaths |
+|---|---|---|---|
+| `1788608477` 0:10 | **18.2 yd** | **18.5%** | **0** |
+| `1788608477` 2:38 | 7.0 | 76.9% | 8 |
+| `1788609171` 1:54 | 5.5 | 85.0% | 9 |
+| `1788609636` 0:10 | 15.5 | 45.0% | 5 |
+
+18 yd is the clean wave, which is where the constant is set. **15 of those 22 deaths were ranged or
+healers** — the bail is melee-only and cannot reach them.
+
+**Nothing intercepts a fresh pack, and that is still open.** The clean wave was clean because the pack
+spawned 3.7-5.2 yd from the melee: seven of eight were in contact in **2.5s** and no lasher ever got
+within 8 yd of the back line. In the other three the melee were 19-27 yd away and took **6.0-6.4s**, by
+which time 6-8 of 10 lashers had reached the camp, pack kill rate had halved from **39.1 to
+22.3-24.1 %hp/s**, and the whole raid was inside one blast. Melee cannot win that race: in
+`1788609171` they needed a median 29 yd and covered 11.4 in six seconds — **1.9 yd/s** against a 7.0
+run speed, stuttering through `reach melee` and mid-cast 19% of frames — while the pack crosses at 8.0.
 
 `freya lasher about to blow` steps melee out of the blast of the lashers that are nearly dead, which is
 the only warning this wave gives. A lasher under `ULDUAR_FREYA_LASHER_BAIL_PCT` (**15%**) sits there a

@@ -9,6 +9,7 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "UldEncounter_Freya.h"
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
@@ -32,6 +33,13 @@ public:
 
 private:
     Unit* ResolveFreyaDpsTarget(Unit* currentTarget);
+
+    // Whether this bot is one of the few sent at Eonar's Gift while a lasher pack is up.
+    bool TakesEonarsGift(FreyaWaveState const& state);
+
+    // Which Gift the share is timing, and when this bot first saw it.
+    ObjectGuid giftGuid;
+    uint32 giftSeenMs = 0;
 };
 
 // Main tank holds Freya; assist tank 0 works down the add ladder and, on the Conservator, walks it onto
