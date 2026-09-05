@@ -177,9 +177,12 @@ bool FreyaRangedCampTrigger::IsActive()
     if (camp == Position())
         return false;
 
-    // The tolerance exists to stop churn, not to license standing in a blast, and a healer's 15 yd of
-    // slack is the whole Detonate radius. Anything already inside it moves whatever the tolerance says.
-    if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_DETONATE_RADIUS))
+    // The tolerance exists to stop churn, not to license standing in a blast that is about to go off,
+    // and a healer's 15 yd of slack is the whole Detonate radius. Only the lashers nearly dead count:
+    // a healthy one detonates nothing, and walking away from a pack that moves faster than the bot
+    // costs more damage than every detonation in the wave.
+    if (!GetFreyaLowLasherPositions(botAI, state, ULDUAR_FREYA_LASHER_BAIL_PCT, ULDUAR_FREYA_DETONATE_RADIUS)
+             .empty())
         return true;
 
     // Healers get the wider band: they also have to stay in range of the melee group and the tanks,

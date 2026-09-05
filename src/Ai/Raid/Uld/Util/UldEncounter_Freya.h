@@ -176,10 +176,11 @@ constexpr float ULDUAR_FREYA_LASHER_BAIL_PCT = 15.0f;
 // instead of finishing it. Roughly the time the walk itself takes at 7.0 yd/s.
 constexpr uint32 ULDUAR_FREYA_LASHER_BAIL_LATCH_MS = 3000;
 
-// Clearance from the nearest living lasher, not from the middle of the pack. A wave spreads over a
-// 17 yd radius, so a standoff measured off the centroid parks the camp on whatever walked out in front
-// of it: measured across four waves, the back line sat a median 5.5-15.5 yd from the nearest lasher
-// and spent 43-85% of the wave inside Detonate. 18 is where it sat on the one wave nobody died to.
+// Clearance from the nearest lasher that is about to blow, not from the pack and not from its middle.
+// They spread over a 17 yd radius, so a standoff measured off the centroid parks the camp on whatever
+// walked out in front of it; and one owed to every living lasher is a retreat from something faster
+// than the bot, which is why only the ones under _LASHER_BAIL_PCT count. 18 clears the 15 yd blast
+// with a yard to spare either side of the walk.
 constexpr float ULDUAR_FREYA_LASHER_CAMP_STANDOFF = 18.0f;
 
 // How far out the search may push a camp before giving up on a bearing. Past this the far side of the
@@ -296,9 +297,10 @@ Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI);
 uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI);
 
 // Where the ranged half stands during the wave: the nearest point on the bearing the raid is already
-// on that keeps every living lasher STANDOFF away, so nobody crosses the pile to reach it. Empty when
-// there is no wave up or no bearing clears collision, and GetFreyaRangedCampAnchor is the fallback - a
-// live bot is always on the mesh, which a computed point is not.
+// on that keeps every lasher about to detonate STANDOFF away, so nobody crosses the pile to reach it.
+// With none of them low it is the anchor itself, which still gathers the back line into one ball for
+// the AoE without asking it to outrun a healthy pack. GetFreyaRangedCampAnchor is also the fallback
+// when no bearing clears collision - a live bot is always on the mesh, which a computed point is not.
 Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state);
 
 // Living detonating lashers under maxPct within radius of the bot. The health filter is the point:

@@ -523,31 +523,42 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
 {
     Player* bot = botAI->GetBot();
 
-    Position centre;
-    uint32 count = 0;
+    // The anchor bot is what defines where the raid already is: every bot picks the same one, so every
+    // bot derives the same spot without shared state.
+    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+
+    // Only the lashers that are about to detonate. A Detonating Lasher runs 8.0 yd/s (speed_run
+    // 1.14286) against a player's 7.0, so clearance owed to the whole pack is a retreat that cannot
+    // end: over one wave the back line walked 256 yd to net 19, still lost ground - median distance to
+    // the nearest lasher fell 20.0 to 14.3 - spent 62% of the wave moving, and did half the damage of
+    // the wave it cleared standing still. Detonate only lands when one dies, so a healthy lasher is
+    // not a blast to walk away from.
+    std::vector<Unit*> low;
     float sumX = 0.0f;
     float sumY = 0.0f;
     float sumZ = 0.0f;
     for (Unit* lasher : state.detonatingLashers)
     {
-        if (!lasher || !lasher->IsAlive())
+        if (!lasher || !lasher->IsAlive() || lasher->GetHealthPct() >= ULDUAR_FREYA_LASHER_BAIL_PCT)
             continue;
 
+        low.push_back(lasher);
         sumX += lasher->GetPositionX();
         sumY += lasher->GetPositionY();
         sumZ += lasher->GetPositionZ();
-        ++count;
     }
 
-    if (!count)
-        return Position();
+    // Nothing is about to blow, so there is nowhere the camp has to be - but it still has to be one
+    // place, or GetFreyaLasherPackFocus has no ball behind it and class AoE never fires. Standing on
+    // the anchor is that place, and the trigger's tolerance is what keeps it from churning.
+    if (low.empty())
+        return anchor ? anchor->GetPosition() : Position();
 
-    centre.Relocate(sumX / count, sumY / count, sumZ / count);
+    Position centre;
+    centre.Relocate(sumX / low.size(), sumY / low.size(), sumZ / low.size());
 
     // Bearing from the pile toward where the raid already is, so the walk to the camp never crosses
-    // the pack. The anchor bot is what defines "already is": every bot picks the same one, so every
-    // bot derives the same spot without shared state.
-    Player* anchor = GetFreyaRangedCampAnchor(botAI);
+    // the pack.
     float bearing = anchor && anchor->GetExactDist2d(&centre) > CONTACT_DISTANCE
                         ? centre.GetAngle(anchor)
                         : centre.GetAngle(bot);
@@ -560,9 +571,9 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
         {
             float const angle = bearing + sign * delta;
 
-            // Walked outward rather than fixed, because the clearance is owed to the nearest lasher and
-            // the pack is wider than its centre: a wave spreads over a 17 yd radius, so the first
-            // candidate off the middle usually has a lasher standing on it.
+            // Walked outward rather than fixed, because the clearance is owed to the nearest of them
+            // and they are wider than their centre: a wave spreads over a 17 yd radius, so the first
+            // candidate off the middle usually has one standing on it.
             for (float radius = ULDUAR_FREYA_LASHER_CAMP_STANDOFF; radius <= ULDUAR_FREYA_LASHER_CAMP_MAX_STANDOFF;
                  radius += ULDUAR_FREYA_LASHER_CAMP_STEP)
             {
@@ -575,11 +586,19 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
                     continue;
 
                 // Collision can pull the spot back toward the pile, which would park the camp inside the
-                // blasts it exists to stay out of.
-                if (CountFreyaLashersNear(Position(x, y, z, 0.0f), state, ULDUAR_FREYA_LASHER_CAMP_STANDOFF))
+                // blasts it exists to stay out of. Counted over the low set rather than through
+                // CountFreyaLashersNear, which the nova, the trap and the pack focus need to keep
+                // reading every living lasher.
+                Position const candidate(x, y, z, 0.0f);
+                bool clear = true;
+                for (Unit* lasher : low)
+                    clear = clear && candidate.GetExactDist2d(lasher->GetPosition()) >
+                                         ULDUAR_FREYA_LASHER_CAMP_STANDOFF;
+
+                if (!clear)
                     continue;
 
-                return Position(x, y, z, 0.0f);
+                return candidate;
             }
         }
     }
