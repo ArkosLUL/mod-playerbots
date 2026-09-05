@@ -103,11 +103,34 @@ the creature itself is banished and never reaches the npc lists.
 The escape rings outward to a spot clear of *every* bomb inside `ULDUAR_FREYA_HAZARD_SEARCH_RADIUS`,
 because a volley drops one on each of the stacked melee. The old `FleePosition` dodge moved 5 yd out of
 a 10 yd blast, so it killed everyone it fired for
-([../../engine/pitfalls.md](../../engine/pitfalls.md)). Tanks are excluded: stepping out would drag Freya
-toward the raid or lift the Conservator off its spore, and ~6k per volley is cheaper than either.
-Dodging keeps its `ACTION_RAID + 4` priority — a bomb hit costs more than a few pacified seconds — and
-the "go to the parked spore" rule is what makes the raid re-converge afterwards instead of smearing
-across three spores.
+([../../engine/pitfalls.md](../../engine/pitfalls.md)). Dodging keeps its `ACTION_RAID + 4` priority — a
+bomb hit costs more than a few pacified seconds — and the "go to the parked spore" rule is what makes
+the raid re-converge afterwards instead of smearing across three spores.
+
+**It is latched (`bombSpot`, ceiling `ULDUAR_FREYA_NATURE_BOMB_LATCH_MS`) for the same reason the beam
+dodge is.** The trigger fires at AVOID (11 yd) and the escape aims at CLEAR (13), so re-deriving every
+tick answered a bot on the rim with a **1.9 yd** median hop that `reach melee` undid before the next
+one: **1231 escape/closer flips in the 109s bomb phase** of `1788613108`, one bot re-aiming every
+108 ms, melee walking 400-530 yd of path to finish 25 yd away. It falls back to AVOID + 1 where
+overlapping bombs leave nothing clearing the full margin — without that it returned false on **164 of
+394** attempts, 77% of them with 4+ bombs in range, leaving the bot standing in the blast.
+
+**Both escapes route around both hazards** (`GetFreyaEscapeHazards`: bombs at CLEAR, beams at
+`_SUN_BEAM_CLEARANCE`). They sit at the same relevance, so a bot reading only its own kind alternates
+forever — **30%** of bomb destinations landed inside a beam and **61%** of beam destinations inside a
+bomb, which is what killed the healer and the druid in `1788613108`. Each falls back to its own hazard
+alone before giving up: somebody else's hazard beats your own.
+
+**The main tank answers a bomb by moving Freya** (`freya tank nature bomb`, `ACTION_RAID + 4`), because
+bombs land at players' feet and the melee stack is on her. **23 of 48** landed within 10 yd of her, her
+melee ring was inside a blast **34%** of the bomb phase, melee uptime within 5 yd ran **7-18%**, and
+raid damage halved — 136k/s before the first volley against 68k after. Tanks used to eat it: measured,
+that tank never moved across six volleys — 4.2-4.3 yd from Freya every one — and took
+**55,569 over 10 hits**, second-worst in the raid. Assist tank 0 is still excluded, since stepping out
+would lift the Conservator off its spore. The spot uses `FindNearestPositionClearOfHazards`'s
+`preferNear`, aimed at the far side of Freya from `GetFreyaRangedCampAnchor` — it only reorders spots
+the same walk away, so the tank never takes a longer trip and never drags her toward the back line. Melee
+re-close on the generic `reach melee`; nothing zeroes it.
 
 **Tanks.** The main tank gets Freya, assist tank 0 works down a ladder: Snaplasher (the Hardened Bark
 sink) > Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it >

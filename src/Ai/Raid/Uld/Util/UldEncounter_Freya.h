@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERFREYA_H
 #define PLAYERBOTS_ULDENCOUNTERFREYA_H
 
+#include "EncounterHelpers.h"
 #include "Position.h"
 #include "UldData.h"
 
@@ -121,6 +122,15 @@ constexpr float ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS = 11.0f;
 // Where the escape aims, deliberately past the trigger radius: landing on the boundary would re-fire
 // the node every tick as combat movement pulls the bot back toward its target.
 constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
+
+// Ceiling on the bomb escape latch. Without one the escape re-derives every tick, and because the
+// trigger fires at AVOID and the escape aims at CLEAR, that answers a bot on the rim with a ~2 yd step
+// that combat movement immediately undoes - the bot ends up walking hundreds of yards on the spot.
+constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 3000;
+
+// Ceiling on the main tank's reposition. Long enough to walk the clearance at 7 yd/s, short enough
+// that a tank stopped on the way hands the tick back instead of holding Freya still for a whole volley.
+constexpr uint32 ULDUAR_FREYA_TANK_BOMB_LATCH_MS = 3000;
 
 // How far the escapes look for hazards to route around. Every one of Freya's comes in numbers - a
 // bomb per player, ten lashers, overlapping sun beams - so stepping clear of the nearest is not
@@ -266,6 +276,15 @@ bool FreyaHasLivingRangedDps(PlayerbotAI* botAI);
 // Every live Nature Bomb near the bot. GameObjects, not creatures: the bomb NPC is banished and never
 // shows up in the npc value lists.
 std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadius);
+
+// Every live Sun Beam near the bot. Takes the AI rather than the Player because the beam stalkers are
+// non-selectable and only ever appear in the raw nearby-npc list.
+std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchRadius);
+
+// Every hazard both Freya escapes have to route around, each paired with the clearance it needs. A bot
+// that only reads its own kind steps out of a bomb into a beam and back again; both nodes sit at the
+// same relevance, so that alternation never resolves on its own.
+std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius);
 
 // The bot the ranged half and the healers gather on: lowest-GUID living ranged DPS in the group on
 // this map, so every bot picks the same one with no shared state. A live bot rather than a fixed

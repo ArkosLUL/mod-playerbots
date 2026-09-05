@@ -19,6 +19,27 @@ public:
     FreyaMoveAwayNatureBombAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya move away nature bomb") {}
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    // The trigger fires at AVOID and the escape aims at CLEAR, so re-deriving every tick answers a bot
+    // on the rim with a ~2 yd step that combat movement undoes before the next one. Hold the first
+    // answer until it stops being safe or the bot arrives.
+    Position bombSpot;
+    uint32 bombSpotMs = 0;
+};
+
+// Main tank only: walks Freya off the bombs so her melee ring is somewhere the rest of the melee can
+// stand. Nothing else in the encounter ever moves the boss.
+class FreyaTankNatureBombAction : public MovementAction
+{
+public:
+    FreyaTankNatureBombAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya tank nature bomb") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Position kiteSpot;
+    uint32 kiteSpotMs = 0;
 };
 
 // Owns every DPS bot's target. Eonar's Gift > Ancient Conservator > the trio slot > Detonating

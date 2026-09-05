@@ -389,6 +389,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya near nature bomb",
         { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
 
+    // The main tank answers a bomb by moving Freya, not itself. Bombs land at players' feet and the
+    // melee stack is on the boss, so a volley buries her melee ring and the rest of the melee lose it.
+    triggers.push_back(new TriggerNode(
+        "freya tank nature bomb",
+        { NextAction("freya tank nature bomb", ACTION_RAID + 4) }));
+
     // Detonating Lasher wave. Order is the doctrine: nothing here can be tanked, kited or outrun, so
     // the raid answers the wave with crowd control and a camp it can AoE. Leave the blast of anything
     // about to go off first - a bot that is dead does no crowd control - then root what has already

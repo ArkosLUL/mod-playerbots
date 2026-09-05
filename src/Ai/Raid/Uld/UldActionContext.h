@@ -69,6 +69,7 @@ public:
         creators["hodir frozen blows swap action"] = &RaidUlduarActionContext::hodir_frozen_blows_swap_action;
         creators["hodir redirect threat action"] = &RaidUlduarActionContext::hodir_redirect_threat_action;
         creators["freya move away nature bomb"] = &RaidUlduarActionContext::freya_move_away_nature_bomb;
+        creators["freya tank nature bomb"] = &RaidUlduarActionContext::freya_tank_nature_bomb;
         creators["freya fire resistance action"] = &RaidUlduarActionContext::freya_fire_resistance_action;
         creators["freya nature resistance action"] = &RaidUlduarActionContext::freya_nature_resistance_action;
         creators["freya set dps priority"] = &RaidUlduarActionContext::freya_set_dps_priority;
@@ -239,6 +240,7 @@ private:
     static Action* hodir_frozen_blows_swap_action(PlayerbotAI* ai) { return new HodirFrozenBlowsSwapAction(ai); }
     static Action* hodir_redirect_threat_action(PlayerbotAI* ai) { return new HodirRedirectThreatAction(ai); }
     static Action* freya_move_away_nature_bomb(PlayerbotAI* ai) { return new FreyaMoveAwayNatureBombAction(ai); }
+    static Action* freya_tank_nature_bomb(PlayerbotAI* ai) { return new FreyaTankNatureBombAction(ai); }
     static Action* freya_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "freya"); }
     static Action* freya_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "freya"); }
     static Action* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityAction(ai); }

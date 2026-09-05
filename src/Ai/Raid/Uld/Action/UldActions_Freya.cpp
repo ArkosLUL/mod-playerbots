@@ -56,15 +56,149 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
     // drops a bomb on every player, so the melee stack ends up under several overlapping ones.
     std::vector<Position> bombs = GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
     if (bombs.empty())
+    {
+        bombSpotMs = 0;
         return false;
+    }
 
-    Position safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS,
-                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    auto const stillClear = [&bombs](Position const& spot)
+    {
+        for (Position const& bomb : bombs)
+            if (bomb.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+
+    // Claim the tick without touching the motion master while the escape is already in flight. Returning
+    // true is the point: the engine stops here, so combat movement never gets to pull the bot back onto
+    // the bomb it just stepped off, and the spline carrying it out survives. A bot whose cast is
+    // blocking movement is not in flight and never will be, so it falls through to the interrupt below.
+    if (bombSpotMs && getMSTimeDiff(bombSpotMs, now) < ULDUAR_FREYA_NATURE_BOMB_LATCH_MS && stillClear(bombSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(bombSpot.GetPositionX(), bombSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    bombSpotMs = 0;
+
+    // Beams too, because a spot that clears both is the only one worth walking to. Both escapes sit at
+    // the same relevance, so a bot that reads only its own hazard alternates between them forever.
+    Position safe = FindNearestPositionClearOfHazards(
+        bot, GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    // A volley drops a bomb on every player at once, so nothing may clear all of them by the full
+    // margin. Somebody else's hazard beats your own, and barely outside beats standing in one.
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS + 1.0f,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
     if (safe == Position())
         return false;
 
-    return MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
-                  true, MovementPriority::MOVEMENT_FORCED, true, false);
+    FreyaClearCastBlockingMove(bot);
+
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    bombSpot = safe;
+    bombSpotMs = now;
+
+    return true;
+}
+
+bool FreyaTankNatureBombAction::isUseful()
+{
+    FreyaTankNatureBombTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaTankNatureBombAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+    {
+        kiteSpotMs = 0;
+        return false;
+    }
+
+    std::vector<Position> bombs = GetFreyaNatureBombPositions(bot, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    if (bombs.empty())
+    {
+        kiteSpotMs = 0;
+        return false;
+    }
+
+    auto const stillClear = [&bombs](Position const& spot)
+    {
+        for (Position const& bomb : bombs)
+            if (bomb.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+
+    if (kiteSpotMs && getMSTimeDiff(kiteSpotMs, now) < ULDUAR_FREYA_TANK_BOMB_LATCH_MS && stillClear(kiteSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(kiteSpot.GetPositionX(), kiteSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    kiteSpotMs = 0;
+
+    // Freya walks after whoever holds her, so every yard the tank takes drags the boss and her melee
+    // ring with it. Aim at the far side of her from the back line: FindNearestPositionClearOfHazards
+    // only reorders spots that are the same walk away, so this picks a direction without ever choosing
+    // a longer trip. No living ranged DPS means no back line to walk away from.
+    Position away;
+    Position const* preferNear = nullptr;
+    if (Player* anchor = GetFreyaRangedCampAnchor(botAI))
+    {
+        float const dx = boss->GetPositionX() - anchor->GetPositionX();
+        float const dy = boss->GetPositionY() - anchor->GetPositionY();
+        float const length = std::sqrt(dx * dx + dy * dy);
+        if (length > 0.0f)
+        {
+            away = Position(boss->GetPositionX() + dx / length * ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                            boss->GetPositionY() + dy / length * ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                            boss->GetPositionZ(), 0.0f);
+            preferNear = &away;
+        }
+    }
+
+    std::vector<EncounterHelpers::HazardCircle> hazards =
+        GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS, 2.0f,
+                                                     static_cast<float>(M_PI) / 8.0f, preferNear);
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS + 1.0f,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        return false;
+
+    FreyaClearCastBlockingMove(bot);
+
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    kiteSpot = safe;
+    kiteSpotMs = now;
+
+    return true;
 }
 
 bool FreyaSetDpsPriorityAction::isUseful()
@@ -392,25 +526,10 @@ bool FreyaDodgeUnstableSunBeamAction::isUseful()
 
 bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 {
-    // Beam stalkers are non-selectable, so find them via the raw nearby-npc list. Every beam in the
-    // search area is routed around, not just the one the bot is standing in, or it sidesteps one beam
-    // straight into another. FleePosition cannot do this: it clamps travel to AiPlayerbot.FleeDistance
-    // (5 yd), which does not clear a 12 yd beam, and it only reads one hazard.
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
-    std::vector<Position> beams;
-
-    for (auto const& guid : npcs)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if (unit->GetEntry() != NPC_FREYA_SUN_BEAM && unit->GetEntry() != NPC_FREYA_UNSTABLE_SUN_BEAM)
-            continue;
-
-        if (bot->GetExactDist2d(unit) < ULDUAR_FREYA_HAZARD_SEARCH_RADIUS)
-            beams.push_back(unit->GetPosition());
-    }
+    // Every beam in the search area is routed around, not just the one the bot is standing in, or it
+    // sidesteps one beam straight into another. FleePosition cannot do this: it clamps travel to
+    // AiPlayerbot.FleeDistance (5 yd), which does not clear a 12 yd beam, and it only reads one hazard.
+    std::vector<Position> beams = GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
 
     if (beams.empty())
     {
@@ -441,8 +560,14 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
 
     dodgeSpotMs = 0;
 
-    Position safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_SUN_BEAM_CLEARANCE,
-                                                      ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    // Bombs too, because a spot that clears both is the only one worth walking to. Both escapes sit at
+    // the same relevance, so a bot that reads only its own hazard alternates between them forever.
+    Position safe = FindNearestPositionClearOfHazards(
+        bot, GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, beams, ULDUAR_FREYA_SUN_BEAM_CLEARANCE,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
 
     // Overlapping beams can leave nowhere that clears all of them by the full margin. Barely outside
     // beats standing in one, so fall back to the radius itself before giving up.

@@ -15,6 +15,15 @@ public:
     bool IsActive() override;
 };
 
+// The main tank, who walks Freya off a bomb field instead of standing in it. Bombs land at players'
+// feet and the melee stack is on the boss, so half of every volley drops inside her melee ring.
+class FreyaTankNatureBombTrigger : public Trigger
+{
+public:
+    FreyaTankNatureBombTrigger(PlayerbotAI* ai) : Trigger(ai, "freya tank nature bomb") {}
+    bool IsActive() override;
+};
+
 // Owns every DPS bot's target for the whole encounter, so the trio wave can be split three ways.
 class FreyaSetDpsPriorityTrigger : public Trigger
 {

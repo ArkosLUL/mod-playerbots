@@ -403,6 +403,41 @@ std::vector<Position> GetFreyaNatureBombPositions(Player* bot, float searchRadiu
     return positions;
 }
 
+std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchRadius)
+{
+    Player* bot = botAI->GetBot();
+
+    std::vector<Position> beams;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() != NPC_FREYA_SUN_BEAM && unit->GetEntry() != NPC_FREYA_UNSTABLE_SUN_BEAM)
+            continue;
+
+        if (bot->GetExactDist2d(unit) < searchRadius)
+            beams.push_back(unit->GetPosition());
+    }
+
+    return beams;
+}
+
+std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius)
+{
+    Player* bot = botAI->GetBot();
+
+    std::vector<EncounterHelpers::HazardCircle> hazards;
+    for (Position const& bomb : GetFreyaNatureBombPositions(bot, searchRadius))
+        hazards.emplace_back(bomb, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS);
+
+    for (Position const& beam : GetFreyaSunBeamPositions(botAI, searchRadius))
+        hazards.emplace_back(beam, ULDUAR_FREYA_SUN_BEAM_CLEARANCE);
+
+    return hazards;
+}
+
 Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();

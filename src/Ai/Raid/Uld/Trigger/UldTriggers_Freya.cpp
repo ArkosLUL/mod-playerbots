@@ -23,9 +23,21 @@ bool FreyaNearNatureBombTrigger::IsActive()
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Tanks eat the bomb. Stepping out would drag Freya toward the raid, or lift the Conservator off
-    // the spore the melee are sheltering on, and ~6k every 18s is cheaper than either.
+    // Assist tank 0 eats the bomb: stepping out would lift the Conservator off the spore the melee are
+    // sheltering on. The main tank has its own node, which moves Freya rather than just the bot.
     if (botAI->IsTank(bot))
+        return false;
+
+    return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;
+}
+
+bool FreyaTankNatureBombTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    if (!PlayerbotAI::IsMainTank(bot))
         return false;
 
     return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;

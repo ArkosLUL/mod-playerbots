@@ -69,6 +69,7 @@ public:
         creators["hodir frozen blows swap"] = &RaidUlduarTriggerContext::hodir_frozen_blows_swap;
         creators["hodir redirect threat"] = &RaidUlduarTriggerContext::hodir_redirect_threat;
         creators["freya near nature bomb"] = &RaidUlduarTriggerContext::freya_near_nature_bomb;
+        creators["freya tank nature bomb"] = &RaidUlduarTriggerContext::freya_tank_nature_bomb;
         creators["freya fire resistance trigger"] = &RaidUlduarTriggerContext::freya_fire_resistance_trigger;
         creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
         creators["freya set dps priority"] = &RaidUlduarTriggerContext::freya_set_dps_priority;
@@ -252,6 +253,7 @@ private:
     static Trigger* hodir_frozen_blows_swap(PlayerbotAI* ai) { return new HodirFrozenBlowsSwapTrigger(ai); }
     static Trigger* hodir_redirect_threat(PlayerbotAI* ai) { return new HodirRedirectThreatTrigger(ai); }
     static Trigger* freya_near_nature_bomb(PlayerbotAI* ai) { return new FreyaNearNatureBombTrigger(ai); }
+    static Trigger* freya_tank_nature_bomb(PlayerbotAI* ai) { return new FreyaTankNatureBombTrigger(ai); }
     static Trigger* freya_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "freya"); }
     static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }
     static Trigger* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityTrigger(ai); }
