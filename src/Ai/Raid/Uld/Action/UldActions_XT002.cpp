@@ -151,19 +151,30 @@ bool XT002DebuffCarrierAction::ApproachIsClear(float x, float y, std::list<Creat
 
 bool XT002DebuffCarrierAction::InsideParkingLot() const
 {
-    Position const& origin = botAI->IsMelee(bot) ? ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE
-                                                 : ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
-
-    // The grid is axis-aligned, so its extent is a rectangle. The margin is the re-engage band, which
+    // Each grid is axis-aligned, so its extent is a rectangle. The margin is the re-engage band, which
     // is what the carrier already tolerates as "on a cell".
     float const margin = ULDUAR_XT002_BOMB_CELL_REENGAGE;
-    float const minX = origin.GetPositionX() - margin;
-    float const maxX = origin.GetPositionX() + (ULDUAR_XT002_BOMB_GRID_X_CELLS - 1) * ULDUAR_XT002_BOMB_GRID_STEP + margin;
-    float const maxY = origin.GetPositionY() + margin;
-    float const minY = origin.GetPositionY() - (ULDUAR_XT002_BOMB_GRID_Y_CELLS - 1) * ULDUAR_XT002_BOMB_GRID_STEP - margin;
+    float const span = (ULDUAR_XT002_BOMB_GRID_Y_CELLS - 1) * ULDUAR_XT002_BOMB_GRID_STEP;
 
-    return bot->GetPositionX() >= minX && bot->GetPositionX() <= maxX && bot->GetPositionY() >= minY &&
-           bot->GetPositionY() <= maxY;
+    for (XT002BombLot const& lot : GetXT002BombLots(botAI, bot))
+    {
+        float const originX = lot.origin.GetPositionX();
+        float const originY = lot.origin.GetPositionY();
+        float const farY = originY + lot.yDirection * span;
+
+        float const minX = originX - margin;
+        float const maxX = originX + (ULDUAR_XT002_BOMB_GRID_X_CELLS - 1) * ULDUAR_XT002_BOMB_GRID_STEP + margin;
+        float const minY = std::min(originY, farY) - margin;
+        float const maxY = std::max(originY, farY) + margin;
+
+        if (bot->GetPositionX() >= minX && bot->GetPositionX() <= maxX && bot->GetPositionY() >= minY &&
+            bot->GetPositionY() <= maxY)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 float XT002DebuffCarrierAction::TravelReach(uint32 remainingMs) const
@@ -308,12 +319,6 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot()
 XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit* boss, float reach,
                                                                            float& cellX, float& cellY)
 {
-    Position const& origin = botAI->IsMelee(bot) ? ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE
-                                                 : ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
-    float const originX = origin.GetPositionX();
-    float const originY = origin.GetPositionY();
-    float const originZ = origin.GetPositionZ();
-
     std::list<Creature*> voidZones;
     boss->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
 
@@ -321,6 +326,7 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
     {
         float x;
         float y;
+        float z;
         int rank;
         float distance;
     };
@@ -328,34 +334,42 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
     std::vector<Cell> cells;
     float nearestDistance = std::numeric_limits<float>::max();
 
-    for (int cell = 0; cell < ULDUAR_XT002_BOMB_GRID_X_CELLS * ULDUAR_XT002_BOMB_GRID_Y_CELLS; ++cell)
+    // Every lot the role owns goes into one pool. Ranged and healers have one on each side of the
+    // formation, and the shortest-walk tie-break below is what sends a carrier to the near one.
+    for (XT002BombLot const& lot : GetXT002BombLots(botAI, bot))
     {
-        float const candidateX = originX + (cell % ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
-        float const candidateY = originY - (cell / ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
+        for (int cell = 0; cell < ULDUAR_XT002_BOMB_GRID_X_CELLS * ULDUAR_XT002_BOMB_GRID_Y_CELLS; ++cell)
+        {
+            float const candidateX =
+                lot.origin.GetPositionX() + (cell % ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
+            float const candidateY =
+                lot.origin.GetPositionY() +
+                lot.yDirection * (cell / ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
 
-        // Measured against where the puddles actually are rather than the cells they were aimed at, so
-        // a drop that landed off-centre blocks whatever it is really near.
-        float nearestVoidZone = std::numeric_limits<float>::max();
-        for (Creature* voidZone : voidZones)
-            nearestVoidZone = std::min(nearestVoidZone, voidZone->GetExactDist2d(candidateX, candidateY));
+            // Measured against where the puddles actually are rather than the cells they were aimed at, so
+            // a drop that landed off-centre blocks whatever it is really near.
+            float nearestVoidZone = std::numeric_limits<float>::max();
+            for (Creature* voidZone : voidZones)
+                nearestVoidZone = std::min(nearestVoidZone, voidZone->GetExactDist2d(candidateX, candidateY));
 
-        if (nearestVoidZone < ULDUAR_XT002_VOID_ZONE_RADIUS)
-            continue;
+            if (nearestVoidZone < ULDUAR_XT002_VOID_ZONE_RADIUS)
+                continue;
 
-        float const distance = bot->GetExactDist2d(candidateX, candidateY);
+            float const distance = bot->GetExactDist2d(candidateX, candidateY);
 
-        // Reachable first, then room, then a clear approach, then the shortest walk. Reachable leads
-        // because a cell the bomb goes off before the bot arrives at is worth nothing at all, however
-        // roomy - the lot runs 30-50 yd out against a 9s debuff, so this is a real gate and not a
-        // formality. Room comes next: standing in Consumption costs the whole debuff, where crossing
-        // a puddle on the way costs a second or two.
-        bool const reachable = distance + ULDUAR_XT002_BOMB_CELL_ARRIVED <= reach;
-        int const rank = (reachable ? 4 : 0) +
-                         (nearestVoidZone >= ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE ? 2 : 0) +
-                         (ApproachIsClear(candidateX, candidateY, voidZones) ? 1 : 0);
+            // Reachable first, then room, then a clear approach, then the shortest walk. Reachable leads
+            // because a cell the bomb goes off before the bot arrives at is worth nothing at all, however
+            // roomy - the lot runs 30-50 yd out against a 9s debuff, so this is a real gate and not a
+            // formality. Room comes next: standing in Consumption costs the whole debuff, where crossing
+            // a puddle on the way costs a second or two.
+            bool const reachable = distance + ULDUAR_XT002_BOMB_CELL_ARRIVED <= reach;
+            int const rank = (reachable ? 4 : 0) +
+                             (nearestVoidZone >= ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE ? 2 : 0) +
+                             (ApproachIsClear(candidateX, candidateY, voidZones) ? 1 : 0);
 
-        cells.push_back({candidateX, candidateY, rank, distance});
-        nearestDistance = std::min(nearestDistance, distance);
+            cells.push_back({candidateX, candidateY, lot.origin.GetPositionZ(), rank, distance});
+            nearestDistance = std::min(nearestDistance, distance);
+        }
     }
 
     if (cells.empty())
@@ -409,7 +423,7 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
             break;
 
         ++attempts;
-        switch (IssueMove(candidate.x, candidate.y, originZ))
+        switch (IssueMove(candidate.x, candidate.y, candidate.z))
         {
             case MoveIssue::Taken:
                 return ParkResult::Moving;

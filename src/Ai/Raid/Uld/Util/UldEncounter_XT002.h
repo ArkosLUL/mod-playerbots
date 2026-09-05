@@ -7,6 +7,8 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERXT002_H
 #define PLAYERBOTS_ULDENCOUNTERXT002_H
 
+#include <vector>
+
 #include "Position.h"
 #include "UldData.h"
 
@@ -76,10 +78,10 @@ constexpr float ULDUAR_XT002_RANGED_SPOT_TOLERANCE = 5.0f;
 // not quite - 14 bots cannot all sit 8 yd apart and stay in range, so the aim is to cost one splash
 // two or three bots instead of the whole group.
 //
-// The centre sits north of the ranged anchor rather than on it. The parking lots run along y = -41,
-// and an ellipse centred on the anchor puts its southern slots 14 yd from the nearest cell - inside
-// Gravity Bomb's 20 yd pull, so an expiring puddle would drag those bots into it. Offset, the nearest
-// cell is 23 yd from the southernmost slot.
+// The centre sits north of the ranged anchor rather than on it, and the ranged parking lots are
+// mirrored about that centre, so the offset now sets the clearance on both sides at once. Centred on
+// the anchor instead, the southern slots sit 14 yd from the nearest cell - inside Gravity Bomb's 20 yd
+// pull, so an expiring puddle would drag those bots into it. Offset, both edges land at 23 yd.
 constexpr float ULDUAR_XT002_RANGED_RING_OFFSET_Y = 6.0f;
 constexpr float ULDUAR_XT002_RANGED_RING_INNER_X = 6.0f;
 constexpr float ULDUAR_XT002_RANGED_RING_INNER_Y = 8.0f;
@@ -87,10 +89,10 @@ constexpr float ULDUAR_XT002_RANGED_RING_OUTER_X = 9.0f;
 constexpr float ULDUAR_XT002_RANGED_RING_OUTER_Y = 12.0f;
 constexpr size_t ULDUAR_XT002_RANGED_RING_INNER_SLOTS = 6;
 
-// XT-002 hard mode: Void Zone parking grid, walked +x and -y from whichever Gravity Bomb origin fits
-// the carrier's role. The origin is the corner nearest the raid and the grid runs away from it, so the
-// cells that only get used once the lot fills are the far ones. Step is just over the Void Zone
-// diameter so consecutive drops cannot overlap.
+// XT-002 hard mode: Void Zone parking grid, walked +x from a Gravity Bomb origin and then away from
+// the raid in y. The origin is the corner nearest the raid, so the cells that only get used once the
+// lot fills are the far ones. Step is just over the Void Zone diameter so consecutive drops cannot
+// overlap.
 constexpr float ULDUAR_XT002_BOMB_GRID_STEP = 6.0f;
 constexpr int ULDUAR_XT002_BOMB_GRID_X_CELLS = 5;
 constexpr int ULDUAR_XT002_BOMB_GRID_Y_CELLS = 4;
@@ -131,9 +133,11 @@ constexpr float ULDUAR_XT002_MELEE_ENGAGE_RANGE = 15.0f;
 // Taunt, Growl, Dark Command and Hand of Reckoning are all 30yd.
 constexpr float ULDUAR_XT002_TAUNT_RANGE = 30.0f;
 
-// Anchored on XT rather than the carrier, so one lookup covers both parking origins wherever the
-// carrier happens to be standing when the debuff lands.
-constexpr float ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS = 100.0f;
+// Anchored on XT rather than the carrier, so one lookup covers every parking lot wherever the carrier
+// happens to be standing when the debuff lands. The far corner of the northern lot sits 92yd from the
+// most easterly position XT has been measured at, and a puddle outside this radius is a cell the
+// ranking believes is free.
+constexpr float ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS = 110.0f;
 
 // XT-002: how many ranked destinations a mover will offer the pathfinder before giving up for the
 // tick. findSmoothPath refuses points in this room that are plainly walkable - it returns
@@ -165,7 +169,16 @@ extern const Position ULDUAR_XT002_MAINTANK_SPOT;
 extern const Position ULDUAR_XT002_RANGED_SPOT;
 extern const Position ULDUAR_XT002_SEARING_LIGHT_SPOT;
 extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE;
-extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED;
+extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_SOUTH;
+extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH;
+
+// One Void Zone parking grid. The grid walks +x from the origin and `yDirection` in y, so the origin
+// is always the corner nearest the raid whichever side of the formation the lot is on.
+struct XT002BombLot
+{
+    Position origin;
+    float yDirection;
+};
 
 // XT-002 Deconstructor. These use GetFirstAliveUnitByEntry rather than "find target": the Heart
 // never attacks anyone, so it never lands on a bot's threat list and "find target" cannot resolve it.
@@ -206,5 +219,11 @@ bool GetXT002RangedSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // Whether a point keeps `clearance` from every formation slot except this bot's own.
 bool XT002PointClearOfFormation(Player* bot, float x, float y, float clearance);
+
+// The parking grids this bot's role may drop a Void Zone in. Melee get the one under their stack;
+// ranged and healers get one on each side of the formation, so a carrier parks on whichever side it
+// is already standing. Everything that reads a lot goes through here, so the mover and the
+// "am I in a lot" test cannot disagree about which grid a bot owns.
+std::vector<XT002BombLot> GetXT002BombLots(PlayerbotAI* botAI, Player* bot);
 
 #endif

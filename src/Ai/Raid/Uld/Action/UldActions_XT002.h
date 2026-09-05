@@ -69,18 +69,20 @@ private:
         Parked       // standing on one, so the tick is free for casts and heals
     };
 
-    // Picks a cell of the role's parking grid that is free of Void Zones, preferring one the bot can
-    // still reach inside `reach` yards, then one with room to spare, then a clear approach, then the
-    // shortest walk. Offers its ranked cells to the pathfinder in turn and reports Moving on the first
-    // one accepted. There is deliberately no line-of-sight test: the lot sits past the edge of the
-    // Ulduar building geometry, so a ray from the raid clips the rim and rejects all twenty cells,
-    // while the navmesh path to every one of them is clean. The best cell is written to
-    // `cellX`/`cellY` whether or not it turned out to be usable.
+    // Picks a cell from every parking grid the role owns that is free of Void Zones, preferring one the
+    // bot can still reach inside `reach` yards, then one with room to spare, then a clear approach,
+    // then the shortest walk. Ranged and healers have a lot on each side of the formation, and that
+    // last tie-break is what sends a carrier to the near one rather than across the room. Offers its
+    // ranked cells to the pathfinder in turn and reports Moving on the first one accepted. There is
+    // deliberately no line-of-sight test: the lots sit past the edge of the Ulduar building geometry,
+    // so a ray from the raid clips the rim and rejects every cell while the navmesh path to each of
+    // them is clean. The best cell is written to `cellX`/`cellY` whether or not it turned out to be
+    // usable.
     ParkResult ParkVoidZone(Unit* boss, float reach, float& cellX, float& cellY);
 
     // How far the bot can still walk before the bomb goes off. GetSpeed(MOVE_RUN) already carries
-    // Tympanic Tantrum's 50% slow, which is the case this exists for: slowed, no cell in either lot
-    // is inside a 9s debuff.
+    // Tympanic Tantrum's 50% slow, which is the case this exists for: slowed, the reach is about 25yd,
+    // which is one lot away and no further.
     float TravelReach(uint32 remainingMs) const;
 
     // Follows the bearing to a cell as far as the time budget allows and stops there, so a carrier
@@ -106,9 +108,9 @@ private:
     // this line - but the carrier action outranks the hazard dodge, so it is the only guard there is.
     bool ApproachIsClear(float x, float y, std::list<Creature*> const& voidZones) const;
 
-    // Whether the bot is standing in its role's parking grid. Geometry only, ignoring which cells are
-    // occupied: the case this exists for is a carrier whose bomb has just expired under its feet, so
-    // the cell it is standing on is certain to be occupied by its own fresh puddle.
+    // Whether the bot is standing in any parking grid its role owns. Geometry only, ignoring which
+    // cells are occupied: the case this exists for is a carrier whose bomb has just expired under its
+    // feet, so the cell it is standing on is certain to be occupied by its own fresh puddle.
     bool InsideParkingLot() const;
 
     // Latched once standing on a cell, so drift inside the deadband does not re-issue a move. A bot

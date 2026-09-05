@@ -34,11 +34,18 @@ const Position ULDUAR_XT002_RANGED_SPOT = Position(866.0f, -12.5f, 409.8f);
 // findSmoothPath answers PATHFIND_NOPATH there from every melee position probed, while every point
 // out here paths normally from all of them. 38yd from the melee stack, inside a 9s run.
 const Position ULDUAR_XT002_SEARING_LIGHT_SPOT = Position(846.0f, -22.0f, 409.597f);
-// Two origins so melee and ranged carriers do not drop Void Zones on top of each other. Each is the
-// corner of its grid nearest the raid - roughly 30yd from the carrier's usual spot, which is the run
-// that has to fit inside the 9s the debuff lasts.
+// Separate origins so melee and ranged carriers do not drop Void Zones on top of each other. Each is
+// the corner of its grid nearest the raid - roughly 30yd from the carrier's usual spot, which is the
+// run that has to fit inside the 9s the debuff lasts.
+//
+// Ranged and healers get a lot on each side because the formation is 24yd deep, so one lot means the
+// far half of it walks 46yd where the near half walks 23. Tympanic Tantrum halves movement speed and
+// cuts the reach to about 25yd, and a carrier caught by both is out of options. The northern origin
+// is the southern one reflected about the formation centre, which puts both lots 23.2yd off the
+// nearest slot - outside Gravity Bomb's 20yd expiry pull on either side.
 const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE = Position(871.5199f, -42.04216f, 409.80377f);
-const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED = Position(837.0746f, -41.01061f, 409.80362f);
+const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_SOUTH = Position(837.0746f, -41.01061f, 409.80362f);
+const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH = Position(837.0746f, 28.01061f, 409.811f);
 
 // XT and his Heart both spend part of the fight carrying UNIT_FLAG_NOT_SELECTABLE, which drops them
 // out of "possible targets" entirely (AttackersValue::IsPossibleTarget rejects the flag). Scanning
@@ -314,4 +321,17 @@ bool XT002PointClearOfFormation(Player* bot, float x, float y, float clearance)
     }
 
     return true;
+}
+
+// Melee get no northern lot, and it is the navmesh rather than the layout that decides it: a sunken
+// WMO roof underlies the yard and rises east, so from anywhere in the melee stack findSmoothPath
+// answers PATHFIND_NOPATH for every point north of the boss line while the whole southern arc is
+// clean. Their one lot sits under them anyway, a 15 to 31yd walk.
+std::vector<XT002BombLot> GetXT002BombLots(PlayerbotAI* botAI, Player* bot)
+{
+    if (botAI->IsMelee(bot))
+        return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE, -1.0f}};
+
+    return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_SOUTH, -1.0f},
+            {ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH, 1.0f}};
 }
