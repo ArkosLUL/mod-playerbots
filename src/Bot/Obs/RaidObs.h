@@ -61,6 +61,12 @@ void OnCreatureEngage(Unit* creature, Unit* victim);
 // `source` names the file and may be null, in which case the map's own name is used.
 void MarkPull(Map* map, Unit* source);
 
+// Names a pull the engage hook cannot. That hook needs a boss to enter combat with a player, and an
+// encounter whose opening phase is fought against adds has none: a Yogg-Saron wipe in phase one was
+// filed as `ulduar` on 2026-09-04, with General Vezax swept in from the next room as the only boss the
+// file named. Only ever upgrades the map-name fallback, so a correctly named trace is never touched.
+void NamePull(Map* map, char const* bossName);
+
 // --- Combat events ---
 
 void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amount, int32 overkill,

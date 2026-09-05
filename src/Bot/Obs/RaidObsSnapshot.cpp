@@ -30,7 +30,7 @@ namespace RaidObs
 // `dealt` is the running damage total for a roster member and 0 for everything else. Passed in rather
 // than looked up here, because only BuildSnapshotPayload knows which rows are bots and it is already
 // holding the BotTrace it comes from.
-std::string UnitRow(Unit* unit, uint64 dealt)
+std::string UnitRow(Unit* unit, uint64 dealt, std::vector<uint32>* castSpells)
 {
     uint32 castingId = 0;
     for (uint32 type = 0; type < CURRENT_MAX_SPELL; ++type)
@@ -39,6 +39,9 @@ std::string UnitRow(Unit* unit, uint64 dealt)
             castingId = spell->GetSpellInfo()->Id;
             break;
         }
+
+    if (castingId && castSpells)
+        castSpells->push_back(castingId);
 
     uint32 const maxMana = unit->GetMaxPower(POWER_MANA);
     float const manaPct = maxMana ? 100.0f * unit->GetPower(POWER_MANA) / maxMana : 0.0f;
@@ -105,7 +108,8 @@ bool HazardIsFriendly(DynamicObject* dyn)
 // Hazards and the hostile units standing among them, from a single grid visit - a searcher each would
 // walk the same 150-yard cell range twice a snapshot. Swept creatures are appended to `units`, so they
 // land in the same row set as the roster.
-std::string ObsSession::SweepArea(Unit* anchor, std::string& units, bool& firstUnit)
+std::string ObsSession::SweepArea(Unit* anchor, std::string& units, bool& firstUnit,
+                                  std::vector<uint32>& castSpells)
 {
     std::list<WorldObject*> objs;
     Acore::AllWorldObjectsInRange check(anchor, OBS_HAZARD_SWEEP_RADIUS);
@@ -175,7 +179,7 @@ std::string ObsSession::SweepArea(Unit* anchor, std::string& units, bool& firstU
         if (!firstUnit)
             units += ",";
         firstUnit = false;
-        units += UnitRow(creature);
+        units += UnitRow(creature, 0, &castSpells);
     }
 
     out += "]";
@@ -185,9 +189,11 @@ std::string ObsSession::SweepArea(Unit* anchor, std::string& units, bool& firstU
 // Built the same way with or without a session, so a flushed pre-roll and live sampling produce the
 // same row shape. Only the sweep differs - pre-roll has no session and cannot afford it.
 std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster,
-                                 std::unordered_set<ObjectGuid> const& watched, ObsSession* session)
+                                 std::unordered_set<ObjectGuid> const& watched, ObsSession* session,
+                                 std::vector<uint32>* castSpells)
 {
     std::string units = "[";
+    std::vector<uint32> casting;
     bool first = true;
     Unit* anchor = nullptr;
     std::unordered_set<ObjectGuid> ridden;
@@ -219,7 +225,7 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
             if (!first)
                 units += ",";
             first = false;
-            units += UnitRow(vehicle);
+            units += UnitRow(vehicle, 0, &casting);
             if (session)
                 session->EnsureUnit(vehicle);
         }
@@ -238,7 +244,7 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
         if (!first)
             units += ",";
         first = false;
-        units += UnitRow(player, dealt);
+        units += UnitRow(player, dealt, &casting);
 
         // Pets are in nothing else: the sweep only keeps units hostile to the anchor and the watched
         // set is seeded from attackers, so a trace could say a pet cast something but never where it
@@ -260,7 +266,7 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
 
             // No damage column. AccrueDamageDealt already folds a pet's damage into its owner's total,
             // and a second copy here would double any window differenced out of two snapshots.
-            units += "," + UnitRow(pet);
+            units += "," + UnitRow(pet, 0, &casting);
             if (session)
                 session->EnsureUnit(pet);
         }
@@ -275,13 +281,20 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
         if (!first)
             units += ",";
         first = false;
-        units += UnitRow(creature);
+        units += UnitRow(creature, 0, &casting);
     }
 
     // The sweep visits every grid cell within 150 yards, which is far too much to run four times a
     // second on a map that is not in a pull. Pre-roll keeps the row so the shape does not change.
-    std::string const hazards = session && anchor ? session->SweepArea(anchor, units, first) : "[]";
+    std::string const hazards = session && anchor ? session->SweepArea(anchor, units, first, casting) : "[]";
     units += "]";
+
+    // The pre-roll has no session to name them with, so it takes the ids and sweeps them at the drain.
+    if (session)
+        for (uint32 spellId : casting)
+            session->EnsureSpell(spellId);
+    else if (castSpells)
+        castSpells->insert(castSpells->end(), casting.begin(), casting.end());
 
     return "\"u\":" + units + ",\"hz\":" + hazards;
 }

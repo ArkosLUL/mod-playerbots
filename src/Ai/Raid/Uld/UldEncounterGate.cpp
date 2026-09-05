@@ -9,6 +9,7 @@
 #include "InstanceScript.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "RaidObs.h"
 
 namespace
 {
@@ -82,6 +83,27 @@ bool UldEncounterGateOpen(PlayerbotAI* botAI, uint32 bossId)
     return true;
 }
 
+bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
+    InstanceScript* instance = bot ? bot->GetInstanceScript() : nullptr;
+    if (!instance || bossId >= instance->GetEncounterCount())
+        return false;
+
+    return instance->GetBossState(bossId) == IN_PROGRESS;
+}
+
+char const* UldEncounterName(uint32 bossId)
+{
+    // First entry wins, which is why `sara` sitting after `yogg-saron` matters: both name the same
+    // encounter and only one of them reads as a boss.
+    for (EncounterPrefix const& entry : ENCOUNTER_PREFIXES)
+        if (entry.bossId == bossId)
+            return entry.prefix;
+
+    return nullptr;
+}
+
 // Name and check interval are copied off the inner trigger, not defaulted: Engine::ProcessTriggers
 // calls needCheck on this object, so a wrapper built with the default interval of 1 would quietly
 // promote every throttled trigger - Algalon's on 2 and 5, Iron Assembly's Rune of Death on 200 - to
@@ -100,7 +122,19 @@ Event UldGatedTrigger::Check()
     if (!inner || !UldEncounterGateOpen(botAI, bossId))
         return Event();
 
-    return inner->Check();
+    Event event = inner->Check();
+    if (!event)
+        return event;
+
+    // A trigger firing while its own encounter is the live one is the only thing that can name a pull
+    // the engage hook missed - Yogg-Saron's phase one has no boss to enter combat with a player, so
+    // 2026-09-04's wipe there was filed as `ulduar`. IN_PROGRESS rather than the gate's weaker test on
+    // purpose: with nothing engaged every trigger is open, and a Vezax trigger firing in that window
+    // must not name a Yogg-Saron pull after Vezax.
+    if (RaidObs::Active() && UldEncounterIsLive(botAI, bossId))
+        RaidObs::NamePull(botAI->GetBot()->GetMap(), UldEncounterName(bossId));
+
+    return event;
 }
 
 bool UldGatedTrigger::IsActive()

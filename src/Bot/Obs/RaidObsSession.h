@@ -173,6 +173,9 @@ struct PreRollEntry
 {
     uint32 ms;
     std::string payload;
+    // Casting spell ids inside the payload. Nothing can name them when the sample is taken - there is
+    // no session yet - so they ride along and are swept when the ring is drained into one.
+    std::vector<uint32> castSpells;
 };
 
 // The sample accumulator lives with the ring rather than in a thread_local, so both are dropped
@@ -242,7 +245,8 @@ public:
     void SeedWatched(Unit* source);
     void PruneWatched();
     void PruneAuras(uint32 now);
-    std::string SweepArea(Unit* anchor, std::string& units, bool& firstUnit);
+    std::string SweepArea(Unit* anchor, std::string& units, bool& firstUnit,
+                          std::vector<uint32>& castSpells);
 
     // --- verdict ticks (RaidObsEngine.cpp) ---
 
@@ -255,6 +259,7 @@ public:
     bool RosterMostlyDead();
     bool AnyRaidMemberInCombat();
     void UpgradeBossName(Creature* boss);
+    void UpgradeBossName(std::string const& slug);
 };
 
 // The registry is the only shared structure here. Bumped on every open and close so map threads can
@@ -309,12 +314,17 @@ inline uint64 GuidKey(ObjectGuid guid)
 
 // --- snapshots (RaidObsSnapshot.cpp) ---
 
-std::string UnitRow(Unit* unit, uint64 dealt = 0);
+// `castSpells` collects what each row says it is casting, for the caller to name. Nothing else
+// sweeps that column: a creature NoteCast filtered out as irrelevant, and every pre-roll row, left a
+// bare id behind - 99 of them across the 2026-09-04/05 traces, three never named in any trace at all.
+std::string UnitRow(Unit* unit, uint64 dealt = 0, std::vector<uint32>* castSpells = nullptr);
 float HazardRadius(DynamicObject* dyn);
 bool HazardIsFriendly(DynamicObject* dyn);
-// `session` is null on the pre-roll path, which samples a map before any trace exists.
+// `session` is null on the pre-roll path, which samples a map before any trace exists; that caller
+// passes `castSpells` instead and sweeps them once it has one.
 std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster,
-                                 std::unordered_set<ObjectGuid> const& watched, ObsSession* session);
+                                 std::unordered_set<ObjectGuid> const& watched, ObsSession* session,
+                                 std::vector<uint32>* castSpells = nullptr);
 
 // --- verdict ticks (RaidObsEngine.cpp) ---
 

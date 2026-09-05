@@ -60,10 +60,18 @@ engage hook name the trace after the creature rather than the map — the core r
 before `OnUnitEnterCombat`.
 
 **A trace can rename itself.** Opened by `bossstate` or `MarkPull` with nothing engaged yet, it has
-only the map name to use — two of ten traces on 2026-08-31 were filed `ulduar`, an Iron Assembly wipe
-and a Thorim wipe. The first boss to engage renames the file and emits a second `pull`, `src`
-`rename`, carrying `was`. `hdr.boss` stays stale, line one being long written, so **prefer the rename
-record**. Only the map-name fallback is ever upgraded.
+only the map name to use — three traces were filed `ulduar`: an Iron Assembly and a Thorim wipe on
+2026-08-31, a Yogg-Saron wipe on 2026-09-04. Whatever names it first renames the file and emits a
+second `pull`, `src` `rename`, carrying `was`. `hdr.boss` stays stale, line one being long written, so
+**prefer the rename record**. Only the map-name fallback is ever upgraded.
+
+Three callers reach it, because the boss cannot always say: `OnCreatureEngage`, the first boss to
+swing at a player; `MarkPull` on an already-open session; and `NamePull(map, name)`, which takes the
+name outright. Yogg-Saron is why the last two exist — phase one is fought against Sara, the Voice and
+the Guardians, none flagged a boss, so nothing engages and the only boss the file named was General
+Vezax, swept in from the next room. `UldGatedTrigger` calls `NamePull` when a trigger fires while its
+own encounter is `IN_PROGRESS`; the gate's own test leaves every trigger open between pulls, far too
+loose to name by.
 
 While a raid sits on a tracked map with no session, snapshots go to a `PreRollSeconds` ring that is
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull
@@ -74,7 +82,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 9`)
+## Schema (`v: 10`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -120,8 +128,10 @@ number and the trace still reads standalone: `spell 63511` needs a DBC open besi
 obvious one — `aura.s` and `cast.tgt` stayed unnamed for a release because only the caster was covered,
 and a death block read `Flash Freeze from #1:1925`. A new *emitter* needs the sweep as much as a new
 field: `NoteHazard` went unswept until Thorim became its first caller, then wrote 121 rows of bare
-`62057`. A guid inside `note.txt` is the exception: that is free text the recorder cannot inspect, so
-`postmortem.py` joins it on read.
+`62057`, and `snap.u`'s casting spell wrote 99 bare ids across the 2026-09-04/05 traces because
+`UnitRow` is a free function holding no session — it hands the ids to its caller now, and the pre-roll
+ring carries them until there is a session to name them with. A guid inside `note.txt` is the
+exception: that is free text the recorder cannot inspect, so `postmortem.py` joins it on read.
 
 **Emit per engine pass, not per verdict.** A pass walks several action nodes and reports a verdict for
 each, so no single verdict is news on its own. `act` and `veto` buffer until `BeginTick` closes the
@@ -235,7 +245,7 @@ because it sits at `combat` alongside `reach melee`. `follow` and `chase` never 
 `RaidObs::MovePriority` mirrors `MovementPriority` so `Bot/Obs` stays off `Ai`, and
 `MovementActions.cpp` static_asserts the two in step.
 
-Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `postmortem.py` on any field *or value*
+Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `obstrace.py` on any field *or value*
 change; an additive one keeps the old version in `READABLE_SCHEMAS` so traces already on disk still
 read. A new sentinel in an existing column is not additive — a reader that does not know it computes a
 wrong number.

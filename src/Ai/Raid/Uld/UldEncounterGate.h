@@ -49,6 +49,13 @@ bool UldEncounterGateOpen(PlayerbotAI* botAI, uint32 bossId);
 // False for a name belonging to no single encounter, which is then left ungated.
 bool UldEncounterOfTrigger(std::string const& triggerName, uint32& bossId);
 
+// Stricter than the gate: this encounter and no other is what the instance script says is running.
+// The gate leaves everything open between pulls, which is far too loose to name a trace by.
+bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId);
+
+// The encounter's name, for a trace that could not name itself. Null for an id with no entry.
+char const* UldEncounterName(uint32 bossId);
+
 // Wraps rather than subclasses. All 165 derive from Trigger directly, so one decorator applied where
 // the context builds them beats editing every class, and leaves their IsActive bodies alone.
 class UldGatedTrigger : public Trigger

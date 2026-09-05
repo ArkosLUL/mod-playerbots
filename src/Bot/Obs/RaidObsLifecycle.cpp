@@ -133,7 +133,12 @@ void OpenSession(Map* map, Unit* source, char const* trigger)
     }
 
     for (PreRollEntry const& entry : preRoll)
+    {
+        for (uint32 spellId : entry.castSpells)
+            s.EnsureSpell(spellId);
+
         s.Emit(entry.ms, "snap", entry.payload);
+    }
 
     s.Emit(s.startMs, "pull",
          "\"boss\":" + Quoted(s.bossSlug) + ",\"src\":\"" + trigger + "\"");
@@ -298,11 +303,12 @@ void OnMapUpdate(Map* map, uint32 diff)
         if (roster.empty())
             return;
 
-        std::string payload = BuildSnapshotPayload(map, roster, {}, nullptr);
+        std::vector<uint32> casting;
+        std::string payload = BuildSnapshotPayload(map, roster, {}, nullptr, &casting);
 
         std::lock_guard<std::mutex> guard(g_registryMutex);
         PreRollRing& ring = g_preRoll[instanceId];
-        ring.entries.push_back({now, std::move(payload)});
+        ring.entries.push_back({now, std::move(payload), std::move(casting)});
         while (!ring.entries.empty() && getMSTimeDiff(ring.entries.front().ms, now) > g_cfg.preRollMs)
             ring.entries.pop_front();
 
@@ -377,21 +383,26 @@ void OnBossState(uint32 bossId, Map* map)
         pending.push_back(bossId);
 }
 
-// A session opened off a boss state change, or off a MarkPull whose boss lookup came back empty, can
-// only name itself after the map - two of ten traces on 2026-08-31 were filed as `ulduar`, one an Iron
-// Assembly wipe and one a Thorim wipe. The filename and hdr.boss are the only way to pick a trace, so
-// the first boss that actually swings fixes both. Only ever upgrades the map-name fallback: a session
-// that already named itself after a creature is never renamed.
+// The first boss to actually swing at the raid, for a trace that opened before it could see one.
 void ObsSession::UpgradeBossName(Creature* boss)
 {
-    if (!map || !boss || path.empty())
+    if (!map || !boss)
         return;
 
-    if (bossSlug != SlugOf(map->GetMapName()))
+    UpgradeBossName(SlugOf(ResolveBossName(map, boss)));
+}
+
+// A session opened off a boss state change, or off a MarkPull whose boss lookup came back empty, can
+// only name itself after the map - two of ten traces on 2026-08-31 were filed as `ulduar`, one an Iron
+// Assembly wipe and one a Thorim wipe, and a Yogg-Saron wipe on 2026-09-04. The filename and hdr.boss
+// are the only way to pick a trace, so anything that later learns the encounter fixes both. Only ever
+// upgrades the map-name fallback: a session that already named itself is never renamed.
+void ObsSession::UpgradeBossName(std::string const& slug)
+{
+    if (!map || path.empty() || slug.empty())
         return;
 
-    std::string const slug = SlugOf(ResolveBossName(map, boss));
-    if (slug.empty() || slug == bossSlug)
+    if (bossSlug != SlugOf(map->GetMapName()) || slug == bossSlug)
         return;
 
     std::filesystem::path const from(path);
@@ -464,5 +475,31 @@ void OnCreatureEngage(Unit* creature, Unit* victim)
     session->WatchCreature(asCreature);
 }
 
-void MarkPull(Map* map, Unit* source) { OpenSession(map, source, "mark"); }
+// Renames rather than doing nothing when a trace is already open: a session that beat the strategy
+// to the pull is exactly the one carrying the map name, since whatever opened it had no boss to name
+// it after.
+void MarkPull(Map* map, Unit* source)
+{
+    if (!map)
+        return;
+
+    if (ObsSession* session = FindSession(map->GetInstanceId()))
+    {
+        if (Creature* boss = source ? source->ToCreature() : nullptr)
+            session->UpgradeBossName(boss);
+
+        return;
+    }
+
+    OpenSession(map, source, "mark");
+}
+
+void NamePull(Map* map, char const* bossName)
+{
+    if (!Active() || !map || !bossName || !*bossName)
+        return;
+
+    if (ObsSession* session = FindSession(map->GetInstanceId()))
+        session->UpgradeBossName(SlugOf(bossName));
+}
 }  // namespace RaidObs
