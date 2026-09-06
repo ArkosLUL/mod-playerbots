@@ -82,7 +82,8 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     // Conservator's Grip is a 50000 yd pacify-silence, so melee need a spore just as much as ranged.
     // Tanks are excluded for two different reasons: the add tank already ends up inside the aura by
     // walking the Conservator onto a spore, and moving it here as well would oscillate it between that
-    // spore and the one nearest itself. The main tank is out because Freya is never repositioned.
+    // spore and the one nearest itself. The main tank is out because it is holding Freya on her anchor,
+    // and a walk to a spore would take her along with it.
     if (botAI->IsTank(bot))
         return false;
 
@@ -262,4 +263,54 @@ bool FreyaGroundTremorHoldCastTrigger::IsActive()
         return false;
 
     return bot->HasUnitState(UNIT_STATE_CASTING);
+}
+
+bool FreyaNaturesFuryBailTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Tanks stay. Whatever they are holding walks after them, so a tank carrying the mark out of the
+    // raid takes Freya or the Conservator into it instead.
+    if (botAI->IsTank(bot))
+        return false;
+
+    if (!bot->HasAura(SPELL_NATURES_FURY_10) && !bot->HasAura(SPELL_NATURES_FURY_25))
+        return false;
+
+    return CountFreyaRaidNear(botAI, bot->GetPosition(), ULDUAR_FREYA_NATURES_FURY_RADIUS, bot) > 0;
+}
+
+bool FreyaStepOutOfSunbeamTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Melee and tanks are stacked on what they are hitting and cannot give up a second and a half of it.
+    // They lose little by staying: thirteen of one pull's sixteen beams were aimed at a ranged bot or
+    // its pet, which is not where the melee ball is standing.
+    if (botAI->IsTank(bot) || !(PlayerbotAI::IsRangedDps(bot) || botAI->IsHeal(bot)))
+        return false;
+
+    Unit* target = GetFreyaSunbeamTarget(boss);
+    if (!target || target == bot)
+        return false;
+
+    return bot->GetExactDist2d(target) <= ULDUAR_FREYA_SUNBEAM_AVOID_RADIUS;
+}
+
+bool FreyaTankHoldFreyaTrigger::IsActive()
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    if (!boss || !boss->IsAlive())
+        return false;
+
+    // Only whoever actually has her: walking anyone else moves no boss, and a tank that has lost her
+    // would drag the melee ring off to where she is not.
+    if (!PlayerbotAI::IsMainTank(bot) || boss->GetVictim() != bot)
+        return false;
+
+    return boss->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) > ULDUAR_FREYA_TANK_LEASH;
 }

@@ -25,6 +25,8 @@
 
 using namespace EncounterHelpers;
 
+const Position ULDUAR_FREYA_TANK_ANCHOR = Position(2360.0847f, -43.1235f, 425.333f);
+
 std::vector<Unit*> FreyaWaveState::LivingTrio() const
 {
     std::vector<Unit*> living;
@@ -275,6 +277,19 @@ Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator)
     return best;
 }
 
+std::vector<Unit*> GetFreyaSpores(PlayerbotAI* botAI)
+{
+    std::vector<Unit*> spores;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == NPC_HEALTHY_SPORE)
+            spores.push_back(unit);
+    }
+
+    return spores;
+}
+
 Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -285,25 +300,83 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
         if (Unit* parked = GetFreyaConservatorSpore(botAI, GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR)))
             return parked;
 
-    // Ranged and healers only need the aura, not melee range, and every spore sits 20 yd from the
-    // Conservator - inside casting range of it and of the melee stack. No reason to join the pile.
+    // Ranged and healers only need the aura, not melee range, so they take the nearest spore that is
+    // not already full rather than the nearest one outright. Nearest outright is what piles them up:
+    // they start the wave in one ball, so it resolves to the same spore for every one of them, and the
+    // melee group is already standing on it.
+    //
+    // No latch and no shared state: the trigger stands down the moment the bot holds Potent Pheromones,
+    // so the choice is only ever made on the way in, and the crowd count settles it the same way for
+    // every bot that asks.
     Unit* nearest = nullptr;
+    Unit* roomy = nullptr;
     float nearestDistance = std::numeric_limits<float>::max();
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    float roomyDistance = std::numeric_limits<float>::max();
+    for (Unit* spore : GetFreyaSpores(botAI))
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_HEALTHY_SPORE)
-            continue;
-
-        float const distance = bot->GetDistance2d(unit);
+        float const distance = bot->GetDistance2d(spore);
         if (distance < nearestDistance)
         {
             nearestDistance = distance;
-            nearest = unit;
+            nearest = spore;
+        }
+
+        if (distance < roomyDistance &&
+            CountFreyaRaidNear(botAI, spore->GetPosition(), ULDUAR_FREYA_SPORE_RADIUS, bot) <
+                ULDUAR_FREYA_SPORE_CROWD)
+        {
+            roomyDistance = distance;
+            roomy = spore;
         }
     }
 
-    return nearest;
+    // Every spore full - three alive at a time against fifteen bots that need one, so this happens.
+    // Sheltered and stacked still beats pacified.
+    return roomy ? roomy : nearest;
+}
+
+uint32 CountFreyaRaidNear(PlayerbotAI* botAI, Position const& centre, float radius, Player* except)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return 0;
+
+    uint32 count = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == except || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (member->GetExactDist2d(centre.GetPositionX(), centre.GetPositionY()) <= radius)
+            ++count;
+    }
+
+    return count;
+}
+
+Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Unit* best = nullptr;
+    float bestDistance = std::numeric_limits<float>::max();
+    for (Unit* spore : GetFreyaSpores(botAI))
+    {
+        // The carrier itself does not count against the spore it is running to.
+        if (CountFreyaRaidNear(botAI, spore->GetPosition(), ULDUAR_FREYA_NATURES_FURY_RADIUS, bot))
+            continue;
+
+        float const distance = bot->GetDistance2d(spore);
+        if (distance < bestDistance)
+        {
+            bestDistance = distance;
+            best = spore;
+        }
+    }
+
+    return best;
 }
 
 // Highest health first, and never a suppressed member - see the header for why the tank goes to the
@@ -674,4 +747,19 @@ bool IsFreyaGroundTremorCasting(Unit* boss)
 
     return spell->m_spellInfo->Id == SPELL_FREYA_GROUND_TREMOR_10 ||
            spell->m_spellInfo->Id == SPELL_FREYA_GROUND_TREMOR_25;
+}
+
+Unit* GetFreyaSunbeamTarget(Unit* boss)
+{
+    if (!boss || !boss->HasUnitState(UNIT_STATE_CASTING))
+        return nullptr;
+
+    Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    if (!spell)
+        return nullptr;
+
+    if (spell->m_spellInfo->Id != SPELL_FREYA_SUNBEAM_10 && spell->m_spellInfo->Id != SPELL_FREYA_SUNBEAM_25)
+        return nullptr;
+
+    return spell->m_targets.GetUnitTarget();
 }

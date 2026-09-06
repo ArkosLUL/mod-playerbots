@@ -41,6 +41,29 @@ void FreyaClearCastBlockingMove(Player* bot)
     if (bot->IsMovementPreventedByCasting())
         bot->InterruptNonMeleeSpells(true);
 }
+
+// Every other living raid member near the bot. Nature's Fury has no ground marker to route around - the
+// raid itself is the hazard, and the carrier is the only one who can move away from it.
+std::vector<Position> GetFreyaAlliesNear(PlayerbotAI* botAI, float radius)
+{
+    Player* bot = botAI->GetBot();
+    Group* group = bot->GetGroup();
+    if (!group)
+        return {};
+
+    std::vector<Position> allies;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (bot->GetExactDist2d(member) < radius)
+            allies.push_back(member->GetPosition());
+    }
+
+    return allies;
+}
 }  // namespace
 
 bool FreyaMoveAwayNatureBombAction::isUseful()
@@ -157,21 +180,27 @@ bool FreyaTankNatureBombAction::Execute(Event /*event*/)
     // ring with it. Aim at the far side of her from the back line: FindNearestPositionClearOfHazards
     // only reorders spots that are the same walk away, so this picks a direction without ever choosing
     // a longer trip. No living ranged DPS means no back line to walk away from.
-    Position away;
-    Position const* preferNear = nullptr;
-    if (Player* anchor = GetFreyaRangedCampAnchor(botAI))
+    //
+    // Past the leash that preference flips to the anchor. Aiming away from the back line every volley
+    // with nothing pulling the other way is a bias that compounds - eighteen seconds a volley, and one
+    // pull ended with Freya 100 yd east of where she is tanked, six yards down the slope toward the
+    // water - so the same tie-break that walked her out is what walks her home.
+    Position preferred = ULDUAR_FREYA_TANK_ANCHOR;
+    if (boss->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) <= ULDUAR_FREYA_TANK_LEASH)
     {
-        float const dx = boss->GetPositionX() - anchor->GetPositionX();
-        float const dy = boss->GetPositionY() - anchor->GetPositionY();
-        float const length = std::sqrt(dx * dx + dy * dy);
-        if (length > 0.0f)
+        if (Player* anchor = GetFreyaRangedCampAnchor(botAI))
         {
-            away = Position(boss->GetPositionX() + dx / length * ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
-                            boss->GetPositionY() + dy / length * ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
-                            boss->GetPositionZ(), 0.0f);
-            preferNear = &away;
+            float const dx = boss->GetPositionX() - anchor->GetPositionX();
+            float const dy = boss->GetPositionY() - anchor->GetPositionY();
+            float const length = std::sqrt(dx * dx + dy * dy);
+            if (length > 0.0f)
+                preferred = Position(boss->GetPositionX() + dx / length * ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                     boss->GetPositionY() + dy / length * ULDUAR_FREYA_HAZARD_SEARCH_RADIUS,
+                                     boss->GetPositionZ(), 0.0f);
         }
     }
+
+    Position const* preferNear = &preferred;
 
     std::vector<EncounterHelpers::HazardCircle> hazards =
         GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
@@ -590,6 +619,155 @@ bool FreyaDodgeUnstableSunBeamAction::Execute(Event /*event*/)
     return true;
 }
 
+bool FreyaNaturesFuryBailAction::isUseful()
+{
+    FreyaNaturesFuryBailTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaNaturesFuryBailAction::Execute(Event /*event*/)
+{
+    auto const stillClear = [this](Position const& spot)
+    { return CountFreyaRaidNear(botAI, spot, ULDUAR_FREYA_NATURES_FURY_RADIUS, bot) == 0; };
+
+    uint32 const now = getMSTime();
+
+    // Claim the tick without touching the motion master while the walk is in flight, the same way the
+    // beam dodge does: a re-issued MoveTo kills the spline that is carrying the mark out of the raid.
+    if (bailSpotMs && getMSTimeDiff(bailSpotMs, now) < ULDUAR_FREYA_NATURES_FURY_LATCH_MS && stillClear(bailSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(bailSpot.GetPositionX(), bailSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    bailSpotMs = 0;
+
+    Position safe;
+    if (Unit* shelter = GetFreyaNaturesFuryShelter(botAI))
+    {
+        // Another spore beats open floor by the whole of Conservator's Grip, which has no range and no
+        // duration and is only ever answered by Potent Pheromones. Stop on the near edge of the aura
+        // rather than the spore's centre: the centre sits inside its collision, so MoveTo would re-issue
+        // the same unreachable point until the mark expired.
+        float const distance = bot->GetExactDist2d(shelter);
+        if (distance > ULDUAR_FREYA_SPORE_STAND_RANGE)
+        {
+            float const ratio = ULDUAR_FREYA_SPORE_STAND_RANGE / distance;
+            safe = Position(shelter->GetPositionX() + (bot->GetPositionX() - shelter->GetPositionX()) * ratio,
+                            shelter->GetPositionY() + (bot->GetPositionY() - shelter->GetPositionY()) * ratio,
+                            shelter->GetPositionZ(), 0.0f);
+        }
+    }
+
+    // No free spore, or none up at all: open floor and ten seconds of being pacified is still cheaper
+    // than five volleys into the raid.
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, GetFreyaAlliesNear(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS),
+                                                 ULDUAR_FREYA_NATURES_FURY_CLEAR, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        return false;
+
+    FreyaClearCastBlockingMove(bot);
+
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    bailSpot = safe;
+    bailSpotMs = now;
+
+    return true;
+}
+
+bool FreyaStepOutOfSunbeamAction::isUseful()
+{
+    FreyaStepOutOfSunbeamTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaStepOutOfSunbeamAction::Execute(Event /*event*/)
+{
+    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* target = boss ? GetFreyaSunbeamTarget(boss) : nullptr;
+    if (!target)
+    {
+        stepSpotMs = 0;
+        return false;
+    }
+
+    Position const beam = target->GetPosition();
+
+    auto const stillClear = [&beam](Position const& spot)
+    { return beam.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) >= ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS; };
+
+    uint32 const now = getMSTime();
+
+    if (stepSpotMs && getMSTimeDiff(stepSpotMs, now) < ULDUAR_FREYA_SUNBEAM_LATCH_MS && stillClear(stepSpot) &&
+        !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(stepSpot.GetPositionX(), stepSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    stepSpotMs = 0;
+
+    // Bombs and beams belong in the same sweep: a spot that only clears the sunbeam is worth nothing if
+    // it sits in one of those, and both escapes hold this relevance, so a bot reading one hazard walks
+    // between them until something kills it.
+    std::vector<EncounterHelpers::HazardCircle> hazards =
+        GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    hazards.emplace_back(beam, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS);
+
+    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    // Barely outside the beam beats standing in it, which is what the raid did with every volley of a
+    // pull that took 271k a minute off this one spell.
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, std::vector<Position>{beam}, ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        return false;
+
+    FreyaClearCastBlockingMove(bot);
+
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    stepSpot = safe;
+    stepSpotMs = now;
+
+    return true;
+}
+
+bool FreyaTankHoldFreyaAction::isUseful()
+{
+    FreyaTankHoldFreyaTrigger trigger(botAI);
+    return trigger.IsActive();
+}
+
+bool FreyaTankHoldFreyaAction::Execute(Event /*event*/)
+{
+    uint32 const now = getMSTime();
+
+    if (holdMs && getMSTimeDiff(holdMs, now) < ULDUAR_FREYA_TANK_HOLD_LATCH_MS &&
+        !bot->IsMovementPreventedByCasting() && bot->GetExactDist2d(&ULDUAR_FREYA_TANK_ANCHOR) > CONTACT_DISTANCE)
+        return true;
+
+    holdMs = 0;
+
+    // Onto the anchor itself, not near it: Freya stops in melee range of wherever the tank ends up, so
+    // she settles a boss length short of this point either way. MOVEMENT_COMBAT, so a bomb volley still
+    // outranks the walk home.
+    if (!MoveTo(bot->GetMapId(), ULDUAR_FREYA_TANK_ANCHOR.GetPositionX(), ULDUAR_FREYA_TANK_ANCHOR.GetPositionY(),
+                ULDUAR_FREYA_TANK_ANCHOR.GetPositionZ(), false, false, false, true,
+                MovementPriority::MOVEMENT_COMBAT))
+        return false;
+
+    holdMs = now;
+
+    return true;
+}
+
 bool FreyaLasherAboutToBlowAction::isUseful()
 {
     FreyaLasherAboutToBlowTrigger trigger(botAI);
@@ -669,13 +847,23 @@ bool FreyaRangedCampAction::Execute(Event /*event*/)
     if (camp == Position())
         return false;
 
+    // Stop a spacing short of the camp, on the bearing the bot is already on, so the back line lands as
+    // a ring rather than on one square. Every bot keeps the direction it arrived from, which spreads
+    // them with no shared state; the alternative measured 0.6 yd between neighbours and handed every
+    // 8 yd hit the whole raid at once.
+    float const distance = bot->GetExactDist2d(camp.GetPositionX(), camp.GetPositionY());
+    float const bearing =
+        distance > CONTACT_DISTANCE ? camp.GetAngle(bot->GetPositionX(), bot->GetPositionY()) : bot->GetOrientation();
+    float const x = camp.GetPositionX() + std::cos(bearing) * ULDUAR_FREYA_RANGED_CAMP_SPACING;
+    float const y = camp.GetPositionY() + std::sin(bearing) * ULDUAR_FREYA_RANGED_CAMP_SPACING;
+
     // No arrival latch: the trigger standing down inside the tolerance is what stops the churn, and a
     // latch held across ticks would swallow the re-aim when the pack moves.
     //
     // MOVEMENT_COMBAT, not FORCED, so a Nature Bomb or a Sun Beam still outranks it - gathering is the
     // lowest-value thing a bot can be doing on this encounter.
-    return MoveTo(bot->GetMapId(), camp.GetPositionX(), camp.GetPositionY(), camp.GetPositionZ(), false, false, false,
-                  false, MovementPriority::MOVEMENT_COMBAT);
+    return MoveTo(bot->GetMapId(), x, y, camp.GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT);
 }
 
 bool FreyaFrostNovaLashersAction::isUseful()

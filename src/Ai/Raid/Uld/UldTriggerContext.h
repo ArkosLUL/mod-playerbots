@@ -84,6 +84,9 @@ public:
         creators["freya frost nova lashers"] = &RaidUlduarTriggerContext::freya_frost_nova_lashers;
         creators["freya trap lashers"] = &RaidUlduarTriggerContext::freya_trap_lashers;
         creators["freya ground tremor hold cast"] = &RaidUlduarTriggerContext::freya_ground_tremor_hold_cast;
+        creators["freya nature fury bail"] = &RaidUlduarTriggerContext::freya_nature_fury_bail;
+        creators["freya step out of sunbeam"] = &RaidUlduarTriggerContext::freya_step_out_of_sunbeam;
+        creators["freya tank hold freya"] = &RaidUlduarTriggerContext::freya_tank_hold_freya;
         creators["thorim frost resistance trigger"] = &RaidUlduarTriggerContext::thorim_frost_resistance_trigger;
         creators["thorim nature resistance trigger"] = &RaidUlduarTriggerContext::thorim_nature_resistance_trigger;
         creators["thorim unbalancing strike trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_trigger;
@@ -268,6 +271,9 @@ private:
     static Trigger* freya_frost_nova_lashers(PlayerbotAI* ai) { return new FreyaFrostNovaLashersTrigger(ai); }
     static Trigger* freya_trap_lashers(PlayerbotAI* ai) { return new FreyaTrapLashersTrigger(ai); }
     static Trigger* freya_ground_tremor_hold_cast(PlayerbotAI* ai) { return new FreyaGroundTremorHoldCastTrigger(ai); }
+    static Trigger* freya_nature_fury_bail(PlayerbotAI* ai) { return new FreyaNaturesFuryBailTrigger(ai); }
+    static Trigger* freya_step_out_of_sunbeam(PlayerbotAI* ai) { return new FreyaStepOutOfSunbeamTrigger(ai); }
+    static Trigger* freya_tank_hold_freya(PlayerbotAI* ai) { return new FreyaTankHoldFreyaTrigger(ai); }
     static Trigger* thorim_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_unbalancing_strike_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeTrigger(ai); }

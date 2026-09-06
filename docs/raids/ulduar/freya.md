@@ -79,10 +79,17 @@ flip it mid-walk.
 Melee then target **that** spore rather than the nearest one — `GetFreyaConservatorSpore` keys off the
 Conservator, never the calling bot, so the tank and the melee resolve the same spore without
 communicating. Sending melee to their own nearest spore is what would oscillate: they gain the aura,
-the DPS node drags them back to the boss to reach it, and they lose the aura on the way. Ranged and
-healers do use their own nearest spore — they need the aura, not melee range, and any spore is inside
-casting range of both the boss and the melee stack. Tanks are excluded from the spore node itself: the
-add tank arrives inside the aura by dragging the boss there, and the main tank never repositions Freya.
+the DPS node drags them back to the boss to reach it, and they lose the aura on the way.
+
+Ranged and healers can use any spore — they need the aura, not melee range, and all of them sit
+inside casting range of the boss and the melee stack — so they take the nearest one **with room**,
+fewer than `ULDUAR_FREYA_SPORE_CROWD` (6) raid members inside its 6 yd. Nearest outright resolves to
+the same spore for every one of them, since they start the wave in one ball and that ball is on the
+parked spore with the melee: `1788717562` had **18 of 25 bots sheltering on one spore** while four
+others held a single bot each, and both of this wave's big hits are 8 yd wide (below). No latch is
+needed, because the trigger stands down the moment the bot holds the aura, so the choice is only
+ever made on the way in. Tanks are excluded from the spore node itself: the add tank arrives inside
+the aura by dragging the boss there, and the main tank is holding Freya on her anchor.
 `GetFreyaTargetSpore` is that whole rule in one call, and **the trigger and the action must both use
 it**: deriving the spore twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while the
 unfiltered grid search walked it at another.
@@ -94,6 +101,45 @@ of 1865 spore move requests in one pull. Bots stop at `ULDUAR_FREYA_SPORE_STAND_
 and the trigger stands down at `ULDUAR_FREYA_SPORE_RADIUS - 1` as well as on the aura, since the aura
 is exact and lands a moment after the bot is already inside 6 yd.
 
+**Two 8 yd circles, and they are why the raid cannot be one ball.** Both carry `EffectRadiusIndex 14`,
+and neither is hard-mode — they run on every pull.
+
+**Nature's Fury** (62589 10-man / 63571 25-man) is a 10s mark the Conservator throws every 14s at a
+random player within 100 yd (`boss_freya.cpp:1248-1251`). Its only effect is a 2s periodic trigger, so
+it fires **five** times, 8 yd around the carrier each time — victims sat a median 2.3 yd out, none past
+9.1. `freya nature fury bail` (`ACTION_RAID + 4`, above the spore node that would walk the carrier
+straight back) runs it to the nearest spore with nobody else inside the splash; shelter groups sit
+15-45 yd apart, so arriving clears it outright and keeps the pheromones. No free spore means open floor
+and the Grip — ten pacified seconds beats five volleys into the raid. Tanks never bail: whatever they
+hold walks after them.
+
+**Sunbeam** (62623 / 62872) is a **1.5s** cast on a random threat-list target every 15-20s
+(`boss_freya.cpp:633-636`), 8 yd at that target's feet. It lands where the target is when the cast
+**ends**, not where it was when it began — `Spell::SelectSpellTargets` runs from `Spell::cast` — so the
+target cannot dodge its own beam and only the bots around it can move. `freya step out of sunbeam`
+(`ACTION_RAID + 4`; trigger at `_SUNBEAM_AVOID_RADIUS` 11, aim at `_CLEAR_RADIUS` 13, latch 1500 ms =
+the cast) does that for ranged and healers only: melee and tanks cannot give up a second and a half,
+and lose little by staying, since 13 of one pull's 16 beams were aimed at a ranged bot or its pet. Pets
+are targeted and cannot be repositioned — the worst beam of `1788717562` landed because a hunter pet
+ran 15.3 yd into the raid mid-cast, and **15 of its 16 victims were clear of 8 yd when the cast
+began**.
+
+**`1788717562` is the bill for standing in one ball.** It wiped at 4:59 with Freya at 100% and 120 of
+150 stacks off — on pace, every wave clearing. Seven bots died inside **85 ms** at 4:12, eight inside
+nine seconds, when Ground Tremor landed on a raid already ground down by a Sunbeam on 16 and five
+Nature's Fury ticks on 13-17. Per minute, against the kill `1788613108` and the other wipe
+`1788716763`:
+
+| pull | out | dmg/min | Sunbeam | Ground Tremor | Nature's Fury | victims per beam | raid inside 8 yd |
+|---|---|---|---|---|---|---|---|
+| `1788613108` | kill | 899k | 137k | 243k | 105k | 4.5 | 5.0 |
+| `1788716763` | wipe | 948k | 137k | 224k | 56k | 5.0 | 5.0 |
+| `1788717562` | wipe | **1163k** | **271k** | 222k | **157k** | **12.5** | **8.0** |
+
+Ground Tremor is the control — 50000 yd, nothing dodges it, flat across all three. The fight did not
+get harder: the raid got tighter, nearest-neighbour **0.6 yd** against 1.3, and only the two mechanics
+that scale with tightness moved.
+
 Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
 whole fight, dropping one bomb per player at their own feet — 7-10 in 25-man, 3-4 in 10-man
 (`boss_freya.cpp:645-660`). Damage 64587 is 5850-6150 in **10 yd** with **no difficulty entry**, the
@@ -104,8 +150,8 @@ The escape rings outward to a spot clear of *every* bomb inside `ULDUAR_FREYA_HA
 because a volley drops one on each of the stacked melee. The old `FleePosition` dodge moved 5 yd out of
 a 10 yd blast, so it killed everyone it fired for
 ([../../engine/pitfalls.md](../../engine/pitfalls.md)). Dodging keeps its `ACTION_RAID + 4` priority — a
-bomb hit costs more than a few pacified seconds — and the "go to the parked spore" rule is what makes
-the raid re-converge afterwards instead of smearing across three spores.
+bomb hit costs more than a few pacified seconds — and melee re-converge afterwards on the parked spore,
+which is the one group here still meant to gather.
 
 **It is latched (`bombSpot`, ceiling `ULDUAR_FREYA_NATURE_BOMB_LATCH_MS`) for the same reason the beam
 dodge is.** The trigger fires at AVOID (11 yd) and the escape aims at CLEAR (13), so re-deriving every
@@ -131,6 +177,17 @@ would lift the Conservator off its spore. The spot uses `FindNearestPositionClea
 `preferNear`, aimed at the far side of Freya from `GetFreyaRangedCampAnchor` — it only reorders spots
 the same walk away, so the tank never takes a longer trip and never drags her toward the back line. Melee
 re-close on the generic `reach melee`; nothing zeroes it.
+
+**That preference had nothing pulling the other way, and it compounds.** A volley lands every 18s and
+Freya walks after whoever holds her, so the tank random-walks in one direction all pull: in
+`1788716763` she finished **100 yd** east of where she was tanked, on ground that settles to Z 419.9,
+six yards below the tanking spot and down the slope toward the water, with the melee ring and half the
+raid strung out behind her. Past `ULDUAR_FREYA_TANK_LEASH` (20 yd) from `ULDUAR_FREYA_TANK_ANCHOR` the
+same `preferNear` flips to the anchor, and `freya tank hold freya` walks her home when no bomb is
+pressing — `ACTION_RAID + 1`, under the escape, which still has to be able to leave the leash. It fires
+only for the bot Freya is actually hitting, since walking anyone else moves no boss. The anchor is
+**(2360.0847, -43.1235, 425.333)**, navprobe-verified on the bot filter (`--nav 0x09`): 0.52 yd from
+the nearest poly, `UpdateAllowedPositionZ` 425.333, and a 12 yd ring around it 8/8 on mesh.
 
 **Tanks.** The main tank gets Freya, assist tank 0 works down a ladder: Snaplasher (the Hardened Bark
 sink) > Ancient Conservator > highest-health non-suppressed trio member > a lasher standing next to it >
@@ -215,6 +272,13 @@ the tanks. Neither survives a *low* lasher inside Detonate range: the trigger fi
 tolerance says, since a healer's slack is the whole blast. Tanks and melee are excluded: they are
 already stacked on what they are hitting, and a tank that left would take Freya or the Conservator
 with it.
+
+Bots stop `ULDUAR_FREYA_RANGED_CAMP_SPACING` (6 yd) short of the spot on the bearing they arrived on,
+so the back line lands as a ring rather than on one square — aiming every bot at the point itself put
+them a median **0.6 yd** apart in `1788717562` against 1.3 in the kill. That alone cannot beat an 8 yd
+splash: twelve bots would need a 15.5 yd ring, a 31 yd ball, past `AiPlayerbot.SpellDistance` and wide
+enough to spread the pack the camp exists to gather. It stops the pile; the sunbeam step-out is what
+answers the beam.
 
 The anchor used to be the bot itself, which is why the camp had no fixed relationship to anything: in
 `1788559467` it sat 23.8-35.7 yd from Freya and 16.3-25.5 yd from the pile, and moved **27.5 yd between

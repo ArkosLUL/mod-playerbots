@@ -395,6 +395,18 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "freya tank nature bomb",
         { NextAction("freya tank nature bomb", ACTION_RAID + 4) }));
 
+    // The two 8 yd circles, and the whole reason the raid has to be able to come apart: Nature's Fury
+    // fires five of them around one bot, Sunbeam drops one wherever its target is standing when the cast
+    // ends. Both sit with the other escapes, above the spore node - which would otherwise walk the
+    // carrier straight back into the ball it just left.
+    triggers.push_back(new TriggerNode(
+        "freya nature fury bail",
+        { NextAction("freya nature fury bail", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
+        "freya step out of sunbeam",
+        { NextAction("freya step out of sunbeam", ACTION_RAID + 4) }));
+
     // Detonating Lasher wave. Order is the doctrine: nothing here can be tanked, kited or outrun, so
     // the raid answers the wave with crowd control and a camp it can AoE. Leave the blast of anything
     // about to go off first - a bot that is dead does no crowd control - then root what has already
@@ -429,6 +441,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "freya tank adds",
         { NextAction("freya tank adds", ACTION_RAID + 1) }));
+
+    // Freya walks after whoever holds her, so every escape the tank takes moves her and nothing used to
+    // move her back. Under the bomb escape, which has to be able to leave the leash.
+    triggers.push_back(new TriggerNode(
+        "freya tank hold freya",
+        { NextAction("freya tank hold freya", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "freya redirect threat",

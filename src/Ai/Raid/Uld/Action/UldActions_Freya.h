@@ -199,4 +199,47 @@ private:
     uint32 dodgeSpotMs = 0;
 };
 
+// Carry Nature's Fury out of the raid, preferably onto another Healthy Spore: the groups sheltering on
+// them stand 15 to 45 yd apart, which clears an 8 yd splash outright and keeps the carrier out of
+// Conservator's Grip.
+class FreyaNaturesFuryBailAction : public MovementAction
+{
+public:
+    FreyaNaturesFuryBailAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya nature fury bail") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    // Allies drift, so re-deriving every tick answers with a spot a yard along and clears the motion
+    // master doing it. Hold the first answer until the raid catches up with it or the bot arrives.
+    Position bailSpot;
+    uint32 bailSpotMs = 0;
+};
+
+// Step out of the circle Freya's Sunbeam is about to drop on a neighbour.
+class FreyaStepOutOfSunbeamAction : public MovementAction
+{
+public:
+    FreyaStepOutOfSunbeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya step out of sunbeam") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    Position stepSpot;
+    uint32 stepSpotMs = 0;
+};
+
+// Main tank only: walk Freya back to her anchor. She follows whoever holds her, so the tank's own feet
+// are the only thing that moves her.
+class FreyaTankHoldFreyaAction : public MovementAction
+{
+public:
+    FreyaTankHoldFreyaAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya tank hold freya") {}
+    bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    uint32 holdMs = 0;
+};
+
 #endif

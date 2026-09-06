@@ -50,6 +50,17 @@ enum UlduarFreyaIds
     SPELL_FREYA_GROUND_TREMOR_10 = 62437,
     SPELL_FREYA_GROUND_TREMOR_25 = 62859,
 
+    // Freya's other big hit, and unlike Ground Tremor this one can be left: a 1.5s cast on a random
+    // threat-list target, 8 yd at that target's feet. 62623 is 10-man, 62872 is 25-man.
+    SPELL_FREYA_SUNBEAM_10 = 62623,
+    SPELL_FREYA_SUNBEAM_25 = 62872,
+
+    // The Ancient Conservator's mark, thrown every 14s at a random player within 100 yd. A 10s aura
+    // whose only effect is a 2s periodic trigger, so it fires five times, each one 8 yd around whoever
+    // is wearing it. 62589 is 10-man, 63571 is 25-man.
+    SPELL_NATURES_FURY_10 = 62589,
+    SPELL_NATURES_FURY_25 = 63571,
+
     // Freya hard mode: Elders left alive permanently empower Freya with an extra ability each.
     // NPC_FREYA comes from core ulduar.h via UldScripts.h.
     NPC_FREYA_IRON_ROOTS = 33088,               // Ironbranch's Iron Roots trap (selectable)
@@ -78,6 +89,16 @@ constexpr float ULDUAR_FREYA_SUN_BEAM_CLEARANCE = 15.0f;
 // rooted mid-dodge hands the tick back instead of holding it for the rest of the wave.
 constexpr uint32 ULDUAR_FREYA_SUN_BEAM_LATCH_MS = 3000;
 
+// Sunbeam's blast, and how far its neighbours aim. The destination is picked when the cast ends rather
+// than when it starts - Spell::SelectSpellTargets runs from Spell::cast - so it follows whoever it is
+// aimed at and only the bots around that target can leave. Trigger at AVOID, aim at CLEAR, the same
+// split the Nature Bomb uses and for the same reason.
+constexpr float ULDUAR_FREYA_SUNBEAM_AVOID_RADIUS = 11.0f;
+constexpr float ULDUAR_FREYA_SUNBEAM_CLEAR_RADIUS = 13.0f;
+
+// The cast itself. Anything longer holds the bot still after the beam has already landed.
+constexpr uint32 ULDUAR_FREYA_SUNBEAM_LATCH_MS = 1500;
+
 // Freya trio wave (Snaplasher / Storm Lasher / Ancient Water Spirit). Each member starts its own 11s
 // revive timer on death and comes back unless all three are down when it expires, so they have to die
 // together. The band only covers the last tenth of the wave - about 6s of raid damage out of the 60s
@@ -89,6 +110,24 @@ constexpr float ULDUAR_FREYA_TRIO_HARD_FLOOR_PCT = 10.0f;     // never cross whi
 // Freya: Potent Pheromones (64321) is a 6 yd ally aura on a Healthy Spore. It is the only counter to
 // Conservator's Grip, which is a 50000 yd pacify-silence and so cannot be outranged.
 constexpr float ULDUAR_FREYA_SPORE_RADIUS = 6.0f;
+
+// How many raid members make a spore full, so the back line spreads over the spores instead of piling
+// onto one. Nearest-spore is what piles them up: the parked spore already holds the whole melee group,
+// the back line starts the wave in one ball, and 18 of 25 bots ended up sheltering on a single spore
+// with four others holding one bot each. Six leaves the melee spore over the line from the start, which
+// is the point - both of this wave's big hits are 8 yd wide, and a spore is 6.
+constexpr uint32 ULDUAR_FREYA_SPORE_CROWD = 6;
+
+// What one Nature's Fury tick covers, centred on the bot wearing the mark: EffectRadiusIndex 14 on the
+// triggered 63570, and the trace agrees - victims sat a median 2.3 yd out, none past 9.1.
+constexpr float ULDUAR_FREYA_NATURES_FURY_RADIUS = 8.0f;
+
+// Where the carrier aims, past the radius for the usual reason: landing on the boundary is answered
+// with a two yard step that combat movement undoes before the next tick.
+constexpr float ULDUAR_FREYA_NATURES_FURY_CLEAR = 11.0f;
+
+// Ceiling on the bail latch, about the walk to the next spore at 7 yd/s. The mark itself runs 10s.
+constexpr uint32 ULDUAR_FREYA_NATURES_FURY_LATCH_MS = 3000;
 
 // Where a bot actually stops. Inside the aura with room to spare, and clear of the spore's own
 // collision - aiming at the centre gives MoveTo a point the bot can never occupy, so it re-issues the
@@ -131,6 +170,20 @@ constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 3000;
 // Ceiling on the main tank's reposition. Long enough to walk the clearance at 7 yd/s, short enough
 // that a tank stopped on the way hands the tick back instead of holding Freya still for a whole volley.
 constexpr uint32 ULDUAR_FREYA_TANK_BOMB_LATCH_MS = 3000;
+
+// Where Freya is held. navprobe on the bot filter (--nav 0x09) puts it 0.52 yd from the nearest poly
+// with UpdateAllowedPositionZ 425.333, and a 12 yd ring around it is 8/8 on mesh at Z 423.8-425.8.
+extern const Position ULDUAR_FREYA_TANK_ANCHOR;
+
+// How far the tank may take her from it. Freya follows whoever holds her, the bomb escape aims away
+// from the back line, a volley lands every 18s and nothing used to walk her back - so the bias
+// compounded: one pull ended with her 100 yd east of the anchor, six yards down the slope toward the
+// water, with the melee ring and half the raid strung out behind her.
+constexpr float ULDUAR_FREYA_TANK_LEASH = 20.0f;
+
+// Ceiling on the walk home. Same reason as every other latch here: a re-issued MoveTo clears the motion
+// master out from under the walk it is repeating.
+constexpr uint32 ULDUAR_FREYA_TANK_HOLD_LATCH_MS = 3000;
 
 // How far the escapes look for hazards to route around. Every one of Freya's comes in numbers - a
 // bomb per player, ten lashers, overlapping sun beams - so stepping clear of the nearest is not
@@ -202,6 +255,13 @@ constexpr uint32 ULDUAR_FREYA_GIFT_SHARE_MS = 5000;
 constexpr float ULDUAR_FREYA_RANGED_CAMP_TOLERANCE = 10.0f;
 constexpr float ULDUAR_FREYA_HEALER_CAMP_TOLERANCE = 15.0f;
 
+// How far short of the camp spot a bot stops, so the back line is a ring instead of a pile: each one
+// keeps the bearing it arrived on, which spreads them without shared state and without moving anybody
+// who was already inside the tolerance. It cannot beat an 8 yd splash on its own - twelve bots would
+// need a 15.5 yd ring for that, a 31 yd ball, past AiPlayerbot.SpellDistance and wide enough to spread
+// the pack the camp exists to gather. Standing on one square is what it fixes.
+constexpr float ULDUAR_FREYA_RANGED_CAMP_SPACING = 6.0f;
+
 // Freya. Everything the encounter needs from one grid pass, so the priority action, the tank action
 // and both multipliers cannot disagree about what is up.
 struct FreyaWaveState
@@ -265,10 +325,24 @@ Unit* GetFreyaRangedLasherFocus(FreyaWaveState const& state);
 // without communicating.
 Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator);
 
-// The spore this bot should be sheltering on. Melee get the parked one, everyone else their own
-// nearest. One derivation for both the trigger and the action: resolving it twice let a bot be woken
-// by a spore in line of sight and then walked at a different one behind the Conservator.
+// The spore this bot should be sheltering on. Melee get the parked one; ranged and healers get the
+// nearest one that is not already full, so the back line spreads across the spores instead of piling
+// onto whichever is nearest - which, starting from one ball, is the same spore for all of them, and is
+// normally the one the melee group is standing on. One derivation for both the trigger and the action:
+// resolving it twice let a bot be woken by a spore in line of sight and then walked at a different one
+// behind the Conservator.
 Unit* GetFreyaTargetSpore(PlayerbotAI* botAI);
+
+// Every living Healthy Spore the bot can see.
+std::vector<Unit*> GetFreyaSpores(PlayerbotAI* botAI);
+
+// Living raid members within radius of a point, ignoring one of them - normally the bot asking.
+uint32 CountFreyaRaidNear(PlayerbotAI* botAI, Position const& centre, float radius, Player* except);
+
+// Where a bot wearing Nature's Fury should run: the nearest spore with nobody else inside the splash,
+// so it keeps Potent Pheromones and stays out of Conservator's Grip. Null when no spore is free, which
+// is when the bail settles for open floor and eats the pacify for the rest of the mark.
+Unit* GetFreyaNaturesFuryShelter(PlayerbotAI* botAI);
 
 // True while any bot in the group that counts as ranged DPS is alive. Eonar's Gift is a ranged job,
 // but a melee-only raid still has to kill it or Freya heals 30-60%.
@@ -328,5 +402,10 @@ uint32 CountFreyaLashersNear(Position const& centre, FreyaWaveState const& state
 
 // Freya is mid-cast on Ground Tremor. Matches both difficulty ids, since 62437 is the 10-man twin.
 bool IsFreyaGroundTremorCasting(Unit* boss);
+
+// Whoever Freya's Sunbeam is currently aimed at, or null when she is not casting it. Both difficulty
+// ids, as above. Pets count: three of one pull's sixteen beams were aimed at one, and the worst of them
+// landed because the pet ran 15 yd into the raid while the cast was still going.
+Unit* GetFreyaSunbeamTarget(Unit* boss);
 
 #endif

@@ -130,4 +130,32 @@ public:
     bool IsActive() override;
 };
 
+// The bot wearing Nature's Fury, with the raid still inside the splash. The mark ticks five times over
+// 10s and every tick covers 8 yd around the carrier, so one bot standing in the ball is five volleys
+// into it - 202k off a single mark on a healer, with seventeen bots in range.
+class FreyaNaturesFuryBailTrigger : public Trigger
+{
+public:
+    FreyaNaturesFuryBailTrigger(PlayerbotAI* ai) : Trigger(ai, "freya nature fury bail") {}
+    bool IsActive() override;
+};
+
+// A ranged bot or healer standing next to whoever Freya's Sunbeam is aimed at. The target itself can do
+// nothing - the blast lands where it is when the cast ends, not where it was when the cast started - so
+// its neighbours are the only ones with an answer.
+class FreyaStepOutOfSunbeamTrigger : public Trigger
+{
+public:
+    FreyaStepOutOfSunbeamTrigger(PlayerbotAI* ai) : Trigger(ai, "freya step out of sunbeam") {}
+    bool IsActive() override;
+};
+
+// Freya has been walked off her anchor. Whoever is holding her walks her back.
+class FreyaTankHoldFreyaTrigger : public Trigger
+{
+public:
+    FreyaTankHoldFreyaTrigger(PlayerbotAI* ai) : Trigger(ai, "freya tank hold freya") {}
+    bool IsActive() override;
+};
+
 #endif
