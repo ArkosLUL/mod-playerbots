@@ -82,51 +82,96 @@ bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot)
     return victim && victim != bot && victim->IsPlayer() && victim->IsAlive();
 }
 
-Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot)
+float GetHodirShelterPark(Creature* shelter)
+{
+    return shelter && shelter->GetEntry() == NPC_HODIR_ICICLE_DRIFT ? ULDUAR_HODIR_BIG_SHARDS_CLEAR
+                                                                    : ULDUAR_HODIR_SAFE_AREA_TOLERANCE;
+}
+
+float GetHodirShelterRelease(Creature* shelter)
+{
+    return GetHodirShelterPark(shelter) +
+           (ULDUAR_HODIR_SAFE_AREA_RELEASE - ULDUAR_HODIR_SAFE_AREA_TOLERANCE);
+}
+
+Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || !GetHodir(botAI))
         return nullptr;
 
-    std::list<Creature*> found;
-    bot->GetCreatureListWithEntryInGrid(found, NPC_SNOWPACKED_ICICLE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+    // Keyed on the bot: its guid is stable and a bot only ever reads or writes its own entry on its
+    // own map thread, so no lock.
+    thread_local std::unordered_map<ObjectGuid, ObjectGuid> latched;
 
-    // Before the centre, not after: a shelter only exists for about 6s of every 49s cycle, and the
-    // centre costs a second grid sweep to find the fire.
-    if (found.empty())
+    std::vector<Creature*> candidates;
+    std::list<Creature*> found;
+
+    bot->GetCreatureListWithEntryInGrid(found, NPC_SNOWPACKED_ICICLE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+    for (Creature* target : found)
+        if (target && target->IsAlive())
+            candidates.push_back(target);
+
+    // A drift stands at the spot its target will occupy - 0.0 yd apart across seven freezes - and it is
+    // on the floor from the first tick of the 9s cast while the target only appears at 3.9s. Staging on
+    // it is the difference between a 5.1s scramble over up to 35 yd and a 9s walk. Only while the cast
+    // is up: at any other time a drift is something to dodge, not somewhere to stand.
+    if (IsHodirFlashFreezeIncoming(botAI))
     {
+        found.clear();
+        bot->GetCreatureListWithEntryInGrid(found, NPC_HODIR_ICICLE_DRIFT, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+        for (Creature* drift : found)
+            if (IsHodirIcicleLethal(drift))
+                candidates.push_back(drift);
+    }
+
+    if (candidates.empty())
+    {
+        latched.erase(bot->GetGUID());
+
         if (RaidObs::Active())
             RaidObs::NoteDerived(bot, "hodir.shelter", "none");
 
         return nullptr;
     }
 
-    // Nearest the ring centre rather than nearest the bot, so the whole raid converges on one drift
-    // and re-forms cleanly instead of splitting across the two or three that spawn. Trigger and
-    // action both call this: two derivations of "which shelter" would disagree and oscillate.
-    //
-    // The centre, not ULDUAR_HODIR_RAID_ANCHOR: the ring rides a Toasty Fire now and sits a median
-    // 9.5 yd off that fixed point, p90 17.6. Measuring from a spot the raid is not standing on was
-    // picking a drift 25 yd away with three other candidates on the floor.
-    Position const centre = GetHodirRingCentre(botAI, bot);
-
     Creature* best = nullptr;
-    float bestDist = 0.0f;
-    for (Creature* shelter : found)
-    {
-        if (!shelter || !shelter->IsAlive())
-            continue;
 
-        float const dist = shelter->GetExactDist2d(&centre);
-        if (!best || dist < bestDist)
+    // Held until the pick leaves the floor rather than re-derived every tick. Nearest-to-self mostly
+    // holds itself, because walking at a shelter keeps it the nearest one, but a sideways dodge can
+    // carry a bot past the midpoint between two and re-picking there flips the destination. The drift
+    // hands over for free: it stops being a candidate when it lands, the latch drops, and the sweep
+    // below finds the target that just spawned where the bot is already standing.
+    if (auto held = latched.find(bot->GetGUID()); held != latched.end())
+        for (Creature* candidate : candidates)
+            if (candidate->GetGUID() == held->second)
+            {
+                best = candidate;
+                break;
+            }
+
+    if (!best)
+    {
+        // Nearest the bot. Trigger and action both call this, and one derivation is what keeps them
+        // from disagreeing - but it never had to be the same answer for every bot. All three targets
+        // grant the Safe Area, and ranking from the ring centre instead sent bots a median 17.7 yd
+        // when their own was 9.8, walked two of them into a Flash Freeze, and left one standing 2.6 yd
+        // from a shelter while it ran 31.6 yd to another.
+        float bestDist = 0.0f;
+        for (Creature* candidate : candidates)
         {
-            best = shelter;
-            bestDist = dist;
+            float const dist = bot->GetExactDist2d(candidate);
+            if (!best || dist < bestDist)
+            {
+                best = candidate;
+                bestDist = dist;
+            }
         }
+
+        latched[bot->GetGUID()] = best->GetGUID();
     }
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.shelter",
-                             best ? RaidObs::DescribeAssignment(best->GetGUID()) : "none");
+        RaidObs::NoteDerived(bot, "hodir.shelter", RaidObs::DescribeAssignment(best->GetGUID()));
 
     return best;
 }

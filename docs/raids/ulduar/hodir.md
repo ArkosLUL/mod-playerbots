@@ -34,7 +34,9 @@ the centre land 6.8 yd from him.
 (p50 26.4, p10 23.2). `hodir.fire` reads `none` for every bot all fight, the centre stays
 `ULDUAR_HODIR_RAID_ANCHOR`, and the raid pays the shuttle instead. That is geometry, not a bad
 constant: a 12-bot ring cannot sit on a fire 26 yd out and keep its far side within 30 of the
-boss, so widening the band just walks the far half out of casting range.
+boss, so widening the band just walks the far half out of casting range. When one *is* adopted the
+centre and the anchor diverge by a median **9.5 yd** (p90 17.6), so anything ranking off the formation
+has to take the centre and not the fixed point.
 
 **Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
 exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
@@ -42,7 +44,7 @@ exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, 
 | Mechanic | Ids | Numbers that drive the code |
 |---|---|---|
 | Flash Freeze | 61968 | **9s cast**, every 48-49s, 200 yd. Spares only 62464 carriers and pets |
-| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift lands at T+3.8 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands T+9: **6.3s of shelter** to cross the room |
+| Shelter chain | 33173 → `62460` → `65370` + `62463` | Drift spawns at T+0 where its target will stand, lands T+3.9 → Ice Shards 14,000 in **7 yd** → summons **33174**, 12s. Freeze lands **T+10.1** |
 | Trapped player | 61969 / 62226 | **300s**, and the *next* Flash Freeze **instakills**. Free by killing NPC **32926** (helpers: 32938) |
 | Small icicles | 62227 → 63545 → 33169 → `62457` | **Every 2s** on 1 random player, falls after 2s, **14,000 Frost in 4 yd** + knockback. Off for 12s (25m) / 24s (10m) after each Flash Freeze |
 | Biting Cold | 62038 / 62039 | **1005 ms ticks**, `200 · 2^stacks`. Stacks after 4 stationary ticks, sheds on the **second consecutive** tick the server reads `isMoving()` |
@@ -62,16 +64,19 @@ and `IsHodirHardModeActive` were deleted rather than left gating nothing.
 its single tick fires `EVENT_HARD_MODE_MISSED` and shatters the Rare Cache. So the target is halving
 this fight, not thirding it.
 
-## The Flash Freeze window is nine seconds and the shelter exists for six
+## The Flash Freeze window is ten seconds and the shelter exists for six
 
-The drift lands ~3.8s into the 9s cast, so the shelter covers only the last **6.3s** — the whole
-budget for crossing the room, against a measured 30 yd median run at ~7 yd/s costing 4.3s of it.
+The cast is 9s but the freeze lands at **+10.1s**, where the ice blocks spawn — the one trapping in
+seven casts applied `61969` at +10.03s. The drift lands at **+3.9s**, so the target covers only the
+last **6.2s**. The drift itself is on the floor from +0.0s and stands exactly where its target will
+spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses the whole cast.
 
 - **The run parks at 6 yd and releases at 8** (`ULDUAR_HODIR_SAFE_AREA_TOLERANCE` / `_RELEASE`, both
-  `static_assert`ed inside the 9 yd Safe Area). `MoveInside` → `MoveNear` lands the bot at *exactly*
-  the tolerance, so testing one number at both ends stood the trigger down the tick it arrived and
-  handed the next tick to the ring anchor — measured walking bots 18-22 yd back out with the freeze
-  2s away.
+  `static_assert`ed inside the 9 yd Safe Area), and at **9 / 11 on a drift that has not landed**
+  (`ULDUAR_HODIR_BIG_SHARDS_CLEAR` plus the same 2 yd, via `GetHodirShelterPark` / `_Release`).
+  `MoveInside` → `MoveNear` lands the bot at *exactly* the tolerance, so testing one number at both
+  ends stood the trigger down the tick it arrived and handed the next tick to the ring anchor —
+  measured walking bots 18-22 yd back out with the freeze 2s away.
 - **Every other mover stands down for the whole cast, every role.** `HodirGuardMultiplier` zeroes
   gap-closers (`CastReachTargetSpellAction` — Charge, Intercept, both Feral Charges) and every
   `MovementAction` bar the shelter run and the icicle dodge. `ReachTargetAction` is in scope;
@@ -87,14 +92,30 @@ budget for crossing the room, against a measured 30 yd median run at ~7 yd/s cos
   `UNIT_STATE_CASTING` plus `FindCurrentSpellBySpellId` over **every** cast slot rather than
   `CURRENT_GENERIC_SPELL`: which slot a scripted boss cast lands in is the script's business, and
   guessing wrong opens the window on nothing. `UldTriggers_Mimiron.cpp:31` is the same shape.
-- **The shelter run keys off 33174 existing**, not off the boss casting. Starting when the drift
-  spawns puts the raid under a 14,000 / 7 yd detonation.
-- Everyone converges on the drift nearest the **ring centre**, not `ULDUAR_HODIR_RAID_ANCHOR`. The
-  two are the same point while no fire is adopted, but when one was the fixed point sat a median
-  9.5 yd off the ring (p90 17.6) and picked drifts 25 yd away with three closer candidates on the
-  floor. Trigger and action share one helper; two derivations would oscillate. It answers "none"
-  before deriving the centre, since a shelter exists for ~6s of every 49s cycle and the centre costs
-  a second grid sweep.
+- **Stage on the drift; do not wait for the target.** Keying the run on 33174 existing wasted the
+  first 3.9s of every cast, because `HodirGuardMultiplier` zeroes every mover from cast start: the
+  raid moved **20.9%** of that half against a **51.7%** whole-fight baseline, then had 6.2s to cover
+  up to 35 yd. Parking at `_BIG_SHARDS_CLEAR` stands it where the target appears without entering the
+  14,000 / 7 yd detonation. A bot already inside the blast needs no push: `MoveInside` answers false
+  there and it descends to the dodge at `ACTION_RAID + 5`, which collects drifts at the same 9 yd
+  clear. 9 also clears the dodge trigger's own 7.5
+  (`_BIG_SHARDS_RADIUS + _DODGE_TRIGGER_MARGIN`), so the two never fight over a parked bot.
+- **Each bot takes its own nearest, latched** (`GetHodirShelter`). Trigger and action still share one
+  helper, because two derivations oscillate, but that never needed one answer for the whole raid —
+  and ranking off the ring centre gave exactly that: one guid for every bot, all seven casts. The
+  three land **5-31 yd apart** and `62464` holds off whichever is nearest (88% at 6-7 yd, 70% at 7-8,
+  53% at 8-9, 26% at 9-10), so the detour bought nothing. The latch is only for the sideways dodge
+  that carries a bot past the midpoint between two; otherwise nearest-to-self holds itself, since
+  walking at a shelter keeps it the nearest.
+- **What the shared pick cost**, over 175 bot-windows: walk in p50 **17.7 → 9.8** yd, max 35.0 → 28.8,
+  total 3,031 → 1,970; walk back out p50 19.5 → 9.4, total 821 → 612; over 20 yd out **68 → 11**,
+  over 30 yd 9 → 0. Ranged and healers inside 15 yd of him went **29% → 12%**: the centre rides a
+  fire, so the shared pick was the thing walking casters into his melee. Five bots missed a freeze
+  outright; in the worst window the tank stood **2.6 yd** from a shelter and was sent **31.6**, and he
+  and a mage sat encased 11.3s — which also costs the five non-healers who break each block.
+  Splitting strands nobody: worst bot-to-nearest-healer **21.6 yd**, none over 40, against heals
+  landing at p50 12.3, p90 26.7, max 51.5. Counting healers per shelter is the wrong test and says
+  otherwise.
 - **The anchor is abandoned every 48s and that is correct** — tanks included. He is encased otherwise.
 - **Residual, still open:** the dodge issues `MOVEMENT_FORCED` and the shelter run `MOVEMENT_COMBAT`,
   and `IsWaitingForLastMove` only yields to a strictly higher priority, so a dodge firing late in the
@@ -178,9 +199,9 @@ for **22%**.
 ## Traps
 
 - **Three icicle entries, and confusing them breaks the fight.** 33169 is the small one, dodged
-  always. 33173 is the drift, dodged **only while falling** — the dodge stands down once a 33174
-  exists within 9 yd of it, because 33174 is the shelter everyone is running to. 33174 is never
-  dodged.
+  always. 33173 is the drift: dodged **only while falling** and only inside 7.5 yd, because the
+  shelter run parks on it at 9. The dodge stands down once a 33174 exists within 9 yd of it. 33174 is
+  the shelter, and is never dodged.
 - The anchor is **not combat-gated**: `MoveInLineOfSight` is a no-op, so bots pre-position in the
   corner and the tank pulls from there instead of dragging him 75 yd.
 - **Melee get no anchor, no fire and no Starlight.** Re-examined once Starlight turned out to be +50%
@@ -302,6 +323,12 @@ movement economy still wants re-measuring after each latch rather than all at on
 against 10 the other way with no tank death, and `hodir frozen blows swap action` produced **7 `OK`
 records against 17**. Healing was not the constraint — he received 1.43M against 0.76M, nearest
 healer p50 18.1 yd — so read the swap's gating before anyone's positioning.
+
+**The tank drags Hodir every 48s.** He moves **1.72 yd/s** during shelter runs against **1.27** the
+rest of the fight, because the tank walked 39-56 yd per window and Hodir follows whoever holds him.
+That drift is what the ring anchor and the Starlight latch re-derive against every tick. Taking the
+nearest shelter already cuts the tank's worst run from 31.6 yd to 2.6, so re-measure before adding a
+tank-specific pick.
 
 **The taunt floor may be set too low.** `ULDUAR_HODIR_TAUNT_HEALTH_FLOOR` ships at **50.0f**, but a
 max-roll `63511` is 28,929 against Bulwark's 45,287 pool — **63.9%** — and two land about 2.4s apart.

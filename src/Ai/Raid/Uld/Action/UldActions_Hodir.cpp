@@ -56,16 +56,19 @@ void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
 
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
 {
-    // The trigger fires only outside the Safe Area with a shelter on the floor, so reaching here
-    // always means the bot has to cross ground it is not standing on yet.
+    // The trigger fires only outside the release ring with somewhere to shelter on the floor, so
+    // reaching here always means the bot has to cross ground it is not standing on yet.
     BreakCastPinningTheFeet(botAI, bot);
 
-    Creature* shelter = GetHodirSharedShelter(botAI, bot);
+    Creature* shelter = GetHodirShelter(botAI, bot);
     if (!shelter)
         return false;
 
+    // MoveInside answers false for a bot already inside the radius, so one caught inside a falling
+    // drift's blast falls through to the dodge below, which collects drifts at the same clear and
+    // walks it out. Nothing here has to push.
     return MoveInside(bot->GetMapId(), shelter->GetPositionX(), shelter->GetPositionY(),
-                      shelter->GetPositionZ(), ULDUAR_HODIR_SAFE_AREA_TOLERANCE,
+                      shelter->GetPositionZ(), GetHodirShelterPark(shelter),
                       MovementPriority::MOVEMENT_COMBAT);
 }
 

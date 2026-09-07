@@ -279,13 +279,24 @@ bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot);
 // rescue valve - with nobody on him the taunt is the save and has to survive.
 bool HodirTauntWouldBeSuicide(PlayerbotAI* botAI, Player* bot);
 
-// The Snowpacked Icicle Target the whole raid shelters at during Flash Freeze.
-Creature* GetHodirSharedShelter(PlayerbotAI* botAI, Player* bot);
+// Where this bot shelters from Flash Freeze: the nearest Snowpacked Icicle Target, or while the cast
+// is up the nearest drift that has not landed yet, since the target appears at the drift's own spot.
+// Latched per bot until the pick leaves the floor. Nothing here is raid-wide - three drifts land 5-31
+// yd apart and every target grants the Safe Area, so sending the raid to one of them bought nothing
+// and cost a median 8 yd each way per bot per freeze.
+Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot);
+
+// How close the shelter run parks, and how far the bot may then drift before it is sent back. A drift
+// still falling is a 14000 damage blast rather than a shelter, so it is parked on the edge of its
+// clear and only stepped into once it has landed. Both pairs keep the same 2 yd of hysteresis, or
+// arriving releases the bot on the same tick and the ring anchor walks it straight back out.
+float GetHodirShelterPark(Creature* shelter);
+float GetHodirShelterRelease(Creature* shelter);
 
 // The Toasty Fire the ranged formation forms on, or nullptr. Picked nearest Hodir rather than nearest
-// the bot, for the same reason the shelter is: two derivations of "which fire" disagree and the
-// formation oscillates between them. Only a fire that leaves the whole ring inside the caster band
-// qualifies, so on most pulls there is none and this returns nullptr all fight.
+// the bot because the ring is one shared formation: a per-bot answer here has each bot centring the
+// ring somewhere else, and the slots it hands out never agree. Only a fire that leaves the whole ring
+// inside the caster band qualifies, so on most pulls there is none and this returns nullptr all fight.
 Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot);
 
 // Where the ranged formation is centred: a Toasty Fire when one sits inside the caster band,
