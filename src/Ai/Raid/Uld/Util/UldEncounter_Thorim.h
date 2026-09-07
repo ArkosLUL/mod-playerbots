@@ -230,29 +230,30 @@ extern const Position ULDUAR_THORIM_BALCONY_4;
 extern const Position ULDUAR_THORIM_BALCONY_5;
 extern const Position ULDUAR_THORIM_JUMP_START_POINT;
 extern const Position ULDUAR_THORIM_JUMP_END_POINT;
+// Where Thorim ends up, so it sits west of centre on purpose: Lightning Charge is a cone off the
+// boss pointed at whichever orb lit up, so what decides exposure is your bearing from him, and the
+// ranged need somewhere behind him to stand. 17.5 yd off Sif's Blizzard walk, and the melee ring at
+// radius 8 is on the floor the whole way round.
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
-// Five spots on an arc north of him, 14 to 26 yd out. Two things pin them.
+// Five spots in his south-eastern shadow, 15 to 26 yd out. Three things pin them.
+//
+// Lightning Charge first, 19% of all incoming in the hard mode trace. Seven orbs ring the room and
+// the cone is 75 degrees wide, so most bearings off the boss sit inside three or four of them.
+// South-east is the one the ring barely reaches: every spot here is covered by exactly one.
 //
 // Sif's Blizzard bunny walks a fixed loop round the outside of the room, so anything on the east or
-// west edge sits under it. The old three had two of them 6.4 and 8.1 yd off that walk and took every
-// yard of Blizzard damage in the hard mode trace; these clear it by 16.2 yd at worst.
+// west edge sits under it. Worst clearance on these is 16.3 yd.
 //
 // Five rather than three because ten ranged and healers on three points stand three and four deep -
 // one trace has a healer dying to Chain Lightning with two more bodies 2.1 and 2.2 yd off it, and the
-// jump range here is 5. The tightest pair on these is 10.8 yd, and the closest to the melee ring at
-// radius 8 is 6.1 yd out from it.
-//
-// Not placed against Lightning Charge, which is the bigger source: its 105 degree cone off whichever
-// orb is lit, seven orbs, covers every bearing but due south. No parked layout survives it - stepping
-// out and back is the only answer, and that costs more cast time than the damage is worth outside
-// hard mode. See docs/plans/thorim-phase2-positioning-and-state-reset.
+// jump range here is 5. The tightest pair on these is 8.2 yd.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT;
 // Only used when Thorim's live position cannot produce a ring point. The arena floor has a hole south
-// of y = -288, so nothing here sits past the tank spot.
+// of y = -288, so nothing here goes near it.
 extern const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT;
