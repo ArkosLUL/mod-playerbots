@@ -161,6 +161,17 @@ constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
 // never get a slot during a live phase.
 constexpr float ULDUAR_MIMIRON_STAGING_MELEE_RADIUS = 8.0f;
 
+// Firefighter staging radii, replacing the two above for as long as hard mode is declared. Nothing
+// is attackable for the 47 s between phases, so there is no casting range to hold and no cone to
+// dodge - but Mimiron keeps seeding fire 5 yd from three random members every 30 s and each chain
+// then crawls toward whoever is nearest it. Staged on the room centre the raid spends the handover
+// setting light to the ground VX-001 is about to spawn on: one pull took 203272 damage over that
+// window, all of it fire, with 86% of the nodes born in it landing inside 25 yd of the centre.
+// Melee sit inside ranged only because they have the longer trip back in - 22 yd against 8, about
+// 3.1 s. navprobe: 24/24 on mesh at both radii, flat at Z 364.314.
+constexpr float ULDUAR_MIMIRON_HM_STAGING_MELEE_RADIUS = 30.0f;
+constexpr float ULDUAR_MIMIRON_HM_STAGING_RANGED_RADIUS = 36.0f;
+
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
 constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
@@ -197,9 +208,27 @@ constexpr uint32 ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS = 250;
 bool IsMimironSpotMineSafe(Player* bot, Position const& dest,
                            float clearance = ULDUAR_MIMIRON_MINE_CLEARANCE);
 
+// The Firefighter hazards a bot can see, gathered in one pass, empty whenever hard mode is off. The
+// flee fan tests up to eleven bearings and "nearest npcs" recalculates on demand, so screening a
+// bearing at a time would walk a 50 to 60 node fire field eleven times for one dodge.
+struct MimironFirefighterHazards
+{
+    std::vector<Position> flames;
+    std::vector<Position> bombs;
+};
+
+MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
+
+// Whether `dest` clears every gathered hazard of that kind. Two calls rather than one because the
+// flee fan counts the two refusals apart, and which filter emptied a fan is the thing the trace has
+// to be able to name.
+bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest);
+bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest);
+
 // Same idea for anywhere a bot is asked to stand rather than flee to: mines plus any Rocket Strike
-// marker still burning its fuse. Positioning that ignores markers walks a bot that just dodged one
-// straight back onto it.
+// marker still burning its fuse, and under hard mode the ground fire and the Frost Bomb. Positioning
+// that ignores markers walks a bot that just dodged one straight back onto it, and one that ignores
+// the bomb walks the raid back into the blast for the whole ten second fuse.
 bool IsMimironSpotSafe(Player* bot, Position const& dest);
 
 // The main tank's slot in phases 1 and 4 is a boss-holding spot, not somewhere it is free to refuse:
@@ -306,11 +335,24 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
 // two disagree about where the bot belongs.
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 
-// Mimiron hard mode: bots flee a persistent fire node when this close (cells are small), and clear
-// the Frost Bomb's larger explosion. Exact radii are DBC, so these are conservative defaults to
-// confirm in-game.
+// Firefighter ground fire. A node's damage aura 64566 reaches 3 yd, so 5 covers the node footprint
+// and pathing slop. Chains grow in 7 yd steps and 50 to 60 nodes are alive by the middle of the
+// fight, so a destination has to clear every node it knows about rather than just the nearest one -
+// a hop shorter than the step lands on the next node along.
 constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
-constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 12.0f;
+// How far past the cluster edge a fire dodge lands. A chain adds a node every 5.75 s exactly 7 yd
+// along, so anything shorter than one step puts the bot on the next node; the measured hops were 4
+// to 5 and bots burned for up to 11 s at a stretch.
+constexpr float ULDUAR_MIMIRON_FLAMES_STEP = 7.0f;
+
+// Frost Bomb Explosion 65333: 30 yd, 47124 base, plus a knockback. That is about twice a bot's
+// health pool, so this is a positional check and no amount of healing answers it. The bomb summons
+// on a burning flame node - 64623's condition rows require entry 34121 carrying aura 64561 - and its
+// SmartAI detonates 10 s after the spawn, which is the whole warning.
+constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 30.0f;
+// Where to stand rather than what the blast reaches: the extra clears the knockback and the yard or
+// two a leg overshoots by.
+constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
 
 // VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
 // point holds still while the mechs turn and charge about.

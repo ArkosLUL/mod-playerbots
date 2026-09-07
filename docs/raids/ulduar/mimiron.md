@@ -2,18 +2,93 @@
 ## Firefighter
 
 A player presses the Big Red Button before the pull; `_hardmode` is set at activation and never
-cleared. Detection uses `SPELL_EMERGENCY_MODE (64582)`, the empower aura applied to whichever mech is
-currently active — those mechs *are* valid attack targets, unlike Mimiron himself.
+cleared. Bots do not detect it: `IsMimironHardModeActive` reads `AiPlayerbot.UlduarMimironHardMode`
+and nothing else, so the config is a declaration and has to match what the raid actually does.
+`SPELL_EMERGENCY_MODE (64582)` is the empower aura on whichever mech is active, if a live signal is
+ever wanted — those mechs *are* valid attack targets, unlike Mimiron himself.
 
-Hazards: persistent ground fire (`NPC_FLAMES_INITIAL` 34363 → `NPC_FLAMES_SPREAD` 34121, aura 64561)
-that creeps toward the nearest player all fight, and the VX-001 **Frost Bomb** (`NPC_FROST_BOMB`
-34149). Both flame nodes are non-selectable trigger creatures, so they are found by scanning
-`"nearest npcs"` — the same idiom as Freya's beams. Bots avoid the bomb *creature*, so no spell id is
-needed and 10/25 are covered identically.
+**The fire is the boss.** Across three 2026-09-07 pulls, Flames 64566 was the largest single damage
+source every time — 45%, 26% and 33% of everything the raid took, ahead of the Frost Bomb and every
+mech ability. Roughly half of all effective healing goes to it.
 
-**Correction to the master plan**: Emergency Fire Bots (34147) are **friendly, non-combat fire
-extinguishers**. They never enter combat with players, never heal or repair Mimiron, and only run to
-flame nodes and cast Water Spray to put fires out. They are **not** kill targets.
+Mimiron seeds it for the whole encounter, handovers included: `EVENT_SPAWN_FLAMES_INITIAL` every
+**30 s** drops three `NPC_FLAMES_INITIAL` (34363) 5 yd from three random raid members. Each chain
+then adds one `NPC_FLAMES_SPREAD` (34121) every **5.75 s**, **7 yd toward the player nearest that
+chain's newest node**, and **stops growing while any player is inside 4 yd of that node**. Nodes
+carry aura 64561, which ticks 64566 for ~3.1k a second inside **3 yd**, and they never expire. Both
+entries are non-selectable trigger creatures, found by scanning `"nearest npcs"` — the same idiom as
+Freya's beams.
+
+**So where the raid stands is where the fire goes, and that is the only lever over it.** Three things
+put fire out and nothing else does: the Frost Bomb, VX-001's Flame Suppressant (65192, 10 yd around
+itself every 10 s in phase 2 — which also lands a 51% cast slow, so it is not a place to stand), and
+one full-room clear 60 s into phase 1 (64570).
+
+**Emergency Fire Bots (34147)** never enter zone combat — the Bot Summon Trigger's
+`if (_option < 3) SetInCombatWithZone()` skips them — and only run to flame nodes and cast Water
+Spray, never healing or repairing Mimiron. They are not friendly, though: `creature_template` gives
+them faction 16, the same as a Junk Bot, so they are attackable, and
+`MimironSetDpsPriorityAction` puts them on the kill list whenever hard mode is on. That
+contradicts `playerbots.conf.dist`, which promises bots leave them alone.
+Unresolved, because none have spawned in a traced pull — they come from the phase 3 ACU summon
+trigger, and no Firefighter attempt has reached phase 3.
+
+## The Frost Bomb is 30 yd, and it lands in your own fire
+
+VX-001 casts 64623 at `SPELLVALUE_MAX_TARGETS 1` from 1 s into phases 2 and 4, repeating every 45 s.
+`acore_world.conditions` restricts it to entry **34121 carrying aura 64561**, so it never targets a
+player: it picks a burning flame node, which summons `NPC_FROST_BOMB` (34149). That creature's
+SmartAI detonates **exactly 10 s later** — 65333 in 25-man, **30 yd, 47124 base**, plus a knockback,
+plus a dummy effect that despawns every flame it catches. It is the raid's fire extinguisher as much
+as its hazard, and gathering the fire into one part of the room is what aims it. Bots avoid the bomb
+*creature*, so no spell id is needed and 10/25 are covered identically.
+
+47k against a 22-24k bot health pool means health is irrelevant and healing cannot answer it. It is a
+pure positional check, and an easy one: at spawn the worst-placed bot in a traced pull needed 23 yd
+of travel, 3.3 s against a 10 s fuse. navprobe has the room flat and on mesh to 45 yd across all 16
+headings and 15/16 at 55, so there is always floor to run to.
+
+`ULDUAR_MIMIRON_FROST_BOMB_RADIUS` was 12 — a placeholder its own comment flagged as unconfirmed —
+and served as both the trigger range and the flee distance, so nobody between 12 and 30 yd reacted
+and anyone who did stopped 18 yd inside the blast. One bomb killed 13-15 of 25 inside 0.15 s in each
+of three pulls, which is what ended all three. The two jobs are now separate constants: 30 for the
+trigger and every spot test, `ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE` 34 for where to stand.
+
+The node also has to win the tick. Rocket strike, the flames dodge and the frost bomb all sat on
+`ACTION_RAID + 4`; `Queue::findHighestRelevanceBasket` breaks an exact tie by push order and
+`Engine::DoNextAction` stops at the first action returning true, so the flames step ended the tick
+143-221 times a pull against 6-13 reaching the bomb. Barrage is now +7, frost bomb +6, rocket strike
++5, flames +4. `mimiron shock blast` at +3 still sits below the flames step — a 99999 blast losing to
+a 3k tick — but nothing has died to it yet.
+
+## Two dodges fought over the fire, and both were too short
+
+Standing in fire totals only ~204-258 bot-seconds a pull. The damage is all in the tail, where 5-14%
+of exposures ran 5 s or longer at 20-50k each. Bots were not walking into fire; they were stuck in
+it, for three compounding reasons.
+
+**Hops shorter than the chain step.** Chains grow in 7 yd steps and 50-60 nodes are live by the
+middle of the fight. Measured accepted moves: `avoid aoe` median **4.0 yd**, the Mimiron dodge
+**5.0 yd** — both land on the next node along. The Mimiron dodge meant to leave the whole field, but
+only collected nodes within 5 yd, so its "clear the outermost node" spread was near zero.
+
+**`avoid aoe` takes the movement lock and then reports failure.**
+`AvoidAoeAction::AvoidUnitWithDamageAura` is built for exactly this hazard — a non-selectable trigger
+within 15 yd whose periodic-trigger aura does school damage, which 64561 → 64566 is. It flees to the
+damage radius itself (**3 yd**), then **ignores the result and returns false**: 642 evaluations
+across two pulls, **zero** wins, **619** accepted moves. At relevance 90 it outranks every Mimiron
+node (60-65), so it goes first every tick a node is in range. Its own rate limiter is dead code —
+`lastMoveTimer` is assigned only inside the `tellWhenAvoidAoe` branch.
+
+**A shared cooldown between the two.** `MovementAction::FleePosition` refuses outright while the
+shared `"recently flee info"` list holds an entry younger than `minInterval` (1000 ms). **71%** of
+the Mimiron flame dodge's FAILEDs had an accepted flee by that same bot in the previous second — its
+own last hop, or `avoid aoe`'s.
+
+The flames dodge is now on the shared Mimiron fan instead of `FleePosition`, sized at the cluster
+edge plus one 7 yd chain step, and `MimironAvoidAoeGuardMultiplier` vetoes `avoid aoe` outright while
+hard mode is live. `AvoidAoeAction`'s own two bugs are left alone: it runs in every encounter in the
+game and deserves its own change.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -309,6 +384,18 @@ event list is `EVENT_SUMMON_{BOMB,ASSAULT,JUNK}_BOT` plus the Firefighter fire b
 scheduled only in phase 4. Range on it matters for exactly one thing, the Magnetic Core window, and
 melee and pets cover that on foot.
 
+**Under Firefighter every live phase wants the wedge**, for an unrelated reason: fire. A 360° ring
+puts 25 bots on 25 bearings, and since each chain grows toward whoever is nearest its own head, that
+drags 25 chains outward along 25 radii until the fire is everywhere. Grouped into one sector the
+chains converge instead, the 4 yd freeze rule actually bites, and the Frost Bomb — which only ever
+summons on a burning node — lands in that sector and clears it. So while hard mode is on, the `ring`
+branch becomes `hmwedge` and reuses this machinery unchanged: `MimironWedgeRows` and
+`MimironWedgeSlot` at the same 18 yd first row and 6 yd spacing, on the same east centreline, still
+anchored on the mech so casting range holds. The cost is Rapid Burst (64531/64532), a 104° cone at
+~1.6k that a 120° wedge barely outruns where the full ring was chosen so it could not — against fire
+outdamaging Rapid Burst five to eight times over. `ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE` is the
+knob if the fire still fans out.
+
 ## A dodge that returns false hands the tick to Charge
 
 Shock Blast (63631) is a **4 s cast**, `TARGET_SRC_CASTER`, 15 yd, 100000 damage, every 30 s. Four
@@ -499,6 +586,16 @@ charges to (2755.77, 2574.95) at 10 s and only reaches the centre at 18.8 s, so 
 walks the melee along the charge waypoints and back. The ring radius is `max(8, focus reach + 1)`,
 since a flat 8 yd would stage half the melee inside the chassis model at reach 8.
 
+**Under Firefighter the centre anchor inverts, and only the radius changes.** Mimiron keeps seeding
+fire through the handover, so a raid holding an 8 yd melee ring and a 22 yd caster ring on the centre
+for 47 s burns the ground VX-001 is about to spawn on: one pull put 37 nodes in that window, **86% of
+them inside 25 yd of the centre**, and took **203,272 damage across it, all of it fire**, with
+nothing attackable. The radii therefore become `ULDUAR_MIMIRON_HM_STAGING_MELEE_RADIUS` 30 and
+`ULDUAR_MIMIRON_HM_STAGING_RANGED_RADIUS` 36 while hard mode is on (navprobe 24/24 on mesh at both,
+flat at Z 364.314). The only cost is the trip back in — 22 yd for melee, 8 for casters — across a
+window with nothing to be in range of. It also pushes the first Frost Bomb to the perimeter, since
+the bomb lands on a flame node.
+
 Three things fall out rather than needing code. The **elevator knockback** 11 s into the first handover
 needs no guard, because VX-001 is not summoned until 17 s and it is what the staging keys off. **Eating
 and drinking still happen**, because the trigger stops firing inside `ULDUAR_MIMIRON_SPREAD_TOLERANCE`
@@ -545,7 +642,11 @@ past roughly 120° off the escape bearing the geometry turns back inward.
 
 `IsMimironSpotSafe` covers Firefighter's ground fire on the same argument, behind the hard-mode check:
 without it the flames node at `ACTION_RAID + 4` pushes a bot out of a burning slot and the formation at
-`ACTION_RAID` pulls it straight back, and it paces on the edge until it burns down.
+`ACTION_RAID` pulls it straight back, and it paces on the edge until it burns down. It covers the
+Frost Bomb for the mirror reason — otherwise the formation walks the raid back inside the blast for
+the whole ten second fuse. The fan screens both too, so a Shock Blast or barrage dodge no longer
+lands in the fire it will have to leave again. Both come from one `GetMimironFirefighterHazards`
+pass, because the fan tests eleven bearings and rescanning a 50-node field per bearing is not free.
 
 ## What a trace answers
 
@@ -558,9 +659,9 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `core` | The Magnetic Core window is open. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse`, `walk-corpse`, `loot`, `bags-full`, `walk-acu`, `blocked`, `use` |
-| `slot` | Which formation shape answered — `p4tank`, `stagemelee`, `p3wedge`, `p1tank`, `stagering`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `stagemelee`, `p3wedge`, `p3tank`, `p1tank`, `hmwedge`, `stagering`, `ring`, `none` — with index/count and the point |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`, and how many bearings each filter refused (`back`, `mine`, `cone`) |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`). `what` names the hazard: `shock`, `rocket`, `flames`, `frostbomb` |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,

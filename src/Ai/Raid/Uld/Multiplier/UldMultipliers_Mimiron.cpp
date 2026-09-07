@@ -83,6 +83,16 @@ float MimironChargeGuardMultiplier::GetValue(Action* action)
     return MimironLethalWindowActive(botAI) ? 0.0f : 1.0f;
 }
 
+float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || action->getName() != "avoid aoe")
+        return 1.0f;
+
+    // Only while the fire is actually there to be mishandled. On a normal clear Mimiron has no ground
+    // hazard this node would answer, so leaving it alone costs nothing.
+    return IsMimironHardModeActive(botAI) ? 0.0f : 1.0f;
+}
+
 float MimironThreatRedirectGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

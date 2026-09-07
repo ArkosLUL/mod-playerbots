@@ -38,7 +38,24 @@ using namespace EncounterHelpers;
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
                                              bool fallbackUnfiltered, bool interrupt, char const* what)
 {
-    if (!from || distance <= 0.0f)
+    if (!from)
+        return false;
+
+    return FleeFan(from->GetPosition(), from, distance, priority, fallbackUnfiltered, interrupt, what);
+}
+
+bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distance,
+                                             MovementPriority priority, bool fallbackUnfiltered,
+                                             bool interrupt, char const* what)
+{
+    return FleeFan(from, nullptr, distance, priority, fallbackUnfiltered, interrupt, what);
+}
+
+bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float distance,
+                                MovementPriority priority, bool fallbackUnfiltered, bool interrupt,
+                                char const* what)
+{
+    if (distance <= 0.0f)
         return false;
 
     // Why the fan emptied, for the trace. A bearing that is never issued reaches no MotionMaster and
@@ -47,6 +64,8 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
     uint32 refusedBack = 0;
     uint32 refusedMine = 0;
     uint32 refusedCone = 0;
+    uint32 refusedFire = 0;
+    uint32 refusedBomb = 0;
 
     // A bot with a cast in flight cannot be moved at all: PointMovementGenerator discards the spline
     // outright for anything IsMovementPreventedByCasting, and MoveTo still reports success and stamps
@@ -57,12 +76,15 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
 
     float const speed = bot->GetSpeed(MOVE_RUN);
     float const travel = speed > 0.0f ? distance / speed : 0.0f;
-    float const away = from->GetAngle(bot);
+    float const away = from.GetAngle(bot->GetPositionX(), bot->GetPositionY());
+    float const started = bot->GetExactDist2d(from.GetPositionX(), from.GetPositionY());
 
-    // Resolved once for the whole fan: reading the window costs a grid scan for the DB Target.
+    // Resolved once for the whole fan: reading the window costs a grid scan for the DB Target, and
+    // gathering the Firefighter hazards walks a fire field that runs to 50 or 60 nodes.
     Unit* const vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
     MimironBarrageWindow const barrage =
         vx001 ? GetMimironBarrageWindow(bot, vx001) : MimironBarrageWindow();
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
 
     // Past about 120 degrees off the escape bearing the geometry turns back inward, so the fan stops
     // short of that. It was 90; two stacked filters can empty the first quadrant, and the alternative
@@ -93,8 +115,7 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
             Position const dest(dx, dy, dz);
 
             // Collision can shorten the step enough to leave the bot no better off than it started.
-            if (dest.GetExactDist2d(from->GetPositionX(), from->GetPositionY()) <=
-                bot->GetExactDist2d(from))
+            if (dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started)
             {
                 ++refusedBack;
                 continue;
@@ -115,31 +136,56 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
                 continue;
             }
 
-            if (MoveTo(from->GetMapId(), dx, dy, dz, false, false, true, exact, priority))
+            // Firefighter only, and empty otherwise. Without these a Shock Blast or barrage dodge
+            // lands the bot in the fire it is about to have to leave again, and a fire dodge steps
+            // out of one node straight into the next - the nodes are 7 yd apart and the hops were 4.
+            if (!IsMimironSpotFireSafe(hazards, dest))
+            {
+                ++refusedFire;
+                continue;
+            }
+
+            if (!IsMimironSpotBombSafe(hazards, dest))
+            {
+                ++refusedBomb;
+                continue;
+            }
+
+            if (MoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority))
             {
                 float const taken = sign * delta;
-                NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone);
+                NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone, refusedFire,
+                                refusedBomb);
                 return true;
             }
         }
     }
 
-    // Every bearing in the fan was refused - by a mine, by the barrage, or by collision leaving the
-    // bot no further from the hazard than it started.
+    // Every bearing in the fan was refused - by a mine, the barrage, the fire, the bomb, or collision
+    // leaving the bot no further from the hazard than it started.
     if (!fallbackUnfiltered)
     {
-        NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone);
+        NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
+                        refusedBomb);
         return false;
     }
 
-    NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone);
-    return MoveAway(from, distance);
+    NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
+                    refusedBomb);
+
+    if (fallbackFrom)
+        return MoveAway(fallbackFrom, distance);
+
+    return MoveTo(bot->GetMapId(), bot->GetPositionX() + cos(away) * distance,
+                  bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ(), false, false, true,
+                  false, priority);
 }
 
 // `taken` is the bearing that won, in radians off straight away from the hazard, and is null for the
 // two outcomes where no bearing won at all.
 void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
-                                        uint32 refusedBack, uint32 refusedMine, uint32 refusedCone)
+                                        uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
+                                        uint32 refusedFire, uint32 refusedBomb)
 {
     if (!RaidObs::Active())
         return;
@@ -148,9 +194,9 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
     if (taken)
         snprintf(bearing, sizeof(bearing), " %+.0f", *taken * 180.0f / static_cast<float>(M_PI));
 
-    char line[96];
-    snprintf(line, sizeof(line), "%s %s%s (back%u mine%u cone%u)", what, outcome, bearing,
-             refusedBack, refusedMine, refusedCone);
+    char line[128];
+    snprintf(line, sizeof(line), "%s %s%s (back%u mine%u cone%u fire%u bomb%u)", what, outcome, bearing,
+             refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
@@ -569,49 +615,41 @@ bool MimironDodgeFlamesAction::isUseful()
 
 bool MimironDodgeFlamesAction::Execute(Event /*event*/)
 {
-    // Fire nodes are non-selectable, so find them via the raw nearby-npc list. Flee from the centre of the
-    // whole in-range fire field (not just the nearest node) out past its edge, so the bot leaves the field
-    // instead of stepping out of one node straight into the next.
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
-    std::vector<Position> nodes;
+    // Fire nodes are non-selectable, so find them via the raw nearby-npc list. Flee the centre of the
+    // burning cluster rather than the nearest node, so the bot leaves the cluster instead of stepping
+    // out of one node into the next one along.
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
 
-    for (auto const& guid : npcs)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
+    std::vector<Position> cluster;
+    for (Position const& node : hazards.flames)
+        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+            cluster.push_back(node);
 
-        if (unit->GetEntry() != NPC_FLAMES_SPREAD && unit->GetEntry() != NPC_FLAMES_INITIAL)
-            continue;
-
-        if (bot->GetExactDist2d(unit) < ULDUAR_MIMIRON_FLAMES_RADIUS)
-            nodes.push_back(unit->GetPosition());
-    }
-
-    if (nodes.empty())
+    if (cluster.empty())
         return false;
 
     float cx = 0.0f, cy = 0.0f;
-    for (Position const& node : nodes)
+    for (Position const& node : cluster)
     {
         cx += node.GetPositionX();
         cy += node.GetPositionY();
     }
-    cx /= nodes.size();
-    cy /= nodes.size();
+    cx /= cluster.size();
+    cy /= cluster.size();
 
-    // Flee far enough to clear the outermost in-range node, not just the centre.
-    Position const centre(cx, cy, 0.0f);
+    Position const centre(cx, cy, bot->GetPositionZ());
     float spread = 0.0f;
-    for (Position const& node : nodes)
-    {
-        float const d = centre.GetExactDist2d(node.GetPositionX(), node.GetPositionY());
-        if (d > spread)
-            spread = d;
-    }
+    for (Position const& node : cluster)
+        spread = std::max(spread, centre.GetExactDist2d(node.GetPositionX(), node.GetPositionY()));
 
-    bot->CastStop();
-    return FleePosition(Position(cx, cy, bot->GetPositionZ()), ULDUAR_MIMIRON_FLAMES_RADIUS + spread + 1.0f);
+    // Chains grow in 7 yd steps, so anything short of a step lands on the next node and the bot burns
+    // on the way. The fan screens every destination against the whole field, so the extra distance is
+    // spent leaving the field rather than crossing it - and it runs through the shared Mimiron fan
+    // rather than FleePosition, which refuses outright for a second after any other flee and was
+    // swallowing seven out of ten of these.
+    float const distance = ULDUAR_MIMIRON_FLAMES_RADIUS + spread + ULDUAR_MIMIRON_FLAMES_STEP;
+    return MoveAwayClearOfMines(centre, distance, MovementPriority::MOVEMENT_COMBAT, true, true,
+                                "flames");
 }
 
 bool MimironFrostBombAction::isUseful()
@@ -620,12 +658,19 @@ bool MimironFrostBombAction::isUseful()
     return mimironFrostBombTrigger.IsActive();
 }
 
-bool MimironFrostBombAction::Execute(Event event)
+bool MimironFrostBombAction::Execute(Event /*event*/)
 {
-    // The move itself is the shared MoveAwayFromCreatureAction; all this adds is the interrupt, which
-    // a casting bot needs before anything can move it at all.
-    bot->CastStop();
-    return MoveAwayFromCreatureAction::Execute(event);
+    Creature* frostBomb = bot->FindNearestCreature(NPC_FROST_BOMB, ULDUAR_MIMIRON_FROST_BOMB_RADIUS);
+    if (!frostBomb)
+        return false;
+
+    // MOVEMENT_FORCED because the formation leg a bot is usually mid-way through outlives the whole
+    // ten second fuse otherwise: one healer issued the right 38 yd escape, had it held, and died 23 yd
+    // from the bomb still walking a flames hop. Unfiltered fallback because a 30 yd blast can leave no
+    // clean bearing at all, and moving somewhere beats standing in it.
+    float const gap = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE - bot->GetExactDist2d(frostBomb);
+    return MoveAwayClearOfMines(frostBomb, gap, MovementPriority::MOVEMENT_FORCED, true, true,
+                                "frostbomb");
 }
 
 std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriorityList()

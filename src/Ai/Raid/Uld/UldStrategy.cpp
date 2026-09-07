@@ -575,7 +575,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     triggers.push_back(new TriggerNode(
         "mimiron p3wx2 laser barrage trigger",
-        { NextAction("mimiron p3wx2 laser barrage action", ACTION_RAID + 5) }));
+        { NextAction("mimiron p3wx2 laser barrage action", ACTION_RAID + 7) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron shock blast trigger",
@@ -599,7 +599,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "mimiron rocket strike trigger",
-        { NextAction("mimiron rocket strike action", ACTION_RAID + 4) }));
+        { NextAction("mimiron rocket strike action", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron phase 4 focus trigger",
@@ -637,13 +637,19 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("mimiron pet control action", ACTION_RAID) }));
 
     // Hard mode (config-gated): step out of the persistent ground fire and clear the Frost Bomb.
+    //
+    // The bomb outranks the fire, and the gap between them is the point. Both used to sit on
+    // ACTION_RAID + 4 alongside the rocket strike, the queue breaks an exact tie by push order, and
+    // the engine stops the tick at the first action that returns true - so the fire step, which wins
+    // that tie, ended the tick 143 to 221 times a pull and the bomb node was reached 6 to 13. Fire is
+    // 3000 a second and healable; the explosion is 47000 in 30 yd against a 24000 health pool.
     triggers.push_back(new TriggerNode(
         "mimiron dodge flames trigger",
         { NextAction("mimiron dodge flames action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron frost bomb trigger",
-        { NextAction("mimiron frost bomb action", ACTION_RAID + 4) }));
+        { NextAction("mimiron frost bomb action", ACTION_RAID + 6) }));
 
     //
     // General Vezax
@@ -876,6 +882,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Mimiron picks every non-tank target in code, so the generic picker has to be shut out
     multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
     multipliers.push_back(new MimironChargeGuardMultiplier(botAI));
+    multipliers.push_back(new MimironAvoidAoeGuardMultiplier(botAI));
     multipliers.push_back(new MimironThreatRedirectGuardMultiplier(botAI));
 
     // The Iron Assembly owns every target in the fight, and its hazard dodges must not be undone by

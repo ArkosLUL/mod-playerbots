@@ -138,6 +138,53 @@ bool IsMimironSpotMineSafe(Player* bot, Position const& dest, float clearance)
     return true;
 }
 
+MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI)
+{
+    MimironFirefighterHazards hazards;
+    if (!botAI || !IsMimironHardModeActive(botAI))
+        return hazards;
+
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        switch (unit->GetEntry())
+        {
+            case NPC_FLAMES_SPREAD:
+            case NPC_FLAMES_INITIAL:
+                hazards.flames.push_back(unit->GetPosition());
+                break;
+            case NPC_FROST_BOMB:
+                hazards.bombs.push_back(unit->GetPosition());
+                break;
+            default:
+                break;
+        }
+    }
+
+    return hazards;
+}
+
+bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest)
+{
+    for (Position const& node : hazards.flames)
+        if (dest.GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+            return false;
+
+    return true;
+}
+
+bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest)
+{
+    for (Position const& bomb : hazards.bombs)
+        if (dest.GetExactDist2d(bomb.GetPositionX(), bomb.GetPositionY()) < ULDUAR_MIMIRON_FROST_BOMB_RADIUS)
+            return false;
+
+    return true;
+}
+
 bool IsMimironSpotSafe(Player* bot, Position const& dest)
 {
     if (!bot)
@@ -150,32 +197,24 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest)
     if (!botAI)
         return true;
 
-    // Firefighter spreads ground fire across the floor, so a standing spot can end up inside it. Without
-    // this the flames node at ACTION_RAID + 4 pushes the bot out and the formation at ACTION_RAID pulls
-    // it straight back, and it paces on the edge until it burns down.
-    bool const hardMode = IsMimironHardModeActive(botAI);
-
     for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_ROCKET_STRIKE_N)
             continue;
 
-        uint32 const entry = unit->GetEntry();
-        float clearance = 0.0f;
-
-        if (entry == NPC_ROCKET_STRIKE_N)
-            clearance = ULDUAR_MIMIRON_ROCKET_CLEARANCE;
-        else if (hardMode && (entry == NPC_FLAMES_SPREAD || entry == NPC_FLAMES_INITIAL))
-            clearance = ULDUAR_MIMIRON_FLAMES_RADIUS;
-        else
-            continue;
-
-        if (dest.GetExactDist2d(unit->GetPositionX(), unit->GetPositionY()) < clearance)
+        if (dest.GetExactDist2d(unit->GetPositionX(), unit->GetPositionY()) <
+            ULDUAR_MIMIRON_ROCKET_CLEARANCE)
             return false;
     }
 
-    return true;
+    // Firefighter spreads ground fire across the floor, so a standing spot can end up inside it, and
+    // the Frost Bomb makes a 30 yd disc of the room lethal for ten seconds at a time. Without the fire
+    // half the flames node at ACTION_RAID + 4 pushes the bot out and the formation at ACTION_RAID pulls
+    // it straight back, and it paces on the edge until it burns down; without the bomb half the
+    // formation walks the raid back into the blast while the fuse runs.
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    return IsMimironSpotFireSafe(hazards, dest) && IsMimironSpotBombSafe(hazards, dest);
 }
 
 bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, Position const& dest,
@@ -663,9 +702,17 @@ bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position
 
     // Outside the mech's own model. The chassis has the largest reach of the three at 8, so a flat
     // 8 yd ring would stage half the melee inside it.
-    float const radius = focus ? std::max(ULDUAR_MIMIRON_STAGING_MELEE_RADIUS,
-                                          focus->GetCombatReach() + 1.0f)
-                              : ULDUAR_MIMIRON_STAGING_MELEE_RADIUS;
+    //
+    // Under Firefighter that ring is the wrong shape entirely: the handover runs 47 s with nothing
+    // attackable, and a raid parked on the room centre for it collects the fire seeds Mimiron keeps
+    // dropping and then hands VX-001 a spawn point already alight. Standing wide costs only the trip
+    // back in, and there is nothing to be in range of until the phase starts.
+    PlayerbotAI* const botAI = GET_PLAYERBOT_AI(bot);
+    float const radius =
+        botAI && IsMimironHardModeActive(botAI)
+            ? ULDUAR_MIMIRON_HM_STAGING_MELEE_RADIUS
+            : (focus ? std::max(ULDUAR_MIMIRON_STAGING_MELEE_RADIUS, focus->GetCombatReach() + 1.0f)
+                     : ULDUAR_MIMIRON_STAGING_MELEE_RADIUS);
 
     float const bearing = 2.0f * static_cast<float>(M_PI) * index / count;
     out = Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + radius * std::cos(bearing),
@@ -845,11 +892,54 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
                 : Position(focus->GetPositionX(), focus->GetPositionY(),
                            ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
 
+    bool const hardMode = IsMimironHardModeActive(botAI);
+
+    // Firefighter, mid-phase: a wedge rather than a ring, because the fire chases the raid. Every
+    // chain grows toward whoever is nearest its head, so 25 bots on 25 bearings drag 25 chains out
+    // along 25 radii and the fire ends up everywhere. Grouped into one sector the chains converge
+    // instead, and the Frost Bomb - which only ever summons on a burning node - lands in that sector
+    // and clears it. The cost is Rapid Burst: a 104 degree cone covers most of a 120 degree wedge,
+    // where the full ring was chosen so it could not. Fire was outdamaging Rapid Burst five to eight
+    // times over.
+    if (hardMode && !staging)
+    {
+        branch = "hmwedge";
+
+        float const rangedDepth = std::max(sPlayerbotAIConfig.spellDistance -
+                                               ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN -
+                                               ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
+                                           0.0f);
+        uint32 const rows = MimironWedgeRows(
+            ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
+            1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count);
+
+        float radius = 0.0f;
+        float offset = 0.0f;
+        MimironWedgeSlot(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS, rows, index, count, radius, offset);
+
+        // Bearing off the room centre, not off the anchor: the sector has to stay put in the room for
+        // the fire to pile up in it, and it is the same east gap phase 3 already forms up in.
+        float const centreline = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
+            ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionX(), ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionY());
+        float const bearing = Position::NormalizeOrientation(centreline + offset);
+
+        out = Position(anchor.GetPositionX() + radius * cos(bearing),
+                       anchor.GetPositionY() + radius * sin(bearing),
+                       ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+        return true;
+    }
+
     branch = staging ? "stagering" : "ring";
 
+    // Wide during a Firefighter handover, for the reason the melee staging ring is: 47 s of standing
+    // still on the room centre while Mimiron keeps seeding fire leaves VX-001 spawning into a field
+    // the raid built for it.
+    float const ringRadius = hardMode && staging ? ULDUAR_MIMIRON_HM_STAGING_RANGED_RADIUS
+                                                 : ULDUAR_MIMIRON_SPREAD_RADIUS;
+
     float const angle = 2.0f * static_cast<float>(M_PI) * index / count;
-    out = Position(anchor.GetPositionX() + ULDUAR_MIMIRON_SPREAD_RADIUS * cos(angle),
-                   anchor.GetPositionY() + ULDUAR_MIMIRON_SPREAD_RADIUS * sin(angle),
+    out = Position(anchor.GetPositionX() + ringRadius * cos(angle),
+                   anchor.GetPositionY() + ringRadius * sin(angle),
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     return true;
 }

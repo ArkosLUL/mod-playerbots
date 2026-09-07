@@ -31,9 +31,22 @@ protected:
                               bool fallbackUnfiltered = true, bool interrupt = false,
                               char const* what = "flee");
 
+    // Same fan, run away from a point rather than a unit. The ground fire is a field of 50 to 60
+    // nodes with no single unit to flee, so the flames dodge hands in its centroid.
+    bool MoveAwayClearOfMines(Position const& from, float distance,
+                              MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
+                              bool fallbackUnfiltered = true, bool interrupt = false,
+                              char const* what = "flee");
+
 private:
+    // The fan itself. `fallbackFrom` is the unit the two public overloads were asked about, and is
+    // only ever used for the unfiltered MoveAway once every bearing has been refused; the point
+    // overload has no unit to hand it, so it walks straight away from `from` instead.
+    bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
+                 bool fallbackUnfiltered, bool interrupt, char const* what);
+
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
-                         uint32 refusedMine, uint32 refusedCone);
+                         uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb);
 };
 
 class MimironShockBlastAction : public MimironFleeAction
@@ -190,22 +203,22 @@ public:
 };
 
 // Hard mode (Firefighter): step out of the persistent ground fire before it burns the bot down.
-class MimironDodgeFlamesAction : public MovementAction
+class MimironDodgeFlamesAction : public MimironFleeAction
 {
 public:
-    MimironDodgeFlamesAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron dodge flames action") {}
+    MimironDodgeFlamesAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron dodge flames action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
 };
 
-// Hard mode (Firefighter): clear VX-001's Frost Bomb radius before it detonates.
-class MimironFrostBombAction : public MoveAwayFromCreatureAction
+// Hard mode (Firefighter): clear VX-001's Frost Bomb radius before it detonates. On the shared fan
+// rather than MoveAwayFromCreatureAction, whose own fan reaches 30 yd and which refuses to move at
+// all when no candidate clears the full radius - which at 30 yd is most of them.
+class MimironFrostBombAction : public MimironFleeAction
 {
 public:
-    MimironFrostBombAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "mimiron frost bomb action", NPC_FROST_BOMB,
-                                     ULDUAR_MIMIRON_FROST_BOMB_RADIUS) {}
+    MimironFrostBombAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron frost bomb action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
