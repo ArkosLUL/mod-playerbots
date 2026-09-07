@@ -651,6 +651,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron frost bomb trigger",
         { NextAction("mimiron frost bomb action", ACTION_RAID + 6) }));
 
+    triggers.push_back(new TriggerNode(
+        "mimiron reset encounter state trigger",
+        { NextAction("mimiron reset encounter state action", ACTION_RAID) }));
+
     //
     // General Vezax
     //

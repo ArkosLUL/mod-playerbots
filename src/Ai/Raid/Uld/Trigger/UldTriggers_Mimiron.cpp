@@ -18,6 +18,28 @@
 
 using namespace EncounterHelpers;
 
+bool MimironResetEncounterStateTrigger::IsActive()
+{
+    // -1 is the DisperseDistanceValue default, so anything at or above zero was set by somebody.
+    if (bot->GetMapId() != ULDUAR_MAP_ID || AI_VALUE(float, "disperse distance") < 0.0f)
+        return false;
+
+    // Same scan the phase 1 node does. Sight distance caps "possible targets" at 100 yd, so at any
+    // other boss in here this finds nothing and the value goes back to default before the pull.
+    for (auto const& guid : AI_VALUE(GuidVector, "possible targets"))
+    {
+        Unit* target = botAI->GetUnit(guid);
+        if (!target || !target->IsAlive())
+            continue;
+
+        uint32 const entry = target->GetEntry();
+        if (entry == NPC_LEVIATHAN_MKII || entry == NPC_VX001 || entry == NPC_AERIAL_COMMAND_UNIT)
+            return false;
+    }
+
+    return true;
+}
+
 bool MimironShockBlastTrigger::IsActive()
 {
     // By entry, not through "find target": that value walks the bot's own threat list, so it only ever

@@ -230,33 +230,34 @@ extern const Position ULDUAR_THORIM_BALCONY_4;
 extern const Position ULDUAR_THORIM_BALCONY_5;
 extern const Position ULDUAR_THORIM_JUMP_START_POINT;
 extern const Position ULDUAR_THORIM_JUMP_END_POINT;
-// Where Thorim ends up, so it sits west of centre on purpose: Lightning Charge is a cone off the
-// boss pointed at whichever orb lit up, so what decides exposure is your bearing from him, and the
-// ranged need somewhere behind him to stand. 17.5 yd off Sif's Blizzard walk, and the melee ring at
-// radius 8 is on the floor the whole way round.
+// Where Thorim ends up, and he is dragged this far west so the melee on him cannot reach the ranged
+// camp. Chain Lightning jumps 5 yd body to body, so the two piles touching is what turns it from a
+// three man hit into an eight man one. The melee ring at radius 8 is walkable the whole way round,
+// the western arc on rim polys.
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
-// Five spots in his south-eastern shadow, 15 to 26 yd out. Three things pin them.
+// Five spots east of him, 23 to 30 yd out, which leaves the nearest 15 yd clear of the melee ring.
+// That clearance is the point: Chain Lightning cannot cross it, so a chain stops at whoever shares an
+// anchor instead of running the length of the raid. Tightest pair here is 8.1 yd, also over the jump.
 //
-// Lightning Charge first, 19% of all incoming in the hard mode trace. Seven orbs ring the room and
-// the cone is 75 degrees wide, so most bearings off the boss sit inside three or four of them.
-// South-east is the one the ring barely reaches: every spot here is covered by exactly one.
+// The price is Lightning Charge, a 75 degree cone off the boss aimed at whichever of the seven orbs
+// lit up. Out here one or two cones cover each spot instead of exactly one, so it roughly doubles -
+// from 3% of phase 2 incoming, against Chain Lightning's 20 to 38.
 //
-// Sif's Blizzard bunny walks a fixed loop round the outside of the room, so anything on the east or
-// west edge sits under it. Worst clearance on these is 16.3 yd.
-//
-// Five rather than three because ten ranged and healers on three points stand three and four deep -
-// one trace has a healer dying to Chain Lightning with two more bodies 2.1 and 2.2 yd off it, and the
-// jump range here is 5. The tightest pair on these is 8.2 yd.
+// Sif's Blizzard bunny loops the outside of the room, so the rim belongs to her. Worst clearance on
+// these is 16.3 yd.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT;
-// Only used when Thorim's live position cannot produce a ring point. The arena floor has a hole south
-// of y = -288, so nothing here goes near it.
+// Only used when Thorim's live position cannot produce a ring point, and StaticMeleeSpot only takes
+// one within 11 yd of him, so these have to sit on the radius 8 ring around the tank spot. Park him
+// somewhere else and they are dead weight.
 extern const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT;
+// Inside the melee ring rather than on it, and off the camp's bearing: taunt range for the
+// Unbalancing Strike swap without adding a body between the boss and the ranged.
 extern const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT;
 
 // Both scans below are raid-wide answers, so they are folded once per instance per interval instead

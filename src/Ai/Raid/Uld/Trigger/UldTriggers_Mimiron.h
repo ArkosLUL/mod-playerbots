@@ -8,6 +8,18 @@
 //
 // Mimiron
 //
+
+// "disperse distance" is bot state, not encounter state, so without this Mimiron's 6.0 outlives the
+// pull and the generic spread mover keeps walking bots around for the rest of the raid night. It
+// also clears a "disperse enable" typed inside Ulduar, which is the price of not needing to know who
+// set it.
+class MimironResetEncounterStateTrigger : public Trigger
+{
+public:
+    MimironResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron reset encounter state trigger", 5) {}
+    bool IsActive() override;
+};
+
 class MimironShockBlastTrigger : public Trigger
 {
 public:

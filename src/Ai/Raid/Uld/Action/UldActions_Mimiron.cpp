@@ -238,6 +238,15 @@ bool MimironShockBlastAction::isUseful()
     return mimironShockBlastTrigger.IsActive();
 }
 
+bool MimironResetEncounterStateAction::Execute(Event /*event*/)
+{
+    RESET_AI_VALUE(float, "disperse distance");
+
+    // Never claims the tick: clearing state is bookkeeping, and whatever the bot is standing in still
+    // needs the nodes below this one to run.
+    return false;
+}
+
 bool MimironPhase1PositioningAction::Execute(Event /*event*/)
 {
     SET_AI_VALUE(float, "disperse distance", 6.0f);

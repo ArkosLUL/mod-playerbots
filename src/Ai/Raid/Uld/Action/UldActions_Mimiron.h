@@ -11,6 +11,14 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
+class MimironResetEncounterStateAction : public Action
+{
+public:
+    MimironResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, "mimiron reset encounter state action") {}
+
+    bool Execute(Event event) override;
+};
+
 // Shared by the Mimiron flee actions. Proximity Mines are non-selectable, so pathing knows nothing
 // about them and a bot stepping out of one hazard can land in the ten that follow a Shock Blast.
 class MimironFleeAction : public MovementAction
