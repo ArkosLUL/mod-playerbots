@@ -131,6 +131,20 @@ its AI casts the fall effect at 2,000 ms and that aura's single 1,700 ms tick tr
 last `ULDUAR_HODIR_ICICLE_SPENT_MS` = 3,300 ms are inert, so at one icicle every 2s roughly half of
 those on the floor have already blown.
 
+**A bot mid-cast cannot dodge, and every layer above it reports success.**
+`Unit::IsMovementPreventedByCasting` is true for *any* cast in flight unless a channel carries
+`IsActionAllowedChannel`, and `PointMovementGenerator::DoInitialize` then returns without launching a
+spline while `DoUpdate` calls `StopMoving()` every tick. `MoveTo` still succeeds and the move record
+reads `ok`; `LastMovement` books the slot for a second and `IsDuplicateMove` refuses every re-issue,
+with the bot standing where it was. Blizzard pinned one caster **5.7 s** and Evocation, an 8 s
+channel, pinned the same one for the **3.5 s** it had left, each ending in `62457` for 13,987 with the
+dodge's accepted destination 4-6 yd away. It costs **101 bot-seconds a pull, 2.9% of ranged alive
+time** (Hurricane 29 s, Mind Flay 12 s, Evocation 11 s). The dodge and the shelter run therefore call
+`PlayerbotAI::RequestSpellInterrupt` first thing — both triggers already gate on a bot that is in
+danger and has to relocate, and a 3.3 s fuse leaves room for a 6 yd leg. **The shed does not**: it
+holds the movement slot for 22% of movement time, and Biting Cold at the arm threshold is 800 a tick
+against Ice Shards' 14,000.
+
 **Biting Cold sheds on sustained movement only, and jumping cannot fake it.** A stack comes off on the
 second *consecutive* tick where the server reads `isMoving()`, and any stationary tick between resets
 that progress, so it needs more than a second of unbroken travel: the shuttle walks 6 yd legs
@@ -184,6 +198,16 @@ for **22%**.
   the corner mid-Frozen-Blows costs more than the buff — but the boss still picks them: **14 of 53**
   carries in one pull went to a tank and 6 more to healers, every one a dead window. Collecting those
   would mean walking the receivers to the carrier. Greedy re-targeting is the Auriaya corridor dance.
+- **A tighter formation buys dps and pays in icicles.** The three latches took 12-or-more bots inside
+  one 10 yd circle from **39.7% of the pull to 56.1%**, and time inside a lethal icicle radius rose
+  **11.2% to 15.3%** of alive time, `62457` damage 177k to 222k. Icicles target players, so a tighter
+  raid shares pools and leaves itself less clear floor to dodge into. Widening `_DECLUMP_RADIUS` or
+  the clears buys that back at the throughput the stacking earned — re-measure after the cast pin
+  above, since two of the three icicle deaths were the pin, not the spacing.
+- **Killing Spree walks a rogue into pools no dodge can predict.** `51690` blinks the bot to a random
+  target's back with `moving` and `moveGen` both zero, so nothing sweeps for it and the dodge only
+  ever evaluates from where the bot currently stands. One 4.5 yd relocation landed **1.7 yd** from a
+  live `62457` and killed the rogue 0.4 s later, mid-shed-leg.
 - Healers are excluded from the targeting node entirely, and **5** non-healers break each ice block —
   raider and helper alike, picked by a GUID window offset per block so several blocks draw disjoint
   sets instead of the same five. Freeing outranks the boss (the trapped raider dies to the next
@@ -202,6 +226,12 @@ Traced 2026-09-02, with the dodge latched and the shed, Starlight and Storm Clou
 the icicle dodge 487 flips at 230-403 ms, and **every one** of the 100 times the dodge followed
 `reach melee`. The four Hodir movers own **82.8%** of movement time, `reach melee` gets 8.3%, and
 melee are within 8 yd of the boss only 49.8% of the fight.
+
+Traced 2026-09-06 with all three latched: **5:48.2 at 124k dps, against 6:20.4 at 115k**. Walking fell
+38,917 to 30,973 yd, moving 58.7% to 53.9%, stalls — 6 s or more stationary while still issuing
+accepted moves — 318 to 208 s, melee within 8 yd 49.8% to 58.6%, ranged beyond 30 yd 18.3% to 8.8%,
+worst Storm Cloud carry 142 to 37 yd from the boss. Deaths went 2 to 6 and **not one was a mover
+overshooting**: two to the cast pin above, one to Killing Spree, three to the tank.
 
 Each cause below is separate, and all of them are still easy to reintroduce.
 
@@ -234,12 +264,22 @@ Each cause below is separate, and all of them are still easy to reintroduce.
   instead; sweep only once it stops being clear. `_DODGE_ARRIVE` is 0.8 for the same reason: at 1.5 a
   bot counted as arrived a fifth of the way into a 2 yd leg, still inside the radius that re-arms the
   trigger.
-- **The Starlight stand is latched per bot too.** Zones are ranked against the ring slot and the stand
-  bearing is taken from it, so any centre change rewrites all 14 slots and with them the answer.
-  Stateless that came out as **739 anchor changes** across 23 bots at a median 3,896 ms, an 11 yd jump
-  each, and Starlight windows lasting 1.6 s against zones that live a minute. Hold the chosen zone
-  until it leaves the sweep and re-validate the stored point against the fire leash and the caster
-  band, rather than re-picking under a moving slot.
+- **The Starlight stand is latched per bot too, and a reject must not drop the latch.** Zones are
+  ranked against the ring slot and the stand bearing is taken from it, so any centre change rewrites
+  all 14 slots and with them the answer: stateless that was **739 anchor changes** across 23 bots at a
+  median 3,896 ms, an 11 yd jump each, and Starlight windows lasting 1.6 s against zones that live a
+  minute. Latching but erasing whenever the stored point failed re-validation made it *worse* —
+  **1,201 anchor moves at a median 320 ms** over as few as 14 distinct points, **1,137 with a stand in
+  force** — because the re-sweep ranks by walk from the slot, so Hodir drifting a yard past the 15/30
+  yd caster band handed the bot a different zone that rejected next tick and back. Hold the zone until
+  it leaves the sweep, re-validate the stored point against the fire leash and the caster band, and on
+  a reject fall back to the ring slot for that tick without dropping the latch.
+- **Put the zone in the note, not just the rule.** `hodir.starlight` carried only
+  `stand`/`noreach`/`fire`/`none` and `NoteDerived` emits on change, so a re-latch onto a *different*
+  zone still read `stand` and wrote nothing: the flap above hid behind 131 notes that looked exactly
+  like a latch holding. The value is now `stand <zone>`, and a held stand standing down reads
+  `held noreach`, so a bot waiting for the boss to drift back is distinguishable from one with no zone
+  at all.
 
 Two things that look broken in a Hodir trace and are not: `hodir frozen blows swap action` logging
 ~95% `FAILED` is the stateless trigger retrying every ~110 ms while the taunt is on cooldown — count
@@ -250,12 +290,18 @@ accepted moves and zero `OK` verdicts, and `NearThorimEncounter` excludes his fl
 (`z < ULDUAR_THORIM_WING_MAX_Z` 425 against 432.687).
 
 **Still open here:** no tank defensive cooldown is tied to a Frozen Blows window — the tanks spent
-four and six in six minutes, unprompted. And the pace is still about half what the deadline needs. The
-first kill ran **6:20.4** at **115k** dps on the boss, against the **214k** a 38.57M pool wants in
-180 s; the opening minute reaches 128k, so this is not a fight that falls off after cooldowns, it
-starts short. Survival is not the constraint either — 23 of 25 lived, and **64.3%** of the 17,309/s
-the raid takes is the raid-wide `64545` tick that no positioning avoids. The movement economy is the
-lever, and it wants re-measuring after each latch rather than all at once.
+four and six in six minutes, unprompted. And the pace is short of the deadline: the best kill runs
+**5:48.2** at **124k** dps on the boss against the **214k** a 38.57M pool wants in 180 s. The
+0:30-1:00 window does reach **222k**, so the ceiling is there and sustain is what is missing — the
+earlier "starts short" reading came off a slower pull. Positioning is no longer where the slack is:
+**57.1%** of the 17,554/s the raid takes is the raid-wide `64545` tick that nothing avoids. The
+movement economy still wants re-measuring after each latch rather than all at once.
+
+**Who eats Frozen Blows is not stable between pulls.** In the 5:48 kill the bot tank took **27 of the
+35 `63511` hits** for 506k against the human paladin's 8 and died three times; the pull before was 19
+against 10 the other way with no tank death, and `hodir frozen blows swap action` produced **7 `OK`
+records against 17**. Healing was not the constraint — he received 1.43M against 0.76M, nearest
+healer p50 18.1 yd — so read the swap's gating before anyone's positioning.
 
 **The taunt floor may be set too low.** `ULDUAR_HODIR_TAUNT_HEALTH_FLOOR` ships at **50.0f**, but a
 max-roll `63511` is 28,929 against Bulwark's 45,287 pool — **63.9%** — and two land about 2.4s apart.

@@ -41,10 +41,25 @@ bool IsClearOfHazards(Position const& position, std::vector<HazardCircle> const&
     return true;
 }
 
+// PointMovementGenerator never launches a spline while IsMovementPreventedByCasting is true, so the
+// MoveTo below is accepted, books the movement slot for a second, and the bot stands still until the
+// cast ends. Blizzard held one caster in an Ice Shards pool for 5.7s and Evocation another for 3.5s;
+// both died there. Only the two nodes that run when the bot is already in danger call this - a cast
+// is worth more than a shed leg, and less than 14000 from Ice Shards or a Flash Freeze.
+void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
+{
+    if (bot->IsMovementPreventedByCasting())
+        botAI->RequestSpellInterrupt();
+}
+
 }  // namespace
 
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
 {
+    // The trigger fires only outside the Safe Area with a shelter on the floor, so reaching here
+    // always means the bot has to cross ground it is not standing on yet.
+    BreakCastPinningTheFeet(botAI, bot);
+
     Creature* shelter = GetHodirSharedShelter(botAI, bot);
     if (!shelter)
         return false;
@@ -61,6 +76,10 @@ bool HodirFrostResistanceAction::Execute(Event /*event*/)
 
 bool HodirIcicleDodgeAction::Execute(Event /*event*/)
 {
+    // The trigger fires only inside a lethal radius, and it stands tanks down, so every bot that
+    // reaches here is standing somewhere that kills and has about 3s of icicle fuse to leave it.
+    BreakCastPinningTheFeet(botAI, bot);
+
     std::vector<HazardCircle> const hazards = CollectHodirIcicleHazards(
         bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR);
     if (hazards.empty())

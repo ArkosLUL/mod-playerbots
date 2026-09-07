@@ -392,17 +392,35 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
             }
         }
 
-        if (stillUp && !standRejects(held->second.stand))
+        if (stillUp)
         {
+            // Held through a reject rather than dropped. Erasing here re-swept, and the sweep ranks by
+            // walk from the slot, so Hodir drifting a yard past the caster band handed the bot a
+            // different zone that rejected on the next tick and back: 1201 anchor moves a median 320ms
+            // apart, ten of them per distinct point, 1137 of them with a stand in force. Falling back
+            // to the ring slot for the ticks a stand does not qualify costs one walk; swapping zones
+            // cost the walk every tick.
+            if (char const* reject = standRejects(held->second.stand))
+            {
+                // "held" so a latched stand standing down reads differently from a sweep that found
+                // nothing: the first is a bot with a zone waiting for the boss to move back, the
+                // second is a bot with no zone at all, and only the second wants more zones.
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "hodir.starlight", std::string("held ") + reject);
+
+                return false;
+            }
+
             out = held->second.stand;
 
             if (RaidObs::Active())
-                RaidObs::NoteDerived(bot, "hodir.starlight", "stand");
+                RaidObs::NoteDerived(bot, "hodir.starlight",
+                                     "stand " + RaidObs::DescribeDerived(held->second.zone));
 
             return true;
         }
 
-        // The zone expired or the point stopped qualifying, so the next sweep is the one that counts.
+        // The zone expired, so the next sweep is the one that counts.
         latched.erase(held);
     }
 
@@ -441,9 +459,12 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
     if (found)
         latched[bot->GetGUID()] = StarlightLatch{bestZone, out};
 
-    // The point itself is already hodir.anchor, which this becomes when it is found.
+    // The point itself is already hodir.anchor, which this becomes when it is found. The zone rides
+    // along because the value is otherwise only the rule: a re-latch onto a different zone still read
+    // "stand", NoteDerived emits on change, and so the swap above stayed invisible for a whole pull.
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.starlight", found ? "stand" : how);
+        RaidObs::NoteDerived(bot, "hodir.starlight",
+                             found ? "stand " + RaidObs::DescribeDerived(bestZone) : std::string(how));
 
     return found;
 }
