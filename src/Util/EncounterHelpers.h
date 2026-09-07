@@ -19,9 +19,17 @@ class PlayerbotAI;
 class Unit;
 
 namespace EncounterHelpers
-
 {
 
+// Cheap, rough proxies for how far along an encounter is. 95% HP means the boss and raid are
+// positioned, the tank has threat, and the fight proper has started, so it's time to use cooldowns.
+// 10% means the boss is almost dead, so ignore adds and finish off the boss.
+inline constexpr float BOSS_ENGAGED_HEALTH_PCT = 95.0f;
+inline constexpr float BOSS_BURN_HEALTH_PCT = 10.0f;
+
+bool GetStepToPosition(
+    Player* bot, Position const& position, float arrivalDist, Unit* facing, float& stepX,
+    float& stepY, bool& backwards);
 bool MarkTargetWithIcon(Player* bot, Unit* target, uint8 iconId);
 bool MarkTargetWithSkull(Player* bot, Unit* target);
 bool MarkTargetWithSquare(Player* bot, Unit* target);
@@ -42,7 +50,7 @@ void SetRtiCcTarget(PlayerbotAI* botAI, std::string const& rtiName, Unit* target
 bool IsMechanicTrackerBot(Player* bot, uint32 mapId);
 Player* GetGroupMainTank(Player* bot);
 Player* GetGroupAssistTank(Player* bot, uint8 index);
-Unit* GetFirstAliveUnitByEntry(PlayerbotAI* botAI, uint32 entry);
+Unit* GetFirstAliveUnitByEntry(PlayerbotAI* botAI, uint32 entry); // DO NOT USE, WILL BE REMOVED
 // Feign death (Stalagg/Feugen) keeps the creature alive at 1 HP but unselectable and lying down,
 // so IsAlive() on its own no longer means "still up".
 bool IsDownOrFeigning(Unit const* unit);

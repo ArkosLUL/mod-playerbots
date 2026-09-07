@@ -190,7 +190,7 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
-    // Bladestorm is a damage cooldown, not just an AoE button - WarrirorAoeStrategy pushes it up on
+    // Bladestorm is a damage cooldown, not just an AoE button - WarriorAoeStrategy pushes it up on
     // multiple targets, this keeps it running on a single one.
     triggers.push_back(
         new TriggerNode(

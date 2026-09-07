@@ -24,6 +24,9 @@ void GenericPriestStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode("medium threat", { NextAction("fade", 55.0f) }));
     triggers.push_back(new TriggerNode(
         "critical health", { NextAction("power word: shield", ACTION_NORMAL) }));
+    // Priced below the whole ladder so a 1.5 min buff never preempts Shadowfiend or the self-shield.
+    triggers.push_back(new TriggerNode(
+        "fear ward on main tank", { NextAction("fear ward on main tank", ACTION_HIGH + 0.7f) }));
 
     triggers.push_back(new TriggerNode("enemy too close for spell",
                                        { NextAction("flee", ACTION_MOVE + 9) }));

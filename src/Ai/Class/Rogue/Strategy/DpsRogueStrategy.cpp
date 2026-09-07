@@ -61,7 +61,7 @@ private:
     }
 };
 
-DpsRogueStrategy::DpsRogueStrategy(PlayerbotAI* botAI) : MeleeCombatStrategy(botAI)
+DpsRogueStrategy::DpsRogueStrategy(PlayerbotAI* botAI) : GenericRogueStrategy(botAI)
 {
     actionNodeFactories.Add(new DpsRogueStrategyActionNodeFactory());
 }
@@ -75,7 +75,7 @@ std::vector<NextAction> DpsRogueStrategy::getDefaultActions()
 
 void DpsRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    MeleeCombatStrategy::InitTriggers(triggers);
+    GenericRogueStrategy::InitTriggers(triggers);
 
     triggers.push_back(
         new TriggerNode(
@@ -129,7 +129,7 @@ void DpsRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         new TriggerNode(
             "tricks of the trade",
             {
-                NextAction("tricks of the trade", ACTION_HIGH + 6)
+                NextAction("tricks of the trade", ACTION_HIGH + 6.5f)
             }
         )
     );

@@ -665,7 +665,7 @@ void PlayerbotAI::HandleCommand(uint32 type, std::string const& text, Player& fr
     {
         std::string response = HandleRemoteCommand(filtered.substr(6));
         WorldPacket data;
-        ChatHandler::BuildChatPacket(data, CHAT_MSG_ADDON, response.c_str(), LANG_ADDON, CHAT_TAG_NONE, bot->GetGUID(),
+        ChatHandler::BuildChatPacket(data, CHAT_MSG_ADDON, LANG_ADDON, bot->GetGUID(), {}, response, CHAT_TAG_NONE,
                                      bot->GetName());
         ServerFacade::instance().SendPacket(&fromPlayer, &data);
         return;
@@ -1541,7 +1541,7 @@ void PlayerbotAI::DoNextAction(bool min)
         SetNextCheckDelay(sPlayerbotAIConfig.passiveDelay);
         return;
     }
-    else if (bot->isAFK())
+    else if (bot->isAFK() && !IsSelfBot(bot))
         bot->ToggleAFK();
 
     if (master && master->IsInWorld())
@@ -1634,10 +1634,10 @@ std::vector<std::string> const& PlayerbotAI::GetInstanceStrategies()
     {
         "aq20", "aq40", "blacktemple", "bwl", "gruulslair", "hyjal", "icc", "karazhan",
         "magtheridon", "moltencore", "naxx", "onyxia", "rs", "ssc", "sunwell", "tbc-ac",
-        "tbc-mech", "tbc-seth", "tbc-ub", "tempestkeep", "trialofthecrusader", "ulduar", "voa",
-        "wotlk-an", "wotlk-cos", "wotlk-dtk", "wotlk-eoe", "wotlk-fos", "wotlk-gd", "wotlk-hol",
-        "wotlk-hos", "wotlk-nex", "wotlk-occ", "wotlk-ok", "wotlk-os", "wotlk-pos", "wotlk-toc",
-        "wotlk-uk", "wotlk-up", "wotlk-vh", "zulaman"
+        "tbc-mech", "tbc-mgt", "tbc-seth", "tbc-ub", "tempestkeep", "trialofthecrusader", "ulduar",
+        "voa", "wotlk-an", "wotlk-cos", "wotlk-dtk", "wotlk-eoe", "wotlk-fos", "wotlk-gd",
+        "wotlk-hol", "wotlk-hos", "wotlk-nex", "wotlk-occ", "wotlk-ok", "wotlk-os", "wotlk-pos",
+        "wotlk-toc", "wotlk-uk", "wotlk-up", "wotlk-vh", "zulaman"
     };
 
     return allInstanceStrategies;
@@ -1728,6 +1728,9 @@ void PlayerbotAI::ApplyInstanceStrategies(uint32 mapId, bool tellMaster)
             break;
         case 580:
             strategyName = "sunwell";  // Sunwell Plateau
+            break;
+        case 585:
+            strategyName = "tbc-mgt";  // Magisters' Terrace
             break;
         case 595:
             strategyName = "wotlk-cos";  // The Culling of Stratholme
@@ -2947,7 +2950,7 @@ bool PlayerbotAI::SayToParty(std::string const& msg)
         return false;
 
     WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, msg.c_str(), LANG_UNIVERSAL, CHAT_TAG_NONE, bot->GetGUID(),
+    ChatHandler::BuildChatPacket(data, CHAT_MSG_PARTY, LANG_UNIVERSAL, bot->GetGUID(), {}, msg, CHAT_TAG_NONE,
                                  bot->GetName());
 
     for (auto receiver : GetRealPlayersInGroup())
@@ -2964,7 +2967,7 @@ bool PlayerbotAI::SayToRaid(std::string const& msg)
         return false;
 
     WorldPacket data;
-    ChatHandler::BuildChatPacket(data, CHAT_MSG_RAID, msg.c_str(), LANG_UNIVERSAL, CHAT_TAG_NONE, bot->GetGUID(),
+    ChatHandler::BuildChatPacket(data, CHAT_MSG_RAID, LANG_UNIVERSAL, bot->GetGUID(), {}, msg, CHAT_TAG_NONE,
                                  bot->GetName());
 
     for (auto receiver : GetRealPlayersInGroup())
