@@ -67,8 +67,13 @@ enum UlduarFreyaIds
     NPC_FREYA_STRENGTHENED_IRON_ROOTS = 33168,  // Freya's empowered Iron Roots trap (selectable)
     NPC_FREYA_SUN_BEAM = 33170,                 // Freya's Unstable Sun Beam stalker (non-selectable)
     NPC_FREYA_UNSTABLE_SUN_BEAM = 33050,        // Brightleaf's Unstable Sun Beam stalker (non-selectable)
-    SPELL_IRON_ROOTS_DAMAGE = 62283,            // DoT on a player trapped by Ironbranch's roots
-    SPELL_IRON_ROOTS_FREYA_DAMAGE = 62861,      // DoT on a player trapped by Freya's roots
+    // The root DoT, and the one place a difficulty pair is easy to miss: acore_world.spelldifficulty_dbc
+    // maps 62283 -> 62930 and 62861 -> 62438, HasAura takes an exact id, and only the 25-man half ever
+    // lands in a 25-man raid. Listing the 10-man ids alone is a check that can never be true.
+    SPELL_IRON_ROOTS_DAMAGE_10 = 62283,        // DoT on a player trapped by Ironbranch's roots
+    SPELL_IRON_ROOTS_DAMAGE_25 = 62930,
+    SPELL_IRON_ROOTS_FREYA_DAMAGE_10 = 62861,  // DoT on a player trapped by Freya's roots
+    SPELL_IRON_ROOTS_FREYA_DAMAGE_25 = 62438,
 
     // Applied to allies within 6 yd of a Healthy Spore; grants immunity to Conservator's Grip.
     // 62541 is what the spore casts on itself - this is the spell that actually lands on players.
@@ -153,19 +158,25 @@ constexpr float ULDUAR_FREYA_MELEE_LASHER_RANGE = 12.0f;
 // the gap, so without this it would swap every few ticks and lose swing timers to nothing.
 constexpr float ULDUAR_FREYA_TANK_TRIO_SWITCH_PCT = 5.0f;
 
-// Nature Bomb (64587) is 10 yd in both raid sizes and lands at the target's own feet, leaving ~6s to
-// clear the full radius from a standing start. The extra yard covers the bot's own reach so it does
-// not clip the edge of the blast while holding still.
+// Nature Bomb (64587) is 10 yd in both raid sizes and lands at the target's own feet. The blast itself,
+// with no margin: the last-resort escape only has to leave the circles the bot is standing in, because
+// a volley drops one on seven to ten players at once and there is often nowhere that clears them all.
+constexpr float ULDUAR_FREYA_NATURE_BOMB_BLAST_RADIUS = 10.0f;
+
+// The extra yard covers the bot's own reach so it does not clip the edge of the blast while holding
+// still.
 constexpr float ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS = 11.0f;
 
 // Where the escape aims, deliberately past the trigger radius: landing on the boundary would re-fire
 // the node every tick as combat movement pulls the bot back toward its target.
 constexpr float ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS = 13.0f;
 
-// Ceiling on the bomb escape latch. Without one the escape re-derives every tick, and because the
-// trigger fires at AVOID and the escape aims at CLEAR, that answers a bot on the rim with a ~2 yd step
-// that combat movement immediately undoes - the bot ends up walking hundreds of yards on the spot.
-constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 3000;
+// Ceiling on the bomb escape latch, and it has to outlast the fuse. A bomb goes off 6s after it lands,
+// not the 11s its explode timer reads: boss_freya_nature_bomb::UpdateAI fires at _explodeTimer >= 11000
+// but the branch under it snaps the timer from 5000 straight to 10000. At 3000 the latch expired with
+// half the fuse left, the bot walked back on its own DPS node, and it was inside the blast again a
+// median 0.7s before it fired.
+constexpr uint32 ULDUAR_FREYA_NATURE_BOMB_LATCH_MS = 7000;
 
 // Ceiling on the main tank's reposition. Long enough to walk the clearance at 7 yd/s, short enough
 // that a tank stopped on the way hands the tick back instead of holding Freya still for a whole volley.

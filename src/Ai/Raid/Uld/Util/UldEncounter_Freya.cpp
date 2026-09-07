@@ -308,9 +308,25 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
     // No latch and no shared state: the trigger stands down the moment the bot holds Potent Pheromones,
     // so the choice is only ever made on the way in, and the crowd count settles it the same way for
     // every bot that asks.
+    //
+    // A spore with an Unstable Sun Beam standing in it is not shelter either. The pool is 5 yd of the
+    // spore's 6, so the two overlap over most of their area, and a bot sent there parks in it for the
+    // pool's full ten seconds - which is how a healer died, rooted on a spore holding two of them.
+    std::vector<Position> const beams = GetFreyaSunBeamPositions(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    auto const pooled = [&beams](Unit* spore)
+    {
+        for (Position const& beam : beams)
+            if (spore->GetExactDist2d(beam.GetPositionX(), beam.GetPositionY()) < ULDUAR_FREYA_SPORE_RADIUS)
+                return true;
+
+        return false;
+    };
+
     Unit* nearest = nullptr;
+    Unit* clean = nullptr;
     Unit* roomy = nullptr;
     float nearestDistance = std::numeric_limits<float>::max();
+    float cleanDistance = std::numeric_limits<float>::max();
     float roomyDistance = std::numeric_limits<float>::max();
     for (Unit* spore : GetFreyaSpores(botAI))
     {
@@ -319,6 +335,15 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
         {
             nearestDistance = distance;
             nearest = spore;
+        }
+
+        if (pooled(spore))
+            continue;
+
+        if (distance < cleanDistance)
+        {
+            cleanDistance = distance;
+            clean = spore;
         }
 
         if (distance < roomyDistance &&
@@ -330,9 +355,12 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
         }
     }
 
-    // Every spore full - three alive at a time against fifteen bots that need one, so this happens.
-    // Sheltered and stacked still beats pacified.
-    return roomy ? roomy : nearest;
+    // Every spore full, or every one of them pooled - three alive at a time against fifteen bots that
+    // need one, so both happen. Sheltered and stacked, or sheltered and burning, still beats pacified.
+    if (roomy)
+        return roomy;
+
+    return clean ? clean : nearest;
 }
 
 uint32 CountFreyaRaidNear(PlayerbotAI* botAI, Position const& centre, float radius, Player* except)

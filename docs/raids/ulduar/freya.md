@@ -88,8 +88,11 @@ the same spore for every one of them, since they start the wave in one ball and 
 parked spore with the melee: `1788717562` had **18 of 25 bots sheltering on one spore** while four
 others held a single bot each, and both of this wave's big hits are 8 yd wide (below). No latch is
 needed, because the trigger stands down the moment the bot holds the aura, so the choice is only
-ever made on the way in. Tanks are excluded from the spore node itself: the add tank arrives inside
-the aura by dragging the boss there, and the main tank is holding Freya on her anchor.
+ever made on the way in. A spore with an Unstable Sun Beam inside those 6 yd is skipped as well: the
+pool is 5 of the 6, so it covers most of the shelter, and a bot sent there parks in it for the
+pool's ten seconds. Order is roomy and clean, then clean, then nearest — sheltered and burning still
+beats pacified. Tanks are excluded from the spore node itself: the add tank arrives inside the aura
+by dragging the boss there, and the main tank is holding Freya on her anchor.
 `GetFreyaTargetSpore` is that whole rule in one call, and **the trigger and the action must both use
 it**: deriving the spore twice let the LOS-filtered `"nearest npcs"` wake a bot for one spore while the
 unfiltered grid search walked it at another.
@@ -159,7 +162,26 @@ tick answered a bot on the rim with a **1.9 yd** median hop that `reach melee` u
 one: **1231 escape/closer flips in the 109s bomb phase** of `1788613108`, one bot re-aiming every
 108 ms, melee walking 400-530 yd of path to finish 25 yd away. It falls back to AVOID + 1 where
 overlapping bombs leave nothing clearing the full margin — without that it returned false on **164 of
-394** attempts, 77% of them with 4+ bombs in range, leaving the bot standing in the blast.
+394** attempts, 77% of them with 4+ bombs in range, leaving the bot standing in the blast. Below that
+it clears the blast itself with no margin (`_BLAST_RADIUS`, 10) and then walks straight out of the
+circles covering the bot, on the bearing away from their centre, because returning false still left
+it standing in one for the whole fuse: **15** times in `1788724466`, one of them `Hellflame` dead at
+**100%** with a bomb at 0.0 yd and three more inside 10, having issued no move at all in its last
+34s.
+
+**The latch has to outlast the fuse, and at 3000 ms it did not.** A bomb goes off **6s** after it
+lands — `boss_freya_nature_bomb::UpdateAI` fires at `_explodeTimer >= 11000`, but the branch under it
+snaps the timer from 5000 straight to 10000 — and the trace agrees, first sighting **6.0s** before
+the blast (min 5.9, max 6.1, n=42). The old latch also stopped holding the moment the bot
+*arrived*, and at 13 yd out the 11 yd trigger went quiet, so nothing reached the node again: **51
+victims walked back into a live blast** in `1788724466`, a median **5.3s** in, moved by the escape
+itself (40), `reach melee` (32) and `reach spell` (20). The trigger now reaches
+`_HAZARD_SEARCH_RADIUS` with `isUseful` narrowing it back to the blast plus the latch window, and
+**melee hold their spot** while a bomb still covers `bombOrigin`. Only melee:
+`Engine::DoNextAction` breaks out of the queue on the first action that returns true, so a held bot
+casts nothing — free for melee, out of range at the escape spot either way, and pure loss for ranged
+and healers. A blanket hold shell is out for the same reason: with a bomb up, bots sit 10-14 yd from
+one **34%** of the time.
 
 **Both escapes route around both hazards** (`GetFreyaEscapeHazards`: bombs at CLEAR, beams at
 `_SUN_BEAM_CLEARANCE`). They sit at the same relevance, so a bot reading only its own kind alternates
@@ -420,8 +442,18 @@ The two object types differ in a way that matters:
   attack-target lists — find them by scanning `"nearest npcs"`.
 
 Breaking Iron Roots sits at `ACTION_RAID + 5`, above the Sun Beam dodge at `+4`, because **a rooted
-bot cannot move**, so it must free itself before it can step out of anything. The beam dodge rings
-outward to a spot clear of every beam in range, not away from the nearest one.
+bot cannot move**, so it must free itself before it can step out of anything.
+
+**Its trigger needs both difficulty ids of both roots, or it never fires.** `spelldifficulty_dbc`
+maps 62283 → 62930 and 62861 → **62438**, `HasAura` takes the exact spell, and a 25-man raid only
+ever applies the 25-man half — so the original check on 62283/62861 alone could never be true, and
+`freya break iron roots` had never once run: `1788724466` and `1788613108` carry 33 and 27
+applications of 62438 between them and no verdict from the node. The root is permanent until its
+creature dies; most break inside a second on incidental AoE, but **7 held 2s or longer** in
+`1788724466` and two of those had the bot inside a hazard — one being `Tree`, dead at 4:36 rooted in
+two beam pools with its dodge orders rejected. Every other Freya id here already carries its pair.
+
+The beam dodge rings outward to a spot clear of every beam in range, not away from the nearest one.
 `ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is a DBC guess.
 
 **The dodge clears by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (15 yd), not by the radius.** Clearing by the

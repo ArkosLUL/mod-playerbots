@@ -28,7 +28,11 @@ bool FreyaNearNatureBombTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS) != nullptr;
+    // Wider than the blast on purpose, so the node is still reached once the bot has stepped clear -
+    // that is what lets the action hold its spot instead of letting reach melee walk the bot back with
+    // most of the fuse still to run. The action narrows it again in isUseful, so a bot that is neither
+    // in a blast nor holding an escape costs nothing here.
+    return bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS) != nullptr;
 }
 
 bool FreyaTankNatureBombTrigger::IsActive()
@@ -112,8 +116,10 @@ bool FreyaBreakIronRootsTrigger::IsActive()
     if (!IsFreyaHardModeActive(botAI))
         return false;
 
-    // Trapped by either the Ironbranch or the Freya-cast Iron Roots (each leaves its own DoT).
-    return bot->HasAura(SPELL_IRON_ROOTS_DAMAGE) || bot->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE);
+    // Trapped by either the Ironbranch or the Freya-cast Iron Roots (each leaves its own DoT), and both
+    // ids of each: HasAura takes the exact spell, and a 25-man raid only ever applies the 25-man half.
+    return bot->HasAura(SPELL_IRON_ROOTS_DAMAGE_10) || bot->HasAura(SPELL_IRON_ROOTS_DAMAGE_25) ||
+           bot->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE_10) || bot->HasAura(SPELL_IRON_ROOTS_FREYA_DAMAGE_25);
 }
 
 bool FreyaDodgeUnstableSunBeamTrigger::IsActive()

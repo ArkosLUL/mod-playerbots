@@ -64,12 +64,61 @@ std::vector<Position> GetFreyaAlliesNear(PlayerbotAI* botAI, float radius)
 
     return allies;
 }
+
+// Straight out of the blasts the bot is standing in, on the bearing away from their centre. Only runs
+// once the ring sweep has failed on every clearance it has, so there is no clear spot left to find: the
+// job here is just to leave the circles, and crossing a fifth bomb on the way out still beats holding
+// still inside four.
+Position StepOffNatureBombs(Player* bot, std::vector<Position> const& bombs)
+{
+    float sumX = 0.0f;
+    float sumY = 0.0f;
+    uint32 covering = 0;
+    for (Position const& bomb : bombs)
+    {
+        if (bomb.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) >= ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS)
+            continue;
+
+        sumX += bomb.GetPositionX();
+        sumY += bomb.GetPositionY();
+        ++covering;
+    }
+
+    if (!covering)
+        return Position();
+
+    float const centreX = sumX / covering;
+    float const centreY = sumY / covering;
+
+    // Standing dead on the centre leaves no bearing to run on, and one direction is as good as another.
+    float const bearing = bot->GetExactDist2d(centreX, centreY) > CONTACT_DISTANCE
+                              ? std::atan2(bot->GetPositionY() - centreY, bot->GetPositionX() - centreX)
+                              : bot->GetOrientation();
+
+    float x = bot->GetPositionX() + std::cos(bearing) * ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS;
+    float y = bot->GetPositionY() + std::sin(bearing) * ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS;
+    float z = bot->GetPositionZ();
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
+                                                        bot->GetPositionZ(), x, y, z))
+        return Position();
+
+    return Position(x, y, z, 0.0f);
+}
 }  // namespace
 
 bool FreyaMoveAwayNatureBombAction::isUseful()
 {
     FreyaNearNatureBombTrigger trigger(botAI);
-    return trigger.IsActive();
+    if (!trigger.IsActive())
+        return false;
+
+    // The trigger reaches out to the whole hazard search radius so this node still runs once the bot has
+    // stepped clear. Narrow it back to the blast here, plus the window in which the bot may still be
+    // holding a spot, so everyone else falls through to their own ladder without leaving a verdict.
+    if (bot->FindNearestGameObject(GOBJECT_NATURE_BOMB, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS))
+        return true;
+
+    return bombSpotMs && getMSTimeDiff(bombSpotMs, getMSTime()) < ULDUAR_FREYA_NATURE_BOMB_LATCH_MS;
 }
 
 bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
@@ -84,32 +133,58 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         return false;
     }
 
-    auto const stillClear = [&bombs](Position const& spot)
+    // Beams too, because a spot that clears both is the only one worth walking to or holding. Both
+    // escapes sit at the same relevance, so a bot that reads only its own hazard alternates between
+    // them forever.
+    std::vector<HazardCircle> const hazards = GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    auto const stillClear = [&hazards](Position const& spot)
     {
-        for (Position const& bomb : bombs)
-            if (bomb.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS)
+        for (HazardCircle const& hazard : hazards)
+            if (hazard.first.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < hazard.second)
                 return false;
 
         return true;
     };
 
+    auto const covered = [&bombs](Position const& spot)
+    {
+        for (Position const& bomb : bombs)
+            if (bomb.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS)
+                return true;
+
+        return false;
+    };
+
     uint32 const now = getMSTime();
+    bool const latched = bombSpotMs && getMSTimeDiff(bombSpotMs, now) < ULDUAR_FREYA_NATURE_BOMB_LATCH_MS;
 
     // Claim the tick without touching the motion master while the escape is already in flight. Returning
     // true is the point: the engine stops here, so combat movement never gets to pull the bot back onto
     // the bomb it just stepped off, and the spline carrying it out survives. A bot whose cast is
     // blocking movement is not in flight and never will be, so it falls through to the interrupt below.
-    if (bombSpotMs && getMSTimeDiff(bombSpotMs, now) < ULDUAR_FREYA_NATURE_BOMB_LATCH_MS && stillClear(bombSpot) &&
-        !bot->IsMovementPreventedByCasting() &&
+    if (latched && stillClear(bombSpot) && !bot->IsMovementPreventedByCasting() &&
         bot->GetExactDist2d(bombSpot.GetPositionX(), bombSpot.GetPositionY()) > CONTACT_DISTANCE)
         return true;
 
+    if (!covered(bot->GetPosition()))
+    {
+        // Arrived, clear, and the bomb it fled is still counting down. A bomb goes off 6s after it lands
+        // and the walk out costs about two, so a melee bot that turns round the moment it arrives spends
+        // the rest of the fuse back inside the blast - which is how bots at full health die to a volley.
+        // Holding costs it nothing it has not already spent, because it is out of melee range at the
+        // escape spot either way. Ranged and healers are not held: they can cast from where they stand,
+        // and returning true here would silence them for the rest of the fuse.
+        if (latched && PlayerbotAI::IsMelee(bot) && stillClear(bombSpot) && covered(bombOrigin))
+            return true;
+
+        bombSpotMs = 0;
+        return false;
+    }
+
     bombSpotMs = 0;
 
-    // Beams too, because a spot that clears both is the only one worth walking to. Both escapes sit at
-    // the same relevance, so a bot that reads only its own hazard alternates between them forever.
-    Position safe = FindNearestPositionClearOfHazards(
-        bot, GetFreyaEscapeHazards(botAI, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS), ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
 
     // A volley drops a bomb on every player at once, so nothing may clear all of them by the full
     // margin. Somebody else's hazard beats your own, and barely outside beats standing in one.
@@ -121,6 +196,16 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
         safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_AVOID_RADIUS + 1.0f,
                                                  ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
 
+    // Down to the blast with no margin at all, and then straight out of it. Giving up instead leaves the
+    // bot standing in the circle for the rest of the fuse: one pull did that fifteen times, and a
+    // warlock died at full health with a bomb at its feet having issued no move at all.
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, bombs, ULDUAR_FREYA_NATURE_BOMB_BLAST_RADIUS,
+                                                 ULDUAR_FREYA_HAZARD_SEARCH_RADIUS);
+
+    if (safe == Position())
+        safe = StepOffNatureBombs(bot, bombs);
+
     if (safe == Position())
         return false;
 
@@ -130,6 +215,7 @@ bool FreyaMoveAwayNatureBombAction::Execute(Event /*event*/)
                 true, MovementPriority::MOVEMENT_FORCED, true, false))
         return false;
 
+    bombOrigin = bot->GetPosition();
     bombSpot = safe;
     bombSpotMs = now;
 

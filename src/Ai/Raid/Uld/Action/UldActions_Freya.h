@@ -23,9 +23,12 @@ public:
 private:
     // The trigger fires at AVOID and the escape aims at CLEAR, so re-deriving every tick answers a bot
     // on the rim with a ~2 yd step that combat movement undoes before the next one. Hold the first
-    // answer until it stops being safe or the bot arrives.
+    // answer until it stops being safe or the bomb that prompted it is gone.
     Position bombSpot;
     uint32 bombSpotMs = 0;
+    // Where the bot fled from. A melee bot keeps its spot while this is still inside a blast, which is
+    // what stops reach melee marching it back with most of the fuse left to run.
+    Position bombOrigin;
 };
 
 // Main tank only: walks Freya off the bombs so her melee ring is somewhere the rest of the melee can
