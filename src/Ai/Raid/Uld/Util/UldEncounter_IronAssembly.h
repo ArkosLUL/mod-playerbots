@@ -30,10 +30,12 @@ class Unit;
 //
 //   ironassembly.alive      which members are up - bit 0 Steelbreaker, 1 Molgeim, 2 Brundir
 //   ironassembly.focus      what the raid is killing, and whether a human's skull beat the order
-//   ironassembly.tank       the boss a tank owns, or the branch that left it without one
+//   ironassembly.tank       the boss a bot tank owns, or the branch that left it without one. Only
+//                           bot tanks are ranked, so a row per bot tank and none for a human one
 //   ironassembly.interrupt  the duty a bot holds for Brundir's current cast
-//   ironassembly.spot       the formation branch that put a bot where it stands - a `-rune` suffix
-//                           means a Rune of Death covered the stack point and the raid shifted off it
+//   ironassembly.spot       the formation branch that put a bot where it stands - a `-rune` or
+//                           `-overload` suffix names the hazard that covered the stack point and
+//                           pushed the whole formation onto the shift ring
 //   ironassembly.slot       its index on the hard-mode spread ring
 //   ironassembly.soak       whether it walked into Rune of Power, and what stopped it
 //
@@ -103,13 +105,16 @@ constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS = 16.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 21.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
 
-// Where the raid stands when a rune covers the stack point. Molgeim drops it on a random member, so
-// with the raid stacked it lands on the stack nearly every time - this is the common path, not an
-// edge case. A fixed candidate set rather than free geometry because every bot picks its own and they
-// have to agree: the eight anchor headings at 25 yd, which navprobe reports 8/8 on mesh with settledZ
-// on the floor (20 and 30 are clean too, so the ring has room either side).
-constexpr uint8 ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_HEADINGS = 8;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_SHIFT_RADIUS = 25.0f;
+// Where the raid stands when a hazard covers the stack point - a Rune of Death, or Brundir's Overload
+// when he is parked anywhere near the raid. Both are the common path rather than an edge case:
+// Molgeim drops the rune on a random member, so on a stacked raid it lands on the stack, and one
+// traced pull had five of five Overloads cover it with 22-24 of 25 members inside.
+//
+// A fixed candidate set rather than free geometry because every bot picks its own and they have to
+// agree: the eight anchor headings at 25 yd, which navprobe reports 8/8 on mesh with settledZ on the
+// floor (20 and 30 are clean too, so the ring has room either side).
+constexpr uint8 ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS = 8;
+constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
 
 // Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on. The
 // carrier dies either way - walking this far is what stops it taking the melee with them, and every
