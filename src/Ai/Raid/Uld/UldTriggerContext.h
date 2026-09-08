@@ -44,7 +44,6 @@ public:
         creators["iron assembly shield of runes trigger"] = &RaidUlduarTriggerContext::iron_assembly_shield_of_runes_trigger;
         creators["iron assembly fusion punch dispel trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_dispel_trigger;
         creators["iron assembly redirect threat trigger"] = &RaidUlduarTriggerContext::iron_assembly_redirect_threat_trigger;
-        creators["iron assembly rune of power trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_trigger;
         creators["iron assembly rune of power soak trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_soak_trigger;
         creators["iron assembly set dps priority trigger"] = &RaidUlduarTriggerContext::iron_assembly_set_dps_priority_trigger;
         creators["iron assembly raid position trigger"] = &RaidUlduarTriggerContext::iron_assembly_raid_position_trigger;
@@ -233,7 +232,6 @@ private:
     static Trigger* iron_assembly_shield_of_runes_trigger(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesTrigger(ai); }
     static Trigger* iron_assembly_fusion_punch_dispel_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelTrigger(ai); }
     static Trigger* iron_assembly_redirect_threat_trigger(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatTrigger(ai); }
-    static Trigger* iron_assembly_rune_of_power_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerTrigger(ai); }
     static Trigger* iron_assembly_rune_of_power_soak_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakTrigger(ai); }
     static Trigger* iron_assembly_set_dps_priority_trigger(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityTrigger(ai); }
     static Trigger* iron_assembly_raid_position_trigger(PlayerbotAI* ai) { return new IronAssemblyRaidPositionTrigger(ai); }

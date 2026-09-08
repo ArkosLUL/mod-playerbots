@@ -44,7 +44,6 @@ public:
         creators["iron assembly shield of runes action"] = &RaidUlduarActionContext::iron_assembly_shield_of_runes_action;
         creators["iron assembly fusion punch dispel action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_dispel_action;
         creators["iron assembly redirect threat action"] = &RaidUlduarActionContext::iron_assembly_redirect_threat_action;
-        creators["iron assembly rune of power action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_action;
         creators["iron assembly rune of power soak action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_soak_action;
         creators["iron assembly set dps priority action"] = &RaidUlduarActionContext::iron_assembly_set_dps_priority_action;
         creators["iron assembly raid position action"] = &RaidUlduarActionContext::iron_assembly_raid_position_action;
@@ -220,7 +219,6 @@ private:
     static Action* iron_assembly_shield_of_runes_action(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesAction(ai); }
     static Action* iron_assembly_fusion_punch_dispel_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelAction(ai); }
     static Action* iron_assembly_redirect_threat_action(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatAction(ai); }
-    static Action* iron_assembly_rune_of_power_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerAction(ai); }
     static Action* iron_assembly_rune_of_power_soak_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakAction(ai); }
     static Action* iron_assembly_set_dps_priority_action(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityAction(ai); }
     static Action* iron_assembly_raid_position_action(PlayerbotAI* ai) { return new IronAssemblyRaidPositionAction(ai); }

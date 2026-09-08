@@ -233,10 +233,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("iron assembly redirect threat action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
-        "iron assembly rune of power trigger",
-        { NextAction("iron assembly rune of power action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
         "iron assembly rune of power soak trigger",
         { NextAction("iron assembly rune of power soak action", ACTION_RAID + 1) }));
 
@@ -893,10 +889,13 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironAvoidAoeGuardMultiplier(botAI));
     multipliers.push_back(new MimironThreatRedirectGuardMultiplier(botAI));
 
-    // The Iron Assembly owns every target in the fight, and its hazard dodges must not be undone by
-    // a generic mover walking the bot back into the blast
+    // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a
+    // generic mover walking the bot back into the blast or by a gap-closer teleporting it there, and
+    // in hard mode the burst is saved for the member that reaches phase 3
     multipliers.push_back(new IronAssemblyDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new IronAssemblyMovementGuardMultiplier(botAI));
+    multipliers.push_back(new IronAssemblyChargeGuardMultiplier(botAI));
+    multipliers.push_back(new IronAssemblyHoldDpsCooldownsMultiplier(botAI));
 
     // Thorim keeps a bailing melee out of the Runic Barrier damage shield, picks every non-tank
     // target in code so the generic pickers have to be shut out, and stops the generic movers

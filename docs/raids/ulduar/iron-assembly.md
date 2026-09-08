@@ -37,6 +37,15 @@ node**. Lightning Whirl reaches 100 yd with no positional answer, so it takes th
 interrupter; Chain Lightning takes the second, and is deliberately allowed through when cooldowns are
 thin.
 
+**One encounter state per instance, shared behind a mutex — never `thread_local`.** Spread slots,
+the shift heading and the alive mask must agree across the raid. `MapUpdate.Threads` is 6 and a map
+is never pinned to a thread, so per-thread copies hand one pull six independent states: two bots
+held slot 0 at once, 11 bots took 71 slot assignments in 4.5s, 10 of 16 slots were ever used, and
+each ranged bot chased 4–6 destinations for 285–334 yd in a 50s Steelbreaker phase. `ObsValue` emits
+only on change, so **six identical `ironassembly.alive` rows per transition is the signature**.
+Mimiron and Flame Leviathan hold theirs this way; Thorim, Ignis, Hodir and the EoE caches are still
+`thread_local` and unaudited.
+
 Formation anchors on `(1587.18, 121.02, 427.27)`. navprobe: 8/8 headings clean at 20 and 30 yd, but
 the 45° and 135° diagonals settle to Z −27.7 and −438 at 40, and three of eight leave the mesh at 50
 — so **nothing sits outside 30 yd** and the slots use cardinals. Brundir parks at 28 yd, 38 from the
@@ -75,10 +84,39 @@ re-fires the escape**. Without it the two actions cancelled every tick; nobody t
 parked, and a permanently-moving bot holds no interrupt duty, so Lightning Whirl took 15 of 29
 killing blows.
 
-Rune of Power lands on `DoSelectLowestHpFriendly`, i.e. on a **member**, not a player — so both
-halves apply at once: the tank walks his boss off it while ranged and healers walk in. The soak is
-capped at 25 yd, which admits every rune on Steelbreaker or Molgeim and rejects every one on Brundir
-that would otherwise tow the ranged group into Overload.
+**Escapes carry a clearance per hazard and break ties toward the bot's station** — its raid spot,
+its tank spot, or whatever the raid is killing. The sweep rings outward from the bot and takes the
+first angle that clears, a fixed compass direction from wherever it stands, so the answer slides as
+it walks: 21–26% of consecutive escape destinations jumped over 5 yd, one bot chasing 25. A station
+holds still while the bot moves, which is what lets one answer keep winning. The per-hazard
+clearance matters in the same call: an Overload escape folds in the runes, and one clearance for the
+whole vector cleared them at 25 instead of 21 — four wasted yards each, walked inside a 5.5s cast.
+
+**Gap-closers need their own guard.** Charge, Intercept and both Feral Charges are
+`CastReachTargetSpellAction` — a `CastSpellAction`, *not* a `MovementAction` — so the movement guard
+cannot see them and the server's spell effect translocates the bot with no `MovementPriority`
+involved. One `dynamic_cast` to that base catches all four; the ICC and Ruby Sanctum enumerations of
+concrete classes each miss one. It holds for the **whole** Overload or Tendrils channel, not just
+while the bot is inside the circle: the escape parks it at 16–19 yd and both spells reach 25, so
+releasing on "out of the blast" hands the ability back at exactly the range that undoes the dodge.
+Traced: the three melee that cast one during an Overload were the only non-tanks that took Overload
+damage, one more than the tank; the five without took none.
+
+Rune of Power lands on `DoSelectLowestHpFriendly`, i.e. on a **member**, not a player. Ranged and
+healers walk in, capped at 25 yd of travel, which admits every rune on Steelbreaker or Molgeim and
+rejects every one on Brundir that would otherwise tow them into Overload. **The tank's answer is his
+spot, not a second node.** A separate drag-out pushed the boss away at `MOVEMENT_COMBAT`, the same
+priority as the tank spot, so the two traded the move slot and cancelled: 339 flip-flops in one
+pull, five seconds of alternating `wait`, a drag target receding a yard a tick because it was
+recomputed from the bot's live position — and Brundir never left the rune at all, so Overload fired
+on the melee standing in it. Now the spot itself rotates off the designed bearing in 22.5° steps at
+the boss's own radius until it is **12 yd** clear: the 5 yd rune, plus the 5 the boss stops short at
+behind the tank, plus margin. The rune is swept as an object (**63513**, the only id in the chain
+with a persistent area aura) — aiming at the carrier's feet makes the destination follow him and
+never settle. navprobe: the 16 and 28 yd rings are both 16/16 on mesh at 22.5° steps. **Three steps,
+not four** — the melee spots are 90° apart, so a fourth puts Steelbreaker's furthest candidate on
+Molgeim's; three still clears 12 yd on either ring and keeps every Brundir candidate 33 yd off the
+stack.
 
 Deliberate non-behaviours: **tanks hold through Overload** (20,000 nature is survivable in plate and
 lethal in cloth, and under the normal order Brundir dies last, so his channel invincibility never
@@ -90,20 +128,25 @@ range only at `D ≤ 12`; widening breaks the ring, and ranking the tanks fixes 
 
 Nothing positional answers what actually kills raids here. **High Voltage** (61890 → 63525/63526) is
 `EffectRadiusIndex 28` = **50,000 yd**, a whole-instance pulse every 3s on every member — 58–65% of
-all damage taken in two traced pulls. It scales with Supercharge and then with Electrical Charge, so
-a phase-3 Steelbreaker compounds: per-hit went 1.7k → 2.9k → 13.2k as the other two died and deaths
-fed charges, taking 24 of 32 killing blows in 23 seconds. Neither is handled positionally — a
-stacking raid-wide buff is a healer and kill-speed problem, not a movement one.
+all damage taken in four traced pulls. It scales with Supercharge and then with Electrical Charge,
+so a phase-3 Steelbreaker compounds: per-hit went 1.7k → 2.9k → 13.2k as the other two died and
+deaths fed charges, taking 24 of 32 killing blows in 23 seconds. Neither is handled positionally — a
+stacking raid-wide buff is a healer and kill-speed problem, not a movement one. The one lever bots
+have is time in that phase, so **in hard mode every DPS cooldown, trinket, racial and Bloodlust is
+held until Steelbreaker is the last one standing**. Held burst costs nothing when three bars are one
+pool, and two traced pulls lost 21 of 31 and 20 of 27 deaths inside it. Hard mode only: the normal
+order kills him first, so it would never release.
 
 **Reading a pull:** `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
-Molgeim, 2 Brundir), `focus` (what the raid is killing, and whether a human's skull beat the order),
-`tank` (the boss a bot tank owns, or the branch that left it none — bot tanks only, so no row for a
-human one), `interrupt` (the duty a bot holds for Brundir's current cast), `spot` (the formation
-branch — a `-rune` or `-overload` suffix names the hazard that shifted the stack), `slot` (its index
-on the spread ring), `soak` (whether it reached Rune of Power, and what stopped it). Overload,
-Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the spell
-radius and the clearance; Rune of Death and Rune of Power do, and are swept instead — only a swept
-hazard is tested against a death.
+Molgeim, 2 Brundir; **one row per transition — more means the state is not shared**), `focus` (what
+the raid is killing, and whether a human's skull beat the order), `tank` (the boss a bot tank owns,
+or the branch that left it none — bot tanks only, so no row for a human one), `interrupt` (the duty
+a bot holds for Brundir's current cast), `spot` (the formation branch — a `-rune` or `-overload`
+suffix names the hazard that shifted the stack), `slot` (its index on the spread ring, assigned
+**once** per bot), `soak` (whether it reached Rune of Power, and what stopped it). Overload,
+Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
+spell radius and the clearance; Rune of Death and Rune of Power do, and are swept instead — only a
+swept hazard is tested against a death.
 
 Core-version assumption: the strategy relies on recent upstream fixes — `#26470` (Rune of Death
 restricted to players), `#26449` (Brundir surviving Tendrils), `#26200` (Static Disruption preferring

@@ -112,16 +112,8 @@ public:
     bool IsActive() override;
 };
 
-// The tank half of Rune of Power: walk the boss off the rune so he does not get the +50% too.
-class IronAssemblyRuneOfPowerTrigger : public Trigger
-{
-public:
-    IronAssemblyRuneOfPowerTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly rune of power trigger") {}
-    bool IsActive() override;
-};
-
-// The raid half: ranged and healers walk into it. Melee lose it when the tank pulls the boss out,
-// which is the accepted cost of denying the boss the same buff.
+// Ranged and healers walk into the rune for the +50%. The tank half is not a node: his spot shifts
+// clear of it instead, so nothing here has to fight him for the move.
 class IronAssemblyRuneOfPowerSoakTrigger : public Trigger
 {
 public:

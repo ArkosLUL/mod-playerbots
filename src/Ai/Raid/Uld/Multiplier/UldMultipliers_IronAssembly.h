@@ -36,4 +36,27 @@ public:
     float GetValue(Action* action) override;
 };
 
+// A gap-closer travels in a straight line, consults nothing about the ground, and is a CastSpellAction
+// rather than a MovementAction - so the movement guard above cannot see it and the server's own spell
+// effect drops the bot back on the boss. Traced: the only three melee that cast one during an Overload
+// were the only three that took Overload damage, one of them more than the tank, while the five with
+// no gap-closer took none.
+class IronAssemblyChargeGuardMultiplier : public Multiplier
+{
+public:
+    IronAssemblyChargeGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly charge guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Hard mode only, where the kill order saves Steelbreaker for last. Everything before him is spent on
+// one shared health pool, so burst held back loses the raid nothing, and the phase it is held for is
+// the one that kills them: Supercharge and then Electrical Charge compound on the survivor, and both
+// traced pulls lost two thirds of the raid inside it.
+class IronAssemblyHoldDpsCooldownsMultiplier : public Multiplier
+{
+public:
+    IronAssemblyHoldDpsCooldownsMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly hold dps cooldowns") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

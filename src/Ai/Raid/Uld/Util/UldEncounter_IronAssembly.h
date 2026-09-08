@@ -68,6 +68,10 @@ enum UlduarIronAssemblyIds
     // The rune's ground pulse, reapplied every 0.8s to anything standing within 5 yd of it. One id
     // for both raid sizes, and it is what marks a boss as standing in his own damage buff.
     SPELL_RUNE_OF_POWER = 64320,
+    // The rune itself. 61973 force-casts this, and it is the only id in the chain with a persistent
+    // area aura effect, so it is the one that leaves a DynamicObject on the floor to sweep for. The
+    // boss carrying 64320 above can walk off it; the object stays where it was dropped.
+    SPELL_RUNE_OF_POWER_AREA = 63513,
     // The damage the auras above trigger. Nothing here is ever cast or tested for - these name the
     // hazard in a trace, where the row has to join onto the damage record that explains it. Only
     // Tendrils is a pair: both Overload auras trigger 61878 and both Overwhelming Power auras
@@ -124,11 +128,27 @@ constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 20.0f;
 
 // Rune of Power pulses 64320 to everything within 5 yd, worth +50% damage, and the rune lives 60s.
 // Molgeim drops it on DoSelectLowestHpFriendly, which is a council member rather than a player, so
-// the tank walks his boss out of it while the ranged walk in. Capped travel matters: without the cap
-// a rune landing on Brundir would drag the entire ranged group into Overload range.
+// the ranged walk in and the tank's spot shifts clear. Capped travel matters: without the cap a rune
+// landing on Brundir would drag the entire ranged group into Overload range.
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_RADIUS = 5.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_SOAK_MAX_TRAVEL = 25.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_DRAG_DISTANCE = 10.0f;
+
+// How far the tank's spot has to sit from a rune his own boss is standing in: the 5 yd rune, plus the
+// 5 the boss stops short at when it follows him there, plus margin. The tank walks to a shifted spot
+// instead of running a second node that pushes the boss away - two movers at MOVEMENT_COMBAT trade
+// the slot and cancel, and a traced pull spent five seconds alternating while the boss never left the
+// rune at all and Overload landed on the melee standing in it.
+constexpr float ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE = 12.0f;
+
+// Candidate spots are the designed bearing rotated by these, in order, at the boss's own radius, so a
+// shifted tank keeps his distance from the anchor and the raid. navprobe: both the 16 and 28 yd rings
+// are 16/16 on mesh at 22.5 degree steps, every heading settling on the floor at Z 427.27.
+// Displacement is 2*R*sin(step/2), so two steps clears 12 yd on either ring - 21.4 at 28, 12.2 at 16 -
+// and the third is spare. Stopping at three matters: the melee spots are 90 degrees apart, so a fourth
+// would put Steelbreaker's furthest candidate exactly on Molgeim's spot. Three also keeps every
+// Brundir candidate at least 33 yd from the stack, well outside his own Overload.
+constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEP = 0.3927f;  // pi/8, 22.5 degrees
+constexpr uint8 ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEPS = 3;
 
 // Formation, all on cardinal bearings from the anchor. Brundir is parked at 28 rather than the 25
 // his own Overload needs, so the stack sits 38 yd off him and never has to react to it at all -
@@ -201,10 +221,15 @@ bool IronAssemblyBrundirIsLast(PlayerbotAI* botAI);
 // makes the unconditional targeting suppression safe.
 Unit* IronAssemblyFocusTarget(PlayerbotAI* botAI);
 
-// Which member this bot tanks, or nullptr. Assignment needs at least two tanks: with one there is
-// nothing to split, so the encounter keeps its hands off and the generic logic runs. Surplus tanks
+// Which member this bot tanks, or nullptr. Bot tanks are ranked among themselves by guid and claim
+// from the front of Brundir, Steelbreaker, Molgeim - a lone one still takes Brundir, since the other
+// two drift onto it anyway and the assignment really decides where the council parks. Surplus tanks
 // get nullptr and fall through to damage on the focus target.
 Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot);
+
+// Where that tank stands, so the boss follows him there rather than being dragged through the raid.
+// Rotated off the designed bearing when his own boss is standing in a Rune of Power, which is the
+// whole of the answer to that rune - there is no second node pushing the boss around.
 bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position);
 
 // Where ranged and healers stand. Stacked normally; on the hard-mode spread ring once Steelbreaker

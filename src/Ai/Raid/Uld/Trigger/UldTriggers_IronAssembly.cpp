@@ -184,16 +184,6 @@ bool IronAssemblyRedirectThreatTrigger::IsActive()
     return IronAssemblyFocusTarget(botAI) != nullptr;
 }
 
-bool IronAssemblyRuneOfPowerTrigger::IsActive()
-{
-    Unit* boss = IronAssemblyAssignedBoss(botAI, bot);
-    if (!boss || !boss->HasAura(SPELL_RUNE_OF_POWER))
-        return false;
-
-    // Only the tank actually holding him can walk him anywhere.
-    return boss->GetVictim() == bot;
-}
-
 bool IronAssemblyRuneOfPowerSoakTrigger::IsActive()
 {
     Position rune;

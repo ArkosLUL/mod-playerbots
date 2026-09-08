@@ -114,13 +114,6 @@ private:
     Player* GetRedirectTank();
 };
 
-class IronAssemblyRuneOfPowerAction : public MovementAction
-{
-public:
-    IronAssemblyRuneOfPowerAction(PlayerbotAI* botAI) : MovementAction(botAI, "iron assembly rune of power action") {}
-    bool Execute(Event event) override;
-};
-
 class IronAssemblyRuneOfPowerSoakAction : public MovementAction
 {
 public:

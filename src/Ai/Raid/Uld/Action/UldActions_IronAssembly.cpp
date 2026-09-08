@@ -32,18 +32,54 @@ bool IronAssemblyResetEncounterStateAction::Execute(Event /*event*/)
 namespace
 {
 
-// Shared shape for the three hazard exits. FleePosition is deliberately not used: it clamps travel to
+// Where a bot stands when nothing is chasing it: its formation slot, its tank spot, or the boss the
+// raid is killing.
+bool TryGetIronAssemblyStation(PlayerbotAI* botAI, Player* bot, Position& station)
+{
+    if (TryGetIronAssemblyRaidSpot(botAI, bot, station))
+        return true;
+
+    if (TryGetIronAssemblyTankSpot(botAI, bot, station))
+        return true;
+
+    if (Unit* focus = IronAssemblyFocusTarget(botAI))
+    {
+        station = focus->GetPosition();
+        return true;
+    }
+
+    return false;
+}
+
+// Shared shape for the hazard exits. FleePosition is deliberately not used: it clamps travel to
 // AiPlayerbot.FleeDistance and cannot clear a 20 yd blast, and it only reads one hazard.
-bool TryGetIronAssemblyEscapeSpot(Player* bot, std::vector<Position> const& hazards, float clearance,
+//
+// Ties inside the first clear ring break toward the bot's station. Without that the sweep takes the
+// first angle that passes, which is a fixed compass direction measured from wherever the bot happens
+// to be standing - so the answer slides as the bot walks and a raid leaving a rune picks a new escape
+// every tick instead of finishing the one it started. The station holds still while the bot moves,
+// which is what makes the same answer keep winning.
+bool TryGetIronAssemblyEscapeSpot(PlayerbotAI* botAI, Player* bot, std::vector<HazardCircle> const& hazards,
                                   Position& spot)
 {
-    Position const clear = FindNearestPositionClearOfHazards(bot, hazards, clearance,
-                                                             ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS);
+    Position station;
+    bool const hasStation = TryGetIronAssemblyStation(botAI, bot, station);
+
+    Position const clear = FindNearestPositionClearOfHazards(
+        bot, hazards, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS, 2.0f,
+        static_cast<float>(M_PI) / 8.0f, hasStation ? &station : nullptr);
     if (clear == Position())
         return false;
 
     spot = clear;
     return true;
+}
+
+void AddIronAssemblyHazards(std::vector<Position> const& centres, float clearance,
+                            std::vector<HazardCircle>& hazards)
+{
+    for (Position const& centre : centres)
+        hazards.emplace_back(centre, clearance);
 }
 
 }  // namespace
@@ -69,8 +105,11 @@ bool IronAssemblyOverwhelmingPowerRunOutAction::Execute(Event /*event*/)
     if (crowd.empty())
         return false;
 
+    std::vector<HazardCircle> hazards;
+    AddIronAssemblyHazards(crowd, ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE, hazards);
+
     Position spot;
-    if (!TryGetIronAssemblyEscapeSpot(bot, crowd, ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE, spot))
+    if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
     // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
@@ -86,10 +125,10 @@ bool IronAssemblyLightningTendrilsAction::Execute(Event /*event*/)
 
     // 2d on purpose: he is hovering while the tendrils tick, and the damage is projected on the floor
     // under him rather than measured to where he is floating.
-    std::vector<Position> hazards = {brundir->GetPosition()};
+    std::vector<HazardCircle> hazards = {{brundir->GetPosition(), ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE}};
 
     Position spot;
-    if (!TryGetIronAssemblyEscapeSpot(bot, hazards, ULDUAR_IRON_ASSEMBLY_TENDRILS_CLEARANCE, spot))
+    if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
     // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
@@ -103,13 +142,17 @@ bool IronAssemblyOverloadAction::Execute(Event /*event*/)
     if (!brundir)
         return false;
 
-    std::vector<Position> hazards = {brundir->GetPosition()};
+    std::vector<HazardCircle> hazards = {{brundir->GetPosition(), ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE}};
 
-    // Runes of Death count too, or the escape from one hazard walks straight into the other.
-    GatherIronAssemblyRunesOfDeath(bot, hazards);
+    // Runes of Death count too, or the escape from one hazard walks straight into the other. Each at
+    // its own clearance: folding them in at Overload's would give up four more yards per rune than
+    // they need, and every yard of it is walked in a 5.5s cast window.
+    std::vector<Position> runes;
+    GatherIronAssemblyRunesOfDeath(bot, runes);
+    AddIronAssemblyHazards(runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, hazards);
 
     Position spot;
-    if (!TryGetIronAssemblyEscapeSpot(bot, hazards, ULDUAR_IRON_ASSEMBLY_OVERLOAD_CLEARANCE, spot))
+    if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
     // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
@@ -124,8 +167,11 @@ bool IronAssemblyRuneOfDeathAction::Execute(Event /*event*/)
     if (runes.empty())
         return false;
 
+    std::vector<HazardCircle> hazards;
+    AddIronAssemblyHazards(runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, hazards);
+
     Position spot;
-    if (!TryGetIronAssemblyEscapeSpot(bot, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, spot))
+    if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
         return false;
 
     // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
@@ -294,16 +340,6 @@ bool IronAssemblyRedirectThreatAction::Execute(Event /*event*/)
         return botAI->CastSpell("steady shot", focus);
 
     return false;
-}
-
-bool IronAssemblyRuneOfPowerAction::Execute(Event /*event*/)
-{
-    Unit* boss = IronAssemblyAssignedBoss(botAI, bot);
-    if (!boss)
-        return false;
-
-    // Backwards, so the tank keeps the boss facing away from the raid while it walks him off the rune.
-    return MoveAway(boss, ULDUAR_IRON_ASSEMBLY_RUNE_OF_POWER_DRAG_DISTANCE, true);
 }
 
 bool IronAssemblyRuneOfPowerSoakAction::Execute(Event /*event*/)

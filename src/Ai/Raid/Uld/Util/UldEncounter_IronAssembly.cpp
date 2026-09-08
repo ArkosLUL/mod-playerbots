@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <mutex>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -61,10 +62,23 @@ struct IronAssemblyEncounterState
     int8 stackShiftHeading = -1;
 };
 
-// One map per map-update thread, keyed by instance: a bot is only ever updated from its own map's
-// thread, so this needs no lock. Trigger, action and multiplier each hold their own helper instance,
-// so the state they must agree on is defined here and nowhere else.
-thread_local std::unordered_map<uint32, IronAssemblyEncounterState> ironAssemblyStates;
+// Keyed by instance, because trigger, action and multiplier each hold their own helper instance and
+// the state they must agree on has to live in one place.
+//
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
+// pool reassigns it: two bots claim the same spread slot from different copies, and the shift heading
+// stops being a latch at all. It shows up in a trace as six identical ironassembly.alive rows per
+// transition, one per thread that ever ticked the pull. References into an unordered_map survive
+// rehashing, so the lock only has to cover the lookup.
+std::mutex ironAssemblyStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, IronAssemblyEncounterState> ironAssemblyStates;
+
+IronAssemblyEncounterState& IronAssemblyStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(ironAssemblyStatesMutex);
+    return ironAssemblyStates[bot->GetInstanceId()];
+}
 
 Position IronAssemblyPositionAt(float bearing, float radius)
 {
@@ -110,7 +124,7 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
     if (!RaidObs::Active())
         return;
 
-    IronAssemblyEncounterState& state = ironAssemblyStates[bot->GetInstanceId()];
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
 
     uint8 alive = 0;
     if (targets.steelbreaker)
@@ -230,7 +244,7 @@ Position IronAssemblyStackPoint(PlayerbotAI* botAI, bool& brundirLast)
 
 void EnsureIronAssemblySpreadSlot(PlayerbotAI* botAI, Player* bot)
 {
-    IronAssemblyEncounterState& state = ironAssemblyStates[bot->GetInstanceId()];
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
 
     Group* group = bot->GetGroup();
     if (!group)
@@ -493,29 +507,80 @@ Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot)
     return boss;
 }
 
+// The rune object, not the boss standing in it. He can drift off it while the aura is still up, and
+// the whole point of the shift is to end up away from where the rune actually is - aiming off his
+// feet makes the destination follow him and never settle.
+static void GatherIronAssemblyRunesOfPower(Player* bot, std::vector<Position>& runes)
+{
+    if (!bot)
+        return;
+
+    std::vector<Position> const found = GetDynamicObjectPositions(
+        bot, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS, SPELL_RUNE_OF_POWER_AREA);
+    runes.insert(runes.end(), found.begin(), found.end());
+}
+
 bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position)
 {
     Unit* boss = IronAssemblyAssignedBoss(botAI, bot);
     if (!boss)
         return false;
 
+    float bearing = 0.0f;
+    float radius = 0.0f;
+
     switch (boss->GetEntry())
     {
         case NPC_BRUNDIR:
-            position = IronAssemblyPositionAt(ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING,
-                                              ULDUAR_IRON_ASSEMBLY_BRUNDIR_RADIUS);
-            return true;
+            bearing = ULDUAR_IRON_ASSEMBLY_BRUNDIR_BEARING;
+            radius = ULDUAR_IRON_ASSEMBLY_BRUNDIR_RADIUS;
+            break;
         case NPC_STEELBREAKER:
-            position = IronAssemblyPositionAt(ULDUAR_IRON_ASSEMBLY_STEELBREAKER_BEARING,
-                                              ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS);
-            return true;
+            bearing = ULDUAR_IRON_ASSEMBLY_STEELBREAKER_BEARING;
+            radius = ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS;
+            break;
         case NPC_MOLGEIM:
-            position = IronAssemblyPositionAt(ULDUAR_IRON_ASSEMBLY_MOLGEIM_BEARING,
-                                              ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS);
-            return true;
+            bearing = ULDUAR_IRON_ASSEMBLY_MOLGEIM_BEARING;
+            radius = ULDUAR_IRON_ASSEMBLY_MELEE_BOSS_RADIUS;
+            break;
         default:
             return false;
     }
+
+    position = IronAssemblyPositionAt(bearing, radius);
+
+    // Only his own boss's rune moves him. One anywhere else is the soakers' business, and a tank that
+    // stepped aside for it would drag his boss out of the formation for nothing.
+    if (!boss->HasAura(SPELL_RUNE_OF_POWER))
+        return true;
+
+    std::vector<Position> runes;
+    GatherIronAssemblyRunesOfPower(bot, runes);
+
+    if (IsIronAssemblyPositionClearOfRunes(position, runes, ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE))
+        return true;
+
+    // Rotate off the designed bearing, nearest step first and alternating sides, so the shift gives up
+    // as little of the formation as it can and the boss still ends on a point the raid can predict.
+    for (uint8 step = 1; step <= ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEPS; ++step)
+    {
+        for (float side : {1.0f, -1.0f})
+        {
+            Position const candidate = IronAssemblyPositionAt(
+                bearing + side * static_cast<float>(step) * ULDUAR_IRON_ASSEMBLY_TANK_SHIFT_STEP, radius);
+
+            if (IsIronAssemblyPositionClearOfRunes(candidate, runes,
+                                                   ULDUAR_IRON_ASSEMBLY_TANK_RUNE_CLEARANCE))
+            {
+                position = candidate;
+                return true;
+            }
+        }
+    }
+
+    // Nothing on the ring clears it, which takes runes on both sides at once. Hold the designed spot:
+    // a boss keeping the buff costs the raid less than a tank parked somewhere nobody planned for.
+    return true;
 }
 
 // What pushed the raid off its stack point, for the ironassembly.spot label.
@@ -590,7 +655,7 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
     std::vector<IronAssemblyStackHazard> hazards;
     GatherIronAssemblyStackHazards(botAI, bot, stack, hazards);
 
-    IronAssemblyEncounterState& state = ironAssemblyStates[bot->GetInstanceId()];
+    IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
 
     if (IsIronAssemblyStackSpotClear(stack, hazards))
     {
@@ -698,7 +763,7 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
 
     EnsureIronAssemblySpreadSlot(botAI, bot);
 
-    IronAssemblyEncounterState const& state = ironAssemblyStates[bot->GetInstanceId()];
+    IronAssemblyEncounterState const& state = IronAssemblyStateFor(bot);
     auto const assignment = state.spreadSlots.find(bot->GetGUID());
     if (assignment == state.spreadSlots.end() || assignment->second >= ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS)
     {
@@ -1024,6 +1089,8 @@ bool IronAssemblyBotHasEncounterState(Player* bot)
     if (!bot)
         return false;
 
+    std::lock_guard<std::mutex> guard(ironAssemblyStatesMutex);
+
     auto const state = ironAssemblyStates.find(bot->GetInstanceId());
     return state != ironAssemblyStates.end() && state->second.spreadSlots.count(bot->GetGUID()) > 0;
 }
@@ -1032,6 +1099,8 @@ void ResetIronAssemblyEncounterState(Player* bot, bool clearInstance)
 {
     if (!bot)
         return;
+
+    std::lock_guard<std::mutex> guard(ironAssemblyStatesMutex);
 
     if (clearInstance)
     {
