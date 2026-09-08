@@ -434,76 +434,50 @@ bool InLightningChargeCone(float bearing, float coneBearing)
     return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
 }
 
-// Smallest rotation of the whole ring that clears every occupied slot out of the cone. Rigid, never
-// per-bot: letting each slot take its own shortest way out swings the two on opposite edges toward
-// each other, which trades a Lightning Charge death for a Chain Lightning one.
-bool RingRotation(PlayerbotAI* botAI, Player* bot, Unit* boss, float& rotation)
+// How far this bot sits off its latched bearing so the Lightning Charge cone misses it. Only the slot
+// the cone actually covers moves, and only to the edge: turning all three together cost every melee
+// bot an 11 yd run per charge and another one back when the orb went dark, and every charge that did
+// hit a melee bot hit one that was still running.
+void LightningChargeOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float bearing, float& offset)
 {
-    rotation = 0.0f;
-
-    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
-    if (!orb)
-        return false;
+    offset = 0.0f;
 
     ThorimEncounterState* state = FindState(bot);
     if (!state)
-        return false;
+        return;
 
-    // Answered once per lit orb and then held. The search steps 5 degrees and its input drifts, so
-    // re-solving every call handed back answers 30 degrees apart on consecutive ticks and the whole
-    // ring walked the difference. Nothing about the cone changes while the same orb is up.
-    if (state->ringRotationOrb == orb->GetGUID())
-    {
-        rotation = state->ringRotation;
-        return state->ringRotationHeld;
-    }
+    ThorimEncounterState::RingOffset& held = state->ringOffsets[bot->GetGUID()];
+    offset = held.offset;
 
-    auto const hold = [state, orb, &rotation](float answer, bool held)
-    {
-        state->ringRotationOrb = orb->GetGUID();
-        state->ringRotation = answer;
-        state->ringRotationHeld = held;
-        rotation = answer;
-        return held;
-    };
+    // Held while nothing is lit. Snapping back to the latched bearing is a second run for nothing -
+    // the slot is only ever wrong again when a new orb draws a new cone.
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    if (!orb || held.orb == orb->GetGUID())
+        return;
 
-    std::vector<uint8> occupied;
-    for (auto const& assignment : state->meleeSlots)
-        if (assignment.second < ULDUAR_THORIM_MELEE_SLOTS &&
-            std::find(occupied.begin(), occupied.end(), assignment.second) == occupied.end())
-            occupied.push_back(assignment.second);
+    held.orb = orb->GetGUID();
+    held.offset = 0.0f;
+    offset = 0.0f;
 
-    if (occupied.empty())
-        return hold(0.0f, false);
-
+    // Measured off the latched bearing every time, never off wherever the last cone left it. Chaining
+    // them lets the three slots drift out of their 90 degree spacing until two share a point, which is
+    // what the old rigid whole-ring turn was really buying.
     float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
-    float const anchor = RingAnchorBearing(boss);
+    if (!InLightningChargeCone(bearing, coneBearing))
+        return;
 
-    auto clears = [&](float candidate)
-    {
-        for (uint8 slot : occupied)
-            if (InLightningChargeCone(SlotBearing(anchor + candidate, slot), coneBearing))
-                return false;
+    // Out by the nearer edge. Costs a median 4 yd against the 11 yd every slot walked before, and the
+    // price is that a displaced slot can end up 4.5 yd off a neighbour instead of 11.3 - inside Chain
+    // Lightning's 10 yd jump. The melee ring already chains through the bots stacked on each slot, and
+    // a chain that stays in melee was the one that killed nobody.
+    float const halfWidth = ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f +
+                            ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN + ULDUAR_THORIM_RING_CONE_CLEARANCE;
+    float const low = Position::NormalizeOrientation(coneBearing - halfWidth);
+    float const high = Position::NormalizeOrientation(coneBearing + halfWidth);
+    float const exit = AbsAngleDelta(high, bearing) <= AbsAngleDelta(low, bearing) ? high : low;
 
-        return true;
-    };
-
-    if (clears(0.0f))
-        return hold(0.0f, false);
-
-    // The three slots span 180 degrees and leave the tank side open, so the 105 degree blocked arc
-    // always fits somewhere and this search always terminates with an answer.
-    float const step = static_cast<float>(M_PI) / 36.0f;  // 5 degrees
-    for (float magnitude = step; magnitude <= static_cast<float>(M_PI) + step; magnitude += step)
-    {
-        if (clears(magnitude))
-            return hold(magnitude, true);
-
-        if (clears(-magnitude))
-            return hold(-magnitude, true);
-    }
-
-    return hold(0.0f, false);
+    held.offset = Position::NormalizeOrientation(exit - bearing);
+    offset = held.offset;
 }
 
 // Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
@@ -1780,15 +1754,16 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     if (!MeleeSlotOf(bot, slot))
         return false;
 
-    // Bearing latched, rotation held per lit orb, and the boss is the only live term left - so the
-    // point only moves when the cone does. It used to be recomputed from four things that all drifted
-    // on their own, and the destination flipped between six points several times a second.
+    // Bearing latched, cone offset held past the orb that set it, and the boss is the only live term
+    // left - so the point only moves when a new cone lands on this slot. It used to be recomputed from
+    // four things that all drifted on their own, and the destination flipped between six points
+    // several times a second.
     float const bearing = LatchedRingBearing(bot, boss, slot);
 
-    float rotation = 0.0f;
-    RingRotation(botAI, bot, boss, rotation);
+    float offset = 0.0f;
+    LightningChargeOffset(botAI, bot, boss, bearing, offset);
 
-    if (RingPoint(bot, boss, Position::NormalizeOrientation(bearing + rotation), position))
+    if (RingPoint(bot, boss, Position::NormalizeOrientation(bearing + offset), position))
         return true;
 
     return StaticMeleeSpot(boss, slot, position);
@@ -1883,12 +1858,9 @@ bool ThorimLightningChargeActive(PlayerbotAI* botAI)
     if (!bot || !ThorimPhase2Active(botAI))
         return false;
 
-    Unit* boss = GetThorim(botAI);
-    if (!boss)
-        return false;
-
-    float rotation = 0.0f;
-    return RingRotation(botAI, bot, boss, rotation);
+    // Just "an orb is lit" now. Which slots that cone covers is baked into the spot, and the caller
+    // already drops out on the arrive tolerance, so a bot the cone misses never leaves its slot.
+    return ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL) != nullptr;
 }
 
 bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
@@ -1941,7 +1913,7 @@ bool ThorimBotHasEncounterState(Player* bot)
            state->barrierBailing.count(bot->GetGUID()) || state->squads.count(bot->GetGUID()) ||
            state->followMasterStripped.count(bot->GetGUID()) ||
            state->arenaAnchorArrived.count(bot->GetGUID()) || state->balconyStep.count(bot->GetGUID()) ||
-           state->ringBearings.count(bot->GetGUID()) ||
+           state->ringBearings.count(bot->GetGUID()) || state->ringOffsets.count(bot->GetGUID()) ||
            state->orbEscapes.count(bot->GetGUID()) || state->dpsTargets.count(bot->GetGUID()) ||
            state->petRecalls.count(bot->GetGUID()) || state->runicSmashSide;
 }
@@ -1973,6 +1945,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->balconyStep.erase(bot->GetGUID());
     state->dpsTargets.erase(bot->GetGUID());
     state->ringBearings.erase(bot->GetGUID());
+    state->ringOffsets.erase(bot->GetGUID());
 
     // Per pet rather than clearing the map: the rest of it belongs to the other bots in the instance,
     // who are not resetting.
@@ -1998,9 +1971,7 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->orbScanMs = 0;
     state->lightningOrbGuid = ObjectGuid::Empty;
     state->lightningOrbScanMs = 0;
-    state->ringRotationOrb.Clear();
-    state->ringRotation = 0.0f;
-    state->ringRotationHeld = false;
+    state->ringOffsets.clear();
     state->bossGuid.Clear();
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;

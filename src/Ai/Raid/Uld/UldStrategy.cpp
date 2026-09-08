@@ -905,6 +905,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new ThorimArenaTargetGuardMultiplier(botAI));
     multipliers.push_back(new ThorimArenaAnchorGuardMultiplier(botAI));
     multipliers.push_back(new ThorimBalconyGuardMultiplier(botAI));
+    multipliers.push_back(new ThorimTauntGuardMultiplier(botAI));
 
     // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));

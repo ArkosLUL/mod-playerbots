@@ -152,9 +152,11 @@ constexpr float ULDUAR_THORIM_TARGET_SWITCH_MARGIN = 8.0f;
 constexpr float ULDUAR_THORIM_MELEE_TARGET_REACH = 15.0f;
 
 // spell_cone gives 62466 a 75 degree arc at 150 yd. The margin covers Thorim re-orienting onto the
-// orb between the tick that picks a rotation and the tick the bot finishes walking it.
+// orb between the tick that picks a rotation and the tick the bot finishes walking it. The clearance
+// is the extra step past the edge, so the bot that just walked out does not read as still inside.
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;   // 75 degrees
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN = 0.2618f;       // 15 degrees
+constexpr float ULDUAR_THORIM_RING_CONE_CLEARANCE = 0.0873f;           // 5 degrees
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE = 150.0f;
 
 // The box boss_thorim.cpp scans every 5s for a living player. Find nobody in it and Thorim summons
@@ -274,12 +276,17 @@ struct ThorimEncounterState
     // six melee spent 74 to 92% of phase 2 walking - 950 to 1430 yd each, at 58% of the ranged dps.
     std::unordered_map<ObjectGuid, float> ringBearings;
 
-    // The rotation that clears the ring of the Lightning Charge cone, solved once per lit orb and
-    // held. Re-solving per tick had a 5 degree search answering 30 degrees differently between two
-    // ticks, and every melee walked the difference.
-    ObjectGuid ringRotationOrb;
-    float ringRotation = 0.0f;
-    bool ringRotationHeld = false;
+    // How far one melee bot sits off its latched bearing to clear the Lightning Charge cone, and the
+    // orb that answer was struck against. Per bot, because only the slot the cone actually covers has
+    // to move. Turning the whole ring together cost all eight of them an 11 yd run per charge and
+    // another one back when the orb died, and every charge that did hit a melee bot caught it running.
+    struct RingOffset
+    {
+        ObjectGuid orb;
+        float offset = 0.0f;
+    };
+
+    std::unordered_map<ObjectGuid, RingOffset> ringOffsets;
 
     // 0 = nothing seen yet, otherwise SPELL_THORIM_RUNIC_SMASH_LEFT / _RIGHT. The side is sticky and
     // the timestamp is not: the timestamp says the wave is still rolling, the side says which lane

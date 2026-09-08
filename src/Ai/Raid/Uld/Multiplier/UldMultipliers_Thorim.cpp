@@ -55,6 +55,16 @@ static bool ThorimIsTargetSelectionAction(Action* action)
            dynamic_cast<AttackLeastHpTargetAction*>(action);
 }
 
+// Every taunt the tank specs wire up. Matched by name because they live across four class headers,
+// and righteous defense has to be in the list: it is what hand of reckoning falls back to on cooldown,
+// and it was half the taunts in the trace.
+static bool ThorimIsTauntAction(std::string const& name)
+{
+    return name == "taunt" || name == "hand of reckoning" || name == "righteous defense" ||
+           name == "dark command" || name == "growl" || name == "challenging shout" ||
+           name == "challenging roar";
+}
+
 float ThorimRunicBarrierMultiplier::GetValue(Action* action)
 {
     if (!action)
@@ -133,6 +143,32 @@ float ThorimDisableAutomaticTargetingMultiplier::GetValue(Action* action)
     // ThorimDpsPriorityAction drops him, and the generic picker hands him straight back next tick.
     // Needs the walk-in trash in GetThorimDpsTarget's tiers, or this silences the raid for the pull.
     return (ThorimHasDpsTarget(botAI, bot) || ThorimSplitActive(botAI)) ? 0.0f : 1.0f;
+}
+
+float ThorimTauntGuardMultiplier::GetValue(Action* action)
+{
+    // Name first: this runs for every action in the queue and everything below it walks the boss lookup.
+    if (!action || !ThorimIsTauntAction(action->getName()))
+        return 1.0f;
+
+    if (!ThorimPhase2Active(botAI))
+        return 1.0f;
+
+    // Gated on the target, so taunting an add off a healer still works.
+    Unit* boss = GetThorim(botAI);
+    if (!boss || AI_VALUE(Unit*, "current target") != boss)
+        return 1.0f;
+
+    Unit* victim = boss->GetVictim();
+    if (!victim || victim == bot)
+        return 1.0f;
+
+    // Another tank has him, human or bot. Taunting now is the second taunter that walks him back and
+    // forth. ThorimTankPickupTrigger picks him up the moment that tank drops him, and the encounter's
+    // own taunts go out through DoSpecificAction, which never sees a multiplier - so this only ever
+    // silences the class nodes.
+    Player* holder = victim->ToPlayer();
+    return holder && PlayerbotAI::IsTank(holder) ? 0.0f : 1.0f;
 }
 
 float ThorimArenaTargetGuardMultiplier::GetValue(Action* action)

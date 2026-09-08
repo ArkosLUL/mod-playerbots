@@ -356,12 +356,21 @@ bool ThorimSifBlizzardTrigger::IsActive()
     if (!IsThorimHardModeActive(botAI))
         return false;
 
-    // Whoever is holding Thorim stands in it. Moving that bot moves the boss, and the anchor is the
-    // only thing keeping the melee pile clear of the ranged camp - Blizzard cost the two tanks 36k
-    // across a whole pull, against 11-38k from one swing of the boss they would be towing.
+    // No tank dodges this in phase 2. It used to be "whoever holds him", and a human tank's taunt
+    // flipped that off for the half second it took the dodge to fire - which does not step out of the
+    // blizzard, it takes the farthest of eight compass rays out to 30 yd. A tank standing on the
+    // anchor went 30 yd into the middle, taunted the boss back from there, and towed him into the
+    // ranged camp. Blizzard costs a tank ~100k a pull; one swing of the boss on a clothie is 11-38k.
     Unit* boss = GetThorim(botAI);
     if (boss && boss->GetVictim() == bot)
         return false;
+
+    if (ThorimPhase2Active(botAI))
+    {
+        ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
+        if (role == ThorimPhase2Role::MainTank || role == ThorimPhase2Role::OffTank)
+            return false;
+    }
 
     TooCloseToCreatureTrigger tooCloseToBlizzard(botAI);
     return tooCloseToBlizzard.TooCloseToCreature(NPC_SIF_BLIZZARD, ULDUAR_THORIM_SIF_BLIZZARD_RADIUS);

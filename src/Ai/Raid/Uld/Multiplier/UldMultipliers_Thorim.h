@@ -48,6 +48,17 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Thorim in phase 2 with a second tank in the raid. The class "lose aggro" node taunts on its own
+// cooldown and knows nothing about who is meant to be holding him, so a paladin ripped him back off
+// the human tank every 8s all fight and the pair walked him across the arena. The pickup node owns
+// the trade instead. Adds are still fair game: this only fires when the boss is the bot's target.
+class ThorimTauntGuardMultiplier : public Multiplier
+{
+public:
+    ThorimTauntGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "thorim taunt guard") {}
+    float GetValue(Action* action) override;
+};
+
 // Without this the leash and the chase take turns: the leash walks the bot back, the picker still
 // holds the corridor mob, and it walks straight out again. Zeroing the attack drops the target instead.
 class ThorimArenaTargetGuardMultiplier : public Multiplier
