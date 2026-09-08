@@ -46,6 +46,15 @@ protected:
                               bool fallbackUnfiltered = true, bool interrupt = false,
                               char const* what = "flee");
 
+    // Same fan again, aimed at a destination instead of away from a hazard, by fleeing the point
+    // mirrored through the bot - so the straight-ahead bearing is the destination itself and the
+    // sweep supplies the alternatives. The Rapid Burst cone has no point to run from: leaving it
+    // means turning around VX-001, and the target of that turn is a place, not a distance.
+    bool MoveTowardClearOfMines(Position const& dest,
+                                MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
+                                bool fallbackUnfiltered = true, bool interrupt = false,
+                                char const* what = "step");
+
 private:
     // The fan itself. `fallbackFrom` is the unit the two public overloads were asked about, and is
     // only ever used for the unfiltered MoveAway once every bearing has been refused; the point
@@ -54,7 +63,8 @@ private:
                  bool fallbackUnfiltered, bool interrupt, char const* what);
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
-                         uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb);
+                         uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,
+                         uint32 refusedBurst);
 };
 
 class MimironShockBlastAction : public MimironFleeAction
@@ -87,9 +97,8 @@ private:
     void NoteBarrageDecision(char const* branch, char const* direction, float cw);
 };
 
-// Rapid Burst and Hand Pulse are both 104 degree cones, so no arrangement dodges them; what helps is
-// occupying more bearings than one cone covers. The six spots this replaced stacked the raid into
-// three clumps, which is the worst possible shape for that.
+// Where a bot stands when nothing is trying to kill it this second. The six fixed spots this replaced
+// stacked the raid into three clumps, which is the worst possible shape against anything conical.
 class MimironArcSpreadAction : public MovementAction
 {
 public:
@@ -111,6 +120,19 @@ class MimironRocketStrikeAction : public MimironFleeAction
 {
 public:
     MimironRocketStrikeAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron rocket strike action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Sidestep out of VX-001's Rapid Burst cone. Not a flee - the cone is 100 yd deep, so distance buys
+// nothing and the only exit is sideways round the boss. Worth taking because the cone is narrow: 60
+// degrees, held on one bearing for the whole 3 s the aura runs, which for half the raid is under six
+// yards of arc and saves four of the six ticks.
+class MimironRapidBurstAction : public MimironFleeAction
+{
+public:
+    MimironRapidBurstAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron rapid burst action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

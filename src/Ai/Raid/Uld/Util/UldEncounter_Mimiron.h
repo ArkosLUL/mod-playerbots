@@ -60,7 +60,12 @@ enum UlduarMimironIds
     NPC_FLAMES_INITIAL = 34363,    // fire seed dropped on players, spawns a spreading node (non-selectable)
     NPC_FLAMES_SPREAD = 34121,     // persistent spreading ground-fire node (non-selectable)
     NPC_FROST_BOMB = 34149,        // VX-001's Frost Bomb; detonates in a large AoE
-    NPC_EMERGENCY_FIRE_BOT = 34147  // puts the flames out; three spawn every 45s
+    NPC_EMERGENCY_FIRE_BOT = 34147,  // puts the flames out; three spawn every 45s
+
+    // Rapid Burst rides the player it was aimed at, not VX-001. 63382 is a 3000 ms aura with a
+    // 500 ms periodic dummy, and each of its six ticks fires the cone from VX-001 along the facing
+    // it was pointed in when the aura landed. Reading the carrier is what makes the centreline exact.
+    SPELL_MIMIRON_RAPID_BURST = 63382
 };
 
 // Mimiron P3Wx2 Laser Barrage. The damage is 63293, a TARGET_UNIT_CONE_ENEMY_104 cone: 104 degrees
@@ -124,8 +129,20 @@ constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
 
 // Phase 3 staging fan, ranged and healers only. Bomb Bots blast 5 yd, so no two bots may share one
 // and 6 keeps a detonation to a single victim.
+//
+// Invariant, and it is load-bearing: this must stay above ULDUAR_MIMIRON_DISPERSE_DISTANCE, which
+// must stay above Napalm Shell's 5 yd. Equal to it, every bot that reaches its slot is judged too
+// close by the generic unstacker and shoved off it, and the formation walks it straight back - which
+// cost ranged 13 to 17 % of their output and added 15 s to phase 1.
 constexpr float ULDUAR_MIMIRON_PHASE3_SPACING = 6.0f;
 constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
+
+// What the generic unstacker is told to keep between ranged bots while the MK II is up, which is the
+// only phase Napalm Shell exists in. It splashes 5 yd, so this has to clear that; it also has to stay
+// under ULDUAR_MIMIRON_PHASE3_SPACING or the formation and the unstacker fight over every bot that
+// reaches its slot. Melee never set it - the phase 1 node is ranged-only - so they run on the
+// DisperseDistanceValue default of -1, which the unstacker rejects outright.
+constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
 
 // Half-width of the staging wedge. The north-east and south-east arms leave the room centre at 59
 // degrees, so only a crowded outer row reaches a bearing anything walks down, and the west arm is
@@ -161,16 +178,28 @@ constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
 // never get a slot during a live phase.
 constexpr float ULDUAR_MIMIRON_STAGING_MELEE_RADIUS = 8.0f;
 
-// Firefighter staging radii, replacing the two above for as long as hard mode is declared. Nothing
-// is attackable for the 47 s between phases, so there is no casting range to hold and no cone to
-// dodge - but Mimiron keeps seeding fire 5 yd from three random members every 30 s and each chain
-// then crawls toward whoever is nearest it. Staged on the room centre the raid spends the handover
-// setting light to the ground VX-001 is about to spawn on: one pull took 203272 damage over that
-// window, all of it fire, with 86% of the nodes born in it landing inside 25 yd of the centre.
-// Melee sit inside ranged only because they have the longer trip back in - 22 yd against 8, about
-// 3.1 s. navprobe: 24/24 on mesh at both radii, flat at Z 364.314.
-constexpr float ULDUAR_MIMIRON_HM_STAGING_MELEE_RADIUS = 30.0f;
-constexpr float ULDUAR_MIMIRON_HM_STAGING_RANGED_RADIUS = 36.0f;
+// The Firefighter handover lap, replacing the ring above for as long as hard mode is declared, and
+// walked by the whole raid together - tank, melee, healers and ranged on one moving point. Nothing is
+// attackable between phases, so there is no casting range to hold and no cone to dodge, but Mimiron
+// keeps seeding fire 5 yd from three random members every 30 s and each chain then crawls toward
+// whoever is nearest it. A raid parked anywhere spends the handover setting light to the ground the
+// next mech spawns on; a raid walking the rim drags every chain out to the wall behind it and leaves
+// the middle clean. navprobe, map 603: 24/24 on mesh and flat at Z 364.314 at 35, 40 and 44 yd; 48
+// puts three east headings 3 to 6 yd off the nearest poly, so 44 is the outermost ring that holds.
+constexpr float ULDUAR_MIMIRON_HM_LAP_RADIUS = 44.0f;
+
+// Step and pause rather than a continuous walk. Chains only grow 7 yd every 5.75 s, so 1.22 yd/s is
+// all the lap has to beat, and a raid that never stops moving never heals: the handover runs about
+// even at 1900 to 4000 damage a second against the same again in healing, so a permanent walk would
+// trade the fire for a raid entering the next phase low. Ten yards then two and a half seconds still
+// averages 3 yd/s, more than double the growth.
+constexpr float ULDUAR_MIMIRON_HM_LAP_STEP = 10.0f;
+constexpr uint32 ULDUAR_MIMIRON_HM_LAP_STEP_MS = 2500;
+
+// How wide the pack is spread across the rim. Tight is free here - the only things landing during a
+// handover are the fire itself and whatever mines the last phase left - and tight is what keeps the
+// three seeds together so one stretch of wall takes them all.
+constexpr float ULDUAR_MIMIRON_HM_LAP_ARC = 20.0f * static_cast<float>(M_PI) / 180.0f;
 
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
@@ -235,6 +264,12 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest);
 // the MK II parks on top of the mine field it just laid, so a tank that will not stand in one never
 // brings the boss back.
 bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot);
+
+// Whether this bot is walking the Firefighter handover lap, which is likewise not a slot it may
+// refuse. The lap screens its own waypoints as it advances, and a handover is the one window where
+// declining the tick hands it to follow at relevance 1.0 and the raid walks off after its master -
+// measured at 368 accepted follow moves against 163 for the staging ring.
+bool IsMimironLapSlot(PlayerbotAI* botAI, Player* bot);
 
 // The 20 s a Magnetic Core buys. The Aerial Command Unit is on the floor, passive, and taking +50%
 // damage, and its own UpdateAI is short-circuited for the whole aura so nothing new spawns for 25 s.
@@ -329,21 +364,36 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
                               float travelSeconds);
 
 // Where this bot stands between barrages. Ranged fan out over a full ring round the room rather than
-// around VX-001, whose facing swings to whoever it last Rapid Burst; Rapid Burst and Hand Pulse are
-// both 104 degree cones, so covering more bearings than one cone can hold is the only thing that
-// helps. Returns false for roles this does not place. Trigger and action must both call this or the
-// two disagree about where the bot belongs.
+// around VX-001, whose facing swings to whoever it last Rapid Burst. Returns false for roles this
+// does not place. Trigger and action must both call this or the two disagree about where the bot
+// belongs.
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
+
+// The live Rapid Burst cone, or a window that is not valid when nothing is firing. The centreline is
+// taken from the raid member carrying 63382 rather than from VX-001's orientation: the boss is
+// pointed at that player once, when the aura lands, and holds it for the whole 3 s, so the carrier is
+// the exact bearing where the orientation is only the last thing the server happened to write.
+struct MimironRapidBurstWindow
+{
+    bool valid = false;
+    float centreline = 0.0f;  // world bearing from VX-001 to the aura carrier
+    float offset = 0.0f;      // this bot's own bearing off it, signed, radians
+    float escape = 0.0f;      // arc this bot must cover to clear the cone, yards; 0 when already out
+};
+
+MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001);
+
+// Whether `dest` is outside the cone as it is pointing now. The true 60 degrees only, with no margin:
+// the margin belongs to whoever is choosing somewhere to stand, and folding it in here would refuse a
+// step aimed at exactly the edge it was told to clear.
+bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& window,
+                                 Position const& dest);
 
 // Firefighter ground fire. A node's damage aura 64566 reaches 3 yd, so 5 covers the node footprint
 // and pathing slop. Chains grow in 7 yd steps and 50 to 60 nodes are alive by the middle of the
 // fight, so a destination has to clear every node it knows about rather than just the nearest one -
 // a hop shorter than the step lands on the next node along.
 constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
-// How far past the cluster edge a fire dodge lands. A chain adds a node every 5.75 s exactly 7 yd
-// along, so anything shorter than one step puts the bot on the next node; the measured hops were 4
-// to 5 and bots burned for up to 11 s at a stretch.
-constexpr float ULDUAR_MIMIRON_FLAMES_STEP = 7.0f;
 
 // Frost Bomb Explosion 65333: 30 yd, 47124 base, plus a knockback. That is about twice a bot's
 // health pool, so this is a positional check and no amount of healing answers it. The bomb summons
@@ -353,6 +403,39 @@ constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 30.0f;
 // Where to stand rather than what the blast reaches: the extra clears the knockback and the yard or
 // two a leg overshoots by.
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
+
+// Health below which a bot is willing to pay for a fire dodge. Above it the fire is cheaper than the
+// trip: a node ticks about 3100 against a 22000 to 24000 pool, and the round trip out and back is
+// 24 yd of a melee bot's uptime or a ranged bot's cast. Below it the arithmetic flips, because the
+// bot no longer has the seven ticks of margin that made standing still affordable.
+constexpr float ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT = 60.0f;
+
+// How many nodes overrule the health gate. One node is about 8 s of margin from full; two is 4, and
+// four seconds is not enough to notice a health bar moving and then walk 12 yd.
+constexpr uint32 ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE = 2;
+
+// The distance ladder a fire dodge tries, each added to the burning cluster's own edge. A chain adds
+// a node every 5.75 s exactly 7 yd along, so a hop shorter than that can land on the next node - but
+// one fixed 7 yd hop found no clean bearing four times out of five and fell through to an unscreened
+// MoveAway anyway. Screening every rung against the whole field is what makes the short ones safe,
+// and landing on one is the half of the dodge's cost that comes back as uptime.
+constexpr float ULDUAR_MIMIRON_FLAMES_STEP_LADDER[] = {3.0f, 5.0f, 7.0f, 10.0f};
+
+// Rapid Burst 64531/64532 is a 60 degree cone, so plus or minus 30 off VX-001's facing, 100 yd deep.
+// acore_world.spell_cone says so and Spell::SelectImplicitConeTargets reads it before falling back to
+// the DBC's TARGET_UNIT_CONE_ENEMY_104 default - but that table is not trusted on its own here, since
+// its row for the Laser Barrage does not match observed behaviour. This one is measured: bucket every
+// bot past 14 yd by its bearing at the tick before a hit and the hit rate holds around 80 % out to 30
+// degrees, then drops to 9 % at 30-40 and about 1 % beyond. The margin is the yard or two a leg
+// overshoots by plus the boss's own turn between the aura landing and the bot arriving.
+constexpr float ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE = 30.0f * static_cast<float>(M_PI) / 180.0f;
+constexpr float ULDUAR_MIMIRON_RAPID_BURST_MARGIN = 8.0f * static_cast<float>(M_PI) / 180.0f;
+
+// Longest arc worth walking to leave the cone. The window is 3 s and ticks twice a second, so a step
+// only pays while it finishes inside it; measured, half the victims needed under 6 yd and two thirds
+// under 9, and past that the boss has re-aimed at somebody else before the bot arrives. Above this a
+// bot stands still and eats it, which is the honest answer rather than a walk that buys nothing.
+constexpr float ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP = 9.0f;
 
 // VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
 // point holds still while the mechs turn and charge about.

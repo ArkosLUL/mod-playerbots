@@ -11,6 +11,9 @@ ever wanted — those mechs *are* valid attack targets, unlike Mimiron himself.
 source every time — 45%, 26% and 33% of everything the raid took, ahead of the Frost Bomb and every
 mech ability. Roughly half of all effective healing goes to it.
 
+Once the dodge and the Frost Bomb were fixed it fell to **22% and 19%** on 2026-09-08, and phase 2
+per living bot per second went 449/426 → 356/332. It is still second. First is now Heat Wave.
+
 Mimiron seeds it for the whole encounter, handovers included: `EVENT_SPAWN_FLAMES_INITIAL` every
 **30 s** drops three `NPC_FLAMES_INITIAL` (34363) 5 yd from three random raid members. Each chain
 then adds one `NPC_FLAMES_SPREAD` (34121) every **5.75 s**, **7 yd toward the player nearest that
@@ -57,9 +60,12 @@ trigger and every spot test, `ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE` 34 for where 
 The node also has to win the tick. Rocket strike, the flames dodge and the frost bomb all sat on
 `ACTION_RAID + 4`; `Queue::findHighestRelevanceBasket` breaks an exact tie by push order and
 `Engine::DoNextAction` stops at the first action returning true, so the flames step ended the tick
-143-221 times a pull against 6-13 reaching the bomb. Barrage is now +7, frost bomb +6, rocket strike
-+5, flames +4. `mimiron shock blast` at +3 still sits below the flames step — a 99999 blast losing to
-a 3k tick — but nothing has died to it yet.
+143-221 times a pull against 6-13 reaching the bomb. The ladder is now rapid burst +8, barrage +7,
+frost bomb +6, rocket strike +5, flames +4. `mimiron shock blast` at +3 still sits below the flames
+step — a 99999 blast losing to a 3k tick — but nothing has died to it yet.
+
+It worked. Across the two 2026-09-08 pulls the bomb did **83,180 (2.2%) and 0**, against 697,314 and
+612,008, and killed **one bot and none** against 13-15 at once.
 
 ## Two dodges fought over the fire, and both were too short
 
@@ -85,10 +91,29 @@ shared `"recently flee info"` list holds an entry younger than `minInterval` (10
 the Mimiron flame dodge's FAILEDs had an accepted flee by that same bot in the previous second — its
 own last hop, or `avoid aoe`'s.
 
-The flames dodge is now on the shared Mimiron fan instead of `FleePosition`, sized at the cluster
-edge plus one 7 yd chain step, and `MimironAvoidAoeGuardMultiplier` vetoes `avoid aoe` outright while
-hard mode is live. `AvoidAoeAction`'s own two bugs are left alone: it runs in every encounter in the
-game and deserves its own change.
+The flames dodge is now on the shared Mimiron fan instead of `FleePosition`, and
+`MimironAvoidAoeGuardMultiplier` vetoes `avoid aoe` outright while hard mode is live.
+`AvoidAoeAction`'s own two bugs are left alone: it runs in every encounter in the game and deserves
+its own change.
+
+That much worked — exposures of 5 s or longer fell from 5% to **1-2%**, p90 episode length from 3.0 s
+to 1.1-2.0, and `avoid aoe` recorded **zero accepted moves** behind 339 and 309 vetoes. Two things it
+still got wrong, both fixed in the dodge itself.
+
+**One fixed hop, and it was the long one.** Cluster edge plus a full 7 yd chain step meant
+`mimiron.flee` read **`flames fallback` 2121 against `flames ok` 468**: four dodges in five found no
+clean bearing at that distance and fell through to an unscreened `MoveAway`. It is now a ladder,
+`ULDUAR_MIMIRON_FLAMES_STEP_LADDER` = 3, 5, 7, 10 yd, each rung screened against the whole field by
+the same fan and the first clean one taken; only the last rung may fall back. Short rungs are safe
+precisely because they are screened, and what a short one saves is the walk home.
+
+**And it dodged whatever the cost.** A node ticks ~3.1k against a 22-24k pool, so a healthy bot has
+seven ticks of margin while the round trip costs 24 yd of uptime.
+`ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT` is **60**: above it the bot stands in the fire and keeps
+working. `ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE` (2) overrules the gate, because two nodes halve
+the margin to about four seconds — not long enough to notice a health bar and then walk 12 yd. Watch
+this one: phase 2 has no healing slack, so if fire per living bot per second climbs back above
+356/332 the threshold is too low.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -99,10 +124,20 @@ via `TARGET_DEST_CASTER_FRONT` (60 yd) plus `TARGET_DEST_DEST_LEFT` 4 yd / `TARG
 6 yd. Reading those 4/6 yd radii as a beam width is what produced the old dodge.
 
 The damage is **63293**: `SPELL_EFFECT_SCHOOL_DAMAGE`, `TARGET_UNIT_CONE_ENEMY_104`, radius index 28
-= 50000 yd. `Spell.cpp` maps that target type to a **104° cone** (±52° through `HasInArc`, which
-compares `arc/2`), and no `spell_cone_angle` row overrides it. Guides describe retail's 30° visual.
+= 50000 yd. So **distance from VX-001 buys nothing** — the cone outreaches the room, and only bearing
+matters.
 
-So **distance from VX-001 buys nothing** — the cone outreaches the room. Only bearing matters.
+`Spell.cpp` maps that target type to a **104° cone** (±52° through `HasInArc`, which compares
+`arc/2`). Guides describe retail's 30° visual.
+
+**Check `acore_world.spell_cone` before trusting the target type anywhere else here.**
+`Spell::SelectImplicitConeTargets` reads `sSpellMgr->GetSpellCone(id)` **first** and only falls back
+to the target-type switch when there is no row. There are rows for this boss, and one of them is
+real: Rapid Burst and Hand Pulse are **60**, confirmed by measurement below. The row for 63293 says
+10, which the traces do **not** bear out — and they cannot settle it either, because the beam bearing
+leads VX-001's visible facing by up to the 42.6° that 33576 travels during Spinning Up, so every
+measured hit angle is against the wrong reference. `ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE` stays at 52°
+until something measures the beam rather than the boss.
 
 Aim comes from `FaceBarrageArc`: VX-001 is repointed at NPC 33576 every tick of the aura, and 33576
 laps the room on a fixed spline every 34016 ms — 10.6°/s, clockwise, ~106° over the 10 s barrage.
@@ -302,14 +337,46 @@ distance before the add has picked anyone.
 
 Both used to be handled by a main-tank `unit->Kill()` gated on `BotCheatMask::raid`. That is gone.
 
-## Rapid Burst and Hand Pulse cannot be dodged
+## Rapid Burst is a 60° cone, and it can be sidestepped
 
-Both are also `TARGET_UNIT_CONE_ENEMY_104`. Rapid Burst (63387/64019) is aimed at a random player
-every 3.2 s at 100 yd; Hand Pulse (64348/64352) fires every 1.75 s in phase 4. No arrangement avoids
-a 104° cone, so the six fixed phase-2 spots that used to stack the raid into three clumps were
-solving a problem that does not exist — and three clumps is the worst shape for a cone. They are
-replaced by a ring of radius 22 yd, one slot per ranged bot. The *bearing* is index-derived and never
-keyed off VX-001's facing, which swings to whoever it last Rapid Burst.
+`EVENT_SPELL_RAPID_BURST` picks a random player within 80 yd every **3.2 s**, casts **63382 on that
+player**, then `SetFacingToObject`. 63382 is a 3000 ms aura with a 500 ms periodic dummy — **six
+ticks** — and each one fires 64531/64532 from VX-001 along the facing it was pointed in when the aura
+landed. VX-001 does not move, so the centreline is exactly `VX-001 → the aura carrier`, fixed for the
+whole 3 s. **Read the carrier, not the boss's orientation**, which is only the last thing the server
+happened to write. Phase 2 only:
+`_events.RescheduleEvent((_phase == 2 ? EVENT_SPELL_RAPID_BURST : EVENT_HAND_PULSE), 14.5s)`.
+
+**60° is measured, not read off a table.** Bucketing every living bot past 14 yd — far enough that
+`IsWithinBoundaryRadius` cannot short-circuit the cone test — by its bearing off VX-001 at the tick
+before each hit, the hit rate holds at **81%, 83%, 74%** across 0-10°, 10-20° and 20-30° and then
+falls off a cliff: **9%** at 30-40°, 3-7% to 60°, ~1% beyond. The residue is snapshot staleness.
+Unlike the barrage there is no aim lead to confound it: the boss faces its target once and holds for
+the whole 3 s.
+
+The escape is therefore short. 93-97% of hits land inside ±30°, and the arc a victim had to cover to
+clear it was **median 6.3-6.7 yd** — 46% under 6, 65% under 9, p90 17.
+A ~1 s step saves four of the six ticks. `MimironRapidBurstAction` takes it whenever the arc is at or
+under `ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP` (9) and stands still above that, because past there the
+boss has re-aimed at somebody else before the bot arrives.
+
+Three things stop it costing more than it buys. It **keeps the bot's own radius**, moving purely
+tangentially, so casting range and melee range both survive and neither `reach spell` nor
+`reach melee` fires afterwards. The **arc spread yields on the slot**, not on the trigger — testing
+the trigger would hand the bot back the instant the step worked, for the remaining ticks. And the
+shared fan **screens for the cone**, so no other dodge can sweep a bearing into it.
+
+It sits at `ACTION_RAID + 8`, top of the ladder, and that costs nothing: Rapid Burst exists only in
+phase 2, so it never contends with the barrage, and the two lethal nodes it outranks there — Frost
+Bomb on a 10 s fuse, Rocket Strike on 5 — both have seconds a 3 s cone does not. It is **not** behind
+the hard-mode check, because Rapid Burst is scheduled unconditionally when phase 2 starts.
+
+**Hand Pulse (64348/64352) is the same 60° cone**, every 1.75 s in phase 4, and is not covered — no
+traced pull has reached phase 4.
+
+The ring survives the correction. Six fixed phase-2 spots used to stack the raid into three clumps,
+which is the worst shape against anything conical whatever its width; a ring of radius 22 with one
+index-derived slot per ranged bot is not. The bearing is never keyed off VX-001's facing.
 
 **The ring centres on the mech, not the room.** Bots cast out to `AiPlayerbot.SpellDistance` — 28.5
 here, with no `AC_` override — so a ring pinned to the room centre puts the far half of the raid out
@@ -332,6 +399,18 @@ exists to prevent. Every input (anchor, focus, radius, count) is group-global an
 is read directly rather than through `PlayerbotAI::GetRange`, so each bot derives the same anchor
 without coordinating. A second clamp keeps the anchor within 40 yd of the room centre — navprobe puts
 the walkable floor at 16/16 headings out to 40, flat at Z 364.31.
+
+## Phase 2 is a healing race, and Heat Wave is why
+
+VX-001 casts **64533 on itself every 10 s** in phase 2 — implicit targets 22/15, radius index 28 =
+**50000 yd**. Raid-wide, unavoidable, no bot-side answer, and the largest single source in both
+2026-09-08 pulls at **936,259 (24.4%) and 750,071 (22.9%)**. Do not re-investigate it.
+
+The arithmetic it forces: phase 2 takes **29,207/s and 20,366/s** against **21,389/s and 14,703/s** of
+effective healing — a 617-679k deficit across the phase, about **1,600 damage per living bot per
+second**. Overheal there is 22-27% where phase 1 runs 68-72%, so there is no slack to spend. Nothing
+one-shots any more; the raid runs out of health from 3:20. Fire and Rapid Burst are the only
+avoidable slices left in that budget, and every other decision on this boss is drawn against it.
 
 ## Phase 3 wants a wedge, not a ring
 
@@ -391,10 +470,34 @@ chains converge instead, the 4 yd freeze rule actually bites, and the Frost Bomb
 summons on a burning node — lands in that sector and clears it. So while hard mode is on, the `ring`
 branch becomes `hmwedge` and reuses this machinery unchanged: `MimironWedgeRows` and
 `MimironWedgeSlot` at the same 18 yd first row and 6 yd spacing, on the same east centreline, still
-anchored on the mech so casting range holds. The cost is Rapid Burst (64531/64532), a 104° cone at
-~1.6k that a 120° wedge barely outruns where the full ring was chosen so it could not — against fire
-outdamaging Rapid Burst five to eight times over. `ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE` is the
-knob if the fire still fans out.
+anchored on the mech so casting range holds. It cost less in Rapid Burst than expected: the cone
+caught **20-30% of the living raid per tick under the wedge against 22-25% under the ring**, which is
+the same number. The first reading of it — 1 victim per tick rising to 3 — was measuring a raid the
+Frost Bomb had already cut to 7-10 alive, and is the reason to normalise anything per-tick by the
+living count. `ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE` is the knob if the fire still fans out.
+
+**What it did cost was spacing, and that collided with the generic unstacker.** `rangedDepth` is
+`SpellDistance(28.5) − margin(4) − 18 = 6.5`, so `MimironWedgeRows` gets two rows: 14 ranged in rows
+of seven, 6.0 yd apart radially and 6.3 along the inner one.
+`MimironPhase1PositioningAction` set `disperse distance` to exactly **6.0**, so every bot that reached
+its slot was immediately judged too close by `CombatFormationMoveAction` and shoved 5 yd off it,
+and the arc spread walked it back. `CombatFormationMoveAction::Execute` **always returns false**, so
+it never claims the tick — it moves the bot underneath whatever else runs, which is why this was
+invisible in the verdict stream. Accepted unstack moves went **51 → 261** a pull, ranged went from
+26% of phase 1 moving to **42%**, 1.8 to 2.9 yd/s, 56 direction reversals to 180, and lost **13-17% of
+their output**; phase 1 ran 15 s longer.
+
+Two halves fix it. `ULDUAR_MIMIRON_DISPERSE_DISTANCE` is **5.5**, in the gap between Napalm Shell's
+5 yd splash and the wedge's 6.0: still unstacks anyone genuinely inside Napalm range, never fires on
+two bots both on their slots. And `MimironFormationGuardMultiplier` zeroes `combat formation move`
+while the bot is within `ULDUAR_MIMIRON_SPREAD_TOLERANCE` of its slot — the same window the arc spread
+declines to act in, so inside it nothing moves the bot and outside it the formation owns the
+correction. Match **by name**: `TankFaceAction` derives from `CombatFormationMoveAction` and does real
+work. A bot with no slot keeps the unstacker untouched, which is every melee mid-phase — and melee
+never had a disperse distance here anyway, since the phase 1 node is ranged-only and
+`DisperseDistanceValue` defaults to -1.
+
+**The invariant to keep:** `PHASE3_SPACING` > `DISPERSE_DISTANCE` > Napalm's 5 yd.
 
 ## A dodge that returns false hands the tick to Charge
 
@@ -415,6 +518,16 @@ and have nothing to do at 18 yd anyway — while ranged and healers go back to w
 subclasses) inside the five windows a hit actually kills through. Proximity Mines and Bomb Bots are
 deliberately **not** among them; the mine node was demoted below the whole ladder because eating one
 is healable, and letting it veto a charge would contradict its own ranking.
+
+**`reach melee` is the same move without the spell, and it was missed.** `ReachMeleeAction` derives
+from `ReachTargetAction : MovementAction`, not from `CastReachTargetSpellAction`, so the guard's
+`dynamic_cast` walked straight past it. Melee get no formation slot mid-phase, so nothing else holds
+their position either: the flames dodge threw a bot 12 yd clear at `ACTION_RAID + 4`, the movement
+lock expired after that leg's travel time, the dodge trigger went quiet, and the tick fell to
+`reach melee` at relevance **21**, which closed back onto ground the chains were crawling toward.
+Melee spent **11% of phase 1 within 5 yd of the Mk II**, against 23-33% before the dodge worked at
+all, and their median distance to it went 6.7-8.4 → 9.3-10.2. The guard now matches
+`ReachTargetAction` as well, which also covers `reach spell`.
 
 **`GetDistance2d` versus `GetExactDist2d`, again.** `WorldObject::GetDistance2d(WorldObject*)`
 subtracts *both* combat reaches, and the MK II's is 8. `20.0f - GetDistance2d(mk2)` therefore fled to
@@ -586,15 +699,39 @@ charges to (2755.77, 2574.95) at 10 s and only reaches the centre at 18.8 s, so 
 walks the melee along the charge waypoints and back. The ring radius is `max(8, focus reach + 1)`,
 since a flat 8 yd would stage half the melee inside the chassis model at reach 8.
 
-**Under Firefighter the centre anchor inverts, and only the radius changes.** Mimiron keeps seeding
-fire through the handover, so a raid holding an 8 yd melee ring and a 22 yd caster ring on the centre
-for 47 s burns the ground VX-001 is about to spawn on: one pull put 37 nodes in that window, **86% of
-them inside 25 yd of the centre**, and took **203,272 damage across it, all of it fire**, with
-nothing attackable. The radii therefore become `ULDUAR_MIMIRON_HM_STAGING_MELEE_RADIUS` 30 and
-`ULDUAR_MIMIRON_HM_STAGING_RANGED_RADIUS` 36 while hard mode is on (navprobe 24/24 on mesh at both,
-flat at Z 364.314). The only cost is the trip back in — 22 yd for melee, 8 for casters — across a
-window with nothing to be in range of. It also pushes the first Frost Bomb to the perimeter, since
-the bomb lands on a flame node.
+**Under Firefighter the raid walks the handover instead of standing it.** Mimiron keeps seeding fire
+through the window, so a raid holding an 8 yd melee ring and a 22 yd caster ring on the centre for
+47 s burns the ground VX-001 is about to spawn on: one pull put 37 nodes in that window, **86% of
+them inside 25 yd of the centre**, and took **203,272 damage across it, all of it fire**, with nothing
+attackable. Widening the two rings to 30 and 36 helped — handover fire fell to 77 and 31 damage per
+bot per second from 174 and 100 — but it was still a raid parked in its own fire.
+
+Both staging branches are therefore replaced by `hmlap`: **one point on a 44 yd ring that the whole
+raid walks together**, tank and melee included. navprobe has the floor 24/24 on mesh and flat at
+Z 364.314 at 35, 40 and 44; 48 puts three east headings 3-6 yd off the nearest poly, so 44 is the
+outermost ring that holds. Chains grow **1.22 yd/s**, so a pack that keeps moving can never be caught
+and every chain trails out to the wall behind it. It also pushes the first Frost Bomb to the
+perimeter, since the bomb lands on a flame node.
+
+It **steps and pauses** rather than walking continuously — `ULDUAR_MIMIRON_HM_LAP_STEP` 10 yd every
+`..._STEP_MS` 2500, averaging 3 yd/s, still more than double the growth. The pauses are the point: a
+handover runs about even at 1,900-4,000 damage a second against the same again in healing, and a raid
+that never stops moving heals nothing and enters the next phase low. The bearing advances off
+`getMSTime()` so every bot derives the same point with no shared state, starting on the east gap the
+wedge already uses, and the pack spreads over `..._LAP_ARC` 20°. Stacking that tight is free here:
+nothing lands during a handover but the fire and whatever mines the last phase left.
+
+**It never returns false.** A waypoint inside a hazard advances to the next step along, bounded at
+six; a sweep that finds nothing hands back the bearing it started from. Refusing is exactly what gives
+the tick to `follow` — measured before the lap, **368 accepted `follow` moves in one handover against
+163 for the staging ring**, with the raid tracking a human master out to r≈48-53 and back, because
+`MimironArcSpreadAction::Execute` returns false whenever `IsMimironSpotSafe` rejects the slot and with
+26-35 nodes live it rejected constantly. Trigger and action both exempt the lap from that test, exactly
+as they exempt the tank anchor.
+
+What the lap buys is a clean *start* to phase 2, not a clean phase: once the raid runs in, every chain
+re-aims and crawls inward at 1.22 yd/s, which across an 87-109 s phase 2 is far more than the 44 yd
+back to the middle. Expect the middle to be burning again before the phase ends.
 
 Three things fall out rather than needing code. The **elevator knockback** 11 s into the first handover
 needs no guard, because VX-001 is not summoned until 17 s and it is what the staging keys off. **Eating
@@ -659,9 +796,9 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `core` | The Magnetic Core window is open. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse`, `walk-corpse`, `loot`, `bags-full`, `walk-acu`, `blocked`, `use` |
-| `slot` | Which formation shape answered — `p4tank`, `stagemelee`, `p3wedge`, `p3tank`, `p1tank`, `hmwedge`, `stagering`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `hmlap`, `stagemelee`, `p3wedge`, `p3tank`, `p1tank`, `hmwedge`, `stagering`, `ring`, `none` — with index/count and the point |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`). `what` names the hazard: `shock`, `rocket`, `flames`, `frostbomb` |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, and `flames+N` per ladder rung, so which rung won is readable |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,

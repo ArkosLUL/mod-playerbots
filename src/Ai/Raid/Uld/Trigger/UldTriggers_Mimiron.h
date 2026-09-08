@@ -48,6 +48,16 @@ public:
     bool IsActive() override;
 };
 
+// Live whenever this bot is inside VX-001's Rapid Burst cone and can walk out of it in time. Not
+// gated on hard mode: Rapid Burst is scheduled unconditionally when phase 2 starts, so a normal
+// clear eats the same cone.
+class MimironRapidBurstTrigger : public Trigger
+{
+public:
+    MimironRapidBurstTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron rapid burst trigger") {}
+    bool IsActive() override;
+};
+
 class MimironAerialCommandUnitTrigger : public Trigger
 {
 public:

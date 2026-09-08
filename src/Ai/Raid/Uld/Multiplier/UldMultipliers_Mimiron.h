@@ -20,11 +20,31 @@ public:
 };
 
 // Mimiron: a gap-closer moves the bot in a straight line and consults nothing about the ground, so it
-// must not fire while the bot is under orders to dodge something that kills.
+// must not fire while the bot is under orders to dodge something that kills. "reach melee" is the
+// same move without the spell and was missed for exactly that reason - it is a ReachTargetAction, not
+// a CastReachTargetSpellAction - so a melee bot that had just been thrown 12 yd clear of the fire was
+// walked back into it at relevance 21 on the next tick, and spent 11 % of phase 1 in range instead of
+// the 23 to 33 % it managed before the dodge worked at all.
 class MimironChargeGuardMultiplier : public Multiplier
 {
 public:
     MimironChargeGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron charge guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Mimiron: the generic unstacker and the Mimiron formation both move the same ranged bot, and on
+// Firefighter they disagreed by construction - the wedge deals rows 6 yd apart and phase 1 set the
+// unstack threshold to the same 6, so every bot that reached its slot was immediately judged too
+// close and shoved off it. Accepted unstack moves went from 51 a pull to 261, ranged spent 42 % of
+// phase 1 walking instead of 26 %, and output fell 13 to 17 %.
+//
+// Only while the bot is standing on its slot, which is also the window the formation declines to act
+// in: inside the tolerance nothing moves the bot, outside it the formation owns the correction. A bot
+// with no slot - melee mid-phase - keeps the unstacker untouched.
+class MimironFormationGuardMultiplier : public Multiplier
+{
+public:
+    MimironFormationGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron formation guard") {}
     float GetValue(Action* action) override;
 };
 

@@ -134,12 +134,46 @@ bool MimironArcSpreadTrigger::IsActive()
 
     // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
     // ring itself, so a bot that dodged one is standing clear while its slot still has the marker
-    // burning on it - checking the bot's own surroundings would send it straight back.
-    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironSpotSafe(bot, slot))
+    // burning on it - checking the bot's own surroundings would send it straight back. The lap is
+    // exempt for the same reason the tank anchor is: it has already swept its own waypoint, and a
+    // handover is the one window where refusing hands the tick to follow.
+    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironLapSlot(botAI, bot) &&
+        !IsMimironSpotSafe(bot, slot))
         return false;
+
+    // Do not walk a bot back into a live Rapid Burst. Tested on the slot rather than through
+    // MimironRapidBurstTrigger, which only answers true while the bot is still inside the cone - the
+    // formation would otherwise reclaim it the instant the step worked and put it back for the
+    // remaining ticks.
+    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    {
+        MimironRapidBurstWindow const burst = GetMimironRapidBurstWindow(botAI, bot, vx001);
+        if (!IsMimironSpotRapidBurstSafe(vx001, burst, slot))
+            return false;
+    }
 
     return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) >
            ULDUAR_MIMIRON_SPREAD_TOLERANCE;
+}
+
+bool MimironRapidBurstTrigger::IsActive()
+{
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    if (!vx001)
+        return false;
+
+    // The phase 4 main tank holds instead. Its spot is what keeps the chassis parked, and the Laser
+    // Barrage cone radiates from a VX-001 that only stays still while the tank does.
+    if (PlayerbotAI::IsMainTank(bot) && IsMimironPhase4(bot))
+        return false;
+
+    MimironRapidBurstWindow const window = GetMimironRapidBurstWindow(botAI, bot, vx001);
+
+    // Zero escape means already outside the cone. Past the cap the walk does not finish inside the
+    // 3 s window and the boss has re-aimed at somebody else before the bot arrives, so standing
+    // still and eating it is the cheaper answer.
+    return window.valid && window.escape > 0.0f &&
+           window.escape <= ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP;
 }
 
 bool MimironAerialCommandUnitTrigger::IsActive()
@@ -252,6 +286,7 @@ bool MimironDodgeFlamesTrigger::IsActive()
 
     // The fire nodes are non-selectable trigger creatures, so they never show up in attack-target
     // lists - scan the raw nearby-npc list instead.
+    uint32 nodes = 0;
     GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
     for (auto const& guid : npcs)
     {
@@ -263,10 +298,18 @@ bool MimironDodgeFlamesTrigger::IsActive()
             continue;
 
         if (bot->GetExactDist2d(unit) < ULDUAR_MIMIRON_FLAMES_RADIUS)
-            return true;
+            ++nodes;
     }
 
-    return false;
+    if (!nodes)
+        return false;
+
+    // Standing in it beats the round trip while the bot can afford it. One node ticks about 3100
+    // against a 22000 to 24000 pool, so a healthy bot has seven ticks of margin and the dodge costs
+    // 24 yd of uptime; two nodes halve that margin to about four seconds, which is not enough to
+    // notice a health bar moving and then walk out, so they overrule the health gate outright.
+    return nodes >= ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE ||
+           bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT;
 }
 
 bool MimironFrostBombTrigger::IsActive()

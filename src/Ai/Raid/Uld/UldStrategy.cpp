@@ -562,6 +562,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // what a hit actually costs - Shock Blast is 100000 damage in a 15 yd circle, a Proximity Mine
     // is 3 yd and healable, which is why the mine dodge sits under the whole rest of the ladder.
     //
+    // Rapid Burst tops the ladder, and it costs nothing to put it there: it is scheduled only when
+    // phase 2 starts, so it can never contend with the barrage below, and the two lethal nodes it
+    // outranks inside phase 2 - the Frost Bomb on a 10 s fuse and the Rocket Strike on a 5 s one -
+    // both have the seconds to spare that a 3 s cone does not.
+    triggers.push_back(new TriggerNode(
+        "mimiron rapid burst trigger",
+        { NextAction("mimiron rapid burst action", ACTION_RAID + 8) }));
+
     triggers.push_back(new TriggerNode(
         "mimiron p3wx2 laser barrage trigger",
         { NextAction("mimiron p3wx2 laser barrage action", ACTION_RAID + 7) }));
@@ -876,6 +884,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironTargetGuardMultiplier(botAI));
     multipliers.push_back(new MimironChargeGuardMultiplier(botAI));
     multipliers.push_back(new MimironAvoidAoeGuardMultiplier(botAI));
+    multipliers.push_back(new MimironFormationGuardMultiplier(botAI));
     multipliers.push_back(new MimironThreatRedirectGuardMultiplier(botAI));
 
     // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a

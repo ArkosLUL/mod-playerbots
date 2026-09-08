@@ -75,12 +75,30 @@ bool MimironLethalWindowActive(PlayerbotAI* botAI)
 
 float MimironChargeGuardMultiplier::GetValue(Action* action)
 {
-    // Cheap gate first: this only ever has an opinion about the gap-closers, and every one of them is a
-    // CastReachTargetSpellAction - Charge, Intercept and both Feral Charges, with no other subclasses.
-    if (!dynamic_cast<CastReachTargetSpellAction*>(action))
+    // Cheap gate first. Two unrelated branches for the same behaviour: the gap-closer spells are all
+    // CastReachTargetSpellAction - Charge, Intercept and both Feral Charges - while "reach melee" and
+    // "reach spell" are plain ReachTargetActions that walk the bot in without casting anything.
+    if (!dynamic_cast<CastReachTargetSpellAction*>(action) && !dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 
     return MimironLethalWindowActive(botAI) ? 0.0f : 1.0f;
+}
+
+float MimironFormationGuardMultiplier::GetValue(Action* action)
+{
+    // By name, not by type: TankFaceAction derives from CombatFormationMoveAction and keeps the tank
+    // pointed away from the raid, which is real work this must not cancel.
+    if (!action || action->getName() != "combat formation move")
+        return 1.0f;
+
+    Position slot;
+    if (!GetMimironSpreadSlot(botAI, bot, slot))
+        return 1.0f;
+
+    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <=
+                   ULDUAR_MIMIRON_SPREAD_TOLERANCE
+               ? 0.0f
+               : 1.0f;
 }
 
 float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)

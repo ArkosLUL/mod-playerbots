@@ -571,6 +571,67 @@ bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot)
            GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) != nullptr;
 }
 
+bool IsMimironLapSlot(PlayerbotAI* botAI, Player* bot)
+{
+    // Only asked once a slot has already been derived, so this does not have to tell a handover from
+    // the minutes before the pull - GetMimironStagingFocus has already refused those.
+    return botAI && bot && IsMimironHardModeActive(botAI) && GetMimironRingFocus(botAI) == nullptr;
+}
+
+MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
+{
+    MimironRapidBurstWindow window;
+    if (!botAI || !bot || !vx001 || !vx001->IsAlive())
+        return window;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return window;
+
+    Player* carrier = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref && !carrier; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (member && member->IsAlive() && member->HasAura(SPELL_MIMIRON_RAPID_BURST))
+            carrier = member;
+    }
+
+    if (!carrier)
+        return window;
+
+    window.valid = true;
+    window.centreline = vx001->GetAngle(carrier->GetPositionX(), carrier->GetPositionY());
+
+    float const mine = vx001->GetAngle(bot->GetPositionX(), bot->GetPositionY());
+    float off = Position::NormalizeOrientation(mine - window.centreline);
+    if (off > static_cast<float>(M_PI))
+        off -= 2.0f * static_cast<float>(M_PI);
+    window.offset = off;
+
+    // Arc, not chord: the bot leaves the cone by turning around VX-001, and how far that is scales
+    // with how far out it is standing. Zero once it is already clear, which is most of the raid.
+    float const inside = ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE - std::fabs(window.offset);
+    window.escape = inside <= 0.0f
+                        ? 0.0f
+                        : (inside + ULDUAR_MIMIRON_RAPID_BURST_MARGIN) * bot->GetExactDist2d(vx001);
+
+    return window;
+}
+
+bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& window,
+                                 Position const& dest)
+{
+    if (!vx001 || !window.valid)
+        return true;
+
+    float const bearing = vx001->GetAngle(dest.GetPositionX(), dest.GetPositionY());
+    float off = Position::NormalizeOrientation(bearing - window.centreline);
+    if (off > static_cast<float>(M_PI))
+        off -= 2.0f * static_cast<float>(M_PI);
+
+    return std::fabs(off) > ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE;
+}
+
 Player* GetMimironCoreCarrier(PlayerbotAI* botAI)
 {
     if (!botAI)
@@ -701,23 +762,87 @@ bool GetMimironStagingMeleeSlot(Player* bot, Group* group, Unit* focus, Position
         return false;
 
     // Outside the mech's own model. The chassis has the largest reach of the three at 8, so a flat
-    // 8 yd ring would stage half the melee inside it.
-    //
-    // Under Firefighter that ring is the wrong shape entirely: the handover runs 47 s with nothing
-    // attackable, and a raid parked on the room centre for it collects the fire seeds Mimiron keeps
-    // dropping and then hands VX-001 a spawn point already alight. Standing wide costs only the trip
-    // back in, and there is nothing to be in range of until the phase starts.
-    PlayerbotAI* const botAI = GET_PLAYERBOT_AI(bot);
+    // 8 yd ring would stage half the melee inside it. Firefighter never reaches this: the handover
+    // lap takes the whole raid before either staging branch is considered.
     float const radius =
-        botAI && IsMimironHardModeActive(botAI)
-            ? ULDUAR_MIMIRON_HM_STAGING_MELEE_RADIUS
-            : (focus ? std::max(ULDUAR_MIMIRON_STAGING_MELEE_RADIUS, focus->GetCombatReach() + 1.0f)
-                     : ULDUAR_MIMIRON_STAGING_MELEE_RADIUS);
+        focus ? std::max(ULDUAR_MIMIRON_STAGING_MELEE_RADIUS, focus->GetCombatReach() + 1.0f)
+              : ULDUAR_MIMIRON_STAGING_MELEE_RADIUS;
 
     float const bearing = 2.0f * static_cast<float>(M_PI) * index / count;
     out = Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + radius * std::cos(bearing),
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + radius * std::sin(bearing),
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+    return true;
+}
+
+// How far round the rim the lap will look for a waypoint that is not on fire before giving up and
+// holding station. Each step costs a walk of the whole hazard list, and the pack only advances one
+// step every ULDUAR_MIMIRON_HM_LAP_STEP_MS anyway, so a long sweep buys accuracy nobody reads.
+constexpr uint32 ULDUAR_MIMIRON_HM_LAP_SWEEP_STEPS = 6;
+
+// Where the raid walks out a Firefighter handover: one point on the rim for everybody, advanced in
+// fixed steps off the server clock so every bot lands on the same bearing without coordinating.
+//
+// Never refuses. A waypoint inside a hazard advances to the next step along instead, and a sweep that
+// finds nothing at all still hands back the bearing it started from - during a handover, declining
+// the tick gives it to follow at relevance 1.0 and the raid walks off after its master, which is a
+// far worse answer than standing in one node.
+bool GetMimironLapSlot(Player* bot, Group* group, Position& out, uint32& index, uint32& count)
+{
+    index = 0;
+    count = 0;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+
+        if (member == bot)
+            index = count;
+
+        ++count;
+    }
+
+    if (count == 0)
+        return false;
+
+    float const stepAngle = ULDUAR_MIMIRON_HM_LAP_STEP / ULDUAR_MIMIRON_HM_LAP_RADIUS;
+    uint32 const stepsPerLap =
+        std::max(1u, static_cast<uint32>(2.0f * static_cast<float>(M_PI) / stepAngle));
+
+    // Starts in the east gap, the same stretch phase 3 forms up in and the one arm no add walks down.
+    // Wrapped on a whole lap so getMSTime rolling over cannot jump the pack across the room.
+    float const base = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionX(),
+                                                           ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionY());
+    uint32 const step = (getMSTime() / ULDUAR_MIMIRON_HM_LAP_STEP_MS) % stepsPerLap;
+
+    // Fanned across the pack width by group order, so the raid is a short arc rather than a pillar.
+    float const spread = count > 1 ? ULDUAR_MIMIRON_HM_LAP_ARC *
+                                         (static_cast<float>(index) / (count - 1) - 0.5f)
+                                   : 0.0f;
+    float const wanted = base + step * stepAngle + spread;
+
+    Position held;
+    for (uint32 ahead = 0; ahead < ULDUAR_MIMIRON_HM_LAP_SWEEP_STEPS; ++ahead)
+    {
+        float const bearing = Position::NormalizeOrientation(wanted + ahead * stepAngle);
+        Position const candidate(
+            ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + ULDUAR_MIMIRON_HM_LAP_RADIUS * std::cos(bearing),
+            ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + ULDUAR_MIMIRON_HM_LAP_RADIUS * std::sin(bearing),
+            ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+
+        if (ahead == 0)
+            held = candidate;
+
+        if (IsMimironSpotSafe(bot, candidate))
+        {
+            out = candidate;
+            return true;
+        }
+    }
+
+    out = held;
     return true;
 }
 
@@ -822,6 +947,18 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         branch = "p4tank";
         out = ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
         return true;
+    }
+
+    // Firefighter replaces both staging rings with one lap of the rim that the whole raid walks
+    // together. Mimiron keeps seeding fire through every handover, and a raid parked anywhere spends
+    // the window setting light to the ground the next mech spawns on; walking drags the chains out to
+    // the wall behind it, because they only grow 1.22 yd/s and cannot catch a moving pack. Behind
+    // p4tank on purpose: that branch only comes up once VX-001 is already on the chassis, which is
+    // the moment the tank wants to be standing on its spot rather than out at the wall.
+    if (staging && IsMimironHardModeActive(botAI))
+    {
+        branch = "hmlap";
+        return GetMimironLapSlot(bot, group, out, index, count);
     }
 
     // Melee only get a spot while staging, where there is no chase for it to fight and arriving in
@@ -931,15 +1068,9 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
 
     branch = staging ? "stagering" : "ring";
 
-    // Wide during a Firefighter handover, for the reason the melee staging ring is: 47 s of standing
-    // still on the room centre while Mimiron keeps seeding fire leaves VX-001 spawning into a field
-    // the raid built for it.
-    float const ringRadius = hardMode && staging ? ULDUAR_MIMIRON_HM_STAGING_RANGED_RADIUS
-                                                 : ULDUAR_MIMIRON_SPREAD_RADIUS;
-
     float const angle = 2.0f * static_cast<float>(M_PI) * index / count;
-    out = Position(anchor.GetPositionX() + ringRadius * cos(angle),
-                   anchor.GetPositionY() + ringRadius * sin(angle),
+    out = Position(anchor.GetPositionX() + ULDUAR_MIMIRON_SPREAD_RADIUS * cos(angle),
+                   anchor.GetPositionY() + ULDUAR_MIMIRON_SPREAD_RADIUS * sin(angle),
                    ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
     return true;
 }
