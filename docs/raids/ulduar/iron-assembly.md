@@ -15,20 +15,32 @@ them works. Guides calling them tauntable are wrong for this core.
 `_phase` is private and Steelbreaker has no `GetData` override, so empowerment is inferred:
 *Steelbreaker alive AND Molgeim dead AND Brundir dead*. It is **not** gated on the config flag — it
 is a phase check, and gating it left a raid that reached the state without the option set with no
-tank swap.
+tank on the empowered boss.
 
-His empowered kit is Fusion Punch (61903/63493, a dispellable Magic DoT on the tank), Static
-Disruption (61911/63495, a random target beyond 10 yd, 6 yd blast plus a 5 yd +75% nature
-vulnerability), Overwhelming Power, and Electrical Charge (61902), +25% per player death. The first
-two bot tanks trade him on **Overwhelming Power only** — Fusion Punch recurs far too fast, and
-swapping on it would ping-pong the boss between them.
+His empowered kit is Fusion Punch (61903/63493, a dispellable Magic DoT on the tank; traced dispels
+strip it inside 0.6s), Static Disruption (61911/63495, a random target beyond 10 yd, 6 yd blast plus
+a 5 yd +75% nature vulnerability), Overwhelming Power, and **Electrical Charge (61902), which is
++25% damage *and* a heal** — `Effect_2 = 136`, measured at 9.7% of his 12.05M bar on every phase-3
+death without exception. A corpse is worth ~1.17M to him, so the phase is decided by how few the
+raid feeds him.
 
 **Every ability is difficulty-mapped through `Unit::CastSpell`**, so each id is a 10/25 pair and
 callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the written guides: Lightning Tendrils is
 **18 yd** (61886/63485), not the 10 of the 61884 dummy; and **Overwhelming Power (64637/61888) is
-`DispelType 0`**, not dispellable. Its carrier dies to Meltdown (61889, 29,250 in 15 yd) regardless,
-so the node walks them clear of the raid instead — every death it causes is another permanent +25%
-Electrical Charge.
+`DispelType 0`**, not dispellable.
+
+**Overwhelming Power goes to `GetVictim()`**, never a random player: 8s into phase 3 and every 36s
+after (25-man; 61s in 10), lasting **35s**, and its `EffectTriggerSpell_2` is Meltdown 61889 —
+29,250 nature in 15 yd, plus an **INSTAKILL** on the carrier. So the raid loses whoever is tanking
+every 36s and pays ~1.17M for it. **Nothing dodges Meltdown** — one trace caught six melee for
+16,300–26,800 after resists and all six lived, at 39–66% — and running from it costs far more,
+because the carrier is the tank: a run-out towed Steelbreaker 180 yd, cut melee uptime to a 16%
+median and left the raid doing **0.4% of a 12.05M bar in a 30s phase**. So **the carrier holds him
+to the end and the off-tank inherits on threat**, already second on the table. Taunting early saves
+nobody — the buff kills its target either way and the next cast lands a second later on whoever
+inherited — so all it buys is a boss that moves. Both ranked tanks are assigned the empowered
+Steelbreaker, so the tank node **taunts only when the current victim is not a group tank**: the tick
+after a carrier dies, and the path that recovers him when a dps rips threat at the transition.
 
 `creature_immunities`: **Brundir (`0x24CB375F`) is vulnerable to STUN and INTERRUPT but immune to
 SILENCE** — kicks and stuns land, `silencing shot` and `spell lock` never do. Steelbreaker and
@@ -134,8 +146,9 @@ deaths fed charges, taking 24 of 32 killing blows in 23 seconds. Neither is hand
 stacking raid-wide buff is a healer and kill-speed problem, not a movement one. The one lever bots
 have is time in that phase, so **in hard mode every DPS cooldown, trinket, racial and Bloodlust is
 held until Steelbreaker is the last one standing**. Held burst costs nothing when three bars are one
-pool, and two traced pulls lost 21 of 31 and 20 of 27 deaths inside it. Hard mode only: the normal
-order kills him first, so it would never release.
+pool, and two traced pulls lost 21 of 31 and 20 of 27 deaths inside it. Traced release: Heroism goes
+out 3.6–4.3s into the phase. Hard mode only — the normal order kills him first, so it would never
+release.
 
 **Reading a pull:** `postmortem.py <file> --notes ironassembly.` — `alive` (bit 0 Steelbreaker, 1
 Molgeim, 2 Brundir; **one row per transition — more means the state is not shared**), `focus` (what
@@ -145,8 +158,8 @@ a bot holds for Brundir's current cast), `spot` (the formation branch — a `-ru
 suffix names the hazard that shifted the stack), `slot` (its index on the spread ring, assigned
 **once** per bot), `soak` (whether it reached Rune of Power, and what stopped it). Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
-spell radius and the clearance; Rune of Death and Rune of Power do, and are swept instead — only a
-swept hazard is tested against a death.
+spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death
+and Rune of Power do, and are swept instead — only a swept hazard is tested against a death.
 
 Core-version assumption: the strategy relies on recent upstream fixes — `#26470` (Rune of Death
 restricted to players), `#26449` (Brundir surviving Tendrils), `#26200` (Static Disruption preferring

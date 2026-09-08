@@ -23,19 +23,6 @@ public:
     bool IsActive() override;
 };
 
-// Overwhelming Power is not dispellable, so the carrier dies either way. Walking them out is what
-// stops Meltdown's 15 yd blast taking the melee with them - and every death it causes is another
-// permanent +25% on Steelbreaker.
-class IronAssemblyOverwhelmingPowerRunOutTrigger : public Trigger
-{
-public:
-    IronAssemblyOverwhelmingPowerRunOutTrigger(PlayerbotAI* ai)
-        : Trigger(ai, "iron assembly overwhelming power run out trigger")
-    {
-    }
-    bool IsActive() override;
-};
-
 class IronAssemblyLightningTendrilsTrigger : public Trigger
 {
 public:
@@ -73,19 +60,6 @@ class IronAssemblyTankAssignmentTrigger : public Trigger
 {
 public:
     IronAssemblyTankAssignmentTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly tank assignment trigger") {}
-    bool IsActive() override;
-};
-
-// Swap the empowered Steelbreaker off the tank carrying Overwhelming Power. Deliberately not driven
-// off Fusion Punch: that is a short, frequently recast DoT and swapping on it would ping-pong the
-// boss between the two tanks on every cast.
-class IronAssemblyOverwhelmingPowerSwapTrigger : public Trigger
-{
-public:
-    IronAssemblyOverwhelmingPowerSwapTrigger(PlayerbotAI* ai)
-        : Trigger(ai, "iron assembly overwhelming power swap trigger")
-    {
-    }
     bool IsActive() override;
 };
 

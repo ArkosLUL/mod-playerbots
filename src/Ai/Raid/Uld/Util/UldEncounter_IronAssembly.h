@@ -120,11 +120,10 @@ constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
 constexpr uint8 ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS = 8;
 constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
 
-// Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on. The
-// carrier dies either way - walking this far is what stops it taking the melee with them, and every
-// death it causes is another permanent +25% on Steelbreaker via Electrical Charge.
+// Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on.
+// Nothing dodges it: traced applications land for 16,300-26,800 after resists and every melee it
+// caught lived, at 39-66% health. Only the obs circle uses this.
 constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
-constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE = 20.0f;
 
 // Rune of Power pulses 64320 to everything within 5 yd, worth +50% damage, and the rune lives 60s.
 // Molgeim drops it on DoSelectLowestHpFriendly, which is a council member rather than a player, so

@@ -66,7 +66,6 @@ float IronAssemblyMovementGuardMultiplier::GetValue(Action* action)
         "iron assembly overload action",
         "iron assembly lightning tendrils action",
         "iron assembly rune of death action",
-        "iron assembly overwhelming power run out action",
         "iron assembly rune of power soak action",
         "iron assembly raid position action",
         "iron assembly tank assignment action"};
@@ -98,9 +97,7 @@ float IronAssemblyChargeGuardMultiplier::GetValue(Action* action)
         if (IronAssemblyOverloadActive(brundir) || IronAssemblyTendrilsActive(brundir))
             return 0.0f;
 
-    // Meltdown rides this bot rather than a boss, so closing back onto the raid is what the run-out
-    // exists to prevent.
-    return IronAssemblyHasOverwhelmingPower(bot) ? 0.0f : 1.0f;
+    return 1.0f;
 }
 
 float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)

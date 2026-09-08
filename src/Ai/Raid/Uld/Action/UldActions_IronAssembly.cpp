@@ -84,39 +84,6 @@ void AddIronAssemblyHazards(std::vector<Position> const& centres, float clearanc
 
 }  // namespace
 
-bool IronAssemblyOverwhelmingPowerRunOutAction::Execute(Event /*event*/)
-{
-    // Everyone else is the hazard here: Meltdown is centred on this bot, so the spot to find is one
-    // far enough from the raid that the blast lands on nobody.
-    std::vector<Position> crowd;
-
-    if (Group* group = bot->GetGroup())
-    {
-        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-        {
-            Player* member = ref->GetSource();
-            if (!member || member == bot || !member->IsAlive() || member->GetMapId() != ULDUAR_MAP_ID)
-                continue;
-
-            crowd.push_back(member->GetPosition());
-        }
-    }
-
-    if (crowd.empty())
-        return false;
-
-    std::vector<HazardCircle> hazards;
-    AddIronAssemblyHazards(crowd, ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE, hazards);
-
-    Position spot;
-    if (!TryGetIronAssemblyEscapeSpot(botAI, bot, hazards, spot))
-        return false;
-
-    // MOVEMENT_FORCED: these are the kill-you hazards, so nothing generic gets to argue about it.
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
-                  false, true, MovementPriority::MOVEMENT_FORCED, true);
-}
-
 bool IronAssemblyLightningTendrilsAction::Execute(Event /*event*/)
 {
     Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
@@ -204,9 +171,21 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
 
+    // Both ranked tanks share the empowered Steelbreaker, so something has to say which of them
+    // holds him. Whoever is carrying Overwhelming Power keeps him until Meltdown kills him: the buff
+    // kills its target either way and the next cast lands a second later on whoever inherited, so an
+    // early taunt saves nobody and only moves the boss. The off-tank is already second on threat and
+    // takes over on the tick after the carrier dies - which is the same path that recovers a boss a
+    // dps has ripped at a phase transition.
+    Unit* const victim = boss->GetVictim();
+    Player* const holder = victim ? victim->ToPlayer() : nullptr;
+    bool const heldByTank =
+        holder && holder->GetGroup() == bot->GetGroup() && PlayerbotAI::IsTank(holder);
+    bool const shared = IsSteelbreakerEmpowered(botAI) && boss->GetEntry() == NPC_STEELBREAKER;
+
     // Stand, do not drag. The tank walks to its spot and the boss follows it there, which never
     // routes a boss through the ranged stack the way a dragged pull does.
-    if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
+    if (victim != bot && !(shared && heldByTank) && CastClassTaunt(botAI, boss))
         return true;
 
     Position spot;
@@ -226,21 +205,6 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
-}
-
-bool IronAssemblyOverwhelmingPowerSwapAction::Execute(Event event)
-{
-    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
-    if (!steelbreaker)
-        return false;
-
-    if (AI_VALUE(Unit*, "current target") != steelbreaker)
-        return Attack(steelbreaker);
-
-    if (steelbreaker->GetVictim() != bot)
-        return botAI->DoSpecificAction("taunt spell", event, true);
-
-    return false;
 }
 
 bool IronAssemblyShieldOfRunesAction::Execute(Event /*event*/)

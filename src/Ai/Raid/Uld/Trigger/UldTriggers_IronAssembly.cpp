@@ -22,15 +22,6 @@ bool IronAssemblyResetEncounterStateTrigger::IsActive()
     return IronAssemblyBotHasEncounterState(bot) && IronAssemblyEncounterStateIsStale(botAI);
 }
 
-bool IronAssemblyOverwhelmingPowerRunOutTrigger::IsActive()
-{
-    if (!IronAssemblyHasOverwhelmingPower(bot))
-        return false;
-
-    // Nothing to run from once the blast would land on nobody.
-    return GetNearestPlayerInRadius(bot, ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE) != nullptr;
-}
-
 bool IronAssemblyLightningTendrilsTrigger::IsActive()
 {
     Unit* brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
@@ -103,41 +94,6 @@ bool IronAssemblyTankAssignmentTrigger::IsActive()
 
     return bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) >
            ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE;
-}
-
-bool IronAssemblyOverwhelmingPowerSwapTrigger::IsActive()
-{
-    if (!IsSteelbreakerEmpowered(botAI))
-        return false;
-
-    Unit* steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
-    if (!steelbreaker)
-        return false;
-
-    // Only the two designated swap partners (main tank + first assist tank) trade the boss.
-    bool const isMainTank = botAI->IsMainTank(bot);
-    bool const isFirstAssistTank = botAI->IsAssistTankOfIndex(bot, 0);
-    if (!isMainTank && !isFirstAssistTank)
-        return false;
-
-    // bot must be the off-tank (not the one currently holding the boss).
-    Unit* activeTank = steelbreaker->GetVictim();
-    if (!activeTank || activeTank == bot)
-        return false;
-
-    Player* activeTankPlayer = activeTank->ToPlayer();
-    if (!activeTankPlayer)
-        return false;
-
-    bool const partnerIsSwapTank = isMainTank ? PlayerbotAI::IsAssistTankOfIndex(activeTankPlayer, 0)
-                                              : PlayerbotAI::IsMainTank(activeTankPlayer);
-    if (!partnerIsSwapTank)
-        return false;
-
-    if (IronAssemblyHasOverwhelmingPower(bot))
-        return false;
-
-    return IronAssemblyHasOverwhelmingPower(activeTank);
 }
 
 bool IronAssemblyShieldOfRunesTrigger::IsActive()

@@ -19,16 +19,6 @@ public:
     bool Execute(Event event) override;
 };
 
-class IronAssemblyOverwhelmingPowerRunOutAction : public MovementAction
-{
-public:
-    IronAssemblyOverwhelmingPowerRunOutAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "iron assembly overwhelming power run out action")
-    {
-    }
-    bool Execute(Event event) override;
-};
-
 class IronAssemblyLightningTendrilsAction : public MovementAction
 {
 public:
@@ -72,16 +62,6 @@ public:
 
 private:
     bool _spotReached = false;
-};
-
-class IronAssemblyOverwhelmingPowerSwapAction : public AttackAction
-{
-public:
-    IronAssemblyOverwhelmingPowerSwapAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, "iron assembly overwhelming power swap action")
-    {
-    }
-    bool Execute(Event event) override;
 };
 
 class IronAssemblyShieldOfRunesAction : public Action

@@ -34,13 +34,11 @@ public:
         creators["razorscale fire resistance trigger"] = &RaidUlduarTriggerContext::razorscale_fire_resistance_trigger;
         creators["ignis fire resistance trigger"] = &RaidUlduarTriggerContext::ignis_fire_resistance_trigger;
         creators["iron assembly reset encounter state trigger"] = &RaidUlduarTriggerContext::iron_assembly_reset_encounter_state_trigger;
-        creators["iron assembly overwhelming power run out trigger"] = &RaidUlduarTriggerContext::iron_assembly_overwhelming_power_run_out_trigger;
         creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
         creators["iron assembly overload trigger"] = &RaidUlduarTriggerContext::iron_assembly_overload_trigger;
         creators["iron assembly rune of death trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_death_trigger;
         creators["iron assembly interrupt trigger"] = &RaidUlduarTriggerContext::iron_assembly_interrupt_trigger;
         creators["iron assembly tank assignment trigger"] = &RaidUlduarTriggerContext::iron_assembly_tank_assignment_trigger;
-        creators["iron assembly overwhelming power swap trigger"] = &RaidUlduarTriggerContext::iron_assembly_overwhelming_power_swap_trigger;
         creators["iron assembly shield of runes trigger"] = &RaidUlduarTriggerContext::iron_assembly_shield_of_runes_trigger;
         creators["iron assembly fusion punch dispel trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_dispel_trigger;
         creators["iron assembly redirect threat trigger"] = &RaidUlduarTriggerContext::iron_assembly_redirect_threat_trigger;
@@ -222,13 +220,11 @@ private:
     static Trigger* razorscale_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "razorscale"); }
     static Trigger* ignis_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); }
     static Trigger* iron_assembly_reset_encounter_state_trigger(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateTrigger(ai); }
-    static Trigger* iron_assembly_overwhelming_power_run_out_trigger(PlayerbotAI* ai) { return new IronAssemblyOverwhelmingPowerRunOutTrigger(ai); }
     static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
     static Trigger* iron_assembly_overload_trigger(PlayerbotAI* ai) { return new IronAssemblyOverloadTrigger(ai); }
     static Trigger* iron_assembly_rune_of_death_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfDeathTrigger(ai); }
     static Trigger* iron_assembly_interrupt_trigger(PlayerbotAI* ai) { return new IronAssemblyInterruptTrigger(ai); }
     static Trigger* iron_assembly_tank_assignment_trigger(PlayerbotAI* ai) { return new IronAssemblyTankAssignmentTrigger(ai); }
-    static Trigger* iron_assembly_overwhelming_power_swap_trigger(PlayerbotAI* ai) { return new IronAssemblyOverwhelmingPowerSwapTrigger(ai); }
     static Trigger* iron_assembly_shield_of_runes_trigger(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesTrigger(ai); }
     static Trigger* iron_assembly_fusion_punch_dispel_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelTrigger(ai); }
     static Trigger* iron_assembly_redirect_threat_trigger(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatTrigger(ai); }

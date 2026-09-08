@@ -177,10 +177,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // Iron Assembly
     //
     // The engine stops at the first action that returns true, so this order is a survival ranking.
-    // The Overwhelming Power carrier leads: they are already dead, and the only question left is
-    // whether Meltdown takes the melee with them - every death it causes is another permanent +25%
-    // on Steelbreaker. Then the three hazards, which are 20,000 nature, 5000 a second, and 5500 a
-    // second respectively.
+    // The three hazards lead, being 20,000 nature, 5000 a second, and 5500 a second respectively.
     //
     // The interrupt has to sit above the RAID band, because every class interrupt lives at
     // ACTION_INTERRUPT (40): Lightning Whirl reaches 100 yd and has no positional answer at all, so
@@ -191,10 +188,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "iron assembly reset encounter state trigger",
         { NextAction("iron assembly reset encounter state action", ACTION_EMERGENCY + 10) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly overwhelming power run out trigger",
-        { NextAction("iron assembly overwhelming power run out action", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode(
         "iron assembly overload trigger",
@@ -215,10 +208,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "iron assembly tank assignment trigger",
         { NextAction("iron assembly tank assignment action", ACTION_RAID + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly overwhelming power swap trigger",
-        { NextAction("iron assembly overwhelming power swap action", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
         "iron assembly shield of runes trigger",

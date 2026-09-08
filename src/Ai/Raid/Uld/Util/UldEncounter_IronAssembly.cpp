@@ -168,7 +168,8 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
     }
 
     // Meltdown is centred on the carrier rather than a boss, so there is one circle per carrier and
-    // usually none at all.
+    // usually none at all. Clearance equals the radius: nobody is asked to stay out of it, and the
+    // circle is here so a death inside the blast can be told from one beside it.
     Group* group = bot->GetGroup();
     if (!group)
         return;
@@ -180,7 +181,7 @@ void TickIronAssemblyObs(Player* bot, IronAssemblyTargets const& targets)
         if (IronAssemblyMemberCounts(member, instanceId) && IronAssemblyHasOverwhelmingPower(member))
             NoteIronAssemblyCircle(map, SPELL_MELTDOWN, member->GetPosition(),
                                    ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS,
-                                   ULDUAR_IRON_ASSEMBLY_MELTDOWN_CLEARANCE);
+                                   ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS);
     }
 }
 
