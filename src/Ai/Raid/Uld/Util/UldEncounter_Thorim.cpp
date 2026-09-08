@@ -1751,6 +1751,15 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
 
     if (role == ThorimPhase2Role::OffTank)
     {
+        // Once the swap hands him the boss he owns the anchor, same as the main tank. The ring point
+        // below is measured off the boss, so a tank towing him by it never arrives - it moves with
+        // every step, which is what walked Thorim 35 yd into the ranged camp.
+        if (boss->GetVictim() == bot)
+        {
+            position = ULDUAR_THORIM_PHASE2_TANK_SPOT;
+            return true;
+        }
+
         // Just off the main tank's bearing: inside taunt range for the Unbalancing Strike swap, and
         // deliberately not rotated for Lightning Charge - moving a tank drags the boss.
         float const bearing = Position::NormalizeOrientation(RingAnchorBearing(boss) +

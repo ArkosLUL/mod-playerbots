@@ -22,6 +22,15 @@ public:
     bool IsActive() override;
 };
 
+// Only ever true for one bot at a time. Two tanks both answering it is the ping-pong that walks the
+// boss across the arena, so a tank already holding him hands the trade to the swap node instead.
+class ThorimTankPickupTrigger : public Trigger
+{
+public:
+    ThorimTankPickupTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim tank pickup trigger") {}
+    bool IsActive() override;
+};
+
 class ThorimDpsPriorityTrigger : public Trigger
 {
 public:

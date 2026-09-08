@@ -498,6 +498,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("thorim unbalancing strike swap action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
+        "thorim tank pickup trigger",
+        { NextAction("thorim tank pickup action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
         "thorim dps priority trigger",
         { NextAction("thorim dps priority action", ACTION_RAID) }));
 

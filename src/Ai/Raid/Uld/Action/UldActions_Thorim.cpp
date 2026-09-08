@@ -418,7 +418,7 @@ bool ThorimUnbalancingStrikeSwapAction::isUseful()
     return thorimUnbalancingStrikeSwapTrigger.IsActive();
 }
 
-bool ThorimUnbalancingStrikeSwapAction::Execute(Event event)
+bool ThorimTakeBossAction::Execute(Event event)
 {
     Unit* boss = GetThorim(botAI);
     if (!boss || !boss->IsAlive())
@@ -431,4 +431,10 @@ bool ThorimUnbalancingStrikeSwapAction::Execute(Event event)
         return botAI->DoSpecificAction("taunt spell", event, true);
 
     return false;
+}
+
+bool ThorimTankPickupAction::isUseful()
+{
+    ThorimTankPickupTrigger thorimTankPickupTrigger(botAI);
+    return thorimTankPickupTrigger.IsActive();
 }

@@ -20,12 +20,35 @@ public:
     bool isUseful() override;
 };
 
-class ThorimUnbalancingStrikeSwapAction : public AttackAction
+// Both tank nodes want the same two things: be on the boss, then pull him off whoever has him.
+class ThorimTakeBossAction : public AttackAction
 {
 public:
-    ThorimUnbalancingStrikeSwapAction(PlayerbotAI* ai) : AttackAction(ai, "thorim unbalancing strike swap action") {}
+    ThorimTakeBossAction(PlayerbotAI* ai, std::string const name) : AttackAction(ai, name) {}
 
     bool Execute(Event event) override;
+};
+
+class ThorimUnbalancingStrikeSwapAction : public ThorimTakeBossAction
+{
+public:
+    ThorimUnbalancingStrikeSwapAction(PlayerbotAI* ai)
+        : ThorimTakeBossAction(ai, "thorim unbalancing strike swap action")
+    {
+    }
+
+    bool isUseful() override;
+};
+
+// The phase change hands the boss to whoever he happens to look at, and nothing else in the encounter
+// puts a tank on him: the target guard lets anything through once he is off the balcony, so the tank
+// branch of the dps picker can never fire, and phase 2 positioning wants him already tanked before it
+// will walk him anywhere. Without this the raid spent 15 s watching him eat the ranged camp.
+class ThorimTankPickupAction : public ThorimTakeBossAction
+{
+public:
+    ThorimTankPickupAction(PlayerbotAI* ai) : ThorimTakeBossAction(ai, "thorim tank pickup action") {}
+
     bool isUseful() override;
 };
 

@@ -49,10 +49,12 @@ bool ThorimDpsPriorityTrigger::IsActive()
     if (botAI->IsHeal(bot))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
-    // Same for a tank, and for the same reason: "tank assist" keeps it on whatever is swinging at the
-    // raid, ThorimDisableAutomaticTargetingMultiplier deliberately leaves that action alone, and two
-    // live pickers on one bot is the oscillation this node exists to end.
-    if (botAI->IsTank(bot))
+    // Same for a tank in phase 1: "tank assist" keeps it on whatever is swinging at the raid,
+    // ThorimDisableAutomaticTargetingMultiplier leaves that action alone there, and two live pickers
+    // on one bot is the oscillation this node exists to end. Phase 2 mutes tank assist instead, so
+    // the tank steers off this like everybody else - without it an off-tank waiting to swap has no
+    // picker at all and sits on whatever add it held when the boss dropped.
+    if (botAI->IsTank(bot) && !ThorimPhase2Active(botAI))
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
     if (currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget))
@@ -167,12 +169,14 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     if (!TryGetThorimPhase2Spot(botAI, bot, role, spot))
         return false;
 
-    if (role == ThorimPhase2Role::MainTank)
-    {
-        // Only the tank actually holding the boss walks him south; a second one would drag him back.
-        Unit* boss = GetThorim(botAI);
-        return boss && boss->GetVictim() == bot && bot->GetDistance(spot) > 1.0f;
-    }
+    Unit* boss = GetThorim(botAI);
+    bool const holdsBoss = boss && boss->GetVictim() == bot;
+
+    // Whoever has him walks him to the anchor, and only that one; a second tank would drag him back.
+    // The off-tank counts here because his own ring point is measured off the boss, so towing him from
+    // that has the spot walking away as fast as he chases it and the pair drift across the room.
+    if (role == ThorimPhase2Role::MainTank || (role == ThorimPhase2Role::OffTank && holdsBoss))
+        return holdsBoss && bot->GetDistance(spot) > 1.0f;
 
     if (role == ThorimPhase2Role::Ranged)
         return bot->GetDistance(spot) > 1.0f;
@@ -299,9 +303,64 @@ bool ThorimUnbalancingStrikeSwapTrigger::IsActive()
     return activeTank->HasAura(SPELL_UNBALANCING_STRIKE);
 }
 
+bool ThorimTankPickupTrigger::IsActive()
+{
+    if (!ThorimPhase2Active(botAI))
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
+        return false;
+
+    if (!boss->IsAlive() || !boss->IsHostileTo(bot))
+        return false;
+
+    // Nothing to reach from up there, and the walk back is the whole corridor. The balcony node
+    // drops the bot first, same as the phase 2 spot does.
+    if (bot->GetPositionZ() > ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+        return false;
+
+    Unit* victim = boss->GetVictim();
+    if (victim == bot)
+        return false;
+
+    // A tank already has him, so this is the swap node's call from here. Answering anyway is the
+    // second taunter that drags him back and forth.
+    if (Player* holder = victim ? victim->ToPlayer() : nullptr)
+        if (PlayerbotAI::IsTank(holder))
+            return false;
+
+    ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
+    if (role == ThorimPhase2Role::MainTank)
+        return true;
+
+    if (role != ThorimPhase2Role::OffTank)
+        return false;
+
+    // Off-tank only covers when there is no main tank left to do it - he is the corridor tank and
+    // still running back at the phase change, and two of them answering is the ping-pong again.
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    ObjectGuid const mainTank = PlayerbotAI::GetMainTankGuid(group);
+    if (mainTank.IsEmpty())
+        return true;
+
+    Player* tank = ObjectAccessor::FindPlayer(mainTank);
+    return !tank || !tank->IsAlive() || !NearThorimEncounter(tank);
+}
+
 bool ThorimSifBlizzardTrigger::IsActive()
 {
     if (!IsThorimHardModeActive(botAI))
+        return false;
+
+    // Whoever is holding Thorim stands in it. Moving that bot moves the boss, and the anchor is the
+    // only thing keeping the melee pile clear of the ranged camp - Blizzard cost the two tanks 36k
+    // across a whole pull, against 11-38k from one swing of the boss they would be towing.
+    Unit* boss = GetThorim(botAI);
+    if (boss && boss->GetVictim() == bot)
         return false;
 
     TooCloseToCreatureTrigger tooCloseToBlizzard(botAI);

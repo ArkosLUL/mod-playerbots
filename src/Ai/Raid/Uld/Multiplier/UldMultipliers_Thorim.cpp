@@ -105,19 +105,27 @@ float ThorimDisableAutomaticTargetingMultiplier::GetValue(Action* action)
     if (!action || botAI->GetState() != BOT_STATE_COMBAT)
         return 1.0f;
 
-    // TankAssistAction is deliberately not in scope, even though ThorimIsTargetSelectionAction covers
-    // it: the encounter has no tank-targeting node to put in its place, and a tank steered onto the
-    // ranged pick is worse than a tank on whatever is currently hitting the raid.
+    // Phase 2 is the only time there is a tank-targeting node to put in its place. Everywhere else
+    // "tank assist" holds whatever is swinging at the raid, which beats steering a tank onto the
+    // ranged pick, so it stays out of scope and so does the tank itself.
+    bool const phase2 = ThorimPhase2Active(botAI);
+
     if (!dynamic_cast<DpsAssistAction*>(action) && !dynamic_cast<DpsAoeAction*>(action) &&
         !dynamic_cast<AggressiveTargetAction*>(action) && !dynamic_cast<AttackAnythingAction*>(action) &&
-        !dynamic_cast<AttackLeastHpTargetAction*>(action))
+        !dynamic_cast<AttackLeastHpTargetAction*>(action) &&
+        !(phase2 && dynamic_cast<TankAssistAction*>(action)))
         return 1.0f;
 
-    // The two roles the picker does not steer. A healer's target drives its wand and its offensive
-    // dispels, and the trigger leaves it alone for that reason, so taking the generic picker away too
-    // would leave it with nothing to hold.
-    if (botAI->IsHeal(bot) || botAI->IsTank(bot))
+    // A healer's target drives its wand and its offensive dispels, and the trigger leaves it alone for
+    // that reason, so taking the generic picker away too would leave it with nothing to hold.
+    if (botAI->IsHeal(bot))
         return 1.0f;
+
+    // In phase 2 the pickup node owns the tank's target and there is one thing left alive worth
+    // hitting. Letting "tank assist" keep voting here is what held Bulwark on a Warbringer for the
+    // first 30 s of the phase while Thorim ate the ranged camp.
+    if (botAI->IsTank(bot))
+        return phase2 ? 0.0f : 1.0f;
 
     // Inside the encounter the picker is the only target source, so nothing from it means nothing
     // legal to hit and standing still is the right answer. Releasing the generic pickers here instead
