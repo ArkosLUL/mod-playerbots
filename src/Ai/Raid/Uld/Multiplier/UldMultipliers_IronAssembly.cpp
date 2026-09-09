@@ -100,12 +100,36 @@ float IronAssemblyChargeGuardMultiplier::GetValue(Action* action)
     return 1.0f;
 }
 
+float IronAssemblyDisableTankFaceMultiplier::GetValue(Action* action)
+{
+    // Cheap gate first: this only ever has an opinion about the one action, and the room test inside
+    // IronAssemblyFormationActive is two float compares for every bot elsewhere in Ulduar.
+    if (!dynamic_cast<TankFaceAction*>(action))
+        return 1.0f;
+
+    if (!IronAssemblyFormationActive(botAI))
+        return 1.0f;
+
+    // Only a tank holding an assignment, which is the one that has a spot to be pulled off.
+    return IronAssemblyAssignedBoss(botAI, bot) ? 0.0f : 1.0f;
+}
+
 float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
 {
     if (!IsIronAssemblyHardModeActive(botAI) || !IronAssemblyFormationActive(botAI))
         return 1.0f;
 
-    if (!IsDpsCooldownAction(bot, action))
+    // Both predicates, because each catches what the other misses. IsDpsCooldownAction is a
+    // dynamic_cast chain with no case for a potion, a tinker or any priest cooldown, and its racial
+    // branch keys on the bot's race while RacialsStrategy arms on HasSpell - the bots here carry
+    // Blood Fury and Berserking as Humans, Dwarves, Night Elves and Draenei, so that branch can never
+    // match. Traced, one pull spent 17 potions, 69 tinkers, 14 Blood Furies and both priest cooldowns
+    // on Brundir and Molgeim. The name registry has all of those; it is missing nine cooldowns the
+    // cast chain does have, so neither alone is enough. IsDps guards the name branch to keep today's
+    // exclusion of healers and tanks - Shadowfiend is a healer's mana, not a burst window.
+    bool const burst = IsDpsCooldownAction(bot, action) ||
+                       (PlayerbotAI::IsDps(bot) && IsBurstCooldownAction(action->getName()));
+    if (!burst)
         return 1.0f;
 
     // Released the moment Steelbreaker is the last one standing. Under the normal order he dies first

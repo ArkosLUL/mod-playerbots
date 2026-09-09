@@ -322,6 +322,14 @@ bool IronAssemblySetDpsPriorityAction::Execute(Event /*event*/)
     if (!focus)
         return false;
 
+    // Every tick, not only on a switch: PetAttackAction's node is commented out globally, so a pet
+    // holds whatever it first latched onto and never follows the kill order. Traced, two pets spent
+    // the whole Molgeim phase on Steelbreaker - 124 of 958 pet casts on the wrong member, and in hard
+    // mode that damage is not just misplaced, Molgeim's death hands it straight back. The call is
+    // above the early return because the early return is the common case; it no-ops when the pet is
+    // already there.
+    CommandPetAttack(botAI, focus);
+
     // Returning false once the bot is already on the right member is what lets the lower nodes run:
     // the engine ends the tick at the first action that succeeds.
     if (AI_VALUE(Unit*, "current target") == focus)

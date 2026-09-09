@@ -521,9 +521,8 @@ static void GatherIronAssemblyRunesOfPower(Player* bot, std::vector<Position>& r
     runes.insert(runes.end(), found.begin(), found.end());
 }
 
-bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position)
+bool TryGetIronAssemblyBossTankSpot(Player* bot, Unit* boss, Position& position)
 {
-    Unit* boss = IronAssemblyAssignedBoss(botAI, bot);
     if (!boss)
         return false;
 
@@ -582,6 +581,11 @@ bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& posit
     // Nothing on the ring clears it, which takes runes on both sides at once. Hold the designed spot:
     // a boss keeping the buff costs the raid less than a tank parked somewhere nobody planned for.
     return true;
+}
+
+bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position)
+{
+    return TryGetIronAssemblyBossTankSpot(bot, IronAssemblyAssignedBoss(botAI, bot), position);
 }
 
 // What pushed the raid off its stack point, for the ironassembly.spot label.
@@ -776,13 +780,27 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(assignment->second) /
                           static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS);
 
-    // The ring rides the displaced centre, so a hazard moves the whole formation rather than leaving
-    // half the slots inside it.
-    how = IronAssemblySpotLabel(shift, "spread", "spread-rune", "spread-overload");
-    position =
-        Position(stack.GetPositionX() + std::cos(bearing) * ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS,
-                 stack.GetPositionY() + std::sin(bearing) * ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS,
-                 stack.GetPositionZ());
+    // Centred on Steelbreaker's spot rather than the stack, because Meltdown goes off on whoever is
+    // tanking him and a ring built round the stack runs its near arc 6.6 yd from that. It does not
+    // ride the stack displacement any more: both bosses that displacement dodges are dead by this
+    // phase, and a rune outliving Molgeim is left to the per-bot escape, which is the only thing
+    // melee have ever had.
+    Position centre = stack;
+    float ringRadius = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS;
+    Position steelbreakerSpot;
+    bool const onBoss = TryGetIronAssemblyBossTankSpot(
+        bot, GetIronAssemblyMember(botAI, NPC_STEELBREAKER), steelbreakerSpot);
+    if (onBoss)
+    {
+        centre = steelbreakerSpot;
+        ringRadius = ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS;
+    }
+
+    how = onBoss ? "spread"
+                 : IronAssemblySpotLabel(shift, "spread", "spread-rune", "spread-overload");
+    position = Position(centre.GetPositionX() + std::cos(bearing) * ringRadius,
+                        centre.GetPositionY() + std::sin(bearing) * ringRadius,
+                        centre.GetPositionZ());
     return true;
 }
 

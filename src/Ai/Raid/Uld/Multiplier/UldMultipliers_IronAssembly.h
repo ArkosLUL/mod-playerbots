@@ -48,6 +48,18 @@ public:
     float GetValue(Action* action) override;
 };
 
+// The tank spot decides where a tank stands here, and tank face is a second mover with an opinion of
+// its own at the same movement priority. Left alone the two alternate every second between the
+// designed spot and a point 6.8 yd nearer the raid - 45 to 57 flips and 385 to 515 yd of wandering
+// destination in one Steelbreaker phase - which also drags the Meltdown blast in over the ranged.
+// Facing is untouched: set facing is a separate node.
+class IronAssemblyDisableTankFaceMultiplier : public Multiplier
+{
+public:
+    IronAssemblyDisableTankFaceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly disable tank face") {}
+    float GetValue(Action* action) override;
+};
+
 // Hard mode only, where the kill order saves Steelbreaker for last. Everything before him is spent on
 // one shared health pool, so burst held back loses the raid nothing, and the phase it is held for is
 // the one that kills them: Supercharge and then Electrical Charge compound on the survivor, and both

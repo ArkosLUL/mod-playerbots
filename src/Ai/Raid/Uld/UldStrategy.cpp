@@ -887,6 +887,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new IronAssemblyDisableAutomaticTargetingMultiplier(botAI));
     multipliers.push_back(new IronAssemblyMovementGuardMultiplier(botAI));
     multipliers.push_back(new IronAssemblyChargeGuardMultiplier(botAI));
+    multipliers.push_back(new IronAssemblyDisableTankFaceMultiplier(botAI));
     multipliers.push_back(new IronAssemblyHoldDpsCooldownsMultiplier(botAI));
 
     // Thorim keeps a bailing melee out of the Runic Barrier damage shield, picks every non-tank

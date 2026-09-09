@@ -120,9 +120,11 @@ constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
 constexpr uint8 ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_HEADINGS = 8;
 constexpr float ULDUAR_IRON_ASSEMBLY_STACK_SHIFT_RADIUS = 25.0f;
 
-// Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on.
-// Nothing dodges it: traced applications land for 16,300-26,800 after resists and every melee it
-// caught lived, at 39-66% health. Only the obs circle uses this.
+// Meltdown 61889 is 29,250 nature in 15 yd, centred on whoever Overwhelming Power expires on. The
+// carrier is instakilled and melee stand in it by definition, so nobody is asked to dodge - traced
+// applications land for 3,600-26,800 after resists and everyone caught but the carrier lived, at
+// 39-100% health. The ranged ring is sized off this, and the obs circle tells a death inside the
+// blast from one beside it.
 constexpr float ULDUAR_IRON_ASSEMBLY_MELTDOWN_RADIUS = 15.0f;
 
 // Rune of Power pulses 64320 to everything within 5 yd, worth +50% damage, and the rune lives 60s.
@@ -175,10 +177,18 @@ constexpr float ULDUAR_IRON_ASSEMBLY_TANK_SPOT_TOLERANCE = 4.0f;
 // Static Disruption 61912/63494 is 5000 nature in 6 yd plus +75% nature damage taken in 5, and it
 // picks a target beyond 10 yd - so it is a ranged and healer problem, never a melee one. It only
 // exists from Steelbreaker's phase 2, which the normal kill order never reaches, so this ring is
-// hard mode only and everyone stacks otherwise. 16 slots at 18 yd sit 7.0 yd apart and none of them
-// lands further than 29.4 yd from Steelbreaker's spot, inside caster range.
+// hard mode only and everyone stacks otherwise. This radius is the fallback, used when the ring
+// cannot be built on Steelbreaker himself.
 constexpr float ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS = 18.0f;
 constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS = 16;
+
+// The ring the raid actually stands on, centred on Steelbreaker's tank spot so every slot clears
+// Meltdown by 7 yd. Centred on the stack point instead the two are 11.4 yd apart and five of the
+// sixteen slots sit inside the 15 yd blast - traced, that caught the same five healers and ranged on
+// every cast. 24 is the ceiling, not the target: navprobe on the bot filter settles 21, 22 and 23 on
+// the floor at all 16 headings from every bearing the tank spot can shift to, while 24 drops the
+// 135 degree slot into a hole at Z -438. Slots sit 8.6 yd apart here, up from 7.0.
+constexpr float ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS = 22.0f;
 
 // Overload, Lightning Tendrils and Meltdown have no world object behind them, so a trace can only
 // know their geometry if the encounter writes it. RaidObs::NoteHazard emits on every call, so this
@@ -230,6 +240,10 @@ Unit* IronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot);
 // Rotated off the designed bearing when his own boss is standing in a Rune of Power, which is the
 // whole of the answer to that rune - there is no second node pushing the boss around.
 bool TryGetIronAssemblyTankSpot(PlayerbotAI* botAI, Player* bot, Position& position);
+
+// The same spot for a named boss rather than the caller's own assignment, so the ranged ring can be
+// built on Steelbreaker's without a tank having to exist.
+bool TryGetIronAssemblyBossTankSpot(Player* bot, Unit* boss, Position& position);
 
 // Where ranged and healers stand. Stacked normally; on the hard-mode spread ring once Steelbreaker
 // is empowered, because Static Disruption only exists from his phase 2.
