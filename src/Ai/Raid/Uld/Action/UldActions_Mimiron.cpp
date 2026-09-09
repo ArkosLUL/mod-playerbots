@@ -85,6 +85,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedFire = 0;
     uint32 refusedBomb = 0;
     uint32 refusedBurst = 0;
+    uint32 refusedMove = 0;
 
     // A bot with a cast in flight cannot be moved at all: PointMovementGenerator discards the spline
     // outright for anything IsMovementPreventedByCasting, and MoveTo still reports success and stamps
@@ -92,6 +93,17 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     // hazards that kill do this - the mine dodge would rather keep its cast than avoid 9000 damage.
     if (interrupt)
         bot->CastStop();
+
+    // Once for the fan, because it does not depend on the destination: a bot inside an earlier leg
+    // refuses all 44 candidates identically, and finding that out by screening 44 of them against a
+    // 50 to 60 node fire field is the expensive way to learn nothing. IsWaitingForLastMove wants a
+    // strictly higher priority, so a leg issued at this one blocks every retry until it expires.
+    UpdateMovementState();
+    if (!IsMovingAllowed() || IsWaitingForLastMove(priority))
+    {
+        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 1);
+        return false;
+    }
 
     float const speed = bot->GetSpeed(MOVE_RUN);
     float const travel = speed > 0.0f ? distance / speed : 0.0f;
@@ -181,13 +193,19 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
-            if (MoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority))
+            if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
+                RaidObs::MoveOutcome::Issued)
             {
                 float const taken = sign * delta;
                 NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone, refusedFire,
-                                refusedBomb, refusedBurst);
+                                refusedBomb, refusedBurst, refusedMove);
                 return true;
             }
+
+            // No path, or the same destination as the last leg. Counted rather than dropped: a fan
+            // the mover emptied and a fan the hazards emptied are the same silence otherwise, and
+            // reading the second for the first is what hid a dead fire dodge for two days.
+            ++refusedMove;
         }
     }
 
@@ -196,12 +214,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     if (!fallbackUnfiltered)
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedBurst);
+                        refusedBomb, refusedBurst, refusedMove);
         return false;
     }
 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                    refusedBomb, refusedBurst);
+                    refusedBomb, refusedBurst, refusedMove);
 
     if (fallbackFrom)
         return MoveAway(fallbackFrom, distance);
@@ -215,7 +233,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 // two outcomes where no bearing won at all.
 void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
                                         uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
-                                        uint32 refusedFire, uint32 refusedBomb, uint32 refusedBurst)
+                                        uint32 refusedFire, uint32 refusedBomb, uint32 refusedBurst,
+                                        uint32 refusedMove)
 {
     if (!RaidObs::Active())
         return;
@@ -224,9 +243,10 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
     if (taken)
         snprintf(bearing, sizeof(bearing), " %+.0f", *taken * 180.0f / static_cast<float>(M_PI));
 
-    char line[144];
-    snprintf(line, sizeof(line), "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u)", what, outcome,
-             bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb, refusedBurst);
+    char line[176];
+    snprintf(line, sizeof(line), "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u move%u)", what,
+             outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb,
+             refusedBurst, refusedMove);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
@@ -279,7 +299,7 @@ bool MimironResetEncounterStateAction::Execute(Event /*event*/)
 
 bool MimironPhase1PositioningAction::Execute(Event /*event*/)
 {
-    SET_AI_VALUE(float, "disperse distance", ULDUAR_MIMIRON_DISPERSE_DISTANCE);
+    SET_AI_VALUE(float, "disperse distance", GetMimironPhase1DisperseDistance(botAI));
 
     // Never claims the tick. Writing the value is all this does, and the engine stops a pass at the
     // first action returning true - at ACTION_RAID that would be every cast and heal the bot owns.
@@ -457,11 +477,9 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
         return false;
 
     // Ten mines land eight seconds after every Shock Blast, and Rocket Strike markers sit on the
-    // ring for five. Nothing in pathing knows about either, so holding beats walking into them - except
-    // for the tank, whose spot is under the mech that laid them, and for the handover lap, which has
-    // already swept its own waypoint and must never hand the tick back.
-    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironLapSlot(botAI, bot) &&
-        !IsMimironSpotSafe(bot, slot))
+    // ring for five. Nothing in pathing knows about either, so holding beats walking into them -
+    // except for the tank, whose spot is under the mech that laid them.
+    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironSpotSafe(bot, slot))
         return false;
 
     return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(),
@@ -702,8 +720,15 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
         char what[16];
         snprintf(what, sizeof(what), "flames+%.0f", step);
 
-        if (MoveAwayClearOfMines(centre, ULDUAR_MIMIRON_FLAMES_RADIUS + spread + step,
-                                 MovementPriority::MOVEMENT_COMBAT, last, true, what))
+        // FORCED, like every other hazard here. At MOVEMENT_COMBAT it tied with the ranged
+        // formation, and IsWaitingForLastMove wants a strictly higher priority, so a formation leg
+        // blocked the dodge for its whole duration - 1249 moves refused against 387 issued, and the
+        // bot stood in the fire for all of them. Capped because a FORCED leg blocks the Rapid Burst
+        // and Frost Bomb dodges in turn, and Rapid Burst has no telegraph to stand down for.
+        float const hop = std::min(ULDUAR_MIMIRON_FLAMES_RADIUS + spread + step,
+                                   ULDUAR_MIMIRON_FLAMES_MAX_HOP);
+
+        if (MoveAwayClearOfMines(centre, hop, MovementPriority::MOVEMENT_FORCED, last, true, what))
             return true;
     }
 

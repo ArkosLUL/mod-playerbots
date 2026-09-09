@@ -171,6 +171,12 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   Emergency dodges want `MOVEMENT_FORCED` — and two of those in one encounter then deadlock each
   other, with no band above to escape into, so precedence between them has to be settled at the
   multiplier layer instead.
+
+  It also hides from the caller's own log. `MoveTo` collapses every `RaidObs::MoveOutcome` into one
+  `bool`, so code that records *why* it gave up — a dodge fan noting which hazard vetoed each bearing
+  — reports a locked bot as "every bearing was hazardous". Count what `TryMoveTo` hands back too.
+  Mimiron's fire dodge read as a saturated arena for two days on **1,249 locked moves against 387
+  issued**.
 - **A registered POINT generator does not mean the unit is moving.**
   `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
   `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it

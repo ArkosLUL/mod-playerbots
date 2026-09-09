@@ -97,9 +97,9 @@ bool MimironPhase1PositioningTrigger::IsActive()
         return false;
 
     // A latch, not a state test: the generic movement layer resets "disperse distance" whenever it
-    // rebuilds a formation, so this node has to re-assert it. Compare the constant the action writes,
+    // rebuilds a formation, so this node has to re-assert it. Both sides go through one accessor,
     // never a literal - drift between the two leaves the trigger permanently active.
-    return AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_DISPERSE_DISTANCE;
+    return AI_VALUE(float, "disperse distance") != GetMimironPhase1DisperseDistance(botAI);
 }
 
 bool MimironP3Wx2LaserBarrageTrigger::IsActive()
@@ -137,11 +137,9 @@ bool MimironArcSpreadTrigger::IsActive()
 
     // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
     // ring itself, so a bot that dodged one is standing clear while its slot still has the marker
-    // burning on it - checking the bot's own surroundings would send it straight back. The lap is
-    // exempt for the same reason the tank anchor is: it has already swept its own waypoint, and a
-    // handover is the one window where refusing hands the tick to follow.
-    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironLapSlot(botAI, bot) &&
-        !IsMimironSpotSafe(bot, slot))
+    // burning on it - checking the bot's own surroundings would send it straight back. The tank
+    // anchor is exempt: its spot sits under the mech that laid the mines.
+    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironSpotSafe(bot, slot))
         return false;
 
     // Do not walk a bot back into a live Rapid Burst. Tested on the slot rather than through
@@ -285,6 +283,14 @@ bool MimironBombBotTrigger::IsActive()
 bool MimironDodgeFlamesTrigger::IsActive()
 {
     if (!IsMimironHardModeActive(botAI))
+        return false;
+
+    // Stand down for the barrage. The dodge issues at MOVEMENT_FORCED, so a fire leg started here
+    // would hold the movement lock against the one cone that kills in a single tick, and a node
+    // ticks about 3100 against a 22000 pool. Rapid Burst gets no equivalent - it lands with no
+    // warning at all, which is what ULDUAR_MIMIRON_FLAMES_MAX_HOP is for instead.
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (barrage.IsActive())
         return false;
 
     // The fire nodes are non-selectable trigger creatures, so they never show up in attack-target

@@ -130,19 +130,27 @@ constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
 // Phase 3 staging fan, ranged and healers only. Bomb Bots blast 5 yd, so no two bots may share one
 // and 6 keeps a detonation to a single victim.
 //
-// Invariant, and it is load-bearing: this must stay above ULDUAR_MIMIRON_DISPERSE_DISTANCE, which
-// must stay above Napalm Shell's 5 yd. Equal to it, every bot that reaches its slot is judged too
-// close by the generic unstacker and shoved off it, and the formation walks it straight back - which
-// cost ranged 13 to 17 % of their output and added 15 s to phase 1.
+// Invariant, and it is load-bearing: this must stay above whatever the phase 1 node writes as the
+// disperse distance. Equal to it, every bot that reaches its slot is judged too close by the generic
+// unstacker and shoved off it, and the formation walks it straight back - which cost ranged 13 to
+// 17 % of their output and added 15 s to phase 1.
 constexpr float ULDUAR_MIMIRON_PHASE3_SPACING = 6.0f;
 constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
 
 // What the generic unstacker is told to keep between ranged bots while the MK II is up, which is the
-// only phase Napalm Shell exists in. It splashes 5 yd, so this has to clear that; it also has to stay
-// under ULDUAR_MIMIRON_PHASE3_SPACING or the formation and the unstacker fight over every bot that
-// reaches its slot. Melee never set it - the phase 1 node is ranged-only - so they run on the
+// only phase Napalm Shell exists in. It splashes 5 yd, so this clears it; it also has to stay under
+// ULDUAR_MIMIRON_PHASE3_SPACING or the formation and the unstacker fight over every bot that reaches
+// its slot. Melee never set it - the phase 1 node is ranged-only - so they run on the
 // DisperseDistanceValue default of -1, which the unstacker rejects outright.
 constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
+
+// Firefighter replaces it, and deliberately fails to clear Napalm's 5 yd. Chains grow toward whoever
+// is nearest their head, so a raid spread over the room drags one out along every radius it occupies
+// while a raid held in one clump makes them converge and leaves the rest of the floor clear. Napalm
+// is what that costs: it splashed 1.38 victims a cast against the spread and takes more from a
+// clump. Not tighter than this, because ULDUAR_MIMIRON_SPREAD_TOLERANCE already leaves a blob about
+// 10 yd across and packing inside the splash radius buys nothing back.
+constexpr float ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE = 3.0f;
 
 // Half-width of the staging wedge. The north-east and south-east arms leave the room centre at 59
 // degrees, so only a crowded outer row reaches a bearing anything walks down, and the west arm is
@@ -172,34 +180,6 @@ constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
 // bot, each resetting a swing or a cast. Two percent is about 2.4 s of raid damage, and five bands
 // still fit inside ULDUAR_MIMIRON_PHASE4_HOLD_PCT.
 constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
-
-// Where melee and tanks wait out a phase handover. Eight yards puts them inside melee range of a
-// combat-reach 8 mech the moment it goes live. Staging only - see GetMimironSpreadSlot for why melee
-// never get a slot during a live phase.
-constexpr float ULDUAR_MIMIRON_STAGING_MELEE_RADIUS = 8.0f;
-
-// The Firefighter handover lap, replacing the ring above for as long as hard mode is declared, and
-// walked by the whole raid together - tank, melee, healers and ranged on one moving point. Nothing is
-// attackable between phases, so there is no casting range to hold and no cone to dodge, but Mimiron
-// keeps seeding fire 5 yd from three random members every 30 s and each chain then crawls toward
-// whoever is nearest it. A raid parked anywhere spends the handover setting light to the ground the
-// next mech spawns on; a raid walking the rim drags every chain out to the wall behind it and leaves
-// the middle clean. navprobe, map 603: 24/24 on mesh and flat at Z 364.314 at 35, 40 and 44 yd; 48
-// puts three east headings 3 to 6 yd off the nearest poly, so 44 is the outermost ring that holds.
-constexpr float ULDUAR_MIMIRON_HM_LAP_RADIUS = 44.0f;
-
-// Step and pause rather than a continuous walk. Chains only grow 7 yd every 5.75 s, so 1.22 yd/s is
-// all the lap has to beat, and a raid that never stops moving never heals: the handover runs about
-// even at 1900 to 4000 damage a second against the same again in healing, so a permanent walk would
-// trade the fire for a raid entering the next phase low. Ten yards then two and a half seconds still
-// averages 3 yd/s, more than double the growth.
-constexpr float ULDUAR_MIMIRON_HM_LAP_STEP = 10.0f;
-constexpr uint32 ULDUAR_MIMIRON_HM_LAP_STEP_MS = 2500;
-
-// How wide the pack is spread across the rim. Tight is free here - the only things landing during a
-// handover are the fire itself and whatever mines the last phase left - and tight is what keeps the
-// three seeds together so one stretch of wall takes them all.
-constexpr float ULDUAR_MIMIRON_HM_LAP_ARC = 20.0f * static_cast<float>(M_PI) / 180.0f;
 
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
@@ -265,11 +245,11 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest);
 // brings the boss back.
 bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot);
 
-// Whether this bot is walking the Firefighter handover lap, which is likewise not a slot it may
-// refuse. The lap screens its own waypoints as it advances, and a handover is the one window where
-// declining the tick hands it to follow at relevance 1.0 and the raid walks off after its master -
-// measured at 368 accepted follow moves against 163 for the staging ring.
-bool IsMimironLapSlot(PlayerbotAI* botAI, Player* bot);
+// What the phase 1 node writes as the generic unstacker's minimum spacing, and what its trigger
+// latches against. One accessor because the two have to agree: that trigger re-arms until the value
+// it reads back matches the one the action wrote, so a literal on either side leaves it permanently
+// active and the action then wins every tick at ACTION_RAID.
+float GetMimironPhase1DisperseDistance(PlayerbotAI* botAI);
 
 // The 20 s a Magnetic Core buys. The Aerial Command Unit is on the floor, passive, and taking +50%
 // damage, and its own UpdateAI is short-circuited for the whole aura so nothing new spawns for 25 s.
@@ -300,11 +280,11 @@ Unit* GetMimironBombBotChasing(PlayerbotAI* botAI, Player* bot);
 // then all three together, and VX-001 is the one that stays parked once they reassemble.
 Unit* GetMimironRingFocus(PlayerbotAI* botAI);
 
-// The mech to form up on when none of them is attackable yet. A defeated mech keeps
+// Which mech is coming next while none of them is attackable yet. A defeated mech keeps
 // UNIT_FLAG_NOT_SELECTABLE and the next one carries it until its phase starts, so "possible targets no
-// los" is blind for the whole handover - 47.75 s from phase 1 to 2, 24 s to phase 3, 31.8 s to phase 4.
-// Nothing else fires either, so the engine falls through to follow at relevance 1.0 and the raid trails
-// its master. A grid scan does see them, which is enough to walk everyone to the next phase in advance.
+// los" is blind for the whole handover - 47.75 s from phase 1 to 2, 24 s to phase 3, 31.8 s to phase 4
+// - and a grid scan is the only thing that sees them. Read to tell a phase 4 handover from the other
+// two, which is what puts the main tank on the chassis spot before VX-001 goes live.
 Unit* GetMimironStagingFocus(Player* bot);
 
 // Any of the three constructs actually fighting. Presence says nothing here: Leviathan MK II is a DB
@@ -364,9 +344,10 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
                               float travelSeconds);
 
 // Where this bot stands between barrages. Ranged fan out over a full ring round the room rather than
-// around VX-001, whose facing swings to whoever it last Rapid Burst. Returns false for roles this
-// does not place. Trigger and action must both call this or the two disagree about where the bot
-// belongs.
+// around VX-001, whose facing swings to whoever it last Rapid Burst. Returns false for roles this does
+// not place, and for everyone during a handover - the raid follows its master between phases, and only
+// the phase 4 main tank has a spot to hold. Trigger and action must both call this or the two disagree
+// about where the bot belongs.
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The live Rapid Burst cone, or a window that is not valid when nothing is firing. The centreline is
@@ -421,6 +402,13 @@ constexpr uint32 ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE = 2;
 // and landing on one is the half of the dodge's cost that comes back as uptime.
 constexpr float ULDUAR_MIMIRON_FLAMES_STEP_LADDER[] = {3.0f, 5.0f, 7.0f, 10.0f};
 
+// Longest leg a fire dodge may ask for, whatever the ladder and the burning cluster's own width come
+// to. The dodge issues at MOVEMENT_FORCED, so its leg holds the movement lock against the Rapid
+// Burst and Frost Bomb dodges, and Rapid Burst lands with no telegraph to stand down for - 12 yd is
+// about 1.7 s at run speed, which is what a fire hop can then cost one of those. This trades reach
+// and not safety: a shortened hop that still lands in fire is refused by the fan like any other.
+constexpr float ULDUAR_MIMIRON_FLAMES_MAX_HOP = 12.0f;
+
 // Rapid Burst 64531/64532 is a 60 degree cone, so plus or minus 30 off VX-001's facing, 100 yd deep.
 // acore_world.spell_cone says so and Spell::SelectImplicitConeTargets reads it before falling back to
 // the DBC's TARGET_UNIT_CONE_ENEMY_104 default - but that table is not trusted on its own here, since
@@ -446,5 +434,26 @@ extern const Position ULDUAR_MIMIRON_ROOM_CENTER;
 // navprobe: this point and a 12 yd fan around it are 16/16 on mesh, flat at Z 364.31.
 extern const Position ULDUAR_MIMIRON_PHASE3_STAGE;
 extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
+
+// Firefighter phase 1, 53 yd west of the room centre. Mimiron seeds fire 5 yd from three random raid
+// members every 30 s and each chain then crawls toward whoever is nearest it, so the fire ends up
+// wherever the raid stood - and the raid stands on its tank. Holding the MK II out here keeps every
+// batch off the ground VX-001 is summoned onto and phases 2 to 4 are fought on.
+//
+// navprobe map 603: 0.223 yd to the nearest poly, settles flat at Z 364.314, and rings around it are
+// 16/16 on mesh at 12 yd and 14/16 at 18 and 24, the failures all west in the raised doorway alcove.
+// 51.5 yd from Mimiron's own spawn, and he evades past 80 yd from it on every tick - that check is
+// the only leash in the encounter, the MK II has none of its own.
+extern const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
+
+// Where ranged and healers stand in Firefighter phase 1: one clump 20.2 yd off the tank spot, which
+// is past ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST, so they never take that flee at all. 51.1 yd from
+// the room centre with about 10 yd of floor behind them for a fire dodge to use.
+//
+// Five yards east of the tank spot's own x, which is not cosmetic: the mesh has a hole against the
+// west wall from y 2582 to 2591 - 3.6 to 4.8 yd off the nearest poly, with a Z that never settles -
+// and a clump placed due north of the tank spot lands in it. navprobe: 0.223 to poly, Z 364.314,
+// 12/12 on mesh at 6 yd and 11/12 at 10.
+extern const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOT;
 
 #endif
