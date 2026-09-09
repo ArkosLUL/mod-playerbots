@@ -325,22 +325,6 @@ bool ThorimRunicBarrierBailAction::Execute(Event /*event*/)
     return MoveAway(colossus, ULDUAR_THORIM_BARRIER_BAIL_DISTANCE - currentDistance);
 }
 
-bool ThorimLightningChargeAction::isUseful()
-{
-    ThorimLightningChargeTrigger thorimLightningChargeTrigger(botAI);
-    return thorimLightningChargeTrigger.IsActive();
-}
-
-bool ThorimLightningChargeAction::Execute(Event /*event*/)
-{
-    Position spot;
-    if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, spot))
-        return false;
-
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
-                  true, MovementPriority::MOVEMENT_COMBAT, true);
-}
-
 bool ThorimResetEncounterStateAction::Execute(Event /*event*/)
 {
     // Hand "follow master" back before the record of having taken it goes with the rest of the state,

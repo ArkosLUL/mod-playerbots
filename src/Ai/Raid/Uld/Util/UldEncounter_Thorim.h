@@ -123,8 +123,12 @@ constexpr float ULDUAR_THORIM_BARRIER_BAIL_DISTANCE = 14.0f;  // clear of the 9.
 constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.0f;
 constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
 
-// Five, so ten ranged and healers stand two deep instead of the three to four the old trio piled up.
-constexpr uint8 ULDUAR_THORIM_RANGED_SLOTS = 5;
+// Chain Lightning is 8 targets at 1.5x per jump, so the eighth takes about 17x the first, and it jumps
+// 8.0 yd centre to centre: spell_jump_distance overrides 64390 to 5.0 and the reach test adds both
+// combat reaches. The old five sat 8.1 yd apart at the closest, which a bot one yard off its point is
+// already inside. Six is the most the room fits at 11 yd while also clearing Sif's Blizzard loop by
+// 16 yd and the melee ring by 8, and 11 holds up with a bot off its point on either side.
+constexpr uint8 ULDUAR_THORIM_RANGED_SLOTS = 6;
 
 // The off-tank sits just off the main tank's bearing: close enough to taunt through the Unbalancing
 // Strike swap, far enough that Chain Lightning does not treat the pair as one clump.
@@ -237,21 +241,23 @@ extern const Position ULDUAR_THORIM_JUMP_END_POINT;
 // three man hit into an eight man one. The melee ring at radius 8 is walkable the whole way round,
 // the western arc on rim polys.
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
-// Five spots east of him, 23 to 30 yd out, which leaves the nearest 15 yd clear of the melee ring.
-// That clearance is the point: Chain Lightning cannot cross it, so a chain stops at whoever shares an
-// anchor instead of running the length of the raid. Tightest pair here is 8.1 yd, also over the jump.
+// Six spots east of him, 22 to 32 yd out. Three things fix that and between them leave room for no
+// more: every spot is 22 yd from the tank spot so the radius 8 melee ring cannot bridge into the camp;
+// every spot clears Sif's Blizzard loop by 16 yd; and no two are closer than 11 yd. The old five had a
+// tightest pair of 8.1 yd, which a bot one yard off its point is already inside.
+//
+// Sif's bunny is the binding one. It reaches far further in than the rim - 1894 hazard samples across
+// three traces cover x 2104-2165, y -280 to -232 at radius 8 - so a seventh point sits in her lane.
 //
 // The price is Lightning Charge, a 75 degree cone off the boss aimed at whichever of the seven orbs
 // lit up. Out here one or two cones cover each spot instead of exactly one, so it roughly doubles -
 // from 3% of phase 2 incoming, against Chain Lightning's 20 to 38.
-//
-// Sif's Blizzard bunny loops the outside of the room, so the rim belongs to her. Worst clearance on
-// these is 16.3 yd.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT;
 // Only used when Thorim's live position cannot produce a ring point, and StaticMeleeSpot only takes
 // one within 11 yd of him, so these have to sit on the radius 8 ring around the tank spot. Park him
 // somewhere else and they are dead weight.
@@ -593,7 +599,6 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
 // way and neither has a cast bar the bots can read: SPELL_THORIM_LIGHTNING_ORB_VISUAL is the 5 second
 // warning before phase 2's Lightning Charge, SPELL_THORIM_CHARGE_ORB is phase 1's 15 second field.
 Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell);
-bool ThorimLightningChargeActive(PlayerbotAI* botAI);
 
 // Where this bot should stand to be clear of the Charge Orb field, or false if it is already clear.
 // Pure, so the trigger can ask as often as it likes; the action records the answer separately.

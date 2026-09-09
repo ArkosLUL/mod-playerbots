@@ -174,7 +174,6 @@ public:
         creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
         creators["thorim runic smash trigger"] = &RaidUlduarTriggerContext::thorim_runic_smash_trigger;
         creators["thorim runic barrier bail trigger"] = &RaidUlduarTriggerContext::thorim_runic_barrier_bail_trigger;
-        creators["thorim lightning charge trigger"] = &RaidUlduarTriggerContext::thorim_lightning_charge_trigger;
         creators["thorim reset encounter state trigger"] = &RaidUlduarTriggerContext::thorim_reset_encounter_state_trigger;
         creators["thorim charged orb trigger"] = &RaidUlduarTriggerContext::thorim_charged_orb_trigger;
         creators["thorim pet leash trigger"] = &RaidUlduarTriggerContext::thorim_pet_leash_trigger;
@@ -361,7 +360,6 @@ private:
     static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
     static Trigger* thorim_runic_smash_trigger(PlayerbotAI* ai) { return new ThorimRunicSmashTrigger(ai); }
     static Trigger* thorim_runic_barrier_bail_trigger(PlayerbotAI* ai) { return new ThorimRunicBarrierBailTrigger(ai); }
-    static Trigger* thorim_lightning_charge_trigger(PlayerbotAI* ai) { return new ThorimLightningChargeTrigger(ai); }
     static Trigger* thorim_reset_encounter_state_trigger(PlayerbotAI* ai) { return new ThorimResetEncounterStateTrigger(ai); }
     static Trigger* thorim_charged_orb_trigger(PlayerbotAI* ai) { return new ThorimChargedOrbTrigger(ai); }
     static Trigger* thorim_pet_leash_trigger(PlayerbotAI* ai) { return new ThorimPetLeashTrigger(ai); }

@@ -218,27 +218,6 @@ bool ThorimRunicBarrierBailTrigger::IsActive()
     return colossus && bot->GetDistance(colossus) < ULDUAR_THORIM_BARRIER_BAIL_DISTANCE;
 }
 
-bool ThorimLightningChargeTrigger::IsActive()
-{
-    // Melee only. Both tanks hold and eat it, because moving one drags the boss and re-anchors the
-    // whole ring behind him. Ranged and healers hold too, and that one is a trade rather than a free
-    // call: the cone put 647k on them in one 191s phase 2, but stepping the whole formation out and
-    // back costs most of a 10s charge cycle in cast time, against healing that had 3.5x the margin.
-    if (GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::MeleeRing)
-        return false;
-
-    if (!ThorimLightningChargeActive(botAI))
-        return false;
-
-    Position spot;
-    if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::MeleeRing, spot))
-        return false;
-
-    // Raw distance, not the arrival latch: the dodge must not be gated by a bot that was settled on
-    // the slot the ring has just rotated away from.
-    return bot->GetDistance(spot) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
-}
-
 bool ThorimPetLeashTrigger::IsActive()
 {
     std::vector<Unit*> stray;

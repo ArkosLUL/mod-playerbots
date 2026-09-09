@@ -525,16 +525,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim sif frost nova trigger",
         { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
 
-    // Lightning Charge is ~17k instant with only the orb lighting up as warning, and it grows 10% per
-    // stack, so it outranks the two Sif nodes. The corridor smash sits below it because the two can
-    // never be live at the same time, and the barrier bail below that: it costs health, not a life.
-    triggers.push_back(new TriggerNode(
-        "thorim lightning charge trigger",
-        { NextAction("thorim lightning charge action", ACTION_RAID + 4) }));
-
-    // Charge Orb shares that rank, and can: it only ever fires while Thorim is still on the balcony,
-    // and Lightning Charge only after he has come down. 3k a second for 15s across a 32 yd circle is
-    // phase 1's largest avoidable damage source, so it has to beat the ring and the add chase both.
+    // Charge Orb: it only ever fires while Thorim is still on the balcony. 3k a second for 15s across a
+    // 32 yd circle is phase 1's largest avoidable damage source, so it has to beat the ring and the add
+    // chase both. Lightning Charge has no node of its own - the cone answer is baked into the phase 2
+    // spot, and a second mover for the same point only fought the first one at the movement gate.
     triggers.push_back(new TriggerNode(
         "thorim charged orb trigger",
         { NextAction("thorim charged orb action", ACTION_RAID + 4) }));

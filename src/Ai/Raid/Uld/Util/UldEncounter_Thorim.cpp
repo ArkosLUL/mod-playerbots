@@ -28,6 +28,7 @@
 #include <cmath>
 #include <limits>
 #include <list>
+#include <string>
 #include <vector>
 
 using namespace EncounterHelpers;
@@ -57,11 +58,12 @@ const Position ULDUAR_THORIM_BALCONY_5 = Position(2137.5f, -318.0f, 438.222f);
 const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
 const Position ULDUAR_THORIM_JUMP_END_POINT = Position(2137.8818f, -278.18942f, 419.66653f);
 const Position ULDUAR_THORIM_PHASE2_TANK_SPOT = Position(2110.7483f, -252.65265f, 419.440f);
-const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2127.0f, -269.0f, 419.789f);
-const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2132.0f, -262.0f, 419.846f);
-const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2135.0f, -270.0f, 419.845f);
-const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT = Position(2140.0f, -259.0f, 419.847f);
-const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT = Position(2125.0f, -279.0f, 419.603f);
+const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2132.75f, -252.65f, 419.775f);
+const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2121.52f, -282.25f, 419.508f);
+const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2123.05f, -270.89f, 419.701f);
+const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT = Position(2132.98f, -275.67f, 419.726f);
+const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT = Position(2131.50f, -263.69f, 419.847f);
+const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT = Position(2142.05f, -259.31f, 419.822f);
 const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT = Position(2118.75f, -252.65f, 419.596f);
 const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT = Position(2110.75f, -244.65f, 419.359f);
 const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT = Position(2110.75f, -260.65f, 419.485f);
@@ -167,9 +169,9 @@ bool TakesRangedSpot(Player* member)
 
 bool TakesMeleeSlot(Player* member)
 {
-    // A third tank has nothing to hold and is left in the ring rather than stacked on the other two.
-    return member && !TakesRangedSpot(member) && !PlayerbotAI::IsMainTank(member) &&
-           !PlayerbotAI::IsAssistTankOfIndex(member, 0);
+    // No tank, whatever its index says. A ring point is measured off the boss, so a tank standing on one
+    // orbits him instead of walking him to the anchor. A third tank waits on the off-tank bearing.
+    return member && !TakesRangedSpot(member) && !PlayerbotAI::IsTank(member);
 }
 
 // Least-loaded slot rather than first-free, so six melee land three-and-three instead of piling onto
@@ -506,7 +508,7 @@ Position const& RangedSpot(uint8 slot)
 {
     static Position const* const spots[ULDUAR_THORIM_RANGED_SLOTS] = {
         &ULDUAR_THORIM_PHASE2_RANGE1_SPOT, &ULDUAR_THORIM_PHASE2_RANGE2_SPOT, &ULDUAR_THORIM_PHASE2_RANGE3_SPOT,
-        &ULDUAR_THORIM_PHASE2_RANGE4_SPOT, &ULDUAR_THORIM_PHASE2_RANGE5_SPOT};
+        &ULDUAR_THORIM_PHASE2_RANGE4_SPOT, &ULDUAR_THORIM_PHASE2_RANGE5_SPOT, &ULDUAR_THORIM_PHASE2_RANGE6_SPOT};
 
     return *spots[std::min<uint8>(slot, ULDUAR_THORIM_RANGED_SLOTS - 1)];
 }
@@ -1658,10 +1660,39 @@ bool ThorimPhase2Active(PlayerbotAI* botAI)
     return boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 }
 
-ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot)
+static char const* ThorimRoleName(ThorimPhase2Role role)
+{
+    switch (role)
+    {
+        case ThorimPhase2Role::MainTank:
+            return "maintank";
+        case ThorimPhase2Role::OffTank:
+            return "offtank";
+        case ThorimPhase2Role::Ranged:
+            return "ranged";
+        case ThorimPhase2Role::MeleeRing:
+            return "melee";
+        default:
+            return "none";
+    }
+}
+
+static ThorimPhase2Role ResolveThorimPhase2Role(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot)
         return ThorimPhase2Role::None;
+
+    // Whoever he is swinging at owns the anchor, ahead of anything the group ordering says.
+    // GetMainTankGuid reads the raid frame's main tank flag without a tank check, so a human wearing it
+    // takes that slot and the two bot tanks fall to assist index 0 and index 1 - and index 1 used to end
+    // up in the melee ring, which is a point measured off the boss. That is a tank orbiting him at 8 yd
+    // instead of walking him anywhere, and it left him 26 yd off the anchor for a whole pull.
+    if (PlayerbotAI::IsTank(bot))
+    {
+        Unit* boss = GetThorim(botAI);
+        if (boss && boss->GetVictim() == bot)
+            return ThorimPhase2Role::MainTank;
+    }
 
     if (PlayerbotAI::IsMainTank(bot))
         return ThorimPhase2Role::MainTank;
@@ -1672,7 +1703,21 @@ ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot)
     if (TakesRangedSpot(bot))
         return ThorimPhase2Role::Ranged;
 
+    // Every other tank waits on the off-tank bearing. Never the ring, for the reason above.
+    if (PlayerbotAI::IsTank(bot))
+        return ThorimPhase2Role::OffTank;
+
     return ThorimPhase2Role::MeleeRing;
+}
+
+ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot)
+{
+    ThorimPhase2Role const role = ResolveThorimPhase2Role(botAI, bot);
+
+    // Probed here rather than at the call sites, so trigger and action cannot disagree about what was
+    // decided. NoteDerived only writes when the answer changes, so a settled raid emits nothing.
+    RaidObs::NoteDerived(bot, "thorim.p2role", ThorimRoleName(role));
+    return role;
 }
 
 bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role role, Position& position)
@@ -1763,6 +1808,14 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     float offset = 0.0f;
     LightningChargeOffset(botAI, bot, boss, bearing, offset);
 
+    // Whole degrees, so a ring that is holding writes one line for the phase. The point flipped between
+    // two bearings 144 degrees apart with the boss stationary and no orb lit, which none of the three
+    // terms below should allow, and ringBearings is the one of them that is not otherwise traced.
+    RaidObs::NoteDerived(bot, "thorim.ringspot",
+                         "slot " + std::to_string(uint32(slot)) + " bearing " +
+                             std::to_string(int32(bearing * 180.0f / float(M_PI))) + " offset " +
+                             std::to_string(int32(offset * 180.0f / float(M_PI))));
+
     if (RingPoint(bot, boss, Position::NormalizeOrientation(bearing + offset), position))
         return true;
 
@@ -1850,17 +1903,6 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
     // every rescan even when the answer had not moved.
     cachedGuid = found ? found->GetGUID() : ObjectGuid::Empty;
     return found;
-}
-
-bool ThorimLightningChargeActive(PlayerbotAI* botAI)
-{
-    Player* bot = botAI ? botAI->GetBot() : nullptr;
-    if (!bot || !ThorimPhase2Active(botAI))
-        return false;
-
-    // Just "an orb is lit" now. Which slots that cone covers is baked into the spot, and the caller
-    // already drops out on the arrive tolerance, so a bot the cone misses never leaves its slot.
-    return ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL) != nullptr;
 }
 
 bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)

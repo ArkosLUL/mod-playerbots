@@ -91,13 +91,6 @@ public:
     bool IsActive() override;
 };
 
-class ThorimLightningChargeTrigger : public Trigger
-{
-public:
-    ThorimLightningChargeTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim lightning charge trigger") {}
-    bool IsActive() override;
-};
-
 // A bot standing under the Thunder Orb Thorim has charged. The orb pulses for 15s at ~3k a second and
 // the field is far wider than it looks, so this is the largest avoidable damage source in phase 1.
 class ThorimChargedOrbTrigger : public Trigger

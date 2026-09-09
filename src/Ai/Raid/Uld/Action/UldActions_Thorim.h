@@ -127,15 +127,6 @@ public:
     bool isUseful() override;
 };
 
-class ThorimLightningChargeAction : public MovementAction
-{
-public:
-    ThorimLightningChargeAction(PlayerbotAI* ai) : MovementAction(ai, "thorim lightning charge action") {}
-
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
 // Sends a strayed pet back to the arena. Not a MovementAction: it moves the pet, not the bot, so it
 // has no business in the movement guards or the leash exemption lists.
 class ThorimPetLeashAction : public Action

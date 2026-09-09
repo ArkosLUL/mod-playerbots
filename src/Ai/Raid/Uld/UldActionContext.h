@@ -174,7 +174,6 @@ public:
         creators["thorim sif frost nova action"] = &RaidUlduarActionContext::thorim_sif_frost_nova_action;
         creators["thorim runic smash action"] = &RaidUlduarActionContext::thorim_runic_smash_action;
         creators["thorim runic barrier bail action"] = &RaidUlduarActionContext::thorim_runic_barrier_bail_action;
-        creators["thorim lightning charge action"] = &RaidUlduarActionContext::thorim_lightning_charge_action;
         creators["thorim reset encounter state action"] = &RaidUlduarActionContext::thorim_reset_encounter_state_action;
         creators["thorim charged orb action"] = &RaidUlduarActionContext::thorim_charged_orb_action;
         creators["thorim pet leash action"] = &RaidUlduarActionContext::thorim_pet_leash_action;
@@ -348,7 +347,6 @@ private:
     static Action* thorim_sif_frost_nova_action(PlayerbotAI* ai) { return new ThorimSifFrostNovaAction(ai); }
     static Action* thorim_runic_smash_action(PlayerbotAI* ai) { return new ThorimRunicSmashAction(ai); }
     static Action* thorim_runic_barrier_bail_action(PlayerbotAI* ai) { return new ThorimRunicBarrierBailAction(ai); }
-    static Action* thorim_lightning_charge_action(PlayerbotAI* ai) { return new ThorimLightningChargeAction(ai); }
     static Action* thorim_reset_encounter_state_action(PlayerbotAI* ai) { return new ThorimResetEncounterStateAction(ai); }
     static Action* thorim_charged_orb_action(PlayerbotAI* ai) { return new ThorimChargedOrbAction(ai); }
     static Action* thorim_pet_leash_action(PlayerbotAI* ai) { return new ThorimPetLeashAction(ai); }
