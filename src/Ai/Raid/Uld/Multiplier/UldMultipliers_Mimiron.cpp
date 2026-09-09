@@ -75,10 +75,15 @@ bool MimironLethalWindowActive(PlayerbotAI* botAI)
 
 float MimironChargeGuardMultiplier::GetValue(Action* action)
 {
+    if (!action)
+        return 1.0f;
+
     // Cheap gate first. Two unrelated branches for the same behaviour: the gap-closer spells are all
-    // CastReachTargetSpellAction - Charge, Intercept and both Feral Charges - while "reach melee" and
-    // "reach spell" are plain ReachTargetActions that walk the bot in without casting anything.
-    if (!dynamic_cast<CastReachTargetSpellAction*>(action) && !dynamic_cast<ReachTargetAction*>(action))
+    // CastReachTargetSpellAction - Charge, Intercept and both Feral Charges - while "reach melee" is a
+    // plain ReachTargetAction that walks the bot in without casting anything. Matched by name and not
+    // by that base, which also covers "reach spell", "reach party member to heal" and "reach pull":
+    // vetoing those strands ranged and healers out of range in the window they are needed most.
+    if (!dynamic_cast<CastReachTargetSpellAction*>(action) && action->getName() != "reach melee")
         return 1.0f;
 
     return MimironLethalWindowActive(botAI) ? 0.0f : 1.0f;

@@ -497,7 +497,17 @@ work. A bot with no slot keeps the unstacker untouched, which is every melee mid
 never had a disperse distance here anyway, since the phase 1 node is ranged-only and
 `DisperseDistanceValue` defaults to -1.
 
-**The invariant to keep:** `PHASE3_SPACING` > `DISPERSE_DISTANCE` > Napalm's 5 yd.
+**It shipped broken, and the failure is worth keeping.** `MimironPhase1PositioningTrigger` ends
+`AI_VALUE(float, "disperse distance") != 6.0f`, and that literal was left behind, so the latch never
+closed: the node returned `true` at `ACTION_RAID` every tick and the engine stops a pass there. For
+the whole of phase 1 every ranged and healer bot — the trigger is `IsRanged`-only, which is why melee
+were untouched — cast nothing whatever. Ranged output fell to **286 dps a bot from 3,487**, effective
+healing to **1,422 HPS from 9,455**, mana never moved, and the only damage left was pets'. The
+unstacker sits below `ACTION_RAID` too, so the raid packed to 4.8 yd and Napalm Shell took four bots
+in three seconds. Both pulls wiped in phase 1.
+
+**The invariant to keep:** `PHASE3_SPACING` > `DISPERSE_DISTANCE` > Napalm's 5 yd, and the trigger
+compares `ULDUAR_MIMIRON_DISPERSE_DISTANCE` rather than a literal.
 
 ## A dodge that returns false hands the tick to Charge
 
@@ -526,8 +536,10 @@ their position either: the flames dodge threw a bot 12 yd clear at `ACTION_RAID 
 lock expired after that leg's travel time, the dodge trigger went quiet, and the tick fell to
 `reach melee` at relevance **21**, which closed back onto ground the chains were crawling toward.
 Melee spent **11% of phase 1 within 5 yd of the Mk II**, against 23-33% before the dodge worked at
-all, and their median distance to it went 6.7-8.4 → 9.3-10.2. The guard now matches
-`ReachTargetAction` as well, which also covers `reach spell`.
+all, and their median distance to it went 6.7-8.4 → 9.3-10.2. The guard now also matches the name
+`reach melee` — **not** the `ReachTargetAction` base, which drags in `reach spell`,
+`reach party member to heal` and `reach pull`; vetoing those strands ranged and healers out of range
+in the window they most need to close.
 
 **`GetDistance2d` versus `GetExactDist2d`, again.** `WorldObject::GetDistance2d(WorldObject*)`
 subtracts *both* combat reaches, and the MK II's is 8. `20.0f - GetDistance2d(mk2)` therefore fled to

@@ -45,6 +45,16 @@ families are **disjoint**, which is what lets a multiplier suppressing only thos
 3. Pop in descending relevance; **break on the first action returning `true`**.
 4. Ties break by insertion order, which reads as nondeterministic in-game.
 
+Two rules follow from 3; breaking either silently disables every node below:
+
+- **An action that only writes state returns `false`.** Bookkeeping that returns `true` at
+  `ACTION_RAID` costs the bot every cast, heal and formation move it owns
+  (`MimironResetEncounterStateAction`, `MimironPhase1PositioningAction`).
+- **A latch trigger tests the constant its action writes, never a literal.** An `IsActive` shaped
+  `AI_VALUE(...) != X` re-arms until the write matches, so drift between the two leaves it
+  permanently active. Mimiron's phase 1 disperse latch shipped the action on `5.5` against the
+  trigger on `6.0` and ran a whole Firefighter phase 1 with no ranged damage and no healing.
+
 A zeroed multiplier breaks the multiplier loop, fails `isPossible() && relevance > 0`, and lands on
 the **IMPOSSIBLE** branch — which still pushes the node's `/*A*/` alternatives. Fallback chains
 survive a veto. Never build an A→B→A cycle in `getAlternatives`.

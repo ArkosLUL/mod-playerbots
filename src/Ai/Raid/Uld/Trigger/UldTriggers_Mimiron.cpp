@@ -96,7 +96,10 @@ bool MimironPhase1PositioningTrigger::IsActive()
     if (!leviathanMkII || !leviathanMkII->IsAlive())
         return false;
 
-    return AI_VALUE(float, "disperse distance") != 6.0f;
+    // A latch, not a state test: the generic movement layer resets "disperse distance" whenever it
+    // rebuilds a formation, so this node has to re-assert it. Compare the constant the action writes,
+    // never a literal - drift between the two leaves the trigger permanently active.
+    return AI_VALUE(float, "disperse distance") != ULDUAR_MIMIRON_DISPERSE_DISTANCE;
 }
 
 bool MimironP3Wx2LaserBarrageTrigger::IsActive()

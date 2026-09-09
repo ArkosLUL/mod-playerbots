@@ -280,7 +280,10 @@ bool MimironResetEncounterStateAction::Execute(Event /*event*/)
 bool MimironPhase1PositioningAction::Execute(Event /*event*/)
 {
     SET_AI_VALUE(float, "disperse distance", ULDUAR_MIMIRON_DISPERSE_DISTANCE);
-    return true;
+
+    // Never claims the tick. Writing the value is all this does, and the engine stops a pass at the
+    // first action returning true - at ACTION_RAID that would be every cast and heal the bot owns.
+    return false;
 }
 
 bool MimironPhase1PositioningAction::isUseful()
@@ -534,7 +537,9 @@ bool MimironPhase4FocusAction::Execute(Event /*event*/)
     if (AI_VALUE(float, "disperse distance") != 4.0f)
         SET_AI_VALUE(float, "disperse distance", 4.0f);
 
-    return true;
+    // Never claims the tick: "combat formation move" is what reads the value, and it sits below
+    // ACTION_RAID.
+    return false;
 }
 
 bool MimironProximityMineAction::isUseful()
