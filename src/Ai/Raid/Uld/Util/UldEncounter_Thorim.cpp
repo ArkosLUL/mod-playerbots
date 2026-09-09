@@ -28,6 +28,7 @@
 #include <cmath>
 #include <limits>
 #include <list>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -58,12 +59,12 @@ const Position ULDUAR_THORIM_BALCONY_5 = Position(2137.5f, -318.0f, 438.222f);
 const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
 const Position ULDUAR_THORIM_JUMP_END_POINT = Position(2137.8818f, -278.18942f, 419.66653f);
 const Position ULDUAR_THORIM_PHASE2_TANK_SPOT = Position(2110.7483f, -252.65265f, 419.440f);
-const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2132.75f, -252.65f, 419.775f);
-const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2121.52f, -282.25f, 419.508f);
-const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2123.05f, -270.89f, 419.701f);
-const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT = Position(2132.98f, -275.67f, 419.726f);
-const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT = Position(2131.50f, -263.69f, 419.847f);
-const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT = Position(2142.05f, -259.31f, 419.822f);
+const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2123.00f, -282.00f, 419.528f);
+const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2124.50f, -270.50f, 419.729f);
+const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2137.50f, -269.00f, 419.845f);
+const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT = Position(2132.50f, -257.50f, 419.845f);
+const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT = Position(2142.00f, -250.50f, 419.691f);
+const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT = Position(2131.50f, -245.00f, 419.612f);
 const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT = Position(2118.75f, -252.65f, 419.596f);
 const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT = Position(2110.75f, -244.65f, 419.359f);
 const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT = Position(2110.75f, -260.65f, 419.485f);
@@ -72,10 +73,24 @@ const Position ULDUAR_THORIM_PHASE2_OFFTANK_SPOT = Position(2115.0f, -247.0f, 41
 namespace
 {
 
-// One map per map-update thread, keyed by instance: a bot is only ever updated from its own map's
-// thread, so this needs no lock. Trigger, action and multiplier each hold their own helper instance,
-// so the state they must agree on is defined here and nowhere else.
-thread_local std::unordered_map<uint32, ThorimEncounterState> thorimStates;
+// Keyed by instance: trigger, action and multiplier each hold their own helper instance, so the state
+// they must agree on is defined here and nowhere else.
+//
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
+// pool reassigns it: the melee slot gets re-picked out of whatever that copy holds, and the latched ring
+// bearing is struck again off a boss that has drifted. That is the ring flipping between three points
+// several times a second. In a trace it reads as exactly six thorim.slot rows per bot, one per thread
+// that ever ticked the pull. References into an unordered_map survive rehashing, so the lock only has to
+// cover the lookup.
+std::mutex thorimStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, ThorimEncounterState> thorimStates;
+
+ThorimEncounterState& ThorimStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(thorimStatesMutex);
+    return thorimStates[bot->GetInstanceId()];
+}
 
 struct GauntletWaypoint
 {
@@ -122,6 +137,8 @@ ThorimEncounterState* FindState(Player const* bot)
 {
     if (!bot)
         return nullptr;
+
+    std::lock_guard<std::mutex> guard(thorimStatesMutex);
 
     auto const itr = thorimStates.find(bot->GetInstanceId());
     return itr == thorimStates.end() ? nullptr : &itr->second;
@@ -178,7 +195,7 @@ bool TakesMeleeSlot(Player* member)
 // one bearing once the ring is full.
 void EnsureMeleeSlot(Player* bot)
 {
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
 
     Group* group = bot->GetGroup();
     if (!group)
@@ -230,7 +247,7 @@ bool IsBotPlayer(Player const* member)
 // corridor a body short.
 void AssignThorimSquads(Player* bot)
 {
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.squadsAssigned)
         return;
 
@@ -360,7 +377,7 @@ void AssignThorimSquads(Player* bot)
 // itself is still struck once and left alone; this only labels the people it cannot place.
 void TickHumanSquads(Player* bot)
 {
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.humanSquadScanMs &&
         GetMSTimeDiffToNow(state.humanSquadScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
         return;
@@ -518,7 +535,7 @@ Position const& RangedSpot(uint8 slot)
 // him live only hands the ring one more input that moves.
 float LatchedRingBearing(Player* bot, Unit* boss, uint8 slot)
 {
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     auto const itr = state.ringBearings.find(bot->GetGUID());
     if (itr != state.ringBearings.end())
         return itr->second;
@@ -564,7 +581,7 @@ void TickRunicSmash(PlayerbotAI* botAI, Player* bot)
     if (!NearThorimEncounter(bot))
         return;
 
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.smashScanMs && GetMSTimeDiffToNow(state.smashScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
         return;
 
@@ -629,7 +646,7 @@ Unit* GetThorim(PlayerbotAI* botAI)
     // balcony could not see him, and with him went the split, the squad label and the walk down.
     // ObjectAccessor has no range of its own, so once the guid is struck the answer holds anywhere in
     // the wing. NearThorimEncounter is what still bounds the callers.
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.bossGuid)
     {
         Unit* cached = botAI->GetUnit(state.bossGuid);
@@ -656,7 +673,7 @@ Unit* GetThorimRunicColossus(PlayerbotAI* botAI)
 
     // Cached because the multiplier asks on every melee action of every bot, and a 150 yd grid sweep
     // is far too heavy for that. One creature, so any bot's answer serves the whole instance.
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.colossusScanMs && GetMSTimeDiffToNow(state.colossusScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
     {
         Unit* cached = botAI->GetUnit(state.colossusGuid);
@@ -923,7 +940,7 @@ void ThorimClearStaleMarks(PlayerbotAI* botAI, Player* bot)
     if (!group)
         return;
 
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.marksCleared)
         return;
 
@@ -1048,7 +1065,7 @@ Unit* GetThorimAncientRuneGiant(PlayerbotAI* botAI)
 
     // Cached the same way the Colossus is, and for the same reason: the balcony trigger asks once per
     // bot per tick and a 150 yd grid sweep at that rate is not worth one boolean.
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     if (state.runeGiantScanMs && GetMSTimeDiffToNow(state.runeGiantScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
     {
         Unit* cached = botAI->GetUnit(state.runeGiantGuid);
@@ -1134,7 +1151,7 @@ bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)
     if (!NearThorimEncounter(bot))
         return false;
 
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
 
     Unit* colossus = GetThorimRunicColossus(botAI);
     if (!colossus || !colossus->IsAlive() || !colossus->HasAura(SPELL_THORIM_RUNIC_BARRIER))
@@ -1561,7 +1578,7 @@ bool ThorimArenaAnchorNeedsMove(PlayerbotAI* /*botAI*/, Player* bot, Position co
     if (!bot)
         return false;
 
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());
 
     // Arriving is what lets the anchor guard switch the movers off, so a spot the leash would reject
@@ -1623,7 +1640,7 @@ void ThorimNoteOrbEscape(Player* bot, Position const& spot)
 
     // Deadbanded, because the escape point is derived from the bot's own drifting coordinates: latched
     // at full precision it would note a new destination on every tick of the walk.
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     auto const noted = state.orbEscapes.find(bot->GetGUID());
     if (noted != state.orbEscapes.end() &&
         noted->second.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= 1.0f)
@@ -1637,7 +1654,7 @@ void ThorimNoteFollowMasterStripped(Player* bot)
     if (!bot)
         return;
 
-    thorimStates[bot->GetInstanceId()].followMasterStripped.insert(bot->GetGUID());
+    ThorimStateFor(bot).followMasterStripped.insert(bot->GetGUID());
 }
 
 bool ThorimFollowMasterStripped(Player const* bot)
@@ -1827,7 +1844,7 @@ bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
     if (!bot)
         return false;
 
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     float const distance = bot->GetDistance(spot);
 
     if (state.ringArrived.count(bot->GetGUID()))
@@ -1873,7 +1890,7 @@ Unit* ThorimChargedThunderOrb(PlayerbotAI* botAI, uint32 markerSpell)
     // One 150 yd grid sweep per instance per interval, shared by every bot, so no two of them
     // disagree about which orb is lit. A slot each, because a single one keyed on the marker turns
     // into a rescan on every call the moment both markers are being asked for.
-    ThorimEncounterState& state = thorimStates[bot->GetInstanceId()];
+    ThorimEncounterState& state = ThorimStateFor(bot);
     bool const lightning = markerSpell == SPELL_THORIM_LIGHTNING_ORB_VISUAL;
     RaidObs::ObsValue<ObjectGuid>& cachedGuid = lightning ? state.lightningOrbGuid : state.chargedOrbGuid;
     uint32& scanMs = lightning ? state.lightningOrbScanMs : state.orbScanMs;
@@ -1945,9 +1962,16 @@ bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
 
 bool ThorimBotHasEncounterState(Player* bot)
 {
-    ThorimEncounterState const* state = FindState(bot);
-    if (!state)
+    if (!bot)
         return false;
+
+    std::lock_guard<std::mutex> guard(thorimStatesMutex);
+
+    auto const itr = thorimStates.find(bot->GetInstanceId());
+    if (itr == thorimStates.end())
+        return false;
+
+    ThorimEncounterState const* state = &itr->second;
 
     // Everything the reset below drops. Leave one out and a bot holding only that never trips the
     // trigger, which is how balconyStep got to ride into the next pull unnoticed.
@@ -1965,15 +1989,21 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     if (!bot)
         return;
 
+    // Held across the whole reset, not just the lookup: clearInstance drops the entry other threads
+    // hold pointers into, and nothing below reaches back through FindState to re-lock.
+    std::lock_guard<std::mutex> guard(thorimStatesMutex);
+
     if (clearInstance)
     {
         thorimStates.erase(bot->GetInstanceId());
         return;
     }
 
-    ThorimEncounterState* state = FindState(bot);
-    if (!state)
+    auto const itr = thorimStates.find(bot->GetInstanceId());
+    if (itr == thorimStates.end())
         return;
+
+    ThorimEncounterState* state = &itr->second;
 
     // Two halves, and they run on different schedules. This one is this bot's own latches and it has
     // to run for every member: they are what decide where a bot thinks it already walked to.

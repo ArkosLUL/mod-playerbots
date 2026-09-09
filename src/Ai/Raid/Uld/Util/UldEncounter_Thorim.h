@@ -125,9 +125,8 @@ constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
 
 // Chain Lightning is 8 targets at 1.5x per jump, so the eighth takes about 17x the first, and it jumps
 // 8.0 yd centre to centre: spell_jump_distance overrides 64390 to 5.0 and the reach test adds both
-// combat reaches. The old five sat 8.1 yd apart at the closest, which a bot one yard off its point is
-// already inside. Six is the most the room fits at 11 yd while also clearing Sif's Blizzard loop by
-// 16 yd and the melee ring by 8, and 11 holds up with a bot off its point on either side.
+// combat reaches. Six is the most the room fits at 11 yd apart while also staying 22 yd off the tank
+// spot and 12 clear of Sif's Blizzard loop, and 11 holds up with a bot off its point on either side.
 constexpr uint8 ULDUAR_THORIM_RANGED_SLOTS = 6;
 
 // The off-tank sits just off the main tank's bearing: close enough to taunt through the Unbalancing
@@ -241,17 +240,20 @@ extern const Position ULDUAR_THORIM_JUMP_END_POINT;
 // three man hit into an eight man one. The melee ring at radius 8 is walkable the whole way round,
 // the western arc on rim polys.
 extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
-// Six spots east of him, 22 to 32 yd out. Three things fix that and between them leave room for no
-// more: every spot is 22 yd from the tank spot so the radius 8 melee ring cannot bridge into the camp;
-// every spot clears Sif's Blizzard loop by 16 yd; and no two are closer than 11 yd. The old five had a
-// tightest pair of 8.1 yd, which a bot one yard off its point is already inside.
+// Six spots east of him, 22 to 32 yd out, spread over as much bearing as the room allows. Every spot
+// is 22 yd off the tank spot so the radius 8 melee ring cannot bridge into the camp, 12 yd clear of
+// Sif's Blizzard loop, and 11 from its nearest neighbour for Chain Lightning's jump. 32 is the outer
+// limit rather than the rim: past it the shorter caster nukes stop reaching the boss.
 //
-// Sif's bunny is the binding one. It reaches far further in than the rim - 1894 hazard samples across
-// three traces cover x 2104-2165, y -280 to -232 at radius 8 - so a seventh point sits in her lane.
+// The bearing spread is for Lightning Charge: a 75 degree cone off the boss, aimed at whichever of the
+// seven orbs lit up, 150 yd deep and instant, so there is nothing to react to. Packed into one 70
+// degree wedge all six sat in a single cone, which is a 13 target burst for 202k and ten dead inside
+// two seconds. Spread over 88 degrees the worst of the seven catches four.
 //
-// The price is Lightning Charge, a 75 degree cone off the boss aimed at whichever of the seven orbs
-// lit up. Out here one or two cones cover each spot instead of exactly one, so it roughly doubles -
-// from 3% of phase 2 incoming, against Chain Lightning's 20 to 38.
+// Four is the floor while the boss parks here. Sif's loop passes 5.4 yd from the tank spot and swings
+// out to 43 yd on the east, so a camp 22 yd off the tank and clear of her only fits in a 95 degree
+// window, and one orb's cone is 75 of that. Parking him 16 yd further east opens it to 190 and takes
+// the worst cone to two, at the cost of walking the boss toward the camp.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;

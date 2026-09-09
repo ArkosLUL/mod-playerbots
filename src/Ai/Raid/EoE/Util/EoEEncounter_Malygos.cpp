@@ -20,6 +20,7 @@
 #include <cmath>
 #include <limits>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 
 namespace
@@ -53,18 +54,33 @@ struct LayoutCacheEntry
     MalygosP1Layout layout;
 };
 
-// Past the per-bot drake check the answer is identical for the whole instance, so the caches below
-// key on the instance. thread_local needs no lock: a bot only updates on its own map thread. With
-// MapUpdate.Threads > 1 a map is not pinned to one worker, so an entry can be rebuilt on another
-// thread - all bots on a map still share a thread within any single tick, so they never disagree.
-// Nothing is ever evicted: four maps at most, one entry per instance id per worker thread.
-thread_local std::unordered_map<uint32, PhaseCacheEntry> phaseCache;
-// Instance id in the high half, creature entry in the low half.
-thread_local std::unordered_map<uint64, CreatureCacheEntry> creatureCache;
-// Malygos' guid, so the whole strategy stops re-running the search behind GetMalygos. No window:
-// the guid is resolved live on every read and dropped the moment it stops resolving to a live boss.
-thread_local std::unordered_map<uint32, ObjectGuid> bossCache;
-thread_local std::unordered_map<uint32, LayoutCacheEntry> layoutCache;
+// Past the per-bot drake check the answer is identical for the whole instance, so this keys on the
+// instance. Nothing is ever evicted: one entry per instance id.
+struct MalygosInstanceState
+{
+    PhaseCacheEntry phase{0, 0};
+    // Malygos' guid, so the whole strategy stops re-running the search behind GetMalygos. No window:
+    // the guid is resolved live on every read and dropped the moment it stops resolving to a live boss.
+    ObjectGuid boss;
+    LayoutCacheEntry layout;
+    // Keyed on creature entry. The instance is already the key of the map this sits in.
+    std::unordered_map<uint32 /*entry*/, CreatureCacheEntry> creatures;
+};
+
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
+// pool reassigns it. Three of these four are time-bounded caches a rebuild recomputes the same way, so
+// they would have survived the split; layout would not, because its latched flag is a one-way switch
+// and each thread had its own to throw. References into an unordered_map survive rehashing, so the lock
+// only has to cover the lookup.
+std::mutex malygosStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, MalygosInstanceState> malygosStates;
+
+MalygosInstanceState& MalygosStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(malygosStatesMutex);
+    return malygosStates[bot->GetInstanceId()];
+}
 
 // AllCreaturesOfEntryInRange measures from the object it was constructed with, so a sweep anchored
 // on a fixed point needs its own check.
@@ -95,9 +111,8 @@ std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
         return none;
     }
 
-    uint64 const key = (static_cast<uint64>(bot->GetInstanceId()) << 32) | entry;
     uint32 const now = getMSTime();
-    CreatureCacheEntry& cached = creatureCache[key];
+    CreatureCacheEntry& cached = MalygosStateFor(bot).creatures[entry];
     if (!cached.at || getMSTimeDiff(cached.at, now) >= EOE_CREATURE_CACHE_MS)
     {
         cached.at = now;
@@ -182,7 +197,7 @@ bool AnyEoECreature(Player* bot, uint32 entry)
 
 Unit* GetMalygos(Player* bot)
 {
-    ObjectGuid& cached = bossCache[bot->GetInstanceId()];
+    ObjectGuid& cached = MalygosStateFor(bot).boss;
     if (!cached.IsEmpty())
     {
         if (Unit* boss = ObjectAccessor::GetUnit(*bot, cached))
@@ -237,7 +252,7 @@ uint8 GetMalygosPhase(Player* bot)
     }
 
     uint32 const now = getMSTime();
-    PhaseCacheEntry& cached = phaseCache[bot->GetInstanceId()];
+    PhaseCacheEntry& cached = MalygosStateFor(bot).phase;
     if (cached.at && getMSTimeDiff(cached.at, now) < EOE_PHASE_CACHE_MS)
     {
         return cached.phase;
@@ -271,7 +286,7 @@ uint8 GetMalygosPhase(Player* bot)
 
 MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
 {
-    LayoutCacheEntry& cached = layoutCache[bot->GetInstanceId()];
+    LayoutCacheEntry& cached = MalygosStateFor(bot).layout;
     uint32 const now = getMSTime();
     if (cached.at && getMSTimeDiff(cached.at, now) >= EOE_LATCH_STALE_MS)
     {

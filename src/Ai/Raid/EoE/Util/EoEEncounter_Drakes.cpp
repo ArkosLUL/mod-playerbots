@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <mutex>
 #include <unordered_map>
 
 namespace
@@ -33,10 +34,6 @@ struct HealerRosterEntry
     std::vector<ObjectGuid> guids;
 };
 
-// Same thread_local, instance-keyed, never-evicted pattern as the Malygos caches.
-thread_local std::unordered_map<uint32, DrakeStackAngle> stackAngleCache;
-thread_local std::unordered_map<uint32, HealerRosterEntry> healerRosterCache;
-
 // When the boss picked this bot's drake, and when that was last confirmed.
 struct DrakeFixate
 {
@@ -44,9 +41,29 @@ struct DrakeFixate
     uint32 seen = 0;
 };
 
-// Keyed on the bot rather than its drake: bot guids are stable and bounded by the population on this
-// thread, where a Skytalon is summoned fresh every pull and the map would grow without limit.
-thread_local std::unordered_map<ObjectGuid, DrakeFixate> fixateCache;
+// One state per instance, never evicted. Fixates are keyed on the bot rather than its drake, because
+// bot guids are stable while a Skytalon is summoned fresh every pull and the map would grow forever.
+struct DrakeInstanceState
+{
+    DrakeStackAngle stackAngle;
+    HealerRosterEntry healerRoster;
+    std::unordered_map<ObjectGuid, DrakeFixate> fixates;
+};
+
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
+// pool reassigns it: the stack heading jumps back to where it started and a fixate reads as fresh on
+// every thread that has not seen it yet. The healer roster is only a 2 s cache and would survive the
+// split, but it lives here with the other two. References into an unordered_map survive rehashing, so
+// the lock only has to cover the lookup.
+std::mutex drakeStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, DrakeInstanceState> drakeStates;
+
+DrakeInstanceState& DrakeStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(drakeStatesMutex);
+    return drakeStates[bot->GetInstanceId()];
+}
 
 // Both come back -1 when there is no power cost worth checking, which callers read as yes.
 bool GetDrakeSpellCost(Unit* drake, uint32 spellId, int32& cost, int32& available)
@@ -112,7 +129,7 @@ bool GetDrakeStackPoint(Player* bot, std::vector<Unit*> const& fields, float& x,
     float const bossY = boss->GetPositionY();
     z = MALYGOS_P3_BOSS_Z;
 
-    DrakeStackAngle& cachedAngle = stackAngleCache[bot->GetInstanceId()];
+    DrakeStackAngle& cachedAngle = DrakeStateFor(bot).stackAngle;
     uint32 const nowMs = getMSTime();
     if (cachedAngle.at && getMSTimeDiff(cachedAngle.at, nowMs) >= EOE_LATCH_STALE_MS)
     {
@@ -232,7 +249,7 @@ void GetDrakeHealerGuids(PlayerbotAI* botAI, std::vector<ObjectGuid>& out)
 
     // Only the group composition and the difficulty feed this, and the walk sorts two vectors, so
     // deriving it per bot per tick was the most expensive thing P3 did.
-    HealerRosterEntry& cached = healerRosterCache[bot->GetInstanceId()];
+    HealerRosterEntry& cached = DrakeStateFor(bot).healerRoster;
     uint32 const now = getMSTime();
     if (cached.at && getMSTimeDiff(cached.at, now) < EOE_HEALER_ROSTER_CACHE_MS)
     {
@@ -431,7 +448,8 @@ bool GetDrakeSurgeElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs)
         return false;
     }
 
-    DrakeFixate& fixate = fixateCache[botAI->GetBot()->GetGUID()];
+    Player* const fixateBot = botAI->GetBot();
+    DrakeFixate& fixate = DrakeStateFor(fixateBot).fixates[fixateBot->GetGUID()];
     uint32 const now = getMSTime();
 
     // Two ways to spot a fresh pick. The gap covers the ordinary case, where the drake went unflagged

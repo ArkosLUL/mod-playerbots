@@ -20,6 +20,7 @@
 #include <cmath>
 #include <functional>
 #include <list>
+#include <mutex>
 #include <unordered_map>
 
 using namespace EncounterHelpers;
@@ -270,11 +271,23 @@ struct IgnisTankArcState
     bool scorchUp = false;
 };
 
-static thread_local std::unordered_map<uint32, IgnisTankArcState> _ignisTankArcStates;
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh rotation whenever the
+// pool reassigns it. scorchUp is a rising edge, so six copies means six first sightings of the same
+// Scorch and the slot walks the arc six times instead of once. References into an unordered_map survive
+// rehashing, so the lock only has to cover the lookup.
+static std::mutex _ignisTankArcStatesMutex;
+static std::unordered_map<uint32 /*instanceId*/, IgnisTankArcState> _ignisTankArcStates;
+
+static IgnisTankArcState& IgnisTankArcStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(_ignisTankArcStatesMutex);
+    return _ignisTankArcStates[bot->GetInstanceId()];
+}
 
 Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot)
 {
-    IgnisTankArcState& state = _ignisTankArcStates[bot->GetInstanceId()];
+    IgnisTankArcState& state = IgnisTankArcStateFor(bot);
 
     // Rising edge, not "while up": the slot advances once per Scorch, at the start of the 3 s root.
     // Ignis cannot turn or follow during those seconds and the patch spawns from the orientation he

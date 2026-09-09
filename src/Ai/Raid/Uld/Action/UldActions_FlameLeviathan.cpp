@@ -2,6 +2,7 @@
 #include "UldActions_Shared.h"
 
 #include <cmath>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -31,7 +32,12 @@ namespace
 // Kite sense per instance, so every vehicle that takes Pursued runs the ring the same way round.
 // Latched on first use and never reversed: turning around runs straight back into the pursuer, and
 // a direction that flips on a distance test is itself the oscillation.
-thread_local std::unordered_map<uint32 /*instanceId*/, int8> flKiteDirection;
+//
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies give the same instance a fresh sense whenever the
+// pool reassigns it, which is exactly the flip the paragraph above forbids.
+std::mutex flKiteDirectionMutex;
+std::unordered_map<uint32 /*instanceId*/, int8> flKiteDirection;
 
 // Spells aimed at the vehicle itself (Tar, Steam Rush, the speed buffs, Shield Generator) cannot go
 // through CanCastVehicleSpell: a self-cast comes back SPELL_FAILED_BAD_TARGETS, which that helper
@@ -622,16 +628,24 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss)
     };
 
     uint32 const instanceId = bot->GetInstanceId();
-    auto dirIt = flKiteDirection.find(instanceId);
-    if (dirIt == flKiteDirection.end())
+    // Copied out under the lock rather than kept as an iterator: another instance inserting on another
+    // thread can rehash the map out from under it.
+    int8 latchedDir = 0;
     {
-        int32 const here = nearestNode();
-        float const ahead = ring[(here + 1) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
-        float const behind =
-            ring[(here - 1 + count) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
-        dirIt = flKiteDirection.emplace(instanceId, ahead >= behind ? int8(1) : int8(-1)).first;
+        std::lock_guard<std::mutex> guard(flKiteDirectionMutex);
+
+        auto dirIt = flKiteDirection.find(instanceId);
+        if (dirIt == flKiteDirection.end())
+        {
+            int32 const here = nearestNode();
+            float const ahead = ring[(here + 1) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
+            float const behind =
+                ring[(here - 1 + count) % count].GetExactDist2d(boss->GetPositionX(), boss->GetPositionY());
+            dirIt = flKiteDirection.emplace(instanceId, ahead >= behind ? int8(1) : int8(-1)).first;
+        }
+        latchedDir = dirIt->second;
     }
-    int32 const dir = dirIt->second;
+    int32 const dir = latchedDir;
 
     if (kiteIdx_ < 0)
     {

@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <list>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -94,14 +95,41 @@ float GetHodirShelterRelease(Creature* shelter)
            (ULDUAR_HODIR_SAFE_AREA_RELEASE - ULDUAR_HODIR_SAFE_AREA_TOLERANCE);
 }
 
+// Both per-bot latches, keyed by instance on the way in so the inner maps are only ever touched by the
+// one thread ticking that map.
+//
+// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
+// MapUpdate.Threads is 6 here, so per-thread copies hand the same bot a fresh latch whenever the pool
+// reassigns its map. Both picks below then stop holding and go back to drifting, which is the 739 anchor
+// changes the Starlight comment further down was written to kill. References into an unordered_map
+// survive rehashing, so the lock only has to cover the outer lookup.
+struct HodirStarlightLatch
+{
+    Position zone;
+    Position stand;
+};
+
+struct HodirBotLatches
+{
+    std::unordered_map<ObjectGuid, ObjectGuid> shelter;
+    std::unordered_map<ObjectGuid, HodirStarlightLatch> starlight;
+};
+
+static std::mutex hodirLatchesMutex;
+static std::unordered_map<uint32 /*instanceId*/, HodirBotLatches> hodirLatches;
+
+static HodirBotLatches& HodirLatchesFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(hodirLatchesMutex);
+    return hodirLatches[bot->GetInstanceId()];
+}
+
 Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || !GetHodir(botAI))
         return nullptr;
 
-    // Keyed on the bot: its guid is stable and a bot only ever reads or writes its own entry on its
-    // own map thread, so no lock.
-    thread_local std::unordered_map<ObjectGuid, ObjectGuid> latched;
+    std::unordered_map<ObjectGuid, ObjectGuid>& latched = HodirLatchesFor(bot).shelter;
 
     std::vector<Creature*> candidates;
     std::list<Creature*> found;
@@ -365,14 +393,7 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
 static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position const& centre,
                                     bool onFire, Position const& slot, Position& out)
 {
-    // Keyed on the bot: its guid is stable and bounded by the population on this thread, and a bot
-    // only ever reads or writes its own entry on its own map thread, so no lock.
-    struct StarlightLatch
-    {
-        Position zone;
-        Position stand;
-    };
-    thread_local std::unordered_map<ObjectGuid, StarlightLatch> latched;
+    std::unordered_map<ObjectGuid, HodirStarlightLatch>& latched = HodirLatchesFor(bot).starlight;
 
     // Bounded rather than the room radius: this runs per bot per tick, and a zone further out than
     // this cannot be within reach of any slot the bot could be standing on anyway.
@@ -502,7 +523,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
     }
 
     if (found)
-        latched[bot->GetGUID()] = StarlightLatch{bestZone, out};
+        latched[bot->GetGUID()] = HodirStarlightLatch{bestZone, out};
 
     // The point itself is already hodir.anchor, which this becomes when it is found. The zone rides
     // along because the value is otherwise only the rule: a re-latch onto a different zone still read
