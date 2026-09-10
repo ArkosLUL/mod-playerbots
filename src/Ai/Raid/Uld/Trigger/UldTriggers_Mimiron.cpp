@@ -10,6 +10,7 @@
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SharedDefines.h"
+#include "Spell.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 #include <MovementActions.h>
@@ -285,12 +286,32 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (!IsMimironHardModeActive(botAI))
         return false;
 
-    // Stand down for the barrage. The dodge issues at MOVEMENT_FORCED, so a fire leg started here
-    // would hold the movement lock against the one cone that kills in a single tick, and a node
-    // ticks about 3100 against a 22000 pool. Rapid Burst gets no equivalent - it lands with no
-    // warning at all, which is what ULDUAR_MIMIRON_FLAMES_MAX_HOP is for instead.
+    // Stand down for anything that kills outright. The dodge issues at MOVEMENT_FORCED and so do all
+    // of these, and IsWaitingForLastMove wants strictly greater priority, so equal FORCED blocks:
+    // whichever ran first owns the lock for its whole leg. A flame node ticks about 3100 against a
+    // 22000 pool and fires ~2500 times a pull, so it wins on volume and the escapes lose. Measured:
+    // seven bots issued a Shock Blast escape, had it cancelled by a fire leg 1.5 s later, and died
+    // to the blast still 9 to 15 yd out.
     MimironP3Wx2LaserBarrageTrigger barrage(botAI);
     if (barrage.IsActive())
+        return false;
+
+    MimironShockBlastTrigger shockBlast(botAI);
+    if (shockBlast.IsActive())
+        return false;
+
+    MimironRocketStrikeTrigger rocketStrike(botAI);
+    if (rocketStrike.IsActive())
+        return false;
+
+    MimironFrostBombTrigger frostBomb(botAI);
+    if (frostBomb.IsActive())
+        return false;
+
+    // Last of the five: this one walks the group to build its cone window, where the others answer
+    // off a cast bar or a nearby creature.
+    MimironRapidBurstTrigger rapidBurst(botAI);
+    if (rapidBurst.IsActive())
         return false;
 
     // The fire nodes are non-selectable trigger creatures, so they never show up in attack-target
@@ -330,28 +351,46 @@ bool MimironFrostBombTrigger::IsActive()
     return tooCloseToFrostBomb.TooCloseToCreature(NPC_FROST_BOMB, ULDUAR_MIMIRON_FROST_BOMB_RADIUS);
 }
 
-bool MimironPlasmaBlastTrigger::IsActive()
+bool MimironPlasmaBlastDefensiveTrigger::IsActive()
 {
-    if (!PlayerbotAI::IsMainTank(bot) && !botAI->IsAssistTankOfIndex(bot, 0))
+    if (!PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot))
         return false;
 
-    // Phase 1 only. From phase 4 on, the main tank has to keep the chassis parked: VX-001 rides it,
-    // and the Laser Barrage cone radiates from wherever it is standing.
+    // Phase 1 only. Nothing later casts it: the cannon is part of the MK II.
     Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     if (!leviathanMkII || GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
         GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
-    // The cannon is a passenger of the MK II and is what actually casts. Taunting while it casts is
-    // always one cast too late - the victim was resolved when the cast began and nothing moves it now -
-    // so this deliberately fires in the gaps instead, and the taunt owns the next cast 22 s out.
+    // While the cast is up, not between casts: the victim was resolved when it began, and the whole
+    // point is having the button down before the first of the six ticks lands.
     Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, 100.0f);
-    if (!cannon || cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST))
+    if (!cannon)
         return false;
 
-    // Whoever is not already holding it takes it. That alternates the two tanks by itself, one taunt
-    // each per 22s cycle, so each tank only taunts every 44s and never trips the 15s taunt-DR window.
-    return leviathanMkII->GetVictim() != bot;
+    Spell* spell = cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST);
+    if (!spell)
+        return false;
+
+    Unit* victim = spell->m_targets.GetUnitTarget();
+    return victim && victim->IsAlive() && (victim == bot || PlayerbotAI::IsHeal(bot));
+}
+
+bool MimironRedirectThreatTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
+        return false;
+
+    // Phase 1 only, and only while somebody else is the main tank.
+    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
+        GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
+        GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    {
+        return false;
+    }
+
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    return mainTank && mainTank != bot && mainTank->IsAlive();
 }
 
 bool MimironMagneticCoreTrigger::IsActive()

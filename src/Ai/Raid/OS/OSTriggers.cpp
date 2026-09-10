@@ -91,7 +91,7 @@ bool OsMainTankCooldownTrigger::IsActive()
     if (!botAI->IsMainTank(bot) || !OnThePlatform(bot) || !SartharionEncounterActive(bot))
         return false;
 
-    return MainTankCooldownWindowOpen(bot) && NextTankDefensive(botAI, bot) != nullptr;
+    return MainTankCooldownWindowOpen(bot) && NextTankDefensive(botAI, bot, nullptr) != nullptr;
 }
 
 bool OsTranquilizeTrigger::IsActive()

@@ -6,6 +6,7 @@
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
+#include "RaidRedirectThreat.h"
 #include "Playerbots.h"
 #include "UldEncounter_Mimiron.h"
 #include "UldTriggers.h"
@@ -160,17 +161,44 @@ private:
     void NoteCoreStep(char const* step);
 };
 
-// Plasma Blast is a 3s cast on whoever is holding the MK II, every 22s, and it does not stack. The
-// two tanks alternate on it and never taunt back: one taunt each per cycle is 22s apart, clear of
-// the 15s taunt-DR reset, whereas swapping back would put two taunts 11s apart and cut the next
-// one's duration to 65%.
-class MimironPlasmaBlastAction : public AttackAction
+// One big defensive on the tank for the Plasma Blast window, spent when the cast starts rather than
+// when a health bar has already dropped. Six ticks totalling 54k to 119k land on a 43k pool in about
+// five seconds, so a threshold notices it around the third one.
+//
+// Exactly one button per window, tank or healer and never both: either alone carries it, and the
+// spare is worth more on the next window 22 s later. The tank's own cooldown goes first because it
+// costs the raid nothing; a healer only steps in when he has none left.
+class MimironPlasmaBlastDefensiveAction : public Action
 {
 public:
-    MimironPlasmaBlastAction(PlayerbotAI* ai) : AttackAction(ai, "mimiron plasma blast action") {}
+    MimironPlasmaBlastDefensiveAction(PlayerbotAI* ai)
+        : Action(ai, "mimiron plasma blast defensive action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    // Whichever of these the healer has, in the order they are worth spending. Hand of Protection is
+    // deliberately absent: it sheds threat and would hand the boss straight back to the raid.
+    static constexpr char const* HEALER_EXTERNALS[] = {"pain suppression", "guardian spirit",
+                                                       "hand of sacrifice"};
+
+    Unit* PlasmaVictim();
+    bool TankHasDefensive(Unit* victim);
+};
+
+// Phase 1 threat redirect. The MK II has to stay on the main tank through a 53 yd walk west, and the
+// rogue's own Tricks picker aims at the hardest-hitting melee during the opener instead - which is
+// what pulled the boss off the tank 2 to 3 s in on every measured pull.
+class MimironRedirectThreatAction : public RaidRedirectThreatAction
+{
+public:
+    MimironRedirectThreatAction(PlayerbotAI* ai)
+        : RaidRedirectThreatAction(ai, "mimiron redirect threat action") {}
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
 };
 
 // Owns "current target" for every non-tank while any mech is up. Raid icons stay cosmetic here: they

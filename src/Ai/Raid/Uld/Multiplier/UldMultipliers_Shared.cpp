@@ -54,8 +54,9 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
     static uint32 const noRedirectBosses[] = {
         // "freya redirect threat" aims at the add tank while it holds the Snaplasher or the Conservator
         NPC_FREYA,
-        // Every phase is a different creature with a fresh threat table; phase 3 splits VX-001 and
-        // the Aerial Command Unit across two tanks
+        // Every phase is a different creature with a fresh threat table, and phase 3 splits VX-001
+        // and the Aerial Command Unit across two tanks. "mimiron redirect threat action" feeds the
+        // main tank through phase 1, which is the one phase a redirect helps.
         NPC_LEVIATHAN_MKII, NPC_VX001, NPC_AERIAL_COMMAND_UNIT,
         // Arena and gauntlet squads each bring their own tank, then Unbalancing Strike swaps
         NPC_THORIM,

@@ -29,31 +29,53 @@ one full-room clear 60 s into phase 1 (64570).
 
 **Which is why phase 1 is fought in the west.** The MK II is held at
 `ULDUAR_MIMIRON_PHASE1_TANK_SPOT` **(2691.576, 2568.532)**, 53 yd off centre, and ranged and healers
-clump at `ULDUAR_MIMIRON_PHASE1_STACK_SPOT` **(2697.0, 2588.0)**, 20.2 yd off it and 51 yd from
-centre — so every seed lands out there rather than on the ground VX-001 is summoned onto. Before the
-move, **70% of phase-1 fire damage was taken inside 20 yd of the centre**.
+clump 22 yd off it on one of `ULDUAR_MIMIRON_PHASE1_STACK_SPOTS` — so every seed lands out there
+rather than on the ground VX-001 is summoned onto. It works: **70% of phase-1 fire damage was taken
+inside 20 yd of the centre** before the move and **0.0%** after it across all three 2026-09-10
+pulls, with no node left within 24 yd of centre at the handover.
 
 The tank spot is **51.5 yd from Mimiron's own spawn** (2742.53, 2560.99), and he evades past **80 yd**
 from it on every tick (`boss_mimiron.cpp:394-398`) — that check is the only leash in the encounter,
-the MK II has none of its own. navprobe `--nav 0x09` settles both points flat at **Z 364.314**, 0.223
-to poly, 16/16 at 12 yd round the tank spot and 12/12 at 6 yd round the stack. The stack is 5 yd
-*east* of the tank spot's own x on purpose: the mesh has a hole against the west wall from **y 2582
-to 2591** — 3.6-4.8 yd off the nearest poly, Z never settling — and a clump placed due north lands in
-it. It is also past `ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST`, so nobody but melee takes that flee.
+the MK II has none of its own. navprobe `--nav 0x09`: 0.223 to poly, flat at **Z 364.314**, 16/16 at
+12 yd. The four stack anchors sit 22 yd out, 45° apart, on the only arc with floor:
 
-The stack is a **fixed point**, never a slot that tracks the boss: chains grow toward whoever is
-nearest their head, so an anchor that drifts smears the field along behind it. It gives ground only
-when the MK II is further off than `spellDistance - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN`, because a
-slot past casting range deadlocks instead of correcting — `reach spell` is `ACTION_HIGH` against the
-formation at `ACTION_RAID`. That is also what a dead main tank looks like.
+| # | bearing | x | y | to poly | 6 yd | 10 yd | to centre |
+|---|---|---|---|---|---|---|---|
+| 0 | 75° | 2697.270 | 2589.782 | 0.22 | 12/12 | 11/12 | 51.6 |
+| 1 | 30° | 2710.629 | 2579.531 | 0.22 | 12/12 | 12/12 | 35.5 |
+| 2 | 345° | 2712.827 | 2562.837 | 0.22 | 12/12 | 12/12 | 32.5 |
+| 3 | 300° | 2702.576 | 2549.479 | 0.22 | 12/12 | 12/12 | 46.6 |
+
+All settle at **Z 364.314**, all stay ≥32.5 yd from centre, and index 0 is the default. 105-255° is
+excluded: off mesh against the west wall, or up in the raised doorway alcove. The mesh also has a
+hole from **y 2582 to 2591** — 3.6-4.8 yd off poly, Z never settling — that swallows anything placed
+due north of the tank spot.
+
+Each anchor is a **fixed point**, never a slot that tracks the boss: chains grow toward whoever is
+nearest their head, so an anchor that drifts smears the field along behind it. A slot gives ground
+only when the MK II is further off than `spellDistance - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN`,
+because a slot past casting range deadlocks instead of correcting — `reach spell` is `ACTION_HIGH`
+against the formation at `ACTION_RAID`. That is also what a dead main tank looks like.
+
+**The clump is what the field converges on, so its own anchor burns first.** One 2026-09-10 pull
+took **538k phase-1 flame damage with the median victim 3.4 yd from the anchor** — 26% of everything
+taken, 329k of it on ranged and 191k on healers against 16k on melee — with 5 nodes inside 10 yd of
+the anchor and 11 inside 20. `GetMimironPhase1StackAnchor` walks the whole raid to a cleaner one: it
+counts live nodes within `ULDUAR_MIMIRON_STACK_FIRE_RADIUS` (10) of each anchor, and switches when
+the live one carries more than `_FIRE_LIMIT` (2) **and** another is cleaner by `_FIRE_MARGIN` (2),
+then holds it `_HOLD_MS` (15 s). Hysteresis both ways: chains grow 1.22 yd/s, so a bare "stand on
+the cleanest" paces the raid across the arc all phase. Neighbours are 16.8 yd apart, which clears a
+5 yd node cluster and a 7 yd chain step. **Decided once per instance** in `MimironFightState`, never
+per bot — twelve bots each picking their own cleanest anchor is twelve clumps.
 
 Clumping is paid for in Napalm Shell, which splashes 5 yd: it took **1.38 and 2.20 victims a cast**
 against the old spread, already 6 at once on 7 of 40 casts in the tighter pull, for 26% and 37% of
 phase-1 damage taken. `ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE` is **3.0** against 5.5 elsewhere, which
 with `ULDUAR_MIMIRON_SPREAD_TOLERANCE` (5) leaves a blob about 10 yd across — a Napalm on its edge
-clips part of the group, not all of it, and packing inside the splash radius buys nothing back.
-**Watch victims per cast**: above about 4 with phase-1 deaths rising, 3.0 is too tight. All of this
-is Firefighter-only; normal mode has no fire and keeps the room centre and 5.5.
+clips part of the group, not all of it, and packing inside the splash radius buys nothing back. The
+bill never came: clumped, it took **1.20, 1.79 and 1.33 victims a cast**, under the spread it
+replaced, so 3.0 is not the knob it was flagged as. All of this is Firefighter-only; normal mode has
+no fire and keeps the room centre and 5.5.
 
 **Emergency Fire Bots (34147)** never enter zone combat — the Bot Summon Trigger's
 `if (_option < 3) SetInCombatWithZone()` skips them — and only run to flame nodes and cast Water
@@ -158,6 +180,33 @@ blocks the Rapid Burst and Frost Bomb dodges in turn and Rapid Burst has no tele
 for; the barrage does, and the trigger stands down for it outright. The fan also counts what the
 mover refused — `move` in the `mimiron.flee` note, and a `locked` outcome from testing the lock once
 up front instead of 44 times — because reading a mover refusal as a hazard refusal is what hid this.
+
+## Raising the fire dodge to FORCED handed it the Shock Blast escape to cancel
+
+Fixing that dodge cost more than it bought. At `MOVEMENT_COMBAT` it was dead — a formation leg
+blocked it for its whole duration — so it went to `MOVEMENT_FORCED`, where every other Mimiron
+hazard dodge already was. Equal `MOVEMENT_FORCED` blocks, and fire fires ~2,500 times a pull against
+Shock Blast's five, so fire won the lock on volume and the escape lost:
+
+```
+64.5-65.8  mimiron shock blast action   forced  ok=1   escape issued, seven bots running
+66.2-67.5  mimiron dodge flames action  forced  ok=1   fire leg overwrites it, they turn round
+67.5-68.1  mimiron shock blast action   forced  ok=1   re-issued
+68.0       Shock Blast lands                           all seven dead, still 9-15 yd out
+```
+
+Shock Blast 63631 hits for **82,450-109,125** against 22-30k pools, measured reach **15.2 yd** — so
+`ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST` (18) is the right number — and lands only 1-3 times a pull.
+One cast at t=38.4 killed **11 of 25** and ended that pull; ranged logged **30 `shock locked`** flee
+notes in another's fatal window. Every other FORCED dodge took the same hit: `rapidburst locked` 327
+against 175 issued, `rocket locked` 58-74, `frostbomb locked` 85.
+
+Both halves of the fix are needed. `mimiron shock blast trigger` moved from `ACTION_RAID + 3` to
+**`+ 5.5`**, above the fire dodge at `+ 4` — but relevance only picks which action runs, not which
+move the lock accepts, so `MimironDodgeFlamesTrigger` **also stands down** whenever the barrage,
+Shock Blast, a Rocket Strike, the Frost Bomb or Rapid Burst is live. Rapid Burst is tested last of
+the five: it walks the group to build its cone window where the others read a cast bar or a nearby
+creature.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -699,35 +748,68 @@ the phase bar the last seconds, and when only the chassis is left, seat 3 holds 
 and VX-001 from phase 4 on. It is asked several times per bot per tick, so a grid sweep there would
 cost the whole raid every phase.
 
-## A taunt during the cast is always one cast too late
+## Plasma Blast is a cooldown check, not a tank swap
 
-The phase 1 tank swap never happened, for three reasons at once.
+62997 is a 3 s cast, `TARGET_UNIT_TARGET_ENEMY`, aura 3 at 1000 ms period, base 16999 + 1 →
+**17000/s for 6 s = 102000**, no stacking, every 22 s; the 25-man id is **64529**, base 24999 →
+25000/s. The debuff expires 16 s before the next one, so it is a heal check, not a stacking debuff.
+Measured windows open at t=27, 49, 72, 95 and 117 for **54k-119k** on a **43,407 HP** tank, troughing
+him at **11-27%**; three of one pull's tank deaths were the tail of consecutive windows.
 
-**The Leviathan MK II is fully tauntable**, so that was never it: `flags_extra` 524289 is
+**The swap this used to answer with is gone.** It needed a second tank bot, and the taunt could never
+be early enough anyway: the cannon casts at `me->GetVictim()` resolved **when the cast began**, so a
+taunt during those 3 s owns nothing, and what makes a swap stick is taunt setting the taunter's
+threat equal to the highest — which needs the boss well before the cast, not during it. The MK II is
+fully tauntable, so that was never the obstacle: `flags_extra` 524289 is
 `OBEYS_TAUNT_DIMINISHING_RETURNS | INSTANCE_BIND` with no `CREATURE_FLAG_EXTRA_NO_TAUNT`, and
 `CreatureImmunitiesId` -361 masks 21 mechanics and effects 98/124/144/145 — knockback and pull, not
-taunt. DR resets after 15 s against a 22 s cadence, so every taunt lands at full duration.
+taunt. DR resets after 15 s against a 22 s cadence.
 
-1. **The trigger fired during the cast.** It required
-   `cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST)`, but the cannon casts at
-   `me->GetVictim()` resolved **when the cast began**. Nothing that happens during those 3 s moves that
-   cast. It now fires in the gaps instead, so the taunt owns the next one ~19 s out.
-2. **Three seconds of taunt cannot hold a 22 s rotation.** What makes the swap stick is that taunt sets
-   the taunter's threat equal to the current highest — the new tank then holds it by continuing to
-   swing, which only works if it took the boss well before the cast.
-3. **The raid was actively undoing it.** `CastMisdirectionOnMainTankAction` and
-   `TricksOfTheTradeOnMainTankTrigger` both target the *main tank* by name, so every hunter and rogue
-   was transferring threat onto exactly the tank being swapped off.
-   `MimironThreatRedirectGuardMultiplier` zeroes both in phase 1 only, matching on the action name
-   (`BuffOnMainTankAction::getName()` returns `"<spell> on main tank"`) rather than the type, which
-   would also catch every blessing aimed at the tank. Redirecting them to the MK II's *current* victim
-   would be better still and belongs in its own change.
+`MimironPlasmaBlastDefensiveTrigger` fires **while the cannon is casting** and one bot spends one big
+defensive. A health threshold cannot do this: six ticks over five seconds means it notices around the
+third. `NextTankDefensive` (`RaidTankDefensive.h`, shared with Obsidian Sanctum) picks the tank's
+weakest ready cooldown, shortest first, and returns nothing while one is already running. A healer
+steps in only when the tank has none — `pain suppression`, `guardian spirit`, `hand of sacrifice`,
+never `hand of protection`, which sheds threat and hands the boss back. `ClaimMimironPlasmaWindow`
+gives the window to the first claimant, so a Shield Wall and a Pain Suppression never land on the
+same five seconds: either alone carries it and the spare is worth more 22 s later. The class nodes
+are **not** held off their own reactive use — nothing measured yet says a button is wasted between
+windows.
 
-Plasma Blast's real numbers, for reference: 62997 is a 3 s cast, `TARGET_UNIT_TARGET_ENEMY`, aura 3 at
-1000 ms period, base 16999 + 1 → **17000/s for 6 s = 102000**, no stacking, every 22 s. The 25-man
-id is **64529**, base 24999 → 25000/s. The debuff
-expires 16 s before the next one, so this is a heal-check swap, not a stacking-debuff swap — and there
-is nothing to test for at swap time, which is why the alternation is unconditional.
+## The tank leaves with three seconds of threat and the boss does not follow
+
+The 53 yd walk west only works if the MK II is actually his, and it was not. Across three 2026-09-10
+pulls he engaged at 13-15 s, started walking at ~16 s, and the boss switched to a melee dps 2-3 s
+later and **stopped** — one pull parked it at (2737.8, 2582.8), 15 yd off the room centre, while the
+tank finished the walk alone 48 yd away. Time on the main tank: **65%, 26%, 20%**.
+
+`IsMimironTankDragReady` holds the anchor back until he owns it: `GetVictim() == bot` **and** threat
+at least `ULDUAR_MIMIRON_TANK_THREAT_LEAD` (1.3) times the highest **non-tank** threat, or
+`_HOLD_MAX_MS` (10 s), whichever lands first. Until then he has no slot at all, so `reach melee` owns
+him and he stands on the boss building it. It **latches**, raid-wide in `MimironFightState`: a
+mid-phase dip must not restart the drag with the raid already spread out behind him. The timeout is
+not optional — a human holding the boss, or a dead tank, would otherwise pin the fight at the pull
+spot for the phase.
+
+`MimironTankAnchorGuardMultiplier` then stops the yo-yo. `reach melee` is `ACTION_HIGH` against the
+formation at `ACTION_RAID`, so the two traded him back and forth the whole way (8 `reach melee` moves
+refused with `wait` in one phase 1). It zeroes `reach melee` only while the boss is his and the latch
+is set — which is also when he does not need it, because the boss is following him — so losing aggro
+lifts it and he can run back and taunt.
+
+**Tricks of the Trade was making it worse.** The rogues cast it on the hardest-hitting melee at
+13.5-15.5 s in all three pulls, and that exact bot pulled the boss 2-3 s later — Justice @16.2,
+Obliteration @17.4, Justice @17.8. `TricksOfTheTradeTargetValue::TankNeedsRedirect` has an opener
+branch keyed on `"combat start time"`, which `PlayerbotAI::ChangeEngineOnCombat` only sets under the
+`wait for attack` strategy, so it is always 0 in a raid; it then falls through to
+`myThreat > tankThreat * 0.5`, false for a rogue who has not swung, and the buff goes to the top dps.
+**That generic bug is still open.** Mimiron only suppresses the smart-target node in phase 1, through
+`MimironGenericRedirectGuardMultiplier`.
+
+`MimironRedirectThreatAction` owns the redirect instead, subclassing `RaidRedirectThreatAction` the
+way Hodir and Freya do: the main tank in phase 1, `nullptr` after, because phases 2-4 split two mechs
+across two tanks. `UldThreatRedirectMultiplier` keeps holding the class-generic on-main-tank nodes
+for the whole encounter, which is why Misdirection was never cast at all.
 
 ## The phase handovers are a minute of wasted time
 
@@ -823,9 +905,11 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `core` | The Magnetic Core window is open. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse`, `walk-corpse`, `loot`, `bags-full`, `walk-acu`, `blocked`, `use` |
-| `slot` | Which formation shape answered — `p4tank`, `hmlap`, `stagemelee`, `p3wedge`, `p3tank`, `p1tank`, `hmwedge`, `stagering`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `ring`, `none` — with index/count and the point |
+| `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
+| `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, and `flames+N` per ladder rung, so which rung won is readable |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,

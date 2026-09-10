@@ -152,6 +152,32 @@ constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
 // 10 yd across and packing inside the splash radius buys nothing back.
 constexpr float ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE = 3.0f;
 
+// How far ahead of the highest non-tank threat the main tank has to be before he may start walking
+// the MK II west. He used to leave with about three seconds of it: the boss switched to a melee dps
+// within 2 to 3 s, stopped following, and parked 15 yd off the room centre while the tank finished
+// the walk alone 48 yd away. Time on the tank across three pulls was 65 %, 26 % and 20 %.
+constexpr float ULDUAR_MIMIRON_TANK_THREAT_LEAD = 1.3f;
+
+// Escape hatch for that hold. A threat table that never resolves - a human holding the boss, or a
+// dead tank - must not pin the fight at the pull spot for the rest of the phase.
+constexpr uint32 ULDUAR_MIMIRON_TANK_HOLD_MAX_MS = 10000;
+
+// Fire nodes this close to a stack anchor count against it. The clump is what the field converges
+// on, because chains grow toward whoever is nearest their head, so its own anchor burns first: one
+// pull took 538k flame damage in phase 1 with the median victim 3.4 yd from the anchor.
+constexpr float ULDUAR_MIMIRON_STACK_FIRE_RADIUS = 10.0f;
+
+// Move once the live anchor carries more than the limit, and only somewhere cleaner by the margin,
+// then sit still for the hold. Hysteresis on both counts - chains grow 1.22 yd/s, so a bare "stand
+// on the cleanest" walks the raid back and forth across the arc for the whole phase.
+constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_LIMIT = 2;
+constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_MARGIN = 2;
+constexpr uint32 ULDUAR_MIMIRON_STACK_HOLD_MS = 15000;
+
+// How long one Plasma Blast counts as the same window for the purpose of claiming it. The cast runs
+// about 5 s and the next one is 22 s behind it, so anything between the two tells the claims apart.
+constexpr uint32 ULDUAR_MIMIRON_PLASMA_WINDOW_MS = 8000;
+
 // Half-width of the staging wedge. The north-east and south-east arms leave the room centre at 59
 // degrees, so only a crowded outer row reaches a bearing anything walks down, and the west arm is
 // excluded outright. Narrower than this and a 25-man ranged group will not fit inside casting range.
@@ -244,6 +270,25 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest);
 // the MK II parks on top of the mine field it just laid, so a tank that will not stand in one never
 // brings the boss back.
 bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot);
+
+// Whether this bot owns the Plasma Blast window that is casting now. First caller takes it and
+// everyone else stands down, which is what keeps a Shield Wall and a Pain Suppression off the same
+// five seconds - either one alone carries the window, and the second is wasted.
+bool ClaimMimironPlasmaWindow(Player* bot);
+
+// Whether the main tank has enough of a threat lead on the MK II to start the walk west. Latches
+// once per pull: a mid-phase dip must not send him back and restart the drag with the raid already
+// spread out behind him.
+bool IsMimironTankDragReady(PlayerbotAI* botAI, Player* bot);
+
+// Which of ULDUAR_MIMIRON_PHASE1_STACK_SPOTS the raid is standing on. Decided once per instance and
+// not per bot - twelve bots each picking their own cleanest anchor is twelve clumps, and one clump
+// is the whole point of the shape.
+Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot);
+
+// Drops the phase 1 latches. Called off the constructs rather than any one bot's combat state, so a
+// wipe re-arms the tank hold and the stack goes back to its default anchor for the next pull.
+void ResetMimironFightState(Player* bot);
 
 // What the phase 1 node writes as the generic unstacker's minimum spacing, and what its trigger
 // latches against. One accessor because the two have to agree: that trigger re-arms until the value
@@ -446,14 +491,20 @@ extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
 // the only leash in the encounter, the MK II has none of its own.
 extern const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
 
-// Where ranged and healers stand in Firefighter phase 1: one clump 20.2 yd off the tank spot, which
-// is past ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST, so they never take that flee at all. 51.1 yd from
-// the room centre with about 10 yd of floor behind them for a fire dodge to use.
+// Where ranged and healers stand in Firefighter phase 1: one clump, 22 yd from the tank spot on the
+// arc that has floor. Four of them 45 degrees apart, because the clump is what the fire converges on
+// and it has to be able to walk off its own anchor - 16.8 yd between neighbours clears a 5 yd node
+// cluster and a 7 yd chain step. Index 0 is the default and is roughly the single spot this replaced.
 //
-// Five yards east of the tank spot's own x, which is not cosmetic: the mesh has a hole against the
-// west wall from y 2582 to 2591 - 3.6 to 4.8 yd off the nearest poly, with a Z that never settles -
-// and a clump placed due north of the tank spot lands in it. navprobe: 0.223 to poly, Z 364.314,
-// 12/12 on mesh at 6 yd and 11/12 at 10.
-extern const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOT;
+// 22 rather than 20.2: Shock Blast reaches 15 yd measured, one cast at 20.2 killed eleven of
+// twenty-five, and casting reach is spellDistance less ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN. The far
+// side self-corrects because the slot slides toward the boss once reach runs out, so the spare
+// margin is worth more on the near side.
+//
+// navprobe map 603, all four: 0.22 yd to the nearest poly, settled Z 364.314, 12/12 on mesh at 6 yd,
+// and 12/12 at 10 except index 0 at 11/12. Westward bearings are excluded - 105 to 255 degrees is
+// either off mesh against the wall or up in the raised doorway alcove.
+constexpr uint8 ULDUAR_MIMIRON_PHASE1_STACK_COUNT = 4;
+extern const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT];
 
 #endif

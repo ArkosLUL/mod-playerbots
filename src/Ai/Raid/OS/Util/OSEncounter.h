@@ -9,6 +9,7 @@
 
 #include "OSData.h"
 #include "PlayerbotAI.h"
+#include "RaidTankDefensive.h"
 #include <string>
 
 class Player;
@@ -95,11 +96,6 @@ bool SartharionBurstWindowOpen(Player* bot);
 
 // The window the main tank holds his cooldowns for, latched on Shadron and unlatched on his own health.
 bool MainTankCooldownWindowOpen(Player* bot);
-// The weakest cooldown he can cast right now, or nullptr - either because none is off cooldown or
-// because one is already running. Ordered by cooldown length, which is what "weakest" means here.
-char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot);
-// True for the cast names in that table, so the class nodes can be held off them.
-bool IsHeldTankDefensive(std::string const& actionName);
 
 // One-shot, latched per encounter: true once Sartharion has come south with the pull drag, or once
 // the tank has given up waiting for him. EncounterState clears itself 15s after combat ends, so a

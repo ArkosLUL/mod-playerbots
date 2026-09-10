@@ -230,6 +230,6 @@ bool OsTankShapeshiftAction::Execute(Event /*event*/)
 
 bool OsMainTankCooldownAction::Execute(Event /*event*/)
 {
-    char const* spell = NextTankDefensive(botAI, bot);
+    char const* spell = NextTankDefensive(botAI, bot, "sartharion.defensive");
     return spell && botAI->CastSpell(spell, bot);
 }

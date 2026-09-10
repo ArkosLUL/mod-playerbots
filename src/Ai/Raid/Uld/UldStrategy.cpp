@@ -570,7 +570,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "mimiron shock blast trigger",
-        { NextAction("mimiron shock blast action", ACTION_RAID + 3) }));
+        { NextAction("mimiron shock blast action", ACTION_RAID + 5.5f) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron fire resistance trigger",
@@ -601,8 +601,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("mimiron magnetic core action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "mimiron plasma blast trigger",
-        { NextAction("mimiron plasma blast action", ACTION_RAID + 1) }));
+        "mimiron plasma blast defensive trigger",
+        { NextAction("mimiron plasma blast defensive action", ACTION_RAID + 6) }));
+
+    triggers.push_back(new TriggerNode(
+        "mimiron redirect threat trigger",
+        { NextAction("mimiron redirect threat action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
         "mimiron set dps priority trigger",
@@ -879,7 +883,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironChargeGuardMultiplier(botAI));
     multipliers.push_back(new MimironAvoidAoeGuardMultiplier(botAI));
     multipliers.push_back(new MimironFormationGuardMultiplier(botAI));
-    multipliers.push_back(new MimironThreatRedirectGuardMultiplier(botAI));
+    multipliers.push_back(new MimironGenericRedirectGuardMultiplier(botAI));
+    multipliers.push_back(new MimironTankAnchorGuardMultiplier(botAI));
 
     // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a
     // generic mover walking the bot back into the blast or by a gap-closer teleporting it there, and

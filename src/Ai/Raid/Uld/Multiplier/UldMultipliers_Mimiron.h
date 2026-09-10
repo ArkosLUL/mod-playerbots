@@ -61,13 +61,26 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Mimiron phase 1: Misdirection and Tricks of the Trade both hand their threat to the main tank by
-// name, which is the one tank the Plasma Blast swap is trying to move off.
-class MimironThreatRedirectGuardMultiplier : public Multiplier
+// Mimiron phase 1: the rogue's own Tricks target picker hands the buff to the hardest-hitting melee
+// during the opener, because its "am I about to pull" test is false for a rogue who has not swung
+// yet. That bot then pulls the MK II off the tank 2 to 3 s later - measured in all three of one
+// night's pulls. "mimiron redirect threat action" owns the redirect here instead.
+class MimironGenericRedirectGuardMultiplier : public Multiplier
 {
 public:
-    MimironThreatRedirectGuardMultiplier(PlayerbotAI* ai)
-        : Multiplier(ai, "mimiron threat redirect guard") {}
+    MimironGenericRedirectGuardMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "mimiron generic redirect guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Mimiron phase 1: the main tank's anchor is 53 yd from where he picks the boss up, and "reach
+// melee" is ACTION_HIGH against a formation at ACTION_RAID, so the two traded him back and forth
+// for the whole walk. Held only while the boss is his, which is also when he does not need it - it
+// is following him. Lose aggro and this lifts, so he can run back and taunt.
+class MimironTankAnchorGuardMultiplier : public Multiplier
+{
+public:
+    MimironTankAnchorGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron tank anchor guard") {}
     float GetValue(Action* action) override;
 };
 

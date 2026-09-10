@@ -177,6 +177,18 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   — reports a locked bot as "every bearing was hazardous". Count what `TryMoveTo` hands back too.
   Mimiron's fire dodge read as a saturated arena for two days on **1,249 locked moves against 387
   issued**.
+
+  And frequency, not danger, decides who wins the tie. A hazard firing thousands of times a pull and
+  one firing five times are not symmetric at equal `MOVEMENT_FORCED`: the frequent one holds the lock
+  most of the time, and it re-issues *over* an escape already in flight, so the bot turns round
+  mid-run. Promoting Mimiron's fire dodge to `MOVEMENT_FORCED` cancelled seven Shock Blast escapes
+  1.5 s after they issued, and all seven died inside a blast they had already left. Reordering
+  relevance does not fix it on its own — stand the frequent one down, in its trigger or a
+  multiplier, for as long as any lethal one is live.
+- **A multiplier that zeroes relevance is reported as `IMPOSSIBLE`.** `Engine::DoNextAction` takes
+  the `else` of `if (action->isPossible() && relevance > 0)`, so a vetoed action is indistinguishable
+  in the act stream from one whose spell is unknown, out of range or on cooldown. The `veto` rows
+  name the multiplier that did it; read those before concluding an ability is broken.
 - **A registered POINT generator does not mean the unit is moving.**
   `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
   `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it

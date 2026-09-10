@@ -162,7 +162,10 @@ public:
         creators["auriaya anti fear action"] = &RaidUlduarActionContext::auriaya_anti_fear_action;
         creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron magnetic core action"] = &RaidUlduarActionContext::mimiron_magnetic_core_action;
-        creators["mimiron plasma blast action"] = &RaidUlduarActionContext::mimiron_plasma_blast_action;
+        creators["mimiron plasma blast defensive action"] =
+            &RaidUlduarActionContext::mimiron_plasma_blast_defensive_action;
+        creators["mimiron redirect threat action"] =
+            &RaidUlduarActionContext::mimiron_redirect_threat_action;
         creators["mimiron set dps priority action"] = &RaidUlduarActionContext::mimiron_set_dps_priority_action;
         creators["mimiron proximity mine action"] = &RaidUlduarActionContext::mimiron_proximity_mine_action;
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
@@ -335,7 +338,14 @@ private:
     static Action* auriaya_anti_fear_action(PlayerbotAI* ai) { return new AuriayaAntiFearAction(ai); }
     static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_magnetic_core_action(PlayerbotAI* ai) { return new MimironMagneticCoreAction(ai); }
-    static Action* mimiron_plasma_blast_action(PlayerbotAI* ai) { return new MimironPlasmaBlastAction(ai); }
+    static Action* mimiron_plasma_blast_defensive_action(PlayerbotAI* ai)
+    {
+        return new MimironPlasmaBlastDefensiveAction(ai);
+    }
+    static Action* mimiron_redirect_threat_action(PlayerbotAI* ai)
+    {
+        return new MimironRedirectThreatAction(ai);
+    }
     static Action* mimiron_set_dps_priority_action(PlayerbotAI* ai) { return new MimironSetDpsPriorityAction(ai); }
     static Action* mimiron_proximity_mine_action(PlayerbotAI* ai) { return new MimironProximityMineAction(ai); }
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }

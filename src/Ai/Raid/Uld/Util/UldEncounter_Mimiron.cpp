@@ -17,6 +17,7 @@
 #include "RaidObs.h"
 #include "ServerFacade.h"
 #include "SpellAuras.h"
+#include "ThreatManager.h"
 #include "Timer.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -36,7 +37,12 @@ const Position ULDUAR_MIMIRON_ROOM_CENTER = Position(2744.65f, 2569.46f, 364.32f
 const Position ULDUAR_MIMIRON_PHASE3_STAGE = Position(2762.65f, 2569.46f, 364.31f);
 const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT = Position(2744.5754f, 2570.8657f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT = Position(2691.5762f, 2568.5315f, 364.3138f);
-const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOT = Position(2697.0f, 2588.0f, 364.3138f);
+const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT] = {
+    Position(2697.2700f, 2589.7820f, 364.3138f),  // 75 deg off the tank spot
+    Position(2710.6290f, 2579.5310f, 364.3138f),  // 30
+    Position(2712.8270f, 2562.8370f, 364.3138f),  // 345
+    Position(2702.5760f, 2549.4790f, 364.3138f),  // 300
+};
 
 namespace
 {
@@ -376,6 +382,35 @@ MimironObsState& MimironObsStateFor(Player* bot)
     return mimironObsStates[bot->GetInstanceId()];
 }
 
+// Raid-wide phase 1 answers, and both have to be the same for every bot in the instance. A tank
+// hold each bot latched for itself would let the formation start walking while the tank was still
+// building threat; a stack anchor picked per bot is not a stack. Same locking as the state above -
+// the map is only touched by one thread at a time but is not pinned to one, and references into it
+// survive rehashing, so the guard only has to cover the lookup.
+struct MimironFightState
+{
+    // One-way per pull. Set when the main tank's threat lead on the MK II is real, or when the hold
+    // times out; until then he has no anchor and stands on the boss.
+    bool tankDragReady = false;
+    uint32 tankHoldStartedMs = 0;
+
+    uint8 stackAnchor = 0;
+    uint32 stackPickedMs = 0;
+    uint32 stackScanMs = 0;
+
+    ObjectGuid plasmaClaimedBy;
+    uint32 plasmaWindowMs = 0;
+};
+
+std::mutex mimironFightStatesMutex;
+std::unordered_map<uint32 /*instanceId*/, MimironFightState> mimironFightStates;
+
+MimironFightState& MimironFightStateFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(mimironFightStatesMutex);
+    return mimironFightStates[bot->GetInstanceId()];
+}
+
 // Everything the trace needs once per instance per tick rather than once per bot: the phase, the
 // Magnetic Core window, who holds the core, and the Laser Barrage cone.
 void TickMimironObs(PlayerbotAI* botAI, Player* bot, Unit* leviathanMkII, Unit* vx001,
@@ -401,6 +436,7 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot, Unit* leviathanMkII, Unit* 
         state.phase = GetMimironStagingFocus(bot) ? MIMIRON_TRACE_HANDOVER : MIMIRON_TRACE_NONE;
         state.acuGrounded = false;
         state.coreCarrier = ObjectGuid::Empty;
+        ResetMimironFightState(bot);
         return;
     }
 
@@ -579,6 +615,150 @@ float GetMimironPhase1DisperseDistance(PlayerbotAI* botAI)
                                           : ULDUAR_MIMIRON_DISPERSE_DISTANCE;
 }
 
+void ResetMimironFightState(Player* bot)
+{
+    if (!bot)
+        return;
+
+    MimironFightState& state = MimironFightStateFor(bot);
+    state = MimironFightState();
+}
+
+bool ClaimMimironPlasmaWindow(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    MimironFightState& state = MimironFightStateFor(bot);
+    if (state.plasmaWindowMs &&
+        GetMSTimeDiffToNow(state.plasmaWindowMs) < ULDUAR_MIMIRON_PLASMA_WINDOW_MS)
+    {
+        return state.plasmaClaimedBy == bot->GetGUID();
+    }
+
+    state.plasmaWindowMs = getMSTime();
+    state.plasmaClaimedBy = bot->GetGUID();
+    return true;
+}
+
+bool IsMimironTankDragReady(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+        return false;
+
+    MimironFightState& state = MimironFightStateFor(bot);
+    if (state.tankDragReady)
+        return true;
+
+    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    if (!leviathanMkII)
+        return false;
+
+    if (!state.tankHoldStartedMs)
+        state.tankHoldStartedMs = getMSTime();
+    else if (GetMSTimeDiffToNow(state.tankHoldStartedMs) >= ULDUAR_MIMIRON_TANK_HOLD_MAX_MS)
+    {
+        // Nobody is going to win this threat table. Walking a boss somebody else is holding is still
+        // better than standing at the pull spot burning the middle of the room down.
+        state.tankDragReady = true;
+        return true;
+    }
+
+    if (leviathanMkII->GetVictim() != bot)
+        return false;
+
+    ThreatManager& mgr = leviathanMkII->GetThreatMgr();
+    float const tankThreat = mgr.GetThreat(bot);
+    if (tankThreat <= 0.0f)
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return false;
+
+    // Against the raid rather than against the runner-up tank: an off-tank above the lead is fine,
+    // it is a dps crossing the line that stops the boss dead halfway through the drag.
+    float highest = 0.0f;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || PlayerbotAI::IsTank(member))
+            continue;
+
+        highest = std::max(highest, mgr.GetThreat(member));
+    }
+
+    if (tankThreat < highest * ULDUAR_MIMIRON_TANK_THREAT_LEAD)
+        return false;
+
+    state.tankDragReady = true;
+    return true;
+}
+
+Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+        return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[0];
+
+    MimironFightState& state = MimironFightStateFor(bot);
+
+    // Gathering the field costs a scan of every nearby npc, and twenty-five bots ask for this every
+    // tick, so the answer is folded on the same interval the observability pass uses.
+    if (state.stackScanMs &&
+        GetMSTimeDiffToNow(state.stackScanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
+    {
+        return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[state.stackAnchor];
+    }
+
+    state.stackScanMs = getMSTime();
+
+    if (state.stackPickedMs && GetMSTimeDiffToNow(state.stackPickedMs) < ULDUAR_MIMIRON_STACK_HOLD_MS)
+        return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[state.stackAnchor];
+
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+
+    uint32 counts[ULDUAR_MIMIRON_PHASE1_STACK_COUNT] = {};
+    for (uint8 i = 0; i < ULDUAR_MIMIRON_PHASE1_STACK_COUNT; ++i)
+    {
+        Position const& spot = ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[i];
+        for (Position const& flame : hazards.flames)
+        {
+            if (spot.GetExactDist2d(flame.GetPositionX(), flame.GetPositionY()) <=
+                ULDUAR_MIMIRON_STACK_FIRE_RADIUS)
+            {
+                ++counts[i];
+            }
+        }
+    }
+
+    uint8 const live = state.stackAnchor;
+    if (counts[live] <= ULDUAR_MIMIRON_STACK_FIRE_LIMIT)
+        return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[live];
+
+    uint8 best = live;
+    for (uint8 i = 0; i < ULDUAR_MIMIRON_PHASE1_STACK_COUNT; ++i)
+        if (counts[i] + ULDUAR_MIMIRON_STACK_FIRE_MARGIN <= counts[best])
+            best = i;
+
+    if (best == live)
+        return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[live];
+
+    state.stackAnchor = best;
+    state.stackPickedMs = getMSTime();
+
+    // Both counts, not just the winner: a switch that traded two nodes for one is the raid pacing,
+    // and that reads identically to a good one unless the number it left behind is on the line.
+    if (RaidObs::Active())
+    {
+        char line[48];
+        snprintf(line, sizeof(line), "%u:%u -> %u:%u", uint32(live), counts[live], uint32(best),
+                 counts[best]);
+        RaidObs::NoteDerived(bot, "mimiron.stack", line);
+    }
+
+    return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[best];
+}
+
 MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
 {
     MimironRapidBurstWindow window;
@@ -739,9 +919,8 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
 // so a slot that tracked the boss would smear the field along behind it. Gives ground only to stay in
 // casting range - "reach spell" is ACTION_HIGH against this formation at ACTION_RAID, so a slot past
 // range deadlocks instead of correcting itself. That is also what a dead main tank looks like.
-Position MimironPhase1StackSlot(Unit* focus)
+Position MimironPhase1StackSlot(Position const& stack, Unit* focus)
 {
-    Position const& stack = ULDUAR_MIMIRON_PHASE1_STACK_SPOT;
     if (!focus)
         return stack;
 
@@ -898,18 +1077,24 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
 
     if (PlayerbotAI::IsMainTank(bot) && phase1)
     {
+        // No anchor until the boss is actually his, so "reach melee" owns him and he stands on it
+        // building threat. Only under Firefighter: normal mode anchors on the room centre, which is
+        // where the MK II already is, so there is no drag to lose the boss halfway through.
+        if (firefighter && !IsMimironTankDragReady(botAI, bot))
+            return false;
+
         branch = "p1tank";
         out = firefighter ? ULDUAR_MIMIRON_PHASE1_TANK_SPOT : ULDUAR_MIMIRON_ROOM_CENTER;
         return true;
     }
 
-    // Ranged and healers hold one clump behind it rather than a ring or a wedge, so every chain grows
-    // toward the same place. It sits past ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST as well, which takes
-    // the 4 s Shock Blast flee off everyone who is not melee.
+    // Ranged and healers hold one clump rather than a ring or a wedge, so every chain grows toward
+    // the same place instead of being dragged out along every radius the raid occupies. Which of the
+    // four anchors is raid-wide and moves off the fire; the slot itself only slides to stay in range.
     if (phase1 && firefighter && PlayerbotAI::IsRanged(bot))
     {
         branch = "p1stack";
-        out = MimironPhase1StackSlot(focus);
+        out = MimironPhase1StackSlot(GetMimironPhase1StackAnchor(botAI, bot), focus);
         return true;
     }
 

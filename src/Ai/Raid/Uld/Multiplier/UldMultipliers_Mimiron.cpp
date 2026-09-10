@@ -116,24 +116,44 @@ float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)
     return IsMimironHardModeActive(botAI) ? 0.0f : 1.0f;
 }
 
-float MimironThreatRedirectGuardMultiplier::GetValue(Action* action)
+namespace
+{
+// Phase 1: the MK II is up and neither later construct is.
+bool MimironPhase1Active(PlayerbotAI* botAI)
+{
+    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+           !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
+           !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+}
+}  // namespace
+
+float MimironGenericRedirectGuardMultiplier::GetValue(Action* action)
 {
     if (!action)
         return 1.0f;
 
-    // Every BuffOnMainTankAction names itself "<spell> on main tank". Matching the two spells rather
-    // than the type on purpose: the type would also catch every blessing and buff aimed at the tank.
-    std::string const name = action->getName();
-    if (name != "misdirection on main tank" && name != "tricks of the trade on main tank")
+    // The smart-target node only. "tricks of the trade on main tank" already aims where this wants
+    // it, and UldThreatRedirectMultiplier holds both of the on-main-tank nodes for the whole
+    // encounter anyway.
+    if (action->getName() != "tricks of the trade")
         return 1.0f;
 
-    // Phase 1 only, where the two tanks trade Plasma Blast every 22 s. A taunt equalises threat for one
-    // moment; twenty seconds of a hunter's and a rogue's redirected threat undoes that long before the
-    // next cast, so the swap never sticks while these run. Nothing to swap in the later phases, so the
-    // redirects stay useful there.
-    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-                   !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
-                   !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT)
+    return MimironPhase1Active(botAI) ? 0.0f : 1.0f;
+}
+
+float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
+{
+    // By name: "reach spell" and "reach party member to heal" walk ranged and healers into range and
+    // must not be touched, and the gap-closers are the charge guard's business.
+    if (!action || action->getName() != "reach melee" || !PlayerbotAI::IsMainTank(bot))
+        return 1.0f;
+
+    if (!IsMimironHardModeActive(botAI) || !MimironPhase1Active(botAI))
+        return 1.0f;
+
+    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    return leviathanMkII && leviathanMkII->GetVictim() == bot &&
+                   IsMimironTankDragReady(botAI, bot)
                ? 0.0f
                : 1.0f;
 }

@@ -20,6 +20,8 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
+#include "RaidTankDefensive.h"
+#include "Spell.h"
 #include "Position.h"
 #include "UldData.h"
 #include "UldEncounter_Mimiron.h"
@@ -1055,28 +1057,95 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
     return needsAttack ? Attack(target) : false;
 }
 
-bool MimironPlasmaBlastAction::isUseful()
+bool MimironPlasmaBlastDefensiveAction::isUseful()
 {
-    MimironPlasmaBlastTrigger mimironPlasmaBlastTrigger(botAI);
-    return mimironPlasmaBlastTrigger.IsActive();
+    MimironPlasmaBlastDefensiveTrigger mimironPlasmaBlastDefensiveTrigger(botAI);
+    return mimironPlasmaBlastDefensiveTrigger.IsActive();
 }
 
-bool MimironPlasmaBlastAction::Execute(Event event)
+Unit* MimironPlasmaBlastDefensiveAction::PlasmaVictim()
 {
-    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
-    if (!leviathanMkII || leviathanMkII->GetVictim() == bot)
+    // The cannon is a passenger of the MK II and is what actually casts, and the victim was resolved
+    // when the cast began - read it off the spell rather than off the mech, which can have retargeted
+    // since.
+    Creature* cannon = bot->FindNearestCreature(NPC_LEVIATHAN_MKII_CANNON, 100.0f);
+    if (!cannon)
+        return nullptr;
+
+    Spell* spell = cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST);
+    if (!spell)
+        return nullptr;
+
+    Unit* victim = spell->m_targets.GetUnitTarget();
+    return victim && victim->IsAlive() ? victim : nullptr;
+}
+
+bool MimironPlasmaBlastDefensiveAction::TankHasDefensive(Unit* victim)
+{
+    Player* tank = victim ? victim->ToPlayer() : nullptr;
+    if (!tank)
         return false;
 
-    // Target and taunt on the same tick. Spending one on Attack, which succeeds and ends the tick, put
-    // the taunt a tick late; the trigger now fires between casts rather than during one, so there is
-    // room for that, but no reason to give the window away either.
-    if (AI_VALUE(Unit*, "current target") != leviathanMkII)
-        Attack(leviathanMkII);
+    PlayerbotAI* tankAI = GET_PLAYERBOT_AI(tank);
+    return tankAI && NextTankDefensive(tankAI, tank, nullptr) != nullptr;
+}
 
-    // Taunt sets the taunter's threat equal to the current highest, so the swap holds across the 22 s
-    // cycle as long as this tank keeps swinging - which is why it has to land before the cast rather
-    // than during it. "taunt spell" is registered for all four tank specs.
-    return botAI->DoSpecificAction("taunt spell", event, true);
+bool MimironPlasmaBlastDefensiveAction::Execute(Event /*event*/)
+{
+    Unit* victim = PlasmaVictim();
+    if (!victim)
+        return false;
+
+    if (victim == bot)
+    {
+        char const* defensive = NextTankDefensive(botAI, bot, "mimiron.plasma");
+        if (!defensive)
+            return false;
+
+        return ClaimMimironPlasmaWindow(bot) && botAI->CastSpell(defensive, bot);
+    }
+
+    // Let the tank spend his own first. He is checked rather than waited for because both nodes run
+    // on the same tick at the same relevance, so a healer that claimed on sight would beat him to it
+    // roughly half the time.
+    if (TankHasDefensive(victim))
+        return false;
+
+    for (char const* external : HEALER_EXTERNALS)
+    {
+        if (!botAI->CanCastSpell(external, victim))
+            continue;
+
+        if (!ClaimMimironPlasmaWindow(bot))
+            return false;
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "mimiron.plasma", external);
+
+        return botAI->CastSpell(external, victim);
+    }
+
+    return false;
+}
+
+Player* MimironRedirectThreatAction::GetRedirectTank()
+{
+    // Phase 1 only. Later phases split two mechs across two tanks, and a redirect that names the
+    // group main tank by definition feeds the wrong one.
+    if (!GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) ||
+        GetFirstAliveUnitByEntry(botAI, NPC_VX001) ||
+        GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+    {
+        return nullptr;
+    }
+
+    Unit* mainTank = AI_VALUE(Unit*, "main tank");
+    return mainTank ? mainTank->ToPlayer() : nullptr;
+}
+
+Unit* MimironRedirectThreatAction::GetThreatDumpTarget()
+{
+    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
 }
 
 bool MimironSlowBombBotAction::isUseful()

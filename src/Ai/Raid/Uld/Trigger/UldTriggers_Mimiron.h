@@ -86,10 +86,24 @@ public:
     bool IsActive() override;
 };
 
-class MimironPlasmaBlastTrigger : public Trigger
+// Live for the ~5 s the cannon is actually casting Plasma Blast on the tank. Six ticks totalling
+// 54k to 119k land on a 43k pool, so the button has to be down before the first one, not after a
+// health threshold notices the third.
+class MimironPlasmaBlastDefensiveTrigger : public Trigger
 {
 public:
-    MimironPlasmaBlastTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron plasma blast trigger") {}
+    MimironPlasmaBlastDefensiveTrigger(PlayerbotAI* ai)
+        : Trigger(ai, "mimiron plasma blast defensive trigger") {}
+    bool IsActive() override;
+};
+
+// Phase 1 only: feed the main tank so the MK II stays on him through the 53 yd walk west. Later
+// phases split two mechs across two tanks, which is why UldThreatRedirectMultiplier holds the
+// class-generic nodes for the whole encounter.
+class MimironRedirectThreatTrigger : public Trigger
+{
+public:
+    MimironRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron redirect threat trigger") {}
     bool IsActive() override;
 };
 

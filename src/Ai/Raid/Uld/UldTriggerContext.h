@@ -162,7 +162,10 @@ public:
         creators["auriaya anti fear trigger"] = &RaidUlduarTriggerContext::auriaya_anti_fear_trigger;
         creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron magnetic core trigger"] = &RaidUlduarTriggerContext::mimiron_magnetic_core_trigger;
-        creators["mimiron plasma blast trigger"] = &RaidUlduarTriggerContext::mimiron_plasma_blast_trigger;
+        creators["mimiron plasma blast defensive trigger"] =
+            &RaidUlduarTriggerContext::mimiron_plasma_blast_defensive_trigger;
+        creators["mimiron redirect threat trigger"] =
+            &RaidUlduarTriggerContext::mimiron_redirect_threat_trigger;
         creators["mimiron set dps priority trigger"] = &RaidUlduarTriggerContext::mimiron_set_dps_priority_trigger;
         creators["mimiron proximity mine trigger"] = &RaidUlduarTriggerContext::mimiron_proximity_mine_trigger;
         creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
@@ -348,7 +351,14 @@ private:
     static Trigger* auriaya_anti_fear_trigger(PlayerbotAI* ai) { return new AuriayaAntiFearTrigger(ai); }
     static Trigger* yogg_saron_anti_fear_trigger(PlayerbotAI* ai) { return new YoggSaronAntiFearTrigger(ai); }
     static Trigger* mimiron_magnetic_core_trigger(PlayerbotAI* ai) { return new MimironMagneticCoreTrigger(ai); }
-    static Trigger* mimiron_plasma_blast_trigger(PlayerbotAI* ai) { return new MimironPlasmaBlastTrigger(ai); }
+    static Trigger* mimiron_plasma_blast_defensive_trigger(PlayerbotAI* ai)
+    {
+        return new MimironPlasmaBlastDefensiveTrigger(ai);
+    }
+    static Trigger* mimiron_redirect_threat_trigger(PlayerbotAI* ai)
+    {
+        return new MimironRedirectThreatTrigger(ai);
+    }
     static Trigger* mimiron_set_dps_priority_trigger(PlayerbotAI* ai) { return new MimironSetDpsPriorityTrigger(ai); }
     static Trigger* mimiron_proximity_mine_trigger(PlayerbotAI* ai) { return new MimironProximityMineTrigger(ai); }
     static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
