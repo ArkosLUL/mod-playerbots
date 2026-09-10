@@ -236,6 +236,62 @@ void EnsureMeleeSlot(Player* bot)
     state.meleeSlots[bot->GetGUID()] = chosen;
 }
 
+// Same shape as EnsureMeleeSlot and for the same reason. This used to be a round robin counted over
+// group order on every call, which renumbers the whole camp behind anyone who dies.
+void EnsureRangedSlot(Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        state.rangedSlots[bot->GetGUID()] = 0;
+        return;
+    }
+
+    uint32 const instanceId = bot->GetInstanceId();
+
+    std::unordered_set<ObjectGuid> present;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (HoldsFormationSlot(member, instanceId) && TakesRangedSpot(member))
+            present.insert(member->GetGUID());
+    }
+
+    for (auto itr = state.rangedSlots.begin(); itr != state.rangedSlots.end();)
+        itr = present.count(itr->first) ? std::next(itr) : state.rangedSlots.erase(itr);
+
+    if (state.rangedSlots.count(bot->GetGUID()))
+        return;
+
+    std::array<uint8, ULDUAR_THORIM_RANGED_SLOTS> load = {};
+    for (auto const& assignment : state.rangedSlots)
+        if (assignment.second < ULDUAR_THORIM_RANGED_SLOTS)
+            ++load[assignment.second];
+
+    uint8 chosen = 0;
+    for (uint8 slot = 1; slot < ULDUAR_THORIM_RANGED_SLOTS; ++slot)
+        if (load[slot] < load[chosen])
+            chosen = slot;
+
+    state.rangedSlots[bot->GetGUID()] = chosen;
+}
+
+bool RangedSlotOf(Player* bot, uint8& slot)
+{
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    auto const itr = state->rangedSlots.find(bot->GetGUID());
+    if (itr == state->rangedSlots.end())
+        return false;
+
+    slot = itr->second;
+    return true;
+}
+
 bool IsBotPlayer(Player const* member)
 {
     WorldSession const* session = member ? member->GetSession() : nullptr;
@@ -499,6 +555,120 @@ void LightningChargeOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float be
     offset = held.offset;
 }
 
+// Sif's bunnies, swept once per instance per interval. Positions rather than units because that is
+// all the ring test wants, and a stale guid would need re-resolving on every bearing it tries.
+std::vector<Position> const& ThorimBlizzardSpots(Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    if (state.blizzardScanMs && GetMSTimeDiffToNow(state.blizzardScanMs) < ULDUAR_THORIM_ENCOUNTER_SCAN_INTERVAL_MS)
+        return state.blizzardSpots;
+
+    state.blizzardScanMs = getMSTime();
+    state.blizzardSpots.clear();
+
+    std::list<Creature*> bunnies;
+    bot->GetCreatureListWithEntryInGrid(bunnies, NPC_SIF_BLIZZARD, ULDUAR_THORIM_BLIZZARD_SCAN_RANGE);
+    for (Creature* bunny : bunnies)
+        if (bunny && bunny->IsAlive())
+            state.blizzardSpots.emplace_back(bunny->GetPositionX(), bunny->GetPositionY(), bunny->GetPositionZ());
+
+    return state.blizzardSpots;
+}
+
+bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position> const& bunnies)
+{
+    float const x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
+    float const y = boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
+
+    for (Position const& bunny : bunnies)
+        if (bunny.GetExactDist2d(x, y) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+            return false;
+
+    return true;
+}
+
+// Whether this bot is standing in a Blizzard and the spot it has been handed is not. Half the ring
+// slides come out under the 5 yd reposition tolerance, so without this the bot sits in the damage
+// waiting out a deadband that exists to stop it chasing a drifting point, not to hold it in fire. Both
+// halves matter: if the spot is no better there is nothing to buy by walking to it.
+bool RingSlideBeatsTheDeadband(Player* bot, Position const& spot)
+{
+    std::vector<Position> const& bunnies = ThorimBlizzardSpots(bot);
+    if (bunnies.empty())
+        return false;
+
+    bool standingInOne = false;
+    for (Position const& bunny : bunnies)
+    {
+        if (bunny.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+            return false;
+
+        if (bunny.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+            standingInOne = true;
+    }
+
+    return standingInOne;
+}
+
+// How far this bot slides around the ring to get off a Blizzard. Sliding rather than fleeing: the old
+// answer was the generic MoveAwayFromCreature, which takes the furthest of eight rays out to 30 yd, so
+// every accepted flee asked for the full 30 and dumped a melee bot a median 35 yd from the boss - and
+// then took another tick within 6s anyway 23-58% of the time, because the bunnies sit on a ring and
+// running outward lands on a different arc of it. The ring is never fully covered, worst case 53% clear
+// over 890 sampled snapshots, and the nearest clear bearing is a median 3-7 yd of arc away.
+void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float bearing, float& offset)
+{
+    offset = 0.0f;
+
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    std::vector<Position> const& bunnies = ThorimBlizzardSpots(bot);
+    if (bunnies.empty())
+    {
+        state.blizzardOffsets.erase(bot->GetGUID());
+        return;
+    }
+
+    auto const held = state.blizzardOffsets.find(bot->GetGUID());
+
+    // Hold what we already walked to while it is still clear. Re-solving every tick against a bunny
+    // that spawned somewhere new has the bot sliding in place, and a moving bot casts nothing.
+    if (held != state.blizzardOffsets.end() &&
+        RingBearingClearOfBlizzard(boss, Position::NormalizeOrientation(bearing + held->second), bunnies))
+    {
+        offset = held->second;
+        return;
+    }
+
+    // Measured off the bearing that came in, never off wherever the last bunny left us. The incoming
+    // bearing already has the cone offset on it, so searching from there is what keeps the two in step.
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
+
+    float const step = 0.0349f;  // 2 degrees
+    for (uint8 tick = 0; tick <= 90; ++tick)
+    {
+        for (int8 way = 1; way >= -1; way -= 2)
+        {
+            float const candidate = Position::NormalizeOrientation(bearing + way * tick * step);
+            if (RingBearingClearOfBlizzard(boss, candidate, bunnies) &&
+                // A cone is 20k in the instant it lands and a Blizzard tick is about 3k, so the cone
+                // wins the tie: a bearing that clears the bunny but sits under a lit orb is no answer.
+                !(orb && InLightningChargeCone(candidate, coneBearing)))
+            {
+                offset = Position::NormalizeOrientation(candidate - bearing);
+                state.blizzardOffsets[bot->GetGUID()] = offset;
+                return;
+            }
+
+            // Both ways are the same point at tick 0.
+            if (!tick)
+                break;
+        }
+    }
+
+    state.blizzardOffsets.erase(bot->GetGUID());
+}
+
 // Raw ring geometry is exactly the shape that lands off the navmesh, and MoveTo would then fail
 // without telling anyone. The arena floor also has a hole south of y = -288, which is what the melee
 // range re-check catches.
@@ -528,6 +698,143 @@ Position const& RangedSpot(uint8 slot)
         &ULDUAR_THORIM_PHASE2_RANGE4_SPOT, &ULDUAR_THORIM_PHASE2_RANGE5_SPOT, &ULDUAR_THORIM_PHASE2_RANGE6_SPOT};
 
     return *spots[std::min<uint8>(slot, ULDUAR_THORIM_RANGED_SLOTS - 1)];
+}
+
+// The seven Thunder Orbs, in the order the shelter table below indexes them. Fixed props, one per
+// pillar bunny at the same x,y, so this is only ever used to turn the lit orb into a table index.
+std::array<Position, 7> const ULDUAR_THORIM_THUNDER_ORB_SPOTS = {
+    Position(2145.50f, -222.62f, 433.30f), Position(2164.20f, -233.47f, 433.30f),
+    Position(2164.55f, -293.00f, 433.30f), Position(2105.04f, -292.56f, 433.30f),
+    Position(2092.95f, -263.00f, 433.30f), Position(2104.94f, -233.44f, 433.30f),
+    Position(2124.30f, -222.60f, 433.30f)};
+
+// Where a camp slot stands while the orb that covers it is lit, one row per (orb, slot) pair the cone
+// actually reaches. Only five of the seven orbs reach the camp at all, and orbs 5 and 6 point away from
+// it entirely, so they have no rows.
+//
+// Solved offline and every row navprobed, point and path: 42.5 degrees off the cone bearing at every
+// settled boss position three traces show, 22 yd off the tank spot so the melee ring cannot bridge
+// Chain Lightning in, inside 32 of the boss so the shorter nukes still reach, and 9 from every other
+// body standing at the time - Chain Lightning jumps 8.0 centre to centre. Longest run is 25.6 yd, about
+// 3.7s, against a 4.9s worst measured warning, so this is the number to watch if a trace ever shows a
+// bot still walking when the cone lands.
+//
+// Two rows are barely a yard. Those slots sit at 39-41 degrees, already outside the real 37.5 cone, and
+// the arrive tolerance swallows the walk - they are here so the table is total rather than to move
+// anyone.
+struct ThorimShelterSpot
+{
+    uint8 orbIndex;
+    uint8 slot;
+    Position spot;
+};
+
+std::array<ThorimShelterSpot, 12> const ULDUAR_THORIM_SHELTER_SPOTS = {{
+    {0, 4, Position(2142.00f, -254.85f, 419.814f)},
+    {0, 5, Position(2113.00f, -227.35f, 420.293f)},
+    {1, 3, Position(2132.00f, -276.35f, 419.755f)},
+    {1, 4, Position(2130.50f, -262.85f, 419.905f)},
+    {1, 5, Position(2119.50f, -225.85f, 420.293f)},
+    {2, 0, Position(2116.50f, -283.35f, 419.509f)},
+    {2, 1, Position(2107.50f, -283.35f, 420.104f)},
+    {2, 2, Position(2114.50f, -274.35f, 419.562f)},
+    {2, 3, Position(2140.00f, -241.35f, 419.502f)},
+    {3, 0, Position(2129.50f, -278.35f, 419.702f)},
+    {3, 1, Position(2125.50f, -269.85f, 419.755f)},
+    {6, 5, Position(2132.50f, -245.85f, 419.762f)},
+}};
+
+// Which of the seven the lit orb is. Refuses a loose match rather than picking the nearest: a wrong
+// index is a bot walking confidently into the cone, and staying home is only as bad as today.
+bool ThorimThunderOrbIndex(Unit* orb, uint8& index)
+{
+    for (size_t i = 0; i < ULDUAR_THORIM_THUNDER_ORB_SPOTS.size(); ++i)
+    {
+        if (ULDUAR_THORIM_THUNDER_ORB_SPOTS[i].GetExactDist2d(orb->GetPositionX(), orb->GetPositionY()) <=
+            ULDUAR_THORIM_THUNDER_ORB_MATCH_RADIUS)
+        {
+            index = static_cast<uint8>(i);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool ThorimShelterFor(uint8 orbIndex, uint8 slot, Position& out)
+{
+    for (ThorimShelterSpot const& row : ULDUAR_THORIM_SHELTER_SPOTS)
+    {
+        if (row.orbIndex == orbIndex && row.slot == slot)
+        {
+            out = row.spot;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// The camp's cone test. Its own margin, not the ring's: see the header for why 2.5 rather than 15.
+bool InLightningChargeConeRanged(float bearing, float coneBearing)
+{
+    float const halfWidth =
+        ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE / 2.0f + ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN;
+    return AbsAngleDelta(bearing, coneBearing) <= halfWidth;
+}
+
+// Where this camp slot stands right now: its spot, or its shelter while an orb covering that spot is
+// lit. Sticky per orb - once we are sheltered for this orb we stay sheltered until a different one
+// lights, which is 15s away at the soonest. There is deliberately no snap home when it goes dark: that
+// is a second run for nothing, and it would put the bot back in the open right as the next cone is
+// picked. Same latch the melee ring's cone offset already runs on.
+// Reports whether it sheltered, and off which orb, purely so the caller can note it.
+bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, Position& out, uint8& orbIndex)
+{
+    out = RangedSpot(slot);
+
+    // Resolved before the state reference is taken, because it goes through ThorimStateFor itself.
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+
+    ThorimEncounterState::RangedShelter& held = ThorimStateFor(bot).rangedShelters[bot->GetGUID()];
+
+    if (orb && held.orb != orb->GetGUID())
+    {
+        held.orb = orb->GetGUID();
+        held.sheltered = false;
+
+        // An orb we cannot place is left unlatched, so the next tick tries again instead of holding a
+        // bad index for the whole 15s.
+        if (!ThorimThunderOrbIndex(orb, held.orbIndex))
+            held.orb.Clear();
+    }
+
+    Position shelter;
+
+    // Re-tested every tick while the orb is lit and we have not committed, so a boss that drifts into
+    // covering this slot part way through the warning still gets an answer. Only ever false to true.
+    if (orb && !held.sheltered && held.orb == orb->GetGUID())
+    {
+        float const bearing = BearingFromBoss(boss, out.GetPositionX(), out.GetPositionY());
+        float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
+        if (InLightningChargeConeRanged(bearing, coneBearing) && ThorimShelterFor(held.orbIndex, slot, shelter))
+            held.sheltered = true;
+    }
+
+    if (!held.sheltered)
+        return false;
+
+    // The slot can still be reassigned under us by a death, and the new one may have no row for this
+    // orb. Home is the only safe answer then.
+    if (!ThorimShelterFor(held.orbIndex, slot, shelter))
+    {
+        held.sheltered = false;
+        return false;
+    }
+
+    out = shelter;
+    orbIndex = held.orbIndex;
+    return true;
 }
 
 // The slot's bearing off Thorim, struck the first time the bot asks and then left alone for the phase.
@@ -1754,34 +2061,33 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         return true;
     }
 
+    Unit* boss = GetThorim(botAI);
+
     if (role == ThorimPhase2Role::Ranged)
     {
-        Group* group = bot->GetGroup();
-        if (!group)
+        EnsureRangedSlot(bot);
+
+        uint8 slot = 0;
+        if (!RangedSlotOf(bot, slot))
             return false;
 
-        uint32 const instanceId = bot->GetInstanceId();
-        uint32 slot = 0;
-        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-        {
-            Player* member = ref->GetSource();
-
-            // Somebody who never zoned in was still eating a spot here. Filter on the instance the
-            // same way the melee picker does, and for the same reason leave liveness out of it.
-            if (!HoldsFormationSlot(member, instanceId) || !TakesRangedSpot(member))
-                continue;
-
-            if (member->GetGUID() == bot->GetGUID())
-                break;
-
-            slot = (slot + 1) % ULDUAR_THORIM_RANGED_SLOTS;
-        }
-
         position = RangedSpot(slot);
+
+        // No boss, no bearing, so no shelter - the spot on its own is still the right answer.
+        if (!boss)
+            return true;
+
+        uint8 orbIndex = 0;
+        bool const sheltered = ThorimRangedSpot(botAI, bot, boss, slot, position, orbIndex);
+
+        // Whether a cone actually moved this bot, and off which orb. A trace otherwise only shows that
+        // a camp bot walked, which is what it does when nothing is lit either.
+        RaidObs::NoteDerived(bot, "thorim.shelter",
+                             "slot " + std::to_string(uint32(slot)) +
+                                 (sheltered ? " orb " + std::to_string(uint32(orbIndex)) : " home"));
         return true;
     }
 
-    Unit* boss = GetThorim(botAI);
     if (!boss)
         return false;
 
@@ -1825,15 +2131,21 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     float offset = 0.0f;
     LightningChargeOffset(botAI, bot, boss, bearing, offset);
 
+    // Off the cone-adjusted bearing rather than the latched one, so the two slides compose instead of
+    // the second one undoing the first.
+    float blizzard = 0.0f;
+    BlizzardRingOffset(botAI, bot, boss, Position::NormalizeOrientation(bearing + offset), blizzard);
+
     // Whole degrees, so a ring that is holding writes one line for the phase. The point flipped between
     // two bearings 144 degrees apart with the boss stationary and no orb lit, which none of the three
     // terms below should allow, and ringBearings is the one of them that is not otherwise traced.
     RaidObs::NoteDerived(bot, "thorim.ringspot",
                          "slot " + std::to_string(uint32(slot)) + " bearing " +
                              std::to_string(int32(bearing * 180.0f / float(M_PI))) + " offset " +
-                             std::to_string(int32(offset * 180.0f / float(M_PI))));
+                             std::to_string(int32(offset * 180.0f / float(M_PI))) + " blizzard " +
+                             std::to_string(int32(blizzard * 180.0f / float(M_PI))));
 
-    if (RingPoint(bot, boss, Position::NormalizeOrientation(bearing + offset), position))
+    if (RingPoint(bot, boss, Position::NormalizeOrientation(bearing + offset + blizzard), position))
         return true;
 
     return StaticMeleeSpot(boss, slot, position);
@@ -1849,7 +2161,7 @@ bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
 
     if (state.ringArrived.count(bot->GetGUID()))
     {
-        if (distance <= ULDUAR_THORIM_RING_REPOSITION_TOLERANCE)
+        if (distance <= ULDUAR_THORIM_RING_REPOSITION_TOLERANCE && !RingSlideBeatsTheDeadband(bot, spot))
             return false;
 
         state.ringArrived.erase(bot->GetGUID());
@@ -1861,6 +2173,34 @@ bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
 
     state.ringArrived.insert(bot->GetGUID());
     return false;
+}
+
+bool ThorimShelterWalkPending(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
+        return false;
+
+    auto const held = state->rangedShelters.find(bot->GetGUID());
+    if (held == state->rangedShelters.end() || !held->second.sheltered)
+        return false;
+
+    // Copied out before the next lookup takes the lock again: a reset on another thread can drop the
+    // whole instance entry, and the iterator with it.
+    uint8 const orbIndex = held->second.orbIndex;
+
+    uint8 slot = 0;
+    if (!RangedSlotOf(bot, slot))
+        return false;
+
+    Position shelter;
+    if (!ThorimShelterFor(orbIndex, slot, shelter))
+        return false;
+
+    return bot->GetDistance(shelter) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
 }
 
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)
@@ -2018,6 +2358,9 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->dpsTargets.erase(bot->GetGUID());
     state->ringBearings.erase(bot->GetGUID());
     state->ringOffsets.erase(bot->GetGUID());
+    state->blizzardOffsets.erase(bot->GetGUID());
+    state->rangedSlots.erase(bot->GetGUID());
+    state->rangedShelters.erase(bot->GetGUID());
 
     // Per pet rather than clearing the map: the rest of it belongs to the other bots in the instance,
     // who are not resetting.
@@ -2044,6 +2387,10 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->lightningOrbGuid = ObjectGuid::Empty;
     state->lightningOrbScanMs = 0;
     state->ringOffsets.clear();
+    state->blizzardOffsets.clear();
+    state->rangedShelters.clear();
+    state->blizzardSpots.clear();
+    state->blizzardScanMs = 0;
     state->bossGuid.Clear();
     state->colossusGuid.Clear();
     state->colossusScanMs = 0;

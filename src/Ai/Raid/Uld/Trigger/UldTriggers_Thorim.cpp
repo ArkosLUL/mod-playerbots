@@ -349,6 +349,17 @@ bool ThorimSifBlizzardTrigger::IsActive()
         ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
         if (role == ThorimPhase2Role::MainTank || role == ThorimPhase2Role::OffTank)
             return false;
+
+        // The ring answers this itself now, by sliding along its own radius to a clear bearing. This
+        // node takes the furthest of eight rays out to 30 yd, which is how every accepted melee flee
+        // ended up asking for the full 30 and landing a median 35 yd off the boss - out of melee, and
+        // back in a Blizzard within 6s a quarter to half the time anyway.
+        if (role == ThorimPhase2Role::MeleeRing)
+            return false;
+
+        // A camp bot on its way out of a Lightning Charge cone is not stopping for a Blizzard tick.
+        if (role == ThorimPhase2Role::Ranged && ThorimShelterWalkPending(bot))
+            return false;
     }
 
     TooCloseToCreatureTrigger tooCloseToBlizzard(botAI);

@@ -80,6 +80,16 @@ constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 
+// What the melee ring slides to keep off a bunny, and deliberately not the 15 above: that one is the
+// flee's trigger radius and is meant to fire early. Damage stops at 9.8 - measured over 161 ticks, the
+// corrected DBC 8 plus both combat reaches - so 11 leaves a yard of slack. At 15 the slide grows from a
+// median 3-7 yd of arc to 9-12 and buys nothing.
+constexpr float ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0f;
+
+// How far out the bunny sweep looks. Only bunnies that could touch a ring point matter, which is 27 yd
+// from a bot standing on the ring, so this is loose on purpose rather than tuned.
+constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 50.0f;
+
 // Cheap first gate for everything Thorim owns, and it takes both halves. Distance alone does not
 // separate the wings: Hodir's room sits 136-176 yd from the arena centre against a corridor that runs
 // out to 126 yd, and a radius through that 10 yd gap would be luck rather than a gate. Height does -
@@ -161,6 +171,15 @@ constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_CONE_ANGLE = 1.3090f;   // 75 deg
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_MARGIN = 0.2618f;       // 15 degrees
 constexpr float ULDUAR_THORIM_RING_CONE_CLEARANCE = 0.0873f;           // 5 degrees
 constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGE = 150.0f;
+
+// The camp's own margin, far tighter than the ring's 15 above. A yard of boss drift swings the bearing
+// 7 degrees at the ring's 8 yd but only 2-4 out at 15-32, and across 46 measured casts the cone bearing
+// moved at most 5.1 degrees over the whole 5 s warning. Wider than this and no shelter set fits the room.
+constexpr float ULDUAR_THORIM_LIGHTNING_CHARGE_RANGED_MARGIN = 0.0436f;  // 2.5 degrees
+
+// How close a lit orb has to be to one of the seven known positions before the shelter table trusts the
+// match. Nothing within this and the bot stays home rather than walking off a guess.
+constexpr float ULDUAR_THORIM_THUNDER_ORB_MATCH_RADIUS = 4.0f;
 
 // The box boss_thorim.cpp scans every 5s for a living player. Find nobody in it and Thorim summons
 // the Lightning Orb, which wipes the raid outright - so these are copied from GetArenaPlayer() and
@@ -250,10 +269,10 @@ extern const Position ULDUAR_THORIM_PHASE2_TANK_SPOT;
 // degree wedge all six sat in a single cone, which is a 13 target burst for 202k and ten dead inside
 // two seconds. Spread over 88 degrees the worst of the seven catches four.
 //
-// Four is the floor while the boss parks here. Sif's loop passes 5.4 yd from the tank spot and swings
-// out to 43 yd on the east, so a camp 22 yd off the tank and clear of her only fits in a 95 degree
-// window, and one orb's cone is 75 of that. Parking him 16 yd further east opens it to 190 and takes
-// the worst cone to two, at the cost of walking the boss toward the camp.
+// Four is as good as spread alone gets, and four is still a wipe: the seven cones between them leave
+// only a 16-28 degree wedge of bearing permanently clear at any anchor, nowhere near enough for six
+// spots 11 yd apart. So the spread is only half the answer and ThorimRangedSpot walks the covered slots
+// off to a shelter for the 5 s the orb is lit.
 extern const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
@@ -279,6 +298,11 @@ struct ThorimEncounterState
     // tick means one death renumbers everyone behind the corpse and the ring shuffles mid-fight.
     RaidObs::ObsGuidMap<uint8> meleeSlots{"thorim.slot"};
 
+    // Same for the camp. It used to be a round robin over group order recomputed on every call, so a
+    // death renumbered everyone behind the corpse - one bot was seen walking spot 6 to 4 and back in
+    // 2.3 seconds. The shelter table below is keyed on this slot, so it has to hold still.
+    RaidObs::ObsGuidMap<uint8> rangedSlots{"thorim.rangedslot"};
+
     // Each melee bot's bearing off Thorim, struck the first time it needs a phase 2 spot. The point
     // was derived live from the tank's bearing and a rotation re-solved every call, and between them
     // six melee spent 74 to 92% of phase 2 walking - 950 to 1430 yd each, at 58% of the ranged dps.
@@ -295,6 +319,23 @@ struct ThorimEncounterState
     };
 
     std::unordered_map<ObjectGuid, RingOffset> ringOffsets;
+
+    // Same idea for the ring's Blizzard slide, kept apart from the cone offset because the two answer
+    // to different things: the cone only moves when a new orb lights, a bunny can land any tick.
+    std::unordered_map<ObjectGuid, float> blizzardOffsets;
+
+    // Whether one camp bot is standing on its shelter instead of its spot, and which orb decided that.
+    // Sticky for the life of the orb: no snapping home when it goes dark, because that is a second run
+    // for nothing and the next cone is 15s out. The index is kept so the spot is still findable after
+    // the orb despawns.
+    struct RangedShelter
+    {
+        ObjectGuid orb;
+        uint8 orbIndex = 0;
+        bool sheltered = false;
+    };
+
+    std::unordered_map<ObjectGuid, RangedShelter> rangedShelters;
 
     // 0 = nothing seen yet, otherwise SPELL_THORIM_RUNIC_SMASH_LEFT / _RIGHT. The side is sticky and
     // the timestamp is not: the timestamp says the wave is still rolling, the side says which lane
@@ -313,6 +354,12 @@ struct ThorimEncounterState
 
     RaidObs::ObsValue<ObjectGuid> lightningOrbGuid{"thorim.lightningorb"};
     uint32 lightningOrbScanMs = 0;
+
+    // Where Sif's Blizzard bunnies are, swept once per instance per interval rather than once per melee
+    // bot per tick. They do not move - 884 hazard samples across 21 spawn points in one trace - so the
+    // only thing the interval can miss is a fresh one, and Blizzard ticks about once a second.
+    std::vector<Position> blizzardSpots;
+    uint32 blizzardScanMs = 0;
 
     // Where each bot was sent to get out of the Charge Orb field. A trace otherwise only shows that a
     // bot moved, not which hazard moved it.
@@ -596,6 +643,12 @@ bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 // A settled ring holder, which is the only window the movement guard covers. Outside it the generic
 // movers are what bring a bot back, and freezing them permanently is the Void Reaver failure.
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
+
+// A camp bot that a lit orb has moved and that has not got there yet. The Blizzard flee stands down for
+// these: both movers run at MOVEMENT_COMBAT so whichever fires first owns the bot, and the positioning
+// node stands down outright while the flee is up - so a bunny landing during the warning is a bot flung
+// 30 yd instead of walked to its shelter, sometimes deeper into the cone. Worth up to 5s of ~3k ticks.
+bool ThorimShelterWalkPending(Player* bot);
 
 // The Thunder Orb carrying markerSpell, or nullptr. Both orb mechanics announce themselves the same
 // way and neither has a cast bar the bots can read: SPELL_THORIM_LIGHTNING_ORB_VISUAL is the 5 second
