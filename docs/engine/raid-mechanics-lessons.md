@@ -55,7 +55,7 @@ Nothing about a bot on a vehicle behaves like a bot on the ground. Every rule be
 
 ## Movement that oscillates
 
-Bots jiggling on the spot is one symptom with six causes.
+Bots jiggling on the spot is one symptom with six causes, plus a seventh that freezes them instead.
 
 - **Two owners** — see above.
 - **A destination that chases a moving boss.** A boss-relative spot flips to his far side while he is
@@ -81,6 +81,13 @@ Bots jiggling on the spot is one symptom with six causes.
   hazard's whole life. Either keep the step smaller than the tolerance, or teach the hold to reject a
   destination the hazard covers. Obsidian Sanctum's fissure dodge steps 10 yd against a raid-line
   tolerance of 8 and needed the second fix.
+- **A latch written inside a predicate more than one caller evaluates per tick.** The symptom inverts:
+  the bot freezes, because the callers disagree. Thorim's ring hold cleared "arrived" and told the
+  trigger to move, then re-armed it on the tighter arrive tolerance and told the action to hold, which
+  returned before its `MoveTo` — one bot stood in a Blizzard for 71 s with a clear point 4 yd away.
+  Keep the predicate a pure read; let the caller that issues the move own the latch. An escape that
+  overrides the deadband belongs outside the tolerance choice too, or the bot gets one order then
+  re-latches before retrying — and 40-60% of orders are refused.
 
 Two rules that belong with the geometry rather than the action:
 

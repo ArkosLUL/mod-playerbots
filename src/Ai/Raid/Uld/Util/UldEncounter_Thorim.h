@@ -636,9 +636,15 @@ bool ThorimPhase2Active(PlayerbotAI* botAI);
 ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot);
 bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role role, Position& position);
 
-// Updates this bot's arrival latch and reports whether it still needs to walk. Idempotent, so the
-// trigger and the action can both ask.
-bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
+// Whether this bot still has somewhere to be. Reads the arrival latch, never writes it: the trigger
+// and the action both ask within a tick, and a version that latched from in here answered them
+// differently - the trigger cleared the latch and said go, the action re-armed it on the 3 yd test
+// and returned before MoveTo. Nothing moved. One bot stood in a Blizzard for 71s that way.
+bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
+
+// The latch itself, for the action to set once it knows what it did with the answer above.
+void ThorimRingMarkArrived(Player* bot);
+void ThorimRingClearArrived(Player* bot);
 
 // A settled ring holder, which is the only window the movement guard covers. Outside it the generic
 // movers are what bring a bot back, and freezing them permanently is the Void Reaver failure.

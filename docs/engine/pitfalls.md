@@ -19,6 +19,18 @@ the *core* hash and says nothing about a module. The worldserver binary's mtime 
 (`docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver`) — it is UTC, so
 convert before comparing it against a local commit time.
 
+## A solved table outlives the traces it was solved from
+
+Coordinates fitted offline stay fitted to the pulls available that day. Thorim's twelve Lightning Charge
+shelters were solved against three pulls' boss positions; two later pulls widened that set enough to
+push four rows out of their own cone margin, one to 38.1° against a 37.5° arc — a bot sheltered into the
+cone it was dodging.
+
+Re-verify every row against every trace you have before shipping, and treat a measured limit as
+pass/fail: three of those shelters sat 7.6-8.2 yd off Sif's Blizzard track against a measured 9.8 yd
+reach, because clearance was a solver preference it was free to trade away. Parse the shipped table back
+out of the source to check it — the solver's own output only proves the solver agrees with itself.
+
 ## Names fail silently at runtime
 
 Everything is wired by string. Nothing here is a compile error.

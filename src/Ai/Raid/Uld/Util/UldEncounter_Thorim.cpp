@@ -587,12 +587,25 @@ bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position>
     return true;
 }
 
-// Whether this bot is standing in a Blizzard and the spot it has been handed is not. Half the ring
-// slides come out under the 5 yd reposition tolerance, so without this the bot sits in the damage
-// waiting out a deadband that exists to stop it chasing a drifting point, not to hold it in fire. Both
-// halves matter: if the spot is no better there is nothing to buy by walking to it.
-bool RingSlideBeatsTheDeadband(Player* bot, Position const& spot)
+// Whether the spot we have been handed is worth breaking the deadband for. The deadband is there to
+// stop a bot chasing a ring point that drifts with the boss, not to hold it in fire, and at 8 yd both
+// slides come out under it: a whole cone dodge is a 5 yd chord or less. Both halves of each test
+// matter - if the spot is no better there is nothing to buy by walking to it.
+bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
+    // Cone first. It lands for 20k in one millisecond against a Blizzard tick's 3k, and it was the
+    // half nothing checked: nine cone hits over two pulls with a safe spot under 5 yd away.
+    if (Unit* boss = GetThorim(botAI))
+    {
+        if (Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL))
+        {
+            float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());
+            if (InLightningChargeCone(BearingFromBoss(boss, bot->GetPositionX(), bot->GetPositionY()), coneBearing) &&
+                !InLightningChargeCone(BearingFromBoss(boss, spot.GetPositionX(), spot.GetPositionY()), coneBearing))
+                return true;
+        }
+    }
+
     std::vector<Position> const& bunnies = ThorimBlizzardSpots(bot);
     if (bunnies.empty())
         return false;
@@ -614,8 +627,9 @@ bool RingSlideBeatsTheDeadband(Player* bot, Position const& spot)
 // answer was the generic MoveAwayFromCreature, which takes the furthest of eight rays out to 30 yd, so
 // every accepted flee asked for the full 30 and dumped a melee bot a median 35 yd from the boss - and
 // then took another tick within 6s anyway 23-58% of the time, because the bunnies sit on a ring and
-// running outward lands on a different arc of it. The ring is never fully covered, worst case 53% clear
-// over 890 sampled snapshots, and the nearest clear bearing is a median 3-7 yd of arc away.
+// running outward lands on a different arc of it. The ring is never fully covered, worst case 22% clear
+// over 1726 sampled snapshots and blocked outright in none of them, and the nearest clear bearing is a
+// median 3-7 yd of arc away.
 void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float bearing, float& offset)
 {
     offset = 0.0f;
@@ -628,27 +642,42 @@ void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float beari
         return;
     }
 
+    // Resolved before the hold, not after. A held offset is a rotation off whatever bearing comes in,
+    // so one solved while nothing was lit will happily turn a fresh cone-safe bearing back under the
+    // orb - that is three of the cone hits, one of them from 56 degrees off cone to 1.4.
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
+
     auto const held = state.blizzardOffsets.find(bot->GetGUID());
+    bool const haveHeld = held != state.blizzardOffsets.end();
 
     // Hold what we already walked to while it is still clear. Re-solving every tick against a bunny
     // that spawned somewhere new has the bot sliding in place, and a moving bot casts nothing.
-    if (held != state.blizzardOffsets.end() &&
-        RingBearingClearOfBlizzard(boss, Position::NormalizeOrientation(bearing + held->second), bunnies))
+    if (haveHeld)
     {
-        offset = held->second;
-        return;
+        float const current = Position::NormalizeOrientation(bearing + held->second);
+        if (RingBearingClearOfBlizzard(boss, current, bunnies) &&
+            !(orb && InLightningChargeCone(current, coneBearing)))
+        {
+            offset = held->second;
+            return;
+        }
     }
 
     // Measured off the bearing that came in, never off wherever the last bunny left us. The incoming
     // bearing already has the cone offset on it, so searching from there is what keeps the two in step.
-    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
-    float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
+    //
+    // Whichever side the last answer was on gets tried first. Fixed order instead had one bunny
+    // spawning flip the answer clean across the ring: Assasin swung 99 degrees, 12 yd of arc, in
+    // 0.64s. Offsets are normalised to [0, 2pi), so past pi is the counter-clockwise side.
+    int8 const firstWay = haveHeld && held->second > float(M_PI) ? -1 : 1;
 
     float const step = 0.0349f;  // 2 degrees
     for (uint8 tick = 0; tick <= 90; ++tick)
     {
-        for (int8 way = 1; way >= -1; way -= 2)
+        for (int8 turn = 0; turn < 2; ++turn)
         {
+            int8 const way = turn ? -firstWay : firstWay;
             float const candidate = Position::NormalizeOrientation(bearing + way * tick * step);
             if (RingBearingClearOfBlizzard(boss, candidate, bunnies) &&
                 // A cone is 20k in the instant it lands and a Blizzard tick is about 3k, so the cone
@@ -713,15 +742,22 @@ std::array<Position, 7> const ULDUAR_THORIM_THUNDER_ORB_SPOTS = {
 // it entirely, so they have no rows.
 //
 // Solved offline and every row navprobed, point and path: 42.5 degrees off the cone bearing at every
-// settled boss position three traces show, 22 yd off the tank spot so the melee ring cannot bridge
-// Chain Lightning in, inside 32 of the boss so the shorter nukes still reach, and 9 from every other
-// body standing at the time - Chain Lightning jumps 8.0 centre to centre. Longest run is 25.6 yd, about
-// 3.7s, against a 4.9s worst measured warning, so this is the number to watch if a trace ever shows a
-// bot still walking when the cone lands.
+// settled boss position five traces show, 22 yd off the tank spot so the melee ring cannot bridge Chain
+// Lightning in, inside 32 of the boss so the shorter nukes still reach, and 9 from every other body
+// standing at the time - Chain Lightning jumps 8.0 centre to centre. Longest run is 25.6 yd, about
+// 3.7s, against a 4.9s worst measured warning, but the run is not capped at runtime: a bot commits to
+// its shelter from wherever it happens to be, and starting from a previous orb's shelter has been
+// measured at 60 yd.
 //
-// Two rows are barely a yard. Those slots sit at 39-41 degrees, already outside the real 37.5 cone, and
-// the arrive tolerance swallows the walk - they are here so the table is total rather than to move
-// anyone.
+// Clearance from Sif's Blizzard track is a preference here, not a rule, and three of orb 2's four rows
+// cannot have it: the pocket that is both off that cone and 11 yd clear of the track runs to about 97
+// square yards, and four points 9 yd apart do not fit in it. Those three sit 7.6-8.2 yd out, inside the
+// measured 9.8 reach. Right trade anyway - a cone is 20k in one instant against a 3k tick, and standing
+// on a shelter was only 14% of the camp's Blizzard damage. Walking to one was 63%.
+//
+// Two rows are under 3 yd, because those slots sit at 34-37 degrees off cone at home - only just inside
+// the 37.5 arc, so the edge is close. They still walk: the camp's trigger moves at 1 yd, not the ring's
+// 3.
 struct ThorimShelterSpot
 {
     uint8 orbIndex;
@@ -730,18 +766,18 @@ struct ThorimShelterSpot
 };
 
 std::array<ThorimShelterSpot, 12> const ULDUAR_THORIM_SHELTER_SPOTS = {{
-    {0, 4, Position(2142.00f, -254.85f, 419.814f)},
+    {0, 4, Position(2142.00f, -255.35f, 419.771f)},
     {0, 5, Position(2113.00f, -227.35f, 420.293f)},
     {1, 3, Position(2132.00f, -276.35f, 419.755f)},
     {1, 4, Position(2130.50f, -262.85f, 419.905f)},
-    {1, 5, Position(2119.50f, -225.85f, 420.293f)},
+    {1, 5, Position(2119.50f, -226.85f, 420.146f)},
     {2, 0, Position(2116.50f, -283.35f, 419.509f)},
     {2, 1, Position(2107.50f, -283.35f, 420.104f)},
     {2, 2, Position(2114.50f, -274.35f, 419.562f)},
     {2, 3, Position(2140.00f, -241.35f, 419.502f)},
     {3, 0, Position(2129.50f, -278.35f, 419.702f)},
-    {3, 1, Position(2125.50f, -269.85f, 419.755f)},
-    {6, 5, Position(2132.50f, -245.85f, 419.762f)},
+    {3, 1, Position(2126.00f, -269.85f, 419.761f)},
+    {6, 5, Position(2133.50f, -246.85f, 419.652f)},
 }};
 
 // Which of the seven the lit orb is. Refuses a loose match rather than picking the nearest: a wrong
@@ -2151,28 +2187,36 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
     return StaticMeleeSpot(boss, slot, position);
 }
 
-bool ThorimRingNeedsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
+bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot)
 {
     if (!bot)
         return false;
 
-    ThorimEncounterState& state = ThorimStateFor(bot);
-    float const distance = bot->GetDistance(spot);
+    ThorimEncounterState const* state = FindState(bot);
 
-    if (state.ringArrived.count(bot->GetGUID()))
-    {
-        if (distance <= ULDUAR_THORIM_RING_REPOSITION_TOLERANCE && !RingSlideBeatsTheDeadband(bot, spot))
-            return false;
+    // Wider once arrived, so a ring recomputed off a moving boss does not have the bot sliding in
+    // place. A moving bot casts nothing.
+    float const tolerance = state && state->ringArrived.count(bot->GetGUID())
+                                ? ULDUAR_THORIM_RING_REPOSITION_TOLERANCE
+                                : ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
 
-        state.ringArrived.erase(bot->GetGUID());
-        return true;
-    }
+    // Note: the escape is ored on outside the tolerance, not nested in the arrived branch. Nested, a
+    // bot standing in fire gets one move order and then re-latches on the next tick because it is
+    // still inside the 3 yd arrive test - so a refused order is never retried, and 40-60% of them
+    // come back refused.
+    return bot->GetDistance(spot) > tolerance || RingSpotBeatsTheDeadband(botAI, bot, spot);
+}
 
-    if (distance > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE)
-        return true;
+void ThorimRingMarkArrived(Player* bot)
+{
+    if (bot)
+        ThorimStateFor(bot).ringArrived.insert(bot->GetGUID());
+}
 
-    state.ringArrived.insert(bot->GetGUID());
-    return false;
+void ThorimRingClearArrived(Player* bot)
+{
+    if (bot)
+        ThorimStateFor(bot).ringArrived.erase(bot->GetGUID());
 }
 
 bool ThorimShelterWalkPending(Player* bot)

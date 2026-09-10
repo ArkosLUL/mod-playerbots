@@ -375,8 +375,20 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
 
     // Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot
     // sliding in place forever, and a moving bot casts nothing.
-    if (ringSlot && !ThorimRingNeedsMove(botAI, bot, targetPosition))
-        return false;
+    //
+    // The latch is set here rather than inside the predicate because this is the only place that
+    // knows whether a move actually went out. The trigger asks the same question first, and a
+    // predicate that wrote the latch gave the two of them different answers in the same tick.
+    if (ringSlot)
+    {
+        if (!ThorimRingWantsMove(botAI, bot, targetPosition))
+        {
+            ThorimRingMarkArrived(bot);
+            return false;
+        }
+
+        ThorimRingClearArrived(bot);
+    }
 
     // The main tank backs into his spot so he keeps facing the boss he is dragging south.
     bool const backward = role == ThorimPhase2Role::MainTank;

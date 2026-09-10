@@ -181,7 +181,7 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     if (role == ThorimPhase2Role::Ranged)
         return bot->GetDistance(spot) > 1.0f;
 
-    return ThorimRingNeedsMove(botAI, bot, spot);
+    return ThorimRingWantsMove(botAI, bot, spot);
 }
 
 bool ThorimRunicSmashTrigger::IsActive()
