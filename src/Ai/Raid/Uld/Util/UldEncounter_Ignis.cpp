@@ -318,7 +318,11 @@ Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot)
     return Position(x, y, z);
 }
 
-bool IsIgnisScorchWindow(Unit* boss) { return boss && boss->HasAura(SPELL_IGNIS_SCORCH); }
+// Both ids: spelldifficulty_dbc remaps these on 25-man, so the 10-man id alone never matches.
+bool IsIgnisScorchWindow(Unit* boss)
+{
+    return boss && (boss->HasAura(SPELL_IGNIS_SCORCH) || boss->HasAura(SPELL_IGNIS_SCORCH_25));
+}
 
 bool IsIgnisFlameJetsCasting(Unit* boss)
 {
@@ -327,7 +331,8 @@ bool IsIgnisFlameJetsCasting(Unit* boss)
 
     Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
 
-    return spell && spell->m_spellInfo->Id == SPELL_IGNIS_FLAME_JETS;
+    return spell && (spell->m_spellInfo->Id == SPELL_IGNIS_FLAME_JETS ||
+                     spell->m_spellInfo->Id == SPELL_IGNIS_FLAME_JETS_25);
 }
 
 bool IsIgnisSlagPotVictim(Player* bot)

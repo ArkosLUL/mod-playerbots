@@ -97,13 +97,12 @@ float MimironFormationGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     Position slot;
-    if (!GetMimironSpreadSlot(botAI, bot, slot))
+    float tolerance = ULDUAR_MIMIRON_SPREAD_TOLERANCE;
+    if (!GetMimironSpreadSlot(botAI, bot, slot, &tolerance))
         return 1.0f;
 
-    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <=
-                   ULDUAR_MIMIRON_SPREAD_TOLERANCE
-               ? 0.0f
-               : 1.0f;
+    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <= tolerance ? 0.0f
+                                                                                     : 1.0f;
 }
 
 float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)

@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -602,6 +603,17 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     return aboveFloor.empty() ? nullptr : highest(aboveFloor);
 }
 
+Spell* GetMimironPlasmaBlastCast(Unit* cannon)
+{
+    if (!cannon)
+        return nullptr;
+
+    if (Spell* spell = cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST))
+        return spell;
+
+    return cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST_25);
+}
+
 bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot)
 {
     // Phases 1 and 4 both park the MK II, and both are the phases it lays mines in.
@@ -1170,12 +1182,17 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
 }
 }  // namespace
 
-bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, float* outTolerance)
 {
     char const* branch = "none";
     uint32 index = 0;
     uint32 count = 0;
     bool const found = DeriveMimironSpreadSlot(botAI, bot, out, branch, index, count);
+
+    if (outTolerance)
+        *outTolerance = found && std::strcmp(branch, "p1stack") == 0
+                            ? ULDUAR_MIMIRON_PHASE1_STACK_TOLERANCE
+                            : ULDUAR_MIMIRON_SPREAD_TOLERANCE;
 
     if (RaidObs::Active())
     {

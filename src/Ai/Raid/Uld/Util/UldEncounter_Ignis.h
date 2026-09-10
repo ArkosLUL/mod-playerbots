@@ -36,7 +36,9 @@ enum UlduarIgnisIds
     // Self-buff on the boss for the 3 s he is rooted and rotation-locked; the patch spawns when it
     // falls off, from the orientation frozen at cast start.
     SPELL_IGNIS_SCORCH = 62546,
+    SPELL_IGNIS_SCORCH_25 = 63474,
     SPELL_IGNIS_FLAME_JETS = 62680,
+    SPELL_IGNIS_FLAME_JETS_25 = 63472,
     SPELL_IGNIS_MOLTEN = 62373,
     SPELL_IGNIS_BRITTLE_10 = 62382,
     SPELL_IGNIS_BRITTLE_25 = 67114,

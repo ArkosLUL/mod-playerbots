@@ -1072,7 +1072,7 @@ Unit* MimironPlasmaBlastDefensiveAction::PlasmaVictim()
     if (!cannon)
         return nullptr;
 
-    Spell* spell = cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST);
+    Spell* spell = GetMimironPlasmaBlastCast(cannon);
     if (!spell)
         return nullptr;
 

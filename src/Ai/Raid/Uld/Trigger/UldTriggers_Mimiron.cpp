@@ -133,7 +133,8 @@ bool MimironArcSpreadTrigger::IsActive()
     // No "is a mech up" gate of its own. GetMimironSpreadSlot answers false when neither a live nor a
     // staging focus resolves, and that is also what keeps this quiet before the pull and after a wipe.
     Position slot;
-    if (!GetMimironSpreadSlot(botAI, bot, slot))
+    float tolerance = ULDUAR_MIMIRON_SPREAD_TOLERANCE;
+    if (!GetMimironSpreadSlot(botAI, bot, slot, &tolerance))
         return false;
 
     // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
@@ -154,8 +155,7 @@ bool MimironArcSpreadTrigger::IsActive()
             return false;
     }
 
-    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) >
-           ULDUAR_MIMIRON_SPREAD_TOLERANCE;
+    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > tolerance;
 }
 
 bool MimironRapidBurstTrigger::IsActive()
@@ -368,7 +368,7 @@ bool MimironPlasmaBlastDefensiveTrigger::IsActive()
     if (!cannon)
         return false;
 
-    Spell* spell = cannon->FindCurrentSpellBySpellId(SPELL_MIMIRON_PLASMA_BLAST);
+    Spell* spell = GetMimironPlasmaBlastCast(cannon);
     if (!spell)
         return false;
 

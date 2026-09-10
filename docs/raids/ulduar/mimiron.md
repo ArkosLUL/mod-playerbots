@@ -29,7 +29,7 @@ one full-room clear 60 s into phase 1 (64570).
 
 **Which is why phase 1 is fought in the west.** The MK II is held at
 `ULDUAR_MIMIRON_PHASE1_TANK_SPOT` **(2691.576, 2568.532)**, 53 yd off centre, and ranged and healers
-clump 22 yd off it on one of `ULDUAR_MIMIRON_PHASE1_STACK_SPOTS` — so every seed lands out there
+camp 22 yd off it on one of `ULDUAR_MIMIRON_PHASE1_STACK_SPOTS` — so every seed lands out there
 rather than on the ground VX-001 is summoned onto. It works: **70% of phase-1 fire damage was taken
 inside 20 yd of the centre** before the move and **0.0%** after it across all three 2026-09-10
 pulls, with no node left within 24 yd of centre at the handover.
@@ -207,6 +207,11 @@ move the lock accepts, so `MimironDodgeFlamesTrigger` **also stands down** whene
 Shock Blast, a Rocket Strike, the Frost Bomb or Rapid Burst is live. Rapid Burst is tested last of
 the five: it walks the group to build its cone window where the others read a cast bar or a nearby
 creature.
+
+It held. Across two 2026-09-10 pulls on the fix Shock Blast went from 597,868 damage and seven deaths
+to **nothing at all**, then one hit and one death; `shock locked` fell 127 → 21 and 43, and
+`rapidburst`/`rocket`/`frostbomb locked` went 194/74/85 → **zero**. Flames fell with them, 625k → 340k
+and 217k.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -776,6 +781,14 @@ same five seconds: either alone carries it and the spare is worth more 22 s late
 are **not** held off their own reactive use — nothing measured yet says a button is wasted between
 windows.
 
+**None of which fired once**, across both pulls that shipped it: no `mimiron.plasma` note and no act
+row at all. `SPELL_MIMIRON_PLASMA_BLAST` is the 10-man 62997 and `spelldifficulty_dbc` remaps the
+cast to 64529 on 25-man, so `FindCurrentSpellBySpellId(62997)` could never match — the id was
+recorded three paragraphs up and still missing from the check. `GetMimironPlasmaBlastCast` tries
+both. Two tank deaths a pull while it was dead: 52.1 s and 76.5 s, then 51.2 s and 73.5 s. Ignis'
+Scorch and Flame Jets had the same hole; sweeping all 139 Ulduar constants against the table found no
+others.
+
 ## The tank leaves with three seconds of threat and the boss does not follow
 
 The 53 yd walk west only works if the MK II is actually his, and it was not. Across three 2026-09-10
@@ -810,6 +823,51 @@ branch keyed on `"combat start time"`, which `PlayerbotAI::ChangeEngineOnCombat`
 way Hodir and Freya do: the main tank in phase 1, `nullptr` after, because phases 2-4 split two mechs
 across two tanks. `UldThreatRedirectMultiplier` keeps holding the class-generic on-main-tank nodes
 for the whole encounter, which is why Misdirection was never cast at all.
+
+It worked. On the two pulls that followed, the MK II sat a median **5.4 yd** off the tank anchor with
+a p90 of 13-15, against a median 10.5 and a p90 of 108, and stayed on the main tank unbroken from
+13.7 s to 50.4 s. `mimiron generic redirect guard` vetoes `tricks of the trade` 11 and 16 times while
+`mimiron redirect threat action` lands 9 and 8 casts in its place.
+
+## Holding the boss made Napalm Shell a wipe, twice
+
+Both of those pulls still died in phase 1, at 92.4 s and 123.9 s, and Napalm Shell was **61.0% and
+46.9%** of everything taken. Eleven ranged and healers died between 38.0 s and 43.0 s in one, ten
+between 37.9 s and 41.9 s in the other.
+
+65026 is a **5 yd** blast — 9,424 on impact plus 5,999 a tick for 8 ticks, about **48k**, against
+22-30k pools — fired every 14 s at a random player. Victims a cast went 1.19/1.76/1.33 before the
+hold to **8.18 and 3.03**, worst cast **13** (564,724 damage) and **14** (402,769).
+
+Both causes are the hold working, not failing.
+
+**The raid finally stands still on the anchor.** `MimironFormationGuardMultiplier` zeroes `combat
+formation move` once a bot is inside its slot tolerance, and all fourteen ranged share **one** slot —
+`MimironPhase1StackSlot` has no per-bot term — so the unstacker switches itself off the moment they
+arrive. Ranged pairs closer than 5 yd: 56%, 38%, 65% before; **97% and 86%** after. What kept them
+apart earlier was the fire dodge throwing them about.
+
+**And the boss is now held next to them.** The shell picks uniformly among players at
+`GetDistance2d(mkII) > 15.0f`, which is raw **> ~24.5 yd** once the MK II's CombatReach of 8 comes off
+both sides, and an empty pool falls through to `SelectTarget(Random, 0, 100.0f, true)` — a threat-list
+pick with no distance floor, landing in the middle of the camp. Share of ranged past that cutoff: 30%,
+61%, 47% before; **16.5% and 2.7%** after, with the pool empty **36% and 68%** of phase 1 against
+6-13%. The earlier numbers were flattered by a human parked 48-97 yd out who soaked four of five
+shells in one pull and three of six in another.
+
+`ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE` is **6.0**, clearing the blast radius, and the camp gets its own
+`ULDUAR_MIMIRON_PHASE1_STACK_TOLERANCE` of **10**, handed back through `GetMimironSpreadSlot`'s
+`outTolerance` so `MimironFormationGuardMultiplier` and `MimironArcSpreadTrigger` cannot disagree about
+where the slot ends. The camp is still a camp for the fire; it just no longer fits inside one shell.
+Fourteen bots at 6 yd want about a 12 yd radius, so the outermost few will trade nudges with the
+formation at 10 — watch ranged `%cast`, and whether `reach spell` starts dominating the phase-1 move
+stream.
+
+Three things are still unexplained, and all of them need a pull that survives phase 1 before they mean
+anything: Bomb Bot `Explosion` reached 204,144 (11.6%) but every death was after 116 s with the healers
+already down; `mimiron dodge flames action` returned FAILED 58 and 55 times, rejecting 770-790
+candidate bearings; and ranged `%cast` is still 45.1% and 37.5% against the 63-65% the centre fight
+managed.
 
 ## The phase handovers are a minute of wasted time
 

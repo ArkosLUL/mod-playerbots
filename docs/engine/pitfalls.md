@@ -315,7 +315,13 @@ Related traps:
 - **Spell ids differ by difficulty and the mapping is not uniform.** Heigan's 25-man Decrepit Fever is
   **55011**, not 29998, so a raw `HasAura(29998)` dispelled nothing in 25-man; Eruption, Spell
   Disruption and Plague Cloud have no difficulty rows at all. Check
-  `spelldifficulty_dbc` per spell and use `NaxxSpellIds::HasAnyAura(unit, {…})`.
+  `spelldifficulty_dbc` per spell and use `NaxxSpellIds::HasAnyAura(unit, {…})`. The table is in the
+  **world DB** and the client `SpellDifficulty.dbc` can be empty for the same spell (Mimiron's Plasma
+  Blast, 62997 → 64529), so a DBC-only check reads as "no remap". It binds boss casts, not just player
+  auras: `FindCurrentSpellBySpellId` or `m_spellInfo->Id ==` on the 10-man id silently never matches.
+  Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice in each.
+  Sweep a raid's constants against the table in one pass — 28 of Ulduar's 139 remap, three of the
+  checks were reading only the 10-man id.
 
 ## Before the pull, and out of combat
 
@@ -444,6 +450,11 @@ nothing.
 Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` returns
 `UNIT_FIELD_COMBATREACH` (`Object.cpp:2888`), `IsWithinCombatRange` is `dist3d < d + reachSum`, and
 `GetMeleeRange = reachSum + 4/3`. Hard-coded stand distances that ignore reach break on large models.
+`GetDistance2d(WorldObject const*)` subtracts both reaches too, so a **boss script's** own filter is
+never the number written in it: Mimiron's Napalm picks among players at `GetDistance2d(mkII) > 15.0f`,
+which the MK II's CombatReach of 8 makes raw > ~24.5 yd. Convert before believing a range literal —
+it decides who a mechanic may pick, and an empty pool can fall through to something quite different
+(Napalm's fallback is a threat-list pick with no distance floor at all).
 
 ## Configuration
 

@@ -15,6 +15,7 @@
 
 class Player;
 class PlayerbotAI;
+class Spell;
 class Unit;
 
 // Mimiron.
@@ -50,6 +51,7 @@ enum UlduarMimironIds
     SPELL_P3WX2_LASER_BARRAGE_AURA_1 = 63274,
     SPELL_P3WX2_LASER_BARRAGE_AURA_2 = 63300,
     SPELL_MIMIRON_PLASMA_BLAST = 62997,
+    SPELL_MIMIRON_PLASMA_BLAST_25 = 64529,
     SPELL_MIMIRON_NAPALM_SHELL = 63666,
     SPELL_MIMIRON_MAGNETIC_FIELD = 64668,
     ITEM_MIMIRON_MAGNETIC_CORE = 46029,  // 100% drop from the Assault Bot; grounds the ACU
@@ -144,13 +146,19 @@ constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
 // DisperseDistanceValue default of -1, which the unstacker rejects outright.
 constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
 
-// Firefighter replaces it, and deliberately fails to clear Napalm's 5 yd. Chains grow toward whoever
-// is nearest their head, so a raid spread over the room drags one out along every radius it occupies
-// while a raid held in one clump makes them converge and leaves the rest of the floor clear. Napalm
-// is what that costs: it splashed 1.38 victims a cast against the spread and takes more from a
-// clump. Not tighter than this, because ULDUAR_MIMIRON_SPREAD_TOLERANCE already leaves a blob about
-// 10 yd across and packing inside the splash radius buys nothing back.
-constexpr float ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE = 3.0f;
+// Firefighter replaces it. The camp itself is deliberate - chains grow toward whoever is nearest
+// their head, so a raid spread over the room drags one out along every radius it occupies while a
+// raid held together makes them converge and leaves the rest of the floor clear. Packing inside
+// Napalm's 5 yd is not: 65026 is a 5 yd blast carrying about 48k over eight ticks, against 22-30k
+// pools, so any two bots inside it die together and a camp packed tighter than the blast loses
+// thirteen or fourteen of them to one cast.
+constexpr float ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE = 6.0f;
+
+// The camp is one shared slot, so the ordinary 5 yd tolerance has the formation guard switch the
+// unstacker off the moment a bot arrives and the raid ends up on a single point. Wide enough for
+// fourteen bots at ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE to settle inside it without the formation
+// and the unstacker fighting over every one of them.
+constexpr float ULDUAR_MIMIRON_PHASE1_STACK_TOLERANCE = 10.0f;
 
 // How far ahead of the highest non-tank threat the main tank has to be before he may start walking
 // the MK II west. He used to leave with about three seconds of it: the boss switched to a melee dps
@@ -392,8 +400,15 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
 // around VX-001, whose facing swings to whoever it last Rapid Burst. Returns false for roles this does
 // not place, and for everyone during a handover - the raid follows its master between phases, and only
 // the phase 4 main tank has a spot to hold. Trigger and action must both call this or the two disagree
-// about where the bot belongs.
-bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
+// about where the bot belongs. `outTolerance` is how close counts as standing on the slot, which is
+// not the same everywhere: the phase 1 camp is one slot shared by the whole raid.
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out,
+                          float* outTolerance = nullptr);
+
+// The cannon's Plasma Blast cast, or nullptr when it is between casts. Matches both ids:
+// spelldifficulty_dbc in the world DB remaps 62997 to 64529 on 25-man, so the id the boss
+// script names is never the one a 25-man cast carries.
+Spell* GetMimironPlasmaBlastCast(Unit* cannon);
 
 // The live Rapid Burst cone, or a window that is not valid when nothing is firing. The centreline is
 // taken from the raid member carrying 63382 rather than from VX-001's orientation: the boss is
