@@ -418,7 +418,8 @@ AiPlayerbot.UlduarFreyaHardMode = 0
 # Firefighter adds two hazards on top of the normal fight: a persistent, spreading ground fire and
 # VX-001's Frost Bomb (a large delayed explosion). When on, bots step out of the fire and clear the
 # Frost Bomb radius before it detonates; with it off they play the fight as normal mode. The Emergency
-# Fire Bots that also spawn are friendly extinguishers, so bots leave them alone either way.
+# Fire Bots that spawn in phase 3 put the fire out, so when on bots keep two of them alive, stay out of
+# their spray and silence, kill any extras, and kill the rest before phase 4.
 # Default: 0 (disabled)
 AiPlayerbot.UlduarMimironHardMode = 0
 

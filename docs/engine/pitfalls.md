@@ -382,6 +382,12 @@ header.
 For a per-instance clock (shared across bots), use the `PhaseStateFor` pattern: static mutex plus
 `unordered_map<instanceId, State>` with a staleness re-anchor.
 
+**A handout standing in for looting has to consume its source.** `StoreNewItem` off a corpse that
+nothing marks spent hands out a fresh item every time the last is used: Mimiron's core carrier minted
+32 Magnetic Cores off two corpses in 24 s. Take the item off the corpse's own `loot` (`is_looted`,
+`unlootedCount`, `NotifyItemRemoved`) and claim the corpse per instance for when loot was never filled
+(`TakeMimironCore`).
+
 `GenericBossHelper<BossAiType>` is **unusable** when the boss AI class is file-local to its `.cpp`
 (Anub'rekhan, Gothik, Heigan) or when the script is `TaskScheduler`-driven with no `events` member.
 Fall back to the plain-`AiObject` + timer-model pattern (`GluthBossHelper`, `HeiganBossHelper`).

@@ -642,6 +642,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron frost bomb trigger",
         { NextAction("mimiron frost bomb action", ACTION_RAID + 6) }));
 
+    // Below the fire dodge, whose fan already refuses the spray line and the silence. A fire bot only
+    // sprays when it reaches a flame; the fire ticks every second.
+    triggers.push_back(new TriggerNode(
+        "mimiron fire bot trigger",
+        { NextAction("mimiron fire bot action", ACTION_RAID + 3) }));
+
     triggers.push_back(new TriggerNode(
         "mimiron reset encounter state trigger",
         { NextAction("mimiron reset encounter state action", ACTION_RAID) }));
@@ -882,6 +888,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironGenericRedirectGuardMultiplier(botAI));
     multipliers.push_back(new MimironTankAnchorGuardMultiplier(botAI));
     multipliers.push_back(new MimironDrinkGuardMultiplier(botAI));
+    multipliers.push_back(new MimironFrostBombGuardMultiplier(botAI));
+    multipliers.push_back(new MimironFireBotAoeGuardMultiplier(botAI));
 
     // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a
     // generic mover walking the bot back into the blast or by a gap-closer teleporting it there, and

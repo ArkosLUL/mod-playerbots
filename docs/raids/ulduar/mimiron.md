@@ -22,10 +22,10 @@ carry aura 64561, which ticks 64566 for ~3.1k a second inside **3 yd**, and they
 entries are non-selectable trigger creatures, found by scanning `"nearest npcs"` — the same idiom as
 Freya's beams.
 
-**So where the raid stands is where the fire goes, and that is the only lever over it.** Three things
+**So where the raid stands is where the fire goes, and that is the only lever over it.** Four things
 put fire out and nothing else does: the Frost Bomb, VX-001's Flame Suppressant (65192, 10 yd around
-itself every 10 s in phase 2 — which also lands a 51% cast slow, so it is not a place to stand), and
-one full-room clear 60 s into phase 1 (64570).
+itself every 10 s in phase 2 — which also lands a 51% cast slow, so it is not a place to stand), one
+full-room clear 60 s into phase 1 (64570), and the phase 3 Emergency Fire Bots.
 
 **Which is why phase 1 is fought in the west.** The MK II is held at
 `ULDUAR_MIMIRON_PHASE1_TANK_SPOT` **(2691.576, 2568.532)**, 53 yd off centre, and ranged and healers
@@ -77,15 +77,6 @@ Napalm Shell is why it is slots and not a point — see
 [Napalm Shell wants one bot per shell](#napalm-shell-wants-one-bot-per-shell). All of this is
 Firefighter-only; normal mode has no fire and keeps the room centre, the ring and 5.5 yd.
 
-**Emergency Fire Bots (34147)** never enter zone combat — the Bot Summon Trigger's
-`if (_option < 3) SetInCombatWithZone()` skips them — and only run to flame nodes and cast Water
-Spray, never healing or repairing Mimiron. They are not friendly, though: `creature_template` gives
-them faction 16, the same as a Junk Bot, so they are attackable, and
-`MimironSetDpsPriorityAction` puts them on the kill list whenever hard mode is on. That
-contradicts `playerbots.conf.dist`, which promises bots leave them alone.
-Unresolved, because none have spawned in a traced pull — they come from the phase 3 ACU summon
-trigger, and no Firefighter attempt has reached phase 3.
-
 ## The Frost Bomb is 30 yd, and it lands in your own fire
 
 VX-001 casts 64623 at `SPELLVALUE_MAX_TARGETS 1` from 1 s into phases 2 and 4, repeating every 45 s.
@@ -111,11 +102,20 @@ The node also has to win the tick. Rocket strike, the flames dodge and the frost
 `ACTION_RAID + 4`; `Queue::findHighestRelevanceBasket` breaks an exact tie by push order and
 `Engine::DoNextAction` stops at the first action returning true, so the flames step ended the tick
 143-221 times a pull against 6-13 reaching the bomb. The ladder is now rapid burst +8, barrage +7,
-frost bomb +6, rocket strike +5, flames +4. `mimiron shock blast` at +3 still sits below the flames
-step — a 99999 blast losing to a 3k tick — but nothing has died to it yet.
+frost bomb +6, shock blast +5.5, rocket strike +5, flames +4, fire bot +3.
 
 It worked. Across the two 2026-09-08 pulls the bomb did **83,180 (2.2%) and 0**, against 697,314 and
 612,008, and killed **one bot and none** against 13-15 at once.
+
+**Then reach moves walked bots back in.** The flee stops at 34 and the trigger lets go just inside
+it, since `FindNearestCreature` adds both bounding radii to the 30, so the next `reach melee`, `reach
+spell`, heal reach or `set behind` walked the bot back toward its target, re-armed the flee, and it
+ping-ponged on the edge for the whole fuse: **114-150** `frost bomb <-> reach melee` a pull on
+2026-09-11, plus 67 `set behind`, 61 `reach spell`, 19 heal reach. Three died on the edge, a healer
+taking 45k at 24.8 yd when the Rapid Burst cone refused her last flees. `MimironChargeGuardMultiplier`
+only vetoes `reach melee`, and only while the trigger is active. `MimironFrostBombGuardMultiplier` now
+zeroes all four and `follow` inside `FROST_BOMB_CLEARANCE + _HOLD_MARGIN` (38 yd) of a live bomb; a
+healer may be out of range of a far tank for the 10 s.
 
 ## Two dodges fought over the fire, and both were too short
 
@@ -565,18 +565,20 @@ two bots is cheaper than half the raid unable to cast. At ±60° a 17-strong ran
 that job, and `CombatFormationMoveAction` shoving bots off slots the formation pulls them back onto is
 pure thrash.
 
-**The wedge is anchored on the room centre and never slides.** It used to slide toward the Aerial
-Command Unit until the outermost row was inside casting range, which sounds harmless and was not.
-`extent` was measured in every direction while the wedge only occupies 120° of one, so with
-`SpellDistance` 28.5 (margin 4 → 24.5) and a two-row wedge of extent 24 the excess came out at
-`dist − 0.5`: the anchor landed **half a yard from the boss** every tick, whatever the room centre
-said. The excess was never clamped to the distance either, so it could overshoot and place the anchor
-on the far side of the unit entirely.
+**The wedge is anchored on the room centre and never slides onto the unit.** A slide that measured
+`extent` in every direction while the wedge only occupies 120° of one landed the anchor **half a yard
+from the boss** every tick (`SpellDistance` 28.5, margin 4, extent 24: excess `dist − 0.5`), unclamped,
+so it could overshoot to the far side. That closed a loop: the unit uses `AttackStartCaster(who,
+30.0f)`, so it chases its threat target to within **30 yd**, and that target was a ranged bot in the
+wedge the anchor dragged after it. Raid and boss circled the room together: ranged oscillating instead
+of doing damage.
 
-That closed a loop. The unit uses `AttackStartCaster(who, 30.0f)`, so it holds **30 yd** from its
-threat target — and its threat target is a ranged bot standing in the wedge the anchor is dragging
-after it. Raid and boss then circle the room together, which is what "ranged oscillate instead of
-doing damage" looks like from the floor.
+**It does shift, rigidly and only for range.** The unit hovers ~16 yd up and follows its tank, so a
+centre-fixed wedge left south slots **35-45 yd 3D** from it on 2026-09-11, past casting range:
+**100** `arc spread <-> reach spell` a phase, one mage 38% casting. `MimironShiftIntoRange`, shared
+with the phase 1 camp, moves the whole wedge toward the unit's ground point until its outermost slot
+is inside `spellDistance + unit reach + 1.5 − margin` in 3D, which leaves ~26.7 yd of floor under a
+hover.
 
 Holding still is also the whole Bomb Bot fix. They spawn on the unit (`SPELL_SUMMON_BOMB_BOT` is cast
 on self), so once the wedge stops chasing, the unit's own 30 yd standoff is what a Bomb Bot has to
@@ -584,10 +586,9 @@ cross: **~3.7 s** of free fire on a 20,000 HP add at 8.0 yd/s, against approxima
 raid was closing on it. Pushing `ULDUAR_MIMIRON_PHASE3_MIN_RADIUS` past 18 buys nothing here — the
 unit keeps 30 yd from its victim wherever that victim stands.
 
-Nothing is lost by not sliding, because **the phase 3 Aerial Command Unit has no attack**. Its entire
-event list is `EVENT_SUMMON_{BOMB,ASSAULT,JUNK}_BOT` plus the Firefighter fire bots; Plasma Ball is
-scheduled only in phase 4. Range on it matters for exactly one thing, the Magnetic Core window, and
-melee and pets cover that on foot.
+**The unit does attack.** Its events are only the four summons, but `UpdateAI` ends in
+`DoSpellAttackIfReady(SPELL_PLASMA_BALL_P1)` on its victim every swing: **462k** into the tank in one
+phase 3.
 
 **Under Firefighter every live phase wants the wedge**, for an unrelated reason: fire. A 360° ring
 puts 25 bots on 25 bearings, and since each chain grows toward whoever is nearest its own head, that
@@ -688,12 +689,26 @@ order, so every bot agrees without coordinating), the corpse search widened to 6
 walks to the corpse before looting it. Corpses last 25 s
 (`TEMPSUMMON_CORPSE_TIMED_DESPAWN`), which is the entire window.
 
-**What the core buys is the only killable window in the phase, and nothing was using it.** Aura 64436
-runs **20 s**, carries `MOD_DAMAGE_PERCENT_TAKEN` at base 49 (**+50 % damage taken**), and its
-`OnApply` runs `DO_DISABLE_AERIAL`: `CastStop`, `AttackStop`, `REACT_PASSIVE`, hover cleared,
-`MoveFall`, and `_events.DelayEvents(25s)`. The unit's own `UpdateAI` returns early for the whole
-aura, so **no adds spawn during it**. It carries neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`, so it
-is an ordinary target.
+**What the core buys is the only killable window in the phase, and nothing was using it.** The placed
+core (34068) casts 64436 on itself **3 s** after the use, reaching the unit within 12 yd, and despawns
+at 25 s. The aura runs **20 s**, carries `MOD_DAMAGE_PERCENT_TAKEN` at base 49 (**+50 % damage
+taken**), and its `OnApply` runs `DO_DISABLE_AERIAL`: `CastStop`, `AttackStop`, `REACT_PASSIVE`, hover
+cleared, `MoveFall`, and `_events.DelayEvents(25s)`. `UpdateAI` returns before the event map for the
+whole aura, so add timers freeze for it and then slip 25 s more: **the next add comes ~45 s after the
+core**. Removal runs `DO_ENABLE_AERIAL`, a climb of +16 and a 2 s lambda that sets hover again. The
+unit carries neither `NOT_SELECTABLE` nor `NON_ATTACKABLE`, so it is an ordinary target.
+
+**One core per landing, one per corpse.** The action handed over a core by `StoreNewItem` whenever
+the carrier stood on an Assault Bot corpse without one, and the only use gate was
+`MOVEMENTFLAG_HOVER`, which holds through the 3 s arm and comes back with the lambda while an aura is
+still on. On 2026-09-11 one carrier looped loot and use every 0.4 s: **32 cores off two corpses** in
+24 s. A second 64436 replaces the first, so removal and apply run in one tick, a queued climb against
+a fall: the unit bounced between Z 364 and 388 for 26 s without landing, and each apply added another
+uncapped 25 s, so no add or fire bot came for the last 3 min of the phase and the fire ran to the
+cap. The core now comes off the corpse's own loot, marked looted as `Player::StoreLootItem` does, with a
+per-instance claimed set for a corpse whose loot was never filled (`TakeMimironCore`). It goes down
+only when `IsMimironCoreUseReady`: airborne, no 64436, and no live 34068 within 100 yd; until then the
+carrier notes `pending`.
 
 Melee and pets switch to it for the window — `IsAllowedTarget` used to refuse melee the Aerial Command
 Unit outside phase 4 unconditionally, and the pet node only ever looked for adds, so both sat it out.
@@ -702,14 +717,48 @@ them. Tanks never reach this: `MimironSetDpsPriorityTrigger` stands down for the
 keeps its tank throughout, which is deliberate — it is the one add nobody can ignore, and a tank
 contributes little of the burn.
 
+**Outside the window melee wait.** With no add up the list fell back to the generic picker, which
+handed melee the airborne unit, and the hold kept a disallowed target too, since both indexes equal
+the list size; `reach melee` then walked them under it into the fire: **1,034** `flame dodge <-> reach
+melee` in one phase 3, melee at 0.9-1.8k dps. The hold now requires an allowed target, and melee with
+nothing allowed while the unit is airborne hold the tick (`p3hold`), like `p4hold`.
+
 **The core grounds the unit where the unit already is, and the main tank is what decides that.** 64444
 summons by nearest entry conditioned on the Aerial Command Unit, so it lands under the unit and never
 under the placer: in one trace both cores spawned **0.00 yd** from the unit's x/y while the carrier stood
-12 yd away, and the unit then descended vertically. The tank decides it instead, because the unit hovers
-directly over its threat target — and phase 3 gave the tank no slot, only a chase. After a Bomb Bot
+12 yd away, and the unit then descended vertically. The tank decides it instead, because the unit chases
+its threat target to within 30 yd — and phase 3 gave the tank no slot, only a chase. After a Bomb Bot
 sidestep pushed it 30 yd out, tank and unit converged **16.8 yd** off the room centre and stayed there
 45 s, leaving 7 to 12 of 25 past casting range for both 20 s windows. `p3tank` pins the main tank to the
-room centre, the same way `p1tank` does for the MK II and for the same reason.
+room centre, the same way `p1tank` does for the MK II and for the same reason. His own `reach melee`
+still dragged it: chasing the airborne unit put him 13.7 yd off the spot, so
+`MimironTankAnchorGuardMultiplier` vetoes it while the unit is airborne, in both modes.
+
+## Emergency Fire Bots are kept, dodged, and killed before phase 4
+
+Three at a time every 45 s from the Aerial Command Unit's `_events`, the first ~8 s into phase 3, so a
+core landing postpones them too; the phase 3 defeat stops new waves and survivors carry into phase 4.
+They never enter zone combat (the Bot Summon Trigger's `if (_option < 3) SetInCombatWithZone()` skips
+them) and never attack, heal or repair: every 15 s each walks to the nearest Flames (Spread) and fires
+**Water Spray 64619** on arrival. That douses the flames and hits players too:
+`SPELL_ATTR0_CU_CONE_LINE` turns its 15 yd cone into a line about 2.3 yd each side, 18,850-21,150 frost
+plus Emergency Mode's 25% and a knockback. The 25-man bot (34148, 50.4k HP, ~63k empowered) also
+carries **Deafening Siren 64616**, a 10 yd area silence, from `creature_template_addon`. Faction 16,
+so attackable.
+
+2009 raids mostly killed them, some kept one or two for fire control, and all agreed none may live into
+phase 4. On 2026-09-11 bots killed the only wave, slowly (22-65 s), after **45 silences on 19 players**
+and two Water Spray deaths.
+
+The raid now **keeps two** through phase 3: `GetMimironKeptFireBots`, the two lowest guids, raid-wide,
+folded every 250 ms. Ranged rank any other above everything but a Bomb Bot, melee after the Assault
+Bot. At 15% ACU health (`_FIREBOT_CLEANUP_PCT`) the pair joins the list, and in the phase 4 handover
+`MimironSetDpsPriorityTrigger` fires with nothing engaged while a fire bot is in the room; phase 4
+already ranks them above the focus. `MimironFireBotAoeGuardMultiplier` holds damage AoE while a kept
+one is within 30 yd of the bot or its target. `IsMimironSpotFireBotSafe` refuses the spray strip (16
+ahead, 3.5 each side) for everyone and 13 yd for casters and healers in 25-man, in `IsMimironSpotSafe`
+and the flee fan; `mimiron fire bot` (`ACTION_RAID + 3`) steps sideways out of the line, or away from
+the siren.
 
 ## Pets need telling twice, in two different phases
 
@@ -898,7 +947,9 @@ The wedge answers both. The MK II stands ~5 yd off the tank spot toward the camp
 21: replaying every traced MK II position, a slot inside 15 yd drops from 40-49% of the time with a
 first row of 19 to 17-21%, and the pool is empty 0.3-1.3%. `GetMimironPhase1DisperseDistance` is 5.5
 in both modes, under the 6 yd rows, and the camp uses the ordinary 5 yd tolerance. The camp never cost
-range: ranged casting was 63.3% and 51.2% against 49.6 and 44.8 the night before.
+range: ranged casting was 63.3% and 51.2% against 49.6 and 44.8 the night before. It held on the
+next two pulls: **1.2 and 1.4** victims a cast, median nearest neighbour 5.9 yd, no bot dead in
+phase 1 in one pull; only the 0:16 opener, mid-drag, still falls back (1 and 3 victims).
 
 The knock-on is the wipe: healers die (one pull was down to one by 1:23), then Plasma windows kill the
 tank.
@@ -908,19 +959,25 @@ of phase-1 damage, about 250-390 dps a melee against the ~120 the adds section p
 `set behind` and `reach melee` putting melee on mines; and `mimiron dodge flames action` FAILED 58 and
 55 times on 2026-09-10, rejecting 770-790 bearings.
 
-## Phase 1 DPS is on pace; phase 2 is the check
+## Phase 3 is the DPS check now
 
-The MK II is the only attackable unit in phase 1, and bots were on it for 94-99% of samples by role on
-2026-09-11 — the misses are targetless stretches after a tank death, not a wrong target. It has
-**8,276,398** HP: **108.5 s at 76.3k** raid DPS and **132.8 s at 62.3k**.
+The 25-man hard-mode berserk is 10 min from the pull (`EVENT_BERSERK`, then Self-Destruction). Take
+out 13.3 s before phase 1 and the 103.5 s of fixed handovers and ~483 s is left for the MK II and
+VX-001 (8,276,398 each), the ACU (5,517,599) and phase 4 at half health (~11M): about **33M, 69k
+sustained**.
 
-The 25-man berserk is 10 min from the pull. Take out 13.3 s before phase 1 and the 103.5 s of fixed
-handovers and ~483 s is left for the MK II and VX-001 (8.28M each), the ACU (HealthModifier 200,
-~5.5M) and phase 4 at half health (~11M): about **33M, 69k sustained**. Phase 1 at 108 s is on pace,
-133 s is not. The check the raid actually fails is phase 2: at 39-55k/s VX-001 needs 150-210 s against
-a healing race that has lasted 88-137 s, and it started with 17 and 14 alive against the 21 of the best
-older pull. Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), which no pull has reached, so
-it has never been cast; that is deliberate.
+| phase, 2026-09-11 | early pulls | late pulls |
+|---|---|---|
+| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k |
+| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k |
+| 3 ACU | - | **231 s at 24k** |
+| 4 | - | 29 s before the berserk, all three at 43-46% |
+
+Bots hit the MK II, the only attackable unit in phase 1, in 94-99% of samples by role; the misses are
+targetless stretches after a tank death. Phase 2 was the check while the raid entered it with 14-17
+alive; with 22-24 it holds. Phase 3 lost the pull: no core landing, melee chasing the airborne unit,
+ranged out of range (see the core and wedge sections). At 69k it is ~80 s and phase 4 gets ~180 s.
+Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), deliberately, and went out 4 s into it.
 
 ## The phase handovers are a minute of wasted time
 
@@ -939,6 +996,13 @@ both are gone. `GetMimironSpreadSlot` returns false for everyone while staging. 
 settled it: across two handovers the human masters stood **43-54 yd from the room centre** on their
 own, against the 49-52 the lap produced. A raid leader already puts the raid where the fire wants
 taking, and chains grow **1.22 yd/s** and cannot catch a pack that is walking.
+
+**It also means the master decides whether phase 2 starts clean.** The first Frost Bomb clears flames
+within 30 yd of one node. In one 2026-09-11 pull the master stood still in the west and the stacked
+raid kept the fire in one cluster (median 8 yd from its centroid): the bomb cleared **37 of 37** and
+phase 2 ran on 4-21 nodes. In the other the master walked ~45 yd north, the raid followed, the fire
+split (median 24.6 yd), the bomb cleared 9, and phase 2 burned at the tracker's 40-node cap until the
+healers died. Following stays, by choice; stand still between phases.
 
 Parking *on the centre* is the thing to avoid, and it is what a formation did by accident and a
 master will not: one pull holding those two rings there put 37 nodes in the window, **86% of them
@@ -1020,13 +1084,13 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `phase` | 0 none, 1-4 the phase, 5 a handover. Per instance |
 | `core` | The Magnetic Core window is open. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
-| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse`, `walk-corpse`, `loot`, `bags-full`, `walk-acu`, `blocked`, `use` |
+| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `walk-acu`, `blocked`, `use` |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried |
-| `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, or `p4hold` |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried |
+| `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,
 which leaves a dodge that refuses all twelve completely silent.
@@ -1037,7 +1101,8 @@ because the cone has no world object, and neither has the DB Target it aims at: 
 hostile, so the snapshot sweep skips it too.
 
 Still invisible: **creature auras**, because `NoteAura` is roster-gated, so 64436 on the Aerial
-Command Unit never appears and `mimiron.core` is the only record of the window; and **mines under
-Firefighter**, because the sweep caps hostile creatures at 40 in grid order and fire nodes spread all
-fight, so a Proximity Mine can drop out of the containment test a death is measured against.
+Command Unit never appears and `mimiron.core` is the only record of the window; and **anything past
+the nearest 40 hazard creatures under Firefighter**, since fire spreads all fight: a Proximity Mine or
+a Frost Bomb can drop out of the snapshot, and so of the containment test a death is measured against,
+and a fire count reads 40 at most.
 

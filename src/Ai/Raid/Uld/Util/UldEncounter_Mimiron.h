@@ -7,12 +7,14 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERMIMIRON_H
 #define PLAYERBOTS_ULDENCOUNTERMIMIRON_H
 
+#include "ObjectGuid.h"
 #include "Position.h"
 #include "UldData.h"
 
 #include <string>
 #include <vector>
 
+class Creature;
 class Player;
 class PlayerbotAI;
 class Spell;
@@ -203,6 +205,13 @@ constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 // to happen to be standing on one.
 constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 60.0f;
 
+// How far to look for a Magnetic Core that is already down. 34068 casts 64436 on itself 3 s after the
+// use and despawns at 25 s, so a live one covers the arming, the 20 s landing and the 2 s climb back.
+// Using another inside that is what breaks the fight: a second 64436 replaces the first, the script
+// runs its lift-off and its landing in the same tick so the unit climbs with the aura still on, and
+// every landing pushes all the add timers back another 25 s with no cap.
+constexpr float ULDUAR_MIMIRON_CORE_PENDING_RANGE = 100.0f;
+
 // Phase 4 only ends when all three parts are channelling Self Repair at once, and that cast is 15 s,
 // so they have to come down level rather than one at a time. Percent, not raw health: the Aerial
 // Command Unit's HealthModifier is 200 against 300, so ordering on raw health ranked it last every
@@ -260,6 +269,7 @@ struct MimironFirefighterHazards
 {
     std::vector<Position> flames;
     std::vector<Position> bombs;
+    std::vector<Position> fireBots;  // orientation is where the Water Spray line points
 };
 
 MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
@@ -270,6 +280,16 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 
+// Out of every Emergency Fire Bot's Water Spray line, and for a caster or healer in 25-man also out of
+// its silence aura. Takes the bot because only the second half depends on who is asking.
+bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
+
+// The fire bots the raid leaves alone for now, so they keep putting the fire out: the
+// ULDUAR_MIMIRON_FIREBOT_KEEP oldest, in phase 3, until the Aerial Command Unit is low enough that
+// the cleanup has to start. Empty otherwise. Raid-wide, so every bot spares the same ones.
+std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot);
+bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot);
+
 // Whether `dest` is outside a Shock Blast the MK II is casting right now. The escape runs a bot out to
 // ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST and then hands the tick back, so anything else that moves a
 // bot during the 4 s cast has to refuse the circle too, or the formation walks it back in and a fire
@@ -277,9 +297,10 @@ bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position co
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest);
 
 // Same idea for anywhere a bot is asked to stand rather than flee to: mines, any Rocket Strike marker
-// still burning its fuse and a Shock Blast being cast, and under hard mode the ground fire and the
-// Frost Bomb. Positioning that ignores markers walks a bot that just dodged one straight back onto
-// it, and one that ignores the bomb walks the raid back into the blast for the whole ten second fuse.
+// still burning its fuse and a Shock Blast being cast, and under hard mode the ground fire, the
+// Frost Bomb and the fire bots. Positioning that ignores markers walks a bot that just dodged one
+// straight back onto it, and one that ignores the bomb walks the raid back into the blast for the
+// whole ten second fuse.
 bool IsMimironSpotSafe(Player* bot, Position const& dest);
 
 // Whether the straight walk from the bot to `dest` stays out of the fire. A slot can be clean while
@@ -319,9 +340,24 @@ void ResetMimironFightState(Player* bot);
 float GetMimironPhase1DisperseDistance(PlayerbotAI* botAI);
 
 // The 20 s a Magnetic Core buys. The Aerial Command Unit is on the floor, passive, and taking +50%
-// damage, and its own UpdateAI is short-circuited for the whole aura so nothing new spawns for 25 s.
-// It is the only stretch of phase 3 in which the boss can be killed at all.
+// damage. Its UpdateAI returns before the event map for the whole aura and the landing delays every
+// event 25 s on top, so the next add comes about 45 s after the core. It is the only stretch of
+// phase 3 in which the boss can be killed at all.
 bool IsMimironAcuGrounded(PlayerbotAI* botAI);
+
+// Phase 3 with the unit in the air. Nothing melee can reach it then, and walking toward it only drags
+// it, since it holds 30 yd from whoever it is on.
+bool IsMimironAcuAirborne(PlayerbotAI* botAI, Player* bot);
+
+// An Assault Bot corpse that still has its Magnetic Core: one core per corpse, taken off the corpse's
+// own loot when the loot was filled, so a player who looted it first leaves nothing for the bot.
+Creature* GetMimironCoreCorpse(Player* bot);
+
+// Moves that corpse's core into the bot's bags and marks the corpse spent. False on full bags.
+bool TakeMimironCore(Player* bot, Creature* corpse);
+
+// Whether a core may go down now: the unit is in the air and no earlier core is still live.
+bool IsMimironCoreUseReady(PlayerbotAI* botAI, Player* bot);
 
 // The ranged snare this bot can put on a Bomb Bot, or empty for a class that has none. Roots are
 // deliberately absent, but not because they break: neither Entangling Roots nor Frost Nova carries
@@ -461,6 +497,29 @@ constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 30.0f;
 // Where to stand rather than what the blast reaches: the extra clears the knockback and the yard or
 // two a leg overshoots by.
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
+// How far past the clearance reach moves stay held while a bomb is live. The flee stops at the
+// clearance and its trigger lets go just inside it, so without a band past both, "reach spell" or a
+// heal reach walks the bot straight back in for the rest of the fuse.
+constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
+
+// Emergency Fire Bots are kept alive through phase 3 to put the fire out. They never attack anyone:
+// each walks to the nearest Flames (Spread) and hits it with Water Spray 64619. Two stay and any more
+// are culled, which keeps the silence and the spray line rare and the cleanup before phase 4 short.
+constexpr uint32 ULDUAR_MIMIRON_FIREBOT_KEEP = 2;
+// Aerial Command Unit health at which the kept ones go on the kill list too. None may reach phase 4,
+// where they spray straight into the rendezvous.
+constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
+// Water Spray is SPELL_ATTR0_CU_CONE_LINE: a line 15 yd ahead of the bot, as wide as both object
+// sizes, about 2.3 yd each side. 18850 to 21150 frost plus Emergency Mode's 25 % and a knockback,
+// most of a bot's pool. The extra covers a step's overshoot and the bot turning to its next flame.
+constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 16.0f;
+constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH = 3.5f;
+// Deafening Siren 64616 is a 10 yd area silence, on the 25-man bot only (creature_template_addon), and
+// area auras add both object sizes to the radius.
+constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
+// How close a kept fire bot may get to the bot, or to what it is hitting, before damage AoE is held.
+// Bots cannot aim AoE away from one, and the kept ones walk into the raid after the fire.
+constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 30.0f;
 
 // Health below which a bot is willing to pay for a fire dodge. Above it the fire is cheaper than the
 // trip: a node ticks about 3100 against a 22000 to 24000 pool, and the round trip out and back is

@@ -148,8 +148,15 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
 
     // "reach melee" by name: "reach spell" and "reach party member to heal" walk ranged and healers
     // into range and must not be touched, and the gap-closers are the charge guard's business.
-    if (!dynamic_cast<TankFaceAction*>(action) && action->getName() != "reach melee")
+    bool const reachMelee = action->getName() == "reach melee";
+    if (!dynamic_cast<TankFaceAction*>(action) && !reachMelee)
         return 1.0f;
+
+    // Phase 3, either mode. The unit hovers out of reach and holds 30 yd from whoever it is on, so
+    // walking toward it only drags it and the fight off the centre spot the tank is given, and the
+    // ranged wedge with it.
+    if (reachMelee && IsMimironAcuAirborne(botAI, bot))
+        return 0.0f;
 
     if (!IsMimironHardModeActive(botAI) || !MimironPhase1Active(botAI))
         return 1.0f;
@@ -175,6 +182,51 @@ float MimironDrinkGuardMultiplier::GetValue(Action* action)
     for (Position const& node : hazards.flames)
         if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE)
             return 0.0f;
+
+    return 1.0f;
+}
+
+float MimironFrostBombGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (name != "reach melee" && name != "reach spell" && name != "reach party member to heal" &&
+        name != "set behind" && name != "follow")
+        return 1.0f;
+
+    if (!IsMimironHardModeActive(botAI))
+        return 1.0f;
+
+    float const hold = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE + ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN;
+    Creature* bomb = bot->FindNearestCreature(NPC_FROST_BOMB, hold + 5.0f);
+    return bomb && bot->GetExactDist2d(bomb) < hold ? 0.0f : 1.0f;
+}
+
+float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
+        return 1.0f;
+
+    if (dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    std::vector<ObjectGuid> const kept = GetMimironKeptFireBots(botAI, bot);
+    if (kept.empty())
+        return 1.0f;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    for (ObjectGuid const& guid : kept)
+    {
+        Unit* fireBot = botAI->GetUnit(guid);
+        if (!fireBot || !fireBot->IsAlive())
+            continue;
+
+        if (bot->GetExactDist2d(fireBot) < ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE ||
+            (target && target->GetExactDist2d(fireBot) < ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE))
+            return 0.0f;
+    }
 
     return 1.0f;
 }

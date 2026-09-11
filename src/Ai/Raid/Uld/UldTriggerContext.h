@@ -182,6 +182,7 @@ public:
         creators["thorim arena leash trigger"] = &RaidUlduarTriggerContext::thorim_arena_leash_trigger;
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
         creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
+        creators["mimiron fire bot trigger"] = &RaidUlduarTriggerContext::mimiron_fire_bot_trigger;
         creators["mimiron rapid burst trigger"] = &RaidUlduarTriggerContext::mimiron_rapid_burst_trigger;
         creators["xt002 debuff carrier trigger"] = &RaidUlduarTriggerContext::xt002_debuff_carrier_trigger;
         creators["xt002 avoid hazard trigger"] = &RaidUlduarTriggerContext::xt002_avoid_hazard_trigger;
@@ -374,6 +375,7 @@ private:
     static Trigger* thorim_arena_leash_trigger(PlayerbotAI* ai) { return new ThorimArenaLeashTrigger(ai); }
     static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
     static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
+    static Trigger* mimiron_fire_bot_trigger(PlayerbotAI* ai) { return new MimironFireBotTrigger(ai); }
     static Trigger* mimiron_rapid_burst_trigger(PlayerbotAI* ai) { return new MimironRapidBurstTrigger(ai); }
     static Trigger* xt002_debuff_carrier_trigger(PlayerbotAI* ai) { return new XT002DebuffCarrierTrigger(ai); }
     static Trigger* xt002_avoid_hazard_trigger(PlayerbotAI* ai) { return new XT002AvoidHazardTrigger(ai); }

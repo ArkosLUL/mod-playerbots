@@ -351,6 +351,20 @@ bool MimironDodgeFlamesTrigger::IsActive()
            bot->GetHealthPct() < ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT;
 }
 
+bool MimironFireBotTrigger::IsActive()
+{
+    if (!IsMimironHardModeActive(botAI))
+        return false;
+
+    // A fire bot that outlived phase 3 can meet the barrage, and that cone kills outright.
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (barrage.IsActive())
+        return false;
+
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    return !IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition());
+}
+
 bool MimironFrostBombTrigger::IsActive()
 {
     if (!IsMimironHardModeActive(botAI))
@@ -408,21 +422,17 @@ bool MimironMagneticCoreTrigger::IsActive()
     if (GetMimironCoreCarrier(botAI) != bot)
         return false;
 
-    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-    if (!aerialCommandUnit)
+    if (!GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
-    // Already grounded; nothing to do until it lifts off again.
-    if (!aerialCommandUnit->HasUnitMovementFlag(MOVEMENTFLAG_HOVER))
-        return false;
-
+    // Holding one, the action decides whether it may go down yet and says so in the trace.
     if (bot->HasItemCount(ITEM_MIMIRON_MAGNETIC_CORE, 1, false))
         return true;
 
-    // Corpses linger 25 s and the Assault Bot dies wherever the raid stopped it, so the search has to
-    // cover the room: the old 5 yd test only passed if the carrier happened to already be standing on
-    // one, which is why the core never reached the Aerial Command Unit. The walk itself is the action's.
-    return bot->FindNearestCreature(NPC_ASSAULT_BOT, ULDUAR_MIMIRON_CORE_SEARCH_RANGE, false) != nullptr;
+    // Fetched whatever the unit is doing: a corpse lasts 25 s, which a landing already under way
+    // mostly outlasts. Corpses lie wherever the raid stopped the Assault Bot, so the search covers the
+    // room and the walk is the action's.
+    return GetMimironCoreCorpse(bot) != nullptr;
 }
 
 bool MimironPetControlTrigger::IsActive()
@@ -469,5 +479,16 @@ bool MimironSetDpsPriorityTrigger::IsActive()
 
     // Engaged, not present: the action calls Attack() directly, and MK II sits in the room from the
     // moment the raid walks in.
-    return IsMimironEngaged(botAI);
+    if (IsMimironEngaged(botAI))
+        return true;
+
+    // The handover into phase 4 with fire bots still up. Nothing is engaged, so nobody would touch
+    // them, and they walk into the rendezvous spraying. They only exist from phase 3 on and the reset
+    // despawns them, so a live one with nothing engaged means exactly this handover. The hard mode
+    // switch is a config read that holds all over Ulduar, hence the room check before the grid scan.
+    if (!IsMimironHardModeActive(botAI) || bot->GetMapId() != ULDUAR_MAP_ID ||
+        bot->GetExactDist2d(ULDUAR_MIMIRON_ROOM_CENTER) > ULDUAR_MIMIRON_STAGING_SEARCH_RANGE)
+        return false;
+
+    return bot->FindNearestCreature(NPC_EMERGENCY_FIRE_BOT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE) != nullptr;
 }

@@ -63,8 +63,8 @@ bool IsFreyaHardModeActive(PlayerbotAI* botAI);
 
 // Mimiron: hard mode ("Firefighter") = a player pressed the Big Red Button before the pull, which
 // empowers the mechs for the whole fight and adds two hazards - a persistent, spreading ground fire
-// and VX-001's Frost Bomb. Note: the Emergency Fire Bots (34147) that also spawn are friendly fire
-// extinguishers, not kill targets, so bots leave them alone.
+// and VX-001's Frost Bomb. The phase 3 Emergency Fire Bots (34147) put that fire out; which of them
+// the raid keeps alive is GetMimironKeptFireBots.
 bool IsMimironHardModeActive(PlayerbotAI* botAI);
 
 // XT-002 Deconstructor: hard mode = the raid kills the exposed Heart during one of the 75/50/25%

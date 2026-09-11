@@ -152,6 +152,15 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode (Firefighter): bot is standing in a fire bot's spray line or, as a caster or healer in
+// 25-man, inside its silence aura.
+class MimironFireBotTrigger : public Trigger
+{
+public:
+    MimironFireBotTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron fire bot trigger") {}
+    bool IsActive() override;
+};
+
 // This bot carries a ranged snare and is already shooting a Bomb Bot that still has ground to cover.
 class MimironSlowBombBotTrigger : public Trigger
 {

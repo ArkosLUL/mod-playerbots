@@ -65,7 +65,8 @@ private:
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,
-                         uint32 refusedBurst, uint32 refusedShock, uint32 refusedMove);
+                         uint32 refusedBurst, uint32 refusedShock, uint32 refusedSpray,
+                         uint32 refusedMove);
 };
 
 class MimironShockBlastAction : public MimironFleeAction
@@ -223,7 +224,9 @@ private:
 
     bool IsAllowedTarget(Unit* unit) const;
 
-    Unit* ResolveTarget(Unit* currentTarget);
+    // nullptr when nothing is allowed and `allowFallback` is false; otherwise the generic picker's
+    // answer stands in.
+    Unit* ResolveTarget(Unit* currentTarget, bool allowFallback);
 
     static char const* DescribeTargetRule(Unit* unit);
 };
@@ -277,6 +280,17 @@ class MimironFrostBombAction : public MimironFleeAction
 {
 public:
     MimironFrostBombAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron frost bomb action") {}
+
+    bool Execute(Event event) override;
+    bool isUseful() override;
+};
+
+// Hard mode (Firefighter): step out of an Emergency Fire Bot's Water Spray line, sideways since the
+// line runs 15 yd ahead of it, or for a caster or healer in 25-man out of its silence aura.
+class MimironFireBotAction : public MimironFleeAction
+{
+public:
+    MimironFireBotAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron fire bot action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

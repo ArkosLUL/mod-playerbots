@@ -89,6 +89,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedBomb = 0;
     uint32 refusedBurst = 0;
     uint32 refusedShock = 0;
+    uint32 refusedSpray = 0;
     uint32 refusedMove = 0;
 
     // Everything except the Shock Blast escape itself, which is the one move that has to start inside
@@ -109,7 +110,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     UpdateMovementState();
     if (!IsMovingAllowed() || IsWaitingForLastMove(priority))
     {
-        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 1);
+        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 0, 1);
         return false;
     }
 
@@ -207,12 +208,18 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
+            if (!IsMimironSpotFireBotSafe(bot, hazards, dest))
+            {
+                ++refusedSpray;
+                continue;
+            }
+
             if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
                 RaidObs::MoveOutcome::Issued)
             {
                 float const taken = sign * delta;
                 NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone, refusedFire,
-                                refusedBomb, refusedBurst, refusedShock, refusedMove);
+                                refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
                 return true;
             }
 
@@ -224,16 +231,16 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     }
 
     // Every bearing in the fan was refused - by a mine, the barrage, the fire, the bomb, the Rapid
-    // Burst cone, or collision leaving the bot no further from the hazard than it started.
+    // Burst cone, a fire bot, or collision leaving the bot no further from the hazard than it started.
     if (!fallbackUnfiltered)
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedBurst, refusedShock, refusedMove);
+                        refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
         return false;
     }
 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                    refusedBomb, refusedBurst, refusedShock, refusedMove);
+                    refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
 
     if (fallbackFrom)
         return MoveAway(fallbackFrom, distance);
@@ -248,7 +255,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
                                         uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
                                         uint32 refusedFire, uint32 refusedBomb, uint32 refusedBurst,
-                                        uint32 refusedShock, uint32 refusedMove)
+                                        uint32 refusedShock, uint32 refusedSpray, uint32 refusedMove)
 {
     if (!RaidObs::Active())
         return;
@@ -259,9 +266,9 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
 
     char line[192];
     snprintf(line, sizeof(line),
-             "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u shock%u move%u)", what, outcome,
-             bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb, refusedBurst,
-             refusedShock, refusedMove);
+             "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u shock%u spray%u move%u)", what,
+             outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb,
+             refusedBurst, refusedShock, refusedSpray, refusedMove);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
@@ -780,6 +787,57 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
     return false;
 }
 
+bool MimironFireBotAction::isUseful()
+{
+    MimironFireBotTrigger mimironFireBotTrigger(botAI);
+    return mimironFireBotTrigger.IsActive();
+}
+
+bool MimironFireBotAction::Execute(Event /*event*/)
+{
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+
+    // The spray line first, since it hurts. Out the near side: running away along the line stays in
+    // it for 15 yd.
+    for (Position const& fireBot : hazards.fireBots)
+    {
+        float const dx = bot->GetPositionX() - fireBot.GetPositionX();
+        float const dy = bot->GetPositionY() - fireBot.GetPositionY();
+        float const facing = fireBot.GetOrientation();
+        float const ahead = dx * std::cos(facing) + dy * std::sin(facing);
+        float const side = dy * std::cos(facing) - dx * std::sin(facing);
+        if (ahead < 0.0f || ahead >= ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH ||
+            std::fabs(side) >= ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH)
+            continue;
+
+        float const step = ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH + 1.5f - std::fabs(side);
+        float const out = side >= 0.0f ? 1.0f : -1.0f;
+        Position const dest(bot->GetPositionX() - out * step * std::sin(facing),
+                            bot->GetPositionY() + out * step * std::cos(facing), bot->GetPositionZ());
+
+        return MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, true, true, "spray");
+    }
+
+    // Otherwise the silence. No interrupt: losing a cast to step out of a silence defeats the point.
+    Position const* nearest = nullptr;
+    float nearestDist = ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE;
+    for (Position const& fireBot : hazards.fireBots)
+    {
+        float const dist = bot->GetExactDist2d(fireBot.GetPositionX(), fireBot.GetPositionY());
+        if (dist < nearestDist)
+        {
+            nearest = &fireBot;
+            nearestDist = dist;
+        }
+    }
+
+    if (!nearest || IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition()))
+        return false;
+
+    return MoveAwayClearOfMines(*nearest, ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE + 2.0f - nearestDist,
+                                MovementPriority::MOVEMENT_FORCED, true, false, "siren");
+}
+
 bool MimironRapidBurstAction::isUseful()
 {
     MimironRapidBurstTrigger mimironRapidBurstTrigger(botAI);
@@ -858,8 +916,13 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
             case NPC_AERIAL_COMMAND_UNIT: aerialCommandUnit = unit; break;
             case NPC_BOMB_BOT:            bombBots.push_back(unit); break;
             case NPC_ASSAULT_BOT:         assaultBots.push_back(unit); break;
-            case NPC_EMERGENCY_FIRE_BOT:  fireBots.push_back(unit); break;
             case NPC_JUNK_BOT:            junkBots.push_back(unit); break;
+            case NPC_EMERGENCY_FIRE_BOT:
+                // Left out rather than refused later, or the nearest one being a kept one would hide
+                // a cull standing further away.
+                if (!IsMimironFireBotProtected(botAI, bot, unit))
+                    fireBots.push_back(unit);
+                break;
             default: break;
         }
     }
@@ -870,8 +933,9 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     // never wins - ranged have to kill it, and it dies to almost nothing. Only ones already in casting
     // range go on the list: chasing one abandons the mech for an add somebody else can reach, and drops
     // the bot into the same "reach spell" versus ACTION_RAID deadlock the ring positioning had. The
-    // Assault Bot comes next because it is the only Magnetic Core source, and the core is what grounds
-    // the Aerial Command Unit, so stopping for fire bots or Junk Bots ahead of it stretches the phase.
+    // Assault Bot comes before the other adds because it is the only Magnetic Core source, and the
+    // core is what grounds the Aerial Command Unit, so stopping for Junk Bots ahead of it stretches
+    // the phase.
     std::vector<std::pair<uint32, Unit*>> priority;
     if (PlayerbotAI::IsRangedDps(bot))
     {
@@ -883,6 +947,14 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         priority.emplace_back(NPC_BOMB_BOT, SelectByEntry(currentTarget, NPC_BOMB_BOT, reachable));
     }
 
+    // Fire bots that are not being kept: the extras past the kept pair, and all of them once the
+    // cleanup starts. Ranged take them ahead of everything but a Bomb Bot, since they die in seconds
+    // and a live one silences and sprays whoever it walks past. Melee get them after the Assault Bot.
+    bool const hardMode = IsMimironHardModeActive(botAI);
+    if (hardMode && PlayerbotAI::IsRangedDps(bot))
+        priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
+                              SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
+
     // A grounded Aerial Command Unit outranks the adds for melee. Nothing new spawns for the whole
     // window, so the only competition is whatever survived it, and +50% damage on the boss beats any
     // of it. Ranged keep the add order and arrive here on their own once the leftovers are dead.
@@ -893,7 +965,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
 
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
-    if (IsMimironHardModeActive(botAI))
+    if (hardMode && !PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
@@ -983,6 +1055,11 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
                    GetFirstAliveUnitByEntry(botAI, NPC_VX001) == nullptr;
         }
 
+        // The kept ones are putting the fire out. Refused here too, so the hold cannot keep a bot
+        // on one it was already hitting.
+        case NPC_EMERGENCY_FIRE_BOT:
+            return !IsMimironFireBotProtected(botAI, bot, unit);
+
         default:
             return true;
     }
@@ -1008,7 +1085,7 @@ char const* MimironSetDpsPriorityAction::DescribeTargetRule(Unit* unit)
     }
 }
 
-Unit* MimironSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
+Unit* MimironSetDpsPriorityAction::ResolveTarget(Unit* currentTarget, bool allowFallback)
 {
     std::vector<std::pair<uint32, Unit*>> const priority = BuildPriorityList();
 
@@ -1037,9 +1114,12 @@ Unit* MimironSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     };
 
     // Hold what the bot is already on unless something strictly more urgent is up, so a churn of
-    // Junk Bots cannot keep resetting swing and cast timers.
+    // Junk Bots cannot keep resetting swing and cast timers. Only something it may still hit: with
+    // nothing allowed both indexes come out equal, which would keep melee on the unit while it is up
+    // in the air.
     bool held = false;
-    if (currentTarget && priorityIndex(currentTarget) <= priorityIndex(target))
+    if (currentTarget && IsAllowedTarget(currentTarget) &&
+        priorityIndex(currentTarget) <= priorityIndex(target))
     {
         held = target != currentTarget;
         target = currentTarget;
@@ -1057,6 +1137,9 @@ Unit* MimironSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
         return target;
     }
+
+    if (!allowFallback)
+        return nullptr;
 
     // Nothing on the list is allowed, so the generic picker answers instead - which is the state
     // worth seeing, because it means this node stopped steering.
@@ -1087,9 +1170,25 @@ bool MimironSetDpsPriorityAction::Execute(Event /*event*/)
         return true;
     }
 
-    Unit* target = ResolveTarget(currentTarget);
+    // Phase 3 melee with no add up and the unit in the air have nothing they can hit, and the generic
+    // picker would hand them the unit anyway: "reach melee" then walks them under it, where the fire
+    // is, and the flame dodge throws them back out, over and over. They wait instead, holding the tick
+    // like the phase 4 hold; the dodges above it still run. Never a healer, same as that hold.
+    bool const phase3Wait =
+        botAI->IsMelee(bot) && !botAI->IsHeal(bot) && IsMimironAcuAirborne(botAI, bot);
+
+    Unit* target = ResolveTarget(currentTarget, !phase3Wait);
     if (!target)
-        return false;
+    {
+        if (!phase3Wait)
+            return false;
+
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "mimiron.dpsrule", "p3hold");
+
+        bot->AttackStop();
+        return true;
+    }
 
     // Returning false once the bot is already on the right target is what lets the lower-priority
     // nodes run at all: the engine ends the tick at the first action that succeeds.
@@ -1214,8 +1313,8 @@ bool MimironMagneticCoreAction::isUseful()
     return mimironMagneticCoreTrigger.IsActive();
 }
 
-// Which of the five steps the carrier is on. The act stream only says the node ran; when a core never
-// reaches the Aerial Command Unit, the answer is always which step it stopped at.
+// Which step the carrier is on. The act stream only says the node ran; when a core never reaches the
+// Aerial Command Unit, the answer is always which step it stopped at.
 void MimironMagneticCoreAction::NoteCoreStep(char const* step)
 {
     if (RaidObs::Active())
@@ -1234,8 +1333,7 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     Item* core = bot->GetItemByEntry(ITEM_MIMIRON_MAGNETIC_CORE);
     if (!core)
     {
-        Creature* corpse =
-            bot->FindNearestCreature(NPC_ASSAULT_BOT, ULDUAR_MIMIRON_CORE_SEARCH_RANGE, false);
+        Creature* corpse = GetMimironCoreCorpse(bot);
         if (!corpse)
         {
             NoteCoreStep("no-corpse");
@@ -1257,18 +1355,24 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         // 46029 is a white consumable the loot strategies discard as junk even when one is open. The
         // Assault Bot drops it at 100%, so a real raid always leaves this fight holding one. Handing
         // it over stands in for the missing packet exchange, gated on what a player would still have
-        // to do: kill the bot, stand on the corpse, and not already be carrying one.
-        ItemPosCountVec dest;
-        if (bot->CanStoreNewItem(NULL_BAG, NULL_SLOT, dest, ITEM_MIMIRON_MAGNETIC_CORE, 1) != EQUIP_ERR_OK)
+        // to do: kill the bot, stand on the corpse, and not already be carrying one. The core comes
+        // off that corpse, once, or it would hand out a new one every time the last was used.
+        if (!TakeMimironCore(bot, corpse))
         {
             NoteCoreStep("bags-full");
             return false;
         }
 
-        bot->StoreNewItem(dest, ITEM_MIMIRON_MAGNETIC_CORE, true,
-                          Item::GenerateItemRandomPropertyId(ITEM_MIMIRON_MAGNETIC_CORE));
         NoteCoreStep("loot");
         return true;
+    }
+
+    // One core per landing. A second one while the first is live makes the unit climb with the aura
+    // still on and pushes every add timer back another 25 s.
+    if (!IsMimironCoreUseReady(botAI, bot))
+    {
+        NoteCoreStep("pending");
+        return false;
     }
 
     // 64444 places its summon by nearest entry, so the core only reaches the ACU from underneath it.

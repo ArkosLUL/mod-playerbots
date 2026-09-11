@@ -91,10 +91,33 @@ public:
 // Tank face too. It steps him about 5.6 yd off the anchor, just past the formation's tolerance, and
 // the formation walks him back, over and over. The MK II has no frontal ability, so pointing it away
 // from the raid buys nothing.
+//
+// Phase 3 as well, for "reach melee" only: the Aerial Command Unit is out of reach in the air, and
+// the tank chasing it under itself drifted the whole fight 14 yd off the centre spot.
 class MimironTankAnchorGuardMultiplier : public Multiplier
 {
 public:
     MimironTankAnchorGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron tank anchor guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Mimiron hard mode: the Frost Bomb flee stops at its clearance and the trigger lets go just inside
+// it, so any reach move then walks the bot back into the blast, and it ping-pongs on the edge for the
+// whole 10 s fuse. A healer can be out of range of a far tank for that long; the blast is 47k against
+// a pool half that.
+class MimironFrostBombGuardMultiplier : public Multiplier
+{
+public:
+    MimironFrostBombGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron frost bomb guard") {}
+    float GetValue(Action* action) override;
+};
+
+// Mimiron hard mode, phase 3: bots cannot aim AoE away from a unit, so damage AoE is held near the
+// Emergency Fire Bots the raid is keeping alive to put the fire out. Heals are left alone.
+class MimironFireBotAoeGuardMultiplier : public Multiplier
+{
+public:
+    MimironFireBotAoeGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron fire bot aoe guard") {}
     float GetValue(Action* action) override;
 };
 
