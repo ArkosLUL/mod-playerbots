@@ -858,8 +858,8 @@ std::array<Position, 7> const ULDUAR_THORIM_THUNDER_ORB_SPOTS = {
 // Lightning in, inside 32 of the boss so the shorter nukes still reach, and 9 from every other body
 // standing at the time - Chain Lightning jumps 8.0 centre to centre. Longest run is 25.6 yd, about
 // 3.7s, against a 4.9s worst measured warning, but the run is not capped at runtime: a bot commits to
-// its shelter from wherever it happens to be, and starting from a previous orb's shelter has been
-// measured at 60 yd.
+// its shelter from wherever it happens to be, which is home unless a Blizzard zone held its walk back
+// from the last shelter.
 //
 // Clearance from Sif's Blizzard track is a preference here, not a rule, and three of orb 2's four rows
 // cannot have it: the pocket that is both off that cone and 11 yd clear of the track runs to about 97
@@ -932,10 +932,9 @@ bool InLightningChargeConeRanged(float bearing, float coneBearing)
 }
 
 // Where this camp slot stands right now: its spot, or its shelter while an orb covering that spot is
-// lit. Sticky per orb - once we are sheltered for this orb we stay sheltered until a different one
-// lights, which is 15s away at the soonest. There is deliberately no snap home when it goes dark: that
-// is a second run for nothing, and it would put the bot back in the open right as the next cone is
-// picked. Same latch the melee ring's cone offset already runs on.
+// lit. Sticky while lit, whatever the boss does mid warning. Home the moment it goes dark: Chain
+// Lightning lands 0.5-1.3s after every orb lights, and bots still walking home right then bridge the
+// stacked slots for it. Only costs an extra run when two orbs in a row cover the slot.
 // Reports whether it sheltered, and off which orb, purely so the caller can note it.
 bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, Position& out, uint8& orbIndex)
 {
@@ -946,7 +945,13 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
 
     ThorimEncounterState::RangedShelter& held = ThorimStateFor(bot).rangedShelters[bot->GetGUID()];
 
-    if (orb && held.orb != orb->GetGUID())
+    if (!orb)
+    {
+        held = {};
+        return false;
+    }
+
+    if (held.orb != orb->GetGUID())
     {
         held.orb = orb->GetGUID();
         held.sheltered = false;
@@ -961,7 +966,7 @@ bool ThorimRangedSpot(PlayerbotAI* botAI, Player* bot, Unit* boss, uint8 slot, P
 
     // Re-tested every tick while the orb is lit and we have not committed, so a boss that drifts into
     // covering this slot part way through the warning still gets an answer. Only ever false to true.
-    if (orb && !held.sheltered && held.orb == orb->GetGUID())
+    if (!held.sheltered && held.orb == orb->GetGUID())
     {
         float const bearing = BearingFromBoss(boss, out.GetPositionX(), out.GetPositionY());
         float const coneBearing = BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY());

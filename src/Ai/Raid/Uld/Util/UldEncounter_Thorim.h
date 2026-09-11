@@ -373,9 +373,8 @@ struct ThorimEncounterState
     std::unordered_map<ObjectGuid, float> blizzardOffsets;
 
     // Whether one camp bot is standing on its shelter instead of its spot, and which orb decided that.
-    // Sticky for the life of the orb: no snapping home when it goes dark, because that is a second run
-    // for nothing and the next cone is 15s out. The index is kept so the spot is still findable after
-    // the orb despawns.
+    // Held while that orb is lit and wiped when it goes dark, so the walk home is over before the next
+    // orb lights and brings its Chain Lightning.
     struct RangedShelter
     {
         ObjectGuid orb;

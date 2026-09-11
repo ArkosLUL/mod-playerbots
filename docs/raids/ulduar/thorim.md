@@ -126,6 +126,14 @@ ends, one way, at 12.5 s once Thorim is within 8 yd of the tank spot or the lit 
 spot, and always by 25 s: Sif's bunny path runs 2.6-7.7 yd from the floor spots. No trace yet shows
 whether Lightning Charge reaches players above z 430.
 
+### Shelters and Chain Lightning
+
+Chain Lightning is cast within 0.8 s of each orb lighting (both run on 15 s cycles) and lands 0.5 s
+later. So the camp shelters only while the orb is lit and walks home the moment it goes dark. Held
+until the next orb lit instead, 68 of 71 shelter exits over five pulls were walks home as the cast
+landed, and one chain ran from three bots stacked on a shelter through two walking home, killing a
+healer at hop 6.
+
 ## The Charge Orb field is a 32.3 yd circle, not a 35 yd sphere
 
 `EVENT_THORIM_CHARGE_ORB` fires 14 s into phase 1 and repeats every 16 s, casting **Charge Orb 62016**
