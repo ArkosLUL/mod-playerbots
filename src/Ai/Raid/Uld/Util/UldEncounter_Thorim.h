@@ -66,7 +66,11 @@ enum UlduarThorimIds
 
     // Thorim hard mode (arena gauntlet cleared fast enough that Sif joins the fight).
     NPC_SIF = 33196,              // spawns at Thorim's throne, drops into the arena when she joins
-    NPC_SIF_BLIZZARD = 32879,     // moving Blizzard ground AoE, only ever exists in hard mode
+    NPC_SIF_BLIZZARD = 32879,     // walks the arena dropping the zones below, only ever exists in hard mode
+    // What actually hurts: a 10s, 8 yd zone the bunny drops every 2s, so up to six of them trail behind
+    // it, a median 26 yd back. Testing the bunny alone missed 16 of 20 melee Blizzard hits in one pull.
+    SPELL_SIF_BLIZZARD_ZONE_10 = 62576,
+    SPELL_SIF_BLIZZARD_ZONE_25 = 62602,
 };
 
 constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
@@ -80,15 +84,21 @@ constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
 
-// What the melee ring slides to keep off a bunny, and deliberately not the 15 above: that one is the
-// flee's trigger radius and is meant to fire early. Damage stops at 9.8 - measured over 161 ticks, the
-// corrected DBC 8 plus both combat reaches - so 11 leaves a yard of slack. At 15 the slide grows from a
-// median 3-7 yd of arc to 9-12 and buys nothing.
+// How far the melee ring and the camp keep off a Blizzard zone, and deliberately not the 15 above: that
+// one is the generic flee's trigger radius and is meant to fire early. Damage stops at 9.8 - measured
+// over 161 ticks, the corrected DBC 8 plus both combat reaches - so 11 leaves a yard of slack. At 15 the
+// slide grows from a median 3-7 yd of arc to 9-12 and buys nothing.
 constexpr float ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0f;
 
-// How far out the bunny sweep looks. Only bunnies that could touch a ring point matter, which is 27 yd
-// from a bot standing on the ring, so this is loose on purpose rather than tuned.
-constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 50.0f;
+// How far out the Blizzard sweep looks. Every bot reads whichever bot's sweep filled the cache last, so
+// it has to reach the whole trail from anywhere in the arena: the bunny's path alone spans 61 by 48 yd.
+constexpr float ULDUAR_THORIM_BLIZZARD_SCAN_RANGE = 70.0f;
+
+// How far a camp bot steps to get off a zone, and how far from Thorim it may end up doing it. Short on
+// purpose: the generic flee's 30 yd runs carried healers along the bunny's own path and into the cone.
+// 32 is the boss range the camp table was solved to.
+constexpr float ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS = 15.0f;
+constexpr float ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE = 32.0f;
 
 // Cheap first gate for everything Thorim owns, and it takes both halves. Distance alone does not
 // separate the wings: Hodir's room sits 136-176 yd from the arena centre against a corridor that runs
@@ -321,7 +331,7 @@ struct ThorimEncounterState
     std::unordered_map<ObjectGuid, RingOffset> ringOffsets;
 
     // Same idea for the ring's Blizzard slide, kept apart from the cone offset because the two answer
-    // to different things: the cone only moves when a new orb lights, a bunny can land any tick.
+    // to different things: the cone only moves when a new orb lights, a zone can land any tick.
     std::unordered_map<ObjectGuid, float> blizzardOffsets;
 
     // Whether one camp bot is standing on its shelter instead of its spot, and which orb decided that.
@@ -355,9 +365,9 @@ struct ThorimEncounterState
     RaidObs::ObsValue<ObjectGuid> lightningOrbGuid{"thorim.lightningorb"};
     uint32 lightningOrbScanMs = 0;
 
-    // Where Sif's Blizzard bunnies are, swept once per instance per interval rather than once per melee
-    // bot per tick. They do not move - 884 hazard samples across 21 spawn points in one trace - so the
-    // only thing the interval can miss is a fresh one, and Blizzard ticks about once a second.
+    // Where Sif's Blizzard zones and the bunny dropping them are, swept once per instance per interval
+    // rather than once per bot per tick. A zone never moves once dropped, so the interval can only miss
+    // a fresh one, and those come every 2s.
     std::vector<Position> blizzardSpots;
     uint32 blizzardScanMs = 0;
 
@@ -642,7 +652,8 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
 // and returned before MoveTo. Nothing moved. One bot stood in a Blizzard for 71s that way.
 bool ThorimRingWantsMove(PlayerbotAI* botAI, Player* bot, Position const& spot);
 
-// The latch itself, for the action to set once it knows what it did with the answer above.
+// The latch itself. The trigger sets it when the answer above is "stay", the action clears it right
+// before it moves. The action only runs when there is a move to make, so it never gets to set it.
 void ThorimRingMarkArrived(Player* bot);
 void ThorimRingClearArrived(Player* bot);
 
@@ -650,11 +661,15 @@ void ThorimRingClearArrived(Player* bot);
 // movers are what bring a bot back, and freezing them permanently is the Void Reaver failure.
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
 
-// A camp bot that a lit orb has moved and that has not got there yet. The Blizzard flee stands down for
-// these: both movers run at MOVEMENT_COMBAT so whichever fires first owns the bot, and the positioning
-// node stands down outright while the flee is up - so a bunny landing during the warning is a bot flung
-// 30 yd instead of walked to its shelter, sometimes deeper into the cone. Worth up to 5s of ~3k ticks.
-bool ThorimShelterWalkPending(Player* bot);
+// Whether a spot is inside the reach of a live Blizzard zone or the bunny about to drop the next one.
+bool ThorimSpotUnderBlizzard(Player* bot, Position const& spot);
+
+// Whether a spot is under the lit orb's cone, on the camp's tight margin. False while nothing is lit.
+bool ThorimCampSpotInLitCone(PlayerbotAI* botAI, Position const& spot);
+
+// Nearest spot a camp bot can step to that is off every Blizzard zone, out of the lit cone and still in
+// range of the boss, favouring its own home or shelter. False when nothing within reach qualifies.
+bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The Thunder Orb carrying markerSpell, or nullptr. Both orb mechanics announce themselves the same
 // way and neither has a cast bar the bots can read: SPELL_THORIM_LIGHTNING_ORB_VISUAL is the 5 second

@@ -11,15 +11,6 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
-class ThorimUnbalancingStrikeAction : public Action
-{
-public:
-    ThorimUnbalancingStrikeAction(PlayerbotAI* ai) : Action(ai, "thorim unbalancing strike action") {}
-
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
 // Both tank nodes want the same two things: be on the boss, then pull him off whoever has him.
 class ThorimTakeBossAction : public AttackAction
 {
@@ -182,7 +173,8 @@ public:
     bool isUseful() override;
 };
 
-// Hard mode: clear Sif's moving Blizzard ground AoE.
+// Hard mode: clear Sif's moving Blizzard ground AoE. The phase 2 camp takes a short cone-safe step off
+// the zones instead of the generic flee. Anyone else still gets the flee.
 class ThorimSifBlizzardAction : public MoveAwayFromCreatureAction
 {
 public:
@@ -191,6 +183,8 @@ public:
                                      ULDUAR_THORIM_SIF_BLIZZARD_RADIUS)
     {
     }
+
+    bool Execute(Event event) override;
 };
 
 // Hard mode: ranged/healers back off so Sif's point-blank Frost Nova misses.

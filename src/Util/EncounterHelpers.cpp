@@ -377,7 +377,8 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
 }
 
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
-                                           float distanceStep, float angleStep, Position const* preferNear)
+                                           float distanceStep, float angleStep, Position const* preferNear,
+                                           std::function<bool(float, float)> const& accept)
 {
     if (hazards.empty() || distanceStep <= 0.0f || angleStep <= 0.0f)
         return Position();
@@ -414,6 +415,9 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
 
             // The collision check can pull the spot back short of the hazard it was clearing.
             if (!clearOf(x, y))
+                continue;
+
+            if (accept && !accept(x, y))
                 continue;
 
             if (!preferNear)

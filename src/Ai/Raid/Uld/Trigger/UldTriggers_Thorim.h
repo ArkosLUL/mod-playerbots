@@ -8,13 +8,6 @@
 //
 // Thorim
 //
-class ThorimUnbalancingStrikeTrigger : public Trigger
-{
-public:
-    ThorimUnbalancingStrikeTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim unbalancing strike trigger") {}
-    bool IsActive() override;
-};
-
 class ThorimUnbalancingStrikeSwapTrigger : public Trigger
 {
 public:

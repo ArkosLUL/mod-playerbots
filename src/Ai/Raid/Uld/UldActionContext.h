@@ -86,7 +86,6 @@ public:
         creators["freya tank hold freya"] = &RaidUlduarActionContext::freya_tank_hold_freya;
         creators["thorim frost resistance action"] = &RaidUlduarActionContext::thorim_frost_resistance_action;
         creators["thorim nature resistance action"] = &RaidUlduarActionContext::thorim_nature_resistance_action;
-        creators["thorim unbalancing strike action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_action;
         creators["thorim dps priority action"] = &RaidUlduarActionContext::thorim_dps_priority_action;
         creators["thorim arena positioning action"] = &RaidUlduarActionContext::thorim_arena_positioning_action;
         creators["thorim gauntlet positioning action"] = &RaidUlduarActionContext::thorim_gauntlet_positioning_action;
@@ -262,7 +261,6 @@ private:
     static Action* freya_tank_hold_freya(PlayerbotAI* ai) { return new FreyaTankHoldFreyaAction(ai); }
     static Action* thorim_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "thorim"); }
     static Action* thorim_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "thorim"); }
-    static Action* thorim_unbalancing_strike_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeAction(ai); }
     static Action* thorim_dps_priority_action(PlayerbotAI* ai) { return new ThorimDpsPriorityAction(ai); }
     static Action* thorim_arena_positioning_action(PlayerbotAI* ai) { return new ThorimArenaPositioningAction(ai); }
     static Action* thorim_gauntlet_positioning_action(PlayerbotAI* ai) { return new ThorimGauntletPositioningAction(ai); }

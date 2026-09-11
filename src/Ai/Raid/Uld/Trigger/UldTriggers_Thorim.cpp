@@ -18,21 +18,6 @@
 
 using namespace EncounterHelpers;
 
-bool ThorimUnbalancingStrikeTrigger::IsActive()
-{
-    Unit* boss = GetThorim(botAI);
-    if (!boss || !boss->IsInWorld() || boss->IsDuringRemoveFromWorld())
-        return false;
-
-    if (!boss->IsAlive())
-        return false;
-
-    if (!boss->IsHostileTo(bot))
-        return false;
-
-    return bot->HasAura(SPELL_UNBALANCING_STRIKE);
-}
-
 bool ThorimDpsPriorityTrigger::IsActive()
 {
     // Cheap gate first. This node runs for every bot in the instance on every tick, and everything
@@ -179,9 +164,25 @@ bool ThorimPhase2PositioningTrigger::IsActive()
         return holdsBoss && bot->GetDistance(spot) > 1.0f;
 
     if (role == ThorimPhase2Role::Ranged)
-        return bot->GetDistance(spot) > 1.0f;
+    {
+        if (bot->GetDistance(spot) <= 1.0f)
+            return false;
 
-    return ThorimRingWantsMove(botAI, bot, spot);
+        // Wait out a zone sitting on the spot rather than walk back into it and get flung off again.
+        // Not while under the cone though: that is 10-36k against a 4-5k tick.
+        return !ThorimSpotUnderBlizzard(bot, spot) || ThorimCampSpotInLitCone(botAI, *bot);
+    }
+
+    // Arrival is written here, where the "stay" answer shows up: the action only runs when there is a
+    // move to make, so it never gets that answer. Fine in a trigger since it only widens the tolerance,
+    // so a second ask this tick still says stay.
+    if (!ThorimRingWantsMove(botAI, bot, spot))
+    {
+        ThorimRingMarkArrived(bot);
+        return false;
+    }
+
+    return true;
 }
 
 bool ThorimRunicSmashTrigger::IsActive()
@@ -357,9 +358,13 @@ bool ThorimSifBlizzardTrigger::IsActive()
         if (role == ThorimPhase2Role::MeleeRing)
             return false;
 
-        // A camp bot on its way out of a Lightning Charge cone is not stopping for a Blizzard tick.
-        if (role == ThorimPhase2Role::Ranged && ThorimShelterWalkPending(bot))
-            return false;
+        // The camp tests the zones themselves at their real reach, not the bunny at 15: every home spot
+        // clears the zone path by 12.9 yd, so a bot at home never has to move. A bot under the cone
+        // leaves the Blizzard to its shelter walk. The test is flat, hence the floor check: a bot still
+        // on the balcony would otherwise dodge zones on the floor below it.
+        if (role == ThorimPhase2Role::Ranged)
+            return bot->GetPositionZ() <= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD && ThorimSpotUnderBlizzard(bot, *bot) &&
+                   !ThorimCampSpotInLitCone(botAI, *bot);
     }
 
     TooCloseToCreatureTrigger tooCloseToBlizzard(botAI);

@@ -25,21 +25,6 @@
 #include "Vehicle.h"
 #include <TankAssistStrategy.h>
 
-bool ThorimUnbalancingStrikeAction::isUseful()
-{
-    ThorimUnbalancingStrikeTrigger thorimUnbalancingStrikeTrigger(botAI);
-    if (!thorimUnbalancingStrikeTrigger.IsActive())
-        return false;
-
-    return botAI->HasCheat(BotCheatMask::raid);
-}
-
-bool ThorimUnbalancingStrikeAction::Execute(Event /*event*/)
-{
-    bot->RemoveAura(SPELL_UNBALANCING_STRIKE);
-    return true;
-}
-
 bool ThorimDpsPriorityAction::isUseful()
 {
     ThorimDpsPriorityTrigger thorimDpsPriorityTrigger(botAI);
@@ -376,9 +361,8 @@ bool ThorimPhase2PositioningAction::Execute(Event /*event*/)
     // Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot
     // sliding in place forever, and a moving bot casts nothing.
     //
-    // The latch is set here rather than inside the predicate because this is the only place that
-    // knows whether a move actually went out. The trigger asks the same question first, and a
-    // predicate that wrote the latch gave the two of them different answers in the same tick.
+    // Leaving is cleared here, right before the move goes out. Arriving is set by the trigger, so the
+    // "stay" branch below only runs if the spot changed between the trigger's ask and this one.
     if (ringSlot)
     {
         if (!ThorimRingWantsMove(botAI, bot, targetPosition))
@@ -406,6 +390,20 @@ bool ThorimPhase2PositioningAction::isUseful()
 {
     ThorimPhase2PositioningTrigger thorimPhase2PositioningTrigger(botAI);
     return thorimPhase2PositioningTrigger.IsActive();
+}
+
+bool ThorimSifBlizzardAction::Execute(Event event)
+{
+    if (!ThorimPhase2Active(botAI) || GetThorimPhase2Role(botAI, bot) != ThorimPhase2Role::Ranged)
+        return MoveAwayFromCreatureAction::Execute(event);
+
+    // Nothing clear and cone-safe within reach: stand and take the 4-5k tick rather than run the trail.
+    Position escape;
+    if (!ThorimCampBlizzardEscape(botAI, bot, escape))
+        return false;
+
+    return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
 bool ThorimUnbalancingStrikeSwapAction::isUseful()

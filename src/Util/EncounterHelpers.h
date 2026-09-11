@@ -9,6 +9,7 @@
 
 #include "Common.h"
 #include "Position.h"
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -73,10 +74,14 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> co
 // preferNear breaks the tie inside whichever ring first has a clear spot. Without it the sweep takes
 // the first angle that passes, which is a fixed compass direction and has nothing to do with where the
 // bot wants to end up - on Hodir that walked melee a yard further out of melee range per hop.
+//
+// accept vetoes spots a circle can't describe, like a cone or a range cap. Asked after the collision
+// check, so it judges the spot the bot would really stand on.
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
                                            float distanceStep = 2.0f,
                                            float angleStep = static_cast<float>(M_PI) / 8.0f,
-                                           Position const* preferNear = nullptr);
+                                           Position const* preferNear = nullptr,
+                                           std::function<bool(float, float)> const& accept = {});
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
 void StopPet(PlayerbotAI* botAI);

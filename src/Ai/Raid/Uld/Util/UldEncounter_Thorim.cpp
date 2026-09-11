@@ -555,8 +555,9 @@ void LightningChargeOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float be
     offset = held.offset;
 }
 
-// Sif's bunnies, swept once per instance per interval. Positions rather than units because that is
-// all the ring test wants, and a stale guid would need re-resolving on every bearing it tries.
+// Every live Blizzard zone plus the bunny, swept once per instance per interval. The bunny marks where
+// the next zone drops within 2s, and the zones behind it are where the damage is. Positions rather than
+// units because that is all the tests want, and a stale guid would need re-resolving on every bearing.
 std::vector<Position> const& ThorimBlizzardSpots(Player* bot)
 {
     ThorimEncounterState& state = ThorimStateFor(bot);
@@ -572,16 +573,20 @@ std::vector<Position> const& ThorimBlizzardSpots(Player* bot)
         if (bunny && bunny->IsAlive())
             state.blizzardSpots.emplace_back(bunny->GetPositionX(), bunny->GetPositionY(), bunny->GetPositionZ());
 
+    for (uint32 const zoneSpell : {SPELL_SIF_BLIZZARD_ZONE_10, SPELL_SIF_BLIZZARD_ZONE_25})
+        for (Position const& zone : GetDynamicObjectPositions(bot, ULDUAR_THORIM_BLIZZARD_SCAN_RANGE, zoneSpell))
+            state.blizzardSpots.push_back(zone);
+
     return state.blizzardSpots;
 }
 
-bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position> const& bunnies)
+bool RingBearingClearOfBlizzard(Unit* boss, float bearing, std::vector<Position> const& zones)
 {
     float const x = boss->GetPositionX() + std::cos(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
     float const y = boss->GetPositionY() + std::sin(bearing) * ULDUAR_THORIM_MELEE_RING_RADIUS;
 
-    for (Position const& bunny : bunnies)
-        if (bunny.GetExactDist2d(x, y) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+    for (Position const& zone : zones)
+        if (zone.GetExactDist2d(x, y) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
             return false;
 
     return true;
@@ -606,17 +611,17 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
         }
     }
 
-    std::vector<Position> const& bunnies = ThorimBlizzardSpots(bot);
-    if (bunnies.empty())
+    std::vector<Position> const& zones = ThorimBlizzardSpots(bot);
+    if (zones.empty())
         return false;
 
     bool standingInOne = false;
-    for (Position const& bunny : bunnies)
+    for (Position const& zone : zones)
     {
-        if (bunny.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+        if (zone.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
             return false;
 
-        if (bunny.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+        if (zone.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
             standingInOne = true;
     }
 
@@ -626,7 +631,7 @@ bool RingSpotBeatsTheDeadband(PlayerbotAI* botAI, Player* bot, Position const& s
 // How far this bot slides around the ring to get off a Blizzard. Sliding rather than fleeing: the old
 // answer was the generic MoveAwayFromCreature, which takes the furthest of eight rays out to 30 yd, so
 // every accepted flee asked for the full 30 and dumped a melee bot a median 35 yd from the boss - and
-// then took another tick within 6s anyway 23-58% of the time, because the bunnies sit on a ring and
+// then took another tick within 6s anyway 23-58% of the time, because the zones sit on a loop and
 // running outward lands on a different arc of it. The ring is never fully covered, worst case 22% clear
 // over 1726 sampled snapshots and blocked outright in none of them, and the nearest clear bearing is a
 // median 3-7 yd of arc away.
@@ -635,8 +640,8 @@ void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float beari
     offset = 0.0f;
 
     ThorimEncounterState& state = ThorimStateFor(bot);
-    std::vector<Position> const& bunnies = ThorimBlizzardSpots(bot);
-    if (bunnies.empty())
+    std::vector<Position> const& zones = ThorimBlizzardSpots(bot);
+    if (zones.empty())
     {
         state.blizzardOffsets.erase(bot->GetGUID());
         return;
@@ -651,12 +656,12 @@ void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float beari
     auto const held = state.blizzardOffsets.find(bot->GetGUID());
     bool const haveHeld = held != state.blizzardOffsets.end();
 
-    // Hold what we already walked to while it is still clear. Re-solving every tick against a bunny
-    // that spawned somewhere new has the bot sliding in place, and a moving bot casts nothing.
+    // Hold what we already walked to while it is still clear. Re-solving every tick against a zone
+    // that dropped somewhere new has the bot sliding in place, and a moving bot casts nothing.
     if (haveHeld)
     {
         float const current = Position::NormalizeOrientation(bearing + held->second);
-        if (RingBearingClearOfBlizzard(boss, current, bunnies) &&
+        if (RingBearingClearOfBlizzard(boss, current, zones) &&
             !(orb && InLightningChargeCone(current, coneBearing)))
         {
             offset = held->second;
@@ -664,12 +669,12 @@ void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float beari
         }
     }
 
-    // Measured off the bearing that came in, never off wherever the last bunny left us. The incoming
+    // Measured off the bearing that came in, never off wherever the last zone left us. The incoming
     // bearing already has the cone offset on it, so searching from there is what keeps the two in step.
     //
-    // Whichever side the last answer was on gets tried first. Fixed order instead had one bunny
-    // spawning flip the answer clean across the ring: Assasin swung 99 degrees, 12 yd of arc, in
-    // 0.64s. Offsets are normalised to [0, 2pi), so past pi is the counter-clockwise side.
+    // Whichever side the last answer was on gets tried first. Fixed order instead had one new zone
+    // flip the answer clean across the ring: Assasin swung 99 degrees, 12 yd of arc, in 0.64s.
+    // Offsets are normalised to [0, 2pi), so past pi is the counter-clockwise side.
     int8 const firstWay = haveHeld && held->second > float(M_PI) ? -1 : 1;
 
     float const step = 0.0349f;  // 2 degrees
@@ -679,9 +684,9 @@ void BlizzardRingOffset(PlayerbotAI* botAI, Player* bot, Unit* boss, float beari
         {
             int8 const way = turn ? -firstWay : firstWay;
             float const candidate = Position::NormalizeOrientation(bearing + way * tick * step);
-            if (RingBearingClearOfBlizzard(boss, candidate, bunnies) &&
+            if (RingBearingClearOfBlizzard(boss, candidate, zones) &&
                 // A cone is 20k in the instant it lands and a Blizzard tick is about 3k, so the cone
-                // wins the tie: a bearing that clears the bunny but sits under a lit orb is no answer.
+                // wins the tie: a bearing that clears the zones but sits under a lit orb is no answer.
                 !(orb && InLightningChargeCone(candidate, coneBearing)))
             {
                 offset = Position::NormalizeOrientation(candidate - bearing);
@@ -2219,32 +2224,74 @@ void ThorimRingClearArrived(Player* bot)
         ThorimStateFor(bot).ringArrived.erase(bot->GetGUID());
 }
 
-bool ThorimShelterWalkPending(Player* bot)
+bool ThorimSpotUnderBlizzard(Player* bot, Position const& spot)
 {
     if (!bot)
         return false;
 
-    ThorimEncounterState const* state = FindState(bot);
-    if (!state)
+    for (Position const& zone : ThorimBlizzardSpots(bot))
+        if (zone.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+            return true;
+
+    return false;
+}
+
+bool ThorimCampSpotInLitCone(PlayerbotAI* botAI, Position const& spot)
+{
+    Unit* boss = GetThorim(botAI);
+    if (!boss)
         return false;
 
-    auto const held = state->rangedShelters.find(bot->GetGUID());
-    if (held == state->rangedShelters.end() || !held->second.sheltered)
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    if (!orb)
         return false;
 
-    // Copied out before the next lookup takes the lock again: a reset on another thread can drop the
-    // whole instance entry, and the iterator with it.
-    uint8 const orbIndex = held->second.orbIndex;
+    return InLightningChargeConeRanged(BearingFromBoss(boss, spot.GetPositionX(), spot.GetPositionY()),
+                                       BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()));
+}
 
-    uint8 slot = 0;
-    if (!RangedSlotOf(bot, slot))
+bool ThorimCampBlizzardEscape(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!botAI || !bot)
         return false;
 
-    Position shelter;
-    if (!ThorimShelterFor(orbIndex, slot, shelter))
+    Unit* boss = GetThorim(botAI);
+    if (!boss)
         return false;
 
-    return bot->GetDistance(shelter) > ULDUAR_THORIM_RING_ARRIVE_TOLERANCE;
+    // Copied, since the lookups below go back through the shared state.
+    std::vector<Position> const zones = ThorimBlizzardSpots(bot);
+    if (zones.empty())
+        return false;
+
+    std::vector<HazardCircle> circles;
+    circles.reserve(zones.size());
+    for (Position const& zone : zones)
+        circles.emplace_back(zone, ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE);
+
+    // Toward home or the shelter, so the walk back is short once the zone expires.
+    Position spot;
+    if (!TryGetThorimPhase2Spot(botAI, bot, ThorimPhase2Role::Ranged, spot))
+        spot = bot->GetPosition();
+
+    Unit* orb = ThorimChargedThunderOrb(botAI, SPELL_THORIM_LIGHTNING_ORB_VISUAL);
+    float const coneBearing = orb ? BearingFromBoss(boss, orb->GetPositionX(), orb->GetPositionY()) : 0.0f;
+
+    auto const accept = [boss, orb, coneBearing](float x, float y)
+    {
+        if (boss->GetExactDist2d(x, y) > ULDUAR_THORIM_CAMP_MAX_BOSS_RANGE)
+            return false;
+
+        return !orb || !InLightningChargeConeRanged(BearingFromBoss(boss, x, y), coneBearing);
+    };
+
+    Position const clear = FindNearestPositionClearOfHazards(bot, circles, ULDUAR_THORIM_CAMP_BLIZZARD_ESCAPE_RADIUS,
+                                                             2.0f, static_cast<float>(M_PI) / 8.0f, &spot, accept);
+    if (clear == Position())
+        return false;
+
+    out = clear;
+    return true;
 }
 
 bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot)

@@ -475,10 +475,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("thorim frost resistance action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "thorim unbalancing strike trigger",
-        { NextAction("thorim unbalancing strike action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
         "thorim unbalancing strike swap trigger",
         { NextAction("thorim unbalancing strike swap action", ACTION_RAID + 2) }));
 

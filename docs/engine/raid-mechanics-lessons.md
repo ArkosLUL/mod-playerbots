@@ -85,9 +85,13 @@ Bots jiggling on the spot is one symptom with six causes, plus a seventh that fr
   the bot freezes, because the callers disagree. Thorim's ring hold cleared "arrived" and told the
   trigger to move, then re-armed it on the tighter arrive tolerance and told the action to hold, which
   returned before its `MoveTo` — one bot stood in a Blizzard for 71 s with a clear point 4 yd away.
-  Keep the predicate a pure read; let the caller that issues the move own the latch. An escape that
-  overrides the deadband belongs outside the tolerance choice too, or the bot gets one order then
-  re-latches before retrying — and 40-60% of orders are refused.
+  Keep the predicate a pure read and split the latch by edge. The action only runs once the trigger
+  says move, so it can clear the latch but never set it: set it where the trigger declines, with a
+  write that cannot flip a second read that tick (widening the tolerance cannot). With the whole latch
+  in the action it was never set: the movement guard it gates went dark, generic movers walked three
+  melee into a cone, and a check that the freeze's signature was zero still passed — so also check the
+  latch fires. An escape that overrides the deadband belongs outside the tolerance choice too, or the
+  bot gets one order then re-latches before retrying — and 40-60% of orders are refused.
 
 Two rules that belong with the geometry rather than the action:
 

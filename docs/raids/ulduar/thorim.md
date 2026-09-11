@@ -154,8 +154,13 @@ a single 15 yd circle; the same clustering feeds Dark Rune Champion Whirlwind (1
 
 Sif is summoned every pull and normally channels, then despawns after the 150s dominion timer. If the
 raid clears the gauntlet fast enough she joins instead and casts Frostbolt Valley (raid-wide,
-unavoidable — healed through), Blizzard (62577 → moving `NPC_SIF_BLIZZARD` 32879, respawned every
-~15s) and Frost Nova (62605, teleport then point-blank).
+unavoidable — healed through), Blizzard and Frost Nova (62605, teleport then point-blank).
+
+**Blizzard is a trail, not a circle.** Every 36-41s a `NPC_SIF_BLIZZARD` 32879 spawns at
+(2108.7, -280.04) and walks a fixed eight-waypoint loop for 30s. Its aura (62577/62603) drops a 10s, 8 yd
+zone (62576 10-man, 62602 25-man) every 2s: up to six live, a median 26 yd behind it, hitting out to
+10.8 yd. **Test the zones (`GetDynamicObjectPositions`), not the bunny** — the bunny alone missed 16 of
+20 melee hits in one pull. Every camp home spot clears the loop by 12.9 yd or more.
 
 **Detector: Sif (33196) alive AND `GetPositionZ() < 429.6`** — she spawns at the throne and only
 `NearTeleportTo`s onto the arena floor when she joins. This reuses the same floor threshold the
