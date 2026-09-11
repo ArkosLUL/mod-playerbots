@@ -19,6 +19,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
+#include "RaidTankDefensive.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -229,6 +230,17 @@ float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
     }
 
     return 1.0f;
+}
+
+float MimironPlasmaDefensiveHoldMultiplier::GetValue(Action* action)
+{
+    if (!action || !PlayerbotAI::IsMainTank(bot) || !IsHeldTankDefensive(action->getName()))
+        return 1.0f;
+
+    // "mimiron plasma blast defensive action" casts through CastSpell directly, so this never holds it.
+    // Plasma Blast only exists while the MK II fights alone. Engaged too: the MK II stands in the room
+    // unselectable before the pull, and trash nearby should keep the class nodes.
+    return IsMimironEngaged(botAI) && MimironPhase1Active(botAI) ? 0.0f : 1.0f;
 }
 
 float MimironTargetGuardMultiplier::GetValue(Action* action)

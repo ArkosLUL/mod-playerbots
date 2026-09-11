@@ -164,6 +164,17 @@ constexpr uint32 ULDUAR_MIMIRON_PHASE1_CAMP_ROWS = 3;
 // 326 to 36 keeps the whole wedge on the floor.
 constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE = 38.0f * static_cast<float>(M_PI) / 180.0f;
 
+// Sight turn for the camp. The tank spot sits about 3 yd inside the doorway alcove and the MK II drifts
+// further in, so the alcove walls can hide it from the wedge's edge slots. A bot that loses sight of its
+// target drops it, falls back to the non combat engine and walks to its master. So the whole camp turns
+// toward the room in these steps until every slot sees the MK II. Fixed eye height so every bot builds
+// the same camp; 1.2 and 2.5 gave the same answers against the alcove walls.
+constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_STEP = 4.0f * static_cast<float>(M_PI) / 180.0f;
+constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_MAX = 16.0f * static_cast<float>(M_PI) / 180.0f;
+constexpr float ULDUAR_MIMIRON_CAMP_SIGHT_EYE = 2.0f;
+// Turning back waits this long after the last raise, or the camp swings with every MK II step.
+constexpr uint32 ULDUAR_MIMIRON_CAMP_SIGHT_HOLD_MS = 15000;
+
 // How far ahead of the highest non-tank threat the main tank has to be before he may start walking
 // the MK II west. He used to leave with about three seconds of it: the boss switched to a melee dps
 // within 2 to 3 s, stopped following, and parked 15 yd off the room centre while the tank finished
@@ -186,9 +197,10 @@ constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_LIMIT = 2;
 constexpr uint32 ULDUAR_MIMIRON_STACK_FIRE_MARGIN = 2;
 constexpr uint32 ULDUAR_MIMIRON_STACK_HOLD_MS = 15000;
 
-// How long one Plasma Blast counts as the same window for the purpose of claiming it. The cast runs
-// about 5 s and the next one is 22 s behind it, so anything between the two tells the claims apart.
-constexpr uint32 ULDUAR_MIMIRON_PLASMA_WINDOW_MS = 8000;
+// How long one Plasma Blast counts as the same window for the purpose of claiming it. About 4 s of
+// cast then six ticks a second apart, so ~9 s from cast start to the last tick, and the next cast is
+// 22 s behind. Anything shorter than the 9 lets a second button in on the same window's tail.
+constexpr uint32 ULDUAR_MIMIRON_PLASMA_WINDOW_MS = 12000;
 
 // Half-width of the staging wedge. The north-east and south-east arms leave the room centre at 59
 // degrees, so only a crowded outer row reaches a bearing anything walks down, and the west arm is
@@ -308,6 +320,25 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest);
 // bot out the far side, up to 23 yd, over and over. Nodes the bot already stands in are left out,
 // since walking out of those is the point.
 bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
+
+// One leg the formation can send a bot on toward its slot. `how` is "direct", "substitute" or
+// "detour", and `turn` is a detour's signed turn off the direct bearing, radians.
+struct MimironApproach
+{
+    Position dest;
+    char const* how;
+    float turn;
+};
+
+// Where the formation sends this bot next, best first, and empty when nothing gets there. Once the
+// fire covers most of the floor, refusing every slot that burns and every walk that crosses fire
+// left ranged a median 15 to 24 yd off their slots from phase 2 on. So:
+// - a slot that is not clear gives way, outside phase 1, to the nearest clear point within
+//   ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS that keeps ULDUAR_MIMIRON_DISPERSE_DISTANCE off everyone;
+// - a walk through fire goes via one waypoint whose two legs both miss it.
+// Empty as well when the bot already stands on clear ground within the substitute radius.
+std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player* bot, Position const& slot,
+                                                      MimironFirefighterHazards const& hazards);
 
 // The main tank's slot in phases 1 and 4 is a boss-holding spot, not somewhere it is free to refuse:
 // the MK II parks on top of the mine field it just laid, so a tank that will not stand in one never
@@ -484,6 +515,14 @@ bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& win
 // a hop shorter than the step lands on the next node along.
 constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
 
+// How far from a slot that is not clear a bot may stand in for it. Further out the slot's spacing and
+// range are gone, and holding where it is does as well.
+constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS = 6.0f;
+
+// Detour waypoint turns off the direct bearing, degrees, tried in order. The waypoint sits over the
+// walk's midpoint, so 65 makes the walk 2.4 times as long. Past that it is walking away.
+constexpr float ULDUAR_MIMIRON_DETOUR_TURNS_DEG[] = {20.0f, 35.0f, 50.0f, 65.0f};
+
 // How far the fire has to be before a bot may sit down to eat or drink. DrinkAction and EatAction push
 // the bot's next AI check back 12 to 18 s, and a chain grows 1.22 yd/s toward the nearest player,
 // which a bot sitting still usually is.
@@ -583,14 +622,17 @@ extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
 extern const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
 
 // Where the Firefighter phase 1 camp points: each is the wedge's middle-row centre, 27 yd from the
-// tank spot on bearings 30 and 330. Two rather than more, because the camp is what the fire
-// converges on and switching has to actually walk it off its own anchor - these two are 27 yd apart,
-// where 30 degree neighbours would move the middle row 14. Index 0 is the default.
+// tank spot on bearings 25 and 345. Two rather than more, because the camp is what the fire
+// converges on and switching has to actually walk it off its own anchor. These two are 18.5 yd apart,
+// still more than a 5 yd node cluster plus a 7 yd chain step. Index 0 is the default.
 //
-// navprobe map 603: every slot either wedge deals for 1 to 16 bots, before any range shift, is on
-// mesh and settles at Z 364.314, and the nearest is 20.7 yd from the room centre. Westward bearings are out -
-// 105 to 255 degrees is off mesh against the wall or up in the raised doorway alcove - and 90 and 270
-// sit on holes in the mesh.
+// Bearings further out put the wedge edges on the alcove walls' shadow line: over 323 traced MK II
+// positions, 30 and 330 hid the worst edge slot 21 % and 38 % of the time, these 1.5 % and 1.2 %. The
+// south shadow is the wider one because the MK II drifts south-west.
+//
+// navprobe map 603: every bearing from 288 to 74 off the tank spot is on mesh at 21, 27 and 33 yd and
+// settles at Z 364.314. Westward bearings are out - 105 to 255 degrees is off mesh against the wall or
+// up in the raised doorway alcove - and 90 and 270 sit on holes in the mesh.
 constexpr uint8 ULDUAR_MIMIRON_PHASE1_STACK_COUNT = 2;
 extern const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT];
 

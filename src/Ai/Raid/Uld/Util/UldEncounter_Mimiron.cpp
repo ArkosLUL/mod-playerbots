@@ -42,8 +42,8 @@ const Position ULDUAR_MIMIRON_PHASE3_STAGE = Position(2762.65f, 2569.46f, 364.31
 const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT = Position(2744.5754f, 2570.8657f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT = Position(2691.5762f, 2568.5315f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT] = {
-    Position(2714.9589f, 2582.0315f, 364.3138f),  // 30 deg off the tank spot
-    Position(2714.9589f, 2555.0315f, 364.3138f),  // 330
+    Position(2716.0465f, 2579.9422f, 364.3138f),  // 25 deg off the tank spot
+    Position(2717.6562f, 2561.5434f, 364.3138f),  // 345
 };
 
 namespace
@@ -235,13 +235,78 @@ bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
            ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
 }
 
-bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest)
+namespace
 {
-    if (!bot || hazards.flames.empty())
+// The standing hazards MimironFirefighterHazards leaves out: mines, live Rocket Strike markers and a
+// Shock Blast being cast. Gathered once, so screening a batch of candidate spots costs one scan.
+struct MimironMarkers
+{
+    std::vector<Position> mines;
+    std::vector<Position> rockets;
+    bool shock = false;
+    Position shockCentre;
+};
+
+MimironMarkers GetMimironMarkers(PlayerbotAI* botAI)
+{
+    MimironMarkers markers;
+    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (unit->GetEntry() == NPC_PROXIMITY_MINE)
+            markers.mines.push_back(unit->GetPosition());
+        else if (unit->GetEntry() == NPC_ROCKET_STRIKE_N)
+            markers.rockets.push_back(unit->GetPosition());
+    }
+
+    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    if (leviathanMkII && leviathanMkII->FindCurrentSpellBySpellId(SPELL_SHOCK_BLAST))
+    {
+        markers.shock = true;
+        markers.shockCentre = leviathanMkII->GetPosition();
+    }
+
+    return markers;
+}
+
+bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers const& markers,
+                            MimironFirefighterHazards const& hazards)
+{
+    for (Position const& mine : markers.mines)
+        if (dest.GetExactDist2d(mine.GetPositionX(), mine.GetPositionY()) < ULDUAR_MIMIRON_MINE_CLEARANCE)
+            return false;
+
+    for (Position const& rocket : markers.rockets)
+        if (dest.GetExactDist2d(rocket.GetPositionX(), rocket.GetPositionY()) < ULDUAR_MIMIRON_ROCKET_CLEARANCE)
+            return false;
+
+    if (markers.shock && dest.GetExactDist2d(markers.shockCentre.GetPositionX(),
+                                             markers.shockCentre.GetPositionY()) <
+                             ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST)
+        return false;
+
+    // Firefighter spreads ground fire across the floor, so a standing spot can end up inside it, and
+    // the Frost Bomb makes a 30 yd disc of the room lethal for ten seconds at a time. Without the fire
+    // half the flames node at ACTION_RAID + 4 pushes the bot out and the formation at ACTION_RAID pulls
+    // it straight back, and it paces on the edge until it burns down; without the bomb half the
+    // formation walks the raid back into the blast while the fuse runs.
+    return IsMimironSpotFireSafe(hazards, dest) && IsMimironSpotBombSafe(hazards, dest) &&
+           IsMimironSpotFireBotSafe(bot, hazards, dest);
+}
+
+// The straight walk from `from` to `dest` against the fire. Nodes `from` already stands in are left
+// out, since walking out of those is the point.
+bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const& hazards,
+                          Position const& dest)
+{
+    if (hazards.flames.empty())
         return true;
 
-    float const fromX = bot->GetPositionX();
-    float const fromY = bot->GetPositionY();
+    float const fromX = from.GetPositionX();
+    float const fromY = from.GetPositionY();
     float const dx = dest.GetPositionX() - fromX;
     float const dy = dest.GetPositionY() - fromY;
     float const lengthSq = dx * dx + dy * dy;
@@ -265,41 +330,135 @@ bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards
 
     return true;
 }
+}  // namespace
+
+bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest)
+{
+    return !bot || IsMimironLegFireSafe(bot->GetPosition(), hazards, dest);
+}
 
 bool IsMimironSpotSafe(Player* bot, Position const& dest)
 {
-    if (!bot)
-        return true;
-
-    if (!IsMimironSpotMineSafe(bot, dest))
-        return false;
-
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(bot);
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
     if (!botAI)
         return true;
 
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_ROCKET_STRIKE_N)
-            continue;
+    return IsMimironSpotStandable(bot, dest, GetMimironMarkers(botAI), GetMimironFirefighterHazards(botAI));
+}
 
-        if (dest.GetExactDist2d(unit->GetPositionX(), unit->GetPositionY()) <
-            ULDUAR_MIMIRON_ROCKET_CLEARANCE)
-            return false;
+std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player* bot, Position const& slot,
+                                                      MimironFirefighterHazards const& hazards)
+{
+    std::vector<MimironApproach> approaches;
+    if (!botAI || !bot)
+        return approaches;
+
+    MimironMarkers const markers = GetMimironMarkers(botAI);
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    MimironRapidBurstWindow const burst =
+        vx001 ? GetMimironRapidBurstWindow(botAI, bot, vx001) : MimironRapidBurstWindow();
+    auto const standable = [&](Position const& spot)
+    {
+        return IsMimironSpotStandable(bot, spot, markers, hazards) &&
+               IsMimironSpotRapidBurstSafe(vx001, burst, spot);
+    };
+
+    Position goal = slot;
+    char const* how = "direct";
+    if (!IsMimironSpotStandable(bot, slot, markers, hazards))
+    {
+        // Already on clear ground beside it: stay. A substitute moves every time the fire grows, and
+        // chasing it is a walk every tick.
+        if (bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <=
+                ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS &&
+            IsMimironSpotStandable(bot, bot->GetPosition(), markers, hazards))
+            return approaches;
+
+        // Phase 1 keeps its slots. Its camp moves off its own fire by switching anchors, and a stand-in
+        // squeezed between 6 yd rows is how two bots end up under one Napalm Shell.
+        if (!vx001 && GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+            !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
+            return approaches;
+
+        std::vector<Position> others;
+        if (Group* group = bot->GetGroup())
+        {
+            for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+            {
+                Player* member = ref->GetSource();
+                if (member && member != bot && member->IsAlive() && member->IsInMap(bot))
+                    others.push_back(member->GetPosition());
+            }
+        }
+
+        // Nearest ring first, and on each ring the bearing toward the bot first, so the stand-in is on
+        // the near side of the slot.
+        float const towardBot = slot.GetAngle(bot->GetPositionX(), bot->GetPositionY());
+        bool found = false;
+        for (float radius = 2.0f; radius <= ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS + 0.01f && !found;
+             radius += 2.0f)
+        {
+            for (uint32 step = 0; step < 12 && !found; ++step)
+            {
+                float const turn = static_cast<float>((step + 1) / 2) * static_cast<float>(M_PI) / 6.0f;
+                float const bearing = towardBot + (step % 2 ? turn : -turn);
+                Position const candidate(slot.GetPositionX() + radius * std::cos(bearing),
+                                         slot.GetPositionY() + radius * std::sin(bearing),
+                                         slot.GetPositionZ());
+                if (!standable(candidate))
+                    continue;
+
+                bool crowded = false;
+                for (Position const& other : others)
+                {
+                    if (candidate.GetExactDist2d(other.GetPositionX(), other.GetPositionY()) <
+                        ULDUAR_MIMIRON_DISPERSE_DISTANCE)
+                    {
+                        crowded = true;
+                        break;
+                    }
+                }
+
+                if (!crowded)
+                {
+                    goal = candidate;
+                    found = true;
+                }
+            }
+        }
+
+        if (!found)
+            return approaches;
+
+        how = "substitute";
     }
 
-    if (!IsMimironSpotShockSafe(botAI, dest))
-        return false;
+    Position const from = bot->GetPosition();
+    if (IsMimironLegFireSafe(from, hazards, goal))
+    {
+        approaches.push_back({goal, how, 0.0f});
+        return approaches;
+    }
 
-    // Firefighter spreads ground fire across the floor, so a standing spot can end up inside it, and
-    // the Frost Bomb makes a 30 yd disc of the room lethal for ten seconds at a time. Without the fire
-    // half the flames node at ACTION_RAID + 4 pushes the bot out and the formation at ACTION_RAID pulls
-    // it straight back, and it paces on the edge until it burns down; without the bomb half the
-    // formation walks the raid back into the blast while the fuse runs.
-    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
-    return IsMimironSpotFireSafe(hazards, dest) && IsMimironSpotBombSafe(hazards, dest) &&
-           IsMimironSpotFireBotSafe(bot, hazards, dest);
+    // Round the fire instead: one waypoint over the walk's midpoint, whose legs both miss it.
+    float const distance = from.GetExactDist2d(goal.GetPositionX(), goal.GetPositionY());
+    float const bearing = from.GetAngle(goal.GetPositionX(), goal.GetPositionY());
+    for (float degrees : ULDUAR_MIMIRON_DETOUR_TURNS_DEG)
+    {
+        float const turn = degrees * static_cast<float>(M_PI) / 180.0f;
+        float const leg = 0.5f * distance / std::cos(turn);
+        for (float sign : {1.0f, -1.0f})
+        {
+            Position const waypoint(from.GetPositionX() + leg * std::cos(bearing + sign * turn),
+                                    from.GetPositionY() + leg * std::sin(bearing + sign * turn),
+                                    from.GetPositionZ());
+            if (standable(waypoint) && IsMimironLegFireSafe(from, hazards, waypoint) &&
+                IsMimironLegFireSafe(waypoint, hazards, goal))
+                approaches.push_back({waypoint, "detour", sign * turn});
+        }
+    }
+
+    return approaches;
 }
 
 bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, Position const& dest,
@@ -484,6 +643,11 @@ struct MimironFightState
     uint8 stackAnchor = 0;
     uint32 stackPickedMs = 0;
     uint32 stackScanMs = 0;
+
+    // Extra turn on the phase 1 camp toward the room, radians, so every slot keeps sight of the MK II.
+    float campTurn = 0.0f;
+    uint32 campTurnScanMs = 0;
+    uint32 campTurnRaisedMs = 0;
 
     ObjectGuid plasmaClaimedBy;
     uint32 plasmaWindowMs = 0;
@@ -1217,19 +1381,29 @@ void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, floa
     }
 }
 
-// Slot `index` of the Firefighter phase 1 camp: a wedge on the tank spot, centreline through the live
-// stack anchor. Fixed on purpose - chains grow toward whoever is nearest their head, so a camp that
-// tracked the boss would smear the field along behind it. It gives ground only to stay in casting
-// range, since "reach spell" is ACTION_HIGH against this formation at ACTION_RAID and a slot past range
-// deadlocks instead of correcting itself. That is also what a dead main tank looks like.
+// Every slot of the Firefighter phase 1 camp: a wedge on the tank spot, centreline through the live
+// stack anchor, turned `turn` radians toward the room. Fixed on purpose - chains grow toward whoever is
+// nearest their head, so a camp that tracked the boss would smear the field along behind it. It gives
+// ground only to stay in casting range, since "reach spell" is ACTION_HIGH against this formation at
+// ACTION_RAID and a slot past range deadlocks instead of correcting itself. That is also what a dead
+// main tank looks like.
 //
 // Range the way the bots test it: IsWithinCombatRange adds both combat reaches, so against the MK II
 // the limit is about 34 raw. The raw spellDistance less margin would be 24.5, which is Napalm's floor
 // to within half a yard.
-Position MimironPhase1CampSlot(Position const& anchor, Unit* focus, uint32 index, uint32 count)
+std::vector<Position> MimironPhase1CampSlots(Position const& anchor, Unit* focus, uint32 count, float turn)
 {
     Position const& hub = ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
-    float const centreline = hub.GetAngle(anchor.GetPositionX(), anchor.GetPositionY());
+    float centreline = hub.GetAngle(anchor.GetPositionX(), anchor.GetPositionY());
+
+    // Never past the room's own bearing, or the two anchors cross over.
+    float toRoom = Position::NormalizeOrientation(
+        hub.GetAngle(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX(), ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY()) -
+        centreline);
+    if (toRoom > static_cast<float>(M_PI))
+        toRoom -= 2.0f * static_cast<float>(M_PI);
+    centreline += (toRoom >= 0.0f ? 1.0f : -1.0f) * std::min(turn, std::fabs(toRoom));
+
     uint32 const rows =
         MimironWedgeRows(ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW, ULDUAR_MIMIRON_PHASE1_CAMP_ROWS, count,
                          ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE, ULDUAR_MIMIRON_PHASE1_CAMP_SPACING);
@@ -1255,8 +1429,81 @@ Position MimironPhase1CampSlot(Position const& anchor, Unit* focus, uint32 index
     float shiftY = 0.0f;
     MimironShiftIntoRange(slots, focus, shiftX, shiftY);
 
-    Position const& mine = slots[std::min(index, count - 1)];
-    return Position(mine.GetPositionX() + shiftX, mine.GetPositionY() + shiftY, mine.GetPositionZ());
+    for (Position& slot : slots)
+        slot.Relocate(slot.GetPositionX() + shiftX, slot.GetPositionY() + shiftY, slot.GetPositionZ());
+
+    return slots;
+}
+
+// Whether a player standing on `slot` sees `focus`. Same ray IsWithinLOSInMap casts from a player: its
+// eye to the creature's hit sphere point. Out of sight is an invalid target and the bot drops it.
+bool MimironSlotSeesFocus(Position const& slot, Unit* focus)
+{
+    Position const eye(slot.GetPositionX(), slot.GetPositionY(),
+                       slot.GetPositionZ() + ULDUAR_MIMIRON_CAMP_SIGHT_EYE);
+    Position const hit = focus->GetHitSpherePointFor(eye);
+    return focus->GetMap()->isInLineOfSight(eye.GetPositionX(), eye.GetPositionY(), eye.GetPositionZ(),
+                                            hit.GetPositionX(), hit.GetPositionY(), hit.GetPositionZ(),
+                                            focus->GetPhaseMask(), LINEOFSIGHT_ALL_CHECKS,
+                                            VMAP::ModelIgnoreFlags::Nothing);
+}
+
+// The smallest turn at which every camp slot sees the MK II. Raid-wide and folded on the observability
+// interval: every bot has to build the same camp, and each step costs a ray per slot. Goes up at once,
+// comes down only after ULDUAR_MIMIRON_CAMP_SIGHT_HOLD_MS, and holds when no step clears.
+float MimironPhase1CampTurn(Player* bot, Position const& anchor, Unit* focus, uint32 count)
+{
+    MimironFightState& state = MimironFightStateFor(bot);
+    if (!focus || (state.campTurnScanMs &&
+                   GetMSTimeDiffToNow(state.campTurnScanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS))
+        return state.campTurn;
+
+    state.campTurnScanMs = getMSTime();
+
+    float wanted = -1.0f;
+    for (float turn = 0.0f; turn <= ULDUAR_MIMIRON_CAMP_SIGHT_MAX + 0.001f;
+         turn += ULDUAR_MIMIRON_CAMP_SIGHT_STEP)
+    {
+        std::vector<Position> const slots = MimironPhase1CampSlots(anchor, focus, count, turn);
+        if (std::all_of(slots.begin(), slots.end(),
+                        [focus](Position const& slot) { return MimironSlotSeesFocus(slot, focus); }))
+        {
+            wanted = turn;
+            break;
+        }
+    }
+
+    if (wanted < 0.0f)
+        return state.campTurn;
+
+    float const before = state.campTurn;
+    if (wanted > state.campTurn)
+    {
+        state.campTurn = wanted;
+        state.campTurnRaisedMs = getMSTime();
+    }
+    else if (wanted < state.campTurn &&
+             GetMSTimeDiffToNow(state.campTurnRaisedMs) >= ULDUAR_MIMIRON_CAMP_SIGHT_HOLD_MS)
+    {
+        state.campTurn = wanted;
+    }
+
+    if (state.campTurn != before && RaidObs::Active())
+    {
+        char line[16];
+        snprintf(line, sizeof(line), "%.0f", state.campTurn * 180.0f / static_cast<float>(M_PI));
+        RaidObs::NoteDerived(bot, "mimiron.campturn", line);
+    }
+
+    return state.campTurn;
+}
+
+Position MimironPhase1CampSlot(Player* bot, Position const& anchor, Unit* focus, uint32 index,
+                               uint32 count)
+{
+    std::vector<Position> const slots =
+        MimironPhase1CampSlots(anchor, focus, count, MimironPhase1CampTurn(bot, anchor, focus, count));
+    return slots[std::min(index, count - 1)];
 }
 
 // Phase 3. The raid groups in the east wedge instead of ringing the room: the summon pads sit on three
@@ -1456,7 +1703,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     if (phase1 && firefighter)
     {
         branch = "p1stack";
-        out = MimironPhase1CampSlot(GetMimironPhase1StackAnchor(botAI, bot), focus, index, count);
+        out = MimironPhase1CampSlot(bot, GetMimironPhase1StackAnchor(botAI, bot), focus, index, count);
         return true;
     }
 

@@ -144,11 +144,11 @@ bool MimironArcSpreadTrigger::IsActive()
     // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
     // ring itself, so a bot that dodged one is standing clear while its slot still has the marker
     // burning on it - checking the bot's own surroundings would send it straight back. The tank
-    // anchor is exempt: its spot sits under the mech that laid the mines. The walk has to be clear of
-    // fire as well as the slot, or the fire dodge throws the bot back out halfway there.
+    // anchor is exempt: its spot sits under the mech that laid the mines. Every leg has to be clear of
+    // fire as well, or the fire dodge throws the bot back out halfway there, so a burning slot or walk
+    // only counts while a substitute or a detour gets round it.
     if (!IsMimironTankAnchorSlot(botAI, bot) &&
-        (!IsMimironSpotSafe(bot, slot) ||
-         !IsMimironWalkFireSafe(bot, GetMimironFirefighterHazards(botAI), slot)))
+        GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)).empty())
         return false;
 
     // Do not walk a bot back into a live Rapid Burst. Tested on the slot rather than through

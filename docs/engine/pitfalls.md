@@ -136,6 +136,12 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   **` line once the drop exceeds 1 yd); in the ring sweep and the JSON it is the **`settledZ`**
   column.
 
+  navprobe answers the floor, never sight. `VMAP::StaticMapTree::isInLineOfSight`, the static half of
+  `Map::isInLineOfSight`, is in the same image's `build/src/common/libcommon.a`: a scratch program of
+  `InitMap`, `LoadMapTile` and the call, linked like navprobe (`build.ninja`), probes it offline. Cast
+  the ray `IsWithinLOSInMap` casts, the player's eye (position + DBC collision height) to the
+  creature's `GetHitSpherePointFor` point; GameObject collision still needs a live server.
+
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
   navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for
   sitting on lava — Obsidian Sanctum's pull-drag corner is exactly that.
@@ -291,6 +297,11 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   *are* selectable, so a bot will happily kill its own root.
 - `AttackersValue::IsPossibleTarget` drops `UNIT_FLAG_NOT_SELECTABLE` units
   (`Value/AttackersValue.cpp:156`), so a phased-out boss leaves `"attackers"` entirely.
+- **Out of line of sight is an invalid target.** `AttackersValue::IsValidTarget` is `IsPossibleTarget`
+  plus `IsWithinLOSInMap`, so a slot behind a wall fires `invalid target` → `drop target`, and
+  `DropTargetAction` calls `ChangeEngine(BOT_STATE_NON_COMBAT)`: the bot stops fighting and `follow`
+  walks it to its master against the formation. Mimiron's alcove walls did it to two camp slots for
+  20-35 s a pull. Test a fixed slot's sight of its focus, not only its floor.
 - **`DisperseDistanceValue` defaults to `-1.0f`**, and `CombatFormationMoveAction::Execute` bails on
   `dis <= 0` — the generic de-clumper is inert unless a strategy sets it.
 

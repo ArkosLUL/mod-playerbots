@@ -239,6 +239,18 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         return false;
     }
 
+    // Still never into the two that kill outright. Standing in a fire node costs ~3.1k a second, and
+    // this leg is forced, so it would also lock out the Shock Blast escape until it expires.
+    Position const straightAway(bot->GetPositionX() + cos(away) * distance,
+                                bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
+    if ((screenShock && !IsMimironSpotShockSafe(botAI, straightAway)) ||
+        !IsMimironSpotBombSafe(hazards, straightAway))
+    {
+        NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
+                        refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
+        return false;
+    }
+
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                     refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
 
@@ -525,17 +537,44 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
     if (!GetMimironSpreadSlot(botAI, bot, slot))
         return false;
 
-    // Ten mines land eight seconds after every Shock Blast, and Rocket Strike markers sit on the
-    // ring for five. Nothing in pathing knows about either, so holding beats walking into them -
-    // except for the tank, whose spot is under the mech that laid them. Same for a walk that crosses
-    // fire: the dodge would only throw the bot out the far side again.
-    if (!IsMimironTankAnchorSlot(botAI, bot) &&
-        (!IsMimironSpotSafe(bot, slot) ||
-         !IsMimironWalkFireSafe(bot, GetMimironFirefighterHazards(botAI), slot)))
-        return false;
+    // The tank's spot is under the mech that laid the mines, so it walks straight there.
+    if (IsMimironTankAnchorSlot(botAI, bot))
+        return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
 
-    return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(),
-                  false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    // Ten mines land eight seconds after every Shock Blast, and Rocket Strike markers sit on the ring
+    // for five. Nothing in pathing knows about either or about the fire, so every leg is screened here,
+    // and the next tick replans from wherever the leg ended.
+    for (MimironApproach const& approach :
+         GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)))
+    {
+        // Only a candidate with no path hands over to the next. Already walking a leg, or held by
+        // the movement lock, has to stay put, or the bot swaps waypoints mid leg.
+        RaidObs::MoveOutcome const outcome =
+            TryMoveTo(bot->GetMapId(), approach.dest.GetPositionX(), approach.dest.GetPositionY(),
+                      approach.dest.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_COMBAT, true);
+        if (outcome == RaidObs::MoveOutcome::NoPath)
+            continue;
+
+        if (outcome != RaidObs::MoveOutcome::Issued)
+            return false;
+
+        if (std::strcmp(approach.how, "direct") != 0 && RaidObs::Active())
+        {
+            char line[32];
+            if (std::strcmp(approach.how, "detour") == 0)
+                snprintf(line, sizeof(line), "detour %+.0f", approach.turn * 180.0f / static_cast<float>(M_PI));
+            else
+                snprintf(line, sizeof(line), "substitute r%.0f",
+                         approach.dest.GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()));
+            RaidObs::NoteDerived(bot, "mimiron.approach", line);
+        }
+
+        return true;
+    }
+
+    return false;
 }
 
 bool MimironAerialCommandUnitAction::Execute(Event /*event*/)

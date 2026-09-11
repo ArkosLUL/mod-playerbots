@@ -121,4 +121,15 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Mimiron phase 1: the main tank's own cooldowns go out only through the Plasma Blast window claim.
+// The class nodes fire on health, so they spent Divine Protection mid window after a healer external
+// had already covered it, and the next window got nothing and killed the tank.
+class MimironPlasmaDefensiveHoldMultiplier : public Multiplier
+{
+public:
+    MimironPlasmaDefensiveHoldMultiplier(PlayerbotAI* ai)
+        : Multiplier(ai, "mimiron plasma defensive hold") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

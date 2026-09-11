@@ -45,13 +45,30 @@ one of two anchors, each a middle-row centre, index 0 by default:
 
 | # | bearing | x | y |
 |---|---|---|---|
-| 0 | 30° | 2714.959 | 2582.032 |
-| 1 | 330° | 2714.959 | 2555.032 |
+| 0 | 25° | 2716.047 | 2579.942 |
+| 1 | 345° | 2717.656 | 2561.543 |
 
-navprobe 1° rings at 21, 27 and 33 yd: clean floor from **288° to 74°**, every slot for 1-16 bots on
-mesh at Z 364.314, the nearest 20.7 yd from centre. 105-255° is off mesh against the west wall or up
+navprobe 1° rings at 21, 27 and 33 yd: clean floor from **288° to 74°**, so every slot for 1-16 bots is
+on mesh at Z 364.314, the nearest ~20 yd from centre. 105-255° is off mesh against the west wall or up
 in the raised doorway alcove, and 90° and 270° sit on holes — the northern one runs **y 2582 to 2591**,
 3.6-4.8 yd off poly with Z never settling.
+
+**Every slot has to see the MK II.** Out of sight is an invalid target (`AttackersValue::IsValidTarget`
+tests `IsWithinLOSInMap`), so `drop target` puts the bot in the non-combat engine, where `follow` walks
+it toward its master and arc spread walks it back: **58 and 49** `follow <-> arc spread` A-B-A in two
+2026-09-11 night pulls, two bots 20-35 s without a target each. The tank spot sits ~3.4 yd inside the
+doorway alcove, whose side walls end at x ≈ 2695, y ≈ 2553 and 2585, and the MK II spends 45% of phase 1
+west of the spot, deeper in. Over 323 traced MK II positions, anchors at 30°/330° hid the worst edge
+slot **21% and 38%** of the time, 25°/345° **1.5% and 1.2%**; the south shadow is wider because the MK
+II drifts south-west. Sliding the camp east buys nothing, since the range shift drags it back, and ±32°
+fixes only the north wedge.
+
+That margin is thin: 2 yd more westward drift puts the south edge back at 34%. `MimironPhase1CampTurn`
+turns the whole camp toward the room in 4° steps up to 16° until every slot sees the MK II
+(`Map::isInLineOfSight` along the `IsWithinLOSInMap` ray from a fixed 2 yd eye), raid-wide on the 250 ms
+scan; it rises at once and falls back only after 15 s (`mimiron.campturn`). In that stress case it
+clears with ≤ 8° in 98% of positions. navprobe has no LoS mode; the offline probe is in
+[pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops).
 
 The wedge is **fixed**, never tracking the boss: chains grow toward whoever is nearest their head, so a
 drifting camp smears the field along behind it. It gives ground only as one rigid piece, when its
@@ -68,8 +85,8 @@ the anchor and 11 inside 20. `GetMimironPhase1StackAnchor` walks the whole raid 
 counts live nodes within `ULDUAR_MIMIRON_STACK_FIRE_RADIUS` (10) of each anchor, and switches when
 the live one carries more than `_FIRE_LIMIT` (2) **and** another is cleaner by `_FIRE_MARGIN` (2),
 then holds it `_HOLD_MS` (15 s). Hysteresis both ways: chains grow 1.22 yd/s, so a bare "stand on
-the cleanest" paces the raid across the arc all phase. The two anchors' middle rows are 27 yd apart,
-which clears a 5 yd node cluster and a 7 yd chain step; 30° neighbours would move them only 14.
+the cleanest" paces the raid across the arc all phase. The two anchors' middle rows are 18.5 yd
+apart, still clear of a 5 yd node cluster plus a 7 yd chain step; 30° neighbours would move them only 14.
 **Decided once per instance** in `MimironFightState`, never per bot — twelve bots each picking their
 own cleanest anchor is twelve camps.
 
@@ -181,11 +198,28 @@ for; the barrage does, and the trigger stands down for it outright. The fan also
 mover refused — `move` in the `mimiron.flee` note, and a `locked` outcome from testing the lock once
 up front instead of 44 times — because reading a mover refusal as a hazard refusal is what hid this.
 
-**The formation walked bots back across the fire.** Arc spread screens its *slot*, not the walk, so a
+**The formation walked bots back across the fire.** Arc spread screened its *slot*, not the walk, so a
 clean slot behind a burning band sent the bot through it and the FORCED dodge threw it out the far
-side, up to 23 yd: 63 and 179 arc-spread/flame-dodge round trips in the two 2026-09-11 pulls.
-`IsMimironWalkFireSafe` holds the bot where the dodge left it while the straight walk passes within
-5 yd of a node it is not already standing in; trigger and action both test it.
+side, up to 23 yd: 63 and 179 arc-spread/flame-dodge round trips in the two 2026-09-11 pulls. No leg
+may pass within 5 yd of a node the bot is not already standing in (`IsMimironWalkFireSafe`).
+
+**That hold emptied the formation once the fire filled the room.** From the 1→2 handover on the
+tracker sits at its 40-node cap, and on 2026-09-11 night ranged and healers stood a median **14.6, 23.5
+and 22.0 yd** off their slots in phases 2-4 (over 10 yd 59-78% of the time), the walk back crossing
+fire 53-75% of the time. That fed `flame dodge <-> reach spell` (89 A-B-A in one phase 3), a phase 3
+tank 16.5 yd off the centre, and four ranged that `reach spell` stacked 38 yd out on one Rapid Burst
+line. `GetMimironSlotApproaches` now plans for trigger and action alike:
+
+- A slot that is not clear gives way, outside phase 1, to the nearest clear point within
+  `ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS` (6) that keeps 5.5 yd off every raid member. A bot already on
+  clear ground that close stays put, since a stand-in moves whenever the fire grows.
+- A walk through fire goes via one waypoint over its midpoint, 20°, 35°, 50° or 65° off the direct
+  bearing, whose two legs both miss the fire. Only a candidate with no path hands over to the next.
+- Phase 1 keeps holding: its camp leaves its own fire by switching anchors, and a stand-in between 6 yd
+  rows is a Napalm pair.
+
+On the traces that recovers a third to a half of the off-slot time; `mimiron.approach` notes each
+non-direct leg.
 
 ## Raising the fire dodge to FORCED handed it the Shock Blast escape to cancel
 
@@ -225,6 +259,12 @@ MK II, dead at 14.3 yd as the blast landed, and a fire dodge carried another in 
 the fan screened fire, mines, cones and bombs but not the circle. `IsMimironSpotShockSafe` refuses
 anything within 18 yd of an MK II casting 63631 — inside `IsMimironSpotSafe`, so arc spread holds, and
 in the fan for every flee but the escape itself (`shock%u` in the `mimiron.flee` note).
+
+**The fan's unscreened fallback was the last way in.** On 2026-09-11 night the fire dodge's last rung
+refused every bearing (three for the circle), and its fallback, straight away from the node, ran at a
+casting MK II to 9.9 yd; its FORCED leg held the lock, the escape logged `shock locked`, and the bot
+died. A fallback whose straight-away point is inside a live Shock Blast (every flee but the escape) or
+Frost Bomb now returns false as `unsafe`, leaving the bot in fire at ~3.1k a second and the lock free.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -478,7 +518,8 @@ The escape is therefore short. 93-97% of hits land inside ±30°, and the arc a 
 clear it was **median 6.3-6.7 yd** — 46% under 6, 65% under 9, p90 17.
 A ~1 s step saves four of the six ticks. `MimironRapidBurstAction` takes it whenever the arc is at or
 under `ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP` (9) and stands still above that, because past there the
-boss has re-aimed at somebody else before the bot arrives.
+boss has re-aimed at somebody else before the bot arrives. On the centreline that is ~13.6 yd from
+VX-001, so a raid arriving from 40 yd eats all six ticks (see the handovers).
 
 Three things stop it costing more than it buys. It **keeps the bot's own radius**, moving purely
 tangentially, so casting range and melee range both survive and neither `reach spell` nor
@@ -491,8 +532,9 @@ phase 2, so it never contends with the barrage, and the two lethal nodes it outr
 Bomb on a 10 s fuse, Rocket Strike on 5 — both have seconds a 3 s cone does not. It is **not** behind
 the hard-mode check, because Rapid Burst is scheduled unconditionally when phase 2 starts.
 
-**Hand Pulse (64348/64352) is the same 60° cone**, every 1.75 s in phase 4, and is not covered — no
-traced pull has reached phase 4.
+**Hand Pulse (64348/64352, 64536/64537 on 25-man) is the same 60° cone**, every 1.75 s in phase 4,
+and is not covered. The one long phase 4 (2026-09-11 night) took 1.86M from it, 56-82k on most of the
+raid, with the ACU on a warlock 70% of the phase.
 
 The ring survives the correction. Six fixed phase-2 spots used to stack the raid into three clumps,
 which is the worst shape against anything conical whatever its width; a ring of radius 22 with one
@@ -708,7 +750,8 @@ uncapped 25 s, so no add or fire bot came for the last 3 min of the phase and th
 cap. The core now comes off the corpse's own loot, marked looted as `Player::StoreLootItem` does, with a
 per-instance claimed set for a corpse whose loot was never filled (`TakeMimironCore`). It goes down
 only when `IsMimironCoreUseReady`: airborne, no 64436, and no live 34068 within 100 yd; until then the
-carrier notes `pending`.
+carrier notes `pending`. The next pull into phase 3 used **two cores off two corpses**, 34 s apart, and
+landed cleanly twice.
 
 Melee and pets switch to it for the window — `IsAllowedTarget` used to refuse melee the Aerial Command
 Unit outside phase 4 unconditionally, and the pet node only ever looked for adds, so both sat it out.
@@ -759,6 +802,10 @@ one is within 30 yd of the bot or its target. `IsMimironSpotFireBotSafe` refuses
 ahead, 3.5 each side) for everyone and 13 yd for casters and healers in 25-man, in `IsMimironSpotSafe`
 and the flee fan; `mimiron fire bot` (`ACTION_RAID + 3`) steps sideways out of the line, or away from
 the siren.
+
+The next phase 3 culled one at 4:48 and kept two until 6:04 and 6:25, before phase 4: one Water Spray
+hit, and 18 siren applications against 45 before, 6 of them on casters and healers against 19, most in
+the 3 s after the wave spawned.
 
 ## Pets need telling twice, in two different phases
 
@@ -848,9 +895,10 @@ weakest ready cooldown, shortest first, and returns nothing while one is already
 steps in only when the tank has none — `pain suppression`, `guardian spirit`, `hand of sacrifice`,
 never `hand of protection`, which sheds threat and hands the boss back. `ClaimMimironPlasmaWindow`
 gives the window to the first claimant, so a Shield Wall and a Pain Suppression never land on the
-same five seconds: either alone carries it and the spare is worth more 22 s later. The class nodes
-are **not** held off their own reactive use — nothing measured yet says a button is wasted between
-windows.
+same window: either alone carries it and the spare is worth more 22 s later. The claim lasts 12 s
+(`ULDUAR_MIMIRON_PLASMA_WINDOW_MS`), since cast start to the last tick is ~9 s, and in phase 1 the main
+tank's class nodes are held off its `NextTankDefensive` buttons (`MimironPlasmaDefensiveHoldMultiplier`,
+as Obsidian Sanctum does), since they fire on health mid-window.
 
 **None of which fired once**, across both pulls that shipped it: no `mimiron.plasma` note and no act
 row at all. `SPELL_MIMIRON_PLASMA_BLAST` is the 10-man 62997 and `spelldifficulty_dbc` remaps the
@@ -863,6 +911,13 @@ others.
 Fixed, it fires: nine `mimiron.plasma` notes over two 2026-09-11 pulls, and every window with a
 defensive and 60-90k of healing left the tank at 38% or better. Windows 3-5 still killed him, with
 5-11k of healing behind them once Napalm had taken the healers.
+
+**Then window 3 went bare in all three 2026-09-11 night pulls** and killed the tank in one (101.5k
+taken, 1:17.7). The paladin tank opens with Avenging Wrath, which locks Divine Protection for 30 s, so
+window 1 always goes to a healer external; window 2 then took two buttons every pull, the class node's
+Divine Protection on health at 0:53 after an external, or a second claim at 0:54 once the old 8 s claim
+lapsed. The 12 s claim and the hold give windows 1-3 one button each on a replay of those pulls;
+windows 4-5 stay bare, as they were (min HP 74-82%).
 
 ## The tank leaves with three seconds of threat and the boss does not follow
 
@@ -966,17 +1021,21 @@ out 13.3 s before phase 1 and the 103.5 s of fixed handovers and ~483 s is left 
 VX-001 (8,276,398 each), the ACU (5,517,599) and phase 4 at half health (~11M): about **33M, 69k
 sustained**.
 
-| phase, 2026-09-11 | early pulls | late pulls |
-|---|---|---|
-| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k |
-| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k |
-| 3 ACU | - | **231 s at 24k** |
-| 4 | - | 29 s before the berserk, all three at 43-46% |
+| phase, 2026-09-11 | afternoon | evening | night |
+|---|---|---|---|
+| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k | 106.2 s at 78k, 93.8 s at 88k, 84.2 s at 98k |
+| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k | wiped at 25% and 57%; 104.3 s at 79k |
+| 3 ACU | - | **231 s at 24k** | **129 s at 42.7k** |
+| 4 | - | 29 s before the berserk, all three at 43-46% | 179 s at 52k; berserk with 6%, 6% and 12% left (~1.66M, ~32 s) |
 
 Bots hit the MK II, the only attackable unit in phase 1, in 94-99% of samples by role; the misses are
 targetless stretches after a tank death. Phase 2 was the check while the raid entered it with 14-17
 alive; with 22-24 it holds. Phase 3 lost the pull: no core landing, melee chasing the airborne unit,
 ranged out of range (see the core and wedge sections). At 69k it is ~80 s and phase 4 gets ~180 s.
+With one core per corpse it took 129 s: the two landings took 21% and 33%, the unit spent the rest in
+the air at ~32k, and no third Assault Bot came, since each landing freezes the add timers ~45 s. That
+pull reached the berserk ~32 s short, six bots down in phase 4 (two to mines, three to Hand Pulse and
+Plasma Ball, one to a Frost Bomb).
 Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), deliberately, and went out 4 s into it.
 
 ## The phase handovers are a minute of wasted time
@@ -1003,6 +1062,13 @@ raid kept the fire in one cluster (median 8 yd from its centroid): the bomb clea
 phase 2 ran on 4-21 nodes. In the other the master walked ~45 yd north, the raid followed, the fire
 split (median 24.6 yd), the bomb cleared 9, and phase 2 burned at the tracker's 40-node cap until the
 healers died. Following stays, by choice; stand still between phases.
+
+**And the 1→2 handover decides whether phase 2 opens in one Rapid Burst line.** The masters of the
+four clean openers on 2026-09-11 stood 49-54 yd out 10 s before VX-001 went live and then walked in, so
+the raid started 4-15 yd from it: Rapid Burst did 324-399k in the first 30 s, mostly 1-3 victims a
+tick. Two masters stayed ~40 yd west, leaving a raid stacked 1.6-2.8 yd on one line well past where the
+dodge walks: 653k and 679k, 10-24 victims a tick, and six dead in one pull, four of them healers. Stand
+still in the west, then walk to the centre over the last ~10 s.
 
 Parking *on the centre* is the thing to avoid, and it is what a formation did by accident and a
 master will not: one pull holding those two rings there put 37 nodes in the window, **86% of them
@@ -1089,7 +1155,9 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast or Frost Bomb |
+| `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
+| `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot) or `detour ±N` (degrees off the direct bearing) |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,
