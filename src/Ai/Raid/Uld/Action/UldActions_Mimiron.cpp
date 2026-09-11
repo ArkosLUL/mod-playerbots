@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <iterator>
 #include <limits>
 
@@ -87,7 +88,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedFire = 0;
     uint32 refusedBomb = 0;
     uint32 refusedBurst = 0;
+    uint32 refusedShock = 0;
     uint32 refusedMove = 0;
+
+    // Everything except the Shock Blast escape itself, which is the one move that has to start inside
+    // the circle.
+    bool const screenShock = std::strcmp(what, "shock") != 0;
 
     // A bot with a cast in flight cannot be moved at all: PointMovementGenerator discards the spline
     // outright for anything IsMovementPreventedByCasting, and MoveTo still reports success and stamps
@@ -103,7 +109,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     UpdateMovementState();
     if (!IsMovingAllowed() || IsWaitingForLastMove(priority))
     {
-        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 1);
+        NoteFleeOutcome(what, "locked", nullptr, 0, 0, 0, 0, 0, 0, 0, 1);
         return false;
     }
 
@@ -195,12 +201,18 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
+            if (screenShock && !IsMimironSpotShockSafe(botAI, dest))
+            {
+                ++refusedShock;
+                continue;
+            }
+
             if (TryMoveTo(bot->GetMapId(), dx, dy, dz, false, false, true, exact, priority) ==
                 RaidObs::MoveOutcome::Issued)
             {
                 float const taken = sign * delta;
                 NoteFleeOutcome(what, "ok", &taken, refusedBack, refusedMine, refusedCone, refusedFire,
-                                refusedBomb, refusedBurst, refusedMove);
+                                refusedBomb, refusedBurst, refusedShock, refusedMove);
                 return true;
             }
 
@@ -216,12 +228,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     if (!fallbackUnfiltered)
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                        refusedBomb, refusedBurst, refusedMove);
+                        refusedBomb, refusedBurst, refusedShock, refusedMove);
         return false;
     }
 
     NoteFleeOutcome(what, "fallback", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
-                    refusedBomb, refusedBurst, refusedMove);
+                    refusedBomb, refusedBurst, refusedShock, refusedMove);
 
     if (fallbackFrom)
         return MoveAway(fallbackFrom, distance);
@@ -236,7 +248,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, float const* taken,
                                         uint32 refusedBack, uint32 refusedMine, uint32 refusedCone,
                                         uint32 refusedFire, uint32 refusedBomb, uint32 refusedBurst,
-                                        uint32 refusedMove)
+                                        uint32 refusedShock, uint32 refusedMove)
 {
     if (!RaidObs::Active())
         return;
@@ -245,10 +257,11 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
     if (taken)
         snprintf(bearing, sizeof(bearing), " %+.0f", *taken * 180.0f / static_cast<float>(M_PI));
 
-    char line[176];
-    snprintf(line, sizeof(line), "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u move%u)", what,
-             outcome, bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb,
-             refusedBurst, refusedMove);
+    char line[192];
+    snprintf(line, sizeof(line),
+             "%s %s%s (back%u mine%u cone%u fire%u bomb%u burst%u shock%u move%u)", what, outcome,
+             bearing, refusedBack, refusedMine, refusedCone, refusedFire, refusedBomb, refusedBurst,
+             refusedShock, refusedMove);
 
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
@@ -446,15 +459,42 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
     float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
 
+    // Radius is free here, so spend it on the fire. The flame dodge stands down for the whole barrage,
+    // so a fixed-radius orbit walks straight onto burning ground and the bot stays there. No clean
+    // radius means keep the step anyway: the cone kills outright, the fire does not.
+    float stepRadius = radius;
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    auto const onOrbit = [&](float r)
+    {
+        return Position(boss->GetPositionX() + r * cos(heading), boss->GetPositionY() + r * sin(heading),
+                        boss->GetPositionZ());
+    };
+
+    if (!IsMimironSpotFireSafe(hazards, onOrbit(radius)))
+    {
+        for (float shift : {2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f, -8.0f})
+        {
+            float const candidate = radius + shift;
+            if (candidate < minRing || candidate > ULDUAR_MIMIRON_SPREAD_RADIUS_MAX)
+                continue;
+
+            if (IsMimironSpotFireSafe(hazards, onOrbit(candidate)))
+            {
+                stepRadius = candidate;
+                break;
+            }
+        }
+    }
+
     NoteBarrageDecision(branch, goClockwise ? "cw" : "ccw", cw);
 
     // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all -
     // see the note on MoveAwayClearOfMines.
     bot->CastStop();
 
-    MoveTo(boss->GetMapId(), boss->GetPositionX() + radius * cos(heading),
-           boss->GetPositionY() + radius * sin(heading), boss->GetPositionZ(), false, false, false,
-           true, MovementPriority::MOVEMENT_FORCED, true);
+    Position const step = onOrbit(stepRadius);
+    MoveTo(boss->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false,
+           false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 
     // Re-check fast while relocating: the cone lands damage every 250 ms and turns nearly three degrees
     // in that time, so a normal interval is most of a cone width. Only while moving - a bot already
@@ -480,8 +520,11 @@ bool MimironArcSpreadAction::Execute(Event /*event*/)
 
     // Ten mines land eight seconds after every Shock Blast, and Rocket Strike markers sit on the
     // ring for five. Nothing in pathing knows about either, so holding beats walking into them -
-    // except for the tank, whose spot is under the mech that laid them.
-    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironSpotSafe(bot, slot))
+    // except for the tank, whose spot is under the mech that laid them. Same for a walk that crosses
+    // fire: the dodge would only throw the bot out the far side again.
+    if (!IsMimironTankAnchorSlot(botAI, bot) &&
+        (!IsMimironSpotSafe(bot, slot) ||
+         !IsMimironWalkFireSafe(bot, GetMimironFirefighterHazards(botAI), slot)))
         return false;
 
     return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(),

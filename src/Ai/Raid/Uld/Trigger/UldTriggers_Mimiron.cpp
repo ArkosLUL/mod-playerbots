@@ -133,15 +133,22 @@ bool MimironArcSpreadTrigger::IsActive()
     // No "is a mech up" gate of its own. GetMimironSpreadSlot answers false when neither a live nor a
     // staging focus resolves, and that is also what keeps this quiet before the pull and after a wipe.
     Position slot;
-    float tolerance = ULDUAR_MIMIRON_SPREAD_TOLERANCE;
-    if (!GetMimironSpreadSlot(botAI, bot, slot, &tolerance))
+    if (!GetMimironSpreadSlot(botAI, bot, slot))
+        return false;
+
+    // First, because it is the cheap one and most bots are standing on their slot: everything below
+    // gathers the fire field.
+    if (bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <= ULDUAR_MIMIRON_SPREAD_TOLERANCE)
         return false;
 
     // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
     // ring itself, so a bot that dodged one is standing clear while its slot still has the marker
     // burning on it - checking the bot's own surroundings would send it straight back. The tank
-    // anchor is exempt: its spot sits under the mech that laid the mines.
-    if (!IsMimironTankAnchorSlot(botAI, bot) && !IsMimironSpotSafe(bot, slot))
+    // anchor is exempt: its spot sits under the mech that laid the mines. The walk has to be clear of
+    // fire as well as the slot, or the fire dodge throws the bot back out halfway there.
+    if (!IsMimironTankAnchorSlot(botAI, bot) &&
+        (!IsMimironSpotSafe(bot, slot) ||
+         !IsMimironWalkFireSafe(bot, GetMimironFirefighterHazards(botAI), slot)))
         return false;
 
     // Do not walk a bot back into a live Rapid Burst. Tested on the slot rather than through
@@ -155,7 +162,7 @@ bool MimironArcSpreadTrigger::IsActive()
             return false;
     }
 
-    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) > tolerance;
+    return true;
 }
 
 bool MimironRapidBurstTrigger::IsActive()
@@ -251,8 +258,10 @@ bool MimironProximityMineTrigger::IsActive()
 {
     // 9000 damage in 3 yd, and a mine self-destructs after 35 s whether anyone is near it or not. Ten
     // scatter within 15 yd of the MK II every 30 s, which is where melee have to stand, so this fired
-    // more or less continuously to dodge about 120 dps - and cost them their uptime for it.
-    if (botAI->IsMelee(bot))
+    // more or less continuously to dodge about 120 dps - and cost them their uptime for it. Only while
+    // they have a mech to hit, though: the mines outlive the MK II, and following the master between
+    // phases walks melee straight across them.
+    if (botAI->IsMelee(bot) && GetMimironRingFocus(botAI))
         return false;
 
     // The barrage action hands the tick to everything below it once a bot is clear, and this node

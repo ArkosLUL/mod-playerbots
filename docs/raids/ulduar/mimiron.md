@@ -29,7 +29,7 @@ one full-room clear 60 s into phase 1 (64570).
 
 **Which is why phase 1 is fought in the west.** The MK II is held at
 `ULDUAR_MIMIRON_PHASE1_TANK_SPOT` **(2691.576, 2568.532)**, 53 yd off centre, and ranged and healers
-camp 22 yd off it on one of `ULDUAR_MIMIRON_PHASE1_STACK_SPOTS` — so every seed lands out there
+camp 21-33 yd off it toward one of `ULDUAR_MIMIRON_PHASE1_STACK_SPOTS` — so every seed lands out there
 rather than on the ground VX-001 is summoned onto. It works: **70% of phase-1 fire damage was taken
 inside 20 yd of the centre** before the move and **0.0%** after it across all three 2026-09-10
 pulls, with no node left within 24 yd of centre at the handover.
@@ -37,45 +37,45 @@ pulls, with no node left within 24 yd of centre at the handover.
 The tank spot is **51.5 yd from Mimiron's own spawn** (2742.53, 2560.99), and he evades past **80 yd**
 from it on every tick (`boss_mimiron.cpp:394-398`) — that check is the only leash in the encounter,
 the MK II has none of its own. navprobe `--nav 0x09`: 0.223 to poly, flat at **Z 364.314**, 16/16 at
-12 yd. The four stack anchors sit 22 yd out, 45° apart, on the only arc with floor:
+12 yd.
 
-| # | bearing | x | y | to poly | 6 yd | 10 yd | to centre |
-|---|---|---|---|---|---|---|---|
-| 0 | 75° | 2697.270 | 2589.782 | 0.22 | 12/12 | 11/12 | 51.6 |
-| 1 | 30° | 2710.629 | 2579.531 | 0.22 | 12/12 | 12/12 | 35.5 |
-| 2 | 345° | 2712.827 | 2562.837 | 0.22 | 12/12 | 12/12 | 32.5 |
-| 3 | 300° | 2702.576 | 2549.479 | 0.22 | 12/12 | 12/12 | 46.6 |
+The camp is a wedge of **per-bot slots** round the tank spot (`MimironPhase1CampSlot`): rows at **21, 27
+and 33 yd**, 6 apart, ±38°, 16 slots, never closer than 5.5 yd even full. Its centreline runs through
+one of two anchors, each a middle-row centre, index 0 by default:
 
-All settle at **Z 364.314**, all stay ≥32.5 yd from centre, and index 0 is the default. 105-255° is
-excluded: off mesh against the west wall, or up in the raised doorway alcove. The mesh also has a
-hole from **y 2582 to 2591** — 3.6-4.8 yd off poly, Z never settling — that swallows anything placed
-due north of the tank spot.
+| # | bearing | x | y |
+|---|---|---|---|
+| 0 | 30° | 2714.959 | 2582.032 |
+| 1 | 330° | 2714.959 | 2555.032 |
 
-Each anchor is a **fixed point**, never a slot that tracks the boss: chains grow toward whoever is
-nearest their head, so an anchor that drifts smears the field along behind it. A slot gives ground
-only when the MK II is further off than `spellDistance - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN`,
-because a slot past casting range deadlocks instead of correcting — `reach spell` is `ACTION_HIGH`
-against the formation at `ACTION_RAID`. That is also what a dead main tank looks like.
+navprobe 1° rings at 21, 27 and 33 yd: clean floor from **288° to 74°**, every slot for 1-16 bots on
+mesh at Z 364.314, the nearest 20.7 yd from centre. 105-255° is off mesh against the west wall or up
+in the raised doorway alcove, and 90° and 270° sit on holes — the northern one runs **y 2582 to 2591**,
+3.6-4.8 yd off poly with Z never settling.
 
-**The clump is what the field converges on, so its own anchor burns first.** One 2026-09-10 pull
+The wedge is **fixed**, never tracking the boss: chains grow toward whoever is nearest their head, so a
+drifting camp smears the field along behind it. It gives ground only as one rigid piece, when its
+farthest slot is out of casting range, because a slot past range deadlocks instead of correcting —
+`reach spell` is `ACTION_HIGH` against the formation at `ACTION_RAID` — and that is also what a dead
+main tank looks like. Range is the bots' own test, `IsWithinCombatRange` with both reaches:
+`spellDistance + 8 + 1.5 - margin`, about **34 raw**. A raw `spellDistance - margin` is 24.5, Napalm's
+floor to within half a yard.
+
+**The camp is what the field converges on, so its own anchor burns first.** One 2026-09-10 pull
 took **538k phase-1 flame damage with the median victim 3.4 yd from the anchor** — 26% of everything
 taken, 329k of it on ranged and 191k on healers against 16k on melee — with 5 nodes inside 10 yd of
 the anchor and 11 inside 20. `GetMimironPhase1StackAnchor` walks the whole raid to a cleaner one: it
 counts live nodes within `ULDUAR_MIMIRON_STACK_FIRE_RADIUS` (10) of each anchor, and switches when
 the live one carries more than `_FIRE_LIMIT` (2) **and** another is cleaner by `_FIRE_MARGIN` (2),
 then holds it `_HOLD_MS` (15 s). Hysteresis both ways: chains grow 1.22 yd/s, so a bare "stand on
-the cleanest" paces the raid across the arc all phase. Neighbours are 16.8 yd apart, which clears a
-5 yd node cluster and a 7 yd chain step. **Decided once per instance** in `MimironFightState`, never
-per bot — twelve bots each picking their own cleanest anchor is twelve clumps.
+the cleanest" paces the raid across the arc all phase. The two anchors' middle rows are 27 yd apart,
+which clears a 5 yd node cluster and a 7 yd chain step; 30° neighbours would move them only 14.
+**Decided once per instance** in `MimironFightState`, never per bot — twelve bots each picking their
+own cleanest anchor is twelve camps.
 
-Clumping is paid for in Napalm Shell, which splashes 5 yd: it took **1.38 and 2.20 victims a cast**
-against the old spread, already 6 at once on 7 of 40 casts in the tighter pull, for 26% and 37% of
-phase-1 damage taken. `ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE` is **3.0** against 5.5 elsewhere, which
-with `ULDUAR_MIMIRON_SPREAD_TOLERANCE` (5) leaves a blob about 10 yd across — a Napalm on its edge
-clips part of the group, not all of it, and packing inside the splash radius buys nothing back. The
-bill never came: clumped, it took **1.20, 1.79 and 1.33 victims a cast**, under the spread it
-replaced, so 3.0 is not the knob it was flagged as. All of this is Firefighter-only; normal mode has
-no fire and keeps the room centre and 5.5.
+Napalm Shell is why it is slots and not a point — see
+[Napalm Shell wants one bot per shell](#napalm-shell-wants-one-bot-per-shell). All of this is
+Firefighter-only; normal mode has no fire and keeps the room centre, the ring and 5.5 yd.
 
 **Emergency Fire Bots (34147)** never enter zone combat — the Bot Summon Trigger's
 `if (_option < 3) SetInCombatWithZone()` skips them — and only run to flame nodes and cast Water
@@ -181,6 +181,12 @@ for; the barrage does, and the trigger stands down for it outright. The fan also
 mover refused — `move` in the `mimiron.flee` note, and a `locked` outcome from testing the lock once
 up front instead of 44 times — because reading a mover refusal as a hazard refusal is what hid this.
 
+**The formation walked bots back across the fire.** Arc spread screens its *slot*, not the walk, so a
+clean slot behind a burning band sent the bot through it and the FORCED dodge threw it out the far
+side, up to 23 yd: 63 and 179 arc-spread/flame-dodge round trips in the two 2026-09-11 pulls.
+`IsMimironWalkFireSafe` holds the bot where the dodge left it while the straight walk passes within
+5 yd of a node it is not already standing in; trigger and action both test it.
+
 ## Raising the fire dodge to FORCED handed it the Shock Blast escape to cancel
 
 Fixing that dodge cost more than it bought. At `MOVEMENT_COMBAT` it was dead — a formation leg
@@ -212,6 +218,13 @@ It held. Across two 2026-09-10 pulls on the fix Shock Blast went from 597,868 da
 to **nothing at all**, then one hit and one death; `shock locked` fell 127 → 21 and 43, and
 `rapidburst`/`rocket`/`frostbomb locked` went 194/74/85 → **zero**. Flames fell with them, 625k → 340k
 and 217k.
+
+**The escape only holds while nothing else moves the bot.** It runs a bot out to 18 yd and hands the
+tick back. On 2026-09-11 the formation walked one straight back toward a slot 12.5 yd from a tankless
+MK II, dead at 14.3 yd as the blast landed, and a fire dodge carried another in from outside to 14 yd:
+the fan screened fire, mines, cones and bombs but not the circle. `IsMimironSpotShockSafe` refuses
+anything within 18 yd of an MK II casting 63631 — inside `IsMimironSpotSafe`, so arc spread holds, and
+in the fan for every flee but the escape itself (`shock%u` in the `mimiron.flee` note).
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -293,7 +306,8 @@ instead, where the band is one contiguous interval and there is nothing to wrap.
 The rest of the dodge is unchanged in shape:
 
 - it is **selective** — bots already outside the swept union never move and keep casting;
-- it rotates at **constant radius**, since radius is irrelevant to safety and melee keep their uptime;
+- it rotates at **constant radius** unless the step is on fire (below), since radius is irrelevant to
+  safety and melee keep their uptime;
 - it picks direction on **time spent inside the cone**, not distance travelled.
 
 That last one is the part that is easy to get wrong, and distance is the wrong currency: the short way
@@ -351,6 +365,12 @@ most 40° per tick (a 40° chord stays within 6% of the ring) and clamps the rad
 that and would otherwise try to orbit through the model. `MOVEMENT_FORCED` sequences the legs for
 free — `IsWaitingForLastMove` refuses anything not strictly above the move already in flight.
 
+**Radius is the one free parameter, so it dodges the fire.** The flame dodge stands down for the whole
+barrage, and on 2026-09-11 a fixed-radius orbit parked four bots on 7-10 nodes at (2752-2755,
+2553-2558), and two healers the next pull, until they burned. A step landing within 5 yd of a node now
+takes the nearest clean radius within ±8 yd, still inside `[14, 24]`; with none it keeps the step,
+because the cone kills outright and fire does not.
+
 ## Which dodges interrupt the cast, and which keep it
 
 A bot mid-cast cannot be moved at all, and `MoveTo` still reports success — the mechanism is in
@@ -401,7 +421,9 @@ inside a 707 yd² circle is about 40 % coverage, so a stationary melee expects ~
 being nudged onto a cone-blind bearing. Ranged keep the sidestep; every healer spec is `IsRanged`
 (`PlayerbotAI::IsRanged` reads `STRATEGY_TYPE_RANGED`), so "melee" here means melee DPS plus warrior,
 DK, protection paladin and feral tanks. The barrage gate is a suppression rather than a filter,
-because a mine is survivable and the cone is not.
+because a mine is survivable and the cone is not. **Between phases melee dodge too**: with nothing
+attackable (`GetMimironRingFocus` null) there is no uptime to lose, and mines outlive the MK II —
+two melee died 0.6 s after it, `follow`ing the master across them.
 
 **Bomb Bot (33836)** is the opposite: `speed_run` 1.14286 works out at **8.0 yd/s against a player's
 7.0**, so it is not merely un-outrunnable, it gains on you, and it detonates on melee contact
@@ -789,6 +811,10 @@ both. Two tank deaths a pull while it was dead: 52.1 s and 76.5 s, then 51.2 s a
 Scorch and Flame Jets had the same hole; sweeping all 139 Ulduar constants against the table found no
 others.
 
+Fixed, it fires: nine `mimiron.plasma` notes over two 2026-09-11 pulls, and every window with a
+defensive and 60-90k of healing left the tank at 38% or better. Windows 3-5 still killed him, with
+5-11k of healing behind them once Napalm had taken the healers.
+
 ## The tank leaves with three seconds of threat and the boss does not follow
 
 The 53 yd walk west only works if the MK II is actually his, and it was not. Across three 2026-09-10
@@ -829,45 +855,72 @@ a p90 of 13-15, against a median 10.5 and a p90 of 108, and stayed on the main t
 13.7 s to 50.4 s. `mimiron generic redirect guard` vetoes `tricks of the trade` 11 and 16 times while
 `mimiron redirect threat action` lands 9 and 8 casts in its place.
 
-## Holding the boss made Napalm Shell a wipe, twice
+**`tank face` fought the anchor.** It steps the tank ~5.6 yd off his slot to point the boss away from
+the raid, just past the 5 yd tolerance, and arc spread walks him back: 36 round trips a pull on
+2026-09-11, 180-250 yd a minute, with the MK II a median 6-7 yd off the anchor against 5.4. The MK II
+has no frontal ability, so `MimironTankAnchorGuardMultiplier` zeroes `tank face` under the same
+conditions as `reach melee`. One of those pulls also went in with a single tank — the feral druid on
+`melee` — and after he died the MK II chased a warlock through the camp, melee targetless 48-77% of the
+rest of the phase.
 
-Both of those pulls still died in phase 1, at 92.4 s and 123.9 s, and Napalm Shell was **61.0% and
-46.9%** of everything taken. Eleven ranged and healers died between 38.0 s and 43.0 s in one, ten
-between 37.9 s and 41.9 s in the other.
+## Napalm Shell wants one bot per shell
 
-65026 is a **5 yd** blast — 9,424 on impact plus 5,999 a tick for 8 ticks, about **48k**, against
-22-30k pools — fired every 14 s at a random player. Victims a cast went 1.19/1.76/1.33 before the
-hold to **8.18 and 3.03**, worst cast **13** (564,724 damage) and **14** (402,769).
+65026 is a **5 yd** blast — 9,424 on impact plus 5,999 a tick for 8 ticks, about **57k** against 22-30k
+pools — from the cannon (34071) every 14 s, on a 2 s cast. The radius is centre to centre, since
+`WorldObjectSpellAreaTargetCheck` adds a target's reach only for a player-controlled caster, so slots a
+little over 5 yd apart isolate every bot.
 
-Both causes are the hold working, not failing.
+It picks uniformly among players at `GetDistance2d(mkII) > 15.0f` — raw **> ~24.5 yd** with both
+reaches — at cast start, and lands where the target stands at cast end. An empty pool falls through
+to `SelectTarget(Random, 0, 100.0f, true)`, a threat-list pick with no distance floor. Over 36 casts
+in seven pulls a non-empty pool was hit in 23 of 26; the rest were a target walking in or out during
+cast and flight.
 
-**The raid finally stands still on the anchor.** `MimironFormationGuardMultiplier` zeroes `combat
-formation move` once a bot is inside its slot tolerance, and all fourteen ranged share **one** slot —
-`MimironPhase1StackSlot` has no per-bot term — so the unstacker switches itself off the moment they
-arrive. Ranged pairs closer than 5 yd: 56%, 38%, 65% before; **97% and 86%** after. What kept them
-apart earlier was the fire dodge throwing them about.
+Victims a cast: 1.38 and 2.20 against the old room-wide spread, 1.2-1.8 in the first west camp,
+**8.18 and 3.03** once the tank held the boss next to it (worst casts 13 and 14, eleven and ten ranged
+and healers dead by 43 s, Napalm 61% and 47% of damage taken, phase-1 wipes at 92.4 and 123.9 s), and
+**3.67 and 7.25** on 2026-09-11. Two causes, and the first fix missed the first:
 
-**And the boss is now held next to them.** The shell picks uniformly among players at
-`GetDistance2d(mkII) > 15.0f`, which is raw **> ~24.5 yd** once the MK II's CombatReach of 8 comes off
-both sides, and an empty pool falls through to `SelectTarget(Random, 0, 100.0f, true)` — a threat-list
-pick with no distance floor, landing in the middle of the camp. Share of ranged past that cutoff: 30%,
-61%, 47% before; **16.5% and 2.7%** after, with the pool empty **36% and 68%** of phase 1 against
-6-13%. The earlier numbers were flattered by a human parked 48-97 yd out who soaked four of five
-shells in one pull and three of six in another.
+- **The camp was one point.** `MimironFormationGuardMultiplier` returns **0** for `combat formation
+  move` while a bot is inside its slot tolerance — right for per-bot slots, fatal for a shared one,
+  where the unstacker switched itself off on arrival (pairs under 5 yd: 38-65% before the hold, 97%
+  and 86% after). Widening the camp's tolerance to 10 switched it off for the whole camp instead:
+  pairs under 5 yd fell to 48-55% only because arc spread stopped pulling bots back, the median
+  nearest neighbour stayed 0.74 and 0.48 yd, and one pull stood ten bots on one point for 20 s.
+- **The camp sat on the floor.** Holding the boss beside it cut the ranged past the floor from 30-61%
+  to 16.5% and 2.7%, and the old raw 24.5 clamp dragged the camp onto the MK II. At ~0:16, mid-drag,
+  the whole raid was within 16.4 yd of the boss, the pool was empty and the fallback landed in the
+  camp: 9 and 13 victims. At ~0:54 it held that one point at 24.7 yd, just past the floor, so all ten
+  were eligible and one shell took twelve. The earliest pulls were flattered by a human parked 48-97
+  yd out, who soaked most shells.
 
-`ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE` is **6.0**, clearing the blast radius, and the camp gets its own
-`ULDUAR_MIMIRON_PHASE1_STACK_TOLERANCE` of **10**, handed back through `GetMimironSpreadSlot`'s
-`outTolerance` so `MimironFormationGuardMultiplier` and `MimironArcSpreadTrigger` cannot disagree about
-where the slot ends. The camp is still a camp for the fire; it just no longer fits inside one shell.
-Fourteen bots at 6 yd want about a 12 yd radius, so the outermost few will trade nudges with the
-formation at 10 — watch ranged `%cast`, and whether `reach spell` starts dominating the phase-1 move
-stream.
+The wedge answers both. The MK II stands ~5 yd off the tank spot toward the camp, so the first row is
+21: replaying every traced MK II position, a slot inside 15 yd drops from 40-49% of the time with a
+first row of 19 to 17-21%, and the pool is empty 0.3-1.3%. `GetMimironPhase1DisperseDistance` is 5.5
+in both modes, under the 6 yd rows, and the camp uses the ordinary 5 yd tolerance. The camp never cost
+range: ranged casting was 63.3% and 51.2% against 49.6 and 44.8 the night before.
 
-Three things are still unexplained, and all of them need a pull that survives phase 1 before they mean
-anything: Bomb Bot `Explosion` reached 204,144 (11.6%) but every death was after 116 s with the healers
-already down; `mimiron dodge flames action` returned FAILED 58 and 55 times, rejecting 770-790
-candidate bearings; and ranged `%cast` is still 45.1% and 37.5% against the 63-65% the centre fight
-managed.
+The knock-on is the wipe: healers die (one pull was down to one by 1:23), then Plasma windows kill the
+tank.
+
+Still open, for a pull that survives phase 1: Proximity Mine `Explosion` (63009) reached 251k and 418k
+of phase-1 damage, about 250-390 dps a melee against the ~120 the adds section prices it at, with
+`set behind` and `reach melee` putting melee on mines; and `mimiron dodge flames action` FAILED 58 and
+55 times on 2026-09-10, rejecting 770-790 bearings.
+
+## Phase 1 DPS is on pace; phase 2 is the check
+
+The MK II is the only attackable unit in phase 1, and bots were on it for 94-99% of samples by role on
+2026-09-11 — the misses are targetless stretches after a tank death, not a wrong target. It has
+**8,276,398** HP: **108.5 s at 76.3k** raid DPS and **132.8 s at 62.3k**.
+
+The 25-man berserk is 10 min from the pull. Take out 13.3 s before phase 1 and the 103.5 s of fixed
+handovers and ~483 s is left for the MK II and VX-001 (8.28M each), the ACU (HealthModifier 200,
+~5.5M) and phase 4 at half health (~11M): about **33M, 69k sustained**. Phase 1 at 108 s is on pace,
+133 s is not. The check the raid actually fails is phase 2: at 39-55k/s VX-001 needs 150-210 s against
+a healing race that has lasted 88-137 s, and it started with 17 and 14 alive against the 21 of the best
+older pull. Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), which no pull has reached, so
+it has never been cast; that is deliberate.
 
 ## The phase handovers are a minute of wasted time
 
@@ -901,12 +954,17 @@ to (2755.77, 2574.95) at 10 s. `GetMimironStagingFocus` survives only to tell a 
 the other two: `Creature::FindNearestCreature` is a grid check on entry, alive state and range with
 **no selectability filter**, so it sees what the target list cannot.
 
-Three things fall out rather than needing code. The **elevator knockback** 11 s into the first
-handover needs no guard, because VX-001 is not summoned until 17 s. **Eating and drinking happen** —
-instance strategies are added to **both** `BOT_STATE_COMBAT` and `BOT_STATE_NON_COMBAT`
-(`PlayerbotAI.cpp:1793-1794`), so nothing at `ACTION_RAID` is holding the tick against them. And
-there is **nothing to do before a pull or after a wipe**: the MK II is `NOT_SELECTABLE` until pulled,
-and evade despawns VX-001 and the ACU outright.
+Two things fall out rather than needing code. The **elevator knockback** 11 s into the first
+handover needs no guard, because VX-001 is not summoned until 17 s. And there is **nothing to do
+before a pull or after a wipe**: the MK II is `NOT_SELECTABLE` until pulled, and evade despawns VX-001
+and the ACU outright.
+
+**Eating and drinking happen**, and are worth it: instance strategies are added to both
+`BOT_STATE_COMBAT` and `BOT_STATE_NON_COMBAT` (`PlayerbotAI.cpp:1793-1794`), and healers went from
+35-65% to 71-100% mana across one handover. But `DrinkAction`/`EatAction` push the next AI check back
+12-18 s, so a sitting bot dodges nothing and, standing still, is the nearest player to a chain head:
+two burned to death drinking in one 2026-09-11 handover. `MimironDrinkGuardMultiplier` vetoes
+`drink`/`food` within 15 yd of a flame node.
 
 ## The ring slot is what kills the Rocket Strike dodge
 
@@ -967,7 +1025,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,

@@ -342,6 +342,10 @@ Related traps:
   explicitly: `context->GetValue<Unit*>("current target")->Set(nullptr)` (precedent
   `ICCActions_LK.cpp:690`, `SWPActions_Felmyst.cpp:386`). Blocking re-acquisition in a multiplier
   cannot undo a target the bot has already picked up.
+- **Eating and drinking blind the bot.** `DrinkAction`/`EatAction` (`NonCombatActions.cpp:65`, `:125`)
+  set `SetNextCheckDelay` to 12-18 s scaled by what is missing, so nothing runs, dodges included,
+  until it expires. Wherever a hazard outlives combat, such as a phase handover, veto `drink`/`food`
+  near it (`MimironDrinkGuardMultiplier`).
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.
@@ -466,7 +470,13 @@ Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` 
 never the number written in it: Mimiron's Napalm picks among players at `GetDistance2d(mkII) > 15.0f`,
 which the MK II's CombatReach of 8 makes raw > ~24.5 yd. Convert before believing a range literal —
 it decides who a mechanic may pick, and an empty pool can fall through to something quite different
-(Napalm's fallback is a threat-list pick with no distance floor at all).
+(Napalm's fallback is a threat-list pick with no distance floor at all). Our own code needs the same
+conversion: `reach spell` fires through `IsWithinCombatRange` (`RangeTriggers.cpp:155`), so a
+formation clamped to raw `spellDistance - margin` gives away both reaches, 9.5 yd against the MK II,
+which parked Mimiron's camp on Napalm's floor. An area spell's radius goes the other way:
+`WorldObjectSpellAreaTargetCheck` (`Spell.cpp:9203`) adds the target's reach only for a
+player-controlled caster, so a creature's AoE is centre to centre and spacing just over its radius
+isolates.
 
 ## Configuration
 

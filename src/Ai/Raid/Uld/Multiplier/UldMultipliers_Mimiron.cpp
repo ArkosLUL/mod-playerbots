@@ -97,12 +97,13 @@ float MimironFormationGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     Position slot;
-    float tolerance = ULDUAR_MIMIRON_SPREAD_TOLERANCE;
-    if (!GetMimironSpreadSlot(botAI, bot, slot, &tolerance))
+    if (!GetMimironSpreadSlot(botAI, bot, slot))
         return 1.0f;
 
-    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <= tolerance ? 0.0f
-                                                                                     : 1.0f;
+    return bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <=
+                   ULDUAR_MIMIRON_SPREAD_TOLERANCE
+               ? 0.0f
+               : 1.0f;
 }
 
 float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)
@@ -142,9 +143,12 @@ float MimironGenericRedirectGuardMultiplier::GetValue(Action* action)
 
 float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
 {
-    // By name: "reach spell" and "reach party member to heal" walk ranged and healers into range and
-    // must not be touched, and the gap-closers are the charge guard's business.
-    if (!action || action->getName() != "reach melee" || !PlayerbotAI::IsMainTank(bot))
+    if (!action || !PlayerbotAI::IsMainTank(bot))
+        return 1.0f;
+
+    // "reach melee" by name: "reach spell" and "reach party member to heal" walk ranged and healers
+    // into range and must not be touched, and the gap-closers are the charge guard's business.
+    if (!dynamic_cast<TankFaceAction*>(action) && action->getName() != "reach melee")
         return 1.0f;
 
     if (!IsMimironHardModeActive(botAI) || !MimironPhase1Active(botAI))
@@ -155,6 +159,24 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
                    IsMimironTankDragReady(botAI, bot)
                ? 0.0f
                : 1.0f;
+}
+
+float MimironDrinkGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (name != "drink" && name != "food")
+        return 1.0f;
+
+    // Empty off hard mode, so a normal clear eats and drinks as before.
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    for (Position const& node : hazards.flames)
+        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE)
+            return 0.0f;
+
+    return 1.0f;
 }
 
 float MimironTargetGuardMultiplier::GetValue(Action* action)

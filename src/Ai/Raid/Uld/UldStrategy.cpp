@@ -881,6 +881,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironFormationGuardMultiplier(botAI));
     multipliers.push_back(new MimironGenericRedirectGuardMultiplier(botAI));
     multipliers.push_back(new MimironTankAnchorGuardMultiplier(botAI));
+    multipliers.push_back(new MimironDrinkGuardMultiplier(botAI));
 
     // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a
     // generic mover walking the bot back into the blast or by a gap-closer teleporting it there, and

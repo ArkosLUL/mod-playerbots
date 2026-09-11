@@ -65,7 +65,7 @@ private:
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,
-                         uint32 refusedBurst, uint32 refusedMove);
+                         uint32 refusedBurst, uint32 refusedShock, uint32 refusedMove);
 };
 
 class MimironShockBlastAction : public MimironFleeAction

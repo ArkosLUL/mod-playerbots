@@ -73,10 +73,24 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Mimiron hard mode: eating or drinking stops the bot thinking for up to 18 s, so one that sits down
+// near the fire does not dodge it. Clean ground only, because the top-up between phases is worth
+// keeping: healers gained 30 to 40 % mana across one handover.
+class MimironDrinkGuardMultiplier : public Multiplier
+{
+public:
+    MimironDrinkGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron drink guard") {}
+    float GetValue(Action* action) override;
+};
+
 // Mimiron phase 1: the main tank's anchor is 53 yd from where he picks the boss up, and "reach
 // melee" is ACTION_HIGH against a formation at ACTION_RAID, so the two traded him back and forth
 // for the whole walk. Held only while the boss is his, which is also when he does not need it - it
 // is following him. Lose aggro and this lifts, so he can run back and taunt.
+//
+// Tank face too. It steps him about 5.6 yd off the anchor, just past the formation's tolerance, and
+// the formation walks him back, over and over. The MK II has no frontal ability, so pointing it away
+// from the raid buys nothing.
 class MimironTankAnchorGuardMultiplier : public Multiplier
 {
 public:

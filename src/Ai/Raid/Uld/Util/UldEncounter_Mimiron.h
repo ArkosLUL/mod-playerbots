@@ -146,19 +146,21 @@ constexpr float ULDUAR_MIMIRON_PHASE3_MIN_RADIUS = 18.0f;
 // DisperseDistanceValue default of -1, which the unstacker rejects outright.
 constexpr float ULDUAR_MIMIRON_DISPERSE_DISTANCE = 5.5f;
 
-// Firefighter replaces it. The camp itself is deliberate - chains grow toward whoever is nearest
-// their head, so a raid spread over the room drags one out along every radius it occupies while a
-// raid held together makes them converge and leaves the rest of the floor clear. Packing inside
-// Napalm's 5 yd is not: 65026 is a 5 yd blast carrying about 48k over eight ticks, against 22-30k
-// pools, so any two bots inside it die together and a camp packed tighter than the blast loses
-// thirteen or fourteen of them to one cast.
-constexpr float ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE = 6.0f;
+// Firefighter phase 1 camp: a wedge of per-bot slots around the tank spot. One camp, because chains
+// grow toward whoever is nearest their head and a raid held together makes them converge, but never
+// one point: Napalm Shell 65026 blasts exactly 5 yd for about 57k, so bots closer than that die in
+// pairs. Rows 6 apart, starting at 21 off the tank spot because the MK II stands about 5 yd off it
+// toward the camp: that keeps the inner row mostly clear of Shock Blast's 15 yd and the mines scattered
+// inside it. The outer rows sit past Napalm's own floor - 15 yd edge to edge, raw 24.5 with both
+// combat reaches - so its target pool is never empty and it never falls back to a random threat pick.
+constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW = 21.0f;
+constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_SPACING = 6.0f;
+constexpr uint32 ULDUAR_MIMIRON_PHASE1_CAMP_ROWS = 3;
 
-// The camp is one shared slot, so the ordinary 5 yd tolerance has the formation guard switch the
-// unstacker off the moment a bot arrives and the raid ends up on a single point. Wide enough for
-// fourteen bots at ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE to settle inside it without the formation
-// and the unstacker fighting over every one of them.
-constexpr float ULDUAR_MIMIRON_PHASE1_STACK_TOLERANCE = 10.0f;
+// Sixteen slots in three rows, never closer than 5.5 yd even full. navprobe --nav 0x09 at 1 degree:
+// every bearing from 288 to 74 off the tank spot is on mesh at 21, 27 and 33 yd, so a centreline from
+// 326 to 36 keeps the whole wedge on the floor.
+constexpr float ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE = 38.0f * static_cast<float>(M_PI) / 180.0f;
 
 // How far ahead of the highest non-tank threat the main tank has to be before he may start walking
 // the MK II west. He used to leave with about three seconds of it: the boss switched to a melee dps
@@ -268,11 +270,23 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 
-// Same idea for anywhere a bot is asked to stand rather than flee to: mines plus any Rocket Strike
-// marker still burning its fuse, and under hard mode the ground fire and the Frost Bomb. Positioning
-// that ignores markers walks a bot that just dodged one straight back onto it, and one that ignores
-// the bomb walks the raid back into the blast for the whole ten second fuse.
+// Whether `dest` is outside a Shock Blast the MK II is casting right now. The escape runs a bot out to
+// ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST and then hands the tick back, so anything else that moves a
+// bot during the 4 s cast has to refuse the circle too, or the formation walks it back in and a fire
+// dodge can carry one in from outside.
+bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest);
+
+// Same idea for anywhere a bot is asked to stand rather than flee to: mines, any Rocket Strike marker
+// still burning its fuse and a Shock Blast being cast, and under hard mode the ground fire and the
+// Frost Bomb. Positioning that ignores markers walks a bot that just dodged one straight back onto
+// it, and one that ignores the bomb walks the raid back into the blast for the whole ten second fuse.
 bool IsMimironSpotSafe(Player* bot, Position const& dest);
+
+// Whether the straight walk from the bot to `dest` stays out of the fire. A slot can be clean while
+// the ground between it and the bot burns, and then the fire dodge fires halfway there and throws the
+// bot out the far side, up to 23 yd, over and over. Nodes the bot already stands in are left out,
+// since walking out of those is the point.
+bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
 
 // The main tank's slot in phases 1 and 4 is a boss-holding spot, not somewhere it is free to refuse:
 // the MK II parks on top of the mine field it just laid, so a tank that will not stand in one never
@@ -289,9 +303,9 @@ bool ClaimMimironPlasmaWindow(Player* bot);
 // spread out behind him.
 bool IsMimironTankDragReady(PlayerbotAI* botAI, Player* bot);
 
-// Which of ULDUAR_MIMIRON_PHASE1_STACK_SPOTS the raid is standing on. Decided once per instance and
-// not per bot - twelve bots each picking their own cleanest anchor is twelve clumps, and one clump
-// is the whole point of the shape.
+// Which of ULDUAR_MIMIRON_PHASE1_STACK_SPOTS the camp points at. Decided once per instance and not
+// per bot - twelve bots each picking their own cleanest anchor is twelve camps, and one camp is the
+// whole point of the shape.
 Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot);
 
 // Drops the phase 1 latches. Called off the constructs rather than any one bot's combat state, so a
@@ -400,10 +414,8 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
 // around VX-001, whose facing swings to whoever it last Rapid Burst. Returns false for roles this does
 // not place, and for everyone during a handover - the raid follows its master between phases, and only
 // the phase 4 main tank has a spot to hold. Trigger and action must both call this or the two disagree
-// about where the bot belongs. `outTolerance` is how close counts as standing on the slot, which is
-// not the same everywhere: the phase 1 camp is one slot shared by the whole raid.
-bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out,
-                          float* outTolerance = nullptr);
+// about where the bot belongs.
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The cannon's Plasma Blast cast, or nullptr when it is between casts. Matches both ids:
 // spelldifficulty_dbc in the world DB remaps 62997 to 64529 on 25-man, so the id the boss
@@ -435,6 +447,11 @@ bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& win
 // fight, so a destination has to clear every node it knows about rather than just the nearest one -
 // a hop shorter than the step lands on the next node along.
 constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
+
+// How far the fire has to be before a bot may sit down to eat or drink. DrinkAction and EatAction push
+// the bot's next AI check back 12 to 18 s, and a chain grows 1.22 yd/s toward the nearest player,
+// which a bot sitting still usually is.
+constexpr float ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE = 15.0f;
 
 // Frost Bomb Explosion 65333: 30 yd, 47124 base, plus a knockback. That is about twice a bot's
 // health pool, so this is a positional check and no amount of healing answers it. The bomb summons
@@ -506,20 +523,16 @@ extern const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
 // the only leash in the encounter, the MK II has none of its own.
 extern const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
 
-// Where ranged and healers stand in Firefighter phase 1: one clump, 22 yd from the tank spot on the
-// arc that has floor. Four of them 45 degrees apart, because the clump is what the fire converges on
-// and it has to be able to walk off its own anchor - 16.8 yd between neighbours clears a 5 yd node
-// cluster and a 7 yd chain step. Index 0 is the default and is roughly the single spot this replaced.
+// Where the Firefighter phase 1 camp points: each is the wedge's middle-row centre, 27 yd from the
+// tank spot on bearings 30 and 330. Two rather than more, because the camp is what the fire
+// converges on and switching has to actually walk it off its own anchor - these two are 27 yd apart,
+// where 30 degree neighbours would move the middle row 14. Index 0 is the default.
 //
-// 22 rather than 20.2: Shock Blast reaches 15 yd measured, one cast at 20.2 killed eleven of
-// twenty-five, and casting reach is spellDistance less ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN. The far
-// side self-corrects because the slot slides toward the boss once reach runs out, so the spare
-// margin is worth more on the near side.
-//
-// navprobe map 603, all four: 0.22 yd to the nearest poly, settled Z 364.314, 12/12 on mesh at 6 yd,
-// and 12/12 at 10 except index 0 at 11/12. Westward bearings are excluded - 105 to 255 degrees is
-// either off mesh against the wall or up in the raised doorway alcove.
-constexpr uint8 ULDUAR_MIMIRON_PHASE1_STACK_COUNT = 4;
+// navprobe map 603: every slot either wedge deals for 1 to 16 bots, before any range shift, is on
+// mesh and settles at Z 364.314, and the nearest is 20.7 yd from the room centre. Westward bearings are out -
+// 105 to 255 degrees is off mesh against the wall or up in the raised doorway alcove - and 90 and 270
+// sit on holes in the mesh.
+constexpr uint8 ULDUAR_MIMIRON_PHASE1_STACK_COUNT = 2;
 extern const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT];
 
 #endif

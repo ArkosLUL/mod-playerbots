@@ -26,7 +26,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -39,10 +38,8 @@ const Position ULDUAR_MIMIRON_PHASE3_STAGE = Position(2762.65f, 2569.46f, 364.31
 const Position ULDUAR_MIMIRON_PHASE4_TANK_SPOT = Position(2744.5754f, 2570.8657f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_TANK_SPOT = Position(2691.5762f, 2568.5315f, 364.3138f);
 const Position ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[ULDUAR_MIMIRON_PHASE1_STACK_COUNT] = {
-    Position(2697.2700f, 2589.7820f, 364.3138f),  // 75 deg off the tank spot
-    Position(2710.6290f, 2579.5310f, 364.3138f),  // 30
-    Position(2712.8270f, 2562.8370f, 364.3138f),  // 345
-    Position(2702.5760f, 2549.4790f, 364.3138f),  // 300
+    Position(2714.9589f, 2582.0315f, 364.3138f),  // 30 deg off the tank spot
+    Position(2714.9589f, 2555.0315f, 364.3138f),  // 330
 };
 
 namespace
@@ -194,6 +191,47 @@ bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position co
     return true;
 }
 
+bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
+{
+    Unit* leviathanMkII = botAI ? GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) : nullptr;
+    if (!leviathanMkII || !leviathanMkII->FindCurrentSpellBySpellId(SPELL_SHOCK_BLAST))
+        return true;
+
+    return leviathanMkII->GetExactDist2d(dest.GetPositionX(), dest.GetPositionY()) >=
+           ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST;
+}
+
+bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest)
+{
+    if (!bot || hazards.flames.empty())
+        return true;
+
+    float const fromX = bot->GetPositionX();
+    float const fromY = bot->GetPositionY();
+    float const dx = dest.GetPositionX() - fromX;
+    float const dy = dest.GetPositionY() - fromY;
+    float const lengthSq = dx * dx + dy * dy;
+    if (lengthSq <= 0.0f)
+        return true;
+
+    for (Position const& node : hazards.flames)
+    {
+        float const nx = node.GetPositionX() - fromX;
+        float const ny = node.GetPositionY() - fromY;
+        if (std::sqrt(nx * nx + ny * ny) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+            continue;
+
+        // Closest point of the walk to this node.
+        float const t = std::clamp((nx * dx + ny * dy) / lengthSq, 0.0f, 1.0f);
+        float const ox = nx - t * dx;
+        float const oy = ny - t * dy;
+        if (std::sqrt(ox * ox + oy * oy) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+            return false;
+    }
+
+    return true;
+}
+
 bool IsMimironSpotSafe(Player* bot, Position const& dest)
 {
     if (!bot)
@@ -216,6 +254,9 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest)
             ULDUAR_MIMIRON_ROCKET_CLEARANCE)
             return false;
     }
+
+    if (!IsMimironSpotShockSafe(botAI, dest))
+        return false;
 
     // Firefighter spreads ground fire across the floor, so a standing spot can end up inside it, and
     // the Frost Bomb makes a 30 yd disc of the room lethal for ten seconds at a time. Without the fire
@@ -621,10 +662,11 @@ bool IsMimironTankAnchorSlot(PlayerbotAI* botAI, Player* bot)
            GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) != nullptr;
 }
 
-float GetMimironPhase1DisperseDistance(PlayerbotAI* botAI)
+float GetMimironPhase1DisperseDistance(PlayerbotAI* /*botAI*/)
 {
-    return IsMimironHardModeActive(botAI) ? ULDUAR_MIMIRON_PHASE1_STACK_DISPERSE
-                                          : ULDUAR_MIMIRON_DISPERSE_DISTANCE;
+    // Both modes. The Firefighter camp deals its own 6 yd slots, and a threshold equal to that would
+    // have the unstacker judge every bot on its slot too close and shove it off.
+    return ULDUAR_MIMIRON_DISPERSE_DISTANCE;
 }
 
 void ResetMimironFightState(Player* bot)
@@ -884,14 +926,13 @@ Position ClampMimironAnchorToRoom(Position anchor)
 // How many rows `count` bots need, capped at `maxRows`. Once the band is full the remaining rows just
 // pack tighter: spacing is the thing to give up, not range, because a Bomb Bot catching two bots is
 // cheaper than half the raid unable to reach the boss at all.
-uint32 MimironWedgeRows(float firstRow, uint32 maxRows, uint32 count)
+uint32 MimironWedgeRows(float firstRow, uint32 maxRows, uint32 count, float halfAngle, float spacing)
 {
     uint32 held = 0;
     for (uint32 rows = 1; rows <= maxRows; ++rows)
     {
-        float const radius = firstRow + (rows - 1) * ULDUAR_MIMIRON_PHASE3_SPACING;
-        held += static_cast<uint32>(2.0f * ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE * radius /
-                                    ULDUAR_MIMIRON_PHASE3_SPACING);
+        float const radius = firstRow + (rows - 1) * spacing;
+        held += static_cast<uint32>(2.0f * halfAngle * radius / spacing);
         if (held >= count)
             return rows;
     }
@@ -901,8 +942,8 @@ uint32 MimironWedgeRows(float firstRow, uint32 maxRows, uint32 count)
 
 // Slot `index` of `count`, dealt row by row from the inside out and then spread edge to edge along
 // whichever row it landed in.
-void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, float& outRadius,
-                      float& outOffset)
+void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, float halfAngle,
+                      float spacing, float& outRadius, float& outOffset)
 {
     uint32 const base = count / rows;
     uint32 const extra = count % rows;  // the first `extra` rows carry one more
@@ -921,29 +962,84 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
     uint32 const size = base + (row < extra ? 1 : 0);
     uint32 const slot = index - filled;
 
-    outRadius = firstRow + row * ULDUAR_MIMIRON_PHASE3_SPACING;
-    outOffset = size <= 1 ? 0.0f
-                          : -ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE +
-                                2.0f * ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE * slot / (size - 1);
+    outRadius = firstRow + row * spacing;
+    outOffset = size <= 1 ? 0.0f : -halfAngle + 2.0f * halfAngle * slot / (size - 1);
 }
 
-// The Firefighter phase 1 clump. Fixed on purpose: chains grow toward whoever is nearest their head,
-// so a slot that tracked the boss would smear the field along behind it. Gives ground only to stay in
-// casting range - "reach spell" is ACTION_HIGH against this formation at ACTION_RAID, so a slot past
-// range deadlocks instead of correcting itself. That is also what a dead main tank looks like.
-Position MimironPhase1StackSlot(Position const& stack, Unit* focus)
+// Slot `index` of the Firefighter phase 1 camp: a wedge on the tank spot, centreline through the live
+// stack anchor. Fixed on purpose - chains grow toward whoever is nearest their head, so a camp that
+// tracked the boss would smear the field along behind it. It gives ground only to stay in casting
+// range, since "reach spell" is ACTION_HIGH against this formation at ACTION_RAID and a slot past range
+// deadlocks instead of correcting itself. That is also what a dead main tank looks like.
+//
+// Range the way the bots test it: IsWithinCombatRange adds both combat reaches, so against the MK II
+// the limit is about 34 raw. The raw spellDistance less margin would be 24.5, which is Napalm's floor
+// to within half a yard.
+Position MimironPhase1CampSlot(Position const& anchor, Unit* focus, uint32 index, uint32 count)
 {
-    if (!focus)
-        return stack;
+    Position const& hub = ULDUAR_MIMIRON_PHASE1_TANK_SPOT;
+    float const centreline = hub.GetAngle(anchor.GetPositionX(), anchor.GetPositionY());
+    uint32 const rows =
+        MimironWedgeRows(ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW, ULDUAR_MIMIRON_PHASE1_CAMP_ROWS, count,
+                         ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE, ULDUAR_MIMIRON_PHASE1_CAMP_SPACING);
 
-    float const reach =
-        std::max(sPlayerbotAIConfig.spellDistance - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN, 1.0f);
-    if (focus->GetExactDist2d(stack.GetPositionX(), stack.GetPositionY()) <= reach)
-        return stack;
+    // Every slot, not just this one: the shift is set by whichever is farthest out, and every bot has
+    // to derive the same shift or the wedge deforms into the lopsided blob the slots exist to prevent.
+    std::vector<Position> slots;
+    slots.reserve(count);
+    for (uint32 i = 0; i < count; ++i)
+    {
+        float radius = 0.0f;
+        float offset = 0.0f;
+        MimironWedgeSlot(ULDUAR_MIMIRON_PHASE1_CAMP_FIRST_ROW, rows, i, count,
+                         ULDUAR_MIMIRON_PHASE1_CAMP_HALF_ANGLE, ULDUAR_MIMIRON_PHASE1_CAMP_SPACING,
+                         radius, offset);
 
-    float const bearing = focus->GetAngle(stack.GetPositionX(), stack.GetPositionY());
-    return Position(focus->GetPositionX() + reach * std::cos(bearing),
-                    focus->GetPositionY() + reach * std::sin(bearing), stack.GetPositionZ());
+        float const bearing = Position::NormalizeOrientation(centreline + offset);
+        slots.emplace_back(hub.GetPositionX() + radius * std::cos(bearing),
+                           hub.GetPositionY() + radius * std::sin(bearing), hub.GetPositionZ());
+    }
+
+    // A player's reach rather than the asking bot's own, so a gnome and a tauren get the same wedge.
+    float shiftX = 0.0f;
+    float shiftY = 0.0f;
+    if (focus)
+    {
+        float const reach = std::max(sPlayerbotAIConfig.spellDistance + focus->GetCombatReach() +
+                                         DEFAULT_COMBAT_REACH - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN,
+                                     1.0f);
+
+        // One pass puts the farthest slot on the limit, but a rigid move can leave a second one just
+        // past it at a different bearing, so settle it a couple more times.
+        for (uint32 pass = 0; pass < 3; ++pass)
+        {
+            float worst = reach;
+            float worstX = 0.0f;
+            float worstY = 0.0f;
+            for (Position const& slot : slots)
+            {
+                float const x = slot.GetPositionX() + shiftX;
+                float const y = slot.GetPositionY() + shiftY;
+                float const dist = focus->GetExactDist2d(x, y);
+                if (dist > worst)
+                {
+                    worst = dist;
+                    worstX = x;
+                    worstY = y;
+                }
+            }
+
+            if (worst <= reach)
+                break;
+
+            float const bearing = std::atan2(focus->GetPositionY() - worstY, focus->GetPositionX() - worstX);
+            shiftX += (worst - reach) * std::cos(bearing);
+            shiftY += (worst - reach) * std::sin(bearing);
+        }
+    }
+
+    Position const& mine = slots[std::min(index, count - 1)];
+    return Position(mine.GetPositionX() + shiftX, mine.GetPositionY() + shiftY, mine.GetPositionZ());
 }
 
 // Phase 3. The raid groups in the east wedge instead of ringing the room: the summon pads sit on three
@@ -984,11 +1080,14 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Position& out, uint32& inde
                                        0.0f);
     uint32 const rows = MimironWedgeRows(
         ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
-        1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count);
+        1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count,
+        ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING);
 
     float radius = 0.0f;
     float offset = 0.0f;
-    MimironWedgeSlot(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS, rows, index, count, radius, offset);
+    MimironWedgeSlot(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS, rows, index, count,
+                     ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING, radius,
+                     offset);
 
     // The room centre, and nothing else. The Aerial Command Unit has no attack in this phase - its
     // whole event list is add summons - so there is nothing range on it buys, and holding still is
@@ -1100,17 +1199,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Ranged and healers hold one clump rather than a ring or a wedge, so every chain grows toward
-    // the same place instead of being dragged out along every radius the raid occupies. Which of the
-    // four anchors is raid-wide and moves off the fire; the slot itself only slides to stay in range.
-    if (phase1 && firefighter && PlayerbotAI::IsRanged(bot))
-    {
-        branch = "p1stack";
-        out = MimironPhase1StackSlot(GetMimironPhase1StackAnchor(botAI, bot), focus);
-        return true;
-    }
-
-    // Melee stand on whatever they are hitting, so only ranged and healers get a ring slot.
+    // Melee stand on whatever they are hitting, so only ranged and healers get a slot from here on.
     if (!PlayerbotAI::IsRanged(bot))
         return false;
 
@@ -1129,6 +1218,16 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
 
     if (count == 0)
         return false;
+
+    // Ranged and healers hold one camp rather than the ring, so every chain grows toward the same
+    // place instead of being dragged out along every radius the raid occupies. Which anchor it points
+    // at is raid-wide and moves off the fire.
+    if (phase1 && firefighter)
+    {
+        branch = "p1stack";
+        out = MimironPhase1CampSlot(GetMimironPhase1StackAnchor(botAI, bot), focus, index, count);
+        return true;
+    }
 
     // Centred on the mech: both ground mechs get dragged about by their tanks, and a ring pinned to
     // the room centre puts the far half of the raid past casting range after only six yards of drift
@@ -1154,11 +1253,14 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
                                            0.0f);
         uint32 const rows = MimironWedgeRows(
             ULDUAR_MIMIRON_PHASE3_MIN_RADIUS,
-            1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count);
+            1u + static_cast<uint32>(rangedDepth / ULDUAR_MIMIRON_PHASE3_SPACING), count,
+            ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING);
 
         float radius = 0.0f;
         float offset = 0.0f;
-        MimironWedgeSlot(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS, rows, index, count, radius, offset);
+        MimironWedgeSlot(ULDUAR_MIMIRON_PHASE3_MIN_RADIUS, rows, index, count,
+                         ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING, radius,
+                         offset);
 
         // Bearing off the room centre, not off the anchor: the sector has to stay put in the room for
         // the fire to pile up in it, and it is the same east gap phase 3 already forms up in.
@@ -1182,17 +1284,12 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
 }
 }  // namespace
 
-bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, float* outTolerance)
+bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 {
     char const* branch = "none";
     uint32 index = 0;
     uint32 count = 0;
     bool const found = DeriveMimironSpreadSlot(botAI, bot, out, branch, index, count);
-
-    if (outTolerance)
-        *outTolerance = found && std::strcmp(branch, "p1stack") == 0
-                            ? ULDUAR_MIMIRON_PHASE1_STACK_TOLERANCE
-                            : ULDUAR_MIMIRON_SPREAD_TOLERANCE;
 
     if (RaidObs::Active())
     {
