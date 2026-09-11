@@ -168,9 +168,10 @@ bool ThorimPhase2PositioningTrigger::IsActive()
         if (bot->GetDistance(spot) <= 1.0f)
             return false;
 
-        // Wait out a zone sitting on the spot rather than walk back into it and get flung off again.
+        // Wait out a zone on the spot or anywhere on the way there, rather than walk into it and get
+        // flung off again. The walk home is a straight line and happily crosses a live zone.
         // Not while under the cone though: that is 10-36k against a 4-5k tick.
-        return !ThorimSpotUnderBlizzard(bot, spot) || ThorimCampSpotInLitCone(botAI, *bot);
+        return !ThorimWalkUnderBlizzard(bot, *bot, spot) || ThorimCampSpotInLitCone(botAI, *bot);
     }
 
     // Arrival is written here, where the "stay" answer shows up: the action only runs when there is a

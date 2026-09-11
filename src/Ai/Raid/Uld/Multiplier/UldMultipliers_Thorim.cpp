@@ -209,6 +209,11 @@ float ThorimBalconyGuardMultiplier::GetValue(Action* action)
         if (ThorimIsTargetSelectionAction(action))
             return 1.0f;
 
+        // He is on the floor now and there is no walkable way down from here, so a reach walks the bot
+        // back through the hallway. It is also what would pull a ranged bot off its wait spot up here.
+        if (dynamic_cast<ReachTargetAction*>(action) && ThorimPhase2Active(botAI))
+            return 0.0f;
+
         if (!ThorimSplitActive(botAI))
             return 1.0f;
 

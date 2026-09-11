@@ -239,6 +239,19 @@ bool ThorimBalconyAdvanceAction::Execute(Event /*event*/)
     // Before the jump test, or the latch never reaches the end and a bot on the edge never jumps.
     uint8 const step = ThorimAdvanceBalconyStep(bot);
 
+    // Ranged wait out the first Chain Lightning up here, spread, instead of dropping in a stack. Ahead of
+    // the jump since hold 2 is inside the edge test, and only past BALCONY_5: a straight line to a hold
+    // from any earlier waypoint runs 7-9 yd from a Paralytic Field bunny.
+    Position hold;
+    if (bossDown && step >= ULDUAR_THORIM_BALCONY_WAYPOINTS - 1 && ThorimBalconyHoldSpot(botAI, bot, hold))
+    {
+        if (bot->GetExactDist2d(&hold) <= ULDUAR_THORIM_BALCONY_HOLD_TOLERANCE)
+            return false;
+
+        return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
+                      false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    }
+
     // Distance, never the latch alone. A latch that says "past the last waypoint" used to be enough
     // to fire the jump, and a step carried in from an earlier pull then fired it from the top of the
     // ramp: one bot flew a 180 yd arc across the whole hallway. Arrive tolerance rather than the jump
@@ -402,8 +415,10 @@ bool ThorimSifBlizzardAction::Execute(Event event)
     if (!ThorimCampBlizzardEscape(botAI, bot, escape))
         return false;
 
+    // Forced, or a walk home already under way at combat priority turns the step away with "wait" until
+    // it finishes, and the bot keeps standing in the zone meanwhile.
     return MoveTo(bot->GetMapId(), escape.GetPositionX(), escape.GetPositionY(), escape.GetPositionZ(), false, false,
-                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
+                  false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
 bool ThorimUnbalancingStrikeSwapAction::isUseful()

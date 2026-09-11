@@ -149,6 +149,17 @@ constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
 // spot and 12 clear of Sif's Blizzard loop, and 11 holds up with a bot off its point on either side.
 constexpr uint8 ULDUAR_THORIM_RANGED_SLOTS = 6;
 
+// Phase 2 opening. He lands in the middle of the camp, the melee pile follows him to the anchor and
+// passes within 8 yd of every camp spot, and the first Chain Lightning lands 12.0-12.1s after he drops
+// below the floor line. So ranged wait somewhere clear of the pile until it has landed. Past the minimum
+// they go home once he is at the anchor or the lit cone covers their wait spot (it fires at ~16s).
+// Never past the max: Sif's first bunny walks by the wait spots from about 24s.
+constexpr uint8 ULDUAR_THORIM_OPENING_SLOTS = 4;
+constexpr uint32 ULDUAR_THORIM_OPENING_HOLD_MIN_MS = 12500;
+constexpr uint32 ULDUAR_THORIM_OPENING_HOLD_MAX_MS = 25000;
+// He settles 4.1-6.1 yd off the tank spot and is 12-23 yd off it while being dragged.
+constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
+
 // The off-tank sits just off the main tank's bearing: close enough to taunt through the Unbalancing
 // Strike swap, far enough that Chain Lightning does not treat the pair as one clump.
 constexpr float ULDUAR_THORIM_OFFTANK_BEARING_OFFSET = 0.3491f;  // 20 degrees
@@ -264,6 +275,14 @@ extern const Position ULDUAR_THORIM_BALCONY_4;
 extern const Position ULDUAR_THORIM_BALCONY_5;
 extern const Position ULDUAR_THORIM_JUMP_START_POINT;
 extern const Position ULDUAR_THORIM_JUMP_END_POINT;
+// Where the corridor squad's ranged wait out the opening, up on his platform and 12 yd apart. Walking
+// the hallway they arrive stacked within a yard, which is an eight hop Chain Lightning on the drop.
+extern const Position ULDUAR_THORIM_BALCONY_HOLD1_SPOT;
+extern const Position ULDUAR_THORIM_BALCONY_HOLD2_SPOT;
+extern const Position ULDUAR_THORIM_BALCONY_HOLD3_SPOT;
+extern const Position ULDUAR_THORIM_BALCONY_HOLD4_SPOT;
+extern const Position ULDUAR_THORIM_BALCONY_HOLD5_SPOT;
+extern const Position ULDUAR_THORIM_BALCONY_HOLD6_SPOT;
 // Where Thorim ends up, and he is dragged this far west so the melee on him cannot reach the ranged
 // camp. Chain Lightning jumps 5 yd body to body, so the two piles touching is what turns it from a
 // three man hit into an eight man one. The melee ring at radius 8 is walkable the whole way round,
@@ -289,6 +308,13 @@ extern const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT;
 extern const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT;
+// Where the arena squad's ranged wait out the opening, two to a spot. Each is 12.8-15.6 yd from every
+// point the opening melee pile reached in five traces, 12 from the others, and in cast and heal range
+// of him on the anchor. Only good for the opening: Sif's bunny path runs 2.6-7.7 yd from them.
+extern const Position ULDUAR_THORIM_PHASE2_OPENING1_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_OPENING2_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_OPENING3_SPOT;
+extern const Position ULDUAR_THORIM_PHASE2_OPENING4_SPOT;
 // Only used when Thorim's live position cannot produce a ring point, and StaticMeleeSpot only takes
 // one within 11 yd of him, so these have to sit on the radius 8 ring around the tank spot. Park him
 // somewhere else and they are dead weight.
@@ -312,6 +338,18 @@ struct ThorimEncounterState
     // death renumbered everyone behind the corpse - one bot was seen walking spot 6 to 4 and back in
     // 2.3 seconds. The shelter table below is keyed on this slot, so it has to hold still.
     RaidObs::ObsGuidMap<uint8> rangedSlots{"thorim.rangedslot"};
+
+    // Opening wait spot per ranged bot: the arena squad's on the floor, the corridor squad's on the
+    // platform. Latched like the camp slot, so a death does not reshuffle them.
+    RaidObs::ObsGuidMap<uint8> openingSlots{"thorim.openingslot"};
+    RaidObs::ObsGuidMap<uint8> balconyHoldSlots{"thorim.balconyhold"};
+
+    // One way. A bot that has left its wait spot never goes back, even when the cone goes dark or a
+    // tank swap nudges him off the anchor again.
+    RaidObs::ObsGuidSet openingReleased{"thorim.openingreleased"};
+
+    // When he first dropped below the floor line in combat. The whole opening is timed off this.
+    RaidObs::ObsValue<uint32> phase2StartMs{"thorim.p2start"};
 
     // Each melee bot's bearing off Thorim, struck the first time it needs a phase 2 spot. The point
     // was derived live from the tank's bearing and a rotation re-solved every call, and between them
@@ -557,6 +595,11 @@ constexpr uint8 ULDUAR_THORIM_BALCONY_WAYPOINTS = 6;
 // fight.
 constexpr float ULDUAR_THORIM_BALCONY_ARRIVE_TOLERANCE = 6.0f;
 
+// The platform wait spots, and how close counts as standing on one. 2D, since the walk moves on exact
+// points and a z mismatch would reissue the same move every few seconds.
+constexpr uint8 ULDUAR_THORIM_BALCONY_HOLD_SLOTS = 6;
+constexpr float ULDUAR_THORIM_BALCONY_HOLD_TOLERANCE = 1.5f;
+
 Position const& GetThorimBalconyWaypoint(uint8 index);
 
 // The Ancient Rune Giant, while it is still worth walking to. Its death opens the second doors and
@@ -643,6 +686,17 @@ bool ThorimFollowMasterStripped(Player const* bot);
 // Phase 2
 //
 bool ThorimPhase2Active(PlayerbotAI* botAI);
+
+// Time since he first dropped for phase 2. False before that and whenever he is out of combat: his walk
+// home after a wipe is below the floor line too, and must not start the next pull's clock.
+bool ThorimPhase2ElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs);
+
+// Whether this ranged bot still waits on holdSpot. Letting go is latched, see openingReleased.
+bool ThorimPhase2OpeningHold(PlayerbotAI* botAI, Player* bot, Position const& holdSpot);
+
+// The platform spot a corridor ranged bot waits on, for as long as that wait lasts.
+bool ThorimBalconyHoldSpot(PlayerbotAI* botAI, Player* bot, Position& out);
+
 ThorimPhase2Role GetThorimPhase2Role(PlayerbotAI* botAI, Player* bot);
 bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role role, Position& position);
 
@@ -663,6 +717,9 @@ bool ThorimMeleeRingSettled(PlayerbotAI* botAI, Player* bot);
 
 // Whether a spot is inside the reach of a live Blizzard zone or the bunny about to drop the next one.
 bool ThorimSpotUnderBlizzard(Player* bot, Position const& spot);
+
+// Same reach, tested along the straight walk between two points, both ends included.
+bool ThorimWalkUnderBlizzard(Player* bot, Position const& from, Position const& to);
 
 // Whether a spot is under the lit orb's cone, on the camp's tight margin. False while nothing is lit.
 bool ThorimCampSpotInLitCone(PlayerbotAI* botAI, Position const& spot);

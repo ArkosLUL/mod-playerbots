@@ -58,6 +58,13 @@ const Position ULDUAR_THORIM_BALCONY_4 = Position(2151.0f, -332.0f, 438.247f);
 const Position ULDUAR_THORIM_BALCONY_5 = Position(2137.5f, -318.0f, 438.222f);
 const Position ULDUAR_THORIM_JUMP_START_POINT = Position(2137.137f, -291.19025f, 438.24753f, 1.7059844f);
 const Position ULDUAR_THORIM_JUMP_END_POINT = Position(2137.8818f, -278.18942f, 419.66653f);
+// Z as navprobe settles each point, for the same reason as the waypoints above.
+const Position ULDUAR_THORIM_BALCONY_HOLD1_SPOT = Position(2126.0f, -294.0f, 438.247f);
+const Position ULDUAR_THORIM_BALCONY_HOLD2_SPOT = Position(2138.0f, -296.0f, 438.247f);
+const Position ULDUAR_THORIM_BALCONY_HOLD3_SPOT = Position(2150.0f, -297.0f, 438.247f);
+const Position ULDUAR_THORIM_BALCONY_HOLD4_SPOT = Position(2132.0f, -307.0f, 438.243f);
+const Position ULDUAR_THORIM_BALCONY_HOLD5_SPOT = Position(2144.0f, -307.0f, 438.243f);
+const Position ULDUAR_THORIM_BALCONY_HOLD6_SPOT = Position(2138.0f, -318.0f, 438.222f);
 const Position ULDUAR_THORIM_PHASE2_TANK_SPOT = Position(2110.7483f, -252.65265f, 419.440f);
 const Position ULDUAR_THORIM_PHASE2_RANGE1_SPOT = Position(2123.00f, -282.00f, 419.528f);
 const Position ULDUAR_THORIM_PHASE2_RANGE2_SPOT = Position(2124.50f, -270.50f, 419.729f);
@@ -65,6 +72,10 @@ const Position ULDUAR_THORIM_PHASE2_RANGE3_SPOT = Position(2137.50f, -269.00f, 4
 const Position ULDUAR_THORIM_PHASE2_RANGE4_SPOT = Position(2132.50f, -257.50f, 419.845f);
 const Position ULDUAR_THORIM_PHASE2_RANGE5_SPOT = Position(2142.00f, -250.50f, 419.691f);
 const Position ULDUAR_THORIM_PHASE2_RANGE6_SPOT = Position(2131.50f, -245.00f, 419.612f);
+const Position ULDUAR_THORIM_PHASE2_OPENING1_SPOT = Position(2114.0f, -232.0f, 420.146f);
+const Position ULDUAR_THORIM_PHASE2_OPENING2_SPOT = Position(2128.0f, -226.0f, 420.146f);
+const Position ULDUAR_THORIM_PHASE2_OPENING3_SPOT = Position(2140.0f, -232.0f, 419.337f);
+const Position ULDUAR_THORIM_PHASE2_OPENING4_SPOT = Position(2146.0f, -244.0f, 419.531f);
 const Position ULDUAR_THORIM_PHASE2_MELEE1_SPOT = Position(2118.75f, -252.65f, 419.596f);
 const Position ULDUAR_THORIM_PHASE2_MELEE2_SPOT = Position(2110.75f, -244.65f, 419.359f);
 const Position ULDUAR_THORIM_PHASE2_MELEE3_SPOT = Position(2110.75f, -260.65f, 419.485f);
@@ -286,6 +297,102 @@ bool RangedSlotOf(Player* bot, uint8& slot)
 
     auto const itr = state->rangedSlots.find(bot->GetGUID());
     if (itr == state->rangedSlots.end())
+        return false;
+
+    slot = itr->second;
+    return true;
+}
+
+std::array<Position const*, ULDUAR_THORIM_OPENING_SLOTS> const openingSpots = {{
+    &ULDUAR_THORIM_PHASE2_OPENING1_SPOT,
+    &ULDUAR_THORIM_PHASE2_OPENING2_SPOT,
+    &ULDUAR_THORIM_PHASE2_OPENING3_SPOT,
+    &ULDUAR_THORIM_PHASE2_OPENING4_SPOT,
+}};
+
+std::array<Position const*, ULDUAR_THORIM_BALCONY_HOLD_SLOTS> const balconyHoldSpots = {{
+    &ULDUAR_THORIM_BALCONY_HOLD1_SPOT,
+    &ULDUAR_THORIM_BALCONY_HOLD2_SPOT,
+    &ULDUAR_THORIM_BALCONY_HOLD3_SPOT,
+    &ULDUAR_THORIM_BALCONY_HOLD4_SPOT,
+    &ULDUAR_THORIM_BALCONY_HOLD5_SPOT,
+    &ULDUAR_THORIM_BALCONY_HOLD6_SPOT,
+}};
+
+// Another member's squad, read straight off the split. GetThorimSquad only answers for the asking bot.
+// No entry is the arena, same as there.
+ThorimSquad SquadOf(ThorimEncounterState const& state, Player const* member)
+{
+    auto const itr = state.squads.find(member->GetGUID());
+    return itr == state.squads.end() ? ThorimSquad::Arena : static_cast<ThorimSquad>(itr->second);
+}
+
+// Least-loaded like the two above, but a tie goes to the spot nearest the bot, not the lowest index.
+// The arena squad starts on a ring round the landing point, so an index pick walks some of them
+// straight through it.
+template <size_t N, typename TakesSlot>
+void EnsureNearestSlot(Player* bot, RaidObs::ObsGuidMap<uint8>& slots, std::array<Position const*, N> const& spots,
+                       TakesSlot const& takesSlot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+    {
+        slots[bot->GetGUID()] = 0;
+        return;
+    }
+
+    uint32 const instanceId = bot->GetInstanceId();
+
+    std::unordered_set<ObjectGuid> present;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (HoldsFormationSlot(member, instanceId) && takesSlot(member))
+            present.insert(member->GetGUID());
+    }
+
+    for (auto itr = slots.begin(); itr != slots.end();)
+        itr = present.count(itr->first) ? std::next(itr) : slots.erase(itr);
+
+    if (slots.count(bot->GetGUID()))
+        return;
+
+    std::array<uint8, N> load = {};
+    for (auto const& assignment : slots)
+        if (assignment.second < N)
+            ++load[assignment.second];
+
+    uint8 chosen = 0;
+    for (uint8 slot = 1; slot < N; ++slot)
+    {
+        bool const nearer = bot->GetExactDist2d(spots[slot]) < bot->GetExactDist2d(spots[chosen]);
+        if (load[slot] < load[chosen] || (load[slot] == load[chosen] && nearer))
+            chosen = slot;
+    }
+
+    slots[bot->GetGUID()] = chosen;
+}
+
+void EnsureOpeningSlot(Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    EnsureNearestSlot(bot, state.openingSlots, openingSpots,
+                      [&state](Player* member)
+                      { return TakesRangedSpot(member) && SquadOf(state, member) != ThorimSquad::Gauntlet; });
+}
+
+void EnsureBalconyHoldSlot(Player* bot)
+{
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    EnsureNearestSlot(bot, state.balconyHoldSlots, balconyHoldSpots,
+                      [&state](Player* member)
+                      { return TakesRangedSpot(member) && SquadOf(state, member) == ThorimSquad::Gauntlet; });
+}
+
+bool SlotOf(RaidObs::ObsGuidMap<uint8> const& slots, Player* bot, uint8& slot)
+{
+    auto const itr = slots.find(bot->GetGUID());
+    if (itr == slots.end())
         return false;
 
     slot = itr->second;
@@ -2025,6 +2132,101 @@ bool ThorimPhase2Active(PlayerbotAI* botAI)
     return boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD;
 }
 
+bool ThorimPhase2ElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs)
+{
+    if (!ThorimPhase2Active(botAI))
+        return false;
+
+    Unit* boss = GetThorim(botAI);
+    if (!boss || !boss->IsInCombat())
+        return false;
+
+    // Write once, so a second ask this tick reads the same clock. Never 0, since 0 means not started.
+    ThorimEncounterState& state = ThorimStateFor(botAI->GetBot());
+    if (!state.phase2StartMs.Get())
+        state.phase2StartMs = std::max<uint32>(getMSTime(), 1);
+
+    elapsedMs = GetMSTimeDiffToNow(state.phase2StartMs.Get());
+    return true;
+}
+
+bool ThorimPhase2OpeningHold(PlayerbotAI* botAI, Player* bot, Position const& holdSpot)
+{
+    uint32 elapsed = 0;
+    if (!bot || !ThorimPhase2ElapsedMs(botAI, elapsed))
+        return false;
+
+    ThorimEncounterState& state = ThorimStateFor(bot);
+    if (state.openingReleased.count(bot->GetGUID()))
+        return false;
+
+    if (elapsed < ULDUAR_THORIM_OPENING_HOLD_MIN_MS)
+        return true;
+
+    Unit* boss = GetThorim(botAI);
+    bool const atAnchor =
+        boss && boss->GetExactDist2d(&ULDUAR_THORIM_PHASE2_TANK_SPOT) <= ULDUAR_THORIM_OPENING_SETTLED_RADIUS;
+
+    if (elapsed < ULDUAR_THORIM_OPENING_HOLD_MAX_MS && !atAnchor && !ThorimCampSpotInLitCone(botAI, holdSpot))
+        return true;
+
+    // Latched here, where the "go" answer shows up. Only ever adds, so a second ask this tick agrees.
+    state.openingReleased.insert(bot->GetGUID());
+    return false;
+}
+
+bool ThorimBalconyHoldSpot(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (!botAI || !bot || !TakesRangedSpot(bot) || GetThorimSquad(botAI, bot) != ThorimSquad::Gauntlet)
+        return false;
+
+    // Nothing to hand out once the wait is over for everyone. Also keeps a bot that only gets up here
+    // late from being given a slot it never uses.
+    uint32 elapsed = 0;
+    if (!ThorimPhase2ElapsedMs(botAI, elapsed) || elapsed >= ULDUAR_THORIM_OPENING_HOLD_MAX_MS)
+        return false;
+
+    EnsureBalconyHoldSlot(bot);
+
+    uint8 slot = 0;
+    if (!SlotOf(ThorimStateFor(bot).balconyHoldSlots, bot, slot))
+        return false;
+
+    Position const& spot = *balconyHoldSpots[std::min<uint8>(slot, ULDUAR_THORIM_BALCONY_HOLD_SLOTS - 1)];
+    if (!ThorimPhase2OpeningHold(botAI, bot, spot))
+        return false;
+
+    out = spot;
+    return true;
+}
+
+// The arena squad's side of the same wait, on the floor.
+static bool ThorimOpeningSpot(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    if (ThorimEncounterState const* state = FindState(bot); !state || state->openingReleased.count(bot->GetGUID()))
+        return false;
+
+    uint32 elapsed = 0;
+    if (!ThorimPhase2ElapsedMs(botAI, elapsed) || elapsed >= ULDUAR_THORIM_OPENING_HOLD_MAX_MS)
+        return false;
+
+    if (GetThorimSquad(botAI, bot) == ThorimSquad::Gauntlet)
+        return false;
+
+    EnsureOpeningSlot(bot);
+
+    uint8 slot = 0;
+    if (!SlotOf(ThorimStateFor(bot).openingSlots, bot, slot))
+        return false;
+
+    Position const& spot = *openingSpots[std::min<uint8>(slot, ULDUAR_THORIM_OPENING_SLOTS - 1)];
+    if (!ThorimPhase2OpeningHold(botAI, bot, spot))
+        return false;
+
+    out = spot;
+    return true;
+}
+
 static char const* ThorimRoleName(ThorimPhase2Role role)
 {
     switch (role)
@@ -2117,6 +2319,15 @@ bool TryGetThorimPhase2Spot(PlayerbotAI* botAI, Player* bot, ThorimPhase2Role ro
         // No boss, no bearing, so no shelter - the spot on its own is still the right answer.
         if (!boss)
             return true;
+
+        // Before the shelter latch, which then does not run during the wait. It picks the lit orb up
+        // on its first call after, since that orb is new to it.
+        Position opening;
+        if (ThorimOpeningSpot(botAI, bot, opening))
+        {
+            position = opening;
+            return true;
+        }
 
         uint8 orbIndex = 0;
         bool const sheltered = ThorimRangedSpot(botAI, bot, boss, slot, position, orbIndex);
@@ -2231,6 +2442,40 @@ bool ThorimSpotUnderBlizzard(Player* bot, Position const& spot)
 
     for (Position const& zone : ThorimBlizzardSpots(bot))
         if (zone.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
+            return true;
+
+    return false;
+}
+
+// 2D distance from a point to the walk between two positions, ends included. Own name, so it cannot
+// clash with Hodir's file static copy in a unity build.
+static float ThorimSegmentDistance2d(Position const& point, Position const& from, Position const& to)
+{
+    float const dx = to.GetPositionX() - from.GetPositionX();
+    float const dy = to.GetPositionY() - from.GetPositionY();
+    float const lengthSq = dx * dx + dy * dy;
+
+    float t = 0.0f;
+    if (lengthSq > 0.0f)
+    {
+        t = ((point.GetPositionX() - from.GetPositionX()) * dx + (point.GetPositionY() - from.GetPositionY()) * dy) /
+            lengthSq;
+        t = std::clamp(t, 0.0f, 1.0f);
+    }
+
+    float const nearestX = from.GetPositionX() + dx * t;
+    float const nearestY = from.GetPositionY() + dy * t;
+    return std::sqrt((point.GetPositionX() - nearestX) * (point.GetPositionX() - nearestX) +
+                     (point.GetPositionY() - nearestY) * (point.GetPositionY() - nearestY));
+}
+
+bool ThorimWalkUnderBlizzard(Player* bot, Position const& from, Position const& to)
+{
+    if (!bot)
+        return false;
+
+    for (Position const& zone : ThorimBlizzardSpots(bot))
+        if (ThorimSegmentDistance2d(zone, from, to) < ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE)
             return true;
 
     return false;
@@ -2378,6 +2623,11 @@ bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
         // A live pull is what arms the next round of resets. Nobody clears anything while he is up,
         // so this is empty on all but the first tick after a wipe.
         state->resetDone.clear();
+
+        // Still up on the balcony means phase 2 has not started this pull, whatever the last one left.
+        if (boss->GetPositionZ() >= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+            state->phase2StartMs = 0;
+
         return false;
     }
 
@@ -2412,7 +2662,9 @@ bool ThorimBotHasEncounterState(Player* bot)
            state->arenaAnchorArrived.count(bot->GetGUID()) || state->balconyStep.count(bot->GetGUID()) ||
            state->ringBearings.count(bot->GetGUID()) || state->ringOffsets.count(bot->GetGUID()) ||
            state->orbEscapes.count(bot->GetGUID()) || state->dpsTargets.count(bot->GetGUID()) ||
-           state->petRecalls.count(bot->GetGUID()) || state->runicSmashSide;
+           state->petRecalls.count(bot->GetGUID()) || state->openingSlots.count(bot->GetGUID()) ||
+           state->balconyHoldSlots.count(bot->GetGUID()) || state->openingReleased.count(bot->GetGUID()) ||
+           state->runicSmashSide;
 }
 
 void ResetThorimEncounterState(Player* bot, bool clearInstance)
@@ -2452,6 +2704,9 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->blizzardOffsets.erase(bot->GetGUID());
     state->rangedSlots.erase(bot->GetGUID());
     state->rangedShelters.erase(bot->GetGUID());
+    state->openingSlots.erase(bot->GetGUID());
+    state->balconyHoldSlots.erase(bot->GetGUID());
+    state->openingReleased.erase(bot->GetGUID());
 
     // Per pet rather than clearing the map: the rest of it belongs to the other bots in the instance,
     // who are not resetting.
@@ -2492,4 +2747,6 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     state->squadsNoted = false;
     state->humanSquadScanMs = 0;
     state->marksCleared = false;
+    state->phase2StartMs = 0;
+    state->openingReleased.clear();
 }

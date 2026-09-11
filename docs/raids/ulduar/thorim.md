@@ -88,7 +88,7 @@ whole time so ranged and instant abilities keep landing.
 
 | Spell | Id | Detail |
 |---|---|---|
-| Chain Lightning | 62131 | `spell_jump_distance` sets the jump radius to **5.0 yd**, not the 10 yd DBC default; 8 bounces, chain source advances to each new victim |
+| Chain Lightning | 62131 / 64390 | 8 targets at **×1.5 per hop** (`EffectChainAmplitude`): the eighth takes ~17× the first. Each hop goes to the unhit target nearest the last victim, within **8 yd** (`spell_jump_distance` 5.0, not the DBC 10, plus both combat reaches); pets count. First cast 13 s after the phase trigger, then every 15 s |
 | Lightning Charge | 62466 | `spell_cone` **75 degrees**, 150 yd, 17343 base nature, **instant with no cast bar** |
 | Lightning Orb Charged | 62186 | Lands on a Thunder Orb (33378). `SpellInfoCorrections` patches the amplitude to 5000ms, so it ticks once **5s before** the cone — the entire warning |
 | Lightning Charge buff | 62279 | Permanent, one stack per cast: +15% damage and melee haste, **+10% nature damage per stack** |
@@ -112,6 +112,19 @@ Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTar
 three stacks into one arc behind the boss the moment the ring node yields. `ThorimMovementGuardMultiplier`
 holds the generic movers, scoped to a **settled** ring holder and exempting `AttackAction`,
 `ReachTargetAction` and `AvoidAoeAction` — a permanent movement freeze is the Void Reaver failure.
+
+### The opening
+
+Thorim lands at (2134.68, -263.13), mid-camp, and over the first 13.5 s the melee pile chasing him to
+the anchor passes within 8 yd of every camp spot. The first Chain Lightning lands **12.0-12.1 s** after
+he drops below the floor line, the first cone at 15.9-16.1 s. That cast killed ranged walking into the
+camp beside the pile, and the corridor squad's ranged dropping off the balcony stacked within a yard.
+
+So ranged wait it out: the arena squad two to a spot on four north-east rim spots (12.8-15.6 yd clear
+of the pile, in cast and heal range), the corridor squad on six platform spots 12 yd apart. The wait
+ends, one way, at 12.5 s once Thorim is within 8 yd of the tank spot or the lit cone covers the wait
+spot, and always by 25 s: Sif's bunny path runs 2.6-7.7 yd from the floor spots. No trace yet shows
+whether Lightning Charge reaches players above z 430.
 
 ## The Charge Orb field is a 32.3 yd circle, not a 35 yd sphere
 
