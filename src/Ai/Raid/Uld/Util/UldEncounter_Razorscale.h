@@ -12,6 +12,8 @@
 #include "Position.h"
 #include "UldData.h"
 
+#include <array>
+#include <cstddef>
 #include <ctime>
 #include <unordered_map>
 #include <vector>
@@ -72,6 +74,9 @@ public:
     // Harpoon cooldown (seconds)
     static constexpr time_t HARPOON_COOLDOWN_DURATION = 5;
 
+    static constexpr float HARPOON_SEARCH_RANGE = 200.0f;
+    static constexpr std::size_t HARPOON_ENTRY_COUNT = 4;
+
     // Structure for harpoon data
     struct HarpoonData
     {
@@ -128,9 +133,52 @@ private:
     static std::unordered_map<ObjectGuid, time_t> _harpoonCooldowns;
 };
 
+// Per-bot cache for the lookups every Razorscale trigger, action and multiplier repeats each tick.
+// The values behind them recompute on every read (100yd grid sweep, plus a LOS ray per npc for the
+// hostile list). Keyed on getMSTime(): a bot never ticks twice in one ms. Holds guids so a despawn
+// between reads drops out instead of dangling.
+class RazorscaleScan
+{
+public:
+    explicit RazorscaleScan(PlayerbotAI* botAI) : botAI(botAI) {}
+
+    // "find target" razorscale. Null until she has this bot on her threat list.
+    Unit* Boss();
+
+    // "nearest hostile npcs" and "possible targets no los", exactly as the values return them.
+    GuidVector const& Hostiles();
+    GuidVector const& PossibleTargets();
+
+    // What FindNearestGameObject(entry, HARPOON_SEARCH_RANGE) returns for each harpoon entry, in
+    // GetHarpoonData() order, off one grid visit. Empty guid where there is none.
+    std::array<ObjectGuid, RazorscaleBossHelper::HARPOON_ENTRY_COUNT> const& NearestHarpoons();
+
+private:
+    PlayerbotAI* botAI;
+
+    uint32 bossAtMs = 0;
+    ObjectGuid boss;
+    uint32 hostilesAtMs = 0;
+    GuidVector hostiles;
+    uint32 targetsAtMs = 0;
+    GuidVector targets;
+    uint32 harpoonsAtMs = 0;
+    std::array<ObjectGuid, RazorscaleBossHelper::HARPOON_ENTRY_COUNT> harpoons;
+};
+
+// This bot's RazorscaleScan, held by the "razorscale scan" value.
+RazorscaleScan& GetRazorscaleScan(PlayerbotAI* botAI);
+
+// Only a ranged dps ever fires a harpoon. IsRanged() is true for healers too, hence the IsHeal test.
+bool IsRazorscaleHarpoonCrew(PlayerbotAI* botAI, Player* bot);
+
+// Closest harpoon to the bot (2D) that is built, unfired and off the local cooldown. A tie goes to
+// the earlier GetHarpoonData() entry. Null when none is ready.
+GameObject* GetRazorscaleClosestReadyHarpoon(PlayerbotAI* botAI);
+
 // Dark Rune add the raid should be killing, most urgent first: Sentinel (whirlwinds the raid) >
-// Watcher (ranged caster) > Guardian, lowest health first within a tier so the raid focuses one down
-// instead of splitting across two. Returns nullptr when none are up.
+// Watcher (ranged caster) > Guardian. Lowest health Sentinel when two are up, so the raid focuses one
+// down instead of splitting across both. Returns nullptr when none are up.
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI);
 
 // What the skull belongs on right now: the boss whenever she is on the floor - harpoon knockdowns

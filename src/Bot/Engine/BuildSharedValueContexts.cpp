@@ -9,6 +9,7 @@
 #include "MechValueContext.h"
 #include "MgTValueContext.h"
 #include "UBValueContext.h"
+#include "UldValueContext.h"
 #include "ValueContext.h"
 
 void AiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
@@ -18,4 +19,5 @@ void AiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<Unty
     valueContexts.Add(new TbcDungeonUnderbogValueContext());
     valueContexts.Add(new WotlkDungeonGDValueContext());
     valueContexts.Add(new TbcDungeonMgTValueContext());
+    valueContexts.Add(new RaidUlduarValueContext());
 }

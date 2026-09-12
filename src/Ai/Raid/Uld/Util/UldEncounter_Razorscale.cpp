@@ -6,14 +6,19 @@
 
 #include "UldEncounter_Razorscale.h"
 
+#include "CellImpl.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "GameObject.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "SpellAuras.h"
+#include "Timer.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
@@ -35,7 +40,7 @@ const std::time_t RazorscaleBossHelper::_roleSwapCooldown;
 
 bool RazorscaleBossHelper::UpdateBossAI()
 {
-    _boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    _boss = GetRazorscaleScan(botAI).Boss();
     if (_boss)
     {
         Group* group = bot->GetGroup();
@@ -83,8 +88,7 @@ Unit* RazorscaleBossHelper::FindDevouringFlameNear(PlayerbotAI* botAI, float rad
     Unit* nearest = nullptr;
     float best = std::numeric_limits<float>::max();
 
-    GuidVector npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest hostile npcs")->Get();
-    for (ObjectGuid const& guid : npcs)
+    for (ObjectGuid const& guid : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive() || unit->GetEntry() != UNIT_DEVOURING_FLAME)
@@ -323,38 +327,176 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
     _lastRoleSwapTime[botGuid] = std::time(nullptr);
 }
 
-// Lowest health first, so two Sentinels up do not split the raid's damage and the skull does not flip
-// between them as the marking bot moves. Entry order alone is resolved per bot and is not stable.
-static Unit* GetLowestHealthUnitByEntry(PlayerbotAI* botAI, uint32 entry)
+namespace
 {
-    Unit* best = nullptr;
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != entry)
-            continue;
 
-        if (!best || unit->GetHealth() < best->GetHealth())
-            best = unit;
+// True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
+bool FreshThisTick(uint32& atMs)
+{
+    uint32 const now = getMSTime();
+    if (atMs && atMs == now)
+        return true;
+
+    atMs = now;
+    return false;
+}
+
+struct AnyRazorscaleHarpoonCheck
+{
+    bool operator()(GameObject* go) const
+    {
+        for (RazorscaleBossHelper::HarpoonData const& harpoon : RazorscaleBossHelper::GetHarpoonData())
+            if (go->GetEntry() == harpoon.gameObjectEntry)
+                return true;
+
+        return false;
+    }
+};
+
+}
+
+Unit* RazorscaleScan::Boss()
+{
+    if (!FreshThisTick(bossAtMs))
+    {
+        Unit* found = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "razorscale")->Get();
+        boss = found ? found->GetGUID() : ObjectGuid::Empty;
     }
 
-    return best;
+    return boss.IsEmpty() ? nullptr : botAI->GetUnit(boss);
+}
+
+GuidVector const& RazorscaleScan::Hostiles()
+{
+    if (!FreshThisTick(hostilesAtMs))
+        hostiles = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest hostile npcs")->Get();
+
+    return hostiles;
+}
+
+GuidVector const& RazorscaleScan::PossibleTargets()
+{
+    if (!FreshThisTick(targetsAtMs))
+        targets = botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+
+    return targets;
+}
+
+std::array<ObjectGuid, RazorscaleBossHelper::HARPOON_ENTRY_COUNT> const& RazorscaleScan::NearestHarpoons()
+{
+    if (FreshThisTick(harpoonsAtMs))
+        return harpoons;
+
+    harpoons.fill(ObjectGuid::Empty);
+
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return harpoons;
+
+    // One visit collects every harpoon in the order FindNearestGameObject's own searcher walks them
+    // (same phase filter, same cells). Replaying its range check per entry over that list then picks
+    // the same object it would.
+    AnyRazorscaleHarpoonCheck anyHarpoon;
+    std::vector<GameObject*> found;
+    Acore::GameObjectListSearcher<AnyRazorscaleHarpoonCheck> searcher(bot, found, anyHarpoon);
+    Cell::VisitObjects(bot, searcher, RazorscaleBossHelper::HARPOON_SEARCH_RANGE);
+
+    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = RazorscaleBossHelper::GetHarpoonData();
+    for (std::size_t i = 0; i < harpoonData.size() && i < harpoons.size(); ++i)
+    {
+        Acore::NearestGameObjectEntryInObjectRangeCheck nearest(*bot, harpoonData[i].gameObjectEntry,
+                                                                RazorscaleBossHelper::HARPOON_SEARCH_RANGE);
+        GameObject* pick = nullptr;
+        for (GameObject* go : found)
+            if (nearest(go))
+                pick = go;
+
+        if (pick)
+            harpoons[i] = pick->GetGUID();
+    }
+
+    return harpoons;
+}
+
+RazorscaleScan& GetRazorscaleScan(PlayerbotAI* botAI)
+{
+    return *botAI->GetAiObjectContext()->GetValue<RazorscaleScan*>("razorscale scan")->Get();
+}
+
+bool IsRazorscaleHarpoonCrew(PlayerbotAI* botAI, Player* bot)
+{
+    return botAI->IsRanged(bot) && botAI->IsDps(bot) && !botAI->IsHeal(bot);
+}
+
+GameObject* GetRazorscaleClosestReadyHarpoon(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    GameObject* closest = nullptr;
+    float minDistance = std::numeric_limits<float>::max();
+
+    for (ObjectGuid const& guid : GetRazorscaleScan(botAI).NearestHarpoons())
+    {
+        if (guid.IsEmpty())
+            continue;
+
+        GameObject* harpoon = ObjectAccessor::GetGameObject(*bot, guid);
+        if (!harpoon || !RazorscaleBossHelper::IsHarpoonReady(harpoon))
+            continue;
+
+        float const distance = bot->GetDistance2d(harpoon);
+        if (distance < minDistance)
+        {
+            minDistance = distance;
+            closest = harpoon;
+        }
+    }
+
+    return closest;
 }
 
 Unit* GetRazorscaleAddKillTarget(PlayerbotAI* botAI)
 {
-    if (Unit* sentinel = GetLowestHealthUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL))
+    // All three tiers off one pass. Lowest health Sentinel so the skull doesn't flip between two as the
+    // marking bot moves (list order is per bot and not stable); first found for the other two.
+    Unit* sentinel = nullptr;
+    Unit* watcher = nullptr;
+    Unit* guardian = nullptr;
+
+    for (ObjectGuid const& guid : GetRazorscaleScan(botAI).PossibleTargets())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        switch (unit->GetEntry())
+        {
+            case RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL:
+                if (!sentinel || unit->GetHealth() < sentinel->GetHealth())
+                    sentinel = unit;
+                break;
+            case RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER:
+                if (!watcher)
+                    watcher = unit;
+                break;
+            case RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN:
+                if (!guardian)
+                    guardian = unit;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (sentinel)
         return sentinel;
 
-    if (Unit* watcher = GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_WATCHER))
-        return watcher;
-
-    return GetFirstAliveUnitByEntry(botAI, RazorscaleBossHelper::UNIT_DARK_RUNE_GUARDIAN);
+    return watcher ? watcher : guardian;
 }
 
 Unit* GetRazorscaleKillTarget(PlayerbotAI* botAI)
 {
-    Unit* boss = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "razorscale")->Get();
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return nullptr;
 

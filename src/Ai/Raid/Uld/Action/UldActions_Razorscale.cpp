@@ -43,7 +43,7 @@ RazorscaleAvoidDevouringFlameAction::FlameScan const& RazorscaleAvoidDevouringFl
     _scan = FlameScan();
     _scan.atMs = now;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
         return _scan;
 
@@ -133,10 +133,11 @@ bool RazorscaleAvoidSentinelAction::Execute(Event /*event*/)
         return false;
 
     const float radius = 8.0f;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
+    // Copied: the walk continues after MoveAway, so a refill mid-loop can't pull the list out from under it.
+    GuidVector const npcs = GetRazorscaleScan(botAI).Hostiles();
 
     bool movedAway = false;
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : npcs)
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
@@ -155,8 +156,7 @@ bool RazorscaleAvoidSentinelAction::isUseful()
         return false;
 
     const float radius = 8.0f;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
@@ -177,8 +177,7 @@ bool RazorscaleAvoidWhirlwindAction::Execute(Event /*event*/)
     }
 
     const float radius = 8.0f;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
@@ -200,8 +199,7 @@ bool RazorscaleAvoidWhirlwindAction::isUseful()
     }
 
     const float radius = 8.0f;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
@@ -222,7 +220,7 @@ bool RazorscaleAvoidWhirlwindAction::isUseful()
 
 bool RazorscaleIgnoreBossAction::isUseful()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
     {
         return false;
@@ -279,7 +277,7 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
     if (!bot)
         return false;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
         return false;
 
@@ -337,7 +335,7 @@ bool RazorscaleIgnoreBossAction::Execute(Event /*event*/)
 
 bool RazorscaleGroundedAction::isUseful()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive() || boss->GetPositionZ() > RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
         return false;
 
@@ -419,7 +417,7 @@ bool RazorscaleGroundedAction::isUseful()
 
 bool RazorscaleGroundedAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive() || boss->GetPositionZ() > RazorscaleBossHelper::RAZORSCALE_FLYING_Z_THRESHOLD)
         return false;
 
@@ -515,35 +513,13 @@ bool RazorscaleHarpoonAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    // Retrieve harpoon data from the helper
-    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = razorscaleHelper.GetHarpoonData();
-
-    GameObject* closestHarpoon = nullptr;
-    float minDistance = std::numeric_limits<float>::max();
-
-    // Find the nearest harpoon that hasn't been fired and is not on cooldown
-    for (auto const& harpoon : harpoonData)
-    {
-        if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
-        {
-            if (RazorscaleBossHelper::IsHarpoonReady(harpoonGO))
-            {
-                float distance = bot->GetDistance2d(harpoonGO);
-                if (distance < minDistance)
-                {
-                    minDistance = distance;
-                    closestHarpoon = harpoonGO;
-                }
-            }
-        }
-    }
-
+    GameObject* closestHarpoon = GetRazorscaleClosestReadyHarpoon(botAI);
     if (!closestHarpoon)
         return false;
 
     // Find the nearest ranged DPS (not a healer) to the harpoon
     Player* closestRangedDPS = nullptr;
-    minDistance = std::numeric_limits<float>::max();
+    float minDistance = std::numeric_limits<float>::max();
     GuidVector groupBots = AI_VALUE(GuidVector, "group members");
 
     for (auto& guid : groupBots)
@@ -603,22 +579,11 @@ bool RazorscaleHarpoonAction::isUseful()
     if (!boss || !boss->IsAlive())
         return false;
 
-    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = razorscaleHelper.GetHarpoonData();
+    // Before the harpoon search: anyone else gets false whatever it finds.
+    if (!IsRazorscaleHarpoonCrew(botAI, bot))
+        return false;
 
-    for (auto const& harpoon : harpoonData)
-    {
-        if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
-        {
-            if (RazorscaleBossHelper::IsHarpoonReady(harpoonGO))
-            {
-                // Check if this bot is a ranged DPS (not a healer)
-                if (botAI->IsRanged(bot) && botAI->IsDps(bot) && !botAI->IsHeal(bot))
-                    return true;
-            }
-        }
-    }
-
-    return false;
+    return GetRazorscaleClosestReadyHarpoon(botAI) != nullptr;
 }
 
 bool RazorscaleFuseArmorAction::isUseful()
@@ -698,7 +663,7 @@ bool RazorscalePetControlAction::isUseful()
 
 bool RazorscalePetControlAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -728,7 +693,7 @@ bool RazorscaleFlameBreathAction::isUseful()
 
 bool RazorscaleFlameBreathAction::Execute(Event /*event*/)
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 

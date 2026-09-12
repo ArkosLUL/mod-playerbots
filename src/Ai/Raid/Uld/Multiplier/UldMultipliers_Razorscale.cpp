@@ -27,6 +27,7 @@
 #include "Timer.h"
 #include "UldActions.h"
 #include "UldData.h"
+#include "UldEncounterGate.h"
 #include "UldEncounter_Razorscale.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
@@ -57,6 +58,11 @@ bool IsRazorscaleGenericMover(Action* action)
 float RazorscaleMultiplier::GetValue(Action* action)
 {
     if (!action || bot->GetMapId() != ULDUAR_MAP_ID)
+        return 1.0f;
+
+    // Patches are her own summons and despawn with the encounter, so outside it there's nothing to
+    // hold. Without this, every follow step through the rest of the instance pays the patch lookup.
+    if (!UldEncounterIsLive(botAI, ULD_BOSS_RAZORSCALE))
         return 1.0f;
 
     if (!IsRazorscaleGenericMover(action))

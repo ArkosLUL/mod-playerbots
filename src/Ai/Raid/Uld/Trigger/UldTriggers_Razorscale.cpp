@@ -20,7 +20,7 @@ using namespace EncounterHelpers;
 
 bool RazorscaleFlyingAloneTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
     {
         return false;
@@ -65,12 +65,11 @@ bool RazorscaleFlyingAloneTrigger::IsActive()
 
 bool RazorscaleDevouringFlamesTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
         return false;
 
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DEVOURING_FLAME)
@@ -84,12 +83,11 @@ bool RazorscaleDevouringFlamesTrigger::IsActive()
 
 bool RazorscaleAvoidSentinelTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
         return false;
 
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL)
@@ -103,12 +101,11 @@ bool RazorscaleAvoidSentinelTrigger::IsActive()
 
 bool RazorscaleAvoidWhirlwindTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
         return false;
 
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest hostile npcs");
-    for (auto& npc : npcs)
+    for (ObjectGuid const& npc : GetRazorscaleScan(botAI).Hostiles())
     {
         Unit* unit = botAI->GetUnit(npc);
         if (unit && unit->GetEntry() == RazorscaleBossHelper::UNIT_DARK_RUNE_SENTINEL &&
@@ -124,7 +121,7 @@ bool RazorscaleAvoidWhirlwindTrigger::IsActive()
 
 bool RazorscaleGroundedTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss)
     {
         return false;
@@ -140,11 +137,7 @@ bool RazorscaleGroundedTrigger::IsActive()
 
 bool RazorscaleHarpoonAvailableTrigger::IsActive()
 {
-    // Get harpoon data from the helper
-    std::vector<RazorscaleBossHelper::HarpoonData> const& harpoonData = RazorscaleBossHelper::GetHarpoonData();
-
-    // Get the boss entity
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
     {
         return false;
@@ -158,27 +151,18 @@ bool RazorscaleHarpoonAvailableTrigger::IsActive()
         return false;
     }
 
-    // Check each harpoon entry
-    for (auto const& harpoon : harpoonData)
-    {
-        // Find the nearest harpoon GameObject within 200 yards
-        if (GameObject* harpoonGO = bot->FindNearestGameObject(harpoon.gameObjectEntry, 200.0f))
-        {
-            if (RazorscaleBossHelper::IsHarpoonReady(harpoonGO))
-            {
-                return true;  // At least one harpoon is available and ready to be fired
-            }
-        }
-    }
+    // After UpdateBossAI(), which assigns the tank roles as a side effect. Nobody else fires one, so
+    // nobody else needs the harpoon search.
+    if (!IsRazorscaleHarpoonCrew(botAI, bot))
+        return false;
 
-    // No harpoons are available or need to be fired
-    return false;
+    return GetRazorscaleClosestReadyHarpoon(botAI) != nullptr;
 }
 
 bool RazorscaleFuseArmorTrigger::IsActive()
 {
     // Get the boss entity
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
     {
         return false;
@@ -226,7 +210,7 @@ bool RazorscaleKillTargetTrigger::IsActive()
 
 bool RazorscalePetControlTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -235,7 +219,7 @@ bool RazorscalePetControlTrigger::IsActive()
 
 bool RazorscaleFlameBreathTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "razorscale");
+    Unit* boss = GetRazorscaleScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
