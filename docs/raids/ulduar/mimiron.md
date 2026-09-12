@@ -159,9 +159,10 @@ the Mimiron flame dodge's FAILEDs had an accepted flee by that same bot in the p
 own last hop, or `avoid aoe`'s.
 
 The flames dodge is now on the shared Mimiron fan instead of `FleePosition`, and
-`MimironAvoidAoeGuardMultiplier` vetoes `avoid aoe` outright while hard mode is live.
-`AvoidAoeAction`'s own two bugs are left alone: it runs in every encounter in the game and deserves
-its own change.
+`MimironAvoidAoeGuardMultiplier` vetoes `avoid aoe` outright while hard mode is on and a construct is
+in combat. Hard mode alone is a config read that holds all over Ulduar: on it the veto also landed
+15 times in Thorim's gauntlet (`603_1_thorim_1789146024`). `AvoidAoeAction`'s own two bugs are left
+alone: it runs in every encounter in the game and deserves its own change.
 
 That much worked — exposures of 5 s or longer fell from 5% to **1-2%**, p90 episode length from 3.0 s
 to 1.1-2.0, and `avoid aoe` recorded **zero accepted moves** behind 339 and 309 vetoes. Two things it

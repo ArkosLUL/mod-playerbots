@@ -112,9 +112,10 @@ float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)
     if (!action || action->getName() != "avoid aoe")
         return 1.0f;
 
-    // Only while the fire is actually there to be mishandled. On a normal clear Mimiron has no ground
-    // hazard this node would answer, so leaving it alone costs nothing.
-    return IsMimironHardModeActive(botAI) ? 0.0f : 1.0f;
+    // Only while the fire is actually there to be mishandled: a normal clear has no ground hazard
+    // this node would answer, and the hard mode switch is a config read that holds all over Ulduar,
+    // so the engaged test is what leaves the node alone in every other fight in the instance.
+    return IsMimironHardModeActive(botAI) && IsMimironEngaged(botAI) ? 0.0f : 1.0f;
 }
 
 namespace
@@ -197,7 +198,9 @@ float MimironFrostBombGuardMultiplier::GetValue(Action* action)
         name != "set behind" && name != "follow")
         return 1.0f;
 
-    if (!IsMimironHardModeActive(botAI))
+    // Room test before the grid scan: the hard mode switch is a config read that holds all over
+    // Ulduar, and the five nodes above are asked for on every tick of every fight in the instance.
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
         return 1.0f;
 
     float const hold = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE + ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN;

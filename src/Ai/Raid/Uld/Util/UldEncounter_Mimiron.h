@@ -421,6 +421,12 @@ Unit* GetMimironRingFocus(PlayerbotAI* botAI);
 // two, which is what puts the main tank on the chassis spot before VX-001 goes live.
 Unit* GetMimironStagingFocus(Player* bot);
 
+// Cheap screen in front of a grid scan or a slot derivation: the hard mode switch is a config
+// read that holds all over Ulduar, so a node gated on it alone runs in every fight in the
+// instance. Bounded by the staging search range rather than the room, so it never cuts a bot
+// out of the fight.
+bool IsNearMimironRoom(Player* bot);
+
 // Any of the three constructs actually fighting. Presence says nothing here: Leviathan MK II is a DB
 // spawn that sits in the room unselectable until the button is pushed, and GetFirstAliveUnitByEntry
 // does not filter selectability.

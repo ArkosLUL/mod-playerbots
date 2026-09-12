@@ -486,8 +486,7 @@ bool MimironSetDpsPriorityTrigger::IsActive()
     // them, and they walk into the rendezvous spraying. They only exist from phase 3 on and the reset
     // despawns them, so a live one with nothing engaged means exactly this handover. The hard mode
     // switch is a config read that holds all over Ulduar, hence the room check before the grid scan.
-    if (!IsMimironHardModeActive(botAI) || bot->GetMapId() != ULDUAR_MAP_ID ||
-        bot->GetExactDist2d(ULDUAR_MIMIRON_ROOM_CENTER) > ULDUAR_MIMIRON_STAGING_SEARCH_RANGE)
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
         return false;
 
     return bot->FindNearestCreature(NPC_EMERGENCY_FIRE_BOT, ULDUAR_MIMIRON_STAGING_SEARCH_RANGE) != nullptr;

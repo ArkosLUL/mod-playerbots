@@ -562,6 +562,12 @@ Unit* GetMimironRingFocus(PlayerbotAI* botAI)
     return GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 }
 
+bool IsNearMimironRoom(Player* bot)
+{
+    return bot && bot->GetMapId() == ULDUAR_MAP_ID &&
+           bot->GetExactDist2d(ULDUAR_MIMIRON_ROOM_CENTER) <= ULDUAR_MIMIRON_STAGING_SEARCH_RANGE;
+}
+
 Unit* GetMimironStagingFocus(Player* bot)
 {
     if (!bot)
@@ -1764,6 +1770,11 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
 
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 {
+    // Ahead of the derivation and of the trace row it writes. Every caller here is registered for
+    // the whole raid, and the staging fallback inside is two 200 yd grid scans.
+    if (!IsNearMimironRoom(bot))
+        return false;
+
     char const* branch = "none";
     uint32 index = 0;
     uint32 count = 0;

@@ -207,6 +207,12 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   the `else` of `if (action->isPossible() && relevance > 0)`, so a vetoed action is indistinguishable
   in the act stream from one whose spell is unknown, out of range or on cooldown. The `veto` rows
   name the multiplier that did it; read those before concluding an ability is broken.
+- **A hard mode switch is a config read, not an encounter gate.** `IsMimironHardModeActive` returns
+  `sPlayerbotAIConfig.ulduarMimironHardMode` and nothing else, and one
+  `RaidUlduarStrategy::InitMultipliers` registers every boss's multipliers, so a guard gated on it
+  alone runs in every fight in the instance: Mimiron's `avoid aoe` veto landed 15 times in Thorim's
+  gauntlet, and its formation guard swept 200 yd twice a tick there. Pair the switch with a live-boss
+  test, and put a room screen (`IsNearMimironRoom`) in front of any grid scan.
 - **A registered POINT generator does not mean the unit is moving.**
   `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
   `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it
