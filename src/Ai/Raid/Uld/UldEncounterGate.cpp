@@ -83,6 +83,75 @@ bool UldEncounterGateOpen(PlayerbotAI* botAI, uint32 bossId)
     return true;
 }
 
+namespace
+{
+    // The instance's boss states, read once per trigger pass instead of once per gated trigger:
+    // every one of the 165 Ulduar triggers asks the gate, and each ask can read all fourteen states.
+    //
+    // A pass is one Engine::ProcessTriggers: the first Check opens it for that bot and the Reset
+    // sweep the engine runs right after the checks closes it. Reading once is exact because boss
+    // state only moves on a pull, a wipe or a kill, and nothing in a trigger pass attacks anything.
+    // Only Check uses it. IsActive can be called from elsewhere, so it keeps reading live.
+    struct GatePass
+    {
+        PlayerbotAI* botAI = nullptr;
+        bool readLive = false;  // more encounters than the masks hold
+        bool hasInstance = false;
+        uint32 encounterCount = 0;
+        uint32 inProgressMask = 0;
+        uint32 doneMask = 0;
+    };
+
+    // Per thread, not shared: a bot's whole pass runs on one map thread, start to finish.
+    thread_local GatePass gatePass;
+
+    bool UldEncounterGateOpenInPass(PlayerbotAI* botAI, uint32 bossId)
+    {
+        if (!botAI)
+            return UldEncounterGateOpen(botAI, bossId);
+
+        if (gatePass.botAI != botAI)
+        {
+            gatePass = GatePass();
+            gatePass.botAI = botAI;
+
+            Player* bot = botAI->GetBot();
+            InstanceScript* instance = bot ? bot->GetInstanceScript() : nullptr;
+            if (instance && instance->GetEncounterCount() > 32)
+                gatePass.readLive = true;
+            else if (instance)
+            {
+                gatePass.hasInstance = true;
+                gatePass.encounterCount = instance->GetEncounterCount();
+                for (uint32 id = 0; id < gatePass.encounterCount; ++id)
+                {
+                    EncounterState const state = instance->GetBossState(id);
+                    if (state == IN_PROGRESS)
+                        gatePass.inProgressMask |= 1u << id;
+                    else if (state == DONE)
+                        gatePass.doneMask |= 1u << id;
+                }
+            }
+        }
+
+        if (gatePass.readLive)
+            return UldEncounterGateOpen(botAI, bossId);
+
+        // The same rules as UldEncounterGateOpen, read off the masks.
+        if (!gatePass.hasInstance || bossId >= gatePass.encounterCount)
+            return true;
+
+        uint32 const bit = 1u << bossId;
+        if (gatePass.doneMask & bit)
+            return false;
+
+        if (gatePass.inProgressMask & bit)
+            return true;
+
+        return (gatePass.inProgressMask & ~bit) == 0;
+    }
+}
+
 bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId)
 {
     Player* bot = botAI ? botAI->GetBot() : nullptr;
@@ -119,7 +188,7 @@ UldGatedTrigger::~UldGatedTrigger() { delete inner; }
 
 Event UldGatedTrigger::Check()
 {
-    if (!inner || !UldEncounterGateOpen(botAI, bossId))
+    if (!inner || !UldEncounterGateOpenInPass(botAI, bossId))
         return Event();
 
     Event event = inner->Check();
@@ -153,6 +222,10 @@ std::vector<NextAction> UldGatedTrigger::getHandlers()
 
 void UldGatedTrigger::Reset()
 {
+    // End of the pass, so the next Check reads the boss states afresh.
+    if (gatePass.botAI == botAI)
+        gatePass = GatePass();
+
     if (inner)
         inner->Reset();
 }

@@ -26,6 +26,9 @@
 #include "WarlockAiObjectContext.h"
 #include "WarriorAiObjectContext.h"
 
+#include <mutex>
+#include <unordered_map>
+
 namespace
 {
 constexpr uint32 SPELL_FROSTFIRE_BOLT = 44614;
@@ -33,40 +36,34 @@ constexpr uint32 SPELL_ICE_SHARDS = 15047;
 constexpr uint32 SPELL_WHIRLWIND = 1680;
 constexpr uint32 SPELL_CAT_FORM = 768;
 constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
-}
 
-AiObjectContext* AiFactory::createAiObjectContext(Player* player, PlayerbotAI* botAI)
+// The spec tab is a function of the talent map, the active spec and the level, and working it out
+// walks the whole talent map. Humans pay that on every IsTank/IsHeal/IsRanged call, and raid helpers
+// ask for every group member, so it adds up fast.
+//
+// The talent map only changes inside Player::LearnTalent, Player::resetTalents and the login load.
+// The hooks bracket the first two: CanLearnTalent / TalentsReset fire before the change and mark the
+// entry `changing`, so any read in the middle computes fresh and stores nothing. LearnTalents /
+// FreeTalentPointsChanged fire after it and drop the entry. Login is covered by not caching until
+// the player is in world. Spec and level are compared on every read rather than trusted to a hook.
+struct SpecTabEntry
 {
-    switch (player->getClass())
-    {
-        case CLASS_PRIEST:
-            return new PriestAiObjectContext(botAI);
-        case CLASS_MAGE:
-            return new MageAiObjectContext(botAI);
-        case CLASS_WARLOCK:
-            return new WarlockAiObjectContext(botAI);
-        case CLASS_WARRIOR:
-            return new WarriorAiObjectContext(botAI);
-        case CLASS_SHAMAN:
-            return new ShamanAiObjectContext(botAI);
-        case CLASS_PALADIN:
-            return new PaladinAiObjectContext(botAI);
-        case CLASS_DRUID:
-            return new DruidAiObjectContext(botAI);
-        case CLASS_HUNTER:
-            return new HunterAiObjectContext(botAI);
-        case CLASS_ROGUE:
-            return new RogueAiObjectContext(botAI);
-        case CLASS_DEATH_KNIGHT:
-            return new DKAiObjectContext(botAI);
-    }
+    uint32 generation = 0;  // bumped by every hook, so a result computed across one is never stored
+    uint8 tab = 0;
+    uint8 level = 0;
+    uint8 activeSpecMask = 0;
+    bool valid = false;
+    bool changing = false;
+};
 
-    return new AiObjectContext(botAI);
-}
+// Entries are invalidated, never erased: an erase would let a read still computing on another
+// thread recreate a fresh entry and store into it.
+std::mutex specTabCacheMutex;
+std::unordered_map<ObjectGuid, SpecTabEntry> specTabCache;
 
-uint8 AiFactory::GetPlayerSpecTab(Player* bot)
+uint8 ComputePlayerSpecTab(Player* bot)
 {
-    std::map<uint8, uint32> tabs = GetPlayerSpecTabs(bot);
+    std::map<uint8, uint32> tabs = AiFactory::GetPlayerSpecTabs(bot);
 
     if (bot->GetLevel() >= 10 && ((tabs[0] + tabs[1] + tabs[2]) > 0))
     {
@@ -107,6 +104,94 @@ uint8 AiFactory::GetPlayerSpecTab(Player* bot)
 
         return tab;
     }
+}
+}
+
+AiObjectContext* AiFactory::createAiObjectContext(Player* player, PlayerbotAI* botAI)
+{
+    switch (player->getClass())
+    {
+        case CLASS_PRIEST:
+            return new PriestAiObjectContext(botAI);
+        case CLASS_MAGE:
+            return new MageAiObjectContext(botAI);
+        case CLASS_WARLOCK:
+            return new WarlockAiObjectContext(botAI);
+        case CLASS_WARRIOR:
+            return new WarriorAiObjectContext(botAI);
+        case CLASS_SHAMAN:
+            return new ShamanAiObjectContext(botAI);
+        case CLASS_PALADIN:
+            return new PaladinAiObjectContext(botAI);
+        case CLASS_DRUID:
+            return new DruidAiObjectContext(botAI);
+        case CLASS_HUNTER:
+            return new HunterAiObjectContext(botAI);
+        case CLASS_ROGUE:
+            return new RogueAiObjectContext(botAI);
+        case CLASS_DEATH_KNIGHT:
+            return new DKAiObjectContext(botAI);
+    }
+
+    return new AiObjectContext(botAI);
+}
+
+uint8 AiFactory::GetPlayerSpecTab(Player* player)
+{
+    // Mid-login the talents are still loading, so nothing is stable enough to keep yet.
+    if (!player->IsInWorld())
+        return ComputePlayerSpecTab(player);
+
+    ObjectGuid const guid = player->GetGUID();
+    uint8 const level = player->GetLevel();
+    uint8 const activeSpecMask = player->GetActiveSpecMask();
+
+    uint32 generation = 0;
+    bool changing = false;
+    {
+        std::lock_guard<std::mutex> guard(specTabCacheMutex);
+        SpecTabEntry const& entry = specTabCache[guid];
+        if (entry.valid && !entry.changing && entry.level == level && entry.activeSpecMask == activeSpecMask)
+            return entry.tab;
+
+        generation = entry.generation;
+        changing = entry.changing;
+    }
+
+    // Computed outside the lock: it walks the talent map, and other map threads read this cache.
+    uint8 const tab = ComputePlayerSpecTab(player);
+    if (changing)
+        return tab;
+
+    std::lock_guard<std::mutex> guard(specTabCacheMutex);
+    SpecTabEntry& entry = specTabCache[guid];
+    if (entry.generation == generation)
+    {
+        entry.tab = tab;
+        entry.level = level;
+        entry.activeSpecMask = activeSpecMask;
+        entry.valid = true;
+    }
+
+    return tab;
+}
+
+void AiFactory::BeginPlayerTalentChange(Player* player)
+{
+    std::lock_guard<std::mutex> guard(specTabCacheMutex);
+    SpecTabEntry& entry = specTabCache[player->GetGUID()];
+    entry.valid = false;
+    entry.changing = true;
+    ++entry.generation;
+}
+
+void AiFactory::EndPlayerTalentChange(Player* player)
+{
+    std::lock_guard<std::mutex> guard(specTabCacheMutex);
+    SpecTabEntry& entry = specTabCache[player->GetGUID()];
+    entry.valid = false;
+    entry.changing = false;
+    ++entry.generation;
 }
 
 std::map<uint8, uint32> AiFactory::GetPlayerSpecTabs(Player* bot)

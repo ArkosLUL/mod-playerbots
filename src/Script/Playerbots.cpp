@@ -5,6 +5,7 @@
  */
 
 #include "Playerbots.h"
+#include "AiFactory.h"
 #include "BattleGroundTactics.h"
 #include "BattlefieldScript.h"
 #include "Channel.h"
@@ -77,8 +78,33 @@ public:
         PLAYERHOOK_CAN_PLAYER_USE_GUILD_CHAT,
         PLAYERHOOK_CAN_PLAYER_USE_CHANNEL_CHAT,
         PLAYERHOOK_ON_GIVE_EXP,
-        PLAYERHOOK_ON_BEFORE_TELEPORT
+        PLAYERHOOK_ON_BEFORE_TELEPORT,
+        PLAYERHOOK_CAN_LEARN_TALENT,
+        PLAYERHOOK_ON_PLAYER_LEARN_TALENTS,
+        PLAYERHOOK_ON_TALENTS_RESET,
+        PLAYERHOOK_ON_FREE_TALENT_POINTS_CHANGED
     }) {}
+
+    // These four bracket every change to a player's talent map, which is what keeps the spec tab
+    // AiFactory caches exact. CanLearnTalent and TalentsReset fire before the change, the other two
+    // after it.
+    bool OnPlayerCanLearnTalent(Player* player, TalentEntry const* /*talent*/, uint32 /*rank*/) override
+    {
+        AiFactory::BeginPlayerTalentChange(player);
+        return true;
+    }
+
+    void OnPlayerTalentsReset(Player* player, bool /*noCost*/) override { AiFactory::BeginPlayerTalentChange(player); }
+
+    void OnPlayerLearnTalents(Player* player, uint32 /*talentId*/, uint32 /*talentRank*/, uint32 /*spellid*/) override
+    {
+        AiFactory::EndPlayerTalentChange(player);
+    }
+
+    void OnPlayerFreeTalentPointsChanged(Player* player, uint32 /*points*/) override
+    {
+        AiFactory::EndPlayerTalentChange(player);
+    }
 
     void OnPlayerLogin(Player* player) override
     {
@@ -301,6 +327,9 @@ public:
 
     void OnDestructPlayer(Player* player) override
     {
+        // So the next session under this guid starts from a fresh spec tab, whatever changed offline.
+        AiFactory::EndPlayerTalentChange(player);
+
         PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
 
         if (botAI != nullptr)

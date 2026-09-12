@@ -55,7 +55,7 @@ bool IgnisMainTankPositionAction::Execute(Event /*event*/)
     if (!boss)
         return false;
 
-    Position const spot = GetIgnisMainTankPosition(botAI, bot);
+    Position const spot = GetIgnisMainTankPosition(botAI, bot, boss);
     float const distance = bot->GetExactDist2d(&spot);
 
     // Reach then hold. Without the latch the bot re-issues a move on every drift inside the

@@ -49,22 +49,27 @@ bool IgnisScorchedGroundTrigger::IsActive()
 
 bool IgnisMainTankPositionTrigger::IsActive()
 {
-    if (!IsIgnisEngaged(botAI) || !botAI->IsMainTank(bot))
+    if (!botAI->IsMainTank(bot))
         return false;
 
     // Only once he actually holds the boss. Ignis follows his victim, so a tank without aggro walking
     // to the anchor takes the raid's positioning with him and leaves the boss where it was.
-    Unit* boss = GetIgnis(botAI);
+    Unit* boss = GetEngagedIgnis(botAI);
     if (!boss || boss->GetVictim() != bot)
         return false;
 
-    Position const spot = GetIgnisMainTankPosition(botAI, bot);
+    Position const spot = GetIgnisMainTankPosition(botAI, bot, boss);
 
     return bot->GetExactDist2d(&spot) > ULDUAR_IGNIS_TANK_SPOT_TOLERANCE;
 }
 
 bool IgnisConstructTankTrigger::IsActive()
 {
+    // Same answer GetIgnisConstructTankIndex gives a non-tank, for the price of a strategy bit. The
+    // full index walks the group, so it waits until the fight is actually on.
+    if (!botAI->IsTank(bot))
+        return false;
+
     if (!IsIgnisEngaged(botAI))
         return false;
 
@@ -78,12 +83,12 @@ bool IgnisConstructTankTrigger::IsActive()
 
 bool IgnisAttackBrittleConstructTrigger::IsActive()
 {
-    if (!IsIgnisEngaged(botAI))
-        return false;
-
     // Tanks stay on what they are holding: pulling the main tank off Ignis or a construct tank off a
     // construct whose threat table Molten already wiped costs far more than the one hit it takes.
     if (botAI->IsTank(bot))
+        return false;
+
+    if (!IsIgnisEngaged(botAI))
         return false;
 
     Unit* construct = GetIgnisBrittleConstruct(botAI);
@@ -105,7 +110,8 @@ bool IgnisAttackBrittleConstructTrigger::IsActive()
 
 bool IgnisAttackBossTrigger::IsActive()
 {
-    if (!IsIgnisEngaged(botAI))
+    Unit* boss = GetEngagedIgnis(botAI);
+    if (!boss)
         return false;
 
     // Everyone else lands here, main tank included - the generic target pickers are switched off for
@@ -113,18 +119,20 @@ bool IgnisAttackBossTrigger::IsActive()
     if (GetIgnisConstructTankIndex(botAI, bot) >= 0)
         return false;
 
-    IgnisAttackBrittleConstructTrigger brittle(botAI);
-    if (brittle.IsActive())
+    // Checked before the Brittle trigger since it settles most ticks on its own, and that trigger
+    // scans every construct in the room.
+    if (AI_VALUE(Unit*, "current target") == boss)
         return false;
 
-    Unit* boss = GetIgnis(botAI);
+    IgnisAttackBrittleConstructTrigger brittle(botAI);
 
-    return boss && AI_VALUE(Unit*, "current target") != boss;
+    return !brittle.IsActive();
 }
 
 bool IgnisMoltenConstructAvoidTrigger::IsActive()
 {
-    if (!IsIgnisEngaged(botAI))
+    Unit* boss = GetEngagedIgnis(botAI);
+    if (!boss)
         return false;
 
     if (GetIgnisConstructTankIndex(botAI, bot) >= 0)
@@ -132,8 +140,7 @@ bool IgnisMoltenConstructAvoidTrigger::IsActive()
 
     // Ignis' own tank stays put too. He is melee-range of a boss that follows him, so running out of
     // a construct's aura drags Ignis (and his Flame Jets) straight through the raid behind him.
-    Unit* boss = GetIgnis(botAI);
-    if (!boss || boss->GetVictim() == bot)
+    if (boss->GetVictim() == bot)
         return false;
 
     Unit* molten = GetIgnisNearestMoltenConstruct(botAI, bot);
@@ -143,21 +150,19 @@ bool IgnisMoltenConstructAvoidTrigger::IsActive()
 
 bool IgnisFlameJetsTrigger::IsActive()
 {
-    if (!IsIgnisEngaged(botAI))
+    if (!bot->HasUnitState(UNIT_STATE_CASTING))
         return false;
 
-    if (!IsIgnisFlameJetsCasting(GetIgnis(botAI)))
-        return false;
-
-    return bot->HasUnitState(UNIT_STATE_CASTING);
+    return GetIgnisIf(botAI, [](Creature const* ignis)
+                      { return ignis->IsInCombat() && IsIgnisFlameJetsCasting(ignis); }) != nullptr;
 }
 
 bool IgnisSlagPotHealTrigger::IsActive()
 {
-    if (!IsIgnisEngaged(botAI))
+    if (!botAI->IsHeal(bot))
         return false;
 
-    if (!botAI->IsHeal(bot))
+    if (!IsIgnisEngaged(botAI))
         return false;
 
     // Sits above every other heal, so it has to wait for the ticks to open a gap - otherwise the

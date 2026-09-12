@@ -10,6 +10,7 @@
 #include "Position.h"
 #include "UldData.h"
 
+class Creature;
 class Player;
 class PlayerbotAI;
 class Unit;
@@ -17,13 +18,15 @@ class WorldObject;
 
 // Ignis the Furnace Master.
 //
-// The fight is about Iron Constructs. Ignis activates them, Flame Jets makes them Molten, and a
-// Molten construct dragged within 18 yd of one of the room's two water pools turns Brittle - at
-// which point a melee hit shatters it. Letting them live instead stacks Strength of the Creator on
-// the boss, so the dragging is the damage race.
+// The fight is about Iron Constructs. Ignis activates them, a construct parked in Scorched Ground
+// stacks Heat until it turns Molten, and a Molten construct dragged within 18 yd of one of the
+// room's two water pools turns Brittle. One big hit then shatters it, which is a ranged job since
+// the blast covers melee range. Every construct left alive stacks Strength of the Creator on the
+// boss, so the dragging is the damage race.
 //
-// Scorched Ground burns where Flame Jets landed and does not despawn, so the tank walks a fixed arc
-// rather than standing still, and Slag Pot picks one player to cook for ten seconds.
+// Scorch drops its patch 20 yd along the boss's facing and the patch burns for 30 s, so the main
+// tank walks a fixed arc to fan them out. Flame Jets hits the whole raid and locks casting, and Slag
+// Pot picks one player to cook for ten seconds.
 
 enum UlduarIgnisIds
 {
@@ -110,8 +113,13 @@ extern const Position ULDUAR_IGNIS_WATER_POOL_EAST;
 // wider than SightDistance, so the cached "nearest npcs" list goes blind at the water pools.
 Unit* GetIgnis(PlayerbotAI* botAI);
 
+// GetIgnis, but null unless `wanted` holds for him. Same answer as testing GetIgnis's result, only
+// the grid search is skipped whenever he fails the test, which is most of the time.
+Unit* GetIgnisIf(PlayerbotAI* botAI, bool (*wanted)(Creature const*));
+
 // Alive and actually fighting. Every Ignis node hangs off this: the room is 200 yd wide and the boss
 // is visible from the whole of it, so proximity alone has bots dodging and kiting on the way in.
+Unit* GetEngagedIgnis(PlayerbotAI* botAI);
 bool IsIgnisEngaged(PlayerbotAI* botAI);
 
 // Activated = Ignis has cast Activate Construct on it: selectable, aggressive, and worth tanking.
@@ -157,14 +165,15 @@ Position const& GetIgnisAssignedWaterPool(int8 tankIndex);
 
 // Where the main tank stands: an arc slot around the room-centre anchor, advanced one step on each
 // Scorch. Ignis is rooted for those 3 s, so the move costs nothing and does not disturb the patch.
-Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot);
+// `boss` is the caller's GetIgnis result, passed in so it is not looked up twice.
+Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot, Unit* boss);
 
 // The 3 s window in which Ignis is rooted and rotation-locked. The patch lands when it ends.
-bool IsIgnisScorchWindow(Unit* boss);
+bool IsIgnisScorchWindow(Unit const* boss);
 
 // Flame Jets is a 2.7 s observable cast, unlike most of what this raid throws, so bots can see it
 // coming and stop feeding casts into the knockback lockout that follows.
-bool IsIgnisFlameJetsCasting(Unit* boss);
+bool IsIgnisFlameJetsCasting(Unit const* boss);
 
 Player* GetIgnisSlagPotVictim(PlayerbotAI* botAI);
 bool IsIgnisSlagPotVictim(Player* bot);

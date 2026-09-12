@@ -6,22 +6,27 @@
 
 #include "UldEncounter_Ignis.h"
 
+#include "CellImpl.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "InstanceScript.h"
 #include "Map.h"
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "UldEncounterGate.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
 #include <cmath>
 #include <functional>
-#include <list>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 using namespace EncounterHelpers;
 
@@ -34,18 +39,70 @@ const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.8
 // Construct each assist tank has committed to, so one Ignis activates nearer to him mid-walk cannot
 // steal the kite. Cleared once that construct turns Brittle or dies. Keyed by instance first: the
 // same tank GUID comes back on a re-pull and in a second raid running the fight concurrently.
+//
+// Locked for the same reason as the arc state below: two raids on Ignis at once reach this from two
+// map threads. Only the outer lookup needs it, since an instance's own map is only ever touched by
+// the thread updating that instance, and references into an unordered_map survive a rehash.
+static std::mutex ignisTankDrivenConstructGuidMutex;
 static std::unordered_map<uint32, std::unordered_map<ObjectGuid, ObjectGuid>> ignisTankDrivenConstructGuid;
+
+static std::unordered_map<ObjectGuid, ObjectGuid>& IgnisDrivenConstructsFor(Player* tank)
+{
+    std::lock_guard<std::mutex> guard(ignisTankDrivenConstructGuidMutex);
+    return ignisTankDrivenConstructGuid[tank->GetInstanceId()];
+}
+
+// The test FindNearestCreature puts each candidate through: the searcher's phase filter from the
+// creature's side, then NearestCreatureEntryWithLiveStateInObjectRangeCheck from the bot's.
+static bool IgnisPassesSearchCheck(Player* bot, Creature const* ignis)
+{
+    return ignis->InSamePhase(bot->GetPhaseMask()) && ignis->GetEntry() == NPC_IGNIS && ignis->IsAlive() &&
+           bot->IsWithinDist(ignis, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS) && bot->InSamePhase(ignis);
+}
+
+Unit* GetIgnisIf(PlayerbotAI* botAI, bool (*wanted)(Creature const*))
+{
+    Player* bot = botAI->GetBot();
+
+    InstanceScript* instance = bot->GetInstanceScript();
+    if (!instance)
+    {
+        Creature* ignis = bot->FindNearestCreature(NPC_IGNIS, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS, true);
+        return ignis && wanted(ignis) ? ignis : nullptr;
+    }
+
+    // Ignis is a single spawn that nothing summons, and the instance script tracks him from create to
+    // remove, so the grid search can only ever return him or nothing. Whatever he fails here the
+    // search result would fail too. The search still runs once he passes, because only it knows which
+    // cells its octagon actually covers.
+    Creature* tracked = instance->GetCreature(ULD_BOSS_IGNIS);
+    if (!tracked || !wanted(tracked) || !IgnisPassesSearchCheck(bot, tracked))
+        return nullptr;
+
+    return bot->FindNearestCreature(NPC_IGNIS, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS, true);
+}
 
 Unit* GetIgnis(PlayerbotAI* botAI)
 {
-    return botAI->GetBot()->FindNearestCreature(NPC_IGNIS, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS, true);
+    return GetIgnisIf(botAI, [](Creature const*) { return true; });
 }
 
-bool IsIgnisEngaged(PlayerbotAI* botAI)
+Unit* GetEngagedIgnis(PlayerbotAI* botAI)
 {
-    Unit* boss = GetIgnis(botAI);
+    return GetIgnisIf(botAI, [](Creature const* ignis) { return ignis->IsInCombat(); });
+}
 
-    return boss && boss->IsAlive() && boss->IsInCombat();
+bool IsIgnisEngaged(PlayerbotAI* botAI) { return GetEngagedIgnis(botAI) != nullptr; }
+
+// GetCreatureListWithEntryInGrid's own body, filling a vector instead of a list: one allocation per
+// scan rather than one per match, and the same visit order, so ties still break the same way.
+static void CollectIgnisRoomCreatures(WorldObject const* from, uint32 entry, std::vector<Creature*>& out)
+{
+    out.reserve(32);
+
+    Acore::AllCreaturesOfEntryInRange check(from, entry, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
+    Acore::CreatureListSearcher<Acore::AllCreaturesOfEntryInRange> searcher(from, out, check);
+    Cell::VisitObjects(from, searcher, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
 }
 
 bool IsIgnisConstructActivated(Unit const* construct)
@@ -76,8 +133,8 @@ static Unit* GetNearestIgnisConstructMatching(WorldObject const* from,
     if (!from)
         return nullptr;
 
-    std::list<Creature*> constructs;
-    from->GetCreatureListWithEntryInGrid(constructs, NPC_IGNIS_IRON_CONSTRUCT, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
+    std::vector<Creature*> constructs;
+    CollectIgnisRoomCreatures(from, NPC_IGNIS_IRON_CONSTRUCT, constructs);
 
     Unit* best = nullptr;
     float bestDistance = ULDUAR_IGNIS_ROOM_SEARCH_RADIUS;
@@ -100,9 +157,8 @@ static Unit* GetNearestIgnisConstructMatching(WorldObject const* from,
 
 Unit* GetIgnisBrittleConstruct(PlayerbotAI* botAI)
 {
-    std::list<Creature*> constructs;
-    botAI->GetBot()->GetCreatureListWithEntryInGrid(constructs, NPC_IGNIS_IRON_CONSTRUCT,
-                                                    ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
+    std::vector<Creature*> constructs;
+    CollectIgnisRoomCreatures(botAI->GetBot(), NPC_IGNIS_IRON_CONSTRUCT, constructs);
 
     // Lowest GUID rather than nearest. Two constructs can be Brittle at once, and a raid split
     // between them wastes the 15 s window on both - GUID order is the same everywhere, so every bot
@@ -130,7 +186,7 @@ Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank)
     if (!tank)
         return nullptr;
 
-    auto& driven = ignisTankDrivenConstructGuid[tank->GetInstanceId()];
+    auto& driven = IgnisDrivenConstructsFor(tank);
 
     ObjectGuid const tankGuid = tank->GetGUID();
     auto const held = driven.find(tankGuid);
@@ -173,8 +229,8 @@ Unit* GetIgnisNearestScorchedGround(PlayerbotAI* /*botAI*/, WorldObject const* f
     if (!from)
         return nullptr;
 
-    std::list<Creature*> patches;
-    from->GetCreatureListWithEntryInGrid(patches, NPC_IGNIS_SCORCHED_GROUND, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
+    std::vector<Creature*> patches;
+    CollectIgnisRoomCreatures(from, NPC_IGNIS_SCORCHED_GROUND, patches);
 
     Unit* best = nullptr;
     float bestDistance = ULDUAR_IGNIS_ROOM_SEARCH_RADIUS;
@@ -217,8 +273,8 @@ Unit* GetIgnisAssignedScorchedGround(PlayerbotAI* /*botAI*/, WorldObject const* 
     if (!from)
         return nullptr;
 
-    std::list<Creature*> patches;
-    from->GetCreatureListWithEntryInGrid(patches, NPC_IGNIS_SCORCHED_GROUND, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS);
+    std::vector<Creature*> patches;
+    CollectIgnisRoomCreatures(from, NPC_IGNIS_SCORCHED_GROUND, patches);
 
     Position const& assigned = GetIgnisAssignedWaterPool(tankIndex);
 
@@ -249,6 +305,11 @@ Unit* GetIgnisAssignedScorchedGround(PlayerbotAI* /*botAI*/, WorldObject const* 
 
 int8 GetIgnisConstructTankIndex(PlayerbotAI* botAI, Player* bot)
 {
+    // GetGroupAssistTank only ever hands back a member that passes IsTank, so a non-tank can skip its
+    // group walk, and with it an IsTank talent scan of every human in the raid.
+    if (!botAI->IsTank(bot))
+        return -1;
+
     if (GetGroupAssistTank(bot, 0) == bot)
         return 0;
 
@@ -285,7 +346,7 @@ static IgnisTankArcState& IgnisTankArcStateFor(Player* bot)
     return _ignisTankArcStates[bot->GetInstanceId()];
 }
 
-Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot)
+Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {
     IgnisTankArcState& state = IgnisTankArcStateFor(bot);
 
@@ -295,7 +356,7 @@ Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot)
     // lands. Only the main tank may consume the edge - anyone else asking would eat the transition.
     if (botAI->IsMainTank(bot))
     {
-        bool const scorchUp = IsIgnisScorchWindow(GetIgnis(botAI));
+        bool const scorchUp = IsIgnisScorchWindow(boss);
         if (scorchUp && !state.scorchUp)
             state.slot = (state.slot + 1) % ULDUAR_IGNIS_TANK_ARC_SLOTS;
 
@@ -319,12 +380,12 @@ Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot)
 }
 
 // Both ids: spelldifficulty_dbc remaps these on 25-man, so the 10-man id alone never matches.
-bool IsIgnisScorchWindow(Unit* boss)
+bool IsIgnisScorchWindow(Unit const* boss)
 {
     return boss && (boss->HasAura(SPELL_IGNIS_SCORCH) || boss->HasAura(SPELL_IGNIS_SCORCH_25));
 }
 
-bool IsIgnisFlameJetsCasting(Unit* boss)
+bool IsIgnisFlameJetsCasting(Unit const* boss)
 {
     if (!boss || !boss->HasUnitState(UNIT_STATE_CASTING))
         return false;

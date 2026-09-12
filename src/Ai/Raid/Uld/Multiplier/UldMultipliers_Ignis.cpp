@@ -9,6 +9,7 @@
 #include "AttackAction.h"
 #include "BurstCooldowns.h"
 #include "ChooseTargetActions.h"
+#include "Creature.h"
 #include "EncounterHelpers.h"
 #include "FollowActions.h"
 #include "GenericSpellActions.h"
@@ -46,13 +47,16 @@ float IgnisMultiplier::GetValue(Action* action)
 
     // Slag Pot is a vehicle ride: the victim is held in place for the full duration, so movement
     // orders only fight the ride and leave the bot facing the wrong way when it drops.
-    bool const slagPotRide = IsIgnisSlagPotVictim(bot) && dynamic_cast<MovementAction*>(action);
+    bool const slagPotRide = dynamic_cast<MovementAction*>(action) && IsIgnisSlagPotVictim(bot);
 
     // The construct tanks are deliberately parked on a Scorched Ground patch - that is what stacks
     // Heat on the construct - so the generic dodge would undo the kite every tick. The main tank is
     // exempt for the opposite reason: his arc rotation already steps him clear of every patch he
     // drops, and a dodge on top of it would drag Ignis across the room.
-    bool const parkedTank = action->getName() == "ignis scorched ground action" &&
+    //
+    // Matched by type, not getName(): that returns a copy of the name, and this runs on every action
+    // of every bot for the whole instance.
+    bool const parkedTank = dynamic_cast<IgnisScorchedGroundAction*>(action) &&
                             (GetIgnisConstructTankIndex(botAI, bot) >= 0 || botAI->IsMainTank(bot));
 
     // GetIgnis walks the grid, and this runs against every action of every bot on the tick, so it is
@@ -68,16 +72,18 @@ float IgnisTankMovementMultiplier::GetValue(Action* action)
     if (!action || bot->GetMapId() != ULDUAR_MAP_ID)
         return 1.0f;
 
-    // Only the three roles the encounter places. Everyone else keeps every generic mover, which is
-    // also what keeps the ranged half spread and in range without an anchor of their own.
-    if (!botAI->IsMainTank(bot) && GetIgnisConstructTankIndex(botAI, bot) < 0)
-        return 1.0f;
-
+    // Type first: it rules out almost every action for free, while the role check below walks the
+    // group, and this runs on every action of every bot for the whole instance.
     if (!dynamic_cast<ReachTargetAction*>(action) && !dynamic_cast<CastReachTargetSpellAction*>(action) &&
         !dynamic_cast<FollowAction*>(action) && !dynamic_cast<FleeAction*>(action))
     {
         return 1.0f;
     }
+
+    // Only the three roles the encounter places. Everyone else keeps every generic mover, which is
+    // also what keeps the ranged half spread and in range without an anchor of their own.
+    if (!botAI->IsMainTank(bot) && GetIgnisConstructTankIndex(botAI, bot) < 0)
+        return 1.0f;
 
     return IsIgnisEngaged(botAI) ? 0.0f : 1.0f;
 }
@@ -100,11 +106,6 @@ float IgnisFlameJetsHoldCastMultiplier::GetValue(Action* action)
 {
     CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
     if (!spellAction || dynamic_cast<CastMeleeSpellAction*>(action) || bot->GetMapId() != ULDUAR_MAP_ID)
-        return 1.0f;
-
-    // The encounter's own hold action is what stops a cast already in flight; this only decides what
-    // is allowed to start.
-    if (action->getName() == "ignis flame jets hold cast action")
         return 1.0f;
 
     uint32 const now = getMSTime();
@@ -133,8 +134,8 @@ float IgnisFlameJetsHoldCastMultiplier::GetValue(Action* action)
 
 int32 IgnisFlameJetsHoldCastMultiplier::EvaluateWindow()
 {
-    Unit* boss = GetIgnis(botAI);
-    if (!IsIgnisFlameJetsCasting(boss))
+    Unit* boss = GetIgnisIf(botAI, [](Creature const* ignis) { return IsIgnisFlameJetsCasting(ignis); });
+    if (!boss)
         return 0;
 
     Spell* jets = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
