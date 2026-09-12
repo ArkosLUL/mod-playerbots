@@ -13,10 +13,12 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "Group.h"
+#include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "Timer.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
@@ -56,6 +58,46 @@ std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
 
     return targets;
 }
+
+// Auriaya and the room's pool list, once per bot per tick instead of once per node. Both are grid
+// sweeps - hers walks every hostile in sight through IsPossibleTarget - and each of her nodes takes
+// them twice on the tick it fires: the trigger takes them, then the action it gates takes them again.
+// Keyed on the bot and getMSTime(), the way the encounter gate is: a bot never ticks twice in one ms,
+// and two bots sharing a map thread inside that ms are told apart by the botAI. Per thread, because a
+// bot's tick runs on one thread start to finish.
+//
+// She is held as a guid and re-resolved, so a boss that dies mid-tick answers null rather than
+// dangling. The pools are held as pointers: everything reading them only measures distance, and
+// ground a pool covered at the top of the tick is still ground to stay off at the bottom of it.
+struct AuriayaRoomScan
+{
+    PlayerbotAI* botAI = nullptr;
+    uint32 atMs = 0;
+    ObjectGuid boss;
+    std::vector<Unit*> pools;
+};
+
+thread_local AuriayaRoomScan auriayaRoomScan;
+
+AuriayaRoomScan const& RefreshedAuriayaRoomScan(PlayerbotAI* botAI)
+{
+    uint32 const now = getMSTime();
+    if (auriayaRoomScan.botAI == botAI && auriayaRoomScan.atMs == now)
+        return auriayaRoomScan;
+
+    auriayaRoomScan = AuriayaRoomScan();
+    auriayaRoomScan.botAI = botAI;
+    auriayaRoomScan.atMs = now;
+
+    std::vector<Unit*> const found = CollectPossibleTargetsByEntry(botAI->GetBot(), NPC_AURIAYA);
+    if (found.empty())
+        return auriayaRoomScan;
+
+    auriayaRoomScan.boss = found.front()->GetGUID();
+    auriayaRoomScan.pools = CollectAuriayaEssencePools(found.front(), ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
+
+    return auriayaRoomScan;
+}
 }  // namespace
 
 // Auriaya's lane. She spawns at (1956.2, 49.32, 411.36) facing (-0.955, 0.296), which points down
@@ -75,8 +117,19 @@ bool AuriayaFearWindowActive(PlayerbotAI* botAI) { return AuriayaEncounterActive
 
 Unit* GetAuriaya(PlayerbotAI* botAI)
 {
-    std::vector<Unit*> const found = CollectPossibleTargetsByEntry(botAI->GetBot(), NPC_AURIAYA);
-    return found.empty() ? nullptr : found.front();
+    ObjectGuid const& guid = RefreshedAuriayaRoomScan(botAI).boss;
+    if (!guid)
+        return nullptr;
+
+    // Alive, because the sweep this replaced went through IsPossibleTarget and so never handed back a
+    // corpse. She can die inside the tick the scan was taken on.
+    Unit* boss = botAI->GetUnit(guid);
+    return boss && boss->IsAlive() ? boss : nullptr;
+}
+
+std::vector<Unit*> const& GetAuriayaRoomPools(PlayerbotAI* botAI)
+{
+    return RefreshedAuriayaRoomScan(botAI).pools;
 }
 
 bool AuriayaEncounterActive(PlayerbotAI* botAI) { return GetAuriaya(botAI) != nullptr; }
@@ -157,7 +210,7 @@ int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools)
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     Unit* boss = GetAuriaya(botAI);
-    return boss && GetAuriayaAnchor(botAI, bot, boss, nullptr, out, tolerance);
+    return boss && GetAuriayaAnchor(botAI, bot, boss, &GetAuriayaRoomPools(botAI), out, tolerance);
 }
 
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<Unit*> const* roomPools,
@@ -169,8 +222,7 @@ bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<U
     if (botAI->IsMainTank(bot))
     {
         int const station =
-            roomPools ? GetAuriayaStationIndex(*roomPools)
-                      : GetAuriayaStationIndex(CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS));
+            GetAuriayaStationIndex(roomPools ? *roomPools : GetAuriayaRoomPools(botAI));
 
         out = ULDUAR_AURIAYA_MAINTANK_SPOTS[station];
         tolerance = ULDUAR_AURIAYA_MAINTANK_SPOT_TOLERANCE;

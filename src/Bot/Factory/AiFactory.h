@@ -28,12 +28,14 @@ public:
     static void AddDefaultDeadStrategies(Player* player, PlayerbotAI* const facade, Engine* deadEngine);
     static void AddDefaultCombatStrategies(Player* player, PlayerbotAI* const facade, Engine* engine);
 
-    // Cached per player. The talent hooks in Playerbots.cpp bracket every change to the talent map
-    // with the two calls below. The active spec and level are checked on every read instead.
+    // Cached per player. The talent hooks in Playerbots.cpp invalidate on both sides of every change
+    // to the talent map; the active spec and level are checked on every read instead. Invalidate is
+    // safe to call any number of times and in any order - nothing pairs up calls. Forget drops the
+    // player's row for good, so the cache does not grow a bucket per guid the realm has ever seen.
     static uint8 GetPlayerSpecTab(Player* player);
     static std::map<uint8, uint32> GetPlayerSpecTabs(Player* player);
-    static void BeginPlayerTalentChange(Player* player);
-    static void EndPlayerTalentChange(Player* player);
+    static void InvalidatePlayerSpecTab(Player* player);
+    static void ForgetPlayerSpecTab(Player* player);
     static BotRoles GetPlayerRoles(Player* player);
     static std::string GetPlayerSpecName(Player* player);
 };

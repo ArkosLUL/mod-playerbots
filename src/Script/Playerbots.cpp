@@ -85,25 +85,29 @@ public:
         PLAYERHOOK_ON_FREE_TALENT_POINTS_CHANGED
     }) {}
 
-    // These four bracket every change to a player's talent map, which is what keeps the spec tab
-    // AiFactory caches exact. CanLearnTalent and TalentsReset fire before the change, the other two
-    // after it.
+    // These four sit on both sides of every change to a player's talent map, which is what keeps the
+    // spec tab AiFactory caches exact. CanLearnTalent and TalentsReset fire before the change, the
+    // other two after it - and the core reaches the first pair on paths that never get as far as the
+    // second, so each one has to stand on its own.
     bool OnPlayerCanLearnTalent(Player* player, TalentEntry const* /*talent*/, uint32 /*rank*/) override
     {
-        AiFactory::BeginPlayerTalentChange(player);
+        AiFactory::InvalidatePlayerSpecTab(player);
         return true;
     }
 
-    void OnPlayerTalentsReset(Player* player, bool /*noCost*/) override { AiFactory::BeginPlayerTalentChange(player); }
+    void OnPlayerTalentsReset(Player* player, bool /*noCost*/) override
+    {
+        AiFactory::InvalidatePlayerSpecTab(player);
+    }
 
     void OnPlayerLearnTalents(Player* player, uint32 /*talentId*/, uint32 /*talentRank*/, uint32 /*spellid*/) override
     {
-        AiFactory::EndPlayerTalentChange(player);
+        AiFactory::InvalidatePlayerSpecTab(player);
     }
 
     void OnPlayerFreeTalentPointsChanged(Player* player, uint32 /*points*/) override
     {
-        AiFactory::EndPlayerTalentChange(player);
+        AiFactory::InvalidatePlayerSpecTab(player);
     }
 
     void OnPlayerLogin(Player* player) override
@@ -328,7 +332,7 @@ public:
     void OnDestructPlayer(Player* player) override
     {
         // So the next session under this guid starts from a fresh spec tab, whatever changed offline.
-        AiFactory::EndPlayerTalentChange(player);
+        AiFactory::ForgetPlayerSpecTab(player);
 
         PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
 

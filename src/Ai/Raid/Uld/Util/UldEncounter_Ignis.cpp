@@ -72,14 +72,14 @@ Unit* GetIgnisIf(PlayerbotAI* botAI, bool (*wanted)(Creature const*))
     }
 
     // Ignis is a single spawn that nothing summons, and the instance script tracks him from create to
-    // remove, so the grid search can only ever return him or nothing. Whatever he fails here the
-    // search result would fail too. The search still runs once he passes, because only it knows which
-    // cells its octagon actually covers.
+    // remove, so the grid search can only ever return him or nothing - and IgnisPassesSearchCheck is
+    // every test that search would put him through. Sweeping the room afterwards would only re-derive
+    // the answer already in hand, on exactly the ticks the fight can least afford it.
     Creature* tracked = instance->GetCreature(ULD_BOSS_IGNIS);
     if (!tracked || !wanted(tracked) || !IgnisPassesSearchCheck(bot, tracked))
         return nullptr;
 
-    return bot->FindNearestCreature(NPC_IGNIS, ULDUAR_IGNIS_ROOM_SEARCH_RADIUS, true);
+    return tracked;
 }
 
 Unit* GetIgnis(PlayerbotAI* botAI)

@@ -110,6 +110,11 @@ Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
 // tick on the dodge path.
 std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius);
 
+// Every pool in the room, taken off the boss once per bot per tick and shared by everything that
+// needs the whole floor rather than the bot's own feet. Empty while she is not in sight. The
+// reference is good for the tick that asked for it and no longer - copy it to keep it.
+std::vector<Unit*> const& GetAuriayaRoomPools(PlayerbotAI* botAI);
+
 // Which station the fight is standing on: the one with the fewest pools near either of its two spots,
 // ties to the lowest index. roomPools is CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS).
 // Only the main tank reads this. Everyone else picks up the move through the boss, so no two bots can
@@ -123,7 +128,7 @@ int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools);
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
 
 // Same, for a caller that already holds the boss. roomPools is optional and only the main tank reads
-// it; pass CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS) if it's already in hand.
+// it; null falls back to GetAuriayaRoomPools, so passing it saves nothing but a freshness check.
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<Unit*> const* roomPools,
                       Position& out, float& tolerance);
 

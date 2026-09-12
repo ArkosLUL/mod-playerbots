@@ -10,6 +10,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "RaidObs.h"
+#include "Timer.h"
 
 namespace
 {
@@ -92,9 +93,16 @@ namespace
     // sweep the engine runs right after the checks closes it. Reading once is exact because boss
     // state only moves on a pull, a wipe or a kill, and nothing in a trigger pass attacks anything.
     // Only Check uses it. IsActive can be called from elsewhere, so it keeps reading live.
+    //
+    // The ms stamp is what makes it safe rather than the Reset sweep. Nothing in Trigger's contract
+    // promises Reset runs: MultiplyAndPush sits between the checks and the resets, and a strategy
+    // swapped there rebuilds the trigger list, so the sweep can iterate a list holding no gated
+    // trigger at all. Stamped, a pass that outlives its Reset expires on its own instead of
+    // answering the next tick's gates from a pull or a kill that has since landed.
     struct GatePass
     {
         PlayerbotAI* botAI = nullptr;
+        uint32 atMs = 0;
         bool readLive = false;  // more encounters than the masks hold
         bool hasInstance = false;
         uint32 encounterCount = 0;
@@ -110,10 +118,12 @@ namespace
         if (!botAI)
             return UldEncounterGateOpen(botAI, bossId);
 
-        if (gatePass.botAI != botAI)
+        uint32 const now = getMSTime();
+        if (gatePass.botAI != botAI || gatePass.atMs != now)
         {
             gatePass = GatePass();
             gatePass.botAI = botAI;
+            gatePass.atMs = now;
 
             Player* bot = botAI->GetBot();
             InstanceScript* instance = bot ? bot->GetInstanceScript() : nullptr;
@@ -222,7 +232,8 @@ std::vector<NextAction> UldGatedTrigger::getHandlers()
 
 void UldGatedTrigger::Reset()
 {
-    // End of the pass, so the next Check reads the boss states afresh.
+    // End of the pass, so the next Check reads the boss states afresh. Belt to the stamp's braces:
+    // this closes the pass on the tick it belongs to, the stamp covers a Reset that never arrives.
     if (gatePass.botAI == botAI)
         gatePass = GatePass();
 

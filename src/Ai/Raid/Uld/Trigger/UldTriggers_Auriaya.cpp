@@ -53,7 +53,7 @@ bool AuriayaRaidPositionTrigger::IsActive()
 
     // Searching off the boss rather than the bot, because the bot is by definition off its anchor
     // here and the pool that fouls it can be out of its own reach.
-    std::vector<Unit*> const roomPools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
+    std::vector<Unit*> const& roomPools = GetAuriayaRoomPools(botAI);
 
     Position anchor;
     float tolerance = 0.0f;

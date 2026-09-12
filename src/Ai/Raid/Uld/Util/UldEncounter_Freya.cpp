@@ -672,9 +672,9 @@ std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveSt
     return low;
 }
 
-Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
+Position GetFreyaLasherCampSpot(PlayerbotAI* botAI)
 {
-    return GetFreyaScan(botAI).LasherCamp(state);
+    return GetFreyaScan(botAI).LasherCamp();
 }
 
 namespace
@@ -876,10 +876,17 @@ GuidVector const& FreyaScan::Stalkers()
     return stalkers;
 }
 
-Position const& FreyaScan::LasherCamp(FreyaWaveState const& state)
+Position const& FreyaScan::LasherCamp()
 {
     if (!FreshThisTick(campAtMs))
+    {
+        // The wave is gathered here, not taken from whoever asked first: the camp is one position per
+        // tick and the centroid it comes from is a function of the lashers, so a caller passing a
+        // narrowed or stale state would be handing its own answer to every other caller that tick.
+        FreyaWaveState state;
+        GatherFreyaWaveState(botAI, state);
         camp = ComputeFreyaLasherCampSpot(botAI, state);
+    }
 
     return camp;
 }

@@ -971,10 +971,7 @@ bool FreyaRangedCampAction::isUseful()
 
 bool FreyaRangedCampAction::Execute(Event /*event*/)
 {
-    FreyaWaveState state;
-    GatherFreyaWaveState(botAI, state);
-
-    Position const camp = GetFreyaLasherCampSpot(botAI, state);
+    Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())
         return false;
 

@@ -90,7 +90,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
 
     // Off the boss and room-wide, so every pool that can foul a candidate is in the list however far
     // the bot has drifted from its anchor. There are at most nine of them.
-    std::vector<Unit*> const pools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
+    std::vector<Unit*> const& pools = GetAuriayaRoomPools(botAI);
     if (pools.empty())
         return false;
 

@@ -182,7 +182,7 @@ bool FreyaRangedCampTrigger::IsActive()
     if (state.detonatingLashers.empty())
         return false;
 
-    Position const camp = GetFreyaLasherCampSpot(botAI, state);
+    Position const camp = GetFreyaLasherCampSpot(botAI);
     if (camp == Position())
         return false;
 

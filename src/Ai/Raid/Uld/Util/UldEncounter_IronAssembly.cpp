@@ -299,6 +299,27 @@ void EnsureIronAssemblySpreadSlot(PlayerbotAI* botAI, Player* bot)
     state.spreadSlots[bot->GetGUID()] = ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS;
 }
 
+// Inside the hall: two float compares against a fixed point, which is what keeps every bot elsewhere
+// in Ulduar off the sweeps behind the formation test.
+bool IronAssemblyBotInHall(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    if (bot->GetExactDist2d(&ULDUAR_IRON_ASSEMBLY_ANCHOR) > ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS)
+        return false;
+
+    return std::fabs(bot->GetPositionZ() - ULDUAR_IRON_ASSEMBLY_ANCHOR.GetPositionZ()) <=
+           ULDUAR_IRON_ASSEMBLY_ARENA_HEIGHT;
+}
+
+bool IronAssemblyTargetsEngaged(IronAssemblyTargets const& targets)
+{
+    return (targets.steelbreaker && targets.steelbreaker->IsInCombat()) ||
+           (targets.molgeim && targets.molgeim->IsInCombat()) ||
+           (targets.brundir && targets.brundir->IsInCombat());
+}
+
 }  // namespace
 
 uint8 IronAssemblyTargets::AliveCount() const
@@ -355,12 +376,20 @@ Unit* IronAssemblyScan::Resolve(ObjectGuid const& guid) const
 
 void IronAssemblyScan::Members(IronAssemblyTargets& targets)
 {
-    if (!FreshThisTick(membersAtMs))
+    bool const refreshed = !FreshThisTick(membersAtMs);
+    if (refreshed)
         RefreshMembers();
 
     targets.steelbreaker = Resolve(steelbreaker);
     targets.molgeim = Resolve(molgeim);
     targets.brundir = Resolve(brundir);
+
+    // Driven off the scan's own once-a-tick refresh rather than off a predicate, so it does not
+    // matter which node asks for the council first or whether that node's cheap gates let it through.
+    // Every lookup in the hall lands here, which is the population the probes want, and the fold
+    // paces itself per instance from there.
+    if (refreshed && IronAssemblyBotInHall(botAI->GetBot()) && IronAssemblyTargetsEngaged(targets))
+        TickIronAssemblyObs(botAI->GetBot(), targets);
 }
 
 Unit* IronAssemblyScan::Member(uint32 entry)
@@ -421,31 +450,13 @@ bool IronAssemblyFormationActive(PlayerbotAI* botAI)
 
     // Room test first: it is two float compares against a fixed point, and it keeps every bot outside
     // the hall off the grid sweep the target gather costs.
-    Player* bot = botAI->GetBot();
-    if (!bot)
-        return false;
-
-    if (bot->GetExactDist2d(&ULDUAR_IRON_ASSEMBLY_ANCHOR) > ULDUAR_IRON_ASSEMBLY_ARENA_RADIUS)
-        return false;
-
-    if (std::fabs(bot->GetPositionZ() - ULDUAR_IRON_ASSEMBLY_ANCHOR.GetPositionZ()) >
-        ULDUAR_IRON_ASSEMBLY_ARENA_HEIGHT)
+    if (!IronAssemblyBotInHall(botAI->GetBot()))
         return false;
 
     IronAssemblyTargets targets;
     GatherIronAssemblyTargets(botAI, targets);
 
-    bool const engaged = (targets.steelbreaker && targets.steelbreaker->IsInCombat()) ||
-                         (targets.molgeim && targets.molgeim->IsInCombat()) ||
-                         (targets.brundir && targets.brundir->IsInCombat());
-
-    // Driven from the gate rather than a tick of its own, the way Algalon drives his: this already
-    // runs every tick for every bot in the hall and for nobody outside it, which is the population
-    // the probes want.
-    if (engaged)
-        TickIronAssemblyObs(bot, targets);
-
-    return engaged;
+    return IronAssemblyTargetsEngaged(targets);
 }
 
 bool IronAssemblyBrundirIsLast(PlayerbotAI* botAI)

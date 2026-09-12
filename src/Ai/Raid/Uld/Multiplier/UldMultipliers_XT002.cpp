@@ -84,8 +84,22 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     // This runs on every action every bot pops anywhere in Ulduar, and finding XT is a scan. So sort
     // the action first, and only look XT up for the kinds that can come out as anything but 1.0.
     bool const movement = dynamic_cast<MovementAction*>(action) != nullptr;
-    bool const carryingDebuff =
-        bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot));
+
+    // Two aura-map walks that only the immunity and the mover branches below ever read, so they sit
+    // behind the dynamic_casts that gate those - a cast, a buff or a heal never pays for them.
+    bool carryingKnown = false;
+    bool carrying = false;
+    auto const carryingDebuff = [&]() -> bool
+    {
+        if (!carryingKnown)
+        {
+            carrying =
+                bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot));
+            carryingKnown = true;
+        }
+
+        return carrying;
+    };
 
     // The class-generic redirects buff whoever the group flags as main tank, which is the wrong
     // sink while a Pummeller is out; xt002 redirect threat action picks the tank that needs it.
@@ -104,8 +118,9 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     // puddle instantly, wherever the carrier is standing, which is the middle of the raid at the
     // point where a bot is at critical health. Eating the hit is the cheaper trade. Hand of
     // Protection is physical-only and does not strip either debuff, so it is left alone.
-    bool const purgingImmunity = carryingDebuff && (dynamic_cast<CastDivineShieldAction*>(action) ||
-                                                    dynamic_cast<CastIceBlockAction*>(action));
+    bool const purgingImmunity = (dynamic_cast<CastDivineShieldAction*>(action) ||
+                                  dynamic_cast<CastIceBlockAction*>(action)) &&
+                                 carryingDebuff();
 
     // xt002 set dps priority action owns every bot's target, so both generic pickers stand down
     // rather than pulling bots back onto whatever is nearest. The tank one matters most: it ranks
@@ -130,7 +145,7 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     // only zeroes the encounter's own targeting and leaves the bot standing with nothing to shoot.
     bool pinnedMover = false;
     if (movement && !dynamic_cast<AttackAction*>(action) &&
-        (carryingDebuff || botAI->IsRangedDps(bot) || botAI->IsHeal(bot)))
+        (botAI->IsRangedDps(bot) || botAI->IsHeal(bot) || carryingDebuff()))
     {
         static std::set<std::string> const encounterMovers = {
             "xt002 raid position action", "xt002 debuff carrier action", "xt002 avoid hazard action"};

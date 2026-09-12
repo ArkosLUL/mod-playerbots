@@ -42,10 +42,12 @@ constexpr uint32 SPELL_DRUID_THICK_HIDE = 16931;
 // ask for every group member, so it adds up fast.
 //
 // The talent map only changes inside Player::LearnTalent, Player::resetTalents and the login load.
-// The hooks bracket the first two: CanLearnTalent / TalentsReset fire before the change and mark the
-// entry `changing`, so any read in the middle computes fresh and stores nothing. LearnTalents /
-// FreeTalentPointsChanged fire after it and drop the entry. Login is covered by not caching until
-// the player is in world. Spec and level are compared on every read rather than trusted to a hook.
+// All four talent hooks just drop the entry and bump the generation, so a tab computed across a
+// change is never stored whichever side of it the hooks fired on. Nothing depends on them pairing
+// up, and they must not: resetTalents fires its hook as its first statement and then returns early
+// with no talents spent or no money, and LearnTalent does the same on a bad rank, so the pre-change
+// hook regularly fires with no post-change one behind it. Login is covered by not caching until the
+// player is in world. Spec and level are compared on every read rather than trusted to a hook.
 struct SpecTabEntry
 {
     uint32 generation = 0;  // bumped by every hook, so a result computed across one is never stored
@@ -53,11 +55,8 @@ struct SpecTabEntry
     uint8 level = 0;
     uint8 activeSpecMask = 0;
     bool valid = false;
-    bool changing = false;
 };
 
-// Entries are invalidated, never erased: an erase would let a read still computing on another
-// thread recreate a fresh entry and store into it.
 std::mutex specTabCacheMutex;
 std::unordered_map<ObjectGuid, SpecTabEntry> specTabCache;
 
@@ -147,21 +146,23 @@ uint8 AiFactory::GetPlayerSpecTab(Player* player)
     uint8 const activeSpecMask = player->GetActiveSpecMask();
 
     uint32 generation = 0;
-    bool changing = false;
     {
+        // find, not operator[]: a miss must not insert, or every read takes the write path and can
+        // rehash the map under the lock every other thread reads it through.
         std::lock_guard<std::mutex> guard(specTabCacheMutex);
-        SpecTabEntry const& entry = specTabCache[guid];
-        if (entry.valid && !entry.changing && entry.level == level && entry.activeSpecMask == activeSpecMask)
-            return entry.tab;
+        auto const it = specTabCache.find(guid);
+        if (it != specTabCache.end())
+        {
+            SpecTabEntry const& entry = it->second;
+            if (entry.valid && entry.level == level && entry.activeSpecMask == activeSpecMask)
+                return entry.tab;
 
-        generation = entry.generation;
-        changing = entry.changing;
+            generation = entry.generation;
+        }
     }
 
     // Computed outside the lock: it walks the talent map, and other map threads read this cache.
     uint8 const tab = ComputePlayerSpecTab(player);
-    if (changing)
-        return tab;
 
     std::lock_guard<std::mutex> guard(specTabCacheMutex);
     SpecTabEntry& entry = specTabCache[guid];
@@ -176,22 +177,22 @@ uint8 AiFactory::GetPlayerSpecTab(Player* player)
     return tab;
 }
 
-void AiFactory::BeginPlayerTalentChange(Player* player)
+void AiFactory::InvalidatePlayerSpecTab(Player* player)
 {
+    // Creates the entry when it is absent, which is the point: a read already computing for a guid
+    // that had none captured generation 0, and the bump is what stops it storing its stale answer.
     std::lock_guard<std::mutex> guard(specTabCacheMutex);
     SpecTabEntry& entry = specTabCache[player->GetGUID()];
     entry.valid = false;
-    entry.changing = true;
     ++entry.generation;
 }
 
-void AiFactory::EndPlayerTalentChange(Player* player)
+// Only from OnDestructPlayer. Erasing anywhere a read might still be computing would let that read
+// recreate the row and store into it; by destruct there is no bot left to ask.
+void AiFactory::ForgetPlayerSpecTab(Player* player)
 {
     std::lock_guard<std::mutex> guard(specTabCacheMutex);
-    SpecTabEntry& entry = specTabCache[player->GetGUID()];
-    entry.valid = false;
-    entry.changing = false;
-    ++entry.generation;
+    specTabCache.erase(player->GetGUID());
 }
 
 std::map<uint8, uint32> AiFactory::GetPlayerSpecTabs(Player* bot)

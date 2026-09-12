@@ -322,8 +322,9 @@ public:
     // the spore pick wants two of them in the same tick the hazard sweep wants the third.
     GuidVector const& Stalkers();
 
-    // Where the back line gathers. The trigger, isUseful and Execute all ask for it in one tick.
-    Position const& LasherCamp(FreyaWaveState const& state);
+    // Where the back line gathers. The trigger, isUseful and Execute all ask for it in one tick, so
+    // it gathers the wave itself rather than trusting every caller to hand in the same one.
+    Position const& LasherCamp();
 
 private:
     PlayerbotAI* botAI;
@@ -444,7 +445,10 @@ uint32 GetFreyaRangedDpsRank(PlayerbotAI* botAI);
 // With none of them low it is the anchor itself, which still gathers the back line into one ball for
 // the AoE without asking it to outrun a healthy pack. GetFreyaRangedCampAnchor is also the fallback
 // when no bearing clears collision - a live bot is always on the mesh, which a computed point is not.
-Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state);
+//
+// Takes no wave state on purpose: the answer is cached for the tick, so a state handed in by the
+// first caller would silently become the camp every later caller gets.
+Position GetFreyaLasherCampSpot(PlayerbotAI* botAI);
 
 // Living detonating lashers under maxPct within radius of the bot. The health filter is the point:
 // clearing every lasher would push melee out of the fight, clearing only the ones about to blow costs
