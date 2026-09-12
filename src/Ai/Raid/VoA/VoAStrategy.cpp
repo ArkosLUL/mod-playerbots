@@ -7,6 +7,7 @@
 #include "VoAStrategy.h"
 #include "VoAMultipliers.h"
 #include "Action.h"
+#include "BossResistanceMultipliers.h"
 #include "Strategy.h"
 #include "Trigger.h"
 #include "vector"
@@ -122,6 +123,11 @@ void RaidVoAStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     //
     multipliers.push_back(new EmalonLightningNovaMultiplier(botAI));
     multipliers.push_back(new EmalonPositioningMultiplier(botAI));
+
+    // Same boss names the nature resistance actions use, so the multiplier and the trigger resolve the
+    // same creature.
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "emalon the storm watcher"));
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "archavon the stone watcher"));
 
     //
     // Koralon the Flame Watcher

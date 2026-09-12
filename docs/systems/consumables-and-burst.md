@@ -135,6 +135,14 @@ WotLK allows one combat potion per fight, so a DPS that pops an offensive potion
 healing potion that fight. Accepted for a DPS role. Role is read at stock time and at use time via
 `IsDps`; a spec change reconciles on the next restock.
 
+**Hunters are carved out of mana potions** for exactly that reason: they carry in-combat mana on Aspect
+of the Viper, so the one potion stays free for Potion of Speed. Three places gate it at level 5, which
+is where the first mana potion exists (Minor Mana Potion) and so covers every hunter that could hold one
+— `UseManaPotion::isUseful`, the `SPELL_EFFECT_ENERGIZE` arm of `InitPotions()`, and
+`ItemUsageValue::Calculate`, which would otherwise keep buying them back. Aspect of the Viper is not
+learned until 20, so levels 5-19 have neither and rely on drinking between pulls; accepted, that content
+does not tax a mana bar. Drinking itself is untouched.
+
 ## Engineering tinkers
 
 Two gaps had to close together, and the ordering matters — this is why USE_SPELL scoring was

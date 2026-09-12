@@ -38,7 +38,7 @@ bool HunterAspectOfTheDragonhawkTrigger::IsActive()
         return false;
 
     if (botAI->HasAura("aspect of the viper", target))
-        return AI_VALUE2(uint8, "mana", "self target") >= 60;
+        return AI_VALUE2(uint8, "mana", "self target") >= HUNTER_VIPER_LEAVE_MANA_PCT;
 
     return true;
 }
@@ -101,7 +101,7 @@ bool HunterAspectOfTheViperTrigger::IsActive()
         return false;
 
     return BuffTrigger::IsActive() &&
-           AI_VALUE2(uint8, "mana", "self target") < (sPlayerbotAIConfig.lowMana / 2);
+           AI_VALUE2(uint8, "mana", "self target") < HUNTER_VIPER_ENTER_MANA_PCT;
 }
 
 bool HunterAspectOfThePackTrigger::IsActive()

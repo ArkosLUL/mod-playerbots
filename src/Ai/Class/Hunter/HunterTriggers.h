@@ -15,6 +15,13 @@
 
 class PlayerbotAI;
 
+// Hunters skip mana potions and carry their in-combat mana on Aspect of the Viper, so it has to take
+// over well before the hunter is dry. Leaving at 60% keeps the band wide enough that a hunter does not
+// flip aspects every few seconds. The two halves live in different triggers - entry in
+// HunterAspectOfTheViperTrigger, exit in HunterAspectOfTheDragonhawkTrigger - so keep them together here.
+constexpr uint8 HUNTER_VIPER_ENTER_MANA_PCT = 30;
+constexpr uint8 HUNTER_VIPER_LEAVE_MANA_PCT = 60;
+
 // Buff and Out of Combat Triggers
 
 class HunterAspectOfTheDragonhawkTrigger : public BuffTrigger

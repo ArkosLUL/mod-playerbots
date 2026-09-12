@@ -6,8 +6,10 @@
 
 #include "GenericBuffUtils.h"
 #include "AiObjectContext.h"
+#include "BossAuraTriggers.h"
 #include "GameTime.h"
 #include "Group.h"
+#include "HunterTriggers.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
@@ -304,6 +306,92 @@ namespace ai::buff
             *outMissingReagentGroupName = groupName;
 
         return baseName;
+    }
+
+    Unit* FindBossByName(PlayerbotAI* botAI, std::string const& bossName)
+    {
+        if (bossName.empty())
+            return nullptr;
+
+        for (ObjectGuid const& guid :
+             botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+        {
+            Unit* unit = botAI->GetUnit(guid);
+            if (!unit)
+                continue;
+
+            std::wstring wnamepart;
+            if (!Utf8toWStr(unit->GetName(), wnamepart))
+                continue;
+
+            wstrToLower(wnamepart);
+            if (bossName.length() == wnamepart.length() && Utf8FitTo(bossName, wnamepart))
+                return unit;
+        }
+
+        return nullptr;
+    }
+
+    Player* GetNatureResistanceHunter(PlayerbotAI* botAI, Player* bot)
+    {
+        Group* group = bot ? bot->GetGroup() : nullptr;
+        if (!group || !group->isRaidGroup())
+            return nullptr;
+
+        static uint32 const ranks[] = {SPELL_ASPECT_OF_THE_WILD_RANK_4, SPELL_ASPECT_OF_THE_WILD_RANK_3,
+                                       SPELL_ASPECT_OF_THE_WILD_RANK_2, SPELL_ASPECT_OF_THE_WILD_RANK_1};
+
+        // Eligibility reuses the Viper band, which is what stops the role flapping: a hunter that hands
+        // off at 30% does not become eligible again until Viper drops it at 60%, so a handback cannot
+        // race the handoff.
+        //
+        // The last fallback ignores eligibility on purpose - the raid-wide nature resistance is worth
+        // more than one hunter's mana, so the aura must never lapse. Two consequences that look like
+        // bugs but are not:
+        //   - a raid with exactly one hunter pins that hunter into Wild for the whole encounter, and it
+        //     will run low;
+        //   - during a raid-wide mana trough the first hunter is held in Wild while the others refill on
+        //     Viper. The first one back over 60% takes the role, which frees the pinned one.
+        Player* auraHolder = nullptr;
+        Player* firstEligible = nullptr;
+        Player* firstCandidate = nullptr;
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || member->getClass() != CLASS_HUNTER ||
+                member->GetMapId() != bot->GetMapId())
+                continue;
+
+            bool knows = false;
+            for (uint32 rank : ranks)
+                if (member->HasActiveSpell(rank))
+                {
+                    knows = true;
+                    break;
+                }
+
+            if (!knows)
+                continue;
+
+            if (!firstCandidate)
+                firstCandidate = member;
+
+            if (botAI->HasAura("aspect of the viper", member) ||
+                member->GetPowerPct(POWER_MANA) < HUNTER_VIPER_ENTER_MANA_PCT)
+                continue;
+
+            if (!firstEligible)
+                firstEligible = member;
+
+            if (!auraHolder && botAI->HasAura("aspect of the wild", member))
+                auraHolder = member;
+        }
+
+        if (auraHolder)
+            return auraHolder;
+
+        return firstEligible ? firstEligible : firstCandidate;
     }
 }
 

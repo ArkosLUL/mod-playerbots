@@ -5,38 +5,12 @@
  */
 
 #include "BossAuraTriggers.h"
+#include "GenericBuffUtils.h"
 #include "Group.h"
-#include "HunterBuffStrategies.h"
 #include "ObjectGuid.h"
 #include "PaladinBuffStrategies.h"
 #include "Playerbots.h"
 #include "Unit.h"
-
-// Same name match as the "find target" value, but resolved against the grid sweep rather than the
-// bot's threatened-by-me list. A bot parked on an add - a Kologarn arm, a Freya lasher - never has
-// the boss on that list, so the resistance aura it is supposed to raise never goes up.
-static Unit* FindBossByName(PlayerbotAI* botAI, std::string const& bossName)
-{
-    if (bossName.empty())
-        return nullptr;
-
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit)
-            continue;
-
-        std::wstring wnamepart;
-        if (!Utf8toWStr(unit->GetName(), wnamepart))
-            continue;
-
-        wstrToLower(wnamepart);
-        if (bossName.length() == wnamepart.length() && Utf8FitTo(bossName, wnamepart))
-            return unit;
-    }
-
-    return nullptr;
-}
 
 bool BossFireResistanceTrigger::IsActive()
 {
@@ -45,7 +19,7 @@ bool BossFireResistanceTrigger::IsActive()
         return false;
 
     // Check boss and it is alive
-    Unit* boss = FindBossByName(botAI, bossName);
+    Unit* boss = ai::buff::FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 
@@ -96,7 +70,7 @@ bool BossFrostResistanceTrigger::IsActive()
         return false;
 
     // Check boss and it is alive
-    Unit* boss = FindBossByName(botAI, bossName);
+    Unit* boss = ai::buff::FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 
@@ -147,7 +121,7 @@ bool BossMarkSkullTrigger::IsActive()
         return false;
 
     // Check boss and it is alive
-    Unit* boss = FindBossByName(botAI, bossName);
+    Unit* boss = ai::buff::FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -173,7 +147,7 @@ bool BossNatureResistanceTrigger::IsActive()
         return false;
 
     // Check boss and it is alive
-    Unit* boss = FindBossByName(botAI, bossName);
+    Unit* boss = ai::buff::FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 
@@ -181,39 +155,10 @@ bool BossNatureResistanceTrigger::IsActive()
     if (botAI->HasAura("aspect of the wild", bot))
         return false;
 
-    // Check if bot dont have already setted nature resistance aura
-    HunterNatureResistanceStrategy hunterNatureResistanceStrategy(botAI);
-    if (botAI->HasStrategy(hunterNatureResistanceStrategy.getName(), BotState::BOT_STATE_COMBAT))
-        return false;
-
-    // Check that the bot actually knows Aspect of the Wild
-    if (!bot->HasActiveSpell(SPELL_ASPECT_OF_THE_WILD_RANK_4) &&
-        !bot->HasActiveSpell(SPELL_ASPECT_OF_THE_WILD_RANK_3) &&
-        !bot->HasActiveSpell(SPELL_ASPECT_OF_THE_WILD_RANK_2) &&
-        !bot->HasActiveSpell(SPELL_ASPECT_OF_THE_WILD_RANK_1))
-        return false;
-
-    // Get the group and ensure it's a raid group
-    Group* group = bot->GetGroup();
-    if (!group || !group->isRaidGroup())
-        return false;
-
-    // Iterate through group members to find the first alive hunter
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* member = gref->GetSource();
-        if (!member || !member->IsAlive())
-            continue;
-
-        // Check if the member is a hunter
-        if (member->getClass() == CLASS_HUNTER)
-        {
-            // Return true only if the current bot is the first alive hunter
-            return member == bot;
-        }
-    }
-
-    return false;
+    // The knows-the-spell and raid-group checks live in the helper. Its gate must stay identical to
+    // BossNatureAspectHoldMultiplier's, or the holder would be told to cast Wild while its own
+    // Dragonhawk node is no longer suppressed, and the two would thrash every tick.
+    return ai::buff::GetNatureResistanceHunter(botAI, bot) == bot;
 }
 
 bool BossShadowResistanceTrigger::IsActive()
@@ -223,7 +168,7 @@ bool BossShadowResistanceTrigger::IsActive()
         return false;
 
     // Check boss and it is alive
-    Unit* boss = FindBossByName(botAI, bossName);
+    Unit* boss = ai::buff::FindBossByName(botAI, bossName);
     if (!boss || !boss->IsAlive() || boss->IsFriendlyTo(bot))
         return false;
 

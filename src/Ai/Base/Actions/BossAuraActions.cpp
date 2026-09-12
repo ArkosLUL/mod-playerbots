@@ -7,7 +7,6 @@
 #include "BossAuraActions.h"
 #include "BossAuraTriggers.h"
 #include "Group.h"
-#include "HunterBuffStrategies.h"
 #include "PaladinBuffStrategies.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -50,10 +49,12 @@ bool BossNatureResistanceAction::isUseful()
 
 bool BossNatureResistanceAction::Execute(Event /*event*/)
 {
-    HunterNatureResistanceStrategy hunterNatureResistanceStrategy(botAI);
-    botAI->ChangeStrategy(ADD_STRATEGY_CHAR + hunterNatureResistanceStrategy.getName(), BotState::BOT_STATE_COMBAT);
-    botAI->DoSpecificAction("aspect of the wild", Event(), true);
-    return true;
+    // No ChangeStrategy: "+rnature" was never removed again, and because it is a sibling of "bdps" it
+    // also evicted the hunter's Dragonhawk node. Worse, the strategy is what made
+    // HunterAspectOfTheViperTrigger return false, so every hunter that ever held the aura lost Aspect
+    // of the Viper for the rest of the session. BossNatureAspectHoldMultiplier does the suppression
+    // instead, and reverts on its own when the boss dies.
+    return botAI->DoSpecificAction("aspect of the wild", Event(), true);
 }
 
 bool BossShadowResistanceAction::isUseful()

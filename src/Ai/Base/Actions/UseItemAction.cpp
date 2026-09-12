@@ -399,7 +399,17 @@ bool UseSpellItemAction::isUseful() { return AI_VALUE2(bool, "spell cast useful"
 
 bool UseHealingPotion::isUseful() { return AI_VALUE2(bool, "combat", "self target"); }
 
-bool UseManaPotion::isUseful() { return AI_VALUE2(bool, "combat", "self target"); }
+bool UseManaPotion::isUseful()
+{
+    // WotLK shares one potion cooldown per fight, so a mana potion here costs the hunter its Potion of
+    // Speed; hunters carry in-combat mana on Aspect of the Viper instead. Level 5 is where the first
+    // mana potion exists, so this covers every hunter - Viper only arrives at 20, so 5-19 drinks out
+    // of combat.
+    if (bot->getClass() == CLASS_HUNTER && bot->GetLevel() >= 5)
+        return false;
+
+    return AI_VALUE2(bool, "combat", "self target");
+}
 
 bool UseOffensivePotion::isUseful()
 {

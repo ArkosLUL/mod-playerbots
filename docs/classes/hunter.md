@@ -18,6 +18,28 @@ every spec, which is why the meter showed no casts at all:
   hit points, orders of magnitude above the 435 threshold. Correct form is
   `GetUInt32Value(PLAYER_FIELD_COMBAT_RATING_1 + CR_ARMOR_PENETRATION)`.
 
+## Aspect of the Viper never fired, and the threshold was not why
+
+Hunters sat at 0-2% mana at full health for ~110s on Thorim (`603_1_thorim_1789155415`) without one
+Viper cast. Three faults, in the order they bite:
+
+- **`rnature` disabled the trigger outright.** `BossNatureResistanceAction` did
+  `ChangeStrategy("+rnature")`, and `HunterAspectOfTheViperTrigger` hard-returns false whenever
+  `rnature` is set, so the mana check was never reached. Nothing removed it — `ApplyInstanceStrategies`
+  strips only *instance* strategies — so it leaked from Thorim into Mimiron and every later boss. The
+  trigger picked "first alive hunter", so with the strategy stuck every hunter accumulated it within a
+  few pulls. `rnature` is a sibling of `bdps`, so it also evicted the combat Dragonhawk node.
+  The action now casts Aspect of the Wild directly and `BossNatureAspectHoldMultiplier` suppresses the
+  competing aspects for the one designated hunter — the Hodir paladin-aura shape, self-reverting. See
+  [../raids/ulduar/thorim.md](../raids/ulduar/thorim.md).
+- **The band could not sustain.** Entry was `lowMana / 2`, integer division of 15, so **7%**. Now
+  `HUNTER_VIPER_ENTER_MANA_PCT` 30 / `HUNTER_VIPER_LEAVE_MANA_PCT` 60, kept together in
+  `HunterTriggers.h` because entry and exit sit in different triggers.
+- **The mana potion took the slot first.** `medium mana` (40%) pushes `mana potion` at
+  `ACTION_EMERGENCY` 90 against the offensive potion's 20, and WotLK allows one potion per fight, so
+  hunters spent theirs on mana and never got Potion of Speed. Hunters now skip mana potions entirely —
+  see [../systems/consumables-and-burst.md](../systems/consumables-and-burst.md).
+
 ## Other fixes
 
 - **Rapid Fire barely fired in raids.** `RapidFireTrigger : BoostTrigger` needs `balance <= 50`, so a
@@ -81,7 +103,6 @@ Survival change was dropping the now-unreachable `arcane shot` default.
 |---|---|
 | D1 | **Concussive Shot on aggro wastes a GCD on bosses.** `has aggro` → concussive shot @20; bosses are snare-immune, so the cast burns a GCD every tick the hunter holds aggro. Fix is gating the trigger to non-boss targets. |
 | D2 | **Melee weave outranks the whole shot list.** `enemy within melee` pushes explosive trap @37, mongoose bite @22, wing clip @21. At 37 the trap beats everything except dispels, and melee weaving is a straight DPS loss for a ranged spec in WotLK. |
-| D3 | **Aspect of the Viper hysteresis is far too wide** — enters at `mana < lowMana/2` = 7.5% and only leaves at `mana >= 60%`, a long stretch at half ranged damage. ~35% is the obvious exit. |
 | D4 | **Disengage is raid-hostile.** Fixed-vector backwards leap at @35; on Thorim / Mimiron / Gunship-style encounters it lands bots in fire, off platforms, or out of healer range. Should be suppressed in raid instances in favour of the existing `flee` alternative. |
 | D5 | `trap launcher: explosive trap` @17 sits mid-rotation, between Survival's explosive shot (17.5) and black arrow (16.5). Left alone because Survival's trap usage is what the user wanted preserved. |
 | D6 | `ExplosiveShotTrigger` overrides `DebuffTrigger` to `BuffTrigger::IsActive()`, so it re-pushes on debuff-absence while the 6s cooldown still has the spell unavailable. Harmless — the action just fails — but it costs a queue iteration. |

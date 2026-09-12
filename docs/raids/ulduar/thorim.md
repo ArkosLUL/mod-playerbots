@@ -411,6 +411,21 @@ a pet on 52 of 55,171 rows, and across three later pulls the boss's victim **nev
 Pets deliberately do not dodge anything — they survive on their own resistances, and a pet AI that steps
 out of hazards is a cost with no payoff.
 
+## Aspect of the Wild has exactly one holder
+
+Thorim's nature damage earns the aura, but 49071 is `APPLY_AREA_AURA_RAID` + `MOD_RESISTANCE_EXCLUSIVE`,
+so a second hunter adds nothing and pays Aspect of the Viper for it. `GetNatureResistanceHunter` picks
+one — whoever already holds the aura, else the first hunter at or above the Viper entry threshold — and
+`BossNatureAspectHoldMultiplier` pins that hunter's aspect slot. Every other hunter keeps Dragonhawk and
+stays free to Viper.
+
+Eligibility reuses the Viper band, so the role cannot flap: a hunter that hands off at 30% is not
+eligible again until Viper drops at 60%. When nobody is eligible the first hunter is pinned regardless —
+raid-wide resistance outranks one hunter's mana — so **a raid with a single hunter pins that hunter for
+the whole fight**. Intended, not a bug.
+
+Kologarn, Freya, and VoA's Emalon and Archavon share the mechanism.
+
 ## Known gaps
 
 **The wipe is a damage race, and nothing positional answers it.** Tank intake reaches **190-260k per

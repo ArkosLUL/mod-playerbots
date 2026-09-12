@@ -53,6 +53,16 @@ std::string UpgradeToGroupIfAppropriate(
     std::string const& baseName,
     std::string* outMissingReagentGroupName = nullptr);
 
+// Same name match as the "find target" value, but resolved against the grid sweep rather than the
+// bot's threatened-by-me list. A bot parked on an add - a Kologarn arm, a Freya lasher - never has
+// the boss on that list, so the resistance aura it is supposed to raise never goes up.
+Unit* FindBossByName(PlayerbotAI* botAI, std::string const& bossName);
+
+// The one hunter that holds Aspect of the Wild for the raid, or nullptr outside a raid group.
+// Aspect of the Wild is APPLY_AREA_AURA_RAID + MOD_RESISTANCE_EXCLUSIVE, so a second holder adds
+// nothing while costing that hunter Aspect of the Viper.
+Player* GetNatureResistanceHunter(PlayerbotAI* botAI, Player* bot);
+
 }
 
 namespace ai::spell

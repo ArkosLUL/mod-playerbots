@@ -6,6 +6,7 @@
 
 #include "UldStrategy.h"
 
+#include "BossResistanceMultipliers.h"
 #include "UldMultipliers.h"
 
 void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -952,6 +953,12 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
     multipliers.push_back(new HodirGuardMultiplier(botAI));
     multipliers.push_back(new HodirPaladinAuraMultiplier(botAI));
+
+    // Hold the one designated hunter in Aspect of the Wild on the three nature bosses, so every other
+    // hunter keeps Dragonhawk and can still drop to Aspect of the Viper for mana.
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "kologarn"));
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "freya"));
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "thorim"));
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));
