@@ -56,6 +56,9 @@ constexpr uint32 OBS_DEATH_AURA_GRACE_MS = 2000;
 constexpr std::size_t OBS_MAX_TICK_ENTRIES = 64;
 // Past this share of the roster dead, the pull was a wipe whatever state the instance script settled on.
 constexpr float OBS_WIPE_DEAD_SHARE = 0.5f;
+// Node names per `covdef` record. A 25-man Ulduar pull defines around 950 of them, and one line
+// carrying all of them is awkward to read and awkward to recover from if the file is cut short.
+constexpr uint32 OBS_COVERAGE_CHUNK = 200;
 
 struct ObsConfig
 {
@@ -174,6 +177,21 @@ struct BotTrace
     MoveKind lastTrackKind = MoveKind::Point;
     uint64 lastTrackTarget = 0;
     bool hasTrack = false;
+
+    // Per-pull node coverage, accumulated here and written once at the close. Keyed engine tag + '/'
+    // + node name: two strategies contributing the same name in one engine are one node as far as
+    // "did this name ever do anything" goes, and they share a Trigger* anyway.
+    struct CoverageRow
+    {
+        std::string strategy;
+        std::string alias;
+        bool multiStrategy = false;
+        NodeCoverage counts;
+    };
+    std::unordered_map<std::string, CoverageRow> coverage;
+    // Executions credited to the trigger name that originated the Event, from the OK verdict site.
+    // Separate from `coverage` because the join is by trigger name, not by node.
+    std::unordered_map<std::string, uint32> wins;
 };
 
 struct PreRollEntry
@@ -266,6 +284,9 @@ public:
     // --- verdict ticks (RaidObsEngine.cpp) ---
 
     void EmitTickEntry(uint64 key, TickEntry const& entry);
+    // Writes the node coverage every bot accumulated, as one dictionary plus a row block per bot.
+    // Called once, at the close, after the roster has drained its engines.
+    void EmitCoverage();
     // Closes the pass being buffered for one bot and writes whatever in it is news.
     void FlushTick(uint64 key, BotTrace& trace);
 

@@ -452,6 +452,10 @@ public:
     BotState GetState() { return currentState; };
     void ResetStrategies(bool load = false);
     void ReInitCurrentEngine();
+    // Hands every engine's node coverage to the open trace. Called when a pull closes; each
+    // engine also drains itself on Init, which is what catches a combat or death transition
+    // rebuilding its node list mid-pull.
+    void ObsDrainCoverage();
     void Reset(bool full = false);
     void LeaveOrDisbandGroup();
     static bool IsTank(Player* player, bool bySpec = false);

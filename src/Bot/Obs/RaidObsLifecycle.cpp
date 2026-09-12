@@ -13,6 +13,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "Playerbots.h"
 #include "Timer.h"
 
 #include <cstring>
@@ -184,6 +185,22 @@ bool ObsSession::RosterMostlyDead()
 
 void CloseSession(uint32 instanceId, char const* outcome)
 {
+    // Node coverage lives on the engines until something asks for it, and the probes it comes back
+    // through resolve their session out of the registry - so this has to run before the session is
+    // unregistered below, while Active() is still true. Map-thread work, like FlushTick: the two
+    // outcomes skipped here are the ones that arrive with the map thread pool already gone, not an
+    // arbitrary pair of names.
+    if (strcmp(outcome, "shutdown") != 0 && strcmp(outcome, "mapgone") != 0)
+    {
+        if (ObsSession* live = FindSession(instanceId))
+        {
+            for (ObjectGuid guid : live->roster)
+                if (Player* member = ObjectAccessor::FindPlayer(guid))
+                    if (PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member))
+                        memberAI->ObsDrainCoverage();
+        }
+    }
+
     std::unique_ptr<ObsSession> session;
     {
         std::lock_guard<std::mutex> guard(g_registryMutex);
@@ -199,6 +216,8 @@ void CloseSession(uint32 instanceId, char const* outcome)
     // The pass each bot was mid-way through has nothing after it to close it.
     for (auto& entry : session->bots)
         session->FlushTick(entry.first, entry.second);
+
+    session->EmitCoverage();
 
     // Hodir's script reports NOT_STARTED when the raid releases, so a 23-of-24 wipe was filed under
     // `reset`. What the roster looked like outranks what the script settled on - taken from the latch

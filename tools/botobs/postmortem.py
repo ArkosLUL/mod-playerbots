@@ -12,6 +12,7 @@ pre-roll). Schema and field meanings live in docs/systems/observability.md.
     postmortem.py <file> --stalls [MS]   held still while still asking to move - i.e. stuck
     postmortem.py <file> --clump [YARDS] how stacked the raid was, largest group in one circle
     postmortem.py <file> --verify        check the trace against the invariants the schema promises
+    postmortem.py <file> --coverage [P]  which strategy nodes did anything, and why the rest did not
     postmortem.py <file> --validity      only the banner: which build, which mode, who was human
     postmortem.py <file> --since REF     compare the build against REF instead of HEAD
 """
@@ -21,6 +22,7 @@ import argparse
 import pathlib
 import sys
 
+from coverage import show_coverage
 from deathreport import show_death, summarise
 from obstrace import Trace
 from validity import show_validity
@@ -62,6 +64,18 @@ def main() -> int:
         help="check the trace against the schema's invariants; exits non-zero if any fail",
     )
     parser.add_argument(
+        "--coverage",
+        nargs="?",
+        const="",
+        metavar="PREFIX",
+        help="per-node checks/fires/runs; pass a node-name prefix such as hodir to narrow it",
+    )
+    parser.add_argument(
+        "--by-bot",
+        action="store_true",
+        help="with --coverage, name the bots behind each node instead of only counting them",
+    )
+    parser.add_argument(
         "--validity",
         action="store_true",
         help="only the validity banner; exits non-zero if anything disqualifies the pull",
@@ -96,6 +110,8 @@ def main() -> int:
         return show_clump(trace, args.clump)
     if args.verify:
         return show_verify(trace)
+    if args.coverage is not None:
+        return show_coverage(trace, args.coverage or None, args.by_bot)
 
     show_validity(trace, args.since)
     summarise(trace)

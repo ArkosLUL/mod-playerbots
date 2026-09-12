@@ -174,12 +174,12 @@ bool GluthPositionAction::Execute(Event event)
         // {
             if (botAI->GetClassIndex(bot, CLASS_HUNTER) == 0)
             {
-                return MoveInside(NAXX_MAP_ID, helper.leftSlowDownPos.first, helper.leftSlowDownPos.second, bot->GetPositionZ(), 0.0f,
+                return MoveInside(NAXX_MAP_ID, helper.leftSlowDownPos.first, helper.leftSlowDownPos.second, bot->GetPositionZ(), 2.0f,
                                   MovementPriority::MOVEMENT_COMBAT);
             }
             if (botAI->GetClassIndex(bot, CLASS_HUNTER) == 1)
             {
-                return MoveInside(NAXX_MAP_ID, helper.rightSlowDownPos.first, helper.rightSlowDownPos.second, bot->GetPositionZ(), 0.0f,
+                return MoveInside(NAXX_MAP_ID, helper.rightSlowDownPos.first, helper.rightSlowDownPos.second, bot->GetPositionZ(), 2.0f,
                                   MovementPriority::MOVEMENT_COMBAT);
             }
         // }
@@ -188,7 +188,7 @@ bool GluthPositionAction::Execute(Event event)
     }
     else if (botAI->IsHeal(bot))
     {
-        return MoveInside(NAXX_MAP_ID, helper.healPos.first, helper.healPos.second, bot->GetPositionZ(), 0.0f,
+        return MoveInside(NAXX_MAP_ID, helper.healPos.first, helper.healPos.second, bot->GetPositionZ(), 3.0f,
                           MovementPriority::MOVEMENT_COMBAT);
     }
     return false;

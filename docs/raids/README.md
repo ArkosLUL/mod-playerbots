@@ -23,7 +23,8 @@ Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
 Nothing enforces that the four agree, so run `tools/pblint/pblint.py` over what a commit touches: it
-cross-checks all four, and every trigger and action name besides. (The `"rs"` bug recorded here is
+cross-checks all four, and every trigger and action name besides. It only proves the name resolves —
+`postmortem.py --coverage` says whether the node then did anything. (The `"rs"` bug recorded here is
 fixed — it is in `GetInstanceStrategies()` and at `case 724:`.)
 
 ## Priority conventions

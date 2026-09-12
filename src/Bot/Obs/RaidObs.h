@@ -32,7 +32,7 @@ class Unit;
 namespace RaidObs
 {
 // Bumped whenever a record's field layout changes, so the analyzer can still read older traces.
-constexpr uint32 SCHEMA_VERSION = 11;
+constexpr uint32 SCHEMA_VERSION = 12;
 
 // True only while at least one trace is open. Probes on shared hot paths test this before doing
 // anything else, so with nothing recording the framework costs one predictable branch.
@@ -104,6 +104,44 @@ void BeginTick(Player* bot);
 
 void NoteAction(Player* bot, char const* action, float relevance, char const* verdict);
 void NoteVeto(Player* bot, char const* multiplier, char const* action);
+
+// Whether this bot's decisions reach a trace. Engine::ProcessTriggers asks once per pass and reuses
+// the answer for every node, so the per-node cost is a branch on a register.
+bool CoversBot(Player* bot);
+
+// One trigger node's coverage over the life of an engine's node list.
+//
+// A verdict stream says what a bot did; nothing says what it declined to do. A node whose name
+// resolves to nothing, one the check interval never got to, and one whose condition was false every
+// pass are all byte-identical silence in a trace, and so is a node that fired into a queue it never
+// won. These are those states as counters.
+//
+// Plain arithmetic with no lookup and no allocation: ProcessTriggers touches one of these per node
+// per pass, on the order of 30,000 times a second across a 25-man raid. A record per check would be
+// ~450 MB for a five-minute pull against a 15 MB baseline, so the counts are drained once at the end
+// instead.
+struct NodeCoverage
+{
+    uint32 checks = 0;     // needCheck said yes and Trigger::Check() ran
+    uint32 fires = 0;      // Check() returned a truthy Event
+    uint32 pushes = 0;     // that fire turned into at least one queue entry
+    uint32 shared = 0;     // another node's Trigger* had already fired this pass; loop 2 still pushes
+    uint32 throttled = 0;  // checkInterval had not elapsed
+    uint32 minimal = 0;    // minimal mode dropped it for sitting under relevance 100
+    uint32 dead = 0;       // the name resolved to no creator this bot's context stack carries
+
+    bool Any() const { return checks || fires || pushes || shared || throttled || minimal || dead; }
+};
+
+// `engine` is "c", "n" or "d" - the same node name lives in the combat and non-combat engines and is
+// a different node in each. `trigger` is the trigger's own name, passed only when it differs from the
+// node's, which is the mismatch pblint hunts statically showing up at runtime.
+void NoteNodeCoverage(Player* bot, char const* engine, char const* strategy, char const* node,
+                      char const* trigger, NodeCoverage const& counts);
+
+// An action ran, credited to the trigger whose Event carried it there. This is the only edge that
+// separates a node that fired and got something done from one that fired and lost every tick.
+void NoteNodeWin(Player* bot, char const* trigger);
 
 // Which MotionMaster generator a command drives. Follow and Chase track a unit that keeps moving, so
 // they have no destination of their own and carry the target instead.

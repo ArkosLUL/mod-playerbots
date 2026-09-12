@@ -62,14 +62,21 @@ Casualties found so far: `blade fury` (should be `blade flurry`), `conflagrate`,
 
 | Node | Registered as |
 |---|---|
-| Zul'Aman `akil'zon` / `jan'alai` / `zul'jin` `boss engaged by main tank` + `main tank position boss` | `…by tanks` / `… tanks position boss` |
-| SWP `m'uru cast stun on shadowsword berserker` | `…shadowsword berseker` |
-| Hunter `explosive shot`, DK `rune strike`, paladin `blessing of might` | actions, referenced as triggers |
-| `grounding totem`, `reset`, `high threat`, `tank aoe`, `location stuck`, `stay line`, chat `naxx`/`bwl`, `master loot roll` | nothing at all |
+| Hunter `explosive shot`, DK `rune strike`, paladin `blessing of might`, mage `high threat` | registered on the other side - an action referenced as a trigger, or the reverse |
+| `grounding totem`, `reset`, `tank aoe`, `location stuck`, `stay line`, chat `naxx`/`bwl`, `master loot roll`, `team flagcarrier near`, `mind freeze on enemy healer`, `freezing trap on cc` | nothing at all: either delete the reference or write the creator |
 
-So three of Zul'Aman's five bosses have had no main-tank positioning since they were written. Halazzi
-works only because it spells `main tank` on both sides and Nalorakk `tanks` on both — that
-inconsistency produced the other three.
+All raid-side names are fixed as of 2026-09-12; the 17 left are base and class. Zul'Aman's three were
+the worst of them — `akil'zon`, `jan'alai` and `zul'jin` asked for `main tank position boss` against a
+registration, factory and class that all said `Tanks`, so three of five bosses had no main-tank
+positioning from the day they were written. Halazzi spells `main tank` on both sides and Nalorakk
+`tanks` on both; that inconsistency produced the other three. Felmyst's pair were simply swapped, the
+trigger name in the action slot.
+
+**The runtime half is `postmortem.py --coverage`** (schema v12), and neither tool subsumes the other.
+pblint proves a name has a creator somewhere in the tree, statically, over every node. Coverage proves
+the node carried current on the pull you ran, and catches what no source sweep can: a name registered
+in a context this bot's own stack does not include. A creator nothing references has no runtime
+counterpart at all, and a correctly wired node whose condition is never true is invisible to pblint.
 
 The two Ulduar cases are the shape to recognise, both dead from the day they were written:
 `UldTriggerContext.h` registered `"yogg-saron shadow resistance trigger**r**"`, so the node asking for
@@ -164,11 +171,13 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   **` line once the drop exceeds 1 yd); in the ring sweep and the JSON it is the **`settledZ`**
   column.
 
-  navprobe answers the floor, never sight. `VMAP::StaticMapTree::isInLineOfSight`, the static half of
-  `Map::isInLineOfSight`, is in the same image's `build/src/common/libcommon.a`: a scratch program of
-  `InitMap`, `LoadMapTile` and the call, linked like navprobe (`build.ninja`), probes it offline. Cast
-  the ray `IsWithinLOSInMap` casts, the player's eye (position + DBC collision height) to the
-  creature's `GetHitSpherePointFor` point; GameObject collision still needs a live server.
+  **Floor is not sight, and navprobe now answers both.** `los X1 Y1 Z1 X2 Y2 Z2` casts the static
+  half of `Map::isInLineOfSight`; `ring ... --los-from X Y Z` adds a sight column to a slot sweep,
+  which is the real question - not "can A see B" but "which of these slots can see the boss". With no
+  coordinates `los` reads 6-tuples from stdin, one verdict a line: loading the vmap tree dominates, so
+  a thousand rays in one invocation is the difference between usable and not. The eye is `--collision`
+  above both endpoints, matching `IsWithinLOSInMap`. **GameObject collision needs a live server**, and
+  a map with no vmap tree reads every ray as clear - `coverage` warns.
 
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
   navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for

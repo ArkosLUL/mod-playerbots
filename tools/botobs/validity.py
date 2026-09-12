@@ -96,58 +96,89 @@ def humans(trace: Trace) -> list[str]:
     return sorted(trace.name(guid) for guid in trace.humans)
 
 
-def show_validity(trace: Trace, since: str | None = None) -> int:
-    """Prints the banner. Returns the number of things that make this trace weak evidence, so a batch
-    can skip a pull without parsing the text."""
+REPO = pathlib.Path(__file__).resolve().parents[2]
+
+
+def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[dict, list[tuple[str, str]]]:
+    """The four disqualifier facts, and what is wrong with them.
+
+    `ref` is already resolved rather than a commit-ish, because a corpus sweep would otherwise shell
+    out to git once per trace. Warnings are (kind, text) so a census can group them.
+    """
     hdr = trace.header
-    repo = pathlib.Path(__file__).resolve().parents[2]
-    warnings: list[str] = []
-
-    built = build_time(trace)
-    if built is None:
-        print("build   unknown (trace predates schema v11)")
-    else:
-        line = f"build   {built:%Y-%m-%d %H:%M} UTC"
-        ref = resolve_since(repo, since)
-        if ref:
-            sha, when = ref
-            delta = built - when
-            hours = delta.total_seconds() / 3600
-            if delta.total_seconds() < 0:
-                line += f"  <-- {abs(hours):.1f}h OLDER than {sha}"
-                warnings.append(f"binary predates {sha} by {abs(hours):.1f}h: it cannot contain that code")
-            else:
-                line += f"  ({hours:.1f}h after {sha})"
-        print(line)
-
-    diff = DIFFICULTY.get(hdr.get("diff"), f"difficulty {hdr.get('diff')}")
-    boss = boss_of(trace)
-    mode = diff
     cfg = hdr.get("cfg") or {}
+    boss = boss_of(trace)
+    facts = {
+        "built": build_time(trace),
+        "boss": boss,
+        "diff": DIFFICULTY.get(hdr.get("diff"), f"difficulty {hdr.get('diff')}"),
+        "hardmode": None,
+        "humans": humans(trace),
+        "cheats": cfg.get("cheats") or "",
+        "mapthreads": cfg.get("mapthreads"),
+        "age_hours": None,
+    }
+    warnings: list[tuple[str, str]] = []
+
+    if facts["built"] is not None and ref:
+        sha, when = ref
+        hours = (facts["built"] - when).total_seconds() / 3600
+        facts["age_hours"] = hours
+        if hours < 0:
+            warnings.append(
+                ("stale-build", f"binary predates {sha} by {abs(hours):.1f}h: it cannot contain that code")
+            )
+
     hard = cfg.get("hardmode") or {}
     key = BOSS_ALIASES.get(boss, boss)
     if key in hard:
-        state = "ON" if hard[key] else "OFF"
-        mode += f", {key} hard mode {state}"
+        facts["hardmode"] = bool(hard[key])
         if not hard[key]:
-            warnings.append(f"{key} hard mode was OFF: a kill here is not a hard-mode kill")
+            warnings.append(
+                ("hardmode-off", f"{key} hard mode was OFF: a kill here is not a hard-mode kill")
+            )
+
+    if facts["humans"]:
+        warnings.append((
+            "human-in-raid",
+            f"{len(facts['humans'])} human(s) in the raid - any role they held was not played by the strategy",
+        ))
+
+    return facts, warnings
+
+
+def show_validity(trace: Trace, since: str | None = None) -> int:
+    """Prints the banner. Returns the number of things that make this trace weak evidence, so a batch
+    can skip a pull without parsing the text."""
+    ref = resolve_since(REPO, since)
+    facts, warnings = inspect(trace, ref)
+
+    if facts["built"] is None:
+        print("build   unknown (trace predates schema v11)")
+    else:
+        line = f"build   {facts['built']:%Y-%m-%d %H:%M} UTC"
+        hours = facts["age_hours"]
+        if hours is not None:
+            line += (f"  <-- {abs(hours):.1f}h OLDER than {ref[0]}" if hours < 0
+                     else f"  ({hours:.1f}h after {ref[0]})")
+        print(line)
+
+    mode = facts["diff"]
+    if facts["hardmode"] is not None:
+        key = BOSS_ALIASES.get(facts["boss"], facts["boss"])
+        mode += f", {key} hard mode {'ON' if facts['hardmode'] else 'OFF'}"
     print(f"mode    {mode}")
 
-    present = humans(trace)
-    if present:
-        print(f"humans  {len(present)} in the raid: {', '.join(present)}")
-        warnings.append(
-            f"{len(present)} human(s) in the raid - any role they held was not played by the strategy"
-        )
+    if facts["humans"]:
+        print(f"humans  {len(facts['humans'])} in the raid: {', '.join(facts['humans'])}")
+    if facts["cheats"]:
+        print(f"cheats  {facts['cheats']}")
+    if facts["mapthreads"]:
+        print(f"threads MapUpdate.Threads = {facts['mapthreads']}")
 
-    if cfg.get("cheats"):
-        print(f"cheats  {cfg['cheats']}")
-    if cfg.get("mapthreads"):
-        print(f"threads MapUpdate.Threads = {cfg['mapthreads']}")
-
-    for warning in warnings:
+    for _, warning in warnings:
         print(f"  !!    {warning}")
-    if not warnings and built is not None:
+    if not warnings and facts["built"] is not None:
         print("  ok    nothing disqualifying")
     print()
 

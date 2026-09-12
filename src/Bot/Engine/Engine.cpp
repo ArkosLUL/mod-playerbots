@@ -32,6 +32,15 @@ inline void ObsVerdict(PlayerbotAI* botAI, ActionNode* actionNode, float relevan
     if (RaidObs::Active())
         RaidObs::NoteAction(botAI->GetBot(), actionNode->getName().c_str(), relevance, verdict);
 }
+
+// Credits the trigger that put this action in the queue. Trigger::Check stamps its own name into the
+// Event, and prereq, alt, cont and again all forward it, so a chain's execution lands on the trigger
+// that started it. Takes the Event for the same reason as above: GetSource returns by value.
+inline void ObsWin(PlayerbotAI* botAI, Event& event)
+{
+    if (RaidObs::Active())
+        RaidObs::NoteNodeWin(botAI->GetBot(), event.GetSource().c_str());
+}
 }  // namespace
 
 Engine::Engine(PlayerbotAI* botAI, AiObjectContext* factory) : PlayerbotAIAware(botAI), aiObjectContext(factory)
@@ -124,6 +133,8 @@ void Engine::Reset()
     }
 
     triggers.clear();
+    coverage.clear();
+    strategySpans.clear();
 
     for (Multiplier* multiplier : multipliers)
     {
@@ -137,6 +148,10 @@ void Engine::Reset()
 
 void Engine::Init()
 {
+    // Before Reset, which deletes the nodes the counters are named after. Not inside Reset itself:
+    // ~Engine calls that too, and by then the bot may be halfway through logging out.
+    ObsDrainCoverage();
+
     Reset();
 
     hasTargetExclusions = false;
@@ -146,7 +161,15 @@ void Engine::Init()
         strategyTypeMask |= strategy->GetType();
         hasTargetExclusions |= strategy->HasTargetExclusions();
         strategy->InitMultipliers(multipliers);
+
+        // InitTriggers only appends, so the growth across the call is exactly this strategy's range.
+        // The name is copied rather than the Strategy* held: removeAllStrategies clears the map, so a
+        // pointer would dangle by the next drain.
+        std::size_t const before = triggers.size();
         strategy->InitTriggers(triggers);
+        if (triggers.size() != before)
+            strategySpans.emplace_back(before, strategy->getName());
+
         for (auto &iter : strategy->actionNodeFactories.creators)
         {
             actionNodeFactories.creators[iter.first] = iter.second;
@@ -261,6 +284,7 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                 {
                     LogAction("A:%s - OK", action->getName().c_str());
                     ObsVerdict(botAI, action, relevance, "OK");
+                    ObsWin(botAI, event);
                     LogMeleeApproach(debugMove, action, "won the tick", relevance);
                     MultiplyAndPush(actionNode->getContinuers(), relevance, false, event, "cont");
                     lastRelevance = relevance;
@@ -498,13 +522,67 @@ Strategy* Engine::GetStrategy(std::string const name)
     return i != strategies.end() ? i->second : nullptr;
 }
 
+void Engine::ObsDrainCoverage()
+{
+    // Init runs at bot creation too, long before the vector is sized against a live node list.
+    if (coverage.size() != triggers.size())
+        return;
+
+    if (!RaidObs::Active())
+    {
+        coverage.clear();
+        return;
+    }
+
+    for (std::size_t i = 0; i < triggers.size(); ++i)
+    {
+        RaidObs::NodeCoverage& counts = coverage[i];
+        if (!counts.Any())
+            continue;
+
+        TriggerNode* node = triggers[i];
+        if (!node)
+            continue;
+
+        // The strategy that contributed this index. Spans are appended in order, so the last one that
+        // starts at or before i owns it.
+        char const* strategy = "";
+        for (auto span = strategySpans.rbegin(); span != strategySpans.rend(); ++span)
+        {
+            if (span->first <= i)
+            {
+                strategy = span->second.c_str();
+                break;
+            }
+        }
+
+        // The win counter joins on the name the Event carries, which Trigger::Check builds from the
+        // trigger's own name rather than the node's. They usually agree; where they do not, that is
+        // the same mismatch pblint hunts statically, so the trace records it.
+        Trigger* trigger = node->getTrigger();
+        std::string const nodeName = node->getName();
+        std::string const triggerName = trigger ? trigger->getName() : std::string();
+        RaidObs::NoteNodeCoverage(botAI->GetBot(), engineTag, strategy, nodeName.c_str(),
+                                  triggerName == nodeName ? nullptr : triggerName.c_str(), counts);
+        counts = RaidObs::NodeCoverage();
+    }
+}
+
 void Engine::ProcessTriggers(bool minimal)
 {
     std::unordered_map<Trigger*, Event> fires;
     uint32 now = getMSTime();
-    for (std::vector<TriggerNode*>::iterator i = triggers.begin(); i != triggers.end(); i++)
+
+    // Asked once for the whole pass rather than once per node: Active() is an acquire-load and
+    // CoversBot walks the session registry, and there are a couple of hundred nodes below. With
+    // nothing recording this stays false in a register and every counter site is a not-taken branch.
+    bool const obs = RaidObs::Active() && RaidObs::CoversBot(botAI->GetBot());
+    if (obs && coverage.size() != triggers.size())
+        coverage.assign(triggers.size(), RaidObs::NodeCoverage());
+
+    for (std::size_t i = 0; i < triggers.size(); ++i)
     {
-        TriggerNode* node = *i;
+        TriggerNode* node = triggers[i];
         if (!node)
             continue;
 
@@ -516,15 +594,35 @@ void Engine::ProcessTriggers(bool minimal)
         }
 
         if (!trigger)
+        {
+            // The name resolves to nothing. pblint finds this statically where no context registers
+            // the name at all; this also catches a name registered in a context this bot's own stack
+            // does not include, which no source sweep can see.
+            if (obs)
+                ++coverage[i].dead;
             continue;
+        }
 
         if (fires.find(trigger) != fires.end())
+        {
+            // Not a miss - the second loop pushes this node anyway. Counted so a row reading no
+            // checks but some pushes is not mistaken for a node that was never evaluated.
+            if (obs)
+                ++coverage[i].shared;
             continue;
+        }
 
         if (testMode || trigger->needCheck(now))
         {
             if (minimal && node->getFirstRelevance() < 100)
+            {
+                if (obs)
+                    ++coverage[i].minimal;
                 continue;
+            }
+
+            if (obs)
+                ++coverage[i].checks;
 
             PerfMonitorOperation* pmo =
                 sPerfMonitor.start(PERF_MON_TRIGGER, trigger->getName(), &aiObjectContext->performanceStack);
@@ -532,8 +630,12 @@ void Engine::ProcessTriggers(bool minimal)
             if (pmo)
                 pmo->finish();
 
+            // Checks minus fires is how often the condition was asked and said no.
             if (!event)
                 continue;
+
+            if (obs)
+                ++coverage[i].fires;
 
             if (trigger->IsBuffTrigger() && !trigger->IsDebuffTrigger())
                 botAI->forceRebuff.NoteBuffProposed();
@@ -541,17 +643,25 @@ void Engine::ProcessTriggers(bool minimal)
             fires[trigger] = event;
             LogAction("T:%s", trigger->getName().c_str());
         }
+        else if (obs)
+        {
+            ++coverage[i].throttled;
+        }
     }
 
-    for (std::vector<TriggerNode*>::iterator i = triggers.begin(); i != triggers.end(); i++)
+    for (std::size_t i = 0; i < triggers.size(); ++i)
     {
-        TriggerNode* node = *i;
+        TriggerNode* node = triggers[i];
         Trigger* trigger = node->getTrigger();
         if (fires.find(trigger) == fires.end())
             continue;
 
         Event event = fires[trigger];
-        MultiplyAndPush(node->getHandlers(), 0.0f, false, event, "trigger");
+        // Handlers offered, not baskets created: Queue::Push folds a duplicate action name into the
+        // basket already queued. Offered is the right grain - a folded push is still this node asking.
+        bool const pushed = MultiplyAndPush(node->getHandlers(), 0.0f, false, event, "trigger");
+        if (obs && pushed)
+            ++coverage[i].pushes;
     }
 
     for (std::vector<TriggerNode*>::iterator i = triggers.begin(); i != triggers.end(); i++)

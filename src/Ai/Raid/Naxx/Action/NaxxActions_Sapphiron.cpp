@@ -35,7 +35,11 @@ bool SapphironGroundPositionAction::Execute(Event event)
     Unit* boss = AI_VALUE2(Unit*, "find target", "sapphiron");
     if (boss && helper.IsPhaseGround())
     {
-        bool needsSideStack = boss->isInFront(bot) || boss->isInBack(bot);
+        // 90 degree cones, not the M_PI default: arc is the full cone width, so the default front and
+        // back are a half circle each and their union is every direction. This read true for everyone
+        // and made the Life Drain check below unreachable. The wedges left over are centred on the
+        // side the bot is sent to, orientation +/- M_PI / 2.
+        bool needsSideStack = boss->isInFront(bot, M_PI / 2) || boss->isInBack(bot, M_PI / 2);
         if (!needsSideStack)
         {
             needsSideStack = NaxxSpellIds::HasAnyAura(bot, {NaxxSpellIds::LifeDrain}) || botAI->HasAura("life drain", bot);

@@ -9,15 +9,21 @@ import json
 import pathlib
 import sys
 
-SUPPORTED_SCHEMA = 11
+SUPPORTED_SCHEMA = 12
+
+# Columns of a `cov` row after the node id, in order. Rows are written with trailing zeros trimmed, so
+# a short row is padded back out here and a column appended in a later schema reads as zero on an
+# older trace.
+COVERAGE_COLUMNS = ("checks", "fires", "pushes", "won", "shared", "throttled", "minimal", "dead")
 
 # Old traces stay readable: every addition through v6 is a new field or a new record, so an older file
 # only loses the detail those carry. v7 gave an existing column a -1 sentinel, but what it replaces was
 # nonsense in older files too, so one render serves both. v8 appends to the end of a snapshot row and
 # adds an optional cast field, so a pre-v8 row is just a short one. v10 adds pet rows to the snapshot
 # and an owner field on unit, so a pre-v10 file simply has no pets in it. v11 adds hdr.bin and
-# hdr.cfg, so a pre-v11 file only cannot say which build or settings produced it.
-READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11)
+# hdr.cfg, so a pre-v11 file only cannot say which build or settings produced it. v12 adds the covdef
+# and cov records, so --coverage is the one view a pre-v12 trace cannot answer.
+READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11, 12)
 
 
 def clock(ms: int) -> str:
@@ -45,6 +51,8 @@ class Trace:
         self.maxhp: dict[int, int] = {}
         self.humans: set[int] = set()
         self.bosses: set[int] = set()
+        # Node id -> {node, strategy, engine, alias}, from the covdef dictionary. Empty before v12.
+        self.covnodes: dict[int, dict] = {}
         self.truncated = False
         self._load()
 
@@ -92,6 +100,18 @@ class Trace:
 
                 if rec.get("e") == "spell":
                     self.spells[rec["sp"]] = rec.get("n", "?")
+                    continue
+
+                if rec.get("e") == "covdef":
+                    # Hoisted like unit and spell: the dictionary is written in chunks and a `cov`
+                    # block may refer back to a chunk several records earlier.
+                    for row in rec.get("d", []):
+                        self.covnodes[row[0]] = {
+                            "node": row[1],
+                            "strategy": row[2] if len(row) > 2 else "",
+                            "engine": row[3] if len(row) > 3 else "?",
+                            "alias": row[4] if len(row) > 4 else "",
+                        }
                     continue
 
                 if rec.get("e") == "truncated":
@@ -146,3 +166,37 @@ class Trace:
             if needle in name.lower():
                 return guid
         return None
+
+
+def boss_from_path(path: pathlib.Path) -> str:
+    """The boss slug out of the filename, which the recorder writes as
+    <map>_<instance>_<boss-slug>_<epoch>.ndjson and renames when it learns a better name. Joining the
+    middle back together rather than taking one field, because a slug may hold the separator."""
+    parts = path.stem.split("_")
+    return "_".join(parts[2:-1]) if len(parts) >= 4 else ""
+
+
+def find_traces(roots, boss: str | None = None) -> list[pathlib.Path]:
+    """Trace paths under `roots`, newest first, deduplicated by resolved path.
+
+    Filtering on the filename means a boss sweep never opens the other 118 files; the corpus runs to
+    1.3 GB and individual traces reach 21 MB.
+    """
+    found: dict[pathlib.Path, float] = {}
+    for root in roots:
+        root = pathlib.Path(root)
+        candidates = [root] if root.is_file() else sorted(root.glob("*.ndjson"))
+        for path in candidates:
+            if boss and boss_from_path(path) != boss:
+                continue
+            resolved = path.resolve()
+            if resolved not in found:
+                found[resolved] = path.stat().st_mtime
+    return sorted(found, key=lambda p: -found[p])
+
+
+def load_many(roots, boss: str | None = None):
+    """Yield one Trace at a time and let each go before the next is read - the corpus does not fit in
+    memory, and nothing that sweeps it needs two at once."""
+    for path in find_traces(roots, boss):
+        yield Trace(path)

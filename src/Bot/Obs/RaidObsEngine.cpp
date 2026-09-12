@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 #include <utility>
 
 namespace RaidObs
@@ -149,6 +150,148 @@ void NoteVeto(Player* bot, char const* multiplier, char const* action)
         return;
 
     trace.tick.push_back({getMSTime(), true, action, 0.0f, multiplier});
+}
+
+// One dictionary for the whole raid, then a row block per bot. The same ~950 node names live on all
+// 25 bots, so writing them once and referring to them by index is the difference between ~50 KB and
+// well over a megabyte - the same move `unit` and `spell` already make.
+//
+// Per bot rather than summed across the raid: a summed `fires: 1204` cannot separate every bot firing
+// a node 48 times from one bot firing it 1204 times and 24 never firing it at all, and the failures
+// worth catching here are role-shaped. A reader can sum rows; it cannot un-sum a total.
+void ObsSession::EmitCoverage()
+{
+    std::unordered_map<std::string, uint32> ids;
+    std::string dict;
+    uint32 chunk = 0;
+
+    auto flushDict = [&]()
+    {
+        if (dict.empty())
+            return;
+        Emit(getMSTime(), "covdef", "\"d\":[" + dict + "]");
+        dict.clear();
+        chunk = 0;
+    };
+
+    for (auto const& [key, trace] : bots)
+    {
+        std::string rows;
+        for (auto const& [name, row] : trace.coverage)
+        {
+            if (!row.counts.Any())
+                continue;
+
+            auto found = ids.find(name);
+            if (found == ids.end())
+            {
+                uint32 const id = static_cast<uint32>(ids.size());
+                found = ids.emplace(name, id).first;
+
+                // name is "<engine>/<node>"; the dictionary carries them apart.
+                std::size_t const slash = name.find('/');
+                std::string const engine = name.substr(0, slash);
+                std::string const node = name.substr(slash + 1);
+
+                // A trailing + means more than one strategy contributed this name in this engine.
+                std::string const strategy = row.multiStrategy ? row.strategy + "+" : row.strategy;
+                if (!dict.empty())
+                    dict += ",";
+                dict += "[" + std::to_string(id) + "," + Quoted(node) + "," + Quoted(strategy) + "," +
+                        Quoted(engine);
+                if (!row.alias.empty())
+                    dict += "," + Quoted(row.alias);
+                dict += "]";
+
+                // Chunked so no single line runs to hundreds of kilobytes.
+                if (++chunk >= OBS_COVERAGE_CHUNK)
+                    flushDict();
+            }
+
+            NodeCoverage const& c = row.counts;
+            uint32 const won = [&]
+            {
+                auto hit = trace.wins.find(row.alias.empty() ? name.substr(name.find('/') + 1) : row.alias);
+                return hit == trace.wins.end() ? 0u : hit->second;
+            }();
+
+            // Trailing zeros trimmed: the typical never-fired node is [id,1847,0] rather than nine
+            // fields. A reader pads back out, so a column appended later reads as a short row.
+            uint32 const columns[] = {c.checks, c.fires, c.pushes, won, c.shared, c.throttled,
+                                      c.minimal, c.dead};
+            std::size_t last = 0;
+            for (std::size_t i = 0; i < std::size(columns); ++i)
+                if (columns[i])
+                    last = i + 1;
+
+            if (!rows.empty())
+                rows += ",";
+            rows += "[" + std::to_string(found->second);
+            for (std::size_t i = 0; i < last; ++i)
+                rows += "," + std::to_string(columns[i]);
+            rows += "]";
+        }
+
+        if (rows.empty())
+            continue;
+
+        flushDict();
+        Emit(getMSTime(), "cov", "\"g\":" + std::to_string(key) + ",\"r\":[" + rows + "]");
+    }
+
+    flushDict();
+}
+
+bool CoversBot(Player* bot)
+{
+    ProbeTarget probe(bot);
+    return static_cast<bool>(probe);
+}
+
+void NoteNodeCoverage(Player* bot, char const* engine, char const* strategy, char const* node,
+                      char const* trigger, NodeCoverage const& counts)
+{
+    if (!engine || !node)
+        return;
+
+    ProbeTarget probe(bot);
+    if (!probe)
+        return;
+
+    BotTrace& trace = probe.Trace();
+    BotTrace::CoverageRow& row = trace.coverage[std::string(engine) + "/" + node];
+
+    // Every counter accumulates: Engine::Init drains and resets mid-pull whenever the bot crosses
+    // into or out of combat, so one node can report several times in one trace.
+    row.counts.checks += counts.checks;
+    row.counts.fires += counts.fires;
+    row.counts.pushes += counts.pushes;
+    row.counts.shared += counts.shared;
+    row.counts.throttled += counts.throttled;
+    row.counts.minimal += counts.minimal;
+    row.counts.dead += counts.dead;
+
+    if (strategy && *strategy)
+    {
+        if (row.strategy.empty())
+            row.strategy = strategy;
+        else if (row.strategy != strategy)
+            row.multiStrategy = true;
+    }
+    if (trigger && *trigger && row.alias.empty())
+        row.alias = trigger;
+}
+
+void NoteNodeWin(Player* bot, char const* trigger)
+{
+    if (!trigger || !*trigger)
+        return;
+
+    ProbeTarget probe(bot);
+    if (!probe)
+        return;
+
+    ++probe.Trace().wins[trigger];
 }
 
 void NoteMove(Player* bot, MoveKind kind, float x, float y, float z, ObjectGuid target, MoveOutcome outcome,

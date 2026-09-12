@@ -74,9 +74,14 @@ That margin is thin: 2 yd more westward drift puts the south edge back at 34%. `
 turns the whole camp toward the room in 4° steps up to 16° until every slot sees the MK II
 (`Map::isInLineOfSight` along the `IsWithinLOSInMap` ray from a fixed 2 yd eye), raid-wide on the 250 ms
 scan; it rises at once and falls back only after 15 s (`mimiron.campturn`). In that stress case it
-clears with ≤ 8° in 98% of positions. navprobe has no LoS mode; the offline probe is in
-[pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops). The static turn was enough on
-its own on 2026-09-12: `follow <-> arc spread` **0**, from 58 and 49, and `campturn` never fired.
+clears with ≤ 8° in 98% of positions. The static turn was enough on its own on 2026-09-12:
+`follow <-> arc spread` **0**, from 58 and 49, and `campturn` never fired.
+
+The sight question is now offline, and the 323 traced positions it took to answer are not needed
+again: `navprobe --map 603 --collision 2.0 ring 2691.5762 2568.5315 364.3138 27 24 --los-from <boss>`
+reports sight per slot. Against the deepest traced MK II position it clears only **300° to 45°** —
+strictly inside the 288-74° clean *floor* arc above, since sight is the tighter constraint, and it
+goes blind at 285° south against 60° north, which is the south-wider asymmetry the traces showed.
 
 The wedge is **fixed**, never tracking the boss: chains grow toward whoever is nearest their head, so a
 drifting camp smears the field along behind it. It gives ground only as one rigid piece, when its

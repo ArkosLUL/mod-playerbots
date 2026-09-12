@@ -10,7 +10,7 @@ import sys
 from collections import defaultdict
 
 from analysis import position_runs, roster_guids
-from obstrace import Trace, clock
+from obstrace import COVERAGE_COLUMNS, Trace, clock
 from records import move_line, note_text
 
 def show_bot(trace: Trace, name: str) -> int:
@@ -239,11 +239,14 @@ LEDGER_MIN_PAIRS = 60
 MAX_SNAP_GAP_MS = 2000
 
 
-def show_verify(trace: Trace) -> int:
+def verify_checks(trace: Trace) -> list[tuple[str, int, list[str]]]:
     """Check the trace against the invariants the schema promises, rather than reading it.
 
     Three audits running rebuilt these as throwaway scripts, and the last one found two defects that
     way. A failure is either a recorder bug or a schema change nobody wrote down.
+
+    Returns one (label, failures, up to 3 examples) per check so a caller can count them without
+    parsing the printed form; show_verify renders it.
     """
     roster = roster_guids(trace)
     snaps = trace.of("snap")
@@ -433,9 +436,40 @@ def show_verify(trace: Trace) -> int:
                 missing.append(f"{trace.name(row[0])} ends at 0 hp with no death record")
     report("everyone who ends dead has a death record", missing)
 
+    # --- node coverage, v12 and up ------------------------------------------------------------------
+    undefined: list[str] = []
+    over_fired: list[str] = []
+    over_pushed: list[str] = []
+    for rec in trace.of("cov"):
+        who = trace.name(rec.get("g"))
+        for row in rec.get("r", []):
+            node_id = row[0]
+            if node_id not in trace.covnodes:
+                undefined.append(f"cov id {node_id} for {who} has no covdef entry")
+                continue
+            padded = list(row[1:]) + [0] * (len(COVERAGE_COLUMNS) - len(row[1:]))
+            counts = dict(zip(COVERAGE_COLUMNS, padded))
+            name = trace.covnodes[node_id]["node"]
+            if counts["fires"] > counts["checks"]:
+                over_fired.append(f"{name}: {counts['fires']} fires from {counts['checks']} checks")
+            # A node whose Trigger* fired via a sibling is pushed without being checked itself, so
+            # `shared` belongs on this side of the comparison.
+            if counts["pushes"] > counts["fires"] + counts["shared"]:
+                over_pushed.append(
+                    f"{name}: {counts['pushes']} pushes from {counts['fires']}+{counts['shared']}")
+    report("every cov row id is defined in covdef", undefined)
+    report("cov fires never exceeds checks", over_fired)
+    report("cov pushes never exceeds fires plus shared", over_pushed)
+
+    return findings
+
+
+def show_verify(trace: Trace) -> int:
+    findings = verify_checks(trace)
     failed = sum(1 for _, count, _ in findings if count)
     width = max(len(label) for label, _, _ in findings)
-    print(f"{trace.path.name}   schema v{trace.header.get('v')}   {len(deaths)} deaths\n")
+    print(f"{trace.path.name}   schema v{trace.header.get('v')}   "
+          f"{len(trace.of('death'))} deaths\n")
     for label, count, examples in findings:
         print(f"  {'FAIL' if count else 'ok  '}  {label:<{width}}  {count or ''}")
         for example in examples:

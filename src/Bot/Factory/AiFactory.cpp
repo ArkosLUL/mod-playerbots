@@ -587,6 +587,7 @@ void AiFactory::AddDefaultCombatStrategies(Player* player, PlayerbotAI* const fa
 Engine* AiFactory::createCombatEngine(Player* player, PlayerbotAI* const facade, AiObjectContext* aiObjectContext)
 {
     Engine* engine = new Engine(facade, aiObjectContext);
+    engine->SetObsTag("c");
     AddDefaultCombatStrategies(player, facade, engine);
     engine->Init();
     return engine;
@@ -804,6 +805,7 @@ void AiFactory::AddDefaultNonCombatStrategies(Player* player, PlayerbotAI* const
 Engine* AiFactory::createNonCombatEngine(Player* player, PlayerbotAI* const facade, AiObjectContext* aiObjectContext)
 {
     Engine* nonCombatEngine = new Engine(facade, aiObjectContext);
+    nonCombatEngine->SetObsTag("n");
 
     AddDefaultNonCombatStrategies(player, facade, nonCombatEngine);
     nonCombatEngine->Init();
@@ -822,6 +824,7 @@ void AiFactory::AddDefaultDeadStrategies(Player* player, PlayerbotAI* const faca
 Engine* AiFactory::createDeadEngine(Player* player, PlayerbotAI* const facade, AiObjectContext* AiObjectContext)
 {
     Engine* deadEngine = new Engine(facade, AiObjectContext);
+    deadEngine->SetObsTag("d");
     AddDefaultDeadStrategies(player, facade, deadEngine);
     deadEngine->Init();
     return deadEngine;

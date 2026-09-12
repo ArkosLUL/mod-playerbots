@@ -1580,6 +1580,13 @@ void PlayerbotAI::ReInitCurrentEngine()
     currentEngine->Init();
 }
 
+void PlayerbotAI::ObsDrainCoverage()
+{
+    for (uint8 state = 0; state < BOT_STATE_MAX; ++state)
+        if (engines[state])
+            engines[state]->ObsDrainCoverage();
+}
+
 void PlayerbotAI::ChangeStrategy(std::string const names, BotState type)
 {
     Engine* e = engines[type];

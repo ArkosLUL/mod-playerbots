@@ -31,11 +31,15 @@ postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to o
 postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
 postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
 postmortem.py <file> --verify        check the schema's invariants; non-zero exit if any fail
+postmortem.py <file> --coverage [P]  what each strategy node did, and why the rest did nothing
 postmortem.py <file> --validity      only the banner below; non-zero exit if anything disqualifies
 postmortem.py <file> --since REF     compare the build against REF rather than HEAD
 ```
 
-`--verify` is 14 checks, so auditing a batch is a loop rather than another throwaway script.
+`--verify` is 17 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
+`--since REF`, `--valid`, `--census`, `--verify`, `--probes` - streaming one trace at a time, because
+125 of them are 1.3 GB. Extra positionals are more roots, which is how a baseline survives the 7-day
+retention. `--probes` lists note keys nothing reads: 12 today, every Flame Leviathan key but two.
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
 
@@ -109,7 +113,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 11`)
+## Schema (`v: 12`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -131,6 +135,8 @@ else `7`. `0` still means no unit.
 | `cast` | `s`,`sp`,`tgt`,`ct` cast time,`tr` 1 when triggered, else absent — cast **start**, the reaction window; roster, its pets and watched creatures only |
 | `act` | `g`,`a`,`rel`,`vd`: OK, FAILED, IMPOSSIBLE, USELESS, PREREQ, UNKNOWN |
 | `veto` | `g`,`m` multiplier,`a` action it zeroed |
+| `covdef` | `d[]` rows `[id,node,strategy,engine,trigger?]`; `engine` c/n/d, `trigger` only when it differs from the node's name; chunked, so a `cov` may cite a chunk several records back |
+| `cov` | `g`,`r[]` rows `[id,checks,fires,pushes,won,shared,throttled,minimal,dead]`, trailing zeros trimmed - pad short rows back out |
 | `move` | `g`,`k` generator,`x`,`y`,`z`,`tgt`,`ok`,`r` reason,`by` owning action,`pr` priority; on `wait` also `hpr`,`hms` — the walk that beat it |
 | `note` | `g`,`k` kind,`txt` — assignments, latches, phases, derived state |
 | `haz` | `sp`,`shape`,`x`,`y`,`z`,`ttl`, plus shape fields — hazards with no world object; timeline only, never tested against a death |

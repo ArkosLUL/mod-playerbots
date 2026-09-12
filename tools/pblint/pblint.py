@@ -291,12 +291,20 @@ def check_trigger_interval(sources) -> list[Finding]:
 
 def check_arc_defaults(sources) -> list[Finding]:
     """isInFront and isInBack both default to arc = M_PI, so front-half plus back-half is the whole
-    circle and the test is always true."""
+    circle and the test is always true.
+
+    Only the defaulted pair is wrong. Passing an arc to both narrows each cone and leaves real side
+    wedges, which is the fix, so a call with two arguments is deliberate and not reported.
+    """
     out = []
-    pattern = re.compile(r"isInFront\s*\([^;]*?\)\s*\|\|\s*[\w>.\-]*isInBack\s*\(")
+    pattern = re.compile(
+        r"isInFront\s*\((?P<front>[^;()]*(?:\([^()]*\)[^;()]*)*)\)\s*\|\|"
+        r"\s*[\w>.\-]*isInBack\s*\((?P<back>[^;()]*(?:\([^()]*\)[^;()]*)*)\)"
+    )
     for src in sources:
         for number, line in enumerate(src.lines, 1):
-            if pattern.search(line):
+            match = pattern.search(line)
+            if match and not ("," in match.group("front") and "," in match.group("back")):
                 out.append(Finding("arc-always-true", src.rel, number,
                                    "isInFront() || isInBack() covers the whole circle - always true"))
     return out

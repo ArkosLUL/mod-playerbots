@@ -10,9 +10,12 @@
 #include "Multiplier.h"
 #include "PlayerbotAIAware.h"
 #include "Queue.h"
+#include "RaidObs.h"
 #include "Strategy.h"
 #include "Trigger.h"
 #include <map>
+#include <utility>
+#include <vector>
 
 class Action;
 class ActionNode;
@@ -89,6 +92,13 @@ public:
     bool HasTargetExclusions() const { return hasTargetExclusions; }
     virtual ~Engine(void);
 
+    // Hand the accumulated node counters to the trace and clear them. Called from Init before Reset
+    // deletes the nodes the counters are named after, and again when a pull closes.
+    void ObsDrainCoverage();
+    // "c", "n" or "d". The same node name lives in more than one engine and is a different node in
+    // each, so the trace has to be able to tell them apart.
+    void SetObsTag(char const* tag) { engineTag = tag; }
+
     bool testMode;
 
 private:
@@ -111,6 +121,16 @@ private:
 protected:
     Queue queue;
     std::vector<TriggerNode*> triggers;
+    // Coverage counters, one per entry in `triggers` and rebuilt with it. Parallel rather than keyed
+    // on TriggerNode*, because Reset deletes every node and the allocator hands the same addresses
+    // back in a different order - a pointer key would merge counters across unrelated names. Sized on
+    // the first pass a trace actually covers this bot, so an idle open-world bot carries nothing.
+    std::vector<RaidObs::NodeCoverage> coverage;
+    // Where each strategy's nodes begin, in the order Init appended them. InitTriggers only appends,
+    // so the growth across one call is that strategy's range - and Init is the last place the
+    // attribution exists at all, since TriggerNode has no strategy of its own.
+    std::vector<std::pair<std::size_t, std::string>> strategySpans;
+    char const* engineTag = "?";
     std::vector<Multiplier*> multipliers;
     AiObjectContext* aiObjectContext;
     std::map<std::string, Strategy*> strategies;
