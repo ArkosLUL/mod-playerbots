@@ -10,8 +10,11 @@
 #include <vector>
 
 #include "AiObjectContext.h"
+#include "CellImpl.h"
 #include "DBCEnums.h"
 #include "GameObject.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "LastMovementValue.h"
 #include "ObjectGuid.h"
@@ -29,6 +32,22 @@
 #include <TankAssistStrategy.h>
 
 using namespace EncounterHelpers;
+
+namespace
+{
+// The check behind "nearest npcs", with the entry tested first.
+struct AnyUnitOfEntriesInRangeCheck
+{
+    Acore::AnyUnitInObjectRangeCheck inRange;
+    uint32 const* entries;
+    size_t count;
+
+    bool operator()(Unit* unit)
+    {
+        return std::find(entries, entries + count, unit->GetEntry()) != entries + count && inRange(unit);
+    }
+};
+}  // namespace
 
 bool AuriayaFallFromFloorAction::Execute(Event /*event*/)
 {
@@ -78,7 +97,7 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     // Melee ride the boss and are not anchored, so they are leashed to her instead.
     Position anchor;
     float tolerance = 0.0f;
-    if (!GetAuriayaAnchor(botAI, bot, anchor, tolerance))
+    if (!GetAuriayaAnchor(botAI, bot, boss, &pools, anchor, tolerance))
         anchor = Position(boss->GetPositionX(), boss->GetPositionY(), boss->GetPositionZ());
 
     constexpr int directions = 8;
@@ -96,11 +115,8 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
     // ground rather than running across the room to find clean ground.
     auto const consider = [&](float candX, float candY, bool isCurrent)
     {
-        if (anchor.GetExactDist2d(candX, candY) > ULDUAR_AURIAYA_ESSENCE_LEASH ||
-            !bot->IsWithinLOS(candX, candY, bot->GetPositionZ()))
-        {
+        if (anchor.GetExactDist2d(candX, candY) > ULDUAR_AURIAYA_ESSENCE_LEASH)
             return;
-        }
 
         int fouling = 0;
         float clearance = std::numeric_limits<float>::max();
@@ -121,6 +137,10 @@ bool AuriayaSeepingEssenceAction::Execute(Event /*event*/)
                                                          : displacement < bestDisplacement;
 
         if (found && !better)
+            return;
+
+        // LOS last. It's a raycast, and it only matters for a spot that would take over as the best.
+        if (!bot->IsWithinLOS(candX, candY, bot->GetPositionZ()))
             return;
 
         found = true;
@@ -231,10 +251,17 @@ bool AuriayaSetDpsPriorityAction::Execute(Event /*event*/)
     // Nearest live candidate of each entry.
     Unit* perEntry[priorityCount] = {nullptr};
 
-    for (auto const& guid : AI_VALUE(GuidVector, "nearest npcs"))
+    // "nearest npcs" cut down to these entries before its LOS test instead of after. Same units in the
+    // same order, without a raycast for every pet and totem in the raid.
+    float const range = sPlayerbotAIConfig.sightDistance;
+    std::vector<Unit*> candidates;
+    AnyUnitOfEntriesInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range), priorityOrder, priorityCount};
+    Acore::UnitListSearcher<AnyUnitOfEntriesInRangeCheck> searcher(bot, candidates, check);
+    Cell::VisitObjects(bot, searcher, range);
+
+    for (Unit* unit : candidates)
     {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!IsAllowedPriorityTarget(boss, unit))
+        if (!IsAllowedPriorityTarget(boss, unit) || !bot->IsWithinLOSInMap(unit))
             continue;
 
         for (size_t index = 0; index < priorityCount; ++index)

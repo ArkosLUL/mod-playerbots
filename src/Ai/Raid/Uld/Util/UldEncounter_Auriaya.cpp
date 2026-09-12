@@ -6,11 +6,16 @@
 
 #include "UldEncounter_Auriaya.h"
 
+#include "AttackersValue.h"
+#include "CellImpl.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -21,6 +26,37 @@
 #include <vector>
 
 using namespace EncounterHelpers;
+
+namespace
+{
+// The check behind "possible targets no los", with the entry tested first.
+struct UnfriendlyOfEntryInRangeCheck
+{
+    Acore::AnyUnfriendlyUnitInObjectRangeCheck inRange;
+    uint32 entry;
+
+    bool operator()(Unit* unit) { return unit->GetEntry() == entry && inRange(unit); }
+};
+
+// What "possible targets no los" holds for one entry, in the same order. Reading the value itself
+// rebuilds and copies the whole list on every call, with IsPossibleTarget on every hostile in sight.
+std::vector<Unit*> CollectPossibleTargetsByEntry(Player* bot, uint32 entry)
+{
+    float const range = sPlayerbotAIConfig.sightDistance;
+
+    std::vector<Unit*> matches;
+    UnfriendlyOfEntryInRangeCheck check{Acore::AnyUnfriendlyUnitInObjectRangeCheck(bot, bot, range), entry};
+    Acore::UnitListSearcher<UnfriendlyOfEntryInRangeCheck> searcher(bot, matches, check);
+    Cell::VisitObjects(bot, searcher, range);
+
+    std::vector<Unit*> targets;
+    for (Unit* unit : matches)
+        if (AttackersValue::IsPossibleTarget(unit, bot, range))
+            targets.push_back(unit);
+
+    return targets;
+}
+}  // namespace
 
 // Auriaya's lane. She spawns at (1956.2, 49.32, 411.36) facing (-0.955, 0.296), which points down
 // the room and directly away from the corridor at +x, so the fight walks that bearing in 10 yd steps
@@ -37,7 +73,11 @@ const Position ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[ULDUAR_AURIAYA_STATION_COUNT] 
 // fear window - there is no narrower slice worth reserving Tremor Totem for.
 bool AuriayaFearWindowActive(PlayerbotAI* botAI) { return AuriayaEncounterActive(botAI); }
 
-Unit* GetAuriaya(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_AURIAYA); }
+Unit* GetAuriaya(PlayerbotAI* botAI)
+{
+    std::vector<Unit*> const found = CollectPossibleTargetsByEntry(botAI->GetBot(), NPC_AURIAYA);
+    return found.empty() ? nullptr : found.front();
+}
 
 bool AuriayaEncounterActive(PlayerbotAI* botAI) { return GetAuriaya(botAI) != nullptr; }
 
@@ -61,16 +101,9 @@ Unit* GetAuriayaFocusTarget(PlayerbotAI* botAI)
 
 Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank)
 {
-    auto const& units = botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
-    for (auto const& guid : units)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_AURIAYA_SANCTUM_SENTRY)
-            continue;
-
-        if (unit->GetVictim() != tank)
-            return unit;
-    }
+    for (Unit* sentry : CollectPossibleTargetsByEntry(botAI->GetBot(), NPC_AURIAYA_SANCTUM_SENTRY))
+        if (sentry->GetVictim() != tank)
+            return sentry;
 
     return nullptr;
 }
@@ -94,21 +127,15 @@ std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius)
 // Score every station by how many pools foul it and take the lowest, ties to the lowest index. A
 // count over fixed geometry can only grow while the fight runs, so the station slides west and never
 // comes back east.
-int GetAuriayaStationIndex(PlayerbotAI* botAI)
+int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools)
 {
-    Unit* boss = GetAuriaya(botAI);
-    if (!boss)
-        return 0;
-
-    std::vector<Unit*> const pools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
-
     int best = 0;
     int bestFouling = std::numeric_limits<int>::max();
 
     for (int i = 0; i < ULDUAR_AURIAYA_STATION_COUNT; ++i)
     {
         int fouling = 0;
-        for (Unit* pool : pools)
+        for (Unit* pool : roomPools)
         {
             if (pool->GetExactDist2d(&ULDUAR_AURIAYA_MAINTANK_SPOTS[i]) < ULDUAR_AURIAYA_STATION_FOUL_RADIUS ||
                 pool->GetExactDist2d(&ULDUAR_AURIAYA_NOMINAL_RAID_POINTS[i]) < ULDUAR_AURIAYA_STATION_FOUL_RADIUS)
@@ -130,12 +157,22 @@ int GetAuriayaStationIndex(PlayerbotAI* botAI)
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     Unit* boss = GetAuriaya(botAI);
+    return boss && GetAuriayaAnchor(botAI, bot, boss, nullptr, out, tolerance);
+}
+
+bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<Unit*> const* roomPools,
+                      Position& out, float& tolerance)
+{
     if (!boss)
         return false;
 
     if (botAI->IsMainTank(bot))
     {
-        out = ULDUAR_AURIAYA_MAINTANK_SPOTS[GetAuriayaStationIndex(botAI)];
+        int const station =
+            roomPools ? GetAuriayaStationIndex(*roomPools)
+                      : GetAuriayaStationIndex(CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS));
+
+        out = ULDUAR_AURIAYA_MAINTANK_SPOTS[station];
         tolerance = ULDUAR_AURIAYA_MAINTANK_SPOT_TOLERANCE;
         return true;
     }

@@ -16,13 +16,11 @@
 
 #include <cmath>
 
+// Every boss lookup here sweeps every unit in sight, so the cheap tests in each trigger go first.
+
 bool AuriayaFallFromFloorTrigger::IsActive()
 {
-    if (!AuriayaEncounterActive(botAI))
-        return false;
-
-    // Check if bot is on the floor
-    return bot->GetPositionZ() < ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT;
+    return bot->GetPositionZ() < ULDUAR_AURIAYA_AXIS_Z_PATHING_ISSUE_DETECT && AuriayaEncounterActive(botAI);
 }
 
 //
@@ -30,36 +28,41 @@ bool AuriayaFallFromFloorTrigger::IsActive()
 //
 bool AuriayaSeepingEssenceTrigger::IsActive()
 {
-    if (!AuriayaEncounterActive(botAI))
-        return false;
-
-    return !CollectAuriayaEssencePools(bot, ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS).empty();
+    // 7 yd is a cell or two, so the pool search goes ahead of the boss.
+    return !CollectAuriayaEssencePools(bot, ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS).empty() &&
+           AuriayaEncounterActive(botAI);
 }
 
 bool AuriayaRaidPositionTrigger::IsActive()
 {
+    // Only the main tank and the ranged half get an anchor.
+    if (!botAI->IsMainTank(bot) && !botAI->IsRanged(bot))
+        return false;
+
     // Combat-gated: an anchor that fires on sight has the raid walking to its spots before anyone
     // has pulled.
-    if (!IsAuriayaEngaged(botAI))
+    Unit* boss = GetAuriaya(botAI);
+    if (!boss || !boss->IsInCombat())
         return false;
 
     // Standing in a pool beats standing on a spot. Fear and stuns need no check here - CanFreeMove
     // already gates the action. Sonic Screech deliberately gets no stand-down: the cast is exactly
     // when everyone needs to be on their anchor splitting it.
-    AuriayaSeepingEssenceTrigger seepingEssence(botAI);
-    if (seepingEssence.IsActive())
+    if (!CollectAuriayaEssencePools(bot, ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS).empty())
         return false;
+
+    // Searching off the boss rather than the bot, because the bot is by definition off its anchor
+    // here and the pool that fouls it can be out of its own reach.
+    std::vector<Unit*> const roomPools = CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS);
 
     Position anchor;
     float tolerance = 0.0f;
-    if (!GetAuriayaAnchor(botAI, bot, anchor, tolerance))
+    if (!GetAuriayaAnchor(botAI, bot, boss, &roomPools, anchor, tolerance))
         return false;
 
     // A fouled anchor is worth nothing. Without this the dodge and the anchor take turns: the bot
     // steps clear, the essence trigger goes quiet, and this one walks it straight back into the pool.
-    // Searching off the boss rather than the bot, because the bot is by definition off its anchor
-    // here and the pool that fouls it can be out of its own reach.
-    for (Unit* pool : CollectAuriayaEssencePools(GetAuriaya(botAI), ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS))
+    for (Unit* pool : roomPools)
         if (pool->GetExactDist2d(&anchor) < ULDUAR_AURIAYA_SEEPING_ESSENCE_RADIUS)
             return false;
 
@@ -68,17 +71,21 @@ bool AuriayaRaidPositionTrigger::IsActive()
 
 bool AuriayaSetDpsPriorityTrigger::IsActive()
 {
+    if (botAI->IsTank(bot))
+        return false;
+
     // The action calls Attack() directly, so without the combat gate the first bot to lay eyes on her
     // pulls the room. Whoever pulls flips this for everyone, which is what makes the raid engage
     // together.
-    if (!IsAuriayaEngaged(botAI))
-        return false;
-
-    return !botAI->IsTank(bot);
+    return IsAuriayaEngaged(botAI);
 }
 
 bool AuriayaSentryTauntTrigger::IsActive()
 {
+    // IsAssistTankOfIndex repeats this, but it walks the group, so it stays last and this goes first.
+    if (!botAI->IsTank(bot))
+        return false;
+
     // A taunt is a pull, so the off-tank waits for the encounter to be live like everyone else.
     if (!IsAuriayaEngaged(botAI))
         return false;

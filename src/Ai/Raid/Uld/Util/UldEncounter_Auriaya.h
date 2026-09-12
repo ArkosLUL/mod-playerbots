@@ -110,15 +110,21 @@ Unit* GetAuriayaLooseSentry(PlayerbotAI* botAI, Player* tank);
 // tick on the dodge path.
 std::vector<Unit*> CollectAuriayaEssencePools(WorldObject* from, float radius);
 
-// Which station the fight is standing on: the lowest whose two spots are both clear of pools, or,
-// once every station is polluted, whichever one keeps the nearest pool furthest away. Only the main
-// tank reads this - everyone else picks up the move through the boss, so no two bots can disagree.
-int GetAuriayaStationIndex(PlayerbotAI* botAI);
+// Which station the fight is standing on: the one with the fewest pools near either of its two spots,
+// ties to the lowest index. roomPools is CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS).
+// Only the main tank reads this. Everyone else picks up the move through the boss, so no two bots can
+// disagree.
+int GetAuriayaStationIndex(std::vector<Unit*> const& roomPools);
 
 // Where this bot belongs and how far it may stray before walking back. The main tank gets the
 // station's fixed spot; ranged and healers get a point derived from the live boss and tank, which is
 // what keeps the split working when a human tanks. Melee and the off-tank are unanchored, and get
 // false. Trigger and action both go through here so they cannot disagree.
 bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
+
+// Same, for a caller that already holds the boss. roomPools is optional and only the main tank reads
+// it; pass CollectAuriayaEssencePools(boss, ULDUAR_AURIAYA_ROOM_SEARCH_RADIUS) if it's already in hand.
+bool GetAuriayaAnchor(PlayerbotAI* botAI, Player* bot, Unit* boss, std::vector<Unit*> const* roomPools,
+                      Position& out, float& tolerance);
 
 #endif
