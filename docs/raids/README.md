@@ -176,6 +176,13 @@ when the window closes.
 `+rfire`/`+rfrost`/`+rshadow` and never remove them, evicting the sibling blessing strategy for good.
 Live at Razorscale, Ignis, Freya, Thorim, Mimiron, Sara, Yogg-Saron, Koralon and Toravon.
 
+**`Aq40UseResistanceBuffsAction` is the last `+rnature` writer**, and its priest branch does the same
+with `+rshadow`. It self-reverts only while the `aq40` instance strategy is loaded, so a hunter that
+leaves AQ40 after Viscidus or Princess Huhuran keeps `rnature` for the session. That costs more than the
+sibling slot: `rnature` evicts the combat Dragonhawk node, and `HunterAspectOfTheViperTrigger` bails out
+whenever it is set, so the hunter cannot use Aspect of the Viper at all and runs dry in every later raid
+— 59.7% of a 514 s fight under 5% mana in `603_4_xt002_1789239467`.
+
 **Explicitly not counterable — do not target:** Insane (63120/64464, AoE charm), Psychosis, Lunatic
 Gaze and Induce Madness (sanity drains), and Chains of Kel'Thuzad (28410, mind control — no *fear*
 counter applies, but a druid does Cyclone the charmed raider, see [naxxramas.md](naxxramas.md)).

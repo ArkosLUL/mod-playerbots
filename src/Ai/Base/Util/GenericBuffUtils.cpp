@@ -341,9 +341,10 @@ namespace ai::buff
         static uint32 const ranks[] = {SPELL_ASPECT_OF_THE_WILD_RANK_4, SPELL_ASPECT_OF_THE_WILD_RANK_3,
                                        SPELL_ASPECT_OF_THE_WILD_RANK_2, SPELL_ASPECT_OF_THE_WILD_RANK_1};
 
-        // Eligibility reuses the Viper band, which is what stops the role flapping: a hunter that hands
-        // off at 30% does not become eligible again until Viper drops it at 60%, so a handback cannot
-        // race the handoff.
+        // Eligibility reuses the Viper band, so the role only moves on a real mana swing rather than
+        // tick by tick: a hunter that hands off at 30% is not eligible again until Viper has carried it
+        // back to 60%. Over a long fight two healthy hunters trade the role every minute or so, which is
+        // fine - each one gets its turn on Viper.
         //
         // The last fallback ignores eligibility on purpose - the raid-wide nature resistance is worth
         // more than one hunter's mana, so the aura must never lapse. Two consequences that look like
@@ -353,6 +354,7 @@ namespace ai::buff
         //   - during a raid-wide mana trough the first hunter is held in Wild while the others refill on
         //     Viper. The first one back over 60% takes the role, which frees the pinned one.
         Player* auraHolder = nullptr;
+        Player* staleHolder = nullptr;
         Player* firstEligible = nullptr;
         Player* firstCandidate = nullptr;
 
@@ -377,19 +379,38 @@ namespace ai::buff
             if (!firstCandidate)
                 firstCandidate = member;
 
+            bool const hasWild = botAI->HasAura("aspect of the wild", member);
+
             if (botAI->HasAura("aspect of the viper", member) ||
                 member->GetPowerPct(POWER_MANA) < HUNTER_VIPER_ENTER_MANA_PCT)
+            {
+                if (!staleHolder && hasWild)
+                    staleHolder = member;
+
                 continue;
+            }
 
             if (!firstEligible)
                 firstEligible = member;
 
-            if (!auraHolder && botAI->HasAura("aspect of the wild", member))
+            if (!auraHolder && hasWild)
                 auraHolder = member;
         }
 
         if (auraHolder)
             return auraHolder;
+
+        // Somebody too low to keep the role is still wearing the aura. Nobody is drafted and nobody is
+        // pinned: Aspect of the Wild costs nothing to hold, so the raid keeps its resistance, and the
+        // outgoing holder drops it by itself as soon as it swaps to Viper - aspects are exclusive.
+        // Drafting a replacement before that happens stacks a second copy of an exclusive area aura,
+        // which buys the raid nothing and costs that hunter its own aspect for as long as it holds.
+        //
+        // Locality here is only "same map", so a stale holder that wanders out of the aura radius keeps
+        // the draft suppressed while the raid has no buff. Tighten with a distance check if a trace
+        // ever shows that.
+        if (staleHolder)
+            return nullptr;
 
         return firstEligible ? firstEligible : firstCandidate;
     }

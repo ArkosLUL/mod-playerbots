@@ -40,6 +40,12 @@ Viper cast. Three faults, in the order they bite:
   hunters spent theirs on mana and never got Potion of Speed. Hunters now skip mana potions entirely —
   see [../systems/consumables-and-burst.md](../systems/consumables-and-burst.md).
 
+Verified on `603_4_xt002_1789239467`: mean 53.6% mana, 72.5% of the fight inside the band, never below
+15%, five clean swaps, Potion of Speed taken. **A hunter that arrives already carrying `rnature` is
+still fully starved** — same fight, 59.7% under 5% mana and zero Viper casts — because
+`Aq40UseResistanceBuffsAction` still sets it, see [../raids/README.md](../raids/README.md). The damage
+scales with fight length: harmless over Kologarn's 157 s, at zero mana from +178 s over XT-002's 514 s.
+
 ## Other fixes
 
 - **Rapid Fire barely fired in raids.** `RapidFireTrigger : BoostTrigger` needs `balance <= 50`, so a

@@ -434,10 +434,22 @@ one — whoever already holds the aura, else the first hunter at or above the Vi
 `BossNatureAspectHoldMultiplier` pins that hunter's aspect slot. Every other hunter keeps Dragonhawk and
 stays free to Viper.
 
-Eligibility reuses the Viper band, so the role cannot flap: a hunter that hands off at 30% is not
-eligible again until Viper drops at 60%. When nobody is eligible the first hunter is pinned regardless —
-raid-wide resistance outranks one hunter's mana — so **a raid with a single hunter pins that hunter for
-the whole fight**. Intended, not a bug.
+**A drained holder still covers the raid**, so when the only hunter wearing the aura is below the Viper
+threshold the helper returns `nullptr` — nobody drafted, nobody pinned. Holding costs nothing, and the
+outgoing holder drops the aura itself on its next Viper cast because aspects are exclusive. Drafting a
+replacement before that is what put two holders on `603_4_elder-stonebark_1789241915`, the second one's
+Dragonhawk vetoed for nothing. Locality is only "same map", so a stale holder outside the aura radius
+still suppresses the draft.
+
+Eligibility reuses the Viper band, so the role moves on mana swings rather than per tick: a hunter that
+hands off at 30% is not eligible again until Viper carries it back to 60%. Two healthy hunters trade the
+role every minute or so, each taking its turn on Viper. When nobody is eligible and nobody holds the aura
+the first hunter is pinned regardless — raid-wide resistance outranks one hunter's mana — so **a raid
+with a single hunter pins that hunter for the whole fight**. Intended, not a bug.
+
+Verified on `603_4_kologarn_1789240634` (one source, 9 recipients, the free hunter cycling Viper) and
+`603_4_elder-stonebark_1789241915` (node at `rel 60.00`; `aspect of the dragonhawk` **and** its
+`aspect of the hawk` alternative both vetoed at `rel 0.00`, so the veto list has to name the whole chain).
 
 Kologarn, Freya, and VoA's Emalon and Archavon share the mechanism.
 

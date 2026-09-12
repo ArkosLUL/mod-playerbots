@@ -58,9 +58,12 @@ std::string UpgradeToGroupIfAppropriate(
 // the boss on that list, so the resistance aura it is supposed to raise never goes up.
 Unit* FindBossByName(PlayerbotAI* botAI, std::string const& bossName);
 
-// The one hunter that holds Aspect of the Wild for the raid, or nullptr outside a raid group.
-// Aspect of the Wild is APPLY_AREA_AURA_RAID + MOD_RESISTANCE_EXCLUSIVE, so a second holder adds
-// nothing while costing that hunter Aspect of the Viper.
+// The one hunter that holds Aspect of the Wild for the raid. Aspect of the Wild is
+// APPLY_AREA_AURA_RAID + MOD_RESISTANCE_EXCLUSIVE, so a second holder adds nothing while costing that
+// hunter Aspect of the Viper. nullptr means "nobody should be holding it right now" and covers three
+// cases: not in a raid group, no hunter knows the spell, or the raid already has the aura from a
+// hunter too low on mana to keep the role. Callers compare against their own bot, so nullptr is
+// already "not me" - no extra handling needed.
 Player* GetNatureResistanceHunter(PlayerbotAI* botAI, Player* bot);
 
 }
