@@ -12,12 +12,77 @@
 #include "Playerbots.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <vector>
 
 namespace RaidObs
 {
+uint64 g_binaryMs = 0;
+
+// --- build identity and run settings ------------------------------------------
+
+// The worldserver's own mtime, which is the same number pitfalls.md tells a human to fetch with
+// `docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver`. It stands in for a
+// build hash because nothing cheaper exists: this module has no CMakeLists of its own to stamp one
+// from, and AzerothCore's revision names the *core*, which says nothing about a module.
+//
+// read_symlink simply fails off Linux and leaves the stamp 0; the deployment target is the only place
+// it has to work, and a 0 reads as "unknown" rather than as a wrong answer.
+static void ResolveBinaryStamp()
+{
+    std::error_code ec;
+    std::filesystem::path const exe = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (ec)
+        return;
+
+    auto const written = std::filesystem::last_write_time(exe, ec);
+    if (ec)
+        return;
+
+    // file_clock and system_clock have no common epoch before C++20's clock_cast, which libstdc++ did
+    // not carry until well after the compiler this builds with. Differencing against both clocks' own
+    // "now" is the portable conversion; it is accurate to the few ms between the two reads, which is
+    // far below the granularity anyone compares a build time at.
+    auto const sys = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        written - std::filesystem::file_time_type::clock::now() + std::chrono::system_clock::now());
+    auto const ms = std::chrono::duration_cast<std::chrono::milliseconds>(sys.time_since_epoch()).count();
+    if (ms > 0)
+        g_binaryMs = static_cast<uint64>(ms);
+}
+
+std::string EnvFieldsJson()
+{
+    std::string out = ",\"bin\":" + std::to_string(g_binaryMs);
+
+    std::string cheats;
+    for (std::string const& cheat : sPlayerbotAIConfig.botCheats)
+    {
+        if (!cheats.empty())
+            cheats += ",";
+        cheats += cheat;
+    }
+
+    // Only the knobs that decide whether a pull is the one that was meant to run. A full config dump
+    // would age with every added option and bury the handful anyone checks. The hard-mode keys are the
+    // conf's own boss names, so postmortem.py can join them against hdr.boss.
+    out += ",\"cfg\":{\"cheats\":" + Quoted(cheats);
+    out += ",\"mapthreads\":" + std::to_string(sConfigMgr->GetOption<uint32>("MapUpdate.Threads", 1, false));
+    out += ",\"hardmode\":{";
+    out += "\"flame-leviathan\":" + std::to_string(sPlayerbotAIConfig.ulduarFlameLeviathanHardMode ? 1 : 0);
+    out += ",\"xt-002\":" + std::to_string(sPlayerbotAIConfig.ulduarXT002HardMode ? 1 : 0);
+    out += ",\"iron-assembly\":" + std::to_string(sPlayerbotAIConfig.ulduarIronAssemblyHardMode ? 1 : 0);
+    out += ",\"thorim\":" + std::to_string(sPlayerbotAIConfig.ulduarThorimHardMode ? 1 : 0);
+    out += ",\"freya\":" + std::to_string(sPlayerbotAIConfig.ulduarFreyaHardMode ? 1 : 0);
+    out += ",\"mimiron\":" + std::to_string(sPlayerbotAIConfig.ulduarMimironHardMode ? 1 : 0);
+    out += ",\"vezax\":" + std::to_string(sPlayerbotAIConfig.ulduarVezaxHardMode ? 1 : 0);
+    out += ",\"yogg-saron\":" + std::to_string(sPlayerbotAIConfig.ulduarYoggSaronHardMode ? 1 : 0);
+    out += "}}";
+
+    return out;
+}
+
 // --- retention ----------------------------------------------------------------
 
 void ApplyRetention()
@@ -93,6 +158,8 @@ void ApplyRetention()
 
 void LoadConfig()
 {
+    ResolveBinaryStamp();
+
     g_cfg.enabled = sPlayerbotAIConfig.obsEnabled;
     g_cfg.dir = sPlayerbotAIConfig.obsDir;
     g_cfg.snapshotIntervalMs = sPlayerbotAIConfig.obsSnapshotIntervalMs;

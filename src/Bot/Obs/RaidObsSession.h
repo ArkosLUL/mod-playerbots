@@ -79,6 +79,9 @@ struct ObsConfig
 
 extern ObsConfig g_cfg;
 extern std::string g_logsDir;
+// The worldserver binary's own mtime in epoch ms, resolved once at load. 0 where it could not be
+// read - see EnvFieldsJson.
+extern uint64 g_binaryMs;
 
 struct DamageEntry
 {
@@ -359,6 +362,10 @@ void ProcessPendingBossState(Map* map, uint32 instanceId);
 // --- config and retention (RaidObsConfig.cpp) ---
 
 void ApplyRetention();
+// The `bin` and `cfg` half of the header: which build recorded this, and the settings that decide
+// whether a pull is the pull it was meant to be. Returned as a leading-comma fragment, because the
+// header is hand-concatenated.
+std::string EnvFieldsJson();
 
 // --- combat (RaidObsCombat.cpp) ---
 

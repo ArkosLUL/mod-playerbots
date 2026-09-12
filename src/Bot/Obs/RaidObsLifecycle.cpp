@@ -112,6 +112,7 @@ void OpenSession(Map* map, Unit* source, char const* trigger)
     hdr += ",\"inst\":" + std::to_string(instanceId);
     hdr += ",\"diff\":" + std::to_string(static_cast<uint32>(map->GetDifficulty()));
     hdr += ",\"boss\":" + Quoted(s.bossSlug);
+    hdr += EnvFieldsJson();
     hdr += ",\"roster\":" + s.RosterJson();
     hdr += "}";
     s.Write(hdr);

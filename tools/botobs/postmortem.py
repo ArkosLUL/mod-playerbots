@@ -12,6 +12,8 @@ pre-roll). Schema and field meanings live in docs/systems/observability.md.
     postmortem.py <file> --stalls [MS]   held still while still asking to move - i.e. stuck
     postmortem.py <file> --clump [YARDS] how stacked the raid was, largest group in one circle
     postmortem.py <file> --verify        check the trace against the invariants the schema promises
+    postmortem.py <file> --validity      only the banner: which build, which mode, who was human
+    postmortem.py <file> --since REF     compare the build against REF instead of HEAD
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ import sys
 
 from deathreport import show_death, summarise
 from obstrace import Trace
+from validity import show_validity
 from views import show_bot, show_clump, show_notes, show_stalls, show_track, show_verify
 
 
@@ -58,6 +61,16 @@ def main() -> int:
         action="store_true",
         help="check the trace against the schema's invariants; exits non-zero if any fail",
     )
+    parser.add_argument(
+        "--validity",
+        action="store_true",
+        help="only the validity banner; exits non-zero if anything disqualifies the pull",
+    )
+    parser.add_argument(
+        "--since",
+        metavar="REF",
+        help="commit-ish or ISO time the build must be newer than (default: HEAD)",
+    )
     args = parser.parse_args()
 
     if not args.file.is_file():
@@ -65,6 +78,9 @@ def main() -> int:
         return 1
 
     trace = Trace(args.file)
+
+    if args.validity:
+        return 1 if show_validity(trace, args.since) else 0
 
     if args.death is not None:
         return show_death(trace, args.death)
@@ -81,6 +97,7 @@ def main() -> int:
     if args.verify:
         return show_verify(trace)
 
+    show_validity(trace, args.since)
     summarise(trace)
     return 0
 

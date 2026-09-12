@@ -9,14 +9,15 @@ import json
 import pathlib
 import sys
 
-SUPPORTED_SCHEMA = 10
+SUPPORTED_SCHEMA = 11
 
 # Old traces stay readable: every addition through v6 is a new field or a new record, so an older file
 # only loses the detail those carry. v7 gave an existing column a -1 sentinel, but what it replaces was
 # nonsense in older files too, so one render serves both. v8 appends to the end of a snapshot row and
 # adds an optional cast field, so a pre-v8 row is just a short one. v10 adds pet rows to the snapshot
-# and an owner field on unit, so a pre-v10 file simply has no pets in it.
-READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10)
+# and an owner field on unit, so a pre-v10 file simply has no pets in it. v11 adds hdr.bin and
+# hdr.cfg, so a pre-v11 file only cannot say which build or settings produced it.
+READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11)
 
 
 def clock(ms: int) -> str:

@@ -22,8 +22,9 @@ files are globbed automatically.
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**One live bug in this area**: `"rs"` is missing from `GetInstanceStrategies()` while map 724 still
-maps to it, so the Ruby Sanctum strategy gets applied but never removed on a zone change.
+Nothing enforces that the four agree, so run `tools/pblint/pblint.py` over what a commit touches: it
+cross-checks all four, and every trigger and action name besides. (The `"rs"` bug recorded here is
+fixed — it is in `GetInstanceStrategies()` and at `case 724:`.)
 
 ## Priority conventions
 

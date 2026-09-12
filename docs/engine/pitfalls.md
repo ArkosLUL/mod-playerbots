@@ -12,12 +12,16 @@ A pull recorded before a fix landed looks exactly like a pull where the fix did 
 pulls on 2026-09-05 were read as evidence against code the running worldserver had never been built
 with; the binary predated the commit by two hours.
 
-Establish the build from inside the trace before reading anything else out of it: a node the change
-added has to appear at least once, and an action a new multiplier zeroes has to show that multiplier's
-label in a `veto` record instead of running at its own relevance. `AzerothCore rev.` in `Server.log` is
-the *core* hash and says nothing about a module. The worldserver binary's mtime does
-(`docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver`) — it is UTC, so
-convert before comparing it against a local commit time.
+**From schema v11 the trace answers this itself**: `hdr.bin` is the binary's mtime, and
+`postmortem.py` opens every report comparing it against HEAD, alongside hard mode, humans and
+difficulty ([../systems/observability.md](../systems/observability.md)). Read the banner first.
+
+A timestamp is not proof the code ran, so where the effect must be *shown*, confirm it from the
+records: a node the change added has to appear at least once, and an action a new multiplier zeroes
+has to carry that multiplier's label in a `veto` row instead of its own relevance. `AzerothCore rev.`
+in `Server.log` is the *core* hash and says nothing about a module. Pre-v11, fetch the mtime by hand
+(`docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver`) — UTC, so convert
+before comparing against a local commit time.
 
 ## A solved table outlives the traces it was solved from
 
@@ -47,19 +51,33 @@ Everything is wired by string. Nothing here is a compile error.
 - Spell names resolve by string through the `"spell id"` value.
 - `TwoTriggers`' creator key must exactly equal `getName()` = `"<name1> and <name2>"`.
 
-Casualties found so far: `blade fury` (should be `blade flurry`), `"boost"` and `"high threat"`
-(never registered as triggers), `conflagrate`, `chaos bolt`, `freezing trap on cc`,
-`cure party member` (a base class — subclasses register under spell names). All fixed.
+**`tools/pblint/pblint.py` is this sweep.** Point it at the paths a commit touches; it exits non-zero
+on a name no context can build. It checks both directions, and needs to: the Yogg-Saron typo below sat
+in a string array no node scan could see, visible only as a creator nothing referenced.
 
-The two most recent were both in Ulduar and both had been dead since they were written, which is the
-point: nothing anywhere reports them. `UldTriggerContext.h` registered
-`"yogg-saron shadow resistance trigger**r**"`, so the node asking for
+Casualties found so far: `blade fury` (should be `blade flurry`), `conflagrate`, `chaos bolt`,
+`cure party member` (a base class — subclasses register under spell names).
+
+**Still open**, all found by the sweep on 2026-09-12 and none of them reported anywhere at runtime:
+
+| Node | Registered as |
+|---|---|
+| Zul'Aman `akil'zon` / `jan'alai` / `zul'jin` `boss engaged by main tank` + `main tank position boss` | `…by tanks` / `… tanks position boss` |
+| SWP `m'uru cast stun on shadowsword berserker` | `…shadowsword berseker` |
+| Hunter `explosive shot`, DK `rune strike`, paladin `blessing of might` | actions, referenced as triggers |
+| `grounding totem`, `reset`, `high threat`, `tank aoe`, `location stuck`, `stay line`, chat `naxx`/`bwl`, `master loot roll` | nothing at all |
+
+So three of Zul'Aman's five bosses have had no main-tank positioning since they were written. Halazzi
+works only because it spells `main tank` on both sides and Nalorakk `tanks` on both — that
+inconsistency produced the other three.
+
+The two Ulduar cases are the shape to recognise, both dead from the day they were written:
+`UldTriggerContext.h` registered `"yogg-saron shadow resistance trigger**r**"`, so the node asking for
 `"yogg-saron shadow resistance trigger"` never resolved; and `"thorim fall from floor action"` had a
-class and a trigger but no `creators[...]` entry at all, so the node resolved its trigger and then
-found nothing to run.
+class and a trigger but no `creators[...]` entry, so the node resolved its trigger and found nothing
+to run.
 
-Sweep for these by checking every `NextAction`/`TriggerNode` name against `creators[...]`. Multiplier
-`dynamic_cast` mistakes, by contrast, do fail at compile time.
+Multiplier `dynamic_cast` mistakes, by contrast, do fail at compile time.
 
 Registration is not activation, and that fails just as quietly. `DpsAoeStrategy` is defined
 (`src/Ai/Base/Strategy/DpsAssistStrategy.h:23`) and has a creator (`StrategyContext.h:245`), but no
@@ -370,8 +388,11 @@ Related traps:
   Blast, 62997 → 64529), so a DBC-only check reads as "no remap". It binds boss casts, not just player
   auras: `FindCurrentSpellBySpellId` or `m_spellInfo->Id ==` on the 10-man id silently never matches.
   Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice in each.
-  Sweep a raid's constants against the table in one pass — 28 of Ulduar's 139 remap, three of the
-  checks were reading only the 10-man id.
+  `pblint.py --spell-difficulty` is that sweep, and it reads the **world DB**: the client CSV in
+  mod-spell-tweaks holds 582 rows against the DB's 604 and is missing Plasma Blast entirely, so a
+  DBC-only check calls it "no remap". 28 of Ulduar's 144 spell constants remap; all 28 are handled
+  today, the three that were not having been fixed. A constant handed to
+  `sSpellMgr->GetSpellIdForDifficulty` is correct on every difficulty and the sweep skips it.
 - **`TricksOfTheTradeTargetValue::TankNeedsRedirect` never takes its opener branch, and the fallback
   is wrong for the class that casts it.** The opener branch keys on `"combat start time"`, which
   `PlayerbotAI::ChangeEngineOnCombat` sets **only** under the `wait for attack` strategy — so it is 0

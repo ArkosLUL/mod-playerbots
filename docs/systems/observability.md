@@ -31,11 +31,35 @@ postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to o
 postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
 postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
 postmortem.py <file> --verify        check the schema's invariants; non-zero exit if any fail
+postmortem.py <file> --validity      only the banner below; non-zero exit if anything disqualifies
+postmortem.py <file> --since REF     compare the build against REF rather than HEAD
 ```
 
 `--verify` is 14 checks, so auditing a batch is a loop rather than another throwaway script.
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
+
+## Is this trace evidence?
+
+Every report opens with a validity banner. Establishing these by hand cost more than reading the
+trace, and getting one wrong cost a session — three Freya pulls on 2026-09-05 were read against a
+binary predating the fix by two hours. Four things disqualify a pull; the header carries all four:
+
+- **`bin`** — the worldserver binary's mtime, epoch ms: what
+  `docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver` reports. It stands in
+  for a build hash because nothing better exists — this module has no `CMakeLists.txt` to stamp one
+  from, and AzerothCore's revision names the core. Read once at load from `/proc/self/exe`, so 0 off
+  Linux. Compared against HEAD's commit time; `--since` takes a commit-ish or ISO time instead.
+- **`cfg.hardmode`** — the eight `Ulduar*HardMode` toggles, keyed by the conf's boss names so the
+  banner joins them against the boss the trace names. A kill with the toggle off is not a hard-mode
+  kill — that disqualified the only kill in five Thorim pulls on 2026-09-12.
+- **humans** — read through `trace.humans`, not `roster[].h` alone: anyone who zoned in after the
+  header appears only in a `unit` record. A human holding a role means the strategy did not play it,
+  which is what left a Plasma Blast fix untested.
+- **`diff`** — rendered 10/25 normal or heroic, not a bare id.
+
+`cfg` also carries `cheats` and `mapthreads`, and is a fixed short list on purpose: a full dump would
+grow with every option and bury the few that decide whether a pull counts.
 
 ## Config
 
@@ -85,7 +109,7 @@ records carry a **negative** `t`. That is what makes a bad squad latch visible.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 10`)
+## Schema (`v: 11`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -95,7 +119,7 @@ else `7`. `0` still means no unit.
 
 | `e` | Fields |
 |---|---|
-| `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
+| `hdr` | `v`, `ts` epoch ms, `map`, `inst`, `diff`, `boss`, `bin`, `cfg`, `roster[]` of `{g,n,c,r,h}` — `r` role, `h` human |
 | `pull` / `end` | `boss`,`src`: bossstate, mark, engage, rename (then `was`) / `out`: kill, wipe, reset, idle, mapgone, shutdown |
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss,`own` owner guid when it has one, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
