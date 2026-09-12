@@ -76,13 +76,17 @@ enum UlduarThorimIds
 constexpr float ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD = 429.6094f;
 constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 
-// Thorim hard mode: bots clear Sif's moving Blizzard, and ranged/healers keep this far from
-// Sif herself so her point-blank Frost Nova (cast after she teleports next to a target) misses.
-// DBC radius is 13, and the searcher applies through IsWithinDistInMap, which adds both object sizes
-// on top - Rune of Death is 13 in the DBC and was measured landing at 15.4. At 12 the dodge stopped
-// while still standing in it.
+// Thorim hard mode: bots clear Sif's moving Blizzard. DBC radius is 13, and the searcher applies
+// through IsWithinDistInMap, which adds both object sizes on top - Rune of Death is 13 in the DBC and
+// was measured landing at 15.4. At 12 the dodge stopped while still standing in it.
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
-constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS = 12.0f;
+
+// How far ranged and healers keep off Sif herself. 62605 is two effects at two radii: 12 yd of damage
+// and a 15 yd root, so clearing only 12 dodges the hit and eats a 6s root. Roots were measured out to
+// 14.9, a quarter to a half of them on bots already clear of the damage, and a rooted camp bot cannot
+// walk home, take a shelter or leave a Blizzard zone. She teleports and casts 2.5s later, so this only
+// saves the ones already outside 12 - nothing helps whoever she lands on.
+constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS = 16.0f;
 
 // How far the melee ring and the camp keep off a Blizzard zone, and deliberately not the 15 above: that
 // one is the generic flee's trigger radius and is meant to fire early. Damage stops at 9.8 - measured

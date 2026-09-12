@@ -343,9 +343,15 @@ Every camp home spot clears the loop by 12.9 yd or more.
 **The two Blizzard radii mean different things.** `ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0` is the
 generic dodge's **trigger** radius, not a damage radius. The damage-side constant is
 `ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0` — the measured 9.8 yd reach (corrected DBC 8 plus both
-combat reaches through `IsWithinDistInMap`) plus a yard. `ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS` stays at
-**12**, matching the DBC damage effect; its victims are mostly a consequence of Sif teleporting on top
-of people rather than of short clearance.
+combat reaches through `IsWithinDistInMap`) plus a yard.
+
+**Frost Nova is two radii too, and the root is the wider one.** 62605 damages at **12 yd** and roots at
+**15**, so a 12 yd clearance dodges the hit and eats the root: roots reach p90 **14.3-14.9**, last
+**~6 s**, and **25-47%** land on bots already clear of the damage. Rooted, a camp bot cannot walk home,
+take a shelter or leave a Blizzard zone — the most-rooted pull refused **31** positioning moves and **11**
+Blizzard escapes, and was also the worst Blizzard pull. Hence
+`ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS = 16`. The damage stays teleport luck: she casts 2.5 s after
+teleporting, ~8.6 yd of travel under the Volley slow, so nobody she lands on escapes either radius.
 
 **The generic 30 yd flee was producing the damage it dodged.** `MoveAwayFromCreatureAction` scores 8
 compass rays out to 30 yd and takes the **furthest**, so every accepted melee flee asked for the full
@@ -359,9 +365,11 @@ trail instead, and tanks are exempt **by role**.
 `NearTeleportTo`s onto the arena floor when she joins. This reuses the same floor threshold the
 normal-mode Thorim strategy already uses.
 
-**Hard mode changes what a trace means.** The 6:31 "kill" used as a yardstick **was not hard mode** —
-Sif vanished at 3:25 and dealt zero, against 520k-1.04M in hard-mode pulls. Any metric compared across
-the two is comparing hard mode to normal.
+**Hard mode changes what a trace means, and the boss with it.** Missing the clock puts **62565** on
+Thorim: `MOD_DAMAGE_PERCENT_DONE` **-40%**, `MOD_INCREASE_HEALTH_PERCENT` **-30%**. A normal-mode Thorim
+is therefore **17.57 M**, not 25.101 M: any figure carried across the two compares different bosses, and
+DPS from a normal-mode kill overstates the raid by **~43%**. The 6:31 and 5:34 "kills" used as
+yardsticks were both normal mode: Sif vanished and dealt zero, against 520k-1.04M in hard-mode pulls.
 
 ## The arena adds, and what to kill first
 
@@ -374,6 +382,13 @@ combat (see [../../engine/pitfalls.md](../../engine/pitfalls.md)).
 Measured share of arena damage taken: Dark Rune Warbringer 21.2% (melee 14.0%, Runic Strike **62322**
 7.2%), Dark Rune Evoker 16.5% (Runic Lightning **62445**). Champions are melee, top of the list and
 already standing on the bots — the generic picker used to send melee straight past them at an Evoker.
+
+**Phase 1's elites outlive phase 1.** 7-9 are still standing when Thorim lands — 5 Champions (0.61 M),
+7 Warbringers (0.53 M), 6 Evokers (0.41 M) — and deal **113-214k** over the rest of the fight; the
+Commoners die on their own (47 units to 9 by +27 s). One Evoker's Lightning Shock was 26k of the 55k that
+killed a healer at **+16 s**, so the phase 2 camp clears **Evokers only** and melee and tanks stay on the
+boss: all 1.55 M costs ~15 s of boss time to save ~200k, while a camp bot kills an Evoker without
+stepping off its spot.
 
 Dark Rune Commoners stack **Low Blow 62326**, whose second effect is
 `SPELL_AURA_MOD_DAMAGE_PERCENT_DONE` at **−3% a stack**; one pull peaked at 25 stacks on a single bot,
@@ -431,8 +446,13 @@ Kologarn, Freya, and VoA's Emalon and Archavon share the mechanism.
 **The wipe is a damage race, and nothing positional answers it.** Tank intake reaches **190-260k per
 20 s by +100 s** (Thorim's melee 110-150k of it) against **180-210k healed**; the Lightning Charge stack
 buff takes his melee from **6.8k to 15.6k a swing by +140 s**, Lightning Charge **13k → 28k**, and Chain
-Lightning peaks at **31.5k**. The tanks fall at **+155-170 s** while the kill needs about **225 s** at
-the observed pace. This is the encounter's actual remaining problem.
+Lightning peaks at **31.5k**. The tanks fall at **+155-170 s**; across five pulls the raid survived
+**166-178 s** against the **217-254 s** its **99-116k** boss DPS needs, taking **4.19-4.68 M** in phase 2
+where normal mode takes **0.64 M**. **Sif is about half of that and most of it is undodgeable** —
+Frostbolt Volley 62604 is a **200 yd** radius carrying a **-51% slow**, which also doubles every
+reposition. Mana is the wall, and not for want of cooldowns: healers run **29-30% overheal** and hit
+**8-20% mana by +150 s** with Innervate, Mana Tide, Hymn of Hope, Shadowfiend, gems and potions all
+already spent. This is the encounter's actual remaining problem.
 
 **Chain Lightning kills from hop 5.** The multipliers are 1, 1.5, 2.25, 3.4, 5.1, 7.6, 11.4, 17.1 on a
 4625-5375 base — hops 6-8 kill outright and hop 5 kills cloth. Melee ring slots are 90° apart (11.3 yd
@@ -459,7 +479,13 @@ squad loses its corridor node for the final stretch and finishes on `follow`.
 
 **The ~28 s opening wait is deliberate.** The squad does not move until the master reaches
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It is left in
-because it is the difference between missing and making the 170 s window.
+because it is the difference between missing and making the clock.
+
+**The clock is missed about two pulls in five.** Margins from the Touch of Dominion cast ran
+**+25.6 / +32.8 / +32.2 / -4.0 / -11.1 s**, and the whole **30-44 s** spread is corridor-trash time: Iron
+Honor Guard held **531/729** target-snapshots on the pulls that made it against **1202/1358** on the ones
+that did not, while Colossus and Rune Giant time was identical in all five. Snapshot cadence never moved
+(p50 227-229 ms), so it is bot behaviour, not load.
 
 **The shelter run is uncapped.** Observed distances to the shelter when the note fired were **52.1 and
 60.6 yd** against a table solved for 25.6, and a bot that does not make it takes the cone while moving.

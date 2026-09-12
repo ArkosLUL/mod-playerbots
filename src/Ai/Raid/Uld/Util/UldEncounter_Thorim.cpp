@@ -1285,9 +1285,29 @@ Unit* GetThorimDpsTarget(PlayerbotAI* botAI, Player* bot, Unit* currentTarget)
     if (!boss || !boss->IsAlive() || !boss->IsHostileTo(bot))
         return nullptr;
 
-    // Phase 2 is one target and nothing else matters.
+    // Phase 2 is the boss, bar one exception: the Evokers that live through phase 1 keep shelling the
+    // camp from range, and a camp bot kills one without stepping off its spot. Champions and Warbringers
+    // are left alone on purpose - 1.1M of health for the 145k they deal is a trade this clock cannot
+    // afford, and a melee sent across the arena at an add is the failure the phase 1 branch below was
+    // written against.
     if (boss->GetPositionZ() < ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
+    {
+        if (GetThorimPhase2Role(botAI, bot) == ThorimPhase2Role::Ranged)
+        {
+            ThorimEncounterTargets leftovers;
+            GatherThorimEncounterTargets(botAI, leftovers);
+
+            std::vector<Unit*> inside;
+            for (Unit* candidate : leftovers.evokers)
+                if (ThorimInArenaBox(candidate))
+                    inside.push_back(candidate);
+
+            if (Unit* pick = SelectThorimTierTarget(currentTarget, inside, ULDUAR_THORIM_NEAR_ARENA_CENTER))
+                return NoteThorimDpsTarget(bot, pick);
+        }
+
         return NoteThorimDpsTarget(bot, boss);
+    }
 
     ThorimEncounterTargets targets;
     GatherThorimEncounterTargets(botAI, targets);

@@ -389,5 +389,5 @@ bool ThorimSifFrostNovaTrigger::IsActive()
         return false;
 
     TooCloseToCreatureTrigger tooCloseToSif(botAI);
-    return tooCloseToSif.TooCloseToCreature(NPC_SIF, ULDUAR_THORIM_SIF_FROST_NOVA_RADIUS);
+    return tooCloseToSif.TooCloseToCreature(NPC_SIF, ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS);
 }
