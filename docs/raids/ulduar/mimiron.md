@@ -75,7 +75,8 @@ turns the whole camp toward the room in 4° steps up to 16° until every slot se
 (`Map::isInLineOfSight` along the `IsWithinLOSInMap` ray from a fixed 2 yd eye), raid-wide on the 250 ms
 scan; it rises at once and falls back only after 15 s (`mimiron.campturn`). In that stress case it
 clears with ≤ 8° in 98% of positions. navprobe has no LoS mode; the offline probe is in
-[pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops).
+[pitfalls](../../engine/pitfalls.md#movement-that-silently-no-ops). The static turn was enough on
+its own on 2026-09-12: `follow <-> arc spread` **0**, from 58 and 49, and `campturn` never fired.
 
 The wedge is **fixed**, never tracking the boss: chains grow toward whoever is nearest their head, so a
 drifting camp smears the field along behind it. It gives ground only as one rigid piece, when its
@@ -219,15 +220,21 @@ tank 16.5 yd off the centre, and four ranged that `reach spell` stacked 38 yd ou
 line. `GetMimironSlotApproaches` now plans for trigger and action alike:
 
 - A slot that is not clear gives way, outside phase 1, to the nearest clear point within
-  `ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS` (6) that keeps 5.5 yd off every raid member. A bot already on
-  clear ground that close stays put, since a stand-in moves whenever the fire grows.
+  `ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE` (12) that keeps 5.5 yd off every raid member. A bot
+  already on clear ground within `_RADIUS` (6) stays put, since a stand-in moves whenever the fire
+  grows.
 - A walk through fire goes via one waypoint over its midpoint, 20°, 35°, 50° or 65° off the direct
   bearing, whose two legs both miss the fire. Only a candidate with no path hands over to the next.
 - Phase 1 keeps holding: its camp leaves its own fire by switching anchors, and a stand-in between 6 yd
   rows is a Napalm pair.
 
-On the traces that recovers a third to a half of the off-slot time; `mimiron.approach` notes each
-non-direct leg.
+Phase 2 came to a **6.6 yd** median off-slot on 2026-09-12, from 14.6. Phase 3 did not — **14.2**,
+p90 63.7 — with ranged 33% on their slot, 37% walking to it and **30% off it standing still**. That
+last third is the answer coming back empty, which stands the formation down: with 40+ nodes alive
+for the whole phase a 6 yd ring round a burning slot burns too. Hence the 12 yd ring, which the
+phase 3 wedge can afford — it orbits 17-27 yd out against a 35 yd cast range. `mimiron.approach`
+notes each non-direct leg, and `none` when no ring is clear, without which an empty answer reads in
+a trace exactly like the trigger never firing.
 
 ## Raising the fire dodge to FORCED handed it the Shock Blast escape to cancel
 
@@ -703,12 +710,15 @@ out 13.3 s before phase 1 and the 103.5 s of fixed handovers and ~483 s is left 
 VX-001 (8,276,398 each), the ACU (5,517,599) and phase 4 at half health (~11M): about **33M, 69k
 sustained**.
 
-| phase, 2026-09-11 | afternoon | evening | night |
-|---|---|---|---|
-| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k | 106.2 s at 78k, 93.8 s at 88k, 84.2 s at 98k |
-| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k | wiped at 25% and 57%; 104.3 s at 79k |
-| 3 ACU | - | **231 s at 24k** | **129 s at 42.7k** |
-| 4 | - | 29 s before the berserk, all three at 43-46% | 179 s at 52k; berserk with 6%, 6% and 12% left (~1.66M, ~32 s) |
+| phase | 09-11 afternoon | 09-11 evening | 09-11 night | 09-12 |
+|---|---|---|---|---|
+| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k | 106.2 s at 78k, 93.8 s at 88k, 84.2 s at 98k | 84 s at 116k |
+| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k | wiped at 25% and 57%; 104.3 s at 79k | 108 s at 94.5k |
+| 3 ACU | - | **231 s at 24k** | **129 s at 42.7k** | **138 s at 42.9k** |
+| 4 | - | 29 s before the berserk, all three at 43-46% | 179 s at 52k; berserk with 6%, 6% and 12% left (~1.66M, ~32 s) | 140 s; berserk with 8.8%, 9.3% and 14.6% left (2.33M, ~30 s) |
+
+The 09-12 column is engaged-to-dead and counts only damage into that part, so it reads higher than
+the 09-11 columns, which span the phase note and the whole raid's output.
 
 Bots hit the MK II, the only attackable unit in phase 1, in 94-99% of samples by role; the misses are
 targetless stretches after a tank death. Phase 2 was the check while the raid entered it with 14-17
@@ -719,6 +729,12 @@ the air at ~32k, and no third Assault Bot came, since each landing freezes the a
 pull reached the berserk ~32 s short, six bots down in phase 4 (two to mines, three to Hand Pulse and
 Plasma Ball, one to a Frost Bomb).
 Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), deliberately, and went out 4 s into it.
+
+2026-09-12 missed by **~30 s**: berserk at 10:00.175 with 2,327,568 left, and 15 of its 31 deaths in
+the four seconds after it. Phase 3 is still where the time goes — only **54%** of output reached the
+ACU, against Assault Bot 23%, Junk Bot 8%, Fire Bot 7%, Bomb Bot 3% — and not the handovers, which
+measured 52 + 31 + 32 s in both pulls that day with the raid back on the new mech 3-5 s after it
+became attackable.
 
 ## A dodge that returns false hands the tick to Charge
 
@@ -836,10 +852,9 @@ phase 4. On 2026-09-11 bots killed the only wave, slowly (22-65 s), after **45 s
 and two Water Spray deaths.
 
 The raid now **keeps two** through phase 3: `GetMimironKeptFireBots`, the two lowest guids, raid-wide,
-folded every 250 ms. Ranged rank any other above everything but a Bomb Bot, melee after the Assault
-Bot. At 15% ACU health (`_FIREBOT_CLEANUP_PCT`) the pair joins the list, and in the phase 4 handover
-`MimironSetDpsPriorityTrigger` fires with nothing engaged while a fire bot is in the room; phase 4
-already ranks them above the focus. `MimironFireBotAoeGuardMultiplier` holds damage AoE while a kept
+folded every 250 ms. At 15% ACU health (`_FIREBOT_CLEANUP_PCT`) the pair joins the list, and in the
+phase 4 handover `MimironSetDpsPriorityTrigger` fires with nothing engaged while a fire bot is in the
+room. `MimironFireBotAoeGuardMultiplier` holds damage AoE while a kept
 one is within 30 yd of the bot or its target. `IsMimironSpotFireBotSafe` refuses the spray strip (16
 ahead, 3.5 each side) for everyone and 13 yd for casters and healers in 25-man, in `IsMimironSpotSafe`
 and the flee fan; `mimiron fire bot` (`ACTION_RAID + 3`) steps sideways out of the line, or away from
@@ -848,6 +863,21 @@ the siren.
 The next phase 3 culled one at 4:48 and kept two until 6:04 and 6:25, before phase 4: one Water Spray
 hit, and 18 siren applications against 45 before, 6 of them on casters and healers against 19, most in
 the 3 s after the wave spawned.
+
+**The cull is cleanup, so it ranks like cleanup.** Ranged took an unkept bot above everything but a
+Bomb Bot, and on 2026-09-12 all 21 non-tanks switched to `firebot` at 4:56 with the ACU at **97.9%**:
+phase 3 spent **361 bot-seconds and 769,961** on fire bots, 7% of output and 21% of ranged bot-seconds,
+while the ACU took 43k dps. Against that, their own output is **one Water Spray hit a pull**, twice
+running. Ranged now take them there only during the 15% sweep, which is the urgent one; outside it
+they wait behind the mech, melee stay behind the Assault Bot, and **nobody culls in phase 4** — a
+stray spray line is cheaper than pulling anyone off the rendezvous.
+
+**Keeping them out of Mimiron's own picker is not enough.** In that pull the bot tank killed *both*
+kept bots on its own (32,731 and 17,824, 34% of its phase 3): `MimironSetDpsPriorityTrigger` stands
+down for tanks and `MimironTargetGuardMultiplier` only zeroes `DpsAssistAction` for non-tanks, so
+nothing told the generic tank picker. Ulduar had no `AppendTargetExclusions` while Kara, MC and SWP
+do; `RaidUlduarStrategy` now excludes the kept pair there, which covers the tank picker, `dps target`,
+`dps aoe target` and the attacker values at once.
 
 ## Pets need telling twice, in two different phases
 
@@ -893,15 +923,29 @@ floor.
 ACU on VX-001) both carry `AttachmentOffsetX/Y/Z = 0,0,0`, `Vehicle::AddPassenger` relocates by exactly
 those offsets, and `RelocatePassengers` rewrites passengers to `vehiclePos + offset` on every chassis
 move without re-applying hover height. The visual stack is a client-side model attachment. Two
-consequences: melee cleave splashes every part, which is what the **10 % floor** is for; and the Aerial
+consequences: everything splashes every part, which is what the floor below is for; and the Aerial
 Command Unit is genuinely reachable by melee in phase 4.
 
-Melee are kept off it anyway, by choice. Ranged DPS own the ACU — `IsRangedDps`, not `IsRanged`, so a
-healer is never steered onto it or into the hold — and with ranged at roughly half the raid against the
-ACU's third of the health pool, that split lands close to even on its own. **Everyone holds at 10 %**
-once nothing they are allowed to touch is above the floor: melee, pets, and both tanks. Tanks holding
-is only safe because nothing else is generating threat by then, so threat is static and no mech changes
-hands; it is the first thing to revisit if one ever does.
+Melee are kept off it anyway, by choice: ranged DPS own the ACU — `IsRangedDps`, not `IsRanged`, so a
+healer is never steered onto it or into the hold.
+
+**The ACU still arrives last, and a fixed floor cannot absorb that.** On 2026-09-12 ranged aimed
+**94%** of their damage at it and it lost **25.6k hp/s** against the ground pair's 46.0k and 44.3k.
+Melee land under 3% of their damage on it while targeting it 9% of the time, and half of what ranged
+aim at it lands on the other two: one point, so pets, DoTs, totems and AoE spread across the stack.
+So the pair reached the old flat 10 % floor with the ACU at **20.2%** and hit 0.2% before it caught
+up: Self Repair started 6:57.985, 7:05.115 and ~7:14.7, a **16.7 s spread against the 15 s cast**,
+all three returned at 50%, and phase 4 cost **235 s for what the second run did in 112**. (That pull
+was not Firefighter — no Emergency Mode, Flames or Frost Bomb — but the rendezvous does not depend
+on the mode.)
+
+The floor is therefore **`max(10 %, leader − ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT)`**, 4 % or two bands,
+`leader` being whichever part is furthest from death: the pair parks just under the ACU instead of 10
+points under it, and the three walk down together. Everyone holds once nothing they may touch is above
+it: melee, pets, and both tanks. Tanks holding is only safe because nothing else is generating threat
+by then, so threat is static and no mech changes hands; it is the first thing to revisit if one ever
+does. The two humans were **29%** of that slide through the floor, 71% of their damage into the ground
+pair, which no bot change reaches: in phase 4 a player belongs on the ACU.
 
 **Every restriction lifts the moment a part starts self-repairing.** `IsMimironPhase4` is keyed on
 VX-001 riding the chassis, not on all three being attackable, precisely so it stays true through that

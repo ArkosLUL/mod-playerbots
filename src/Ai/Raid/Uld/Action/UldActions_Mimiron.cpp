@@ -987,10 +987,21 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     }
 
     // Fire bots that are not being kept: the extras past the kept pair, and all of them once the
-    // cleanup starts. Ranged take them ahead of everything but a Bomb Bot, since they die in seconds
-    // and a live one silences and sprays whoever it walks past. Melee get them after the Assault Bot.
+    // cleanup starts. The cleanup sweep is the urgent one - none may reach phase 4, where they spray
+    // straight into the rendezvous - so there ranged take them ahead of everything but a Bomb Bot.
+    // Before it an extra is only cleanup: it costs a spray line and a siren, which the movement
+    // nodes already dodge, and listing it above the mech had the whole ranged group drop the boss
+    // the moment a third one spawned. One Firefighter phase 3 spent 361 bot-seconds and 770k on them
+    // while the Aerial Command Unit took 43k dps, so outside the sweep they wait behind the mech.
+    // Melee get them after the Assault Bot either way. Nobody culls in phase 4: one stray bot is a
+    // spray line, and anything that pulls a bot off the rendezvous costs the whole phase.
     bool const hardMode = IsMimironHardModeActive(botAI);
-    if (hardMode && PlayerbotAI::IsRangedDps(bot))
+    bool const phase4 = IsMimironPhase4(bot);
+    bool const cullFireBots = hardMode && !phase4;
+    bool const fireBotSweep =
+        cullFireBots && aerialCommandUnit &&
+        aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT;
+    if (fireBotSweep && PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
@@ -1004,7 +1015,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
 
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
-    if (hardMode && !PlayerbotAI::IsRangedDps(bot))
+    if (cullFireBots && !PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
@@ -1013,7 +1024,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     // Phase 4 has its own rule: the three only stay down if all of them reach Self Repair inside its
     // 15 s cast, so they have to come down level. One shared helper answers for the tank node, this one
     // and the pets, which is what stops the three disagreeing about who is being evened out.
-    if (IsMimironPhase4(bot))
+    if (phase4)
     {
         if (Unit* focus = GetMimironPhase4Focus(botAI, bot, botAI->IsMelee(bot)))
             priority.emplace_back(focus->GetEntry(), focus);
@@ -1025,6 +1036,10 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     for (Unit* mech : {leviathanMkII, vx001, aerialCommandUnit})
         if (mech)
             priority.emplace_back(mech->GetEntry(), mech);
+
+    if (cullFireBots && !fireBotSweep && PlayerbotAI::IsRangedDps(bot))
+        priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
+                              SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
     return priority;
 }

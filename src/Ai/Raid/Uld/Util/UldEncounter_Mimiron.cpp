@@ -395,8 +395,9 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         // the near side of the slot.
         float const towardBot = slot.GetAngle(bot->GetPositionX(), bot->GetPositionY());
         bool found = false;
-        for (float radius = 2.0f; radius <= ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS + 0.01f && !found;
-             radius += 2.0f)
+        // Phase 1 has already returned above, so this is the wide ring.
+        for (float radius = 2.0f;
+             radius <= ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE + 0.01f && !found; radius += 2.0f)
         {
             for (uint32 step = 0; step < 12 && !found; ++step)
             {
@@ -428,7 +429,14 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
         }
 
         if (!found)
+        {
+            // An empty answer stands the formation down, and without this it is indistinguishable
+            // in a trace from the trigger never firing.
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "mimiron.approach", "none");
+
             return approaches;
+        }
 
         how = "substitute";
     }
@@ -854,13 +862,24 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (levelled)
         return highest(allowed);
 
+    // Paced to whichever part is furthest from death, not to a fixed percentage. Only ranged dps
+    // reach the Aerial Command Unit and about half of what they aim at it lands on the other two,
+    // so it is always the last to arrive; holding the ground pair at an absolute floor let them run
+    // 10 points ahead of it and the rendezvous missed Self Repair's 15 s cast by 1.7 s.
+    float leader = 0.0f;
+    for (Unit* part : parts)
+        leader = std::max(leader, part->GetHealthPct());
+
+    float const floorPct =
+        std::max(ULDUAR_MIMIRON_PHASE4_HOLD_PCT, leader - ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT);
+
     std::vector<Unit*> aboveFloor;
     for (Unit* part : allowed)
-        if (part->GetHealthPct() > ULDUAR_MIMIRON_PHASE4_HOLD_PCT)
+        if (part->GetHealthPct() > floorPct)
             aboveFloor.push_back(part);
 
     // Nothing left this bot may touch that is not already at the floor. Hold: all three sit on one
-    // point server-side, so cleave splashes every part, and 10 % is the margin that keeps incidental
+    // point server-side, so cleave splashes every part, and the margin is what keeps incidental
     // damage from pushing one under while the others are still high.
     return aboveFloor.empty() ? nullptr : highest(aboveFloor);
 }

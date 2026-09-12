@@ -238,6 +238,14 @@ constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
 // still fit inside ULDUAR_MIMIRON_PHASE4_HOLD_PCT.
 constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
 
+// How far below the part furthest from death the others may be pushed before they wait. The
+// Aerial Command Unit is the one that cannot be helped along: melee never reach it, and all three
+// sit on one point so about half of what ranged aim at it lands on the other two instead. A fixed
+// floor does not know that - the ground pair reached 10 % with the unit still at 20 % and was
+// driven under long before it caught up, which cost a whole second phase 4. Two focus bands, so
+// the hold releases when the unit catches up rather than on every tick of splash.
+constexpr float ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT = 4.0f;
+
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
 constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
@@ -521,9 +529,17 @@ bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& win
 // a hop shorter than the step lands on the next node along.
 constexpr float ULDUAR_MIMIRON_FLAMES_RADIUS = 5.0f;
 
-// How far from a slot that is not clear a bot may stand in for it. Further out the slot's spacing and
-// range are gone, and holding where it is does as well.
+// How far from a slot that is not clear a bot may stand in for it in phase 1, and how close it has to
+// be already to stay put rather than look at all. The camp's rows are 6 yd apart, and a stand-in
+// squeezed between them is how two bots end up under one Napalm Shell.
 constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS = 6.0f;
+
+// The same search outside phase 1, where the fire covers the floor and a 6 yd ring round a burning
+// slot burns too - 30 % of a Firefighter phase 3 was ranged standing still off their slots because
+// nothing on the ring was clear. The phase 3 wedge orbits 17 to 27 yd out against a 35 yd cast
+// range, so 12 still leaves the bot in range, and every candidate is screened against
+// ULDUAR_MIMIRON_DISPERSE_DISTANCE anyway, so widening cannot clump the raid.
+constexpr float ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS_WIDE = 12.0f;
 
 // Detour waypoint turns off the direct bearing, degrees, tried in order. The waypoint sits over the
 // walk's midpoint, so 65 makes the walk 2.4 times as long. Past that it is walking away.

@@ -7,7 +7,20 @@
 #include "UldStrategy.h"
 
 #include "BossResistanceMultipliers.h"
+#include "Playerbots.h"
+#include "UldEncounter_Mimiron.h"
 #include "UldMultipliers.h"
+
+// The kept Emergency Fire Bots are the raid's fire suppression, and only Mimiron's own dps picker
+// knew it: that node stands down for tanks, and the target guard beside it only zeroes
+// DpsAssistAction, so the generic tank picker killed both of the protected pair in one Firefighter
+// pull. Excluding them here covers every picker at once - tank, dps, dps aoe and the attackers.
+void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions,
+                                               TargetValueExclusionType /*type*/)
+{
+    for (ObjectGuid const& guid : GetMimironKeptFireBots(botAI, botAI->GetBot()))
+        exclusions.insert(guid);
+}
 
 void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
