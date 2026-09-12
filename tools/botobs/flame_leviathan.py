@@ -6,17 +6,26 @@
     flame_leviathan.py <file> --fury   Hodir's Fury only
     flame_leviathan.py <file> --adds   Freya's Ward adds only
     flame_leviathan.py <file> --vents  Flame Vents channels and interrupts only
+    flame_leviathan.py <file> --inferno Mimiron's Inferno trail only
 
 **Battering Ram (62376)** is cast `me->CastSpell(me->GetVictim(), ...)` when the boss is
 `IsWithinCombatRange(victim, 15.0f)`, and its ImplicitTargetA is 53 = TARGET_DEST_TARGET_ENEMY with
 EffectRadiusIndex 20. It is therefore a 25 yd sphere centred on the **pursued vehicle**, not a cone
-off the boss's front. `--ram` scores every other vehicle against that sphere, and against the
-distance-to-boss gate the module uses, so the two can be compared directly.
+off the boss's front. `--ram` scores every other vehicle against that sphere, which is the same test the module backs off
+on (`FlameLeviathanInBatteringRamBlast`), so what it prints is the exposure the backoff had to clear
+and did not. It used to also score a distance-to-boss gate; the module has not used one since the
+sphere replaced it, and that column was measuring nothing.
 
 **Hodir's Fury** is not a chaser at the moment that matters. npc_hodirs_fury walks to a target with
 MoveFollow(target, 0, 0); on arrival it roots itself and runs a 5 s fuse, then drops a 10 yd blast
 carrying an undispellable 60 s stun (62297) **where it stopped**. So the dodge window is the 5 s the
 reticle spends stationary, and `--fury` measures who cleared 10 yd inside it.
+
+**Mimiron's Inferno** is not one circle. `npc_mimirons_inferno` (33369) walks a waypoint path and
+every 2 s summons NPC 33370, each of which burns for 30 s - so the hazard is a line of about fifteen
+9 yd patches trailing a moving head. The patches are also dynamic objects, spell 62910, which is how
+`snap.hz` sees them; the bot's own scan reads creature entries. A hull standing in one loses about
+half its health every 5 s. `--inferno` scores who stood in it and what it cost.
 
 **Freya's Ward** spawns four wards once, 30 s in, at the arena corners; each fires a wave every 29 s
 for the rest of the pull, and the adds carry TEMPSUMMON_MANUAL_DESPAWN so they never time out. Every
@@ -33,6 +42,9 @@ Two things this file will not tell you, both of which have already fooled a read
 - **The snapshot cast column only catches spells with a cast time.** Ram, Mortar and Fire Cannon are
   instant, so they never appear in it. Absence there is not evidence a seat held its fire - judge
   that from the add health deltas below.
+- **`dmg` rows are written for roster players only**, so damage to a hull never appears in one and
+  cannot be attributed to a spell. Every hull-attrition figure below comes from `snap` health deltas
+  instead, which is why they are rates per 5 s rather than totals.
 - **Riders are not at their vehicle's exact coordinates.** A turret gunner sits 0.20 yd off its
   hull, so matching rider to hull on equal positions reports a crewed bot as dismounted.
 """
@@ -68,6 +80,9 @@ LASH_SPELL = 65062
 VENT_TICK = 63847           # SPELL_FLAME_VENTS_TRIGGER, one cast per tick of the 62396 channel
 VENT_TICKS_FULL = 11        # what a channel that runs its whole 10 s emits
 VENT_GAP_MS = 4000          # ticks are ~1 s apart, so a longer gap is a new channel
+
+INFERNO_SPELL = 62910       # the ground fire, a dynamic object rather than a creature
+INFERNO_RADIUS = 9.0        # what snap.hz reports for it, and what the DBC effect radius says
 
 # The four NPC_FREYA_WARD_TARGET spawn points, boss_flame_leviathan.cpp SummonTowerHelpers.
 ARENA_CORNERS = [(159.4, 64.1), (382.9, 74.0), (374.0, -141.0), (157.7, -140.3)]
@@ -188,9 +203,7 @@ def frames(trace: Trace):
 
 
 def show_ram(trace: Trace) -> int:
-    real = collections.Counter()        # inside the 25 yd sphere on the victim
-    gated = collections.Counter()       # what dist-to-boss <= 25 + size would have caught
-    both = collections.Counter()
+    real = collections.Counter()        # inside the 25 yd sphere on the victim, plus own size
     per_role = collections.defaultdict(collections.Counter)
     lead_to_victim = []
     lead_to_boss = []
@@ -208,38 +221,33 @@ def show_ram(trace: Trace) -> int:
         for (x, y), (size, role, _) in frame.vehicles.items():
             if (x, y) == (vx, vy):
                 continue                # the victim is already kiting; it is exempt by design
-            danger = math.hypot(x - vx, y - vy) <= RAM_RADIUS
-            gate = math.hypot(x - bx, y - by) <= RAM_RADIUS + size
+            # FlameLeviathanInBatteringRamBlast: the vehicle's own object size counts, because the
+            # blast is measured to its edge rather than its centre.
+            danger = math.hypot(x - vx, y - vy) <= RAM_RADIUS + size
             real[danger] += 1
-            gated[gate] += 1
-            if danger and gate:
-                both[True] += 1
             per_role[role][("danger", danger)] += 1
-            if danger and not gate:
-                per_role[role]["missed"] += 1
             if role == "tar-lead":
                 lead_to_victim.append(math.hypot(x - vx, y - vy))
                 lead_to_boss.append(math.hypot(x - bx, y - by))
 
     exposed = real[True]
-    fired = gated[True]
+    scored = real[True] + real[False]
     print("Battering Ram: a 25 yd sphere on the pursued vehicle\n")
-    print(f"  vehicle-frames scored (boss in range to fire) : {real[True] + real[False]}")
-    print(f"  genuinely inside the blast                    : {exposed}")
-    if exposed:
-        print(f"     caught by the distance-to-boss gate        : {both[True]} ({100 * both[True] / exposed:.1f}%)")
-    if fired:
-        print(f"  gate fired while safe (dragged off station)   : {fired - both[True]}"
-              f" ({100 * (fired - both[True]) / fired:.1f}% of its activations)")
+    print("  This is the module's own test, so what is left here is exposure the backoff did not")
+    print("  clear - not exposure it could not see.\n")
+    print(f"  vehicle-frames scored (boss in range to fire) : {scored}")
+    if scored:
+        print(f"  still inside the blast                        : {exposed}"
+              f" ({100 * exposed / scored:.1f}%)")
 
     print("\n  by station:")
-    print(f"     {'station':12s} {'in blast':>9s} {'invisible to the gate':>23s}")
+    print(f"     {'station':12s} {'frames':>9s} {'in blast':>10s}")
     for role in sorted(per_role):
         counts = per_role[role]
         inside = counts[("danger", True)]
-        missed = counts["missed"]
-        share = f"{100 * missed / inside:.0f}%" if inside else "-"
-        print(f"     {role:12s} {inside:9d} {missed:14d} ({share})")
+        total = inside + counts[("danger", False)]
+        share = f"{100 * inside / total:.1f}%" if total else "-"
+        print(f"     {role:12s} {total:9d} {inside:7d} ({share})")
 
     if lead_to_victim:
         lead_to_victim.sort()
@@ -471,6 +479,98 @@ def show_adds(trace: Trace) -> int:
     return 0
 
 
+def inferno_patches(snap: dict):
+    """The Inferno patches on the ground in this snapshot, as (x, y, radius)."""
+    return [(row[1], row[2], row[4] or INFERNO_RADIUS)
+            for row in (snap.get("hz") or []) if row[0] == INFERNO_SPELL]
+
+
+def show_inferno(trace: Trace) -> int:
+    ents = trace.entries
+    hulls = {guid: entry for guid, entry in ents.items() if entry in VEHICLE_SIZE}
+    roster = roster_guids(trace)
+
+    # Distance to the nearest patch EDGE, so the bands read the way a driver would think about it.
+    bands = [(-1e9, 0.0, "inside the fire"), (0.0, 10.0, "0-10 yd from the edge"),
+             (10.0, 25.0, "10-25 yd"), (25.0, 60.0, "25-60 yd"), (60.0, 1e9, "over 60 yd")]
+    lost = collections.defaultdict(float)
+    secs = collections.defaultdict(float)
+    total_lost = 0.0
+    by_zone = collections.defaultdict(float)
+    inside_hull = collections.Counter()
+    inside_bot = collections.Counter()
+    concurrent = []
+
+    snaps = [s for s in trace.of("snap") if s["t"] >= 0]
+    prev = None
+    for snap in snaps:
+        pos = {row[0]: (row[1], row[2], row[5]) for row in snap.get("u", [])}
+        fires = inferno_patches(snap)
+        concurrent.append(len(fires))
+
+        def edge(x, y):
+            return min((math.hypot(x - fx, y - fy) - fr for fx, fy, fr in fires), default=1e9)
+
+        for guid, entry in hulls.items():
+            if guid not in pos or pos[guid][2] <= 0:
+                continue
+            inside_hull[VEHICLE_NAME[entry], edge(*pos[guid][:2]) < 0] += 1
+        for guid in roster:
+            if guid in pos:
+                inside_bot[edge(*pos[guid][:2]) < 0] += 1
+
+        if prev is not None:
+            dt = (snap["t"] - prev[0]) / 1000.0
+            if 0 < dt <= 3.0:
+                for guid in hulls:
+                    if guid not in pos or guid not in prev[1]:
+                        continue
+                    was, now = prev[1][guid], pos[guid]
+                    if was[2] <= 0 or now[2] <= 0:
+                        continue
+                    drop = max(0.0, was[2] - now[2])
+                    d = prev[2](was[0], was[1])
+                    for lo, hi, label in bands:
+                        if lo <= d < hi:
+                            lost[label] += drop
+                            secs[label] += dt
+                            break
+                    total_lost += drop
+                    by_zone["inside" if d < 0 else ("near" if d < 10 else "clear")] += drop
+        prev = (snap["t"], pos, edge)
+
+    print("Mimiron's Inferno: a walking head drops a 9 yd patch every 2 s, each burning 30 s\n")
+    if not concurrent or not max(concurrent):
+        print("  no Inferno patches in this trace - the Flame tower was down, or it is a pre-v8 file")
+        return 0
+
+    concurrent.sort()
+    print(f"  patches on the ground at once: median {concurrent[len(concurrent) // 2]}"
+          f"  max {concurrent[-1]}")
+
+    print("\n  hull frames standing in one:")
+    for name in sorted(VEHICLE_NAME.values()):
+        hot, cold = inside_hull[name, True], inside_hull[name, False]
+        if hot + cold:
+            print(f"     {name:12s} {hot:6d} / {hot + cold:6d}  ({100 * hot / (hot + cold):.1f}%)")
+    hot, cold = inside_bot[True], inside_bot[False]
+    if hot + cold:
+        print(f"     {'bots (any)':12s} {hot:6d} / {hot + cold:6d}  ({100 * hot / (hot + cold):.1f}%)")
+
+    print("\n  hull hp lost per 5 s, by distance to the nearest patch edge:")
+    for _, _, label in bands:
+        if secs[label] > 1:
+            print(f"     {label:22s} {5 * lost[label] / secs[label]:6.2f}%"
+                  f"   ({secs[label]:.0f} hull-seconds)")
+
+    if total_lost:
+        print("\n  share of every hull point the fleet lost:")
+        for key, label in (("inside", "inside the fire"), ("near", "within 10 yd of it"),
+                           ("clear", "clear of it")):
+            print(f"     {label:22s} {100 * by_zone[key] / total_lost:5.1f}%")
+    return 0
+
+
 def vent_channels(trace: Trace):
     """Flame Vents channels as (start, end, ticks). Electroshock is the only thing that ends one early."""
     ticks = sorted(rec["t"] for rec in trace.of("cast") if rec.get("sp") == VENT_TICK)
@@ -548,6 +648,7 @@ def main() -> int:
     parser.add_argument("--fury", action="store_true", help="Hodir's Fury only")
     parser.add_argument("--adds", action="store_true", help="Freya's Ward adds only")
     parser.add_argument("--vents", action="store_true", help="Flame Vents channels and interrupts only")
+    parser.add_argument("--inferno", action="store_true", help="Mimiron's Inferno trail only")
     args = parser.parse_args()
 
     if not args.file.is_file():
@@ -555,7 +656,7 @@ def main() -> int:
         return 1
 
     trace = Trace(args.file)
-    every = not (args.ram or args.fury or args.adds or args.vents)
+    every = not (args.ram or args.fury or args.adds or args.vents or args.inferno)
     if args.ram or every:
         show_ram(trace)
     if every:
@@ -570,6 +671,10 @@ def main() -> int:
         print()
     if args.vents or every:
         show_vents(trace)
+    if every:
+        print()
+    if args.inferno or every:
+        show_inferno(trace)
     return 0
 
 

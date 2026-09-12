@@ -66,6 +66,10 @@ struct FlameLeviathanState
     // where no adds are coming. Latches on only; the reset below clears it with the rest.
     bool lifeTowerStanding = false;
 
+    // Siege hulls in guid order, latched the first time anyone asks. Ranking the live ones instead
+    // renumbered every engine below a loss, so one hull dying swapped all four corners at once.
+    std::vector<ObjectGuid> siegeOrder;
+
     uint32 scanMs = 0;
 };
 
@@ -105,6 +109,7 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         state.pursuedVehicle = ObjectGuid::Empty;
         state.frozen.clear();
         state.lifeTowerStanding = false;
+        state.siegeOrder.clear();
         return;
     }
 
@@ -188,10 +193,19 @@ bool FlameLeviathanEngaged(PlayerbotAI* botAI)
     // Ahead of the combat test, because the housekeeping it drives includes the wipe reset.
     TickFlameLeviathan(botAI, bot, boss);
 
-    if (!bot->IsInCombat())
+    if (!boss || boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
         return false;
 
-    return boss && !boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
+    // His combat, not the rider's. Threat here belongs to the vehicle creature, so a bot that
+    // drives far enough away drops combat while the pull is still very much on - and that used to
+    // switch off both this encounter's mover and the veto that keeps the generic ones out, handing
+    // the wheel to "follow". Every accepted follow move on a crewed bot across two traces happened
+    // with the hull more than 100 yd out.
+    if (boss->IsInCombat())
+        return true;
+
+    // He can be out of combat for a moment while the raid is driving in, so the rider still counts.
+    return bot->IsInCombat();
 }
 
 Unit* FlameLeviathanRiddenVehicle(Player* bot)
@@ -533,26 +547,64 @@ static int32 FlameLeviathanSiegeRank(Player* bot)
     if (!base || base->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
         return -1;
 
-    int32 rank = 0;
+    FlameLeviathanState& state = FlameLeviathanStateFor(bot);
     ObjectGuid const myGuid = base->GetGUID();
-    if (Group* group = bot->GetGroup())
+
+    if (state.siegeOrder.empty())
     {
-        for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+        if (Group* group = bot->GetGroup())
         {
-            Player* member = gref->GetSource();
-            if (!member || member == bot || !member->IsAlive() || !FlameLeviathanIsDriver(member))
-                continue;
+            for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+            {
+                Player* member = gref->GetSource();
+                if (!member || !FlameLeviathanIsDriver(member))
+                    continue;
 
-            Unit* memberBase = member->GetVehicleBase();
-            if (!memberBase || memberBase->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
-                continue;
+                Unit* memberBase = member->GetVehicleBase();
+                if (!memberBase || memberBase->GetEntry() != NPC_SALVAGED_SIEGE_ENGINE)
+                    continue;
 
-            if (memberBase->GetGUID() < myGuid)
-                ++rank;
+                state.siegeOrder.push_back(memberBase->GetGUID());
+            }
         }
+
+        std::sort(state.siegeOrder.begin(), state.siegeOrder.end());
     }
 
-    return rank;
+    auto const it = std::find(state.siegeOrder.begin(), state.siegeOrder.end(), myGuid);
+    if (it == state.siegeOrder.end())
+    {
+        // A hull nobody was driving when the order latched. Give it a slot behind the originals
+        // rather than refusing, so a bot that took a replacement engine still posts somewhere.
+        state.siegeOrder.push_back(myGuid);
+        return static_cast<int32>(state.siegeOrder.size()) - 1;
+    }
+
+    return static_cast<int32>(std::distance(state.siegeOrder.begin(), it));
+}
+
+// The lowest rank still being driven. Ranks are fixed for the pull, so this is how a role that has
+// to exist finds a live holder without moving any of the ones that do not.
+static int32 FlameLeviathanLowestLiveSiegeRank(Player* bot)
+{
+    int32 best = -1;
+
+    Group* group = bot ? bot->GetGroup() : nullptr;
+    if (!group)
+        return FlameLeviathanSiegeRank(bot);
+
+    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
+    {
+        Player* member = gref->GetSource();
+        if (!member || !member->IsAlive())
+            continue;
+
+        int32 const rank = FlameLeviathanSiegeRank(member);
+        if (rank >= 0 && (best < 0 || rank < best))
+            best = rank;
+    }
+
+    return best;
 }
 
 int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
@@ -564,9 +616,12 @@ int8 FlameLeviathanCornerPost(PlayerbotAI* /*botAI*/, Player* bot)
     if (FlameLeviathanIsPursued(bot) || !FlameLeviathanCrewUsable(bot))
         return -1;
 
-    // Rank 0 never posts. A corner is ~90 yd from where he actually roams, which puts a posted
+    // The reserve never posts. A corner is ~90 yd from where he actually roams, which puts a posted
     // engine outside FlameLeviathanCanElectroshock's 25 yd cone test - so it drops out of the vent
     // interrupter election, and posting all of them would leave Flame Vents uninterruptible.
+    if (FlameLeviathanIsVentReserve(bot))
+        return -1;
+
     int32 const rank = FlameLeviathanSiegeRank(bot);
     if (rank <= 0 || rank > static_cast<int32>(ULDUAR_FL_ARENA_CORNERS.size()))
         return -1;
@@ -578,7 +633,17 @@ bool FlameLeviathanIsVentReserve(Player* bot)
 {
     // Only while the others are actually posting. With the tower down all five engines hold station
     // and the interrupter election picks among them as it always did.
-    return bot && FlameLeviathanStateFor(bot).lifeTowerStanding && FlameLeviathanSiegeRank(bot) == 0;
+    if (!bot || !FlameLeviathanStateFor(bot).lifeTowerStanding)
+        return false;
+
+    int32 const rank = FlameLeviathanSiegeRank(bot);
+    if (rank < 0)
+        return false;
+
+    // The lowest engine still driving, not rank 0 outright: when rank 0's hull dies nobody would be
+    // left near him and Flame Vents would stop being interrupted at all. Promoting costs one short
+    // drive back toward him and leaves a corner unmanned, which is the cheaper of the two.
+    return FlameLeviathanLowestLiveSiegeRank(bot) == rank;
 }
 
 Position FlameLeviathanCornerPostPoint(uint8 index)

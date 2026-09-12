@@ -71,6 +71,19 @@ uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* /*botAI*/)
     return sPlayerbotAIConfig.ulduarFlameLeviathanHardMode ? FL_TOWER_ALL : 0;
 }
 
+namespace
+{
+bool IsFlameLeviathanTowerHazard(uint32 entry, uint32 towerMask)
+{
+    // Both Mimiron entries: the target is the head of the trail, and NPC_FL_MIMIRONS_INFERNO is each
+    // 9 yd patch it drops behind itself. The patches outlive the head passing by a full 30s.
+    return ((towerMask & FL_TOWER_STORM) && entry == NPC_FL_THORIM_HAMMER_TARGET) ||
+           ((towerMask & FL_TOWER_FLAMES) &&
+            (entry == NPC_FL_MIMIRONS_INFERNO_TARGET || entry == NPC_FL_MIMIRONS_INFERNO)) ||
+           ((towerMask & FL_TOWER_FROST) && entry == NPC_FL_HODIRS_FURY_TARGET);
+}
+}  // namespace
+
 Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius)
 {
     if (!from)
@@ -89,11 +102,7 @@ Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32
         if (!unit || !unit->IsAlive())
             continue;
 
-        uint32 entry = unit->GetEntry();
-        bool const isHazard = ((towerMask & FL_TOWER_STORM) && entry == NPC_FL_THORIM_HAMMER_TARGET) ||
-                              ((towerMask & FL_TOWER_FLAMES) && entry == NPC_FL_MIMIRONS_INFERNO_TARGET) ||
-                              ((towerMask & FL_TOWER_FROST) && entry == NPC_FL_HODIRS_FURY_TARGET);
-        if (!isHazard)
+        if (!IsFlameLeviathanTowerHazard(unit->GetEntry(), towerMask))
             continue;
 
         float const dist = from->GetExactDist2d(unit);
@@ -105,6 +114,28 @@ Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32
     }
 
     return nearest;
+}
+
+void GetFlameLeviathanTowerHazards(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius,
+                                   std::vector<Unit*>& out)
+{
+    out.clear();
+    if (!from)
+        return;
+
+    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+    for (auto const& guid : npcs)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if (!IsFlameLeviathanTowerHazard(unit->GetEntry(), towerMask))
+            continue;
+
+        if (from->GetExactDist2d(unit) <= radius)
+            out.push_back(unit);
+    }
 }
 
 bool IsThorimHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarThorimHardMode; }

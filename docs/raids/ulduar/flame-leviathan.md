@@ -150,10 +150,20 @@ and never close; one chopper (lowest guid, neither Pursued nor frozen) runs *ahe
 turned, so its tar pool lands in his path — clamped to stop short of the Battering Ram sphere, and
 giving the slot up entirely when the chase leaves no room. Each class fans out by guid rank.
 
+**Every stand distance is measured outward from his combat reach**, so a 50 yd band puts a demolisher
+65 yd from his centre and the arrival deadband takes it past Hurl Pyrite Barrel's 70. `HoldStation`
+clamps the demolisher against that range: a barrel that will not cast drops the Blue Pyrite stack the
+raid does its boss damage with.
+
 `FlameLeviathanVehicleMovementMultiplier` zeroes every other `MovementAction` while a bot is on an FL
 vehicle, exempting only the drive action, boarding and `LeaveVehicleAction` — and it stays **inert
 until he is engaged**, or the raid could never drive into the arena. The Void Reaver risk applies:
 once it is live, a silently failing drive action means vehicles stand still all fight.
+
+**"Engaged" is his combat, not the rider's.** Threat here belongs to the vehicle creature, so a bot
+that drives far enough out drops combat mid-pull — which switched off the drive action and the
+multiplier together and handed the wheel to `follow`. `FlameLeviathanEngaged` reads the boss's combat
+first, falling back to the rider's so the approach still counts.
 
 ## The kite is a wall loop, not a corner run
 
@@ -178,6 +188,14 @@ periodic ground event:
 | Flame | 65075 | 33369 | Escort-path **moving** fire trail, drops fire every 2s |
 | Frost | 65077 | 33108 (2 spawn) | Walks to a target, roots itself, fires 5s later where it stopped |
 | Life | 64482 | 33367 (4 spawn) | Spawns adds that never despawn — kill, not dodge |
+
+**Mimiron's Inferno is a trail, not a circle.** 33369 walks a waypoint path and every 2 s summons
+**33370**, each burning **30 s** — about fifteen 9 yd patches in a line behind a moving head, median
+14 on the ground at once. Scanning only 33369 dodges the head and leaves the trail unseen: a hull
+standing in one loses **51-54% of its health per 5 s** (`--inferno`), and on 2026-09-12 that was
+**61%** of every hull point the fleet lost out of ~6% of hull-seconds. Both entries count now, and
+`ClearHazard` fans off the radial to a point clear of *every* patch within 45 yd — straight out from
+the nearest lands in the next as often as it escapes.
 
 **The Life tower adds were never being shot, and "the kill-nearest-attacker loop covers it" was
 wrong.** `FlameLeviathanVehicleAction` chose `boss ? boss : add`, so an add was only ever considered
@@ -229,16 +247,20 @@ the extra bodies are usually there to be had. The corner reticle that tells the 
 standing is **`NPC_FL_FREYA_WARD_TARGET = 33366`**; its presence is the latch input for
 `freyaAddsSeen`.
 
-**One siege engine per corner, and never all of them.** Ranks 1–4 of the live siege hulls post
+**One siege engine per corner, and never all of them.** Ranks 1–4 post
 `ULDUAR_FL_CORNER_STANDOFF` (12 yd) inside their corner facing out, so Ram's knockback drives what it
 catches deeper in rather than back at the fleet, and Fire Cannon still clears its 10 yd minimum. Rank
-counts every live hull, pursued and stunned included — dropping them renumbers everyone below and
-swaps all four corners on every Pursued switch, about once every 31 s.
-**Rank 0 never posts**: `FlameLeviathanIsVentInterrupter` requires `FlameLeviathanCanElectroshock`, a
-25 yd cone test against the boss, and a corner is ~90 yd from where he actually roams — post every
-engine and Flame Vents becomes uninterruptible. It also keeps its facing on the boss rather than
-turning for a Ram, being the only engine left inside that cone. The posting stays off until a ward or
-add is actually sighted, so a pull with the Life tower down never sends anyone to a corner.
+counts the hulls the instance started with, latched on first use: ranking the live ones renumbered
+everyone below a loss — one siege death swapped all four corners at once — and skipping pursued or
+stunned ones did the same every 31 s. A dead hull leaves its corner unmanned instead.
+
+**The lowest rank still driving never posts**: `FlameLeviathanIsVentInterrupter` requires
+`FlameLeviathanCanElectroshock`, a 25 yd cone test against the boss, and a corner is ~90 yd from where
+he actually roams — post every engine and Flame Vents becomes uninterruptible. It also keeps its
+facing on the boss rather than turning for a Ram, being the only engine left inside that cone. Lowest
+*live* rank rather than rank 0 outright, so losing that hull promotes the next one back toward him
+instead of leaving nobody. The posting stays off until a ward or add is actually sighted, so a pull
+with the Life tower down never sends anyone to a corner.
 
 **A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
 turned, while `DriveTo`'s park block re-faces the boss every tick. `HoldStation` therefore faces
@@ -347,19 +369,39 @@ against.
 passenger, so the helper's `UNIT_STATE_NOT_MOVE` test on the rider was false for every crewed bot from
 `e41a0e89a` onward.
 
-**The corner posting is an accepted regression, do not re-open it.** The boss floor got *worse*
-because both gunners now prefer any add in range over the boss. It is left alone pending the
-vent-interrupt fix, which is the change that would pay for it.
+**The corner posting was an accepted regression here**, left alone pending the vent-interrupt fix —
+the boss floor got *worse* because both gunners now prefer any add in range over the boss. That fix
+landed; see the 09-12 baseline below.
+
+## Baseline to beat — 2026-09-12, four towers up
+
+`603_4_flame-leviathan_1789222298` (211 s, floor **69.1%**) and `_1789222754` (318 s, floor
+**64.0%**): the first traces of `8823616d4`, and the first with all four towers standing.
+
+**The crew-usable fix landed.** Flame Vents channels cut short went 2 of 13 → **6 of 6** and **8 of
+12**, Electroshock 6/6 and 10/7, and `tar-lead` and `fl.corner` were both elected for the first time.
+Hodir's Fury: 3 of 4 then **6 of 6** cleared the fuse. Thorim's Hammer is a non-event at 0.03%.
+
+**Mimiron's Inferno replaced all of it as the hull killer** — 61% of every hull point lost, above.
+All 58 deaths were bots **on foot**; none died crewed.
+
+**Pyrite is the boss-damage hole.** Demolishers spent 56% of crewed frames past the barrel's 70 yd,
+held 2.7–4.7 of 10 stacks, and one sat 70 s at zero.
+
+**Corner posting was elected but never arrived** — median 126–209 yd from post, one engine inside
+15 yd for 2% of frames — because `follow` kept taking the wheel. Fine-grain driving is clean
+(path/net 1.3–1.5 for siege and demolishers); the oscillation was that tug-of-war, ~30 s a cycle.
 
 ## Known gaps
 
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
   `master->GetVehicle()` — the Oculus `GroupFlyingTrigger` defect, where one human who has not
   mounted freezes the whole raid.
-- **The tar lead is untested.** It was never elected before the crew-usable fix, so
-  `FlameLeviathanTarLeadDistance`'s clamp — lead capped at
-  `dist(boss, pursued) − bossReach(15) − BATTERING_RAM_RADIUS(25) − size`, needing the pursued
-  vehicle more than ~40 yd out — has never run and may still close the role on its own.
+- **The tar lead runs but is unmeasured.** It is elected in both 09-12 traces and the note only
+  emits when `FlameLeviathanTarLeadDistance`'s clamp opens — lead capped at
+  `dist(boss, pursued) − bossReach(15) − BATTERING_RAM_RADIUS(25) − size`, needing the pursued vehicle
+  more than ~40 yd out — so the role does drive. What it is worth is still unknown, because
+  `stations()` keeps only the last `fl.station` per bot and so cannot show a role held then lost.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**

@@ -30,7 +30,12 @@ enum UlduarFlameLeviathanIds
 {
     // spawns that tower's periodic ground hazard).
     NPC_FL_THORIM_HAMMER_TARGET = 33364,     // Storm: static lightning-strike marks
-    NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,  // Flame: moving fire trail
+    // Flame. The target walks a waypoint path and every 2s summons NPC_FL_MIMIRONS_INFERNO, each
+    // of which burns for 30s - so the hazard is a line of about fifteen 9 yd patches trailing behind
+    // a moving head, not one circle. Dodging only the head leaves the whole trail unseen, and a hull
+    // standing in it loses about half its health every 5s.
+    NPC_FL_MIMIRONS_INFERNO_TARGET = 33369,
+    NPC_FL_MIMIRONS_INFERNO = 33370,
     // Frost: walks to a target, roots itself on arrival, then fires 5s later where it stopped. The
     // strike carries a 60s stun (62297) with no mechanic and no dispel type, so a vehicle that eats
     // one is out of the fight for a minute and nothing can shorten it.
@@ -110,6 +115,11 @@ enum FlameLeviathanTowerFlags
 // Vehicle keeps this clear of any active-tower ground hazard (strike / fire / frost).
 constexpr float ULDUAR_FL_TOWER_HAZARD_RADIUS = 18.0f;
 
+// How far the clear step looks when it picks somewhere to go. Wider than the band above on purpose:
+// the step has to see the neighbouring patches of an Inferno trail, or it steps out of one and into
+// the next.
+constexpr float ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN = 45.0f;
+
 // What the strike itself actually covers, which is smaller than the band above: Hodir's Fury 10 yd
 // (62297), Mimiron's Inferno 9 (62910), Thorim's Hammer 7 (62912). The scan radius is the warning;
 // this is the circle a vehicle has to be out of.
@@ -130,7 +140,11 @@ constexpr float ULDUAR_FL_SIEGE_STAND_DIST = 8.0f;
 // of him - 6 yd put it 21 yd from his centre, permanently inside Battering Ram's 25. Out here it
 // keeps every shot and is only in the blast while it chooses to be, i.e. on the tar lead.
 constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 20.0f;
-constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;    // inside the 10-70 yd hurl band, outside Battering Ram
+// Where a demolisher wants to sit, measured the way every other stand distance is - outward from his
+// combat reach, not from his centre. HoldStation clamps it against ULDUAR_FL_HURL_BOULDER_MAX_RANGE,
+// which Hurl Pyrite Barrel shares: reach (15) plus this plus the arrival deadband lands outside 70,
+// and a barrel that will not cast drops the stack the raid does its boss damage with.
+constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;
 constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
 
 // Re-facing costs a spline, so only correct a facing that has really drifted. Roughly 6 degrees.
@@ -194,7 +208,8 @@ constexpr float ULDUAR_FL_BATTERING_RAM_CAST_RANGE = 15.0f;
 
 // Hurl Boulder is a lobbed shot with a real minimum range (RangeIndex 164), so a demolisher parked
 // on top of a frozen ally cannot thaw it and has to back off first. Mortar (RangeIndex 37) has no
-// minimum but only reaches 50.
+// minimum but only reaches 50. Hurl Pyrite Barrel shares RangeIndex 164, so this band is also the
+// one the pyrite stack lives or dies by.
 constexpr float ULDUAR_FL_HURL_BOULDER_MIN_RANGE = 10.0f;
 constexpr float ULDUAR_FL_HURL_BOULDER_MAX_RANGE = 70.0f;
 constexpr float ULDUAR_FL_MORTAR_MAX_RANGE = 50.0f;

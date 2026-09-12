@@ -394,6 +394,12 @@ Related traps:
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.
+- **A rider's own combat state is not the encounter's.** Where threat sits on a vehicle creature, a
+  passenger that drives away from the fight drops combat while the pull is still on. Gate on that and
+  the encounter's own mover and the multiplier shutting the generic movers out die together, handing
+  the wheel to `follow` — on Flame Leviathan every accepted `follow` move on a crewed bot sat 105+ yd
+  out, which cost the corner drive, the pyrite band, and a ~30 s oscillation. Read the boss's combat
+  first and fall back to the rider's, so the approach above still counts.
 - **A boss resolved by a wide grid search is resolved long before the pull** — a 200 yd search reaches
   the instance entrance in Obsidian Sanctum. So any per-instance state stamped on first sight starts
   its clock at zone-in, and a `lastSeenMs` staleness guard can never fire. Re-anchor on the boss's

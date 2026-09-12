@@ -1,6 +1,7 @@
 #include "UldActions_FlameLeviathan.h"
 #include "UldActions_Shared.h"
 
+#include <algorithm>
 #include <cmath>
 #include <mutex>
 #include <string>
@@ -484,10 +485,10 @@ bool FlameLeviathanDriveAction::DetourToCrate(Unit* /*boss*/)
 
 bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard)
 {
-    // Straight out, for all three reticles. Hodir's Fury reads like a chaser and used to be dodged
-    // sideways on that basis, but it only ever walks: on arrival it roots itself and the blast lands
-    // five seconds later on the spot where it stopped. By the time it can hurt anything it is a
-    // static mark like the other two, and radial is what puts the most ground between.
+    // Radial is the first thing tried, for all three reticles. Hodir's Fury reads like a chaser and
+    // used to be dodged sideways on that basis, but it only ever walks: on arrival it roots itself
+    // and the blast lands five seconds later on the spot where it stopped. By the time it can hurt
+    // anything it is a static mark like the other two.
     float const angle = hazard->GetAngle(vehicleBase_);
 
     float const clear = ULDUAR_FL_TOWER_BLAST_RADIUS + 2.0f * ULDUAR_FL_ARRIVE_TOLERANCE;
@@ -498,10 +499,55 @@ bool FlameLeviathanDriveAction::ClearHazard(Unit* hazard)
     if (step <= 0.0f)
         return false;
 
-    Position const goal(vehicleBase_->GetPositionX() + std::cos(angle) * step,
-                        vehicleBase_->GetPositionY() + std::sin(angle) * step, vehicleBase_->GetPositionZ());
+    auto const pointFor = [this](float bearing, float reach)
+    {
+        return Position(vehicleBase_->GetPositionX() + std::cos(bearing) * reach,
+                        vehicleBase_->GetPositionY() + std::sin(bearing) * reach,
+                        vehicleBase_->GetPositionZ());
+    };
 
-    DriveTo(goal, nullptr, false, MovementPriority::MOVEMENT_FORCED);
+    // Mimiron's Inferno is not one circle. Its head walks a waypoint path dropping a fresh 9 yd
+    // patch every 2s, each burning 30s, so there are about fifteen of them lying in a line - and
+    // straight out from the nearest lands in the next one as often as it escapes. Fan off the radial
+    // until somewhere is clear of all of them.
+    std::vector<Unit*> hazards;
+    GetFlameLeviathanTowerHazards(botAI, vehicleBase_, FlameLeviathanActiveTowerMask(botAI),
+                                  ULDUAR_FL_TOWER_HAZARD_CLEAR_SCAN, hazards);
+
+    float const safe = ULDUAR_FL_TOWER_BLAST_RADIUS + ULDUAR_FL_ARRIVE_TOLERANCE;
+    static constexpr float FAN[] = {0.0f, 0.6f, -0.6f, 1.2f, -1.2f, 1.8f, -1.8f, 2.4f, -2.4f, 3.0f};
+
+    for (float reach : {step, step + ULDUAR_FL_TOWER_BLAST_RADIUS, step + 2.0f * ULDUAR_FL_TOWER_BLAST_RADIUS})
+    {
+        for (float offset : FAN)
+        {
+            Position const goal = pointFor(angle + offset, reach);
+
+            // The arena bounds are the kite ring's, so a dodge that leaves them is a dodge into a
+            // wall - the spline stops short and the vehicle stays in the fire.
+            if (!FlameLeviathanInArena(goal))
+                continue;
+
+            bool clearOfAll = true;
+            for (Unit* each : hazards)
+            {
+                if (each->GetExactDist2d(goal.GetPositionX(), goal.GetPositionY()) < safe)
+                {
+                    clearOfAll = false;
+                    break;
+                }
+            }
+
+            if (!clearOfAll)
+                continue;
+
+            DriveTo(goal, nullptr, false, MovementPriority::MOVEMENT_FORCED);
+            return true;
+        }
+    }
+
+    // Boxed in by the trail. Straight out from the nearest patch still beats standing in it.
+    DriveTo(pointFor(angle, step), nullptr, false, MovementPriority::MOVEMENT_FORCED);
     return true;
 }
 
@@ -557,8 +603,13 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss)
             how = "chopper";
             break;
         case NPC_SALVAGED_DEMOLISHER:
-            // Demolishers hurl from 10-70 yd and never close, which also keeps them off Battering Ram.
-            standDist = ULDUAR_FL_DEMOLISHER_BAND;
+            // Demolishers hurl from 10-70 yd and never close, which also keeps them off Battering
+            // Ram. Clamped, because FlameLeviathanOffsetPoint measures outward from his combat reach:
+            // 15 plus the 50 band plus the deadband DriveTo parks in already sits past 70, and a
+            // barrel that will not cast drops the Blue Pyrite stack the raid does its damage with.
+            standDist = std::min(ULDUAR_FL_DEMOLISHER_BAND,
+                                 ULDUAR_FL_HURL_BOULDER_MAX_RANGE - boss->GetCombatReach() -
+                                     2.0f * ULDUAR_FL_ARRIVE_TOLERANCE);
             how = "demolisher";
             break;
         default:

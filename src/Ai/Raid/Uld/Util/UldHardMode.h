@@ -3,6 +3,8 @@
 
 #include "Define.h"
 
+#include <vector>
+
 class Player;
 class PlayerbotAI;
 class Unit;
@@ -51,6 +53,11 @@ uint32 FlameLeviathanActiveTowerMask(PlayerbotAI* botAI);
 // radius of `from`, restricted to the towers set in `towerMask`. Life tower is adds, not a
 // ground hazard, so it is never considered. Returns nullptr if none are in range.
 Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius);
+
+// Every active-tower ground hazard within radius of `from`, into `out`. The Flame trail is a line of
+// patches rather than one circle, so a step that only knows about the nearest walks along it.
+void GetFlameLeviathanTowerHazards(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius,
+                                   std::vector<Unit*>& out);
 
 // Thorim: hard mode = the arena gauntlet is cleared fast enough that Sif (33196) interrupts her
 // channel and joins the fight instead of despawning.
