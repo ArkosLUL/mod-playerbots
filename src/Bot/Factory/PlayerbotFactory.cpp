@@ -5823,6 +5823,116 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         }
     }
 
+    // Gems are chosen socket by socket with no reference to item_template.socketBonus, so a gem whose
+    // color would pay on one item routinely lands on another where it cannot. Exchanging two placed
+    // gems leaves the multiset untouched - same stats, same unique/limit-category budget, same global
+    // color counts for the meta gem's condition - so this can only add socket bonuses, never cost one.
+    if (coloredSockets.size() > 1)
+    {
+        std::map<Item*, std::vector<size_t>> bonusItemSockets;
+        for (size_t i = 0; i < coloredSockets.size(); ++i)
+        {
+            SocketToGem const& s = coloredSockets[i];
+            // A prismatic socket has no color and never gates a bonus, but it still holds a gem that
+            // may be worth more elsewhere, so it stays in the swap pool without being counted here.
+            if (s.socketColor && s.item->GetTemplate()->socketBonus)
+                bonusItemSockets[s.item].push_back(i);
+        }
+
+        std::map<Item*, float> bonusWeight;
+        for (std::pair<Item* const, std::vector<size_t>> const& entry : bonusItemSockets)
+        {
+            float weight = calculator.CalculateEnchant(entry.first->GetTemplate()->socketBonus);
+            if (weight > 0.0f)
+                bonusWeight[entry.first] = weight;
+        }
+
+        if (!bonusWeight.empty())
+        {
+            // owner[i] is the socket whose gem currently sits in socket i.
+            std::vector<size_t> owner(coloredSockets.size());
+            for (size_t i = 0; i < coloredSockets.size(); ++i)
+                owner[i] = i;
+
+            // Item::GemsFitSockets is all-or-nothing, so a partial color match on an item is worth
+            // exactly zero and only the complete ones are counted.
+            auto totalBonus = [&]() -> float
+            {
+                float total = 0.0f;
+                for (std::pair<Item* const, std::vector<size_t>> const& entry : bonusItemSockets)
+                {
+                    std::map<Item*, float>::const_iterator weight = bonusWeight.find(entry.first);
+                    if (weight == bonusWeight.end())
+                        continue;
+
+                    bool fits = true;
+                    for (size_t i : entry.second)
+                    {
+                        if (!(gemColorOf(coloredSockets[owner[i]].curGemItem) & coloredSockets[i].socketColor))
+                        {
+                            fits = false;
+                            break;
+                        }
+                    }
+                    if (fits)
+                        total += weight->second;
+                }
+                return total;
+            };
+
+            // Hill-climb on pairwise exchanges, bounded by the socket count so a scoring tie can never
+            // loop. A geared bot has under a dozen sockets, so the inner scan costs nothing.
+            float current = totalBonus();
+            for (size_t round = 0; round < coloredSockets.size(); ++round)
+            {
+                float bestScore = current;
+                size_t bestI = 0;
+                size_t bestJ = 0;
+                for (size_t i = 0; i < coloredSockets.size(); ++i)
+                {
+                    for (size_t j = i + 1; j < coloredSockets.size(); ++j)
+                    {
+                        std::swap(owner[i], owner[j]);
+                        float score = totalBonus();
+                        std::swap(owner[i], owner[j]);
+
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestI = i;
+                            bestJ = j;
+                        }
+                    }
+                }
+                if (bestScore <= current)
+                    break;
+
+                std::swap(owner[bestI], owner[bestJ]);
+                current = bestScore;
+            }
+
+            // Snapshot first: the write loop reads gems that earlier iterations have already replaced.
+            std::vector<SocketToGem> const before = coloredSockets;
+            for (size_t i = 0; i < coloredSockets.size(); ++i)
+            {
+                if (owner[i] == i)
+                    continue;
+
+                SocketToGem const& src = before[owner[i]];
+                SocketToGem& dst = coloredSockets[i];
+                bot->ApplyEnchantment(dst.item, EnchantmentSlot(dst.enchantSlot), false);
+                dst.item->SetEnchantment(EnchantmentSlot(dst.enchantSlot),
+                                         src.curEnchantId > 0 ? static_cast<uint32>(src.curEnchantId) : 0, 0, 0,
+                                         bot->GetGUID());
+                bot->ApplyEnchantment(dst.item, EnchantmentSlot(dst.enchantSlot), true);
+
+                dst.curEnchantId = src.curEnchantId;
+                dst.curGemItem = src.curGemItem;
+                dst.curScore = src.curScore;
+            }
+        }
+    }
+
     // Apply the deferred meta gem(s) last. The meta is now in a known-unapplied state (pre-deactivated
     // above) and the colored gems satisfy the condition, so this single apply activates the bonus exactly
     // once. No leading remove — that's what caused the phantom -stats wash on already-gemmed bots.
@@ -5831,6 +5941,24 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         SocketToGem const& ms = mp.first;
         ms.item->SetEnchantment(EnchantmentSlot(ms.enchantSlot), static_cast<uint32>(mp.second), 0, 0, bot->GetGUID());
         bot->ApplyEnchantment(ms.item, EnchantmentSlot(ms.enchantSlot), true);
+    }
+
+    // The core stores a socket bonus only in WorldSession::HandleSocketOpcode, which a bot never goes
+    // through, so without this every socketBonus stays dead even when the gems already match. Runs
+    // after the meta apply above: GemsFitSockets counts the meta socket too.
+    for (uint8 slot = 0; slot < EQUIPMENT_SLOT_END; ++slot)
+    {
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        if (!item || !item->GetTemplate()->socketBonus)
+            continue;
+
+        uint32 socketBonus = item->GemsFitSockets() ? item->GetTemplate()->socketBonus : 0;
+        if (item->GetEnchantmentId(BONUS_ENCHANTMENT_SLOT) == socketBonus)
+            continue;
+
+        bot->ApplyEnchantment(item, BONUS_ENCHANTMENT_SLOT, false);
+        item->SetEnchantment(BONUS_ENCHANTMENT_SLOT, socketBonus, 0, 0, bot->GetGUID());
+        bot->ApplyEnchantment(item, BONUS_ENCHANTMENT_SLOT, true);
     }
 }
 

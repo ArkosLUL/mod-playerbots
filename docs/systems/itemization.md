@@ -6,7 +6,7 @@ see [loot.md](loot.md).
 ## One function does all of it
 
 **All bot enchanting and gemming happens in `PlayerbotFactory::ApplyEnchantAndGemsNew`**
-(`src/Bot/Factory/PlayerbotFactory.cpp:5036`). It runs after `InitSkills` (`:715`) and
+(`src/Bot/Factory/PlayerbotFactory.cpp:5365`). It runs after `InitSkills` (`:715`) and
 `InitEquipment` (`:779`), so professions and the full gear set are both known by then.
 
 Two startup caches feed it, built in `PlayerbotFactory::Init()`:
@@ -100,8 +100,32 @@ or a calculator reused across bots hands out a stale pool. Two deliberate differ
 factory's `pickBestGem`: no `×1.2` colour-match nudge (that biases *which* gem to slot, not what the
 socket is worth) and no jeweller cap (scoring a hypothetical socket, not allocating a budget).
 
-Still out of scope: `StatsCollector.cpp:81-85` credits full `socketBonus` enchant stats regardless of
-whether the bot can colour-match.
+### Socket bonuses
+
+`BONUS_ENCHANTMENT_SLOT` is written in exactly one place server-wide:
+`WorldSession::HandleSocketOpcode` (`ItemHandler.cpp:1387-1393`), which calls `Item::GemsFitSockets()`
+and stores `proto->socketBonus`. Bots never send that opcode, so **every socket bonus on every bot was
+dead**, even on items whose gems already colour-matched. `ApplyEnchantAndGemsNew` now mirrors it in a
+final pass — which must run after the meta apply, because `GemsFitSockets` counts the meta socket too.
+
+`GemsFitSockets` is all-or-nothing over *coloured template* sockets: an empty one fails, a colourless
+(prismatic) one is skipped. A partial colour match is worth exactly zero.
+
+**Placement is colour-blind by construction.** `pickBestGem` sees only `socketColor` and applies its
+×1.2 nudge per socket in isolation, which cannot express all-or-nothing. A pass before the meta apply
+hill-climbs pairwise **exchanges of already-placed gems**. Permutation-only is what makes it safe to
+bolt onto this function: the gem multiset never changes, so total stats, the unique/`ItemLimitCategory`
+budget and the global colour counts `Player::EnchantmentFitsRequirements` reads are all invariant — it
+can only add bonuses, never cost one. Meta sockets live in their own vector and never take part.
+
+Measured on an Ulduar-geared prot paladin: 54 stamina of socket bonuses on the gear, none applied; +18
+after both fixes. The other five need gems the bot does not own — five yellow sockets against one
+yellow-capable gem.
+
+**Still out of scope:** changing which gems are *chosen*. A per-item "colour-matched candidates plus
+the bonus" alternative must mirror `BestGemScore`'s eligibility filters exactly and interacts with the
+cap escalation. `StatsCollector.cpp:81-85` still credits full `socketBonus` stats without checking
+colour-match feasibility — much closer to true now that matched bonuses apply.
 
 ## Gems
 
@@ -168,6 +192,17 @@ Still out of scope: a general "source item requires a profession the bot lacks" 
 spell→source-item map built from `item_template.spellid_1..5`, and it would not have caught the leg
 armors for a leatherworking bot anyway.
 
+**Confirmed correct — do not re-audit:**
+
+- **`enchant->slot` compared with `!=`** against `PERM_`/`TEMP_ENCHANTMENT_SLOT`
+  (`PlayerbotFactory.cpp:5607-5610`), though the field is a bitmask (`EnchantmentSlotMask`,
+  `ENCHANTMENT_CAN_SOULBOUND = 0x01`, `Item.h:199`). It rejects 131 entries with flags 3/6/7/9 — all
+  shaman imbues, rogue poisons and warlock firestones, which `ImbueAction` owns separately.
+- **A capped tank skipping Arcanum of the Stalwart Protector is right.** `ApplyOverflowPenalty` zeroes
+  `STATS_TYPE_DEFENSE` once `GetRatingBonusValue(CR_DEFENSE_SKILL) >= DEFENSE_OVERFLOW`, so Arcanum
+  (3818, +37 Sta +20 defense) scores 114.7 against Mind Amplification Dish's 139.5 (+45 Sta). Guides
+  name Arcanum as the way to *reach* 540; a bot already there correctly values the defense at 0.
+
 ## Profession enhancements
 
 Per-profession status, and what blocked each one:
@@ -217,6 +252,12 @@ would never switch off and every socket would go into a dead stat permanently.
 **Deliberately not propagated to `BestGemScore`** — turning it on there would make an under-cap tank
 re-rank whole gear pieces and churn equips as it crosses the cap. The cost is a slightly conservative
 socket estimate for under-cap tanks.
+
+**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:617`), raised from 0.5 so `3849 'Titanium
+Plating'` (+81 block value, 56.7) takes a tank shield over `1071 '+18 Stamina'` (55.8) — a 0.9 margin,
+so the shield enchant is not stable across gear changes. Gemming cannot move: no gem in the DBC carries
+`ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move — `StatsCollector.cpp:54`
+feeds `proto->Block` into the stat sum, and raid shields carry 0–259 of it (mean 223).
 
 ## Progression gating (mod-individual-progression)
 

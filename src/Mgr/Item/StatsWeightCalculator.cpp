@@ -614,7 +614,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_DODGE] += 2.0f;
         // stats_weights_[STATS_TYPE_RESILIENCE] += 2.0f;
         stats_weights_[STATS_TYPE_BLOCK_RATING] += 1.0f;
-        stats_weights_[STATS_TYPE_BLOCK_VALUE] += 0.5f;
+        stats_weights_[STATS_TYPE_BLOCK_VALUE] += 0.7f;
         stats_weights_[STATS_TYPE_ARMOR] += 0.15f;
         stats_weights_[STATS_TYPE_HIT] += 2.0f;
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 2.0f;
