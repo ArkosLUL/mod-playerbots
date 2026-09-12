@@ -25,7 +25,14 @@ Freya's beams.
 **So where the raid stands is where the fire goes, and that is the only lever over it.** Four things
 put fire out and nothing else does: the Frost Bomb, VX-001's Flame Suppressant (65192, 10 yd around
 itself every 10 s in phase 2 — which also lands a 51% cast slow, so it is not a place to stand), one
-full-room clear 60 s into phase 1 (64570), and the phase 3 Emergency Fire Bots.
+full-room clear 60 s into phase 1 (**64570**, cast alongside **Clear Fires 65229**), and the phase 3
+Emergency Fire Bots.
+
+**The room clear happens once and never again.** `EVENT_FLAME_SUPPRESSION_50000` is scheduled a single
+time, 60 s into phase 1, with no repeat — so everything after it burns until phase 2. That makes the
+cleanse a deadline rather than a rhythm: the usable window is **81-97 s**, and the MK II has to be dead
+by about **100 s** to spend it, while it actually dies at **112-133 s**. Closing that gap is worth
+roughly **13-20% more phase-1 damage** and is the largest single known-open item on this fight.
 
 **Which is why phase 1 is fought in the west.** The MK II is held at
 `ULDUAR_MIMIRON_PHASE1_TANK_SPOT` **(2691.576, 2568.532)**, 53 yd off centre, and ranged and healers
@@ -188,9 +195,9 @@ this one: phase 2 has no healing slack, so if fire per living bot per second cli
 hazard filters had refused only **5.8 of 11 bearings** on those calls, and 60 of them refused none at
 all: the bearings were clean and the *mover* said no. `mimiron dodge flames action` logged **1,249
 moves refused `wait` against 387 issued**, median hold 917 ms, p90 3.8 s. It issued at
-`MOVEMENT_COMBAT`, so does `mimiron arc spread action`, and `IsWaitingForLastMove` wants a *strictly*
-higher priority — so a formation leg blocked the dodge for that leg's whole duration and the bot
-burned through it.
+`MOVEMENT_COMBAT` and so does `mimiron arc spread action`, so a formation leg blocked the dodge for
+that leg's whole duration and the bot burned through it
+([../../engine/pitfalls.md](../../engine/pitfalls.md)).
 
 It is `MOVEMENT_FORCED` now, like every other hazard node here.
 `ULDUAR_MIMIRON_FLAMES_MAX_HOP` (**12 yd**, about 1.7 s of lock) caps the leg, because a FORCED leg
@@ -404,7 +411,7 @@ every bearing the cone covers, which is a guaranteed hit. The dodge therefore is
 most 40° per tick (a 40° chord stays within 6% of the ring) and clamps the radius to
 `[combat reach + 6, 24]`. VX-001's combat reach is **8**, so the floor is 14 yd: melee sit inside
 that and would otherwise try to orbit through the model. `MOVEMENT_FORCED` sequences the legs for
-free — `IsWaitingForLastMove` refuses anything not strictly above the move already in flight.
+free, since the movement lock refuses anything not strictly above the move in flight.
 
 **Radius is the one free parameter, so it dodges the fire.** The flame dodge stands down for the whole
 barrage, and on 2026-09-11 a fixed-radius orbit parked four bots on 7-10 nodes at (2752-2755,
@@ -432,9 +439,11 @@ list. That is fine for a boss which calls `DoZoneInCombat`, and quietly fatal fo
 
 VX-001's phase 4 `SetData` calls neither `DoZoneInCombat()` nor `AttackStart()`, and its `AttackStart`
 is a no-op override. So a bot that never damaged VX-001 — a healer, a melee locked on the chassis —
-got `nullptr` and **the Laser Barrage dodge never ran for it at all**. Every Mimiron node now uses
-`GetFirstAliveUnitByEntry`, which reads the grid-swept `"possible targets no los"` and has no threat
-dependency. The same defect is still live across a dozen other instance strategies.
+got `nullptr` and **the Laser Barrage dodge never ran for it at all** — the threat-list limits of
+`"find target"` are in [../../engine/pitfalls.md](../../engine/pitfalls.md). Every Mimiron node now
+resolves through `GetFirstAliveUnitByEntry` instead. **The same defect is still live across a dozen
+other instance strategies**, so it is worth checking first on any boss whose script skips
+`DoZoneInCombat`.
 
 ## The two adds need opposite answers
 
@@ -665,7 +674,15 @@ declines to act in, so inside it nothing moves the bot and outside it the format
 correction. Match **by name**: `TankFaceAction` derives from `CombatFormationMoveAction` and does real
 work. A bot with no slot keeps the unstacker untouched, which is every melee mid-phase — and melee
 never had a disperse distance here anyway, since the phase 1 node is ranged-only and
-`DisperseDistanceValue` defaults to -1.
+`DisperseDistanceValue` defaults to -1. Phase 4 sets its own: `MimironPhase4FocusAction` puts
+`disperse distance` at **4.0** on its non-tank tail.
+
+**Mimiron is the module's only writer of `disperse distance`, and it owes every later encounter a
+reset.** Leaving it set armed `combat formation move` on every bot for the *next* pull in the instance
+— three Mimiron pulls before a Thorim pull cost 586/414/439 extra moves in his phase 1 alone. That is
+what `MimironResetEncounterStateTrigger` / `MimironResetEncounterStateAction` exist for; the general
+trap is in [../../engine/pitfalls.md](../../engine/pitfalls.md). The same leak carried `mimiron.slot`
+and `ironassembly.*` notes into a Thorim trace, which has never been followed up.
 
 **It shipped broken, and the failure is worth keeping.** `MimironPhase1PositioningTrigger` ends
 `AI_VALUE(float, "disperse distance") != 6.0f`, and that literal was left behind, so the latch never
@@ -678,6 +695,30 @@ in three seconds. Both pulls wiped in phase 1.
 
 **The invariant to keep:** `PHASE3_SPACING` > `DISPERSE_DISTANCE` > Napalm's 5 yd, and the trigger
 compares `ULDUAR_MIMIRON_DISPERSE_DISTANCE` rather than a literal.
+
+## Phase 3 is the DPS check now
+
+The 25-man hard-mode berserk is 10 min from the pull (`EVENT_BERSERK`, then Self-Destruction). Take
+out 13.3 s before phase 1 and the 103.5 s of fixed handovers and ~483 s is left for the MK II and
+VX-001 (8,276,398 each), the ACU (5,517,599) and phase 4 at half health (~11M): about **33M, 69k
+sustained**.
+
+| phase, 2026-09-11 | afternoon | evening | night |
+|---|---|---|---|
+| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k | 106.2 s at 78k, 93.8 s at 88k, 84.2 s at 98k |
+| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k | wiped at 25% and 57%; 104.3 s at 79k |
+| 3 ACU | - | **231 s at 24k** | **129 s at 42.7k** |
+| 4 | - | 29 s before the berserk, all three at 43-46% | 179 s at 52k; berserk with 6%, 6% and 12% left (~1.66M, ~32 s) |
+
+Bots hit the MK II, the only attackable unit in phase 1, in 94-99% of samples by role; the misses are
+targetless stretches after a tank death. Phase 2 was the check while the raid entered it with 14-17
+alive; with 22-24 it holds. Phase 3 lost the pull: no core landing, melee chasing the airborne unit,
+ranged out of range (see the core and wedge sections). At 69k it is ~80 s and phase 4 gets ~180 s.
+With one core per corpse it took 129 s: the two landings took 21% and 33%, the unit spent the rest in
+the air at ~32k, and no third Assault Bot came, since each landing freezes the add timers ~45 s. That
+pull reached the berserk ~32 s short, six bots down in phase 4 (two to mines, three to Hand Pulse and
+Plasma Ball, one to a Frost Bomb).
+Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), deliberately, and went out 4 s into it.
 
 ## A dodge that returns false hands the tick to Charge
 
@@ -711,13 +752,13 @@ all, and their median distance to it went 6.7-8.4 → 9.3-10.2. The guard now al
 `reach party member to heal` and `reach pull`; vetoing those strands ranged and healers out of range
 in the window they most need to close.
 
-**`GetDistance2d` versus `GetExactDist2d`, again.** `WorldObject::GetDistance2d(WorldObject*)`
-subtracts *both* combat reaches, and the MK II's is 8. `20.0f - GetDistance2d(mk2)` therefore fled to
-**29.5 yd centre to centre** against a 15 yd radius, and the trigger's `GetDistance2d(boss) < 15`
-fired out to 24.5. Both now measure centre to centre against
+**`GetDistance2d` versus `GetExactDist2d`, again**
+([../../engine/pitfalls.md](../../engine/pitfalls.md)). The MK II's combat reach is 8, so
+`20.0f - GetDistance2d(mk2)` fled to **29.5 yd centre to centre** against a 15 yd radius while the
+trigger's `GetDistance2d(boss) < 15` fired out to 24.5. Both now measure centre to centre against
 `ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST` (18), which also puts the whole 22 yd ranged ring permanently
-outside the mechanic. This is the second defect of this exact shape in this encounter — the barrage
-radius was the first.
+outside the mechanic. Second defect of this exact shape in this encounter — the barrage radius was
+the first.
 
 ## The Magnetic Core needs a carrier that walks
 
@@ -941,14 +982,11 @@ refused with `wait` in one phase 1). It zeroes `reach melee` only while the boss
 is set — which is also when he does not need it, because the boss is following him — so losing aggro
 lifts it and he can run back and taunt.
 
-**Tricks of the Trade was making it worse.** The rogues cast it on the hardest-hitting melee at
+**Tricks of the Trade was making it worse.** The rogues put it on the hardest-hitting melee at
 13.5-15.5 s in all three pulls, and that exact bot pulled the boss 2-3 s later — Justice @16.2,
-Obliteration @17.4, Justice @17.8. `TricksOfTheTradeTargetValue::TankNeedsRedirect` has an opener
-branch keyed on `"combat start time"`, which `PlayerbotAI::ChangeEngineOnCombat` only sets under the
-`wait for attack` strategy, so it is always 0 in a raid; it then falls through to
-`myThreat > tankThreat * 0.5`, false for a rogue who has not swung, and the buff goes to the top dps.
-**That generic bug is still open.** Mimiron only suppresses the smart-target node in phase 1, through
-`MimironGenericRedirectGuardMultiplier`.
+Obliteration @17.4, Justice @17.8. The generic target value is broken for every raid and is still
+open ([../../engine/pitfalls.md](../../engine/pitfalls.md)); Mimiron works around it by suppressing
+the smart-target node in phase 1, through `MimironGenericRedirectGuardMultiplier`.
 
 `MimironRedirectThreatAction` owns the redirect instead, subclassing `RaidRedirectThreatAction` the
 way Hodir and Freya do: the main tank in phase 1, `nullptr` after, because phases 2-4 split two mechs
@@ -1014,30 +1052,6 @@ Still open, for a pull that survives phase 1: Proximity Mine `Explosion` (63009)
 of phase-1 damage, about 250-390 dps a melee against the ~120 the adds section prices it at, with
 `set behind` and `reach melee` putting melee on mines; and `mimiron dodge flames action` FAILED 58 and
 55 times on 2026-09-10, rejecting 770-790 bearings.
-
-## Phase 3 is the DPS check now
-
-The 25-man hard-mode berserk is 10 min from the pull (`EVENT_BERSERK`, then Self-Destruction). Take
-out 13.3 s before phase 1 and the 103.5 s of fixed handovers and ~483 s is left for the MK II and
-VX-001 (8,276,398 each), the ACU (5,517,599) and phase 4 at half health (~11M): about **33M, 69k
-sustained**.
-
-| phase, 2026-09-11 | afternoon | evening | night |
-|---|---|---|---|
-| 1 MK II | 108.5 s at 76.3k, 132.8 s at 62.3k | 99.2 s at 83k, 97.9 s at 85k | 106.2 s at 78k, 93.8 s at 88k, 84.2 s at 98k |
-| 2 VX-001 | 61% and 65% left at the wipe | wiped at 21%; 124.5 s at 66k | wiped at 25% and 57%; 104.3 s at 79k |
-| 3 ACU | - | **231 s at 24k** | **129 s at 42.7k** |
-| 4 | - | 29 s before the berserk, all three at 43-46% | 179 s at 52k; berserk with 6%, 6% and 12% left (~1.66M, ~32 s) |
-
-Bots hit the MK II, the only attackable unit in phase 1, in 94-99% of samples by role; the misses are
-targetless stretches after a tank death. Phase 2 was the check while the raid entered it with 14-17
-alive; with 22-24 it holds. Phase 3 lost the pull: no core landing, melee chasing the airborne unit,
-ranged out of range (see the core and wedge sections). At 69k it is ~80 s and phase 4 gets ~180 s.
-With one core per corpse it took 129 s: the two landings took 21% and 33%, the unit spent the rest in
-the air at ~32k, and no third Assault Bot came, since each landing freezes the add timers ~45 s. That
-pull reached the berserk ~32 s short, six bots down in phase 4 (two to mines, three to Hand Pulse and
-Plasma Ball, one to a Frost Bomb).
-Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), deliberately, and went out 4 s into it.
 
 ## The phase handovers are a minute of wasted time
 
@@ -1109,15 +1123,15 @@ the arc spread sees it off its slot and returns it — to the slot the marker is
 within 8 yd of it. Testing the bot's own surroundings is exactly the check that fails, because a bot
 that dodged successfully is by definition clear.
 
-Second, quieter trap: the flee and the arc spread both issued at `MOVEMENT_COMBAT`, and
-`IsWaitingForLastMove` only lets a move through when its priority is **strictly** above the one in
-flight. A dodge starting mid-walk was dropped with no trace. Shock Blast and Rocket Strike now issue
-at `MOVEMENT_FORCED`, as do the Frost Bomb, Rapid Burst and — since it turned out to be losing every
+Second, quieter trap: the flee and the arc spread both issued at `MOVEMENT_COMBAT`, so a dodge
+starting mid-walk was dropped with no trace (the movement lock is in
+[../../engine/pitfalls.md](../../engine/pitfalls.md)). Shock Blast and Rocket Strike now issue at
+`MOVEMENT_FORCED`, as do the Frost Bomb, Rapid Burst and — since it turned out to be losing every
 contested tick to the formation — the flames dodge. Only the genuinely low-stakes avoids, mines and
 bomb bots, stay at `MOVEMENT_COMBAT`, where they cannot stomp a real emergency.
 
-**Two `MOVEMENT_FORCED` dodges in one encounter deadlock each other**, and there is no band above
-`MOVEMENT_FORCED` to escape into. The barrage dodge returns `false` for a bot that is already clear, so
+**Mimiron is where two `MOVEMENT_FORCED` dodges deadlocking was first paid for.** The barrage dodge
+returns `false` for a bot that is already clear, so
 Rocket Strike and Shock Blast get the tick and flee on a bearing derived purely from the hazard they
 are escaping. That leg then holds the lock — about 1.4 s for a 10 yd rocket step, 2.6 s for an 18 yd
 Shock Blast flee, against `MaxWaitForMove` of 5000 — and *strictly above* means the barrage dodge's own

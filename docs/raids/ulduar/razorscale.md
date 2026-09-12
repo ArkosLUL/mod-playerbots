@@ -18,10 +18,25 @@ damage radius index is 8 = 5.0 yd**. Bots clear `DEVOURING_FLAME_CLEAR_RADIUS` (
 actually leaves the patch instead of stopping on its edge, and `DevouringFlameBlocks()` rejects any
 destination covered by another one — she drops these every 6–12 s and they stack up.
 
-Clearing is only half of it. `razorscale avoid devouring flames` also **holds the tick without moving**
-while the spot a melee bot would walk back to is on fire; `RazorscaleMultiplier` zeroes the generic
-movers and `avoid aoe` for the same window. Both release the moment the tank drags her clear, so
-nobody stands out the patch's full life. A permanent veto here is the freeze bug.
+Clearing is only half of it. **The hold lives in the multiplier, not the action** —
+`razorscale avoid devouring flames` is useful only while a patch is live
+(`return !Scan().flame.IsEmpty();`), and standing clear is `RazorscaleMultiplier`'s job: it zeroes the
+generic movers and `avoid aoe` while the spot a melee bot would walk back to is on fire. Both release
+the moment the tank drags her clear, so nobody stands out the patch's full life. A permanent veto here
+is the freeze bug.
+
+**The per-tick lookups go through one scan.** `RazorscaleScan` is a per-bot snapshot stamped with
+`getMSTime()`, held as a `ManualSetValue<RazorscaleScan*>` in `RaidUlduarValueContext`
+(`src/Ai/Raid/Uld/UldValueContext.h`) and registered in `src/Bot/Engine/BuildSharedValueContexts.cpp`
+— a value because that is the one per-bot store triggers, actions and multipliers can all reach. A
+bot never ticks twice in one millisecond and world state holds still for the length of a tick, so one
+sweep serves every reader. Before it, the harpoons alone cost **12 GameObject sweeps of 200 yd
+(37 cells) per bot per tick**.
+
+**The patch is safe to gate on the encounter.** 63236 is a trigger-missile (effect 32) into 63308,
+which summons NPC 34188 for **22 s**; she is the summoner, so every patch sits in `BossAI::summons`
+and both `_JustDied` and `EnterEvadeMode` `DespawnAll()` in the same call that sets the state. No
+patch can outlive the encounter flag.
 
 `razorscale kill target action` is the **only** thing that sets the skull: the boss whenever she is
 on the floor, otherwise Sentinel → Watcher → Guardian. `DpsTargetValue` prefers the RTI target, so a

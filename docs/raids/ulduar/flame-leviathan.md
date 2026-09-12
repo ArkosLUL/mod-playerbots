@@ -212,6 +212,23 @@ widest — it alone covers 60% of add-frames from station; **Mortar 62634** (dem
 62345** and **Ram 62308** are 15 yd cones that *knock back* (Effect 98). 82% of add-frames are inside
 some band with nobody moving, so target selection does most of the work and repositioning little.
 
+What each one is actually worth, which is what ranks them when several are in band:
+
+| Weapon | Damage | Cost / cadence |
+|---|---|---|
+| Fire Cannon 62358 → 62357 | **76,000**, 20 yd sphere | 20 energy |
+| Hurl Boulder 62306 → 62307 | **27,000**, 20 yd splash | free |
+| Ram 62345 | **22,500** | 40 energy |
+| Ram 62308 | **19,000** | free, 4 s cd |
+| Mortar 62634 → 62635 | **11,100** + Flames 20,000 | free, 1 s cd |
+| Sonic Horn 62974 | **6,300** | 20 energy |
+
+**`FlameLeviathanBestAdd` ranks by neighbour count inside the weapon's own splash**, nearest breaking
+ties — not by nearest alone. Adds clump at a median of 2, p75 3 and max 9 inside one 20 yd splash, so
+the extra bodies are usually there to be had. The corner reticle that tells the fleet a tower is
+standing is **`NPC_FL_FREYA_WARD_TARGET = 33366`**; its presence is the latch input for
+`freyaAddsSeen`.
+
 **One siege engine per corner, and never all of them.** Ranks 1–4 of the live siege hulls post
 `ULDUAR_FL_CORNER_STANDOFF` (12 yd) inside their corner facing out, so Ram's knockback drives what it
 catches deeper in rather than back at the fleet, and Fire Cannon still clears its 10 yd minimum. Rank
@@ -296,14 +313,43 @@ chopper never trips it** — it sat inside the blast 15.8% (A) / 30.3% (B) of th
 34 of 36 cleared, **2 caught**. Median distance from the centre at +5 s: 18.3 / 17.6 yd.
 ## Baseline to beat — 2026-09-05, before the Freya-adds fixes
 
-Three wipes with the Storm and Life towers live, boss floors 76.0% / 72.2% / **27.4%**. Full numbers
-and the per-trace tables are in
-[docs/plans/flame-leviathan-freya-adds/flame-leviathan-freya-adds.BASELINE.md](../../plans/flame-leviathan-freya-adds/flame-leviathan-freya-adds.BASELINE.md);
-reproduce any of them with `flame_leviathan.py <trace> --adds`.
+Three wipes with the Storm and Life towers live, boss floors 76.0% / 72.2% / **27.4%**;
+`603_1_flame-leviathan_1788624223.ndjson` is the reference, being the only one where the collapse is
+legible rather than immediate. The second baseline `…_1788628796.ndjson` (339 s, **36.4%**) is the
+first pull carrying `418afbe49`. Reproduce any figure with `flame_leviathan.py <trace> --adds` /
+`--ram` / `--fury` / `--vents`; **keep those traces**, because the chronicle logs that would
+corroborate them have rotated away.
 
-Worth carrying forward from that set: the Battering Ram fix above **worked** — the backoff went from
-catching 27–30% of real exposure to **64.6%**, with false alarms down from 71%/59% to **47.6%**. No
-`62297` landed in any of the three, so the thaw is still unverified in the field.
+The Battering Ram fix above **worked** — the backoff went from catching 27–30% of real exposure to
+**64.6%**, false alarms down from 71%/59% to **47.6%**. The add work landed too: median time to kill
+one add **22 s → 13 s**, and `Lash` fell from **20.0%** of raid damage taken to **4.4%**. No `62297`
+landed in any of the three, so the thaw is still unverified in the field.
+
+**The fleet got worse anyway, and the reason is the whole fight.** Hulls melted ~25% faster, the first
+bot was on foot at **80 s** against 180, and the boss floor went 27.4% → 36.4%. A seated bot is
+invisible to boss AoE and a dismounted one absorbs all of it
+([../../engine/pitfalls.md](../../engine/pitfalls.md)), so every bot on foot is a damage sink the
+raid did not have before:
+
+| spell | on bots out of a vehicle | on crewed bots |
+|---|---|---|
+| 63847 Flame Vents | 861,477 (318 hits) | 5,400 (2) |
+| 62297 Hodir's Fury | 594,180 (4) | 0 |
+| 62376 Battering Ram | 501,478 (21) | 0 |
+| **62400 Missile Barrage** (`SPELL_FL_MISSILE_BARRAGE`) | 303,227 (106) | 8,909 (4) |
+
+**So hull survival is the fight, not dodging.** A hull is worth roughly 1.8 M on a siege engine, 1.0 M
+on a demolisher and 766-826 k on a chopper — the numbers the boss's 230,498,304 has to be spent
+against.
+
+**Nothing gated on `FlameLeviathanCrewUsable` ever ran.** `fl.corner` emitted **0** times and
+`fl.station` never read `tar-lead` in any Sep-05 trace, because `Vehicle::AddPassenger` roots every
+passenger, so the helper's `UNIT_STATE_NOT_MOVE` test on the rider was false for every crewed bot from
+`e41a0e89a` onward.
+
+**The corner posting is an accepted regression, do not re-open it.** The boss floor got *worse*
+because both gunners now prefer any add in range over the boss. It is left alone pending the
+vent-interrupt fix, which is the change that would pay for it.
 
 ## Known gaps
 

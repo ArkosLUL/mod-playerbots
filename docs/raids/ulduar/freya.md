@@ -15,11 +15,25 @@ They do not have equal health, which is what makes the sync hard. From `creature
 | Storm Lasher | 234 594 | 781 980 |
 | Ancient Water Spirit | 188 748 | 524 300 |
 
-**Hardened Bark (62663) does not make the Snaplasher tankier.** It stacks to 99 at +10%
-`MOD_DAMAGE_PERCENT_DONE` each, applied by proc 62664 when the Snaplasher is struck, and resets after
-4s without a hit. It is a threat to whoever tanks it, never a reason to stop damaging it. An earlier
-version of this strategy withheld all raid damage from the Snaplasher on the opposite assumption,
-which is why the trio could never die together.
+**Hardened Bark (62663) does not make the Snaplasher tankier.** It stacks to 99, applied by proc 62664
+when the Snaplasher is struck, and resets after 4s without a hit. Each stack is **+10%
+`MOD_DAMAGE_PERCENT_DONE` (aura 79) and −5% movement speed (`MOD_DECREASE_SPEED`, aura 33)** — the DBC
+row is `EffectBasePoints` 9 and −6 with `DieSides` 1, so both need the `+1`; reading the base points
+raw gives the wrong +9 / −6. It is a threat to whoever tanks it, never a reason to stop damaging it.
+An earlier version of this strategy withheld all raid damage from the Snaplasher on the opposite
+assumption, which is why the trio could never die together.
+
+**The Ancient Water Spirit's Tidal Wave is the trio's one real cone.** `62936` is `EffectRadiusIndex
+23` = **40 yd**, base damage 9,250-10,750 with a knock-back second effect, and it is fired **3 s after**
+the spirit's charge `62935`, while the spirit carries the 3,000 ms `62655` aura — so the charge is the
+telegraph. Its `spell_cone` entry is narrow (about 20°), which is what makes stepping off the line
+cheap; the DB value is worth re-reading before anything is built on the exact angle. Median victims per
+cast went 1.0 → 5.0 once the raid tightened, 135,394 → 342,391 damage.
+
+**The dose table is exact, and it sums to the fight.** `Attuned to Nature` starts at 150 and comes off
+in fixed doses: a lasher removes **2**, a trio member **10**, the Ancient Conservator **25**. Freya
+spawns at **(2338.46, −52.33, 425.55)**, and the room floor is solid over x 2300-2400 / y −30..−80 at
+z 423-426 — there is no hole to path around.
 
 There is also a hard clock: `EVENT_FREYA_ADDS_SPAM` repeats every **60s** regardless of progress
 (`boss_freya.cpp:612-623`), capped at 6 waves, so an uncleared wave gets a second one stacked on it.
@@ -55,7 +69,10 @@ ways, falling back to melee when no ranged DPS is alive. While a lasher pack is 
 `ULDUAR_FREYA_GIFT_SHARE` (5) ranged by GUID take it, and after `ULDUAR_FREYA_GIFT_SHARE_MS` (5s) the
 rest join: ten bots take a Gift from full to dead in 4.2-6.3s, so five clear it inside the 12s while
 the pack keeps the other half. Sending every ranged emptied the pack for 4.7-6.5s at 84% and 86% pack
-health in the two waves that wiped, against 10% in the one that did not. The Detonating Lasher rung
+health in the two waves that wiped, against 10% in the one that did not. **Known-open: the head start
+is measured from the wrong event.** `TakesEonarsGift` starts `ULDUAR_FREYA_GIFT_SHARE_MS` when the
+*pack* spawns, not when the Gift appears, so a Gift summoned just before a wave spends nearly its whole
+12s fuse with five ranged still held off it. The Detonating Lasher rung
 resolves per role, and for ranged in two phases — see the lasher paragraphs below.
 
 **Conservator's Grip (62532) pacifies the whole raid.** It is `APPLY_AREA_AURA_ENEMY` +
@@ -64,11 +81,19 @@ resolves per role, and for ranged in two phases — see the lasher paragraphs be
 swings as well as casts, so tanks lose their damage and their taunt exactly like casters — it is not a
 caster-only mechanic.
 
-The only counter is Potent Pheromones (64321), a **6 yd** ally aura on a Healthy Spore. Spores are
-summoned by the Conservator itself — 62566 is an 8s periodic triggering three directional summons
-(62582 / 62591 / 62592) at radius index 9 = **20 yd** — and despawn after 22s. So they always sit 20 yd
-away from the boss, and **melee can never be sheltered and in melee range at once unless the boss is
-brought to a spore.**
+The only counter is Potent Pheromones (64321), a **6 yd** ally aura on a Healthy Spore. Measured raid
+uptime is **30.7%** for the pheromones against **8.2%** for the Grip itself, which is why the spore node
+sits at `ACTION_RAID + 2` rather than being promoted over the hazard dodges — the shelter is worth
+holding, not worth dying for. Spores are
+summoned by the Conservator itself — 62566 is an 8s periodic triggering directional summons
+(62582 / 62591 / 62592 / 62593) at radius index 9 = **20 yd** — and despawn after 22s. So they always
+sit 20 yd away from the boss, and **melee can never be sheltered and in melee range at once unless the
+boss is brought to a spore.**
+
+**Splitting the raid by compass quadrant was rejected on evidence, do not re-derive it.** The four
+summon spells look like they place spores north/south/east/west, but their `ImplicitTargetA` values
+82-85 are **caster-relative** (front-left, back-left and so on), not world bearings — and in practice
+the core only ever casts 62566 → 62582. There are no fixed quadrants to assign bots to.
 
 That is what `FreyaTankAddsAction::ParkConservator` does, in the Ignis construct-tank shape: walk the
 Conservator onto a spore and hold it there, hysteresis at `ULDUAR_FREYA_SPORE_RADIUS - 1` so it is not
@@ -103,6 +128,12 @@ tick falls through to the DPS chase, which walks the bot back out of the aura it
 of 1865 spore move requests in one pull. Bots stop at `ULDUAR_FREYA_SPORE_STAND_RANGE` (4 yd) instead,
 and the trigger stands down at `ULDUAR_FREYA_SPORE_RADIUS - 1` as well as on the aura, since the aura
 is exact and lands a moment after the bot is already inside 6 yd.
+
+**It is not the water — do not re-litigate the stream.** The long walks across this room look like
+pathing around the water and are not. `navprobe --map 603 path` across the worst measured detour
+returns **14.92 yd, `PATHFIND_NORMAL`, 3 polys**, identical under the bot filter `--nav 0x09`. All 133
+detour segments were churn between the spore node and a dodge — 117 of them from the spore node, worst
+case 14.8 yd straight against 62.9 yd walked.
 
 **Two 8 yd circles, and they are why the raid cannot be one ball.** Both carry `EffectRadiusIndex 14`,
 and neither is hard-mode — they run on every pull.
@@ -144,8 +175,10 @@ get harder: the raid got tighter, nearest-neighbour **0.6 yd** against 1.3, and 
 that scale with tightness moved.
 
 Expect this stack to be broken up regularly. `EVENT_FREYA_NATURE_BOMB` repeats every **18s** for the
-whole fight, dropping one bomb per player at their own feet — 7-10 in 25-man, 3-4 in 10-man
-(`boss_freya.cpp:645-660`). Damage 64587 is 5850-6150 in **10 yd** with **no difficulty entry**, the
+whole fight, dropping one bomb per player at their own feet — `urand(7,10)` players **within 70 yd**
+in 25-man, 3-4 in 10-man (`boss_freya.cpp:645-660`). Damage 64587 is 5850-6150 in **10 yd** with **no
+difficulty entry** — 64650 is a separate, higher-damage Nature Bomb at the same radius, not a
+difficulty remap of it, and `spelldifficulty` carries no row for either — the
 fuse is ~6s (`:1300-1317`), and the marker is GO **194902** summoned in the bomb creature's `Reset()`;
 the creature itself is banished and never reaches the npc lists.
 
@@ -251,8 +284,15 @@ bucket averaging as much as 0-3 yd.
 **A stacked raid eats every blast whole, and that is the accepted trade.** Six 25-man pulls
 (2026-09-02) lost **120 of 161** bots to lashers, standing at a median **0.7 yd** nearest-neighbour
 with ~10 mates inside 15 yd: **6.7-10.4 victims a blast**, ten blasts a wave. Even so, Detonate was
-only **4.6-16.3%** of all damage taken — lasher melee and Flame Lash are the bulk — and those pulls
-survived 2:06-4:01.
+only **4.6-16.3%** of all damage taken — lasher melee and **Flame Lash 62608** are the bulk — and those
+pulls survived 2:06-4:01. Flame Lash is effect 31 `WEAPON_PERCENT_DAMAGE` at base points 149, i.e.
+**150% weapon damage**, landing 13-17k a hit; it was the single largest damage source in four of those
+six pulls (463k-920k of lasher melee alone).
+
+**The wave spawns on top of Freya and stands still for five seconds.** `SPELL_SUMMON_WAVE_10` **62687**
+is cast ten times at `EffectRadiusIndex 18`, so the pack appears **within 15 yd of Freya**, each member
+`REACT_PASSIVE` and stationary for **5 s** before it picks a first target. That window is the whole
+reason a hunter frost trap is worth placing rather than reacting to the pack after it moves.
 
 **Spreading past the blast was tried (`45d9a3e36`) and cost far more than it saved.** A 16 yd lattice
 plus a multiplier zeroing `ReachTargetAction` and `CombatFormationMoveAction` did exactly what it was
@@ -454,7 +494,9 @@ creature dies; most break inside a second on incidental AoE, but **7 held 2s or 
 two beam pools with its dodge orders rejected. Every other Freya id here already carries its pair.
 
 The beam dodge rings outward to a spot clear of every beam in range, not away from the nearest one.
-`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is a DBC guess.
+**`ULDUAR_FREYA_UNSTABLE_SUN_BEAM_RADIUS = 12.0f` is 2.4× too wide** — Unstable Energy **62865** is
+`EffectRadiusIndex 8` = **5 yd** (effect 27, persistent area aura), which matches the traces. The DBC
+check was done; the constant was never brought down, so this is an open gap rather than an unknown.
 
 **The dodge clears by `ULDUAR_FREYA_SUN_BEAM_CLEARANCE` (15 yd), not by the radius.** Clearing by the
 radius plus a yard answered a bot on the rim with a ~2 yd step — measured median **1.9 yd** over 694

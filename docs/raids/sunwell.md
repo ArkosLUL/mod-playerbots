@@ -12,6 +12,19 @@ keeping; two things from it are.
 the Ruby Sanctum strategy was applied but **never removed on a zone change**. Fixed in the same edit
 that added `"sunwell"`.
 
+## The Eredar Twins tank gate has never worked
+
+`src/Ai/Raid/SWP/Action/SWPActions.cpp:99` reads
+
+```cpp
+if (PlayerbotAI::IsTank && !AI_VALUE2(Unit*, "find target", "grand warlock alythess"))
+```
+
+`PlayerbotAI::IsTank` with no call parentheses takes the **function's address**, which is never null,
+so the tank half of the condition is always true and every bot passes it. Nothing warns and nothing
+fails to compile. The gate has been inert since the strategy landed, so any judgement of how the
+Twins play is a judgement of the ungated behaviour.
+
 ## The instance-strategy key list
 
 `GetInstanceStrategies()` is the authoritative list; any key missing from it can be applied but never

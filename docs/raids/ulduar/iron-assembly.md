@@ -9,7 +9,9 @@ is only undone there, so **all loot comes from whoever dies last**.
 whatever it first latched onto — two sat on Steelbreaker through the whole Molgeim phase, 124 of 958
 pet casts on the wrong member, and Supercharge hands that damage straight back. `CommandPetAttack`
 runs from the focus action every tick and **above its early return**, since already being on the
-right member is the common case.
+right member is the common case. **Known-open:** `IronAssemblySetDpsPriorityTrigger::IsActive` bails
+for tanks, so a *tank's* ghoul is never redirected. Closing it means six wiring sites and no trace
+has shown it costing anything, so it is left open on purpose.
 
 Kill order is the only thing `AiPlayerbot.UlduarIronAssemblyHardMode` changes: normally
 **Steelbreaker → Molgeim → Brundir**, hard mode **Brundir → Molgeim → Steelbreaker**. Molgeim is
@@ -56,14 +58,13 @@ node**. Lightning Whirl reaches 100 yd with no positional answer, so it takes th
 interrupter; Chain Lightning takes the second, and is deliberately allowed through when cooldowns are
 thin.
 
-**One encounter state per instance, shared behind a mutex — never `thread_local`.** Spread slots,
-the shift heading and the alive mask must agree across the raid. `MapUpdate.Threads` is 6 and a map
-is never pinned to a thread, so per-thread copies hand one pull six independent states: two bots
-held slot 0 at once, 11 bots took 71 slot assignments in 4.5s, 10 of 16 slots were ever used, and
-each ranged bot chased 4–6 destinations for 285–334 yd in a 50s Steelbreaker phase. `ObsValue` emits
-only on change, so **six identical `ironassembly.alive` rows per transition is the signature**.
-Mimiron and Flame Leviathan hold theirs this way; Thorim, Ignis, Hodir and the EoE caches are still
-`thread_local` and unaudited.
+**One encounter state per instance, shared behind a mutex — never `thread_local`**
+(the rule and its signature are in
+[../../engine/raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md)). Spread slots, the
+shift heading and the alive mask must agree across the raid, and per-thread copies handed one pull
+six independent states: two bots held slot 0 at once, 11 bots took 71 slot assignments in 4.5s, 10
+of 16 slots were ever used, and each ranged bot chased 4–6 destinations for 285–334 yd in a 50s
+Steelbreaker phase. Every raid holds its state this way now.
 
 Formation anchors on `(1587.18, 121.02, 427.27)`. navprobe: 8/8 headings clean at 20 and 30 yd, but
 the 45° and 135° diagonals settle to Z −27.7 and −438 at 40, and three of eight leave the mesh at 50
@@ -159,6 +160,24 @@ applies); **ranged spread only in hard mode**, since Static Disruption needs Ste
 and every traced blast left them alive; and **the melee tank spots stay 11 yd off the stack**, which
 keeps healers covering the tanks and the stack at once.
 
+**The 11 yd is forced, and that is why `MELEE_BOSS_RADIUS = 16` and `SPREAD_RING_RADIUS = 18` must not
+be widened.** For a melee spot `D` yd from the stack, the nearest spread slot is `|18 − D|` away and
+the furthest `D + 18`. Keeping a slot clear of the boss needs `D ≤ 10` **or** `D ≥ 26`; keeping every
+slot inside caster range needs `D ≤ 12`. Only the narrow band around 11 satisfies both, so nudging
+either radius breaks one of the two silently. `SPREAD_RING_RADIUS = 18` is still live in its own
+right: it is the **stack-centred** ring used when nobody is empowered, and the fallback whenever the
+boss-centred spot cannot be derived.
+
+The points the rest of this geometry is stated against, derived off the anchor: the stack is
+`anchor + 10 yd @ 180°` = **(1577.18, 121.02)**, Steelbreaker's tank spot is `anchor + 16 yd @ 135°`
+= **(1575.87, 132.33)**, and Brundir's is **(1615.18, 121.02)**. The navprobe rings and the 5-of-16
+Meltdown overlap were both measured at those.
+
+**Melee uptime measured by an 8 yd proximity proxy is a lie here — do not re-audit it on that.** It
+read a 2% median while those melee were parked 9.3 yd out, which is inside melee range of a boss this
+size. Cast rate on the boss is the honest measure, and it is flat across pulls: melee **2.8-3.0/s**,
+ranged **0.93-1.07/s**.
+
 Nothing positional answers what actually kills raids here. **High Voltage** (61890 → 63525/63526) is
 `EffectRadiusIndex 28` = **50,000 yd**, a whole-instance pulse every 3s on every member — 58–65% of
 all damage taken in four traced pulls, and **72–86% with 63 of 90 killing blows** once the phase
@@ -170,6 +189,14 @@ mode every DPS cooldown, trinket, racial, potion, tinker and Bloodlust is held u
 the last one standing**. Held burst costs nothing when three bars are one pool, and two traced pulls
 lost 21 of 31 and 20 of 27 deaths inside it. Traced release: Heroism goes out 3.6–4.3s into the
 phase. Hard mode only — the normal order kills him first, so it would never release.
+
+**A guaranteed tank death re-vetoes the release, which is a known and accepted interaction.**
+`TankHasHeldBoss` needs `boss->GetVictim()` to be a grouped tank *continuously* for 5 s — 3 s for lust
+— and any gap resets the dwell (the generic rule is in
+[../../systems/consumables-and-burst.md](../../systems/consumables-and-burst.md)). Here a tank dies
+about every 36 s, so the dwell re-arms and burst is vetoed again mid-phase: 44 and 36 vetoes at the
+transition, **none from 210 to 235 s**, then 51 / 35 / 60. Left alone until the tank stops travelling,
+at which point it is worth re-measuring rather than tuning the dwell.
 
 **The hold matches on action name as well as type, because neither predicate is complete.**
 `IsDpsCooldownAction` is a `dynamic_cast` chain with no case for a potion, a tinker or any priest

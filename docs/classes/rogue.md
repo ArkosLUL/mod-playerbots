@@ -3,6 +3,15 @@
 Subtlety aliases the Assassination strategy (`AiFactory.cpp:379-380`) and inherits whatever improves
 there. Engine semantics are in [../engine/action-selection.md](../engine/action-selection.md).
 
+**`GenericRogueStrategy` must stay parented to `MeleeCombatStrategy`.** Upstream parents it to
+`CombatStrategy`, and `MeleeCombatStrategy` is the only source of the `"enemy out of melee"` trigger
+that produces `reach melee`; `AiFactory.cpp` never hands rogues the `"close"` strategy either. Take
+upstream's parent and **every rogue stands still whenever Sprint is on cooldown**, in every raid, with
+nothing failing to compile. It is a local divergence to re-apply on each merge — see
+[../engine/pitfalls.md](../engine/pitfalls.md). `tricks of the trade` likewise sits at
+`ACTION_HIGH + 6.5f` rather than upstream's 26.0, to break an exact relevance tie with
+`use instant poison on main hand`.
+
 ## Design decisions
 
 - **Armor-debuff ownership.** A rogue applies Expose Armor only when **nobody else in the group can**,

@@ -120,8 +120,10 @@ must agree on needs a file-static, GUID-keyed map defined in exactly one `.cpp`.
 
 Resolve bosses with `AI_VALUE2(Unit*, "find target", "<lowercase name>")` **only** when the bot is
 reliably on that creature's threat list; otherwise use `GetFirstAliveUnitByEntry`
-(`RaidBossHelpers.h:29`). A melee bot parked on Thane never resolves Zeliek. `SetInCombatWithZone()`
-in a script's `JustEngagedWith` is what makes `"find target"` work from the pull on some bosses.
+(`RaidBossHelpers.h:29`), noting it is **deprecated upstream** — see
+[../engine/pitfalls.md](../engine/pitfalls.md). A melee bot parked on Thane never resolves Zeliek.
+`SetInCombatWithZone()` in a script's `JustEngagedWith` is what makes `"find target"` work from the
+pull on some bosses.
 
 ## Heroic and 10/25
 

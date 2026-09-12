@@ -159,9 +159,16 @@ twenty-five of them agree anyway:
 - **Derive, don't communicate.** A roster sorted by guid is identical on every bot. So is "rank by
   energy descending, guid ascending" — and that one **self-rotates**, because acting costs energy and
   drops the actor to the back of its own queue.
-- **Latch per instance, not per bot**: `thread_local std::unordered_map<uint32 /*instanceId*/, T>`,
-  safe unlocked because a bot is only ever updated from its own map's thread. Use it for phase,
-  creature lookups, layout choices and any held heading.
+- **Latch per instance, not per bot**: `std::unordered_map<uint32 /*instanceId*/, T>` behind a
+  `std::mutex`. Use it for phase, creature lookups, layout choices and any held heading. **Never
+  `thread_local`** — `MapUpdater::schedule_update` pushes maps onto a shared queue with no thread
+  affinity, so above `MapUpdate.Threads` 1 (**6 here**, set by `AC_MAP_UPDATE_THREADS` over the
+  conf's 1) the pool hands the same instance to a different worker and each worker gets its own
+  empty latch. The signature is one note per bot **per thread that ever ticked the pull** — six
+  identical rows, which reads as a bot re-deciding several times a second. References into an
+  `unordered_map` survive rehashing, so the lock only has to cover the lookup. A time-bounded
+  **cache** of live world state is exempt: a rebuild on another thread recomputes the same answer.
+  Only a **latch** is corrupted by being duplicated.
 - **Read the world, not your bookkeeping.** "Has someone already done this?" is answered by the aura
   their action left behind, with its remaining duration as the timestamp. That survives a cast that
   silently failed and it counts real players in the group; a flag set on our own success does
@@ -178,13 +185,20 @@ twenty-five of them agree anyway:
 
 Cheap per bot, ruinous per raid — and invisible in single-bot testing.
 
-- **`Multiplier::GetValue` runs once per queued action per bot per tick** (`Engine.cpp:188`), dozens
-  of calls per bot. Anything it derives is derived that many times.
+- **`Multiplier::GetValue` runs on every popped action that passed `isUseful()`**
+  (`Engine.cpp:216-234`), dozens per bot per tick, so anything it derives is derived that many
+  times. The chain breaks on the first `relevance <= 0` and the outer loop on the first successful
+  `Execute` — which is why a multiplier must test the **action** before it resolves a boss.
 - **Role lookups are not free.** `IsMainTank` → `GetMainTankGuid` walks every group member;
   `IsTank`/`IsDps`/`IsRanged`/`IsHeal` cost a `GET_PLAYERBOT_AI` hash lookup plus a bitmask test
   (`Engine::HasStrategyType`, `Engine.h:88`). Precompute them for a 25-man loop or a sort comparator,
   which otherwise calls them on both sides of every compare — `Strategy::InitMultipliers` builds one
-  multiplier per bot, so there is no sharing to worry about.
+  multiplier per bot, so there is no sharing to worry about. On a **human** the same predicates used
+  to walk the whole talent map and build a `std::map` per call; `specTabCache`
+  (`AiFactory.cpp:49-195`) fixed that, and its shape is worth copying: entries are **invalidated,
+  never erased** — an erase lets an in-flight read on another thread recreate the entry and store a
+  stale answer into a fresh one — results computed across a `generation` bump are discarded, and
+  nothing is cached until `IsInWorld()`, because talents are still loading mid-login.
 - **Do not stack cache windows.** Caching an already-cached value again leaves the second layer
   enforcing the previous answer for up to a full window after the first moved on. Cache the expensive
   leaves; read the cheap composite live.

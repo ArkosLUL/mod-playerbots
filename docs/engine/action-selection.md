@@ -132,6 +132,19 @@ not require including 25 class headers. Racials and trinkets follow the same con
 
 Unlike creator-name strings, a `dynamic_cast` mistake fails at **compile** time.
 
+**Multipliers only apply on the queue path.** `PlayerbotAI::DoSpecificAction` goes through
+`Engine::ExecuteAction` (`Engine.cpp:361`), which runs `isUseful()` and `isPossible()` and then
+executes — no multiplier chain. So a guard can only ever silence nodes that arrive through the queue,
+typically the class ones; anything an encounter fires directly is immune to it by construction. Build
+the encounter's own suppression into the action, not into a multiplier that will never see it.
+
+**Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
+passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation
+spell that falls through — one Ulduar chain pass reached roughly 150 line-of-sight raycasts before
+anything returned a verdict, and every verdict was 1.0. Where everything a multiplier suppresses is
+either a `MovementAction` or a `CastSpellAction` — disjoint families — one `dynamic_cast` each way up
+front replaces the whole chain for the common case.
+
 ## Casting
 
 - `PlayerbotAI::CanCastSpell` builds its probe with `TRIGGERED_IGNORE_POWER_AND_REAGENT_COST` and

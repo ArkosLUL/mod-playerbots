@@ -165,3 +165,15 @@ and a trigger must not gate on that. The impact carries `KNOCK_BACK_DEST`, so st
 hold a formation together either. Key the dodge off the **cast**: an earlier node keyed off the *field*
 (63277) and so moved only once the damage had already landed.
 
+## Known gaps
+
+**The healer-mana half does not work.** `ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL` ships at **25.0f**, but
+the five observed puddles landed **31, 37, 42, 46 and 50 yd** from the anchor, so nothing was ever in
+range to soak: five bots got a stack at all, 23 ticks, about **7k mana for the whole raid over 227 s**.
+Raising the travel budget means costing the walk against Shadow Crash exposure, which has not been
+measured — the constant was left where it is deliberately, not by oversight.
+
+**The formation gate flaps.** `vezax.formation` toggled `outside` ↔ `on` **52 times** in one pull:
+vapor excursions cross the 45 yd arena bubble the gate is keyed on and drop it mid-run, so anything
+gated on "in formation" stops and restarts for the length of the excursion.
+

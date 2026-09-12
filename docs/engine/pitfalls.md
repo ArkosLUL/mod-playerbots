@@ -31,6 +31,12 @@ pass/fail: three of those shelters sat 7.6-8.2 yd off Sif's Blizzard track again
 reach, because clearance was a solver preference it was free to trade away. Parse the shipped table back
 out of the source to check it — the solver's own output only proves the solver agrees with itself.
 
+**A navprobe-clean point can still be a wrong point.** Navprobe answers "is this on the mesh", which is
+one constraint out of several. A nine-spot Thorim camp solve ignored Sif's Blizzard lane and put two
+points 5.6 and 6.8 yd from the bunny's path; both probed clean. So the hazard check is its own step,
+and re-solving a failed point means **re-solving the whole set against every constraint** rather than
+nudging the one that failed — a nudge just moves the violation to a neighbour.
+
 ## Names fail silently at runtime
 
 Everything is wired by string. Nothing here is a compile error.
@@ -115,6 +121,10 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   points. Void Reaver's ranged never spread for this reason, and because
   `VoidReaverMaintainPositionsMultiplier` disables `CombatFormationMoveAction`, the spread action was
   the *only* thing that could position them — so they froze permanently.
+
+  **`exact_waypoint = true` skips `SearchForBestPath` entirely, so such a node structurally cannot log
+  `nopath`** — an absence of `nopath` from it is not evidence the destination was reachable, and
+  reading it that way sends the investigation somewhere else.
 
   Two qualifiers. The navmesh half cannot fire on a map with no `.mmtile` files — `CalculatePath`
   short-circuits to a shortcut and every destination "paths". The height band survives only where
@@ -292,7 +302,11 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   `creature_template.name`. A melee bot parked on Thane never resolves Zeliek, and every Auriaya
   trigger lost the boss the same way to a Sanctum Sentry. A pacified or CC'd bot has attacked
   nothing, so it fails for exactly the bot a rescue node exists to serve. For multi-boss encounters,
-  non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry`.
+  non-attacking objects, or anything not yet on threat, use `GetFirstAliveUnitByEntry` — **which
+  upstream has now marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`) against
+  **163 call sites** here. It is still the right answer today and no replacement has landed; the
+  mitigation when it goes is a Custom-owned copy under a different name, so the deletion is a no-op.
+  Every recommendation of it in `raids/` inherits this caveat.
 - **`AvoidAoeAction` only sees three things**: a dynobject aura, a damaging trap GameObject, or a
   `UNIT_FLAG_NOT_SELECTABLE` trigger NPC. Mechanics outside those — Anub'rekhan's Impale and Locust
   Swarm, the Four Horsemen's Void Zone NPC 16697 (SmartAI, casts on update) — are invisible to it.
@@ -310,6 +324,13 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   20-35 s a pull. Test a fixed slot's sight of its focus, not only its floor.
 - **`DisperseDistanceValue` defaults to `-1.0f`**, and `CombatFormationMoveAction::Execute` bails on
   `dis <= 0` — the generic de-clumper is inert unless a strategy sets it.
+- **`AttackersValue::Calculate` is threat-based, not range-based.** It builds from `AddAttackersOf`,
+  so an untouchable boss 138 yd away stays in every bot's attacker list and `dps assist` takes him at
+  `rel=50.0`. **Distance never removes a target** — only threat does.
+- **`CommandPetAttack` reaches at most one guardian.** It drives `bot->GetGuardianPet()`, which reads
+  the single `SUMMON_SLOT_PET` slot, so a shaman's two Feral Spirits are invisible to it — the exact
+  pets most likely to run off — and it dereferences `GetCharmInfo()` unchecked. Redirecting every
+  guardian means walking `m_Controlled`.
 
 ## Detection that never fires
 
@@ -351,6 +372,13 @@ Related traps:
   Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice in each.
   Sweep a raid's constants against the table in one pass — 28 of Ulduar's 139 remap, three of the
   checks were reading only the 10-man id.
+- **`TricksOfTheTradeTargetValue::TankNeedsRedirect` never takes its opener branch, and the fallback
+  is wrong for the class that casts it.** The opener branch keys on `"combat start time"`, which
+  `PlayerbotAI::ChangeEngineOnCombat` sets **only** under the `wait for attack` strategy — so it is 0
+  in every raid. It then falls through to `myThreat > tankThreat * 0.5`, false for a rogue who has not
+  swung yet, and Tricks goes to the top DPS instead of the tank. Measured on Mimiron: the buff landed
+  on the hardest-hitting melee at 13.5-15.5 s and that bot pulled the boss 2-3 s later, in all three
+  pulls. **Still open** — encounters work around it by suppressing the smart-target node.
 
 ## Before the pull, and out of combat
 
@@ -388,6 +416,31 @@ Related traps:
 - **The four raid registration sites are pure include/name lists** (`RaidStrategyContext.h`,
   `BuildSharedActionContexts.cpp`, `BuildSharedTriggerContexts.cpp`, `GetInstanceStrategies()`), so a
   merge that drops either side **silently unregisters raid strategies** and nothing fails to compile.
+- **`rerere` holds 123 cached resolutions and must not be trusted** on a merge that spans a refactor —
+  it will replay a resolution written against code that has since moved.
+
+### Local divergences a merge must re-apply
+
+None of these fail to compile when reverted, so a merge that takes upstream's side is silent.
+
+- **`GenericRogueStrategy` is re-parented to `MeleeCombatStrategy`** (upstream parents it to
+  `CombatStrategy`). `MeleeCombatStrategy` is the **only** source of `"enemy out of melee"` →
+  `reach melee`, and `AiFactory.cpp` never gives rogues the `"close"` strategy, so without the
+  re-parent **every rogue stands still whenever Sprint is on cooldown**, in every raid. Upstream bug,
+  never reported. See [../classes/rogue.md](../classes/rogue.md).
+- **`tricks of the trade` is registered at `ACTION_HIGH + 6.5f` (26.5)**, not upstream's 26.0, to break
+  an exact tie with `use instant poison on main hand` — equal relevance resolves in unspecified order.
+  The ladder it sits in: tricks 26.5 / MH poison 26.0 / OH poison 25.5 / slice and dice 25.0 /
+  rupture 24.0.
+- **`fear ward on main tank` is registered at `ACTION_HIGH + 0.7f` (20.7)**, not upstream's 23.0, which
+  puts it below the whole Discipline ladder deliberately.
+- **CI builds with `-Werror`** (`-DWITH_WARNINGS=ON` plus `-Werror` in
+  `.github/actions/linux-build/action.yml:145-150`), and Custom-only code carries roughly 60 warnings
+  — mostly `-Wunused-parameter` on `Execute(Event event)` overrides and on free helpers taking an
+  unused `PlayerbotAI* botAI`. Five CI jobs go red on the first upstream PR until they are cleared.
+- `AttackersValue::IsPossibleTarget` gained an `IsInCombatWith(bot)` gate upstream, so
+  `GetFirstAliveUnitByEntry` resolves mobs slightly earlier than it used to — relevant anywhere a
+  `nullptr` return was being read as "not engaged yet".
 
 ## State does not cross objects
 
@@ -408,6 +461,25 @@ nothing marks spent hands out a fresh item every time the last is used: Mimiron'
 `GenericBossHelper<BossAiType>` is **unusable** when the boss AI class is file-local to its `.cpp`
 (Anub'rekhan, Gothik, Heigan) or when the script is `TaskScheduler`-driven with no `events` member.
 Fall back to the plain-`AiObject` + timer-model pattern (`GluthBossHelper`, `HeiganBossHelper`).
+
+**An AI value set by one encounter is still set in the next one.** `disperse distance` is written by
+Mimiron (`UldActions_Mimiron.cpp:336`), is the module's only writer, and was never cleared — so three
+Mimiron pulls before a Thorim pull left `combat formation move` armed on every bot: 586/414/439 moves
+in Thorim phase 1, ranged travel **277 yd/min against 27** in a clean pull, and arena add damage up
+from 3,077/s to 5,105-6,310/s. This is the whole reason `MimironResetEncounterStateTrigger/Action`
+exists. **The proof technique generalises**: the first `combat formation move` fired 39 ms, 307 ms and
+686 ms into the pull, and a value armed before the pull began cannot have been set by that pull. Any
+encounter that writes a shared value owes the next one a reset.
+
+**A shared staleness flag cleared by the first actor starves every other actor.** Thorim's
+`ThorimEncounterStateIsStale` returned one instance-wide `engagedSeen` and the reset set it false, so
+**the first bot to reset closed the gate for the other 24** — exactly one bot per wipe cycle was
+cleared and the rest carried their latched slots, ring state and waypoint steps into the next pull.
+Split it: a per-bot `resetDone` guid set for the work, a raid-wide flag for the detection. The
+signature is a reporting artefact worth knowing — `ObsGuidMap::Set` emits **only on change**, so
+**"no note" means "carried in"**: 3 of 13 gauntlet bots emitted `thorim.balcony`, and the ten silent
+ones were the leaked ones. It accumulates, too — applications went 1 → 10 → 9 → 18 over four attempts
+in one session.
 
 ## A targeting mark never clears inside a pull
 
@@ -448,6 +520,14 @@ targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
   `dispelAuraDuration` (default 700 ms) remaining.
 - Class dispel nodes sit **below** `ACTION_RAID`: mage `remove curse on party` at 40, druid at 57
   against `ACTION_RAID` 60. Any raid positioning node outranks them.
+- **`IsTank` flickers, and a role test that reads false once has lasting consequences.** It is
+  `ContainsStrategy(STRATEGY_TYPE_TANK)`, so a bot the roster records as a tank can answer false — on
+  one Thorim pull that dropped him past `IsMainTank` and `IsAssistTankOfIndex` into the melee ring,
+  where he took a DPS slot, lost his role-keyed hazard exemption, and got **156 ring points and zero
+  anchor points while holding the boss**. A ring point is 8 yd off the boss, so a tank standing on one
+  never pulls him anywhere. Belt and braces is
+  `PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, /*bySpec*/ true)` in **both** the role
+  resolver and whatever assigns slots.
 - **Boarding changes what a rider is, in two ways that break tests written for a bot on foot.**
   `Vehicle::AddPassenger` roots every passenger, driver included — `SetControlled(true,
   UNIT_STATE_ROOT)` (`Vehicle.cpp:437`), cleared only on exit — so `UNIT_STATE_NOT_MOVE` on a rider
@@ -506,6 +586,12 @@ isolates.
 - **Raid cheats are on by default**: `AiPlayerbot.BotCheats = "food,taxi,raid"`. A mechanic that is
   only survivable because of the raid cheat is (a) not real play and (b) a silent wipe on any server
   that turns the cheat off. See the CHEAT-ONLY list in [../raids/README.md](../raids/README.md).
+- **The raid cheat strips auras, which silently breaks any node keyed on one.** Thorim's tank-swap
+  trigger fires only while the active tank still carries Unbalancing Strike; the cheat stripped it
+  **2-230 ms** after it landed, so only 2-3 of every 5-8 strikes ever produced a swap — while the
+  strikes that kept their aura the full 15 s **all** swapped within 37-199 ms. Nothing errors; the
+  node just rarely fires. Before keying a node on a debuff, check the cheat is not removing it. Raid
+  cheat is live for Yogg-Saron, ICC, SSC, BT, BWL and RS.
 - `errorDelay` defaults to 100 ms and is compared as `(now - lastErrorTell) < errorDelay / 1000`
   (`PlayerbotMgr.cpp:1709`) — integer division makes that 0 seconds, so errors flush every tick.
   **Still unfixed.**

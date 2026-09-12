@@ -86,6 +86,10 @@ Hazard radii are sized against the spells, not the visuals: the Scorched Ground 
 and nobody else — the three roles whose spot the encounter owns. Non-tanks keep everything, which is
 what spreads the ranged half without an anchor of their own.
 
+Scorch's 25-man id is **`SPELL_IGNIS_SCORCH_25` = 63474** (`UldEncounter_Ignis.h:42`), the
+difficulty remap of 62546 — a whole-module sweep for missing remaps of this shape found it here and a
+matching hole on Mimiron's Plasma Blast.
+
 Ignis has no hard mode. Heroic is free: the paired spell ids above are both checked, and the only
 other 25-man difference is the construct cadence (30s instead of 40s).
 
@@ -93,6 +97,13 @@ Every node is gated on `IsIgnisEngaged` — alive **and** in combat, since the b
 the whole 200 yd room. Lookups go through `GetIgnis` (a grid search), not `"find target"`: a bot
 parked on a construct never has Ignis on its threat list, and a dormant construct carries
 `UNIT_FLAG_NOT_SELECTABLE`, which drops it out of `"possible targets"` entirely. The room is wider
-than SightDistance too, so the cached `"nearest npcs"` list goes blind at the pools — every Ignis
-lookup searches the grid at 200 yd.
+than SightDistance too, so the cached `"nearest npcs"` list goes blind at the pools.
+
+**A grid search that far is expensive, so ask the instance script first.** `GetIgnisIf` reads
+`instance->GetCreature(ULD_BOSS_IGNIS)` as an O(1) pre-filter and rejects there — **then still runs
+the real search**, because only the search knows which cells its 200 yd octagon actually covers. Most
+lookups now never reach it. The preconditions are what make the pre-filter sound: there is exactly
+one DB spawn of 33118, the script summons none, and `instance_ulduar` registers it through the base
+`OnCreatureCreate` / `OnCreatureRemove`. Where a trigger depends on threat, keep `"find target"` —
+the instance handle knows nothing about threat.
 

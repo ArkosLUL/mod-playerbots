@@ -350,8 +350,9 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   the most clearance, and boss-ward was often that direction, which put the flight inside Arcane
   Pulse and killed it faster than the field would have.
   Two details matter as much as the ring itself. **The whole phase is one slow lap, always forward**
-  — the heading is latched per instance (`stackAngleCache`, `thread_local`, keyed on the instance
-  like the phase and creature caches) and the sweep starts from wherever the flight already is,
+  — the heading is latched per instance (in `DrakeInstanceState`, behind `drakeStatesMutex`, keyed
+  on the instance like the phase and creature caches) and the sweep starts from wherever the flight
+  already is,
   never from `DRAKE_STACK_ANGLE`. Both halves of that are load-bearing. Sweeping backwards picks the
   ground the flight has just crossed, where the field it dodged is still live. And re-sweeping from
   a fixed base is the subtler one: an expiring field frees a heading *behind* the flight, the sweep
@@ -579,8 +580,8 @@ multiplier, where `IsMainTank` walks every group member and each check scans tha
 list.
 
 - **One creature cache for the whole instance.** `GetEoECreatures` / `GetNearestEoECreature` /
-  `AnyEoECreature` (`Util/EoEEncounter_Malygos.cpp`) answer from a `thread_local` map keyed by
-  instance id and creature entry, refilled at most every `EOE_CREATURE_CACHE_MS` (300 ms). Before
+  `AnyEoECreature` (`Util/EoEEncounter_Malygos.cpp`) answer from a map keyed by instance id and
+  creature entry, refilled at most every `EOE_CREATURE_CACHE_MS` (300 ms). Before
   this, phase 2 cost eight to ten sweeps per bot per tick — the bubble trigger and the free-disk
   trigger duplicated each other outright — for about 250 sweeps a tick that all returned the same
   answer. The fill sweep is anchored on `MALYGOS_CENTER_POSITION`, **not on whichever bot refreshed
@@ -591,7 +592,9 @@ list.
   constructed with, so visiting cells around a different point does not move its range test, and a
   radius of 0 filters everything out rather than disabling it. **Guids are cached, not pointers** — a
   creature that despawns inside the window drops out of the answer instead of coming back as a
-  dangling read. Bots are only ever updated from their own map's thread, so no locking.
+  dangling read. The whole state struct sits behind `malygosStatesMutex`: a map is updated by one
+  thread at a time but is **never pinned to one**, so `thread_local` would hand each worker its own
+  copy (see [../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md)).
 - **A killed Power Spark stays `IsAlive()` for 60 s.** `npc_power_spark::DamageTaken` zeroes the
   damage, sets `UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_DISABLE_MOVE` and
   despawns on a timer, so for a full minute after every spark `PowerSparkTrigger` kept firing, both
@@ -621,9 +624,9 @@ list.
   sorts two vectors for an answer that only moves when the roster or the difficulty does, and both
   drake actions read it every tick. `GetDrakeFlightAndHealerRank` stays uncached — it reads live
   drake energy.
-- **Nothing evicts the `thread_local` caches, deliberately.** Phase, creatures, boss guid, P1 layout,
-  drake heading and healer roster are six maps holding one entry per instance id per worker thread,
-  tens of bytes each, never freed. What they do carry is a staleness window — `EOE_LATCH_STALE_MS`
+- **Nothing evicts the caches, deliberately.** Phase, creatures, boss guid, P1 layout, drake heading
+  and healer roster hold one entry per instance id, tens of bytes each, never freed. What they do
+  carry is a staleness window — `EOE_LATCH_STALE_MS`
   (5 min), far longer than any pull — because instance ids get recycled and a latch with no window
   eventually hands a fresh pull the previous tenant's state.
 - **The multiplier splits on action family before testing anything.** Everything it suppresses is
