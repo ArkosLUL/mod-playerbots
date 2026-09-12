@@ -8,6 +8,7 @@
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
 #include "UldEncounter_FlameLeviathan.h"
+#include "UldEncounter_IronAssembly.h"
 #include "UldEncounter_XT002.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -28,16 +29,20 @@ bool IsSteelbreakerEmpowered(PlayerbotAI* botAI)
     // No hard-mode gate: this is a phase check, and Steelbreaker reaching phase 3 is a fact about the
     // fight rather than a raid setting. Gating it meant a raid that got there without the option set
     // lost the tank swap and chain-died to Meltdown.
-    return IsSteelbreakerEmpowered(botAI, GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER),
-                                   GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM),
-                                   GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR));
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+
+    return IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir);
 }
 
 Unit* GetIronAssemblyNextKillTarget(PlayerbotAI* botAI)
 {
-    Unit* steelbreaker = GetFirstAliveUnitByEntry(botAI, NPC_STEELBREAKER);
-    Unit* molgeim = GetFirstAliveUnitByEntry(botAI, NPC_MOLGEIM);
-    Unit* brundir = GetFirstAliveUnitByEntry(botAI, NPC_BRUNDIR);
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+
+    Unit* steelbreaker = targets.steelbreaker;
+    Unit* molgeim = targets.molgeim;
+    Unit* brundir = targets.brundir;
 
     // The kill order is the only thing the hard-mode option changes. Hard mode saves Steelbreaker for
     // last so he reaches phase 3; otherwise he dies first, which takes Fusion Punch off the tank and

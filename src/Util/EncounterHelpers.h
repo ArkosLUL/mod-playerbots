@@ -10,6 +10,7 @@
 #include "Common.h"
 #include "Position.h"
 #include <functional>
+#include <initializer_list>
 #include <string>
 #include <utility>
 #include <vector>
@@ -58,6 +59,11 @@ bool IsDownOrFeigning(Unit const* unit);
 Player* GetNearestPlayerInRadius(Player* bot, float radius);
 bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range);
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId);
+
+// Several spells off one grid visit, for a mechanic whose id is difficulty-mapped and whose callers
+// have to test both. Results are in visit order, so the ids are interleaved rather than grouped.
+std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
+                                                std::initializer_list<uint32> spellIds);
 // A hazard and the distance a bot has to keep from it.
 using HazardCircle = std::pair<Position, float>;
 

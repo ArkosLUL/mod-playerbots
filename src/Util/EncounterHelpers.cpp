@@ -353,6 +353,12 @@ bool IsBotInFrontalCone(Player* bot, Unit* source, float coneAngle, float range)
 // Grid search for dynamic objects for methods to avoid dynobj-based AoE hazards.
 std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius, uint32 spellId)
 {
+    return GetDynamicObjectPositions(bot, searchRadius, {spellId});
+}
+
+std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
+                                                std::initializer_list<uint32> spellIds)
+{
     std::list<WorldObject*> objs;
     Acore::AllWorldObjectsInRange check(bot, searchRadius);
     Acore::WorldObjectListSearcher<Acore::AllWorldObjectsInRange> searcher(
@@ -366,7 +372,7 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
             continue;
 
         DynamicObject* dynObj = static_cast<DynamicObject*>(obj);
-        if (dynObj->GetSpellId() == spellId)
+        if (std::find(spellIds.begin(), spellIds.end(), dynObj->GetSpellId()) != spellIds.end())
         {
             dynObjs.emplace_back(
                 dynObj->GetPositionX(), dynObj->GetPositionY(), dynObj->GetPositionZ());

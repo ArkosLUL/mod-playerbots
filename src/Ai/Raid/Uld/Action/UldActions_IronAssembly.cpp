@@ -114,8 +114,7 @@ bool IronAssemblyOverloadAction::Execute(Event /*event*/)
     // Runes of Death count too, or the escape from one hazard walks straight into the other. Each at
     // its own clearance: folding them in at Overload's would give up four more yards per rune than
     // they need, and every yard of it is walked in a 5.5s cast window.
-    std::vector<Position> runes;
-    GatherIronAssemblyRunesOfDeath(bot, runes);
+    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
     AddIronAssemblyHazards(runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, hazards);
 
     Position spot;
@@ -129,8 +128,7 @@ bool IronAssemblyOverloadAction::Execute(Event /*event*/)
 
 bool IronAssemblyRuneOfDeathAction::Execute(Event /*event*/)
 {
-    std::vector<Position> runes;
-    GatherIronAssemblyRunesOfDeath(bot, runes);
+    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
     if (runes.empty())
         return false;
 
@@ -188,8 +186,9 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     if (victim != bot && !(shared && heldByTank) && CastClassTaunt(botAI, boss))
         return true;
 
+    // Same boss the assignment above returned, rather than ranking the tanks a second time.
     Position spot;
-    if (!TryGetIronAssemblyTankSpot(botAI, bot, spot))
+    if (!TryGetIronAssemblyBossTankSpot(bot, boss, spot))
         return false;
 
     float const distance = bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY());

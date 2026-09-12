@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ULDVALUECONTEXT_H
 
 #include "NamedObjectContext.h"
+#include "UldEncounter_IronAssembly.h"
 #include "UldEncounter_Razorscale.h"
 #include "Value.h"
 
@@ -26,13 +27,32 @@ private:
     RazorscaleScan scan;
 };
 
+// Owns the bot's IronAssemblyScan, the same way.
+class IronAssemblyScanValue : public ManualSetValue<IronAssemblyScan*>
+{
+public:
+    IronAssemblyScanValue(PlayerbotAI* botAI)
+        : ManualSetValue<IronAssemblyScan*>(botAI, nullptr, "iron assembly scan"), scan(botAI)
+    {
+        value = defaultValue = &scan;
+    }
+
+private:
+    IronAssemblyScan scan;
+};
+
 class RaidUlduarValueContext : public NamedObjectContext<UntypedValue>
 {
 public:
-    RaidUlduarValueContext() { creators["razorscale scan"] = &RaidUlduarValueContext::razorscale_scan; }
+    RaidUlduarValueContext()
+    {
+        creators["razorscale scan"] = &RaidUlduarValueContext::razorscale_scan;
+        creators["iron assembly scan"] = &RaidUlduarValueContext::iron_assembly_scan;
+    }
 
 private:
     static UntypedValue* razorscale_scan(PlayerbotAI* botAI) { return new RazorscaleScanValue(botAI); }
+    static UntypedValue* iron_assembly_scan(PlayerbotAI* botAI) { return new IronAssemblyScanValue(botAI); }
 };
 
 #endif

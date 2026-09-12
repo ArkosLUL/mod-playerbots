@@ -180,14 +180,19 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
 
 - **`Multiplier::GetValue` runs once per queued action per bot per tick** (`Engine.cpp:188`), dozens
   of calls per bot. Anything it derives is derived that many times.
-- **Role lookups are not cheap.** `IsMainTank` → `GetMainTankGuid` walks every group member, and each
-  `IsTank()` → `ContainsStrategy` scans that member's strategy list; `IsDps`/`IsRanged`/`IsHeal` are
-  the same shape. Across a 25-man that is tens of thousands of list scans a tick. Snapshot the roles
-  on a window — `Strategy::InitMultipliers` builds one multiplier per bot, so there is no sharing to
-  worry about.
+- **Role lookups are not free.** `IsMainTank` → `GetMainTankGuid` walks every group member;
+  `IsTank`/`IsDps`/`IsRanged`/`IsHeal` cost a `GET_PLAYERBOT_AI` hash lookup plus a bitmask test
+  (`Engine::HasStrategyType`, `Engine.h:88`). Precompute them for a 25-man loop or a sort comparator,
+  which otherwise calls them on both sides of every compare — `Strategy::InitMultipliers` builds one
+  multiplier per bot, so there is no sharing to worry about.
 - **Do not stack cache windows.** Caching an already-cached value again leaves the second layer
   enforcing the previous answer for up to a full window after the first moved on. Cache the expensive
   leaves; read the cheap composite live.
+- **A value built with the default `checkInterval` recomputes on every `Get()`**
+  (`Value.h:71-85`), so each `GetFirstAliveUnitByEntry` or `"nearest npcs"` read is a fresh
+  sight-range sweep, and Ulduar code took 20-60 of them per bot per tick. One **per-bot scan stamped
+  with `getMSTime()`** collapses them (`RazorscaleScan`, `IronAssemblyScan`): a bot never ticks twice
+  in one ms, and world state holds still for the length of one tick.
 - **Grid sweeps walk every `SIZE_OF_GRID_CELL` (66.67 yd) cell inside the radius**, and twenty-five
   bots re-answer the same instance-wide question every tick — EoE peaked near 250 identical sweeps a
   tick. One instance-keyed creature cache collapses that to one. **Cache guids, not pointers**, so a

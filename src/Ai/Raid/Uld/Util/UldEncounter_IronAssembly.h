@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERIRONASSEMBLY_H
 #define PLAYERBOTS_ULDENCOUNTERIRONASSEMBLY_H
 
+#include "ObjectGuid.h"
 #include "Position.h"
 #include "UldData.h"
 
@@ -215,6 +216,42 @@ struct IronAssemblyTargets
 Unit* GetIronAssemblyMember(PlayerbotAI* botAI, uint32 entry);
 void GatherIronAssemblyTargets(PlayerbotAI* botAI, IronAssemblyTargets& targets);
 bool IronAssemblyEncounterActive(PlayerbotAI* botAI);
+
+// Per-bot cache for the lookups every trigger, action and multiplier here repeats within one tick.
+// The value behind them recomputes on every read - a 100 yd grid sweep and a vector copy - and a
+// ranged bot asks for a member about a hundred times a tick. Keyed on getMSTime(), the key the
+// ms-cached multipliers already use: a bot never ticks twice in one ms. Holds guids, so a member that
+// dies between two reads answers null instead of dangling.
+class IronAssemblyScan
+{
+public:
+    explicit IronAssemblyScan(PlayerbotAI* botAI) : botAI(botAI) {}
+
+    // The three members, alive, exactly as three GetFirstAliveUnitByEntry calls return them.
+    void Members(IronAssemblyTargets& targets);
+    Unit* Member(uint32 entry);
+
+    // Rune of Death positions around this bot, off one grid visit. By value: a caller can hold the
+    // list across another scan read, and that read refills this one the moment the clock moves on.
+    std::vector<Position> RunesOfDeath();
+
+private:
+    void RefreshMembers();
+    Unit* Resolve(ObjectGuid const& guid) const;
+
+    PlayerbotAI* botAI;
+
+    uint32 membersAtMs = 0;
+    ObjectGuid steelbreaker;
+    ObjectGuid molgeim;
+    ObjectGuid brundir;
+
+    uint32 runesAtMs = 0;
+    std::vector<Position> runes;
+};
+
+// This bot's IronAssemblyScan, held by the "iron assembly scan" value.
+IronAssemblyScan& GetIronAssemblyScan(PlayerbotAI* botAI);
 
 // Gate for everything that positions a bot or picks its target. The raid strategy runs in the
 // non-combat engine too, and the council is visible from out in the corridor, so a presence gate has

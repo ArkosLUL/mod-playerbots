@@ -54,8 +54,7 @@ bool IronAssemblyRuneOfDeathTrigger::IsActive()
     if (!IronAssemblyEncounterActive(botAI))
         return false;
 
-    std::vector<Position> runes;
-    GatherIronAssemblyRunesOfDeath(bot, runes);
+    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
     if (runes.empty())
         return false;
 
@@ -88,8 +87,10 @@ bool IronAssemblyTankAssignmentTrigger::IsActive()
     if (boss->GetVictim() != bot)
         return true;
 
+    // The boss above, not a second assignment: deriving it ranks the bot tanks and walks the group
+    // again, and both answers come from the same tick anyway.
     Position spot;
-    if (!TryGetIronAssemblyTankSpot(botAI, bot, spot))
+    if (!TryGetIronAssemblyBossTankSpot(bot, boss, spot))
         return false;
 
     return bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) >

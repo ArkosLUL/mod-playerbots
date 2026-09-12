@@ -51,15 +51,17 @@ float IronAssemblyDisableAutomaticTargetingMultiplier::GetValue(Action* action)
 
 float IronAssemblyMovementGuardMultiplier::GetValue(Action* action)
 {
-    if (!action || !IronAssemblyFormationActive(botAI))
-        return 1.0f;
-
-    if (!dynamic_cast<MovementAction*>(action))
+    // Action family first: most of what a bot pops is a cast, and the formation test below reaches
+    // the council lookup, which is the expensive half.
+    if (!action || !dynamic_cast<MovementAction*>(action))
         return 1.0f;
 
     // AttackAction derives from MovementAction, so a blanket zero would also kill targeting, and
     // ReachTargetAction is what walks a healer into range of someone the formation cannot reach.
     if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    if (!IronAssemblyFormationActive(botAI))
         return 1.0f;
 
     static std::set<std::string> const encounterMovers = {
@@ -116,7 +118,7 @@ float IronAssemblyDisableTankFaceMultiplier::GetValue(Action* action)
 
 float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
 {
-    if (!IsIronAssemblyHardModeActive(botAI) || !IronAssemblyFormationActive(botAI))
+    if (!IsIronAssemblyHardModeActive(botAI))
         return 1.0f;
 
     // Both predicates, because each catches what the other misses. IsDpsCooldownAction is a
@@ -130,6 +132,9 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
     bool const burst = IsDpsCooldownAction(bot, action) ||
                        (PlayerbotAI::IsDps(bot) && IsBurstCooldownAction(action->getName()));
     if (!burst)
+        return 1.0f;
+
+    if (!IronAssemblyFormationActive(botAI))
         return 1.0f;
 
     // Released the moment Steelbreaker is the last one standing. Under the normal order he dies first

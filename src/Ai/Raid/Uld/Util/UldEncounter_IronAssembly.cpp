@@ -80,6 +80,17 @@ IronAssemblyEncounterState& IronAssemblyStateFor(Player* bot)
     return ironAssemblyStates[bot->GetInstanceId()];
 }
 
+// True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
+bool FreshThisTick(uint32& atMs)
+{
+    uint32 const now = getMSTime();
+    if (atMs && atMs == now)
+        return true;
+
+    atMs = now;
+    return false;
+}
+
 Position IronAssemblyPositionAt(float bearing, float radius)
 {
     return Position(ULDUAR_IRON_ASSEMBLY_ANCHOR.GetPositionX() + std::cos(bearing) * radius,
@@ -295,16 +306,105 @@ uint8 IronAssemblyTargets::AliveCount() const
     return (steelbreaker ? 1 : 0) + (molgeim ? 1 : 0) + (brundir ? 1 : 0);
 }
 
+void IronAssemblyScan::RefreshMembers()
+{
+    steelbreaker.Clear();
+    molgeim.Clear();
+    brundir.Clear();
+
+    // One pass for all three. The list is rebuilt from a grid sweep on every read, so asking it three
+    // times - which is what three GetFirstAliveUnitByEntry calls do - sweeps three times.
+    GuidVector const units =
+        botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+
+    for (ObjectGuid const& guid : units)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        // First match per entry, which is the one a lookup for that entry would have stopped on.
+        switch (unit->GetEntry())
+        {
+            case NPC_STEELBREAKER:
+                if (!steelbreaker)
+                    steelbreaker = guid;
+                break;
+            case NPC_MOLGEIM:
+                if (!molgeim)
+                    molgeim = guid;
+                break;
+            case NPC_BRUNDIR:
+                if (!brundir)
+                    brundir = guid;
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+Unit* IronAssemblyScan::Resolve(ObjectGuid const& guid) const
+{
+    if (!guid)
+        return nullptr;
+
+    Unit* unit = botAI->GetUnit(guid);
+    return unit && unit->IsAlive() ? unit : nullptr;
+}
+
+void IronAssemblyScan::Members(IronAssemblyTargets& targets)
+{
+    if (!FreshThisTick(membersAtMs))
+        RefreshMembers();
+
+    targets.steelbreaker = Resolve(steelbreaker);
+    targets.molgeim = Resolve(molgeim);
+    targets.brundir = Resolve(brundir);
+}
+
+Unit* IronAssemblyScan::Member(uint32 entry)
+{
+    IronAssemblyTargets targets;
+    Members(targets);
+
+    switch (entry)
+    {
+        case NPC_STEELBREAKER:
+            return targets.steelbreaker;
+        case NPC_MOLGEIM:
+            return targets.molgeim;
+        case NPC_BRUNDIR:
+            return targets.brundir;
+        default:
+            return GetFirstAliveUnitByEntry(botAI, entry);
+    }
+}
+
+std::vector<Position> IronAssemblyScan::RunesOfDeath()
+{
+    if (!FreshThisTick(runesAtMs))
+    {
+        runes.clear();
+        GatherIronAssemblyRunesOfDeath(botAI->GetBot(), runes);
+    }
+
+    return runes;
+}
+
+IronAssemblyScan& GetIronAssemblyScan(PlayerbotAI* botAI)
+{
+    return *botAI->GetAiObjectContext()->GetValue<IronAssemblyScan*>("iron assembly scan")->Get();
+}
+
 Unit* GetIronAssemblyMember(PlayerbotAI* botAI, uint32 entry)
 {
-    return GetFirstAliveUnitByEntry(botAI, entry);
+    return GetIronAssemblyScan(botAI).Member(entry);
 }
 
 void GatherIronAssemblyTargets(PlayerbotAI* botAI, IronAssemblyTargets& targets)
 {
-    targets.steelbreaker = GetIronAssemblyMember(botAI, NPC_STEELBREAKER);
-    targets.molgeim = GetIronAssemblyMember(botAI, NPC_MOLGEIM);
-    targets.brundir = GetIronAssemblyMember(botAI, NPC_BRUNDIR);
+    GetIronAssemblyScan(botAI).Members(targets);
 }
 
 bool IronAssemblyEncounterActive(PlayerbotAI* botAI)
@@ -428,7 +528,8 @@ static Unit* DeriveIronAssemblyAssignedBoss(PlayerbotAI* botAI, Player* bot, cha
     // The Overwhelming Power swap needs both partners on Steelbreaker, so his empowered phase is the
     // one case where two tanks share a member. Ranked, not IsMainTank: the group flags count humans
     // and this list does not, so the two would disagree about who the partners are.
-    if (IsSteelbreakerEmpowered(botAI) && targets.steelbreaker)
+    if (IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir) &&
+        targets.steelbreaker)
     {
         if (rank < 2)
         {
@@ -605,11 +706,10 @@ struct IronAssemblyStackHazard
     IronAssemblyStackShift kind;
 };
 
-static void GatherIronAssemblyStackHazards(PlayerbotAI* botAI, Player* bot, Position const& stack,
+static void GatherIronAssemblyStackHazards(PlayerbotAI* botAI, Position const& stack,
                                            std::vector<IronAssemblyStackHazard>& hazards)
 {
-    std::vector<Position> swept;
-    GatherIronAssemblyRunesOfDeath(bot, swept);
+    std::vector<Position> const swept = GetIronAssemblyScan(botAI).RunesOfDeath();
 
     // Kept against the stack rather than the caller: the sweep is centred on whoever asked, so two
     // bots standing apart would otherwise weigh different runes. It cannot conjure one a distant bot
@@ -658,7 +758,7 @@ static Position DisplaceIronAssemblyStackPoint(PlayerbotAI* botAI, Player* bot, 
     shift = IronAssemblyStackShift::None;
 
     std::vector<IronAssemblyStackHazard> hazards;
-    GatherIronAssemblyStackHazards(botAI, bot, stack, hazards);
+    GatherIronAssemblyStackHazards(botAI, stack, hazards);
 
     IronAssemblyEncounterState& state = IronAssemblyStateFor(bot);
 
@@ -753,10 +853,13 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     IronAssemblyStackShift shift = IronAssemblyStackShift::None;
     Position const stack = DisplaceIronAssemblyStackPoint(botAI, bot, opening, shift);
 
+    IronAssemblyTargets targets;
+    GatherIronAssemblyTargets(botAI, targets);
+
     // Static Disruption is the only reason to spread and it does not exist before Steelbreaker's
     // phase 2, which the normal kill order never reaches. Everywhere else the raid stacks, which is
     // what keeps healers in range and makes Rune of Power worth soaking.
-    if (!IsSteelbreakerEmpowered(botAI))
+    if (!IsSteelbreakerEmpowered(botAI, targets.steelbreaker, targets.molgeim, targets.brundir))
     {
         how = brundirLast ? IronAssemblySpotLabel(shift, "stack-late", "stack-late-rune",
                                                   "stack-late-overload")
@@ -788,8 +891,7 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
     Position centre = stack;
     float ringRadius = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS;
     Position steelbreakerSpot;
-    bool const onBoss = TryGetIronAssemblyBossTankSpot(
-        bot, GetIronAssemblyMember(botAI, NPC_STEELBREAKER), steelbreakerSpot);
+    bool const onBoss = TryGetIronAssemblyBossTankSpot(bot, targets.steelbreaker, steelbreakerSpot);
     if (onBoss)
     {
         centre = steelbreakerSpot;
@@ -851,12 +953,13 @@ void GatherIronAssemblyRunesOfDeath(Player* bot, std::vector<Position>& runes)
     if (!bot)
         return;
 
-    for (uint32 spellId : {SPELL_RUNE_OF_DEATH_10_MAN, SPELL_RUNE_OF_DEATH_25_MAN})
-    {
-        std::vector<Position> const found =
-            GetDynamicObjectPositions(bot, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS, spellId);
-        runes.insert(runes.end(), found.begin(), found.end());
-    }
+    // One visit for both ids rather than one each. The two are interleaved in the result instead of
+    // grouped, and nothing reads the order: every caller asks whether a spot clears all of them.
+    std::vector<Position> const found = GetDynamicObjectPositions(
+        bot, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS,
+        {SPELL_RUNE_OF_DEATH_10_MAN, SPELL_RUNE_OF_DEATH_25_MAN});
+
+    runes.insert(runes.end(), found.begin(), found.end());
 }
 
 bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Position> const& runes,
@@ -903,8 +1006,7 @@ static Unit* DeriveIronAssemblyRuneOfPowerSoakSpot(PlayerbotAI* botAI, Player* b
         return nullptr;
     }
 
-    std::vector<Position> runes;
-    GatherIronAssemblyRunesOfDeath(bot, runes);
+    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
     if (!IsIronAssemblyPositionClearOfRunes(rune, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS))
     {
         how = "none:rune";
@@ -954,8 +1056,13 @@ bool IronAssemblyMemberMustMove(PlayerbotAI* botAI, Player* member)
         }
     }
 
+    // The cache belongs to the bot whose tick this is; anyone else is swept fresh, because their scan
+    // was filled on their own tick and they have moved since.
     std::vector<Position> runes;
-    GatherIronAssemblyRunesOfDeath(member, runes);
+    if (member == botAI->GetBot())
+        runes = GetIronAssemblyScan(botAI).RunesOfDeath();
+    else
+        GatherIronAssemblyRunesOfDeath(member, runes);
 
     return !IsIronAssemblyPositionClearOfRunes(member->GetPosition(), runes,
                                                ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS);
@@ -1013,6 +1120,12 @@ static char const* DeriveIronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* b
         return nullptr;
     }
 
+    // Whirl belongs to rank 0 and Chain Lightning to rank 1, so once the count passes the rank that
+    // could still hold this cast the answer is standby whatever the rest of the raid looks like.
+    // Worth the stop: each member counted costs ten spell checks and, when one of them is ready, a
+    // rune sweep.
+    uint8 const decided = whirl ? 1 : 2;
+
     uint8 rank = 0;
     if (Group* group = bot->GetGroup())
     {
@@ -1027,7 +1140,8 @@ static char const* DeriveIronAssemblyInterruptDuty(PlayerbotAI* botAI, Player* b
             if (member->GetGUID() < bot->GetGUID() && IronAssemblyReadyInterrupt(member, brundir) &&
                 !IronAssemblyMemberMustMove(botAI, member))
             {
-                ++rank;
+                if (++rank >= decided)
+                    break;
             }
         }
     }
