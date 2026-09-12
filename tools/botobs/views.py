@@ -120,7 +120,7 @@ def show_notes(trace: Trace, prefix: str | None = None) -> int:
 ANSWERED_MOVE_YD = 5.0
 
 
-def show_stalls(trace: Trace, min_ms: int) -> int:
+def stall_windows(trace: Trace, min_ms: int) -> list[dict]:
     """Ordered to move and didn't.
 
     A bot that has *arrived* is also motionless, so standing still is not the signal on its own. The
@@ -148,8 +148,7 @@ def show_stalls(trace: Trace, min_ms: int) -> int:
         if rec.get("ok"):
             moves[rec.get("g")].append(rec)
 
-    print(f"stationary windows of at least {min_ms / 1000:.0f}s that still contain accepted moves\n")
-    total = 0
+    found: list[dict] = []
     for guid, track in sorted(tracks.items(), key=lambda kv: trace.name(kv[0])):
         for start, end, x0, y0 in position_runs(track, 1.0, min_ms):
             if guid in dead_at and end > dead_at[guid]:
@@ -162,21 +161,33 @@ def show_stalls(trace: Trace, min_ms: int) -> int:
             furthest = max(math.hypot(m["x"] - x0, m["y"] - y0) for m in issued)
             if furthest <= ANSWERED_MOVE_YD:
                 continue
-            total += end - start
-            owners = sorted({m.get("by") or "?" for m in issued})
-            print(
-                f"{trace.name(guid):<16} {clock(start):>9} -> {clock(end):>9}"
-                f"  {(end - start) / 1000:6.1f}s at ({x0:7.1f},{y0:7.1f})"
-                f"  {len(issued)} move(s) accepted, furthest goal {furthest:.0f} yd"
-            )
-            print(f"{'':16} {'':9}    {'':9}  wanted by: {', '.join(owners)}")
+            found.append({
+                "guid": guid, "start": start, "end": end, "x": x0, "y": y0,
+                "issued": len(issued), "furthest": furthest,
+                "owners": sorted({m.get("by") or "?" for m in issued}),
+            })
+    return found
+
+
+def show_stalls(trace: Trace, min_ms: int) -> int:
+    print(f"stationary windows of at least {min_ms / 1000:.0f}s that still contain accepted moves\n")
+    total = 0
+    for window in stall_windows(trace, min_ms):
+        total += window["end"] - window["start"]
+        print(
+            f"{trace.name(window['guid']):<16} {clock(window['start']):>9} -> {clock(window['end']):>9}"
+            f"  {(window['end'] - window['start']) / 1000:6.1f}s"
+            f" at ({window['x']:7.1f},{window['y']:7.1f})"
+            f"  {window['issued']} move(s) accepted, furthest goal {window['furthest']:.0f} yd"
+        )
+        print(f"{'':16} {'':9}    {'':9}  wanted by: {', '.join(window['owners'])}")
 
     print(f"\ntotal: {total / 1000:.0f}s")
     return 0
 
 
-def show_clump(trace: Trace, radius: float) -> int:
-    """How much of the pull had the raid stacked inside one AoE.
+def clump_histogram(trace: Trace, radius: float) -> dict[int, int]:
+    """How much of the pull had the raid stacked inside one AoE, as size -> snapshot count.
 
     Counts distinct *positions*, not bodies: passengers share their vehicle's coordinates exactly, so
     five riders in one siege engine are one thing an area spell can hit, not five.
@@ -201,7 +212,11 @@ def show_clump(trace: Trace, radius: float) -> int:
             sum(1 for x, y in spots if math.hypot(x - cx, y - cy) <= radius) for cx, cy in spots
         )
         histogram[biggest] += 1
+    return histogram
 
+
+def show_clump(trace: Trace, radius: float) -> int:
+    histogram = clump_histogram(trace, radius)
     frames = sum(histogram.values())
     if not frames:
         print("no snapshots with two or more live positions")

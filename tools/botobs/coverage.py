@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from obstrace import COVERAGE_COLUMNS, Trace
+from validity import encounter_of as trace_encounter
 
 # Ulduar keys every trigger to the boss in the room, and a shut gate returns the same empty Event as a
 # condition that was false - so without this every other encounter's nodes read as NEVER on every pull.
@@ -95,34 +96,49 @@ EXPLAIN = {
 }
 
 
+def walked(trace: Trace, prefix: str | None = None) -> tuple[list[dict], int, str]:
+    """The nodes this pull actually walked, the count folded away as gated, and the boss.
+
+    An Ulduar node belonging to another encounter was gated off, not silent. Folding these is what
+    keeps a Hodir pull from reporting ~150 phantom NEVERs.
+    """
+    boss = trace_encounter(trace)
+    gated = 0
+    rows = []
+    for entry in collect(trace).values():
+        node = entry["def"]["node"]
+        if prefix and not node.startswith(prefix):
+            continue
+        owner = encounter_of(node)
+        if owner and boss and owner != boss and not entry["won"]:
+            gated += 1
+            continue
+        rows.append(entry)
+    return rows, gated, boss
+
+
+def coverage_metrics(trace: Trace) -> dict[str, float]:
+    """Nodes per bucket, for the corpus comparison. A node moving out of LOST is the whole point of
+    the view, and it is invisible unless the buckets are counted rather than only printed."""
+    rows, _, _ = walked(trace)
+    if not rows:
+        return {}
+    carriers = max((len(e["bots"]) for e in rows), default=0)
+    counts: dict[str, float] = defaultdict(float)
+    for entry in rows:
+        counts[f"cov.{bucket(entry, carriers).lower()}"] += 1
+    return dict(counts)
+
+
 def show_coverage(trace: Trace, prefix: str | None = None, by_bot: bool = False) -> int:
     if not trace.of("cov"):
         version = trace.header.get("v")
         print(f"this trace has no node coverage (schema v{version}, needs v12)")
         return 1
 
-    totals = collect(trace)
-    boss = trace.header.get("boss") or ""
-    renames = [p for p in trace.of("pull") if p.get("src") == "rename"]
-    if renames:
-        boss = renames[-1].get("boss") or boss
-
+    rows, gated, boss = walked(trace, prefix)
     bots = len({rec.get("g") for rec in trace.of("cov")})
-    print(f"node coverage   {boss or 'pull'}   {bots} bot(s)   {len(totals)} node(s) walked\n")
-
-    gated = 0
-    rows = []
-    for entry in totals.values():
-        node = entry["def"]["node"]
-        if prefix and not node.startswith(prefix):
-            continue
-        # An Ulduar node belonging to another encounter was gated off, not silent. Folding these is
-        # what keeps a Hodir pull from reporting ~150 phantom NEVERs.
-        owner = encounter_of(node)
-        if owner and boss and owner != boss and not entry["won"]:
-            gated += 1
-            continue
-        rows.append(entry)
+    print(f"node coverage   {boss or 'pull'}   {bots} bot(s)   {len(rows) + gated} node(s) walked\n")
 
     carriers = max((len(e["bots"]) for e in rows), default=0)
     rows.sort(key=lambda e: (ORDER[bucket(e, carriers)], -e["checks"], e["def"]["node"]))

@@ -9,6 +9,7 @@ pre-roll). Schema and field meanings live in docs/systems/observability.md.
     postmortem.py <file> --bot NAME      that bot's timeline
     postmortem.py <file> --track NAME    position track, with distance to each boss
     postmortem.py <file> --notes [KEY]   pull/phase/note/end records, optionally one key prefix
+    postmortem.py <file> --probes [KEY]  what each probe key decided, ranked by churn
     postmortem.py <file> --stalls [MS]   held still while still asking to move - i.e. stuck
     postmortem.py <file> --clump [YARDS] how stacked the raid was, largest group in one circle
     postmortem.py <file> --verify        check the trace against the invariants the schema promises
@@ -25,6 +26,7 @@ import sys
 from coverage import show_coverage
 from deathreport import show_death, summarise
 from obstrace import Trace
+from probes import show_probes
 from validity import show_validity
 from views import show_bot, show_clump, show_notes, show_stalls, show_track, show_verify
 
@@ -41,6 +43,18 @@ def main() -> int:
         const="",
         metavar="KEY",
         help="pull/note/hazard/end records only; pass a key prefix such as hodir. to narrow it",
+    )
+    parser.add_argument(
+        "--probes",
+        nargs="?",
+        const="",
+        metavar="KEY",
+        help="every probe key ranked by churn; name one key exactly for its full timeline",
+    )
+    parser.add_argument(
+        "--during",
+        metavar="KEY=VALUE",
+        help="with --probes, only while a latch held a value, e.g. mimiron.phase=1",
     )
     parser.add_argument(
         "--stalls",
@@ -104,6 +118,8 @@ def main() -> int:
         return show_track(trace, args.track)
     if args.notes is not None:
         return show_notes(trace, args.notes or None)
+    if args.probes is not None:
+        return show_probes(trace, args.probes or None, args.during)
     if args.stalls is not None:
         return show_stalls(trace, args.stalls)
     if args.clump is not None:

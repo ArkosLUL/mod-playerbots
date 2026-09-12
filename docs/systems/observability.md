@@ -22,12 +22,20 @@ Reader: [tools/botobs/postmortem.py](../../tools/botobs/postmortem.py) — the C
 Traces land in `<LogsDir>/botobs/<map>_<instance>_<boss>_<epoch>.ndjson`, named from the creature that
 engaged. `.playerbots debug obs` lists what is open.
 
+A fight with several bosses lands under whichever one engaged, so `BOSS_ALIASES` in `obstrace.py` maps
+every such slug to one encounter: the Iron Assembly's 30 pulls read as 16 Brundir and 14 Molgeim, and
+Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go through it, and so does
+`cfg.hardmode`, whose keys are these names - an unmapped slug means the hard-mode check silently never
+applies.
+
 ```
 postmortem.py <file>                 summary + a block per death
 postmortem.py <file> --death N       full rewind for one death
 postmortem.py <file> --bot NAME      one bot's timeline
 postmortem.py <file> --track NAME    position track + distance to each boss
 postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to one note-key prefix
+postmortem.py <file> --probes [KEY]  every probe key ranked by churn; name one exactly for its timeline
+postmortem.py <file> --during K=V    with --probes, only while a latch held a value
 postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
 postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
 postmortem.py <file> --verify        check the schema's invariants; non-zero exit if any fail
@@ -37,9 +45,21 @@ postmortem.py <file> --since REF     compare the build against REF rather than H
 ```
 
 `--verify` is 17 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
-`--since REF`, `--valid`, `--census`, `--verify`, `--probes` - streaming one trace at a time, because
-125 of them are 1.3 GB. Extra positionals are more roots, which is how a baseline survives the 7-day
-retention. `--probes` lists note keys nothing reads: 12 today, every Flame Leviathan key but two.
+`--since REF`, `--valid`, `--census`, `--verify`, `--probes`, `--split-at REF`, `--baseline DIR` -
+streaming one trace at a time, because 130 of them are 1.4 GB. Extra positionals are more roots, which
+is how a baseline survives the 7-day retention.
+
+**`--split-at REF` answers "did the change help".** It compares pulls before a commit against pulls
+after it on every metric either side carries - deaths, stalls, clumping, coverage buckets, and churn
+per probe key and per action pair - reporting median and range per side, and calling a metric *moved*
+only when the two ranges are disjoint, which is the only claim three to thirty pulls support. Splits
+on `hdr.bin` where there is one, else on the pull's own timestamp, which assumes you rebuilt before
+pulling. Unprompted, it reproduced Mimiron's documented phase-1 flip-flop:
+`flip.act.won:follow <-> mimiron arc spread action` at 10.3/min before `eb9db6855`, absent after.
+
+**`--probes` names keys the source declares that never reached a trace of their own boss.** One silent
+pull usually means the thing did not happen; silence across every pull of a boss means the recorder is
+dropping it. One today: `fl.frozen`.
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
 
@@ -59,7 +79,10 @@ binary predating the fix by two hours. Four things disqualify a pull; the header
   kill — that disqualified the only kill in five Thorim pulls on 2026-09-12.
 - **humans** — read through `trace.humans`, not `roster[].h` alone: anyone who zoned in after the
   header appears only in a `unit` record. A human holding a role means the strategy did not play it,
-  which is what left a Plasma Blast fix untested.
+  which is what left a Plasma Blast fix untested. `roster[].r` carries their real role; it used to read
+  the literal `"human"`, duplicating `h` and destroying the half that decides anything. Tank or heal
+  disqualifies the pull, damage among 24 bots is recorded and not counted, and traces written before
+  the fix can only say a human was present.
 - **`diff`** — rendered 10/25 normal or heroic, not a bare id.
 
 `cfg` also carries `cheats` and `mapthreads`, and is a fixed short list on purpose: a full dump would
@@ -308,6 +331,11 @@ deliberately emit nothing — dropping a departed member is not an assignment. `
 on both containers: clearing one named bot is a wipe reset or a boss that is gone, which is real news.
 Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise.
 
+The key guid decides which session the record lands in; where it is not a player, the bot whose tick
+set it does. Before that fallback existed, a container keyed on anything but a player emitted nothing
+at all - `fl.frozen` is keyed on a vehicle and was absent from 129 traces while its six siblings
+carried 1,556 rows.
+
 State **derived** fresh on every call rather than stored — Hodir derives every position that way on
 purpose — has nothing for a container to watch. Probe inside the helper that derives it, never at the
 call sites: trigger and action both route through the helper, so one probe covers both and two cannot
@@ -363,10 +391,11 @@ are left bare on purpose.
   carries a median of 6 and a p90 of 25 live pets and guardians, which is the likeliest reason observed
   chains reach 7-8 hops where an idealised formation caps at 3 — and it stays a hypothesis until
   `Bot/Obs` logs pet damage.
-- **`stations()` in `tools/botobs/flame_leviathan.py` keeps only the last `fl.station` per bot**, so a
-  chopper that led early and stationed later reads as `chopper` for the whole pull. Fine for
-  per-station splits, but that table can never prove a role was *never* held — read the raw notes for
-  that.
+- **`tools/botobs/flame_leviathan.py` never reads `fl.station`.** `Frame.__init__` returns at the
+  vehicle branch on every trace where vehicles are in the snapshot, which is all of them, so the
+  station fallback below it is dead and its `tar-lead` branch has never run — the "by station" tables
+  really split on the vehicle's creature entry. `victim()` likewise still guesses the pursued vehicle
+  from the boss's facing ray, while `snap.u` column 7 and `fl.pursued` each name it outright.
 - **`ObsValue` / `ObsGuidMap::Set` emit only on change**, so a missing note means "unchanged", not
   "never set". That makes absence the signature of state leaking in from a previous pull rather than
   evidence of nothing happening.

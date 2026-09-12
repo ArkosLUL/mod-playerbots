@@ -10,8 +10,9 @@ disk. This makes the corpus the unit of analysis instead of the pull.
     batch.py --boss thorim          one boss
     batch.py --boss thorim --valid  only the pulls that count as evidence
     batch.py --census               validity and outcome totals, no per-trace rows
-    batch.py --probes               note keys the module emits that no tool reads
+    batch.py --probes               probe keys declared in source that never reach a trace
     batch.py --verify               roll up the invariant checks across the selection
+    batch.py --boss X --split-at R  did the change help: pulls built before R against after
 
 Retention is 7 days and 5 GB (Obs.RetentionDays, Obs.MaxDirMB), so a baseline worth keeping belongs
 outside the log dir - pass its directory as an extra positional and it joins the selection.
@@ -23,44 +24,39 @@ import pathlib
 import sys
 from collections import Counter
 
-from obstrace import Trace, boss_from_path, find_traces
-from validity import REPO, boss_of, inspect, resolve_since
+from obstrace import Trace, find_traces, pull_time
+from metrics import Side, show_compare, trace_metrics
+from probes import silent_keys
+from validity import DECIDABLE, REPO, encounter_of, inspect, resolve_since
 from views import verify_checks
 
 DEFAULT_ROOT = REPO.parents[1] / "env" / "dist" / "logs" / "botobs"
 
-# Note keys each scorer actually consumes. Kept as a declaration rather than derived by grep, because
-# the point of --probes is to catch a probe the module publishes and no reader ever picked up - and a
-# grep over the reader would happily "find" a key in a comment saying it is unread.
-CONSUMED_KEYS: dict[str, tuple[str, ...]] = {
-    "flame_leviathan.py": ("fl.station", "fl.vent"),
-}
-
 # One letter per disqualifier for the row table. Not the first letter of the kind: hardmode-off and
 # human-in-raid would collide, and those two are the pair most worth telling apart.
-FLAG = {"stale-build": "S", "hardmode-off": "M", "human-in-raid": "H"}
+FLAG = {"stale-build": "S", "hardmode-off": "M", "human-role": "R", "human-in-raid": "H"}
 
-# What --valid drops. A human is in the raid in all 125 traces on disk, so treating that alone as
-# disqualifying leaves an empty selection and says nothing. It is also the weakest of the three: the
-# roster records a human's role as the literal string "human", so the trace cannot say whether they
-# held one the strategy was meant to play, which is the thing that actually invalidated the Mimiron
-# pull. --strict drops them anyway.
-DECIDABLE = {"stale-build", "hardmode-off"}
+# --valid drops what validity.DECIDABLE names; --strict drops any human at all. A human who held tank
+# or heal is only decidable on traces written after the recorder learned to read a human's talent tab,
+# since older ones record every human's role as the literal "human".
 
 
 def decidable(row: dict) -> list[tuple[str, str]]:
     return [w for w in row["warnings"] if w[0] in DECIDABLE]
 
 
-def row_for(trace: Trace, ref) -> dict:
-    """One trace reduced to the handful of facts a corpus view needs, so the Trace can be dropped."""
+def row_for(trace: Trace, ref, with_metrics: bool = False) -> dict:
+    """One trace reduced to the handful of facts a corpus view needs, so the Trace can be dropped.
+
+    Metrics cost roughly another second on a 28 MB trace, so they are only assembled when something
+    is going to compare them."""
     facts, warnings = inspect(trace, ref)
     ends = trace.of("end")
     snaps = trace.of("snap")
     checks = verify_checks(trace)
     return {
         "name": trace.path.name,
-        "boss": boss_of(trace) or boss_from_path(trace.path),
+        "boss": encounter_of(trace),
         "v": trace.header.get("v"),
         "outcome": ends[-1].get("out") if ends else "cut short",
         "ms": snaps[-1]["t"] if snaps else 0,
@@ -73,6 +69,9 @@ def row_for(trace: Trace, ref) -> dict:
         "deaths": len(trace.of("death")),
         "truncated": trace.truncated,
         "keys": Counter(rec.get("k", "") for rec in trace.of("note")),
+        "built": facts["built"],
+        "pulled": pull_time(trace.path),
+        "metrics": trace_metrics(trace) if with_metrics else None,
     }
 
 
@@ -127,29 +126,53 @@ def show_verify_rollup(rows: list[dict]) -> None:
 
 
 def show_probes(rows: list[dict]) -> None:
-    """Which note keys the recorder wrote that nothing reads.
+    """Probe keys the source declares that never once reached a trace of their own boss.
 
-    flame_leviathan.py is the precedent: the module publishes fl.pursued, fl.corner, fl.frozen,
-    fl.lifetower, fl.interrupter and fl.pyrite, and the only scorer in the tree reads two keys. Its
-    victim() still guesses by facing ray at a boss the trace names outright.
+    Over one pull a silent key usually means the thing did not happen. Over every pull of a boss it
+    means the recorder is dropping it, and nothing else says so: `fl.frozen` is written each pass,
+    keyed on a vehicle guid, and NoteAssignment resolves its key with FindPlayer and returns early
+    when it is not a player - 7 Flame Leviathan pulls, 1,556 rows across its six sibling keys, zero
+    for that one.
     """
     emitted: Counter = Counter()
+    seen_per_boss: dict[str, set[str]] = {}
     for row in rows:
         emitted.update(row["keys"])
+        seen_per_boss.setdefault(row["boss"], set()).update(row["keys"])
     emitted.pop("", None)
 
-    consumed = {key for keys in CONSUMED_KEYS.values() for key in keys}
-    print(f"\nprobes     {len(emitted)} note key(s) across {len(rows)} trace(s)")
-    for key, count in sorted(emitted.items()):
-        reader = next((tool for tool, keys in CONSUMED_KEYS.items() if key in keys), None)
-        print(f"           {count:7d}  {key:<24} {reader or 'UNREAD'}")
+    print(f"\nprobes     {len(emitted)} key(s) emitted across {len(rows)} trace(s)")
+    for key, count in emitted.most_common(10):
+        print(f"           {count:7d}  {key}")
+    if len(emitted) > 10:
+        print(f"           ... {len(emitted) - 10} more")
 
-    unread = sorted(set(emitted) - consumed)
-    if unread:
-        print(f"\n           {len(unread)} emitted and never read: {', '.join(unread)}")
-    stale = sorted(consumed - set(emitted))
-    if stale:
-        print(f"           {len(stale)} read but never emitted here: {', '.join(stale)}")
+    mute: dict[str, list[str]] = {}
+    for boss, keys in sorted(seen_per_boss.items()):
+        for key, _, where in silent_keys(keys, boss):
+            mute.setdefault(boss, []).append(f"{key} ({where})")
+    if not mute:
+        print("\n           every key declared for a boss in this selection reached a trace")
+        return
+    total = sum(len(v) for v in mute.values())
+    print(f"\n           {total} key(s) declared and never emitted in any pull of that boss:")
+    for boss, keys in mute.items():
+        for entry in keys:
+            print(f"           {boss:<18} {entry}")
+
+
+def read_rows(paths: list[pathlib.Path], ref, with_metrics: bool) -> list[dict]:
+    # Reading the corpus takes minutes, so say where it is - but only to a terminal, since the
+    # carriage returns turn a redirected run into one long line.
+    progress = sys.stderr.isatty()
+    rows = []
+    for index, path in enumerate(paths, 1):
+        if progress:
+            print(f"\rreading {index}/{len(paths)} {path.name[:48]:<48}", end="", file=sys.stderr)
+        rows.append(row_for(Trace(path), ref, with_metrics))
+    if progress:
+        print("\r" + " " * 60 + "\r", end="", file=sys.stderr)
+    return rows
 
 
 def main() -> int:
@@ -165,7 +188,12 @@ def main() -> int:
                         help="--valid, and also drop any trace with a human in the raid")
     parser.add_argument("--census", action="store_true", help="totals only, no per-trace rows")
     parser.add_argument("--verify", action="store_true", help="roll up the invariant checks")
-    parser.add_argument("--probes", action="store_true", help="note keys nothing reads")
+    parser.add_argument("--probes", action="store_true",
+                        help="probe keys declared in source that never reach a trace")
+    parser.add_argument("--split-at", metavar="REF",
+                        help="compare pulls built before REF against pulls built after it")
+    parser.add_argument("--baseline", metavar="DIR", type=pathlib.Path,
+                        help="compare the selection against the traces kept in DIR")
     parser.add_argument("--limit", type=int, help="stop after N traces, newest first")
     args = parser.parse_args()
 
@@ -179,16 +207,24 @@ def main() -> int:
         return 1
 
     ref = resolve_since(REPO, args.since)
-    # Reading the corpus takes minutes, so say where it is - but only to a terminal, since the
-    # carriage returns turn a redirected run into one long line.
-    progress = sys.stderr.isatty()
-    rows = []
-    for index, path in enumerate(paths, 1):
-        if progress:
-            print(f"\rreading {index}/{len(paths)} {path.name[:48]:<48}", end="", file=sys.stderr)
-        rows.append(row_for(Trace(path), ref))
-    if progress:
-        print("\r" + " " * 60 + "\r", end="", file=sys.stderr)
+    comparing = bool(args.split_at or args.baseline)
+
+    split = None
+    if args.split_at:
+        split = resolve_since(REPO, args.split_at)
+        if not split:
+            print(f"cannot resolve {args.split_at} to a commit", file=sys.stderr)
+            return 1
+
+    baseline_rows: list[dict] = []
+    if args.baseline:
+        for path in find_traces([args.baseline], args.boss):
+            baseline_rows.append(row_for(Trace(path), ref, with_metrics=True))
+        if not baseline_rows:
+            print(f"no traces under {args.baseline}", file=sys.stderr)
+            return 1
+
+    rows = read_rows(paths, ref, comparing)
 
     if args.valid or args.strict:
         rows = [r for r in rows if not (r["warnings"] if args.strict else decidable(r))]
@@ -206,6 +242,24 @@ def main() -> int:
         show_verify_rollup(rows)
     if args.probes:
         show_probes(rows)
+
+    if args.baseline:
+        return show_compare(Side(str(args.baseline), baseline_rows), Side("selection", rows))
+    if split:
+        sha, when = split
+        # hdr.bin says what the binary was and is the honest split, but it only arrived in v11 and
+        # most traces on disk predate it. Falling back to when the pull was recorded answers the same
+        # question one assumption weaker: that the build happened before the pull.
+        stamped = [r for r in rows if r["built"]]
+        basis = "built" if len(stamped) == len(rows) else "pulled"
+        if basis == "pulled":
+            print(f"\n{len(rows) - len(stamped)} of {len(rows)} trace(s) carry no build stamp, so the"
+                  f" split is on when the pull was recorded")
+        dated = [r for r in rows if r[basis]]
+        return show_compare(
+            Side(f"{basis} before {sha}", [r for r in dated if r[basis] < when]),
+            Side(f"{basis} after {sha}", [r for r in dated if r[basis] >= when]),
+        )
 
     return 0
 

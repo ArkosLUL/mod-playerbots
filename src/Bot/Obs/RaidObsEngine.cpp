@@ -408,11 +408,15 @@ void NoteAssignment(ObjectGuid guid, char const* kind, std::string const& value)
     if (!Active() || !kind)
         return;
 
-    Player* player = ObjectAccessor::FindPlayer(guid);
-    if (!player)
-        return;
+    // The lookup only exists to find a session to write into, and the key need not be a player to
+    // have one: fl.frozen is keyed on a vehicle guid, is written every pass, and returning here left
+    // it absent from all 129 traces on disk while its six sibling keys carried 1,556 rows. Fall back
+    // to the bot whose tick made the assignment, the way NoteDerived does.
+    Player* owner = ObjectAccessor::FindPlayer(guid);
+    if (!owner)
+        owner = t_currentBot;
 
-    ObsSession* session = SessionFor(player);
+    ObsSession* session = owner ? SessionFor(owner) : nullptr;
     if (!session)
         return;
 

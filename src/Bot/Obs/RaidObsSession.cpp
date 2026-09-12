@@ -355,15 +355,16 @@ bool ObsSession::Tracks(Unit* unit)
 
 std::string RoleOf(Player* player)
 {
-    PlayerbotAI* botAI = GET_PLAYERBOT_AI(player);
-    if (!botAI)
-        return "human";
-
-    if (botAI->IsTank(player))
+    // The static forms answer for a human as well: each only short-circuits to the bot's own
+    // strategy when there is a PlayerbotAI, and otherwise reads the talent tab. Returning "human"
+    // here threw the role away, and `h` already says whether they are one - so a human main-tanking
+    // and a human standing at the back read identically, which is the fact that decides whether a
+    // pull counts as evidence.
+    if (PlayerbotAI::IsTank(player))
         return "tank";
-    if (botAI->IsHeal(player))
+    if (PlayerbotAI::IsHeal(player))
         return "heal";
-    if (botAI->IsRanged(player))
+    if (PlayerbotAI::IsRanged(player))
         return "ranged";
 
     return "melee";

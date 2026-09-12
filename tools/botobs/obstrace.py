@@ -5,6 +5,7 @@ pre-roll. Schema and field meanings live in docs/systems/observability.md.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import pathlib
 import sys
@@ -176,18 +177,61 @@ def boss_from_path(path: pathlib.Path) -> str:
     return "_".join(parts[2:-1]) if len(parts) >= 4 else ""
 
 
+# One encounter, one name. The recorder names a pull after whichever creature engaged, so a fight with
+# several bosses in it lands under two or three slugs and splits its own sample: the Iron Assembly's
+# 30 pulls read as 16 Brundir and 14 Molgeim, and Freya's 11 three-elder pulls read as Stonebark.
+# `hdr.cfg.hardmode` is keyed by the conf's names, which are these, so an unmapped slug also means the
+# hard-mode disqualifier silently never applies. Only slugs that differ need an entry.
+BOSS_ALIASES = {
+    "assembly-of-iron": "iron-assembly",
+    "runemaster-molgeim": "iron-assembly",
+    "steelbreaker": "iron-assembly",
+    "stormcaller-brundir": "iron-assembly",
+    "elder-brightleaf": "freya",
+    "elder-ironbranch": "freya",
+    "elder-stonebark": "freya",
+    "xt002": "xt-002",
+    "xt-002-deconstructor": "xt-002",
+    "general-vezax": "vezax",
+    "yogg-saron-": "yogg-saron",
+}
+
+
+def canonical_boss(slug: str) -> str:
+    return BOSS_ALIASES.get(slug, slug)
+
+
+def boss_key(path: pathlib.Path) -> str:
+    """The encounter a file belongs to, from its name alone. Selection uses this rather than opening
+    each trace, which is what keeps a boss sweep off the other 120 files."""
+    return canonical_boss(boss_from_path(path))
+
+
+def pull_time(path: pathlib.Path) -> datetime.datetime | None:
+    """When the pull was recorded, off the epoch the recorder puts in the file name.
+
+    Weaker evidence than `hdr.bin`, which says what the binary was: this only says when you played,
+    and assumes you rebuilt before you pulled. It is the only thing the 118 pre-v11 traces carry.
+    """
+    stem = path.stem.rsplit("_", 1)
+    if len(stem) != 2 or not stem[1].isdigit():
+        return None
+    return datetime.datetime.fromtimestamp(int(stem[1]), datetime.timezone.utc)
+
+
 def find_traces(roots, boss: str | None = None) -> list[pathlib.Path]:
     """Trace paths under `roots`, newest first, deduplicated by resolved path.
 
     Filtering on the filename means a boss sweep never opens the other 118 files; the corpus runs to
     1.3 GB and individual traces reach 21 MB.
     """
+    wanted = canonical_boss(boss) if boss else None
     found: dict[pathlib.Path, float] = {}
     for root in roots:
         root = pathlib.Path(root)
         candidates = [root] if root.is_file() else sorted(root.glob("*.ndjson"))
         for path in candidates:
-            if boss and boss_from_path(path) != boss:
+            if wanted and boss_key(path) != wanted:
                 continue
             resolved = path.resolve()
             if resolved not in found:

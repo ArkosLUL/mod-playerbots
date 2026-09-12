@@ -11,20 +11,11 @@ import datetime
 import pathlib
 import subprocess
 
-from obstrace import Trace
+from obstrace import Trace, boss_from_path, canonical_boss
 
 # Raid difficulty ids. Only raid maps are tracked unless Obs.Maps names one, so these are the labels
 # that apply; a 5-man would read 0/1 as normal/heroic instead.
 DIFFICULTY = {0: "10-man normal", 1: "25-man normal", 2: "10-man heroic", 3: "25-man heroic"}
-
-# hdr.cfg.hardmode is keyed by the conf's own boss names, which are not always the slug the trace
-# names itself with - that comes from the DBC encounter name. Only the ones that differ need an entry.
-BOSS_ALIASES = {
-    "assembly-of-iron": "iron-assembly",
-    "xt-002-deconstructor": "xt-002",
-    "general-vezax": "vezax",
-    "yogg-saron-": "yogg-saron",
-}
 
 
 def boss_of(trace: Trace) -> str:
@@ -34,6 +25,12 @@ def boss_of(trace: Trace) -> str:
     if renames:
         return str(renames[-1].get("boss") or "")
     return str(trace.header.get("boss") or "")
+
+
+def encounter_of(trace: Trace) -> str:
+    """The fight this trace belongs to, which is what a census counts and what the conf keys on. The
+    boss slug says which creature engaged, and for a council or an elder pull that is not the same."""
+    return canonical_boss(boss_of(trace) or boss_from_path(trace.path))
 
 
 def build_time(trace: Trace) -> datetime.datetime | None:
@@ -89,6 +86,25 @@ def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.
         return None
 
 
+# Roles whose absence changes what a pull proves. A human doing damage is noise; a human tanking or
+# healing means the strategy was never asked to do the job.
+DECIDING_ROLES = ("tank", "heal")
+
+# Warning kinds that actually disqualify a pull. The rest are printed and not counted: a human is in
+# the raid in every trace on disk, so treating mere presence as disqualifying rejects everything and
+# says nothing. Lives here rather than in a view, so one definition decides for all of them.
+DECIDABLE = {"stale-build", "hardmode-off", "human-role"}
+
+
+def human_roles(trace: Trace) -> dict[str, str]:
+    """Each human's name against the role the trace recorded for them.
+
+    Before the recorder learned to read a human's talent tab this was the literal string "human" for
+    all of them, so a "human" here means unknown, not a role.
+    """
+    return {trace.name(guid): trace.roles.get(guid, "?") for guid in trace.humans}
+
+
 def humans(trace: Trace) -> list[str]:
     """Off trace.humans, not off the roster: someone who zoned in after the header was written appears
     only in a `unit` record, and that is the same person most likely to have picked up a role
@@ -111,6 +127,7 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
     facts = {
         "built": build_time(trace),
         "boss": boss,
+        "encounter": encounter_of(trace),
         "diff": DIFFICULTY.get(hdr.get("diff"), f"difficulty {hdr.get('diff')}"),
         "hardmode": None,
         "humans": humans(trace),
@@ -130,7 +147,7 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
             )
 
     hard = cfg.get("hardmode") or {}
-    key = BOSS_ALIASES.get(boss, boss)
+    key = encounter_of(trace)
     if key in hard:
         facts["hardmode"] = bool(hard[key])
         if not hard[key]:
@@ -138,18 +155,28 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
                 ("hardmode-off", f"{key} hard mode was OFF: a kill here is not a hard-mode kill")
             )
 
-    if facts["humans"]:
+    # A human doing damage among 24 bots barely dents a raid strategy; a human tanking or healing
+    # means the strategy never played the role the pull was meant to test, which is what invalidated
+    # the Mimiron pull. Older traces record every human's role as the literal "human", so for those
+    # the question cannot be answered and the warning stays informational.
+    played = {name: role for name, role in human_roles(trace).items() if role in DECIDING_ROLES}
+    if played:
+        held = ", ".join(f"{name} ({role})" for name, role in sorted(played.items()))
+        warnings.append(("human-role", f"a human held a role the strategy was meant to play: {held}"))
+    elif facts["humans"]:
+        blind = any(role == "human" for role in human_roles(trace).values())
+        detail = " and the trace predates real roles for humans" if blind else ""
         warnings.append((
             "human-in-raid",
-            f"{len(facts['humans'])} human(s) in the raid - any role they held was not played by the strategy",
+            f"{len(facts['humans'])} human(s) in the raid{detail}",
         ))
 
     return facts, warnings
 
 
 def show_validity(trace: Trace, since: str | None = None) -> int:
-    """Prints the banner. Returns the number of things that make this trace weak evidence, so a batch
-    can skip a pull without parsing the text."""
+    """Prints the banner. Returns the number of things that disqualify the pull, so a caller can skip
+    it without parsing the text. Informational warnings print and do not count."""
     ref = resolve_since(REPO, since)
     facts, warnings = inspect(trace, ref)
 
@@ -165,8 +192,7 @@ def show_validity(trace: Trace, since: str | None = None) -> int:
 
     mode = facts["diff"]
     if facts["hardmode"] is not None:
-        key = BOSS_ALIASES.get(facts["boss"], facts["boss"])
-        mode += f", {key} hard mode {'ON' if facts['hardmode'] else 'OFF'}"
+        mode +=  f", {key} hard mode {'ON' if facts['hardmode'] else 'OFF'}"
     print(f"mode    {mode}")
 
     if facts["humans"]:
@@ -182,4 +208,4 @@ def show_validity(trace: Trace, since: str | None = None) -> int:
         print("  ok    nothing disqualifying")
     print()
 
-    return len(warnings)
+    return sum(1 for kind, _ in warnings if kind in DECIDABLE)

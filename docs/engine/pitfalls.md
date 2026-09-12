@@ -91,6 +91,19 @@ Registration is not activation, and that fails just as quietly. `DpsAoeStrategy`
 `addStrategies*` call anywhere adds `"dps aoe"` — only the unrelated `"aoe"` — so it can never run.
 Check for both the `creators[...]` entry **and** an `addStrategies*` mention.
 
+## A probe can go missing, and churn hides outside its phase
+
+`RaidObs::NoteAssignment` resolves the guid a traced container is keyed on to find the session to
+write into, so keying one on a vehicle, creature or object used to drop the record outright:
+`fl.frozen` is written every pass and gates three Flame Leviathan decisions, and was absent from all
+129 traces on disk while its six sibling keys carried 1,556 rows. It now falls back to the bot whose
+tick set it. `batch.py --probes` is the sweep — a key the source declares that never reaches a trace
+of its own boss.
+
+Churn is only legible inside the phase you care about. Mimiron's phase-1 flip-flop counts 57 A-B-A
+within phase 1 and disappears into ~700 across the whole pull, so `postmortem.py --probes --during
+mimiron.phase=1` is what reproduces it and a whole-pull number is what hid it.
+
 ## A moving bot cannot cast
 
 `PlayerbotAI::CanCastSpell` / `CastSpell` refuse **any** spell with a non-zero cast time while
