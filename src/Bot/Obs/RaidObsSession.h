@@ -39,6 +39,10 @@ constexpr uint32 OBS_FLUSH_INTERVAL_MS = 2000;
 constexpr float OBS_HAZARD_SWEEP_RADIUS = 150.0f;
 // Bounds a snapshot row count when a pull drags half the zone into combat.
 constexpr std::size_t OBS_MAX_WATCHED = 40;
+// Bounds the pre-roll's pet names. The ring sheds rows on age but a name has to outlive them - the
+// unit it describes is usually gone - so a raid parked on a tracked map for an evening would otherwise
+// accumulate one entry per resummoned guardian. Well past a 25-man raid's pets; oldest names win.
+constexpr std::size_t OBS_MAX_PREROLL_UNITS = 256;
 // A stuck bot re-offers the same rejected destination every tick; once a second is enough to see it.
 constexpr uint32 OBS_MOVE_REJECT_THROTTLE_MS = 1000;
 // How long an unchanged engine pass stays deduplicated before it is written again, so a bot that has
@@ -184,6 +188,11 @@ struct PreRollRing
 {
     uint32 accumMs = 0;
     std::deque<PreRollEntry> entries;
+    // Pet and vehicle `unit` records, keyed by guid so each is built once per window rather than once
+    // per sample. They ride on the ring rather than on an entry because a guardian outlives neither:
+    // Army of the Dead is gone in 30 seconds, and a guid looked up at the drain comes back null. The
+    // name has to be taken while the unit is still standing there.
+    std::unordered_map<uint64, std::string> unitRecords;
 };
 
 // One open trace. Data stays public: this is an internal aggregate, and the parts that build records
@@ -233,6 +242,9 @@ public:
 
     // Emitted once per guid per trace, so later records can carry a bare guid instead of a name.
     void EnsureUnit(Unit* unit);
+    // Same, for a record built before this session existed. Shares `seenUnits`, so a pre-roll pet
+    // still alive at the pull is not written twice.
+    void EnsureUnitRecord(uint64 key, std::string const& fields);
     void EnsureSpell(uint32 spellId);
     bool Tracks(Unit* unit);
 
@@ -285,6 +297,8 @@ std::string Quoted(std::string const& in);
 std::string Num(float v);
 std::string SlugOf(std::string const& name);
 std::string RoleOf(Player* player);
+// What a `unit` record carries. Free of the session so the pre-roll can name a unit at sample time.
+std::string UnitRecordFields(Unit* unit);
 char const* MoveKindName(MoveKind kind);
 char const* MoveReason(MoveOutcome outcome);
 char const* MovePriorityName(MovePriority priority);
@@ -321,10 +335,13 @@ std::string UnitRow(Unit* unit, uint64 dealt = 0, std::vector<uint32>* castSpell
 float HazardRadius(DynamicObject* dyn);
 bool HazardIsFriendly(DynamicObject* dyn);
 // `session` is null on the pre-roll path, which samples a map before any trace exists; that caller
-// passes `castSpells` instead and sweeps them once it has one.
+// passes `castSpells` and `unitRecords` instead and emits both once it has one. Only pets and ridden
+// vehicles reach `unitRecords`: the roster is already in the header, and the sweep that would find
+// anything else does not run without a session.
 std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster,
                                  std::unordered_set<ObjectGuid> const& watched, ObsSession* session,
-                                 std::vector<uint32>* castSpells = nullptr);
+                                 std::vector<uint32>* castSpells = nullptr,
+                                 std::unordered_map<uint64, std::string>* unitRecords = nullptr);
 
 // --- verdict ticks (RaidObsEngine.cpp) ---
 

@@ -30,7 +30,10 @@ postmortem.py <file> --track NAME    position track + distance to each boss
 postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to one note-key prefix
 postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
 postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
+postmortem.py <file> --verify        check the schema's invariants; non-zero exit if any fail
 ```
+
+`--verify` is 14 checks, so auditing a batch is a loop rather than another throwaway script.
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
 
@@ -97,7 +100,7 @@ else `7`. `0` still means no unit.
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss,`own` owner guid when it has one, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
 | `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt]`, `dealt` cumulative damage to non-raid targets, 0 off the roster and on pet rows; roster players, their pets and guardians, ridden vehicles and the swept creatures; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
-| `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` after |
+| `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` before the hit |
 | `heal` | `s`,`d`,`sp`,`a`,`oh` overheal,`hp` after |
 | `abs` | `d`,`s` shield caster,`sp`,`a` |
 | `aura` | `d`,`s` caster,`sp`,`r` 1=removed,`st` stacks,`dur` ms left,`p` 1=positive |
@@ -116,6 +119,10 @@ and `appliedT` −1 when the aura was applied before the session opened;
 `[hp%,t]`; `death.acts` rows are `[firstT,lastT,action,rel,verdict,repeats]`, a veto's verdict reading
 `VETO:<multiplier>`.
 
+**`dmg.hp` is the health a hit landed *on*; `heal.hp` is what the heal left behind.** The core logs
+damage before applying it and a heal after. So `dmg.hp` never reads 0, and `ok` is the row's only sign
+a hit was lethal; read as an outcome it shifts a death's trajectory down a row and hides the blow.
+
 **`cause` explains a death with no `blow`.** `Unit::Kill` called directly never reaches `DealDamage`,
 so the hook feeding `blow` never fires and `killer` is the victim itself: `reset` is the master's
 `wipe` command (`WipeAction`), `self` is environmental damage. Absent whenever there is a `blow`. 32
@@ -130,7 +137,9 @@ and a death block read `Flash Freeze from #1:1925`. A new *emitter* needs the sw
 field: `NoteHazard` went unswept until Thorim became its first caller, then wrote 121 rows of bare
 `62057`, and `snap.u`'s casting spell wrote 99 bare ids across the 2026-09-04/05 traces because
 `UnitRow` is a free function holding no session — it hands the ids to its caller now, and the pre-roll
-ring carries them until there is a session to name them with. A guid inside `note.txt` is the
+ring carries them until there is a session to name them with. Its pet and vehicle rows ride it too,
+unnamed in 33 traces, built at sample time because an expiring guardian is gone by the drain. A guid
+inside `note.txt` is the
 exception: that is free text the recorder cannot inspect, so `postmortem.py` joins it on read.
 
 **Emit per engine pass, not per verdict.** A pass walks several action nodes and reports a verdict for
@@ -316,6 +325,32 @@ Hyjal, SSC, Tempest Keep, Obsidian Sanctum. Still bare: ICC's `IccInstanceState`
 variant), SWP's instance-keyed nested maps (the inner map must be default-constructible, which a
 kind-carrying container is not), and Naxx's function-local statics. Timestamps, thresholds and caches
 are left bare on purpose.
+
+## What a trace cannot tell you
+
+- **Pet damage is not recorded.** `dmg` rows are written only for raid members, so nothing involving a
+  pet as a damage source or a chain-lightning link can be confirmed from a trace. Thorim's phase 2
+  carries a median of 6 and a p90 of 25 live pets and guardians, which is the likeliest reason observed
+  chains reach 7-8 hops where an idealised formation caps at 3 — and it stays a hypothesis until
+  `Bot/Obs` logs pet damage.
+- **`stations()` in `tools/botobs/flame_leviathan.py` keeps only the last `fl.station` per bot**, so a
+  chopper that led early and stationed later reads as `chopper` for the whole pull. Fine for
+  per-station splits, but that table can never prove a role was *never* held — read the raw notes for
+  that.
+- **`ObsValue` / `ObsGuidMap::Set` emit only on change**, so a missing note means "unchanged", not
+  "never set". That makes absence the signature of state leaking in from a previous pull rather than
+  evidence of nothing happening.
+
+## Timing a bot: `.playerbots pmon`
+
+`PlayerbotCommandScript.cpp:63`, `SEC_GAMEMASTER`. `pmon toggle` to arm, `pmon reset` at the pull,
+`pmon` afterwards. `AC_AI_PLAYERBOT_PERF_MON_ENABLED` is **0** by default, so it is off unless asked
+for.
+
+Two traps make its absolute numbers meaningless. **It does not time `isUseful` or the multipliers** —
+both show up only inside the single `PlayerbotAI::UpdateAIInternal I` bucket, which is exactly where
+most encounter cost hides. And its global mutex plus a per-call string build inflate every figure once
+a thousand random bots are logged in. **Read ratios between buckets, never times.**
 
 ## Constraints
 

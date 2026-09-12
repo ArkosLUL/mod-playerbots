@@ -39,6 +39,9 @@ class Trace:
         # Owner guid per pet/guardian/totem, v10 and up. Pet names are picked at summon time and repeat
         # across owners, so this is the only reliable way to say whose Wolf a row belongs to.
         self.owners: dict[int, int] = {}
+        # Max health per guid, for anything that has to turn a percentage back into hit points - the
+        # snapshot and every combat row carry hp as a percentage only.
+        self.maxhp: dict[int, int] = {}
         self.humans: set[int] = set()
         self.bosses: set[int] = set()
         self.truncated = False
@@ -80,6 +83,8 @@ class Trace:
                         self.humans.add(rec["g"])
                     if rec.get("own"):
                         self.owners[rec["g"]] = rec["own"]
+                    if rec.get("mhp"):
+                        self.maxhp[rec["g"]] = rec["mhp"]
                     if rec.get("b"):
                         self.bosses.add(rec["g"])
                     continue

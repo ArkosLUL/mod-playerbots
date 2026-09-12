@@ -265,18 +265,16 @@ void ObsSession::Emit(uint32 ms, char const* event, std::string const& fields, b
     Write(line, force);
 }
 
-// Emitted once per guid per trace, so later records can carry a bare guid instead of repeating names.
-void ObsSession::EnsureUnit(Unit* unit)
+// Split from EnsureUnit so the pre-roll can name a unit at sample time. It has no session to write
+// to and cannot wait for one: a guardian lives about 30 seconds, so by the time the ring drains the
+// unit is gone and a guid lookup returns null. What survives is the string taken while it was there.
+std::string UnitRecordFields(Unit* unit)
 {
     if (!unit)
-        return;
-
-    uint64 const key = GuidKey(unit->GetGUID());
-    if (!seenUnits.insert(key).second)
-        return;
+        return {};
 
     Creature* creature = unit->ToCreature();
-    std::string fields = "\"g\":" + std::to_string(key);
+    std::string fields = "\"g\":" + std::to_string(GuidKey(unit->GetGUID()));
     fields += ",\"en\":" + std::to_string(creature ? creature->GetEntry() : 0);
     fields += ",\"n\":" + Quoted(unit->GetName());
     fields += ",\"lvl\":" + std::to_string(unit->GetLevel());
@@ -297,6 +295,31 @@ void ObsSession::EnsureUnit(Unit* unit)
         fields += ",\"r\":" + Quoted(RoleOf(player));
         fields += ",\"h\":" + std::string(GET_PLAYERBOT_AI(player) ? "0" : "1");
     }
+
+    return fields;
+}
+
+// Emitted once per guid per trace, so later records can carry a bare guid instead of repeating names.
+// The dedupe runs before the fields are built: every damage row and every cast calls this, and almost
+// all of them are repeats.
+void ObsSession::EnsureUnit(Unit* unit)
+{
+    if (!unit)
+        return;
+
+    uint64 const key = GuidKey(unit->GetGUID());
+    if (!seenUnits.insert(key).second)
+        return;
+
+    Emit(getMSTime(), "unit", UnitRecordFields(unit));
+}
+
+// The same record, built elsewhere. `seenUnits` is shared with EnsureUnit, so a pre-roll pet that
+// lives to see the pull is named once, by whichever path reaches it first.
+void ObsSession::EnsureUnitRecord(uint64 key, std::string const& fields)
+{
+    if (!key || fields.empty() || !seenUnits.insert(key).second)
+        return;
 
     Emit(getMSTime(), "unit", fields);
 }

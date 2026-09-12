@@ -122,15 +122,22 @@ void OpenSession(Map* map, Unit* source, char const* trigger)
     // Taken out from under the lock before being written: a 25-man ring is hundreds of kilobytes and
     // flushing it inline would block every other map thread's probe path on a disk write.
     std::deque<PreRollEntry> preRoll;
+    std::unordered_map<uint64, std::string> preRollUnits;
     {
         std::lock_guard<std::mutex> guard(g_registryMutex);
         auto it = g_preRoll.find(instanceId);
         if (it != g_preRoll.end())
         {
             preRoll = std::move(it->second.entries);
+            preRollUnits = std::move(it->second.unitRecords);
             g_preRoll.erase(it);
         }
     }
+
+    // Ahead of the rows referencing them, as a live snapshot names what it samples. Some describe a
+    // pet that expired during the pre-roll, which is the whole point: nothing else can name it now.
+    for (auto const& [key, fields] : preRollUnits)
+        s.EnsureUnitRecord(key, fields);
 
     for (PreRollEntry const& entry : preRoll)
     {
@@ -304,11 +311,14 @@ void OnMapUpdate(Map* map, uint32 diff)
             return;
 
         std::vector<uint32> casting;
-        std::string payload = BuildSnapshotPayload(map, roster, {}, nullptr, &casting);
+        std::unordered_map<uint64, std::string> named;
+        std::string payload = BuildSnapshotPayload(map, roster, {}, nullptr, &casting, &named);
 
         std::lock_guard<std::mutex> guard(g_registryMutex);
         PreRollRing& ring = g_preRoll[instanceId];
         ring.entries.push_back({now, std::move(payload), std::move(casting)});
+        if (ring.unitRecords.size() < OBS_MAX_PREROLL_UNITS)
+            ring.unitRecords.merge(named);
         while (!ring.entries.empty() && getMSTimeDiff(ring.entries.front().ms, now) > g_cfg.preRollMs)
             ring.entries.pop_front();
 

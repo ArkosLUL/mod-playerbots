@@ -11,6 +11,7 @@ pre-roll). Schema and field meanings live in docs/systems/observability.md.
     postmortem.py <file> --notes [KEY]   pull/phase/note/end records, optionally one key prefix
     postmortem.py <file> --stalls [MS]   held still while still asking to move - i.e. stuck
     postmortem.py <file> --clump [YARDS] how stacked the raid was, largest group in one circle
+    postmortem.py <file> --verify        check the trace against the invariants the schema promises
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import sys
 
 from deathreport import show_death, summarise
 from obstrace import Trace
-from views import show_bot, show_clump, show_notes, show_stalls, show_track
+from views import show_bot, show_clump, show_notes, show_stalls, show_track, show_verify
 
 
 def main() -> int:
@@ -52,6 +53,11 @@ def main() -> int:
         metavar="YARDS",
         help="how stacked the raid was, as the largest group inside one circle (default 10 yd)",
     )
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        help="check the trace against the schema's invariants; exits non-zero if any fail",
+    )
     args = parser.parse_args()
 
     if not args.file.is_file():
@@ -72,6 +78,8 @@ def main() -> int:
         return show_stalls(trace, args.stalls)
     if args.clump is not None:
         return show_clump(trace, args.clump)
+    if args.verify:
+        return show_verify(trace)
 
     summarise(trace)
     return 0

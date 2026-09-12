@@ -190,8 +190,28 @@ std::string ObsSession::SweepArea(Unit* anchor, std::string& units, bool& firstU
 // same row shape. Only the sweep differs - pre-roll has no session and cannot afford it.
 std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster,
                                  std::unordered_set<ObjectGuid> const& watched, ObsSession* session,
-                                 std::vector<uint32>* castSpells)
+                                 std::vector<uint32>* castSpells,
+                                 std::unordered_map<uint64, std::string>* unitRecords)
 {
+    // A pet or vehicle sampled without a session is named here or never: it can be gone by the drain.
+    // Looked up before building, not emplaced over: the fields would be serialised on every sample of
+    // every pet and thrown away, four times a second for the whole pre-roll.
+    auto name = [session, unitRecords](Unit* unit)
+    {
+        if (session)
+        {
+            session->EnsureUnit(unit);
+            return;
+        }
+
+        if (!unitRecords || !unit)
+            return;
+
+        uint64 const key = GuidKey(unit->GetGUID());
+        if (unitRecords->find(key) == unitRecords->end())
+            unitRecords->emplace(key, UnitRecordFields(unit));
+    };
+
     std::string units = "[";
     std::vector<uint32> casting;
     bool first = true;
@@ -226,8 +246,7 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
                 units += ",";
             first = false;
             units += UnitRow(vehicle, 0, &casting);
-            if (session)
-                session->EnsureUnit(vehicle);
+            name(vehicle);
         }
 
         // The last health this bot was seen at, so a death the damage hooks never saw can still say
@@ -267,8 +286,7 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
             // No damage column. AccrueDamageDealt already folds a pet's damage into its owner's total,
             // and a second copy here would double any window differenced out of two snapshots.
             units += "," + UnitRow(pet, 0, &casting);
-            if (session)
-                session->EnsureUnit(pet);
+            name(pet);
         }
     }
 
