@@ -110,10 +110,8 @@ bool IsMimironHardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig
 
 bool IsXT002HardModeActive(PlayerbotAI* /*botAI*/) { return sPlayerbotAIConfig.ulduarXT002HardMode; }
 
-bool IsXT002HeartbreakActive(PlayerbotAI* botAI)
+bool IsXT002HeartbreakActive(Player* bot, Unit* xt002)
 {
-    Player* bot = botAI->GetBot();
-    Unit* xt002 = GetXT002(botAI);
     return bot != nullptr && xt002 != nullptr && xt002->HasAura(GetXT002HeartbreakSpellId(bot));
 }
 

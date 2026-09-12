@@ -239,11 +239,11 @@ float XT002DebuffCarrierAction::RaidClearance(float x, float y) const
     return nearest;
 }
 
-bool XT002DebuffCarrierAction::MoveToSearingLightSpot()
+bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
 {
     // Nothing drops a puddle before XT carries Heartbreak, so normal mode skips the grid scan entirely.
     std::list<Creature*> voidZones;
-    if (IsXT002HeartbreakActive(botAI))
+    if (heartbreak)
         bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
 
     auto clearOfPuddles = [&voidZones](float x, float y)
@@ -259,10 +259,19 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot()
     float const spotY = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionY();
     float const spotZ = ULDUAR_XT002_SEARING_LIGHT_SPOT.GetPositionZ();
 
-    auto usable = [this, &clearOfPuddles](float x, float y)
+    // Built once for the spot and all eight alternates, not once per candidate.
+    std::vector<Position> const formation = GetXT002OtherFormationSlots(bot);
+
+    auto usable = [&clearOfPuddles, &formation](float x, float y)
     {
-        return clearOfPuddles(x, y) &&
-               XT002PointClearOfFormation(bot, x, y, ULDUAR_XT002_SEARING_LIGHT_SLOT_CLEARANCE);
+        if (!clearOfPuddles(x, y))
+            return false;
+
+        for (Position const& slot : formation)
+            if (slot.GetExactDist2d(x, y) < ULDUAR_XT002_SEARING_LIGHT_SLOT_CLEARANCE)
+                return false;
+
+        return true;
     };
 
     if (bot->GetExactDist(ULDUAR_XT002_SEARING_LIGHT_SPOT) < 1.0f && usable(spotX, spotY))
@@ -449,9 +458,12 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         return false;
     }
 
+    // One lookup for the whole carrier tick, since finding XT is a scan.
+    Unit* xt002 = GetXT002(botAI);
+
     // Void Zones only drop once XT carries Heartbreak, so before then there is nothing to park and a
     // bomb carrier just needs to be somewhere the splash misses - which keeps melee uptime.
-    bool const heartbreak = IsXT002HeartbreakActive(botAI);
+    bool const heartbreak = IsXT002HeartbreakActive(bot, xt002);
 
     // The lot also owns a bot that is only carrying Searing Light while it is standing in one: that is
     // a carrier whose bomb has just gone off under its feet, and it has to step off its own puddle
@@ -467,11 +479,11 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
             if (Aura* bomb = bot->GetAura(GetXT002GravityBombSpellId(bot)))
                 reach = TravelReach(std::max(0, bomb->GetDuration()));
 
-        if (Unit* boss = GetXT002(botAI))
+        if (xt002)
         {
             float cellX = 0.0f;
             float cellY = 0.0f;
-            switch (ParkVoidZone(boss, reach, cellX, cellY))
+            switch (ParkVoidZone(xt002, reach, cellX, cellY))
             {
                 case ParkResult::Moving:
                     return true;
@@ -508,7 +520,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         if (botAI->IsTank(bot))
             return false;
 
-        return MoveToSearingLightSpot();
+        return MoveToSearingLightSpot(heartbreak);
     }
 
     Group* group = bot->GetGroup();
@@ -584,7 +596,7 @@ bool XT002RedirectThreatAction::isUseful()
     return bot->getClass() == CLASS_HUNTER || bot->getClass() == CLASS_ROGUE;
 }
 
-Player* XT002RedirectThreatAction::GetRedirectTank()
+Player* XT002RedirectThreatAction::GetRedirectTank(Unit* xt002)
 {
     Group* group = bot->GetGroup();
     if (!group)
@@ -599,7 +611,6 @@ Player* XT002RedirectThreatAction::GetRedirectTank()
     }
 
     // Otherwise feed whoever is actually holding XT, which survives a tank swap or a tank death.
-    Unit* xt002 = GetXT002(botAI);
     if (xt002)
     {
         if (Unit* victim = xt002->GetVictim())
@@ -621,7 +632,10 @@ Player* XT002RedirectThreatAction::GetRedirectTank()
 
 bool XT002RedirectThreatAction::Execute(Event /*event*/)
 {
-    Player* tank = GetRedirectTank();
+    // One lookup for the whole evaluation, since finding XT is a scan.
+    Unit* xt002 = GetXT002(botAI);
+
+    Player* tank = GetRedirectTank(xt002);
     if (!tank || tank == bot)
         return false;
 
@@ -636,8 +650,7 @@ bool XT002RedirectThreatAction::Execute(Event /*event*/)
 
     // Misdirection only moves the threat of the next three shots, so spend them on XT rather than
     // leaving them to whatever the rotation picks - and never on an add the tank does not want.
-    Unit* xt002 = GetXT002(botAI);
-    if (xt002 && !IsXT002Submerged(botAI) && bot->HasAura(SPELL_MISDIRECTION) &&
+    if (xt002 && !IsXT002Submerged(xt002) && bot->HasAura(SPELL_MISDIRECTION) &&
         botAI->CanCastSpell("steady shot", xt002))
     {
         return botAI->CastSpell("steady shot", xt002);
@@ -659,7 +672,7 @@ bool XT002RaidPositionAction::Execute(Event /*event*/)
     }
 
     Position slot;
-    if (GetXT002RangedSlot(botAI, bot, slot))
+    if (GetXT002RangedSlot(bot, GetXT002(botAI), slot))
     {
         if (bot->GetExactDist(slot) <= ULDUAR_XT002_RANGED_SPOT_TOLERANCE)
             return false;
@@ -671,7 +684,7 @@ bool XT002RaidPositionAction::Execute(Event /*event*/)
     return false;
 }
 
-bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
+bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit, Unit* xt002) const
 {
     // The Heart is hidden, not despawned, when its window shuts, and XT is hidden while submerged.
     // Both stay alive, and the core refuses an untargetable unit, so a bot left holding one queues
@@ -695,13 +708,13 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
 
         case NPC_XS013_SCRAPBOT:
         case PB_NPC_XT002_PUMMELLER:
-            return inReach && IsXT002AddEngageable(botAI, unit);
+            return inReach && IsXT002AddEngageable(xt002, unit);
 
         case PB_NPC_XT002_BOOMBOT:
             // Melee must never pick one up, and ranged only from outside the blast: closer than that
             // the avoid action should be moving the bot, not this one holding it in place.
             return !botAI->IsMelee(bot) && unit->GetExactDist2d(bot) >= ULDUAR_XT002_BOOMBOT_AVOID_RADIUS &&
-                   inReach && IsXT002AddEngageable(botAI, unit);
+                   inReach && IsXT002AddEngageable(xt002, unit);
 
         case NPC_HEART_OF_DECONSTRUCTOR:
             // Damage only reaches XT while the Heart channels Exposed Heart.
@@ -722,7 +735,7 @@ bool XT002SetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
             return unit->GetHealthPct() > ULDUAR_XT002_HEART_SAFE_HP_PCT;
 
         case NPC_XT002:
-            return !IsXT002Submerged(botAI);
+            return !IsXT002Submerged(xt002);
 
         default:
             return true;
@@ -757,7 +770,7 @@ Unit* XT002SetDpsPriorityAction::SelectByEntry(Unit* currentTarget, uint32 entry
     return selected;
 }
 
-std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityList()
+std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityList(Unit*& xt002)
 {
     Unit* boss = nullptr;
     Unit* heart = nullptr;
@@ -765,8 +778,9 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
     std::vector<Unit*> scrapbots;
     std::vector<Unit*> boombots;
     std::vector<Unit*> pummellers;
+    xt002 = nullptr;
 
-    // One pass over the list every other XT-002 trigger already forces, so this adds no grid work.
+    // One scan for the whole action: the same pass hands back XT for the gates, so they need none.
     GuidVector const& npcs = AI_VALUE(GuidVector, "nearest npcs");
     for (ObjectGuid const& guid : npcs)
     {
@@ -778,6 +792,9 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
         {
             case NPC_XT002:
                 boss = unit;
+                // First match, which is what GetXT002 returns. `boss` keeps the last one as before.
+                if (!xt002)
+                    xt002 = unit;
                 break;
             case NPC_HEART_OF_DECONSTRUCTOR:
                 heart = unit;
@@ -856,12 +873,13 @@ std::vector<std::pair<uint32, Unit*>> XT002SetDpsPriorityAction::BuildPriorityLi
 
 Unit* XT002SetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 {
-    std::vector<std::pair<uint32, Unit*>> const priority = BuildPriorityList();
+    Unit* xt002 = nullptr;
+    std::vector<std::pair<uint32, Unit*>> const priority = BuildPriorityList(xt002);
 
     Unit* target = nullptr;
     for (auto const& candidate : priority)
     {
-        if (IsAllowedTarget(candidate.second))
+        if (IsAllowedTarget(candidate.second, xt002))
         {
             target = candidate.second;
             break;
@@ -870,7 +888,7 @@ Unit* XT002SetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     auto const priorityIndex = [&](Unit* unit) -> size_t
     {
-        if (!IsAllowedTarget(unit))
+        if (!IsAllowedTarget(unit, xt002))
             return priority.size();
 
         for (size_t index = 0; index < priority.size(); ++index)

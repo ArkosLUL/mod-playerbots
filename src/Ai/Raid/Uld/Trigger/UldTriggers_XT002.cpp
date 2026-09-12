@@ -45,39 +45,40 @@ bool InsideXT002Hazard(PlayerbotAI* botAI, Player* bot)
 
 bool XT002DebuffCarrierTrigger::IsActive()
 {
-    if (!GetXT002(botAI))
+    // No proximity check: nobody else is going to step aside, so the carrier leaves whether or not
+    // someone happens to be standing next to it right now. Auras before XT, since his lookup is a scan
+    // and almost nobody is carrying.
+    if (!bot->HasAura(GetXT002GravityBombSpellId(bot)) && !bot->HasAura(GetXT002SearingLightSpellId(bot)))
         return false;
 
-    // No proximity check: nobody else is going to step aside, so the carrier leaves whether or not
-    // someone happens to be standing next to it right now.
-    return bot->HasAura(GetXT002GravityBombSpellId(bot)) || bot->HasAura(GetXT002SearingLightSpellId(bot));
+    return GetXT002(botAI) != nullptr;
 }
 
 bool XT002AvoidHazardTrigger::IsActive()
 {
-    if (!GetXT002(botAI))
-        return false;
+    // Two small-radius searches before XT's lookup, which is the expensive one.
+    bool hazardNear = false;
 
     // Ranged already stand outside the blast; pulling them out too would only break their casts.
-    if (botAI->IsMelee(bot))
-    {
-        TooCloseToCreatureTrigger tooCloseToBoombot(botAI);
-        if (tooCloseToBoombot.TooCloseToCreature(PB_NPC_XT002_BOOMBOT, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS))
-            return true;
-    }
-
+    if (botAI->IsMelee(bot) && bot->FindNearestCreature(PB_NPC_XT002_BOOMBOT, ULDUAR_XT002_BOOMBOT_AVOID_RADIUS))
+        hazardNear = true;
     // Has to match the action's own gate, or this fires for a case the action declines and the tick is
     // wasted. A carrier's puddles belong to "xt002 debuff carrier action", which is also what walks one
     // off its own bomb.
-    if (bot->HasAura(GetXT002SearingLightSpellId(bot)) || bot->HasAura(GetXT002GravityBombSpellId(bot)))
-        return false;
+    else if (!bot->HasAura(GetXT002SearingLightSpellId(bot)) && !bot->HasAura(GetXT002GravityBombSpellId(bot)) &&
+             bot->FindNearestCreature(PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_RADIUS))
+        hazardNear = true;
 
-    TooCloseToCreatureTrigger tooCloseToVoidZone(botAI);
-    return tooCloseToVoidZone.TooCloseToCreature(PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_RADIUS);
+    return hazardNear && GetXT002(botAI) != nullptr;
 }
 
 bool XT002RaidPositionTrigger::IsActive()
 {
+    // Melee dps and off-tanks never get a spot, so this is always false for them. Same role calls
+    // BuildXT002RingMembers makes, answered before XT's lookup.
+    if (!botAI->IsMainTank(bot) && (botAI->IsTank(bot) || (!botAI->IsRangedDps(bot) && !botAI->IsHeal(bot))))
+        return false;
+
     Unit* xt002 = GetXT002(botAI);
 
     // Combat-gated, unlike the rest of the encounter's triggers: an anchor that fires on sight has
@@ -122,10 +123,9 @@ bool XT002RaidPositionTrigger::IsActive()
             return false;
     }
 
-    // Same call the action makes, so the two cannot disagree about which slot is this bot's - and it
-    // answers false for anyone who is neither ranged dps nor a healer, which is what leaves melee out.
+    // Same call the action makes, so the two cannot disagree about which slot is this bot's.
     Position slot;
-    if (!GetXT002RangedSlot(botAI, bot, slot))
+    if (!GetXT002RangedSlot(bot, xt002, slot))
         return false;
 
     return bot->GetExactDist(slot) > ULDUAR_XT002_RANGED_SPOT_TOLERANCE;
@@ -142,6 +142,10 @@ bool XT002SetDpsPriorityTrigger::IsActive()
 
 bool XT002PummellerTauntTrigger::IsActive()
 {
+    // Only a tank can own the Pummeller. Own role first, it is a flag test and XT's lookup is a scan.
+    if (!botAI->IsTank(bot))
+        return false;
+
     if (!GetXT002(botAI))
         return false;
 
@@ -168,5 +172,5 @@ bool XT002RedirectThreatTrigger::IsActive()
 
     // Submerged XT is REACT_PASSIVE and off everyone's threat list, so a redirect fired there would
     // burn its charges on nothing.
-    return !IsXT002Submerged(botAI);
+    return !IsXT002Submerged(xt002);
 }

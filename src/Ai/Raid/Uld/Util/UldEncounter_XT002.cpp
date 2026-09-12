@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <list>
 #include <string>
+#include <utility>
 #include <vector>
 
 using namespace EncounterHelpers;
@@ -50,9 +51,8 @@ const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH = Position(837.0746
 // XT and his Heart both spend part of the fight carrying UNIT_FLAG_NOT_SELECTABLE, which drops them
 // out of "possible targets" entirely (AttackersValue::IsPossibleTarget rejects the flag). Scanning
 // the raw nearby-npc list instead keeps the encounter visible right through the Heart phases.
-static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
+static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, GuidVector const& npcs, uint32 entry)
 {
-    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
     for (auto const& guid : npcs)
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -61,6 +61,12 @@ static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
     }
 
     return nullptr;
+}
+
+static Unit* GetFirstAliveNpcByEntry(PlayerbotAI* botAI, uint32 entry)
+{
+    return GetFirstAliveNpcByEntry(botAI, botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get(),
+                                   entry);
 }
 
 Unit* GetXT002(PlayerbotAI* botAI) { return GetFirstAliveNpcByEntry(botAI, NPC_XT002); }
@@ -76,9 +82,8 @@ Unit* GetXT002ExposedHeart(PlayerbotAI* botAI)
     return heart->HasAura(SPELL_XT002_EXPOSED_HEART) ? heart : nullptr;
 }
 
-bool IsXT002Submerged(PlayerbotAI* botAI)
+bool IsXT002Submerged(Unit* xt002)
 {
-    Unit* xt002 = GetXT002(botAI);
     if (!xt002)
         return false;
 
@@ -120,12 +125,11 @@ bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot)
     return true;
 }
 
-bool IsXT002AddEngageable(PlayerbotAI* botAI, Unit* unit)
+bool IsXT002AddEngageable(Unit* xt002, Unit* unit)
 {
     if (!unit)
         return false;
 
-    Unit* xt002 = GetXT002(botAI);
     if (!xt002)
         return true;
 
@@ -138,13 +142,17 @@ Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float
     float nearestDistance = 0.0f;
 
     GuidVector const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get();
+
+    // Same unit GetXT002 would return, read off the list already in hand instead of a scan per add.
+    Unit* xt002 = GetFirstAliveNpcByEntry(botAI, npcs, NPC_XT002);
+
     for (ObjectGuid const& guid : npcs)
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive() || unit->GetEntry() != entry)
             continue;
 
-        if (!IsXT002AddEngageable(botAI, unit))
+        if (!IsXT002AddEngageable(xt002, unit))
             continue;
 
         float const distance = unit->GetExactDist2d(bot);
@@ -171,6 +179,9 @@ static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
         return false;
 
     out.clear();
+
+    // Heal flag read once per member, not on both sides of every compare in the sort.
+    std::vector<std::pair<bool, Player*>> ranked;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
@@ -181,26 +192,29 @@ static bool BuildXT002RingMembers(Player* bot, std::vector<Player*>& out)
         if (!memberAI || memberAI->IsTank(member))
             continue;
 
-        if (!memberAI->IsRangedDps(member) && !memberAI->IsHeal(member))
+        bool const heal = memberAI->IsHeal(member);
+        if (!heal && !memberAI->IsRangedDps(member))
             continue;
 
-        out.push_back(member);
+        ranked.emplace_back(heal, member);
     }
 
-    if (out.empty())
+    if (ranked.empty())
         return false;
 
     // Healers ahead of ranged dps, then guid. Both keys read the same on every bot, so nobody has to be
     // told which slot is theirs - and healers land on the centre and inner ring, the slots still inside
     // 40 yd of the tank spot.
-    std::sort(out.begin(), out.end(), [](Player* left, Player* right)
-    {
-        bool const leftHeal = GET_PLAYERBOT_AI(left)->IsHeal(left);
-        bool const rightHeal = GET_PLAYERBOT_AI(right)->IsHeal(right);
-        if (leftHeal != rightHeal)
-            return leftHeal;
-        return left->GetGUID() < right->GetGUID();
-    });
+    std::sort(ranked.begin(), ranked.end(),
+              [](std::pair<bool, Player*> const& left, std::pair<bool, Player*> const& right)
+              {
+                  if (left.first != right.first)
+                      return left.first;
+                  return left.second->GetGUID() < right.second->GetGUID();
+              });
+
+    for (std::pair<bool, Player*> const& entry : ranked)
+        out.push_back(entry.second);
 
     return true;
 }
@@ -246,7 +260,7 @@ static Position XT002RingSlotPoint(size_t slot, size_t total)
                     ULDUAR_XT002_RANGED_SPOT.GetPositionZ());
 }
 
-bool GetXT002RangedSlot(PlayerbotAI* botAI, Player* bot, Position& out)
+bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out)
 {
     std::vector<Player*> members;
     if (!BuildXT002RingMembers(bot, members))
@@ -265,7 +279,7 @@ bool GetXT002RangedSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     // Every ranged bot and healer asks for this every tick, so the grid scan waits until puddles can
     // actually exist - nothing drops one until XT carries Heartbreak.
     std::list<Creature*> voidZones;
-    if (IsXT002HeartbreakActive(botAI))
+    if (IsXT002HeartbreakActive(bot, xt002))
         bot->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
 
     // Deal out the slots that are not sitting in Consumption and index into those, rather than letting
@@ -303,24 +317,20 @@ bool GetXT002RangedSlot(PlayerbotAI* botAI, Player* bot, Position& out)
     return true;
 }
 
-// Tested against where the formation says bots belong, not where they are standing: a carrier picks
-// its destination while the raid is still walking, so the slots are what it has to miss.
-bool XT002PointClearOfFormation(Player* bot, float x, float y, float clearance)
+// Where the formation says bots belong, not where they are standing: a carrier picks its destination
+// while the raid is still walking, so the slots are what it has to miss.
+std::vector<Position> GetXT002OtherFormationSlots(Player* bot)
 {
+    std::vector<Position> slots;
     std::vector<Player*> members;
     if (!BuildXT002RingMembers(bot, members))
-        return true;
+        return slots;
 
     for (size_t i = 0; i < members.size(); ++i)
-    {
-        if (members[i] == bot)
-            continue;
+        if (members[i] != bot)
+            slots.push_back(XT002RingSlotPoint(i, members.size()));
 
-        if (XT002RingSlotPoint(i, members.size()).GetExactDist2d(x, y) < clearance)
-            return false;
-    }
-
-    return true;
+    return slots;
 }
 
 // Melee get no northern lot, and it is the navmesh rather than the layout that decides it: a sunken

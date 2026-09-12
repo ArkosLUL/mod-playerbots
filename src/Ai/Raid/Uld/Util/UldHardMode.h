@@ -3,6 +3,7 @@
 
 #include "Define.h"
 
+class Player;
 class PlayerbotAI;
 class Unit;
 
@@ -77,8 +78,8 @@ bool IsXT002HardModeActive(PlayerbotAI* botAI);
 
 // Hard mode is already live: XT carries Heartbreak (65737), so there will be no further Heart phase
 // and Life Sparks / Void Zones now spawn. Deliberately config-independent, so a Heartbreak the human
-// players triggered is handled too.
-bool IsXT002HeartbreakActive(PlayerbotAI* botAI);
+// players triggered is handled too. Takes the XT the caller already found, since finding him is a scan.
+bool IsXT002HeartbreakActive(Player* bot, Unit* xt002);
 
 // Yogg-Saron: hard mode is the reduced-Keeper achievement ladder - the raid frees fewer than 4 Keepers
 // before the pull, losing that Keeper's support. The handling is tuned for the hardest single-Keeper

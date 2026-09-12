@@ -95,8 +95,9 @@ private:
     // The Searing Light spot, or the nearest alternate around it that is clear of Void Zones and that
     // the pathfinder accepts. Neither guard is optional: a puddle sat 2 yd from the spot for half a
     // fight, and findSmoothPath refuses the spot outright from most of the melee stack, which left
-    // carriers irradiating the raid for the full 9s.
-    bool MoveToSearingLightSpot();
+    // carriers irradiating the raid for the full 9s. `heartbreak` is Execute's answer, since Void Zones
+    // only exist once XT carries it.
+    bool MoveToSearingLightSpot(bool heartbreak);
 
     // Distance from (x, y) to the nearest living raider, this bot aside. Ranks Searing Light
     // alternates: they are all far enough from the raid on paper, and this picks the one that is
@@ -148,7 +149,7 @@ public:
 
 private:
     // The tank this bot's threat should land on, or nullptr when there is nothing to redirect to.
-    Player* GetRedirectTank();
+    Player* GetRedirectTank(Unit* xt002);
 };
 
 // Anchors the fight. The main tank gets a point; ranged DPS and healers get a slot each in the
@@ -168,11 +169,11 @@ public:
 // Tanks get a list of their own: the boss, the Pummeller only for the tank that owns it while a second
 // tank is alive to hold XT, and the Heart in hard mode.
 //
-// Healers get nothing at all and have any leftover target cleared - Ulduar is in
-// RestrictedHealerDPSMaps, so they have no damage node that could use one, and all a target does there
-// is fire "reach spell". Adds are offered only once they are inside the leash around XT and within the
-// bot's own reach, so nobody walks at one that never left its toy pile. Tanks are exempt from the
-// reach gate: going and getting the Pummeller is the off-tank's job.
+// Healers get one too. Ulduar is in RestrictedHealerDPSMaps, so they never spend a GCD on it, but a bot
+// with no target never enters combat and loses every heal that lives on the combat engine. Adds are
+// offered only once they are inside the leash around XT and within the bot's own reach, so nobody walks
+// at one that never left its toy pile. Tanks are exempt from the reach gate: going and getting the
+// Pummeller is the off-tank's job.
 class XT002SetDpsPriorityAction : public AttackAction
 {
 public:
@@ -182,14 +183,15 @@ public:
 
 private:
     // Ordered candidates for this bot's role, most urgent first. Entries the role must not touch are
-    // left out entirely rather than filtered later.
-    std::vector<std::pair<uint32, Unit*>> BuildPriorityList();
+    // left out entirely rather than filtered later. `xt002` comes back as the unit GetXT002 would return,
+    // found in the same pass.
+    std::vector<std::pair<uint32, Unit*>> BuildPriorityList(Unit*& xt002);
 
     // Nearest live candidate of `entry`, preferring the current target so two identical adds cannot
     // make the bot alternate between them every tick.
     Unit* SelectByEntry(Unit* currentTarget, uint32 entry, std::vector<Unit*> const& candidates) const;
 
-    bool IsAllowedTarget(Unit* unit) const;
+    bool IsAllowedTarget(Unit* unit, Unit* xt002) const;
 
     Unit* ResolveTarget(Unit* currentTarget);
 };

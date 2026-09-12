@@ -182,14 +182,16 @@ struct XT002BombLot
 
 // XT-002 Deconstructor. These use GetFirstAliveUnitByEntry rather than "find target": the Heart
 // never attacks anyone, so it never lands on a bot's threat list and "find target" cannot resolve it.
+// Each call is a fresh scan ("nearest npcs" recomputes on every read: 100yd grid visit plus a LOS ray
+// per npc), so look XT up once per evaluation and pass him down.
 Unit* GetXT002(PlayerbotAI* botAI);
 
 // The Heart while it is actually vulnerable - alive, selectable and channeling Exposed Heart.
 // Damage dealt to it transfers to XT, which makes this window the encounter's damage multiplier.
 Unit* GetXT002ExposedHeart(PlayerbotAI* botAI);
 
-// XT is down in a Heart phase: not selectable and not attacking anyone.
-bool IsXT002Submerged(PlayerbotAI* botAI);
+// XT is down in a Heart phase: not selectable and not attacking anyone. False without an XT.
+bool IsXT002Submerged(Unit* xt002);
 
 // Difficulty-mapped debuff ids (the 10- and 25-man versions are separate spells).
 uint32 GetXT002SearingLightSpellId(Player* bot);
@@ -203,7 +205,7 @@ bool IsXT002PummellerTank(PlayerbotAI* botAI, Player* bot);
 
 // Close enough to XT to be worth engaging. Anything further out is still sitting at its toy pile.
 // True when XT cannot be found, so the gate can never strand a bot with nothing to hit.
-bool IsXT002AddEngageable(PlayerbotAI* botAI, Unit* unit);
+bool IsXT002AddEngageable(Unit* xt002, Unit* unit);
 
 // Nearest live add of `entry` inside the leash around XT and within `botReach` of the bot. Nearest
 // rather than first-found: GetFirstAliveUnitByEntry lets an add stuck at a pile mask the one actually
@@ -215,10 +217,11 @@ Unit* GetXT002EngageableAdd(PlayerbotAI* botAI, Player* bot, uint32 entry, float
 // no communication and survives a death mid-fight. Healers take the centre and the inner ring because
 // they are the ones who need the tank in range; ranged dps fill the outer. A slot sitting in a Void
 // Zone is dealt out. False when the bot is neither ranged dps nor a healer, or the group is gone.
-bool GetXT002RangedSlot(PlayerbotAI* botAI, Player* bot, Position& out);
+bool GetXT002RangedSlot(Player* bot, Unit* xt002, Position& out);
 
-// Whether a point keeps `clearance` from every formation slot except this bot's own.
-bool XT002PointClearOfFormation(Player* bot, float x, float y, float clearance);
+// Every formation slot except this bot's own, as laid out before any Void Zone re-deal. Empty when the
+// group is gone.
+std::vector<Position> GetXT002OtherFormationSlots(Player* bot);
 
 // The parking grids this bot's role may drop a Void Zone in. Melee get the one under their stack;
 // ranged and healers get one on each side of the formation, so a carrier parks on whichever side it
