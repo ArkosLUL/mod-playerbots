@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ULDVALUECONTEXT_H
 
 #include "NamedObjectContext.h"
+#include "UldEncounter_Freya.h"
 #include "UldEncounter_IronAssembly.h"
 #include "UldEncounter_Razorscale.h"
 #include "Value.h"
@@ -41,6 +42,19 @@ private:
     IronAssemblyScan scan;
 };
 
+// Owns the bot's FreyaScan, the same way.
+class FreyaScanValue : public ManualSetValue<FreyaScan*>
+{
+public:
+    FreyaScanValue(PlayerbotAI* botAI) : ManualSetValue<FreyaScan*>(botAI, nullptr, "freya scan"), scan(botAI)
+    {
+        value = defaultValue = &scan;
+    }
+
+private:
+    FreyaScan scan;
+};
+
 class RaidUlduarValueContext : public NamedObjectContext<UntypedValue>
 {
 public:
@@ -48,11 +62,13 @@ public:
     {
         creators["razorscale scan"] = &RaidUlduarValueContext::razorscale_scan;
         creators["iron assembly scan"] = &RaidUlduarValueContext::iron_assembly_scan;
+        creators["freya scan"] = &RaidUlduarValueContext::freya_scan;
     }
 
 private:
     static UntypedValue* razorscale_scan(PlayerbotAI* botAI) { return new RazorscaleScanValue(botAI); }
     static UntypedValue* iron_assembly_scan(PlayerbotAI* botAI) { return new IronAssemblyScanValue(botAI); }
+    static UntypedValue* freya_scan(PlayerbotAI* botAI) { return new FreyaScanValue(botAI); }
 };
 
 #endif

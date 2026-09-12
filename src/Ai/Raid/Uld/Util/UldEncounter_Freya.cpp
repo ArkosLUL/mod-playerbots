@@ -6,14 +6,20 @@
 
 #include "UldEncounter_Freya.h"
 
+#include "AttackersValue.h"
+#include "CellImpl.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "GameObject.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "Group.h"
 #include "Map.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "Timer.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
@@ -24,6 +30,46 @@
 #include <vector>
 
 using namespace EncounterHelpers;
+
+namespace
+{
+// True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
+bool FreshThisTick(uint32& atMs)
+{
+    uint32 const now = getMSTime();
+    if (atMs && atMs == now)
+        return true;
+
+    atMs = now;
+    return false;
+}
+
+// The check behind "nearest npcs", with the entry tested first.
+struct FreyaStalkerInRangeCheck
+{
+    Acore::AnyUnitInObjectRangeCheck inRange;
+
+    bool operator()(Unit* unit)
+    {
+        uint32 const entry = unit->GetEntry();
+
+        return (entry == NPC_HEALTHY_SPORE || entry == NPC_FREYA_SUN_BEAM ||
+                entry == NPC_FREYA_UNSTABLE_SUN_BEAM) &&
+               inRange(unit);
+    }
+};
+
+// The check behind "possible targets no los", with the entry tested first.
+struct FreyaUnfriendlyOfEntryCheck
+{
+    Acore::AnyUnfriendlyUnitInObjectRangeCheck inRange;
+    uint32 entry;
+
+    bool operator()(Unit* unit) { return unit->GetEntry() == entry && inRange(unit); }
+};
+
+Position ComputeFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state);
+}  // namespace
 
 const Position ULDUAR_FREYA_TANK_ANCHOR = Position(2360.0847f, -43.1235f, 425.333f);
 
@@ -79,7 +125,7 @@ void GatherFreyaWaveState(PlayerbotAI* botAI, FreyaWaveState& state)
 
     // "possible targets" enforces line of sight, which drops adds behind Freya's tree trunks out of
     // the scan and makes the split disagree between bots standing on opposite sides.
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get())
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).PossibleTargets())
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())
@@ -280,7 +326,7 @@ Unit* GetFreyaConservatorSpore(PlayerbotAI* botAI, Unit* conservator)
 std::vector<Unit*> GetFreyaSpores(PlayerbotAI* botAI)
 {
     std::vector<Unit*> spores;
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).Stalkers())
     {
         Unit* unit = botAI->GetUnit(guid);
         if (unit && unit->IsAlive() && unit->GetEntry() == NPC_HEALTHY_SPORE)
@@ -297,7 +343,7 @@ Unit* GetFreyaTargetSpore(PlayerbotAI* botAI)
     // Melee take the spore the Conservator is parked on, not their own nearest - anywhere else and the
     // DPS node drags them back out of the aura to reach the boss, and the two nodes fight all wave.
     if (PlayerbotAI::IsMelee(bot))
-        if (Unit* parked = GetFreyaConservatorSpore(botAI, GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR)))
+        if (Unit* parked = GetFreyaConservatorSpore(botAI, GetFreyaScanUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR)))
             return parked;
 
     // Ranged and healers only need the aura, not melee range, so they take the nearest spore that is
@@ -447,7 +493,7 @@ static Unit* GetFreyaTankTrioTarget(FreyaWaveState const& state, Unit* currentTa
 Unit* GetFreyaTankTarget(PlayerbotAI* botAI, FreyaWaveState const& state, Unit* currentTarget)
 {
     Player* bot = botAI->GetBot();
-    Unit* freya = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    Unit* freya = GetFreyaScanUnitByEntry(botAI, NPC_FREYA);
 
     if (PlayerbotAI::IsMainTank(bot))
         return freya;
@@ -509,7 +555,7 @@ std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchR
     Player* bot = botAI->GetBot();
 
     std::vector<Position> beams;
-    for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).Stalkers())
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())
@@ -525,18 +571,24 @@ std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchR
     return beams;
 }
 
-std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius)
+std::vector<EncounterHelpers::HazardCircle> BuildFreyaEscapeHazards(std::vector<Position> const& bombs,
+                                                                    std::vector<Position> const& beams)
 {
-    Player* bot = botAI->GetBot();
-
     std::vector<EncounterHelpers::HazardCircle> hazards;
-    for (Position const& bomb : GetFreyaNatureBombPositions(bot, searchRadius))
+    hazards.reserve(bombs.size() + beams.size());
+    for (Position const& bomb : bombs)
         hazards.emplace_back(bomb, ULDUAR_FREYA_NATURE_BOMB_CLEAR_RADIUS);
 
-    for (Position const& beam : GetFreyaSunBeamPositions(botAI, searchRadius))
+    for (Position const& beam : beams)
         hazards.emplace_back(beam, ULDUAR_FREYA_SUN_BEAM_CLEARANCE);
 
     return hazards;
+}
+
+std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius)
+{
+    return BuildFreyaEscapeHazards(GetFreyaNatureBombPositions(botAI->GetBot(), searchRadius),
+                                   GetFreyaSunBeamPositions(botAI, searchRadius));
 }
 
 Player* GetFreyaRangedCampAnchor(PlayerbotAI* botAI)
@@ -622,6 +674,13 @@ std::vector<Position> GetFreyaLowLasherPositions(PlayerbotAI* botAI, FreyaWaveSt
 
 Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
 {
+    return GetFreyaScan(botAI).LasherCamp(state);
+}
+
+namespace
+{
+Position ComputeFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
+{
     Player* bot = botAI->GetBot();
 
     // The anchor bot is what defines where the raid already is: every bot picks the same one, so every
@@ -670,6 +729,11 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
     {
         for (float sign : {1.0f, -1.0f})
         {
+            // Straight ahead is one bearing, not two: at delta 0 the mirrored pass would re-test the
+            // six radii the first one has already rejected.
+            if (delta == 0.0f && sign < 0.0f)
+                continue;
+
             float const angle = bearing + sign * delta;
 
             // Walked outward rather than fixed, because the clearance is owed to the nearest of them
@@ -708,6 +772,7 @@ Position GetFreyaLasherCampSpot(PlayerbotAI* botAI, FreyaWaveState const& state)
     // whole reason the anchor is a bot and not a fixed point, so fall back to standing on it.
     return anchor ? anchor->GetPosition() : Position();
 }
+}  // namespace
 
 Unit* GetFreyaLasherPackFocus(FreyaWaveState const& state)
 {
@@ -762,6 +827,101 @@ Unit* GetFreyaFinishingPackNear(PlayerbotAI* botAI, FreyaWaveState const& state,
         return nullptr;
 
     return IsFreyaLasherPackFinishing(state, focus->GetPosition()) ? focus : nullptr;
+}
+
+Unit* FreyaScan::Boss()
+{
+    if (!FreshThisTick(bossAtMs))
+    {
+        Unit* found = botAI->GetAiObjectContext()->GetValue<Unit*>("find target", "freya")->Get();
+        boss = found ? found->GetGUID() : ObjectGuid::Empty;
+    }
+
+    return boss.IsEmpty() ? nullptr : botAI->GetUnit(boss);
+}
+
+GuidVector const& FreyaScan::PossibleTargets()
+{
+    if (!FreshThisTick(targetsAtMs))
+        targets = botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
+
+    return targets;
+}
+
+GuidVector const& FreyaScan::Stalkers()
+{
+    if (FreshThisTick(stalkersAtMs))
+        return stalkers;
+
+    stalkers.clear();
+
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return stalkers;
+
+    // What "nearest npcs" holds for these three entries, in the same order: the same visit and the
+    // same range check, with the entry tested first so the line-of-sight ray is spent on a spore or a
+    // beam rather than on every pet, ghoul and bomb in sight.
+    float const range = sPlayerbotAIConfig.sightDistance;
+
+    std::vector<Unit*> matches;
+    FreyaStalkerInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, range)};
+    Acore::UnitListSearcher<FreyaStalkerInRangeCheck> searcher(bot, matches, check);
+    Cell::VisitObjects(bot, searcher, range);
+
+    for (Unit* unit : matches)
+        if (!unit->IsPlayer() && bot->IsWithinLOSInMap(unit))
+            stalkers.push_back(unit->GetGUID());
+
+    return stalkers;
+}
+
+Position const& FreyaScan::LasherCamp(FreyaWaveState const& state)
+{
+    if (!FreshThisTick(campAtMs))
+        camp = ComputeFreyaLasherCampSpot(botAI, state);
+
+    return camp;
+}
+
+FreyaScan& GetFreyaScan(PlayerbotAI* botAI)
+{
+    return *botAI->GetAiObjectContext()->GetValue<FreyaScan*>("freya scan")->Get();
+}
+
+Unit* GetFreyaScanUnitByEntry(PlayerbotAI* botAI, uint32 entry)
+{
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).PossibleTargets())
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (unit && unit->IsAlive() && unit->GetEntry() == entry)
+            return unit;
+    }
+
+    return nullptr;
+}
+
+Unit* GetFreyaBossByEntry(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!bot)
+        return nullptr;
+
+    // What "possible targets no los" would hold for her entry, in the same order and through the same
+    // check, without building the rest of the list: IsPossibleTarget only runs on units already known
+    // to be her.
+    float const range = sPlayerbotAIConfig.sightDistance;
+
+    std::vector<Unit*> matches;
+    FreyaUnfriendlyOfEntryCheck check{Acore::AnyUnfriendlyUnitInObjectRangeCheck(bot, bot, range), NPC_FREYA};
+    Acore::UnitListSearcher<FreyaUnfriendlyOfEntryCheck> searcher(bot, matches, check);
+    Cell::VisitObjects(bot, searcher, range);
+
+    for (Unit* unit : matches)
+        if (unit->IsAlive() && AttackersValue::IsPossibleTarget(unit, bot, range))
+            return unit;
+
+    return nullptr;
 }
 
 bool IsFreyaGroundTremorCasting(Unit* boss)

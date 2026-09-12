@@ -19,7 +19,7 @@ using namespace EncounterHelpers;
 
 bool FreyaNearNatureBombTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -37,7 +37,7 @@ bool FreyaNearNatureBombTrigger::IsActive()
 
 bool FreyaTankNatureBombTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -49,7 +49,7 @@ bool FreyaTankNatureBombTrigger::IsActive()
 
 bool FreyaSetDpsPriorityTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -58,7 +58,7 @@ bool FreyaSetDpsPriorityTrigger::IsActive()
 
 bool FreyaTankAddsTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -71,7 +71,7 @@ bool FreyaRedirectThreatTrigger::IsActive()
     if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
         return false;
 
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
 
     return boss && boss->IsAlive();
 }
@@ -79,7 +79,7 @@ bool FreyaRedirectThreatTrigger::IsActive()
 bool FreyaMoveToHealingSporeTrigger::IsActive()
 {
     // Check for the Freya boss
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -91,14 +91,15 @@ bool FreyaMoveToHealingSporeTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    // By entry, not "find target": that value walks only this bot's threat list, and a pacified bot that
-    // has not hit the Conservator yet is exactly the bot that needs a spore.
-    if (!GetFirstAliveUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR))
+    // The pheromone aura is the thing that matters, and it is exact - a bot can be inside 6 yd of a
+    // spore that is still growing and not have it yet. It is also an aura lookup against a sweep, and
+    // most of the raid is already sheltered by the middle of the wave, so it goes first.
+    if (bot->HasAura(SPELL_POTENT_PHEROMONES))
         return false;
 
-    // The pheromone aura is the thing that matters, and it is exact - a bot can be inside 6 yd of a
-    // spore that is still growing and not have it yet.
-    if (bot->HasAura(SPELL_POTENT_PHEROMONES))
+    // By entry, not "find target": that value walks only this bot's threat list, and a pacified bot that
+    // has not hit the Conservator yet is exactly the bot that needs a spore.
+    if (!GetFreyaScanUnitByEntry(botAI, NPC_ANCIENT_CONSERVATOR))
         return false;
 
     Unit* spore = GetFreyaTargetSpore(botAI);
@@ -127,10 +128,11 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
     if (!IsFreyaHardModeActive(botAI))
         return false;
 
-    // The beam stalkers are non-selectable, so they never show up in attack-target lists - scan the
-    // raw nearby-npc list instead.
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
-    for (auto const& guid : npcs)
+    // The beam stalkers are non-selectable, so they never show up in attack-target lists - walk the
+    // stalker scan instead, which is the nearby-npc list with the entry tested before the
+    // line-of-sight ray. This runs for every bot every tick for as long as the gate is open, which is
+    // every stretch of Ulduar before Freya dies.
+    for (ObjectGuid const& guid : GetFreyaScan(botAI).Stalkers())
     {
         Unit* unit = botAI->GetUnit(guid);
         if (!unit || !unit->IsAlive())
@@ -148,7 +150,7 @@ bool FreyaDodgeUnstableSunBeamTrigger::IsActive()
 
 bool FreyaLasherAboutToBlowTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -166,7 +168,7 @@ bool FreyaLasherAboutToBlowTrigger::IsActive()
 
 bool FreyaRangedCampTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -202,14 +204,13 @@ bool FreyaRangedCampTrigger::IsActive()
 
 bool FreyaFrostNovaLashersTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
-    if (!boss || !boss->IsAlive())
-        return false;
-
+    // Class first: it rules out most of the raid for free, where the boss lookup and CanCastSpell both
+    // cost real work. Nothing here has a side effect, so the order is free to be the cheap one.
     if (bot->getClass() != CLASS_MAGE)
         return false;
 
-    if (!botAI->CanCastSpell("frost nova", bot))
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
         return false;
 
     FreyaWaveState state;
@@ -218,20 +219,22 @@ bool FreyaFrostNovaLashersTrigger::IsActive()
     // The nova is a sphere on the caster, so what matters is how many lashers have closed on the mage,
     // not what state a pile somewhere else is in. Two, so a single lasher the mage is already killing
     // does not spend the cooldown.
-    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) >=
-           ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS;
+    if (CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_NOVA_RADIUS) <
+        ULDUAR_FREYA_FROST_NOVA_MIN_LASHERS)
+        return false;
+
+    // Last, because it builds a Spell on the heap and runs the whole cast check, and Frost Nova is off
+    // cooldown for most of a fight that only wants it during a lasher wave.
+    return botAI->CanCastSpell("frost nova", bot);
 }
 
 bool FreyaTrapLashersTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
-    if (!boss || !boss->IsAlive())
-        return false;
-
     if (bot->getClass() != CLASS_HUNTER)
         return false;
 
-    if (!botAI->CanCastSpell("frost trap", bot))
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
         return false;
 
     FreyaWaveState state;
@@ -239,25 +242,28 @@ bool FreyaTrapLashersTrigger::IsActive()
 
     // Wider than the trap's own 10 yd field, deliberately: the patch needs to be down and armed before
     // the lasher arrives, and one that has picked this bot is coming here at 8 yd/s whatever it does.
-    return CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_TRAP_ARM_RANGE) > 0;
+    if (!CountFreyaLashersNear(bot->GetPosition(), state, ULDUAR_FREYA_FROST_TRAP_ARM_RANGE))
+        return false;
+
+    return botAI->CanCastSpell("frost trap", bot);
 }
 
 bool FreyaSummonArmyTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
-    if (!boss || !boss->IsAlive())
-        return false;
-
     if (bot->getClass() != CLASS_DEATH_KNIGHT)
         return false;
 
-    if (!botAI->CanCastSpell("army of the dead", bot))
+    Unit* boss = GetFreyaScan(botAI).Boss();
+    if (!boss || !boss->IsAlive())
         return false;
 
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return !state.detonatingLashers.empty();
+    if (state.detonatingLashers.empty())
+        return false;
+
+    return botAI->CanCastSpell("army of the dead", bot);
 }
 
 bool FreyaGroundTremorHoldCastTrigger::IsActive()
@@ -265,7 +271,9 @@ bool FreyaGroundTremorHoldCastTrigger::IsActive()
     if (!IsFreyaHardModeActive(botAI))
         return false;
 
-    if (!IsFreyaGroundTremorCasting(GetFirstAliveUnitByEntry(botAI, NPC_FREYA)))
+    // By entry rather than off the target list: this runs for every bot wherever the gate is open, and
+    // on trash and in other fights nothing else needs that list built.
+    if (!IsFreyaGroundTremorCasting(GetFreyaBossByEntry(botAI)))
         return false;
 
     return bot->HasUnitState(UNIT_STATE_CASTING);
@@ -273,7 +281,7 @@ bool FreyaGroundTremorHoldCastTrigger::IsActive()
 
 bool FreyaNaturesFuryBailTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -290,7 +298,7 @@ bool FreyaNaturesFuryBailTrigger::IsActive()
 
 bool FreyaStepOutOfSunbeamTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 
@@ -309,7 +317,7 @@ bool FreyaStepOutOfSunbeamTrigger::IsActive()
 
 bool FreyaTankHoldFreyaTrigger::IsActive()
 {
-    Unit* boss = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* boss = GetFreyaScan(botAI).Boss();
     if (!boss || !boss->IsAlive())
         return false;
 

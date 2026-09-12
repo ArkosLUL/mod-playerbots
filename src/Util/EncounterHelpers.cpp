@@ -384,10 +384,23 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
 
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
                                            float distanceStep, float angleStep, Position const* preferNear,
-                                           std::function<bool(float, float)> const& accept)
+                                           std::function<bool(float, float)> const& accept, HazardSweepCache* cache)
 {
     if (hazards.empty() || distanceStep <= 0.0f || angleStep <= 0.0f)
         return Position();
+
+    // A cache filled from another spot, or for a grid of another shape, describes different points.
+    if (cache && (cache->distanceStep != distanceStep || cache->angleStep != angleStep ||
+                  cache->originX != bot->GetPositionX() || cache->originY != bot->GetPositionY() ||
+                  cache->originZ != bot->GetPositionZ()))
+    {
+        cache->tested.clear();
+        cache->distanceStep = distanceStep;
+        cache->angleStep = angleStep;
+        cache->originX = bot->GetPositionX();
+        cache->originY = bot->GetPositionY();
+        cache->originZ = bot->GetPositionZ();
+    }
 
     auto const clearOf = [&hazards](float x, float y)
     {
@@ -400,13 +413,15 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
 
     // Rings outward, so the first hit is also the shortest walk. Nothing checks the path: a bot that
     // has to cross a hazard to leave one is still better off out the far side than standing still.
-    for (float distance = distanceStep; distance <= maxRadius; distance += distanceStep)
+    uint32 ringIndex = 0;
+    for (float distance = distanceStep; distance <= maxRadius; distance += distanceStep, ++ringIndex)
     {
         Position best;
         float bestScore = 0.0f;
         bool found = false;
 
-        for (float angle = 0.0f; angle < 2.0f * static_cast<float>(M_PI); angle += angleStep)
+        uint32 angleIndex = 0;
+        for (float angle = 0.0f; angle < 2.0f * static_cast<float>(M_PI); angle += angleStep, ++angleIndex)
         {
             float x = bot->GetPositionX() + distance * std::cos(angle);
             float y = bot->GetPositionY() + distance * std::sin(angle);
@@ -415,8 +430,34 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
             if (!clearOf(x, y))
                 continue;
 
-            if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
-                                                               bot->GetPositionZ(), x, y, z))
+            // Ring and angle name the point, since the grid is the same one every call of a chain.
+            uint32 const key = (ringIndex << 16) | angleIndex;
+
+            bool passable = false;
+            bool remembered = false;
+            if (cache)
+            {
+                auto const answer = cache->tested.find(key);
+                if (answer != cache->tested.end())
+                {
+                    passable = answer->second.first;
+                    x = answer->second.second.GetPositionX();
+                    y = answer->second.second.GetPositionY();
+                    z = answer->second.second.GetPositionZ();
+                    remembered = true;
+                }
+            }
+
+            if (!remembered)
+            {
+                passable = bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(),
+                                                                         bot->GetPositionY(),
+                                                                         bot->GetPositionZ(), x, y, z);
+                if (cache)
+                    cache->tested[key] = {passable, Position(x, y, z, 0.0f)};
+            }
+
+            if (!passable)
                 continue;
 
             // The collision check can pull the spot back short of the hazard it was clearing.
@@ -448,14 +489,29 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
 }
 
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
-                                           float maxRadius, float distanceStep, float angleStep)
+                                           float maxRadius, float distanceStep, float angleStep,
+                                           HazardSweepCache* cache)
 {
     std::vector<HazardCircle> circles;
     circles.reserve(hazards.size());
     for (Position const& hazard : hazards)
         circles.emplace_back(hazard, clearRadius);
 
-    return FindNearestPositionClearOfHazards(bot, circles, maxRadius, distanceStep, angleStep);
+    return FindNearestPositionClearOfHazards(bot, circles, maxRadius, distanceStep, angleStep, nullptr, {}, cache);
+}
+
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
+                                           float maxRadius, HazardSweepCache* cache)
+{
+    return FindNearestPositionClearOfHazards(bot, hazards, clearRadius, maxRadius, 2.0f,
+                                             static_cast<float>(M_PI) / 8.0f, cache);
+}
+
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
+                                           HazardSweepCache* cache)
+{
+    return FindNearestPositionClearOfHazards(bot, hazards, maxRadius, 2.0f, static_cast<float>(M_PI) / 8.0f, nullptr,
+                                             {}, cache);
 }
 
 // Return the shortest-rotation spot just outside source's frontal cone, at the bot's current

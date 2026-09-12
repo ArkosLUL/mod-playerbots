@@ -8,6 +8,7 @@
 #define PLAYERBOTS_ULDENCOUNTERFREYA_H
 
 #include "EncounterHelpers.h"
+#include "ObjectGuid.h"
 #include "Position.h"
 #include "UldData.h"
 
@@ -297,6 +298,58 @@ struct FreyaWaveState
 
 void GatherFreyaWaveState(PlayerbotAI* botAI, FreyaWaveState& state);
 
+// Per-bot cache for the lookups every Freya trigger, action and multiplier repeats each tick. The
+// values behind them recompute on every read: a 100 yd grid sweep for the target list, that sweep
+// plus a line-of-sight ray per npc for the stalkers, a threat-list walk with a name conversion per
+// unit for the boss. Keyed on getMSTime(), since a bot never ticks twice in one ms, and holding guids
+// so a despawn between two reads drops out instead of dangling.
+//
+// Tick-scoped on purpose. A queued action can be up to AiPlayerbot.ExpireActionTime old when it is
+// finally popped, so an answer held across ticks would decide on a world that has moved.
+class FreyaScan
+{
+public:
+    explicit FreyaScan(PlayerbotAI* botAI) : botAI(botAI) {}
+
+    // "find target" freya. Null until she has this bot on her threat list.
+    Unit* Boss();
+
+    // "possible targets no los", exactly as the value returns it.
+    GuidVector const& PossibleTargets();
+
+    // Healthy Spores and both Sun Beam stalkers, in the order "nearest npcs" walks them and through
+    // its own alive, non-player and line-of-sight filters. One visit for all three entries, because
+    // the spore pick wants two of them in the same tick the hazard sweep wants the third.
+    GuidVector const& Stalkers();
+
+    // Where the back line gathers. The trigger, isUseful and Execute all ask for it in one tick.
+    Position const& LasherCamp(FreyaWaveState const& state);
+
+private:
+    PlayerbotAI* botAI;
+
+    uint32 bossAtMs = 0;
+    ObjectGuid boss;
+    uint32 targetsAtMs = 0;
+    GuidVector targets;
+    uint32 stalkersAtMs = 0;
+    GuidVector stalkers;
+    uint32 campAtMs = 0;
+    Position camp;
+};
+
+// This bot's FreyaScan, held by the "freya scan" value.
+FreyaScan& GetFreyaScan(PlayerbotAI* botAI);
+
+// First living unit with this entry in the scan's target list: the same list and the same test as
+// EncounterHelpers::GetFirstAliveUnitByEntry, off one sweep a tick instead of one per call.
+Unit* GetFreyaScanUnitByEntry(PlayerbotAI* botAI, uint32 entry);
+
+// Freya, found by a visit that tests her entry first rather than through the whole target list. Both
+// Ground Tremor nodes run wherever the encounter gate is open, so on trash and in every other fight
+// nothing else wants that list and building it costs more than this does.
+Unit* GetFreyaBossByEntry(PlayerbotAI* botAI);
+
 // Whether damage on this trio member has to stop so the three converge. A backstop for damage the
 // targeting cannot steer - a swing mid-animation, a DoT already ticking - since GetFreyaTrioAssignment
 // has normally moved bots off a suppressed member already.
@@ -371,6 +424,11 @@ std::vector<Position> GetFreyaSunBeamPositions(PlayerbotAI* botAI, float searchR
 // that only reads its own kind steps out of a bomb into a beam and back again; both nodes sit at the
 // same relevance, so that alternation never resolves on its own.
 std::vector<EncounterHelpers::HazardCircle> GetFreyaEscapeHazards(PlayerbotAI* botAI, float searchRadius);
+
+// The same list from hazards the caller already holds, so an escape that collected the bombs to test
+// its own spot does not collect them again to route around them.
+std::vector<EncounterHelpers::HazardCircle> BuildFreyaEscapeHazards(std::vector<Position> const& bombs,
+                                                                    std::vector<Position> const& beams);
 
 // The bot the ranged half and the healers gather on: lowest-GUID living ranged DPS in the group on
 // this map, so every bot picks the same one with no shared state. A live bot rather than a fixed

@@ -47,7 +47,7 @@ float FreyaDisableAutomaticTargetingMultiplier::GetValue(Action* action)
     if (!isDpsAssist && !isTankAssist)
         return 1.0f;
 
-    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* freya = GetFreyaScan(botAI).Boss();
     if (!freya || !freya->IsAlive())
         return 1.0f;
 
@@ -72,14 +72,26 @@ float FreyaTrioSyncMultiplier::GetValue(Action* action)
     if (!isDamage)
         return 1.0f;
 
-    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    // Only a trio member is ever held back: FreyaTrioSyncSuppress returns false for anything else, and
+    // GatherFreyaWaveState fills those three slots by entry. So the entry of whatever the bot is
+    // already hitting settles this before the boss lookup and the wave sweep - which every Ulduar
+    // fight, not just this one, would otherwise pay on every damage action of every dps bot.
+    Unit* const target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return 1.0f;
+
+    uint32 const entry = target->GetEntry();
+    if (entry != NPC_SNAPLASHER && entry != NPC_STORM_LASHER && entry != NPC_ANCIENT_WATER_SPIRIT)
+        return 1.0f;
+
+    Unit* freya = GetFreyaScan(botAI).Boss();
     if (!freya || !freya->IsAlive())
         return 1.0f;
 
     FreyaWaveState state;
     GatherFreyaWaveState(botAI, state);
 
-    return FreyaTrioSyncSuppress(state, AI_VALUE(Unit*, "current target")) ? 0.0f : 1.0f;
+    return FreyaTrioSyncSuppress(state, target) ? 0.0f : 1.0f;
 }
 
 float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)
@@ -91,7 +103,7 @@ float FreyaLasherFinishAoeMultiplier::GetValue(Action* action)
     if (dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* freya = GetFreyaScan(botAI).Boss();
     if (!freya || !freya->IsAlive())
         return 1.0f;
 
@@ -108,7 +120,7 @@ float FreyaLasherTrapReserveMultiplier::GetValue(Action* action)
     if (!dynamic_cast<CastExplosiveTrapAction*>(action) && !dynamic_cast<CastTrapLauncherExplosiveAction*>(action))
         return 1.0f;
 
-    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* freya = GetFreyaScan(botAI).Boss();
     if (!freya || !freya->IsAlive())
         return 1.0f;
 
@@ -123,7 +135,7 @@ float FreyaAvoidAoeHoldMultiplier::GetValue(Action* action)
     if (!dynamic_cast<AvoidAoeAction*>(action))
         return 1.0f;
 
-    Unit* freya = AI_VALUE2(Unit*, "find target", "freya");
+    Unit* freya = GetFreyaScan(botAI).Boss();
     if (!freya || !freya->IsAlive())
         return 1.0f;
 
@@ -167,7 +179,9 @@ float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)
 
 int32 FreyaGroundTremorCastGateMultiplier::EvaluateWindow()
 {
-    Unit* boss = GetFirstAliveUnitByEntry(botAI, NPC_FREYA);
+    // By entry rather than off the target list: this gate runs for every bot on the Ulduar map, so on
+    // trash and in every other fight nothing else there wants that list built.
+    Unit* boss = GetFreyaBossByEntry(botAI);
     if (!IsFreyaGroundTremorCasting(boss))
         return 0;
 

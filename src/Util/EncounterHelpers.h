@@ -12,6 +12,7 @@
 #include <functional>
 #include <initializer_list>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -67,13 +68,37 @@ std::vector<Position> GetDynamicObjectPositions(Player* bot, float searchRadius,
 // A hazard and the distance a bot has to keep from it.
 using HazardCircle = std::pair<Position, float>;
 
+// Collision answers for one sweep grid. An escape that has to fall back walks the same rings at the
+// same angles again with a looser clearance, so most of what the second sweep asks the collision
+// check, the first has already asked - up to 240 questions a sweep, each one a navmesh raycast and a
+// handful of height lookups. The answer only depends on where the bot stands, which cannot change
+// inside one Execute, so a cache threaded through the chain replies from memory.
+//
+// One per Execute. Holding one across ticks would answer for a bot that has since walked.
+struct HazardSweepCache
+{
+    float originX = 0.0f;
+    float originY = 0.0f;
+    float originZ = 0.0f;
+    float distanceStep = 0.0f;
+    float angleStep = 0.0f;
+    std::unordered_map<uint32, std::pair<bool, Position>> tested;
+};
+
 // Nearest spot at least clearRadius from every hazard. Use instead of MovementAction::FleePosition
 // for anything wider than a few yards: that one silently clamps its travel to
 // AiPlayerbot.FleeDistance and cannot clear a large blast. Returns Position() when nothing inside
 // maxRadius is clear.
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
                                            float maxRadius, float distanceStep = 2.0f,
-                                           float angleStep = static_cast<float>(M_PI) / 8.0f);
+                                           float angleStep = static_cast<float>(M_PI) / 8.0f,
+                                           HazardSweepCache* cache = nullptr);
+
+// The same two sweeps sharing a caller's collision cache, without spelling out the step defaults.
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<Position> const& hazards, float clearRadius,
+                                           float maxRadius, HazardSweepCache* cache);
+Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
+                                           HazardSweepCache* cache);
 // Same sweep with a clear radius per hazard, for an encounter that drops pools of two different
 // sizes: clearing them all to the larger one buys safety with movement, and a moving bot cannot cast.
 //
@@ -87,7 +112,8 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
                                            float distanceStep = 2.0f,
                                            float angleStep = static_cast<float>(M_PI) / 8.0f,
                                            Position const* preferNear = nullptr,
-                                           std::function<bool(float, float)> const& accept = {});
+                                           std::function<bool(float, float)> const& accept = {},
+                                           HazardSweepCache* cache = nullptr);
 Position GetPositionOutsideFrontalCone(Player* bot, Unit* source, float coneAngle, float margin = M_PI / 12.0f);
 void CommandPetAttack(PlayerbotAI* botAI, Unit* target);
 void StopPet(PlayerbotAI* botAI);
