@@ -1,4 +1,4 @@
-# Paladin — Holy
+# Paladin
 
 Engine and healer semantics (health bands, `HealerAutoSaveManaMultiplier`) are in
 [../engine/action-selection.md](../engine/action-selection.md).
@@ -188,3 +188,34 @@ the meter means the beacon is working, not that something is casting three spell
 **A derived `InitTriggers` cannot remove a base-class node.** The Divine Plea fix is *relocation*:
 strip the node from the base strategy and re-add it verbatim in each sibling spec that wants it. The
 priest Holy-school relocation reuses this.
+
+## Protection — Holy Shield was never up
+
+Measured on the 2026-09-12 Ulduar Freya kill: the bot tank blocked **18.7%** of 155 swings against an
+**18.5%** no-Holy-Shield baseline (5.0 base + 5.60 from 540 defense skill + 8.48 from 139 block
+rating, −0.60 for the level-83 attacker). Holy Shield was up on 12 of 158 swings (**8%**); a
+player-driven paladin in the same pull ran **75%** uptime and 39.8% block.
+
+Two defects stacked:
+
+1. `TankPaladinStrategy` hung `holy shield` off the **`medium health`** trigger
+   (`AiPlayerbot.MediumHealth` = 65), so a healthy tank never cast it. `HolyShieldTrigger` was
+   registered in the factory and referenced by zero `TriggerNode`s — the same dead registration as
+   Divine Favor above.
+2. **`beforeDuration` 0 means "only once the buff has already dropped".** `BuffTrigger::IsActive`
+   and `CastBuffSpellAction::isUseful` both route through `ai::buff::BuffBelowRefreshTarget`, whose
+   in-combat path is `baseBeforeDuration && remaining < baseBeforeDuration` (`ForceRebuff.cpp:64`).
+   **Set it on both** — the action vetoes any early refresh the trigger proposes.
+
+Fixed with `beforeDuration` 2000 on trigger and action, and the node at `ACTION_HIGH + 10` (30):
+above the threat/AoE/mana cluster that was taking the global (seal of wisdom 29 … avenger's shield
+25), below interrupts (40). The warrior's `shield block` sits at 41, but that is a 60 s cooldown —
+Holy Shield returns every 8 s and would cost interrupts at that priority.
+
+**Holy Shield 48952**: +30% block, 10 s, 8 charges, 8 s cooldown (category 931), 274 holy damage per
+block. The damage is one event per block, so `SPELL_DAMAGE` 48952 in a Chronicle log counts blocks
+directly.
+
+**Skada cannot measure block.** Only a *full* block (`amount=0`) is a distinct event; a partial block
+is a normal hit carrying a `blocked` amount — `MELEE_HIT_BLOCK` keeps `VICTIMSTATE_HIT` in
+`Unit::CalculateMeleeDamage`. Count Chronicle rows where `blocked > 0`.

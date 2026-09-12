@@ -325,7 +325,7 @@ END_SPELL_ACTION()
 class CastHolyShieldAction : public CastBuffSpellAction
 {
 public:
-    CastHolyShieldAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "holy shield") {}
+    CastHolyShieldAction(PlayerbotAI* botAI) : CastBuffSpellAction(botAI, "holy shield", false, 2000) {}
 };
 
 class CastRedemptionAction : public ResurrectPartyMemberAction
