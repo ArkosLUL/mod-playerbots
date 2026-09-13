@@ -153,9 +153,23 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
         return false;
     }
 
+    // FORCED, not COMBAT: the dodge's own destination stays latched in IsWaitingForLastMove for
+    // seconds after it has stopped wanting it, and that swallowed a quarter of these moves. Safe to
+    // outrank it, because the dodge sits far above this in the ladder - the soak only ever runs on a
+    // tick the dodge declined, and it has already refused any field under a pending missile.
     return MoveTo(bot->GetMapId(), field.position.GetPositionX(), field.position.GetPositionY(),
                   field.position.GetPositionZ(), false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT, true);
+                  MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool VezaxDropVaporTargetAction::Execute(Event /*event*/)
+{
+    Unit* vezax = GetVezax(botAI);
+    if (!vezax)
+        return false;
+
+    RaidObs::NoteDerived(bot, "vezax.target", "vapor");
+    return Attack(vezax);
 }
 
 bool VezaxRaidPositionAction::Execute(Event /*event*/)

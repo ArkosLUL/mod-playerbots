@@ -88,6 +88,15 @@ public:
     bool Execute(Event event) override;
 };
 
+// Put the boss back under the bot's crosshair, off a Saronite Vapor.
+class VezaxDropVaporTargetAction : public AttackAction
+{
+public:
+    VezaxDropVaporTargetAction(PlayerbotAI* ai) : AttackAction(ai, "vezax drop vapor target action") {}
+
+    bool Execute(Event event) override;
+};
+
 class VezaxRaidPositionAction : public MovementAction
 {
 public:

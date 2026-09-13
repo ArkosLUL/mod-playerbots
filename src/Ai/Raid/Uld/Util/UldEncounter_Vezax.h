@@ -46,6 +46,9 @@ enum UlduarVezaxIds
     // General Vezax
     NPC_VEZAX = 33271,
     NPC_VEZAX_SARONITE_ANIMUS = 33524,
+    // Nothing here fights one. It is listed so targeting can refuse it: killing a vapor calls
+    // DoAction(1) on the boss and ends hard mode permanently.
+    NPC_VEZAX_SARONITE_VAPORS = 33488,
 };
 
 // Shadow Crash lands as a missile: 62660 is instant with Speed 10, so its destination is fixed at
@@ -64,17 +67,19 @@ constexpr float ULDUAR_VEZAX_HAZARD_CLEARANCE = 9.0f;
 constexpr float ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS = 60.0f;
 constexpr float ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS = 25.0f;
 
-// The field is worth +100% magic damage, +100% cast speed and -70% mana cost for 20s, which is the
-// only real answer to Aura of Despair - so mana casters walk into it rather than out of it. Only the
-// damage and healing halves are on 63277 itself; the cast speed and mana cost ride 65269, linked to
-// it through spell_linked_spell, so reading the DBC row alone says the field does nothing for mana.
+// The field is worth +100% magic damage, +100% cast speed and -70% mana cost for 20s, and it is the
+// entire mana economy here: Aura of Despair grants immunity to SPELL_EFFECT_ENERGIZE and to the
+// OBS_MOD_POWER and PERIODIC_ENERGIZE aura types, which between them kill regeneration, Life Tap,
+// mana gems, Evocation, Innervate and Replenishment. Only the damage and healing halves ride 63277
+// itself; the cast speed and mana cost are on 65269, linked through spell_linked_spell, so the DBC
+// row alone reads as if the field did nothing for mana.
 //
-// Healers never travel to one: it also cuts healing done by 75%, so a healer in a field heals for
-// 0.25x per cast and 0.83x per point of mana. They stand in whichever one lands on the camp because
-// the camp is where crashes land, not because it is worth walking to.
-// Capped travel, or every caster abandons its slot for one 8 yd circle and Shadow Crash catches the
-// lot of them next cast.
-constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 15.0f;
+// Healers walk to one as well, despite the -75% healing done. Nothing refills them otherwise and
+// every healer in a traced pull was below 5% mana before three minutes.
+//
+// 20 is where the reach curve flattens: a clear field sat within 15 yd for 27% of the time a caster
+// spent outside one and within 20 yd for 40%, and past 25 this would outgrow the local sweep radius.
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL = 20.0f;
 
 // Vezax formation. He spawns dead centre of his room facing north (o 1.658) and the raid comes down
 // from the north: the trash pack sits at y 109-137, and the only door - 194750 at y 31.5 - is
@@ -142,9 +147,10 @@ constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
 constexpr float ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS = 4.0f;
 
 // Mark of the Faceless ticks ten times over 10s on a 40s cadence. Every tick the boss casts 63278 at
-// the marked bot and leeches 5000 from everyone else inside the radius, healing himself 20x what it
-// takes - EffectMultipleValue on the HEALTH_LEECH effect, applied in Spell.cpp. It is the largest
-// single thing in the fight: one untreated window put 8% of a 27.6M boss back.
+// the marked bot and leeches 5000 from everyone else inside the radius, healing himself about 10x
+// what it takes. EffectMultipleValue on the HEALTH_LEECH effect reads 20, but three traced pulls
+// measure 9.4 to 10.3. It is the largest single thing in the fight: one untreated window put 8% of a
+// 27.6M boss back.
 //
 // The marked bot is the one person its own leech skips, so nobody has to outrun their own mark -
 // they have to leave everyone else. The radius reads 15 in the DBC but the area test is
@@ -152,11 +158,15 @@ constexpr float ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS = 4.0f;
 constexpr float ULDUAR_VEZAX_MARK_LEECH_RADIUS = 15.0f;
 constexpr float ULDUAR_VEZAX_MARK_BREAK_DISTANCE = 18.0f;
 
-// A marked camp member steps sideways on its own group's side, never across the boss: the southern
-// spots are a diameter away and the walk there drags the leech through the melee ball. 24 is a floor
-// rather than a preference - the nearest slot on that side sits at tangential 5.5, so anything under
-// 22 leaves a neighbour inside the leech. The camp's own width sets it.
-constexpr float ULDUAR_VEZAX_MARK_SIDE_OFFSET = 24.0f;
+// A marked camp member arcs around the boss on its own group's side, never across him: the southern
+// spots are a diameter away and the walk there drags the leech through the melee ball. Arc length at
+// CAMP_RADIUS, so 40 is 72.8 degrees off the camp bearing and the distance from the boss never
+// changes - the band holds and reach-spell stays quiet.
+//
+// A straight sideways step cannot work. The dodge strafes each group 15 yd outward, the same
+// direction a marked member of that group leaves in, so a 24 yd offset lands 3.5 yd from its own
+// neighbours and 39.6 yd from the boss. 40 yd of arc clears the widest strafed slot by 20.
+constexpr float ULDUAR_VEZAX_MARK_SIDE_OFFSET = 40.0f;
 
 // A marked melee has no camp side to step to, so it takes one of three spots south of the boss,
 // opposite the camp and 50+ yd from its near row.
@@ -164,12 +174,6 @@ constexpr float ULDUAR_VEZAX_MARK_SPOT_RADIUS = 26.0f;
 constexpr float ULDUAR_VEZAX_MARK_SPOT_ARC_OFFSET = 2.3208f;  // pi/2 + 0.75, clear of the camp
 constexpr float ULDUAR_VEZAX_MARK_SPOT_TOLERANCE = 3.0f;
 constexpr uint8 ULDUAR_VEZAX_MARK_SPOT_COUNT = 3;
-
-// Aura of Despair stops mana regeneration, so a warlock here really does need Life Tap - but only
-// when it has something to buy. Left alone it taps on cooldown at full mana: one traced pull had both
-// locks casting it every 1.25s for the whole fight, paying 2000 health a time for mana they never
-// spent, and both died of it having dealt a tenth of what the comparable caster did.
-constexpr uint8 ULDUAR_VEZAX_LIFE_TAP_MANA_PCT = 60;
 
 // Vezax' own spawn point, and the point the Saronite Vapors charge to when they merge.
 extern const Position ULDUAR_VEZAX_ANCHOR;

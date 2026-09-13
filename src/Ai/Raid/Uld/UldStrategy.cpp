@@ -724,6 +724,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("vezax saronite animus action", ACTION_RAID + 5) }));
 
     triggers.push_back(new TriggerNode(
+        "vezax drop vapor target",
+        { NextAction("vezax drop vapor target action", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode(
         "vezax shadow crash soak",
         { NextAction("vezax shadow crash soak action", ACTION_RAID + 2) }));
 
@@ -975,6 +979,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // formation is re-derived and abandoned on alternate ticks.
     multipliers.push_back(new VezaxControlMovementMultiplier(botAI));
     multipliers.push_back(new VezaxSuppressLifeTapMultiplier(botAI));
+    multipliers.push_back(new VezaxTargetGuardMultiplier(botAI));
+    multipliers.push_back(new VezaxHoldCastOutsideFieldMultiplier(botAI));
 
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
     multipliers.push_back(new HodirGuardMultiplier(botAI));

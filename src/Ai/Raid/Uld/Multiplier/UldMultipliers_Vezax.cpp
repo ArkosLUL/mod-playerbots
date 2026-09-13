@@ -70,15 +70,52 @@ float VezaxSuppressLifeTapMultiplier::GetValue(Action* action)
     if (!action || !dynamic_cast<CastLifeTapAction*>(action))
         return 1.0f;
 
+    // No mana test, because there is no amount of missing mana a tap here could fix. The glyph
+    // refresh goes with it: that proc rides the same energize the boss makes everyone immune to.
+    return VezaxEncounterActive(botAI) ? 0.0f : 1.0f;
+}
+
+float VezaxTargetGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // The debuff one matters as much as the two pickers: it is what lands DoTs on whatever a caster
+    // drifted onto, which on this boss is a vapor often enough to end hard mode.
+    if (!dynamic_cast<DpsAssistAction*>(action) && !dynamic_cast<TankAssistAction*>(action) &&
+        !dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
+    {
+        return 1.0f;
+    }
+
+    return VezaxEncounterActive(botAI) ? 0.0f : 1.0f;
+}
+
+float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
+{
+    if (!action || botAI->IsHeal(bot) || !botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+        return 1.0f;
+
+    // Damage, DoTs and the wand. Buffs and defensives stay available - a held bot that could not
+    // Barkskin through a leech tick is worse off than one that skipped a Shadow Bolt - and so does
+    // every movement action, or it would stop dodging. Debuffs are deliberately not exempt: a
+    // caster's DoTs are most of its mana here.
+    //
+    // Nothing exempts the class interrupts, and nothing needs to. Searing Flames is the only
+    // interruptible cast Vezax has, and its own node sits above this one and casts through
+    // botAI->CastSpell rather than a CastSpellAction, so a multiplier never sees it.
+    bool const isDamage =
+        dynamic_cast<MeleeAction*>(action) ||
+        (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastBuffSpellAction*>(action) &&
+         !dynamic_cast<CastHealingSpellAction*>(action));
+    if (!isDamage)
+        return 1.0f;
+
     if (!VezaxEncounterActive(botAI))
         return 1.0f;
 
-    uint32 const maxMana = bot->GetMaxPower(POWER_MANA);
-    if (!maxMana)
-        return 1.0f;
-
-    // Below the gate the tap is real mana the bot will spend; above it the health is the only thing
-    // that changes hands, and there is no regeneration here to make it back.
-    uint8 const mana = static_cast<uint8>(bot->GetPower(POWER_MANA) * 100 / maxMana);
-    return mana >= ULDUAR_VEZAX_LIFE_TAP_MANA_PCT ? 0.0f : 1.0f;
+    // 63277, not the linked 65269 that actually carries the mana cost cut: the link trails the field
+    // by 11-15% of uptime, and a bot inside a field without it would hold its casts for something it
+    // cannot influence.
+    return bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD) ? 1.0f : 0.0f;
 }

@@ -111,6 +111,7 @@ public:
         creators["vezax surge of darkness action"] = &RaidUlduarActionContext::vezax_surge_of_darkness_action;
         creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
         creators["vezax shadow crash soak action"] = &RaidUlduarActionContext::vezax_shadow_crash_soak_action;
+        creators["vezax drop vapor target action"] = &RaidUlduarActionContext::vezax_drop_vapor_target_action;
         creators["vezax raid position action"] = &RaidUlduarActionContext::vezax_raid_position_action;
         creators["vezax shadow resistance action"] = &RaidUlduarActionContext::vezax_shadow_resistance_action;
         creators["yogg-saron shadow resistance action"] = &RaidUlduarActionContext::yogg_saron_shadow_resistance_action;
@@ -290,6 +291,7 @@ private:
     static Action* vezax_surge_of_darkness_action(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessAction(ai); }
     static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
     static Action* vezax_shadow_crash_soak_action(PlayerbotAI* ai) { return new VezaxShadowCrashSoakAction(ai); }
+    static Action* vezax_drop_vapor_target_action(PlayerbotAI* ai) { return new VezaxDropVaporTargetAction(ai); }
     static Action* vezax_raid_position_action(PlayerbotAI* ai) { return new VezaxRaidPositionAction(ai); }
     static Action* vezax_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "general vezax"); }
     static Action* yogg_saron_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "yogg-saron"); }

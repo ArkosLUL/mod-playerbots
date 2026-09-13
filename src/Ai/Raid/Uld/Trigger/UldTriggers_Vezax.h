@@ -84,6 +84,15 @@ public:
     bool IsActive() override;
 };
 
+// Holding a Saronite Vapor as a target. They are hostile and the generic pickers take them, but
+// killing one ends hard mode, so a bot that has one has to be pushed back onto the boss.
+class VezaxDropVaporTargetTrigger : public Trigger
+{
+public:
+    VezaxDropVaporTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax drop vapor target") {}
+    bool IsActive() override;
+};
+
 class VezaxRaidPositionTrigger : public Trigger
 {
 public:

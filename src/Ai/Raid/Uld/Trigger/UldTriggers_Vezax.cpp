@@ -151,6 +151,15 @@ bool VezaxShadowCrashSoakTrigger::IsActive()
            ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL;
 }
 
+bool VezaxDropVaporTargetTrigger::IsActive()
+{
+    if (!VezaxEncounterActive(botAI))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && target->GetEntry() == NPC_VEZAX_SARONITE_VAPORS;
+}
+
 bool VezaxRaidPositionTrigger::IsActive()
 {
     return VezaxFormationActive(botAI);

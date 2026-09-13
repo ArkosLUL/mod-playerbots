@@ -233,7 +233,10 @@ bool TryGetVezaxNearestHazard(Player* bot, std::vector<VezaxHazard> const& hazar
 
 bool VezaxCanSoakShadowCrashField(Player* bot)
 {
-    if (!bot || PlayerbotAI::IsHeal(bot) || !PlayerbotAI::IsRangedDps(bot))
+    // The same test that hands out camp slots, so everyone the formation places also walks to a
+    // field. Healers included: the -75% healing done is worth paying when nothing else on this boss
+    // restores a point of mana.
+    if (!bot || !PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsMainTank(bot))
         return false;
 
     return bot->GetMaxPower(POWER_MANA) > 0;
@@ -382,13 +385,16 @@ bool TryGetVezaxMarkSpot(Player* bot, Position& position)
     uint8 slotIndex = 0;
     if (TryGetVezaxDodgeSlot(bot, slotIndex))
     {
-        // Sideways on its own group's side, never across the boss. The southern spots are a diameter
-        // away and the walk there drags the leech straight through the melee ball.
+        // Around the boss on its own group's side, never across him. An arc rather than a sideways
+        // step because the offset then costs nothing in distance from the boss: the camp band holds
+        // at both ends, and the dodge's own 15 yd strafe can no longer close the gap.
         float const side = VezaxSlotIsRightGroup(slotIndex) ? ULDUAR_VEZAX_MARK_SIDE_OFFSET
                                                             : -ULDUAR_VEZAX_MARK_SIDE_OFFSET;
+        float const bearing = ULDUAR_VEZAX_ARC_ORIENTATION + side / ULDUAR_VEZAX_CAMP_RADIUS;
 
         RaidObs::NoteDerived(bot, "vezax.mark", "side");
-        position = VezaxCampPosition(vezax->GetPosition(), ULDUAR_VEZAX_CAMP_RADIUS, side);
+        position = VezaxPositionAt(vezax->GetPosition(), Position::NormalizeOrientation(bearing),
+                                   ULDUAR_VEZAX_CAMP_RADIUS);
         return true;
     }
 

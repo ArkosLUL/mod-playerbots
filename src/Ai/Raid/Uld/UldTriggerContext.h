@@ -111,6 +111,7 @@ public:
         creators["vezax surge of darkness"] = &RaidUlduarTriggerContext::vezax_surge_of_darkness;
         creators["vezax saronite animus"] = &RaidUlduarTriggerContext::vezax_saronite_animus;
         creators["vezax shadow crash soak"] = &RaidUlduarTriggerContext::vezax_shadow_crash_soak;
+        creators["vezax drop vapor target"] = &RaidUlduarTriggerContext::vezax_drop_vapor_target;
         creators["vezax raid position"] = &RaidUlduarTriggerContext::vezax_raid_position;
         creators["vezax shadow resistance"] = &RaidUlduarTriggerContext::vezax_shadow_resistance;
         creators["yogg-saron shadow resistance trigger"] = &RaidUlduarTriggerContext::yogg_saron_shadow_resistance_trigger;
@@ -303,6 +304,7 @@ private:
     static Trigger* vezax_surge_of_darkness(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessTrigger(ai); }
     static Trigger* vezax_saronite_animus(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
     static Trigger* vezax_shadow_crash_soak(PlayerbotAI* ai) { return new VezaxShadowCrashSoakTrigger(ai); }
+    static Trigger* vezax_drop_vapor_target(PlayerbotAI* ai) { return new VezaxDropVaporTargetTrigger(ai); }
     static Trigger* vezax_raid_position(PlayerbotAI* ai) { return new VezaxRaidPositionTrigger(ai); }
     static Trigger* vezax_shadow_resistance(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
     static Trigger* yogg_saron_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "yogg-saron"); }
