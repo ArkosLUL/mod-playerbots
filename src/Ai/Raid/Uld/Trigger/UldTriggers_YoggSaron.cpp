@@ -324,20 +324,25 @@ bool YoggSaronDeathOrbTrigger::IsActive()
 
 bool YoggSaronPhase1SpacingTrigger::IsActive()
 {
-    if (!YoggSaronInPhase1(botAI) || !botAI->CanMove())
+    if (!botAI->CanMove())
         return false;
 
+    // Short-radius hazard reads first, phase read last. The gate leaves every Yogg trigger open
+    // between pulls, and YoggSaronInPhase1 is three 200 yd grid sweeps on every bot on the map.
+    //
     // Everyone dodges clouds: one summons a Guardian on any player inside 6 yd, and the innermost
     // orbit runs at 11 yd from Sara, straight through where melee stand.
-    if (bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS, true))
-        return true;
+    bool hazardNear = bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS, true);
 
     // Shadow Nova is the other half, and only ranged and healers can answer it. Melee and tanks have
     // to stand in it to kill the Guardian, which is also the only way Sara takes damage.
-    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
-        return false;
+    if (!hazardNear && (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot)))
+    {
+        hazardNear =
+            bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS, true);
+    }
 
-    return bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS, true) != nullptr;
+    return hazardNear && YoggSaronInPhase1(botAI);
 }
 
 bool YoggSaronDarkVolleyTrigger::IsActive()
