@@ -3,56 +3,6 @@
 #include "Playerbots.h"
 #include "AttackAction.h"
 
-bool Aq40UseResistanceBuffsAction::Execute(Event event)
-{
-    switch(bot->getClass())
-    {
-        case CLASS_HUNTER:
-        {
-            bool isNatureBoss = false;
-            Unit* boss;
-
-            if ((boss = AI_VALUE2(Unit*, "find target", "viscidus")) && boss->IsInCombat())
-                isNatureBoss = true;
-
-            else if ((boss = AI_VALUE2(Unit*, "find target", "princess huhuran")) && boss->IsInCombat())
-                isNatureBoss = true;
-
-            if (isNatureBoss)
-            {
-                if (!botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT))
-                {
-                    botAI->ChangeStrategy("+rnature", BOT_STATE_NON_COMBAT);
-                    botAI->ChangeStrategy("+rnature", BOT_STATE_COMBAT);
-                    return true;
-                }
-            }
-            else if (botAI->HasStrategy("rnature", BotState::BOT_STATE_COMBAT))
-            {
-                botAI->ChangeStrategy("-rnature", BOT_STATE_NON_COMBAT);
-                botAI->ChangeStrategy("-rnature", BOT_STATE_COMBAT);
-                return true;
-            }
-        }
-        break;
-        case CLASS_PRIEST:
-        {
-            // paladin aura seems like a waste when priests have buffs that don't have a radius limitation
-            if (!botAI->HasStrategy("rshadow", BotState::BOT_STATE_NON_COMBAT))
-            {
-                botAI->ChangeStrategy("+rshadow", BOT_STATE_NON_COMBAT);
-                botAI->ChangeStrategy("+rshadow", BOT_STATE_COMBAT);
-                return true;
-            }
-        }
-        break;
-        default:
-            break;
-    }
-
-    return false;
-}
-
 // 88072: The Master's Eye for positioning maybe
 
 // bool Aq40MoveFromOtherEmperorAction::Execute(Event event)

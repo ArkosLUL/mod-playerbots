@@ -1,14 +1,18 @@
 #include "RaidAq40Strategy.h"
 
+#include "BossResistanceMultipliers.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
 #include "Strategy.h"
 
 void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
-    // Resistance buffs
-    triggers.push_back(new TriggerNode("aq40 should use resistance buffs",
-        { NextAction("aq40 use resistance buffs", ACTION_RAID) }
+    triggers.push_back(new TriggerNode("viscidus nature resistance trigger",
+        { NextAction("viscidus nature resistance action", ACTION_RAID) }
+    ));
+
+    triggers.push_back(new TriggerNode("princess huhuran nature resistance trigger",
+        { NextAction("princess huhuran nature resistance action", ACTION_RAID) }
     ));
 
     // // Twin Emperors: aggro holder moves away from the other emperor
@@ -78,10 +82,13 @@ void RaidAq40Strategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     ));
 }
 
-// void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
-// {
-//     multipliers.push_back(new Aq40EmperorMultiplier(botAI));
-// }
+void RaidAq40Strategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
+{
+    // Same boss names the nature resistance actions use, so the multiplier and the trigger resolve the
+    // same hunter. Without it the holder's own "bdps" node re-casts Dragonhawk on the next GCD.
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "viscidus"));
+    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "princess huhuran"));
+}
 
 // float Aq40EmperorMultiplier::GetValue(Action* action)
 // {

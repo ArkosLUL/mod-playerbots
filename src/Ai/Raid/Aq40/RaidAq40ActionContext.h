@@ -2,6 +2,7 @@
 #define _PLAYERBOT_RAIDAQ40ACTIONCONTEXT_H
 
 #include "Action.h"
+#include "BossAuraActions.h"
 #include "NamedObjectContext.h"
 #include "RaidAq40Actions.h"
 
@@ -10,7 +11,8 @@ class RaidAq40ActionContext : public NamedObjectContext<Action>
 public:
     RaidAq40ActionContext()
     {
-        creators["aq40 use resistance buffs"] = &RaidAq40ActionContext::use_resistance_buffs;
+        creators["viscidus nature resistance action"] = &RaidAq40ActionContext::viscidus_nature_resistance_action;
+        creators["princess huhuran nature resistance action"] = &RaidAq40ActionContext::huhuran_nature_resistance_action;
         // creators["aq40 move from other emperor"] = &RaidAq40ActionContext::move_from_other_emperor;
         // creators["aq40 attack emperor vek'lor"] = &RaidAq40ActionContext::attack_emperor_veklor;
         // creators["aq40 attack emperor vek'nilash"] = &RaidAq40ActionContext::attack_emperor_veknilash;
@@ -29,7 +31,8 @@ public:
     }
 
 private:
-    static Action* use_resistance_buffs(PlayerbotAI *ai) { return new Aq40UseResistanceBuffsAction(ai); }
+    static Action* viscidus_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "viscidus"); }
+    static Action* huhuran_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "princess huhuran"); }
     // static Action* move_from_other_emperor(PlayerbotAI* ai) { return new Aq40MoveFromOtherEmperorAction(ai); }
     // static Action* attack_emperor_veklor(PlayerbotAI* ai) { return new Aq40AttackEmperorVekLorAction(ai); }
     // static Action* attack_emperor_veknilash(PlayerbotAI* ai) { return new Aq40AttackEmperorVekNilashAction(ai); }

@@ -7,14 +7,6 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 
-class Aq40UseResistanceBuffsAction : public Action
-{
-public:
-    Aq40UseResistanceBuffsAction(PlayerbotAI* botAI, std::string const name = "aq40 use resistance buffs")
-        : Action(botAI, name) {}
-    bool Execute(Event event) override;
-};
-
 class Aq40MoveFromOtherEmperorAction : public MovementAction
 {
 public:

@@ -212,4 +212,9 @@ Every strategy is switchable per bot with `strategy -<name>`.
 `PlayerbotRepository::Load` runs after `ResetStrategies()` and `ClearStrategies` wipes the
 map-derived strategy, so a saved string re-applied verbatim resurrects the previous instance's
 strategy — bots last saved in Serpentshrine arrived in The Eye still carrying `ssc` and fired no Void
-Reaver triggers.
+Reaver triggers. `Save` filters those out; **everything else in the string is permanent.** It writes
+the combat, non-combat and dead lists to `playerbots_db_store` on logout and `Load` replays them, so
+`ChangeStrategy` on a class strategy outlives the fight, the session and the binary, and the sibling it
+evicted never returns from the factory defaults. One AQ40 visit left a hunter carrying `rnature`
+instead of `bdps` across a rebuild and a restart. Suppress with a multiplier instead; only a DB update
+undoes one.

@@ -2,6 +2,7 @@
 #define _PLAYERBOT_RAIDAQ40TRIGGERCONTEXT_H
 
 #include "AiObjectContext.h"
+#include "BossAuraTriggers.h"
 #include "NamedObjectContext.h"
 #include "RaidAq40Triggers.h"
 
@@ -10,7 +11,8 @@ class RaidAq40TriggerContext : public NamedObjectContext<Trigger>
 public:
     RaidAq40TriggerContext()
     {
-        creators["aq40 should use resistance buffs"] = &RaidAq40TriggerContext::should_use_resistance_buffs;
+        creators["viscidus nature resistance trigger"] = &RaidAq40TriggerContext::viscidus_nature_resistance_trigger;
+        creators["princess huhuran nature resistance trigger"] = &RaidAq40TriggerContext::huhuran_nature_resistance_trigger;
         // creators["aq40 has emperor aggro"] = &RaidAq40TriggerContext::has_emperor_aggro;
         // creators["aq40 warlock tank emperor"] = &RaidAq40TriggerContext::warlock_tank_emperor;
         creators["aq40 mage frostbolt viscidus"] = &RaidAq40TriggerContext::mage_frostbolt_viscidus;
@@ -30,7 +32,8 @@ public:
     }
 
 private:
-    static Trigger* should_use_resistance_buffs(PlayerbotAI* ai) { return new Aq40ShouldUseResistanceBuffsTrigger(ai); }
+    static Trigger* viscidus_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "viscidus"); }
+    static Trigger* huhuran_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "princess huhuran"); }
     // static Trigger* has_emperor_aggro(PlayerbotAI* ai) { return new Aq40HasEmperorAggroTrigger(ai); }
     // static Trigger* warlock_tank_emperor(PlayerbotAI* ai) { return new Aq40WarlockTankEmperorTrigger(ai); }
     static Trigger* mage_frostbolt_viscidus(PlayerbotAI* ai) { return new Aq40MageFrostboltViscidusTrigger(ai); }

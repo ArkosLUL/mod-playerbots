@@ -5,13 +5,6 @@
 #include "Playerbots.h"
 #include "Trigger.h"
 
-class Aq40ShouldUseResistanceBuffsTrigger : public Trigger
-{
-public:
-    Aq40ShouldUseResistanceBuffsTrigger(PlayerbotAI* botAI) : Trigger(botAI, "aq40 should use resistance buffs") {}
-    bool IsActive() override { return true; }
-};
-
 // class Aq40HasEmperorAggroTrigger : public Trigger
 // {
 // public:

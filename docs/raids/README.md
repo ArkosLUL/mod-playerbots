@@ -170,18 +170,19 @@ totem stays up all fight), and Yogg-Saron P2/P3 (Malady of the Mind 63830/63881,
 Cast directly and suppress the competition; no `ChangeStrategy`, no persistent state, self-reverting
 when the window closes.
 
-`BossNatureResistanceAction` (hunter Aspect of the Wild) was converted to this shape after leaking
-`+rnature` across a whole session. **The paladin resistance auras still have the old defect:**
-`BossFireResistanceAction`, `BossFrostResistanceAction` and `BossShadowResistanceAction` add
-`+rfire`/`+rfrost`/`+rshadow` and never remove them, evicting the sibling blessing strategy for good.
-Live at Razorscale, Ignis, Freya, Thorim, Mimiron, Sara, Yogg-Saron, Koralon and Toravon.
+Both `+rnature` writers are converted to this shape: `BossNatureResistanceAction` (hunter Aspect of the
+Wild) after it leaked across a whole session, and AQ40's `Aq40UseResistanceBuffsAction`, now per-boss
+`BossNatureResistanceTrigger`/`Action` plus `BossNatureAspectHoldMultiplier` nodes for Viscidus and
+Princess Huhuran. **Never set `rnature` loosely:** it is a sibling of `bdps` so it evicts the combat
+Dragonhawk node, and `HunterAspectOfTheViperTrigger` bails out whenever it is set, so the hunter cannot
+use Aspect of the Viper at all and runs dry in every later raid — 59.7% of a 514 s fight under 5% mana
+in `603_4_xt002_1789239467`, 70.3% of a 363 s one in `603_4_general-vezax_1789302545`. It also outlives
+the session, see [../engine/action-selection.md](../engine/action-selection.md).
 
-**`Aq40UseResistanceBuffsAction` is the last `+rnature` writer**, and its priest branch does the same
-with `+rshadow`. It self-reverts only while the `aq40` instance strategy is loaded, so a hunter that
-leaves AQ40 after Viscidus or Princess Huhuran keeps `rnature` for the session. That costs more than the
-sibling slot: `rnature` evicts the combat Dragonhawk node, and `HunterAspectOfTheViperTrigger` bails out
-whenever it is set, so the hunter cannot use Aspect of the Viper at all and runs dry in every later raid
-— 59.7% of a 514 s fight under 5% mana in `603_4_xt002_1789239467`.
+**The paladin resistance auras still have the old defect:** `BossFireResistanceAction`,
+`BossFrostResistanceAction` and `BossShadowResistanceAction` add `+rfire`/`+rfrost`/`+rshadow` and never
+remove them, evicting the sibling blessing strategy for good. Live at Razorscale, Ignis, Freya, Thorim,
+Mimiron, Sara, Yogg-Saron, Koralon and Toravon.
 
 **Explicitly not counterable — do not target:** Insane (63120/64464, AoE charm), Psychosis, Lunatic
 Gaze and Induce Madness (sanity drains), and Chains of Kel'Thuzad (28410, mind control — no *fear*
