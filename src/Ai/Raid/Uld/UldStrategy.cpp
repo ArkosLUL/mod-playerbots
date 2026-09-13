@@ -767,10 +767,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron sanity action", ACTION_RAID + 1) }));
 
     triggers.push_back(new TriggerNode(
-        "yogg-saron death orb trigger",
-        { NextAction("yogg-saron death orb action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
         "yogg-saron malady of the mind trigger",
         { NextAction("yogg-saron malady of the mind action", ACTION_RAID) }));
 
@@ -779,8 +775,16 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron anti fear action", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
-        "yogg-saron mark target trigger",
-        { NextAction("yogg-saron mark target action", ACTION_RAID) }));
+        "yogg-saron phase 3 control trigger",
+        { NextAction("yogg-saron phase 3 control action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron set dps priority trigger",
+        { NextAction("yogg-saron set dps priority action", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron phase 2 spacing trigger",
+        { NextAction("yogg-saron phase 2 spacing action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "yogg-saron brain link trigger",
@@ -808,7 +812,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode(
         "yogg-saron move to exit portal trigger",
-        { NextAction("yogg-saron move to exit portal action", ACTION_RAID) }));
+        { NextAction("yogg-saron move to exit portal action", ACTION_RAID + 4) }));
 
     triggers.push_back(new TriggerNode(
         "yogg-saron lunatic gaze trigger",
@@ -819,10 +823,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron phase 3 positioning action", ACTION_RAID) }));
 
     // Reduced-Keeper (Thorim-only) hard mode
-    triggers.push_back(new TriggerNode(
-        "yogg-saron crusher tentacle trigger",
-        { NextAction("yogg-saron crusher tentacle action", ACTION_RAID + 2) }));
-
     triggers.push_back(new TriggerNode(
         "yogg-saron guardian control trigger",
         { NextAction("yogg-saron guardian control action", ACTION_RAID + 3) }));
@@ -988,5 +988,6 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));
+    multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronAntiFearTotemGuardMultiplier(botAI));
 }

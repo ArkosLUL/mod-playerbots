@@ -615,6 +615,14 @@ Ram is the second and was modelled as the first: the resulting "stay out of his 
 third of the real hits while over half of what it did fire on dragged a vehicle off station for
 nothing.
 
+**And a cone's facing is a runtime fact, not a call-chain conclusion.** A static walk of Yogg-Saron's
+Crusher Tentacle read its orientation as frozen at spawn — `SetCombatMovement(false)` routes through
+`MoveIdle`, and the proc casts carry `TRIGGERED_IGNORE_SET_FACING` — so a dodge built on it would have
+aimed at a fixed compass direction and done nothing. The trace showed ten distinct orientations in
+28 s, every Crush victim within 0.7° of the recorded facing and every survivor inside the radius at
+5.1° or more. Orientation is `snap.u` column 4
+([../systems/observability.md](../systems/observability.md)); measure it there.
+
 Core distance helpers are surface-to-surface on combat reach: `GetObjectSize()` returns
 `UNIT_FIELD_COMBATREACH` (`Object.cpp:2888`), `IsWithinCombatRange` is `dist3d < d + reachSum`, and
 `GetMeleeRange = reachSum + 4/3`. Hard-coded stand distances that ignore reach break on large models.

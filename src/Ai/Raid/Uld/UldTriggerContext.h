@@ -119,9 +119,10 @@ public:
         creators["yogg-saron dark volley trigger"] = &RaidUlduarTriggerContext::yogg_saron_dark_volley_trigger;
         creators["yogg-saron guardian positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_positioning_trigger;
         creators["yogg-saron sanity trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_trigger;
-        creators["yogg-saron death orb trigger"] = &RaidUlduarTriggerContext::yogg_saron_death_orb_trigger;
         creators["yogg-saron malady of the mind trigger"] = &RaidUlduarTriggerContext::yogg_saron_malady_of_the_mind_trigger;
-        creators["yogg-saron mark target trigger"] = &RaidUlduarTriggerContext::yogg_saron_mark_target_trigger;
+        creators["yogg-saron phase 3 control trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_control_trigger;
+        creators["yogg-saron set dps priority trigger"] = &RaidUlduarTriggerContext::yogg_saron_set_dps_priority_trigger;
+        creators["yogg-saron phase 2 spacing trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_2_spacing_trigger;
         creators["yogg-saron brain link trigger"] = &RaidUlduarTriggerContext::yogg_saron_brain_link_trigger;
         creators["yogg-saron move to enter portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_enter_portal_trigger;
         creators["yogg-saron use portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_use_portal_trigger;
@@ -131,7 +132,6 @@ public:
         creators["yogg-saron move to exit portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_exit_portal_trigger;
         creators["yogg-saron lunatic gaze trigger"] = &RaidUlduarTriggerContext::yogg_saron_lunatic_gaze_trigger;
         creators["yogg-saron phase 3 positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_positioning_trigger;
-        creators["yogg-saron crusher tentacle trigger"] = &RaidUlduarTriggerContext::yogg_saron_crusher_tentacle_trigger;
         creators["yogg-saron guardian control trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_control_trigger;
         creators["yogg-saron sanity conservation trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_conservation_trigger;
         creators["yogg-saron squeeze escape trigger"] = &RaidUlduarTriggerContext::yogg_saron_squeeze_escape_trigger;
@@ -311,9 +311,10 @@ private:
     static Trigger* yogg_saron_dark_volley_trigger(PlayerbotAI* ai) { return new YoggSaronDarkVolleyTrigger(ai); }
     static Trigger* yogg_saron_guardian_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningTrigger(ai); }
     static Trigger* yogg_saron_sanity_trigger(PlayerbotAI* ai) { return new YoggSaronSanityTrigger(ai); }
-    static Trigger* yogg_saron_death_orb_trigger(PlayerbotAI* ai) { return new YoggSaronDeathOrbTrigger(ai); }
     static Trigger* yogg_saron_malady_of_the_mind_trigger(PlayerbotAI* ai) { return new YoggSaronMaladyOfTheMindTrigger(ai); }
-    static Trigger* yogg_saron_mark_target_trigger(PlayerbotAI* ai) { return new YoggSaronMarkTargetTrigger(ai); }
+    static Trigger* yogg_saron_phase_3_control_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3ControlTrigger(ai); }
+    static Trigger* yogg_saron_set_dps_priority_trigger(PlayerbotAI* ai) { return new YoggSaronSetDpsPriorityTrigger(ai); }
+    static Trigger* yogg_saron_phase_2_spacing_trigger(PlayerbotAI* ai) { return new YoggSaronPhase2SpacingTrigger(ai); }
     static Trigger* yogg_saron_brain_link_trigger(PlayerbotAI* ai) { return new YoggSaronBrainLinkTrigger(ai); }
     static Trigger* yogg_saron_move_to_enter_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToEnterPortalTrigger(ai); }
     static Trigger* yogg_saron_use_portal_trigger(PlayerbotAI* ai) { return new YoggSaronUsePortalTrigger(ai); }
@@ -323,7 +324,6 @@ private:
     static Trigger* yogg_saron_move_to_exit_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalTrigger(ai); }
     static Trigger* yogg_saron_lunatic_gaze_trigger(PlayerbotAI* ai) { return new YoggSaronLunaticGazeTrigger(ai); }
     static Trigger* yogg_saron_phase_3_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningTrigger(ai); }
-    static Trigger* yogg_saron_crusher_tentacle_trigger(PlayerbotAI* ai) { return new YoggSaronCrusherTentacleTrigger(ai); }
     static Trigger* yogg_saron_guardian_control_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianControlTrigger(ai); }
     static Trigger* yogg_saron_sanity_conservation_trigger(PlayerbotAI* ai) { return new YoggSaronSanityConservationTrigger(ai); }
     static Trigger* yogg_saron_squeeze_escape_trigger(PlayerbotAI* ai) { return new YoggSaronSqueezeEscapeTrigger(ai); }

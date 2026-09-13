@@ -37,4 +37,20 @@
 
 using namespace EncounterHelpers;
 
+float YoggSaronDpsTargetGuardMultiplier::GetValue(Action* action)
+{
+    // Cheap tests first: the phase reads below are 200 yd grid sweeps, and this runs for every action
+    // the engine weighs.
+    if (!action || botAI->IsTank(bot))
+        return 1.0f;
+
+    // "attack rti target" is deliberately left alone: bots no longer set marks here, but a mark a
+    // player sets should still win. Nor is TankAssistAction zeroed - the resolver excludes tanks, so
+    // that would strand them with nothing in its place.
+    if (!dynamic_cast<DpsAssistAction*>(action))
+        return 1.0f;
+
+    return (YoggSaronInPhase2(botAI) || YoggSaronInPhase3(botAI)) ? 0.0f : 1.0f;
+}
+
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }

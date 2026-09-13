@@ -119,9 +119,10 @@ public:
         creators["yogg-saron dark volley interrupt action"] = &RaidUlduarActionContext::yogg_saron_dark_volley_interrupt_action;
         creators["yogg-saron guardian positioning action"] = &RaidUlduarActionContext::yogg_saron_guardian_positioning_action;
         creators["yogg-saron sanity action"] = &RaidUlduarActionContext::yogg_saron_sanity_action;
-        creators["yogg-saron death orb action"] = &RaidUlduarActionContext::yogg_saron_death_orb_action;
         creators["yogg-saron malady of the mind action"] = &RaidUlduarActionContext::yogg_saron_malady_of_the_mind_action;
-        creators["yogg-saron mark target action"] = &RaidUlduarActionContext::yogg_saron_mark_target_action;
+        creators["yogg-saron phase 3 control action"] = &RaidUlduarActionContext::yogg_saron_phase_3_control_action;
+        creators["yogg-saron set dps priority action"] = &RaidUlduarActionContext::yogg_saron_set_dps_priority_action;
+        creators["yogg-saron phase 2 spacing action"] = &RaidUlduarActionContext::yogg_saron_phase_2_spacing_action;
         creators["yogg-saron brain link action"] = &RaidUlduarActionContext::yogg_saron_brain_link_action;
         creators["yogg-saron move to enter portal action"] = &RaidUlduarActionContext::yogg_saron_move_to_enter_portal_action;
         creators["yogg-saron use portal action"] = &RaidUlduarActionContext::yogg_saron_use_portal_action;
@@ -131,7 +132,6 @@ public:
         creators["yogg-saron move to exit portal action"] = &RaidUlduarActionContext::yogg_saron_move_to_exit_portal_action;
         creators["yogg-saron lunatic gaze action"] = &RaidUlduarActionContext::yogg_saron_lunatic_gaze_action;
         creators["yogg-saron phase 3 positioning action"] = &RaidUlduarActionContext::yogg_saron_phase_3_positioning_action;
-        creators["yogg-saron crusher tentacle action"] = &RaidUlduarActionContext::yogg_saron_crusher_tentacle_action;
         creators["yogg-saron guardian control action"] = &RaidUlduarActionContext::yogg_saron_guardian_control_action;
         creators["yogg-saron sanity conservation action"] = &RaidUlduarActionContext::yogg_saron_sanity_conservation_action;
         creators["yogg-saron squeeze escape action"] = &RaidUlduarActionContext::yogg_saron_squeeze_escape_action;
@@ -298,9 +298,10 @@ private:
     static Action* yogg_saron_dark_volley_interrupt_action(PlayerbotAI* ai) { return new YoggSaronDarkVolleyInterruptAction(ai); }
     static Action* yogg_saron_guardian_positioning_action(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningAction(ai); }
     static Action* yogg_saron_sanity_action(PlayerbotAI* ai) { return new YoggSaronSanityAction(ai); }
-    static Action* yogg_saron_death_orb_action(PlayerbotAI* ai) { return new YoggSaronDeathOrbAction(ai); }
     static Action* yogg_saron_malady_of_the_mind_action(PlayerbotAI* ai) { return new YoggSaronMaladyOfTheMindAction(ai); }
-    static Action* yogg_saron_mark_target_action(PlayerbotAI* ai) { return new YoggSaronMarkTargetAction(ai); }
+    static Action* yogg_saron_phase_3_control_action(PlayerbotAI* ai) { return new YoggSaronPhase3ControlAction(ai); }
+    static Action* yogg_saron_set_dps_priority_action(PlayerbotAI* ai) { return new YoggSaronSetDpsPriorityAction(ai); }
+    static Action* yogg_saron_phase_2_spacing_action(PlayerbotAI* ai) { return new YoggSaronPhase2SpacingAction(ai); }
     static Action* yogg_saron_brain_link_action(PlayerbotAI* ai) { return new YoggSaronBrainLinkAction(ai); }
     static Action* yogg_saron_move_to_enter_portal_action(PlayerbotAI* ai) { return new YoggSaronMoveToEnterPortalAction(ai); }
     static Action* yogg_saron_use_portal_action(PlayerbotAI* ai) { return new YoggSaronUsePortalAction(ai); }
@@ -310,7 +311,6 @@ private:
     static Action* yogg_saron_move_to_exit_portal_action(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalAction(ai); }
     static Action* yogg_saron_lunatic_gaze_action(PlayerbotAI* ai) { return new YoggSaronLunaticGazeAction(ai); }
     static Action* yogg_saron_phase_3_positioning_action(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningAction(ai); }
-    static Action* yogg_saron_crusher_tentacle_action(PlayerbotAI* ai) { return new YoggSaronCrusherTentacleAction(ai); }
     static Action* yogg_saron_guardian_control_action(PlayerbotAI* ai) { return new YoggSaronGuardianControlAction(ai); }
     static Action* yogg_saron_sanity_conservation_action(PlayerbotAI* ai) { return new YoggSaronSanityConservationAction(ai); }
     static Action* yogg_saron_squeeze_escape_action(PlayerbotAI* ai) { return new YoggSaronSqueezeEscapeAction(ai); }

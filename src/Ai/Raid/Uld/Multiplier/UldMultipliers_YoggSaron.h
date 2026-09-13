@@ -11,6 +11,19 @@
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
 
+// Companion to yogg-saron set dps priority action: that node owns every non-tank's target from phase 2
+// on, so the generic picker has to stand down rather than pull bots back onto whatever is nearest.
+class YoggSaronDpsTargetGuardMultiplier : public Multiplier
+{
+public:
+    YoggSaronDpsTargetGuardMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron dps target guard multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 class YoggSaronAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
 {
 public:

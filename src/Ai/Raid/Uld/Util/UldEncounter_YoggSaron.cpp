@@ -6,10 +6,18 @@
 
 #include "UldEncounter_YoggSaron.h"
 
+#include <cmath>
+
 #include "Creature.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+
+const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS = {
+    NPC_INFLUENCE_TENTACLE, NPC_RUBY_CONSORT,    NPC_AZURE_CONSORT,       NPC_BRONZE_CONSORT,
+    NPC_EMERALD_CONSORT,    NPC_OBSIDIAN_CONSORT, NPC_ALEXTRASZA,         NPC_MALYGOS_ILLUSION,
+    NPC_NELTHARION,         NPC_YSERA,           NPC_DEATHSWORN_ZEALOT,   NPC_LICH_KING_ILLUSION,
+    NPC_IMMOLATED_CHAMPION, NPC_SUIT_OF_ARMOR,   NPC_GARONA,              NPC_KING_LLANE};
 
 const Position ULDUAR_YOGG_SARON_MIDDLE = Position(1980.28f, -25.5868f, 329.397f);
 const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE = Position(1927.1511f, 68.507256f, 242.37657f);
@@ -82,6 +90,51 @@ bool YoggSaronCanInterrupt(Player* bot)
         default:
             return bot->getRace() == RACE_BLOODELF;
     }
+}
+
+bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
+{
+    return !botAI->GetBot()->FindNearestCreature(NPC_INFLUENCE_TENTACLE, 200.0f, true);
+}
+
+std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, searchRadius);
+
+    std::vector<Position> wedges;
+    for (Creature* crusher : crushers)
+    {
+        if (!crusher->IsAlive() || crusher->GetVictim() == bot)
+            continue;
+
+        wedges.push_back(crusher->GetPosition());
+    }
+
+    return wedges;
+}
+
+bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y, float arcDegrees)
+{
+    float const arc = arcDegrees * static_cast<float>(M_PI) / 180.0f;
+
+    for (Position const& wedge : wedges)
+    {
+        if (wedge.GetExactDist2d(x, y) > ULDUAR_YOGG_SARON_CRUSH_RANGE)
+            continue;
+
+        float const bearing = std::atan2(y - wedge.GetPositionY(), x - wedge.GetPositionX());
+        float offset = Position::NormalizeOrientation(bearing - wedge.GetOrientation());
+        if (offset > static_cast<float>(M_PI))
+            offset = 2.0f * static_cast<float>(M_PI) - offset;
+
+        if (offset <= arc)
+            return true;
+    }
+
+    return false;
 }
 
 bool YoggSaronFearWindowActive(PlayerbotAI* botAI) { return YoggSaronInPhase2(botAI) || YoggSaronInPhase3(botAI); }

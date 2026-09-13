@@ -13,6 +13,9 @@
 #include "UldTriggers.h"
 #include "Vehicle.h"
 
+#include <functional>
+#include <vector>
+
 class YoggSaronOminousCloudCheatAction : public Action
 {
 public:
@@ -37,36 +40,82 @@ public:
     bool Execute(Event event) override;
 };
 
-class YoggSaronDeathOrbAction : public MoveAwayFromCreatureAction
-{
-public:
-    YoggSaronDeathOrbAction(PlayerbotAI* ai) : MoveAwayFromCreatureAction(ai, "yogg-saron death orb action", NPC_DEATH_ORB, 10.0f) {}
-};
-
 class YoggSaronMaladyOfTheMindAction : public MoveAwayFromPlayerWithDebuffAction
 {
 public:
     YoggSaronMaladyOfTheMindAction(PlayerbotAI* ai) : MoveAwayFromPlayerWithDebuffAction(ai, "yogg-saron malady of the mind action", SPELL_MALADY_OF_THE_MIND, 15.0f) {}
 };
 
-// Clouds and Guardians in one sweep. Two nodes at the same relevance cannot share a bot - the engine
-// ends the tick at the first action returning true - so a pair would trade ticks and walk the bot down
-// the line between their destinations.
-class YoggSaronPhase1SpacingAction : public MovementAction
+// Latch and sweep shared by the two spacing nodes. Each phase puts everything it has to clear into one
+// node: two nodes at the same relevance cannot share a bot - the engine ends the tick at the first
+// action returning true - so a pair would trade ticks and walk the bot down the line between their
+// destinations.
+class YoggSaronSpacingAction : public MovementAction
 {
 public:
-    YoggSaronPhase1SpacingAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron phase 1 spacing action") {}
+    YoggSaronSpacingAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name) {}
+
+    bool Execute(Event event) override;
+
+protected:
+    struct HazardSet
+    {
+        std::vector<EncounterHelpers::HazardCircle> hazards;
+
+        // Swept again with `clear` dropped when nothing satisfies everything at once. Empty means no
+        // retry: the bot stays where it is rather than moving to a spot that is no better.
+        std::vector<EncounterHelpers::HazardCircle> fallback;
+
+        // Shapes a circle cannot describe, like the Crush wedge. True means the spot is safe.
+        std::function<bool(float, float)> clear;
+    };
+
+    // False skips the tick outright.
+    virtual bool Collect(HazardSet& set) = 0;
+    virtual float SearchRadius() const = 0;
+
+private:
+    // Held destination. The hazards move - clouds orbit at 3 yd/s, a Crusher re-faces onto whoever it
+    // is hitting - so a fresh sweep every tick answers a different question every tick and the bot
+    // never arrives.
+    Position heldSpot;
+    uint32 heldSpotMs = 0;
+};
+
+class YoggSaronPhase1SpacingAction : public YoggSaronSpacingAction
+{
+public:
+    YoggSaronPhase1SpacingAction(PlayerbotAI* ai) : YoggSaronSpacingAction(ai, "yogg-saron phase 1 spacing action") {}
+
+protected:
+    bool Collect(HazardSet& set) override;
+    float SearchRadius() const override { return ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS; }
+};
+
+class YoggSaronPhase2SpacingAction : public YoggSaronSpacingAction
+{
+public:
+    YoggSaronPhase2SpacingAction(PlayerbotAI* ai) : YoggSaronSpacingAction(ai, "yogg-saron phase 2 spacing action") {}
+
+protected:
+    bool Collect(HazardSet& set) override;
+    float SearchRadius() const override { return ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS; }
+};
+
+// One owner of every non-tank's target for the whole encounter, in place of the raid icons this fight
+// used to target through.
+class YoggSaronSetDpsPriorityAction : public AttackAction
+{
+public:
+    YoggSaronSetDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, "yogg-saron set dps priority action") {}
 
     bool Execute(Event event) override;
 
 private:
-    void CollectHazards(std::vector<EncounterHelpers::HazardCircle>& clouds,
-                        std::vector<EncounterHelpers::HazardCircle>& guardians) const;
-
-    // Held destination. The clouds move 3 yd/s, so a fresh sweep every tick answers a different
-    // question every tick and the bot never arrives.
-    Position heldSpot;
-    uint32 heldSpotMs = 0;
+    // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
+    static size_t TierOf(Unit* unit, bool brainLevel);
+    bool IsAllowedTarget(Unit* candidate, bool tentaclesCleared) const;
+    Unit* ResolveTarget(Unit* currentTarget);
 };
 
 class YoggSaronDarkVolleyInterruptAction : public Action
@@ -81,10 +130,12 @@ private:
     int32 GetInterrupterIndex();
 };
 
-class YoggSaronMarkTargetAction : public Action
+// Phase 3 housekeeping one designated bot tank does for the raid: the TankAssist strategy swap, and
+// the cheat that finishes an Immortal Guardian nothing else can kill.
+class YoggSaronPhase3ControlAction : public Action
 {
 public:
-    YoggSaronMarkTargetAction(PlayerbotAI* ai) : Action(ai, "yogg-saron mark target action") {}
+    YoggSaronPhase3ControlAction(PlayerbotAI* ai) : Action(ai, "yogg-saron phase 3 control action") {}
 
     bool Execute(Event event) override;
 };
@@ -138,8 +189,8 @@ public:
 
 private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
-    bool SetIllusionRtiTarget(YoggSaronTrigger yoggSaronTrigger);
-    bool SetBrainRtiTarget(YoggSaronTrigger yoggSaronTrigger);
+    bool KillIllusionAdd(YoggSaronTrigger yoggSaronTrigger);
+    bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
 };
 
 class YoggSaronMoveToExitPortalAction : public MovementAction
@@ -162,16 +213,6 @@ class YoggSaronPhase3PositioningAction : public MovementAction
 {
 public:
     YoggSaronPhase3PositioningAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron phase 3 positioning action") {}
-
-    bool Execute(Event event) override;
-};
-
-// Reduced-Keeper hard mode: a ranged DPS bot attacks the nearest Crusher Tentacle directly (no group
-// marker, so melee keep their target).
-class YoggSaronCrusherTentacleAction : public AttackAction
-{
-public:
-    YoggSaronCrusherTentacleAction(PlayerbotAI* ai) : AttackAction(ai, "yogg-saron crusher tentacle action") {}
 
     bool Execute(Event event) override;
 };

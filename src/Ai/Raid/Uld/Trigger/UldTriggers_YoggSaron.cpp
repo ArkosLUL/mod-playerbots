@@ -17,29 +17,10 @@
 #include "WorldSession.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
-#include <RtiTargetValue.h>
+#include <CombatStrategy.h>
+#include <TankAssistStrategy.h>
 
 using namespace EncounterHelpers;
-
-const std::vector<uint32> illusionMobs =
-{
-    NPC_INFLUENCE_TENTACLE,
-    NPC_RUBY_CONSORT,
-    NPC_AZURE_CONSORT,
-    NPC_BRONZE_CONSORT,
-    NPC_EMERALD_CONSORT,
-    NPC_OBSIDIAN_CONSORT,
-    NPC_ALEXTRASZA,
-    NPC_MALYGOS_ILLUSION,
-    NPC_NELTHARION,
-    NPC_YSERA,
-    NPC_DEATHSWORN_ZEALOT,
-    NPC_LICH_KING_ILLUSION,
-    NPC_IMMOLATED_CHAMPION,
-    NPC_SUIT_OF_ARMOR,
-    NPC_GARONA,
-    NPC_KING_LLANE
-};
 
 Unit* YoggSaronTrigger::GetSaraIfAlive()
 {
@@ -170,22 +151,27 @@ Position YoggSaronTrigger::GetIllusionRoomEntrancePosition()
         return Position();
 }
 
-Unit* YoggSaronTrigger::GetIllusionRoomRtiTarget()
+// Two reads of the one server fact, neither of them a human: the Brain opens the room's door in the
+// same branch that fires when the last Influence Tentacle dies. Getting it wrong now means standing
+// still rather than walking in and dying, and the exit node rescues that.
+bool YoggSaronTrigger::IsBrainRoomApproachable()
 {
-    Group* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
+    if (!YoggSaronInfluenceTentaclesCleared(botAI))
+        return false;
 
-    int32_t rtiIndex = RtiTargetValue::GetRtiIndex(AI_VALUE(std::string, "rti"));
-    if (rtiIndex == -1)
-        return nullptr;  // Invalid RTI mark
+    uint32 doorEntry = 0;
+    if (IsInChamberOfTheAspectsIllusion())
+        doorEntry = GO_CHAMBER_ILLUSION_DOORS;
+    else if (IsInIcecrownKeeperIllusion())
+        doorEntry = GO_ICECROWN_ILLUSION_DOORS;
+    else if (IsInStormwindKeeperIllusion())
+        doorEntry = GO_STORMWIND_ILLUSION_DOORS;
+    else
+        return false;
 
-    ObjectGuid currentRtiTarget = group->GetTargetIcon(rtiIndex);
-    Unit* currentRtiTargetUnit = botAI->GetUnit(currentRtiTarget);
-    if (!currentRtiTargetUnit || !currentRtiTargetUnit->IsAlive())
-        currentRtiTargetUnit = nullptr;
+    GameObject* door = bot->FindNearestGameObject(doorEntry, 200.0f);
 
-    return currentRtiTargetUnit;
+    return door && door->GetGoState() == GO_STATE_ACTIVE;
 }
 
 Unit* YoggSaronTrigger::GetNextIllusionRoomRtiTarget()
@@ -215,7 +201,7 @@ Unit* YoggSaronTrigger::GetNextIllusionRoomRtiTarget()
     float nearestDistance = std::numeric_limits<float>::max();
     Unit* nextIllusionRoomRtiTarget = nullptr;
 
-    for (uint32 const& creatureId : illusionMobs)
+    for (uint32 const& creatureId : ULDUAR_YOGG_SARON_ILLUSION_MOBS)
     {
         for (ObjectGuid const& guid : targets)
         {
@@ -316,12 +302,6 @@ bool YoggSaronSanityTrigger::IsActive()
            (distanceToSanityWell < 1.0f && sanityAuraStacks < 100);
 }
 
-bool YoggSaronDeathOrbTrigger::IsActive()
-{
-    TooCloseToCreatureTrigger tooCloseToDeathOrbTrigger(botAI);
-    return IsPhase2() && tooCloseToDeathOrbTrigger.TooCloseToCreature(NPC_DEATH_ORB, 10.0f);
-}
-
 bool YoggSaronPhase1SpacingTrigger::IsActive()
 {
     if (!botAI->CanMove())
@@ -345,6 +325,34 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     return hazardNear && YoggSaronInPhase1(botAI);
 }
 
+bool YoggSaronPhase2SpacingTrigger::IsActive()
+{
+    if (!botAI->CanMove())
+        return false;
+
+    // Short-radius hazard reads first, phase read last, for the reason recorded on the phase 1
+    // trigger: YoggSaronInPhase2 is a 200 yd grid sweep on every bot on the map.
+    bool hazardNear = bot->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS, true);
+
+    if (!hazardNear)
+    {
+        std::vector<Position> wedges = GetYoggSaronCrushWedges(botAI, ULDUAR_YOGG_SARON_CRUSH_RANGE);
+        hazardNear = InYoggSaronCrushWedge(wedges, bot->GetPositionX(), bot->GetPositionY(),
+                                           ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC);
+    }
+
+    return hazardNear && IsPhase2();
+}
+
+bool YoggSaronSetDpsPriorityTrigger::IsActive()
+{
+    // Tanks keep the generic picker: the resolver would pull them off whatever they are holding.
+    if (botAI->IsTank(bot))
+        return false;
+
+    return IsPhase2() || IsPhase3();
+}
+
 bool YoggSaronDarkVolleyTrigger::IsActive()
 {
     if (!YoggSaronCanInterrupt(bot))
@@ -359,79 +367,37 @@ bool YoggSaronMaladyOfTheMindTrigger::IsActive()
     return IsPhase2() && tooCloseToPlayerWithDebuffTrigger.TooCloseToPlayerWithDebuff(SPELL_MALADY_OF_THE_MIND, 15.0f) && botAI->CanMove();
 }
 
-bool YoggSaronMarkTargetTrigger::IsActive()
+bool YoggSaronPhase3ControlTrigger::IsActive()
 {
-    if (!IsYoggSaronFight())
+    if (!IsDesignatedBotTank() || !IsPhase3())
         return false;
 
-    if (!IsDesignatedBotTank())
-        return false;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    if (IsPhase2())
-    {
-        ObjectGuid currentMoonTarget = group->GetTargetIcon(RtiTargetValue::moonIndex);
-        Creature* yogg_saron = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
-        if (!currentMoonTarget || currentMoonTarget != yogg_saron->GetGUID())
-            return true;
-
-        ObjectGuid currentSkullTarget = group->GetTargetIcon(RtiTargetValue::skullIndex);
-
-        Creature* nextPossibleTarget = bot->FindNearestCreature(NPC_CONSTRICTOR_TENTACLE, 200.0f, true);
-        if (!nextPossibleTarget)
-        {
-            nextPossibleTarget = bot->FindNearestCreature(NPC_CORRUPTOR_TENTACLE, 200.0f, true);
-            if (!nextPossibleTarget)
-                return false;
-        }
-
-        if (currentSkullTarget)
-        {
-            Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
-
-            if (!currentSkullUnit)
-                return true;
-
-            if (currentSkullUnit->IsAlive() && currentSkullUnit->GetGUID() == nextPossibleTarget->GetGUID())
-                return false;
-        }
-
+    // The strategy swap has to land once even with nothing left to kill, so it gates on its own state
+    // rather than on a guardian being up.
+    TankFaceStrategy tankFaceStrategy(botAI);
+    if (botAI->HasStrategy(tankFaceStrategy.getName(), BotState::BOT_STATE_COMBAT))
         return true;
-    }
-    else if (IsPhase3())
-    {
-        ObjectGuid currentSkullTarget = group->GetTargetIcon(RtiTargetValue::skullIndex);
-        Unit* currentSkullUnit = nullptr;
-        if (currentSkullTarget)
-            currentSkullUnit = botAI->GetUnit(currentSkullTarget);
 
-        if (currentSkullUnit &&
-            (currentSkullUnit->GetEntry() == NPC_IMMORTAL_GUARDIAN ||
-             currentSkullUnit->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN) &&
-            currentSkullUnit->GetHealthPct() > 10)
-        {
-            return false;
-        }
+    TankAssistStrategy tankAssistStrategy(botAI);
+    if (!botAI->HasStrategy(tankAssistStrategy.getName(), BotState::BOT_STATE_COMBAT))
+        return true;
 
-        GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-        for (ObjectGuid const& guid : targets)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!unit || !unit->IsAlive())
-                continue;
-
-            if ((unit->GetEntry() == NPC_IMMORTAL_GUARDIAN || unit->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN) &&
-                unit->GetHealthPct() > 10)
-                return true;
-        }
-
-        if (!currentSkullUnit || currentSkullUnit->GetEntry() != NPC_YOGG_SARON)
-            return true;
-
+    // All that is left is the cheat, and only an Immortal Guardian above the Weakened floor can take
+    // it. With Thorim as a Keeper the raid plays it for real instead: melee cleave the guardian down
+    // and Titanic Storm executes it.
+    if (!botAI->HasCheat(BotCheatMask::raid) || (IsYoggSaronHardModeActive(botAI) && YoggThorimKeeperActive(botAI)))
         return false;
+
+    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
+    for (ObjectGuid const& guid : targets)
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive())
+            continue;
+
+        if ((unit->GetEntry() == NPC_IMMORTAL_GUARDIAN || unit->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN) &&
+            unit->GetHealthPct() > 10)
+            return true;
     }
 
     return false;
@@ -518,18 +484,10 @@ bool YoggSaronBossRoomMovementCheatTrigger::IsActive()
     if (AI_VALUE(std::string, "rti") != "skull")
         return false;
 
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
+    Unit* target = AI_VALUE(Unit*, "current target");
 
-    ObjectGuid currentSkullTarget = group->GetTargetIcon(RtiTargetValue::skullIndex);
-
-    if (!currentSkullTarget)
-        return false;
-
-    Unit* currentSkullUnit = botAI->GetUnit(currentSkullTarget);
-
-    if (!currentSkullUnit || !currentSkullUnit->IsAlive() || bot->GetDistance2d(currentSkullUnit->GetPositionX(), currentSkullUnit->GetPositionY()) < 40.0f)
+    if (!target || !target->IsAlive() ||
+        bot->GetDistance2d(target->GetPositionX(), target->GetPositionY()) < 40.0f)
         return false;
 
     return true;
@@ -568,7 +526,7 @@ bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
     if (AI_VALUE(std::string, "rti") == "square")
         return false;
 
-    return IsMasterIsInBrainRoom();
+    return IsBrainRoomApproachable();
 }
 
 bool YoggSaronIllusionRoomTrigger::SetRtiMarkRequired()
@@ -576,13 +534,11 @@ bool YoggSaronIllusionRoomTrigger::SetRtiMarkRequired()
     return AI_VALUE(std::string, "rti") == "diamond";
 }
 
+// Cheat-gated because the cheat is all that is left here: with targeting off the raid icons, a bot
+// without it reaches the room's adds through the dps priority resolver like anything else.
 bool YoggSaronIllusionRoomTrigger::SetRtiTargetRequired()
 {
-    Unit const* currentRtiTarget = GetIllusionRoomRtiTarget();
-    if (currentRtiTarget != nullptr)
-        return false;
-
-    return GetNextIllusionRoomRtiTarget() != nullptr;
+    return botAI->HasCheat(BotCheatMask::raid) && GetNextIllusionRoomRtiTarget() != nullptr;
 }
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()
@@ -590,7 +546,11 @@ bool YoggSaronMoveToExitPortalTrigger::IsActive()
     if (!IsYoggSaronFight() || !IsInBrainLevel())
         return false;
 
-    Creature const* brain = bot->FindNearestCreature(NPC_BRAIN, 60.0f, true);
+    // The Brain sits at z 265 while its room's floor is z 236-244, so a radius to it was never "am I in
+    // the brain room" - it was that question plus a permanent 25 yd vertical tax, and two of the three
+    // portal arrivals land outside 60 yd before the bot takes a step. IsInBrainLevel is the real test;
+    // this only has to find the map's one Brain.
+    Creature const* brain = bot->FindNearestCreature(NPC_BRAIN, 200.0f, true);
     if (!brain || !brain->IsAlive())
         return false;
 
@@ -601,11 +561,10 @@ bool YoggSaronMoveToExitPortalTrigger::IsActive()
         if (induceMadnessSpell && induceMadnessSpell->m_spellInfo->Id == SPELL_INDUCE_MADNESS)
         {
             uint32 castingTimeLeft = induceMadnessSpell->GetCastTimeRemaining();
-            if ((botAI->HasCheat(BotCheatMask::raid) && castingTimeLeft < 6000) ||
-                (!botAI->HasCheat(BotCheatMask::raid) && castingTimeLeft < 8000))
-            {
+            uint32 lead = botAI->HasCheat(BotCheatMask::raid) ? ULDUAR_YOGG_SARON_EXIT_LEAD_CHEAT_MS
+                                                             : ULDUAR_YOGG_SARON_EXIT_LEAD_WALK_MS;
+            if (castingTimeLeft < lead)
                 return true;
-            }
         }
     }
     else if (brain->GetHealth() < brain->GetMaxHealth() * 0.3f)
@@ -616,16 +575,12 @@ bool YoggSaronMoveToExitPortalTrigger::IsActive()
 
 bool YoggSaronLunaticGazeTrigger::IsActive()
 {
-    Unit* yoggsaron = AI_VALUE2(Unit*, "find target", "yogg-saron");
+    // 64163 is a 4-second aura Yogg puts on himself, ticking 64164 once a second at 130 yd through his
+    // front 180 degrees - not a channel, so GetCurrentSpell never saw it. And "find target" walks the
+    // bot's own threat list, which Yogg is not reliably on.
+    Creature* yoggsaron = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
 
-    if (yoggsaron && yoggsaron->IsAlive() && yoggsaron->HasUnitState(UNIT_STATE_CASTING))
-    {
-        Spell* currentSpell = yoggsaron->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
-        if (currentSpell && currentSpell->m_spellInfo->Id == SPELL_LUNATIC_GAZE_YS)
-            return true;
-    }
-
-    return false;
+    return yoggsaron && yoggsaron->IsAlive() && yoggsaron->HasAura(SPELL_LUNATIC_GAZE_YS);
 }
 
 bool YoggSaronPhase3PositioningTrigger::IsActive()
@@ -682,23 +637,6 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
     return false;
 }
 
-bool YoggSaronCrusherTentacleTrigger::IsActive()
-{
-    if (!IsYoggSaronHardModeActive(botAI) || !IsPhase2())
-        return false;
-
-    // Ranged DPS handle the stationary Crusher Tentacle; melee stay on the other targets and healers heal.
-    if (!botAI->IsRangedDps(bot))
-        return false;
-
-    Unit* crusher = GetFirstAliveUnitByEntry(botAI, NPC_CRUSHER_TENTACLE);
-    if (!crusher)
-        return false;
-
-    // Only fire when the bot is not already on it.
-    return AI_VALUE(Unit*, "current target") != crusher;
-}
-
 bool YoggSaronGuardianControlTrigger::IsActive()
 {
     // Only meaningful with Thorim: he executes the Weakened guardians the tank feeds to the melee stack.
@@ -752,9 +690,9 @@ bool YoggSaronSanityConservationTrigger::IsActive()
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return false;
 
-    // Let the death-orb dodge win when an orb is near (death rays still hurt at low health).
-    TooCloseToCreatureTrigger tooCloseToDeathOrb(botAI);
-    if (tooCloseToDeathOrb.TooCloseToCreature(NPC_DEATH_ORB, 10.0f))
+    // Let the phase 2 spacing dodge win while a hazard is on top of the bot: a Death Ray still kills at
+    // low health. The Death Orb this used to test is a marker 27 yd overhead and never reaches anyone.
+    if (bot->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS, true))
         return false;
 
     return true;

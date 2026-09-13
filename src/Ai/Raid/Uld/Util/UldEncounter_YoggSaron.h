@@ -53,6 +53,7 @@ enum UlduarYoggSaronIds
     NPC_KING_LLANE = 33437,
     NPC_DEATHSWORN_ZEALOT = 33567,
     NPC_INFLUENCE_TENTACLE = 33943,
+    NPC_DEATH_RAY = 33881,
     NPC_DEATH_ORB = 33882,
     NPC_BRAIN = 33890,
     NPC_CRUSHER_TENTACLE = 33966,
@@ -79,6 +80,11 @@ enum UlduarYoggSaronIds
     SPELL_SQUEEZE = 64125,  // Constrictor Tentacle's grip; base id, difficulty-mapped at runtime
     SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
+    // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
+    // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
+    GO_CHAMBER_ILLUSION_DOORS = 194635,
+    GO_ICECROWN_ILLUSION_DOORS = 194636,
+    GO_STORMWIND_ILLUSION_DOORS = 194637,
 };
 
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
@@ -112,9 +118,38 @@ constexpr float ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE = 35.0f;
 // Backstop only - "is the held spot still clear" normally invalidates first.
 constexpr uint32 ULDUAR_YOGG_SARON_SPACING_HOLD_MS = 3000;
 
+// Crush, the Crusher Tentacle's 100% proc on its own white swings: a 23 yd physical cone, +-5 degrees
+// off its current facing, and the facing tracks whoever it is hitting. So the danger is standing
+// collinear with the tentacle and its victim, not standing close - a four-yard sidestep at 20 yd
+// clears it. Melee range is no exemption either: the cone's proximity bypass is 2.0 yd against a
+// ~10.8 yd melee reach here.
+constexpr float ULDUAR_YOGG_SARON_CRUSH_RANGE = 25.0f;       // DBC radius 23 plus both object sizes
+constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either side of the facing
+constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
+
+// Death Rays walk 9 yd legs every 1625 ms along a re-rolled cardinal axis, so the gap between these
+// two is about a second of travel. The Death Orb that drops them is a marker 27 yd overhead and never
+// reaches anybody.
+constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS = 9.0f;  // DBC 3 yd plus room to react
+constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS = 14.0f;
+
+// Wider than phase 1's: a Crush wedge can only be left sideways, and at 25 yd out that is a long walk.
+constexpr float ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS = 35.0f;
+
+// How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
+// anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
+// a mind control is always a death. The cheat teleports onto the portal; a walking bot can end a
+// window ~120 yd from the nearest exit, about 17 s at run speed.
+constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_CHEAT_MS = 6000;
+constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_WALK_MS = 15000;
+
 // How far out to look for a Guardian worth kicking. Wider than any interrupt's range on purpose - the
 // action drops the ones it cannot reach, and a short list here would hide a cast from a bot who could.
 constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
+
+// Everything the raid has to clear out of an illusion room before the Brain can be touched. The
+// Influence Tentacle leads the list because it is the one that gates the Brain.
+extern const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS;
 
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;
@@ -141,6 +176,20 @@ std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI);
 // Classes carrying an interrupt the action can aim. Avenger's Shield is left out - it picks its own
 // target and cannot be pointed at a named Guardian.
 bool YoggSaronCanInterrupt(Player* bot);
+
+// Whether the Brain is safe to approach and hit. Damaging it while any Influence Tentacle lives deals
+// nothing and kills the attacker outright, so this gates both the walk down and the target pick.
+bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
+
+// Live Crusher Tentacles to angle away from, each as its position plus the facing its Crush cone
+// follows. The one currently hitting the bot is left out: that bot is hit wherever it stands, and
+// moving only drags the cone around behind it.
+//
+// Shared between the spacing trigger and its action so the two cannot disagree about what a wedge is.
+// The trigger asks at the tight arc and the action at the wide one, which is what keeps a tentacle
+// re-facing a yard from restarting the dance.
+std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius);
+bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y, float arcDegrees);
 
 // Window in which a counterable fear can land, for the shared anti-fear component. Yogg-Saron fears
 // in P2 (Malady of the Mind, which re-casts on removal) and again in P3 (Deafening Roar).

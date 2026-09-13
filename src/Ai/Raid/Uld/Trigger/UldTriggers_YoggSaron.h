@@ -26,8 +26,8 @@ public:
     bool IsInChamberOfTheAspectsIllusion();
     bool IsMasterIsInIllusionGroup();
     bool IsMasterIsInBrainRoom();
+    bool IsBrainRoomApproachable();
     Position GetIllusionRoomEntrancePosition();
-    Unit* GetIllusionRoomRtiTarget();
     Unit* GetNextIllusionRoomRtiTarget();
     Unit* GetSaraIfAlive();
     bool IsDesignatedBotTank();
@@ -74,13 +74,6 @@ public:
     bool IsActive() override;
 };
 
-class YoggSaronDeathOrbTrigger : public YoggSaronTrigger
-{
-public:
-    YoggSaronDeathOrbTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron death orb trigger") {}
-    bool IsActive() override;
-};
-
 class YoggSaronMaladyOfTheMindTrigger : public YoggSaronTrigger
 {
 public:
@@ -88,10 +81,32 @@ public:
     bool IsActive() override;
 };
 
-class YoggSaronMarkTargetTrigger : public YoggSaronTrigger
+// Phase 3 housekeeping the single designated bot tank does for the raid: the strategy swap onto
+// TankAssist, and the cheat that finishes an Immortal Guardian nothing else can kill.
+class YoggSaronPhase3ControlTrigger : public YoggSaronTrigger
 {
 public:
-    YoggSaronMarkTargetTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron mark target trigger") {}
+    YoggSaronPhase3ControlTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 3 control trigger") {}
+    bool IsActive() override;
+};
+
+// One owner of every non-tank's target for the whole encounter, replacing the raid icons this fight
+// used to target through. An icon is a sticky override - RtiTargetValue hands it back before the smart
+// picker runs and IsHighPriority pins it - so a wrong mark could not be corrected until combat ended.
+class YoggSaronSetDpsPriorityTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronSetDpsPriorityTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron set dps priority trigger") {}
+    bool IsActive() override;
+};
+
+// Crush wedges and Death Rays in one node, for the reason recorded on the phase 1 pair: two nodes at
+// one relevance cannot share a bot, so they would trade ticks and walk it down the line between their
+// destinations.
+class YoggSaronPhase2SpacingTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronPhase2SpacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 2 spacing trigger") {}
     bool IsActive() override;
 };
 
@@ -160,15 +175,6 @@ class YoggSaronPhase3PositioningTrigger : public YoggSaronTrigger
 {
 public:
     YoggSaronPhase3PositioningTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 3 positioning trigger") {}
-    bool IsActive() override;
-};
-
-// Reduced-Keeper hard mode: ranged DPS peel onto a live Crusher Tentacle (P2) to clear its Diminish
-// Power fast, so melee are not dragged out to the stationary tentacle.
-class YoggSaronCrusherTentacleTrigger : public YoggSaronTrigger
-{
-public:
-    YoggSaronCrusherTentacleTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron crusher tentacle trigger") {}
     bool IsActive() override;
 };
 
