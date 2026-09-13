@@ -42,6 +42,36 @@ below).
 - The enchant tie-break in `ApplyEnchantAndGemsNew` is `score > bestScore` (strict). It used to be
   `>=`, which let the *last* zero-scoring candidate win a slot by iteration order.
 
+### Talent-driven stat weights
+
+`GenerateBasicWeights` is flat per spec; **stat-conversion talents belong in
+`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:661-707`), gated on `HasAura` — safe there
+because `Randomize` runs `InitTalentsTree` (`PlayerbotFactory.cpp:959`) before `InitEquipment` and
+`ApplyEnchantAndGemsNew`. Convention: **added weight = conversion ratio × the target stat's weight**.
+Careful Aim and Mental Dexterity each convert 100% of Intellect to attack power and each add 1.1
+against an attack power weight of 1.0.
+
+**`ITEM_MOD_SPELL_POWER` fills both `STATS_TYPE_SPELL_POWER` and `STATS_TYPE_HEAL_POWER`**
+(`StatsCollector.cpp:562-565`). Healer branches weight only `HEAL_POWER`, so spell power still
+collects that full weight and outscores anything below it — which is why holy paladins gemmed Runed
+(pure spell power) in every socket while Intellect sat at 0.9.
+
+**Holy paladin Intellect is 1.3** (0.9 + 0.4, `:697`). Holy Guidance rank 5 (`31841`) converts 20% of
+total Intellect to healing power, and Divine Intellect and Blessing of Kings each add 10% on top, so
+a point on gear is worth 0.24 healing — plus roughly 0.2 for the spell crit it carries
+(`1.21 / 166.6 %` × `45.9` rating per % × crit weight `0.6`), value a flat weight cannot scale. Gated
+on `PALADIN_TAB_HOLY` as well as the aura, because protection and retribution sit on a
+`SPELL_POWER -2.0` branch that does not want Intellect. Measured at ilvl 80: yellow and blue sockets
+move to Brilliant King's Amber and red to Luminous Ametrine, and 4 of 12 gear slots reorder toward
+Intellect.
+
+**Still unmodelled**, same aura family — `SPELL_AURA_MOD_SPELL_DAMAGE_OF_STAT_PERCENT` (174) and
+`SPELL_AURA_MOD_SPELL_HEALING_OF_STAT_PERCENT` (175), stat index in `EffectMiscValue`, percent in
+`EffectBasePoints + 1`: restoration shaman Nature's Blessing (`30867-30869`, 15% Intellect, but only
+Healing Wave / Lesser Healing Wave / Riptide), priest Spiritual Guidance (`15031`, 25% Spirit),
+restoration druid Improved Tree of Life (`48537`, 15% Spirit, form-gated). Each shares a weight
+branch with specs that lack the talent, so each needs its own branch, never a base bump.
+
 ## Set bonuses
 
 Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod` (`:664-706`). It was

@@ -32,6 +32,7 @@ constexpr uint32 SPELL_CAREFUL_AIM = 34484;
 constexpr uint32 SPELL_HUNTER_VS_WILD = 56341;
 constexpr uint32 SPELL_ARMORED_TO_THE_TEETH = 61222;
 constexpr uint32 SPELL_MENTAL_DEXTERITY = 51885;
+constexpr uint32 SPELL_HOLY_GUIDANCE = 31841;
 constexpr uint32 SPELL_ROGUE_SWORD_SPECIALIZATION = 13964;
 constexpr uint32 SPELL_POLEAXE_SPECIALIZATION = 12785;
 constexpr uint32 SPELL_NERVES_OF_COLD_STEEL = 50138;
@@ -693,6 +694,15 @@ void StatsWeightCalculator::GenerateAdditionalWeights(Player* player)
     {
         if (!HasAnySpell(player, SPELL_FEL_ARMOR_RANKS))
             stats_weights_[STATS_TYPE_SPIRIT] -= 0.4f;
+    }
+    else if (cls == CLASS_PALADIN && tab == PALADIN_TAB_HOLY)
+    {
+        // Holy Guidance turns a fifth of total Intellect into healing power, and Divine Intellect
+        // and Kings each add 10% on top, so a point of Intellect on gear carries 0.24 healing with
+        // it before the mana and the spell crit it also buys. Puts Intellect ahead of raw spell
+        // power, which is where a holy paladin wants it.
+        if (player->HasAura(SPELL_HOLY_GUIDANCE))
+            stats_weights_[STATS_TYPE_INTELLECT] += 0.4f;
     }
 
     if (pvpSpec_ && !exclude_resilience_)
