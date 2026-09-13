@@ -343,117 +343,39 @@ Unit* HodirRedirectThreatAction::GetThreatDumpTarget() { return GetHodir(botAI);
 
 bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
 {
-    Position const centre = GetHodirRingCentre(botAI, bot);
-    uint32 const stormPower = sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot);
-
-    Aura* cloud = bot->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot));
-    if (!cloud)
+    Position rally;
+    if (!GetHodirStormCloudRally(botAI, bot, bot, rally))
         return false;
 
-    // Apply time rather than the stack count, because Storm Cloud only ever sheds stacks: a carry that
-    // ended on one stack and a new one that starts on one are the same number, and the lap would then
-    // inherit a centre and a bearing from wherever the bot was standing a minute ago.
-    time_t const applied = cloud->GetApplyTime();
-    if (applied != _carryApplied)
-        _direction = 0;
-    _carryApplied = applied;
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.stormcloud", "rally " + RaidObs::DescribeDerived(rally));
 
-    float const botAngle = std::atan2(bot->GetPositionY() - centre.GetPositionY(),
-                                      bot->GetPositionX() - centre.GetPositionX());
+    // Holding still is the whole job. Storm Power is an area pulse at the carrier's own feet reaching
+    // 3 yd, and the carry has 6 charges spent about one a second, so a carrier that keeps walking
+    // spends them on whoever it happens to pass - measured p50 0-1 raiders inside the pulse, and 4.4%
+    // of raider-samples during a live carry. Lapping the ring was the best available answer while the
+    // carrier was the only thing that could move; now the receivers come instead.
+    //
+    // The rally is seeded from where this bot was standing when the cloud landed, so MoveInside
+    // ordinarily answers false straight away and the engine descends to whatever it can cast. It only
+    // walks when something else - a dodge, a shelter run - has pushed the carrier off the point.
+    return MoveInside(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(),
+                      ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK, MovementPriority::MOVEMENT_COMBAT);
+}
 
-    // Storm Power reaches 3 yd and the carrier has only 4-6 one-second ticks, so it laps the ring
-    // rather than stepping to one neighbour. The direction is chosen once, toward whichever way has
-    // more allies still missing the buff, then held: re-deciding every tick makes it pace on the spot.
-    if (!_direction)
-    {
-        uint32 ahead = 0;
-        uint32 behind = 0;
+bool HodirCollectStormPowerAction::Execute(Event /*event*/)
+{
+    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
+    if (!carrier || carrier == bot)
+        return false;
 
-        for (auto const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
-        {
-            Unit* ally = botAI->GetUnit(guid);
-            if (!ally || !ally->IsAlive() || ally == bot || ally->HasAura(stormPower))
-                continue;
+    Position rally;
+    if (!GetHodirStormCloudRally(botAI, bot, carrier, rally))
+        return false;
 
-            // Tanks are skipped: they hold the corner, and walking one out of it for a damage buff
-            // is a trade the raid loses.
-            Player* allyPlayer = ally->ToPlayer();
-            if (!allyPlayer || PlayerbotAI::IsTank(allyPlayer))
-                continue;
-
-            float const allyAngle = std::atan2(ally->GetPositionY() - centre.GetPositionY(),
-                                               ally->GetPositionX() - centre.GetPositionX());
-            if (Position::NormalizeOrientation(allyAngle - botAngle) < static_cast<float>(M_PI))
-                ++ahead;
-            else
-                ++behind;
-        }
-
-        _direction = ahead >= behind ? 1 : -1;
-
-        // Latched with the direction and never read off the bot again. Both used to be sampled from
-        // wherever the carrier had drifted to, so the target sat 45 degrees ahead of a moving bot and
-        // could never be reached, and the std::max on the radius locked in every yard of outward
-        // drift: one carrier walked 213 yd in a 30 s carry, ended 142 yd from the boss outside the
-        // room, and died there alone.
-        //
-        // Clamped to the formation ring rather than the carrier's own distance from it. Storm Power
-        // reaches 3 yd, so the lap has to run where the raid is actually standing - a carrier 30 yd
-        // out was touring a circle nobody was on, 23 yd a step against 4-6 one-second ticks. It also
-        // bounds the whole carry inside the outer ring, which is what makes a runaway impossible
-        // rather than merely unlikely.
-        _lapCentre = centre;
-        _lapRadius = std::clamp(bot->GetExactDist2d(&centre), ULDUAR_HODIR_RAID_RING_INNER,
-                                ULDUAR_HODIR_RAID_RING_OUTER);
-        _lapAngle = botAngle;
-        _step = Position();
-    }
-
-    // Advance a step only on arrival. Deriving one every tick is what made the target recede.
-    if (IsEmptyPosition(_step) || bot->GetExactDist2d(&_step) <= ULDUAR_HODIR_DODGE_ARRIVE)
-    {
-        Unit* hodir = GetHodir(botAI);
-
-        for (uint8 attempt = 0; attempt < 2; ++attempt)
-        {
-            float const nextAngle = Position::NormalizeOrientation(
-                _lapAngle + static_cast<float>(_direction) * static_cast<float>(M_PI) / 4.0f);
-
-            float const x = _lapCentre.GetPositionX() + std::cos(nextAngle) * _lapRadius;
-            float const y = _lapCentre.GetPositionY() + std::sin(nextAngle) * _lapRadius;
-            float z = bot->GetMapWaterOrGroundLevel(x, y, _lapCentre.GetPositionZ());
-            if (z <= INVALID_HEIGHT)
-                z = _lapCentre.GetPositionZ();
-
-            Position const step(x, y, z);
-
-            // A step out of casting range turns the lap round instead of walking it out. With the
-            // radius clamped this should never fire; it is here so leaving the room is impossible
-            // rather than improbable, and the second pass is taken whatever it costs, because a
-            // carrier that stops moving sheds nothing and buffs nobody.
-            if (!attempt && hodir && step.GetExactDist2d(hodir) > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
-            {
-                _direction = -_direction;
-
-                if (RaidObs::Active())
-                    RaidObs::NoteDerived(bot, "hodir.stormcloud", "flip");
-
-                continue;
-            }
-
-            _lapAngle = nextAngle;
-            _step = step;
-            break;
-        }
-
-        if (RaidObs::Active())
-            RaidObs::NoteDerived(bot, "hodir.stormcloud", "lap");
-    }
-    else if (RaidObs::Active())
-    {
-        RaidObs::NoteDerived(bot, "hodir.stormcloud", "held");
-    }
-
-    return MoveTo(bot->GetMapId(), _step.GetPositionX(), _step.GetPositionY(), _step.GetPositionZ(), false, false,
-                  false, false, MovementPriority::MOVEMENT_COMBAT);
+    // No cast is broken to get here, unlike the shelter run and the dodge. Those are avoiding a 14000
+    // hit; this is collecting a buff, and a caster that drops a cast to walk 3 yd has already spent
+    // more than the pulse is worth.
+    return MoveInside(bot->GetMapId(), rally.GetPositionX(), rally.GetPositionY(), rally.GetPositionZ(),
+                      ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK, MovementPriority::MOVEMENT_COMBAT);
 }

@@ -74,12 +74,19 @@ public:
     bool IsActive() override;
 };
 
-// The bot carries Storm Cloud, so it has 4-6 seconds to hand Storm Power to as much of the raid as
-// it can reach.
+// The bot carries Storm Cloud, so it holds its rally point until the charges are spent.
 class HodirSpreadStormCloudTrigger : public Trigger
 {
 public:
     HodirSpreadStormCloudTrigger(PlayerbotAI* ai) : Trigger(ai, "hodir spread storm cloud") {}
+    bool IsActive() override;
+};
+
+// Somebody nearby is carrying, this bot deals damage, and it has not been handed Storm Power yet.
+class HodirCollectStormPowerTrigger : public Trigger
+{
+public:
+    HodirCollectStormPowerTrigger(PlayerbotAI* ai) : Trigger(ai, "hodir collect storm power") {}
     bool IsActive() override;
 };
 

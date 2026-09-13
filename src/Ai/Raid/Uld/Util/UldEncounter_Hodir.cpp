@@ -43,6 +43,11 @@ const Position ULDUAR_HODIR_MAINTANK_SPOT = Position(1974.50f, -275.50f, 432.687
 const Position ULDUAR_HODIR_OFFTANK_SPOT = Position(1980.00f, -277.00f, 432.687f);
 const Position ULDUAR_HODIR_RAID_ANCHOR = Position(1986.56f, -257.11f, 432.687f);
 
+// The y band he evades outside of, kept a yard in on each side. Only the fire drag needs it: every
+// other spot here is a fixed point or hangs off one, and none of them approach the edge.
+constexpr float ULDUAR_HODIR_ROOM_MIN_Y = -297.0f;
+constexpr float ULDUAR_HODIR_ROOM_MAX_Y = -171.0f;
+
 Unit* GetHodir(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_HODIR); }
 
 bool IsHodirEngaged(PlayerbotAI* botAI)
@@ -109,10 +114,30 @@ struct HodirStarlightLatch
     Position stand;
 };
 
+// One entry per carry, keyed on the carrier rather than on the bot reading it: the carrier and every
+// receiver have to gather on the same point, so the first to derive it publishes and the rest read.
+// applied is the aura's apply time, which is what tells two carries apart - stacks only ever fall, so
+// a carry ending on one and a new one starting on one are the same number.
+struct HodirStormRally
+{
+    time_t applied = 0;
+    Position rally;
+};
+
+// The fire the tank is currently holding Hodir on, and the spot it stands to do it. Held until the
+// fire is gone: re-picking while one is alive walks him between two of them.
+struct HodirFireDragLatch
+{
+    ObjectGuid fire;
+    Position hold;
+};
+
 struct HodirBotLatches
 {
     std::unordered_map<ObjectGuid, ObjectGuid> shelter;
     std::unordered_map<ObjectGuid, HodirStarlightLatch> starlight;
+    std::unordered_map<ObjectGuid, HodirStormRally> stormRally;
+    std::unordered_map<ObjectGuid, HodirFireDragLatch> fireDrag;
 };
 
 static std::mutex hodirLatchesMutex;
@@ -227,8 +252,9 @@ Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot)
         if (gap < ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP)
             continue;
 
-        // The whole ring has to reach him from it, not just the centre.
-        if (gap + ULDUAR_HODIR_RAID_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE >
+        // The whole ring has to reach him from it, not just the centre - measured against the ring
+        // the raid will actually form, which is the tight one whenever the centre is a fire.
+        if (gap + ULDUAR_HODIR_FIRE_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE >
             ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
             continue;
 
@@ -244,6 +270,64 @@ Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot)
                              best ? RaidObs::DescribeAssignment(best->GetGUID()) : "none");
 
     return best;
+}
+
+Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot)
+{
+    if (!bot || !GetHodir(botAI))
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    uint32 const cloud = sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot);
+
+    // Lowest guid wins when the boss has two carries running, so every bot picks the same one to
+    // gather on rather than each heading for whichever it happened to iterate first.
+    Player* best = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (!member->HasAura(cloud))
+            continue;
+
+        if (!best || member->GetGUID() < best->GetGUID())
+            best = member;
+    }
+
+    return best;
+}
+
+bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, Position& out)
+{
+    if (!bot || !carrier)
+        return false;
+
+    Aura* cloud = carrier->GetAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, carrier));
+    if (!cloud)
+        return false;
+
+    std::unordered_map<ObjectGuid, HodirStormRally>& latched = HodirLatchesFor(bot).stormRally;
+    HodirStormRally& entry = latched[carrier->GetGUID()];
+
+    time_t const applied = cloud->GetApplyTime();
+    if (entry.applied != applied)
+    {
+        entry.applied = applied;
+
+        // Seeded from where the carrier was standing when the cloud landed, so the gather point is
+        // already in the middle of whichever half of the raid the carrier belongs to: a melee carrier
+        // holds the melee on the boss, a ranged one holds the formation. Picking one point for the
+        // whole raid instead would walk half of it across the room for six seconds of buff.
+        entry.rally = ValidateFloorPoint(bot, carrier->GetPosition());
+    }
+
+    out = entry.rally;
+    return true;
 }
 
 Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot, bool* onFire)
@@ -311,7 +395,7 @@ static bool BuildHodirRingMembers(Player* bot, std::vector<Player*>& out)
 
 // Raw ring geometry for one slot, no ground or collision pass. Cheap enough to run for the whole
 // roster, which is what deciding who owns a Starlight zone needs.
-static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t total)
+static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t total, bool onFire)
 {
     // Bearing between two fixed points, so the layout never rotates. Deriving it from the centre
     // instead would spin every slot each time the centre moved.
@@ -319,6 +403,12 @@ static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t t
                                        ULDUAR_HODIR_MAINTANK_SPOT.GetPositionX() - ULDUAR_HODIR_RAID_ANCHOR.GetPositionX());
 
     size_t const inner = std::min<size_t>(ULDUAR_HODIR_RAID_RING_INNER_SLOTS, total > 0 ? total - 1 : 0);
+
+    // A fire centre draws the ring in. Its own 11 yd is not the binding constraint - reaching Hodir
+    // from 23-30 yd out is - and the tighter ring is also what lets a Storm Cloud carry standing on
+    // the centre cover the inner ring with one 3 yd pulse.
+    float const innerRadius = onFire ? ULDUAR_HODIR_FIRE_RING_INNER : ULDUAR_HODIR_RAID_RING_INNER;
+    float const outerRadius = onFire ? ULDUAR_HODIR_FIRE_RING_OUTER : ULDUAR_HODIR_RAID_RING_OUTER;
 
     float radius = 0.0f;
     float angle = baseAngle;
@@ -331,14 +421,14 @@ static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t t
     }
     else if (slot <= inner)
     {
-        radius = ULDUAR_HODIR_RAID_RING_INNER;
+        radius = innerRadius;
         angle = baseAngle + 2.0f * static_cast<float>(M_PI) * static_cast<float>(slot - 1) / static_cast<float>(inner);
     }
     else
     {
         size_t const outerCount = total - inner - 1;
         size_t const outerSlot = slot - inner - 1;
-        radius = ULDUAR_HODIR_RAID_RING_OUTER;
+        radius = outerRadius;
         angle = baseAngle +
                 2.0f * static_cast<float>(M_PI) * static_cast<float>(outerSlot) / static_cast<float>(outerCount);
     }
@@ -349,7 +439,7 @@ static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t t
                     centre.GetPositionY() + std::sin(angle) * radius, centre.GetPositionZ());
 }
 
-bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out)
+bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, bool onFire, Position& out)
 {
     std::vector<Player*> ringMembers;
     if (!BuildHodirRingMembers(bot, ringMembers))
@@ -364,7 +454,7 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
         return false;
 
     size_t const total = ringMembers.size();
-    out = ValidateFloorPoint(bot, HodirRingSlotPoint(centre, slot, total));
+    out = ValidateFloorPoint(bot, HodirRingSlotPoint(centre, slot, total, onFire));
 
     // The slot index and the size of the ring it was cut from, so a formation that re-seated is
     // readable without re-deriving the sort from the roster.
@@ -754,21 +844,123 @@ bool IsHodirBitingColdShedArmed(Player* bot)
     return cold->GetStackAmount() >= arm;
 }
 
+// Where a tank stands to hold Hodir on a Toasty Fire. Standing in one sheds Biting Cold on every tick
+// exactly as moving does - spell_hodir_biting_cold_player_aura tests isMoving() or the aura - and melee
+// are the half of the raid the ranged ring never covers, so this is the only thing that hands it to
+// them. Nothing but Flash Freeze puts a fire out, so he may stand right on one.
+//
+// Measured: the one fire the raid ever adopted held for 14s of a five minute pull and the raid ran at
+// 246708 dps while it did, against ~120000 once it lapsed.
+static bool DeriveHodirFireTankHold(PlayerbotAI* botAI, Player* bot, bool offTank, Position& out)
+{
+    Unit* hodir = GetHodir(botAI);
+    if (!hodir)
+        return false;
+
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, NPC_TOASTY_FIRE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+
+    std::unordered_map<ObjectGuid, HodirFireDragLatch>& latched = HodirLatchesFor(bot).fireDrag;
+
+    // Held while the fire is still burning. The mage re-establishes its 30 yd stand-off from wherever
+    // he ends up, so the next fire lands 30 yd further on - re-picking while one is alive would walk
+    // him round the room for the rest of the fight instead of once per fire.
+    if (auto held = latched.find(bot->GetGUID()); held != latched.end())
+    {
+        for (Creature* fire : found)
+            if (fire && fire->IsAlive() && fire->GetGUID() == held->second.fire)
+            {
+                out = held->second.hold;
+                return true;
+            }
+
+        latched.erase(held);
+    }
+
+    Creature* best = nullptr;
+    float bestDist = 0.0f;
+    for (Creature* fire : found)
+    {
+        if (!fire || !fire->IsAlive())
+            continue;
+
+        float const gap = fire->GetExactDist2d(hodir);
+        if (gap > ULDUAR_HODIR_FIRE_DRAG_LEASH)
+            continue;
+
+        if (!best || gap < bestDist)
+        {
+            best = fire;
+            bestDist = gap;
+        }
+    }
+
+    if (!best)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "hodir.tankhold", "corner");
+
+        return false;
+    }
+
+    // Bearing from the raid anchor, not from Hodir. It is the same number on both tanks and on every
+    // tick, and it never goes degenerate - once he is standing on the fire, a bearing measured from him
+    // points nowhere. Running out along it also leaves both tanks on the far side of the fire from the
+    // raid, which is what the corner's off-tank spot exists for.
+    float const bearing = std::atan2(best->GetPositionY() - ULDUAR_HODIR_RAID_ANCHOR.GetPositionY(),
+                                     best->GetPositionX() - ULDUAR_HODIR_RAID_ANCHOR.GetPositionX());
+
+    float const reach =
+        ULDUAR_HODIR_FIRE_TANK_OFFSET + (offTank ? ULDUAR_HODIR_FIRE_OFFTANK_GAP : 0.0f);
+
+    Position hold(best->GetPositionX() + std::cos(bearing) * reach,
+                  best->GetPositionY() + std::sin(bearing) * reach, best->GetPositionZ());
+
+    // He evades the moment he leaves the y band, and this is the point he is being walked to.
+    if (hold.GetPositionY() < ULDUAR_HODIR_ROOM_MIN_Y || hold.GetPositionY() > ULDUAR_HODIR_ROOM_MAX_Y)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "hodir.tankhold", "offfloor");
+
+        return false;
+    }
+
+    HodirFireDragLatch& entry = latched[bot->GetGUID()];
+    entry.fire = best->GetGUID();
+    entry.hold = ValidateFloorPoint(bot, hold);
+
+    // Which fire he is being held on, not where - the spot is already in hodir.anchor, and what that
+    // cannot say is whether the anchor moved because a fire was adopted or because the corner moved.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.tankhold", RaidObs::DescribeAssignment(entry.fire));
+
+    out = entry.hold;
+    return true;
+}
+
 static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     if (!GetHodir(botAI))
         return false;
 
+    // Both tanks take a fire when one is in reach and the corner otherwise. The corner is what
+    // collapses the helpers' stand-off arc into somewhere predictable, so it stays the fallback rather
+    // than being replaced - and it is where they end up anyway for the first half-minute, before the
+    // mage has dropped anything.
     if (botAI->IsMainTank(bot))
     {
-        out = ULDUAR_HODIR_MAINTANK_SPOT;
+        if (!DeriveHodirFireTankHold(botAI, bot, false, out))
+            out = ULDUAR_HODIR_MAINTANK_SPOT;
+
         tolerance = ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE;
         return true;
     }
 
     if (botAI->IsAssistTankOfIndex(bot, 0, true))
     {
-        out = ULDUAR_HODIR_OFFTANK_SPOT;
+        if (!DeriveHodirFireTankHold(botAI, bot, true, out))
+            out = ULDUAR_HODIR_OFFTANK_SPOT;
+
         tolerance = ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE;
         return true;
     }
@@ -782,7 +974,7 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
     // sweeps the grid for the fire and writes a note.
     bool onFire = false;
     Position const centre = GetHodirRingCentre(botAI, bot, &onFire);
-    if (!GetHodirRingSlot(botAI, bot, centre, out))
+    if (!GetHodirRingSlot(botAI, bot, centre, onFire, out))
         return false;
 
     tolerance = ULDUAR_HODIR_RING_SPOT_TOLERANCE;
@@ -1032,7 +1224,7 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
         // Only the melee fallback lands here, and it has no slot to rank from. Its own position is
         // still the same number on every bot that reads it, so the raid keeps agreeing.
         spots[i] = slot < ringMembers.size()
-                       ? HodirRingSlotPoint(ULDUAR_HODIR_RAID_ANCHOR, slot, ringMembers.size())
+                       ? HodirRingSlotPoint(ULDUAR_HODIR_RAID_ANCHOR, slot, ringMembers.size(), false)
                        : candidates[i]->GetPosition();
     }
 

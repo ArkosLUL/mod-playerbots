@@ -60,6 +60,7 @@ public:
         creators["hodir biting cold shed"] = &RaidUlduarActionContext::hodir_biting_cold_shed;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
         creators["hodir spread storm cloud"] = &RaidUlduarActionContext::hodir_spread_storm_cloud;
+        creators["hodir collect storm power"] = &RaidUlduarActionContext::hodir_collect_storm_power;
         creators["hodir icicle dodge action"] = &RaidUlduarActionContext::hodir_icicle_dodge_action;
         creators["hodir raid position action"] = &RaidUlduarActionContext::hodir_raid_position_action;
         creators["hodir set dps priority action"] = &RaidUlduarActionContext::hodir_set_dps_priority_action;
@@ -236,6 +237,7 @@ private:
     static Action* hodir_biting_cold_shed(PlayerbotAI* ai) { return new HodirBitingColdShedAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new HodirFrostResistanceAction(ai); }
     static Action* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudAction(ai); }
+    static Action* hodir_collect_storm_power(PlayerbotAI* ai) { return new HodirCollectStormPowerAction(ai); }
     static Action* hodir_icicle_dodge_action(PlayerbotAI* ai) { return new HodirIcicleDodgeAction(ai); }
     static Action* hodir_raid_position_action(PlayerbotAI* ai) { return new HodirRaidPositionAction(ai); }
     static Action* hodir_set_dps_priority_action(PlayerbotAI* ai) { return new HodirSetDpsPriorityAction(ai); }

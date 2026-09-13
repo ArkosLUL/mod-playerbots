@@ -105,24 +105,22 @@ protected:
     Unit* GetThreatDumpTarget() override;
 };
 
-// Carry Storm Cloud around the ranged formation so Storm Power lands on as much of the raid as its
-// 4-6 one-second ticks reach.
+// Hold the carry still on its rally point so its six charges pulse into a gathering stack rather than
+// into whoever the carrier walks past. The state lives in the shared per-carry latch, not here: the
+// receivers below have to read the same point.
 class HodirSpreadStormCloudAction : public MovementAction
 {
 public:
     HodirSpreadStormCloudAction(PlayerbotAI* ai) : MovementAction(ai, "hodir spread storm cloud") {}
     bool Execute(Event event) override;
+};
 
-private:
-    int8 _direction = 0;
-    // Which carry the lap below belongs to. Stack counts repeat across carries; apply times do not.
-    time_t _carryApplied = 0;
-    // The lap itself, latched once per carry. Re-reading the centre, radius or angle off the bot makes
-    // the target recede ahead of it, which walked one carrier clean out of the room.
-    Position _lapCentre;
-    float _lapRadius = 0.0f;
-    float _lapAngle = 0.0f;
-    Position _step;
+// Step inside the 3 yd pulse of somebody else's carry.
+class HodirCollectStormPowerAction : public MovementAction
+{
+public:
+    HodirCollectStormPowerAction(PlayerbotAI* ai) : MovementAction(ai, "hodir collect storm power") {}
+    bool Execute(Event event) override;
 };
 
 #endif

@@ -60,6 +60,7 @@ public:
         creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
         creators["hodir frost resistance trigger"] = &RaidUlduarTriggerContext::hodir_frost_resistance_trigger;
         creators["hodir spread storm cloud"] = &RaidUlduarTriggerContext::hodir_spread_storm_cloud;
+        creators["hodir collect storm power"] = &RaidUlduarTriggerContext::hodir_collect_storm_power;
         creators["hodir icicle dodge"] = &RaidUlduarTriggerContext::hodir_icicle_dodge;
         creators["hodir raid position"] = &RaidUlduarTriggerContext::hodir_raid_position;
         creators["hodir set dps priority"] = &RaidUlduarTriggerContext::hodir_set_dps_priority;
@@ -249,6 +250,7 @@ private:
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
     static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new HodirFrostResistanceTrigger(ai); }
     static Trigger* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudTrigger(ai); }
+    static Trigger* hodir_collect_storm_power(PlayerbotAI* ai) { return new HodirCollectStormPowerTrigger(ai); }
     static Trigger* hodir_icicle_dodge(PlayerbotAI* ai) { return new HodirIcicleDodgeTrigger(ai); }
     static Trigger* hodir_raid_position(PlayerbotAI* ai) { return new HodirRaidPositionTrigger(ai); }
     static Trigger* hodir_set_dps_priority(PlayerbotAI* ai) { return new HodirSetDpsPriorityTrigger(ai); }

@@ -368,6 +368,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("hodir spread storm cloud", ACTION_RAID + 2) }));
 
     triggers.push_back(new TriggerNode(
+        "hodir collect storm power",
+        { NextAction("hodir collect storm power", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
         "hodir biting cold",
         { NextAction("hodir biting cold shed", ACTION_RAID + 1) }));
 

@@ -87,9 +87,28 @@ static_assert(ULDUAR_HODIR_SAFE_AREA_RELEASE < ULDUAR_HODIR_SAFE_AREA_RADIUS,
 static_assert(ULDUAR_HODIR_SAFE_AREA_TOLERANCE < ULDUAR_HODIR_SAFE_AREA_RELEASE,
               "the park ring has to sit inside the release ring or arriving releases the bot");
 
-// Storm Power lands on allies within 3 yd of the carrier, and the carrier only has 4 (10man) / 6
-// (25man) one-second ticks to spend, so it tours the ring rather than searching for a cluster.
+// Storm Power (65134) is an area pulse cast at the carrier's own feet - boss_hodir.cpp casts it on a
+// null target - so how many it hits is bounded only by who is standing inside 3 yd. The carrier holds
+// 4 (10man) / 6 (25man) charges.
+//
+// Touring the ring spends them one bot at a time, because the formation's own spacing is wider than
+// the pulse: raiders sat inside it on 4.4% of samples during a live carry, p50 0-1 of them, while
+// coverage over 50% was worth 198857 dps against 123105 under it. So the raid gathers on the carrier
+// instead, and the carrier holds still.
 constexpr float ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS = 3.0f;
+
+// Where a receiver parks and how far it may drift before it is sent back, same 2 yd of hysteresis the
+// shelter run uses - testing one number at both ends releases the bot the tick it arrives. 2 sits a
+// yard inside the pulse, which is the blur a bot covers between two snapshots.
+constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK = 2.0f;
+constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE = 4.0f;
+static_assert(ULDUAR_HODIR_STORM_CLOUD_COLLECT_PARK < ULDUAR_HODIR_STORM_CLOUD_STACK_RADIUS,
+              "a parked receiver has to be inside the pulse, not on its edge");
+
+// How far a bot will walk to collect. Short on purpose: a melee carrier then gathers the melee already
+// on the boss and a ranged carrier gathers the formation, instead of either dragging the other half of
+// the raid across the room for six seconds of buff.
+constexpr float ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH = 15.0f;
 
 // Two different pools, two different radii, both 13000-14000 a hit. Icicle 33169 leaves Ice Shards
 // 62457 in 4 yd; Snowpacked Icicle 33173 leaves Ice Shards 65370 in 7 yd. Clearing everything to 6
@@ -117,6 +136,22 @@ constexpr float ULDUAR_HODIR_RAID_RING_INNER = 4.5f;
 constexpr float ULDUAR_HODIR_RAID_RING_OUTER = 9.0f;
 constexpr uint32 ULDUAR_HODIR_RAID_RING_INNER_SLOTS = 6;
 
+// The same ring, shrunk, for the one case that is worth the spacing: a centre that is a Toasty Fire.
+// The mage holds 30 yd off Hodir (AttackStartCaster in boss_hodir.cpp) and drops the fire at its own
+// feet, so a fire sits 23-30 yd out and the 9 yd ring plus 2 yd of tolerance cannot fit inside the
+// caster band with it. At 4.5 the far side of a fire 28 yd out lands at 34.5, still inside the band.
+//
+// This deliberately packs the raid tighter than Ice Shards' 4 yd splash, which the wide ring exists to
+// beat. It is the trade the fire is worth: standing in one sheds Biting Cold on every tick exactly as
+// moving does, so the ring stops paying the shuttle - 45% of dps-bot time in one trace - and the raid
+// casts instead. Watch 62457 damage and --clump, not this constant, to say whether it paid.
+constexpr float ULDUAR_HODIR_FIRE_RING_INNER = 2.5f;
+constexpr float ULDUAR_HODIR_FIRE_RING_OUTER = 4.5f;
+static_assert(ULDUAR_HODIR_FIRE_RING_OUTER > ULDUAR_HODIR_FIRE_RING_INNER,
+              "the fire ring's two rings have to stay distinct");
+static_assert(ULDUAR_HODIR_FIRE_RING_OUTER < ULDUAR_HODIR_RAID_RING_OUTER,
+              "the fire ring only exists because it is tighter than the anchor ring");
+
 // Arrival tolerance doubles as the re-anchor threshold.
 constexpr float ULDUAR_HODIR_RING_SPOT_TOLERANCE = 2.0f;
 constexpr float ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE = 3.0f;
@@ -126,6 +161,9 @@ static_assert(ULDUAR_HODIR_RAID_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE <=
               "the outer ring plus its arrival tolerance has to stay inside a Toasty Fire");
 static_assert(ULDUAR_HODIR_RAID_RING_OUTER - ULDUAR_HODIR_RAID_RING_INNER > ULDUAR_HODIR_ICE_SHARDS_RADIUS,
               "the two rings have to sit more than one Ice Shards radius apart");
+static_assert(ULDUAR_HODIR_FIRE_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE <=
+                  ULDUAR_HODIR_TOASTY_FIRE_RADIUS,
+              "the fire ring plus its arrival tolerance has to stay well inside a Toasty Fire");
 
 // Measured against Hodir himself, not the tank spot, which he leaves: he drifted 10-25 yd off it and
 // a fixed-point gate let the centre land 6.8 yd from him with a 4.5 yd inner ring. The gap does not
@@ -133,14 +171,19 @@ static_assert(ULDUAR_HODIR_RAID_RING_OUTER - ULDUAR_HODIR_RAID_RING_INNER > ULDU
 // because the position trigger checks that the slot is clear before it fires.
 constexpr float ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP = 15.0f;
 
-// The far end of the same band: how far from Hodir a caster may stand and still reach him. A Shadow
-// Bolt is 30 and that is the shortest range in the raid. Both the fire and the Starlight zone are
-// tested against this, because both are reasons to stand somewhere other than the ring slot, and a
-// spot that cannot reach the boss is worth nothing whatever else it gives.
+// The far end of the same band: how far from Hodir a caster may stand and still reach him. Both the
+// fire and the Starlight zone are tested against this, because both are reasons to stand somewhere
+// other than the ring slot, and a spot that cannot reach the boss is worth nothing whatever else it
+// gives.
+//
+// 35, not the 30 a Shadow Bolt's book range says. Spell range is measured to the target's bounding
+// radius and Hodir is a giant, so the book number understates him: binned by distance, ranged bots
+// dealt 7693 dps each from 30-35 yd against 7844 from 20-25, and casts aimed at him were started out
+// to 40.1 (p99 36.2). 35-40 is where it falls off, to 4854, so the band ends there and not before.
 //
 // Picking fires off the fixed anchor instead let the centre drift to a p75 of 29 yd from him and a
 // max of 52, with the ring's far side 45 out and the casters walking a reach spell back in.
-constexpr float ULDUAR_HODIR_CASTER_MAX_BOSS_GAP = 30.0f;
+constexpr float ULDUAR_HODIR_CASTER_MAX_BOSS_GAP = 35.0f;
 static_assert(ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
               "the caster band has to have room between its ends");
 
@@ -205,6 +248,23 @@ static_assert(ULDUAR_HODIR_STARLIGHT_SHED_RADIUS < ULDUAR_HODIR_STARLIGHT_RADIUS
 // swing from dead whether or not it has aggro.
 constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
 
+// How far past a Toasty Fire the tank stands when dragging Hodir onto one. He stops at roughly the
+// same 13 yd his reach plus a raider's makes, so standing this far beyond the fire lands him on it and
+// the melee stacked behind him well inside its 11 yd. The tank itself ends up just outside and keeps
+// the shuttle, which is the cheap half of the trade - it already walks for Biting Cold without leaving
+// the corner.
+constexpr float ULDUAR_HODIR_FIRE_TANK_OFFSET = 13.0f;
+
+// And how much further out the off-tank stands, matching the 5.5 yd the corner's two spots already sit
+// apart. Further out rather than to one side, so a Frozen Blows taunt pulls him off the fire's far
+// edge instead of back through the raid.
+constexpr float ULDUAR_HODIR_FIRE_OFFTANK_GAP = 5.5f;
+
+// How far the tank will go to put him on a fire. A fire lives 60s and the next one lands 30 yd from
+// wherever he is standing by then, so without a leash this is a permanent tour of the room; with one,
+// the drag is a single move per fire and the corner stays the fallback.
+constexpr float ULDUAR_HODIR_FIRE_DRAG_LEASH = 40.0f;
+
 // How far a bot may drift from its slot before it is walked home regardless of anything else. The
 // slot is not a restoring force any more, so without a hard leash a bot that stepped out for one
 // dodge after another ends up out of heal range with nothing pulling it back.
@@ -220,16 +280,24 @@ constexpr float ULDUAR_HODIR_RETURN_LEASH = 20.0f;
 // from length/speedXY, so a 0.01 yd hop is airborne for about 1.4ms and never covers a tick, let
 // alone two. A jump long enough to span two ticks is a 7 yd walk, which is what this already does.
 //
-// Arming at 2 stacks costs ~33% movement duty and ~600/s; arming at 1 would cost half the raid's cast
-// uptime for 200/s less.
+// The shuttle is the single most expensive thing in the fight: at 2 stacks it won 18.7% of every
+// engine pass and 32.4% of accepted moves, while dps bots held the aura 45% of their time and the raid
+// cast on 32% of ticks against 48% with a fire up. The tick is cheap until very late - 800 at 2, 6400
+// at 5 - so 5 buys back most of that movement for damage the healers were already covering: they ran
+// 33553/s effective with 16025/s of overheal against 17372/s taken.
+//
+// 6 is one stack from 12800/s, which is a third of a pool a second, so this is the ceiling and not a
+// starting point. A bot in a fire never gets here at all - the check below short-circuits on the aura,
+// because a fire sheds on every tick exactly as moving does - so this governs only the bots that have
+// none, and it should be dropped back toward 3 the moment deaths or Biting Cold damage climb.
 constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
 constexpr float ULDUAR_HODIR_SHUTTLE_BEARING = -0.785398f;  // -pi/4, parallel to the SW bevel
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 2;
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 5;
 
-// Standing in Starlight is worth a stack: +50% to every cast and swing against 1600 a tick. Only 36
-// of 3298 stack applications in a six minute kill ever reached 3, so this mostly just stops the shed
-// interrupting a zone rather than actually letting stacks run.
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 3;
+// Standing in Starlight is worth a stack: +50% to every cast and swing against what the tick costs.
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 6;
+static_assert(ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT <= 6,
+              "62039 caps at 8 stacks and 200*2^7 is 25600 a tick - past 6 the shed arms too late to matter");
 
 // A trapped raider dies to the next Flash Freeze 48s later, so freeing them outranks the boss - but
 // the block has little health, so only the nearest few bots leave what they were doing.
@@ -295,9 +363,28 @@ float GetHodirShelterRelease(Creature* shelter);
 
 // The Toasty Fire the ranged formation forms on, or nullptr. Picked nearest Hodir rather than nearest
 // the bot because the ring is one shared formation: a per-bot answer here has each bot centring the
-// ring somewhere else, and the slots it hands out never agree. Only a fire that leaves the whole ring
-// inside the caster band qualifies, so on most pulls there is none and this returns nullptr all fight.
+// ring somewhere else, and the slots it hands out never agree.
+//
+// A fire only qualifies if the whole ring still reaches him from it, and that is measured against the
+// tighter ULDUAR_HODIR_FIRE_RING_OUTER rather than the anchor ring - the mage drops fires 23-30 yd out
+// and the 9 yd ring cannot fit inside the caster band with one. Against the old 9 yd ring and a 30 yd
+// band, exactly one fire in a five minute pull ever qualified, for 14 seconds, and the raid ran at
+// 246708 dps while it held against ~120000 after it lapsed.
 Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot);
+
+// The bot carrying Storm Cloud right now, or nullptr. Swept off the group rather than the grid so a
+// carrier standing outside anyone's sweep is still found, and taken as the first carrier in roster
+// order so every bot answers the same when the boss has stacked two.
+Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot);
+
+// The one point a carry gathers on, shared by the carrier and everyone collecting from it. Storm Power
+// is a 3 yd pulse at the carrier's feet with 6 charges, so the raid has to come to the carrier and the
+// carrier has to stop moving - two derivations that disagree walk past each other.
+//
+// Latched per carry on the carrier's aura apply time, because the carrier's own position is the seed
+// and it moves. Keyed per instance rather than per bot so a receiver joining late reads the same point
+// the carrier already committed to.
+bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, Position& out);
 
 // Where the ranged formation is centred: a Toasty Fire when one sits inside the caster band,
 // otherwise ULDUAR_HODIR_RAID_ANCHOR. The fire is what the ring wants to be inside - it stops Biting
@@ -320,7 +407,9 @@ bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& toler
 // Ranged dps are ranked ahead of healers and ties break on guid, so every bot derives the same layout
 // without sharing state. The raw point is validated against the ground and the collision mesh before
 // it is returned - MoveTo rejects an off-mesh destination silently.
-bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out);
+// onFire picks the radii: a fire centre uses the tighter ULDUAR_HODIR_FIRE_RING_* pair so the far side
+// of the ring still reaches Hodir from a fire 23-30 yd out.
+bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, bool onFire, Position& out);
 
 // The Starlight zone this bot is standing in, or false. The centre, not the bot's own spot, so the
 // shuttle can be laid out around it.

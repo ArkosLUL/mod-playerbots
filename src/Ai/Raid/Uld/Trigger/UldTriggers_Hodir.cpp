@@ -271,3 +271,36 @@ bool HodirSpreadStormCloudTrigger::IsActive()
 
     return bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_CLOUD, bot));
 }
+
+bool HodirCollectStormPowerTrigger::IsActive()
+{
+    if (!GetHodir(botAI))
+        return false;
+
+    // Tanks never leave the boss for a damage buff, and healers are not worth a charge: they took
+    // 22.6% of everything the carries handed out in one pull for 0.2% of the raid's damage.
+    if (botAI->IsTank(bot) || botAI->IsHeal(bot))
+        return false;
+
+    // Already holding it - the pulse would be spent on a bot that cannot use it, and the walk is
+    // downtime for nothing.
+    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_HODIR_STORM_POWER, bot)))
+        return false;
+
+    Player* carrier = GetHodirStormCloudCarrier(botAI, bot);
+    if (!carrier || carrier == bot)
+        return false;
+
+    Position rally;
+    if (!GetHodirStormCloudRally(botAI, bot, carrier, rally))
+        return false;
+
+    float const gap = bot->GetExactDist2d(&rally);
+    if (gap > ULDUAR_HODIR_STORM_CLOUD_COLLECT_LEASH)
+        return false;
+
+    // Release rather than the park distance the action aims for. Testing one number at both ends
+    // stands this down the tick the bot arrives and hands the next tick to the ring anchor, which
+    // walks it straight back out - the same trap the shelter run's park/release pair exists for.
+    return gap > ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
+}
