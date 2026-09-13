@@ -30,6 +30,27 @@ public:
     Unit* GetIllusionRoomRtiTarget();
     Unit* GetNextIllusionRoomRtiTarget();
     Unit* GetSaraIfAlive();
+    bool IsDesignatedBotTank();
+};
+
+// Clouds and Guardians in one node. Two nodes at the same relevance cannot share a bot - the engine
+// ends the tick at the first action returning true - so they would trade ticks and walk the bot down
+// the line between their two destinations.
+class YoggSaronPhase1SpacingTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronPhase1SpacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 1 spacing trigger") {}
+    bool IsActive() override;
+};
+
+// Dark Volley is a 1.5s cast hitting everything within 35 yd, so it cannot be walked out of. The
+// always-on class interrupts only ever look at the bot's current target and caught under a third of
+// them.
+class YoggSaronDarkVolleyTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronDarkVolleyTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron dark volley trigger") {}
+    bool IsActive() override;
 };
 
 class YoggSaronOminousCloudCheatTrigger : public YoggSaronTrigger

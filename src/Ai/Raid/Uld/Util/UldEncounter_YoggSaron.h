@@ -10,7 +10,11 @@
 #include "Position.h"
 #include "UldData.h"
 
+#include <vector>
+
 class PlayerbotAI;
+class Player;
+class Unit;
 
 // Yogg-Saron.
 //
@@ -70,6 +74,8 @@ enum UlduarYoggSaronIds
     SPELL_CANCEL_ILLUSION_AURA = 63993,
     SPELL_INDUCE_MADNESS = 64059,
     SPELL_LUNATIC_GAZE_YS = 64163,
+    SPELL_DARK_VOLLEY = 63038,  // Guardian's 1.5s cast, 35 yd - distance is no answer, only a kick
+    SPELL_DARK_VOLLEY_H = 65330,  // 25 normal casts 63038, so the split is not 10/25: test both
     SPELL_SQUEEZE = 64125,  // Constrictor Tentacle's grip; base id, difficulty-mapped at runtime
     SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
@@ -87,6 +93,29 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
 // drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
 constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
+// Ominous Clouds orbit Sara at 11/21/31/41/51/61 yd, constant 3 yd/s, and summon a Guardian on any
+// player within 6 yd. Trigger and clear are kept apart on purpose: the sweep parks the bot on
+// whatever boundary it gets, so one radius re-fires every time a cloud drifts a yard in.
+constexpr float ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS = 10.0f;
+constexpr float ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS = 14.0f;
+
+// Shadow Nova, the Guardian's death explosion: DBC radius 15, plus both object sizes at apply time.
+// Ranged and healers stay out of it; melee and tanks have to eat it to kill the thing at all.
+constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
+constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
+
+// The second cap is the load-bearing one: a bot dodging outward otherwise walks out of spell range
+// and stops contributing for the rest of the phase.
+constexpr float ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS = 25.0f;
+constexpr float ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE = 35.0f;
+
+// Backstop only - "is the held spot still clear" normally invalidates first.
+constexpr uint32 ULDUAR_YOGG_SARON_SPACING_HOLD_MS = 3000;
+
+// How far out to look for a Guardian worth kicking. Wider than any interrupt's range on purpose - the
+// action drops the ones it cannot reach, and a short list here would hide a cast from a bot who could.
+constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
+
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE;
@@ -100,8 +129,18 @@ extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 
 // Yogg-Saron phase reads. Yogg is not reliably on a bot's threat list, so both scan for the creature
 // instead of going through "find target".
+// Phase 1. Sara lives on into P2/P3 at 1 health, so "Sara is alive" is not a phase test by itself.
+bool YoggSaronInPhase1(PlayerbotAI* botAI);
 bool YoggSaronInPhase2(PlayerbotAI* botAI);
 bool YoggSaronInPhase3(PlayerbotAI* botAI);
+
+// Guardians casting Dark Volley right now, for the interrupt node. Shared between trigger and action
+// so the two cannot disagree about what is being kicked.
+std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI);
+
+// Classes carrying an interrupt the action can aim. Avenger's Shield is left out - it picks its own
+// target and cannot be pointed at a named Guardian.
+bool YoggSaronCanInterrupt(Player* bot);
 
 // Window in which a counterable fear can land, for the shared anti-fear component. Yogg-Saron fears
 // in P2 (Malady of the Mind, which re-casts on removal) and again in P3 (Deafening Roar).

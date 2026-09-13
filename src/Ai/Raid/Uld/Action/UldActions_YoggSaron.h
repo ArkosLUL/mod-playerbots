@@ -3,6 +3,7 @@
 
 #include "Action.h"
 #include "AttackAction.h"
+#include "EncounterHelpers.h"
 #include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
@@ -46,6 +47,38 @@ class YoggSaronMaladyOfTheMindAction : public MoveAwayFromPlayerWithDebuffAction
 {
 public:
     YoggSaronMaladyOfTheMindAction(PlayerbotAI* ai) : MoveAwayFromPlayerWithDebuffAction(ai, "yogg-saron malady of the mind action", SPELL_MALADY_OF_THE_MIND, 15.0f) {}
+};
+
+// Clouds and Guardians in one sweep. Two nodes at the same relevance cannot share a bot - the engine
+// ends the tick at the first action returning true - so a pair would trade ticks and walk the bot down
+// the line between their destinations.
+class YoggSaronPhase1SpacingAction : public MovementAction
+{
+public:
+    YoggSaronPhase1SpacingAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron phase 1 spacing action") {}
+
+    bool Execute(Event event) override;
+
+private:
+    void CollectHazards(std::vector<EncounterHelpers::HazardCircle>& clouds,
+                        std::vector<EncounterHelpers::HazardCircle>& guardians) const;
+
+    // Held destination. The clouds move 3 yd/s, so a fresh sweep every tick answers a different
+    // question every tick and the bot never arrives.
+    Position heldSpot;
+    uint32 heldSpotMs = 0;
+};
+
+class YoggSaronDarkVolleyInterruptAction : public Action
+{
+public:
+    YoggSaronDarkVolleyInterruptAction(PlayerbotAI* ai) : Action(ai, "yogg-saron dark volley interrupt action") {}
+
+    bool Execute(Event event) override;
+
+private:
+    bool CastClassInterrupt(Unit* target);
+    int32 GetInterrupterIndex();
 };
 
 class YoggSaronMarkTargetAction : public Action

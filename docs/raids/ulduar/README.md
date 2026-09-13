@@ -108,7 +108,10 @@ the kill.
 **Never call `RazorscaleBossHelper::UpdateBossAI()` from a multiplier** — it side-effects into
 `AssignRolesBasedOnHealth()`, which reassigns the raid's main tank. Read Z straight off the target
 sweep instead. Yogg is resolved with `FindNearestCreature`, not `"find target"`, because he is not
-reliably on a bot's threat list.
+reliably on a bot's threat list. **Sara is the worst case of that rule:** friendly all of P1 and
+damaged only by Guardian Shadow Nova, so no bot ever holds threat on her, and the `"find target"`
+lookup gating every Yogg trigger left all 21 of them dead through two wipes. See
+[yogg-saron.md](yogg-saron.md).
 
 **The `"possible targets no los"` sweep is capped at `AiPlayerbot.SightDistance` (100 yd)**, and
 Razorscale's second flight point `RazorFlightPos2` (619.1, -238.1, 475.2) sits past that from most of
@@ -174,8 +177,8 @@ From the Sev-1/Sev-2 audit. Sev-1 fails **even with the raid cheat on**:
 | **Auriaya** | `AuriayaEncounterActive` is presence-only (`GetAuriaya(botAI) != nullptr`), so bots pull her on sight from up to 100 yd. Kologarn had the same defect and now gates on `IsInCombat()` |
 
 **Sev-2 CHEAT-ONLY** — works in the default config, breaks silently if `BotCheats` drops `raid`:
-Yogg Ominous Clouds, Crusher/Constrictor tentacles, illusion-room adds and P2 movement
-(cheat instakill / teleport).
+Yogg Crusher/Constrictor tentacles, illusion-room adds and P2 movement (cheat instakill / teleport).
+Ominous Clouds have left this list — `yogg-saron phase 1 spacing` dodges them without the cheat.
 
 Structural notes: **no boss reuses `RazorscaleBossHelper`'s role-swap machinery for a real tank
 swap** — each rolls its own detector instead: Thorim on the Unbalancing Strike debuff, Kologarn on

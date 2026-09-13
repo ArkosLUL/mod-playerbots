@@ -1,6 +1,7 @@
 #include "UldTriggers_YoggSaron.h"
 
 #include "GameObject.h"
+#include "Group.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
@@ -13,6 +14,7 @@
 #include "SharedDefines.h"
 #include "Trigger.h"
 #include "Vehicle.h"
+#include "WorldSession.h"
 #include <MovementActions.h>
 #include <FollowMasterStrategy.h>
 #include <RtiTargetValue.h>
@@ -41,11 +43,39 @@ const std::vector<uint32> illusionMobs =
 
 Unit* YoggSaronTrigger::GetSaraIfAlive()
 {
-    Unit* sara = AI_VALUE2(Unit*, "find target", "sara");
-    if (!sara || !sara->IsAlive())
-        return nullptr;
+    // Not "find target": that walks the bot's own threat list, and Sara is FACTION_FRIENDLY for the
+    // whole of phase 1 and only ever takes damage from a Guardian's Shadow Nova. No bot ever holds
+    // threat on her, so the lookup returned null every tick and took all 21 Yogg nodes down with it.
+    return bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true);
+}
 
-    return sara;
+// IsBotMainTank goes false for every bot the moment a human holds main tank, which silently disabled
+// both single-actor nodes. First living bot tank instead, so a human MT does not switch them off.
+bool YoggSaronTrigger::IsDesignatedBotTank()
+{
+    if (botAI->IsBotMainTank(bot))
+        return true;
+
+    if (!botAI->IsTank(bot))
+        return false;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return true;
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
+            continue;
+
+        if (!member->GetSession() || !member->GetSession()->IsBot())
+            continue;
+
+        return member == bot;
+    }
+
+    return false;
 }
 
 bool YoggSaronTrigger::IsPhase2()
@@ -65,13 +95,10 @@ bool YoggSaronTrigger::IsInBrainLevel()
 
 bool YoggSaronTrigger::IsYoggSaronFight()
 {
-    Unit* sara = AI_VALUE2(Unit*, "find target", "sara");
-    Unit* yoggsaron = AI_VALUE2(Unit*, "find target", "yogg-saron");
-
-    if ((sara && sara->IsAlive()) || (yoggsaron && yoggsaron->IsAlive()))
-        return true;
-
-    return false;
+    // Same threat-list trap as GetSaraIfAlive, and Yogg is no better: he is not reliably on a bot's
+    // threat list either.
+    return bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true) ||
+           bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
 }
 
 bool YoggSaronTrigger::IsInIllusionRoom()
@@ -227,7 +254,7 @@ bool YoggSaronOminousCloudCheatTrigger::IsActive()
     if (!boss)
         return false;
 
-    if (!botAI->IsBotMainTank(bot))
+    if (!IsDesignatedBotTank())
         return false;
 
     if (bot->GetDistance2d(boss->GetPositionX(), boss->GetPositionY()) > 50.0f)
@@ -295,6 +322,32 @@ bool YoggSaronDeathOrbTrigger::IsActive()
     return IsPhase2() && tooCloseToDeathOrbTrigger.TooCloseToCreature(NPC_DEATH_ORB, 10.0f);
 }
 
+bool YoggSaronPhase1SpacingTrigger::IsActive()
+{
+    if (!YoggSaronInPhase1(botAI) || !botAI->CanMove())
+        return false;
+
+    // Everyone dodges clouds: one summons a Guardian on any player inside 6 yd, and the innermost
+    // orbit runs at 11 yd from Sara, straight through where melee stand.
+    if (bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS, true))
+        return true;
+
+    // Shadow Nova is the other half, and only ranged and healers can answer it. Melee and tanks have
+    // to stand in it to kill the Guardian, which is also the only way Sara takes damage.
+    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
+        return false;
+
+    return bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS, true) != nullptr;
+}
+
+bool YoggSaronDarkVolleyTrigger::IsActive()
+{
+    if (!YoggSaronCanInterrupt(bot))
+        return false;
+
+    return !GetYoggSaronDarkVolleyCasters(botAI).empty();
+}
+
 bool YoggSaronMaladyOfTheMindTrigger::IsActive()
 {
     TooCloseToPlayerWithDebuffTrigger tooCloseToPlayerWithDebuffTrigger(botAI);
@@ -306,7 +359,7 @@ bool YoggSaronMarkTargetTrigger::IsActive()
     if (!IsYoggSaronFight())
         return false;
 
-    if (!botAI->IsBotMainTank(bot))
+    if (!IsDesignatedBotTank())
         return false;
 
     Group* group = bot->GetGroup();

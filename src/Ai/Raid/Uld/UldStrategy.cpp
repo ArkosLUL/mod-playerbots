@@ -755,6 +755,14 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron guardian positioning action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
+        "yogg-saron phase 1 spacing trigger",
+        { NextAction("yogg-saron phase 1 spacing action", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode(
+        "yogg-saron dark volley trigger",
+        { NextAction("yogg-saron dark volley interrupt action", ACTION_EMERGENCY + 1) }));
+
+    triggers.push_back(new TriggerNode(
         "yogg-saron sanity trigger",
         { NextAction("yogg-saron sanity action", ACTION_RAID + 1) }));
 

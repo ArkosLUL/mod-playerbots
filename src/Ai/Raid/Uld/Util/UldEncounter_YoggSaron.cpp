@@ -22,6 +22,13 @@ const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE = Position(2048.63f
 const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT = Position(1998.5377f, -22.90317f, 324.8895f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.896868f, 327.07245f);
 
+bool YoggSaronInPhase1(PlayerbotAI* botAI)
+{
+    Creature* sara = botAI->GetBot()->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true);
+
+    return sara && !YoggSaronInPhase2(botAI) && !YoggSaronInPhase3(botAI);
+}
+
 bool YoggSaronInPhase2(PlayerbotAI* botAI)
 {
     Creature* yogg = botAI->GetBot()->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
@@ -36,6 +43,45 @@ bool YoggSaronInPhase3(PlayerbotAI* botAI)
     Creature* guardian = bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, 200.0f, true);
 
     return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
+}
+
+std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS);
+
+    std::vector<Unit*> casters;
+    for (Creature* guardian : guardians)
+    {
+        if (!guardian->IsAlive())
+            continue;
+
+        if (guardian->FindCurrentSpellBySpellId(SPELL_DARK_VOLLEY) ||
+            guardian->FindCurrentSpellBySpellId(SPELL_DARK_VOLLEY_H))
+        {
+            casters.push_back(guardian);
+        }
+    }
+
+    return casters;
+}
+
+bool YoggSaronCanInterrupt(Player* bot)
+{
+    switch (bot->getClass())
+    {
+        case CLASS_DEATH_KNIGHT:
+        case CLASS_HUNTER:
+        case CLASS_MAGE:
+        case CLASS_ROGUE:
+        case CLASS_SHAMAN:
+        case CLASS_WARRIOR:
+            return true;
+        default:
+            return bot->getRace() == RACE_BLOODELF;
+    }
 }
 
 bool YoggSaronFearWindowActive(PlayerbotAI* botAI) { return YoggSaronInPhase2(botAI) || YoggSaronInPhase3(botAI); }

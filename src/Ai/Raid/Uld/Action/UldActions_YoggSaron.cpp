@@ -71,6 +71,161 @@ bool YoggSaronSanityAction::Execute(Event /*event*/)
                   true, false);
 }
 
+void YoggSaronPhase1SpacingAction::CollectHazards(std::vector<HazardCircle>& clouds,
+                                                 std::vector<HazardCircle>& guardians) const
+{
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, NPC_OMINOUS_CLOUD,
+                                        ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS + ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+    for (Creature* cloud : found)
+        if (cloud->IsAlive())
+            clouds.emplace_back(cloud->GetPosition(), ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+
+    found.clear();
+    bot->GetCreatureListWithEntryInGrid(found, NPC_GUARDIAN_OF_YS,
+                                        ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS + ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+    for (Creature* guardian : found)
+        if (guardian->IsAlive())
+            guardians.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+}
+
+bool YoggSaronPhase1SpacingAction::Execute(Event /*event*/)
+{
+    // Melee and tanks only dodge clouds. Standing in Shadow Nova is the price of killing a Guardian,
+    // and a Guardian dying next to Sara is the only way she takes damage at all.
+    bool const avoidNova = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
+
+    std::vector<HazardCircle> clouds;
+    std::vector<HazardCircle> guardians;
+    CollectHazards(clouds, guardians);
+
+    std::vector<HazardCircle> hazards = clouds;
+    if (avoidNova)
+        hazards.insert(hazards.end(), guardians.begin(), guardians.end());
+
+    if (hazards.empty())
+        return false;
+
+    auto const stillClear = [](std::vector<HazardCircle> const& set, Position const& spot)
+    {
+        for (HazardCircle const& hazard : set)
+            if (hazard.first.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < hazard.second)
+                return false;
+
+        return true;
+    };
+
+    uint32 const now = getMSTime();
+    bool const latched = heldSpotMs && getMSTimeDiff(heldSpotMs, now) < ULDUAR_YOGG_SARON_SPACING_HOLD_MS;
+
+    // Claim the tick without touching the motion master while the step is in flight, so combat
+    // movement cannot drag the bot back into what it just left and the spline survives.
+    if (latched && stillClear(hazards, heldSpot) && !bot->IsMovementPreventedByCasting() &&
+        bot->GetExactDist2d(heldSpot.GetPositionX(), heldSpot.GetPositionY()) > CONTACT_DISTANCE)
+        return true;
+
+    heldSpotMs = 0;
+
+    // Already outside everything. The trigger fires at a tighter radius than this on purpose: move at
+    // 10 yd from a cloud, rest at 14, so a cloud drifting a yard closer cannot restart the dance.
+    if (stillClear(hazards, bot->GetPosition()))
+        return false;
+
+    HazardSweepCache sweep;
+    Position const middle = ULDUAR_YOGG_SARON_MIDDLE;
+
+    // Every candidate in a ring is the same walk away, so preferNear is free and decides the whole
+    // character of the dodge: biased at Sara it sidesteps along the orbit instead of running for the rim.
+    auto const nearEnough = [&middle](float x, float y)
+    { return middle.GetExactDist2d(x, y) <= ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE; };
+
+    Position safe = FindNearestPositionClearOfHazards(bot, hazards, ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS, 2.0f,
+                                                      static_cast<float>(M_PI) / 8.0f, &middle, nearEnough, &sweep);
+
+    // Nothing clears both. Shadow Nova is the one that kills, so drop the clouds and take the second
+    // sweep off the same cache.
+    if (safe == Position() && avoidNova && !guardians.empty())
+        safe = FindNearestPositionClearOfHazards(bot, guardians, ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS, 2.0f,
+                                                 static_cast<float>(M_PI) / 8.0f, &middle, nearEnough, &sweep);
+
+    if (safe == Position())
+        return false;
+
+    // MOVEMENT_FORCED: IsWaitingForLastMove yields only to a strictly higher priority, and at combat
+    // priority a reach-spell walk already in flight wins the tick.
+    if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
+                true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return false;
+
+    heldSpot = safe;
+    heldSpotMs = now;
+
+    return true;
+}
+
+int32 YoggSaronDarkVolleyInterruptAction::GetInterrupterIndex()
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return 0;
+
+    int32 index = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !YoggSaronCanInterrupt(member))
+            continue;
+
+        if (member == bot)
+            return index;
+
+        ++index;
+    }
+
+    return 0;
+}
+
+bool YoggSaronDarkVolleyInterruptAction::CastClassInterrupt(Unit* target)
+{
+    auto const cast = [&](char const* spell)
+    { return botAI->CanCastSpell(spell, target) && botAI->CastSpell(spell, target); };
+
+    switch (bot->getClass())
+    {
+        case CLASS_DEATH_KNIGHT:
+            return cast("mind freeze") || cast("strangulate");
+        case CLASS_HUNTER:
+            return cast("silencing shot");
+        case CLASS_MAGE:
+            return cast("counterspell");
+        case CLASS_ROGUE:
+            return cast("kick");
+        case CLASS_SHAMAN:
+            return cast("wind shear");
+        case CLASS_WARRIOR:
+            return cast("pummel") || cast("shield bash");
+        default:
+            return bot->getRace() == RACE_BLOODELF && cast("arcane torrent");
+    }
+}
+
+bool YoggSaronDarkVolleyInterruptAction::Execute(Event /*event*/)
+{
+    std::vector<Unit*> casters = GetYoggSaronDarkVolleyCasters(botAI);
+    if (casters.empty())
+        return false;
+
+    // Start each interrupter at its own slot. Several Guardians cast at once and the cooldowns run
+    // 6-24s, so without the offset the whole raid spends its kicks on one volley.
+    size_t const start = static_cast<size_t>(GetInterrupterIndex()) % casters.size();
+
+    for (size_t i = 0; i < casters.size(); ++i)
+        if (CastClassInterrupt(casters[(start + i) % casters.size()]))
+            return true;
+
+    return false;
+}
+
 bool YoggSaronMarkTargetAction::Execute(Event /*event*/)
 {
     Group* group = bot->GetGroup();
