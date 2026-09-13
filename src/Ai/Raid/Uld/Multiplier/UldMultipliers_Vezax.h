@@ -24,4 +24,19 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Aura of Despair stops mana regeneration, which makes Life Tap the only mana a warlock can find
+// here - and the generic rotation taps on cooldown whether or not there is anything to spend it on.
+// One traced pull had both locks casting it every 1.25s for the whole fight at 94-100% mana, paying
+// 2000 health a time, and both bled out having dealt a tenth of what the comparable caster did.
+class VezaxSuppressLifeTapMultiplier : public Multiplier
+{
+public:
+    VezaxSuppressLifeTapMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "vezax suppress life tap multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 #endif

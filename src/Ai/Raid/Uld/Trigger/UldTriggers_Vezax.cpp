@@ -45,12 +45,22 @@ bool VezaxMarkOfTheFacelessTrigger::IsActive()
            ULDUAR_VEZAX_MARK_SPOT_TOLERANCE;
 }
 
-bool VezaxVaporPuddleClearTrigger::IsActive()
+bool VezaxMarkOfTheFacelessBreakTrigger::IsActive()
 {
-    if (!VezaxShouldLeaveVaporPuddle(bot))
+    // Melee and the off-tank only. The camp sits past 27 yd and the ball inside 10, so a mark out
+    // there never reaches in here - and pulling camp members off their slots every 40s would cost
+    // more cast time than the few ticks it saves.
+    if (botAI->IsRanged(bot) || botAI->IsMainTank(bot))
         return false;
 
-    return VezaxEncounterActive(botAI);
+    // Whoever holds the mark is the one person its leech skips, and it has its own node.
+    if (bot->HasAura(SPELL_MARK_OF_THE_FACELESS))
+        return false;
+
+    if (!VezaxEncounterActive(botAI))
+        return false;
+
+    return GetVezaxMarkedAlly(bot) != nullptr;
 }
 
 bool VezaxShadowCrashDodgeTrigger::IsActive()
@@ -81,12 +91,6 @@ bool VezaxSearingFlamesInterruptTrigger::IsActive()
     // Darkness, and neither is worth an interrupt.
     Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
     if (!spell || spell->m_spellInfo->Id != SPELL_VEZAX_SEARING_FLAMES)
-        return false;
-
-    // This node outranks the puddle clear, so an interrupter standing in one spends the 2s cast there
-    // rather than stepping out - which is the right trade while the tick is survivable, and a lethal
-    // one at stack 8. The predicate that owns leaving is the same one, so the two cannot disagree.
-    if (VezaxShouldLeaveVaporPuddle(bot))
         return false;
 
     return VezaxIsSearingFlamesInterrupter(bot, boss);
@@ -122,48 +126,6 @@ bool VezaxSaroniteAnimusTrigger::IsActive()
     return AI_VALUE(Unit*, "current target") != animus;
 }
 
-bool VezaxVaporSoakTrigger::IsActive()
-{
-    if (IsVezaxHardModeActive(botAI) || !VezaxWantsVaporPuddleMana(bot))
-        return false;
-
-    if (AI_VALUE2(uint8, "mana", "self target") >= sPlayerbotAIConfig.lowMana)
-        return false;
-
-    // Already in one - VezaxShouldLeaveVaporPuddle owns the exit from here.
-    if (bot->HasAura(SPELL_VEZAX_SARONITE_VAPORS_PUDDLE))
-        return false;
-
-    if (!VezaxEncounterActive(botAI))
-        return false;
-
-    std::vector<VezaxHazard> hazards;
-    GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL);
-
-    VezaxHazard puddle;
-    if (!TryGetVezaxNearestHazard(bot, hazards, false, puddle))
-        return false;
-
-    return bot->GetExactDist2d(puddle.position.GetPositionX(), puddle.position.GetPositionY()) <=
-           ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL;
-}
-
-bool VezaxKillVaporTrigger::IsActive()
-{
-    // In hard mode a dead vapor is a lost hard mode, so this node never arms.
-    if (IsVezaxHardModeActive(botAI) || !VezaxIsVaporHandler(bot))
-        return false;
-
-    if (!VezaxEncounterActive(botAI))
-        return false;
-
-    Unit* vapor = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_VAPORS);
-    if (!vapor)
-        return false;
-
-    return AI_VALUE(Unit*, "current target") != vapor;
-}
-
 bool VezaxShadowCrashSoakTrigger::IsActive()
 {
     // Cheap tests first. GatherVezaxHazards runs two grid searches, and this is one of the two Vezax
@@ -182,7 +144,7 @@ bool VezaxShadowCrashSoakTrigger::IsActive()
     GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
 
     VezaxHazard field;
-    if (!TryGetVezaxNearestHazard(bot, hazards, true, field))
+    if (!TryGetVezaxNearestHazard(bot, hazards, field))
         return false;
 
     return bot->GetExactDist2d(field.position.GetPositionX(), field.position.GetPositionY()) <=

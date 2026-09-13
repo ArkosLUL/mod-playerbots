@@ -685,16 +685,16 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // decision anyone made.
     //
     // The dodge leads: Shadow Crash is 11310 plus a knockback, and it is the only hazard here with a
-    // deadline, about 1.8-2.6s of missile flight. The interrupt comes next and outranks the puddle
-    // exit, because losing a kick costs the whole raid 13875-16125 fire while riding one more puddle
-    // tick costs one bot a survivable hit - the interrupt trigger yields on its own when the next
-    // tick is not survivable. Mark of the Faceless is the only node whose failure heals the boss, but
-    // it drains over 10s rather than landing at once, so it sits under both.
+    // deadline, about 2.7-3.6s of missile flight. The interrupt comes next, because losing a kick
+    // costs the whole raid 13875-16125 fire at once. Then the two halves of Mark of the Faceless,
+    // which is the only mechanic whose failure heals the boss - 5000 a tick off everyone nearby, at
+    // 20x back into him - but drains over 10s rather than landing at once, so both sit under the
+    // dodge. Breaking out of someone else's mark outranks carrying your own: the bot that holds it is
+    // the one person its leech skips, so it is never the one taking damage.
     //
-    // The RAID band is the reward half. Soaking a field or a puddle is worth nothing to a bot that is
-    // already dying, and kill-vapor outranks the field soak because the handler is by definition out
-    // of mana and a cost reduction buys it nothing. Position is last on purpose, and yields as soon as
-    // it is parked, so the class interrupts at ACTION_INTERRUPT (40) still get a tick.
+    // The RAID band is the reward half, and soaking a field is worth nothing to a bot that is already
+    // dying. Position is last on purpose, and yields as soon as it is parked, so the class interrupts
+    // at ACTION_INTERRUPT (40) still get a tick.
     triggers.push_back(new TriggerNode(
         "vezax reset encounter state",
         { NextAction("vezax reset encounter state action", ACTION_EMERGENCY + 10) }));
@@ -708,8 +708,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("vezax searing flames interrupt action", ACTION_EMERGENCY + 8) }));
 
     triggers.push_back(new TriggerNode(
-        "vezax vapor puddle clear",
-        { NextAction("vezax vapor puddle clear action", ACTION_EMERGENCY + 7) }));
+        "vezax mark of the faceless break",
+        { NextAction("vezax mark of the faceless break action", ACTION_EMERGENCY + 7) }));
 
     triggers.push_back(new TriggerNode(
         "vezax mark of the faceless",
@@ -722,14 +722,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "vezax saronite animus",
         { NextAction("vezax saronite animus action", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax vapor soak",
-        { NextAction("vezax vapor soak action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax kill vapor",
-        { NextAction("vezax kill vapor action", ACTION_RAID + 3) }));
 
     triggers.push_back(new TriggerNode(
         "vezax shadow crash soak",
@@ -974,6 +966,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Vezax owns where the ranged half stands, so the generic movers have to stand down or the
     // formation is re-derived and abandoned on alternate ticks.
     multipliers.push_back(new VezaxControlMovementMultiplier(botAI));
+    multipliers.push_back(new VezaxSuppressLifeTapMultiplier(botAI));
 
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
     multipliers.push_back(new HodirGuardMultiplier(botAI));

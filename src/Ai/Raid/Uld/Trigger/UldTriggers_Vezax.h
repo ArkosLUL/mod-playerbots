@@ -25,11 +25,15 @@ public:
     bool IsActive() override;
 };
 
-// Riding a Saronite Vapors puddle past the point where the next tick is worth the mana.
-class VezaxVaporPuddleClearTrigger : public Trigger
+// Standing inside the leech around someone else's mark. Melee only: the camp is far enough out that
+// nothing marked in the ball reaches it.
+class VezaxMarkOfTheFacelessBreakTrigger : public Trigger
 {
 public:
-    VezaxVaporPuddleClearTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax vapor puddle clear") {}
+    VezaxMarkOfTheFacelessBreakTrigger(PlayerbotAI* ai)
+        : Trigger(ai, "vezax mark of the faceless break")
+    {
+    }
     bool IsActive() override;
 };
 
@@ -66,22 +70,6 @@ class VezaxSaroniteAnimusTrigger : public Trigger
 {
 public:
     VezaxSaroniteAnimusTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax saronite animus") {}
-    bool IsActive() override;
-};
-
-// Normal mode only: killing a vapor is what creates the raid's mana, and in hard mode it is what
-// destroys the hard mode.
-class VezaxVaporSoakTrigger : public Trigger
-{
-public:
-    VezaxVaporSoakTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax vapor soak", 2) {}
-    bool IsActive() override;
-};
-
-class VezaxKillVaporTrigger : public Trigger
-{
-public:
-    VezaxKillVaporTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax kill vapor") {}
     bool IsActive() override;
 };
 

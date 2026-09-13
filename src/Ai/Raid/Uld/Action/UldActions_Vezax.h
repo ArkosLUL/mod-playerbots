@@ -19,6 +19,8 @@ public:
     bool Execute(Event event) override;
 };
 
+// Carry the mark away from everyone else. The leech skips whoever holds it, so this is not an escape
+// from its own damage - it is getting ten seconds of 5000-a-tick off the people standing nearby.
 class VezaxMarkOfTheFacelessAction : public MovementAction
 {
 public:
@@ -27,10 +29,14 @@ public:
     bool Execute(Event event) override;
 };
 
-class VezaxVaporPuddleClearAction : public MovementAction
+// The other side of it: step out of the leech around someone else's mark.
+class VezaxMarkOfTheFacelessBreakAction : public MovementAction
 {
 public:
-    VezaxVaporPuddleClearAction(PlayerbotAI* ai) : MovementAction(ai, "vezax vapor puddle clear action") {}
+    VezaxMarkOfTheFacelessBreakAction(PlayerbotAI* ai)
+        : MovementAction(ai, "vezax mark of the faceless break action")
+    {
+    }
 
     bool Execute(Event event) override;
 };
@@ -69,22 +75,6 @@ class VezaxSaroniteAnimusAction : public AttackAction
 {
 public:
     VezaxSaroniteAnimusAction(PlayerbotAI* ai) : AttackAction(ai, "vezax saronite animus action") {}
-
-    bool Execute(Event event) override;
-};
-
-class VezaxVaporSoakAction : public MovementAction
-{
-public:
-    VezaxVaporSoakAction(PlayerbotAI* ai) : MovementAction(ai, "vezax vapor soak action") {}
-
-    bool Execute(Event event) override;
-};
-
-class VezaxKillVaporAction : public AttackAction
-{
-public:
-    VezaxKillVaporAction(PlayerbotAI* ai) : AttackAction(ai, "vezax kill vapor action") {}
 
     bool Execute(Event event) override;
 };

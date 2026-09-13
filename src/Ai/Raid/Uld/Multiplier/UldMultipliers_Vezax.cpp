@@ -30,6 +30,7 @@
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "UldTriggers.h"
+#include "WarlockActions.h"
 #include "VehicleActions.h"
 
 #include <set>
@@ -58,9 +59,26 @@ float VezaxControlMovementMultiplier::GetValue(Action* action)
         return 1.0f;
 
     static std::set<std::string> const encounterMovers = {
-        "vezax raid position action",       "vezax mark of the faceless action",
-        "vezax vapor puddle clear action",  "vezax shadow crash dodge action",
-        "vezax shadow crash soak action",   "vezax vapor soak action"};
+        "vezax raid position action", "vezax mark of the faceless action",
+        "vezax shadow crash dodge action", "vezax shadow crash soak action"};
 
     return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
+}
+
+float VezaxSuppressLifeTapMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<CastLifeTapAction*>(action))
+        return 1.0f;
+
+    if (!VezaxEncounterActive(botAI))
+        return 1.0f;
+
+    uint32 const maxMana = bot->GetMaxPower(POWER_MANA);
+    if (!maxMana)
+        return 1.0f;
+
+    // Below the gate the tap is real mana the bot will spend; above it the health is the only thing
+    // that changes hands, and there is no regeneration here to make it back.
+    uint8 const mana = static_cast<uint8>(bot->GetPower(POWER_MANA) * 100 / maxMana);
+    return mana >= ULDUAR_VEZAX_LIFE_TAP_MANA_PCT ? 0.0f : 1.0f;
 }

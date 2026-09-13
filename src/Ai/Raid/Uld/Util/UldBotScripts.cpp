@@ -18,11 +18,9 @@
 namespace
 {
 
-// Both Vezax ground effects appear under a bot's feet with no warning it can act on: the Shadow
-// Crash field lands where the missile does, and the vapor puddle where the vapor dies. A bot part
-// way through a cast cannot move, so without this it finishes the cast standing in the effect -
-// which on a puddle is one more doubling of 100 * 2^stacks. Nothing is stored; both hooks fire once,
-// at the instant the effect is created.
+// A Shadow Crash lands where the missile was aimed, with no warning a bot can act on, and a bot part
+// way through a cast cannot move - so without this it finishes the cast standing in the impact.
+// Nothing is stored; the hook fires once, at the instant the missile goes out.
 void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float radius,
                                bool (*needsToLeave)(Player*))
 {
@@ -52,8 +50,6 @@ void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float ra
     }
 }
 
-bool GainsNothingFromVaporPuddle(Player* bot) { return !VezaxMayStandInVaporPuddle(bot); }
-
 // Everyone the dodge node will move. Melee and the tank are not on it: they hold the boss, and the
 // camp's radii are all measured from him.
 bool DodgesShadowCrash(Player* bot)
@@ -74,7 +70,9 @@ public:
         if (!caster || !spellInfo || caster->GetMapId() != ULDUAR_MAP_ID)
             return;
 
-        if (spellInfo->Id == SPELL_VEZAX_SHADOW_CRASH_CAST)
+        if (spellInfo->Id != SPELL_VEZAX_SHADOW_CRASH_CAST)
+            return;
+
         {
             // Both effects are TRIGGER_MISSILE aimed at TARGET_DEST_TARGET_ENEMY, so the spell
             // carries a destination and no unit target - GetUniqueTargetInfo is empty for it. The
@@ -108,23 +106,6 @@ public:
                 RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SHADOW_CRASH_DMG, impact,
                                           ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS, flightMs);
             }
-
-            return;
-        }
-
-        if (spellInfo->Id == SPELL_VEZAX_SARONITE_VAPORS_SPAWN)
-        {
-            Position const puddle = caster->GetPosition();
-            InterruptVezaxCastersNear(caster, puddle, ULDUAR_VEZAX_HAZARD_RADIUS,
-                                      &GainsNothingFromVaporPuddle);
-
-            // 63322 applies a periodic aura rather than a persistent area aura, so it is never a
-            // DynamicObject for the snapshot sweep to find, and the corpse holding it leaves the
-            // watched set the moment it dies. Without this the puddle is nowhere in the trace.
-            // 63323's own duration is the corpse aura's life, and so the puddle's.
-            uint32 const ttlMs = static_cast<uint32>(std::max<int32>(0, spellInfo->GetDuration()));
-            RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SARONITE_VAPORS_PUDDLE, puddle,
-                                      ULDUAR_VEZAX_HAZARD_RADIUS, ttlMs);
         }
     }
 };

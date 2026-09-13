@@ -45,28 +45,23 @@ bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
     if (!TryGetVezaxMarkSpot(bot, spot))
         return false;
 
+    // FORCED, not COMBAT: IsWaitingForLastMove only yields to a strictly higher priority, so at
+    // COMBAT any dodge move still in flight swallows this one - and the debuff is ten seconds long.
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
-                  false, false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
+                  false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
-bool VezaxVaporPuddleClearAction::Execute(Event /*event*/)
+bool VezaxMarkOfTheFacelessBreakAction::Execute(Event /*event*/)
 {
-    std::vector<VezaxHazard> hazards;
-    GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
-
-    std::vector<Position> avoid;
-    VezaxBuildAvoidPositions(bot, hazards, avoid);
-    if (avoid.empty())
+    Unit* marked = GetVezaxMarkedAlly(bot);
+    if (!marked)
         return false;
 
-    // Not FleePosition: that clamps travel to AiPlayerbot.FleeDistance, which defaults to 5 yards and
-    // cannot walk a bot out of the middle of an 8 yard puddle.
-    Position const clear = FindNearestPositionClearOfHazards(
-        bot, avoid, ULDUAR_VEZAX_HAZARD_CLEARANCE, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
-    if (clear == Position())
+    Position spot;
+    if (!TryGetVezaxMarkBreakSpot(bot, marked, spot))
         return false;
 
-    return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(),
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
@@ -130,52 +125,13 @@ bool VezaxSaroniteAnimusAction::Execute(Event /*event*/)
     return Attack(animus);
 }
 
-bool VezaxVaporSoakAction::Execute(Event /*event*/)
-{
-    std::vector<VezaxHazard> hazards;
-    GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_VAPOR_SOAK_MAX_TRAVEL);
-
-    VezaxHazard puddle;
-    if (!TryGetVezaxNearestHazard(bot, hazards, false, puddle))
-        return false;
-
-    // Anywhere inside is enough; the aura does not care how central the bot stands.
-    if (bot->GetExactDist2d(puddle.position.GetPositionX(), puddle.position.GetPositionY()) <=
-        puddle.radius - 1.0f)
-    {
-        return false;
-    }
-
-    return MoveTo(bot->GetMapId(), puddle.position.GetPositionX(), puddle.position.GetPositionY(),
-                  puddle.position.GetPositionZ(), false, false, false, true,
-                  MovementPriority::MOVEMENT_COMBAT, true);
-}
-
-bool VezaxKillVaporAction::Execute(Event /*event*/)
-{
-    Unit* vapor = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_VAPORS);
-    if (!vapor)
-        return false;
-
-    // Close first, then kill. The puddle drops on the corpse, so a handler that shoots one from
-    // 30 yd has to walk that far afterwards to stand in what it came for.
-    if (bot->GetExactDist2d(vapor) > ULDUAR_VEZAX_VAPOR_KILL_RANGE)
-    {
-        return MoveTo(bot->GetMapId(), vapor->GetPositionX(), vapor->GetPositionY(),
-                      vapor->GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_COMBAT, true);
-    }
-
-    return Attack(vapor);
-}
-
 bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
 {
     std::vector<VezaxHazard> hazards;
     GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_HAZARD_LOCAL_SEARCH_RADIUS);
 
     VezaxHazard field;
-    if (!TryGetVezaxNearestHazard(bot, hazards, true, field))
+    if (!TryGetVezaxNearestHazard(bot, hazards, field))
         return false;
 
     // Never walk into a spot a missile is about to land on. Fields overlap - one lands every 10s and
@@ -204,11 +160,8 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
 
 bool VezaxRaidPositionAction::Execute(Event /*event*/)
 {
-    std::vector<VezaxHazard> hazards;
-    GatherVezaxHazards(bot, hazards, ULDUAR_VEZAX_HAZARD_SEARCH_RADIUS);
-
     Position slot;
-    if (!TryGetVezaxSlot(bot, hazards, slot))
+    if (!TryGetVezaxSlot(bot, slot))
     {
         // Melee hold the boss instead of taking a slot. All they need is not to be stacked on each
         // other - a crash can still reach them, but walking them off it would take them off the

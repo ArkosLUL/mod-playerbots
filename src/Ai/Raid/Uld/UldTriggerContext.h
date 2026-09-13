@@ -105,13 +105,11 @@ public:
         creators["sara shadow resistance trigger"] = &RaidUlduarTriggerContext::sara_shadow_resistance_trigger;
         creators["vezax reset encounter state"] = &RaidUlduarTriggerContext::vezax_reset_encounter_state;
         creators["vezax mark of the faceless"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless;
-        creators["vezax vapor puddle clear"] = &RaidUlduarTriggerContext::vezax_vapor_puddle_clear;
+        creators["vezax mark of the faceless break"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless_break;
         creators["vezax shadow crash dodge"] = &RaidUlduarTriggerContext::vezax_shadow_crash_dodge;
         creators["vezax searing flames interrupt"] = &RaidUlduarTriggerContext::vezax_searing_flames_interrupt;
         creators["vezax surge of darkness"] = &RaidUlduarTriggerContext::vezax_surge_of_darkness;
         creators["vezax saronite animus"] = &RaidUlduarTriggerContext::vezax_saronite_animus;
-        creators["vezax vapor soak"] = &RaidUlduarTriggerContext::vezax_vapor_soak;
-        creators["vezax kill vapor"] = &RaidUlduarTriggerContext::vezax_kill_vapor;
         creators["vezax shadow crash soak"] = &RaidUlduarTriggerContext::vezax_shadow_crash_soak;
         creators["vezax raid position"] = &RaidUlduarTriggerContext::vezax_raid_position;
         creators["vezax shadow resistance"] = &RaidUlduarTriggerContext::vezax_shadow_resistance;
@@ -297,13 +295,11 @@ private:
     static Trigger* sara_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "sara"); }
     static Trigger* vezax_reset_encounter_state(PlayerbotAI* ai) { return new VezaxResetEncounterStateTrigger(ai); }
     static Trigger* vezax_mark_of_the_faceless(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessTrigger(ai); }
-    static Trigger* vezax_vapor_puddle_clear(PlayerbotAI* ai) { return new VezaxVaporPuddleClearTrigger(ai); }
+    static Trigger* vezax_mark_of_the_faceless_break(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessBreakTrigger(ai); }
     static Trigger* vezax_shadow_crash_dodge(PlayerbotAI* ai) { return new VezaxShadowCrashDodgeTrigger(ai); }
     static Trigger* vezax_searing_flames_interrupt(PlayerbotAI* ai) { return new VezaxSearingFlamesInterruptTrigger(ai); }
     static Trigger* vezax_surge_of_darkness(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessTrigger(ai); }
     static Trigger* vezax_saronite_animus(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
-    static Trigger* vezax_vapor_soak(PlayerbotAI* ai) { return new VezaxVaporSoakTrigger(ai); }
-    static Trigger* vezax_kill_vapor(PlayerbotAI* ai) { return new VezaxKillVaporTrigger(ai); }
     static Trigger* vezax_shadow_crash_soak(PlayerbotAI* ai) { return new VezaxShadowCrashSoakTrigger(ai); }
     static Trigger* vezax_raid_position(PlayerbotAI* ai) { return new VezaxRaidPositionTrigger(ai); }
     static Trigger* vezax_shadow_resistance(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
