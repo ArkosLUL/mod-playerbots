@@ -181,6 +181,8 @@ public:
         creators["thorim charged orb trigger"] = &RaidUlduarTriggerContext::thorim_charged_orb_trigger;
         creators["thorim pet leash trigger"] = &RaidUlduarTriggerContext::thorim_pet_leash_trigger;
         creators["thorim arena leash trigger"] = &RaidUlduarTriggerContext::thorim_arena_leash_trigger;
+        creators["mimiron approach target trigger"] =
+            &RaidUlduarTriggerContext::mimiron_approach_target_trigger;
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
         creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
         creators["mimiron fire bot trigger"] = &RaidUlduarTriggerContext::mimiron_fire_bot_trigger;
@@ -375,6 +377,10 @@ private:
     static Trigger* thorim_charged_orb_trigger(PlayerbotAI* ai) { return new ThorimChargedOrbTrigger(ai); }
     static Trigger* thorim_pet_leash_trigger(PlayerbotAI* ai) { return new ThorimPetLeashTrigger(ai); }
     static Trigger* thorim_arena_leash_trigger(PlayerbotAI* ai) { return new ThorimArenaLeashTrigger(ai); }
+    static Trigger* mimiron_approach_target_trigger(PlayerbotAI* ai)
+    {
+        return new MimironApproachTargetTrigger(ai);
+    }
     static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
     static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
     static Trigger* mimiron_fire_bot_trigger(PlayerbotAI* ai) { return new MimironFireBotTrigger(ai); }

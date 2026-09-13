@@ -290,6 +290,22 @@ bool MimironBombBotTrigger::IsActive()
     return tooCloseToBombBot.TooCloseToCreature(NPC_BOMB_BOT, ULDUAR_MIMIRON_BOMB_BOT_RADIUS);
 }
 
+bool MimironApproachTargetTrigger::IsActive()
+{
+    if (!IsMimironHardModeActive(botAI) || !IsMimironEngaged(botAI))
+        return false;
+
+    // Nothing to close on while a hazard owns the tick, and every one of those runs above this
+    // node anyway - asking here only saves the hazard scan below.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    Position approach;
+    return GetMimironTargetApproach(botAI, bot, target, GetMimironApproachRange(botAI, bot),
+                                    approach);
+}
+
 bool MimironDodgeFlamesTrigger::IsActive()
 {
     if (!IsMimironHardModeActive(botAI))

@@ -114,6 +114,17 @@ public:
 
 // Mimiron hard mode, phase 3: bots cannot aim AoE away from a unit, so damage AoE is held near the
 // Emergency Fire Bots the raid is keeping alive to put the fire out. Heals are left alone.
+// Mimiron hard mode: the generic movers aim at a unit and know nothing about the ground fire, so
+// they walk a bot straight back into the node it just paid to leave. Held for a window after the
+// dodge rather than while the fire is near - the fire is near for the whole of phase 3, and
+// zeroing them on that would strand melee and healers out of range for the phase.
+class MimironFireHoldGuardMultiplier : public Multiplier
+{
+public:
+    MimironFireHoldGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron fire hold guard") {}
+    float GetValue(Action* action) override;
+};
+
 class MimironFireBotAoeGuardMultiplier : public Multiplier
 {
 public:

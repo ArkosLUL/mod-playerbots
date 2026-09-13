@@ -189,12 +189,14 @@ the same fan and the first clean one taken; only the last rung may fall back. Sh
 precisely because they are screened, and what a short one saves is the walk home.
 
 **And it dodged whatever the cost.** A node ticks ~3.1k against a 22-24k pool, so a healthy bot has
-seven ticks of margin while the round trip costs 24 yd of uptime.
-`ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT` is **60**: above it the bot stands in the fire and keeps
-working. `ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE` (2) overrules the gate, because two nodes halve
-the margin to about four seconds — not long enough to notice a health bar and then walk 12 yd. Watch
-this one: phase 2 has no healing slack, so if fire per living bot per second climbs back above
-356/332 the threshold is too low.
+seven ticks of margin while the round trip costs 24 yd of uptime. The gate is `nodes >=
+ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE (2) || GetHealthPct() <
+ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT (60)` — an **or**, so two overlapping nodes dodge at any
+health, and that is the usual reason: **481 of 820** issued dodges on 2026-09-13 were at 100%, 99
+below 60. Two nodes halve the margin to about four seconds, not long enough to notice a health bar
+and then walk 12 yd. The count is not checkable from a trace — the snapshot's fire set caps at 40,
+so one read off it is a floor. Watch this one: phase 2 has no healing slack, so if fire per living
+bot per second climbs back above 356/332 the threshold is too low.
 
 **And the ladder was dead anyway.** On 2026-09-09 `mimiron.flee` read `flames+3 none` 2,173 times,
 `+5` 2,161, `+7` 2,159 and `flames+10 fallback` 2,156, against **320 `flames ok` — 13%**. But the
@@ -211,6 +213,8 @@ blocks the Rapid Burst and Frost Bomb dodges in turn and Rapid Burst has no tele
 for; the barrage does, and the trigger stands down for it outright. The fan also counts what the
 mover refused — `move` in the `mimiron.flee` note, and a `locked` outcome from testing the lock once
 up front instead of 44 times — because reading a mover refusal as a hazard refusal is what hid this.
+On 2026-09-13 that read **1303 `locked` on every one of the four rungs** against 590 `ok` on rung 1:
+the lock is tested once before the fan, so a bot mid-leg burns the whole ladder saying so.
 
 **The formation walked bots back across the fire.** Arc spread screened its *slot*, not the walk, so a
 clean slot behind a burning band sent the bot through it and the FORCED dodge threw it out the far
@@ -240,6 +244,40 @@ for the whole phase a 6 yd ring round a burning slot burns too. Hence the 12 yd 
 phase 3 wedge can afford — it orbits 17-27 yd out against a 35 yd cast range. `mimiron.approach`
 notes each non-direct leg, and `none` when no ring is clear, without which an empty answer reads in
 a trace exactly like the trigger never firing.
+
+**The dodge works; the generic movers undo it.** They aim at a unit and screen nothing about the
+floor. Share of accepted legs whose destination sat inside a node the snapshot could see, 2026-09-13:
+arc spread **3%** (350 legs) and the flame dodge **4%** (820) against `reach melee` **38%** (447, 66%
+in phase 3), `reach spell` 42% (172), `follow` 45% (484, **97%** in the 2→3 handover), `set behind`
+38% (188), `reach party member to heal` 30% (56). Of the 731 legs that immediately followed an
+accepted dodge, 350 were `follow` and 202 of those went straight back in. So a bot dodges every
+**3.1 s** (median of 797 gaps, 61% under 4 s) and still stands in a node 35.4% of phase 3 and 40.6%
+of the 2→3 handover, and Flames was the pull's largest single damage source at **1,863,846, 27.7%**
+of everything taken — ahead of Heat Wave. The A-B-A that used to be `flame dodge <-> reach spell` is
+now `follow <-> dodge flames`, 276 and 205 across the two handovers.
+
+Two answers, because the hazard has two shapes. `MimironFireHoldGuardMultiplier` zeroes the five
+names the Frost Bomb guard already lists — `reach melee`, `reach spell`, `reach party member to
+heal`, `set behind`, `follow` — for `ULDUAR_MIMIRON_FLAMES_HOLD_MS` (2500) after this bot's last
+accepted dodge (`fireDodgeMs` in `MimironFightState`). A **hold**, not a veto: fire covers a third
+of the floor for all of phase 3, so gating on fire being near would strand the raid. It does
+suppress `follow` for most of a handover, which is free while nothing is attackable — but if the
+master walks the raid during one, the bots will lag.
+
+`mimiron approach target action` (`ACTION_RAID - 2`) is the other, because melee stood in fire 29.1%
+of phase 3 while their own target stood in it 31.1%: the exposure is the add, not the walk, and a
+hold cannot fix that. `GetMimironTargetApproach` sweeps 12 bearings round the target at the bot's
+own stop distance less `ULDUAR_MIMIRON_APPROACH_INSET` (2), starting from the bearing toward the
+bot; if that one is clear it returns false and the generic node does its own job. Destination
+screened by `IsMimironSpotStandable` and the Rapid Burst cone, noted `mimiron.close round`.
+
+**It has to be a node, not a screen inside `reach melee`.** The three reach actions share one body,
+`MovementAction::ReachCombatTo`, which does compute a point — but
+`SharedNamedObjectContextList::Add` flattens every context's creators into one global map, last
+writer wins, and the list is static, so re-registering `reach melee` for Ulduar replaces it for
+every bot in every fight. There is no context override in the tree and every destination-computing
+member of `MovementAction` is non-virtual. No multiplier is needed either: `ACTION_RAID` is 60
+against `ACTION_HIGH`'s 20, so any Mimiron node already outranks both reach nodes.
 
 ## Raising the fire dodge to FORCED handed it the Shock Blast escape to cancel
 
@@ -285,6 +323,35 @@ refused every bearing (three for the circle), and its fallback, straight away fr
 casting MK II to 9.9 yd; its FORCED leg held the lock, the escape logged `shock locked`, and the bot
 died. A fallback whose straight-away point is inside a live Shock Blast (every flee but the escape) or
 Frost Bomb now returns false as `unsafe`, leaving the bot in fire at ~3.1k a second and the lock free.
+
+**And a bearing could report an escape without moving the bot.** On 2026-09-13 the fire dodge parked
+three melee on one point, 2688.45,2580.02, and the next Shock Blast killed all three there at
+9.65 yd — the pull's only three hits, the rest of the raid at 15.8 yd or more, `death.lastmove`
+reading `mimiron shock blast action, arrived`. Two defects, both in the fan:
+
+- **"Further than I started" is not an escape.** `CheckCollisionAndGetValidCoords` overwrites the
+  destination with the raycast's last point and still returns true on a `PATHFIND_INCOMPLETE`
+  result, so a bearing leaving the mesh comes back as the bot's own feet — and 7 mm of gain passed
+  `refusedBack`. Those three logged `shock ok +22`, `ok -68`, `ok +45` inside 310 ms, moved
+  **0.3 yd**, and stood still for the remaining 4 s. A candidate must now cover at least
+  `ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT` (0.5) of the hop it asked for, counted into the note's
+  `move` bucket. Every hazard dodge gets this, not only the escape.
+- **One radius over eleven bearings clears the circle on one of them.** At bearing θ off
+  straight-away the destination sits `sqrt(d² + r² + 2dr·cosθ)` from the hazard, so sweeping the
+  radial gap `SAFE_DIST - d` reaches 18 yd at θ=0 and nowhere else — at d=9.52 not one of the eleven
+  did. The hop is solved per bearing now, `r(θ) = -d·cosθ + sqrt(SAFE² - d²·sin²θ)` (`clearRadius`
+  on `MoveAwayClearOfMines`), so every bearing lands on the circle.
+
+That spot is a mesh trap and the fan had no way to see it: navprobe rings at 8.5 and 12 yd read
+14/16 on mesh with the holes at **112° and 135°**, and the MK II sat at -49°, putting straight-away
+at 131° — dead centre. Per-bearing, +45° gives 2678.51,2580.69 (poly 0.23, `PATHFIND_NORMAL`,
+13.48 yd, ~2 s of the 4 s cast), which is where the one melee who lived ended up; ±67.5° also clear.
+
+`screenShock` used to except the escape from `IsMimironSpotShockSafe`, reasoning about where the bot
+**starts** while the test is on where it **ends**; it is unconditional now. And when every bearing
+is refused, `FleeShockToAnchor` aims at the bot's own spread slot, else `ULDUAR_MIMIRON_ROOM_CENTER`,
+through `MoveTowardClearOfMines` — screened like any other destination, noted `shock anchor`. The
+old fallback re-ran bearing 0, which is the bearing that had just failed.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -741,6 +808,11 @@ ACU, against Assault Bot 23%, Junk Bot 8%, Fire Bot 7%, Bomb Bot 3% — and not 
 measured 52 + 31 + 32 s in both pulls that day with the raid back on the new mech 3-5 s after it
 became attackable.
 
+2026-09-13 never got there. MK II dead in 104 s and VX-001 in 144 s, then phase 3 collapsed: the ACU
+was still at **87.4% after 135 s**, the raid went 19 alive at 5:00 to 9 at 7:00, and the master
+called it. Living bots spent **65%** of their phase 3 ticks on Assault Bots, 16.8% on the ACU, 9.5%
+on Bomb Bots, 1.4% on fire bots.
+
 ## A dodge that returns false hands the tick to Charge
 
 Shock Blast (63631) is a **4 s cast**, `TARGET_SRC_CASTER`, 15 yd, 100000 damage, every 30 s. Four
@@ -869,13 +941,17 @@ The next phase 3 culled one at 4:48 and kept two until 6:04 and 6:25, before pha
 hit, and 18 siren applications against 45 before, 6 of them on casters and healers against 19, most in
 the 3 s after the wave spawned.
 
-**The cull is cleanup, so it ranks like cleanup.** Ranged took an unkept bot above everything but a
-Bomb Bot, and on 2026-09-12 all 21 non-tanks switched to `firebot` at 4:56 with the ACU at **97.9%**:
-phase 3 spent **361 bot-seconds and 769,961** on fire bots, 7% of output and 21% of ranged bot-seconds,
-while the ACU took 43k dps. Against that, their own output is **one Water Spray hit a pull**, twice
-running. Ranged now take them there only during the 15% sweep, which is the urgent one; outside it
-they wait behind the mech, melee stay behind the Assault Bot, and **nobody culls in phase 4** — a
-stray spray line is cheaper than pulling anyone off the rendezvous.
+**The cull ranks by how many are loose, because both extremes cost a phase.** Ranged used to take any
+unkept bot above everything but a Bomb Bot, and on 2026-09-12 all 21 non-tanks switched to `firebot`
+at 4:56 with the ACU at **97.9%**: phase 3 spent **361 bot-seconds and 769,961** on them, 7% of
+output and 21% of ranged bot-seconds, while the ACU took 43k dps. Demoting it behind the mech
+inverted that on 2026-09-13 — the 15% sweep never armed because the ACU never got below 87.4%, fire
+bots took **1.4%** of living bot-ticks, six were up together from 6:26, and they put **248,392**
+Water Spray into the raid and killed **six bots**, half of phase 3's deaths. One loose bot is one
+Water Spray hit a pull; six is a wipe. So three tiers for ranged: the 15% sweep above everything but
+the Bomb Bot, a pile-up of `ULDUAR_MIMIRON_FIREBOT_CULL_AT` (2) unkept ones — four alive — also above
+the mech, and a single extra behind it. Melee stay behind the Assault Bot in all three, and **nobody
+culls in phase 4**: a stray spray line is cheaper than pulling anyone off the rendezvous.
 
 **Keeping them out of Mimiron's own picker is not enough.** In that pull the bot tank killed *both*
 kept bots on its own (32,731 and 17,824, 34% of its phase 3): `MimironSetDpsPriorityTrigger` stands
@@ -1009,6 +1085,9 @@ window 1 always goes to a healer external; window 2 then took two buttons every 
 Divine Protection on health at 0:53 after an external, or a second claim at 0:54 once the old 8 s claim
 lapsed. The 12 s claim and the hold give windows 1-3 one button each on a replay of those pulls;
 windows 4-5 stay bare, as they were (min HP 74-82%).
+
+**Still untested in a pull**, three running: a human has main-tanked every Firefighter attempt since,
+so no bot tank has taken a Plasma Blast and none of this has been exercised.
 
 ## The tank leaves with three seconds of threat and the boss does not follow
 
@@ -1219,9 +1298,10 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `rocket`, `frostbomb`, `rapidburst`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast or Frost Bomb |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `rapidburst`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast or Frost Bomb |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot) or `detour ±N` (degrees off the direct bearing) |
+| `close` | A melee or caster approach steered round the fire instead of straight at the target |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,

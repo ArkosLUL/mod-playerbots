@@ -40,12 +40,14 @@
 using namespace EncounterHelpers;
 
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
-                                             bool fallbackUnfiltered, bool interrupt, char const* what)
+                                             bool fallbackUnfiltered, bool interrupt, char const* what,
+                                             float clearRadius)
 {
     if (!from)
         return false;
 
-    return FleeFan(from->GetPosition(), from, distance, priority, fallbackUnfiltered, interrupt, what);
+    return FleeFan(from->GetPosition(), from, distance, priority, fallbackUnfiltered, interrupt, what,
+                   clearRadius);
 }
 
 bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distance,
@@ -74,7 +76,7 @@ bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPri
 
 bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float distance,
                                 MovementPriority priority, bool fallbackUnfiltered, bool interrupt,
-                                char const* what)
+                                char const* what, float clearRadius)
 {
     if (distance <= 0.0f)
         return false;
@@ -91,10 +93,6 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     uint32 refusedShock = 0;
     uint32 refusedSpray = 0;
     uint32 refusedMove = 0;
-
-    // Everything except the Shock Blast escape itself, which is the one move that has to start inside
-    // the circle.
-    bool const screenShock = std::strcmp(what, "shock") != 0;
 
     // A bot with a cast in flight cannot be moved at all: PointMovementGenerator discards the spline
     // outright for anything IsMovementPreventedByCasting, and MoveTo still reports success and stamps
@@ -115,7 +113,6 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     }
 
     float const speed = bot->GetSpeed(MOVE_RUN);
-    float const travel = speed > 0.0f ? distance / speed : 0.0f;
     float const away = from.GetAngle(bot->GetPositionX(), bot->GetPositionY());
     float const started = bot->GetExactDist2d(from.GetPositionX(), from.GetPositionY());
 
@@ -140,21 +137,51 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
 
             float const angle = away + sign * delta;
-            float dx = bot->GetPositionX() + cos(angle) * distance;
-            float dy = bot->GetPositionY() + sin(angle) * distance;
+
+            // A bearing delta off straight away lands sqrt(d^2 + r^2 + 2dr cos delta) from the
+            // hazard, not d + r, so one swept radius clears clearRadius on the first bearing and
+            // nothing else. Solve for the hop that puts this bearing on the circle. A bearing so
+            // wide that it never reaches the circle has no root, and is no escape.
+            float hop = distance;
+            if (clearRadius > 0.0f)
+            {
+                float const leg = started * sin(delta);
+                float const disc = clearRadius * clearRadius - leg * leg;
+                hop = disc > 0.0f ? sqrt(disc) - started * cos(delta) : 0.0f;
+                if (hop <= 0.0f)
+                {
+                    ++refusedBack;
+                    continue;
+                }
+            }
+
+            float dx = bot->GetPositionX() + cos(angle) * hop;
+            float dy = bot->GetPositionY() + sin(angle) * hop;
             float dz = bot->GetPositionZ();
             bool exact = true;
             if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(),
                                                                bot->GetPositionY(),
                                                                bot->GetPositionZ(), dx, dy, dz))
             {
-                dx = bot->GetPositionX() + cos(angle) * distance;
-                dy = bot->GetPositionY() + sin(angle) * distance;
+                dx = bot->GetPositionX() + cos(angle) * hop;
+                dy = bot->GetPositionY() + sin(angle) * hop;
                 dz = bot->GetPositionZ();
                 exact = false;
             }
 
             Position const dest(dx, dy, dz);
+            float const travel = speed > 0.0f ? hop / speed : 0.0f;
+
+            // That helper rewrites the destination to the raycast's last point and still reports
+            // success on an incomplete path, so a bearing running off the mesh comes back as the
+            // bot's own feet. Judge the step, not only the gain: the test below is satisfied by a
+            // millimetre.
+            if (dest.GetExactDist2d(bot->GetPositionX(), bot->GetPositionY()) <
+                hop * ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT)
+            {
+                ++refusedMove;
+                continue;
+            }
 
             // Collision can shorten the step enough to leave the bot no better off than it started.
             if (dest.GetExactDist2d(from.GetPositionX(), from.GetPositionY()) <= started)
@@ -202,7 +229,10 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
-            if (screenShock && !IsMimironSpotShockSafe(botAI, dest))
+            // Including the Shock Blast escape itself. The comment this used to carry reasoned
+            // about where the bot starts, but the test is on the destination, and an escape that
+            // ends inside the circle is not one.
+            if (!IsMimironSpotShockSafe(botAI, dest))
             {
                 ++refusedShock;
                 continue;
@@ -243,7 +273,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     // this leg is forced, so it would also lock out the Shock Blast escape until it expires.
     Position const straightAway(bot->GetPositionX() + cos(away) * distance,
                                 bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
-    if ((screenShock && !IsMimironSpotShockSafe(botAI, straightAway)) ||
+    if (!IsMimironSpotShockSafe(botAI, straightAway) ||
         !IsMimironSpotBombSafe(hazards, straightAway))
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
@@ -285,6 +315,21 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
     RaidObs::NoteDerived(bot, "mimiron.flee", line);
 }
 
+// Where to run when every bearing off the boss is refused. The fan only ever sweeps away from the
+// MK II, and a bot standing where that points off the mesh has no bearing left - three melee died
+// on one such spot, retrying the same off-mesh heading for the whole 4 s cast. A named point the
+// bot can path to is the way out; the fan screens it like any other destination, so an anchor
+// that is itself inside the circle is refused rather than walked to.
+bool MimironShockBlastAction::FleeShockToAnchor()
+{
+    Position anchor;
+    if (!GetMimironSpreadSlot(botAI, bot, anchor))
+        anchor = ULDUAR_MIMIRON_ROOM_CENTER;
+
+    return MoveTowardClearOfMines(anchor, MovementPriority::MOVEMENT_FORCED, false, true,
+                                  "shock anchor");
+}
+
 bool MimironShockBlastAction::Execute(Event /*event*/)
 {
     Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
@@ -298,8 +343,9 @@ bool MimironShockBlastAction::Execute(Event /*event*/)
     float const gap = ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST - bot->GetExactDist2d(leviathanMkII);
     if (gap > 0.0f)
     {
-        MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true,
-                             "shock");
+        if (!MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true,
+                                  "shock", ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST))
+            FleeShockToAnchor();
 
         if (botAI->IsMelee(bot))
             botAI->SetNextCheckDelay(100);
@@ -762,6 +808,29 @@ bool MimironPetControlAction::Execute(Event /*event*/)
     return false;
 }
 
+bool MimironApproachTargetAction::Execute(Event /*event*/)
+{
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    Position approach;
+    if (!GetMimironTargetApproach(botAI, bot, target, GetMimironApproachRange(botAI, bot), approach))
+        return false;
+
+    // MOVEMENT_COMBAT, like the formation: every hazard dodge issues FORCED and has to be able to
+    // take the tick off this one mid-walk.
+    if (TryMoveTo(bot->GetMapId(), approach.GetPositionX(), approach.GetPositionY(),
+                  approach.GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_COMBAT, true) != RaidObs::MoveOutcome::Issued)
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "mimiron.close", "round");
+
+    return true;
+}
+
 bool MimironDodgeFlamesAction::isUseful()
 {
     MimironDodgeFlamesTrigger mimironDodgeFlamesTrigger(botAI);
@@ -820,7 +889,10 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
                                    ULDUAR_MIMIRON_FLAMES_MAX_HOP);
 
         if (MoveAwayClearOfMines(centre, hop, MovementPriority::MOVEMENT_FORCED, last, true, what))
+        {
+            NoteMimironFireDodge(bot);
             return true;
+        }
     }
 
     return false;
@@ -986,22 +1058,22 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         priority.emplace_back(NPC_BOMB_BOT, SelectByEntry(currentTarget, NPC_BOMB_BOT, reachable));
     }
 
-    // Fire bots that are not being kept: the extras past the kept pair, and all of them once the
-    // cleanup starts. The cleanup sweep is the urgent one - none may reach phase 4, where they spray
-    // straight into the rendezvous - so there ranged take them ahead of everything but a Bomb Bot.
-    // Before it an extra is only cleanup: it costs a spray line and a siren, which the movement
-    // nodes already dodge, and listing it above the mech had the whole ranged group drop the boss
-    // the moment a third one spawned. One Firefighter phase 3 spent 361 bot-seconds and 770k on them
-    // while the Aerial Command Unit took 43k dps, so outside the sweep they wait behind the mech.
-    // Melee get them after the Assault Bot either way. Nobody culls in phase 4: one stray bot is a
-    // spray line, and anything that pulls a bot off the rendezvous costs the whole phase.
+    // Fire bots that are not being kept, in three tiers for ranged. The cleanup sweep is the urgent
+    // one - none may reach phase 4, where they spray straight into the rendezvous. A pile-up is the
+    // other: each one alive is a Water Spray line and a siren, and past ULDUAR_MIMIRON_FIREBOT_CULL_AT
+    // of them the overlap does more damage than the mech is worth. A single extra is neither, and
+    // ranking that above the mech had the whole ranged group drop the boss the moment a third one
+    // spawned, for 361 bot-seconds while the Aerial Command Unit took 43k dps - so one waits behind
+    // the mech. Melee get them after the Assault Bot in every tier. Nobody culls in phase 4: a stray
+    // bot is a spray line, and anything that pulls a bot off the rendezvous costs the whole phase.
     bool const hardMode = IsMimironHardModeActive(botAI);
     bool const phase4 = IsMimironPhase4(bot);
     bool const cullFireBots = hardMode && !phase4;
     bool const fireBotSweep =
         cullFireBots && aerialCommandUnit &&
         aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT;
-    if (fireBotSweep && PlayerbotAI::IsRangedDps(bot))
+    bool const fireBotPileUp = cullFireBots && fireBots.size() >= ULDUAR_MIMIRON_FIREBOT_CULL_AT;
+    if ((fireBotSweep || fireBotPileUp) && PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
@@ -1037,7 +1109,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         if (mech)
             priority.emplace_back(mech->GetEntry(), mech);
 
-    if (cullFireBots && !fireBotSweep && PlayerbotAI::IsRangedDps(bot))
+    if (cullFireBots && !fireBotSweep && !fireBotPileUp && PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 

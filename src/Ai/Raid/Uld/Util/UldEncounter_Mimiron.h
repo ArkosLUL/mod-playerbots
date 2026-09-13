@@ -372,6 +372,23 @@ Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot);
 // wipe re-arms the tank hold and the stack goes back to its default anchor for the next pull.
 void ResetMimironFightState(Player* bot);
 
+// The fire dodge is the only node that knows where the fire is, and it only moves the bot once.
+// Stamping the escape lets everything that does not know hold still for ULDUAR_MIMIRON_FLAMES_HOLD_MS
+// rather than undo it.
+void NoteMimironFireDodge(Player* bot);
+bool IsMimironFireHoldActive(Player* bot);
+
+// A spot within `range` of `target` that is not burning, for a bot that has to close on an add
+// standing in the fire. False when the bot is already in range, when the straight approach is
+// clear anyway - "reach melee" and "reach spell" do that themselves, and better - or when no
+// bearing round the target is clear. Only the destination is screened: walking through a node
+// costs one tick of it, standing in one costs the phase.
+bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                              Position& out);
+
+// The range the bot's own reach node would stop at, so the two agree on what "in range" means.
+float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot);
+
 // What the phase 1 node writes as the generic unstacker's minimum spacing, and what its trigger
 // latches against. One accessor because the two have to agree: that trigger re-arms until the value
 // it reads back matches the one the action wrote, so a literal on either side leaves it permanently
@@ -567,6 +584,11 @@ constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
 // each walks to the nearest Flames (Spread) and hits it with Water Spray 64619. Two stay and any more
 // are culled, which keeps the silence and the spray line rare and the cleanup before phase 4 short.
 constexpr uint32 ULDUAR_MIMIRON_FIREBOT_KEEP = 2;
+// How many unkept ones alive at once make the cull urgent enough to outrank the mech. One extra
+// costs a spray line the movement nodes already dodge, and chasing it drops the boss for 361
+// bot-seconds. Letting them pile up instead is worse: six alive put 248000 Water Spray into a
+// 25-man raid and killed six of them, which is half a phase 3.
+constexpr uint32 ULDUAR_MIMIRON_FIREBOT_CULL_AT = 2;
 // Aerial Command Unit health at which the kept ones go on the kill list too. None may reach phase 4,
 // where they spray straight into the rendezvous.
 constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
@@ -592,6 +614,18 @@ constexpr float ULDUAR_MIMIRON_FLAMES_DODGE_HEALTH_PCT = 60.0f;
 // four seconds is not enough to notice a health bar moving and then walk 12 yd.
 constexpr uint32 ULDUAR_MIMIRON_FLAMES_DODGE_NODE_OVERRIDE = 2;
 
+// How long after a fire dodge the generic movers stay out of it. They pick a destination with no
+// idea the floor is burning - two thirds of every "reach melee" leg in a Firefighter phase 3
+// aimed inside a node, and 97% of the follow legs in a handover - so the bot pays for a dodge and
+// is walked back in on the next tick, once every 3.1 s. Long enough to outlast that, short enough
+// that nobody is stranded while the fire covers a third of the floor.
+constexpr uint32 ULDUAR_MIMIRON_FLAMES_HOLD_MS = 2500;
+
+// How far inside its own stop distance a bot closing on a target parks. Landing exactly on the
+// edge leaves it one step short the moment the target shuffles, and the step back out is another
+// walk through the fire.
+constexpr float ULDUAR_MIMIRON_APPROACH_INSET = 2.0f;
+
 // The distance ladder a fire dodge tries, each added to the burning cluster's own edge. A chain adds
 // a node every 5.75 s exactly 7 yd along, so a hop shorter than that can land on the next node - but
 // one fixed 7 yd hop found no clean bearing four times out of five and fell through to an unscreened
@@ -605,6 +639,14 @@ constexpr float ULDUAR_MIMIRON_FLAMES_STEP_LADDER[] = {3.0f, 5.0f, 7.0f, 10.0f};
 // about 1.7 s at run speed, which is what a fire hop can then cost one of those. This trades reach
 // and not safety: a shortened hop that still lands in fire is refused by the fan like any other.
 constexpr float ULDUAR_MIMIRON_FLAMES_MAX_HOP = 12.0f;
+
+// Shortest step a swept bearing may actually cover, as a share of the hop it asked for.
+// CheckCollisionAndGetValidCoords rewrites the destination to the raycast's last point and
+// still reports success on a PATHFIND_INCOMPLETE result, so a bearing that leaves the mesh
+// comes back as a destination on the bot's own feet - and the fan's back-tracking test only
+// asks for further from the hazard, which 7 mm satisfies. Three of those in a row read as
+// three escapes and left a bot 0.3 yd from where a Shock Blast was about to land.
+constexpr float ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT = 0.5f;
 
 // Rapid Burst 64531/64532 is a 60 degree cone, so plus or minus 30 off VX-001's facing, 100 yd deep.
 // acore_world.spell_cone says so and Spell::SelectImplicitConeTargets reads it before falling back to

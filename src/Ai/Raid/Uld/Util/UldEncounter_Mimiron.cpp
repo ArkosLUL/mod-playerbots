@@ -346,6 +346,63 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest)
     return IsMimironSpotStandable(bot, dest, GetMimironMarkers(botAI), GetMimironFirefighterHazards(botAI));
 }
 
+float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot)
+        return 0.0f;
+
+    return botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : botAI->GetRange("spell");
+}
+
+bool GetMimironTargetApproach(PlayerbotAI* botAI, Player* bot, Unit* target, float range,
+                              Position& out)
+{
+    if (!botAI || !bot || !target)
+        return false;
+
+    if (bot->IsWithinCombatRange(target, range))
+        return false;
+
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    if (hazards.flames.empty())
+        return false;
+
+    MimironMarkers const markers = GetMimironMarkers(botAI);
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    MimironRapidBurstWindow const burst =
+        vx001 ? GetMimironRapidBurstWindow(botAI, bot, vx001) : MimironRapidBurstWindow();
+    auto const standable = [&](Position const& spot)
+    {
+        return IsMimironSpotStandable(bot, spot, markers, hazards) &&
+               IsMimironSpotRapidBurstSafe(vx001, burst, spot);
+    };
+
+    float const stop = range + bot->GetCombatReach() + target->GetCombatReach();
+    float const radius = std::max(1.0f, stop - ULDUAR_MIMIRON_APPROACH_INSET);
+
+    // Bearing toward the bot first, which is where the generic reach nodes would stop, then out
+    // to either side. Step 0 clear means there is nothing here to fix.
+    float const towardBot = target->GetAngle(bot->GetPositionX(), bot->GetPositionY());
+    for (uint32 step = 0; step < 12; ++step)
+    {
+        float const turn = static_cast<float>((step + 1) / 2) * static_cast<float>(M_PI) / 6.0f;
+        float const bearing = towardBot + (step % 2 ? turn : -turn);
+        Position const candidate(target->GetPositionX() + radius * std::cos(bearing),
+                                 target->GetPositionY() + radius * std::sin(bearing),
+                                 bot->GetPositionZ());
+        if (!standable(candidate))
+            continue;
+
+        if (step == 0)
+            return false;
+
+        out = candidate;
+        return true;
+    }
+
+    return false;
+}
+
 std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player* bot, Position const& slot,
                                                       MimironFirefighterHazards const& hazards)
 {
@@ -671,6 +728,9 @@ struct MimironFightState
 
     std::vector<ObjectGuid> keptFireBots;
     uint32 fireBotScanMs = 0;
+
+    // When each bot last got itself out of the fire.
+    std::unordered_map<ObjectGuid, uint32> fireDodgeMs;
 };
 
 std::mutex mimironFightStatesMutex;
@@ -916,6 +976,25 @@ void ResetMimironFightState(Player* bot)
 
     MimironFightState& state = MimironFightStateFor(bot);
     state = MimironFightState();
+}
+
+void NoteMimironFireDodge(Player* bot)
+{
+    if (!bot)
+        return;
+
+    MimironFightStateFor(bot).fireDodgeMs[bot->GetGUID()] = getMSTime();
+}
+
+bool IsMimironFireHoldActive(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    MimironFightState& state = MimironFightStateFor(bot);
+    auto const it = state.fireDodgeMs.find(bot->GetGUID());
+    return it != state.fireDodgeMs.end() &&
+           GetMSTimeDiffToNow(it->second) < ULDUAR_MIMIRON_FLAMES_HOLD_MS;
 }
 
 bool ClaimMimironPlasmaWindow(Player* bot)

@@ -208,6 +208,26 @@ float MimironFrostBombGuardMultiplier::GetValue(Action* action)
     return bomb && bot->GetExactDist2d(bomb) < hold ? 0.0f : 1.0f;
 }
 
+float MimironFireHoldGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // The same five the Frost Bomb guard holds: every mover that picks its destination from a unit
+    // rather than from the floor.
+    std::string const name = action->getName();
+    if (name != "reach melee" && name != "reach spell" && name != "reach party member to heal" &&
+        name != "set behind" && name != "follow")
+        return 1.0f;
+
+    // Room test before the state lookup: the hard mode switch is a config read that holds all over
+    // Ulduar, and these five are asked for on every tick of every fight in the instance.
+    if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
+        return 1.0f;
+
+    return IsMimironFireHoldActive(bot) ? 0.0f : 1.0f;
+}
+
 float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
 {
     if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)

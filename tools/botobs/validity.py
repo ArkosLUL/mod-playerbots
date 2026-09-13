@@ -192,7 +192,7 @@ def show_validity(trace: Trace, since: str | None = None) -> int:
 
     mode = facts["diff"]
     if facts["hardmode"] is not None:
-        mode +=  f", {key} hard mode {'ON' if facts['hardmode'] else 'OFF'}"
+        mode += f", {facts['encounter']} hard mode {'ON' if facts['hardmode'] else 'OFF'}"
     print(f"mode    {mode}")
 
     if facts["humans"]:

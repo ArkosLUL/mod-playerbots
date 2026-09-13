@@ -144,6 +144,15 @@ public:
     bool IsActive() override;
 };
 
+// Hard mode (Firefighter): the bot has to close on its target and the spot the generic reach nodes
+// would stop on is burning, but another bearing round the target is not.
+class MimironApproachTargetTrigger : public Trigger
+{
+public:
+    MimironApproachTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron approach target trigger") {}
+    bool IsActive() override;
+};
+
 // Hard mode (Firefighter): bot is inside VX-001's Frost Bomb radius and must clear it before it blows.
 class MimironFrostBombTrigger : public Trigger
 {

@@ -35,10 +35,14 @@ protected:
     // that IsMovementPreventedByCasting cannot be moved at all, so the dodge is a no-op without it.
     // what names the hazard for the trace, because a refused bearing writes no movement record and a
     // flee that finds none is otherwise a silent gap.
+    // clearRadius, when set, replaces the flat distance with the per-bearing hop that lands the
+    // destination that far from `from`. One radius swept over a fan only reaches it on the
+    // straight-away bearing; every other lands short, which is how an escape sweeps eleven
+    // headings and stays inside the circle it was running from.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
-                              char const* what = "flee");
+                              char const* what = "flee", float clearRadius = 0.0f);
 
     // Same fan, run away from a point rather than a unit. The ground fire is a field of 50 to 60
     // nodes with no single unit to flee, so the flames dodge hands in its centroid.
@@ -61,7 +65,8 @@ private:
     // only ever used for the unfiltered MoveAway once every bearing has been refused; the point
     // overload has no unit to hand it, so it walks straight away from `from` instead.
     bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
-                 bool fallbackUnfiltered, bool interrupt, char const* what);
+                 bool fallbackUnfiltered, bool interrupt, char const* what,
+                 float clearRadius = 0.0f);
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,
@@ -76,6 +81,9 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    bool FleeShockToAnchor();
 };
 
 class MimironPhase1PositioningAction : public MovementAction
@@ -264,6 +272,18 @@ public:
 };
 
 // Hard mode (Firefighter): step out of the persistent ground fire before it burns the bot down.
+// Hard mode (Firefighter): close on the target by the clear side of it. "reach melee" and
+// "reach spell" walk the straight line and stop where it ends, which in a Firefighter phase 3 is
+// inside a burning node two thirds of the time; they cannot be screened per encounter, because
+// the action names are registered once for every bot on the server.
+class MimironApproachTargetAction : public MovementAction
+{
+public:
+    MimironApproachTargetAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron approach target action") {}
+
+    bool Execute(Event event) override;
+};
+
 class MimironDodgeFlamesAction : public MimironFleeAction
 {
 public:

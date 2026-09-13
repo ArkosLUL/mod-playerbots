@@ -656,6 +656,13 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "mimiron dodge flames trigger",
         { NextAction("mimiron dodge flames action", ACTION_RAID + 4) }));
 
+    // Below every Mimiron node and above the generic reach nodes at ACTION_HIGH, which is the whole
+    // point: the formation and the dodges answer first, and only a bot they left with nothing to do
+    // but walk at its target gets steered round the fire instead of into it.
+    triggers.push_back(new TriggerNode(
+        "mimiron approach target trigger",
+        { NextAction("mimiron approach target action", ACTION_RAID - 2) }));
+
     triggers.push_back(new TriggerNode(
         "mimiron frost bomb trigger",
         { NextAction("mimiron frost bomb action", ACTION_RAID + 6) }));
@@ -907,6 +914,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironTankAnchorGuardMultiplier(botAI));
     multipliers.push_back(new MimironDrinkGuardMultiplier(botAI));
     multipliers.push_back(new MimironFrostBombGuardMultiplier(botAI));
+    multipliers.push_back(new MimironFireHoldGuardMultiplier(botAI));
     multipliers.push_back(new MimironFireBotAoeGuardMultiplier(botAI));
     multipliers.push_back(new MimironPlasmaDefensiveHoldMultiplier(botAI));
 
