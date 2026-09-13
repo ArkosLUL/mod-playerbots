@@ -39,6 +39,13 @@ Deliberately **excluded**: `unbreakable armor` and `dancing rune weapon` (tank m
 and mana trinkets and is left alone for non-DPS; `shadowfiend` doubles as a mana return, so it stays
 available on trash.
 
+**`IsManaReturnCooldown(bot, name)` (`BurstCooldowns.cpp`) exempts a priest's `shadowfiend` from the
+per-boss phase holds** — Iron Assembly, XT-002, the shared Ulduar gate, Naxx and Sartharion. Those
+hold for a whole phase rather than a dwell, and shadow carries no mana potions, so the hold does not
+save a damage window, it starves the caster: Iron Assembly hard mode vetoed it 19 times in one
+traced pull and the priest drank a mana potion instead. The base gate above is seconds, so
+Shadowfiend still waits out its dwell there.
+
 ### Behaviour by target
 
 | Case | Result |
@@ -135,13 +142,42 @@ WotLK allows one combat potion per fight, so a DPS that pops an offensive potion
 healing potion that fight. Accepted for a DPS role. Role is read at stock time and at use time via
 `IsDps`; a spec change reconciles on the next restock.
 
-**Hunters are carved out of mana potions** for exactly that reason: they carry in-combat mana on Aspect
-of the Viper, so the one potion stays free for Potion of Speed. Three places gate it at level 5, which
-is where the first mana potion exists (Minor Mana Potion) and so covers every hunter that could hold one
-— `UseManaPotion::isUseful`, the `SPELL_EFFECT_ENERGIZE` arm of `InitPotions()`, and
-`ItemUsageValue::Calculate`, which would otherwise keep buying them back. Aspect of the Viper is not
-learned until 20, so levels 5-19 have neither and rely on drinking between pulls; accepted, that content
-does not tax a mana bar. Drinking itself is untouched.
+**Every class carrying its own in-combat mana is carved out of mana potions** for exactly that
+reason: the one potion stays free for damage. `SkipsManaPotions(Player*)` (`PlayerbotAI.cpp`) is the
+single rule, gating the three sites that would otherwise drift — `UseManaPotion::isUseful`
+(drinking), the `SPELL_EFFECT_ENERGIZE` arm of `InitPotions()` (stocking) and
+`ItemUsageValue::Calculate` (buying them back).
+
+| Class | Gate | Leans on instead |
+|---|---|---|
+| Hunter | level 5 | Aspect of the Viper |
+| Warlock | level 6 | Life Tap |
+| Mage | level 20 | Evocation, Mana Gem from 28 |
+| Priest, non-healer | `HasSpell(34433)` | Shadowfiend, Replenishment, Dispersion |
+| Shaman, enhancement | `HasSpell(30823)` | Shamanistic Rage (Lightning Shield, so no Water Shield) |
+| Shaman, elemental | level 60 | Water Shield, Thunderstorm |
+| Shaman, restoration | never | keeps mana potions |
+
+**Level gate versus `HasSpell` is not a style choice.** A player knows only the highest rank
+learned, so `HasSpell(<rank 1 id>)` is false for a max-level bot on any multi-rank spell. Only
+Shadowfiend (34433) and Shamanistic Rage (30823) are single-rank; everything else gates on the level
+the class learns the tool, which is also where the ladder would otherwise start handing it mana
+potions. Use `IsHeal(bot, bySpec = true)` for the healer test — the default overload reads
+`ContainsStrategy(STRATEGY_TYPE_HEAL)`, not yet reliable inside `InitPotions()` during gear-up.
+
+A bot below its gate still drinks; accepted, that content does not tax a mana bar. Drinking between
+pulls is untouched everywhere — `UseManaPotion::isUseful` requires combat and water is a separate
+path.
+
+**Elemental shaman is the thinnest kit and the one to watch**: no Mana Tide (resto-only), no
+Shamanistic Rage (enhancement-only), just Water Shield and Thunderstorm's 8% per 45 s. It fires
+Thunderstorm at `high mana` (< 65%) so it is not starved today; if it ever runs dry, drop the
+elemental arm and leave the rest.
+
+**A spent potion stops being retried.** `UsePotionAction::isPossible` checks the item's spells
+against `HasSpellCooldown`, so once the shared cooldown is burnt the node drops out instead of
+re-attempting every tick — traced at 10-14 failed attempts per bot per pull, at relevance 90.
+IMPOSSIBLE rather than USELESS, so the healthstone → healing potion chain still falls through.
 
 ## Engineering tinkers
 

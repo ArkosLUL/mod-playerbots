@@ -395,17 +395,43 @@ bool UseItemAction::SocketItem(Item* item, Item* gem, bool replace)
 
 bool UseItemAction::isPossible() { return getName() == "use" || AI_VALUE2(uint32, "item count", getName()) > 0; }
 
+namespace
+{
+    // WotLK potions share one cooldown that only resets out of combat, so once a bot spends any
+    // potion every other one is dead for the rest of the fight. CanCastSpell rejects the cast, but
+    // without this the node stays queued and retries every tick - traced at 10-14 attempts a bot on
+    // one pull, at the highest relevance in the engine. IMPOSSIBLE rather than USELESS so the
+    // healthstone -> healing potion chain still falls through.
+    bool PotionSpellsReady(Player* bot, std::vector<Item*> const& items)
+    {
+        if (items.empty())
+            return false;
+
+        ItemTemplate const* proto = (*items.begin())->GetTemplate();
+        for (uint8 i = 0; i < MAX_ITEM_PROTO_SPELLS; ++i)
+        {
+            uint32 const spellId = proto->Spells[i].SpellId;
+            if (spellId > 0 && bot->HasSpellCooldown(spellId))
+                return false;
+        }
+
+        return true;
+    }
+}  // namespace
+
+bool UsePotionAction::isPossible()
+{
+    return UseItemAction::isPossible() &&
+           PotionSpellsReady(bot, AI_VALUE2(std::vector<Item*>, "inventory items", getName()));
+}
+
 bool UseSpellItemAction::isUseful() { return AI_VALUE2(bool, "spell cast useful", getName()); }
 
 bool UseHealingPotion::isUseful() { return AI_VALUE2(bool, "combat", "self target"); }
 
 bool UseManaPotion::isUseful()
 {
-    // WotLK shares one potion cooldown per fight, so a mana potion here costs the hunter its Potion of
-    // Speed; hunters carry in-combat mana on Aspect of the Viper instead. Level 5 is where the first
-    // mana potion exists, so this covers every hunter - Viper only arrives at 20, so 5-19 drinks out
-    // of combat.
-    if (bot->getClass() == CLASS_HUNTER && bot->GetLevel() >= 5)
+    if (SkipsManaPotions(bot))
         return false;
 
     return AI_VALUE2(bool, "combat", "self target");

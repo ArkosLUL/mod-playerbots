@@ -44,7 +44,11 @@ using namespace EncounterHelpers;
 // two modes therefore want opposite behaviour, and the config is the only statement of intent.
 float XT002BurstWindowMultiplier::GetValue(Action* action)
 {
-    if (!action || !IsBurstCooldownAction(action->getName()))
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (!IsBurstCooldownAction(name) || IsManaReturnCooldown(bot, name))
         return 1.0f;
 
     uint32 now = getMSTime();

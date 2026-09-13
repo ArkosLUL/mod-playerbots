@@ -198,6 +198,11 @@ about every 36 s, so the dwell re-arms and burst is vetoed again mid-phase: 44 a
 transition, **none from 210 to 235 s**, then 51 / 35 / 60. Left alone until the tank stops travelling,
 at which point it is worth re-measuring rather than tuning the dwell.
 
+**A priest's `shadowfiend` is exempt from this hold** — it is a mana return, and shadow carries no
+mana potions, so holding it for the phase starved the priest into drinking one and losing its
+offensive potion for the Steelbreaker phase (traced: 19 vetoes, one cast). The generic rule is in
+[../../systems/consumables-and-burst.md](../../systems/consumables-and-burst.md).
+
 **The hold matches on action name as well as type, because neither predicate is complete.**
 `IsDpsCooldownAction` is a `dynamic_cast` chain with no case for a potion, a tinker or any priest
 cooldown, and its racial branch keys on `getRace()` while `RacialsStrategy` arms on `HasSpell` —

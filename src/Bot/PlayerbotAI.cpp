@@ -5491,6 +5491,45 @@ Item* PlayerbotAI::FindPoison() const
 
 bool RangedWeaponNeedsAmmo(Player* bot) { return !bot->HasAura(SPELL_REQUIRES_NO_AMMO); }
 
+bool SkipsManaPotions(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    // Both are single-rank, so HasSpell on the one id is safe. Every other mana tool below has
+    // ranks and a player only knows the highest, which would make HasSpell on a rank-1 id false for
+    // a max-level bot - hence the level gates.
+    constexpr uint32 shadowfiend = 34433;
+    constexpr uint32 shamanisticRage = 30823;
+
+    // Levels are where the class first learns the tool it leans on instead, which is also the point
+    // the ladder would otherwise start handing it mana potions.
+    uint8 const level = bot->GetLevel();
+    switch (bot->getClass())
+    {
+        case CLASS_HUNTER:  // Aspect of the Viper
+            return level >= 5;
+        case CLASS_WARLOCK:  // Life Tap
+            return level >= 6;
+        case CLASS_MAGE:  // Evocation, then Mana Gem from 28
+            return level >= 20;
+        case CLASS_PRIEST:  // Shadowfiend, plus Replenishment and Dispersion
+            return !PlayerbotAI::IsHeal(bot, true) && bot->HasSpell(shadowfiend);
+        case CLASS_SHAMAN:
+        {
+            if (PlayerbotAI::IsHeal(bot, true))
+                return false;
+            // Enhancement runs Lightning Shield, so Shamanistic Rage is genuinely its only tool.
+            // Elemental has the thinnest kit of any class here: Water Shield plus Thunderstorm's 8%.
+            if (AiFactory::GetPlayerSpecTab(bot) == SHAMAN_TAB_ENHANCEMENT)
+                return bot->HasSpell(shamanisticRage);
+            return level >= 60;
+        }
+        default:
+            return false;
+    }
+}
+
 // Find Ammo
 Item* PlayerbotAI::FindAmmo() const
 {

@@ -50,8 +50,9 @@ Mage strategy files use **bare floats, not `ACTION_*` constants**, unlike the ot
 
 | # | Finding |
 |---|---|
-| S1 | **Mana gem has no fallback chain.** The gem node is chosen by the highest *Conjure* rank the bot knows, but each `UseMana*Action::isUseful()` requires that exact item in bags. A level-80 mage carrying a Ruby but no Sapphire uses nothing. Wants an `ActionNode` alternatives chain down the ranks, same shape as `CastMoltenArmorAction::getAlternatives()`. |
+| S1 | *Fixed.* The gem node is chosen by the highest *Conjure* rank the bot knows, but the bags may hold an older gem, and a level-80 mage carrying a Ruby but no Sapphire used nothing. `GenericMageStrategy` now chains sapphire → emerald → ruby → citrine → jade → agate through `ActionNode` alternatives. The "not in bags" test sits in `isPossible`, **not** `isUseful`, because `Engine::DoNextAction` only walks alternatives on IMPOSSIBLE and drops USELESS nodes outright. |
 | S2 | `"high mana"` is a misnomer — it tests `mana < 65%`. Noted so nobody "fixes" the gem node backwards. |
+| S3 | Mages carry **no mana potions** ([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md)) from level 20. The gem already fires at 65% and Evocation at 15%, both at 90.0, so the potion was pure redundancy that cost the mage its Potion of Wild Magic. |
 | S3 | **Registered but unreferenced.** Triggers `fireball`, `pyroblast`, `frostfire bolt`, `arcane blast`, `presence of mind`, `ice barrier`, `counterspell`; actions `presence of mind`, `counterspell`, `conjure food`, `conjure water`. Wire `presence of mind` (A1) and `counterspell` (a raid-PvE interrupt node — only `counterspell on enemy healer` is used today, at 40.0); delete the rest via the two-site `creators[...]` + factory pattern. |
 | S4 | **Focus Magic is out-of-combat only.** If the focus target dies mid-fight the buff is gone for the rest of the encounter. Low impact. |
 

@@ -4235,9 +4235,7 @@ void PlayerbotFactory::InitPotions()
         if (effect == SPELL_EFFECT_ENERGIZE && !bot->GetPower(POWER_MANA))
             continue;
 
-        // Hunters run Aspect of the Viper for mana so the one potion per fight stays free for Potion of
-        // Speed. Level 5 is where the first mana potion exists (Minor Mana Potion), so this skips them all.
-        if (effect == SPELL_EFFECT_ENERGIZE && bot->getClass() == CLASS_HUNTER && level >= 5)
+        if (effect == SPELL_EFFECT_ENERGIZE && SkipsManaPotions(bot))
             continue;
 
         FindPotionVisitor visitor(bot, effect);

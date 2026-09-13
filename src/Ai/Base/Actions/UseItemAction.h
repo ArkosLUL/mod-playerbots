@@ -49,26 +49,35 @@ public:
     bool isUseful() override;
 };
 
-class UseHealingPotion : public UseItemAction
+// Carries the shared-cooldown check for everything on the one-potion-per-fight timer.
+class UsePotionAction : public UseItemAction
 {
 public:
-    UseHealingPotion(PlayerbotAI* botAI) : UseItemAction(botAI, "healing potion") {}
+    UsePotionAction(PlayerbotAI* botAI, std::string const name) : UseItemAction(botAI, name) {}
+
+    bool isPossible() override;
+};
+
+class UseHealingPotion : public UsePotionAction
+{
+public:
+    UseHealingPotion(PlayerbotAI* botAI) : UsePotionAction(botAI, "healing potion") {}
 
     bool isUseful() override;
 };
 
-class UseManaPotion : public UseItemAction
+class UseManaPotion : public UsePotionAction
 {
 public:
-    UseManaPotion(PlayerbotAI* botAI) : UseItemAction(botAI, "mana potion") {}
+    UseManaPotion(PlayerbotAI* botAI) : UsePotionAction(botAI, "mana potion") {}
 
     bool isUseful() override;
 };
 
-class UseOffensivePotion : public UseItemAction
+class UseOffensivePotion : public UsePotionAction
 {
 public:
-    UseOffensivePotion(PlayerbotAI* botAI) : UseItemAction(botAI, "offensive potion") {}
+    UseOffensivePotion(PlayerbotAI* botAI) : UsePotionAction(botAI, "offensive potion") {}
 
     bool isUseful() override;
 };

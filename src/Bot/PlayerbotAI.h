@@ -257,6 +257,11 @@ constexpr uint32 SPELL_REQUIRES_NO_AMMO = 46699;
 
 bool RangedWeaponNeedsAmmo(Player* bot);
 
+// WotLK shares one combat potion cooldown per fight, so a mana potion costs the bot its offensive
+// one. True for classes that carry their own in-combat mana and should spend that slot on damage
+// instead. Governs drinking, stocking and re-buying alike, so all three stay consistent.
+bool SkipsManaPotions(Player* bot);
+
 enum class BotTypeNumber : uint8
 {
     ACTIVITY_TYPE_NUMBER = 1,

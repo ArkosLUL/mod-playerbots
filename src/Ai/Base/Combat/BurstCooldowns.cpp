@@ -51,6 +51,11 @@ bool IsBurstCooldownAction(std::string const& actionName)
     return burstCooldownNames.find(actionName) != burstCooldownNames.end();
 }
 
+bool IsManaReturnCooldown(Player* bot, std::string const& actionName)
+{
+    return bot && bot->getClass() == CLASS_PRIEST && actionName == "shadowfiend";
+}
+
 bool TankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwellMs)
 {
     if (!bot || !boss)

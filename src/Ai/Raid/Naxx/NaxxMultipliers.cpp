@@ -656,7 +656,13 @@ float NaxxThreatRedirectMultiplier::GetValue(Action* action)
 
 float NaxxBurstWindowMultiplier::GetValue(Action* action)
 {
-    if (!action || !IsBurstCooldownAction(action->getName()))
+    if (!action)
+    {
+        return 1.0f;
+    }
+
+    std::string const name = action->getName();
+    if (!IsBurstCooldownAction(name) || IsManaReturnCooldown(bot, name))
     {
         return 1.0f;
     }

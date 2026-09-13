@@ -36,8 +36,9 @@ Inherited nodes the relevance tables must not collide with: `CombatStrategy` —
 - **Power Infusion is unreachable in a raid.** `PowerInfusionTrigger` is a `BOOST_TRIGGER`, so in PvE
   it needs `balance <= 50`. Its only node ties with `dispel magic` @41, moot only because the node
   never activates. `power infusion on party` is registered and referenced by zero nodes.
-- **The registered `shadowfiend` trigger is also boost-gated**, so there is currently **no working
-  "Shadowfiend is off cooldown" trigger for any spec to use**.
+- **The `shadowfiend` trigger is a `SpellNoCooldownTrigger` and works** — known and off cooldown, no
+  mana gate. An earlier pass of this doc recorded it as boost-gated and dead; that is stale, do not
+  re-fix it.
 - **Inner Focus is bound to `medium mana` @21** — a 3-minute free-cast spent on whatever the engine
   picks below 40% mana. Its purpose-built `InnerFocusTrigger` is dead and would not help as written:
   `BUFF_TRIGGER` resolves to `BuffTrigger`, whose `IsActive` is simply "the aura is missing", with no
@@ -228,6 +229,21 @@ Flay finishes** → Mind Flay, clipped after the second tick.
   settled decision above, Shadow keeps only `critical health` → self PW:S.
 
 Shadow does not get `save mana` or `healer dps` — `PlayerbotAI::IsHeal` is false for it.
+
+### Shadow's mana kit
+
+Shadow carries **no mana potions**
+([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md)), so the kit is
+Shadowfiend @21 on cooldown (5 min, ungated by mana), Replenishment off Vampiric Touch @23 plus Mind
+Blast crits, and Dispersion @25 on `low mana` as the floor — 36% over a 6 s channel, 2 min cooldown.
+Nothing else is needed and nothing else is wanted:
+
+- **Shadowfiend must stay exempt from the per-boss phase holds**, not only the generic burst gate.
+  It is the only real tool here, and a phase-long hold starves the priest rather than saving a
+  window.
+- **Do not add Hymn of Hope** — settled above, and doubly so now: it is not castable in Shadowform.
+- Dispersion's 15% threshold is late on purpose. It is 6 s of zero damage, so it is a floor, not a
+  mana plan.
 
 ## Confirmed correct — do not re-audit
 

@@ -126,6 +126,29 @@ tank is the intended use — and `ProtectPartyMemberTrigger` also stays generic,
 warrior nodes still fire on the shared trigger and simply report `isUseful() == false` when the
 candidate is not for them.
 
+## Mana kit per spec
+
+Only restoration carries mana potions
+([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md)); the other two spend
+their one potion on damage.
+
+| Spec | In combat | Shield |
+|---|---|---|
+| Elemental | `high mana` (< 65%) → thunderstorm @19.0 | water shield @19.5 |
+| Enhancement | `medium mana` (< 40%) → shamanistic rage @23.0, also on `low health` | lightning shield @18.5 — **no** water shield |
+| Restoration | `medium mana` → mana tide totem @26.5, plus potions | water shield @10.5 |
+
+Removing the potion is what lets enhancement's node work at all: it sat at the same 40% threshold
+but was outranked 90 vs 23, so the potion always won the tick.
+
+**Elemental is the thinnest kit of any class carved out of mana potions** — Mana Tide is resto-only
+and Shamanistic Rage enhancement-only, leaving Water Shield and Thunderstorm's 8% per 45 s. It is
+the first thing to re-check if an elemental bot runs dry in a long fight.
+
+Watch out: `WaterShieldTrigger` derives from `BuffTrigger`, which tests aura presence only. Water
+Shield is **charge**-based, so a shield down to its last orb still reads as up and is not refreshed
+until the charges are gone.
+
 ## Known follow-ups, deliberately out of scope
 
 - `PartyMemberToHeal` is uncached — a full group scan with LOS raycasts on every `Get()`. Real perf

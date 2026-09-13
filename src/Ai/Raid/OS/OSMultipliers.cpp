@@ -231,7 +231,11 @@ float SartharionMultiplier::GetValue(Action* action)
 
 float SartharionBurstWindowMultiplier::GetValue(Action* action)
 {
-    if (!action || !IsBurstCooldownAction(action->getName()))
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (!IsBurstCooldownAction(name) || IsManaReturnCooldown(bot, name))
         return 1.0f;
 
     uint32 const now = getMSTime();

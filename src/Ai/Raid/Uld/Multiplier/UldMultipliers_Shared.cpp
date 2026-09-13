@@ -84,7 +84,11 @@ float UldThreatRedirectMultiplier::GetValue(Action* action)
 // hold-until-the-tank-engages window spends everything on a phase that does not matter.
 float UlduarBurstWindowMultiplier::GetValue(Action* action)
 {
-    if (!action || !IsBurstCooldownAction(action->getName()))
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (!IsBurstCooldownAction(name) || IsManaReturnCooldown(bot, name))
         return 1.0f;
 
     if (!bot->IsInCombat())
@@ -97,7 +101,6 @@ float UlduarBurstWindowMultiplier::GetValue(Action* action)
         cachedValue = EvaluateWindow();
     }
 
-    std::string const name = action->getName();
     bool const allowed = (name == "bloodlust" || name == "heroism") ? cachedValue.allowLust : cachedValue.allowAll;
 
     return allowed ? 1.0f : 0.0f;

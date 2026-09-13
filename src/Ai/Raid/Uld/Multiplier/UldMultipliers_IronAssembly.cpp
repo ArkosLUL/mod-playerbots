@@ -129,8 +129,12 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
     // on Brundir and Molgeim. The name registry has all of those; it is missing nine cooldowns the
     // cast chain does have, so neither alone is enough. IsDps guards the name branch to keep today's
     // exclusion of healers and tanks - Shadowfiend is a healer's mana, not a burst window.
+    std::string const name = action->getName();
+    if (IsManaReturnCooldown(bot, name))
+        return 1.0f;
+
     bool const burst = IsDpsCooldownAction(bot, action) ||
-                       (PlayerbotAI::IsDps(bot) && IsBurstCooldownAction(action->getName()));
+                       (PlayerbotAI::IsDps(bot) && IsBurstCooldownAction(name));
     if (!burst)
         return 1.0f;
 

@@ -20,6 +20,13 @@ class Unit;
 // Action::getName() returns by value and callers are on a per-action-per-tick path.
 bool IsBurstCooldownAction(std::string const& actionName);
 
+// True for cooldowns a class depends on to refill its own mana bar, which happen to also be burst
+// cooldowns. A per-boss phase hold that suppresses one of these does not save a damage window, it
+// starves the caster - shadow priests carry no mana potions and would spend a held phase dry.
+// The base tank-dwell gate is a few seconds and is left to apply normally; this is for the holds
+// that last a whole phase.
+bool IsManaReturnCooldown(Player* bot, std::string const& actionName);
+
 // Caller-owned dwell state, keyed on the boss guid so engaging a different boss re-arms the gate
 // instead of inheriting the previous boss's timer.
 struct BurstHoldState

@@ -20,11 +20,25 @@ void GenericWarlockStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     CombatStrategy::InitTriggers(triggers);
 
+    // Warlocks carry no mana potions, so Life Tap has to cover the whole bar, not just the floor.
+    // Tapping from 40% also gets it done while the bot is still healthy enough to pay the health
+    // cost - both LifeTapTrigger and CastLifeTapAction::isUseful refuse below lowHealth, so a
+    // warlock that waits for 15% on a fight with heavy raid damage can end up unable to tap at all.
+    triggers.push_back(
+        new TriggerNode(
+            "medium mana",
+            {
+                NextAction("life tap", 30.0f)
+            }
+        )
+    );
+    // Under spell lock (40.0) and flee (39.0): an interrupt window is worth more than one tap, and
+    // the node above should mean the bot rarely gets here.
     triggers.push_back(
         new TriggerNode(
             "low mana",
             {
-                NextAction("life tap", 95.0f)
+                NextAction("life tap", 39.5f)
             }
         )
     );

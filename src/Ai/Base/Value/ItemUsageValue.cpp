@@ -179,10 +179,9 @@ ItemUsage ItemUsageValue::Calculate()
     {
         std::string foodType = GetConsumableType(proto, bot->GetPower(POWER_MANA));
 
-        // Hunters drop mana potions for Aspect of the Viper, so treat these as vendor trash rather than
-        // buying two stacks of something they will never drink. Drinks are untouched - they still
-        // refill between pulls.
-        if (foodType == "mana potion" && bot->getClass() == CLASS_HUNTER && bot->GetLevel() >= 5)
+        // Treat these as vendor trash rather than buying two stacks of something the bot will never
+        // drink. Drinks are untouched - they still refill between pulls.
+        if (foodType == "mana potion" && SkipsManaPotions(bot))
             foodType.clear();
 
         if (!foodType.empty() && bot->CanUseItem(proto) == EQUIP_ERR_OK)

@@ -71,6 +71,24 @@ worth keeping in mind:
 - `"metamorphosis"` is the **only** warlock entry in `burstCooldownNames`, so `BurstWindowStrategy`
   paces it and nothing else.
 
+## Life Tap is the whole mana bar
+
+Warlocks carry no mana potions ([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md)),
+so Life Tap covers the bar rather than just its floor. Four nodes, shared across all three specs
+except `tank` (SH2):
+
+| Trigger | Rel | Why there |
+|---|---|---|
+| `medium mana` (< 40%) | 30.0 | above every spec rotation (Demonology tops at 28.5) and the glyph node |
+| `low mana` (< 15%) | 39.5 | under `spell lock` 40.0 and `flee` 39.0 — an interrupt beats one tap |
+| `life tap glyph buff` | 29.5 | spellpower upkeep; mana is the side effect |
+| `life tap` filler | 5.1 | idle globals only; loses every contested tick |
+
+**Tapping from 40% rather than 15% is the point, not a tuning preference.** `LifeTapTrigger` and
+`CastLifeTapAction::isUseful` both refuse below `lowHealth` (45), so on a fight with heavy raid-wide
+damage — Iron Assembly's High Voltage pulses every 3 s — a warlock that waits for 15% mana is likely
+too hurt to tap at all. The emergency node exists for when that happens anyway.
+
 ## Affliction
 
 Code order: corruption on attacker 19.5, UA on attacker 19.0, corruption 18.0, UA 17.5, haunt 16.5,
@@ -123,7 +141,7 @@ Defaults: immolate 5.9, conflagrate 5.8, chaos bolt 5.7, incinerate 5.6, corrupt
 | SH2 | `TankWarlockStrategy::InitTriggers` is empty and does not chain to `GenericWarlockStrategy::InitTriggers`, so a tank-spec warlock loses life tap, soulshatter and all soul-shard management. |
 | SH3 | All five curses sit at 29.0, so enabling two curse strategies gives order-dependent, non-deterministic behaviour. |
 | SH4 | The `backlash` trigger and the `hellfire`, `shadow cleave`, `drain mana`, `drain life` actions are registered but referenced by no strategy. |
-| SH5 | **OPEN — Life Tap on `"low mana"` at 95.0 outranks `spell lock` (40.0) and everything else** (`GenericWarlockStrategy.cpp:27`): a low-mana warlock will Life Tap through an interrupt window. |
+| SH5 | *Fixed.* Life Tap on `"low mana"` at 95.0 outranked `spell lock` (40.0) and everything else, so a low-mana warlock tapped through an interrupt window. Now 39.5 — see the ladder below. |
 | SH6 | No `CLASS_WARLOCK` case in `AiFactory::GetPlayerRoles`; falls through to the default DPS role. Fine today. |
 
 ## Divergences to decide
