@@ -28,6 +28,11 @@ Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go throug
 `cfg.hardmode`, whose keys are these names - an unmapped slug means the hard-mode check silently never
 applies.
 
+`--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
+encounter - so on a trace nothing renamed, **every boss's nodes fold away into the "gate shut this
+pull" line**, 342 of them on the 2026-09-13 Yogg wipes. That reads as a closed gate and is only the
+join failing. Name the pull before trusting either view.
+
 ```
 postmortem.py <file>                 summary + a block per death
 postmortem.py <file> --death N       full rewind for one death
