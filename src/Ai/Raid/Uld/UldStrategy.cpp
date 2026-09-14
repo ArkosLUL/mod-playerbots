@@ -758,6 +758,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron phase 1 spacing trigger",
         { NextAction("yogg-saron phase 1 spacing action", ACTION_RAID + 2) }));
 
+    // Under the spacing node, so a nova still wins the tick. It never contends with guardian
+    // positioning at the same relevance because that one only fires on melee and tanks.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron phase 1 station trigger",
+        { NextAction("yogg-saron phase 1 station action", ACTION_RAID) }));
+
     triggers.push_back(new TriggerNode(
         "yogg-saron dark volley trigger",
         { NextAction("yogg-saron dark volley interrupt action", ACTION_EMERGENCY + 1) }));

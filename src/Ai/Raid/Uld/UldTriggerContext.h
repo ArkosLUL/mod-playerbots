@@ -116,6 +116,7 @@ public:
         creators["vezax shadow resistance"] = &RaidUlduarTriggerContext::vezax_shadow_resistance;
         creators["yogg-saron shadow resistance trigger"] = &RaidUlduarTriggerContext::yogg_saron_shadow_resistance_trigger;
         creators["yogg-saron phase 1 spacing trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_spacing_trigger;
+        creators["yogg-saron phase 1 station trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_station_trigger;
         creators["yogg-saron dark volley trigger"] = &RaidUlduarTriggerContext::yogg_saron_dark_volley_trigger;
         creators["yogg-saron guardian positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_positioning_trigger;
         creators["yogg-saron sanity trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_trigger;
@@ -308,6 +309,7 @@ private:
     static Trigger* vezax_shadow_resistance(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
     static Trigger* yogg_saron_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "yogg-saron"); }
     static Trigger* yogg_saron_phase_1_spacing_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1SpacingTrigger(ai); }
+    static Trigger* yogg_saron_phase_1_station_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1StationTrigger(ai); }
     static Trigger* yogg_saron_dark_volley_trigger(PlayerbotAI* ai) { return new YoggSaronDarkVolleyTrigger(ai); }
     static Trigger* yogg_saron_guardian_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningTrigger(ai); }
     static Trigger* yogg_saron_sanity_trigger(PlayerbotAI* ai) { return new YoggSaronSanityTrigger(ai); }

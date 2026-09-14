@@ -1,6 +1,7 @@
 #include "UldTriggers_YoggSaron.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "GameObject.h"
 #include "Group.h"
@@ -241,9 +242,10 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     // Short-radius hazard reads first, phase read last. The gate leaves every Yogg trigger open
     // between pulls, and YoggSaronInPhase1 is three 200 yd grid sweeps on every bot on the map.
     //
-    // Everyone dodges clouds: one summons a Guardian on any player inside 6 yd, and the innermost
-    // orbit runs at 11 yd from Sara, straight through where melee stand.
-    bool hazardNear = bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS, true);
+    // The cloud read is "I am standing in one", not "one is coming". Anticipating never worked - the
+    // orbit outruns the step - but a bot left inside the summon radius farms a Guardian every 10 s
+    // forever, because the aura re-arms the moment the last one lands.
+    bool hazardNear = bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS, true);
 
     char const* reason = hazardNear ? "cloud" : nullptr;
 
@@ -252,27 +254,47 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     if (!hazardNear && !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty())
         reason = bot->HasAura(SPELL_SARAS_FERVOR) ? "fervor" : "nova";
 
-    // Sara's own spot is where every Guardian dies, so anyone at range holds off it rather than
-    // waiting to be told a particular one is about to go. Distance only, no sweep, so it costs
-    // nothing to ask before the phase read. Released further out than it fires, or reach spell walks
-    // the bot back in and the two trade the tick.
-    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
-    {
-        float const fromSara =
-            bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
-
-        standingOff = fromSara <
-                      (standingOff ? ULDUAR_YOGG_SARON_P1_STANDOFF_RELEASE : ULDUAR_YOGG_SARON_P1_STANDOFF);
-
-        if (!reason && standingOff)
-            reason = "standoff";
-    }
-
     if (!reason || !YoggSaronInPhase1(botAI))
         return false;
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.p1dodge", reason);
+
+    return true;
+}
+
+bool YoggSaronPhase1StationTrigger::IsActive()
+{
+    if (!botAI->CanMove())
+        return false;
+
+    // Melee and tanks have their own station, the leash that holds them on Sara.
+    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
+        return false;
+
+    // Distance only, no sweep, so both reads cost nothing before the phase read.
+    float const fromSara =
+        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+    float const fromSpot = bot->GetDistance2d(ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionX(),
+                                              ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionY());
+
+    // The band is what keeps the first and third orbits off the back line and it has 1.13 yd of margin
+    // in hand, so the parked latch widens only the stack radius. Widening the band instead hands the
+    // bot to a neighbouring orbit, which is the one thing the station exists to prevent.
+    float const stack = ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS * (parked ? 1.5f : 1.0f);
+
+    bool const offBand = std::abs(fromSara - ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS) >
+                         ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE;
+
+    char const* reason = offBand ? "band" : (fromSpot > stack ? "stack" : nullptr);
+
+    parked = !reason;
+
+    if (!reason || !YoggSaronInPhase1(botAI))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.p1station", reason);
 
     return true;
 }

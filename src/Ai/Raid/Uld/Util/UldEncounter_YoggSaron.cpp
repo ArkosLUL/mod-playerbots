@@ -34,6 +34,7 @@ const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE = Position(1980.1971f, -27.85
 const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE = Position(1954.06f, 21.66f, 239.71f);
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE = Position(1950.11f, -79.284f, 239.98982f);
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE = Position(2048.63f, -25.5f, 239.72f);
+const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT = Position(1958.78f, -25.587f, 324.889f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT = Position(1998.5377f, -22.90317f, 324.8895f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.896868f, 327.07245f);
 
@@ -254,7 +255,7 @@ bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& cloud
         }
 
         if (cloud.GetExactDist2d(originX + legX * along, originY + legY * along) <
-            ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS)
+            ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS)
             return false;
     }
 

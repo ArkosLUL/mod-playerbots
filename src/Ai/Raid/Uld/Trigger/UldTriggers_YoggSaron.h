@@ -44,11 +44,21 @@ class YoggSaronPhase1SpacingTrigger : public YoggSaronTrigger
 public:
     YoggSaronPhase1SpacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 1 spacing trigger") {}
     bool IsActive() override;
+};
+
+// Ranged and healers hold one spot on the second orbit instead of dodging clouds, because no radius
+// clears every orbit and the cloud outruns any sidestep. Standing there costs the whole back line one
+// Guardian per 45 s orbit, against the 2.7 a minute a phase of dodging cost.
+class YoggSaronPhase1StationTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronPhase1StationTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 1 station trigger") {}
+    bool IsActive() override;
 
 private:
     // Per bot, like the guardian positioning trigger's leash: trigger instances belong to one bot's
     // context.
-    bool standingOff = false;
+    bool parked = false;
 };
 
 // Dark Volley is a 1.5s cast hitting everything within 35 yd, so it cannot be walked out of. The

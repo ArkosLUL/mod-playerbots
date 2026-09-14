@@ -56,10 +56,11 @@ nobody. The "chasing me" half of the ranged rule needs no timing and is untouche
 
 ## Ominous Clouds
 
-Six clouds orbit Sara at fixed **11.5 / 21.3 / 31.2 / 41 / 50.8 / 60.8 yd** radii, constant
-**3.0 yd/s** (`SpawnClouds`, `8 + i*7` on the diagonal). `InformCloud` skips clouds closer than 20 yd
-to Sara, so **the innermost orbit only ever fires from player contact** - and it sweeps straight
-through where melee stand.
+Six clouds, one per orbit, circle Sara at a constant **3.0 yd/s** (`SpawnClouds`, `8 + i*7` on the
+diagonal). Measured over four pulls the radii never drift: **11.39-11.86 / 21.25-21.52 / 31.13-31.31 /
+40.93-41.07 / 50.81-50.92 / 60.74-60.84 yd**, so laps take **24 / 45 / 65 / 86 / 106 / 127 s**.
+`InformCloud` skips clouds closer than 20 yd to Sara, so **the innermost orbit only ever fires from
+player contact**.
 
 **The summon is a 10 s aura and the cloud then re-arms.** 63031 is `EffectAura` 23 with period and
 duration both 10000, triggering 62979, so a Guardian appears exactly 10 s after its cloud is marked
@@ -67,64 +68,80 @@ and attributing one means rewinding by that. `JustSummoned` clears `_isSummoning
 in reach summons **one Guardian every 10 s indefinitely**: the innermost cloud alone produced 6 of one
 pull's 17. The C++ reads as an instant one-shot summon; both the delay and the repeat are DBC-only.
 
-**A cloud summons on any player within 8.5 yd, not the script's 6** — `SelectNearbyTarget` goes
-through `IsWithinDistInMap`, which adds both bounding radii. Calibrated off the innermost orbit
-because it is provably player-only: the nearest player to each of its summons sat at **4.6-8.4 yd**.
+**A cloud summons on any player within exactly 8.5 yd, not the script's 6.** `SelectNearbyTarget`
+goes through `_IsWithinDist`, which adds both `GetObjectSize()` values — and that returns
+**`UNIT_FIELD_COMBATREACH`, not the bounding radius**. The cloud's is **1.0**, and every player's is
+**1.5** whatever their race, because `Player::SetObjectScale` hands out `DEFAULT_COMBAT_REACH` flat.
+Inner-orbit summons, which are provably player-only, measure the approach at 8.53 / 8.64 / 8.71.
 Pets cannot trigger it (`who->IsPlayer()`).
 
 Avoiding them starves nothing: `EVENT_SARA_P1_SUMMON` feeds Guardians every 20 s, shrinking to a 10 s
 floor, wherever the raid stands. That timer is also the yardstick — it can fire at most **7** times in
 a 99 s window, so the 20 Guardians of 2026-09-14 put **at least 13** on the raid's own feet.
 
-**No station is ever safe.** Orbit gaps are ~9.8 yd, so clearing every ring at once would need gaps
-over **17**, and every point within 69 yd of Sara is swept by something. The dodge has to win on
-**warning** instead, and bots sidestep as a cloud comes round.
+**Nobody dodges a cloud. Two places in the room it cannot reach, and you stand in one.** Against the
+8.5 yd reach the orbits leave exactly these:
 
-**The route matters more than the destination here, unlike every other hazard.** Crossing a Death Ray
-to leave one still beats standing in it, which is why `FindNearestPositionClearOfHazards` checks no
-path; crossing a cloud costs a Guardian, so the far side is worse than standing still. Phase 1 alone
-overrides `RouteAcceptable` to reject a candidate whose straight walk passes inside
-`ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS` of a cloud.
+- inside **2.89 yd** of Sara (11.39 - 8.5) nothing reaches at all, which is where melee already stand
+- between **20.36 and 22.63 yd** (11.86 + 8.5 up to 31.13 - 8.5) only the second orbit reaches
 
-**And the orbit outruns a sidestep.** A destination clear of a cloud now is under it seconds later, so
-each cloud enters the hazard set twice: where it is, and where its own facing and run speed put it
-`ULDUAR_YOGG_SARON_CLOUD_LEAD_MS` ahead. Without the lead the dodge is no better than chance —
-destinations sat a median 16.3 yd from the nearest cloud against a 15.4 yd baseline for standing
-still.
+Nowhere is clear of every orbit — gaps are 9.4-9.9 yd against the 17 yd a cloud sweeps — and no
+sidestep outruns one, because a spot clear of an orbit now is under it seconds later.
+
+**Dodging anyway cost a phase.** With the trigger widened to 18 yd to buy warning, the node was asked
+on nearly every tick against a clear radius unsatisfiable within 25 yd of Sara: it fired **8,260x**,
+ran **4,987x**, and **4,225 of 4,298** phase 1 moves cited the cloud. Ranged walked a median 4.0 yd
+for a median change in distance from Sara of **-0.1**, and 53% of their destinations landed 25+ yd out
+where the third orbit catches them, smearing the back line over a **109 degree** arc. Melee and tanks
+held their ground by orbiting Sara antipodal to the innermost cloud (median **163 degrees** off it), a
+continuous 24 s lap that cost **43% of melee damage and 91% of the tank's**. Raid output fell
+97.5k to 74.0k dps, 7 Guardians died against the previous pull's 12, phase 2 never came and the raid
+wiped with 14 alive.
+
+**So the cloud circle is a filter, not a dodge.** `ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS` (9.5, the
+reach plus a yard of slop) does three jobs and no more: the trigger reads it as "I am standing in
+one", which is the case that must never be dropped because the aura re-arms; the hazard set keeps a
+bot moving for some *other* reason from landing in one; and phase 1 alone overrides `RouteAcceptable`
+to reject a candidate whose straight walk passes inside it. Only phase 1 checks the route, because
+crossing a Death Ray to leave one still beats standing in it while crossing a cloud costs a Guardian.
+Each cloud enters the set twice — where it is, and `ULDUAR_YOGG_SARON_CLOUD_LEAD_MS` ahead along its
+orbit. Without the lead, destinations sat a median 16.3 yd from the nearest cloud against a 15.4 yd
+baseline for standing still, which is chance.
 
 ## The spacing nodes
 
 Each phase puts everything it has to dodge into **one** node: two nodes at one relevance trade ticks
 and walk the bot down the line between their destinations. Phase 1 takes clouds and Shadow Nova,
-phase 2 takes Death Rays and Crush wedges, off a shared latch and sweep. Three things keep them from
-oscillating against hazards that never stop moving.
+phase 2 takes Death Rays and Crush wedges, off a shared latch and sweep. What keeps them from
+oscillating against hazards that never stop moving:
 
 - **Trigger and clear thresholds kept apart** (nova 17 → 20, ray 9 → 14, Crush arc ±8° → ±14°). One
   threshold parks the bot on the boundary and re-fires the moment a hazard drifts a yard in.
-- **The cloud pair runs the other way** (**18 → 14**). The action's early-out is "already outside every
-  circle", so the *clear* radius is what decides when a bot moves and the trigger only decides whether
-  the node is asked at all: a trigger inside the clear radius leaves a band where the bot sits in a
-  hazard circle and nothing asks. At 10 against a clear of 14, a bot first moved with the cloud 10 yd
-  out — **0.5 s** before it is in reach, against the 1.2 s needed to cover 8.5 yd, so the dodge could
-  not win however it was tuned. The nova pair keeps the tight-trigger shape because its own band
-  (17-20) is margin, not exposure: 18 yd is already past the blast.
+- **A trigger inside its own clear radius is a band nobody asks about.** The action's early-out is
+  "already outside every circle", so the *clear* radius decides when a bot moves and the trigger only
+  decides whether the node is asked at all. Clouds at 10 against a clear of 14 first moved a bot with
+  the cloud 10 yd out — **0.5 s** before reach, against the 1.2 s needed to cover 8.5 yd. Widening the
+  trigger to 18 closed that band and broke the phase instead, which is why clouds are no longer
+  dodged. The nova pair keeps the tight-trigger shape deliberately: its band (17-20) is margin, not
+  exposure, since 18 yd is already past the blast.
 - **The destination is held** until the bot arrives or a hazard drifts onto it, and the in-flight tick is
   claimed by returning true without touching the motion master.
 - **`preferNear` is `ULDUAR_YOGG_SARON_MIDDLE`, not the bot.** Every candidate in a ring is the same
   walk away, so a bot-position bias is a no-op tie-break; biasing at the middle makes the dodge a
   sidestep rather than a run for the rim. The `accept` cap holds it inside spell range.
 
-- **The dodge keeps melee in their own swing range.** A melee bot that sidesteps a cloud out of reach
-  is hauled straight back by `reach melee`, and the two traded the tick **252 times** in one pull while
-  the spacing node returned FAILED 582 times against 618 OK. With nothing about to detonate, phase 1
-  puts "still within `meleeDistance` of my target" in `set.clear` and the cloud circles in
-  `set.fallback`, so the retry drops the reach and keeps the clearance.
+- **A melee move keeps the bot in its own swing range.** A melee bot that steps out of reach of its
+  target is hauled straight back by `reach melee`, and the two traded the tick **252 times** in one
+  pull while the spacing node returned FAILED 582 times against 618 OK. With nothing about to
+  detonate, phase 1 puts "still within `meleeDistance` of my target" in `set.clear` and the cloud
+  circles in `set.fallback`, so the retry drops the reach and keeps the clearance.
 
 `MoveAwayFromCreatureAction` was rejected for this: no throttle, no latch, and it *maximises* distance
 recomputed from the bot's new position every tick, so against six rotating rings the best answer rotates
 with them.
 
-**Who dodges what, in phase 1.** Everyone dodges clouds. A Guardian's nova is dodged only by a bot that
+**Who dodges what, in phase 1.** Nobody dodges clouds; the only cloud move is stepping off one a bot
+is already standing in. A Guardian's nova is dodged only by a bot that
 would not otherwise survive it: ranged and healers when one is at or under
 `ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT` **and chasing them** — at spell range nothing else reaches
 them — and anyone holding Sara's Fervor, on the wider gate above. Running from every Guardian instead is
@@ -132,25 +149,38 @@ what scattered the raid to the rim on 2026-09-14, where seven bots were picked o
 1:26 and 1:30. `GetYoggSaronNovaThreats` is the single owner of that rule, so the trigger and the action
 cannot disagree about who is running.
 
-**Ranged and healers stand off Sara, stacked.** Guardians die on her, so her spot is a standing nova
-hazard for everyone who need not be in it — ranged and healers were inside it for 37% and 49% of one
-phase 1. `ULDUAR_YOGG_SARON_P1_STANDOFF` is 20 yd, clearing the 16.2 measured blast, released at 22:
-the mirror of the melee leash, for the same reason.
+**Ranged and healers hold one spot on the second orbit.** Guardians die on Sara, so her spot is a
+standing nova hazard for everyone who need not be in it — ranged and healers were inside it for 37%
+and 49% of one phase 1, and a 20 yd standoff alone took both to **0%**. The station is
+`ULDUAR_YOGG_SARON_P1_RANGED_SPOT` **(1958.78, -25.587, 324.889)**, due west because the raid stages
+there, navprobe-clean on the WMO floor — and so is the whole 21.5 yd ring, 24/24 headings, if it ever
+needs moving. 21.5 is the midpoint of the single-orbit band, hence the second orbit itself: standing
+*on* a ring is what buys the most room from its neighbours, 1.13 yd either way, which is all
+`ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE` (1.0) has to give. The third orbit would be the cheaper
+station — one Guardian per 65 s against 45 — but it sits 31.2 yd out against a 28.5 yd `spellDistance`,
+so a bot posted there walks itself back in.
 
-They **stack** out there rather than spread. Against a point hazard that sweeps a circle and re-arms
-every 10 s, a blob is passed once per orbit while a spread-out line hands it somebody in reach for most
-of one — **1.5 summons per orbit against 7.3**. That inverts the usual raid rule and holds only because
-the nova cannot reach the standoff. 20-22 yd is also the least-swept band inside spell range: one orbit
-reaches it, 13% of the time, against two and 17% at 26 yd.
+They **stack** on it rather than spread, which inverts the usual raid rule and holds only because the
+nova cannot reach the station. A cloud is in contact for `(8.5 + blob + 8.5) / 3` seconds and re-arms
+10 s after each summon, so any blob under 13 yd across costs exactly one Guardian per pass:
+`ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS` (5) gives 9 s of contact and **one Guardian per 45 s orbit
+for the whole back line**. Spread instead over the 109 degree arc a phase of dodging produced, the
+cloud has somebody in reach for most of every orbit. The parked latch widens only the stack radius,
+never the band: there is no margin there to spend.
 
 **Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
 (15 yd, the nova's own reach to Sara) the bot walks back to the middle, and it is not released until
-`ULDUAR_YOGG_SARON_P1_LEASH_RELEASE` (12 yd): let go on the leash itself, `reach melee` drags it
-straight out again and the two trade the tick. The node reads a live Guardian before the phase, which
-is four 200 yd sweeps and would otherwise run every tick for melee standing outside the leash in P2 and
-P3; the price is no walk back before the first spawn. The leash keeps melee inside the 11.5 yd cloud
-orbit by design — a station tight enough to clear it would give up chasing entirely, so **melee still
-trigger clouds, and that is the trade to check first** if spawns still outrun the timer.
+`ULDUAR_YOGG_SARON_P1_LEASH_RELEASE` — the **2.8 yd cloud-free radius**, not a boundary a step inside
+the leash. Anything between the two lets go of the bot somewhere the innermost orbit sweeps, and the
+old 12 let go of it on the orbit. The node reads a live Guardian before the phase, which is four 200 yd
+sweeps and would otherwise run every tick for melee standing outside the leash in P2 and P3; the price
+is no walk back before the first spawn.
+
+Nothing pins melee inside 2.89 yd, though — they get there because a Guardian walks to whoever holds
+threat and `meleeDistance` is 0.75. Measured they sat at **2.5-2.9 yd** and triggered no inner-orbit
+Guardian at all; all three of one pull's came from the human player at 6.7-13.4 yd. **That is the first
+thing to check** now that they hold still instead of orbiting: settle beyond 2.89 and the innermost
+cloud harvests one Guardian every 24 s, and the leash has to fire tighter than 15 yd after all.
 
 ## Targeting is direct, never a raid icon
 

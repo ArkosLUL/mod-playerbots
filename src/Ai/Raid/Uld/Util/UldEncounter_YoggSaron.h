@@ -101,33 +101,29 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
 // drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
 constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
-// Ominous Clouds orbit Sara at 11.5/21.3/31.2/41/50.8/60.8 yd, constant 3 yd/s. Summon reach is the
-// script's 6 yd plus both bounding radii, because the check runs through IsWithinDistInMap: the
-// innermost orbit is provably player-only and the nearest player to each of its summons sat at
-// 4.6-8.4 yd. Ring gaps are ~9.8 yd, so no station ever clears every orbit and the dodge has to win
-// on warning instead.
+// A cloud summons a Guardian on any player within 8.5 yd. SelectNearbyTarget's 6 yd goes through
+// _IsWithinDist, which adds both GetObjectSize() values, and that returns UNIT_FIELD_COMBATREACH
+// rather than the bounding radius: 1.0 for the cloud, and 1.5 for every player whatever their race,
+// because Player::SetObjectScale hands out DEFAULT_COMBAT_REACH flat.
 //
-// The trigger has to cover the clear radius. The action's own early-out is "already outside every
-// circle", so the clear radius is what decides when a bot moves; a trigger inside it leaves a band
-// where the bot is in a hazard circle and the node is never asked. At 10 against a clear of 14 a bot
-// first moved with the cloud 10 yd out, which is 0.5 s before it is in reach against the 1.2 s it
-// needs to cover 8.5 yd.
-constexpr float ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS = 18.0f;
-constexpr float ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS = 14.0f;
-constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS = 9.0f;
+// Nobody dodges that. The orbits are fixed circles, the summon aura re-arms 10 s after every kill,
+// and the ring gaps are under the 17 yd a cloud sweeps, so no radius clears every orbit and no
+// sidestep outruns one. Bots stand where the geometry cannot reach them instead - see the cloud-free
+// radius and the ranged station below - and this is only the circle a bot moving for some other
+// reason must not land in or walk through. Widening it back into a dodge cost one pull 4,225 moves,
+// a quarter of the raid's damage and the phase.
+constexpr float ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS = 9.5f;
 
-// Unlike a Death Ray, crossing a cloud is worse than standing in one: the far side costs a Guardian.
-// The orbit is the other half - a sideways step is back under the same cloud within seconds - so a
-// candidate is tested against where the cloud will be as well as where it is. It has to outlast the
-// crossing: a cloud sweeps a bot holding the standoff for about 5.8 s, so a shorter lead puts the
-// sidestep in its near future.
+// Crossing a cloud is worse than standing next to one: the far side costs a Guardian. The orbit is
+// the other half - a spot clear of a cloud now is under it seconds later - so a candidate is tested
+// against where the cloud will be as well as where it is. It has to outlast the crossing: a cloud
+// sweeps a stationary bot for about 5.7 s, so a shorter lead puts the destination in its near future.
 constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 6000;
 
 // Shadow Nova, the Guardian's death explosion: DBC radius 15, plus both object sizes at apply time,
 // which measured 16.2 at its furthest. Ranged and healers stay out of it; melee and tanks have to eat
-// it to kill the thing at all. Unlike the cloud pair the trigger sits inside the clear radius, and
-// that band is margin rather than exposure: a bot 18 yd out is not moved to 20, but 18 is already
-// past the blast.
+// it to kill the thing at all. The trigger sits inside the clear radius, and that band is margin
+// rather than exposure: a bot 18 yd out is not moved to 20, but 18 is already past the blast.
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
 
@@ -140,24 +136,35 @@ constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
 // a second, which is 7 yd of travel against a 16 yd blast.
 constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
 
-// Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
-// nova only reaches her from 15 yd - a kill further out does nothing for the phase at all. Release is
-// tighter than the leash: walked back to the boundary itself a bot is let go the moment it crosses
-// and dragged straight out again by reach melee.
-constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 15.0f;
-constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = 12.0f;
-
-// The mirror of the leash, for everyone who does not have to be in the blast. Every Guardian dies on
-// Sara, so her own spot is a standing nova hazard: ranged and healers sat inside it for 37% and 49%
-// of one phase 1 and Shadow Nova was 65% of all damage the raid took. Released further out than it
-// fires, or reach spell walks the bot straight back in and the two trade the tick.
+// The two places in the room a cloud cannot reach, both fixed by the orbits. Measured over four pulls
+// the six sit at 11.39-11.86 / 21.25-21.52 / 31.13-31.31 / 40.93-41.07 / 50.81-50.92 / 60.74-60.84 yd
+// and never drift, so against an 8.5 yd reach:
 //
-// They stack rather than spread once out there. Against a point hazard that sweeps a circle and
-// re-arms 10 s after each summon, a blob is passed once per orbit while a spread-out line hands it
-// somebody in reach for most of one - 1.5 summons against 7.3. That inverts the usual rule and only
-// holds because the nova cannot reach this far.
-constexpr float ULDUAR_YOGG_SARON_P1_STANDOFF = 20.0f;
-constexpr float ULDUAR_YOGG_SARON_P1_STANDOFF_RELEASE = 22.0f;
+//   - inside 11.39 - 8.5 = 2.89 yd of Sara nothing reaches at all, which is where melee already stand
+//   - between 11.86 + 8.5 and 31.13 - 8.5 only the second orbit reaches, and the midpoint of that band
+//     is 21.5 - the second orbit itself, because standing on a ring is what buys the most room from
+//     its neighbours. That leaves 1.13 yd either way, which is the whole band tolerance.
+//
+// No radius is clear of every orbit: the gaps are 9.4-9.9 yd against the 17 yd a cloud sweeps. The
+// third orbit would be the cheaper station - one Guardian per 65 s against 45 - but it is 31.2 yd out
+// against a 28.5 yd spellDistance, so a bot posted there walks itself back in.
+constexpr float ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS = 2.8f;
+constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS = 21.5f;
+constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
+
+// Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
+// nova only reaches her from 15 yd - a kill further out does nothing for the phase at all. The
+// release is the cloud-free radius rather than a boundary a step inside the leash: anything between
+// the two lets go of the bot somewhere the innermost orbit sweeps, and 12 let go of it on the orbit.
+constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 15.0f;
+constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
+
+// Ranged and healers stack rather than spread, which inverts the usual rule and only holds because the
+// nova cannot reach the station. A cloud is in contact for (8.5 + blob + 8.5) / 3 seconds and re-arms
+// 10 s after each summon, so a blob under 13 yd across costs exactly one Guardian per pass: at 5 yd
+// that is 9 s of contact and one Guardian per 45 s orbit for the whole back line. Spread over an arc
+// instead, one pull handed the cloud somebody in reach for most of every orbit.
+constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS = 5.0f;
 
 // The second cap is the load-bearing one: a bot dodging outward otherwise walks out of spell range
 // and stops contributing for the rest of the phase.
@@ -221,6 +228,7 @@ extern const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE;
+extern const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 

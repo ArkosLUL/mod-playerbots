@@ -94,6 +94,16 @@ private:
     std::vector<Position> clouds;
 };
 
+// Ranged and healers hold one spot on the second orbit. Everyone walks to the same point, as the
+// phase 3 stations do; the trigger's stack radius is what stops the re-issue and shapes the blob.
+class YoggSaronPhase1StationAction : public MovementAction
+{
+public:
+    YoggSaronPhase1StationAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron phase 1 station action") {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronPhase2SpacingAction : public YoggSaronSpacingAction
 {
 public:

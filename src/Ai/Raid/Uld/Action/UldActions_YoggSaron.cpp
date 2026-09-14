@@ -116,8 +116,8 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
     heldSpotMs = 0;
 
     // Already outside everything, so this is what decides when a bot moves at all rather than where it
-    // ends up. The trigger radii have to cover the clear radii or there is a band the node is never
-    // asked about.
+    // ends up. It has to agree with the trigger: a circle here that the trigger does not read leaves a
+    // band where the bot sits in a hazard and the node is never asked.
     if (stillClear(set.hazards, set.clear, bot->GetPosition()))
         return false;
 
@@ -174,29 +174,24 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
 
     std::list<Creature*> found;
     bot->GetCreatureListWithEntryInGrid(found, NPC_OMINOUS_CLOUD,
-                                        SearchRadius() + ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+                                        SearchRadius() + ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS);
     for (Creature* cloud : found)
     {
         if (!cloud->IsAlive())
             continue;
 
         clouds.push_back(cloud->GetPosition());
-        set.hazards.emplace_back(cloud->GetPosition(), ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+        set.hazards.emplace_back(cloud->GetPosition(), ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS);
 
-        // And where it will be by the time the bot gets there. Without the lead a sidestep along the
-        // orbit is back under the same cloud within seconds and the dodge fires again.
-        set.hazards.emplace_back(YoggSaronCloudLead(cloud), ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+        // And where it will be by the time the bot gets there. Without the lead a destination clear of
+        // the orbit now is under it on arrival.
+        set.hazards.emplace_back(YoggSaronCloudLead(cloud), ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS);
     }
 
     std::vector<Unit*> const novas =
         GetYoggSaronNovaThreats(botAI, SearchRadius() + ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
     for (Unit* guardian : novas)
         set.fallback.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
-
-    // Every Guardian dies on Sara, because melee are leashed there and one walks to whoever holds
-    // threat. So her own spot is a standing nova hazard for anyone with no reason to be in it.
-    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
-        set.fallback.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_P1_STANDOFF_RELEASE);
 
     // Shadow Nova is the one that kills, so it is what the retry keeps when the clouds cannot also be
     // cleared.
@@ -224,6 +219,17 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
 bool YoggSaronPhase1SpacingAction::RouteAcceptable(float x, float y) const
 {
     return YoggSaronRouteClearOfClouds(bot, clouds, x, y);
+}
+
+bool YoggSaronPhase1StationAction::Execute(Event /*event*/)
+{
+    if (!YoggSaronWalkMakingProgress(botAI, "p1station", ULDUAR_YOGG_SARON_P1_RANGED_SPOT))
+        return false;
+
+    return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionX(),
+                  ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionY(),
+                  ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionZ(), false, false, false, true,
+                  MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)

@@ -116,6 +116,7 @@ public:
         creators["vezax shadow resistance action"] = &RaidUlduarActionContext::vezax_shadow_resistance_action;
         creators["yogg-saron shadow resistance action"] = &RaidUlduarActionContext::yogg_saron_shadow_resistance_action;
         creators["yogg-saron phase 1 spacing action"] = &RaidUlduarActionContext::yogg_saron_phase_1_spacing_action;
+        creators["yogg-saron phase 1 station action"] = &RaidUlduarActionContext::yogg_saron_phase_1_station_action;
         creators["yogg-saron dark volley interrupt action"] = &RaidUlduarActionContext::yogg_saron_dark_volley_interrupt_action;
         creators["yogg-saron guardian positioning action"] = &RaidUlduarActionContext::yogg_saron_guardian_positioning_action;
         creators["yogg-saron sanity action"] = &RaidUlduarActionContext::yogg_saron_sanity_action;
@@ -295,6 +296,7 @@ private:
     static Action* vezax_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "general vezax"); }
     static Action* yogg_saron_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "yogg-saron"); }
     static Action* yogg_saron_phase_1_spacing_action(PlayerbotAI* ai) { return new YoggSaronPhase1SpacingAction(ai); }
+    static Action* yogg_saron_phase_1_station_action(PlayerbotAI* ai) { return new YoggSaronPhase1StationAction(ai); }
     static Action* yogg_saron_dark_volley_interrupt_action(PlayerbotAI* ai) { return new YoggSaronDarkVolleyInterruptAction(ai); }
     static Action* yogg_saron_guardian_positioning_action(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningAction(ai); }
     static Action* yogg_saron_sanity_action(PlayerbotAI* ai) { return new YoggSaronSanityAction(ai); }
