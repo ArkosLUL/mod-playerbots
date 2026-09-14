@@ -66,6 +66,10 @@ protected:
     virtual bool Collect(HazardSet& set) = 0;
     virtual float SearchRadius() const = 0;
 
+    // Whether the walk to a candidate is acceptable, not just the candidate itself. No opinion by
+    // default: for most hazards crossing one to leave another still beats standing still.
+    virtual bool RouteAcceptable(float /*x*/, float /*y*/) const { return true; }
+
 private:
     // Held destination. The hazards move - clouds orbit at 3 yd/s, a Crusher re-faces onto whoever it
     // is hitting - so a fresh sweep every tick answers a different question every tick and the bot
@@ -82,6 +86,12 @@ public:
 protected:
     bool Collect(HazardSet& set) override;
     float SearchRadius() const override { return ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS; }
+    bool RouteAcceptable(float x, float y) const override;
+
+private:
+    // Where the clouds stood on this tick's Collect. Their 14 yd clear circles are already in the
+    // hazard set; this is for the tighter summon radius the walk itself has to miss.
+    std::vector<Position> clouds;
 };
 
 class YoggSaronPhase2SpacingAction : public YoggSaronSpacingAction
@@ -105,7 +115,7 @@ public:
 
 private:
     // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
-    static size_t TierOf(Unit* unit, bool brainLevel);
+    static size_t TierOf(Unit* unit, bool brainLevel, bool phaseOne);
     bool IsAllowedTarget(Unit* candidate, bool tentaclesCleared) const;
     Unit* ResolveTarget(Unit* currentTarget);
 };

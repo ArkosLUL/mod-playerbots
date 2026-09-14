@@ -25,14 +25,6 @@
 
 using namespace EncounterHelpers;
 
-Unit* YoggSaronTrigger::GetSaraIfAlive()
-{
-    // Not "find target": that walks the bot's own threat list, and Sara is FACTION_FRIENDLY for the
-    // whole of phase 1 and only ever takes damage from a Guardian's Shadow Nova. No bot ever holds
-    // threat on her, so the lookup returned null every tick and took all 21 Yogg nodes down with it.
-    return bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true);
-}
-
 // IsBotMainTank goes false for every bot the moment a human holds main tank, which silently disabled
 // both single-actor nodes. First living bot tank instead, so a human MT does not switch them off.
 bool YoggSaronTrigger::IsDesignatedBotTank()
@@ -90,8 +82,10 @@ bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
 
 bool YoggSaronTrigger::IsYoggSaronFight()
 {
-    // Same threat-list trap as GetSaraIfAlive, and Yogg is no better: he is not reliably on a bot's
-    // threat list either.
+    // Not "find target": that walks the bot's own threat list, and neither of these is reliably on
+    // it. Sara is FACTION_FRIENDLY for the whole of phase 1 and only ever takes damage from a
+    // Guardian's Shadow Nova, so no bot holds threat on her at all - the lookup returned null every
+    // tick and took all 21 Yogg nodes down with it.
     return bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true) ||
            bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
 }
@@ -190,33 +184,28 @@ bool YoggSaronTrigger::IsBrainRoomApproachable()
 
 bool YoggSaronGuardianPositioningTrigger::IsActive()
 {
-    if (!GetSaraIfAlive())
+    if (!botAI->IsTank(bot) && !PlayerbotAI::IsMelee(bot))
         return false;
 
-    if (!botAI->IsTank(bot))
-        return false;
+    float const fromSara =
+        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
 
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-    bool thereIsAnyGuardian = false;
+    // The release radius is what makes this hysteresis rather than a boundary: let go the instant the
+    // bot crosses the leash, reach melee drags it straight back out and the two trade the tick.
+    bool const beyond = fromSara > (returning ? ULDUAR_YOGG_SARON_P1_LEASH_RELEASE : ULDUAR_YOGG_SARON_P1_LEASH);
 
-    for (ObjectGuid const& guid : targets)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
+    // A live phase-1 Guardian before the phase read, which is four 200 yd sweeps - melee sit outside
+    // this leash for most of phases 2 and 3. The price is no walk back before the first spawn.
+    bool const active = beyond &&
+                        bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance, true) &&
+                        YoggSaronInPhase1(botAI);
 
-        if (unit->GetEntry() == NPC_GUARDIAN_OF_YS)
-        {
-            thereIsAnyGuardian = true;
-            ObjectGuid unitTargetGuid = unit->GetTarget();
-            Player* targetedPlayer = botAI->GetPlayer(unitTargetGuid);
-            if (!targetedPlayer || !botAI->IsTank(targetedPlayer))
-                return false;
-        }
-    }
+    if (active != returning && RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.p1leash", active ? "returning" : "held");
 
-    return thereIsAnyGuardian &&
-           bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) > 1.0f;
+    returning = active;
+
+    return returning;
 }
 
 bool YoggSaronSanityTrigger::IsActive()
@@ -256,15 +245,20 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     // orbit runs at 11 yd from Sara, straight through where melee stand.
     bool hazardNear = bot->FindNearestCreature(NPC_OMINOUS_CLOUD, ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS, true);
 
-    // Shadow Nova is the other half, and only ranged and healers can answer it. Melee and tanks have
-    // to stand in it to kill the Guardian, which is also the only way Sara takes damage.
-    if (!hazardNear && (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot)))
-    {
-        hazardNear =
-            bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS, true);
-    }
+    char const* reason = hazardNear ? "cloud" : nullptr;
 
-    return hazardNear && YoggSaronInPhase1(botAI);
+    // Shadow Nova is the other half, and only a Guardian about to detonate counts - running from every
+    // one of them scattered the raid to the rim to be picked off one at a time.
+    if (!hazardNear && !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty())
+        reason = bot->HasAura(SPELL_SARAS_FERVOR) ? "fervor" : "nova";
+
+    if (!reason || !YoggSaronInPhase1(botAI))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.p1dodge", reason);
+
+    return true;
 }
 
 bool YoggSaronPhase2SpacingTrigger::IsActive()
@@ -292,15 +286,27 @@ bool YoggSaronSetDpsPriorityTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    return IsPhase2() || IsPhase3();
+    // Fight-wide rather than per phase, and it has to stay in step with
+    // YoggSaronDpsTargetGuardMultiplier: that zeroes the stock assist over exactly this window, so a
+    // narrower gate here would leave a non-tank with no target source at all.
+    return IsYoggSaronFight();
 }
 
 bool YoggSaronDarkVolleyTrigger::IsActive()
 {
-    if (!YoggSaronCanInterrupt(bot))
+    std::vector<char const*> const spells = YoggSaronInterruptSpells(bot);
+    if (spells.empty())
         return false;
 
-    return !GetYoggSaronDarkVolleyCasters(botAI).empty();
+    // Answer for this bot, not for the raid. The node sits at ACTION_EMERGENCY + 1, so a bot that
+    // claims the tick and only then finds every caster out of reach has spent the whole tick on
+    // nothing - 63 of 92 attempts in one pull.
+    for (Unit* caster : GetYoggSaronDarkVolleyCasters(botAI))
+        for (char const* spell : spells)
+            if (botAI->CanCastSpell(spell, caster))
+                return true;
+
+    return false;
 }
 
 bool YoggSaronMaladyOfTheMindTrigger::IsActive()

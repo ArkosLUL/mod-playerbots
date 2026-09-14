@@ -49,9 +49,14 @@ struct AnyUnitOfEntriesInRangeCheck
     }
 };
 
-bool IsYoggSaronImmortalGuardian(Unit* unit)
+// Guardians the raid finishes one at a time instead of spreading over three. In phase 3 a Shadow
+// Beacon heal outruns split damage; in phase 1 two brought down together detonate together, and a
+// pair of Shadow Novas killed all eight melee inside 16 ms.
+bool IsYoggSaronFocusedGuardian(Unit* unit)
 {
-    return unit->GetEntry() == NPC_IMMORTAL_GUARDIAN || unit->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN;
+    uint32 const entry = unit->GetEntry();
+
+    return entry == NPC_GUARDIAN_OF_YS || entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN;
 }
 }  // namespace
 
@@ -121,16 +126,21 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
 
     // The cap is the load-bearing half: a bot dodging outward otherwise walks out of spell range and
     // stops contributing for the rest of the phase.
-    auto const accept = [&middle, &set](float x, float y)
+    auto const accept = [this, &middle, &set](float x, float y)
     {
         if (middle.GetExactDist2d(x, y) > ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE)
+            return false;
+
+        if (!RouteAcceptable(x, y))
             return false;
 
         return !set.clear || set.clear(x, y);
     };
 
-    auto const capOnly = [&middle](float x, float y)
-    { return middle.GetExactDist2d(x, y) <= ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE; };
+    auto const capOnly = [this, &middle](float x, float y)
+    {
+        return middle.GetExactDist2d(x, y) <= ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE && RouteAcceptable(x, y);
+    };
 
     // Every candidate in a ring is the same walk away, so preferNear is free and decides the whole
     // character of the dodge: biased at the middle it sidesteps along the orbit instead of running for
@@ -160,32 +170,55 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
 
 bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
 {
-    // Melee and tanks only dodge clouds. Standing in Shadow Nova is the price of killing a Guardian,
-    // and a Guardian dying next to Sara is the only way she takes damage at all.
-    bool const avoidNova = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
+    clouds.clear();
 
     std::list<Creature*> found;
     bot->GetCreatureListWithEntryInGrid(found, NPC_OMINOUS_CLOUD,
                                         SearchRadius() + ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
     for (Creature* cloud : found)
-        if (cloud->IsAlive())
-            set.hazards.emplace_back(cloud->GetPosition(), ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
-
-    if (avoidNova)
     {
-        found.clear();
-        bot->GetCreatureListWithEntryInGrid(found, NPC_GUARDIAN_OF_YS,
-                                            SearchRadius() + ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
-        for (Creature* guardian : found)
-            if (guardian->IsAlive())
-                set.fallback.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+        if (!cloud->IsAlive())
+            continue;
 
-        // Shadow Nova is the one that kills, so it is what the retry keeps when the clouds cannot also
-        // be cleared.
-        set.hazards.insert(set.hazards.end(), set.fallback.begin(), set.fallback.end());
+        clouds.push_back(cloud->GetPosition());
+        set.hazards.emplace_back(cloud->GetPosition(), ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+
+        // And where it will be by the time the bot gets there. Without the lead a sidestep along the
+        // orbit is back under the same cloud within seconds and the dodge fires again.
+        set.hazards.emplace_back(YoggSaronCloudLead(cloud), ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS);
+    }
+
+    std::vector<Unit*> const novas =
+        GetYoggSaronNovaThreats(botAI, SearchRadius() + ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+    for (Unit* guardian : novas)
+        set.fallback.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+
+    // Shadow Nova is the one that kills, so it is what the retry keeps when the clouds cannot also be
+    // cleared.
+    set.hazards.insert(set.hazards.end(), set.fallback.begin(), set.fallback.end());
+
+    // With nothing about to detonate, a melee bot dodging a cloud otherwise steps out of its own swing
+    // range and reach melee hauls it straight back - the two traded the tick 252 times in one pull.
+    // Requiring the candidate to stay in reach ends the trade, and the retry drops it when nothing
+    // satisfies both.
+    if (novas.empty() && PlayerbotAI::IsMelee(bot))
+    {
+        if (Unit* target = AI_VALUE(Unit*, "current target"))
+        {
+            Position const at = target->GetPosition();
+            float const reach = sPlayerbotAIConfig.meleeDistance;
+
+            set.clear = [at, reach](float x, float y) { return at.GetExactDist2d(x, y) <= reach; };
+            set.fallback = set.hazards;
+        }
     }
 
     return !set.hazards.empty();
+}
+
+bool YoggSaronPhase1SpacingAction::RouteAcceptable(float x, float y) const
+{
+    return YoggSaronRouteClearOfClouds(bot, clouds, x, y);
 }
 
 bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
@@ -211,7 +244,7 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
     return !set.hazards.empty() || !wedges.empty();
 }
 
-size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
+size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseOne)
 {
     constexpr size_t none = std::numeric_limits<size_t>::max();
 
@@ -233,6 +266,12 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
 
         return entry == NPC_BRAIN ? 2 : none;
     }
+
+    // Phase 1 has one tier because one Guardian at a time is the whole point. It is kept off the
+    // boss-room ladder rather than folded into it so a Guardian left over across the transition
+    // cannot read as the Crusher's tier and pin a bot to it.
+    if (phaseOne)
+        return entry == NPC_GUARDIAN_OF_YS ? 0 : none;
 
     // One boss-room ladder for both phases: the tentacles are gone by the time a Guardian exists, so
     // the tail never competes with the head.
@@ -295,6 +334,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     YoggSaronTrigger yoggSaronTrigger(botAI);
     bool const brainLevel = yoggSaronTrigger.IsInBrainLevel();
+    bool const phaseOne = !brainLevel && YoggSaronInPhase1(botAI);
 
     std::vector<uint32> entries;
     size_t tierCount = 0;
@@ -303,6 +343,11 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         entries = ULDUAR_YOGG_SARON_ILLUSION_MOBS;
         entries.push_back(NPC_BRAIN);
         tierCount = 3;
+    }
+    else if (phaseOne)
+    {
+        entries = {NPC_GUARDIAN_OF_YS};
+        tierCount = 1;
     }
     else
     {
@@ -327,7 +372,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     std::vector<Unit*> perTier(tierCount, nullptr);
     for (Unit* unit : candidates)
     {
-        size_t const tier = TierOf(unit, brainLevel);
+        size_t const tier = TierOf(unit, brainLevel, phaseOne);
         if (tier >= tierCount || !IsAllowedTarget(unit, tentaclesCleared))
             continue;
 
@@ -340,7 +385,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
         // Guardians go down lowest first so the raid's damage finishes one instead of spreading over
         // three; everything else is nearest, which is the shortest walk into range.
-        bool const better = IsYoggSaronImmortalGuardian(unit)
+        bool const better = IsYoggSaronFocusedGuardian(unit)
                                 ? unit->GetHealth() < selected->GetHealth()
                                 : unit->GetExactDist2d(bot) < selected->GetExactDist2d(bot);
         if (better)
@@ -361,7 +406,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     size_t currentTier = none;
     if (currentTarget && IsAllowedTarget(currentTarget, tentaclesCleared))
-        currentTier = TierOf(currentTarget, brainLevel);
+        currentTier = TierOf(currentTarget, brainLevel, phaseOne);
 
     if (currentTier != none && currentTier <= desiredTier)
     {
@@ -369,7 +414,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         // something meaningfully closer - otherwise two tentacles ping-pong the whole raid. Guardians
         // hold outright: that tier is ordered by health, and an order that flips mid-fight would reset
         // every swing and cast timer in the raid.
-        if (currentTier < desiredTier || !target || IsYoggSaronImmortalGuardian(currentTarget) ||
+        if (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
             target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
         {
             target = currentTarget;
@@ -421,26 +466,11 @@ int32 YoggSaronDarkVolleyInterruptAction::GetInterrupterIndex()
 
 bool YoggSaronDarkVolleyInterruptAction::CastClassInterrupt(Unit* target)
 {
-    auto const cast = [&](char const* spell)
-    { return botAI->CanCastSpell(spell, target) && botAI->CastSpell(spell, target); };
+    for (char const* spell : YoggSaronInterruptSpells(bot))
+        if (botAI->CanCastSpell(spell, target) && botAI->CastSpell(spell, target))
+            return true;
 
-    switch (bot->getClass())
-    {
-        case CLASS_DEATH_KNIGHT:
-            return cast("mind freeze") || cast("strangulate");
-        case CLASS_HUNTER:
-            return cast("silencing shot");
-        case CLASS_MAGE:
-            return cast("counterspell");
-        case CLASS_ROGUE:
-            return cast("kick");
-        case CLASS_SHAMAN:
-            return cast("wind shear");
-        case CLASS_WARRIOR:
-            return cast("pummel") || cast("shield bash");
-        default:
-            return bot->getRace() == RACE_BLOODELF && cast("arcane torrent");
-    }
+    return false;
 }
 
 bool YoggSaronDarkVolleyInterruptAction::Execute(Event /*event*/)

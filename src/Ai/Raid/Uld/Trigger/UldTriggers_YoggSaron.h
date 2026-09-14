@@ -28,7 +28,6 @@ public:
     bool IsMasterIsInBrainRoom();
     bool IsBrainRoomApproachable();
     Position GetIllusionRoomEntrancePosition();
-    Unit* GetSaraIfAlive();
     bool IsDesignatedBotTank();
 
     // Whether the bot's phase 3 station still reaches a target from inside its radius. A fixed spot
@@ -57,11 +56,18 @@ public:
     bool IsActive() override;
 };
 
+// Melee and tanks are leashed to Sara rather than stationed on her: a Guardian walks to whoever holds
+// threat, so where melee stand is where it dies, and only a death inside 15 yd of Sara advances the
+// phase at all.
 class YoggSaronGuardianPositioningTrigger : public YoggSaronTrigger
 {
 public:
     YoggSaronGuardianPositioningTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron guardian positioning trigger") {}
     bool IsActive() override;
+
+private:
+    // Per bot, like the spacing action's held spot: trigger instances belong to one bot's context.
+    bool returning = false;
 };
 
 class YoggSaronSanityTrigger : public YoggSaronTrigger

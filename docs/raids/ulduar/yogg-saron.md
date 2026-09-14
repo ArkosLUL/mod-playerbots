@@ -5,6 +5,12 @@ Sara is `FACTION_FRIENDLY` all of P1, and her `DamageTaken` zeroes anything whos
 Guardian of Yogg-Saron (33136). The raid's job is to kill Guardians **on top of her** — their death
 explosion Shadow Nova Sara (65719, 15 yd) is her only damage source.
 
+That makes P1 a counter, not a damage race: 65719 is a flat **25,000** against her spawn row's
+**199,999**, so the phase wants roughly **eight** deaths inside 15 yd of her and a kill further out
+buys nothing at all. One of six kills on 2026-09-14 landed 22.0 yd out and was simply wasted. Guardians
+have no movement script — `SetInCombatWithZone`, then a vanilla threat table — so **where melee stand
+is where a Guardian dies**, which is the whole reason melee are leashed to her.
+
 So no bot ever holds threat on her, and `AI_VALUE2(Unit*, "find target", "sara")` walks
 `GetThreatenedByMeList()`. It returned null every tick and took **all 21 Yogg nodes** with it: two
 wipes on 2026-09-13, ~6,900 checks per trigger, zero fires. Resolve her with
@@ -22,17 +28,32 @@ phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot t
 | Shadow Nova 62714 / 65209 | instant, uninterruptible, 15 yd, on Guardian **death** | ranged and healers stay out; melee and tanks must eat it |
 | Dark Volley 63038 / 65330 | 1500 ms cast, 35 yd, `InterruptFlags` 0xF | interrupt it — distance is no answer |
 
-~97% of raid damage across both wipes. 25-man **normal** casts 63038, so the Dark Volley ids do not
+~97% of raid damage across both wipes. Which of the two leads flips with how many Guardians are up:
+the nova led at 1,570,355 over 115 hits when two or three were alive, Dark Volley at 957,559 over 182
+against the nova's 730,809 once 14 were. 25-man **normal** casts 63038, so the Dark Volley ids do not
 split 10/25; test both. The always-on class interrupts only look at the bot's current target and
 caught under a third of the volleys, hence `yogg-saron dark volley`, which offsets each interrupter by
 its index so the raid does not spend every cooldown on one cast.
 
 The nova is a **death explosion, not a cast** — `boss_yoggsaron_guardian_of_ys::JustDied` →
-`DoCastAOE` — so nothing interrupts or outranges it once the guardian dies inside the stack, and it
-stayed the fight's single largest damage source at 1,570,355 over 115 hits. Its kill zone and the
-raid's camp are the same place: ranged and healers sat at a median 11 yd from Sara while every burst
-caught 20-25 of 25 raiders. **Do not gate the retreat on Guardian health** — the median Guardian is
-below 15% for 1.05 s, about 7 yd of travel. Spacing is a standing rule.
+`DoCastAOE` — so nothing interrupts or outranges it once the guardian dies inside the stack. Its kill
+zone and the raid's camp are the same place: ranged and healers sat at a median 11 yd from Sara while
+every burst caught 20-25 of 25 raiders.
+
+**Sara's Fervor (63138) doubles it.** The DBC gives it +20% damage done and **+100% damage taken** for
+15 s; the core implements none of that, so the spellbook and every server-side grep are silent on it.
+Measured on 2026-09-14: a melee bot holding Fervor took **27,750** from the same detonation that hit
+the other nine for 6,340-17,077. Against ~80,000 pools that is not a one-shot, but it is lethal beside
+a Dark Volley tick or a second nova. Melee dodge a nova only while they hold it.
+
+**The health gate on that retreat is fragile, and focus fire makes it worse.** The window a Guardian
+spends at or under 20% is entirely a function of how concentrated the raid's damage is: a **median
+3.5 s** across the six deaths of the split-damage 2026-09-14 pull, but **0.9-1.0 s** across the 26
+deaths of the two pulls before it, where two or three Guardians were burned serially. At ~7 yd/s one
+second is 7 yd of travel against a 15 yd radius, from a start in melee contact. So the kill order in
+this fight tightens the window the retreat depends on, and the two pull against each other. If a trace
+shows bots still eating novas they tried to leave, the health gate is the part to drop — the "chasing
+me" half is what stops the scatter, and it needs no timing at all.
 
 ## Ominous Clouds
 
@@ -42,10 +63,23 @@ a scripted ~11-12. `InformCloud` skips clouds closer than 20 yd to Sara, so **th
 ever fires from player contact** - and it sweeps straight through where melee stand.
 
 Avoiding them starves nothing: `EVENT_SARA_P1_SUMMON` feeds Guardians every 20 s, shrinking to a 10 s
-floor, wherever the raid stands.
+floor, wherever the raid stands. That timer is also the yardstick — it can fire at most **7** times in
+a 99 s window, so the 20 Guardians of 2026-09-14 put **at least 13** on the raid's own feet.
 
 No fixed radius is safe. Orbit gaps are ~10 yd, so the best clearance any ring holds is 5 yd against
 its two neighbours, inside the 6 yd summon check. Bots sidestep as a cloud comes round.
+
+**The route matters more than the destination here, unlike every other hazard.** Crossing a Death Ray
+to leave one still beats standing in it, which is why `FindNearestPositionClearOfHazards` checks no
+path; crossing a cloud costs a Guardian, so the far side is worse than standing still. Phase 1 alone
+overrides `RouteAcceptable` to reject a candidate whose straight walk passes inside a cloud's 6 yd
+summon radius.
+
+**And the orbit outruns a sidestep.** A destination clear of a cloud now is under it seconds later, so
+each cloud enters the hazard set twice: where it is, and where its own facing and run speed put it
+`ULDUAR_YOGG_SARON_CLOUD_LEAD_MS` ahead. Without the lead the dodge is no better than chance —
+destinations sat a median 16.3 yd from the nearest cloud against a 15.4 yd baseline for standing
+still.
 
 ## The spacing nodes
 
@@ -63,15 +97,40 @@ oscillating against hazards that never stop moving.
   walk away, so a bot-position bias is a no-op tie-break; biasing at the middle makes the dodge a
   sidestep rather than a run for the rim. The `accept` cap holds it inside spell range.
 
+- **The dodge keeps melee in their own swing range.** A melee bot that sidesteps a cloud out of reach
+  is hauled straight back by `reach melee`, and the two traded the tick **252 times** in one pull while
+  the spacing node returned FAILED 582 times against 618 OK. With nothing about to detonate, phase 1
+  puts "still within `meleeDistance` of my target" in `set.clear` and the cloud circles in
+  `set.fallback`, so the retry drops the reach and keeps the clearance.
+
 `MoveAwayFromCreatureAction` was rejected for this: no throttle, no latch, and it *maximises* distance
 recomputed from the bot's new position every tick, so against six rotating rings the best answer rotates
 with them.
 
+**Who dodges what, in phase 1.** Everyone dodges clouds. A Guardian's nova is dodged only by a bot that
+would not otherwise survive it: ranged and healers when one is at or under
+`ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT` **and chasing them** — at spell range nothing else reaches
+them — and melee when they hold Sara's Fervor. Running from every Guardian instead is what scattered
+the raid to the rim on 2026-09-14, where seven bots were picked off one at a time between 1:26 and
+1:30. `GetYoggSaronNovaThreats` is the single owner of that rule, so the trigger and the action cannot
+disagree about who is running.
+
+**Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
+(15 yd, the nova's own reach to Sara) the bot walks back to the middle, and it is not released until
+`ULDUAR_YOGG_SARON_P1_LEASH_RELEASE` (12 yd): let go on the leash itself, `reach melee` drags it
+straight out again and the two trade the tick. The node reads a live Guardian before the phase, which
+is four 200 yd sweeps and would otherwise run every tick for melee standing outside the leash in P2 and
+P3; the price is no walk back before the first spawn. The leash keeps melee inside the 11.5 yd cloud
+orbit by design — a station tight enough to clear it would give up chasing entirely, so **melee still
+trigger clouds, and that is the trade to check first** if spawns still outrun the timer.
+
 ## Targeting is direct, never a raid icon
 
 Yogg-Saron was the last Ulduar encounter targeting through raid icons. `yogg-saron set dps priority`
-now owns every non-tank's target, paired with a multiplier zeroing `DpsAssistAction` — the idiom the
-rest of the raid already uses. `AttackRtiTargetAction` is left alone so a **human's** mark still wins,
+now owns every non-tank's target for the **whole** encounter, paired with a multiplier zeroing
+`DpsAssistAction` — the idiom the rest of the raid already uses. Both read `IsYoggSaronFight`, the same
+call rather than merely the same phases: a multiplier zeroing the assist over a wider window than the
+resolver covers leaves a bot with no target source at all. `AttackRtiTargetAction` is left alone so a **human's** mark still wins,
 and `rti` survives only as a per-bot room tag.
 
 An icon is a sticky override: `RtiTargetValue` hands it back before the smart picker runs and
@@ -83,7 +142,13 @@ pull, and the bots waiting on it dropped out of combat into `clean quest log` an
 `RtiTargetValue::Calculate` returns null on LOS failure and beyond `sightDistance` (100) in 2D. A
 direct `Attack()` has **no distance cap, only LOS**, which is what makes the Brain reachable at all.
 
-Kill order — brain level: Influence Tentacle → nearest other illusion add → the Brain. Boss room:
+Kill order — **phase 1: one tier, the lowest-health Guardian of Yogg-Saron**, kept off the boss-room
+ladder rather than folded into it so a Guardian left over across the transition cannot read as the
+Crusher's tier and pin a bot to it. Splitting damage is what killed the raid on 2026-09-14: two
+Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and
+the **double** nova put 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier
+single novas were all survived. Brain level: Influence Tentacle → nearest other illusion add → the
+Brain. Boss room:
 Crusher (**ranged only**, below) → Constrictor → Corruptor → **Marked** Immortal Guardian (36064) →
 Immortal Guardian (33988) → Yogg. Guardians are picked lowest-health first and then held outright:
 that tier is ordered by health, and an order that flips mid-fight resets every swing and cast timer in

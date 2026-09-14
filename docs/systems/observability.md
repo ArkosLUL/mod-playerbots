@@ -404,6 +404,10 @@ are left bare on purpose.
 - **`ObsValue` / `ObsGuidMap::Set` emit only on change**, so a missing note means "unchanged", not
   "never set". That makes absence the signature of state leaking in from a previous pull rather than
   evidence of nothing happening.
+- **A friendly boss is never sampled, so its phase is invisible.** The snapshot sweep keeps only units
+  hostile to the anchor, and Yogg-Saron's Sara is `FACTION_FRIENDLY` for all of phase 1 — the phase
+  whose entire progress is her health bar. No trace can say how close a phase-1 attempt came;
+  Guardian deaths inside 15 yd of her are the only proxy.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies
   `AiPlayerbot.BotCheats` verbatim, so a header reading `food,taxi,raid` says nothing about whether
   any node took a cheat branch. An encounter that stopped cheating reads identically before and

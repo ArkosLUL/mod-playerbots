@@ -6,7 +6,9 @@
 
 #include "UldEncounter_YoggSaron.h"
 
+#include <algorithm>
 #include <cmath>
+#include <list>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -161,20 +163,99 @@ std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI)
     return casters;
 }
 
-bool YoggSaronCanInterrupt(Player* bot)
+std::vector<char const*> YoggSaronInterruptSpells(Player* bot)
 {
     switch (bot->getClass())
     {
         case CLASS_DEATH_KNIGHT:
+            return {"mind freeze", "strangulate"};
         case CLASS_HUNTER:
+            return {"silencing shot"};
         case CLASS_MAGE:
+            return {"counterspell"};
         case CLASS_ROGUE:
+            return {"kick"};
         case CLASS_SHAMAN:
+            return {"wind shear"};
         case CLASS_WARRIOR:
-            return true;
+            return {"pummel", "shield bash"};
         default:
-            return bot->getRace() == RACE_BLOODELF;
+            if (bot->getRace() == RACE_BLOODELF)
+                return {"arcane torrent"};
+
+            return {};
     }
+}
+
+bool YoggSaronCanInterrupt(Player* bot) { return !YoggSaronInterruptSpells(bot).empty(); }
+
+std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
+{
+    Player* bot = botAI->GetBot();
+
+    // Standing in a nova is the price of killing a Guardian at all, and Sara's Fervor is what turns
+    // that price into a death: +100% damage taken for 15 s, measured at 27,750 against a 15,500 median
+    // on the same detonation.
+    bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
+    bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
+    if (!fervor && !atRange)
+        return {};
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, radius);
+
+    std::vector<Unit*> threats;
+    for (Creature* guardian : guardians)
+    {
+        if (!guardian->IsAlive() || guardian->GetHealthPct() > ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT)
+            continue;
+
+        // At spell range the only way into a 15 yd nova is for the Guardian to have walked over, so
+        // one chasing somebody else is a blast the bot is already clear of. A bot carrying Fervor is
+        // in it wherever the Guardian is heading.
+        if (!fervor && guardian->GetVictim() != bot)
+            continue;
+
+        threats.push_back(guardian);
+    }
+
+    return threats;
+}
+
+Position YoggSaronCloudLead(Creature* cloud)
+{
+    // An escort-AI creature faces the leg it is walking, so its own orientation is the heading - no
+    // need to track the orbit or know which way round it was sent.
+    float const travel = cloud->GetSpeed(MOVE_RUN) * ULDUAR_YOGG_SARON_CLOUD_LEAD_MS / 1000.0f;
+    float const heading = cloud->GetOrientation();
+
+    return Position(cloud->GetPositionX() + std::cos(heading) * travel,
+                    cloud->GetPositionY() + std::sin(heading) * travel, cloud->GetPositionZ());
+}
+
+bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& clouds, float x, float y)
+{
+    float const originX = bot->GetPositionX();
+    float const originY = bot->GetPositionY();
+    float const legX = x - originX;
+    float const legY = y - originY;
+    float const legSquared = legX * legX + legY * legY;
+
+    for (Position const& cloud : clouds)
+    {
+        float along = 0.0f;
+        if (legSquared > 0.0f)
+        {
+            along = ((cloud.GetPositionX() - originX) * legX + (cloud.GetPositionY() - originY) * legY) / legSquared;
+            along = std::max(0.0f, std::min(1.0f, along));
+        }
+
+        if (cloud.GetExactDist2d(originX + legX * along, originY + legY * along) <
+            ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS)
+            return false;
+    }
+
+    return true;
 }
 
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)

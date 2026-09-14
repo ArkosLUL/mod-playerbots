@@ -13,6 +13,7 @@
 #include <vector>
 
 class PlayerbotAI;
+class Creature;
 class Player;
 class Unit;
 
@@ -65,6 +66,7 @@ enum UlduarYoggSaronIds
     NPC_DESCEND_INTO_MADNESS = 34072,
     NPC_MARKED_IMMORTAL_GUARDIAN = 36064,
     SPELL_SANITY = 63050,
+    SPELL_SARAS_FERVOR = 63138,  // +20% damage done and +100% damage taken, 15s
     SPELL_BRAIN_LINK = 63802,
     SPELL_MALADY_OF_THE_MIND = 63830,
     SPELL_SHADOW_BARRIER = 63894,
@@ -104,11 +106,28 @@ constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 // whatever boundary it gets, so one radius re-fires every time a cloud drifts a yard in.
 constexpr float ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS = 10.0f;
 constexpr float ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS = 14.0f;
+constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS = 6.0f;
+
+// Unlike a Death Ray, crossing a cloud is worse than standing in one: the far side costs a Guardian.
+// The orbit is the other half - a sideways step is back under the same cloud within seconds - so a
+// candidate is tested against where the cloud will be as well as where it is.
+constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 3000;
 
 // Shadow Nova, the Guardian's death explosion: DBC radius 15, plus both object sizes at apply time.
 // Ranged and healers stay out of it; melee and tanks have to eat it to kill the thing at all.
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
+
+// A Guardian at or under this is about to detonate. Running from every Guardian instead scatters the
+// raid to the rim and leaves bots to be picked off one at a time.
+constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
+
+// Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
+// nova only reaches her from 15 yd - a kill further out does nothing for the phase at all. Release is
+// tighter than the leash: walked back to the boundary itself a bot is let go the moment it crosses
+// and dragged straight out again by reach melee.
+constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 15.0f;
+constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = 12.0f;
 
 // The second cap is the load-bearing one: a bot dodging outward otherwise walks out of spell range
 // and stops contributing for the rest of the phase.
@@ -186,9 +205,22 @@ bool YoggSaronInPhase3(PlayerbotAI* botAI);
 // so the two cannot disagree about what is being kicked.
 std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI);
 
-// Classes carrying an interrupt the action can aim. Avenger's Shield is left out - it picks its own
-// target and cannot be pointed at a named Guardian.
+// Interrupts this bot can aim, in the order the action tries them, empty for a class with none.
+// Avenger's Shield is left out - it picks its own target and cannot be pointed at a named Guardian.
+std::vector<char const*> YoggSaronInterruptSpells(Player* bot);
 bool YoggSaronCanInterrupt(Player* bot);
+
+// Guardians whose death nova this bot should leave. Ranged and healers count only one that is both
+// about to die and chasing them: at spell range nothing else can reach them. Melee stand in a nova by
+// design and count one only while Sara's Fervor is doubling it. Shared so the trigger and the action
+// cannot disagree about who is running.
+std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius);
+
+// Where a cloud will be one lead ahead, taken from its own facing and run speed.
+Position YoggSaronCloudLead(Creature* cloud);
+
+// Whether a straight walk from the bot to (x, y) stays outside every cloud's summon radius.
+bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& clouds, float x, float y);
 
 // Whether the Brain is safe to approach and hit. Damaging it while any Influence Tentacle lives deals
 // nothing and kills the attacker outright, so this gates both the walk down and the target pick.
