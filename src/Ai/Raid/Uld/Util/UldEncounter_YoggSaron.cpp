@@ -194,8 +194,9 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
     Player* bot = botAI->GetBot();
 
     // Standing in a nova is the price of killing a Guardian at all, and Sara's Fervor is what turns
-    // that price into a death: +100% damage taken for 15 s, measured at 27,750 against a 15,500 median
-    // on the same detonation.
+    // that price into a death: +100% damage taken for 15 s. Measured over one pull, novas ran to a
+    // 13,877 median across 199 hits and 23,789-34,039 across the 4 that landed on a Fervor holder,
+    // against caster and healer pools of 25,000-30,000. All four were lethal, one from full health.
     bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
     bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
     if (!fervor && !atRange)
@@ -207,7 +208,9 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
     std::vector<Unit*> threats;
     for (Creature* guardian : guardians)
     {
-        if (!guardian->IsAlive() || guardian->GetHealthPct() > ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT)
+        float const gate = fervor ? ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT
+                                  : ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT;
+        if (!guardian->IsAlive() || guardian->GetHealthPct() > gate)
             continue;
 
         // At spell range the only way into a 15 yd nova is for the Guardian to have walked over, so

@@ -252,6 +252,22 @@ bool YoggSaronPhase1SpacingTrigger::IsActive()
     if (!hazardNear && !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty())
         reason = bot->HasAura(SPELL_SARAS_FERVOR) ? "fervor" : "nova";
 
+    // Sara's own spot is where every Guardian dies, so anyone at range holds off it rather than
+    // waiting to be told a particular one is about to go. Distance only, no sweep, so it costs
+    // nothing to ask before the phase read. Released further out than it fires, or reach spell walks
+    // the bot back in and the two trade the tick.
+    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
+    {
+        float const fromSara =
+            bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+
+        standingOff = fromSara <
+                      (standingOff ? ULDUAR_YOGG_SARON_P1_STANDOFF_RELEASE : ULDUAR_YOGG_SARON_P1_STANDOFF);
+
+        if (!reason && standingOff)
+            reason = "standoff";
+    }
+
     if (!reason || !YoggSaronInPhase1(botAI))
         return false;
 

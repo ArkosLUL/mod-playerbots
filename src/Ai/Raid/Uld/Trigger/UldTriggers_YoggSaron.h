@@ -44,6 +44,11 @@ class YoggSaronPhase1SpacingTrigger : public YoggSaronTrigger
 public:
     YoggSaronPhase1SpacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron phase 1 spacing trigger") {}
     bool IsActive() override;
+
+private:
+    // Per bot, like the guardian positioning trigger's leash: trigger instances belong to one bot's
+    // context.
+    bool standingOff = false;
 };
 
 // Dark Volley is a 1.5s cast hitting everything within 35 yd, so it cannot be walked out of. The

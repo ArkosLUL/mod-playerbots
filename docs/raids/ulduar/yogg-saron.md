@@ -25,7 +25,7 @@ phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot t
 
 | Spell | Shape | Answer |
 |---|---|---|
-| Shadow Nova 62714 / 65209 | instant, uninterruptible, 15 yd, on Guardian **death** | ranged and healers stay out; melee and tanks must eat it |
+| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death** | ranged and healers stand off; melee and tanks must eat it |
 | Dark Volley 63038 / 65330 | 1500 ms cast, 35 yd, `InterruptFlags` 0xF | interrupt it — distance is no answer |
 
 ~97% of raid damage across both wipes. Which of the two leads flips with how many Guardians are up:
@@ -36,44 +36,55 @@ caught under a third of the volleys, hence `yogg-saron dark volley`, which offse
 its index so the raid does not spend every cooldown on one cast.
 
 The nova is a **death explosion, not a cast** — `boss_yoggsaron_guardian_of_ys::JustDied` →
-`DoCastAOE` — so nothing interrupts or outranges it once the guardian dies inside the stack. Its kill
-zone and the raid's camp are the same place: ranged and healers sat at a median 11 yd from Sara while
-every burst caught 20-25 of 25 raiders.
+`DoCastAOE` — so nothing interrupts or outranges it once the guardian dies inside the stack. **Its
+kill zone is Sara**, because that is where the raid is supposed to kill Guardians, so the phase works
+and the raid dies of it: once every kill landed inside 15 yd, the 12 novas of one pull caught 12-23
+raiders each and were **65%** of all damage the raid took. Melee and tanks have no way out. Ranged and
+healers do, and stand off (below).
 
-**Sara's Fervor (63138) doubles it.** The DBC gives it +20% damage done and **+100% damage taken** for
-15 s; the core implements none of that, so the spellbook and every server-side grep are silent on it.
-Measured on 2026-09-14: a melee bot holding Fervor took **27,750** from the same detonation that hit
-the other nine for 6,340-17,077. Against ~80,000 pools that is not a one-shot, but it is lethal beside
-a Dark Volley tick or a second nova. Melee dodge a nova only while they hold it.
+**Sara's Fervor (63138) doubles it, and that is a one-shot.** The DBC gives +20% damage done and
+**+100% damage taken** for 15 s; the core implements none of it, so the spellbook and every
+server-side grep are silent. Measured over one pull: **13,877** median across 199 ordinary nova hits,
+**23,789-34,039** across the 4 that landed on a Fervor holder, against caster and healer pools of
+**25,000-30,000**. All four killed, one from full health.
 
-**The health gate on that retreat is fragile, and focus fire makes it worse.** The window a Guardian
-spends at or under 20% is entirely a function of how concentrated the raid's damage is: a **median
-3.5 s** across the six deaths of the split-damage 2026-09-14 pull, but **0.9-1.0 s** across the 26
-deaths of the two pulls before it, where two or three Guardians were burned serially. At ~7 yd/s one
-second is 7 yd of travel against a 15 yd radius, from a start in melee contact. So the kill order in
-this fight tightens the window the retreat depends on, and the two pull against each other. If a trace
-shows bots still eating novas they tried to leave, the health gate is the part to drop — the "chasing
-me" half is what stops the scatter, and it needs no timing at all.
+So Fervor gets its own, wider health gate — `ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT` (50%) against
+20% for everyone else. Focus fire is what forces that: concentrating damage cuts the window a Guardian
+spends at or under 20% from a **median 3.5 s** to **0.9-1.0 s**, and one second is 7 yd of travel
+against a 16 yd blast from a start in melee contact. The 20% gate fired at 4 Fervored novas and saved
+nobody. The "chasing me" half of the ranged rule needs no timing and is untouched.
 
 ## Ominous Clouds
 
-Six clouds orbit Sara at fixed **11 / 21 / 31 / 41 / 51 / 61 yd** radii, constant **3.0 yd/s**. One
-summons a Guardian whenever a player comes within 6 yd, which is how bots spawned ~23 Guardians against
-a scripted ~11-12. `InformCloud` skips clouds closer than 20 yd to Sara, so **the innermost orbit only
-ever fires from player contact** - and it sweeps straight through where melee stand.
+Six clouds orbit Sara at fixed **11.5 / 21.3 / 31.2 / 41 / 50.8 / 60.8 yd** radii, constant
+**3.0 yd/s** (`SpawnClouds`, `8 + i*7` on the diagonal). `InformCloud` skips clouds closer than 20 yd
+to Sara, so **the innermost orbit only ever fires from player contact** - and it sweeps straight
+through where melee stand.
+
+**The summon is a 10 s aura and the cloud then re-arms.** 63031 is `EffectAura` 23 with period and
+duration both 10000, triggering 62979, so a Guardian appears exactly 10 s after its cloud is marked
+and attributing one means rewinding by that. `JustSummoned` clears `_isSummoning`, so a bot that stays
+in reach summons **one Guardian every 10 s indefinitely**: the innermost cloud alone produced 6 of one
+pull's 17. The C++ reads as an instant one-shot summon; both the delay and the repeat are DBC-only.
+
+**A cloud summons on any player within 8.5 yd, not the script's 6** — `SelectNearbyTarget` goes
+through `IsWithinDistInMap`, which adds both bounding radii. Calibrated off the innermost orbit
+because it is provably player-only: the nearest player to each of its summons sat at **4.6-8.4 yd**.
+Pets cannot trigger it (`who->IsPlayer()`).
 
 Avoiding them starves nothing: `EVENT_SARA_P1_SUMMON` feeds Guardians every 20 s, shrinking to a 10 s
 floor, wherever the raid stands. That timer is also the yardstick — it can fire at most **7** times in
 a 99 s window, so the 20 Guardians of 2026-09-14 put **at least 13** on the raid's own feet.
 
-No fixed radius is safe. Orbit gaps are ~10 yd, so the best clearance any ring holds is 5 yd against
-its two neighbours, inside the 6 yd summon check. Bots sidestep as a cloud comes round.
+**No station is ever safe.** Orbit gaps are ~9.8 yd, so clearing every ring at once would need gaps
+over **17**, and every point within 69 yd of Sara is swept by something. The dodge has to win on
+**warning** instead, and bots sidestep as a cloud comes round.
 
 **The route matters more than the destination here, unlike every other hazard.** Crossing a Death Ray
 to leave one still beats standing in it, which is why `FindNearestPositionClearOfHazards` checks no
 path; crossing a cloud costs a Guardian, so the far side is worse than standing still. Phase 1 alone
-overrides `RouteAcceptable` to reject a candidate whose straight walk passes inside a cloud's 6 yd
-summon radius.
+overrides `RouteAcceptable` to reject a candidate whose straight walk passes inside
+`ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS` of a cloud.
 
 **And the orbit outruns a sidestep.** A destination clear of a cloud now is under it seconds later, so
 each cloud enters the hazard set twice: where it is, and where its own facing and run speed put it
@@ -88,9 +99,15 @@ and walk the bot down the line between their destinations. Phase 1 takes clouds 
 phase 2 takes Death Rays and Crush wedges, off a shared latch and sweep. Three things keep them from
 oscillating against hazards that never stop moving.
 
-- **Trigger and clear thresholds kept apart** (cloud 10 → 14, nova 17 → 20, ray 9 → 14, Crush arc
-  ±8° → ±14°). One threshold parks the bot on the boundary and re-fires the moment a hazard drifts a
-  yard in.
+- **Trigger and clear thresholds kept apart** (nova 17 → 20, ray 9 → 14, Crush arc ±8° → ±14°). One
+  threshold parks the bot on the boundary and re-fires the moment a hazard drifts a yard in.
+- **The cloud pair runs the other way** (**18 → 14**). The action's early-out is "already outside every
+  circle", so the *clear* radius is what decides when a bot moves and the trigger only decides whether
+  the node is asked at all: a trigger inside the clear radius leaves a band where the bot sits in a
+  hazard circle and nothing asks. At 10 against a clear of 14, a bot first moved with the cloud 10 yd
+  out — **0.5 s** before it is in reach, against the 1.2 s needed to cover 8.5 yd, so the dodge could
+  not win however it was tuned. The nova pair keeps the tight-trigger shape because its own band
+  (17-20) is margin, not exposure: 18 yd is already past the blast.
 - **The destination is held** until the bot arrives or a hazard drifts onto it, and the in-flight tick is
   claimed by returning true without touching the motion master.
 - **`preferNear` is `ULDUAR_YOGG_SARON_MIDDLE`, not the bot.** Every candidate in a ring is the same
@@ -110,10 +127,21 @@ with them.
 **Who dodges what, in phase 1.** Everyone dodges clouds. A Guardian's nova is dodged only by a bot that
 would not otherwise survive it: ranged and healers when one is at or under
 `ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT` **and chasing them** — at spell range nothing else reaches
-them — and melee when they hold Sara's Fervor. Running from every Guardian instead is what scattered
-the raid to the rim on 2026-09-14, where seven bots were picked off one at a time between 1:26 and
-1:30. `GetYoggSaronNovaThreats` is the single owner of that rule, so the trigger and the action cannot
-disagree about who is running.
+them — and anyone holding Sara's Fervor, on the wider gate above. Running from every Guardian instead is
+what scattered the raid to the rim on 2026-09-14, where seven bots were picked off one at a time between
+1:26 and 1:30. `GetYoggSaronNovaThreats` is the single owner of that rule, so the trigger and the action
+cannot disagree about who is running.
+
+**Ranged and healers stand off Sara, stacked.** Guardians die on her, so her spot is a standing nova
+hazard for everyone who need not be in it — ranged and healers were inside it for 37% and 49% of one
+phase 1. `ULDUAR_YOGG_SARON_P1_STANDOFF` is 20 yd, clearing the 16.2 measured blast, released at 22:
+the mirror of the melee leash, for the same reason.
+
+They **stack** out there rather than spread. Against a point hazard that sweeps a circle and re-arms
+every 10 s, a blob is passed once per orbit while a spread-out line hands it somebody in reach for most
+of one — **1.5 summons per orbit against 7.3**. That inverts the usual raid rule and holds only because
+the nova cannot reach the standoff. 20-22 yd is also the least-swept band inside spell range: one orbit
+reaches it, 13% of the time, against two and 17% at 26 yd.
 
 **Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
 (15 yd, the nova's own reach to Sara) the bot walks back to the middle, and it is not released until
@@ -142,17 +170,24 @@ pull, and the bots waiting on it dropped out of combat into `clean quest log` an
 `RtiTargetValue::Calculate` returns null on LOS failure and beyond `sightDistance` (100) in 2D. A
 direct `Attack()` has **no distance cap, only LOS**, which is what makes the Brain reachable at all.
 
-Kill order — **phase 1: one tier, the lowest-health Guardian of Yogg-Saron**, kept off the boss-room
-ladder rather than folded into it so a Guardian left over across the transition cannot read as the
-Crusher's tier and pin a bot to it. Splitting damage is what killed the raid on 2026-09-14: two
-Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and
-the **double** nova put 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier
-single novas were all survived. Brain level: Influence Tentacle → nearest other illusion add → the
-Brain. Boss room:
-Crusher (**ranged only**, below) → Constrictor → Corruptor → **Marked** Immortal Guardian (36064) →
-Immortal Guardian (33988) → Yogg. Guardians are picked lowest-health first and then held outright:
-that tier is ordered by health, and an order that flips mid-fight resets every swing and cast timer in
-the raid. Below 10% a guardian is Weakened and only Thorim's Titanic Storm can finish it, so it stops
+Kill order — **phase 1: one tier, the lowest-health Guardian of Yogg-Saron**. Splitting damage is what
+killed the raid on 2026-09-14: two Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and
+crossed zero inside one second, and the **double** nova put 228,396 over 16 hits and killed all eight
+melee in **16 ms**. Four earlier single novas were all survived. Brain level: Influence Tentacle →
+nearest other illusion add → the Brain. Boss room:
+**leftover Guardian of Yogg-Saron** → Crusher (**ranged only**, below) → Constrictor → Corruptor →
+**Marked** Immortal Guardian (36064) → Immortal Guardian (33988) → Yogg.
+
+**The leftovers lead the boss room, and leaving them off it cost a pull.** They survive the transition,
+keep casting a 35 yd Dark Volley nothing walks out of, and regenerate to full the moment the raid takes
+a portal. With no tier they fell through to the `dps target` fallback, which is nearest-first per bot:
+five of them took **~1,978,370** — two Guardians' worth — for **zero kills**, four ending between 11.9%
+and 21.2%, while dealing 735,989 back. That is the same split-damage failure phase 1 has a kill order to
+prevent.
+
+Every Guardian tier is picked lowest-health first and then held outright: an order that flips
+mid-fight resets every swing and cast timer in the raid.
+ Below 10% a guardian is Weakened and only Thorim's Titanic Storm can finish it, so it stops
 being a target at all.
 
 ## Crush is a ±5° cone that tracks its victim

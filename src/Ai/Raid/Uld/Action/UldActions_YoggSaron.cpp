@@ -115,9 +115,9 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
 
     heldSpotMs = 0;
 
-    // Already outside everything. The trigger fires at a tighter radius and a tighter arc than this on
-    // purpose: move at 10 yd from a cloud, rest at 14, so a hazard drifting a yard closer cannot
-    // restart the dance.
+    // Already outside everything, so this is what decides when a bot moves at all rather than where it
+    // ends up. The trigger radii have to cover the clear radii or there is a band the node is never
+    // asked about.
     if (stillClear(set.hazards, set.clear, bot->GetPosition()))
         return false;
 
@@ -193,6 +193,11 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     for (Unit* guardian : novas)
         set.fallback.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
 
+    // Every Guardian dies on Sara, because melee are leashed there and one walks to whoever holds
+    // threat. So her own spot is a standing nova hazard for anyone with no reason to be in it.
+    if (PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot))
+        set.fallback.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_P1_STANDOFF_RELEASE);
+
     // Shadow Nova is the one that kills, so it is what the retry keeps when the clouds cannot also be
     // cleared.
     set.hazards.insert(set.hazards.end(), set.fallback.begin(), set.fallback.end());
@@ -267,34 +272,37 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool p
         return entry == NPC_BRAIN ? 2 : none;
     }
 
-    // Phase 1 has one tier because one Guardian at a time is the whole point. It is kept off the
-    // boss-room ladder rather than folded into it so a Guardian left over across the transition
-    // cannot read as the Crusher's tier and pin a bot to it.
+    // Phase 1 has one tier because one Guardian at a time is the whole point: splitting damage let
+    // two come down together once, and the double nova killed all eight melee inside 16 ms.
     if (phaseOne)
         return entry == NPC_GUARDIAN_OF_YS ? 0 : none;
 
-    // One boss-room ladder for both phases: the tentacles are gone by the time a Guardian exists, so
-    // the tail never competes with the head.
+    // One boss-room ladder for both phases, led by whatever phase 1 left alive. Those carry over,
+    // keep casting a 35 yd Dark Volley nothing can be walked out of, and regenerate to full the moment
+    // the raid takes a portal. Left unordered they are picked off by nearest, which is how one pull
+    // put two Guardians' worth of damage into five of them for no kill while taking 736,000 back.
     switch (entry)
     {
-        // The Crusher leads it. Diminish Power is a 5-minute channel taking 21% off every point of
-        // damage the raid does, multiplicative across tentacles, undispellable and unkickable - only a
-        // melee hit (worth ~1.5 s) or the tentacle's death stops it.
-        case NPC_CRUSHER_TENTACLE:
+        case NPC_GUARDIAN_OF_YS:
             return 0;
-        case NPC_CONSTRICTOR_TENTACLE:
+        // Then the Crusher. Diminish Power is a 5-minute channel taking 21% off every point of damage
+        // the raid does, multiplicative across tentacles, undispellable and unkickable - only a melee
+        // hit (worth ~1.5 s) or the tentacle's death stops it.
+        case NPC_CRUSHER_TENTACLE:
             return 1;
-        case NPC_CORRUPTOR_TENTACLE:
+        case NPC_CONSTRICTOR_TENTACLE:
             return 2;
+        case NPC_CORRUPTOR_TENTACLE:
+            return 3;
         // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
         // it over 20 s - 176% of its own max health. Focusing it is the only way it reaches Weakened
         // before that lands, and the entry swap makes it a free signal.
         case NPC_MARKED_IMMORTAL_GUARDIAN:
-            return 3;
-        case NPC_IMMORTAL_GUARDIAN:
             return 4;
-        case NPC_YOGG_SARON:
+        case NPC_IMMORTAL_GUARDIAN:
             return 5;
+        case NPC_YOGG_SARON:
+            return 6;
         default:
             return none;
     }
@@ -351,9 +359,10 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     }
     else
     {
-        entries = {NPC_CRUSHER_TENTACLE,  NPC_CONSTRICTOR_TENTACLE,     NPC_CORRUPTOR_TENTACLE,
-                   NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN, NPC_YOGG_SARON};
-        tierCount = 6;
+        entries = {NPC_GUARDIAN_OF_YS,     NPC_CRUSHER_TENTACLE,  NPC_CONSTRICTOR_TENTACLE,
+                   NPC_CORRUPTOR_TENTACLE, NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN,
+                   NPC_YOGG_SARON};
+        tierCount = 7;
     }
 
     // The brain level needs the reach: its floor sits ~25 yd below the Brain and a portal drops the bot

@@ -101,20 +101,33 @@ constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
 // drain is one-way - kept low so only near-Insane bots pull out. Confirm in-game.
 constexpr uint32 ULDUAR_YOGG_SARON_SANITY_CONSERVE_THRESHOLD = 15;
 
-// Ominous Clouds orbit Sara at 11/21/31/41/51/61 yd, constant 3 yd/s, and summon a Guardian on any
-// player within 6 yd. Trigger and clear are kept apart on purpose: the sweep parks the bot on
-// whatever boundary it gets, so one radius re-fires every time a cloud drifts a yard in.
-constexpr float ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS = 10.0f;
+// Ominous Clouds orbit Sara at 11.5/21.3/31.2/41/50.8/60.8 yd, constant 3 yd/s. Summon reach is the
+// script's 6 yd plus both bounding radii, because the check runs through IsWithinDistInMap: the
+// innermost orbit is provably player-only and the nearest player to each of its summons sat at
+// 4.6-8.4 yd. Ring gaps are ~9.8 yd, so no station ever clears every orbit and the dodge has to win
+// on warning instead.
+//
+// The trigger has to cover the clear radius. The action's own early-out is "already outside every
+// circle", so the clear radius is what decides when a bot moves; a trigger inside it leaves a band
+// where the bot is in a hazard circle and the node is never asked. At 10 against a clear of 14 a bot
+// first moved with the cloud 10 yd out, which is 0.5 s before it is in reach against the 1.2 s it
+// needs to cover 8.5 yd.
+constexpr float ULDUAR_YOGG_SARON_CLOUD_TRIGGER_RADIUS = 18.0f;
 constexpr float ULDUAR_YOGG_SARON_CLOUD_CLEAR_RADIUS = 14.0f;
-constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS = 6.0f;
+constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_RADIUS = 9.0f;
 
 // Unlike a Death Ray, crossing a cloud is worse than standing in one: the far side costs a Guardian.
 // The orbit is the other half - a sideways step is back under the same cloud within seconds - so a
-// candidate is tested against where the cloud will be as well as where it is.
-constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 3000;
+// candidate is tested against where the cloud will be as well as where it is. It has to outlast the
+// crossing: a cloud sweeps a bot holding the standoff for about 5.8 s, so a shorter lead puts the
+// sidestep in its near future.
+constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 6000;
 
-// Shadow Nova, the Guardian's death explosion: DBC radius 15, plus both object sizes at apply time.
-// Ranged and healers stay out of it; melee and tanks have to eat it to kill the thing at all.
+// Shadow Nova, the Guardian's death explosion: DBC radius 15, plus both object sizes at apply time,
+// which measured 16.2 at its furthest. Ranged and healers stay out of it; melee and tanks have to eat
+// it to kill the thing at all. Unlike the cloud pair the trigger sits inside the clear radius, and
+// that band is margin rather than exposure: a bot 18 yd out is not moved to 20, but 18 is already
+// past the blast.
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
 
@@ -122,12 +135,29 @@ constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
 // raid to the rim and leaves bots to be picked off one at a time.
 constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
 
+// Fervor gets a wider gate because the nova it doubles kills outright rather than hurts, so waiting
+// for a Guardian to look nearly dead is waiting too long: under focus fire one is below 20% for about
+// a second, which is 7 yd of travel against a 16 yd blast.
+constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
+
 // Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
 // nova only reaches her from 15 yd - a kill further out does nothing for the phase at all. Release is
 // tighter than the leash: walked back to the boundary itself a bot is let go the moment it crosses
 // and dragged straight out again by reach melee.
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 15.0f;
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = 12.0f;
+
+// The mirror of the leash, for everyone who does not have to be in the blast. Every Guardian dies on
+// Sara, so her own spot is a standing nova hazard: ranged and healers sat inside it for 37% and 49%
+// of one phase 1 and Shadow Nova was 65% of all damage the raid took. Released further out than it
+// fires, or reach spell walks the bot straight back in and the two trade the tick.
+//
+// They stack rather than spread once out there. Against a point hazard that sweeps a circle and
+// re-arms 10 s after each summon, a blob is passed once per orbit while a spread-out line hands it
+// somebody in reach for most of one - 1.5 summons against 7.3. That inverts the usual rule and only
+// holds because the nova cannot reach this far.
+constexpr float ULDUAR_YOGG_SARON_P1_STANDOFF = 20.0f;
+constexpr float ULDUAR_YOGG_SARON_P1_STANDOFF_RELEASE = 22.0f;
 
 // The second cap is the load-bearing one: a bot dodging outward otherwise walks out of spell range
 // and stops contributing for the rest of the phase.
