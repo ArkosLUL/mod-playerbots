@@ -1,17 +1,20 @@
 #include "UldTriggers_YoggSaron.h"
 
+#include <algorithm>
+
 #include "GameObject.h"
 #include "Group.h"
 #include "Object.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "UldEncounter_YoggSaron.h"
-#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "ScriptedCreature.h"
 #include "SpellMgr.h"
 #include "SharedDefines.h"
+#include "PlayerbotAIConfig.h"
+#include "RaidObs.h"
 #include "Trigger.h"
 #include "Vehicle.h"
 #include "WorldSession.h"
@@ -72,6 +75,17 @@ bool YoggSaronTrigger::IsPhase3()
 bool YoggSaronTrigger::IsInBrainLevel()
 {
     return bot->GetPositionZ() > 230.0f && bot->GetPositionZ() < 250.0f;
+}
+
+bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
+{
+    Position const& spot =
+        botAI->IsRanged(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+    float const reach = botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+
+    return spot.GetExactDist2d(target->GetPositionX(), target->GetPositionY()) -
+               ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS <=
+           reach;
 }
 
 bool YoggSaronTrigger::IsYoggSaronFight()
@@ -174,83 +188,6 @@ bool YoggSaronTrigger::IsBrainRoomApproachable()
     return door && door->GetGoState() == GO_STATE_ACTIVE;
 }
 
-Unit* YoggSaronTrigger::GetNextIllusionRoomRtiTarget()
-{
-    float detectionRadius = 0.0f;
-    if (IsInStormwindKeeperIllusion())
-        detectionRadius = ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
-    else if (IsInIcecrownKeeperIllusion())
-        detectionRadius = ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS;
-    else if (IsInChamberOfTheAspectsIllusion())
-        detectionRadius = ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS;
-    else
-        return nullptr;
-
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-
-    if (botAI->HasCheat(BotCheatMask::raid))
-    {
-        for (ObjectGuid const& guid : targets)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (unit && unit->IsAlive() && unit->GetEntry() == NPC_LAUGHING_SKULL)
-                return unit;
-        }
-    }
-
-    float nearestDistance = std::numeric_limits<float>::max();
-    Unit* nextIllusionRoomRtiTarget = nullptr;
-
-    for (uint32 const& creatureId : ULDUAR_YOGG_SARON_ILLUSION_MOBS)
-    {
-        for (ObjectGuid const& guid : targets)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (unit && unit->IsAlive() && unit->GetEntry() == creatureId)
-            {
-                float distance = bot->GetDistance(unit);
-                if (distance < nearestDistance)
-                {
-                    nextIllusionRoomRtiTarget = unit;
-                    nearestDistance = distance;
-                }
-            }
-        }
-    }
-
-    if (nextIllusionRoomRtiTarget)
-        return nextIllusionRoomRtiTarget;
-
-    if (IsInStormwindKeeperIllusion())
-    {
-        Creature* target = bot->FindNearestCreature(NPC_SUIT_OF_ARMOR, detectionRadius, true);
-        if (target)
-            return target;
-    }
-
-    return nullptr;
-}
-
-bool YoggSaronOminousCloudCheatTrigger::IsActive()
-{
-    if (!botAI->HasCheat(BotCheatMask::raid))
-        return false;
-
-    Unit* boss = GetSaraIfAlive();
-    if (!boss)
-        return false;
-
-    if (!IsDesignatedBotTank())
-        return false;
-
-    if (bot->GetDistance2d(boss->GetPositionX(), boss->GetPositionY()) > 50.0f)
-        return false;
-
-    Creature* target = boss->FindNearestCreature(NPC_OMINOUS_CLOUD, 25.0f, true);
-
-    return target;
-}
-
 bool YoggSaronGuardianPositioningTrigger::IsActive()
 {
     if (!GetSaraIfAlive())
@@ -298,8 +235,13 @@ bool YoggSaronSanityTrigger::IsActive()
 
     float distanceToSanityWell = bot->GetDistance(sanityWell);
 
-    return (distanceToSanityWell >= 1.0f && sanityAuraStacks < 40) ||
-           (distanceToSanityWell < 1.0f && sanityAuraStacks < 100);
+    if ((distanceToSanityWell >= 1.0f && sanityAuraStacks >= 40) ||
+        (distanceToSanityWell < 1.0f && sanityAuraStacks >= 100))
+        return false;
+
+    // A well the bot cannot get to parked three of them stationary for 202, 164 and 96 s, suppressing
+    // everything below this node for as long as it lasted.
+    return YoggSaronWalkMakingProgress(botAI, "sanity", sanityWell->GetPosition());
 }
 
 bool YoggSaronPhase1SpacingTrigger::IsActive()
@@ -379,28 +321,7 @@ bool YoggSaronPhase3ControlTrigger::IsActive()
         return true;
 
     TankAssistStrategy tankAssistStrategy(botAI);
-    if (!botAI->HasStrategy(tankAssistStrategy.getName(), BotState::BOT_STATE_COMBAT))
-        return true;
-
-    // All that is left is the cheat, and only an Immortal Guardian above the Weakened floor can take
-    // it. With Thorim as a Keeper the raid plays it for real instead: melee cleave the guardian down
-    // and Titanic Storm executes it.
-    if (!botAI->HasCheat(BotCheatMask::raid) || (IsYoggSaronHardModeActive(botAI) && YoggThorimKeeperActive(botAI)))
-        return false;
-
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-    for (ObjectGuid const& guid : targets)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if ((unit->GetEntry() == NPC_IMMORTAL_GUARDIAN || unit->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN) &&
-            unit->GetHealthPct() > 10)
-            return true;
-    }
-
-    return false;
+    return !botAI->HasStrategy(tankAssistStrategy.getName(), BotState::BOT_STATE_COMBAT);
 }
 
 bool YoggSaronBrainLinkTrigger::IsActive()
@@ -469,28 +390,13 @@ bool YoggSaronFallFromFloorTrigger::IsActive()
     return false;
 }
 
-bool YoggSaronBossRoomMovementCheatTrigger::IsActive()
+bool YoggSaronStopFollowingTrigger::IsActive()
 {
     if (!IsYoggSaronFight() || !IsPhase2())
         return false;
 
     FollowMasterStrategy followMasterStrategy(botAI);
-    if (botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
-        return true;
-
-    if (!botAI->HasCheat(BotCheatMask::raid))
-        return false;
-
-    if (AI_VALUE(std::string, "rti") != "skull")
-        return false;
-
-    Unit* target = AI_VALUE(Unit*, "current target");
-
-    if (!target || !target->IsAlive() ||
-        bot->GetDistance2d(target->GetPositionX(), target->GetPositionY()) < 40.0f)
-        return false;
-
-    return true;
+    return botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
 }
 
 bool YoggSaronUsePortalTrigger::IsActive()
@@ -512,9 +418,6 @@ bool YoggSaronIllusionRoomTrigger::IsActive()
     if (SetRtiMarkRequired())
         return true;
 
-    if (SetRtiTargetRequired())
-        return true;
-
     if (GoToBrainRoomRequired())
         return true;
 
@@ -532,13 +435,6 @@ bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
 bool YoggSaronIllusionRoomTrigger::SetRtiMarkRequired()
 {
     return AI_VALUE(std::string, "rti") == "diamond";
-}
-
-// Cheat-gated because the cheat is all that is left here: with targeting off the raid icons, a bot
-// without it reaches the room's adds through the dps priority resolver like anything else.
-bool YoggSaronIllusionRoomTrigger::SetRtiTargetRequired()
-{
-    return botAI->HasCheat(BotCheatMask::raid) && GetNextIllusionRoomRtiTarget() != nullptr;
 }
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()
@@ -561,8 +457,18 @@ bool YoggSaronMoveToExitPortalTrigger::IsActive()
         if (induceMadnessSpell && induceMadnessSpell->m_spellInfo->Id == SPELL_INDUCE_MADNESS)
         {
             uint32 castingTimeLeft = induceMadnessSpell->GetCastTimeRemaining();
-            uint32 lead = botAI->HasCheat(BotCheatMask::raid) ? ULDUAR_YOGG_SARON_EXIT_LEAD_CHEAT_MS
-                                                             : ULDUAR_YOGG_SARON_EXIT_LEAD_WALK_MS;
+
+            // Every millisecond of lead is damage the Brain does not take, so it is measured against
+            // the walk the bot actually faces rather than set flat for the worst case.
+            uint32 lead = ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS;
+            GameObject* portal = bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
+            float const speed = bot->GetSpeed(MOVE_RUN);
+            if (portal && speed > 0.0f)
+            {
+                lead = std::max(lead, static_cast<uint32>(bot->GetDistance2d(portal) / speed *
+                                                          ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY * 1000.0f));
+            }
+
             if (castingTimeLeft < lead)
                 return true;
         }
@@ -592,55 +498,53 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
     if (sanityTrigger.IsActive())
         return false;
 
-    if (botAI->IsRanged(bot) && bot->GetDistance2d(ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionX(),
-                                                   ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionY()) > 15.0f)
-        return true;
-
-    if (botAI->IsMelee(bot) && !botAI->IsTank(bot) &&
-        bot->GetDistance2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-            ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY()) > 15.0f)
-    {
-        return true;
-    }
-
+    // Bringing a loose guardian back to the stack is guardian control's job, and that node outranks
+    // this one. All the leash adds is a way home once nothing is loose and it returns false.
     if (botAI->IsTank(bot))
+        return bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH;
+
+    Position const& spot =
+        botAI->IsRanged(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+
+    if (bot->GetDistance2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS)
     {
-        if (bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > 30.0f)
-            return true;
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.station", "parked");
 
-        GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-        bool thereIsAnyGuardian = false;
-
-        for (ObjectGuid const& guid : targets)
-        {
-            Unit* unit = botAI->GetUnit(guid);
-            if (!unit || !unit->IsAlive())
-                continue;
-
-            if (unit->GetEntry() == NPC_IMMORTAL_GUARDIAN || unit->GetEntry() == NPC_MARKED_IMMORTAL_GUARDIAN)
-            {
-                thereIsAnyGuardian = true;
-                ObjectGuid unitTargetGuid = unit->GetTarget();
-                Player* targetedPlayer = botAI->GetPlayer(unitTargetGuid);
-                if (!targetedPlayer || !botAI->IsTank(targetedPlayer))
-                    return false;
-            }
-        }
-
-        if (thereIsAnyGuardian && bot->GetDistance2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-                                                     ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY()) > 3.0f)
-        {
-            return true;
-        }
+        return false;
     }
 
-    return false;
+    // Somewhere to stand when standing there costs nothing, never a cage: a target the station cannot
+    // reach from inside its radius leaves the bot free to go to it.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive() && !PhaseThreeStationReaches(target))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.station", "released");
+
+        return false;
+    }
+
+    if (!YoggSaronWalkMakingProgress(botAI, "station", spot))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.station", "unreachable");
+
+        return false;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.station", "parked");
+
+    return true;
 }
 
 bool YoggSaronGuardianControlTrigger::IsActive()
 {
-    // Only meaningful with Thorim: he executes the Weakened guardians the tank feeds to the melee stack.
-    if (!IsYoggSaronHardModeActive(botAI) || !YoggThorimKeeperActive(botAI) || !IsPhase3())
+    // Not gated on Thorim. Which Keepers are up is a raid choice, and hard mode means fewer of them,
+    // so asking for both demanded exactly the case where Thorim is least likely to be there. Guardians
+    // parked on a tank beat guardians loose among the casters even where none of them can die.
+    if (!IsPhase3())
         return false;
 
     if (!botAI->IsTank(bot))
@@ -667,9 +571,6 @@ bool YoggSaronGuardianControlTrigger::IsActive()
 
 bool YoggSaronSanityConservationTrigger::IsActive()
 {
-    if (!IsYoggSaronHardModeActive(botAI))
-        return false;
-
     // The main tank must stay on the adds; never pull it out.
     if (botAI->IsBotMainTank(bot))
         return false;
@@ -686,7 +587,7 @@ bool YoggSaronSanityConservationTrigger::IsActive()
     if (bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f))
         return false;
 
-    // Only in the boss room; the brain/illusion level is cheated through.
+    // Boss room only: the spot this retreats to is behind Yogg, who is not down there.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return false;
 

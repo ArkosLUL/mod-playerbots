@@ -7,11 +7,16 @@
 #include "UldEncounter_YoggSaron.h"
 
 #include <cmath>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "Creature.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidObs.h"
 
 const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS = {
     NPC_INFLUENCE_TENTACLE, NPC_RUBY_CONSORT,    NPC_AZURE_CONSORT,       NPC_BRONZE_CONSORT,
@@ -44,13 +49,93 @@ bool YoggSaronInPhase2(PlayerbotAI* botAI)
     return yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER);
 }
 
+// The Brain, not the absence of a phase-1 Guardian. A test made only of absences is true between the
+// phases it separates: the last Guardian dies ~9.5 s before the Shadow Barrier lands, and the whole
+// raid used to run its phase 3 positioning through that gap. The Brain spawns with the first tentacle
+// wave and lives to the end, so it is the positive fact. 200 yd covers the worst case, ~80 yd from the
+// room's edge including the 62 yd drop.
 bool YoggSaronInPhase3(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
-    Creature* guardian = bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, 200.0f, true);
+    if (!yogg || !yogg->IsAlive() || yogg->HasAura(SPELL_SHADOW_BARRIER))
+        return false;
 
-    return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) && !guardian;
+    return bot->FindNearestCreature(NPC_BRAIN, 200.0f, true) != nullptr;
+}
+
+namespace
+{
+struct YoggSaronWalkLatch
+{
+    std::string node;
+    Position destination;
+    float bestDistance = 0.0f;
+    uint32 lastProgressMs = 0;
+    uint32 lastAskedMs = 0;
+};
+
+// Per instance, then per bot, never evicted - the destinations are a handful of fixed spots and three
+// portals, so the vector stays short enough for a linear scan. Not thread_local: a map is updated by
+// one thread at a time but is never pinned to one, and per-thread copies would hand the same bot a
+// fresh latch whenever the pool reassigns its map.
+std::mutex yoggSaronWalkLatchesMutex;
+std::unordered_map<uint32 /*instanceId*/, std::unordered_map<ObjectGuid, std::vector<YoggSaronWalkLatch>>>
+    yoggSaronWalkLatches;
+}  // namespace
+
+bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position const& destination)
+{
+    Player* bot = botAI->GetBot();
+    uint32 const now = getMSTime();
+    float const distance = bot->GetExactDist(destination);
+
+    bool giveUp = false;
+    char const* branch = "walking";
+    {
+        std::lock_guard<std::mutex> guard(yoggSaronWalkLatchesMutex);
+        std::vector<YoggSaronWalkLatch>& latches = yoggSaronWalkLatches[bot->GetInstanceId()][bot->GetGUID()];
+
+        YoggSaronWalkLatch* latch = nullptr;
+        for (YoggSaronWalkLatch& candidate : latches)
+        {
+            if (candidate.node == node && candidate.destination.GetExactDist(destination) < 1.0f)
+            {
+                latch = &candidate;
+                break;
+            }
+        }
+
+        if (!latch)
+        {
+            latches.push_back(YoggSaronWalkLatch{node, destination, distance, now, now});
+            latch = &latches.back();
+        }
+
+        // A gap in the asking starts a new attempt rather than continuing the old one. Without it a
+        // give-up outlives the walk that earned it: the node stands down, the bot ends up somewhere
+        // else entirely, and every later walk reads as "no closer than last time" forever.
+        bool const fresh = getMSTimeDiff(latch->lastAskedMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS;
+        bool const arrived = distance <= ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS;
+        latch->lastAskedMs = now;
+
+        if (fresh || arrived || distance < latch->bestDistance)
+        {
+            latch->bestDistance = distance;
+            latch->lastProgressMs = now;
+            branch = arrived ? "arrived" : "walking";
+        }
+        else if (getMSTimeDiff(latch->lastProgressMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS)
+        {
+            giveUp = true;
+            branch = "gaveup";
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.walk", std::string(node) + " " + branch);
+
+    return !giveUp;
 }
 
 std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI)

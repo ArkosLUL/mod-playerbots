@@ -138,10 +138,23 @@ constexpr float ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS = 35.0f;
 
 // How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
-// a mind control is always a death. The cheat teleports onto the portal; a walking bot can end a
-// window ~120 yd from the nearest exit, about 17 s at run speed.
-constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_CHEAT_MS = 6000;
-constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_WALK_MS = 15000;
+// a mind control is always a death. The lead is taken out of the window the raid has to damage the
+// Brain, so it is measured rather than flat: a bot standing on a portal needs the floor, one deep in
+// an illusion room can be ~120 yd out.
+constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 10000;
+constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 2.0f;
+
+// Phase 3 station. The radius is what the bot is allowed to drift inside, the leash is how far a tank
+// may wander before it is walked back - wider because a tank chasing a guardian to the room's edge is
+// doing its job.
+constexpr float ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS = 15.0f;
+constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
+
+// How long a forced walk may fail to close distance before the bot stops trying, and how close counts
+// as having got there. The arrival radius is generous because MoveTo stops where its own tolerance
+// leaves the bot, not on the point it was handed.
+constexpr uint32 ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS = 6000;
+constexpr float ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS = 5.0f;
 
 // How far out to look for a Guardian worth kicking. Wider than any interrupt's range on purpose - the
 // action drops the ones it cannot reach, and a short list here would hide a cast from a bot who could.
@@ -190,6 +203,13 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
 // re-facing a yard from restarting the dance.
 std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius);
 bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y, float arcDegrees);
+
+// Whether a forced walk is still closing on where it was sent. MoveTo's `ok` says a command was
+// issued, never that a route exists: the core falls back to a straight-line spline, which once carried
+// a bot 91 yd vertically at a constant speed with ok=1. Closing distance is the only evidence of a
+// real path. Records are kept per node and destination, so testing several destinations in one tick
+// does not wipe what the others learned.
+bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position const& destination);
 
 // Window in which a counterable fear can land, for the shared anti-fear component. Yogg-Saron fears
 // in P2 (Malady of the Mind, which re-casts on removal) and again in P3 (Deafening Roar).

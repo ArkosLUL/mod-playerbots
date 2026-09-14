@@ -115,7 +115,6 @@ public:
         creators["vezax raid position"] = &RaidUlduarTriggerContext::vezax_raid_position;
         creators["vezax shadow resistance"] = &RaidUlduarTriggerContext::vezax_shadow_resistance;
         creators["yogg-saron shadow resistance trigger"] = &RaidUlduarTriggerContext::yogg_saron_shadow_resistance_trigger;
-        creators["yogg-saron ominous cloud cheat trigger"] = &RaidUlduarTriggerContext::yogg_saron_ominous_cloud_cheat_trigger;
         creators["yogg-saron phase 1 spacing trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_spacing_trigger;
         creators["yogg-saron dark volley trigger"] = &RaidUlduarTriggerContext::yogg_saron_dark_volley_trigger;
         creators["yogg-saron guardian positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_positioning_trigger;
@@ -128,7 +127,7 @@ public:
         creators["yogg-saron move to enter portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_enter_portal_trigger;
         creators["yogg-saron use portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_use_portal_trigger;
         creators["yogg-saron fall from floor trigger"] = &RaidUlduarTriggerContext::yogg_saron_fall_from_floor_trigger;
-        creators["yogg-saron boss room movement cheat trigger"] = &RaidUlduarTriggerContext::yogg_saron_boss_room_movement_cheat_trigger;
+        creators["yogg-saron stop following trigger"] = &RaidUlduarTriggerContext::yogg_saron_stop_following_trigger;
         creators["yogg-saron illusion room trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_room_trigger;
         creators["yogg-saron move to exit portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_exit_portal_trigger;
         creators["yogg-saron lunatic gaze trigger"] = &RaidUlduarTriggerContext::yogg_saron_lunatic_gaze_trigger;
@@ -308,7 +307,6 @@ private:
     static Trigger* vezax_raid_position(PlayerbotAI* ai) { return new VezaxRaidPositionTrigger(ai); }
     static Trigger* vezax_shadow_resistance(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
     static Trigger* yogg_saron_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "yogg-saron"); }
-    static Trigger* yogg_saron_ominous_cloud_cheat_trigger(PlayerbotAI* ai) { return new YoggSaronOminousCloudCheatTrigger(ai); }
     static Trigger* yogg_saron_phase_1_spacing_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1SpacingTrigger(ai); }
     static Trigger* yogg_saron_dark_volley_trigger(PlayerbotAI* ai) { return new YoggSaronDarkVolleyTrigger(ai); }
     static Trigger* yogg_saron_guardian_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningTrigger(ai); }
@@ -321,7 +319,7 @@ private:
     static Trigger* yogg_saron_move_to_enter_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToEnterPortalTrigger(ai); }
     static Trigger* yogg_saron_use_portal_trigger(PlayerbotAI* ai) { return new YoggSaronUsePortalTrigger(ai); }
     static Trigger* yogg_saron_fall_from_floor_trigger(PlayerbotAI* ai) { return new YoggSaronFallFromFloorTrigger(ai); }
-    static Trigger* yogg_saron_boss_room_movement_cheat_trigger(PlayerbotAI* ai) { return new YoggSaronBossRoomMovementCheatTrigger(ai); }
+    static Trigger* yogg_saron_stop_following_trigger(PlayerbotAI* ai) { return new YoggSaronStopFollowingTrigger(ai); }
     static Trigger* yogg_saron_illusion_room_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionRoomTrigger(ai); }
     static Trigger* yogg_saron_move_to_exit_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalTrigger(ai); }
     static Trigger* yogg_saron_lunatic_gaze_trigger(PlayerbotAI* ai) { return new YoggSaronLunaticGazeTrigger(ai); }

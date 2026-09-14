@@ -28,9 +28,13 @@ public:
     bool IsMasterIsInBrainRoom();
     bool IsBrainRoomApproachable();
     Position GetIllusionRoomEntrancePosition();
-    Unit* GetNextIllusionRoomRtiTarget();
     Unit* GetSaraIfAlive();
     bool IsDesignatedBotTank();
+
+    // Whether the bot's phase 3 station still reaches a target from inside its radius. A fixed spot
+    // with a radius is a fence whenever the target sits further out than radius plus range, and the
+    // ranged spot is tuned so Yogg is reachable by 4.4 yd and nothing else in the room is.
+    bool PhaseThreeStationReaches(Unit* target);
 };
 
 // Clouds and Guardians in one node. Two nodes at the same relevance cannot share a bot - the engine
@@ -50,13 +54,6 @@ class YoggSaronDarkVolleyTrigger : public YoggSaronTrigger
 {
 public:
     YoggSaronDarkVolleyTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron dark volley trigger") {}
-    bool IsActive() override;
-};
-
-class YoggSaronOminousCloudCheatTrigger : public YoggSaronTrigger
-{
-public:
-    YoggSaronOminousCloudCheatTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron ominous cloud cheat trigger") {}
     bool IsActive() override;
 };
 
@@ -81,8 +78,8 @@ public:
     bool IsActive() override;
 };
 
-// Phase 3 housekeeping the single designated bot tank does for the raid: the strategy swap onto
-// TankAssist, and the cheat that finishes an Immortal Guardian nothing else can kill.
+// The strategy swap onto TankAssist the single designated bot tank does for the raid at the start of
+// phase 3.
 class YoggSaronPhase3ControlTrigger : public YoggSaronTrigger
 {
 public:
@@ -131,10 +128,10 @@ public:
     bool IsActive() override;
 };
 
-class YoggSaronBossRoomMovementCheatTrigger : public YoggSaronTrigger
+class YoggSaronStopFollowingTrigger : public YoggSaronTrigger
 {
 public:
-    YoggSaronBossRoomMovementCheatTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron boss room movement cheat trigger") {}
+    YoggSaronStopFollowingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron stop following trigger") {}
     bool IsActive() override;
 };
 
@@ -154,7 +151,6 @@ public:
 private:
     bool GoToBrainRoomRequired();
     bool SetRtiMarkRequired();
-    bool SetRtiTargetRequired();
 };
 
 class YoggSaronMoveToExitPortalTrigger : public YoggSaronTrigger
@@ -178,8 +174,8 @@ public:
     bool IsActive() override;
 };
 
-// Reduced-Keeper hard mode with Thorim: the tank taunts loose Immortal Guardians (P3) to the melee
-// stack so they get cleaved to Weakened and Thorim's Titanic Storm executes them.
+// The tank taunts loose Immortal Guardians (P3) to the melee stack so they get cleaved to Weakened and
+// Thorim's Titanic Storm executes them.
 class YoggSaronGuardianControlTrigger : public YoggSaronTrigger
 {
 public:
@@ -187,8 +183,8 @@ public:
     bool IsActive() override;
 };
 
-// Reduced-Keeper hard mode: with no Sanity Wells to run to, a bot near the Insane cliff retreats to a
-// safe ranged spot and faces away from Yogg to stop every avoidable sanity drain.
+// With no Sanity Wells to run to, a bot near the Insane cliff retreats to a safe ranged spot and faces
+// away from Yogg to stop every avoidable sanity drain.
 class YoggSaronSanityConservationTrigger : public YoggSaronTrigger
 {
 public:

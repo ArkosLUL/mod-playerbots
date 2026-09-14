@@ -751,10 +751,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron shadow resistance action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "yogg-saron ominous cloud cheat trigger",
-        { NextAction("yogg-saron ominous cloud cheat action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
         "yogg-saron guardian positioning trigger",
         { NextAction("yogg-saron guardian positioning action", ACTION_RAID) }));
 
@@ -807,8 +803,8 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("yogg-saron fall from floor action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
-        "yogg-saron boss room movement cheat trigger",
-        { NextAction("yogg-saron boss room movement cheat action", ACTION_RAID) }));
+        "yogg-saron stop following trigger",
+        { NextAction("yogg-saron stop following action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
         "yogg-saron illusion room trigger",
@@ -826,7 +822,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron phase 3 positioning trigger",
         { NextAction("yogg-saron phase 3 positioning action", ACTION_RAID) }));
 
-    // Reduced-Keeper (Thorim-only) hard mode
     triggers.push_back(new TriggerNode(
         "yogg-saron guardian control trigger",
         { NextAction("yogg-saron guardian control action", ACTION_RAID + 3) }));

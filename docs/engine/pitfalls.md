@@ -162,7 +162,12 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
 
   **`exact_waypoint = true` skips `SearchForBestPath` entirely, so such a node structurally cannot log
   `nopath`** — an absence of `nopath` from it is not evidence the destination was reachable, and
-  reading it that way sends the investigation somewhere else.
+  reading it that way sends the investigation somewhere else. What happens instead is worse than
+  silence: `MoveTo` returns `ok` and the core lays a **straight-line spline**. One bot travelled
+  **91.3 yd vertically over 12.5 yd horizontally in 8.5 s at a constant 10.9 y/s**, `ok=1` throughout.
+  So `ok` says a command was issued, never that a route exists, and **closing distance is the only
+  evidence of a real path** — a forced walk that matters wants a progress latch, not a return value
+  (`YoggSaronWalkMakingProgress`).
 
   Two qualifiers. The navmesh half cannot fire on a map with no `.mmtile` files — `CalculatePath`
   short-circuits to a shortcut and every destination "paths". The height band survives only where

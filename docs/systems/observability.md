@@ -404,6 +404,10 @@ are left bare on purpose.
 - **`ObsValue` / `ObsGuidMap::Set` emit only on change**, so a missing note means "unchanged", not
   "never set". That makes absence the signature of state leaking in from a previous pull rather than
   evidence of nothing happening.
+- **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies
+  `AiPlayerbot.BotCheats` verbatim, so a header reading `food,taxi,raid` says nothing about whether
+  any node took a cheat branch. An encounter that stopped cheating reads identically before and
+  after; only the body can show it.
 
 ## Timing a bot: `.playerbots pmon`
 

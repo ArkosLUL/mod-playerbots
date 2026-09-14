@@ -20,7 +20,6 @@
 #include "Playerbots.h"
 #include "Position.h"
 #include "UldEncounter_YoggSaron.h"
-#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
 #include "RtiValue.h"
@@ -63,22 +62,6 @@ const Position yoggPortalLoc[] = {
     {1960.62f, -32.00f, 325.5f}, {1981.98f, -5.69f, 325.5f},  {1982.78f, -45.73f, 325.5f}, {2000.66f, -29.68f, 325.5f},
     {1999.88f, -19.61f, 325.5f}, {1961.37f, -19.54f, 325.5f}};
 
-bool YoggSaronOminousCloudCheatAction::Execute(Event /*event*/)
-{
-    YoggSaronTrigger yoggSaronTrigger(botAI);
-
-    Unit* boss = yoggSaronTrigger.GetSaraIfAlive();
-    if (!boss)
-        return false;
-
-    Creature* target = boss->FindNearestCreature(NPC_OMINOUS_CLOUD, 25.0f);
-    if (!target || !target->IsAlive())
-        return false;
-
-    target->Kill(bot, target);
-    return true;
-}
-
 bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 {
     return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY(),
@@ -90,6 +73,9 @@ bool YoggSaronSanityAction::Execute(Event /*event*/)
 {
     Creature* sanityWell = bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f);
     if (!sanityWell)
+        return false;
+
+    if (!YoggSaronWalkMakingProgress(botAI, "sanity", sanityWell->GetPosition()))
         return false;
 
     return MoveTo(bot->GetMapId(), sanityWell->GetPositionX(), sanityWell->GetPositionY(), sanityWell->GetPositionZ(),
@@ -261,11 +247,15 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
             return 1;
         case NPC_CORRUPTOR_TENTACLE:
             return 2;
-        case NPC_IMMORTAL_GUARDIAN:
+        // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
+        // it over 20 s - 176% of its own max health. Focusing it is the only way it reaches Weakened
+        // before that lands, and the entry swap makes it a free signal.
         case NPC_MARKED_IMMORTAL_GUARDIAN:
             return 3;
-        case NPC_YOGG_SARON:
+        case NPC_IMMORTAL_GUARDIAN:
             return 4;
+        case NPC_YOGG_SARON:
+            return 5;
         default:
             return none;
     }
@@ -280,6 +270,11 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, bool tentac
     {
         case NPC_BRAIN:
             return tentaclesCleared;
+        // Crush skips its own cone test inside 2 yd and re-aims onto whoever the tentacle is swinging
+        // at, so a melee bot that was clear becomes collinear without moving. No angle answers that,
+        // only not being there. Healers stay eligible: they are at range.
+        case NPC_CRUSHER_TENTACLE:
+            return !PlayerbotAI::IsMelee(bot);
         // Below 10% it is Weakened, and nothing but Thorim's Titanic Storm can finish one, so holding
         // there is a dead tick for the rest of the fight.
         case NPC_IMMORTAL_GUARDIAN:
@@ -313,7 +308,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     {
         entries = {NPC_CRUSHER_TENTACLE,  NPC_CONSTRICTOR_TENTACLE,     NPC_CORRUPTOR_TENTACLE,
                    NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN, NPC_YOGG_SARON};
-        tierCount = 5;
+        tierCount = 6;
     }
 
     // The brain level needs the reach: its floor sits ~25 yd below the Brain and a portal drops the bot
@@ -483,36 +478,7 @@ bool YoggSaronPhase3ControlAction::Execute(Event /*event*/)
         acted = true;
     }
 
-    // Added because lunatic gaze freeze all bots and they can't attack
-    // If someone fix it then this cheat can be removed.
-    // With Thorim as a Keeper the raid plays it for real instead: the tank brings the guardian to the
-    // melee stack, they cleave it to Weakened, and Titanic Storm executes it. Nothing else can kill a
-    // Weakened guardian, so anywhere else the cheat is the only way one ever dies.
-    if (!botAI->HasCheat(BotCheatMask::raid) || (IsYoggSaronHardModeActive(botAI) && YoggThorimKeeperActive(botAI)))
-        return acted;
-
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-
-    Unit* lowestHealthUnit = nullptr;
-    for (ObjectGuid const& guid : targets)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if ((unit->GetEntry() != NPC_IMMORTAL_GUARDIAN && unit->GetEntry() != NPC_MARKED_IMMORTAL_GUARDIAN) ||
-            unit->GetHealthPct() <= 10)
-            continue;
-
-        if (!lowestHealthUnit || unit->GetHealth() < lowestHealthUnit->GetHealth())
-            lowestHealthUnit = unit;
-    }
-
-    if (!lowestHealthUnit)
-        return acted;
-
-    lowestHealthUnit->Kill(bot, lowestHealthUnit);
-    return true;
+    return acted;
 }
 
 bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
@@ -575,19 +541,12 @@ bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
 
     botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("diamond");
 
-    if (botAI->HasCheat(BotCheatMask::raid))
-    {
-        return bot->TeleportTo(bot->GetMapId(), assignedPortalPosition.GetPositionX(),
-                                      assignedPortalPosition.GetPositionY(),
-                        assignedPortalPosition.GetPositionZ(), bot->GetOrientation());
-    }
-    else
-    {
-        return MoveNear(bot->GetMapId(), assignedPortalPosition.GetPositionX(),
-                               assignedPortalPosition.GetPositionY(),
-                 assignedPortalPosition.GetPositionZ(), sPlayerbotAIConfig.contactDistance,
-                 MovementPriority::MOVEMENT_FORCED);
-    }
+    if (!YoggSaronWalkMakingProgress(botAI, "enter", assignedPortalPosition))
+        return false;
+
+    return MoveNear(bot->GetMapId(), assignedPortalPosition.GetPositionX(), assignedPortalPosition.GetPositionY(),
+                    assignedPortalPosition.GetPositionZ(), sPlayerbotAIConfig.contactDistance,
+                    MovementPriority::MOVEMENT_FORCED);
 }
 
 bool YoggSaronFallFromFloorAction::Execute(Event /*event*/)
@@ -622,28 +581,14 @@ bool YoggSaronFallFromFloorAction::Execute(Event /*event*/)
     return false;
 }
 
-bool YoggSaronBossRoomMovementCheatAction::Execute(Event /*event*/)
+bool YoggSaronStopFollowingAction::Execute(Event /*event*/)
 {
     FollowMasterStrategy followMasterStrategy(botAI);
-    if (botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
-        botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
-
-    if (!botAI->HasCheat(BotCheatMask::raid))
+    if (!botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
         return false;
 
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (!target || !target->IsAlive())
-        return false;
-
-    // Land at the bot's own range along the bearing it already had, not on top of the target: that can
-    // now be a Crusher Tentacle, and dropping a ranged bot inside its ~10.8 yd reach makes it a Crush
-    // candidate with no angle left to dodge.
-    float const reach = botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
-    float const bearing = target->GetAngle(bot);
-
-    return bot->TeleportTo(bot->GetMapId(), target->GetPositionX() + reach * cos(bearing),
-                           target->GetPositionY() + reach * sin(bearing), target->GetPositionZ(),
-                           bot->GetOrientation());
+    botAI->ChangeStrategy(REMOVE_STRATEGY_CHAR + followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
+    return true;
 }
 
 bool YoggSaronUsePortalAction::Execute(Event /*event*/)
@@ -651,10 +596,6 @@ bool YoggSaronUsePortalAction::Execute(Event /*event*/)
     Creature* assignedPortal = bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, 2.0f, true);
     if (!assignedPortal)
         return false;
-
-    FollowMasterStrategy followMasterStrategy(botAI);
-    if (botAI->HasStrategy(followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT))
-        botAI->ChangeStrategy(ADD_STRATEGY_CHAR + followMasterStrategy.getName(), BotState::BOT_STATE_NON_COMBAT);
 
     return assignedPortal->HandleSpellClick(bot);
 }
@@ -664,10 +605,9 @@ bool YoggSaronIllusionRoomAction::Execute(Event /*event*/)
     YoggSaronTrigger yoggSaronTrigger(botAI);
 
     bool resultSetRtiMark = SetRtiMark(yoggSaronTrigger);
-    bool resultKillIllusionAdd = KillIllusionAdd(yoggSaronTrigger);
     bool resultGoToBrainRoom = GoToBrainRoom(yoggSaronTrigger);
 
-    return resultSetRtiMark || resultKillIllusionAdd || resultGoToBrainRoom;
+    return resultSetRtiMark || resultGoToBrainRoom;
 }
 
 bool YoggSaronIllusionRoomAction::SetRtiMark(YoggSaronTrigger yoggSaronTrigger)
@@ -693,26 +633,6 @@ bool YoggSaronIllusionRoomAction::SetRtiMark(YoggSaronTrigger yoggSaronTrigger)
     return false;
 }
 
-// If proper adds handling in illusion room will be implemented, then this can be removed. Without the
-// cheat a bot reaches the room's adds through yogg-saron set dps priority like anything else.
-bool YoggSaronIllusionRoomAction::KillIllusionAdd(YoggSaronTrigger yoggSaronTrigger)
-{
-    if (!botAI->HasCheat(BotCheatMask::raid))
-        return false;
-
-    Unit* add = yoggSaronTrigger.GetNextIllusionRoomRtiTarget();
-    if (!add)
-        return false;
-
-    bot->TeleportTo(bot->GetMapId(), add->GetPositionX(), add->GetPositionY(), add->GetPositionZ(),
-                    bot->GetOrientation());
-
-    Unit::DealDamage(bot->GetSession()->GetPlayer(), add, add->GetHealth(), nullptr, DIRECT_DAMAGE,
-                     SPELL_SCHOOL_MASK_NORMAL, nullptr, false, true);
-
-    return true;
-}
-
 bool YoggSaronIllusionRoomAction::GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger)
 {
     if (AI_VALUE(std::string, "rti") == "square" || !yoggSaronTrigger.IsBrainRoomApproachable())
@@ -722,19 +642,9 @@ bool YoggSaronIllusionRoomAction::GoToBrainRoom(YoggSaronTrigger yoggSaronTrigge
 
     // The room's middle, not its entrance: a bot parked at the doorway healed from there for 40 s while
     // the Brain sat untouched. The dps priority resolver picks the Brain up once the bot is inside.
-    if (botAI->HasCheat(BotCheatMask::raid))
-    {
-        bot->TeleportTo(bot->GetMapId(), ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionX(),
-                        ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionY(),
-                        ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionZ(), bot->GetOrientation());
-    }
-    else
-    {
-        MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionX(),
-               ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionY(),
-               ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionZ(), false, false, false, true,
-               MovementPriority::MOVEMENT_FORCED, true, false);
-    }
+    MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionX(),
+           ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionY(), ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionZ(),
+           false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 
     return true;
 }
@@ -743,25 +653,34 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
 {
     // Three of these are permanently spawned around the brain level, and a window can end with the bot
     // ~120 yd from the nearest one.
-    GameObject* portal = bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
-    if (!portal)
-        return false;
+    std::list<GameObject*> found;
+    bot->GetGameObjectListWithEntryInGrid(found, GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
 
-    if (botAI->HasCheat(BotCheatMask::raid))
-        bot->TeleportTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(),
-                               bot->GetOrientation());
-    else
-        MoveTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), false,
-                      false, false, true, MovementPriority::MOVEMENT_FORCED,
-                      true, false);
+    std::vector<GameObject*> portals(found.begin(), found.end());
+    std::sort(portals.begin(), portals.end(), [this](GameObject* left, GameObject* right)
+              { return bot->GetDistance2d(left) < bot->GetDistance2d(right); });
 
-    if (bot->GetDistance2d(portal) > 2.0f)
-        return false;
+    for (GameObject* portal : portals)
+    {
+        // Standing down is fatal here - Induce Madness lands, and a mind control is always a death - so
+        // a route going nowhere moves on to the next portal instead of giving up on the lot. They sit
+        // far enough apart that a blocked route to one says nothing about the others.
+        if (!YoggSaronWalkMakingProgress(botAI, "exit", portal->GetPosition()))
+            continue;
 
-    portal->Use(bot);
+        MoveTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), false, false,
+               false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 
-    botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("skull");
-    return true;
+        if (bot->GetDistance2d(portal) > 2.0f)
+            return false;
+
+        portal->Use(bot);
+
+        botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("skull");
+        return true;
+    }
+
+    return false;
 }
 
 bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
@@ -779,60 +698,25 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
 
 bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
 {
-    if (botAI->IsRanged(bot))
-    {
-        if (botAI->HasCheat(BotCheatMask::raid))
-        {
-            return bot->TeleportTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionX(),
-                            ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionY(),
-                            ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionZ(),
-                            bot->GetOrientation());
-        }
-        else
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionX(),
-                   ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionY(),
-                   ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT.GetPositionZ(), false,
-                   false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
-        }
-    }
-
-    if (botAI->IsMelee(bot) && !botAI->IsTank(bot))
-    {
-        if (botAI->HasCheat(BotCheatMask::raid))
-        {
-            return bot->TeleportTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-                            ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
-                            ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), bot->GetOrientation());
-        }
-        else
-        {
-            return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-                   ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
-                   ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), false, false, false, true,
-                   MovementPriority::MOVEMENT_FORCED, true, false);
-        }
-    }
-
+    // A tank is only ever walked back on the leash: wherever it drifted to, a guardian took it there.
     if (botAI->IsTank(bot))
     {
-        if (bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > 30.0f)
-        {
-            if (botAI->HasCheat(BotCheatMask::raid))
-            {
-                return bot->TeleportTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-                                       ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
-                                       ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), bot->GetOrientation());
-            }
-        }
-
         return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
                       ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
                       ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), false, false, false, true,
                       MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    return false;
+    Position const& spot =
+        botAI->IsRanged(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+
+    YoggSaronTrigger yoggSaronTrigger(botAI);
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive() && !yoggSaronTrigger.PhaseThreeStationReaches(target))
+        return false;
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronGuardianControlAction::Execute(Event /*event*/)

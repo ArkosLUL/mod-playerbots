@@ -16,14 +16,6 @@
 #include <functional>
 #include <vector>
 
-class YoggSaronOminousCloudCheatAction : public Action
-{
-public:
-    YoggSaronOminousCloudCheatAction(PlayerbotAI* ai) : Action(ai, "yogg-saron ominous cloud cheat action") {}
-
-    bool Execute(Event event) override;
-};
-
 class YoggSaronGuardianPositioningAction : public MovementAction
 {
 public:
@@ -130,8 +122,8 @@ private:
     int32 GetInterrupterIndex();
 };
 
-// Phase 3 housekeeping one designated bot tank does for the raid: the TankAssist strategy swap, and
-// the cheat that finishes an Immortal Guardian nothing else can kill.
+// The TankAssist strategy swap one designated bot tank does for the raid at the start of phase 3.
+// TankFace goes with it: it would turn the tank back into Lunatic Gaze, which the face-away answers.
 class YoggSaronPhase3ControlAction : public Action
 {
 public:
@@ -164,10 +156,12 @@ public:
     bool Execute(Event event) override;
 };
 
-class YoggSaronBossRoomMovementCheatAction : public MovementAction
+// Following a master is wrong in every part of this fight, and the bots that go down to the brain
+// level are exactly the ones that used to idle behind a human there.
+class YoggSaronStopFollowingAction : public Action
 {
 public:
-    YoggSaronBossRoomMovementCheatAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron boss room movement cheat action") {}
+    YoggSaronStopFollowingAction(PlayerbotAI* ai) : Action(ai, "yogg-saron stop following action") {}
 
     bool Execute(Event event) override;
 };
@@ -189,7 +183,6 @@ public:
 
 private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
-    bool KillIllusionAdd(YoggSaronTrigger yoggSaronTrigger);
     bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
 };
 
@@ -217,7 +210,8 @@ public:
     bool Execute(Event event) override;
 };
 
-// Reduced-Keeper hard mode: the tank holds the melee stack and taunts loose Immortal Guardians to it.
+// The tank holds the melee stack and taunts loose Immortal Guardians onto it, so the raid cleaves them
+// to Weakened for Thorim's Titanic Storm - and so they are not loose among the casters where it cannot.
 class YoggSaronGuardianControlAction : public MovementAction
 {
 public:
