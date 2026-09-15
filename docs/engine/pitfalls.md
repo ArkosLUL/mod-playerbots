@@ -664,3 +664,10 @@ isolates.
 - `errorDelay` defaults to 100 ms and is compared as `(now - lastErrorTell) < errorDelay / 1000`
   (`PlayerbotMgr.cpp:1709`) — integer division makes that 0 seconds, so errors flush every tick.
   **Still unfixed.**
+- **Boss health is not `creature_template`.** `mod-dungeon-scale` is loaded and
+  `AC_DUNGEON_SCALE_STAT_MODIFIER_RAID_BOSS_HEALTH=1.2` scales every raid boss, with the result moving
+  with raid size: Sara measured **240,000 at 25 raiders and 237,500 at 24** against the 199,999 her
+  `HealthModifier` gives, and the Guardians scaled with her. That is the difference between an eight-
+  and a ten-kill phase. Anything that turns a boss's health into a count — adds to kill, casts to
+  survive, a burn window — takes it from the trace's `unit` row (`mhp`), never from the DB, and never
+  from a figure another doc quotes without saying which it came from.

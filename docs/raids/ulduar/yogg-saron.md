@@ -8,12 +8,11 @@ explosion Shadow Nova Sara (65719, 15 yd) is her only damage source.
 That makes P1 a counter, not a damage race: 65719 is a flat **25,000**, so the phase costs her health
 divided by it and a kill outside 15 yd buys nothing at all.
 
-**Never take that count from `creature_template`.** Her spawn row is 199,999, but mod-dungeon-scale
-scales raid boss health and the result moves with raid size — **240,000 at 25 raiders, 237,500 at 24**
-— so **ten** deaths, not the eight the row gives. Read it off Sara's `unit` row in the trace;
-`yogg_saron.py --phases` does. On 2026-09-15 a pull wiped with **9 of the 10**, having spent four
-kills 18-22 yd out where they counted for nothing; the pull that transitioned did so 0.26 s after its
-tenth.
+**Never take that count from `creature_template`** — her row's 199,999 gives eight, and she measures
+**237,500 at 24 raiders** for **ten** ([../../engine/pitfalls.md](../../engine/pitfalls.md), boss
+health is scaled and moves with raid size). Read it off Sara's `unit` row; `yogg_saron.py --phases`
+does. On 2026-09-15 a pull wiped with **9 of the 10**, having spent four kills 18-22 yd out where they
+counted for nothing; the pull that transitioned did so 0.26 s after its tenth.
 
 Guardians have no movement script — `SetInCombatWithZone`, then a vanilla threat table — so **where
 melee stand is where a Guardian dies**, which is the whole reason melee are leashed to her.
