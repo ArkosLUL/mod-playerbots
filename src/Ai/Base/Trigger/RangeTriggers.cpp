@@ -272,8 +272,6 @@ bool TooFarFromPlayerWithAuraTrigger::TooFarFromPlayerWithAura(uint32 spellId, f
         }
     }
 
-    return !debuffedPlayers.empty();
-
     if (debuffedPlayers.empty())
     {
         return false;

@@ -248,10 +248,36 @@ constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_MS = 18000;
 constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS = 4000;
 constexpr float ULDUAR_YOGG_SARON_HANDOVER_LEAD_SAFETY = 2.0f;
 
+// And how long the walk out keeps claiming the bot after the ring has actually lit. Without it the
+// window closes on the same tick the barrier lands: three of nine melee were back inside 13.3 yd
+// within 600 ms of the knock back starting, because reach melee took the very next tick.
+constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS = 6000;
+
 // Where a bot crossing the room is sent instead of straight through the body. Wide enough that both
 // legs of the detour keep their distance: the worst case is a half-turn, whose chord passes
 // 24 * cos(45 deg) = 17.0 yd from the middle.
 constexpr float ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS = 24.0f;
+
+// Brain Link ties two raiders together for 30 s. Past 20 yd apart both take 63803 and lose 2 Sanity a
+// second; inside it neither takes anything. The bot closes to a margin under the threshold so ordinary
+// drift does not re-break a link it has just mended.
+//
+// Which raider is the partner cannot be read. Only the owner carries 63802 and the aura script keeps
+// the other GUID to itself, so the nearest raider is the best a bot can aim at - and the phase 2 band
+// is narrow enough that it usually lands inside. Measured with nothing closing at all: seven pairs sat
+// at 24 to 60 yd apart for the full 30 s each, 355k of damage.
+constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_RANGE = 20.0f;
+constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE = 15.0f;
+
+// Hand of Protection frees a Squeeze victim outright. It grants physical school immunity and carries
+// SPELL_ATTR1_IMMUNITY_PURGES_EFFECT, Squeeze is physical and dispellable, and the Squeeze aura script
+// kills the tentacle on any removal - which is what unseats the passenger. 30 yd is the spell's own
+// range, and a bot outside it has nothing to offer.
+//
+// The claim is keyed per victim, not per window: grabs overlap, one pull held two raiders at once for
+// 20 s, and three paladins spending three two-minute cooldowns on one tentacle helps nobody.
+constexpr float ULDUAR_YOGG_SARON_HAND_OF_PROTECTION_RANGE = 30.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS = 3000;
 
 // The portal wave clock. EVENT_SARA_P2_OPEN_PORTALS fires 60 s after phase 2 starts and repeats
 // every 80 s; clearing a room delays Sara's other events but explicitly reschedules this one, so the
@@ -279,6 +305,11 @@ constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN = 10;
 // damage and -2 Sanity at 30 yd. The skull is UNIT_FLAG_NOT_SELECTABLE and cannot be killed, and the
 // spell picks its targets with HasInArc(M_PI, caster), so facing away is the only defence there is.
 constexpr float ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS = 30.0f;
+
+// How far a heading may drift before it is worth correcting, about 6 degrees. Re-facing costs a
+// spline, and a node that re-faces on every tick fights the engine's own target facing instead of the
+// skull: one pull had a bot flip between two orientations once a second for 48 seconds.
+constexpr float ULDUAR_YOGG_SARON_FACING_TOLERANCE = 0.1f;
 
 // How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
@@ -401,8 +432,25 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI);
 bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 
 // Laughing Skulls within gaze range that are in the bot's front 180 degrees, which is the exact test
-// the spell uses to pick its targets.
+// the spell uses to pick its targets. The distance is re-checked after the grid sweep, whose own range
+// test is bounding-radius inclusive: 164 of 235 probe flips in one pull had no skull inside 30 yd.
 std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI);
+
+// The raider a Squeeze rescue should be spent on: lowest health first, nearest as the tie-break, in
+// Hand of Protection's range, and without Forbearance. Never the bot itself - a paladin who is held
+// bubbles instead. nullptr when there is nobody worth the cooldown.
+Player* YoggSaronSqueezeVictim(PlayerbotAI* botAI);
+
+// One rescuer per victim. True for the bot that takes the claim and false for everyone else until it
+// lapses.
+bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim);
+
+// The nearest living raider on the boss platform, the bot itself excluded.
+Player* YoggSaronNearestRaider(PlayerbotAI* botAI);
+
+// Who a Brain Linked bot should close on, or nullptr when it is not linked, is already close enough,
+// or has gone underground - the script drops the link outright past 10 yd of vertical separation.
+Player* YoggSaronBrainLinkTarget(PlayerbotAI* botAI);
 
 // Where the portal wave clock stands. ordinal counts waves actually seen, msToNextWave is the
 // prediction the spread runs on, and portalsUp is this bot's own sight of the ring - a bot
@@ -469,6 +517,9 @@ struct YoggSaronHandover
     // Whether it is time for this bot to walk out, which is the lead decided here rather than by each
     // caller, so the trigger and the action cannot answer it differently. Never true for a bot that is
     // already outside the clearance radius, which is the whole back line.
+    //
+    // It stays true for a hold after the ring has lit, because the window itself ends on that tick and
+    // a bot released there walks straight back under the knock back.
     bool clearing = false;
     uint32 msToRing = 0;
 };

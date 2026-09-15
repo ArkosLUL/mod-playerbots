@@ -320,9 +320,10 @@ bool YoggSaronPhase3ControlTrigger::IsActive()
 
 bool YoggSaronBrainLinkTrigger::IsActive()
 {
-    TooFarFromPlayerWithAuraTrigger tooFarFromPlayerWithAuraTrigger(botAI);
-    return IsPhase2() && bot->HasAura(SPELL_BRAIN_LINK) &&
-           tooFarFromPlayerWithAuraTrigger.TooFarFromPlayerWithAura(SPELL_BRAIN_LINK, 20.0f, false);
+    // Not TooFarFromPlayerWithAura, which measures the gap to other holders of the same aura: Brain
+    // Link puts 63802 on one end only and keeps the partner's GUID inside the aura script, so that
+    // helper finds nobody to measure against. Closing on the nearest raider is what is left.
+    return IsPhase2() && YoggSaronBrainLinkTarget(botAI) != nullptr;
 }
 
 bool YoggSaronMoveToEnterPortalTrigger::IsActive()
@@ -417,6 +418,18 @@ bool YoggSaronMoveToExitPortalTrigger::IsActive()
     // the brain room" - it was that question plus a permanent 25 yd vertical tax, and two of the three
     // portal arrivals land outside 60 yd before the bot takes a step. The level is the real test.
     if (!IsInBrainLevel() || !IsYoggSaronFight())
+        return false;
+
+    // An illusion room has no exit to walk to until its door opens. All three Flee to the Surface
+    // portals sit in the brain chamber, 93 to 109 yd from an illusion room's middle and behind doors
+    // the Brain only opens when the last Influence Tentacle in that room dies. Without this the node
+    // starts hauling a bot at a shut door half a minute before Induce Madness lands: 53 of 62 walks in
+    // one pull came back as the same unreachable point re-issued.
+    //
+    // The brain chamber itself is exempt rather than routed through the same test: the portals are in
+    // there, so a bot that made it through can always leave, and the next wave's tentacles must not
+    // strand it.
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_BRAIN && !IsBrainRoomApproachable())
         return false;
 
     return YoggSaronShouldLeaveBrainLevel(botAI);
@@ -549,6 +562,21 @@ bool YoggSaronSanityConservationTrigger::IsActive()
         return false;
 
     return true;
+}
+
+bool YoggSaronSqueezeRescueTrigger::IsActive()
+{
+    // Class first: it is free, and the fight test behind it is a pair of 200 yd grid sweeps run for
+    // every bot in Ulduar.
+    if (bot->getClass() != CLASS_PALADIN || !IsYoggSaronFight())
+        return false;
+
+    // A paladin who is held bubbles instead, which is the squeeze escape node below this one. Hand of
+    // Protection cannot be cast from inside the tentacle's grip anyway.
+    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_SQUEEZE, bot)))
+        return false;
+
+    return YoggSaronSqueezeVictim(botAI) != nullptr;
 }
 
 bool YoggSaronSqueezeEscapeTrigger::IsActive()

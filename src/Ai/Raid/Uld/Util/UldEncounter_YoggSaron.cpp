@@ -22,10 +22,12 @@
 #include "Group.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "RaidObs.h"
 #include "Spell.h"
 #include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "UldEncounterGate.h"
 #include "Unit.h"
 
@@ -79,8 +81,15 @@ struct YoggSaronEncounterState
     uint32 slotWave = 0;
 
     // Nothing in the world counts the transformation dialogue down, so the window is timed off the
-    // tick Yogg was first seen without his barrier.
+    // tick Yogg was first seen without his barrier. The second is when the ring actually lit, which is
+    // the tick the window closes: the walk out has to outlive it or melee are released into the knock
+    // back they were sent out to avoid.
     uint32 handoverStartMs = 0;
+    uint32 handoverRingMs = 0;
+
+    // Which Squeeze victim each rescuer has called, so three paladins do not spend three cooldowns on
+    // one tentacle. Keyed by victim rather than by window because grabs overlap.
+    std::unordered_map<ObjectGuid, uint32> squeezeClaims;
 
     uint32 hazardNoteMs = 0;
     std::unordered_map<ObjectGuid, uint32> obsScanMs;
@@ -333,6 +342,11 @@ std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
         if (!skull->IsAlive())
             continue;
 
+        // The grid sweep above measures with both objects' bounding radii, so it hands back skulls the
+        // 30 yd gaze cannot reach. Measure it plainly before answering for one.
+        if (bot->GetExactDist2d(skull) > ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS)
+            continue;
+
         // The exact filter the spell uses, so what the node answers for and what the raid is hit by
         // are the same set.
         if (bot->HasInArc(static_cast<float>(M_PI), skull))
@@ -569,26 +583,45 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
     YoggSaronHandover answer;
+    bool holding = false;
     {
         std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
 
-        if (!open)
-        {
-            state.handoverStartMs = 0;
-            if (RaidObs::Active())
-                RaidObs::NoteDerived(bot, "yogg.handover", "clear");
-
-            return answer;
-        }
-
         uint32 const now = getMSTime();
-        if (!state.handoverStartMs)
-            state.handoverStartMs = now;
+        if (open)
+        {
+            state.handoverRingMs = 0;
+            if (!state.handoverStartMs)
+                state.handoverStartMs = now;
 
-        uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
-        answer.active = true;
-        answer.msToRing =
-            elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
+            uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
+            answer.active = true;
+            answer.msToRing =
+                elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
+        }
+        else
+        {
+            // The window and the ring are the same tick, so the moment the window closes is the moment
+            // to start the hold from.
+            if (state.handoverStartMs)
+            {
+                state.handoverRingMs = now;
+                state.handoverStartMs = 0;
+            }
+
+            holding = state.handoverRingMs &&
+                      getMSTimeDiff(state.handoverRingMs, now) < ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS;
+            if (!holding)
+                state.handoverRingMs = 0;
+        }
+    }
+
+    if (!answer.active && !holding)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.handover", "clear");
+
+        return answer;
     }
 
     // Only melee and the tank are ever inside the ring when it lights up; the back line is already
@@ -618,9 +651,14 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 
 bool YoggSaronInBodyKnockback(Player* player)
 {
-    return player && player->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
-                                           ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <
-                         ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS;
+    // The height test carries as much weight as the radius. The brain room's middle sits 2.3 yd from
+    // the arena's in x and y and 93 yd below it, so a flat 2D ring swallows the whole room: every bot
+    // down there would read as standing in a knock back that cannot reach it, and the spacing node
+    // would push it off the spot the illusion room node had just walked it to.
+    return player && player->GetPositionZ() > ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT &&
+           player->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
+                                 ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <
+               ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS;
 }
 
 namespace
@@ -930,6 +968,113 @@ bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y
     return false;
 }
 
+Player* YoggSaronNearestRaider(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    Player* nearest = nullptr;
+    float best = 0.0f;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive())
+            continue;
+
+        if (member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+            continue;
+
+        float const distance = bot->GetExactDist2d(member);
+        if (!nearest || distance < best)
+        {
+            nearest = member;
+            best = distance;
+        }
+    }
+
+    return nearest;
+}
+
+Player* YoggSaronBrainLinkTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    if (!bot->HasAura(SPELL_BRAIN_LINK))
+        return nullptr;
+
+    // The aura script drops the link outright once the two ends are more than 10 yd apart vertically,
+    // so a bot that has taken a portal down has nothing left to close on.
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return nullptr;
+
+    Player* nearest = YoggSaronNearestRaider(botAI);
+    bool const far = nearest && bot->GetExactDist2d(nearest) > ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.brainlink", far ? "closing" : "clear");
+
+    return far ? nearest : nullptr;
+}
+
+Player* YoggSaronSqueezeVictim(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    uint32 const squeeze = sSpellMgr->GetSpellIdForDifficulty(SPELL_SQUEEZE, bot);
+
+    Player* victim = nullptr;
+    float best = 0.0f;
+    float bestDistance = 0.0f;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || !member->HasAura(squeeze))
+            continue;
+
+        float const distance = bot->GetExactDist2d(member);
+        if (distance > ULDUAR_YOGG_SARON_HAND_OF_PROTECTION_RANGE)
+            continue;
+
+        // Lowest health first, because Squeeze is a flat tick and the question is who runs out of room
+        // soonest. Nearest breaks the tie, which is also the least likely to walk out of range mid-cast.
+        float const health = member->GetHealthPct();
+        if (!victim || health < best || (health == best && distance < bestDistance))
+        {
+            victim = member;
+            best = health;
+            bestDistance = distance;
+        }
+    }
+
+    return victim;
+}
+
+bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim)
+{
+    if (!victim)
+        return false;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
+
+    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+
+    uint32 const now = getMSTime();
+    uint32& claimed = state.squeezeClaims[victim->GetGUID()];
+    if (claimed && getMSTimeDiff(claimed, now) < ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS)
+        return false;
+
+    claimed = now;
+
+    return true;
+}
+
 bool YoggSaronFearWindowActive(PlayerbotAI* botAI)
 {
     uint32 const phase = YoggSaronPhase(botAI);
@@ -1074,5 +1219,22 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
 
     size_t const skulls = GetYoggSaronSkullsInArc(botAI).size();
     RaidObs::NoteDerived(bot, "yogg.skull", skulls ? std::to_string(skulls) + " in arc" : "clear");
+
+    // Whether the room is being fought or only stood in. An illusion room is eight Influence Tentacles
+    // inside 60 s or 100 Sanity off everyone in it, and "did anybody ever get within reach of one" was
+    // the question the last trace could not answer: 11 bots managed 151 casts across three waves and
+    // killed none. Bucketed because a raw distance would emit a row every tick.
+    Creature* tentacle = bot->FindNearestCreature(NPC_INFLUENCE_TENTACLE, 200.0f, true);
+    if (!tentacle)
+    {
+        RaidObs::NoteDerived(bot, "yogg.tentacle", "none");
+        return;
+    }
+
+    float const reach = bot->GetExactDist2d(tentacle);
+    RaidObs::NoteDerived(bot, "yogg.tentacle",
+                         reach <= sPlayerbotAIConfig.meleeDistance   ? "melee"
+                         : reach <= sPlayerbotAIConfig.spellDistance ? "spell"
+                                                                     : "far");
 }
 }  // namespace

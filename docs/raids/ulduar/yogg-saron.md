@@ -168,6 +168,28 @@ oscillating against hazards that never stop moving:
   detonate, phase 1 puts "still within `meleeDistance` of my target" in `set.clear` and the cloud
   circles in `set.fallback`, so the retry drops the reach and keeps the clearance.
 
+- **Phase 2 does the same by preference.** `set.preferred` is tried ahead of `accept` and dropped when
+  nothing satisfies both, so a bot in a hazard still moves: it asks for a spot still inside
+  `meleeDistance` / `spellDistance` of the current target, which leaves `reach melee` and `reach spell`
+  nothing to undo. Without it the 3 s hold lapses, the reach node walks the bot back at its target, the
+  bot lands in a hazard and the spacing node walks it out again — **1565 handovers** in one phase 2,
+  77 per melee bot and 69 per ranged, 754 yd of melee walking to finish 88 yd from the start.
+
+**Yogg-Saron was the only anchored Ulduar encounter with no movement guard.** Iron Assembly, Mimiron
+and Thorim each zero `ReachTargetAction` while a positioning node owns the bot
+([../README.md](../README.md)); Yogg had a dps-target guard and a displacement guard, neither of which
+sees it. `YoggSaronMovementGuardMultiplier` closes the two windows where the generic reach is simply
+wrong and no others — it is the only way a bot closes on anything, so a blanket zero strands the raid,
+and `reach party member to heal` is exempt outright:
+
+- **The walk out of the knockback ring**, which spans the phase boundary: the window is phase 1 and
+  the 6 s hold that outlives it is phase 2. Two nodes at `MOVEMENT_FORCED` and `MOVEMENT_COMBAT` traded
+  the bot every ~300 ms for the whole walk.
+- **Inside the ring in phase 2**, at exactly `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS` — the radius the
+  spacing trigger fires at, so reach stands down only while that node owns the bot and is free the
+  moment it is walked clear. A wider band leaves a ring where neither node moves anybody. Phase 3 is
+  left out: its spacing node does not run, so nothing would walk the bot out in its place.
+
 `MoveAwayFromCreatureAction` was rejected for this: no throttle, no latch, and it *maximises* distance
 recomputed from the bot's new position every tick, so against six rotating rings the best answer rotates
 with them.
@@ -343,11 +365,12 @@ as `yogg.knockback`.
 **invisible** in the same tick; `ACTION_YOGG_SARON_APPEAR` casts Shadow Barrier and 64022 together at
 the end of the transformation dialogue — 4 + 5 + 4.5 + 4 s of it plus the 500 ms
 `EVENT_SARA_P2_START`, measured 18.0-18.3 s. The phase reads 1 throughout and 2-6 Guardians are still
-alive, so the leash keeps hauling melee and the tank onto the middle: in every pull on record **9 of 9
-melee and the tank stand in the ring when it lights up**, against **0 of 10 ranged and 0 of 4
-healers**, already 8.2 yd clear of it on the 21.5 yd station. So the walk out belongs to melee and the
-tank alone — to `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS` along the bearing each already holds,
-which fans nine of them around the ring instead of stacking them on a point.
+alive, so the leash kept hauling melee and the tank onto the middle: before the walk out, in every
+pull on record **9 of 9 melee and the tank stood in the ring when it lit**, against **0 of 10 ranged
+and 0 of 4 healers**, already 8.2 yd clear of it on the 21.5 yd station. With it, 2 of 9. So the walk
+out belongs to melee and the tank alone — to `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS` along
+the bearing each already holds, which fans nine of them around the ring instead of stacking them on a
+point.
 
 **Yogg without Shadow Barrier is the whole window**, and `SetVisible(false)` does not hide him from a
 grid search, so `YoggSaronHandoverState` reads it from the first tick. P3 strips the barrier again and
@@ -358,6 +381,11 @@ but their novas still land for 25k, and one dying at the clearance radius reache
 one dying on the leash cannot, so the raid holds the middle until
 `ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS` out. Nothing in the world counts the dialogue down, so the
 clock is predicted off the first sighting, like the portal wave's.
+
+**The walk has to outlive the ring.** "Yogg without the barrier" ends on the tick the barrier lands,
+and melee released there walk straight back under the knock back — three of nine were inside 13.3 yd
+again within 600 ms. `ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS` (6 s) keeps `clearing` true past it, and the
+movement guard below keeps `reach melee` off the bot for the same window.
 
 It costs melee nothing — Yogg's `CombatReach` is **30** (display 28817, `BoundingRadius` 0), so melee
 range on him is `1.5 + 30 + 2.67` ≈ **34 yd**, and the P3 melee spot is already 18.4 yd out. What it
@@ -404,6 +432,24 @@ the state machine: `notteam` / `waiting` / `spreading` / `holding` / `late` / `c
 bot derives the same team from its own seat. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
 `GetYoggSaronBrainTeam` is the single owner now.
+
+**Brain Link's partner cannot be read, so the bot closes on the nearest raider.** 63802 goes on
+**one** player: `spell_yogg_saron_brain_link_aura` picks a random living player within 50 yd on apply,
+keeps that GUID to itself, and every second they are more than **20 yd** apart casts 63803 on **both**
+ends — DBC damage plus −2 Sanity each — dropping the link if either dies or they end up more than 10 yd
+apart vertically. No client-side test can name the partner, and `TooFarFromPlayerWithAura` cannot
+help: it measures the gap to *other holders of the same aura*, of which there are none. So
+`yogg-saron brain link` at `ACTION_RAID + 1.5` walks the holder within
+`ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE` (15, a margin under the 20 so drift does not re-break it) of the
+nearest living raider above z 300 — over the dps resolver and the Sanity Well walk, under the hazard
+dodges, since a link costs 2 Sanity and a shared hit a second while a Death Ray costs the bot. Probed
+as `yogg.brainlink`.
+
+It was doing none of that. `TooFarFromPlayerWithAura` had an unconditional
+`return !debuffedPlayers.empty();` above its range loop and never read the `range` argument at all;
+the action walked to the first group member carrying the aura rather than to the partner; and at
+`ACTION_RAID` four nodes outranked it, so it **issued zero moves in a whole fight**. Seven pairs sat
+24-60 yd apart for the full 30 s each, for **355,013**.
 
 ## The brain room
 
@@ -484,6 +530,32 @@ dies. It was entirely unhandled: **149 gaze hits for 137,815 damage** and 298 Sa
 `yogg-saron laughing skull` faces away from the centroid of the skulls in arc, at `ACTION_EMERGENCY`
 beside the Yogg gaze node — the two cannot share a bot and never need to, since Yogg's own Lunatic
 Gaze is a P3 self aura on the platform and the skulls only exist below it. Probed as `yogg.skull`.
+
+**Facing away must never cost a tick.** The node returned `true` whenever any skull was in arc, and
+the engine ends a tick at the first action returning true, so at `ACTION_EMERGENCY` it starved the dps
+resolver, the walk into the room and the exit — while `set facing` (37), `AttackAction` and
+`PlayerbotAI::CastSpell` each turned the bot back at its target inside the same tick. A bot flipped
+between two orientations about once a second and stood on one coordinate for **48 s** with an
+Influence Tentacle 78 yd away; **six of nine melee** went that way in one pull, four of them caught by
+Induce Madness at 263.9 s and dead at 323.9 s. It now yields outright while the bot has a live target
+— fighting is worth more than 1750 damage and 2 Sanity a second, and a bot cannot face away from what
+it is attacking in any case — corrects a heading only past `ULDUAR_YOGG_SARON_FACING_TOLERANCE`
+(0.1 rad, ~6°), and never claims the tick. The 30 yd read is measured plainly too:
+`GetCreatureListWithEntryInGrid` is bounding-radius inclusive, and **164 of 235** probe flips in one
+pull had no skull inside 30 yd at all.
+
+**There is no way out of an illusion room until its tentacles are dead.** All three Flee to the
+Surface goobers (194625) stand in the brain chamber — (2000.65, 5.79), (1943.06, −23.51),
+(1998.42, −59.85) — **93 to 109 yd** from an illusion room's middle and behind `GO_*_ILLUSION_DOORS`,
+which the Brain sets `GO_STATE_READY` when the illusion starts and `GO_STATE_ACTIVE` only in the same
+statement that despawns every skull. Killing all eight tentacles in T ms opens that door **and stuns
+everything upstairs for 60000 − T ms**, while nothing interrupts the cast itself — `_induceTimer` is
+only a stopwatch for the stun length. So the exit node wants a door gate, not priority: on its own
+`YoggSaronShouldLeaveBrainLevel` started hauling bots at a shut door half a minute early and **53 of
+62** of its walks came back as the same unreachable point re-issued. The brain chamber is exempt from
+the gate, because the portals are in there and the next wave's tentacles must not strand a bot that
+already made it through. `yogg.tentacle` records how close anyone actually got: 151 casts across three
+waves and eleven bots killed none, and the Brain finished a 4 minute 42 second phase 2 at 100%.
 
 **No Sanity Well reaches the brain level.** All five stand on the platform and nothing restores Sanity
 underground, so `yogg-saron sanity` could only ever walk a bot at something it would never get to. It
@@ -645,3 +717,26 @@ Removing the Squeeze aura (64125 / 64126) kills the Constrictor Tentacle and dro
 `yogg-saron squeeze escape` at `ACTION_RAID + 1` has a grabbed mage cast Ice Block and a paladin cast
 Divine Shield. Hunter Feign Death and rogue Vanish are deliberately not used — neither removes a
 periodic damage aura.
+
+**A paladin can do it for somebody else with Hand of Protection**, which covers the other eight
+classes. 10278 grants `SPELL_AURA_SCHOOL_IMMUNITY` over school mask 1 and carries
+`SPELL_ATTR1_IMMUNITY_PURGES_EFFECT`, so `HandleAuraModSchoolImmunity` strips every non-positive
+physical aura the immunity would cover; Squeeze is physical, not passive and lacks
+`SPELL_ATTR0_NO_IMMUNITIES`, so `CanDispelAura` passes and the tentacle dies on removal.
+`yogg-saron squeeze rescue` at `ACTION_RAID + 6` — above the Sanity Well retreat, since cutting
+somebody out of 7.5k a second beats walking somebody else to a well — takes the lowest-health victim
+inside the spell's own **30 yd**, skips one carrying Forbearance (25771, matched by id), and claims
+that victim for `ULDUAR_YOGG_SARON_SQUEEZE_CLAIM_MS` so three paladins do not spend three cooldowns on
+one tentacle. Squeeze costs no Sanity — `spell_yogg_saron_sanity_reduce` has no case for it — so this
+is damage and healer load only: 18 grabs, **477,137**, longest **34.8 s**.
+
+**The main tank is rescued like anyone else.** He rides a vehicle and holds nothing while he is held,
+so the threat wipe costs less than the grip; Forbearance locking out his own Divine Shield and Lay on
+Hands for two minutes is the accepted price.
+
+**The spell is "Hand of Protection", not "Blessing of Protection".** It was renamed in 3.0 and
+`SpellIdValue::Calculate` matches the DBC name by first character, exact length and full string, so
+the 2.x spelling resolves to spell id 0. `CastBlessingOfProtectionProtectAction` still asks for the
+old one and has therefore never cast. It is left alone: reviving it changes paladin behaviour in every
+instance, and it could not serve this anyway — `PartyMemberToProtect` only returns a non-tank under
+30% health, and a squeezed bot is near full.

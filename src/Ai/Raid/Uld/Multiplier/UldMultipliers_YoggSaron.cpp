@@ -84,4 +84,41 @@ float YoggSaronDisplacementGuardMultiplier::GetValue(Action* action)
     return phase == 1 || teleport ? 0.0f : 1.0f;
 }
 
+float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
+{
+    if (!action || !dynamic_cast<ReachTargetAction*>(action))
+        return 1.0f;
+
+    // The heal reach is what keeps a healer in range of somebody no station can see, and it never walks
+    // anyone into the body. Leave it alone.
+    if (action->getName() == "reach party member to heal")
+        return 1.0f;
+
+    // Both windows are within a few yards of the middle of the boss platform, and the phase read below
+    // is a pair of 200 yd grid sweeps, so the arithmetic goes first.
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return 1.0f;
+
+    float const fromMiddle =
+        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+    if (fromMiddle >= ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
+        return 1.0f;
+
+    uint32 const phase = YoggSaronPhase(botAI);
+
+    // Exactly the radius the phase 2 spacing trigger fires at, so reach stands down only while that
+    // node owns the bot and is free again the moment it has been walked clear. A wider band here would
+    // leave a ring where neither node moves anybody. Phase 3 is left out: its spacing node does not
+    // run, so nothing down here would walk the bot out in its place.
+    if (phase == 2 && fromMiddle < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS)
+        return 0.0f;
+
+    if (phase != 1 && phase != 2)
+        return 1.0f;
+
+    // The walk out of the ring, which spans the phase boundary: the window is phase 1 and the hold that
+    // outlives it is phase 2.
+    return YoggSaronHandoverState(botAI).clearing ? 0.0f : 1.0f;
+}
+
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }

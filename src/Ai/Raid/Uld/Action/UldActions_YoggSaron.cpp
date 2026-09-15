@@ -157,11 +157,28 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
         return !set.fallbackClear || set.fallbackClear(x, y);
     };
 
+    // Somewhere the bot can still reach what it is killing, when such a spot exists. Without it the
+    // hold lapses every 3 s, reach melee walks the bot back toward its target, the bot lands in a
+    // hazard and this node walks it out again - 77 handovers between the two per melee bot over one
+    // phase 2. Dropped rather than enforced: a bot in a hazard has to move whether or not it can shoot
+    // from where it lands.
+    Position safe;
+    if (set.preferred)
+    {
+        auto const preferredAccept = [&accept, &set](float x, float y)
+        { return accept(x, y) && set.preferred(x, y); };
+
+        safe = FindNearestPositionClearOfHazards(bot, set.hazards, SearchRadius(), 2.0f,
+                                                 static_cast<float>(M_PI) / 8.0f, &middle, preferredAccept,
+                                                 &sweep);
+    }
+
     // Every candidate in a ring is the same walk away, so preferNear is free and decides the whole
     // character of the dodge: biased at the middle it sidesteps along the orbit instead of running for
     // the rim.
-    Position safe = FindNearestPositionClearOfHazards(bot, set.hazards, SearchRadius(), 2.0f,
-                                                      static_cast<float>(M_PI) / 8.0f, &middle, accept, &sweep);
+    if (safe == Position())
+        safe = FindNearestPositionClearOfHazards(bot, set.hazards, SearchRadius(), 2.0f,
+                                                 static_cast<float>(M_PI) / 8.0f, &middle, accept, &sweep);
 
     // Nothing clears everything at once. Retry on the subset that kills, off the same cache.
     if (safe == Position() && !set.fallback.empty())
@@ -276,6 +293,19 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 
     // The retry needs something to sweep against, and the body is the one circle that is always there.
     set.fallback.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS);
+
+    // Resolved once here rather than inside the sweep, which asks its filter hundreds of times.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive())
+    {
+        float const reach =
+            botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+        float const targetX = target->GetPositionX();
+        float const targetY = target->GetPositionY();
+
+        set.preferred = [targetX, targetY, reach](float x, float y)
+        { return std::hypot(targetX - x, targetY - y) <= reach; };
+    }
 
     return true;
 }
@@ -562,18 +592,14 @@ bool YoggSaronPhase3ControlAction::Execute(Event /*event*/)
 
 bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
 {
-    Group* group = bot->GetGroup();
-    if (!group)
+    // The nearest raider, not the first group member carrying the aura: Brain Link puts 63802 on one
+    // end only, so iterating for a second holder finds nobody and the old walk went to whoever the
+    // group happened to list first.
+    Player* partner = YoggSaronBrainLinkTarget(botAI);
+    if (!partner)
         return false;
 
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* player = gref->GetSource();
-        if (player && player->IsAlive() && player->HasAura(SPELL_BRAIN_LINK) && player->GetGUID() != bot->GetGUID())
-            return MoveNear(player, 10.0f, MovementPriority::MOVEMENT_FORCED);
-    }
-
-    return false;
+    return MoveNear(partner, ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE, MovementPriority::MOVEMENT_FORCED);
 }
 
 bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
@@ -764,6 +790,16 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
     if (skulls.empty())
         return false;
 
+    // Never while there is something to kill. An illusion room is a 60 s race for eight Influence
+    // Tentacles, there is no way out until they are dead, and everyone still inside when Induce
+    // Madness lands loses all 100 Sanity - against 1750 damage and 2 Sanity a second for looking at a
+    // skull. A bot cannot face away from what it is attacking in any case: set facing, AttackAction
+    // and CastSpell each turn it back within the same tick. Turning anyway cost one pull six melee,
+    // who stood on one spot flipping between two headings for 48 s apiece with a tentacle 78 yd away.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive())
+        return false;
+
     float x = 0.0f;
     float y = 0.0f;
     for (Unit* skull : skulls)
@@ -777,9 +813,21 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
 
     // Away from the centroid. Four skulls to a room can be spread wide enough that no heading clears
     // all of them, and the middle of the ones that are in arc is the heading that clears the most.
-    bot->SetFacingTo(Position::NormalizeOrientation(bot->GetAngle(x, y) + static_cast<float>(M_PI)));
+    float const away = Position::NormalizeOrientation(bot->GetAngle(x, y) + static_cast<float>(M_PI));
 
-    return true;
+    float drift = std::fabs(Position::NormalizeOrientation(bot->GetOrientation() - away));
+    if (drift > static_cast<float>(M_PI))
+        drift = 2.0f * static_cast<float>(M_PI) - drift;
+
+    if (drift <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+        return false;
+
+    bot->SetFacingTo(away);
+
+    // The tick is never claimed. Walking into the room and leaving it both sit below this node and
+    // both matter more than a heading, and a heading needs no tick of its own to hold once nothing
+    // is turning the bot back.
+    return false;
 }
 
 bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
@@ -912,6 +960,32 @@ bool YoggSaronSanityConservationAction::Execute(Event /*event*/)
     }
 
     return true;
+}
+
+bool YoggSaronSqueezeRescueAction::Execute(Event /*event*/)
+{
+    Player* victim = YoggSaronSqueezeVictim(botAI);
+    if (!victim)
+        return false;
+
+    // Hand of Protection's own debuff, matched by id because PlayerbotAI::HasAura compares the DBC
+    // string exactly. A second Hand inside two minutes is refused outright, so this is not a nicety.
+    constexpr uint32 SPELL_FORBEARANCE = 25771;
+    if (victim->HasAura(SPELL_FORBEARANCE))
+        return false;
+
+    // The 3.3.5a name. It was Blessing of Protection in 2.x, and SpellIdValue matches the DBC string
+    // exactly - the old spelling resolves to no spell at all.
+    if (!botAI->CanCastSpell("hand of protection", victim))
+        return false;
+
+    if (!ClaimYoggSaronSqueezeRescue(botAI, victim))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.squeeze", "rescue");
+
+    return botAI->CastSpell("hand of protection", victim);
 }
 
 bool YoggSaronSqueezeEscapeAction::Execute(Event /*event*/)

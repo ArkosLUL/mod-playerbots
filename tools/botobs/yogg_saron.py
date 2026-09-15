@@ -50,14 +50,20 @@ NPC_GUARDIAN = 33136
 NPC_YOGG_SARON = 33288
 NPC_BRAIN = 33890
 NPC_INFLUENCE_TENTACLE = 33943
+NPC_LAUGHING_SKULL = 33990
 
 SPELL_SANITY = 63050
+SPELL_INSANE = 63120
 SPELL_INDUCE_MADNESS = 64059
 SPELL_LUNATIC_GAZE_SKULL = 64168
 SPELL_GRIM_REPRISAL = 64039
 SPELL_CRUSH_CONE = 64147
 SPELL_KNOCK_BACK = 64020
 SPELL_SHADOW_NOVA_SARA = 65719
+SPELL_SQUEEZE = 64126
+SPELL_BRAIN_LINK = 63802
+SPELL_BRAIN_LINK_DAMAGE = 63803
+SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 
 # A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
 # is 21.5, so a Guardian dying more than 6.5 yd from the middle catches the whole raid rather than the
@@ -65,11 +71,21 @@ SPELL_SHADOW_NOVA_SARA = 65719
 NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
 
+# 64167 on a Laughing Skull triggers 64168 at 30 yd, and the module's node uses the same number.
+LAUGHING_SKULL_RADIUS = 30.0
+
 # 64022 on Yogg triggers a 14 yd knock back every second, and his model sits 4.5 yd above the
 # floor, so what lands on the floor is a 13.26 yd ring. Nothing in the world can be swept for it.
 KNOCKBACK_RADIUS = 13.3
 
 BODY = (1980.28, -25.5868)
+
+# Brain Link ticks 63803 and -2 Sanity on both ends past this, nothing inside it. Only the owner
+# carries 63802; the partner is only visible as the second raider taking 63803 in the same window.
+BRAIN_LINK_RANGE = 20.0
+
+# The boss platform floor is z 325-330 and every illusion room is z 236-244, so this separates them.
+BRAIN_LEVEL_Z = 300.0
 
 # boss_yoggsaron.cpp yoggPortalLoc, in table order. AddPortals spawns RAID_MODE(4, 10) of them, so a
 # 10-man pull only ever gets the first four.
@@ -84,7 +100,7 @@ PORTAL_SPOTS = [
 PROBE_KEYS = (
     "yogg.phase", "yogg.engaged", "yogg.room", "yogg.roomstate", "yogg.cloudreach", "yogg.knockback",
     "yogg.crush", "yogg.deathray", "yogg.wave", "yogg.portal", "yogg.portalslot", "yogg.brainteam",
-    "yogg.skull", "yogg.exit", "yogg.handover",
+    "yogg.skull", "yogg.exit", "yogg.handover", "yogg.squeeze", "yogg.brainlink", "yogg.tentacle",
 )
 
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
@@ -371,7 +387,24 @@ def show_brain(trace: Trace) -> None:
         print(f"  Lunatic Gaze     : {len(gaze)} hits for {total:,} damage")
     skulls = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.skull"))
     if skulls:
-        print(f"  skulls in arc    : {dict(skulls)}")
+        near = []
+        skull_guids = guids_of_entry(trace, NPC_LAUGHING_SKULL)
+        for rec in notes(trace, "yogg.skull"):
+            here = position_at(trace, rec.get("g", 0), rec["t"])
+            seen = [position_at(trace, guid, rec["t"]) for guid in skull_guids]
+            far = [math.dist(here, spot) for spot in seen if here and spot]
+            if far:
+                near.append(min(far))
+        tail = ""
+        if near:
+            out_of_range = sum(1 for gap in near if gap > LAUGHING_SKULL_RADIUS)
+            tail = (f", nearest skull median {median(near):.1f} yd,"
+                    f" {out_of_range} of {len(near)} flips with none inside {LAUGHING_SKULL_RADIUS:.0f}")
+        print(f"  skulls in arc    : {dict(skulls)}{tail}")
+
+    reach = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.tentacle"))
+    if reach:
+        print(f"  tentacle reach   : {dict(reach)}")
 
     reprisal = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_GRIM_REPRISAL]
     if reprisal:
@@ -384,6 +417,132 @@ def show_brain(trace: Trace) -> None:
         print(f"  exit decisions   : {dict(exits)}")
     if madness:
         print(f"  Induce Madness   : {len(madness)} rows")
+
+    # Induce Madness leaves no damage row: it strips all 100 Sanity from whoever is still below the
+    # platform when its 60 s cast ends, and Insane kills them when the charm falls off a minute later.
+    # So the Insane aura is the record of who failed to get out, and the only one there is.
+    caught = sorted({rec.get("d", 0) for rec in trace.of("aura")
+                     if rec.get("sp") == SPELL_INSANE and not rec.get("r")},
+                    key=lambda guid: trace.name(guid))
+    if caught:
+        names = ", ".join(f"{trace.name(guid)}({role_of(trace, guid)})" for guid in caught)
+        print(f"  caught by it     : {len(caught)} went Insane - {names}")
+
+
+def aura_windows(trace: Trace, spell: int) -> list[tuple[int, int, int]]:
+    """(guid, applied, removed) per aura window, closed at the last record when it never lifts."""
+    end = trace.records[-1].get("t", 0) if trace.records else 0
+    open_at: dict[int, int] = {}
+    out: list[tuple[int, int, int]] = []
+    for rec in sorted((r for r in trace.of("aura") if r.get("sp") == spell), key=lambda r: r["t"]):
+        guid = rec.get("d", 0)
+        if not rec.get("r"):
+            open_at.setdefault(guid, rec["t"])
+        elif guid in open_at:
+            out.append((guid, open_at.pop(guid), rec["t"]))
+    out.extend((guid, start, end) for guid, start in open_at.items())
+    return sorted(out, key=lambda w: w[1])
+
+
+def show_phase2(trace: Trace) -> None:
+    """Everything phase 2 is decided by that is not the brain room: who gets held by a Constrictor and
+    for how long, whether Brain Linked pairs ever close, and how often two nodes trade a bot."""
+    print("PHASE 2")
+
+    roster = roster_guids(trace)
+    squeeze = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_SQUEEZE]
+    grabs = aura_windows(trace, SPELL_SQUEEZE)
+    rescues = [rec for rec in trace.of("cast") if rec.get("sp") in SPELL_HAND_OF_PROTECTION]
+
+    if grabs:
+        total = sum(rec.get("a", 0) for rec in squeeze)
+        longest = max((stop - start) / 1000.0 for _, start, stop in grabs)
+        print(f"  Constrictor grabs  : {len(grabs)}, {total:,} damage, longest {longest:.1f} s")
+        for guid, start, stop in grabs:
+            took = sum(rec.get("a", 0) for rec in squeeze
+                       if rec.get("d") == guid and start <= rec["t"] <= stop + 500)
+            freed = any(rec.get("tgt") == guid and start <= rec["t"] <= stop + 500 for rec in rescues)
+            print(f"    {trace.name(guid):14} {role_of(trace, guid):6} {clock(start)} -> {clock(stop)}"
+                  f"  ({(stop - start) / 1000.0:5.1f} s) {took:>7,}"
+                  f"  {'Hand of Protection' if freed else 'rode it out'}")
+        print(f"    rescues cast     : {len(rescues)}")
+    else:
+        print("  no Squeeze rows - nothing was ever grabbed")
+
+    links = aura_windows(trace, SPELL_BRAIN_LINK)
+    link_dmg = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_BRAIN_LINK_DAMAGE]
+    if links:
+        print(f"  Brain Link         : {len(links)} links, "
+              f"{sum(rec.get('a', 0) for rec in link_dmg):,} damage")
+        for guid, start, stop in links:
+            # Only the owner carries the aura. The partner is whoever else took 63803 alongside it.
+            hurt = {rec.get("d") for rec in link_dmg if start <= rec["t"] <= stop} - {guid}
+            partner = next(iter(hurt), None)
+            if partner is None:
+                print(f"    {clock(start)} -> {clock(stop)}  {trace.name(guid):14}"
+                      f"  never ticked, so the pair stayed inside {BRAIN_LINK_RANGE:.0f} yd")
+                continue
+
+            gaps = []
+            for snap in trace.of("snap"):
+                if not start <= snap["t"] <= stop:
+                    continue
+                seen = {row[0]: (row[1], row[2]) for row in snap.get("u", [])
+                        if row[0] in (guid, partner)}
+                if len(seen) == 2:
+                    gaps.append(math.dist(seen[guid], seen[partner]))
+            if not gaps:
+                continue
+            over = sum(1 for gap in gaps if gap > BRAIN_LINK_RANGE)
+            print(f"    {clock(start)} -> {clock(stop)}  {trace.name(guid)}({role_of(trace, guid)})"
+                  f" + {trace.name(partner)}({role_of(trace, partner)})"
+                  f"  gap median {median(gaps):.1f} yd, {over} of {len(gaps)} samples over"
+                  f" {BRAIN_LINK_RANGE:.0f}")
+    else:
+        print("  no 63802 rows - nothing was ever linked")
+
+    show_handovers(trace)
+
+
+def show_handovers(trace: Trace) -> None:
+    """Two nodes trading a bot. A successful move handed to a different node inside two seconds is one
+    of them undoing the other, and it is what a raid strategy with no movement guard looks like."""
+    spans = [(start, stop) for phase, start, stop in phase_spans(trace) if phase == 2]
+    if not spans:
+        return
+
+    roster = roster_guids(trace)
+    last: dict[int, tuple[int, str]] = {}
+    per_bot: dict[int, int] = collections.Counter()
+    pairs: dict[tuple[str, str], int] = collections.Counter()
+    issued: dict[str, int] = collections.Counter()
+    for rec in trace.of("move"):
+        if not any(start <= rec["t"] <= stop for start, stop in spans):
+            continue
+        guid, node = rec.get("g", 0), str(rec.get("by", "?"))
+        if guid not in roster:
+            continue
+        issued[node] += 1
+        if not rec.get("ok"):
+            continue
+        before = last.get(guid)
+        last[guid] = (rec["t"], node)
+        if before and before[1] != node and rec["t"] - before[0] <= 2000:
+            per_bot[guid] += 1
+            pairs[tuple(sorted((before[1], node)))] += 1
+
+    if not per_bot:
+        return
+
+    by_role: dict[str, list[int]] = collections.defaultdict(list)
+    for guid, count in per_bot.items():
+        by_role[role_of(trace, guid)].append(count)
+    parts = ", ".join(f"{role} {sum(v) / len(v):.0f}/bot" for role, v in sorted(by_role.items()))
+    print(f"  node handovers     : {sum(per_bot.values())} in phase 2 ({parts})")
+    for (one, two), count in pairs.most_common(3):
+        print(f"    {one} <-> {two}: {count}")
+    for node, count in issued.most_common(4):
+        print(f"    issued {count:5} by {node}")
 
 
 def show_crush(trace: Trace) -> None:
@@ -452,6 +611,7 @@ def main() -> int:
     parser.add_argument("--phases", action="store_true", help="phase timeline and the pre-pull window")
     parser.add_argument("--clouds", action="store_true", help="cloud-orbit exposure per role")
     parser.add_argument("--portals", action="store_true", help="portal waves and assignments")
+    parser.add_argument("--phase2", action="store_true", help="Constrictor, Brain Link, node handovers")
     parser.add_argument("--brain", action="store_true", help="brain room, the Brain, skulls")
     parser.add_argument("--crush", action="store_true", help="Crush, knockback and Death Rays")
     parser.add_argument("--sanity", action="store_true", help="Sanity minima")
@@ -462,12 +622,12 @@ def main() -> int:
         return 1
 
     trace = Trace(args.file)
-    picked = (args.phases, args.clouds, args.portals, args.brain, args.crush, args.sanity)
+    picked = (args.phases, args.clouds, args.portals, args.phase2, args.brain, args.crush, args.sanity)
     every = not any(picked)
 
     show_banner(trace)
-    for wanted, section in zip(picked, (show_phases, show_clouds, show_portals, show_brain,
-                                        show_crush, show_sanity)):
+    for wanted, section in zip(picked, (show_phases, show_clouds, show_portals, show_phase2,
+                                        show_brain, show_crush, show_sanity)):
         if wanted or every:
             print()
             section(trace)

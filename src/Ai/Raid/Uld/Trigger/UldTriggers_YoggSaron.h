@@ -236,6 +236,15 @@ public:
     bool IsActive() override;
 };
 
+// A paladin frees somebody else's Constrictor Tentacle with Hand of Protection: it grants physical
+// school immunity, which purges Squeeze, and the Squeeze aura script kills the tentacle on removal.
+class YoggSaronSqueezeRescueTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronSqueezeRescueTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron squeeze rescue trigger") {}
+    bool IsActive() override;
+};
+
 // Covers both fears the fight has: Malady of the Mind in P2 and Deafening Roar in P3. Complements
 // the malady spread node, which handles the bot who is already feared.
 class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger

@@ -62,6 +62,11 @@ protected:
 
         // Shapes a circle cannot describe, like the Crush wedge. True means the spot is safe.
         std::function<bool(float, float)> clear;
+
+        // Where the bot would rather end up, on top of being safe. Tried first and dropped when
+        // nothing satisfies both, so it can never leave a bot standing in a hazard. Null means the
+        // first spot that clears everything will do.
+        std::function<bool(float, float)> preferred;
     };
 
     // False skips the tick outright.
@@ -264,6 +269,18 @@ class YoggSaronSanityConservationAction : public MovementAction
 {
 public:
     YoggSaronSanityConservationAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron sanity conservation action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Hand of Protection on somebody else's Constrictor Tentacle. The main tank is rescued like anyone
+// else: he is riding a vehicle and holding nothing while he is held, so the threat wipe costs less
+// than the grip does. Forbearance blocking his own Divine Shield and Lay on Hands for two minutes
+// afterwards is the price, and it is deliberate.
+class YoggSaronSqueezeRescueAction : public Action
+{
+public:
+    YoggSaronSqueezeRescueAction(PlayerbotAI* ai) : Action(ai, "yogg-saron squeeze rescue action") {}
 
     bool Execute(Event event) override;
 };

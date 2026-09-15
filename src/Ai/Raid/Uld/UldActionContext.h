@@ -137,6 +137,7 @@ public:
         creators["yogg-saron guardian control action"] = &RaidUlduarActionContext::yogg_saron_guardian_control_action;
         creators["yogg-saron sanity conservation action"] = &RaidUlduarActionContext::yogg_saron_sanity_conservation_action;
         creators["yogg-saron squeeze escape action"] = &RaidUlduarActionContext::yogg_saron_squeeze_escape_action;
+        creators["yogg-saron squeeze rescue action"] = &RaidUlduarActionContext::yogg_saron_squeeze_rescue_action;
         creators["algalon reset encounter state action"] = &RaidUlduarActionContext::algalon_reset_encounter_state_action;
         creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
         creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
@@ -318,6 +319,7 @@ private:
     static Action* yogg_saron_guardian_control_action(PlayerbotAI* ai) { return new YoggSaronGuardianControlAction(ai); }
     static Action* yogg_saron_sanity_conservation_action(PlayerbotAI* ai) { return new YoggSaronSanityConservationAction(ai); }
     static Action* yogg_saron_squeeze_escape_action(PlayerbotAI* ai) { return new YoggSaronSqueezeEscapeAction(ai); }
+    static Action* yogg_saron_squeeze_rescue_action(PlayerbotAI* ai) { return new YoggSaronSqueezeRescueAction(ai); }
     static Action* algalon_reset_encounter_state_action(PlayerbotAI* ai) { return new AlgalonResetEncounterStateAction(ai); }
     static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
     static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }

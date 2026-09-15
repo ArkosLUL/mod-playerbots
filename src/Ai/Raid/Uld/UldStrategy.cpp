@@ -792,9 +792,11 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron phase 2 spacing trigger",
         { NextAction("yogg-saron phase 2 spacing action", ACTION_RAID + 3) }));
 
+    // Over the dps resolver and the Sanity Well walk, under the hazard dodges and the fear counter: a
+    // link costs 2 Sanity and a shared hit a second, a Death Ray costs the bot.
     triggers.push_back(new TriggerNode(
         "yogg-saron brain link trigger",
-        { NextAction("yogg-saron brain link action", ACTION_RAID) }));
+        { NextAction("yogg-saron brain link action", ACTION_RAID + 1.5f) }));
 
     triggers.push_back(new TriggerNode(
         "yogg-saron move to enter portal trigger",
@@ -845,6 +847,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     triggers.push_back(new TriggerNode(
         "yogg-saron squeeze escape trigger",
         { NextAction("yogg-saron squeeze escape action", ACTION_RAID + 1) }));
+
+    // Above the sanity conservation retreat: cutting somebody out of 7.5k a second beats walking
+    // somebody else to a well.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron squeeze rescue trigger",
+        { NextAction("yogg-saron squeeze rescue action", ACTION_RAID + 6) }));
 
     //
     // Algalon the Observer
@@ -1003,5 +1011,6 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDisplacementGuardMultiplier(botAI));
+    multipliers.push_back(new YoggSaronMovementGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronAntiFearTotemGuardMultiplier(botAI));
 }

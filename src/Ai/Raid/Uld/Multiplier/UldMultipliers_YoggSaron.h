@@ -44,6 +44,23 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Yogg's body knocks players away once a second forever inside 13.3 yd, and the walk out of that ring
+// at the phase 1 to 2 handover is a forced move against reach melee's combat one. Neither wins
+// outright: the two traded a melee bot back and forth every ~300 ms for the whole walk, and 77 times
+// over one phase 2. So reach stands down over exactly the two windows where an encounter node owns
+// where the bot stands, and nowhere else - it is the only generic way a bot closes on anything, so a
+// blanket zero strands the raid.
+class YoggSaronMovementGuardMultiplier : public Multiplier
+{
+public:
+    YoggSaronMovementGuardMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron movement guard multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 class YoggSaronAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
 {
 public:
