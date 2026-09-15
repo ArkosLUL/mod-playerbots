@@ -311,6 +311,17 @@ constexpr float ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS = 30.0f;
 // skull: one pull had a bot flip between two orientations once a second for 48 seconds.
 constexpr float ULDUAR_YOGG_SARON_FACING_TOLERANCE = 0.1f;
 
+// Facing a skull is decided by where the bot stands, not by what it points at: set facing,
+// AttackAction and PlayerbotAI::CastSpell each turn it back at its target inside the same tick. So the
+// answer is a sidestep around the tentacle, and 15 yd is enough of one - one pull measured a median
+// 4.3 yd from the tentacle against 22.4 yd to the skull, with the two inside 90 degrees of each other
+// in 459 of 640 samples.
+constexpr float ULDUAR_YOGG_SARON_ILLUSION_FACING_SEARCH_RADIUS = 15.0f;
+
+// The sweep needs a circle to ring outward from, and a bot has no business standing under a skull
+// anyway. Small on purpose: the constraint that matters is angular, not radial.
+constexpr float ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS = 5.0f;
+
 // How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
 // a mind control is always a death. The lead is taken out of the window the raid has to damage the
@@ -436,6 +447,16 @@ bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 // test is bounding-radius inclusive: 164 of 235 probe flips in one pull had no skull inside 30 yd.
 std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI);
 
+// The same skulls without the arc test, for deciding where to stand rather than what is hitting the
+// bot now. A candidate spot is judged on the heading it would force, so the bot's current facing has
+// no bearing on which skulls matter.
+std::vector<Position> GetYoggSaronSkullsInRange(PlayerbotAI* botAI);
+
+// Whether standing at (x, y) and facing (targetX, targetY) leaves every one of `skulls` outside the
+// front 180 degrees, which is the exact filter spell_yogg_saron_lunatic_gaze picks its targets with.
+bool YoggSaronFacingClearOfSkulls(std::vector<Position> const& skulls, float x, float y, float targetX,
+                                  float targetY);
+
 // The raider a Squeeze rescue should be spent on: lowest health first, nearest as the tie-break, in
 // Hand of Protection's range, and without Forbearance. Never the bot itself - a paladin who is held
 // bubbles instead. nullptr when there is nobody worth the cooldown.
@@ -534,6 +555,12 @@ bool YoggSaronRouteClearOfBody(Player* bot, float x, float y);
 // each leg halves the turn the next one has to make, so the bot walks the arc rather than the chord.
 bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& waypoint);
 
+// Any live Influence Tentacle within `radius`, disguise included. A tentacle is re-stamped as a Suit
+// of Armor, a Deathsworn Zealot or a Consort the instant it spawns and only reverts to entry 33943
+// when something damages it, so a sweep for 33943 alone reports a room full of them as empty. One
+// grid visit for the whole list.
+Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius);
+
 // Whether the Brain is safe to hit: every Influence Tentacle in this room dead. Scoped to the room
 // rather than swept at 200 yd, which is one yard short of reaching the next room's tentacles.
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
@@ -541,6 +568,11 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
 // Live Crusher Tentacles to angle away from, each as its position plus the facing its Crush cone
 // follows. The one currently hitting the bot is left out: that bot is hit wherever it stands, and
 // moving only drags the cone around behind it.
+//
+// A Crusher with nothing inside its melee range is left out too. Crush is a 100% proc on the
+// tentacle's own white swing and UpdateAI will not swing at a victim out of melee range, so an
+// unoccupied Crusher cannot produce a cone at all: one pull spent 251 hazard rows routing 25 bots
+// around empty floor. Every one of its six cones fired with no player inside 12 yd and a pet at 5.5.
 //
 // Shared between the spacing trigger and its action so the two cannot disagree about what a wedge is.
 // The trigger asks at the tight arc and the action at the wide one, which is what keeps a tentacle

@@ -444,6 +444,29 @@ bool YoggSaronLaughingSkullTrigger::IsActive()
     return !GetYoggSaronSkullsInArc(botAI).empty();
 }
 
+bool YoggSaronIllusionFacingTrigger::IsActive()
+{
+    // Level test first: this runs for every bot in Ulduar and the sweeps behind it are not free.
+    if (!IsInBrainLevel() || !botAI->CanMove())
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    // What is hitting the bot now, not what is in range: a bot already facing away from every skull is
+    // standing somewhere that works, whatever it may have to walk through later.
+    return !GetYoggSaronSkullsInArc(botAI).empty();
+}
+
+bool YoggSaronPetGuardTrigger::IsActive()
+{
+    if (bot->m_Controlled.empty() || !IsYoggSaronFight())
+        return false;
+
+    return bot->FindNearestCreature(NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE, true);
+}
+
 bool YoggSaronLunaticGazeTrigger::IsActive()
 {
     // 64163 is a 4-second aura Yogg puts on himself, ticking 64164 once a second at 130 yd through his

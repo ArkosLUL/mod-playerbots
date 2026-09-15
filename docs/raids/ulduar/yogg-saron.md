@@ -334,6 +334,24 @@ length of every window. The tentacle cannot be tanked either — `DamageTaken` d
 `DoResetThreatList(); AddThreat(who, 100000); AttackStart(who)` on any direct damage, so it re-faces
 whoever hit it last, in both traces a hunter pet. No bot controls where the wedge points.
 
+**An unoccupied Crusher cannot Crush at all, and the pets were the occupants.** `UpdateAI` swings
+only at a victim inside melee range and `DoMeleeAttackIfReady` tests it again, so with nothing in
+reach there is no white swing, no proc and no cone — it channels Diminish Power instead. Once melee
+stopped targeting 33966 the only things left in there were pets: every one of six cones in one pull
+fired with **no player inside 12 yd** and a Felguard at 5.5, and the closest approach all fight ran
+Shadowfiend 0.4, ghoul 1.1, Felguard 1.2, hunter pet 1.3 — the first actual player at 2.3. It cost
+**162,663 damage and four killing blows**, and 251 hazard rows routing 25 bots around floor that was
+never dangerous. `yogg-saron pet guard` walks `m_Controlled` and pulls anything that is a Crusher's
+victim or inside its melee range, re-issued every tick rather than latched because a Shadowfiend and
+an Army of the Dead ghoul re-acquire on their own AI where a hunter or warlock pet takes the
+command. Either half of that test is enough on its own: `SetInCombatWithZone` hands the tentacle a
+threat list holding the whole raid, so a pet that never attacked can still come up as the victim.
+
+So `GetYoggSaronCrushWedges` raises a wedge **only for a Crusher that currently has something inside
+its melee range**, which keeps it armed for exactly the case the guard cannot close — an
+uncommandable guardian that got back in — and switches it off the rest of the time. It costs the
+Diminish Power interrupts that pet melee was buying, ~1.5 s apiece.
+
 ## Diminish Power is why the Crusher dies first
 
 `64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−21% damage done raid-wide**
@@ -470,10 +488,16 @@ ran produced 0 mind controls, 17 where it never ran produced 10.
 
 **Damaging the Brain while an Influence Tentacle (33943) lives deals nothing and kills the attacker** —
 `boss_yoggsaron_brain::DamageTaken` zeroes the damage and calls `Unit::Kill(who, who)`. So approaching
-it is gated on two reads of one server fact, neither of them a human: no 33943 alive, **and** the room's
-illusion door (`194635` Chamber / `194636` Icecrown / `194637` Stormwind) reading `GO_STATE_ACTIVE`,
-which the Brain sets in the same branch that fires when the last tentacle dies. Reading it wrong leaves
-the bot standing still rather than walking in to die.
+it is gated on server facts, never on a human: from an illusion room, no live tentacle **and** that
+room's illusion door (`194635` Chamber / `194636` Icecrown / `194637` Stormwind) reading
+`GO_STATE_ACTIVE`, which the Brain sets in the same branch that fires when the last tentacle dies.
+Reading it wrong leaves the bot standing still rather than walking in to die.
+
+**From inside the brain chamber, ask the doors instead.** `DoAction` shuts all three when it
+prepares an illusion and opens exactly one on the last kill, so **any** door standing open means
+this wave is done — an exact test where a radius cannot be one. The sweep it replaces reached 110 yd
+and the Chamber's far tentacles spawn 167 yd out, so a bot on the Brain could be told the room was
+clear with six of them alive.
 
 The old gate waited on the bot's **master**, a human, to stand in the brain room, and Brain health only
 ever moved in windows where one did — the windows without a human left it untouched.
@@ -521,6 +545,20 @@ old 200 yd sweep was one yard from reading the next room's tentacles — and rea
 wasted tick, it is `Unit::Kill(who, who)`. The Brain's own test is `_tentacleCount < _tentacleTotal`,
 a per-wave counter, so per-room is the right scope.
 
+**Read the disguises too, or a full room reports empty.** Every spawn in all three summon groups
+satisfies one of the three branches above, so **no tentacle is ever entry 33943 when the raid
+arrives**, and `boss_yoggsaron_influence_tentacle::DamageTaken` reverts it only once something has
+hit it. A sweep for 33943 alone therefore answers *cleared* on arrival, `YoggSaronRoomStateOf`
+returns `doorshut` instead of `walkingin`, and `walkingin` is the only state the walk into the room
+moves on — which closes the same deadlock from the other side: no walk → no line of sight → no
+target → no damage → no reveal. Icecrown and the Chamber escape it on luck, having sight of a
+tentacle from the landing spot, so the dps resolver picks a disguise anyway and the first hit
+unlocks the room: 3.7 s and 1.8 s to the first cast in one pull. Stormwind's sit behind the Keep
+doorway, and there seven bots stood on the landing coordinate — **0.0 yd moved over 80 s**, 0 casts
+at a tentacle — until Induce Madness took all 100 Sanity off nine of them.
+`YoggSaronLiveIllusionMob` sweeps all eight entries in one grid visit and owns every "is a tentacle
+alive" read, the `yogg.tentacle` probe included.
+
 **The Laughing Skull cannot be killed, only faced away from.** 33990, faction 14, `unit_flags`
 `UNIT_FLAG_NOT_SELECTABLE` with `flags_extra 128`: neither targetable nor killable.
 `creature_template_addon.auras = 64167` triggers **64168 every 1000 ms — 1750 shadow damage, −2
@@ -543,6 +581,21 @@ it is attacking in any case — corrects a heading only past `ULDUAR_YOGG_SARON_
 (0.1 rad, ~6°), and never claims the tick. The 30 yd read is measured plainly too:
 `GetCreatureListWithEntryInGrid` is bounding-radius inclusive, and **164 of 235** probe flips in one
 pull had no skull inside 30 yd at all.
+
+**Where the bot stands is the only thing that can hold a facing.** The heading is not the bot's to
+keep, but the side of the tentacle it fights from is, and the geometry is generous: with the
+tentacle and the nearest skull inside 90° of each other in **459 of 640** samples — median
+separation 72° — the bot was nearer the tentacle in **73%** of those, a median 4.3 yd against 22.4
+yd to the skull, so a sidestep of a few yards swings the skull behind. `yogg-saron illusion facing`
+is a spacing node whose `clear` predicate asks whether the heading a candidate spot *would force*
+leaves every skull within 30 yd outside the front 180°, with `preferred` keeping it inside reach of
+the target. It has no fallback: every spot the sweep rejects is one the bot would be gazed on
+anyway, so standing still beats walking for nothing. The movement guard zeroes `ReachTargetAction`
+while a skull is in arc — reach closes on the tentacle, which is the thing being walked around, so
+the two pull apart by construction. Anchoring is the one thing the base class could not already do:
+its sweep was centred on the boss platform, 93 yd above and up to 124 yd away, so `Anchor()` is
+virtual and this node returns the room middle. Untreated it cost **122,980 damage and 272 Sanity**
+in one pull, 14% of everything lost.
 
 **There is no way out of an illusion room until its tentacles are dead.** All three Flee to the
 Surface goobers (194625) stand in the brain chamber — (2000.65, 5.79), (1943.06, −23.51),

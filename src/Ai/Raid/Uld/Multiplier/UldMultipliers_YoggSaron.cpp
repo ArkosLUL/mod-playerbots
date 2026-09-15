@@ -94,10 +94,18 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if (action->getName() == "reach party member to heal")
         return 1.0f;
 
-    // Both windows are within a few yards of the middle of the boss platform, and the phase read below
-    // is a pair of 200 yd grid sweeps, so the arithmetic goes first.
+    // The illusion rooms, where reach melee would walk the bot straight back onto the spot the facing
+    // node just moved it off - the tentacle is the thing it is being walked around, so the two pull in
+    // opposite directions by construction. Scoped to a skull actually being in arc, which is the same
+    // condition that node fires on, so reach is free again the moment the bot is standing right.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
-        return 1.0f;
+    {
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (!target || !target->IsAlive())
+            return 1.0f;
+
+        return GetYoggSaronSkullsInArc(botAI).empty() ? 1.0f : 0.0f;
+    }
 
     float const fromMiddle =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());

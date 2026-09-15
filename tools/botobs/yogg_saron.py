@@ -51,6 +51,13 @@ NPC_YOGG_SARON = 33288
 NPC_BRAIN = 33890
 NPC_INFLUENCE_TENTACLE = 33943
 NPC_LAUGHING_SKULL = 33990
+NPC_CRUSHER_TENTACLE = 33966
+
+# The six entries Creature::UpdateEntry disguises an Influence Tentacle as, picked by where it spawned
+# rather than by which illusion is running. A tentacle wears one from the moment it is summoned and
+# only reverts to 33943 once something damages it, so counting 33943 alone counts revealed tentacles,
+# never the room.
+NPC_TENTACLE_DISGUISES = (33433, 33567, 33716, 33717, 33718, 33719, 33720)
 
 SPELL_SANITY = 63050
 SPELL_INSANE = 63120
@@ -70,6 +77,11 @@ SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 # melee pile. Measured: novas at 2.2-4.0 yd hit 9-10 players, novas at 8.5-14.8 yd hit 22-24.
 NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
+
+# GetCombatReach of both ends plus 4/3, floored at NOMINAL_MELEE_RANGE and widened again by movement
+# leeway, so the real threshold moves. Kept generous because the question this answers is "what was in
+# there at all": every Crush in one pull had a pet at 5.5 yd and no player nearer than 12.
+CRUSHER_MELEE_RANGE = 10.0
 
 # 64167 on a Laughing Skull triggers 64168 at 30 yd, and the module's node uses the same number.
 LAUGHING_SKULL_RADIUS = 30.0
@@ -101,6 +113,7 @@ PROBE_KEYS = (
     "yogg.phase", "yogg.engaged", "yogg.room", "yogg.roomstate", "yogg.cloudreach", "yogg.knockback",
     "yogg.crush", "yogg.deathray", "yogg.wave", "yogg.portal", "yogg.portalslot", "yogg.brainteam",
     "yogg.skull", "yogg.exit", "yogg.handover", "yogg.squeeze", "yogg.brainlink", "yogg.tentacle",
+    "yogg.gaze", "yogg.petguard",
 )
 
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
@@ -329,6 +342,47 @@ def show_portals(trace: Trace) -> None:
     if team:
         print(f"  reached the brain level: {len(arrived & set(team))} of {len(team)} on the team"
               f" ({len(arrived)} bots in all)")
+
+    show_rooms(trace, waves)
+
+
+def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
+    """What each wave did with the room it landed in. A wave that never reaches `fighting` is a
+    room the raid stood in rather than cleared, and the gap between arriving and the first cast at a
+    tentacle is where that goes wrong: every tentacle is disguised on arrival, so a bot with none in
+    sight has nothing to reveal one with and the room reads as already clear."""
+    if not waves:
+        return
+
+    tentacles = set()
+    for entry in (NPC_INFLUENCE_TENTACLE,) + NPC_TENTACLE_DISGUISES:
+        tentacles |= guids_of_entry(trace, entry)
+
+    ends = [start for start, _ in waves[1:]] + [trace.records[-1].get("t", 0) if trace.records else 0]
+    print()
+    for (start, ordinal), stop in zip(waves, ends):
+        window = [rec for rec in notes(trace, "yogg.room") if start <= rec["t"] <= stop]
+        rooms = collections.Counter(str(rec.get("txt", "")) for rec in window
+                                    if str(rec.get("txt", "")) in ("stormwind", "icecrown", "chamber"))
+        if not rooms:
+            print(f"  wave {ordinal}: nobody reached an illusion room")
+            continue
+
+        room, bots = rooms.most_common(1)[0]
+        entered = min(rec["t"] for rec in window if str(rec.get("txt", "")) == room)
+
+        states = {str(rec.get("txt", "")) for rec in notes(trace, "yogg.roomstate")
+                  if start <= rec["t"] <= stop}
+        engaged = [rec["t"] for rec in trace.of("cast")
+                   if start <= rec["t"] <= stop and rec.get("tgt") in tentacles]
+
+        if engaged:
+            delay = f"{(min(engaged) - entered) / 1000.0:.1f} s to the first cast at a tentacle"
+        else:
+            delay = "NEVER cast at a tentacle"
+        cleared = "cleared" if states & {"tobrain", "atbrain"} else "not cleared"
+        print(f"  wave {ordinal} {room:10} {bots} bots, entered {clock(entered)}, {delay}, {cleared}")
+        print(f"    states: {', '.join(sorted(states)) or 'none'}")
 
 
 def position_at(trace: Trace, guid: int, when: int):
@@ -580,6 +634,89 @@ def show_crush(trace: Trace) -> None:
     circles = [rec for rec in trace.of("haz") if rec.get("sp") == SPELL_KNOCK_BACK]
     print(f"  haz rows: {len(lanes)} Crush wedges, {len(circles)} body rings")
 
+    guard = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.petguard"))
+    if guard:
+        print(f"  pet guard        : {dict(guard)}")
+
+    show_crush_melee(trace)
+
+
+def show_crush_melee(trace: Trace) -> None:
+    """What stood inside a Crusher's melee range. Crush is a 100% proc on the tentacle's own
+    white swing and UpdateAI will not swing at a victim out of melee range, so whatever is in there is
+    what fires every cone the raid eats - and a pet counts."""
+    crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
+    if not crushers:
+        return
+
+    roster = roster_guids(trace)
+    closest: dict[int, float] = {}
+    for snap in trace.of("snap"):
+        spots = {row[0]: (row[1], row[2], row[5]) for row in snap.get("u", [])}
+        live = [spot for guid, spot in spots.items() if guid in crushers and spot[2] > 0]
+        if not live:
+            continue
+        for guid, spot in spots.items():
+            if guid not in roster and guid not in trace.owners:
+                continue
+            gap = min(math.dist((spot[0], spot[1]), (other[0], other[1])) for other in live)
+            closest[guid] = min(closest.get(guid, gap), gap)
+
+    inside = sorted((gap, guid) for guid, gap in closest.items() if gap <= CRUSHER_MELEE_RANGE)
+    if not inside:
+        print(f"  nothing came inside {CRUSHER_MELEE_RANGE:.0f} yd of a Crusher")
+        return
+
+    print(f"  inside {CRUSHER_MELEE_RANGE:.0f} yd of a Crusher ({len(inside)}):")
+    for gap, guid in inside[:8]:
+        kind = role_of(trace, guid) if guid in roster else "pet"
+        print(f"    {trace.name(guid):28} {kind:6} {gap:5.1f} yd")
+
+
+# What each source takes off a 25-man Sanity bar, from spell_yogg_saron_sanity_reduce. Induce Madness
+# is not in here: it leaves no damage or aura row of its own, so the Insane aura is the only record
+# that it landed, and what it takes is the whole bar.
+SANITY_COSTS = {65301: 12, 63830: 3, 63881: 3, 63803: 2, 64168: 2, 64164: 4}
+SANITY_NAMES = {65301: "Psychosis", 63830: "Malady of the Mind", 63881: "Malady trigger",
+                63803: "Brain Link", 64168: "Lunatic Gaze (skull)", 64164: "Lunatic Gaze (Yogg)"}
+
+
+def show_sanity_sources(trace: Trace) -> None:
+    """Where the Sanity went, reconstructed from the spells that take it. Deduplicated on
+    (time, spell, target) because one landed hit can leave both a dmg and an aura row."""
+    roster = roster_guids(trace)
+    lost: dict[int, int] = collections.Counter()
+    seen: set[tuple[int, int, int]] = set()
+    for rec in trace.of("dmg", "aura"):
+        spell, victim = rec.get("sp"), rec.get("d")
+        if spell not in SANITY_COSTS or victim not in roster:
+            continue
+        if rec.get("e") == "aura" and rec.get("r"):
+            continue
+        key = (rec["t"], spell, victim)
+        if key in seen:
+            continue
+        seen.add(key)
+        lost[spell] += SANITY_COSTS[spell]
+
+    insane = sorted({rec.get("d", 0) for rec in trace.of("aura")
+                     if rec.get("sp") == SPELL_INSANE and not rec.get("r")})
+    madness = len(insane) * 100
+
+    total = sum(lost.values()) + madness
+    if not total:
+        return
+
+    print("  where it went:")
+    rows = [("Induce Madness", madness)] if madness else []
+    rows += [(SANITY_NAMES[spell], stacks) for spell, stacks in lost.items()]
+    for label, stacks in sorted(rows, key=lambda row: -row[1]):
+        print(f"    {label:22} {stacks:5}  {stacks * 100.0 / total:4.1f}%")
+    print(f"    {'total':22} {total:5}")
+    if insane:
+        print(f"    Induce Madness is {len(insane)} bots x 100, every one still below the platform"
+              f" when the cast ended")
+
 
 def show_sanity(trace: Trace) -> None:
     print("SANITY")
@@ -603,6 +740,8 @@ def show_sanity(trace: Trace) -> None:
     insane = [guid for guid, stacks in low.items() if stacks <= 0]
     if insane:
         print(f"  went Insane: {', '.join(trace.name(g) for g in insane)}")
+
+    show_sanity_sources(trace)
 
 
 def main() -> int:

@@ -131,7 +131,7 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
         return false;
 
     HazardSweepCache sweep;
-    Position const middle = ULDUAR_YOGG_SARON_MIDDLE;
+    Position const middle = Anchor();
 
     // The cap is the load-bearing half: a bot dodging outward otherwise walks out of spell range and
     // stops contributing for the rest of the phase.
@@ -313,6 +313,99 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 bool YoggSaronPhase2SpacingAction::RouteAcceptable(float x, float y) const
 {
     return YoggSaronRouteClearOfBody(bot, x, y);
+}
+
+bool YoggSaronIllusionFacingAction::Collect(HazardSet& set)
+{
+    if (!YoggSaronRoomMiddle(bot, roomMiddle))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    std::vector<Position> const skulls = GetYoggSaronSkullsInRange(botAI);
+    if (skulls.empty())
+        return false;
+
+    // FindNearestPositionClearOfHazards returns nothing for an empty hazard list, and the constraint
+    // here is angular rather than radial, so the skulls go in as circles only to give the sweep
+    // something to ring outward from. Standing under one is worth avoiding on its own account.
+    for (Position const& skull : skulls)
+        set.hazards.emplace_back(skull, ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS);
+
+    float const targetX = target->GetPositionX();
+    float const targetY = target->GetPositionY();
+
+    set.clear = [skulls, targetX, targetY](float x, float y)
+    { return YoggSaronFacingClearOfSkulls(skulls, x, y, targetX, targetY); };
+
+    // No fallback. Every candidate the sweep rejects is one where the bot would be gazed anyway, so
+    // there is nothing left to retry on and standing still beats a walk that buys nothing.
+    float const reach =
+        botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+
+    set.preferred = [targetX, targetY, reach](float x, float y)
+    { return std::hypot(targetX - x, targetY - y) <= reach; };
+
+    return true;
+}
+
+bool YoggSaronPetGuardAction::Execute(Event /*event*/)
+{
+    std::vector<Creature*> owned;
+    for (Unit* controlled : bot->m_Controlled)
+        if (Creature* creature = controlled->ToCreature())
+            owned.push_back(creature);
+
+    if (owned.empty())
+        return false;
+
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE,
+                                        ULDUAR_YOGG_SARON_CRUSH_RANGE + ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS);
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && (!target->IsAlive() || target->GetEntry() == NPC_CRUSHER_TENTACLE))
+        target = nullptr;
+
+    bool pulled = false;
+    for (Creature* pet : owned)
+    {
+        Creature* touching = nullptr;
+        for (Creature* crusher : crushers)
+        {
+            // Either half is enough. Being the victim is what makes the tentacle swing, and standing
+            // in reach is what lets it: SetInCombatWithZone gives it a threat list holding the whole
+            // raid, so a pet that never attacked can still come up as the victim.
+            if (crusher->IsAlive() && (crusher->GetVictim() == pet || crusher->IsWithinMeleeRange(pet)))
+            {
+                touching = crusher;
+                break;
+            }
+        }
+
+        if (!touching)
+            continue;
+
+        pet->AttackStop();
+
+        // Re-issued every tick rather than latched: a hunter or warlock pet takes the command and
+        // stays off, but a Shadowfiend and an Army of the Dead ghoul run their own AI and re-acquire.
+        if (target && pet->AI())
+            pet->AI()->AttackStart(target);
+        else
+            pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
+
+        pulled = true;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.petguard", pulled ? "pulled" : "clear");
+
+    // Never claims the tick. Commanding a pet costs the bot nothing it was going to do with its own
+    // body, and the node sits above the dps resolver only so it is asked before the pet swings again.
+    return false;
 }
 
 size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseOne)

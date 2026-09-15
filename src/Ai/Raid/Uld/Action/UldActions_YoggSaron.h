@@ -77,6 +77,10 @@ protected:
     // and a bot needing a sidestep has every outward candidate rejected.
     virtual float MaxFromMiddle() const { return ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE; }
 
+    // What MaxFromMiddle is measured against, and what the sweep biases toward. The boss platform for
+    // both phases that happen on it; an illusion room is 93 yd below it and its own middle away.
+    virtual Position Anchor() const { return ULDUAR_YOGG_SARON_MIDDLE; }
+
     // Whether the walk to a candidate is acceptable, not just the candidate itself. No opinion by
     // default: for most hazards crossing one to leave another still beats standing still.
     virtual bool RouteAcceptable(float /*x*/, float /*y*/) const { return true; }
@@ -125,6 +129,42 @@ protected:
     float SearchRadius() const override { return ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS; }
     float MaxFromMiddle() const override { return ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE; }
     bool RouteAcceptable(float x, float y) const override;
+};
+
+// Stand so that facing the tentacle faces away from the skulls. Facing itself cannot be held - set
+// facing, AttackAction and CastSpell each turn the bot back at its target inside the same tick - so
+// the only lever is which side of the tentacle the bot fights from. One pull ate 122,980 damage and
+// 272 Sanity with the tentacle and the nearest skull inside 90 degrees of each other in 459 of 640
+// samples, and the bot nearer the tentacle in 73% of those, which is a sidestep of a few yards.
+class YoggSaronIllusionFacingAction : public YoggSaronSpacingAction
+{
+public:
+    YoggSaronIllusionFacingAction(PlayerbotAI* ai)
+        : YoggSaronSpacingAction(ai, "yogg-saron illusion facing action")
+    {
+    }
+
+protected:
+    bool Collect(HazardSet& set) override;
+    float SearchRadius() const override { return ULDUAR_YOGG_SARON_ILLUSION_FACING_SEARCH_RADIUS; }
+    float MaxFromMiddle() const override { return ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS; }
+    Position Anchor() const override { return roomMiddle; }
+
+private:
+    // Filled by Collect, which is what decides the room the bot is standing in. Anchor() is called
+    // after it and is const, so it cannot work that out for itself.
+    Position roomMiddle;
+};
+
+// Keep pets and guardians out of a Crusher Tentacle's melee range. Nothing else can put one there:
+// melee bots are already barred from targeting a Crusher, and every Crush cone in one pull was
+// procced by somebody's pet while the nearest player stood 12 yd clear.
+class YoggSaronPetGuardAction : public Action
+{
+public:
+    YoggSaronPetGuardAction(PlayerbotAI* ai) : Action(ai, "yogg-saron pet guard action") {}
+
+    bool Execute(Event event) override;
 };
 
 // One owner of every non-tank's target for the whole encounter, in place of the raid icons this fight

@@ -16,8 +16,11 @@
 #include <vector>
 
 #include "AiObjectContext.h"
+#include "CellImpl.h"
 #include "Creature.h"
 #include "DBCEnums.h"
+#include "GridNotifiers.h"
+#include "GridNotifiersImpl.h"
 #include "GameObject.h"
 #include "Group.h"
 #include "Player.h"
@@ -217,9 +220,17 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI)
     uint32 doorEntry = 0;
     switch (YoggSaronRoomOf(bot))
     {
-        // Already through it.
+        // Already through it, and out of reach of the room it came from. The Brain shuts all three
+        // doors when it prepares an illusion and opens exactly one in the same statement that fires
+        // when that room's last tentacle dies, so any door standing open means this wave is done.
+        // A radius cannot answer it from in here: the Chamber's far tentacles are 167 yd out.
         case YOGG_SARON_ROOM_BRAIN:
-            return true;
+            for (uint32 entry = GO_CHAMBER_ILLUSION_DOORS; entry <= GO_STORMWIND_ILLUSION_DOORS; ++entry)
+                if (GameObject* open = bot->FindNearestGameObject(entry, 200.0f))
+                    if (open->GetGoState() == GO_STATE_ACTIVE)
+                        return true;
+
+            return false;
         case YOGG_SARON_ROOM_STORMWIND:
             doorEntry = GO_STORMWIND_ILLUSION_DOORS;
             break;
@@ -354,6 +365,43 @@ std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
     }
 
     return inArc;
+}
+
+std::vector<Position> GetYoggSaronSkullsInRange(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> skulls;
+    bot->GetCreatureListWithEntryInGrid(skulls, NPC_LAUGHING_SKULL, ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS);
+
+    std::vector<Position> found;
+    for (Creature* skull : skulls)
+        if (skull->IsAlive() && bot->GetExactDist2d(skull) <= ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS)
+            found.push_back(skull->GetPosition());
+
+    return found;
+}
+
+bool YoggSaronFacingClearOfSkulls(std::vector<Position> const& skulls, float x, float y, float targetX,
+                                  float targetY)
+{
+    float const heading = std::atan2(targetY - y, targetX - x);
+
+    for (Position const& skull : skulls)
+    {
+        // The skull keeps hitting from wherever it stands, so a candidate is judged on the heading the
+        // target forces there, not on how far the walk moved the bot away from it.
+        float const bearing = std::atan2(skull.GetPositionY() - y, skull.GetPositionX() - x);
+
+        float offset = Position::NormalizeOrientation(bearing - heading);
+        if (offset > static_cast<float>(M_PI))
+            offset = 2.0f * static_cast<float>(M_PI) - offset;
+
+        if (offset < static_cast<float>(M_PI) / 2.0f)
+            return false;
+    }
+
+    return true;
 }
 
 YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
@@ -913,6 +961,51 @@ bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& cloud
     return true;
 }
 
+namespace
+{
+
+// The check behind "nearest npcs", cut down to the illusion entries before the range test.
+struct IllusionMobInRangeCheck
+{
+    Acore::AnyUnitInObjectRangeCheck inRange;
+
+    bool operator()(Unit* unit)
+    {
+        if (!unit->IsAlive())
+            return false;
+
+        return std::find(ULDUAR_YOGG_SARON_ILLUSION_MOBS.begin(), ULDUAR_YOGG_SARON_ILLUSION_MOBS.end(),
+                         unit->GetEntry()) != ULDUAR_YOGG_SARON_ILLUSION_MOBS.end() &&
+               inRange(unit);
+    }
+};
+
+// Whether a Crusher Tentacle can produce a Crush cone at all. 64146 is a self-buff procced by its own
+// white swing at 100%, and UpdateAI swings only at a victim inside melee range - GetCombatReach of
+// both plus 4/3, floored at NOMINAL_MELEE_RANGE - so with nothing in reach there is no swing and no
+// cone. Pets count: every Crush in one pull was procced by a Felguard at 5.5 yd while the nearest
+// player stood 12 yd out.
+bool YoggSaronCrusherCanSwing(Creature* crusher)
+{
+    Unit* victim = crusher->GetVictim();
+
+    return victim && victim->IsAlive() && crusher->IsWithinMeleeRange(victim);
+}
+
+}  // namespace
+
+Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius)
+{
+    Player* bot = botAI->GetBot();
+
+    std::vector<Unit*> found;
+    IllusionMobInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, radius)};
+    Acore::UnitListSearcher<IllusionMobInRangeCheck> searcher(bot, found, check);
+    Cell::VisitObjects(bot, searcher, radius);
+
+    return found.empty() ? nullptr : found.front();
+}
+
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
 {
     // Room radius, not the 200 yd the rest of this fight sweeps at: the Stormwind and Chamber middles
@@ -925,7 +1018,7 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
                              ? ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS + ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS
                              : ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
 
-    return !bot->FindNearestCreature(NPC_INFLUENCE_TENTACLE, radius, true);
+    return !YoggSaronLiveIllusionMob(botAI, radius);
 }
 
 std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius)
@@ -939,6 +1032,9 @@ std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRa
     for (Creature* crusher : crushers)
     {
         if (!crusher->IsAlive() || crusher->GetVictim() == bot)
+            continue;
+
+        if (!YoggSaronCrusherCanSwing(crusher))
             continue;
 
         wedges.push_back(crusher->GetPosition());
@@ -1224,7 +1320,7 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
     // inside 60 s or 100 Sanity off everyone in it, and "did anybody ever get within reach of one" was
     // the question the last trace could not answer: 11 bots managed 151 casts across three waves and
     // killed none. Bucketed because a raw distance would emit a row every tick.
-    Creature* tentacle = bot->FindNearestCreature(NPC_INFLUENCE_TENTACLE, 200.0f, true);
+    Unit* tentacle = YoggSaronLiveIllusionMob(botAI, 200.0f);
     if (!tentacle)
     {
         RaidObs::NoteDerived(bot, "yogg.tentacle", "none");

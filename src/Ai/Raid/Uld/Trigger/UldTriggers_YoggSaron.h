@@ -195,6 +195,23 @@ public:
     bool IsActive() override;
 };
 
+// The facing node corrects a heading; this one moves the bot so the heading it will be forced into is
+// already safe. Only while there is something to kill - clear of a fight, turning away is free and the
+// facing node handles it.
+class YoggSaronIllusionFacingTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronIllusionFacingTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron illusion facing trigger") {}
+    bool IsActive() override;
+};
+
+class YoggSaronPetGuardTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronPetGuardTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron pet guard trigger") {}
+    bool IsActive() override;
+};
+
 class YoggSaronLunaticGazeTrigger : public YoggSaronTrigger
 {
 public:

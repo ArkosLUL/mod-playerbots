@@ -854,6 +854,18 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron squeeze rescue trigger",
         { NextAction("yogg-saron squeeze rescue action", ACTION_RAID + 6) }));
 
+    // Level with the phase 2 dodge and above the dps resolver: where the bot stands has to be settled
+    // before the reach node is asked to close on the target from there.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron illusion facing trigger",
+        { NextAction("yogg-saron illusion facing action", ACTION_RAID + 3) }));
+
+    // Above the dps resolver for the same reason, though it never claims the tick: the pet has to be
+    // pulled off before it swings again, not after the bot has picked its own target.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron pet guard trigger",
+        { NextAction("yogg-saron pet guard action", ACTION_RAID + 2) }));
+
     //
     // Algalon the Observer
     //
