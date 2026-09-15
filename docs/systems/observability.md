@@ -374,17 +374,21 @@ it, so the helper that derives the geometry must say so (Thorim's Runic Smash la
 ```cpp
 RaidObs::NoteHazardCircle(map, spellId, pos, radius, ttlMs);
 RaidObs::NoteHazard(map, spellId, origin, "sweep", "\"lead\":1.2,\"rate\":0.5", ttlMs);
+RaidObs::NoteHazard(map, spellId, origin, "wedge", "\"facing\":2.10,\"arc\":8.0,\"range\":25.0", ttlMs);
 ```
 
-It lands on the timeline only, so give the shape enough fields to reconstruct it by hand.
+It lands on the timeline only, so give the shape enough fields to reconstruct it by hand: Yogg-Saron's
+Crush wedge carries its facing for exactly that reason, while its body's permanent knockback ring —
+an aura on the boss, not an object — needs only a circle. `NoteHazard` has no change-latch, so pace
+these per instance; 25 bots reaching one once a tick writes 25 rows a tick.
 
 Anything else: `RaidObs::Note(bot, kind, text)`, which emits every call rather than on change. Reserve
 it for something that happens once and is in no other stream; nothing uses it today.
 
 Everything above this section is raid-agnostic and already covers every instance map — only the `note`
 stream needs per-raid wiring, because only the encounter code knows what an assignment is. Converted:
-Ulduar (Thorim, Vezax, Algalon, Iron Assembly, Hodir, XT-002, Mimiron, Flame Leviathan), Black Temple,
-Hyjal, SSC, Tempest Keep, Obsidian Sanctum. Still bare: ICC's `IccInstanceState` (`std::map`, needs an ordered container
+Ulduar (Thorim, Vezax, Algalon, Iron Assembly, Hodir, XT-002, Mimiron, Flame Leviathan,
+Yogg-Saron), Black Temple, Hyjal, SSC, Tempest Keep, Obsidian Sanctum. Still bare: ICC's `IccInstanceState` (`std::map`, needs an ordered container
 variant), SWP's instance-keyed nested maps (the inner map must be default-constructible, which a
 kind-carrying container is not), and Naxx's function-local statics. Timestamps, thresholds and caches
 are left bare on purpose.
@@ -404,10 +408,13 @@ are left bare on purpose.
 - **`ObsValue` / `ObsGuidMap::Set` emit only on change**, so a missing note means "unchanged", not
   "never set". That makes absence the signature of state leaking in from a previous pull rather than
   evidence of nothing happening.
-- **A friendly boss is never sampled, so its phase is invisible.** The snapshot sweep keeps only units
-  hostile to the anchor, and Yogg-Saron's Sara is `FACTION_FRIENDLY` for all of phase 1 — the phase
-  whose entire progress is her health bar. No trace can say how close a phase-1 attempt came;
-  Guardian deaths inside 15 yd of her are the only proxy.
+- **A friendly boss is never sampled, so its health is invisible.** The snapshot sweep keeps only
+  units hostile to the anchor, and Yogg-Saron's Sara is `FACTION_FRIENDLY` for all of phase 1 — the
+  phase whose entire progress is her health bar. No trace can say how close a phase-1 attempt came;
+  Guardian deaths inside 15 yd of her are the only proxy. `yogg.phase` supplies the boundaries, which
+  is why an encounter with an unsampled boss needs one.
+- **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
+  anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies
   `AiPlayerbot.BotCheats` verbatim, so a header reading `food,taxi,raid` says nothing about whether
   any node took a cheat branch. An encounter that stopped cheating reads identically before and

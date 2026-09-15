@@ -81,6 +81,9 @@ enum UlduarYoggSaronIds
     SPELL_DARK_VOLLEY_H = 65330,  // 25 normal casts 63038, so the split is not 10/25: test both
     SPELL_SQUEEZE = 64125,  // Constrictor Tentacle's grip; base id, difficulty-mapped at runtime
     SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
+    SPELL_KNOCK_BACK_TRIGGERED = 64020,  // what 64022 fires every second off Yogg's body, 14 yd
+    SPELL_CRUSH_CONE = 64147,  // the cone 64146 procs down the Crusher Tentacle's facing
+    SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
     // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
@@ -91,10 +94,20 @@ enum UlduarYoggSaronIds
 
 constexpr float ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 300.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_AXIS_Z_PATHING_ISSUE_DETECT = 200.0f;
-constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 150.0f;
-constexpr float ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS = 150.0f;
-constexpr float ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS = 150.0f;
+// The three illusion rooms and the brain room share one floor 108-124 yd apart, so a radius wide
+// enough to overlap makes the first test win everywhere: at 150 the brain room read as Stormwind on
+// every sample and 14-21% of illusion-room samples took the wrong room's name. 60 covers each room's
+// landing spot (48.9 / 54.0 / 55.9 yd from its own middle) and every Laughing Skull spawn (52.8 at
+// the furthest), while the nearest rival middle is 190 yd away.
+constexpr float ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS = 60.0f;
+constexpr float ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS = 60.0f;
+constexpr float ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS = 60.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS = 50.0f;
+
+// Floor of the brain level. The three illusion rooms and the brain room all sit on it; the boss
+// platform is 85 yd above.
+constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MIN_Z = 230.0f;
+constexpr float ULDUAR_YOGG_SARON_BRAIN_LEVEL_MAX_Z = 250.0f;
 
 // Yogg-Saron reduced-Keeper hard mode: a bot whose Sanity (63050, 100 stacks) is at or below this
 // pulls behind Yogg and faces away to conserve it. With Freya absent there are no Sanity Wells, so the
@@ -152,6 +165,12 @@ constexpr float ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS = 2.8f;
 constexpr float ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS = 21.5f;
 constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
 
+// The six orbits themselves, midpoints of the four-pull spread above. Not used to steer anything -
+// the station is a spot, not a ring - only to say which orbits could reach a bot that ended up
+// somewhere else, which is the one number the whole phase 1 design turns on.
+constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 50.9f, 60.8f};
+constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
+
 // Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
 // nova only reaches her from 15 yd - a kill further out does nothing for the phase at all. The
 // release is the cloud-free radius rather than a boundary a step inside the leash: anything between
@@ -192,6 +211,53 @@ constexpr float ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS = 14.0f;
 // Wider than phase 1's: a Crush wedge can only be left sideways, and at 25 yd out that is a long walk.
 constexpr float ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS = 35.0f;
 
+// Phase 2 needs its own cap. Sharing phase 1's 35 yd put the box inside where the raid stands: melee
+// were already beyond it in 37-50% of samples and tanks in 64-81%, so every outward candidate was
+// rejected and a bot needing a three-yard sidestep had to walk inward along a 25 yd Crush wedge. The
+// tentacle ring sits 41-48 yd out and the room ends at the outermost cloud orbit, 60.8 yd.
+constexpr float ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE = 55.0f;
+
+// Yogg's body knocks players away once a second for the rest of the fight. 64022 is cast on himself
+// at ACTION_YOGG_SARON_APPEAR and never removed: an infinite self aura triggering 64020 every 1000 ms,
+// radius 14 yd, with no conditions row and no script filter. His model sits 4.5 yd above the floor,
+// so sqrt(14^2 - 4.5^2) = 13.26 yd of horizontal ring. Nothing in the world can be swept for it.
+//
+// This costs melee nothing: Yogg's CombatReach is 30, so melee range on him is about 34 yd.
+constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS = 13.3f;
+constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS = 15.0f;
+
+// Where a bot crossing the room is sent instead of straight through the body. Wide enough that both
+// legs of the detour keep their distance: the worst case is a half-turn, whose chord passes
+// 24 * cos(45 deg) = 17.0 yd from the middle.
+constexpr float ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS = 24.0f;
+
+// The portal wave clock. EVENT_SARA_P2_OPEN_PORTALS fires 60 s after phase 2 starts and repeats
+// every 80 s; clearing a room delays Sara's other events but explicitly reschedules this one, so the
+// cadence holds all fight. Each portal is one use and despawns after 25 s, so a bot that starts
+// walking when it sees one has already lost the wave - the spread has to happen before it opens.
+//
+// The debounce is what separates two waves from one wave seen twice, and sits above the 25 s despawn.
+constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_FIRST_WAVE_MS = 60000;
+constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_PERIOD_MS = 80000;
+constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS = 30000;
+
+// Same adaptive shape as the exit lead below: every millisecond spent standing on a portal spot is a
+// millisecond not spent killing tentacles, so the lead is measured against the walk the bot faces.
+constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_FLOOR_MS = 8000;
+constexpr float ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_SAFETY = 2.0f;
+constexpr float ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS = 100.0f;
+constexpr float ULDUAR_YOGG_SARON_PORTAL_ARRIVED_RADIUS = 3.0f;
+
+// AddPortals spawns RAID_MODE(4, 10), which is the first four table entries in 10-man and all ten in
+// 25-man, so the brain team is capped by how many portals actually exist.
+constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_10MAN = 4;
+constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN = 10;
+
+// Lunatic Gaze off a Laughing Skull: 64167 on the skull triggers 64168 every 1000 ms for 1750 shadow
+// damage and -2 Sanity at 30 yd. The skull is UNIT_FLAG_NOT_SELECTABLE and cannot be killed, and the
+// spell picks its targets with HasInArc(M_PI, caster), so facing away is the only defence there is.
+constexpr float ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS = 30.0f;
+
 // How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
 // a mind control is always a death. The lead is taken out of the window the raid has to damage the
@@ -212,13 +278,28 @@ constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
 constexpr uint32 ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS = 6000;
 constexpr float ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS = 5.0f;
 
+// How often the per-bot exposure probes resample. They answer "where was this bot standing when the
+// thing that killed it went off", so a second is fine and a tick is 25 bots of noise.
+constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
+
 // How far out to look for a Guardian worth kicking. Wider than any interrupt's range on purpose - the
 // action drops the ones it cannot reach, and a short list here would hide a cast from a bot who could.
 constexpr float ULDUAR_YOGG_SARON_INTERRUPT_SEARCH_RADIUS = 40.0f;
 
-// Everything the raid has to clear out of an illusion room before the Brain can be touched. The
-// Influence Tentacle leads the list because it is the one that gates the Brain.
+// Everything the raid has to clear out of an illusion room before the Brain can be touched: the
+// Influence Tentacle and the six entries Creature::UpdateEntry disguises it as. Nothing else in the
+// rooms is a target - the dragons, Garona, King Llane and the Immolated Champion are faction 35 and
+// unattackable, and The Lich King is hostile but carries 11.1 M health, never attacks and cannot be
+// killed. Listing any of them outranks the Brain in the kill order and blocks it forever.
+//
+// A disguise shows the entry's own health percentage while carrying the tentacle's real 8,000 (10) /
+// 40,000 (25), because UpdateEntry keeps current health. That is not a damaged mob.
 extern const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS;
+
+// The ten portal spots, straight from the core's yoggPortalLoc. Kept as a table rather than read off
+// the live creatures because the brain team has to be standing on its spot before any portal exists.
+// All ten are navprobe-clean on the floor and 20.1-23.2 yd from the body, outside the knockback ring.
+extern const Position ULDUAR_YOGG_SARON_PORTAL_SPOTS[ULDUAR_YOGG_SARON_PORTAL_SPOTS_25MAN];
 
 extern const Position ULDUAR_YOGG_SARON_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;
@@ -232,12 +313,102 @@ extern const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 
-// Yogg-Saron phase reads. Yogg is not reliably on a bot's threat list, so both scan for the creature
-// instead of going through "find target".
-// Phase 1. Sara lives on into P2/P3 at 1 health, so "Sara is alive" is not a phase test by itself.
+// Yogg-Saron phase read, and the one place the encounter is recognised at all. Yogg is not reliably
+// on a bot's threat list, so it scans for the creature instead of going through "find target", and
+// every node routes through here so trigger and action cannot answer differently.
+//
+// Combat is part of the read. Sara is a static friendly spawn that LoadAllGrids makes findable from
+// instance creation and that lives on at 1 health into phases 2 and 3, so her being there says
+// nothing; her JustEngagedWith calls SetInCombatWithZone, which does. Without that gate the whole
+// raid walked its phase 1 stations out of combat, crossing all six cloud orbits at a run and handing
+// the pull four of its twelve Guardians before the first point of damage.
+uint32 YoggSaronPhase(PlayerbotAI* botAI);
+bool YoggSaronEncounterActive(PlayerbotAI* botAI);
 bool YoggSaronInPhase1(PlayerbotAI* botAI);
 bool YoggSaronInPhase2(PlayerbotAI* botAI);
 bool YoggSaronInPhase3(PlayerbotAI* botAI);
+
+// Which room on the brain level a position is in, or the boss platform above it.
+enum YoggSaronRoom : uint32
+{
+    YOGG_SARON_ROOM_NONE = 0,
+    YOGG_SARON_ROOM_ARENA = 1,
+    YOGG_SARON_ROOM_STORMWIND = 2,
+    YOGG_SARON_ROOM_ICECROWN = 3,
+    YOGG_SARON_ROOM_CHAMBER = 4,
+    YOGG_SARON_ROOM_BRAIN = 5,
+};
+
+YoggSaronRoom YoggSaronRoomOf(Player* player);
+bool YoggSaronOnBrainLevel(Player* player);
+
+// What the bot is doing about the room it landed in. The brain room was never reached in either
+// measured attempt because nothing walked a bot in: 71% of Stormwind samples sat within 6 yd of the
+// landing spot with the tentacles alive 28-82 yd further in, and 65% of brain-level samples had no
+// target at all, because the dps resolver needs line of sight and a doorway breaks it.
+enum YoggSaronRoomState : uint32
+{
+    YOGG_SARON_ROOM_STATE_NONE = 0,
+    YOGG_SARON_ROOM_STATE_WALKING_IN = 1,
+    YOGG_SARON_ROOM_STATE_FIGHTING = 2,
+    YOGG_SARON_ROOM_STATE_DOOR_SHUT = 3,
+    YOGG_SARON_ROOM_STATE_TO_BRAIN = 4,
+    YOGG_SARON_ROOM_STATE_AT_BRAIN = 5,
+};
+
+YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI);
+
+// The middle of the room the bot is in, which is the centroid of that room's Influence Tentacle
+// summon group - walk there and the tentacles come into line of sight. False outside the three rooms.
+bool YoggSaronRoomMiddle(Player* player, Position& middle);
+
+// Whether the Brain is safe to walk to and hit: every Influence Tentacle in this room dead, and the
+// room's door open. Damaging the Brain while one lives is Unit::Kill(who, who) on the attacker, so
+// the door is the second read of the one server fact rather than a nicety.
+bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI);
+
+// Whether Induce Madness is close enough that the bot has to start walking for an exit portal. It
+// strips all 100 Sanity from anyone below z 300 and Insane's removal kills outright, so a mind
+// control is always a death - and no Sanity Well reaches the brain level, they are all on the
+// platform. The lead is measured against the walk the bot actually faces.
+bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
+
+// Laughing Skulls within gaze range that are in the bot's front 180 degrees, which is the exact test
+// the spell uses to pick its targets.
+std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI);
+
+// Where the portal wave clock stands. ordinal counts waves actually seen, msToNextWave is the
+// prediction the spread runs on, and portalsUp is this bot's own sight of the ring - a bot
+// underground sees nothing and its silence must not be read as a wave ending.
+struct YoggSaronPortalWave
+{
+    bool active = false;
+    uint32 ordinal = 0;
+    uint32 msToNextWave = 0;
+    bool portalsUp = false;
+};
+
+YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI);
+
+// Who goes down the portals, in an order every bot derives identically: melee dps first, then exactly
+// one healer, then ranged to fill, each band by GUID, tanks never. Melee because the room is a 60 s
+// race on foot, and because it takes them out of the Crush ring for the length of every window - they
+// stand inside an 8 degree wedge in 6.5% of samples against 1.3% for ranged.
+std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI);
+
+// What this bot should be doing about the next portal wave.
+enum YoggSaronPortalIntent : uint32
+{
+    YOGG_SARON_PORTAL_NOT_TEAM = 0,
+    YOGG_SARON_PORTAL_WAITING = 1,
+    YOGG_SARON_PORTAL_SPREADING = 2,
+    YOGG_SARON_PORTAL_HOLDING = 3,
+    YOGG_SARON_PORTAL_LATE = 4,
+};
+
+// Nearest-first, latched for the wave so it does not churn as bots move. By group index instead, the
+// assigned walk ran a median of 41-44 yd against the 12-15 yd of the nearest live portal.
+YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot);
 
 // Guardians casting Dark Volley right now, for the interrupt node. Shared between trigger and action
 // so the two cannot disagree about what is being kicked.
@@ -260,8 +431,16 @@ Position YoggSaronCloudLead(Creature* cloud);
 // Whether a straight walk from the bot to (x, y) stays outside every cloud's summon radius.
 bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& clouds, float x, float y);
 
-// Whether the Brain is safe to approach and hit. Damaging it while any Influence Tentacle lives deals
-// nothing and kills the attacker outright, so this gates both the walk down and the target pick.
+// The body's knockback ring, which has no world object behind it and so cannot be swept for.
+bool YoggSaronInBodyKnockback(Player* player);
+bool YoggSaronRouteClearOfBody(Player* bot, float x, float y);
+
+// A point to cross the room through when the straight line would go over the body. One is enough:
+// each leg halves the turn the next one has to make, so the bot walks the arc rather than the chord.
+bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& waypoint);
+
+// Whether the Brain is safe to hit: every Influence Tentacle in this room dead. Scoped to the room
+// rather than swept at 200 yd, which is one yard short of reaching the next room's tentacles.
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
 
 // Live Crusher Tentacles to angle away from, each as its position plus the facing its Crush cone

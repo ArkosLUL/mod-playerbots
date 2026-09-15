@@ -54,9 +54,11 @@ protected:
     {
         std::vector<EncounterHelpers::HazardCircle> hazards;
 
-        // Swept again with `clear` dropped when nothing satisfies everything at once. Empty means no
-        // retry: the bot stays where it is rather than moving to a spot that is no better.
+        // The retry, swept when nothing satisfies everything at once: whichever half of the set is
+        // the one that kills. Empty means no retry - the bot stays where it is rather than moving to
+        // a spot that is no better. fallbackClear is the retry's own shape test, null to drop it.
         std::vector<EncounterHelpers::HazardCircle> fallback;
+        std::function<bool(float, float)> fallbackClear;
 
         // Shapes a circle cannot describe, like the Crush wedge. True means the spot is safe.
         std::function<bool(float, float)> clear;
@@ -65,6 +67,10 @@ protected:
     // False skips the tick outright.
     virtual bool Collect(HazardSet& set) = 0;
     virtual float SearchRadius() const = 0;
+
+    // How far out a destination may sit from the body. The load-bearing half of the dodge: too tight
+    // and a bot needing a sidestep has every outward candidate rejected.
+    virtual float MaxFromMiddle() const { return ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE; }
 
     // Whether the walk to a candidate is acceptable, not just the candidate itself. No opinion by
     // default: for most hazards crossing one to leave another still beats standing still.
@@ -112,6 +118,8 @@ public:
 protected:
     bool Collect(HazardSet& set) override;
     float SearchRadius() const override { return ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS; }
+    float MaxFromMiddle() const override { return ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE; }
+    bool RouteAcceptable(float x, float y) const override;
 };
 
 // One owner of every non-tank's target for the whole encounter, in place of the raid icons this fight
@@ -126,7 +134,7 @@ public:
 private:
     // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
     static size_t TierOf(Unit* unit, bool brainLevel, bool phaseOne);
-    bool IsAllowedTarget(Unit* candidate, bool tentaclesCleared) const;
+    bool IsAllowedTarget(Unit* candidate, bool brainApproachable) const;
     Unit* ResolveTarget(Unit* currentTarget);
 };
 
@@ -204,12 +212,23 @@ public:
 private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
     bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
+    bool WalkIntoRoom();
 };
 
 class YoggSaronMoveToExitPortalAction : public MovementAction
 {
 public:
     YoggSaronMoveToExitPortalAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron move to exit portal action") {}
+
+    bool Execute(Event event) override;
+};
+
+// Face away from the Laughing Skulls in the bot's front arc. The skull cannot be killed and its gaze
+// picks targets by facing alone, so this is the only defence the room has.
+class YoggSaronLaughingSkullAction : public MovementAction
+{
+public:
+    YoggSaronLaughingSkullAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron laughing skull action") {}
 
     bool Execute(Event event) override;
 };

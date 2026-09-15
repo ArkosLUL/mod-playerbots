@@ -58,4 +58,30 @@ float YoggSaronDpsTargetGuardMultiplier::GetValue(Action* action)
     return yoggSaronTrigger.IsYoggSaronFight() ? 0.0f : 1.0f;
 }
 
+float YoggSaronDisplacementGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // Cheap gate first: the phase read below is a pair of 200 yd grid sweeps, and this runs for every
+    // action the engine weighs. CastReachTargetSpellAction is the whole gap-closer family - Charge,
+    // Intercept and both Feral Charges, with no other subclasses - and catching all of it matters,
+    // because the Fury chain is charge then intercept then reach melee, so a partial veto only moves
+    // the problem down the list. Blink and Disengage are plain CastSpellActions and need naming.
+    bool const teleport =
+        dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<CastDisengageAction*>(action);
+    bool const gapCloser =
+        dynamic_cast<CastReachTargetSpellAction*>(action) || dynamic_cast<CastKillingSpreeAction*>(action);
+
+    if (!teleport && !gapCloser)
+        return 1.0f;
+
+    uint32 const phase = YoggSaronPhase(botAI);
+    if (!phase)
+        return 1.0f;
+
+    // reach melee survives either way, so melee still walk in on foot.
+    return phase == 1 || teleport ? 0.0f : 1.0f;
+}
+
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }

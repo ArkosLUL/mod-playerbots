@@ -131,6 +131,7 @@ public:
         creators["yogg-saron stop following trigger"] = &RaidUlduarTriggerContext::yogg_saron_stop_following_trigger;
         creators["yogg-saron illusion room trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_room_trigger;
         creators["yogg-saron move to exit portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_exit_portal_trigger;
+        creators["yogg-saron laughing skull trigger"] = &RaidUlduarTriggerContext::yogg_saron_laughing_skull_trigger;
         creators["yogg-saron lunatic gaze trigger"] = &RaidUlduarTriggerContext::yogg_saron_lunatic_gaze_trigger;
         creators["yogg-saron phase 3 positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_positioning_trigger;
         creators["yogg-saron guardian control trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_control_trigger;
@@ -324,6 +325,7 @@ private:
     static Trigger* yogg_saron_stop_following_trigger(PlayerbotAI* ai) { return new YoggSaronStopFollowingTrigger(ai); }
     static Trigger* yogg_saron_illusion_room_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionRoomTrigger(ai); }
     static Trigger* yogg_saron_move_to_exit_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalTrigger(ai); }
+    static Trigger* yogg_saron_laughing_skull_trigger(PlayerbotAI* ai) { return new YoggSaronLaughingSkullTrigger(ai); }
     static Trigger* yogg_saron_lunatic_gaze_trigger(PlayerbotAI* ai) { return new YoggSaronLunaticGazeTrigger(ai); }
     static Trigger* yogg_saron_phase_3_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningTrigger(ai); }
     static Trigger* yogg_saron_guardian_control_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianControlTrigger(ai); }

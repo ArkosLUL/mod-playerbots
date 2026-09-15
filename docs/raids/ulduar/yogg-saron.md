@@ -14,9 +14,20 @@ is where a Guardian dies**, which is the whole reason melee are leashed to her.
 So no bot ever holds threat on her, and `AI_VALUE2(Unit*, "find target", "sara")` walks
 `GetThreatenedByMeList()`. It returned null every tick and took **all 21 Yogg nodes** with it: two
 wipes on 2026-09-13, ~6,900 checks per trigger, zero fires. Resolve her with
-`FindNearestCreature(NPC_SARA_PHASE_1, …)`. She lives into P2/P3 at 1 health, so "Sara is alive" is no
-phase test — `YoggSaronInPhase1` also demands neither P2 nor P3. Yogg himself is no better; resolve
-him the same way.
+`FindNearestCreature(NPC_SARA_PHASE_1, …)`; Yogg himself is no better.
+
+**Her presence is not a pull; her combat is.** `LoadAllGrids` makes her findable from instance
+creation and `Reset()` leaves her visible with the clouds already orbiting, so a phase read made of
+"Sara exists" is true between pulls — and the Ulduar strategy runs in the non-combat engine too. The
+raid therefore walked its phase 1 stations before the pull, crossing all six orbits at a run: 76-101
+yd out at t=0, a median 20 yd by t=10 s, and **4 of the pull's 12 Guardians summoned before the first
+point of damage**, one per orbit it ran through. `InitFight` calls `SetInCombatWithZone` and
+`ACTION_YOGG_SARON_APPEAR` calls it again on Yogg, so one combat test covers all three phases.
+
+`YoggSaronPhase` is the single read every node routes through — phase 2 is Yogg with Shadow Barrier,
+phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all gated on that combat test — and it is
+what writes `yogg.phase`. She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by
+itself.
 
 `IsBotMainTank` is false for **every** bot while a human holds main tank, which silently disabled the
 phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot tank.
@@ -107,6 +118,19 @@ crossing a Death Ray to leave one still beats standing in it while crossing a cl
 Each cloud enters the set twice — where it is, and `ULDUAR_YOGG_SARON_CLOUD_LEAD_MS` ahead along its
 orbit. Without the lead, destinations sat a median 16.3 yd from the nearest cloud against a 15.4 yd
 baseline for standing still, which is chance.
+
+**Nothing may jump in this room.** Blink, Disengage and the gap-closers put a bot somewhere nobody
+picked, and in a room made of six fixed rings that means onto one: of 20 phase 1 casts in one pull,
+**13 left the bot with more orbits inside the 8.5 yd reach than it started with**. Blink took bots
+from the 21.5 yd station to 39.2-40.0, onto the fourth orbit; Disengage to 31.1-33.7, onto the third;
+Charge, Intercept and Feral Charge fired straight out of the 2.89 yd cloud-free circle through the
+first two. `YoggSaronDisplacementGuardMultiplier` zeroes all of them in phase 1, and Blink and
+Disengage for the whole encounter — those two fire on "something is too close" rather than to close a
+gap, so neither is aimed at anything, while the gap-closers come back in P2 and P3 where there is no
+orbit to land on. Catch the whole `CastReachTargetSpellAction` family: the Fury chain is charge →
+intercept → `reach melee`, so a partial veto only moves the problem down the list, and `reach melee`
+surviving is what walks melee in on foot. Blink and Disengage are plain `CastSpellAction`s and have to
+be named.
 
 ## The spacing nodes
 
@@ -254,6 +278,24 @@ Barrier, so a window with only a Crusher up gives them no allowed target. That i
 lone Crusher means the tank is its only other candidate, so every melee bot on it is collateral on the
 tank's own Crush line.
 
+**The dodge needs somewhere legal to go, and the retry has to keep the wedge.** The wedge model is
+right: 18 of 19 Crush hits landed within 8° of the tentacle's facing, exactly
+`ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC`. What failed around it was the box and the retry. Phase 2 shared
+phase 1's 35 yd cap from the body while melee were already beyond it in **37-50%** of samples and
+tanks in **64-81%**, so every outward candidate was rejected and a bot needing a three-yard sidestep
+had to walk *inward* along a 25 yd wedge; `ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE` is 55, still
+inside the room's 60.8 yd outer orbit. And when nothing cleared both shapes the retry used to keep the
+Death Ray circles and drop the wedge, on the reasoning that a ray is certain death and a wedge a
+coin-flip. The pulls say otherwise — Death Ray **1 death** over 11 hits for 150,504, Crush **4** over
+19 for 485,964, ~25k a hit against melee pools — so the retry keeps the wedge and gives up the rays.
+
+Melee exposure is the root cause, and the brain team below is most of the answer: melee sit within
+25 yd of a live Crusher in **36.2%** of samples against 15.5% for ranged, and inside an 8° wedge in
+**6.5%** against **1.3%**, so sending melee down the portals takes them out of the arena for the
+length of every window. The tentacle cannot be tanked either — `DamageTaken` does
+`DoResetThreatList(); AddThreat(who, 100000); AttackStart(who)` on any direct damage, so it re-faces
+whoever hit it last, in both traces a hunter pet. No bot controls where the wedge points.
+
 ## Diminish Power is why the Crusher dies first
 
 `64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−21% damage done raid-wide**
@@ -269,6 +311,63 @@ reset. Or the tentacle dies — **2,000,001 HP** in 25-man, which the whole raid
 debuffed, against a respawn of 45-54 s tightening to 25-30 s by the sixth portal wave. Ten ranged alone
 would spend 50 s of that window debuffed. So the Crusher is the **top** target for everyone who can
 safely stand there — every ranged and healer — rather than something to keep away from.
+
+## Phase 2: the body is a wall, and the portals run on a clock
+
+**Yogg's body knocks players away once a second, permanently.** `ACTION_YOGG_SARON_APPEAR` casts
+`SPELL_KNOCK_AWAY 64022` on him and never removes it: an infinite self aura,
+`SPELL_AURA_PERIODIC_TRIGGER_SPELL` every **1000 ms**, firing **64020** — `SPELL_EFFECT_KNOCK_BACK`,
+radius index 61 = **14 yd**, horizontal speed 15 — with no `conditions` row, no script filter and no
+combat-reach bonus, since `Spell.cpp` gates that on `IsControlledByPlayer` and the caster is a
+creature. His model sits at z 329.397 over a floor of 324.89-325.19, so it is a **13.26 yd horizontal
+ring that never goes away**. Nothing can sweep for it; it reaches a trace only as a `haz` circle and
+as `yogg.knockback`.
+
+It costs melee nothing — Yogg's `CombatReach` is **30** (display 28817, `BoundingRadius` 0), so melee
+range on him is `1.5 + 30 + 2.67` ≈ **34 yd**, and the P3 melee spot is already 18.4 yd out. What it
+costs is the *crossing*: **42%** of portal walks routed the bot within 12 yd of the body. So P2
+spacing carries the ring as a standing hazard circle, its trigger reads it too, and both the spacing
+walk and the portal walk filter the route. A bot already inside the ring is exempt from that filter —
+every short step out passes close to the middle by definition, so judging those would reject the only
+walks that end the problem. A blocked crossing gets one waypoint at
+`ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter arc: each leg halves the
+turn the next one makes, so one is enough, and the worst case — a half-turn — passes
+24 × cos 45° = 17.0 yd from the middle.
+
+**The portals are creatures, one-use, and on a clock the raid has to beat.**
+`NPC_DESCEND_INTO_MADNESS` (34072), `TEMPSUMMON_TIMED_DESPAWN` 25 s, `OnSpellClick` clearing the
+npcflags so each takes exactly one passenger. `EVENT_SARA_P2_OPEN_PORTALS` fires **60 s** after P2
+starts and repeats every **80 s**; clearing a room delays Sara's other events but explicitly
+reschedules this one. `AddPortals` spawns `RAID_MODE(4, 10)`, so **only the first four table entries
+exist in 10-man**. They are not hostile, so no snapshot samples one — `yogg.wave` is the only record a
+wave happened at all.
+
+The core's table is `yoggPortalLoc`, and all ten of the module's old coordinates were wrong:
+
+```
+(1964.60,-42.71,325.08) (1986.94,-46.21,324.98) (1989.50,-6.70,325.08) (1965.52,-8.09,324.95)
+(2000.84,-25.40,325.19) (1960.22,-26.14,325.01) (1976.30,-47.83,325.11) (1997.69,-37.46,325.04)
+(1998.07,-13.36,325.17) (1976.99,-3.96,325.17)
+```
+
+All navprobe-clean on the floor, settled z 324.87-325.04, **20.1-23.2 yd from the body** and so
+outside the knockback ring. Keep them in code rather than reading live creatures: the team has to be
+*standing* on its spot before any portal exists.
+
+**Spread before the wave, and assign by distance.** By group index the assigned walk ran a median of
+**41-44 yd** when the nearest spot was **12-15**. Nearest-first instead, latched once per wave so it
+does not churn as bots move, off a wave clock kept per instance: predict the first wave at +60 s,
+re-anchor on every wave a bot actually sees, and roll the prediction forward by a period when one
+passes unseen — otherwise it reads "any moment now" forever and parks the team on its spots for the
+rest of the fight. A bot walks once the next wave is inside `max(8 s, distance / runSpeed × 2)`, the
+same adaptive shape as the exit lead, and holds until the portal appears under it. `yogg.portal` is
+the state machine: `notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`.
+
+**The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a
+60 s race on foot, and it doubles as the Crush answer above. Order within each band by GUID so every
+bot derives the same team from its own seat. The trigger and the action used to build the list
+differently — one skipped the master, the other did not — so they disagreed about who was on it;
+`GetYoggSaronBrainTeam` is the single owner now.
 
 ## The brain room
 
@@ -297,7 +396,62 @@ the bot standing still rather than walking in to die.
 The old gate waited on the bot's **master**, a human, to stand in the brain room, and Brain health only
 ever moved in windows where one did — the windows without a human left it untouched.
 
-Every portal in a wave leads to the same illusion, cycling Stormwind → Chamber → Icecrown.
+**The illusion is random per attempt, in both start and direction.** `Reset()` does
+`_currentIllusion = urand(1, 3); _isIllusionReversed = urand(0, 1);` and steps ±1 with wraparound per
+wave, so nothing may assume a fixed cycle. Every portal in one wave leads to the same room.
+
+**The three room radii overlapped, and the brain room lost.** At 150 yd apiece against middles only
+190-203 yd apart and a brain room 108-124 yd from each, **every** brain-room sample tested as
+Stormwind — it is checked first — and 14-21% of illusion-room samples took the wrong room's name. 60
+covers each room's landing spot (48.9 / 54.0 / 55.9 yd from its own middle) and every Laughing Skull
+spawn (52.8 at the furthest), while the nearest rival middle is 190 yd away. `YoggSaronRoomOf` is the
+single resolver, brain room tested first, and `yogg.room` records what the bot *read* — the difference
+between that and where it stood is the whole defect.
+
+**Nothing walked a bot into the room, and that deadlocks.** The dps resolver needs
+`IsWithinLOSInMap`, two of the three rooms put their tentacles behind a doorway, and the only mover
+inside a room was the walk to the Brain, which needs the tentacles already dead. So the tentacle is
+out of sight → nobody walks in → it lives → the door stays shut → the Brain is never touched. Share of
+samples parked within 6 yd of the landing spot: **Stormwind 71%, Chamber 51%, Icecrown 6%** — the last
+an open courtyard — with **65%** of all brain-level samples carrying no target at all and
+`DpsAssistAction` zeroed encounter-wide, so no fallback. One bot stood on the Stormwind landing
+coordinate motionless for 50 s, twice, with four Suits of Armor alive 28-82 yd further in.
+
+The fix is a walk to the room's middle, which is the centroid of that room's Influence Tentacle summon
+group (`creature_summon_groups`, summonerId 33890: group 1 Chamber, 2 Icecrown, 3 Stormwind) and
+navprobe-clean with `PATHFIND_NORMAL` from each landing spot. `YoggSaronRoomStateOf` owns the question
+and writes `yogg.roomstate`: `walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain`.
+
+**Nine of the sixteen entries in the old illusion target list could not be killed.** From
+`creature_template`: Alexstrasza, Malygos, Neltharion, Ysera, the Immolated Champion, Garona and King
+Llane are faction **35**, friendly RP actors; The Lich King (33441) is faction 14 and hostile but
+carries **11.1 M** health, never attacks and cannot be killed — a pure time sink in Icecrown. All
+sixteen sat in one tier *above* the Brain, so any decoy in line of sight blocked it forever. The list
+is the eight real entries: 33943 plus its six disguises (33433 Suit of Armor, 33567 Deathsworn Zealot,
+33716-33720 Consorts). Which disguise a tentacle wears comes from where it spawned — `x ∈ (2000,
+2150)` a Consort, else `y ∈ (−150, −90)` a Zealot, else a Suit of Armor; the wiki has Zealots and
+Suits the other way round and the script wins. The disguise is `Creature::UpdateEntry`, not an aura,
+and `UpdateEntry` **preserves current health**, so a Suit of Armor showing 6% is a full-health
+tentacle carrying 8,000 (10) / 40,000 (25).
+
+**Scope the tentacle read to the room.** The Stormwind and Chamber middles are 200.8 yd apart, so the
+old 200 yd sweep was one yard from reading the next room's tentacles — and reading it wrong is not a
+wasted tick, it is `Unit::Kill(who, who)`. The Brain's own test is `_tentacleCount < _tentacleTotal`,
+a per-wave counter, so per-room is the right scope.
+
+**The Laughing Skull cannot be killed, only faced away from.** 33990, faction 14, `unit_flags`
+`UNIT_FLAG_NOT_SELECTABLE` with `flags_extra 128`: neither targetable nor killable.
+`creature_template_addon.auras = 64167` triggers **64168 every 1000 ms — 1750 shadow damage, −2
+Sanity, 30 yd** — and its target filter is exactly `target->HasInArc(M_PI, caster)`, so only players
+with the skull in their front 180° are hit. Four per room, despawned when the last Influence Tentacle
+dies. It was entirely unhandled: **149 gaze hits for 137,815 damage** and 298 Sanity in one wipe.
+`yogg-saron laughing skull` faces away from the centroid of the skulls in arc, at `ACTION_EMERGENCY`
+beside the Yogg gaze node — the two cannot share a bot and never need to, since Yogg's own Lunatic
+Gaze is a P3 self aura on the platform and the skulls only exist below it. Probed as `yogg.skull`.
+
+**No Sanity Well reaches the brain level.** All five stand on the platform and nothing restores Sanity
+underground, so `yogg-saron sanity` could only ever walk a bot at something it would never get to. It
+stands down below the floor.
 
 ## The encounter plays its own mechanics
 
@@ -324,6 +478,22 @@ without a latch — it is one-shot behind the `rti` room tag, so there is no rep
 Following a master is wrong in every part of this fight — the illusion rooms are exactly where bots
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
+
+**Fourteen `yogg.` probes and a reader.** `tools/botobs/yogg_saron.py` prints phases, cloud-orbit
+exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
+exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
+declared in source and absent from every trace of its own boss means the recorder is dropping it, not
+that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `yogg.room`,
+`yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
+`yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull` and `yogg.exit`, beside the older
+`yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`. Two hazards go to
+the timeline only because nothing can sweep for either: the body's knockback circle, and each
+Crusher's wedge carrying facing, arc and range so it can be tested by hand afterwards.
+
+**Do not add a Sanity probe.** 63050 is already in the aura stream — 467 and 819 rows across the two
+attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic
+Gaze 64168 in `dmg`. A removal row carries no stack count, so skip `r:1` rows when taking a minimum or
+every bot reads as Insane.
 
 ## The Death Orb is not the hazard
 
@@ -358,8 +528,8 @@ whole raid ran its phase-3 positioning through the gap. The Brain (33890) is the
 spawns with that wave and lives to the end, and swapping the Guardian sweep for a Brain sweep shrinks
 the bad window to 0.5 s at the same cost.
 
-A trace carries no phase note, but P3 starts when the Brain reaches 30% and the script then forces
-Yogg's health to exactly 30% — which is how a trace dates the transition.
+`yogg.phase` dates the transition directly. Before it existed the tell was the script forcing Yogg's
+health to exactly 30% when the Brain reaches 30%.
 
 **A fixed position with a radius is a leash, and a leash is a fence whenever the bot's target sits
 further than radius + range from it.** The P3 ranged spot is 39.1 yd from Yogg against 28.5 yd of

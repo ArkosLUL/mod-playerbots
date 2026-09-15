@@ -65,10 +65,7 @@ bool YoggSaronTrigger::IsPhase3()
     return YoggSaronInPhase3(botAI);
 }
 
-bool YoggSaronTrigger::IsInBrainLevel()
-{
-    return bot->GetPositionZ() > 230.0f && bot->GetPositionZ() < 250.0f;
-}
+bool YoggSaronTrigger::IsInBrainLevel() { return YoggSaronOnBrainLevel(bot); }
 
 bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
 {
@@ -81,53 +78,21 @@ bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
            reach;
 }
 
-bool YoggSaronTrigger::IsYoggSaronFight()
-{
-    // Not "find target": that walks the bot's own threat list, and neither of these is reliably on
-    // it. Sara is FACTION_FRIENDLY for the whole of phase 1 and only ever takes damage from a
-    // Guardian's Shadow Nova, so no bot holds threat on her at all - the lookup returned null every
-    // tick and took all 21 Yogg nodes down with it.
-    return bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true) ||
-           bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
-}
+bool YoggSaronTrigger::IsYoggSaronFight() { return YoggSaronEncounterActive(botAI); }
 
 bool YoggSaronTrigger::IsInIllusionRoom()
 {
-    if (!IsInBrainLevel())
-        return false;
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
 
-    if (IsInStormwindKeeperIllusion())
-        return true;
-
-    if (IsInIcecrownKeeperIllusion())
-        return true;
-
-    if (IsInChamberOfTheAspectsIllusion())
-        return true;
-
-    return false;
+    return room == YOGG_SARON_ROOM_STORMWIND || room == YOGG_SARON_ROOM_ICECROWN ||
+           room == YOGG_SARON_ROOM_CHAMBER;
 }
 
-bool YoggSaronTrigger::IsInStormwindKeeperIllusion()
-{
-    return bot->GetDistance2d(ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE.GetPositionX(),
-                              ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE.GetPositionY()) <
-           ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
-}
+bool YoggSaronTrigger::IsInStormwindKeeperIllusion() { return YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_STORMWIND; }
 
-bool YoggSaronTrigger::IsInIcecrownKeeperIllusion()
-{
-    return bot->GetDistance2d(ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE.GetPositionX(),
-                              ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE.GetPositionY()) <
-           ULDUAR_YOGG_SARON_ICECROWN_CITADEL_RADIUS;
-}
+bool YoggSaronTrigger::IsInIcecrownKeeperIllusion() { return YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_ICECROWN; }
 
-bool YoggSaronTrigger::IsInChamberOfTheAspectsIllusion()
-{
-    return bot->GetDistance2d(ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE.GetPositionX(),
-                              ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE.GetPositionY()) <
-           ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_RADIUS;
-}
+bool YoggSaronTrigger::IsInChamberOfTheAspectsIllusion() { return YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_CHAMBER; }
 
 bool YoggSaronTrigger::IsMasterIsInIllusionGroup()
 {
@@ -137,51 +102,10 @@ bool YoggSaronTrigger::IsMasterIsInIllusionGroup()
 
 bool YoggSaronTrigger::IsMasterIsInBrainRoom()
 {
-    Player* master = botAI->GetMaster();
-
-    if (!master)
-        return false;
-
-    return master->GetDistance2d(ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionX(),
-                                 ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionY()) <
-               ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS &&
-           master->GetPositionZ() > 230.0f && master->GetPositionZ() < 250.0f;
+    return YoggSaronRoomOf(botAI->GetMaster()) == YOGG_SARON_ROOM_BRAIN;
 }
 
-Position YoggSaronTrigger::GetIllusionRoomEntrancePosition()
-{
-    if (IsInChamberOfTheAspectsIllusion())
-        return ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE;
-    else if (IsInIcecrownKeeperIllusion())
-        return ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE;
-    else if (IsInStormwindKeeperIllusion())
-        return ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE;
-    else
-        return Position();
-}
-
-// Two reads of the one server fact, neither of them a human: the Brain opens the room's door in the
-// same branch that fires when the last Influence Tentacle dies. Getting it wrong now means standing
-// still rather than walking in and dying, and the exit node rescues that.
-bool YoggSaronTrigger::IsBrainRoomApproachable()
-{
-    if (!YoggSaronInfluenceTentaclesCleared(botAI))
-        return false;
-
-    uint32 doorEntry = 0;
-    if (IsInChamberOfTheAspectsIllusion())
-        doorEntry = GO_CHAMBER_ILLUSION_DOORS;
-    else if (IsInIcecrownKeeperIllusion())
-        doorEntry = GO_ICECROWN_ILLUSION_DOORS;
-    else if (IsInStormwindKeeperIllusion())
-        doorEntry = GO_STORMWIND_ILLUSION_DOORS;
-    else
-        return false;
-
-    GameObject* door = bot->FindNearestGameObject(doorEntry, 200.0f);
-
-    return door && door->GetGoState() == GO_STATE_ACTIVE;
-}
+bool YoggSaronTrigger::IsBrainRoomApproachable() { return YoggSaronBrainRoomApproachable(botAI); }
 
 bool YoggSaronGuardianPositioningTrigger::IsActive()
 {
@@ -211,6 +135,11 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
 
 bool YoggSaronSanityTrigger::IsActive()
 {
+    // All five Sanity Wells stand on the boss platform and nothing restores Sanity underground, so
+    // below the floor this node can only ever walk a bot at something it will never reach.
+    if (IsInBrainLevel())
+        return false;
+
     Aura* sanityAura = bot->GetAura(SPELL_SANITY);
 
     if (!sanityAura)
@@ -315,6 +244,11 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
                                            ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC);
     }
 
+    // The body's ring has to be read here as well as in the action: a circle the action clears but the
+    // trigger does not leaves a band where the bot stands in a hazard and the node is never asked.
+    if (!hazardNear)
+        hazardNear = YoggSaronInBodyKnockback(bot);
+
     return hazardNear && IsPhase2();
 }
 
@@ -377,45 +311,20 @@ bool YoggSaronBrainLinkTrigger::IsActive()
 
 bool YoggSaronMoveToEnterPortalTrigger::IsActive()
 {
-    if (!IsPhase2())
+    // The spread happens before the wave exists, so "diamond" - set by the walk itself - keeps the
+    // node live rather than ending it. The arena test is what stops it firing again underground,
+    // where the mark still reads diamond until the illusion room node renames it.
+    std::string const rti = AI_VALUE(std::string, "rti");
+    if (rti != "skull" && rti != "diamond")
         return false;
 
-    Creature* portal = bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, 100.0f, true);
-    if (!portal)
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_ARENA)
         return false;
 
-    if (bot->GetDistance2d(portal->GetPositionX(), portal->GetPositionY()) < 2.0f)
-        return false;
+    Position spot;
+    YoggSaronPortalIntent const intent = YoggSaronPortalPlan(botAI, spot);
 
-    if (AI_VALUE(std::string, "rti") != "skull")
-        return false;
-
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    int brainRoomTeamCount = 10;
-    if (bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL)
-        brainRoomTeamCount = 4;
-
-    if (IsMasterIsInIllusionGroup())
-        brainRoomTeamCount--;
-
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* member = gref->GetSource();
-        if (!member || !member->IsAlive() || botAI->IsTank(member))
-            continue;
-
-        if (member->GetGUID() == bot->GetGUID())
-            return true;
-
-        brainRoomTeamCount--;
-        if (brainRoomTeamCount == 0)
-            break;
-    }
-
-    return false;
+    return intent == YOGG_SARON_PORTAL_SPREADING || intent == YOGG_SARON_PORTAL_LATE;
 }
 
 bool YoggSaronFallFromFloorTrigger::IsActive()
@@ -465,7 +374,12 @@ bool YoggSaronIllusionRoomTrigger::IsActive()
     if (GoToBrainRoomRequired())
         return true;
 
-    return false;
+    return WalkIntoRoomRequired();
+}
+
+bool YoggSaronIllusionRoomTrigger::WalkIntoRoomRequired()
+{
+    return YoggSaronRoomStateOf(botAI) == YOGG_SARON_ROOM_STATE_WALKING_IN;
 }
 
 bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
@@ -483,44 +397,22 @@ bool YoggSaronIllusionRoomTrigger::SetRtiMarkRequired()
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()
 {
-    if (!IsYoggSaronFight() || !IsInBrainLevel())
-        return false;
-
     // The Brain sits at z 265 while its room's floor is z 236-244, so a radius to it was never "am I in
     // the brain room" - it was that question plus a permanent 25 yd vertical tax, and two of the three
-    // portal arrivals land outside 60 yd before the bot takes a step. IsInBrainLevel is the real test;
-    // this only has to find the map's one Brain.
-    Creature const* brain = bot->FindNearestCreature(NPC_BRAIN, 200.0f, true);
-    if (!brain || !brain->IsAlive())
+    // portal arrivals land outside 60 yd before the bot takes a step. The level is the real test.
+    if (!IsInBrainLevel() || !IsYoggSaronFight())
         return false;
 
-    if (brain->HasUnitState(UNIT_STATE_CASTING))
-    {
-        Spell* induceMadnessSpell = brain->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return YoggSaronShouldLeaveBrainLevel(botAI);
+}
 
-        if (induceMadnessSpell && induceMadnessSpell->m_spellInfo->Id == SPELL_INDUCE_MADNESS)
-        {
-            uint32 castingTimeLeft = induceMadnessSpell->GetCastTimeRemaining();
+bool YoggSaronLaughingSkullTrigger::IsActive()
+{
+    // Level test first: this runs for every bot in Ulduar and the sweep behind it is not free.
+    if (!IsInBrainLevel())
+        return false;
 
-            // Every millisecond of lead is damage the Brain does not take, so it is measured against
-            // the walk the bot actually faces rather than set flat for the worst case.
-            uint32 lead = ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS;
-            GameObject* portal = bot->FindNearestGameObject(GO_FLEE_TO_THE_SURFACE_PORTAL, 200.0f);
-            float const speed = bot->GetSpeed(MOVE_RUN);
-            if (portal && speed > 0.0f)
-            {
-                lead = std::max(lead, static_cast<uint32>(bot->GetDistance2d(portal) / speed *
-                                                          ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY * 1000.0f));
-            }
-
-            if (castingTimeLeft < lead)
-                return true;
-        }
-    }
-    else if (brain->GetHealth() < brain->GetMaxHealth() * 0.3f)
-        return true;
-
-    return false;
+    return !GetYoggSaronSkullsInArc(botAI).empty();
 }
 
 bool YoggSaronLunaticGazeTrigger::IsActive()

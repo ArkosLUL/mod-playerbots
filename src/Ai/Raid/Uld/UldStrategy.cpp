@@ -824,6 +824,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron lunatic gaze trigger",
         { NextAction("yogg-saron lunatic gaze action", ACTION_EMERGENCY) }));
 
+    // Same relevance as the gaze node above and they cannot share a bot, which costs nothing: Yogg's
+    // own Lunatic Gaze is a phase 3 self aura on the platform and the skulls only exist below it.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron laughing skull trigger",
+        { NextAction("yogg-saron laughing skull action", ACTION_EMERGENCY) }));
+
     triggers.push_back(new TriggerNode(
         "yogg-saron phase 3 positioning trigger",
         { NextAction("yogg-saron phase 3 positioning action", ACTION_RAID) }));
@@ -996,5 +1002,6 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Keep Tremor Totem in the earth slot for as long as these two can fear
     multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));
+    multipliers.push_back(new YoggSaronDisplacementGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronAntiFearTotemGuardMultiplier(botAI));
 }

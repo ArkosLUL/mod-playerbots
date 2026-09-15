@@ -27,7 +27,6 @@ public:
     bool IsMasterIsInIllusionGroup();
     bool IsMasterIsInBrainRoom();
     bool IsBrainRoomApproachable();
-    Position GetIllusionRoomEntrancePosition();
     bool IsDesignatedBotTank();
 
     // Whether the bot's phase 3 station still reaches a target from inside its radius. A fixed spot
@@ -172,12 +171,27 @@ public:
 private:
     bool GoToBrainRoomRequired();
     bool SetRtiMarkRequired();
+
+    // Nothing else in the fight moves a bot once a portal has dropped it, and the dps resolver will
+    // not pick a target it has no line of sight to. Two of the three rooms put their tentacles behind
+    // a doorway, so the raid stood at the landing spot until Induce Madness landed.
+    bool WalkIntoRoomRequired();
 };
 
 class YoggSaronMoveToExitPortalTrigger : public YoggSaronTrigger
 {
 public:
     YoggSaronMoveToExitPortalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron move to exit portal trigger") {}
+    bool IsActive() override;
+};
+
+// The Laughing Skull cannot be targeted or killed - UNIT_FLAG_NOT_SELECTABLE, flags_extra 128 - and
+// its gaze picks targets by HasInArc(M_PI, caster), so turning around is the only defence. Four per
+// room, 1750 shadow damage and -2 Sanity a second each at 30 yd.
+class YoggSaronLaughingSkullTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronLaughingSkullTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron laughing skull trigger") {}
     bool IsActive() override;
 };
 

@@ -19,6 +19,7 @@
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidObs.h"
 #include "UldEncounter_YoggSaron.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -61,11 +62,6 @@ bool IsYoggSaronFocusedGuardian(Unit* unit)
 }  // namespace
 
 const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, -24.871964f, 324.88956f, 6.247805f);
-
-const Position yoggPortalLoc[] = {
-    {1970.48f, -9.75f, 325.5f},  {1992.76f, -10.21f, 325.5f}, {1995.53f, -39.78f, 325.5f}, {1969.25f, -42.00f, 325.5f},
-    {1960.62f, -32.00f, 325.5f}, {1981.98f, -5.69f, 325.5f},  {1982.78f, -45.73f, 325.5f}, {2000.66f, -29.68f, 325.5f},
-    {1999.88f, -19.61f, 325.5f}, {1961.37f, -19.54f, 325.5f}};
 
 bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 {
@@ -128,7 +124,7 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
     // stops contributing for the rest of the phase.
     auto const accept = [this, &middle, &set](float x, float y)
     {
-        if (middle.GetExactDist2d(x, y) > ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE)
+        if (middle.GetExactDist2d(x, y) > MaxFromMiddle())
             return false;
 
         if (!RouteAcceptable(x, y))
@@ -137,9 +133,15 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
         return !set.clear || set.clear(x, y);
     };
 
-    auto const capOnly = [this, &middle](float x, float y)
+    auto const fallbackAccept = [this, &middle, &set](float x, float y)
     {
-        return middle.GetExactDist2d(x, y) <= ULDUAR_YOGG_SARON_SPACING_MAX_FROM_MIDDLE && RouteAcceptable(x, y);
+        if (middle.GetExactDist2d(x, y) > MaxFromMiddle())
+            return false;
+
+        if (!RouteAcceptable(x, y))
+            return false;
+
+        return !set.fallbackClear || set.fallbackClear(x, y);
     };
 
     // Every candidate in a ring is the same walk away, so preferNear is free and decides the whole
@@ -151,7 +153,7 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
     // Nothing clears everything at once. Retry on the subset that kills, off the same cache.
     if (safe == Position() && !set.fallback.empty())
         safe = FindNearestPositionClearOfHazards(bot, set.fallback, SearchRadius(), 2.0f,
-                                                 static_cast<float>(M_PI) / 8.0f, &middle, capOnly, &sweep);
+                                                 static_cast<float>(M_PI) / 8.0f, &middle, fallbackAccept, &sweep);
 
     if (safe == Position())
         return false;
@@ -241,18 +243,33 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
         if (ray->IsAlive())
             set.hazards.emplace_back(ray->GetPosition(), ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
 
+    // Yogg's body, which is a hazard from the moment he emerges and stays one: 64022 triggers a 14 yd
+    // knock back off him every second for the rest of the fight, and nothing in the world can be swept
+    // for it. It costs melee nothing - his CombatReach is 30, so melee range on him is about 34 yd.
+    set.hazards.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS);
+
     std::vector<Position> wedges = GetYoggSaronCrushWedges(botAI, SearchRadius() + ULDUAR_YOGG_SARON_CRUSH_RANGE);
     if (!wedges.empty())
     {
         set.clear = [wedges](float x, float y)
         { return !InYoggSaronCrushWedge(wedges, x, y, ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC); };
 
-        // Rays only if nothing clears both: standing in one is certain death, while being in a wedge is
-        // a coin-flip on the tentacle's swing timer.
-        set.fallback = set.hazards;
+        // The wedge is what the retry keeps, and the rays are what it gives up. Across two pulls a
+        // Death Ray killed once over 11 hits for 150,504; Crush killed four times over 19 hits for
+        // 485,964, about 25k a hit against melee pools. Dropping the wedge to keep the rays put bots
+        // back in the Crush line, which is where four of the five non-wipe deaths happened.
+        set.fallbackClear = set.clear;
     }
 
-    return !set.hazards.empty() || !wedges.empty();
+    // The retry needs something to sweep against, and the body is the one circle that is always there.
+    set.fallback.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS);
+
+    return true;
+}
+
+bool YoggSaronPhase2SpacingAction::RouteAcceptable(float x, float y) const
+{
+    return YoggSaronRouteClearOfBody(bot, x, y);
 }
 
 size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseOne)
@@ -314,7 +331,7 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool p
     }
 }
 
-bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, bool tentaclesCleared) const
+bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, bool brainApproachable) const
 {
     if (!candidate || !candidate->IsAlive() || !bot->IsWithinLOSInMap(candidate))
         return false;
@@ -322,7 +339,7 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, bool tentac
     switch (candidate->GetEntry())
     {
         case NPC_BRAIN:
-            return tentaclesCleared;
+            return brainApproachable;
         // Crush skips its own cone test inside 2 yd and re-aims onto whoever the tentacle is swinging
         // at, so a melee bot that was clear becomes collinear without moving. No angle answers that,
         // only not being there. Healers stay eligible: they are at range.
@@ -375,7 +392,11 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     // 60-72 yd from it, so sight distance alone leaves bots with nothing to shoot. Attack() itself caps
     // at nothing but line of sight. The boss room is ~50 yd across and keeps the cheaper sweep.
     float const range = brainLevel ? 200.0f : sPlayerbotAIConfig.sightDistance;
-    bool const tentaclesCleared = brainLevel && YoggSaronInfluenceTentaclesCleared(botAI);
+
+    // The door as well as the tentacles. The Brain opens it in the same branch that fires when the
+    // last Influence Tentacle in the room dies, so a bot reading the tentacles alone can start hitting
+    // the Brain through a wall it has not been let through yet.
+    bool const brainApproachable = brainLevel && YoggSaronBrainRoomApproachable(botAI);
 
     // "nearest npcs" cut down to these entries before its LOS test instead of after. Same units in the
     // same order, without a raycast for every pet and totem in the raid.
@@ -388,7 +409,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     for (Unit* unit : candidates)
     {
         size_t const tier = TierOf(unit, brainLevel, phaseOne);
-        if (tier >= tierCount || !IsAllowedTarget(unit, tentaclesCleared))
+        if (tier >= tierCount || !IsAllowedTarget(unit, brainApproachable))
             continue;
 
         Unit*& selected = perTier[tier];
@@ -420,7 +441,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     }
 
     size_t currentTier = none;
-    if (currentTarget && IsAllowedTarget(currentTarget, tentaclesCleared))
+    if (currentTarget && IsAllowedTarget(currentTarget, brainApproachable))
         currentTier = TierOf(currentTarget, brainLevel, phaseOne);
 
     if (currentTier != none && currentTier <= desiredTier)
@@ -544,53 +565,28 @@ bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
 
 bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
 {
-    Group* group = bot->GetGroup();
-    if (!group)
+    Position spot;
+    YoggSaronPortalIntent const intent = YoggSaronPortalPlan(botAI, spot);
+    if (intent != YOGG_SARON_PORTAL_SPREADING && intent != YOGG_SARON_PORTAL_LATE)
         return false;
-
-    bool isInBrainRoomTeam = false;
-    int portalNumber = 0;
-    int brainRoomTeamCount = 10;
-    if (bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL)
-        brainRoomTeamCount = 4;
-
-    Player* master = botAI->GetMaster();
-    if (master && !botAI->IsTank(master))
-    {
-        portalNumber++;
-        brainRoomTeamCount--;
-    }
-
-    for (GroupReference* gref = group->GetFirstMember(); gref; gref = gref->next())
-    {
-        Player* member = gref->GetSource();
-        if (!member || !member->IsAlive() || botAI->IsTank(member) || botAI->GetMaster()->GetGUID() == member->GetGUID())
-            continue;
-
-        portalNumber++;
-        if (member->GetGUID() == bot->GetGUID())
-        {
-            isInBrainRoomTeam = true;
-            break;
-        }
-
-        brainRoomTeamCount--;
-        if (brainRoomTeamCount == 0)
-            break;
-    }
-
-    if (!isInBrainRoomTeam)
-        return false;
-
-    Position assignedPortalPosition = yoggPortalLoc[portalNumber - 1];
 
     botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("diamond");
 
-    if (!YoggSaronWalkMakingProgress(botAI, "enter", assignedPortalPosition))
+    // Progress is measured against the spot, not the waypoint: the detour's bisector moves as the bot
+    // walks, and a latch keyed on a moving destination is a new latch every tick.
+    if (!YoggSaronWalkMakingProgress(botAI, "enter", spot))
         return false;
 
-    return MoveNear(bot->GetMapId(), assignedPortalPosition.GetPositionX(), assignedPortalPosition.GetPositionY(),
-                    assignedPortalPosition.GetPositionZ(), sPlayerbotAIConfig.contactDistance,
+    // Straight across the room is straight through the body, which throws the bot back once a second
+    // for as long as it is inside the ring. One waypoint turns the crossing into an arc, and each leg
+    // halves the turn the next one has to make.
+    Position destination = spot;
+    Position waypoint;
+    if (YoggSaronBodyDetour(bot, spot, waypoint))
+        destination = waypoint;
+
+    return MoveNear(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
+                    destination.GetPositionZ(), sPlayerbotAIConfig.contactDistance,
                     MovementPriority::MOVEMENT_FORCED);
 }
 
@@ -642,6 +638,9 @@ bool YoggSaronUsePortalAction::Execute(Event /*event*/)
     if (!assignedPortal)
         return false;
 
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.portal", "clicking");
+
     return assignedPortal->HandleSpellClick(bot);
 }
 
@@ -652,7 +651,25 @@ bool YoggSaronIllusionRoomAction::Execute(Event /*event*/)
     bool resultSetRtiMark = SetRtiMark(yoggSaronTrigger);
     bool resultGoToBrainRoom = GoToBrainRoom(yoggSaronTrigger);
 
-    return resultSetRtiMark || resultGoToBrainRoom;
+    return resultSetRtiMark || resultGoToBrainRoom || WalkIntoRoom();
+}
+
+bool YoggSaronIllusionRoomAction::WalkIntoRoom()
+{
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_WALKING_IN)
+        return false;
+
+    // The room's middle is the centroid of its Influence Tentacle summon group, so walking there is
+    // what puts the tentacles in line of sight - which is all the dps resolver was ever waiting for.
+    Position middle;
+    if (!YoggSaronRoomMiddle(bot, middle))
+        return false;
+
+    if (!YoggSaronWalkMakingProgress(botAI, "illusion", middle))
+        return false;
+
+    return MoveTo(bot->GetMapId(), middle.GetPositionX(), middle.GetPositionY(), middle.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronIllusionRoomAction::SetRtiMark(YoggSaronTrigger yoggSaronTrigger)
@@ -726,6 +743,30 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
     }
 
     return false;
+}
+
+bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
+{
+    std::vector<Unit*> const skulls = GetYoggSaronSkullsInArc(botAI);
+    if (skulls.empty())
+        return false;
+
+    float x = 0.0f;
+    float y = 0.0f;
+    for (Unit* skull : skulls)
+    {
+        x += skull->GetPositionX();
+        y += skull->GetPositionY();
+    }
+
+    x /= skulls.size();
+    y /= skulls.size();
+
+    // Away from the centroid. Four skulls to a room can be spread wide enough that no heading clears
+    // all of them, and the middle of the ones that are in arc is the heading that clears the most.
+    bot->SetFacingTo(Position::NormalizeOrientation(bot->GetAngle(x, y) + static_cast<float>(M_PI)));
+
+    return true;
 }
 
 bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
