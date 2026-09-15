@@ -35,6 +35,7 @@
 #include "SpellMgr.h"
 #include "UldEncounterGate.h"
 #include "Unit.h"
+#include "WorldSession.h"
 
 const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS = {
     NPC_INFLUENCE_TENTACLE, NPC_SUIT_OF_ARMOR,   NPC_DEATHSWORN_ZEALOT,  NPC_RUBY_CONSORT,
@@ -960,6 +961,91 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
     }
 
     return threats;
+}
+
+namespace
+{
+float YoggSaronDistanceFromMiddle(Unit* unit)
+{
+    return unit->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
+                               ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+}
+}  // namespace
+
+bool YoggSaronGuardianCountsForSara(Unit* guardian)
+{
+    return guardian && YoggSaronDistanceFromMiddle(guardian) <= ULDUAR_YOGG_SARON_P1_SARA_NOVA_RADIUS;
+}
+
+bool YoggSaronGuardianOnTheStack(Unit* guardian)
+{
+    return guardian && YoggSaronDistanceFromMiddle(guardian) <= ULDUAR_YOGG_SARON_P1_LEASH;
+}
+
+bool YoggSaronPhase1GuardianPreferred(Unit* candidate, Unit* incumbent)
+{
+    if (!candidate)
+        return false;
+
+    if (!incumbent)
+        return true;
+
+    bool const candidateIn = YoggSaronGuardianOnTheStack(candidate);
+    if (candidateIn != YoggSaronGuardianOnTheStack(incumbent))
+        return candidateIn;
+
+    return candidate->GetHealth() < incumbent->GetHealth();
+}
+
+Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+
+    Unit* focus = nullptr;
+    for (Creature* guardian : guardians)
+    {
+        if (!guardian->IsAlive())
+            continue;
+
+        // Already walking at a tank, so the taunt would buy nothing. Its own victim rather than the
+        // threat table: a taunt is a forced victim, and that is the state this is checking for.
+        Player* victim = botAI->GetPlayer(guardian->GetTarget());
+        if (victim && botAI->IsTank(victim))
+            continue;
+
+        if (guardian->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
+                                    ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <= ULDUAR_YOGG_SARON_P1_LEASH)
+        {
+            continue;
+        }
+
+        if (YoggSaronPhase1GuardianPreferred(guardian, focus))
+            focus = guardian;
+    }
+
+    return focus;
+}
+
+bool YoggSaronBotTankAlive(PlayerbotAI* botAI)
+{
+    Group* group = botAI->GetBot()->GetGroup();
+    if (!group)
+        return PlayerbotAI::IsTank(botAI->GetBot());
+
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || !member->IsAlive() || !PlayerbotAI::IsTank(member))
+            continue;
+
+        if (member->GetSession() && member->GetSession()->IsBot())
+            return true;
+    }
+
+    return false;
 }
 
 Position YoggSaronCloudLead(Creature* cloud)

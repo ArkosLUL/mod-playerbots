@@ -554,13 +554,30 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
 
 bool YoggSaronGuardianControlTrigger::IsActive()
 {
+    // Tank first: both branches below are tank-only and the phase read under them is two 200 yd sweeps.
+    if (!botAI->IsTank(bot))
+        return false;
+
+    uint32 const phase = YoggSaronPhase(botAI);
+
+    // Phase 1 wants the same thing for a harder reason. There a Guardian's death location is the phase:
+    // 65719 reaches Sara from 15 yd, so one killed further out is worth nothing, and one killed more
+    // than 6.5 yd out novas the back line as well as the melee pile. One pull lost 4 of its 13 kills
+    // 18-22 yd out and wiped one kill short of the transition.
+    if (phase == 1)
+    {
+        // The designated bot tank rather than the main tank: IsBotMainTank goes false for every bot
+        // the moment a human holds main tank, which is how the phase 3 node stayed silent for a pull.
+        if (!IsDesignatedBotTank())
+            return false;
+
+        return YoggSaronPhase1TauntTarget(botAI) != nullptr;
+    }
+
     // Not gated on Thorim. Which Keepers are up is a raid choice, and hard mode means fewer of them,
     // so asking for both demanded exactly the case where Thorim is least likely to be there. Guardians
     // parked on a tank beat guardians loose among the casters even where none of them can die.
-    if (!IsPhase3())
-        return false;
-
-    if (!botAI->IsTank(bot))
+    if (phase != 3)
         return false;
 
     // Fire while any guardian is loose - alive and not yet held by a tank.

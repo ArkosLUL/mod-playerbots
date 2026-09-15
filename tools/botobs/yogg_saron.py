@@ -3,7 +3,8 @@
 
     yogg_saron.py <file>            every section
     yogg_saron.py <file> --phases   phase timeline and what happened before the pull
-    yogg_saron.py <file> --clouds   cloud-orbit exposure per role
+    yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
+    yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure
     yogg_saron.py <file> --crush    Crush, the body's knockback and Death Rays, per role
@@ -82,6 +83,33 @@ SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 # melee pile. Measured: novas at 2.2-4.0 yd hit 9-10 players, novas at 8.5-14.8 yd hit 22-24.
 NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
+P1_LEASH = 6.5
+
+# 65719 is a flat 25,000 against Sara, so what the phase costs is her health divided by it. Never
+# assume that number: mod-dungeon-scale scales raid boss health and the result moves with raid size -
+# 240,000 at 25 raiders, 237,500 at 24, against the 199,999 of her spawn row. Ten kills, not eight.
+# She is FACTION_FRIENDLY and no snapshot ever samples her, but the `unit` row carries her max health.
+NPC_SARA = 33134
+SARA_NOVA_DAMAGE = 25000
+
+# The clouds. Six of them, one per orbit, circling the middle at a constant 3.0 yd/s; radii are the
+# midpoints of a four-pull spread that never drifted. A cloud summons on any player within 8.5 yd -
+# SelectNearbyTarget's 6 goes through _IsWithinDist, which adds both combat reaches - and the Guardian
+# appears 10 s later, because 63031 is a 10 s aura rather than the instant summon the C++ reads as.
+#
+# InformCloud, Sara's own 20-18-16-14-12-10 s timer, skips any cloud within 20 yd of her, so the
+# innermost orbit can only ever have been triggered by a player standing on it. That is what makes
+# attribution possible at all.
+NPC_OMINOUS_CLOUD = 33292
+CLOUD_ORBITS = (11.6, 21.4, 31.2, 41.0, 50.9, 60.8)
+CLOUD_SUMMON_REACH = 8.5
+CLOUD_SUMMON_DELAY_MS = 10000
+INFORM_CLOUD_MIN_RANGE = 20.0
+
+# Threat redirects and the single-target taunts, for --threat. Righteous Defense is left out: it is
+# aimed at the raid member being hit rather than at a Guardian, so it cannot be ranked against one.
+REDIRECT_SPELLS = {34477: "Misdirection", 57934: "Tricks of the Trade"}
+TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 2649: "Growl"}
 
 # GetCombatReach of both ends plus 4/3, floored at NOMINAL_MELEE_RANGE and widened again by movement
 # leeway, so the real threshold moves. Kept generous because the question this answers is "what was in
@@ -166,6 +194,15 @@ def guids_of_entry(trace: Trace, entry: int) -> set[int]:
     return {guid for guid, en in trace.entries.items() if en == entry}
 
 
+def sara_kills_needed(trace: Trace) -> int | None:
+    """Guardian deaths inside 15 yd the phase costs, from Sara's own max health."""
+    for guid in guids_of_entry(trace, NPC_SARA):
+        maxhp = trace.maxhp.get(guid)
+        if maxhp:
+            return math.ceil(maxhp / SARA_NOVA_DAMAGE)
+    return None
+
+
 def phase_spans(trace: Trace) -> list[tuple[int, int, int]]:
     """(phase, start, end) over the whole file, from the change-only yogg.phase stream."""
     marks = sorted((rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.phase"))
@@ -245,6 +282,19 @@ def show_phases(trace: Trace) -> None:
         print(f"    reaching the {RANGED_STATION:.1f} yd station (over "
               f"{RANGED_STATION - NOVA_RADIUS:.1f} yd out): {wide} of {len(radii)}")
 
+        # The only number that says how close the phase came. A kill outside the nova's reach of Sara
+        # does nothing at all for it, so 13 deaths can still be 9 kills.
+        counted = sum(1 for r in radii if r <= NOVA_RADIUS)
+        needed = sara_kills_needed(trace)
+        if needed:
+            short = needed - counted
+            verdict = "enough" if short <= 0 else f"{short} short"
+            print(f"    counting for Sara (inside {NOVA_RADIUS:.0f} yd): {counted} of the {needed}"
+                  f" she needed - {verdict}")
+        else:
+            print(f"    counting for Sara (inside {NOVA_RADIUS:.0f} yd): {counted}"
+                  f"  (no Sara unit row, so her health is unknown)")
+
     show_handover(trace)
 
 
@@ -316,6 +366,102 @@ def show_clouds(trace: Trace) -> None:
     station = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.p1station"))
     if station:
         print(f"  station re-issues     : {dict(station)}")
+    taunts = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.p1taunt"))
+    if taunts:
+        print(f"  phase 1 taunts        : {dict(taunts)}  (counts = still inside 15 yd of Sara)")
+
+    show_cloud_spawns(trace)
+
+
+def show_cloud_spawns(trace: Trace) -> None:
+    """Which Guardians the raid summoned by standing on a cloud, and which Sara's timer sent.
+
+    Every Guardian appears at the cloud that summoned it, so the cloud is read off the spawn position
+    rather than guessed. Who marked it is read 10 s earlier, because 63031 is a 10 s aura and the
+    Guardian arrives at the end of it - attributing one without rewinding blames whoever happens to be
+    standing there when it lands.
+    """
+    frames = [(snap["t"], {row[0]: (row[1], row[2]) for row in snap.get("u", [])})
+              for snap in trace.of("snap")]
+    if not frames:
+        print("\n  no snapshots, so nothing to attribute")
+        return
+
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+    clouds = guids_of_entry(trace, NPC_OMINOUS_CLOUD)
+    roster = roster_guids(trace)
+    if not clouds:
+        print("\n  no Ominous Cloud was ever sampled, so spawns cannot be attributed")
+        return
+
+    def orbit_of(radius: float) -> int:
+        for index, ring in enumerate(CLOUD_ORBITS, 1):
+            if abs(radius - ring) < 1.5:
+                return index
+        return 0
+
+    def frame_at(when: int):
+        return min(frames, key=lambda frame: abs(frame[0] - when))
+
+    cloud_orbit = {}
+    for guid in clouds:
+        for _, positions in frames:
+            if guid in positions:
+                cloud_orbit[guid] = orbit_of(math.dist(positions[guid], BODY))
+                break
+
+    born: dict[int, tuple[int, tuple[float, float]]] = {}
+    for when, positions in frames:
+        for guid in positions:
+            if guid in guardians and guid not in born:
+                born[guid] = (when, positions[guid])
+
+    print("\nCLOUD SPAWNS")
+    per_orbit = collections.Counter()
+    contact = collections.Counter()
+    detail = []
+    for guid, (when, where) in sorted(born.items(), key=lambda kv: kv[1][0]):
+        _, positions = frame_at(when)
+        near = sorted((math.dist(positions[cloud], where), cloud)
+                      for cloud in clouds if cloud in positions)
+        if not near or near[0][0] > 4.0:
+            detail.append((when, 0, []))
+            continue
+
+        gap, cloud = near[0]
+        orbit = cloud_orbit.get(cloud, 0)
+        per_orbit[orbit] += 1
+
+        _, marked = frame_at(when - CLOUD_SUMMON_DELAY_MS)
+        who = []
+        if cloud in marked:
+            who = sorted((round(math.dist(marked[guid2], marked[cloud]), 1), trace.name(guid2),
+                          role_of(trace, guid2))
+                         for guid2 in roster
+                         if guid2 in marked
+                         and math.dist(marked[guid2], marked[cloud]) <= CLOUD_SUMMON_REACH)
+        if who:
+            contact[orbit] += 1
+        detail.append((when, orbit, who))
+
+    for when, orbit, who in detail:
+        names = ", ".join(f"{name}/{role} {gap}" for gap, name, role in who) or "-"
+        ring = f"orbit{orbit}" if orbit else "no cloud"
+        print(f"  {clock(when):>9}  {ring:<9}  {names}")
+
+    # The innermost orbit is the load-bearing one: InformCloud skips every cloud within 20 yd of Sara,
+    # so Sara's timer can never pick it and every Guardian off it was summoned by a player.
+    inner = [index for index, ring in enumerate(CLOUD_ORBITS, 1) if ring < INFORM_CLOUD_MIN_RANGE]
+    ours = sum(count for orbit, count in per_orbit.items() if orbit in inner)
+    ours += sum(count for orbit, count in contact.items() if orbit not in inner)
+    total = sum(per_orbit.values())
+    print(f"\n  by orbit: {dict(sorted(per_orbit.items()))}   of {len(born)} Guardians")
+    print(f"  the raid's own feet: {ours} of {total}"
+          f"   (every orbit {'/'.join(str(i) for i in inner)} spawn, plus any other with a raider"
+          f" inside {CLOUD_SUMMON_REACH} yd at the mark)")
+    print(f"  Sara's timer: {total - ours}"
+          f"   (20-18-16-14-12-10 s, and it can only pick a cloud over"
+          f" {INFORM_CLOUD_MIN_RANGE:.0f} yd out)")
 
 
 def show_portals(trace: Trace) -> None:
@@ -929,6 +1075,81 @@ def show_sanity(trace: Trace) -> None:
     show_sanity_sources(trace)
 
 
+def show_threat(trace: Trace) -> None:
+    """Who the Guardians were actually beating on, and what the raid spent trying to change that.
+
+    The answer is not "nothing was tried": Misdirection goes to the tank and the tank taunts. It is
+    that one tank's taunt budget is roughly one cast per Guardian death, against a room where every
+    Guardian carries its own threat table from SetInCombatWithZone, so the question worth asking is
+    whether the budget was spent on the Guardian whose death location decides the phase.
+    """
+    print("THREAT")
+    spans = phase_spans(trace)
+    p1_end = next((stop for phase, _, stop in spans if phase == 1), None)
+    if p1_end is None:
+        print("  no phase 1 in this trace")
+        return
+
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+    roster = roster_guids(trace)
+
+    held = collections.Counter()
+    frames = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end]
+    for index, snap in enumerate(frames):
+        step = (frames[index + 1]["t"] - snap["t"]) if index + 1 < len(frames) else 0
+        for row in snap.get("u", []):
+            # Pre-v8 traces are short rows and carry no target column at all.
+            if row[0] not in guardians or len(row) < 8 or row[5] <= 0:
+                continue
+            target = row[7]
+            held[role_of(trace, target) if target in roster else
+                 ("nobody" if not target else "other")] += step
+
+    total = sum(held.values())
+    if total:
+        shares = "  ".join(f"{role}: {span * 100.0 / total:4.1f}%"
+                           for role, span in held.most_common())
+        print(f"  Guardian time on target  {shares}")
+        print(f"    on a tank: {held['tank'] * 100.0 / total:.1f}%")
+    else:
+        print("  no live Guardian was ever sampled with a target")
+
+    redirects = [rec for rec in trace.of("cast")
+                 if rec.get("sp") in REDIRECT_SPELLS and 0 <= rec["t"] <= p1_end]
+    if redirects:
+        print(f"\n  redirects: {len(redirects)}")
+        for rec in redirects:
+            target = rec.get("tgt", 0)
+            role = role_of(trace, target) if target in roster else "?"
+            print(f"    {clock(rec['t']):>9}  {REDIRECT_SPELLS[rec['sp']]:<20}"
+                  f" {trace.name(rec.get('s', 0)):<14} -> {trace.name(target)} ({role})")
+
+    # A taunt is only worth its cooldown if it lands on the Guardian the raid is killing, which is the
+    # lowest-health one. Ranking it against the living Guardians is the whole measurement.
+    taunts = [rec for rec in trace.of("cast")
+              if rec.get("sp") in TAUNT_SPELLS and 0 <= rec["t"] <= p1_end
+              and rec.get("s") in roster]
+    if not taunts:
+        print("\n  no single-target taunt was cast in phase 1")
+        return
+
+    print(f"\n  taunts: {len(taunts)}   (rank 1 = the lowest-health Guardian, the one the raid is on)")
+    on_focus = 0
+    for rec in taunts:
+        target = rec.get("tgt", 0)
+        snap = min(frames, key=lambda s: abs(s["t"] - rec["t"])) if frames else None
+        live = sorted((row[5], row[0]) for row in (snap.get("u", []) if snap else [])
+                      if row[0] in guardians and row[5] > 0)
+        rank = next((i + 1 for i, (_, guid) in enumerate(live) if guid == target), 0)
+        if rank == 1:
+            on_focus += 1
+        where = position_at(trace, target, rec["t"])
+        radius = f"{math.dist(where, BODY):5.1f}" if where else "    ?"
+        print(f"    {clock(rec['t']):>9}  {TAUNT_SPELLS[rec['sp']]:<18}"
+              f" rank {rank or '?'}/{len(live):<2}  target {radius} yd out")
+    print(f"    landed on the focus Guardian: {on_focus} of {len(taunts)}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("file", type=pathlib.Path)
@@ -939,6 +1160,7 @@ def main() -> int:
     parser.add_argument("--brain", action="store_true", help="brain room, the Brain, skulls")
     parser.add_argument("--crush", action="store_true", help="Crush, knockback and Death Rays")
     parser.add_argument("--sanity", action="store_true", help="Sanity minima")
+    parser.add_argument("--threat", action="store_true", help="who the Guardians were on, and taunts")
     args = parser.parse_args()
 
     if not args.file.is_file():
@@ -946,12 +1168,13 @@ def main() -> int:
         return 1
 
     trace = Trace(args.file)
-    picked = (args.phases, args.clouds, args.portals, args.phase2, args.brain, args.crush, args.sanity)
+    picked = (args.phases, args.clouds, args.threat, args.portals, args.phase2, args.brain,
+              args.crush, args.sanity)
     every = not any(picked)
 
     show_banner(trace)
-    for wanted, section in zip(picked, (show_phases, show_clouds, show_portals, show_phase2,
-                                        show_brain, show_crush, show_sanity)):
+    for wanted, section in zip(picked, (show_phases, show_clouds, show_threat, show_portals,
+                                        show_phase2, show_brain, show_crush, show_sanity)):
         if wanted or every:
             print()
             section(trace)

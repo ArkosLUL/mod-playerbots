@@ -313,14 +313,20 @@ public:
     bool Execute(Event event) override;
 };
 
-// The tank holds the melee stack and taunts loose Immortal Guardians onto it, so the raid cleaves them
-// to Weakened for Thorim's Titanic Storm - and so they are not loose among the casters where it cannot.
+// The tank holds a stack spot and taunts loose Guardians onto it. Phase 3 does it so the raid cleaves
+// Immortal Guardians to Weakened for Thorim's Titanic Storm; phase 1 does it because a Guardian's
+// death location is the phase, and one that dies out among the casters neither hurts Sara nor spares
+// the back line.
 class YoggSaronGuardianControlAction : public MovementAction
 {
 public:
     YoggSaronGuardianControlAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron guardian control action") {}
 
     bool Execute(Event event) override;
+
+private:
+    bool ControlPhaseOne();
+    bool Taunt(Unit* guardian);
 };
 
 // Reduced-Keeper hard mode: retreat to a safe ranged spot and face away from Yogg to conserve sanity.

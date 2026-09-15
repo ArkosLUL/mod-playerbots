@@ -189,6 +189,11 @@ constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
 
+// The other of those two 15s: how far 65719 reaches Sara, so how far out a kill still counts. It is
+// the wider one on purpose - the leash decides where a bot stands, this decides when the raid gives
+// up on a Guardian, and keeping them apart is what stops a focus flipping on a yard of drift.
+constexpr float ULDUAR_YOGG_SARON_P1_SARA_NOVA_RADIUS = 15.0f;
+
 // Ranged and healers stack rather than spread, which inverts the usual rule and only holds because the
 // nova cannot reach the station. A cloud is in contact for (8.5 + blob + 8.5) / 3 seconds and re-arms
 // 10 s after each summon, so a blob under 13 yd across costs exactly one Guardian per pass: at 5 yd
@@ -541,6 +546,32 @@ bool YoggSaronCanInterrupt(Player* bot);
 // design and count one only while Sara's Fervor is doubling it. Shared so the trigger and the action
 // cannot disagree about who is running.
 std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius);
+
+// Which of two phase 1 Guardians the raid should be on. One inside the leash beats one outside it
+// whatever their health, because a kill out there does nothing for Sara and its nova reaches the
+// station instead of the melee pile; lowest health decides within each group, which is the focus fire
+// that keeps a Guardian from spending 3.5 s at detonation range. Shared so the kill order and the
+// tank's taunt cannot pick different Guardians - they run on different bots and never exchange state,
+// so agreeing means computing the same answer from the same world.
+bool YoggSaronPhase1GuardianPreferred(Unit* candidate, Unit* incumbent);
+
+// The two radii that comment separates, as predicates, so nothing has to remember which 15 is which.
+// A Guardian that counts is one whose death nova still reaches Sara; one on the stack also dies close
+// enough that the blast stops at the melee pile instead of the 21.5 yd station.
+bool YoggSaronGuardianCountsForSara(Unit* guardian);
+bool YoggSaronGuardianOnTheStack(Unit* guardian);
+
+// The Guardian the tank should pull in, or null while every one of them is already where it should be
+// or already walking at a tank. The raid's focus first: the tank gets one taunt per Guardian death at
+// best - 12 casts against 13 kills on the pull that measured it - and spending that on whoever last
+// hit somebody picked the 7th-lowest Guardian of 9. Only fires for a Guardian outside the leash,
+// because one already inside needs no fetching.
+Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI);
+
+// Whether the raid still has a living bot tank to fetch Guardians with. The reach guard below stands
+// melee down on the promise that somebody else brings the target in, so it has to know that somebody
+// is there - without this a dead tank strands the melee half of the raid out of combat.
+bool YoggSaronBotTankAlive(PlayerbotAI* botAI);
 
 // Where a cloud will be one lead ahead, taken from its own facing and run speed.
 Position YoggSaronCloudLead(Creature* cloud);

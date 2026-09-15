@@ -84,9 +84,42 @@ float YoggSaronDisplacementGuardMultiplier::GetValue(Action* action)
     return phase == 1 || teleport ? 0.0f : 1.0f;
 }
 
+float YoggSaronMovementGuardMultiplier::FleeGuard()
+{
+    // Ranged and healers only. The station owns their feet in phase 1 and stepping off it is what
+    // hands the second orbit a stacked back line to sweep; melee and the tank keep it, because the
+    // leash already owns them and no melee bot fled at all in the pull that measured this.
+    if (!PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot))
+        return 1.0f;
+
+    return YoggSaronInPhase1(botAI) ? 0.0f : 1.0f;
+}
+
+bool YoggSaronMovementGuardMultiplier::MeleeReachIsWrong(Action* action)
+{
+    // Only the melee reach pays the phase read, so every other reach keeps the cheap ring arithmetic
+    // below ahead of it.
+    if (action->getName() != "reach melee" || !YoggSaronInPhase1(botAI))
+        return false;
+
+    // Walking at a Guardian that is not on the stack is walking out of the cloud-free circle, and the
+    // innermost orbit collected a Guardian on almost every one of its 24 s laps that way. The tank
+    // taunts it in instead - but only if there is a tank alive to do it, or this strands the melee
+    // half of the raid with nothing to close on.
+    Unit* target = AI_VALUE(Unit*, "current target");
+
+    return target && !YoggSaronGuardianOnTheStack(target) && YoggSaronBotTankAlive(botAI);
+}
+
 float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 {
-    if (!action || !dynamic_cast<ReachTargetAction*>(action))
+    if (!action)
+        return 1.0f;
+
+    if (dynamic_cast<FleeAction*>(action))
+        return FleeGuard();
+
+    if (!dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 
     // The heal reach is what keeps a healer in range of somebody no station can see, and it never walks
@@ -100,6 +133,9 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     // bot standing on the Brain, 93 yd underneath it.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
+
+    if (MeleeReachIsWrong(action))
+        return 0.0f;
 
     float const fromMiddle =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());

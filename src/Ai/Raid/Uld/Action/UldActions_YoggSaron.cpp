@@ -604,10 +604,17 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         }
 
         // Guardians go down lowest first so the raid's damage finishes one instead of spreading over
-        // three; everything else is nearest, which is the shortest walk into range.
-        bool const better = IsYoggSaronFocusedGuardian(unit)
-                                ? unit->GetHealth() < selected->GetHealth()
-                                : unit->GetExactDist2d(bot) < selected->GetExactDist2d(bot);
+        // three; everything else is nearest, which is the shortest walk into range. Phase 1 puts a
+        // Guardian standing where its death counts ahead of a lower-health one that is not, because
+        // there the kill location is the phase and not just who eats the nova.
+        bool better;
+        if (phaseOne && IsYoggSaronFocusedGuardian(unit))
+            better = YoggSaronPhase1GuardianPreferred(unit, selected);
+        else if (IsYoggSaronFocusedGuardian(unit))
+            better = unit->GetHealth() < selected->GetHealth();
+        else
+            better = unit->GetExactDist2d(bot) < selected->GetExactDist2d(bot);
+
         if (better)
             selected = unit;
     }
@@ -630,12 +637,22 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     if (currentTier != none && currentTier <= desiredTier)
     {
+        // The one place a Guardian hold is dropped. A phase 1 focus that has drifted past 15 yd cannot
+        // damage Sara at all, so finishing it there is a kill thrown away and a nova over the back
+        // line; one pull lost four of its thirteen that way and wiped a kill short. Give up at 15 and
+        // pick up only inside 6.5 - the gap is what stops a Guardian on the boundary flipping the
+        // raid's target, and while nothing is on the stack the hold survives and the tank fetches.
+        bool const abandon = phaseOne && IsYoggSaronFocusedGuardian(currentTarget) &&
+                             !YoggSaronGuardianCountsForSara(currentTarget) &&
+                             YoggSaronGuardianOnTheStack(target);
+
         // Never downgrade off something at least as urgent, and inside one tier only switch for
         // something meaningfully closer - otherwise two tentacles ping-pong the whole raid. Guardians
         // hold outright: that tier is ordered by health, and an order that flips mid-fight would reset
         // every swing and cast timer in the raid.
-        if (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
-            target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
+        if (!abandon &&
+            (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
+             target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot)))
         {
             target = currentTarget;
         }
@@ -1030,6 +1047,9 @@ bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
     if (!botAI->IsTank(bot))
         return false;
 
+    if (YoggSaronInPhase1(botAI))
+        return ControlPhaseOne();
+
     // Hold the melee stack so taunted guardians pile onto the melee bots to be cleaved down.
     if (bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > 5.0f)
     {
@@ -1067,16 +1087,50 @@ bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
     if (!looseGuardian)
         return false;
 
+    return Taunt(looseGuardian);
+}
+
+bool YoggSaronGuardianControlAction::ControlPhaseOne()
+{
+    // Inside the cloud-free circle, not the 5 yd the phase 3 stack uses. A taunted Guardian walks to
+    // the tank, so wherever the tank stands is where it dies, and outside 2.89 yd the innermost orbit
+    // sweeps the pile - one pull fed it 8 of its 23 Guardians that way. Taunt reaches 30 yd from here,
+    // which covers the whole 21.5 yd back line, so this is never a walk out after one.
+    if (bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) >
+        ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS)
+    {
+        return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
+                      ULDUAR_YOGG_SARON_MIDDLE.GetPositionY(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionZ(), false,
+                      false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+    }
+
+    Unit* guardian = YoggSaronPhase1TauntTarget(botAI);
+    if (!guardian)
+        return false;
+
+    // Whether the Guardian being fetched is still somewhere its death would pay for the phase, which
+    // is the one thing worth knowing about a taunt here after the fact.
+    if (RaidObs::Active())
+    {
+        RaidObs::NoteDerived(bot, "yogg.p1taunt",
+                             YoggSaronGuardianCountsForSara(guardian) ? "counts" : "beyond");
+    }
+
+    return Taunt(guardian);
+}
+
+bool YoggSaronGuardianControlAction::Taunt(Unit* guardian)
+{
     switch (bot->getClass())
     {
         case CLASS_WARRIOR:
-            return botAI->CastSpell("taunt", looseGuardian);
+            return botAI->CastSpell("taunt", guardian);
         case CLASS_PALADIN:
-            return botAI->CastSpell("hand of reckoning", looseGuardian);
+            return botAI->CastSpell("hand of reckoning", guardian);
         case CLASS_DEATH_KNIGHT:
-            return botAI->CastSpell("dark command", looseGuardian);
+            return botAI->CastSpell("dark command", guardian);
         case CLASS_DRUID:
-            return botAI->CastSpell("growl", looseGuardian);
+            return botAI->CastSpell("growl", guardian);
         default:
             return false;
     }

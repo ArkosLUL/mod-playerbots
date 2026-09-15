@@ -5,11 +5,18 @@ Sara is `FACTION_FRIENDLY` all of P1, and her `DamageTaken` zeroes anything whos
 Guardian of Yogg-Saron (33136). The raid's job is to kill Guardians **on top of her** — their death
 explosion Shadow Nova Sara (65719, 15 yd) is her only damage source.
 
-That makes P1 a counter, not a damage race: 65719 is a flat **25,000** against her spawn row's
-**199,999**, so the phase wants roughly **eight** deaths inside 15 yd of her and a kill further out
-buys nothing at all. One of six kills on 2026-09-14 landed 22.0 yd out and was simply wasted. Guardians
-have no movement script — `SetInCombatWithZone`, then a vanilla threat table — so **where melee stand
-is where a Guardian dies**, which is the whole reason melee are leashed to her.
+That makes P1 a counter, not a damage race: 65719 is a flat **25,000**, so the phase costs her health
+divided by it and a kill outside 15 yd buys nothing at all.
+
+**Never take that count from `creature_template`.** Her spawn row is 199,999, but mod-dungeon-scale
+scales raid boss health and the result moves with raid size — **240,000 at 25 raiders, 237,500 at 24**
+— so **ten** deaths, not the eight the row gives. Read it off Sara's `unit` row in the trace;
+`yogg_saron.py --phases` does. On 2026-09-15 a pull wiped with **9 of the 10**, having spent four
+kills 18-22 yd out where they counted for nothing; the pull that transitioned did so 0.26 s after its
+tenth.
+
+Guardians have no movement script — `SetInCombatWithZone`, then a vanilla threat table — so **where
+melee stand is where a Guardian dies**, which is the whole reason melee are leashed to her.
 
 So no bot ever holds threat on her, and `AI_VALUE2(Unit*, "find target", "sara")` walks
 `GetThreatenedByMeList()`. It returned null every tick and took **all 21 Yogg nodes** with it: two
@@ -94,9 +101,18 @@ goes through `_IsWithinDist`, which adds both `GetObjectSize()` values — and t
 Inner-orbit summons, which are provably player-only, measure the approach at 8.53 / 8.64 / 8.71.
 Pets cannot trigger it (`who->IsPlayer()`).
 
-Avoiding them starves nothing: `EVENT_SARA_P1_SUMMON` feeds Guardians every 20 s, shrinking to a 10 s
-floor, wherever the raid stands. That timer is also the yardstick — it can fire at most **7** times in
-a 99 s window, so the 20 Guardians of 2026-09-14 put **at least 13** on the raid's own feet.
+Avoiding them starves nothing: `EVENT_SARA_P1_SUMMON` feeds Guardians every 20 s, shrinking 2 s a
+summon to a 10 s floor, wherever the raid stands.
+
+**Every Guardian spawns on the cloud that summoned it, so attribution is a measurement rather than an
+estimate.** Match its spawn position to a cloud, then rewind 10 s for who was inside 8.5 yd of that
+cloud — `yogg_saron.py --clouds` does both. Of 23 on 2026-09-15, by orbit **1: 8 · 2: 4 · 3: 1 · 4: 1
+· 5: 2 · 6: 7**, and **11 were the raid's own feet**: every orbit-1 spawn, plus three on orbit 2. The
+innermost cloud laps in 24 s against a 190 s phase and collected one on nearly every pass — melee
+outside the cloud-free circle in 7 of its 12 contacts, ranged in 3.
+
+Orbit 2's four are the station's designed cost: 4.2 laps, one each, exactly the arithmetic above.
+**Not a defect; do not re-audit.**
 
 **Nobody dodges a cloud. Two places in the room it cannot reach, and you stand in one.** Against the
 8.5 yd reach the orbits leave exactly these:
@@ -204,6 +220,27 @@ reach of every bot standing on the Brain, 93 yd underneath it.
 recomputed from the bot's new position every tick, so against six rotating rings the best answer rotates
 with them.
 
+**Two more generic movers own feet in phase 1, and neither was guarded.** Between them they put the
+raid on the clouds:
+
+- **`reach melee` walks melee *out*.** The displacement guard leaves it alive on purpose so melee walk
+  in on foot, but its destination is the target, and 16 of 23 Guardians on 2026-09-15 lived outside the
+  leash — eight parked on the 21.5 yd station. Median destination **10.5 yd** from the middle, which is
+  the innermost orbit. Now zeroed in phase 1 while the current target is outside
+  `ULDUAR_YOGG_SARON_P1_LEASH` **and a bot tank is alive to fetch it**; without that second condition a
+  dead tank strands every melee bot out of combat.
+- **`flee` walks ranged and healers off the station.** Not the panic route: median health when fleeing
+  was **96.9%** and 74% of the moves were above 80%. It is `RangedCombatStrategy`'s `"enemy too close
+  for spell"` at `ACTION_MOVE + 4`, true whenever a Guardian stands on a caster — and the 3 yd it gives
+  up escapes nothing, since Dark Volley is 35 yd and the nova is a death explosion. **957** moves in one
+  phase 1, **96.4%** ending further from the band, 36.5% inside 20.1 yd where the innermost orbit
+  reaches. Zeroed for ranged and healers in phase 1; melee and the tank keep it, because the leash
+  already owns them and no melee bot fled at all.
+
+Relevance is why both ran. Each loses to the station node at `ACTION_RAID` — but only while that node
+is *active*, and it stands down the moment the bot is in band and stacked. **A node that yields once
+satisfied owns nothing between its own firings; only a guard does.**
+
 **Who dodges what, in phase 1.** Nobody dodges clouds; the only cloud move is stepping off one a bot
 is already standing in. A Guardian's nova is dodged only by a bot that
 would not otherwise survive it: ranged and healers when one is at or under
@@ -272,10 +309,11 @@ pull, and the bots waiting on it dropped out of combat into `clean quest log` an
 `RtiTargetValue::Calculate` returns null on LOS failure and beyond `sightDistance` (100) in 2D. A
 direct `Attack()` has **no distance cap, only LOS**, which is what makes the Brain reachable at all.
 
-Kill order — **phase 1: one tier, the lowest-health Guardian of Yogg-Saron**. Splitting damage is what
-killed the raid on 2026-09-14: two Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and
-crossed zero inside one second, and the **double** nova put 228,396 over 16 hits and killed all eight
-melee in **16 ms**. Four earlier single novas were all survived. Brain level: Influence Tentacle →
+Kill order — **phase 1: one tier, and inside it the Guardian nearest Sara before the lowest-health
+one** (below). Splitting damage is what killed the raid on 2026-09-14: two Guardians rode down in
+lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and the **double** nova put
+228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier single novas were all
+survived. Brain level: Influence Tentacle →
 nearest other illusion add → the Brain. Boss room:
 **leftover Guardian of Yogg-Saron** → Crusher (**ranged only**, below) → Constrictor → Corruptor →
 **Marked** Immortal Guardian (36064) → Immortal Guardian (33988) → Yogg.
@@ -287,10 +325,45 @@ five of them took **~1,978,370** — two Guardians' worth — for **zero kills**
 and 21.2%, while dealing 735,989 back. That is the same split-damage failure phase 1 has a kill order to
 prevent.
 
-Every Guardian tier is picked lowest-health first and then held outright: an order that flips
-mid-fight resets every swing and cast timer in the raid.
+Every Guardian tier is picked lowest-health first and then held outright: an order that flips mid-fight
+resets every swing and cast timer in the raid. Phase 1 is the one exception on both counts, and the
+threat section below is why.
  Below 10% a guardian is Weakened and only Thorim's Titanic Storm can finish it, so it stops
 being a target at all.
+
+## Threat: the redirects are fine, the taunt budget does not stretch
+
+**Do not re-investigate whether bots redirect threat in P1 — they do, correctly.** Over one phase 1:
+Misdirection **6 casts, all on the tank**; Hand of Reckoning 12; Righteous Defense 11, six of them
+aimed at a ranged or healer being hit. Tricks of the Trade went to a melee dps 6 of 6, and that is also
+right: `TricksOfTheTradeTargetValue` prefers the main tank and falls back to the highest attack-power
+melee when `TankNeedsRedirect` is false — when the tank already out-threatens the rogue on that target.
+Leave all three alone.
+
+None of it governs the Guardians the raid is *not* on. Guardian time on target: **ranged 39.8%, tank
+35.2%, melee 17.3%, heal 5.9%** — **63% on a non-tank**, with 11 of 23 living mostly on a ranged bot.
+One tank, ~12 single-target taunts in 190 s, 23 independent threat tables from `SetInCombatWithZone`,
+Hand of Reckoning on an 8 s cooldown: the budget is about **one taunt per Guardian death** and cannot
+cover the room.
+
+So spend it on the Guardian whose death location decides the phase. The generic paladin taunt is
+reactive — whoever last hit a raid member — and its aim decays as they pile up: on the focus Guardian
+**6 of 13 times**, all six with 1-5 alive, then rank 3, 3, 4, 6 and **7 of 9**. `yogg-saron guardian
+control` runs in phase 1 as well now, holding the tank inside the **2.8 yd** cloud-free circle rather
+than phase 3's 5.0 and taunting `YoggSaronPhase1TauntTarget`: the raid's focus first, skipping any
+Guardian already inside the leash or already walking at a tank. Taunt reaches 30 yd, which covers the
+whole 21.5 yd back line, so this never walks the tank out after one.
+
+**A taunt only pays if the raid waits for the walk.** One pull taunted the focus Guardian at 22.4 yd
+and killed it at **18.0 yd, 6.4 s later** — mid-walk, and wasted. So the phase 1 kill order puts a
+Guardian inside the leash ahead of a lower-health one outside it, and drops a held focus that has
+drifted past **15 yd** for one inside **6.5**. The two radii are far apart deliberately: give up where
+the kill stops counting, pick up where it lands on the melee pile, and a Guardian on the boundary never
+flips the raid's target. While nothing is inside, the hold survives and the tank fetches.
+
+`YoggSaronPhase1GuardianPreferred` owns that comparison for both the kill order and the taunt. They run
+on different bots and never exchange state, so agreeing means computing the same answer from the same
+world.
 
 ## Crush is a ±5° cone that tracks its victim
 
