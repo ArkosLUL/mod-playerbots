@@ -11,6 +11,11 @@ pre-roll). Schema and field meanings live in docs/systems/observability.md.
     postmortem.py <file> --notes [KEY]   pull/phase/note/end records, optionally one key prefix
     postmortem.py <file> --probes [KEY]  what each probe key decided, ranked by churn
     postmortem.py <file> --stalls [MS]   held still while still asking to move - i.e. stuck
+    postmortem.py <file> --idle [MS]     held a target and cast nothing - stuck, the other half
+    postmortem.py <file> --vetoes        which multiplier zeroed which action, most often first
+    postmortem.py <file> --moves [ACT]   what each mover did to the raid's distance from --from
+    postmortem.py <file> --where SPEC    where deaths/casts/notes happened, relative to --from
+    postmortem.py <file> --threat [ENT]  who the hostiles were on, by role, weighted by time held
     postmortem.py <file> --clump [YARDS] how stacked the raid was, largest group in one circle
     postmortem.py <file> --verify        check the trace against the invariants the schema promises
     postmortem.py <file> --coverage [P]  which strategy nodes did anything, and why the rest did not
@@ -27,8 +32,10 @@ from coverage import show_coverage
 from deathreport import show_death, summarise
 from obstrace import Trace
 from probes import show_probes
+from space import show_moves, show_threat, show_where
 from validity import show_validity
-from views import show_bot, show_clump, show_notes, show_stalls, show_track, show_verify
+from views import (show_bot, show_clump, show_idle, show_notes, show_stalls, show_track,
+                   show_verify, show_vetoes)
 
 
 def main() -> int:
@@ -54,7 +61,7 @@ def main() -> int:
     parser.add_argument(
         "--during",
         metavar="KEY=VALUE",
-        help="with --probes, only while a latch held a value, e.g. mimiron.phase=1",
+        help="only while a latch held a value, e.g. mimiron.phase=1; scopes the views that take it",
     )
     parser.add_argument(
         "--stalls",
@@ -63,6 +70,50 @@ def main() -> int:
         const=6000,
         metavar="MS",
         help="windows where a bot held station while still issuing accepted moves (default 6000ms)",
+    )
+    parser.add_argument(
+        "--idle",
+        nargs="?",
+        type=int,
+        const=10000,
+        metavar="MS",
+        help="bots that held a target and cast nothing at all (default 10000ms)",
+    )
+    parser.add_argument(
+        "--vetoes",
+        action="store_true",
+        help="which multiplier zeroed which action, and how often",
+    )
+    parser.add_argument(
+        "--moves",
+        nargs="?",
+        const="",
+        metavar="ACTION",
+        help="per mover, the radius it moved bots from and to; name one to see its role split",
+    )
+    parser.add_argument(
+        "--where",
+        metavar="SPEC",
+        help="radius of each event from --from, as death, cast:<spell> or note:<key>",
+    )
+    parser.add_argument(
+        "--threat",
+        nargs="?",
+        type=int,
+        const=0,
+        metavar="ENTRY",
+        help="who the hostiles held as target, by role; pass a creature entry to narrow it",
+    )
+    parser.add_argument(
+        "--from",
+        dest="origin",
+        metavar="ANCHOR",
+        help="point to measure from: a Position constant's name, or entry:<N> for a creature",
+    )
+    parser.add_argument(
+        "--band",
+        metavar="RADIUS",
+        help="with --moves or --where, a distance to score against: a float constant's name, or a number",
     )
     parser.add_argument(
         "--clump",
@@ -97,7 +148,12 @@ def main() -> int:
     parser.add_argument(
         "--since",
         metavar="REF",
-        help="commit-ish or ISO time the build must be newer than (default: HEAD)",
+        help="commit-ish or ISO time the build must be newer than; naming one makes it disqualify",
+    )
+    parser.add_argument(
+        "--hardmode",
+        action="store_true",
+        help="the pull was meant to be hard mode, so hard mode off disqualifies it",
     )
     args = parser.parse_args()
 
@@ -108,7 +164,7 @@ def main() -> int:
     trace = Trace(args.file)
 
     if args.validity:
-        return 1 if show_validity(trace, args.since) else 0
+        return 1 if show_validity(trace, args.since, args.hardmode) else 0
 
     if args.death is not None:
         return show_death(trace, args.death)
@@ -122,6 +178,19 @@ def main() -> int:
         return show_probes(trace, args.probes or None, args.during)
     if args.stalls is not None:
         return show_stalls(trace, args.stalls)
+    if args.idle is not None:
+        return show_idle(trace, args.idle)
+    if args.vetoes:
+        return show_vetoes(trace)
+    if args.moves is not None or args.where:
+        if not args.origin:
+            print("--moves and --where need --from ANCHOR to measure against", file=sys.stderr)
+            return 1
+        if args.where:
+            return show_where(trace, args.where, args.origin, args.band, args.during)
+        return show_moves(trace, args.moves or None, args.origin, args.band, args.during)
+    if args.threat is not None:
+        return show_threat(trace, args.threat or None, args.during)
     if args.clump is not None:
         return show_clump(trace, args.clump)
     if args.verify:
@@ -129,7 +198,7 @@ def main() -> int:
     if args.coverage is not None:
         return show_coverage(trace, args.coverage or None, args.by_bot)
 
-    show_validity(trace, args.since)
+    show_validity(trace, args.since, args.hardmode)
     summarise(trace)
     return 0
 

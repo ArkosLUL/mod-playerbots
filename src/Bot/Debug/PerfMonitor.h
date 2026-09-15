@@ -65,7 +65,9 @@ public:
         return instance;
     }
 
-    PerfMonitorOperation* start(PerformanceMetric metric, std::string const name,
+    // By reference: the name arrives from getName(), which already returns a fresh string, and
+    // taking it by value copied that again on every call whether or not the monitor was on.
+    PerfMonitorOperation* start(PerformanceMetric metric, std::string const& name,
                                        PerformanceStack* stack = nullptr);
     void PrintStats(bool perTick = false, bool fullStack = false);
     void Reset();

@@ -29,9 +29,12 @@ Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go throug
 applies.
 
 `--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
-encounter - so on a trace nothing renamed, **every boss's nodes fold away into the "gate shut this
-pull" line**, 342 of them on the 2026-09-13 Yogg wipes. That reads as a closed gate and is only the
-join failing. Name the pull before trusting either view.
+encounter - so on a trace nothing renamed, every boss's nodes used to fold away into the "gate shut
+this pull" line, 342 of them on the 2026-09-13 Yogg wipes, which reads as a closed gate and is only
+the join failing. Where no rename record exists the units now decide instead: several creatures can
+carry the boss flag - Yogg's room has the four Keepers standing in it - so the one that traded damage
+is the encounter. `--boss` opens a file its name ruled out rather than dropping it, but only on the
+miss, so a boss that files itself correctly still costs nothing.
 
 ```
 postmortem.py <file>                 summary + a block per death
@@ -42,12 +45,32 @@ postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to o
 postmortem.py <file> --probes [KEY]  every probe key ranked by churn; name one exactly for its timeline
 postmortem.py <file> --during K=V    with --probes, only while a latch held a value
 postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
+postmortem.py <file> --idle [MS]     held a target and cast nothing - the same failure, cast side
+postmortem.py <file> --vetoes        which multiplier zeroed which action, most often first
+postmortem.py <file> --moves [ACT]   what each mover did to the raid's radius from --from
+postmortem.py <file> --where SPEC    radius of each death / cast:<spell> / note:<key> from --from
+postmortem.py <file> --threat [ENT]  who the hostiles held as target, by role, weighted by time
+postmortem.py <file> --from ANCHOR   the point those three measure from; --band scores against it
 postmortem.py <file> --clump [YARDS] largest group inside one circle, per snapshot
 postmortem.py <file> --verify        check the schema's invariants; non-zero exit if any fail
 postmortem.py <file> --coverage [P]  what each strategy node did, and why the rest did nothing
 postmortem.py <file> --validity      only the banner below; non-zero exit if anything disqualifies
 postmortem.py <file> --since REF     compare the build against REF rather than HEAD
 ```
+
+**The fight supplies the point, `geometry.py` the rest.** `--from` names a `const Position`
+declared anywhere under `src/Ai/Raid/` - 195 of them, plus 696 `constexpr float` radii for `--band` -
+parsed out of the source the way probe keys are, so nothing is kept by hand and every trace on disk
+can be measured against any of them. A unique suffix is enough (`YOGG_SARON_MIDDLE`), an ambiguous one
+lists the candidates, `--band` also takes a bare number, and `--from entry:<N>` measures from a
+creature. This turns "`move.by` churned 2,396 times" into "957 `flee` moves, median 21.5 yd out to
+24.9, 96% ending further from the band than they started" - the Yogg-Saron phase 1 defect, reachable
+before this only through a script written for one pull and thrown away.
+
+A `move` carries its destination only, so `--moves` joins the snapshot before it for the origin.
+`--where` also takes `cast:<spell>`, because a creature's death reaches no record at all and what it
+cast on the way out stands in - see [engine/pitfalls.md](../engine/pitfalls.md). All three accept
+`--during KEY=VALUE`.
 
 `--verify` is 17 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
 `--since REF`, `--valid`, `--census`, `--verify`, `--probes`, `--split-at REF`, `--baseline DIR` -
@@ -57,7 +80,12 @@ is how a baseline survives the 7-day retention.
 **`--split-at REF` answers "did the change help".** It compares pulls before a commit against pulls
 after it on every metric either side carries - deaths, stalls, clumping, coverage buckets, and churn
 per probe key and per action pair - reporting median and range per side, and calling a metric *moved*
-only when the two ranges are disjoint, which is the only claim three to thirty pulls support. Splits
+only when the two ranges are disjoint **and** the gap is at least a tenth of the larger side and
+visible at the printed precision - without those, 0.14 against 0.13 ranks as a finding. A stream only
+one side carries has to appear in most of that side's pulls and be non-zero there: the sides are
+rarely the same size, so with twelve pulls before and three after, anything occasional shows up on the
+bigger side and nowhere else, which is what put `apply oil <-> clean quest log` beside the raid
+streams. Splits
 on `hdr.bin` where there is one, else on the pull's own timestamp, which assumes you rebuilt before
 pulling. Unprompted, it reproduced Mimiron's documented phase-1 flip-flop:
 `flip.act.won:follow <-> mimiron arc spread action` at 10.3/min before `eb9db6855`, absent after.
@@ -72,7 +100,14 @@ NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` b
 
 Every report opens with a validity banner. Establishing these by hand cost more than reading the
 trace, and getting one wrong cost a session — three Freya pulls on 2026-09-05 were read against a
-binary predating the fix by two hours. Four things disqualify a pull; the header carries all four:
+binary predating the fix by two hours. Four things can disqualify a pull; the header carries all four.
+
+**A disqualifier that fires on the whole sample rejects the whole sample and says nothing**, so two of
+them only decide once you say what is under test. The loop commits after every pull, so every trace
+predates HEAD; every normal-mode pull of a hard-mode-capable boss has hard mode off. Left decisive
+they returned 0 of 15 Yogg pulls and 0 of 55 Gluth ones. `--since REF` names the change being tested
+and makes the build decide; `--hardmode` says the pull was meant to be one. A human holding tank or
+heal always decides — the strategy was not asked to do the job, whatever else was being tested.
 
 - **`bin`** — the worldserver binary's mtime, epoch ms: what
   `docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver` reports. It stands in

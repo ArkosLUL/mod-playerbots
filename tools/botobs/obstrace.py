@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import json
 import pathlib
+import re
 import sys
 
 SUPPORTED_SCHEMA = 12
@@ -148,6 +149,11 @@ class Trace:
         # a creature and a player that share one look like the same unit.
         return f"#{guid >> 32}:{guid & 0xFFFFFFFF}"
 
+    def role(self, guid) -> str:
+        """Tank, heal, melee or ranged, and `?` for anything the roster never placed. An accessor
+        because the default is the half that matters and four call sites each re-spelled it."""
+        return self.roles.get(guid, "?")
+
     def spell(self, spell_id) -> str:
         """A spell as a reader recognises it. v4 traces carry no names, so those stay bare numbers."""
         if not spell_id:
@@ -194,11 +200,44 @@ BOSS_ALIASES = {
     "xt-002-deconstructor": "xt-002",
     "general-vezax": "vezax",
     "yogg-saron-": "yogg-saron",
+    "sara": "yogg-saron",
 }
 
 
 def canonical_boss(slug: str) -> str:
     return BOSS_ALIASES.get(slug, slug)
+
+
+def slugify(name: str) -> str:
+    """A creature name as the recorder would have filed it."""
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def recover_boss(path: pathlib.Path) -> str:
+    """The encounter a trace belongs to, read out of its own units rather than its name.
+
+    A session that opens before its boss engages is filed under the map, and where nothing renames it
+    afterwards that name sticks: two full Ulduar pulls on disk are `ulduar`, unreachable by --boss,
+    and every strategy node folds into "gate shut this pull" because the coverage join runs on the
+    same name. Several creatures can carry the boss flag - Yogg's room has the four Keepers standing
+    in it - so the one that traded damage is the encounter, and the flag alone is not enough.
+    """
+    flagged: dict[int, str] = {}
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if '"e":"unit"' in line:
+                    rec = json.loads(line)
+                    if rec.get("b") and rec.get("n"):
+                        flagged[rec.get("g")] = rec["n"]
+                elif flagged and '"e":"dmg"' in line:
+                    rec = json.loads(line)
+                    for guid in (rec.get("s"), rec.get("d")):
+                        if guid in flagged:
+                            return canonical_boss(slugify(flagged[guid]))
+    except (OSError, ValueError):
+        return ""
+    return ""
 
 
 def boss_key(path: pathlib.Path) -> str:
@@ -222,8 +261,10 @@ def pull_time(path: pathlib.Path) -> datetime.datetime | None:
 def find_traces(roots, boss: str | None = None) -> list[pathlib.Path]:
     """Trace paths under `roots`, newest first, deduplicated by resolved path.
 
-    Filtering on the filename means a boss sweep never opens the other 118 files; the corpus runs to
-    1.3 GB and individual traces reach 21 MB.
+    Filtering on the filename means a boss sweep never opens the other files; the corpus runs to
+    1.4 GB and individual traces reach 21 MB. A file the name rules out is opened rather than
+    dropped, because a pull the recorder never renamed carries the map's name and is otherwise
+    unreachable - but only on the miss, so a boss that files itself correctly still costs nothing.
     """
     wanted = canonical_boss(boss) if boss else None
     found: dict[pathlib.Path, float] = {}
@@ -231,7 +272,7 @@ def find_traces(roots, boss: str | None = None) -> list[pathlib.Path]:
         root = pathlib.Path(root)
         candidates = [root] if root.is_file() else sorted(root.glob("*.ndjson"))
         for path in candidates:
-            if wanted and boss_key(path) != wanted:
+            if wanted and boss_key(path) != wanted and recover_boss(path) != wanted:
                 continue
             resolved = path.resolve()
             if resolved not in found:

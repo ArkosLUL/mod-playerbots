@@ -20,13 +20,26 @@ import unittest
 BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
+import contextlib  # noqa: E402
+import io  # noqa: E402
+import math  # noqa: E402
+
+import coverage  # noqa: E402
+import deathreport  # noqa: E402
+import flame_leviathan  # noqa: E402
+import geometry  # noqa: E402
+import probes  # noqa: E402
+import space  # noqa: E402
+import validity  # noqa: E402
+import views  # noqa: E402
 from coverage import bucket, coverage_metrics  # noqa: E402
 from metrics import Side, compare  # noqa: E402
-from obstrace import Trace, boss_key, canonical_boss, pull_time  # noqa: E402
+from obstrace import Trace, boss_key, canonical_boss, pull_time, recover_boss  # noqa: E402
 from probes import (  # noqa: E402
-    HOLDER, LATCH, Series, latch_windows, prefix_matches_boss, resolve_guids,
+    HOLDER, LATCH, Series, declared_keys, latch_spans, latch_windows, prefix_matches_boss,
+    resolve_guids,
 )
-from views import verify_checks  # noqa: E402
+from views import idle_windows, verify_checks  # noqa: E402
 
 FIXTURE = BOTOBS / "fixtures" / "coverage-v12.ndjson"
 
@@ -238,6 +251,353 @@ class Fixture(unittest.TestCase):
             return rec
 
         self.assertTrue(self.failing(self.corrupt(mangle)))
+
+
+FULL = BOTOBS / "fixtures" / "full-v12.ndjson"
+
+
+def rich() -> Trace:
+    return Trace(FULL)
+
+
+class Geometry(unittest.TestCase):
+    def test_dist2_ignores_height(self):
+        self.assertAlmostEqual(geometry.dist2((0, 0, 100), (3, 4, -50)), 5.0)
+
+    def test_dist3_uses_it(self):
+        self.assertAlmostEqual(geometry.dist3((0, 0, 0), (0, 3, 4)), 5.0)
+
+    def test_edge_is_signed(self):
+        self.assertAlmostEqual(geometry.edge((0, 0), [(0, 0, 10)]), -10.0)
+        self.assertAlmostEqual(geometry.edge((20, 0), [(0, 0, 10)]), 10.0)
+
+    def test_edge_takes_the_nearest_rim_not_the_nearest_centre(self):
+        # A far circle with a wide radius can have the closer edge, which is the whole point.
+        self.assertAlmostEqual(geometry.edge((0, 0), [(8, 0, 1), (30, 0, 29)]), 1.0)
+
+    def test_edge_of_nothing(self):
+        self.assertEqual(geometry.edge((0, 0), []), math.inf)
+
+    def test_nearest_picks_the_closest(self):
+        self.assertEqual(geometry.nearest((0, 0), {"far": (9, 0), "near": (2, 0)}), ("near", 2.0))
+
+    def test_nearest_of_nothing(self):
+        self.assertIsNone(geometry.nearest((0, 0), {}))
+
+    def test_at_before_never_looks_forward(self):
+        trace = rich()
+        # The boss sits still, so what is being pinned is the policy, not the coordinates.
+        self.assertIsNotNone(geometry.at(trace, 5001, 500))
+        self.assertIsNone(geometry.at(trace, 5001, -9999))
+
+    def test_at_nearest_respects_tolerance(self):
+        trace = rich()
+        self.assertIsNone(geometry.at(trace, 5001, 500000, geometry.NEAREST, tol=10))
+        self.assertIsNotNone(geometry.at(trace, 5001, 500000, geometry.NEAREST))
+
+    def test_at_unknown_guid(self):
+        self.assertIsNone(geometry.at(rich(), 987654321, 0))
+
+    def test_track_skips_rows_too_short_for_the_column(self):
+        trace = rich()
+        for snap in trace.of("snap"):
+            snap["u"] = [row[:6] for row in snap["u"]]
+        trace.__dict__.pop("_geom_frames", None)
+        trace.__dict__.pop("_geom_index", None)
+        self.assertEqual(geometry.track(trace, {5001}, ("t", "target")), {})
+        self.assertTrue(geometry.track(trace, {5001}, ("t", "x", "y")))
+
+    def test_anchors_and_radii_come_out_of_the_raid_tree(self):
+        self.assertEqual(geometry.anchor("ULDUAR_YOGG_SARON_MIDDLE")[:2], (1980.28, -25.5868))
+        self.assertAlmostEqual(geometry.radius("ULDUAR_YOGG_SARON_P1_LEASH"), 6.5)
+
+    def test_a_unique_suffix_resolves(self):
+        self.assertEqual(geometry.anchor("YOGG_SARON_MIDDLE"),
+                         geometry.anchor("ULDUAR_YOGG_SARON_MIDDLE"))
+
+    def test_an_ambiguous_suffix_names_the_candidates(self):
+        with self.assertRaises(geometry.Unknown) as caught:
+            geometry.anchor("MIDDLE")
+        self.assertIn("ULDUAR_YOGG_SARON_MIDDLE", str(caught.exception))
+
+    def test_an_unknown_name_is_not_silently_zero(self):
+        with self.assertRaises(geometry.Unknown):
+            geometry.anchor("NO_SUCH_ANCHOR_ANYWHERE")
+
+
+class Spatial(unittest.TestCase):
+    def test_event_spots_reads_a_cast_as_its_casters_position(self):
+        found = space.event_spots(rich(), "cast:100")
+        self.assertEqual([guid for _, guid, _ in found], [5003])
+
+    def test_event_spots_reads_deaths(self):
+        self.assertEqual(len(space.event_spots(rich(), "death")), 1)
+
+    def test_event_spots_reads_notes(self):
+        self.assertEqual(len(space.event_spots(rich(), "note:fixture.role")), 2)
+
+    def test_event_spots_rejects_an_unknown_stream(self):
+        with self.assertRaises(geometry.Unknown):
+            space.event_spots(rich(), "nonsense")
+
+    def test_band_takes_a_bare_number(self):
+        self.assertAlmostEqual(space.band_of("15"), 15.0)
+        self.assertAlmostEqual(space.band_of("ULDUAR_YOGG_SARON_P1_LEASH"), 6.5)
+        self.assertIsNone(space.band_of(None))
+
+    def test_scope_narrows_to_a_latch_value(self):
+        trace = rich()
+        inside = space.scope(trace, "fixture.phase=2")
+        self.assertFalse(inside(0))
+        self.assertTrue(inside(2200))
+
+    def test_scope_of_a_value_nothing_held(self):
+        self.assertIsNone(space.scope(rich(), "fixture.phase=9"))
+
+    def test_scope_without_during_drops_the_pre_roll(self):
+        inside = space.scope(rich(), None)
+        self.assertFalse(inside(-1))
+        self.assertTrue(inside(0))
+
+    def test_move_rows_join_an_origin_onto_a_destination(self):
+        trace = rich()
+        rows = space.move_rows(trace, (0.0, 0.0, 0.0), lambda when: when >= 0)
+        movers = {row[0] for row in rows}
+        self.assertEqual(movers, {"flee", "reach melee"})
+        # A move record carries only where it was going; the start radius has to come from a snapshot.
+        for row in rows:
+            self.assertGreater(row[2], 0.0)
+
+    def test_role_held_separates_a_pet_from_an_unknown(self):
+        trace = rich()
+        self.assertEqual(space.role_held(trace, 5001), "tank")
+        self.assertEqual(space.role_held(trace, 5005), "pet")
+        self.assertEqual(space.role_held(trace, 0), "nobody")
+        self.assertEqual(space.role_held(trace, 111222333), "other")
+
+
+class Decidability(unittest.TestCase):
+    def test_a_human_role_always_decides(self):
+        self.assertIn("human-role", validity.decidable_kinds())
+
+    def test_the_build_only_decides_when_a_ref_is_named(self):
+        self.assertNotIn("stale-build", validity.decidable_kinds())
+        self.assertIn("stale-build", validity.decidable_kinds(since="HEAD"))
+
+    def test_hard_mode_only_decides_when_asked_for(self):
+        self.assertNotIn("hardmode-off", validity.decidable_kinds())
+        self.assertIn("hardmode-off", validity.decidable_kinds(hardmode=True))
+
+
+class Recovery(unittest.TestCase):
+    """A pull nothing renamed is filed under the map, and has to be found by its units instead."""
+
+    def test_the_engaged_boss_is_the_one_that_traded_damage(self):
+        trace = rich()
+        trace.header["boss"] = "ulduar"
+        self.assertEqual(validity.engaged_of(trace), "fixture-boss")
+
+    def test_a_rename_outranks_the_units(self):
+        trace = rich()
+        trace.records.append({"t": 5, "e": "pull", "boss": "named-by-rename", "src": "rename"})
+        self.assertEqual(validity.encounter_of(trace), "named-by-rename")
+
+    def test_recover_boss_reads_it_off_disk(self):
+        self.assertEqual(recover_boss(FULL), "fixture-boss")
+
+    def test_recover_boss_on_a_file_that_is_not_one(self):
+        with tempfile.TemporaryDirectory() as folder:
+            junk = pathlib.Path(folder) / "junk.ndjson"
+            junk.write_text("not json at all\n", encoding="utf-8")
+            self.assertEqual(recover_boss(junk), "")
+
+
+class Prefixes(unittest.TestCase):
+    def test_the_first_word_of_a_slug_counts(self):
+        # Without this every yogg.* key was invisible to the mute check.
+        self.assertTrue(prefix_matches_boss("yogg", "yogg-saron"))
+
+    def test_the_other_two_forms_still_count(self):
+        self.assertTrue(prefix_matches_boss("ironassembly", "iron-assembly"))
+        self.assertTrue(prefix_matches_boss("fl", "flame-leviathan"))
+
+    def test_an_unrelated_prefix_does_not(self):
+        self.assertFalse(prefix_matches_boss("thorim", "yogg-saron"))
+
+
+class Declarations(unittest.TestCase):
+    def test_a_key_on_the_line_after_its_call_is_still_declared(self):
+        self.assertIn("yogg.deathray", declared_keys())
+
+    def test_a_key_nothing_declares_is_absent(self):
+        self.assertNotIn("yogg.gaze", declared_keys())
+
+
+class LatchAllValues(unittest.TestCase):
+    def test_latch_spans_keeps_every_value_in_order(self):
+        spans = latch_spans(rich(), "fixture.phase", end=9999)
+        self.assertEqual([value for value, _, _ in spans], ["1", "2"])
+        self.assertEqual(spans[0][1], -1000)
+        self.assertEqual(spans[-1][2], 9999)
+
+    def test_latch_windows_is_the_filtered_form(self):
+        self.assertEqual(latch_windows(rich(), "fixture.phase", "1")[0][0], -1000)
+
+
+class Ranking(unittest.TestCase):
+    """What `--split-at` is allowed to call a move."""
+
+    @staticmethod
+    def sides(before_rows, after_rows):
+        return (Side("before", [{"metrics": m} for m in before_rows]),
+                Side("after", [{"metrics": m} for m in after_rows]))
+
+    def find(self, findings, key):
+        return next(f for f in findings if f["key"] == key)
+
+    def test_a_change_under_the_printed_precision_is_not_a_move(self):
+        before, after = self.sides([{"k": 0.144}, {"k": 0.144}], [{"k": 0.132}, {"k": 0.132}])
+        self.assertFalse(self.find(compare(before, after), "k")["moved"])
+
+    def test_a_real_shift_still_is(self):
+        before, after = self.sides([{"k": 10.0}, {"k": 11.0}], [{"k": 1.0}, {"k": 2.0}])
+        self.assertTrue(self.find(compare(before, after), "k")["moved"])
+
+    def test_a_stream_in_a_minority_of_pulls_is_not_a_finding(self):
+        before, after = self.sides([{"k": 5.0}, {}, {}, {}], [{}])
+        self.assertEqual([f for f in compare(before, after) if f["key"] == "k"], [])
+
+    def test_a_stream_in_most_pulls_is(self):
+        before, after = self.sides([{"k": 5.0}, {"k": 6.0}, {"k": 5.5}], [{}])
+        self.assertEqual(self.find(compare(before, after), "k")["only"], "before")
+
+    def test_a_one_sided_zero_is_not_a_finding(self):
+        before, after = self.sides([{"k": 0.0}, {"k": 0.0}], [{}])
+        self.assertEqual([f for f in compare(before, after) if f["key"] == "k"], [])
+
+
+class ShortRows(unittest.TestCase):
+    """Columns 8 to 11 arrived in v8. Reading one off an older row used to raise."""
+
+    def test_the_flame_leviathan_frame_survives_a_pre_v8_row(self):
+        snap = {"t": 0, "u": [[1, 1.0, 2.0, 3.0, 0.4, 100.0]]}
+        frame = flame_leviathan.Frame(snap, rich(), {1: flame_leviathan.BOSS_ENTRY},
+                                      set(), {}, {})
+        self.assertEqual(frame.boss, (1.0, 2.0, 0.4, 0))
+
+    def test_idle_windows_ignore_a_row_with_no_target_column(self):
+        trace = rich()
+        for snap in trace.of("snap"):
+            snap["u"] = [r[:6] for r in snap["u"]]
+        self.assertEqual(idle_windows(trace, 1), [])
+
+
+class Renderers(unittest.TestCase):
+    """Every printing entry point, against a fixture carrying one of every record.
+
+    These do not check what is printed - they check that it prints. The defect that prompted them
+    was an undefined name in `show_validity`, which no amount of testing the pure functions under it
+    would ever have reached.
+    """
+
+    def run_quiet(self, call):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
+            call()
+        return buffer.getvalue()
+
+    def test_every_renderer_runs(self):
+        trace = rich()
+        calls = {
+            "show_bot": lambda: views.show_bot(trace, "Bulwark"),
+            "show_track": lambda: views.show_track(trace, "Bulwark"),
+            "show_notes": lambda: views.show_notes(trace),
+            "show_notes_prefix": lambda: views.show_notes(trace, "fixture."),
+            "show_stalls": lambda: views.show_stalls(trace, 1000),
+            "show_idle": lambda: views.show_idle(trace, 1),
+            "show_vetoes": lambda: views.show_vetoes(trace),
+            "show_clump": lambda: views.show_clump(trace, 10.0),
+            "show_verify": lambda: views.show_verify(trace),
+            "show_coverage": lambda: coverage.show_coverage(trace),
+            "show_coverage_by_bot": lambda: coverage.show_coverage(trace, None, True),
+            "show_probes": lambda: probes.show_probes(trace),
+            "show_probes_key": lambda: probes.show_probes(trace, "fixture.phase"),
+            "show_probes_during": lambda: probes.show_probes(trace, None, "fixture.phase=1"),
+            "summarise": lambda: deathreport.summarise(trace),
+            "show_death": lambda: deathreport.show_death(trace, 0),
+            "show_threat": lambda: space.show_threat(trace),
+            "show_threat_entry": lambda: space.show_threat(trace, 33999),
+            "show_moves": lambda: space.show_moves(trace, None, "entry:33999"),
+            "show_moves_action": lambda: space.show_moves(trace, "flee", "entry:33999", "15"),
+            "show_moves_unknown_anchor": lambda: space.show_moves(trace, None, "NO_SUCH_ANCHOR"),
+            "show_where_death": lambda: space.show_where(trace, "death", "entry:33999"),
+            "show_where_cast": lambda: space.show_where(trace, "cast:100", "entry:33999", "15"),
+            "show_where_bad_spec": lambda: space.show_where(trace, "nonsense", "entry:33999"),
+            "show_validity": lambda: validity.show_validity(trace),
+            "show_validity_hardmode": lambda: validity.show_validity(trace, None, True),
+        }
+        for name, call in calls.items():
+            with self.subTest(renderer=name):
+                self.assertTrue(self.run_quiet(call), f"{name} printed nothing")
+
+    def test_the_ones_that_answer_on_stderr_still_return(self):
+        trace = rich()
+        self.assertEqual(self.run_quiet(lambda: views.show_bot(trace, "Nobody")), "")
+        self.assertEqual(self.run_quiet(lambda: views.show_track(trace, "Nobody")), "")
+        self.run_quiet(lambda: deathreport.show_death(trace, 99))
+
+    def test_the_smoke_test_catches_a_broken_renderer(self):
+        def broken():
+            print(undefined_name_just_like_the_one_that_shipped)  # noqa: F821
+
+        with self.assertRaises(NameError):
+            self.run_quiet(broken)
+
+    def test_a_renderer_survives_a_trace_with_nothing_in_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            bare = pathlib.Path(folder) / "603_4_bare_1789500000.ndjson"
+            bare.write_text(json.dumps({"e": "hdr", "v": 12, "boss": "bare", "roster": []}) + "\n",
+                            encoding="utf-8")
+            trace = Trace(bare)
+            for call in (lambda: views.show_notes(trace),
+                         lambda: views.show_vetoes(trace),
+                         lambda: views.show_idle(trace, 1000),
+                         lambda: space.show_threat(trace),
+                         lambda: deathreport.summarise(trace)):
+                self.run_quiet(call)
+
+
+class RichFixture(unittest.TestCase):
+    """The thin coverage fixture leaves most invariants iterating an empty list."""
+
+    def test_all_seventeen_pass_on_a_trace_that_exercises_them(self):
+        failed = [name for name, count, _ in verify_checks(rich()) if count]
+        self.assertEqual(failed, [])
+
+    def test_the_combat_checks_are_actually_reached(self):
+        trace = rich()
+        self.assertTrue(trace.of("dmg"))
+        self.assertTrue(trace.of("death"))
+        self.assertTrue(trace.of("move"))
+        self.assertTrue(trace.of("veto"))
+        self.assertTrue(trace.of("aura"))
+        self.assertTrue(trace.of("haz"))
+
+    def test_a_blow_with_no_damage_row_is_caught(self):
+        trace = rich()
+        victims = {death["g"] for death in trace.of("death")}
+        trace.records = [rec for rec in trace.records
+                         if not (rec.get("e") == "dmg" and rec.get("d") in victims)]
+        failed = [name for name, count, _ in verify_checks(trace) if count]
+        self.assertIn("every blow has a damage row behind it", failed)
+
+    def test_a_dealt_column_going_backwards_is_caught(self):
+        trace = rich()
+        snaps = trace.of("snap")
+        for row in snaps[-1]["u"]:
+            row[11] = 0
+        failed = [name for name, count, _ in verify_checks(trace) if count]
+        self.assertIn("cumulative `dealt` never decreases", failed)
 
 
 if __name__ == "__main__":

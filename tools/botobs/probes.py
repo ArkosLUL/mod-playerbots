@@ -1,6 +1,6 @@
 """What the encounter said about its own decisions, and what kept changing its mind.
 
-The raid code publishes 96 probe keys and, before this, two of them were read. The rest were printed
+The raid code publishes 125 probe keys and, before this, two of them were read. The rest were printed
 raw or counted. A key does not need its own scorer to be legible - what it needs is to be told apart
 from the other shapes, because the emitters mean different things:
 
@@ -69,12 +69,14 @@ def declared_keys(root: pathlib.Path = SRC_ROOT) -> dict[str, tuple[str, str]]:
             continue
         if "Obs" not in text and "Note" not in text:
             continue
-        for lineno, line in enumerate(text.splitlines(), 1):
-            for pattern, kind in DECLARATIONS:
-                match = pattern.search(line)
-                if match and match.group(1) not in found:
-                    found[match.group(1)] = (kind, f"{path.name}:{lineno}")
-                    break
+        # Whole text, not line by line: a call wrapped after its opening paren puts the key on the
+        # next line, and reading one line at a time misses it. `yogg.deathray` is written that way
+        # and so was never declared as far as the mute check could tell.
+        for pattern, kind in DECLARATIONS:
+            for match in pattern.finditer(text):
+                key = match.group(1)
+                if key not in found:
+                    found[key] = (kind, f"{path.name}:{text.count(chr(10), 0, match.start()) + 1}")
     return found
 
 
@@ -85,13 +87,16 @@ def encounter_of(key: str) -> str:
 def prefix_matches_boss(prefix: str, boss: str) -> bool:
     """Whether a key prefix names the boss a trace fought.
 
-    Prefixes are written two ways and both are regular: `thorim`/`mimiron`/`algalon` spell the slug
-    out with the punctuation dropped, and `fl` is the slug's initials. Deriving both beats a third
-    hand-mirrored prefix table - there are already two of those and they drift.
+    Prefixes are written three ways and all are regular: `thorim`/`mimiron`/`algalon` spell the slug
+    out with the punctuation dropped, `fl` is the slug's initials, and `yogg` is its first word.
+    Deriving all three beats a fourth hand-mirrored prefix table - there are already two of those and
+    they drift. Without the first-word form all 25 `yogg.*` keys were invisible to the mute check,
+    because `yoggsaron` and `ys` are the only names it could derive.
     """
-    flat = re.sub(r"[^a-z0-9]", "", boss.lower())
-    initials = "".join(word[0] for word in re.split(r"[^a-z0-9]+", boss.lower()) if word)
-    return prefix == flat or prefix == initials
+    words = [word for word in re.split(r"[^a-z0-9]+", boss.lower()) if word]
+    flat = "".join(words)
+    initials = "".join(word[0] for word in words)
+    return prefix in (flat, initials, words[0] if words else "")
 
 
 GUID_TOKEN = re.compile(r"\b\d{4,}\b")
@@ -113,21 +118,29 @@ def resolve_guids(trace: Trace, text: str) -> str:
 Window = tuple[int, int]
 
 
+def latch_spans(trace: Trace, key: str, end: int = 1 << 62) -> list[tuple[str, int, int]]:
+    """`(value, start, stop)` for every value a latch key held, in order.
+
+    A latch stream is change-only, so a value runs until the next mark and the last one runs to
+    `end`. Pass the trace's last stamp for a span you mean to print; the default is only useful for
+    testing whether a time falls inside one.
+    """
+    marks = sorted((rec["t"], str(rec.get("txt", ""))) for rec in trace.of("note")
+                   if rec.get("k") == key)
+    spans = []
+    for index, (when, held) in enumerate(marks):
+        stop = marks[index + 1][0] if index + 1 < len(marks) else end
+        spans.append((held, when, stop))
+    return spans
+
+
 def latch_windows(trace: Trace, key: str, value: str) -> list[Window]:
     """The spans where a latch key held `value`.
 
     Churn has to be scoped or a late-phase storm buries an early-phase defect: Mimiron's phase-1
     flip-flop reads 57 A-B-A inside phase 1 and disappears into ~700 whole-pull ones.
     """
-    marks = sorted((rec["t"], str(rec.get("txt", ""))) for rec in trace.of("note")
-                   if rec.get("k") == key)
-    spans: list[Window] = []
-    for index, (when, held) in enumerate(marks):
-        if held != value:
-            continue
-        end = marks[index + 1][0] if index + 1 < len(marks) else 1 << 62
-        spans.append((when, end))
-    return spans
+    return [(start, stop) for held, start, stop in latch_spans(trace, key) if held == value]
 
 
 def parse_during(spec: str) -> tuple[str, str]:

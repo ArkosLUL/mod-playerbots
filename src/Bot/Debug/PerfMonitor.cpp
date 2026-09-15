@@ -15,7 +15,7 @@
 #include "PerfMonitor.h"
 #include "Playerbots.h"
 
-PerfMonitorOperation* PerfMonitor::start(PerformanceMetric metric, std::string const name,
+PerfMonitorOperation* PerfMonitor::start(PerformanceMetric metric, std::string const& name,
                                                        PerformanceStack* stack)
 {
     if (!sPlayerbotAIConfig.perfMonEnabled)

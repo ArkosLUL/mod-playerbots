@@ -11,7 +11,7 @@ import datetime
 import pathlib
 import subprocess
 
-from obstrace import Trace, boss_from_path, canonical_boss
+from obstrace import Trace, boss_from_path, canonical_boss, slugify
 
 # Raid difficulty ids. Only raid maps are tracked unless Obs.Maps names one, so these are the labels
 # that apply; a 5-man would read 0/1 as normal/heroic instead.
@@ -27,10 +27,34 @@ def boss_of(trace: Trace) -> str:
     return str(trace.header.get("boss") or "")
 
 
+def engaged_of(trace: Trace) -> str:
+    """The encounter read out of the loaded records: the boss-flagged unit that traded damage.
+
+    The same recovery `obstrace.recover_boss` does off disk, but free here because the trace is
+    already in memory. Several creatures can carry the flag, so the damage is what picks one.
+    """
+    flagged = {guid for guid in trace.bosses}
+    if not flagged:
+        return ""
+    for rec in trace.of("dmg"):
+        for guid in (rec.get("s"), rec.get("d")):
+            if guid in flagged and trace.names.get(guid):
+                return canonical_boss(slugify(trace.names[guid]))
+    return ""
+
+
 def encounter_of(trace: Trace) -> str:
     """The fight this trace belongs to, which is what a census counts and what the conf keys on. The
-    boss slug says which creature engaged, and for a council or an elder pull that is not the same."""
-    return canonical_boss(boss_of(trace) or boss_from_path(trace.path))
+    boss slug says which creature engaged, and for a council or an elder pull that is not the same.
+
+    Where no rename ever landed the slug is the map's name, which joins to no encounter at all, so
+    the units decide instead - otherwise the coverage view reports every node gated off.
+    """
+    filed = canonical_boss(boss_of(trace) or boss_from_path(trace.path))
+    renamed = any(p.get("src") == "rename" for p in trace.of("pull"))
+    if renamed:
+        return filed
+    return engaged_of(trace) or filed
 
 
 def build_time(trace: Trace) -> datetime.datetime | None:
@@ -90,10 +114,26 @@ def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.
 # healing means the strategy was never asked to do the job.
 DECIDING_ROLES = ("tank", "heal")
 
-# Warning kinds that actually disqualify a pull. The rest are printed and not counted: a human is in
-# the raid in every trace on disk, so treating mere presence as disqualifying rejects everything and
-# says nothing. Lives here rather than in a view, so one definition decides for all of them.
-DECIDABLE = {"stale-build", "hardmode-off", "human-role"}
+# A human holding tank or heal always disqualifies: the strategy was not asked to do the job, whatever
+# the pull was testing.
+ALWAYS_DECIDABLE = {"human-role"}
+
+# The other two only disqualify once the reader says what is under test. Both are true of almost every
+# pull otherwise - the loop commits after each pull, so every trace predates HEAD, and every
+# normal-mode pull of a hard-mode-capable boss has hard mode off. A disqualifier that fires on the
+# whole sample rejects the whole sample and says nothing, which is the vacuity `human-in-raid` had
+# before it was demoted. Lives here rather than in a view, so one definition decides for all of them.
+ON_ASK = {"stale-build": "--since", "hardmode-off": "--hardmode"}
+
+
+def decidable_kinds(since: str | None = None, hardmode: bool = False) -> set[str]:
+    """Which warnings count against a pull, given what the reader asked for."""
+    kinds = set(ALWAYS_DECIDABLE)
+    if since:
+        kinds.add("stale-build")
+    if hardmode:
+        kinds.add("hardmode-off")
+    return kinds
 
 
 def human_roles(trace: Trace) -> dict[str, str]:
@@ -174,10 +214,11 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
     return facts, warnings
 
 
-def show_validity(trace: Trace, since: str | None = None) -> int:
+def show_validity(trace: Trace, since: str | None = None, hardmode: bool = False) -> int:
     """Prints the banner. Returns the number of things that disqualify the pull, so a caller can skip
     it without parsing the text. Informational warnings print and do not count."""
     ref = resolve_since(REPO, since)
+    decisive = decidable_kinds(since, hardmode)
     facts, warnings = inspect(trace, ref)
 
     if facts["built"] is None:
@@ -202,10 +243,15 @@ def show_validity(trace: Trace, since: str | None = None) -> int:
     if facts["mapthreads"]:
         print(f"threads MapUpdate.Threads = {facts['mapthreads']}")
 
-    for _, warning in warnings:
-        print(f"  !!    {warning}")
-    if not warnings and facts["built"] is not None:
+    for kind, warning in warnings:
+        if kind in decisive:
+            print(f"  !!    {warning}")
+        else:
+            ask = ON_ASK.get(kind)
+            note = f"   (pass {ask} to make this decide)" if ask else "   (informational)"
+            print(f"  --    {warning}{note}")
+    if not any(kind in decisive for kind, _ in warnings) and facts["built"] is not None:
         print("  ok    nothing disqualifying")
     print()
 
-    return sum(1 for kind, _ in warnings if kind in DECIDABLE)
+    return sum(1 for kind, _ in warnings if kind in decisive)

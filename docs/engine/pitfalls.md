@@ -100,6 +100,20 @@ write into, so keying one on a vehicle, creature or object used to drop the reco
 tick set it. `batch.py --probes` is the sweep — a key the source declares that never reaches a trace
 of its own boss.
 
+That sweep needs the source parse to be right twice over, and it was wrong both ways. The scan read
+one line at a time, so a call wrapped after its opening paren declared nothing as far as the check
+could tell (`yogg.deathray`). And a key prefix is written three ways — the slug with punctuation
+dropped, its initials, or **its first word** — and only the first two were derived, so every one of
+the 25 `yogg.*` keys was invisible. A hand-kept list is not the fix: the one in `yogg_saron.py` was
+already wrong in both directions, missing three keys the same file read and inventing one nothing
+declares.
+
+**A creature's death reaches no record at all.** The `death` stream is roster-only, and so is `dmg`,
+so nothing says an add died or who killed it — a count over `death` for a creature is not low, it is
+structurally zero. What a trace does carry is the last health the snapshot sampled before the unit
+stopped appearing, and whatever it cast on the way out: Yogg's Guardians are counted through their
+Shadow Nova for exactly this reason.
+
 Churn is only legible inside the phase you care about. Mimiron's phase-1 flip-flop counts 57 A-B-A
 within phase 1 and disappears into ~700 across the whole pull, so `postmortem.py --probes --during
 mimiron.phase=1` is what reproduces it and a whole-pull number is what hid it.

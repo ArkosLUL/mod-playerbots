@@ -30,6 +30,19 @@ def trace_metrics(trace: Trace) -> dict[str, float]:
         "deaths.per_min": round(len(trace.of("death")) / minutes, 2),
     }
 
+    # `snap.u[11]` is cumulative damage dealt, kept up to date by AccrueDamageDealt with its own
+    # pet-to-owner attribution, and until now read by nothing but an invariant check. A change that
+    # fixes positioning and quietly costs the raid a third of its damage should not read as a win.
+    # Cumulative per unit and monotonic, so the last value each one reached is its total, and the
+    # raid's is the sum of those - a corpse stops being sampled and must still count what it did.
+    dealt: dict[int, int] = {}
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            if len(row) > 11 and row[11]:
+                dealt[row[0]] = max(dealt.get(row[0], 0), row[11])
+    if dealt:
+        metrics["dps.raid"] = round(sum(dealt.values()) / (minutes * 60.0), 1)
+
     stalls = stall_windows(trace, STALL_MIN_MS)
     stalled_ms = sum(window["end"] - window["start"] for window in stalls)
     metrics["stall.windows_per_min"] = round(len(stalls) / minutes, 2)
@@ -67,6 +80,14 @@ class Side:
             return None
         return statistics.median(seen), min(seen), max(seen)
 
+    def pulls_with(self, key: str) -> int:
+        return len(self.values.get(key, ()))
+
+
+# The smallest change worth calling a move, as a share of the larger side. Ranges can sit a hair apart
+# on three pulls and mean nothing; below this the sample cannot tell a shift from the roster.
+MIN_EFFECT = 0.10
+
 
 def compare(before: Side, after: Side, limit: int = 40) -> list[dict]:
     """Every metric either side carries, worst-moved first.
@@ -83,11 +104,27 @@ def compare(before: Side, after: Side, limit: int = 40) -> list[dict]:
         if left and right and not any(left) and not any(right):
             continue
         if left is None or right is None:
+            # A stream only one side carries is usually that side's roster, not the change: one
+            # hunter in one pull invents `explosive shot <-> steady shot`. Worse, the sides are rarely
+            # the same size, so with twelve pulls before and three after anything occasional shows up
+            # on the bigger side and nowhere else. Ask for it in most of the pulls it could have
+            # appeared in, and for it to be non-zero there at all.
+            side = after if left is None else before
+            stat = right if left is None else left
+            if side.n > 1 and side.pulls_with(key) * 2 <= side.n:
+                continue
+            if not any(stat):
+                continue
             findings.append({"key": key, "before": left, "after": right, "moved": True,
                              "delta": None, "only": "after" if left is None else "before"})
             continue
-        moved = left[2] < right[1] or right[2] < left[1]
         delta = right[0] - left[0]
+        # Disjoint ranges, but also a gap big enough to see: the printed row carries two decimals, and
+        # calling 0.14 against 0.13 a move puts noise at the top of a list read for signal.
+        scale = max(abs(left[0]), abs(right[0]))
+        moved = ((left[2] < right[1] or right[2] < left[1])
+                 and abs(delta) >= MIN_EFFECT * scale
+                 and f"{left[0]:.2f}" != f"{right[0]:.2f}")
         findings.append({"key": key, "before": left, "after": right, "moved": moved,
                          "delta": delta, "only": None})
 

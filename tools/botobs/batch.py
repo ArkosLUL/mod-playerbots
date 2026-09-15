@@ -27,7 +27,7 @@ from collections import Counter
 from obstrace import Trace, find_traces, pull_time
 from metrics import Side, show_compare, trace_metrics
 from probes import silent_keys
-from validity import DECIDABLE, REPO, encounter_of, inspect, resolve_since
+from validity import ON_ASK, REPO, decidable_kinds, encounter_of, inspect, resolve_since
 from views import verify_checks
 
 DEFAULT_ROOT = REPO.parents[1] / "env" / "dist" / "logs" / "botobs"
@@ -36,13 +36,13 @@ DEFAULT_ROOT = REPO.parents[1] / "env" / "dist" / "logs" / "botobs"
 # human-in-raid would collide, and those two are the pair most worth telling apart.
 FLAG = {"stale-build": "S", "hardmode-off": "M", "human-role": "R", "human-in-raid": "H"}
 
-# --valid drops what validity.DECIDABLE names; --strict drops any human at all. A human who held tank
+# --valid drops what validity.decidable_kinds names; --strict drops any human at all. A human who held tank
 # or heal is only decidable on traces written after the recorder learned to read a human's talent tab,
 # since older ones record every human's role as the literal "human".
 
 
-def decidable(row: dict) -> list[tuple[str, str]]:
-    return [w for w in row["warnings"] if w[0] in DECIDABLE]
+def decidable(row: dict, decisive: set[str]) -> list[tuple[str, str]]:
+    return [w for w in row["warnings"] if w[0] in decisive]
 
 
 def row_for(trace: Trace, ref, with_metrics: bool = False) -> dict:
@@ -87,13 +87,14 @@ def show_rows(rows: list[dict]) -> None:
     print("\n  bad: S stale build, M hard mode off, H human in the raid")
 
 
-def show_census(rows: list[dict]) -> None:
+def show_census(rows: list[dict], decisive: set[str]) -> None:
     total = len(rows)
-    clean = sum(1 for r in rows if not decidable(r))
+    clean = sum(1 for r in rows if not decidable(r, decisive))
     print(f"\nvalidity   {clean}/{total} traces survive the checks that can be decided")
     reasons = Counter(kind for row in rows for kind, _ in row["warnings"])
     for kind, count in reasons.most_common():
-        note = "" if kind in DECIDABLE else "   (informational)"
+        note = "" if kind in decisive else (f"   (pass {ON_ASK[kind]} to decide)"
+                                            if kind in ON_ASK else "   (informational)")
         print(f"           {count:4d}  {kind}{note}")
 
     # Three of the four disqualifiers live in hdr.bin and hdr.cfg, which arrived in v11. Without
@@ -107,7 +108,7 @@ def show_census(rows: list[dict]) -> None:
         print(f"           {count:4d}  {outcome}")
 
     per_boss = Counter(r["boss"] for r in rows)
-    valid_boss = Counter(r["boss"] for r in rows if not decidable(r))
+    valid_boss = Counter(r["boss"] for r in rows if not decidable(r, decisive))
     print("\nper boss   traces / of which valid")
     for boss, count in per_boss.most_common():
         print(f"           {count:4d} / {valid_boss[boss]:<4d} {boss}")
@@ -195,6 +196,8 @@ def main() -> int:
     parser.add_argument("--baseline", metavar="DIR", type=pathlib.Path,
                         help="compare the selection against the traces kept in DIR")
     parser.add_argument("--limit", type=int, help="stop after N traces, newest first")
+    parser.add_argument("--hardmode", action="store_true",
+                        help="the pulls were meant to be hard mode, so hard mode off disqualifies")
     args = parser.parse_args()
 
     roots = args.roots or [DEFAULT_ROOT]
@@ -207,6 +210,7 @@ def main() -> int:
         return 1
 
     ref = resolve_since(REPO, args.since)
+    decisive = decidable_kinds(args.since, args.hardmode)
     comparing = bool(args.split_at or args.baseline)
 
     split = None
@@ -227,7 +231,8 @@ def main() -> int:
     rows = read_rows(paths, ref, comparing)
 
     if args.valid or args.strict:
-        rows = [r for r in rows if not (r["warnings"] if args.strict else decidable(r))]
+        rows = [r for r in rows
+                if not (r["warnings"] if args.strict else decidable(r, decisive))]
         if not rows:
             print("nothing in the selection counts as evidence", file=sys.stderr)
             return 1
@@ -237,7 +242,7 @@ def main() -> int:
 
     if not args.census:
         show_rows(rows)
-    show_census(rows)
+    show_census(rows, decisive)
     if args.verify:
         show_verify_rollup(rows)
     if args.probes:

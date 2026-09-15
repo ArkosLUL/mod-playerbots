@@ -139,7 +139,9 @@ class Frame:
         for row in rows:
             entry = ents.get(row[0])
             if entry == BOSS_ENTRY:
-                self.boss = (row[1], row[2], row[4], row[7])
+                # The target column arrived in v8, so an older row stops before it. Reading it blind
+                # raised on the first frame carrying the boss and took every view in this file with it.
+                self.boss = (row[1], row[2], row[4], row[7] if len(row) > 7 else 0)
             elif entry == RETICLE_ENTRY:
                 self.reticles.append((row[0], row[1], row[2]))
             elif entry in ADD_ENTRIES:

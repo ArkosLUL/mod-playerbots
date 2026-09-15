@@ -231,6 +231,19 @@ void CloseSession(uint32 instanceId, char const* outcome)
     session->Flush();
     session->file.close();
 
+    // A session opens on a boss state change and lasts until the encounter resets, so a room the raid
+    // only walked through opens and closes one over and over: 55 Gluth files three seconds apart, none
+    // of them a pull, all of them counted by anything reading the corpus. lastCombatMs still sitting
+    // at startMs means nobody in the raid was ever in combat, which is the honest test for that.
+    if (session->lastCombatMs == session->startMs)
+    {
+        std::error_code discard;
+        std::filesystem::remove(session->path, discard);
+        LOG_INFO("playerbots", "RaidObs: dropped {} ({}, no combat ever happened)", session->path,
+                 result);
+        return;
+    }
+
     LOG_INFO("playerbots", "RaidObs: closed {} ({}, {} bytes)", session->path, result,
              session->bytes.load(std::memory_order_relaxed));
 }

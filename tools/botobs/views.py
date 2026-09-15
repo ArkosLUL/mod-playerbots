@@ -1,4 +1,4 @@
-"""One function per query mode: --bot, --track, --notes, --stalls, --clump, --verify.
+"""One function per query mode: --bot, --track, --notes, --stalls, --idle, --vetoes, --clump, --verify.
 
 Each returns the process exit code, so main() can hand it straight to sys.exit.
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from analysis import position_runs, roster_guids
 from obstrace import COVERAGE_COLUMNS, Trace, clock
@@ -183,6 +183,87 @@ def show_stalls(trace: Trace, min_ms: int) -> int:
         print(f"{'':16} {'':9}    {'':9}  wanted by: {', '.join(window['owners'])}")
 
     print(f"\ntotal: {total / 1000:.0f}s")
+    return 0
+
+
+# How long a bot has to hold a target casting nothing before it means something. Below this it is
+# just a global cooldown and a walk.
+IDLE_MS = 10000
+
+# Snapshots are 4 Hz, so a target held across a gap wider than this is two holds, not one.
+TARGET_GAP_MS = 2000
+
+
+def idle_windows(trace: Trace, min_ms: int) -> list[dict]:
+    """Held a target and cast nothing at all.
+
+    The cast-side twin of `stall_windows`: same failure, other half of the bot. A vetoed walk with
+    nothing walking in its place leaves a bot with somewhere to be and no way to get there, and from
+    outside that is a unit pointed at something doing nothing to it. Only stretches where the bot
+    held a target throughout count - otherwise every corpse and everyone waiting out a phase reads as
+    idle.
+    """
+    roster = roster_guids(trace)
+
+    casts: dict = defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("s") in roster:
+            casts[rec["s"]].append(rec["t"])
+
+    holding: dict = defaultdict(list)
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            guid = row[0]
+            # Columns past 7 arrived in v8, and a corpse keeps whatever it died pointed at.
+            if guid not in roster or len(row) < 8 or row[5] <= 0 or not row[7]:
+                continue
+            runs = holding[guid]
+            if runs and snap["t"] - runs[-1][1] <= TARGET_GAP_MS:
+                runs[-1] = (runs[-1][0], snap["t"])
+            else:
+                runs.append((snap["t"], snap["t"]))
+
+    found: list[dict] = []
+    for guid, runs in holding.items():
+        stamps = sorted(casts.get(guid, []))
+        for start, stop in runs:
+            spoke = [when for when in stamps if start <= when <= stop]
+            edges = [start] + spoke + [stop]
+            longest = max(edges[index + 1] - edges[index] for index in range(len(edges) - 1))
+            if longest >= min_ms:
+                found.append({"guid": guid, "start": start, "quiet": longest})
+    return found
+
+
+def show_idle(trace: Trace, min_ms: int) -> int:
+    print(f"bots that held a target and cast nothing for at least {min_ms / 1000:.0f}s\n")
+    found = idle_windows(trace, min_ms)
+    if not found:
+        print("  none")
+        return 0
+
+    for window in sorted(found, key=lambda w: -w["quiet"]):
+        print(f"{trace.name(window['guid']):<16} {trace.roles.get(window['guid'], '?'):<7}"
+              f" {window['quiet'] / 1000.0:6.1f}s quiet from {clock(window['start'])}")
+    return 0
+
+
+def show_vetoes(trace: Trace, limit: int = 20) -> int:
+    """Which multiplier zeroed which action, and how often.
+
+    A veto is cheap to write and easy to get wrong. One that zeroes a walk with nothing walking in
+    its place is a bot standing still, which this says long before the position views do.
+    """
+    rows = Counter()
+    for rec in trace.of("veto"):
+        rows[(str(rec.get("m", "")), str(rec.get("a", "")))] += 1
+    if not rows:
+        print("no multiplier vetoed anything in this pull")
+        return 0
+
+    print(f"{sum(rows.values())} veto(es), {len(rows)} distinct multiplier/action pairs\n")
+    for (multiplier, action), count in rows.most_common(limit):
+        print(f"{count:6}  {multiplier} -> {action}")
     return 0
 
 

@@ -45,7 +45,11 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from analysis import roster_guids  # noqa: E402
+from geometry import at, dist2, first_seen, guids_of_entry  # noqa: E402
+from geometry import track as tracks  # noqa: E402
 from obstrace import Trace, clock  # noqa: E402
+from probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
+from validity import encounter_of  # noqa: E402
 
 NPC_GUARDIAN = 33136
 NPC_YOGG_SARON = 33288
@@ -126,6 +130,10 @@ PORTAL_DESPAWN_MS = 25000
 # says about it. Set well past any cast the class has: the silence this exists to catch ran 50 s.
 FROZEN_MS = 10000
 
+# A creature that stops being sampled below this was almost certainly killed; one that vanishes near
+# full health was despawned by the phase. Nothing records a creature death, so this is the line.
+TENTACLE_SPENT_PCT = 20.0
+
 # 64022 on Yogg triggers a 14 yd knock back every second, and his model sits 4.5 yd above the
 # floor, so what lands on the floor is a 13.26 yd ring. Nothing in the world can be swept for it.
 KNOCKBACK_RADIUS = 13.3
@@ -168,32 +176,6 @@ def notes(trace: Trace, key: str) -> list[dict]:
     return [rec for rec in trace.of("note") if rec.get("k") == key]
 
 
-def role_of(trace: Trace, guid: int) -> str:
-    return trace.roles.get(guid, "?")
-
-
-def tracks(trace: Trace, guids: set[int]) -> dict[int, list[tuple[int, float, float]]]:
-    """Snapshot positions per guid, in time order."""
-    out: dict[int, list[tuple[int, float, float]]] = collections.defaultdict(list)
-    for snap in trace.of("snap"):
-        for row in snap.get("u", []):
-            if row[0] in guids:
-                out[row[0]].append((snap["t"], row[1], row[2]))
-    return out
-
-
-def first_seen(trace: Trace, guids: set[int]) -> int | None:
-    for snap in trace.of("snap"):
-        for row in snap.get("u", []):
-            if row[0] in guids:
-                return snap["t"]
-    return None
-
-
-def guids_of_entry(trace: Trace, entry: int) -> set[int]:
-    return {guid for guid, en in trace.entries.items() if en == entry}
-
-
 def sara_kills_needed(trace: Trace) -> int | None:
     """Guardian deaths inside 15 yd the phase costs, from Sara's own max health."""
     for guid in guids_of_entry(trace, NPC_SARA):
@@ -205,21 +187,15 @@ def sara_kills_needed(trace: Trace) -> int | None:
 
 def phase_spans(trace: Trace) -> list[tuple[int, int, int]]:
     """(phase, start, end) over the whole file, from the change-only yogg.phase stream."""
-    marks = sorted((rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.phase"))
-    if not marks:
-        return []
-
-    end = trace.records[-1].get("t", marks[-1][0]) if trace.records else marks[-1][0]
-    spans = []
-    for index, (start, phase) in enumerate(marks):
-        stop = marks[index + 1][0] if index + 1 < len(marks) else end
-        spans.append((phase, start, stop))
-    return spans
+    end = trace.records[-1].get("t", 0) if trace.records else 0
+    return [(int(value or 0), start, stop)
+            for value, start, stop in latch_spans(trace, "yogg.phase", end)]
 
 
 def missing_probes(trace: Trace) -> list[str]:
-    present = {rec.get("k", "") for rec in trace.of("note")}
-    return [key for key in PROBE_KEYS if key not in present]
+    """Declared for this boss and absent from this pull, read out of the source rather than a list
+    kept here: the list this replaces had already gone stale on three keys the file itself reads."""
+    return [key for key, _, _ in silent_keys(emitted_keys(trace), encounter_of(trace))]
 
 
 def show_banner(trace: Trace) -> None:
@@ -322,7 +298,7 @@ def show_handover(trace: Trace) -> None:
 
     inside: dict[str, list[bool]] = collections.defaultdict(list)
     for guid, far in standing.items():
-        inside[role_of(trace, guid)].append(far <= KNOCKBACK_RADIUS)
+        inside[trace.role(guid)].append(far <= KNOCKBACK_RADIUS)
     if inside:
         parts = ", ".join(f"{role} {sum(v)} of {len(v)}"
                           for role, v in sorted(inside.items()) if v)
@@ -349,10 +325,10 @@ def show_clouds(trace: Trace) -> None:
         guid, now, value = rec.get("g", 0), rec["t"], str(rec.get("txt", ""))
         if guid in held:
             was_t, was = held[guid]
-            time_in[role_of(trace, guid)][was] += now - was_t
+            time_in[trace.role(guid)][was] += now - was_t
         held[guid] = (now, value)
     for guid, (was_t, was) in held.items():
-        time_in[role_of(trace, guid)][was] += max(0, end - was_t)
+        time_in[trace.role(guid)][was] += max(0, end - was_t)
 
     for role in sorted(time_in):
         total = sum(time_in[role].values()) or 1
@@ -436,7 +412,7 @@ def show_cloud_spawns(trace: Trace) -> None:
         who = []
         if cloud in marked:
             who = sorted((round(math.dist(marked[guid2], marked[cloud]), 1), trace.name(guid2),
-                          role_of(trace, guid2))
+                          trace.role(guid2))
                          for guid2 in roster
                          if guid2 in marked
                          and math.dist(marked[guid2], marked[cloud]) <= CLOUD_SUMMON_REACH)
@@ -475,7 +451,7 @@ def show_portals(trace: Trace) -> None:
 
     team = sorted({rec.get("g", 0) for rec in notes(trace, "yogg.brainteam") if rec.get("txt") == "1"})
     if team:
-        roles = collections.Counter(role_of(trace, guid) for guid in team)
+        roles = collections.Counter(trace.role(guid) for guid in team)
         names = ", ".join(trace.name(guid) for guid in team)
         print(f"\n  brain team ({len(team)}): {dict(roles)}")
         print(f"    {names}")
@@ -491,8 +467,8 @@ def show_portals(trace: Trace) -> None:
         assigned.append(math.dist(where, PORTAL_SPOTS[slot]))
         nearest.append(min(math.dist(where, spot) for spot in PORTAL_SPOTS))
     if assigned:
-        print(f"\n  walk to the assigned spot: median {median(assigned):.1f} yd"
-              f", nearest spot was {median(nearest):.1f} yd  ({len(assigned)} assignments)")
+        print(f"\n  walk to the assigned spot: median {statistics.median(assigned):.1f} yd"
+              f", nearest spot was {statistics.median(nearest):.1f} yd  ({len(assigned)} assignments)")
 
     states = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.portal"))
     if states:
@@ -622,7 +598,7 @@ def show_frozen(trace: Trace) -> None:
 
     print(f"\n  held a target and cast nothing for over {FROZEN_MS / 1000:.0f} s:")
     for longest, start, guid in sorted(frozen, reverse=True)[:8]:
-        print(f"    {trace.name(guid):14} {role_of(trace, guid):6} {longest / 1000.0:5.1f} s from {clock(start)}")
+        print(f"    {trace.name(guid):14} {trace.role(guid):6} {longest / 1000.0:5.1f} s from {clock(start)}")
 
 
 def show_vetoes(trace: Trace) -> None:
@@ -641,20 +617,9 @@ def show_vetoes(trace: Trace) -> None:
 
 
 def position_at(trace: Trace, guid: int, when: int):
-    best = None
-    for snap in trace.of("snap"):
-        if snap["t"] > when:
-            break
-        for row in snap.get("u", []):
-            if row[0] == guid:
-                best = (row[1], row[2])
-    return best
-
-
-def median(values: list[float]) -> float:
-    ordered = sorted(values)
-    mid = len(ordered) // 2
-    return ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2.0
+    """Ground position only: everything here measures across a flat platform."""
+    spot = at(trace, guid, when)
+    return (spot[0], spot[1]) if spot else None
 
 
 def show_brain(trace: Trace) -> None:
@@ -687,8 +652,14 @@ def show_brain(trace: Trace) -> None:
 
     tentacles = guids_of_entry(trace, NPC_INFLUENCE_TENTACLE)
     if tentacles:
-        kills = sum(1 for rec in trace.of("death") if rec.get("g") in tentacles)
-        print(f"  Influence Tentacles seen: {len(tentacles)}, {kills} died")
+        # Nothing in the trace says a creature died: the death stream is roster only, and so is dmg,
+        # so the old count read zero on every trace ever taken. The snapshot does carry the last
+        # health each one was sampled at before it stopped appearing - a few percent for one the raid
+        # killed, near full for one the phase despawned - so that is what gets reported.
+        last = [rows[-1][1] for rows in tracks(trace, tentacles, ("t", "hp")).values() if rows]
+        spent = sum(1 for hp in last if hp <= TENTACLE_SPENT_PCT)
+        print(f"  Influence Tentacles seen: {len(tentacles)}, {spent} last seen under "
+              f"{TENTACLE_SPENT_PCT:.0f}% health and gone")
 
     gaze = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_LUNATIC_GAZE_SKULL]
     if gaze:
@@ -707,7 +678,7 @@ def show_brain(trace: Trace) -> None:
         tail = ""
         if near:
             out_of_range = sum(1 for gap in near if gap > LAUGHING_SKULL_RADIUS)
-            tail = (f", nearest skull median {median(near):.1f} yd,"
+            tail = (f", nearest skull median {statistics.median(near):.1f} yd,"
                     f" {out_of_range} of {len(near)} flips with none inside {LAUGHING_SKULL_RADIUS:.0f}")
         print(f"  skulls in arc    : {dict(skulls)}{tail}")
 
@@ -734,7 +705,7 @@ def show_brain(trace: Trace) -> None:
                      if rec.get("sp") == SPELL_INSANE and not rec.get("r")},
                     key=lambda guid: trace.name(guid))
     if caught:
-        names = ", ".join(f"{trace.name(guid)}({role_of(trace, guid)})" for guid in caught)
+        names = ", ".join(f"{trace.name(guid)}({trace.role(guid)})" for guid in caught)
         print(f"  caught by it     : {len(caught)} went Insane - {names}")
 
 
@@ -771,7 +742,7 @@ def show_phase2(trace: Trace) -> None:
             took = sum(rec.get("a", 0) for rec in squeeze
                        if rec.get("d") == guid and start <= rec["t"] <= stop + 500)
             freed = any(rec.get("tgt") == guid and start <= rec["t"] <= stop + 500 for rec in rescues)
-            print(f"    {trace.name(guid):14} {role_of(trace, guid):6} {clock(start)} -> {clock(stop)}"
+            print(f"    {trace.name(guid):14} {trace.role(guid):6} {clock(start)} -> {clock(stop)}"
                   f"  ({(stop - start) / 1000.0:5.1f} s) {took:>7,}"
                   f"  {'Hand of Protection' if freed else 'rode it out'}")
         print(f"    rescues cast     : {len(rescues)}")
@@ -808,9 +779,9 @@ def show_phase2(trace: Trace) -> None:
             if not gaps:
                 continue
             over = sum(1 for gap in gaps if gap > BRAIN_LINK_RANGE)
-            print(f"    {clock(start)} -> {clock(stop)}  {trace.name(guid)}({role_of(trace, guid)})"
-                  f" + {trace.name(partner)}({role_of(trace, partner)})"
-                  f"  gap median {median(gaps):.1f} yd, {over} of {len(gaps)} samples over"
+            print(f"    {clock(start)} -> {clock(stop)}  {trace.name(guid)}({trace.role(guid)})"
+                  f" + {trace.name(partner)}({trace.role(partner)})"
+                  f"  gap median {statistics.median(gaps):.1f} yd, {over} of {len(gaps)} samples over"
                   f" {BRAIN_LINK_RANGE:.0f}")
     else:
         print("  no 63802 rows - nothing was ever linked")
@@ -850,7 +821,7 @@ def show_handovers(trace: Trace) -> None:
 
     by_role: dict[str, list[int]] = collections.defaultdict(list)
     for guid, count in per_bot.items():
-        by_role[role_of(trace, guid)].append(count)
+        by_role[trace.role(guid)].append(count)
     parts = ", ".join(f"{role} {sum(v) / len(v):.0f}/bot" for role, v in sorted(by_role.items()))
     print(f"  node handovers     : {sum(per_bot.values())} in phase 2 ({parts})")
     for (one, two), count in pairs.most_common(3):
@@ -870,7 +841,7 @@ def show_crush(trace: Trace) -> None:
             continue
         per_role: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
         for rec in rows:
-            per_role[role_of(trace, rec.get("g", 0))][str(rec.get("txt", ""))] += 1
+            per_role[trace.role(rec.get("g", 0))][str(rec.get("txt", ""))] += 1
         print(f"  {label}:")
         for role in sorted(per_role):
             total = sum(per_role[role].values()) or 1
@@ -887,7 +858,7 @@ def show_crush(trace: Trace) -> None:
 
     deaths = trace.of("death")
     if deaths:
-        by_role = collections.Counter(role_of(trace, rec.get("g", 0)) for rec in deaths)
+        by_role = collections.Counter(trace.role(rec.get("g", 0)) for rec in deaths)
         print(f"  deaths by role: {dict(by_role)}")
 
     lanes = [rec for rec in trace.of("haz") if rec.get("shape") == "wedge"]
@@ -955,7 +926,7 @@ def show_launches(trace: Trace) -> None:
     print(f"  thrown by the body ring: {len(launches)}")
     for when, guid, flat, by, aimed in sorted(launches)[:10]:
         where = f" -> {aimed:.1f} yd out" if aimed >= 0 else ""
-        print(f"    {clock(when):>10} {trace.name(guid):14} {role_of(trace, guid):6}"
+        print(f"    {clock(when):>10} {trace.name(guid):14} {trace.role(guid):6}"
               f" from {flat:5.1f} yd  walked in by {by}{where}")
 
 
@@ -995,7 +966,7 @@ def show_crush_melee(trace: Trace) -> None:
 
     print(f"  inside {CRUSHER_MELEE_RANGE:.0f} yd of a Crusher ({len(inside)}):")
     for gap, guid in inside[:8]:
-        kind = role_of(trace, guid) if guid in roster else "pet"
+        kind = trace.role(guid) if guid in roster else "pet"
         print(f"    {trace.name(guid):28} {kind:6} {gap:5.1f} yd")
 
     if aimed:
@@ -1066,7 +1037,7 @@ def show_sanity(trace: Trace) -> None:
         low[guid] = min(low.get(guid, stacks), stacks)
 
     for guid in sorted(low, key=lambda g: low[g]):
-        print(f"  {trace.name(guid):18} {role_of(trace, guid):7} low {low[guid]:3}")
+        print(f"  {trace.name(guid):18} {trace.role(guid):7} low {low[guid]:3}")
 
     insane = [guid for guid, stacks in low.items() if stacks <= 0]
     if insane:
@@ -1102,7 +1073,7 @@ def show_threat(trace: Trace) -> None:
             if row[0] not in guardians or len(row) < 8 or row[5] <= 0:
                 continue
             target = row[7]
-            held[role_of(trace, target) if target in roster else
+            held[trace.role(target) if target in roster else
                  ("nobody" if not target else "other")] += step
 
     total = sum(held.values())
@@ -1120,7 +1091,7 @@ def show_threat(trace: Trace) -> None:
         print(f"\n  redirects: {len(redirects)}")
         for rec in redirects:
             target = rec.get("tgt", 0)
-            role = role_of(trace, target) if target in roster else "?"
+            role = trace.role(target) if target in roster else "?"
             print(f"    {clock(rec['t']):>9}  {REDIRECT_SPELLS[rec['sp']]:<20}"
                   f" {trace.name(rec.get('s', 0)):<14} -> {trace.name(target)} ({role})")
 

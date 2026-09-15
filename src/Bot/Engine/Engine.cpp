@@ -270,7 +270,14 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
                     }
                 }
 
-                PerfMonitorOperation* pmo = sPerfMonitor.start(PERF_MON_ACTION, action->getName(), &aiObjectContext->performanceStack);
+                // getName() returns by value and most node names are past the small-string
+                // buffer, so asking for one costs a heap allocation. The early-out lives inside
+                // start(), which is a frame too late to help: guard the call instead.
+                PerfMonitorOperation* pmo =
+                    sPlayerbotAIConfig.perfMonEnabled
+                        ? sPerfMonitor.start(PERF_MON_ACTION, action->getName(),
+                                             &aiObjectContext->performanceStack)
+                        : nullptr;
                 std::optional<RaidObs::ActionScope> obsAction;
                 if (RaidObs::Active())
                     obsAction.emplace(action->getName());
@@ -625,7 +632,10 @@ void Engine::ProcessTriggers(bool minimal)
                 ++coverage[i].checks;
 
             PerfMonitorOperation* pmo =
-                sPerfMonitor.start(PERF_MON_TRIGGER, trigger->getName(), &aiObjectContext->performanceStack);
+                sPlayerbotAIConfig.perfMonEnabled
+                    ? sPerfMonitor.start(PERF_MON_TRIGGER, trigger->getName(),
+                                         &aiObjectContext->performanceStack)
+                    : nullptr;
             Event event = trigger->Check();
             if (pmo)
                 pmo->finish();
