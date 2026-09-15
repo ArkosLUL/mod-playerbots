@@ -212,6 +212,16 @@ public:
     bool IsActive() override;
 };
 
+// The walk to a target on the far side of Yogg. Everything else about the body ring asks where the bot
+// is standing; this asks where the walk is going, which is the only read that can stop a bot entering
+// it in the first place.
+class YoggSaronBodyDetourTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronBodyDetourTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron body detour trigger") {}
+    bool IsActive() override;
+};
+
 class YoggSaronLunaticGazeTrigger : public YoggSaronTrigger
 {
 public:

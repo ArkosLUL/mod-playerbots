@@ -68,6 +68,10 @@ enum UlduarYoggSaronIds
     SPELL_SANITY = 63050,
     SPELL_SARAS_FERVOR = 63138,  // +20% damage done and +100% damage taken, 15s
     SPELL_BRAIN_LINK = 63802,
+    // The two the aura casts on its partner every second, apart and together. Neither leaves an aura,
+    // so the cast is the only place the pair is visible from outside the aura script.
+    SPELL_BRAIN_LINK_DAMAGE = 63803,
+    SPELL_BRAIN_LINK_OK = 63804,
     SPELL_MALADY_OF_THE_MIND = 63830,
     SPELL_SHADOW_BARRIER = 63894,
     SPELL_TELEPORT_TO_CHAMBER = 63997,
@@ -205,6 +209,11 @@ constexpr uint32 ULDUAR_YOGG_SARON_SPACING_HOLD_MS = 3000;
 // collinear with the tentacle and its victim, not standing close - a four-yard sidestep at 20 yd
 // clears it. Melee range is no exemption either: the cone's proximity bypass is 2.0 yd against a
 // ~10.8 yd melee reach here.
+// How far a pet pulled off a Crusher will look for something else to hit. It has to find something:
+// an idle pet is one PetAI update away from re-acquiring, and its first two picks are whoever is
+// hitting it and whoever its owner is hitting - both the Crusher the guard just pulled it from.
+constexpr float ULDUAR_YOGG_SARON_PET_TARGET_RADIUS = 40.0f;
+
 constexpr float ULDUAR_YOGG_SARON_CRUSH_RANGE = 25.0f;       // DBC radius 23 plus both object sizes
 constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either side of the facing
 constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
@@ -262,12 +271,14 @@ constexpr float ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS = 24.0f;
 // second; inside it neither takes anything. The bot closes to a margin under the threshold so ordinary
 // drift does not re-break a link it has just mended.
 //
-// Which raider is the partner cannot be read. Only the owner carries 63802 and the aura script keeps
-// the other GUID to itself, so the nearest raider is the best a bot can aim at - and the phase 2 band
-// is narrow enough that it usually lands inside. Measured with nothing closing at all: seven pairs sat
-// at 24 to 60 yd apart for the full 30 s each, 355k of damage.
+// The aura script keeps the partner's GUID to itself, but it casts on that partner once a second
+// either way - 63803 while the two are apart, 63804 while they are together - so the pair is readable
+// from the cast even though it is not readable from any aura. The TTL is three missed ticks.
+// Guessing instead costs: one pull had nine of ten links sitting past 20 yd for their full 30 s,
+// 477,727 damage, with the owner closing on whoever was nearest rather than on its partner.
 constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_RANGE = 20.0f;
 constexpr float ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE = 15.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_BRAIN_LINK_PAIR_TTL_MS = 3000;
 
 // Hand of Protection frees a Squeeze victim outright. It grants physical school immunity and carries
 // SPELL_ATTR1_IMMUNITY_PURGES_EFFECT, Squeeze is physical and dispellable, and the Squeeze aura script
@@ -294,7 +305,11 @@ constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS = 30000;
 constexpr uint32 ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_FLOOR_MS = 8000;
 constexpr float ULDUAR_YOGG_SARON_PORTAL_SPREAD_LEAD_SAFETY = 2.0f;
 constexpr float ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS = 100.0f;
-constexpr float ULDUAR_YOGG_SARON_PORTAL_ARRIVED_RADIUS = 3.0f;
+
+// One number for "I have arrived" and for "I can click this", because two disagreed: a bot jittering
+// between 2 and 3 yd read as holding while the click test found nothing, and flipped holding to late
+// and back every 0.7 s for a whole 25 s window without ever taking the portal.
+constexpr float ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS = 2.0f;
 
 // AddPortals spawns RAID_MODE(4, 10), which is the first four table entries in 10-man and all ten in
 // 25-man, so the brain team is capped by how many portals actually exist.
@@ -466,11 +481,17 @@ Player* YoggSaronSqueezeVictim(PlayerbotAI* botAI);
 // lapses.
 bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim);
 
-// The nearest living raider on the boss platform, the bot itself excluded.
-Player* YoggSaronNearestRaider(PlayerbotAI* botAI);
+// Somewhere other than a Crusher Tentacle for a pet to be, nearest first. nullptr when the pet has
+// nothing else within reach, which is the only case worth silencing it for.
+Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet);
 
-// Who a Brain Linked bot should close on, or nullptr when it is not linked, is already close enough,
-// or has gone underground - the script drops the link outright past 10 yd of vertical separation.
+// Record a Brain Link pair, from the spell hook that sees 63803 or 63804 go out. Both ends read the
+// same record, so both walk.
+void YoggSaronNoteBrainLinkPair(Unit* owner, Unit* partner);
+
+// Who a Brain Linked bot should close on, whichever end of the pair it is, or nullptr when it is not
+// linked, is already close enough, or has gone underground - the script drops the link outright past
+// 10 yd of vertical separation.
 Player* YoggSaronBrainLinkTarget(PlayerbotAI* botAI);
 
 // Where the portal wave clock stands. ordinal counts waves actually seen, msToNextWave is the

@@ -17,6 +17,8 @@
 
 #include "AiObjectContext.h"
 #include "CellImpl.h"
+#include "ObjectAccessor.h"
+#include "ObjectGuid.h"
 #include "Creature.h"
 #include "DBCEnums.h"
 #include "GridNotifiers.h"
@@ -82,6 +84,7 @@ struct YoggSaronEncounterState
     uint32 nextWaveMs = 0;
     uint32 waveOrdinal = 0;
     uint32 slotWave = 0;
+    bool slotPortalsUp = false;
 
     // Nothing in the world counts the transformation dialogue down, so the window is timed off the
     // tick Yogg was first seen without his barrier. The second is when the ring actually lit, which is
@@ -541,9 +544,15 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
 
         // Latched per wave. Nearest-first off live positions churns every tick as bots walk, and two
         // bots swapping spots mid-approach costs both of them the window.
-        if (state.slotWave != assignmentWave)
+        //
+        // Rebuilt once more when the portals actually arrive. The wave the plan is for is the same
+        // number before and after they spawn, so without the second test the assignment stands from
+        // the moment the previous wave's portals despawned - 55 s and a whole room fight earlier, off
+        // positions nobody is standing in any more.
+        if (state.slotWave != assignmentWave || (wave.portalsUp && !state.slotPortalsUp))
         {
             state.slotWave = assignmentWave;
+            state.slotPortalsUp = wave.portalsUp;
             state.portalSlot.clear();
             state.brainTeam.clear();
 
@@ -588,8 +597,36 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     {
         spot = ULDUAR_YOGG_SARON_PORTAL_SPOTS[slot];
 
+        // A portal is one use and the click takes whichever is nearest, so a slot is a suggestion the
+        // raid routinely talks itself out of - in one wave five of six bots used somebody else's. The
+        // ones left over stood half a yard from a dead spot while three portals went unused, so what
+        // a bot walks to is a portal that is still there, not the one it was handed.
+        if (wave.portalsUp)
+        {
+            std::list<Creature*> portals;
+            bot->GetCreatureListWithEntryInGrid(portals, NPC_DESCEND_INTO_MADNESS,
+                                                ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS);
+
+            Creature* mine = nullptr;
+            Creature* nearest = nullptr;
+            for (Creature* portal : portals)
+            {
+                if (!portal->IsAlive())
+                    continue;
+
+                if (portal->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
+                    mine = portal;
+
+                if (!nearest || bot->GetExactDist2d(portal) < bot->GetExactDist2d(nearest))
+                    nearest = portal;
+            }
+
+            if (!mine && nearest)
+                spot = nearest->GetPosition();
+        }
+
         float const distance = bot->GetExactDist2d(spot);
-        if (distance <= ULDUAR_YOGG_SARON_PORTAL_ARRIVED_RADIUS)
+        if (distance <= ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
             intent = YOGG_SARON_PORTAL_HOLDING;
         else if (wave.portalsUp)
             intent = YOGG_SARON_PORTAL_LATE;
@@ -980,6 +1017,28 @@ struct IllusionMobInRangeCheck
     }
 };
 
+// Everything a pet may be pointed at instead of a Crusher Tentacle: the phase 2 half of the dps
+// resolver's ladder with the Crusher struck out. Influence Tentacles are deliberately absent - those
+// live 93 yd below the platform, in a room the pet's owner is not standing in.
+const std::vector<uint32> yoggSaronPetTargets = {NPC_GUARDIAN_OF_YS, NPC_CONSTRICTOR_TENTACLE,
+                                                 NPC_CORRUPTOR_TENTACLE, NPC_MARKED_IMMORTAL_GUARDIAN,
+                                                 NPC_IMMORTAL_GUARDIAN};
+
+struct PetTargetInRangeCheck
+{
+    Acore::AnyUnitInObjectRangeCheck inRange;
+
+    bool operator()(Unit* unit)
+    {
+        if (!unit->IsAlive())
+            return false;
+
+        return std::find(yoggSaronPetTargets.begin(), yoggSaronPetTargets.end(), unit->GetEntry()) !=
+                   yoggSaronPetTargets.end() &&
+               inRange(unit);
+    }
+};
+
 // Whether a Crusher Tentacle can produce a Crush cone at all. 64146 is a self-buff procced by its own
 // white swing at 100%, and UpdateAI swings only at a victim inside melee range - GetCombatReach of
 // both plus 4/3, floored at NOMINAL_MELEE_RANGE - so with nothing in reach there is no swing and no
@@ -1004,6 +1063,31 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius)
     Cell::VisitObjects(bot, searcher, radius);
 
     return found.empty() ? nullptr : found.front();
+}
+
+Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet)
+{
+    if (!pet)
+        return nullptr;
+
+    std::vector<Unit*> found;
+    PetTargetInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(pet, ULDUAR_YOGG_SARON_PET_TARGET_RADIUS)};
+    Acore::UnitListSearcher<PetTargetInRangeCheck> searcher(pet, found, check);
+    Cell::VisitObjects(pet, searcher, ULDUAR_YOGG_SARON_PET_TARGET_RADIUS);
+
+    Unit* nearest = nullptr;
+    float best = 0.0f;
+    for (Unit* candidate : found)
+    {
+        float const distance = pet->GetExactDist2d(candidate);
+        if (!nearest || distance < best)
+        {
+            nearest = candidate;
+            best = distance;
+        }
+    }
+
+    return nearest;
 }
 
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
@@ -1064,55 +1148,90 @@ bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y
     return false;
 }
 
-Player* YoggSaronNearestRaider(PlayerbotAI* botAI)
+namespace
 {
-    Player* bot = botAI->GetBot();
+struct YoggSaronBrainLinkPair
+{
+    ObjectGuid owner;
+    ObjectGuid partner;
+    uint32 seenMs = 0;
+};
 
-    Group* group = bot->GetGroup();
-    if (!group)
-        return nullptr;
+// Per instance, a handful of entries at a time - one link is up at once and each is 30 s long.
+std::mutex yoggSaronBrainLinkPairsMutex;
+std::unordered_map<uint32 /*instanceId*/, std::vector<YoggSaronBrainLinkPair>> yoggSaronBrainLinkPairs;
+}  // namespace
 
-    Player* nearest = nullptr;
-    float best = 0.0f;
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+void YoggSaronNoteBrainLinkPair(Unit* owner, Unit* partner)
+{
+    if (!owner || !partner || owner == partner)
+        return;
+
+    uint32 const now = getMSTime();
+
+    std::lock_guard<std::mutex> guard(yoggSaronBrainLinkPairsMutex);
+    std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs[owner->GetInstanceId()];
+
+    for (YoggSaronBrainLinkPair& pair : pairs)
     {
-        Player* member = ref->GetSource();
-        if (!member || member == bot || !member->IsAlive())
-            continue;
-
-        if (member->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
-            continue;
-
-        float const distance = bot->GetExactDist2d(member);
-        if (!nearest || distance < best)
+        if (pair.owner == owner->GetGUID())
         {
-            nearest = member;
-            best = distance;
+            pair.partner = partner->GetGUID();
+            pair.seenMs = now;
+            return;
         }
     }
 
-    return nearest;
+    pairs.push_back(YoggSaronBrainLinkPair{owner->GetGUID(), partner->GetGUID(), now});
 }
 
 Player* YoggSaronBrainLinkTarget(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
-    if (!bot->HasAura(SPELL_BRAIN_LINK))
-        return nullptr;
-
     // The aura script drops the link outright once the two ends are more than 10 yd apart vertically,
     // so a bot that has taken a portal down has nothing left to close on.
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return nullptr;
 
-    Player* nearest = YoggSaronNearestRaider(botAI);
-    bool const far = nearest && bot->GetExactDist2d(nearest) > ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE;
+    // Whichever end of the pair the bot is. Only the owner carries 63802 and the partner's GUID lives
+    // inside the aura script, so a HasAura test here would leave the partner standing still while the
+    // owner chased it - and chasing a bot walking away at the same speed never arrives.
+    ObjectGuid other;
+    {
+        uint32 const now = getMSTime();
+
+        std::lock_guard<std::mutex> guard(yoggSaronBrainLinkPairsMutex);
+        std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs[bot->GetInstanceId()];
+
+        // Three missed ticks. The link casts on the partner once a second whether the two are apart
+        // (63803) or together (63804), so silence for that long means the aura has gone.
+        pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                                   [now](YoggSaronBrainLinkPair const& pair) {
+                                       return getMSTimeDiff(pair.seenMs, now) >
+                                              ULDUAR_YOGG_SARON_BRAIN_LINK_PAIR_TTL_MS;
+                                   }),
+                    pairs.end());
+
+        for (YoggSaronBrainLinkPair const& pair : pairs)
+        {
+            if (pair.owner == bot->GetGUID())
+                other = pair.partner;
+            else if (pair.partner == bot->GetGUID())
+                other = pair.owner;
+        }
+    }
+
+    Player* partner = other ? ObjectAccessor::FindPlayer(other) : nullptr;
+    if (partner && (!partner->IsAlive() || partner->GetMapId() != bot->GetMapId()))
+        partner = nullptr;
+
+    bool const far = partner && bot->GetExactDist2d(partner) > ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE;
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.brainlink", far ? "closing" : "clear");
+        RaidObs::NoteDerived(bot, "yogg.brainlink", !partner ? "none" : (far ? "closing" : "clear"));
 
-    return far ? nearest : nullptr;
+    return far ? partner : nullptr;
 }
 
 Player* YoggSaronSqueezeVictim(PlayerbotAI* botAI)

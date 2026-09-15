@@ -336,19 +336,43 @@ bool YoggSaronIllusionFacingAction::Collect(HazardSet& set)
 
     float const targetX = target->GetPositionX();
     float const targetY = target->GetPositionY();
-
-    set.clear = [skulls, targetX, targetY](float x, float y)
-    { return YoggSaronFacingClearOfSkulls(skulls, x, y, targetX, targetY); };
-
-    // No fallback. Every candidate the sweep rejects is one where the bot would be gazed anyway, so
-    // there is nothing left to retry on and standing still beats a walk that buys nothing.
     float const reach =
         botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
 
-    set.preferred = [targetX, targetY, reach](float x, float y)
-    { return std::hypot(targetX - x, targetY - y) <= reach; };
+    // Staying in reach is a requirement, not a preference the sweep may drop. A spot out of reach puts
+    // the bot back under reach melee, which walks it to the target and undoes this - one room spent
+    // fifty seconds trading those two while the tentacle sat at 87%. No fallback either: every
+    // candidate rejected here is one where the bot would be gazed anyway, so standing still and
+    // fighting through it beats a walk that buys nothing.
+    set.clear = [skulls, targetX, targetY, reach](float x, float y)
+    {
+        return std::hypot(targetX - x, targetY - y) <= reach &&
+               YoggSaronFacingClearOfSkulls(skulls, x, y, targetX, targetY);
+    };
 
     return true;
+}
+
+bool YoggSaronBodyDetourAction::Execute(Event /*event*/)
+{
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    Position waypoint;
+    if (!YoggSaronBodyDetour(bot, target->GetPosition(), waypoint))
+        return false;
+
+    // A blocked arc is worse than a straight walk, because this node claims the tick and reach cannot
+    // run while it does. The latch hands the bot back after ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS of it.
+    if (!YoggSaronWalkMakingProgress(botAI, "detour", waypoint))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.detour", "around");
+
+    return MoveNear(bot->GetMapId(), waypoint.GetPositionX(), waypoint.GetPositionY(), waypoint.GetPositionZ(),
+                    sPlayerbotAIConfig.contactDistance, MovementPriority::MOVEMENT_FORCED);
 }
 
 bool YoggSaronPetGuardAction::Execute(Event /*event*/)
@@ -386,16 +410,33 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
         }
 
         if (!touching)
+        {
+            Unhush(pet);
             continue;
+        }
+
+        // Somewhere else to be. An idle pet is what PetAI reads as "pick your own", and its first two
+        // picks are whoever is hitting the pet and whoever the owner is hitting - both this Crusher,
+        // since the owner's target is a Crusher in every tick this node fires in. A pet that has a
+        // living victim is never re-selected, so one good command is the whole fix.
+        Unit* elsewhere = target ? target : YoggSaronPetFallbackTarget(botAI, pet);
 
         pet->AttackStop();
 
-        // Re-issued every tick rather than latched: a hunter or warlock pet takes the command and
-        // stays off, but a Shadowfiend and an Army of the Dead ghoul run their own AI and re-acquire.
-        if (target && pet->AI())
-            pet->AI()->AttackStart(target);
+        if (elsewhere && pet->AI())
+        {
+            Unhush(pet);
+            pet->AI()->AttackStart(elsewhere);
+        }
         else
+        {
+            // Nothing else on the floor. Passive is the one state SelectNextTarget, AttackedBy and
+            // OwnerAttacked all honour, so it is what keeps a pet out of the cone when there is no
+            // other target to hold its attention.
+            pet->SetReactState(REACT_PASSIVE);
+            hushed.insert(pet->GetGUID());
             pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
+        }
 
         pulled = true;
     }
@@ -406,6 +447,13 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
     // Never claims the tick. Commanding a pet costs the bot nothing it was going to do with its own
     // body, and the node sits above the dps resolver only so it is asked before the pet swings again.
     return false;
+}
+
+void YoggSaronPetGuardAction::Unhush(Creature* pet)
+{
+    // Only pets this node silenced, so a stance the player set themselves is never overwritten.
+    if (hushed.erase(pet->GetGUID()))
+        pet->SetReactState(REACT_DEFENSIVE);
 }
 
 size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseOne)
@@ -685,14 +733,30 @@ bool YoggSaronPhase3ControlAction::Execute(Event /*event*/)
 
 bool YoggSaronBrainLinkAction::Execute(Event /*event*/)
 {
-    // The nearest raider, not the first group member carrying the aura: Brain Link puts 63802 on one
-    // end only, so iterating for a second holder finds nobody and the old walk went to whoever the
-    // group happened to list first.
     Player* partner = YoggSaronBrainLinkTarget(botAI);
     if (!partner)
         return false;
 
-    return MoveNear(partner, ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE, MovementPriority::MOVEMENT_FORCED);
+    // Both ends run this, so both walk and the gap closes at twice the rate. Aiming at the partner
+    // instead is a chase, and a chase after somebody moving away at the same speed never arrives -
+    // one link ran 17 walks while the gap grew from 45.8 to 78.5 yd.
+    float x = (bot->GetPositionX() + partner->GetPositionX()) / 2.0f;
+    float y = (bot->GetPositionY() + partner->GetPositionY()) / 2.0f;
+
+    // Two bots on opposite sides of Yogg have the body itself as their midpoint, which knocks both of
+    // them back once a second. Pushed straight out along the same bearing, so the two still meet.
+    float const middleX = ULDUAR_YOGG_SARON_MIDDLE.GetPositionX();
+    float const middleY = ULDUAR_YOGG_SARON_MIDDLE.GetPositionY();
+    float const fromMiddle = std::hypot(x - middleX, y - middleY);
+    if (fromMiddle < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
+    {
+        float const heading = fromMiddle > 0.1f ? std::atan2(y - middleY, x - middleX) : bot->GetOrientation();
+        x = middleX + std::cos(heading) * ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
+        y = middleY + std::sin(heading) * ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
+    }
+
+    return MoveNear(bot->GetMapId(), x, y, bot->GetPositionZ(), sPlayerbotAIConfig.contactDistance,
+                    MovementPriority::MOVEMENT_FORCED);
 }
 
 bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
@@ -766,7 +830,8 @@ bool YoggSaronStopFollowingAction::Execute(Event /*event*/)
 
 bool YoggSaronUsePortalAction::Execute(Event /*event*/)
 {
-    Creature* assignedPortal = bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, 2.0f, true);
+    Creature* assignedPortal =
+        bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS, true);
     if (!assignedPortal)
         return false;
 

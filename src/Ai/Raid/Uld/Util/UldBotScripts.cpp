@@ -12,6 +12,7 @@
 #include "Spell.h"
 #include "UldData.h"
 #include "UldEncounter_Vezax.h"
+#include "UldEncounter_YoggSaron.h"
 
 #include <algorithm>
 
@@ -110,7 +111,33 @@ public:
     }
 };
 
+// Brain Link names its partner nowhere a bot can read: the aura script holds _targetGUID privately and
+// neither 63803 nor 63804 leaves an aura behind. But it casts one of the two on that partner every
+// second for the life of the link, so the cast is the pair, and both ends can be told about it.
+class YoggSaronBrainLinkListenerScript : public AllSpellScript
+{
+public:
+    YoggSaronBrainLinkListenerScript()
+        : AllSpellScript("YoggSaronBrainLinkListenerScript", {ALLSPELLHOOK_ON_PREPARE})
+    {
+    }
+
+    void OnSpellPrepare(Spell* spell, Unit* caster, SpellInfo const* spellInfo) override
+    {
+        if (!spell || !caster || !spellInfo || caster->GetMapId() != ULDUAR_MAP_ID)
+            return;
+
+        if (spellInfo->Id != SPELL_BRAIN_LINK_DAMAGE && spellInfo->Id != SPELL_BRAIN_LINK_OK)
+            return;
+
+        // 63803 goes out twice a tick, once at the partner and once back at the owner. The self-cast
+        // is the one that carries no information.
+        YoggSaronNoteBrainLinkPair(caster, spell->m_targets.GetUnitTarget());
+    }
+};
+
 void AddSC_UlduarBotScripts()
 {
     new VezaxHazardListenerScript();
+    new YoggSaronBrainLinkListenerScript();
 }

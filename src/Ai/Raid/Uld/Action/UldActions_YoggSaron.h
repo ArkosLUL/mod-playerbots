@@ -14,6 +14,7 @@
 #include "Vehicle.h"
 
 #include <functional>
+#include <set>
 #include <vector>
 
 class YoggSaronGuardianPositioningAction : public MovementAction
@@ -156,6 +157,17 @@ private:
     Position roomMiddle;
 };
 
+// Walk around the body instead of through it. ReachCombatTo shortens its path to halfway, so a target
+// on the far side of Yogg puts the destination on top of him: one pull sent eight ranged and healers
+// to 7.6-9.4 yd of the middle in a single second and the knock back caught thirteen of them.
+class YoggSaronBodyDetourAction : public MovementAction
+{
+public:
+    YoggSaronBodyDetourAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron body detour action") {}
+
+    bool Execute(Event event) override;
+};
+
 // Keep pets and guardians out of a Crusher Tentacle's melee range. Nothing else can put one there:
 // melee bots are already barred from targeting a Crusher, and every Crush cone in one pull was
 // procced by somebody's pet while the nearest player stood 12 yd clear.
@@ -165,6 +177,13 @@ public:
     YoggSaronPetGuardAction(PlayerbotAI* ai) : Action(ai, "yogg-saron pet guard action") {}
 
     bool Execute(Event event) override;
+
+private:
+    // Give a pet its stance back, once it is clear and only if this node took it away.
+    void Unhush(Creature* pet);
+
+    // Pets currently held passive because there was nothing but a Crusher for them to hit.
+    std::set<ObjectGuid> hushed;
 };
 
 // One owner of every non-tank's target for the whole encounter, in place of the raid icons this fight

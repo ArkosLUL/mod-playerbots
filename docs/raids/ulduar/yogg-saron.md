@@ -190,6 +190,16 @@ and `reach party member to heal` is exempt outright:
   moment it is walked clear. A wider band leaves a ring where neither node moves anybody. Phase 3 is
   left out: its spacing node does not run, so nothing would walk the bot out in its place.
 
+**A third window was tried below the platform and cost a whole room.** Zeroing reach while a
+Laughing Skull was in arc left five bots in the Chamber holding a tentacle at 87% for **fifty
+seconds**: reach sat at relevance 0.0, every melee ability beside it read `USELESS` for range, and
+the facing node that was meant to do the walking instead returned false on all of it. A veto is only
+ever as good as the node that moves the bot in its place, so make that node incapable of leaving the
+bot somewhere reach would want to undo, and skip the veto - which is what the illusion facing node
+does below. The early return for anything under z 300 is load-bearing on its own account: the brain
+room middle is **2.3 yd** from the platform middle in 2d, so without it the ring test would veto the
+reach of every bot standing on the Brain, 93 yd underneath it.
+
 `MoveAwayFromCreatureAction` was rejected for this: no throttle, no latch, and it *maximises* distance
 recomputed from the bot's new position every tick, so against six rotating rings the best answer rotates
 with them.
@@ -342,10 +352,22 @@ fired with **no player inside 12 yd** and a Felguard at 5.5, and the closest app
 Shadowfiend 0.4, ghoul 1.1, Felguard 1.2, hunter pet 1.3 — the first actual player at 2.3. It cost
 **162,663 damage and four killing blows**, and 251 hazard rows routing 25 bots around floor that was
 never dangerous. `yogg-saron pet guard` walks `m_Controlled` and pulls anything that is a Crusher's
-victim or inside its melee range, re-issued every tick rather than latched because a Shadowfiend and
-an Army of the Dead ghoul re-acquire on their own AI where a hunter or warlock pet takes the
-command. Either half of that test is enough on its own: `SetInCombatWithZone` hands the tentacle a
-threat list holding the whole raid, so a pet that never attacked can still come up as the victim.
+victim or inside its melee range. Either half of that test is enough on its own:
+`SetInCombatWithZone` hands the tentacle a threat list holding the whole raid, so a pet that never
+attacked can still come up as the victim.
+
+**Pulling a pet is half a command; it also has to be given somewhere else to be.** `PetAI::UpdateAI`
+re-selects the moment the pet has no victim, and `SelectNextTarget` checks whoever is attacking the
+pet first and `owner->GetVictim()` third - both the Crusher, because the only tick this node ever
+fires in is one where the owner is on a Crusher itself. A first version stopped the attack and
+recalled the pet, and the pet was back in melee range before the bot's next tick: 336, 321, 312 and
+165 samples with a Crusher targeted, four pets between 0.0 and 0.4 yd of one. A pet that *has* a
+living victim is never re-selected - `UpdateAI` takes the melee branch, and `AttackedBy` and
+`OwnerAttacked` both bail on "prevent pet from disengaging" - so `YoggSaronPetFallbackTarget` hands
+it the nearest live phase 2 add that is not a Crusher and the one command sticks. `REACT_PASSIVE` is
+the fallback for an empty floor, since passive is the one state all three of those honour; restored
+to defensive the tick the pet is clear, and only for pets this node silenced. It stays a per-tick
+node rather than a latch: an uncommandable guardian can walk back in at any point.
 
 So `GetYoggSaronCrushWedges` raises a wedge **only for a Crusher that currently has something inside
 its melee range**, which keeps it armed for exactly the case the guard cannot close — an
@@ -416,6 +438,23 @@ walks that end the problem. A blocked crossing gets one waypoint at
 turn the next one makes, so one is enough, and the worst case — a half-turn — passes
 24 × cos 45° = 17.0 yd from the middle.
 
+**The walk at a target on the far side of Yogg ends on top of him.** `ReachCombatTo` shortens its
+path to `disToGo / 2 + distance`, so half the way to a target across the room is the body, and the
+reach nodes are the one walk the route filter above does not cover. One pull had the resolver hand
+eight ranged and healers a Crusher **56 yd** away past the middle; `reach spell` put all eight at
+**7.6-9.4 yd** of it inside a single second, and the pulse 0.7 s later threw thirteen bots. Every
+other read of the ring asks where the bot is standing, which is a tick too late against a hazard
+that fires once a second. `yogg-saron body detour` at `ACTION_RAID - 1` asks where the walk is
+going: while the bot is out of its own reach of the target and `YoggSaronRouteClearOfBody` says the
+straight line passes inside the ring, it owns the approach and walks the same arc waypoint the
+portal spread uses, then stands down. Under every raid node and over `charge` and both `reach melee`
+entries, so the price is one shadowed gap-closer for the length of the arc leg. Probed as
+`yogg.detour`.
+
+The 13.3 yd model held up under test: 23 launches matched a Knock Away cast and the last grounded
+sample before each was **7.8 to 12.9 yd** out. Measure that sample, not the first airborne one,
+which is already a third of a second into the flight and reads 6 yd too far.
+
 **The portals are creatures, one-use, and on a clock the raid has to beat.**
 `NPC_DESCEND_INTO_MADNESS` (34072), `TEMPSUMMON_TIMED_DESPAWN` 25 s, `OnSpellClick` clearing the
 npcflags so each takes exactly one passenger. `EVENT_SARA_P2_OPEN_PORTALS` fires **60 s** after P2
@@ -445,23 +484,46 @@ rest of the fight. A bot walks once the next wave is inside `max(8 s, distance /
 same adaptive shape as the exit lead, and holds until the portal appears under it. `yogg.portal` is
 the state machine: `notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`.
 
+**Rebuild the plan when the portals spawn, and take one that is still there.** The wave a plan is
+for carries the same ordinal before and after the portals appear, so a latch keyed on that alone
+never rebuilds a second time: every assignment in one pull was stamped **55 to 61 s** before the
+wave it served, off positions taken at the end of the previous one. And a slot is only ever a
+suggestion, because the click takes whichever portal is inside
+`ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS` - in one wave five of six bots used somebody else's, and the
+three left over stood **0.2 to 0.5 yd** from a spot whose portal was gone, flipping `holding` to
+`late` and back every 0.7 s for the rest of the window while three portals went unused. So the plan
+rebuilds once more on the tick the portals are first seen, and a bot whose own spot is empty walks
+to the nearest portal still alive. Arriving and clicking share one radius now: 3 yd for arrival
+against 2 for the click meant `holding` did not imply clickable. Portals taken per wave ran 7, 6, 2,
+0 of 10.
+
 **The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a
 60 s race on foot, and it doubles as the Crush answer above. Order within each band by GUID so every
 bot derives the same team from its own seat. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
 `GetYoggSaronBrainTeam` is the single owner now.
 
-**Brain Link's partner cannot be read, so the bot closes on the nearest raider.** 63802 goes on
-**one** player: `spell_yogg_saron_brain_link_aura` picks a random living player within 50 yd on apply,
-keeps that GUID to itself, and every second they are more than **20 yd** apart casts 63803 on **both**
-ends — DBC damage plus −2 Sanity each — dropping the link if either dies or they end up more than 10 yd
-apart vertically. No client-side test can name the partner, and `TooFarFromPlayerWithAura` cannot
-help: it measures the gap to *other holders of the same aura*, of which there are none. So
-`yogg-saron brain link` at `ACTION_RAID + 1.5` walks the holder within
-`ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE` (15, a margin under the 20 so drift does not re-break it) of the
-nearest living raider above z 300 — over the dps resolver and the Sanity Well walk, under the hazard
-dodges, since a link costs 2 Sanity and a shared hit a second while a Death Ray costs the bot. Probed
-as `yogg.brainlink`.
+**Brain Link's partner is readable from the cast, never from an aura.** 63802 goes on **one**
+player: `spell_yogg_saron_brain_link_aura` picks a random living player within 50 yd on apply, keeps
+that GUID to itself, and drops the link if either dies or they end up more than 10 yd apart
+vertically. Neither 63803 (apart, DBC damage plus −2 Sanity on **both** ends past **20 yd**) nor
+63804 (together) leaves an aura behind, so no aura test can name the partner and
+`TooFarFromPlayerWithAura` cannot help - it measures the gap to *other holders of the same aura*, of
+which there are none. But the aura casts one of those two at the partner **every second** for the
+life of the link, so an `AllSpellScript` on `ALLSPELLHOOK_ON_PREPARE` in `UldBotScripts.cpp` latches
+the pair, per instance, expiring after three missed ticks. Both ends read it, so both walk - unless
+one is under z 300, where there is nothing left to close on.
+
+They walk to their **midpoint**, not at each other: one bot chasing another that is moving away at
+the same speed never arrives. Closing on the nearest raider instead, one link ran 17 walks while the
+gap grew from 45.8 to 78.5 yd, and nine of ten links in that pull sat past 20 yd for their full 30
+s, for **477,727** damage and 676 Sanity. The midpoint is pushed back out to
+`ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS` when it lands inside the ring, which is exactly what
+two bots on opposite sides of Yogg produce. `yogg-saron brain link` runs at `ACTION_RAID + 1.5`,
+over the dps resolver and the Sanity Well walk and under the hazard dodges, since a link costs 2
+Sanity and a shared hit a second while a Death Ray costs the bot, and closes to
+`ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE` (15, a margin under the 20 so drift does not re-break it).
+Probed as `yogg.brainlink`.
 
 It was doing none of that. `TooFarFromPlayerWithAura` had an unconditional
 `return !debuffedPlayers.empty();` above its range loop and never read the `range` argument at all;
@@ -588,12 +650,15 @@ tentacle and the nearest skull inside 90° of each other in **459 of 640** sampl
 separation 72° — the bot was nearer the tentacle in **73%** of those, a median 4.3 yd against 22.4
 yd to the skull, so a sidestep of a few yards swings the skull behind. `yogg-saron illusion facing`
 is a spacing node whose `clear` predicate asks whether the heading a candidate spot *would force*
-leaves every skull within 30 yd outside the front 180°, with `preferred` keeping it inside reach of
-the target. It has no fallback: every spot the sweep rejects is one the bot would be gazed on
-anyway, so standing still beats walking for nothing. The movement guard zeroes `ReachTargetAction`
-while a skull is in arc — reach closes on the tentacle, which is the thing being walked around, so
-the two pull apart by construction. Anchoring is the one thing the base class could not already do:
-its sweep was centred on the boss platform, 93 yd above and up to 124 yd away, so `Anchor()` is
+leaves every skull within 30 yd outside the front 180° **and** whether that spot is still inside
+melee or spell range of the target. In range is a requirement, not a preference the sweep may drop:
+a spot out of range hands the bot back to `reach melee`, which walks it at the target and undoes the
+sidestep. With every spot it can pick already in range, reach is not useful from there
+(`ReachTargetAction::isUseful` is false once the bot is within `distance`) and no movement guard is
+needed - the one that was tried froze a room for fifty seconds. It has no fallback either: every
+spot the sweep rejects is one the bot would be gazed on anyway, so standing still and fighting
+through it beats walking for nothing. Anchoring is the one thing the base class could not already
+do: its sweep was centred on the boss platform, 93 yd above and up to 124 yd away, so `Anchor()` is
 virtual and this node returns the room middle. Untreated it cost **122,980 damage and 272 Sanity**
 in one pull, 14% of everything lost.
 
@@ -640,17 +705,24 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Fifteen `yogg.` probes and a reader.** `tools/botobs/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-one `yogg.` probes and a reader.** `tools/botobs/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
-declared in source and absent from every trace of its own boss means the recorder is dropping it, not
-that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `yogg.room`,
+declared in source and absent from every trace of its own boss means the recorder is dropping it,
+not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `yogg.room`,
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
-`yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit` and
-`yogg.handover`, beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and
-`yogg.p1leash`. Two hazards go to the timeline only because nothing can sweep for either: the body's
-knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
+`yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
+`yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard` and `yogg.detour`,
+beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
+Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
+circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
 afterwards.
+
+Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
+see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
+place is a bot standing still and nothing else names it. **Frozen bots**, the longest a bot held a
+target and cast nothing, which is that same failure from outside. And **launches**, matched to the
+walk that aimed into the ring rather than to the last walk issued, which is usually the dodge out.
 
 **Do not add a Sanity probe.** 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic

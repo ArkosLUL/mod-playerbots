@@ -866,6 +866,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron pet guard trigger",
         { NextAction("yogg-saron pet guard action", ACTION_RAID + 2) }));
 
+    // Under every raid node and over reach melee, reach spell and charge: it is the last thing asked
+    // before the plain walk it exists to replace, and it stands down the moment the route is clear.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron body detour trigger",
+        { NextAction("yogg-saron body detour action", ACTION_RAID - 1) }));
+
     //
     // Algalon the Observer
     //

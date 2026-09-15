@@ -322,7 +322,8 @@ bool YoggSaronBrainLinkTrigger::IsActive()
 {
     // Not TooFarFromPlayerWithAura, which measures the gap to other holders of the same aura: Brain
     // Link puts 63802 on one end only and keeps the partner's GUID inside the aura script, so that
-    // helper finds nobody to measure against. Closing on the nearest raider is what is left.
+    // helper finds nobody to measure against. The pair comes off the cast instead, which both ends
+    // can read, so this fires for the partner as well as the owner.
     return IsPhase2() && YoggSaronBrainLinkTarget(botAI) != nullptr;
 }
 
@@ -377,7 +378,8 @@ bool YoggSaronUsePortalTrigger::IsActive()
     if (AI_VALUE(std::string, "rti") != "diamond")
         return false;
 
-    return bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, 2.0f, true) != nullptr;
+    return bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS, true) !=
+           nullptr;
 }
 
 bool YoggSaronIllusionRoomTrigger::IsActive()
@@ -465,6 +467,29 @@ bool YoggSaronPetGuardTrigger::IsActive()
         return false;
 
     return bot->FindNearestCreature(NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE, true);
+}
+
+bool YoggSaronBodyDetourTrigger::IsActive()
+{
+    if (!botAI->CanMove() || !IsYoggSaronFight() || !IsPhase2())
+        return false;
+
+    // Platform only. The illusion rooms are 93 yd underneath and have no body in them, and the brain
+    // room middle is 2.3 yd from the platform middle in 2d, so the ring test would fire down there.
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || !target->IsAlive())
+        return false;
+
+    // Nothing to route while the bot can already shoot from where it stands - that is exactly when
+    // reach stands down too, so claiming the tick here would only cost it a cast.
+    float const reach = botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
+    if (bot->GetExactDist2d(target) <= reach)
+        return false;
+
+    return !YoggSaronRouteClearOfBody(bot, target->GetPositionX(), target->GetPositionY());
 }
 
 bool YoggSaronLunaticGazeTrigger::IsActive()

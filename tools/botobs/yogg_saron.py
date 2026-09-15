@@ -70,6 +70,11 @@ SPELL_SHADOW_NOVA_SARA = 65719
 SPELL_SQUEEZE = 64126
 SPELL_BRAIN_LINK = 63802
 SPELL_BRAIN_LINK_DAMAGE = 63803
+SPELL_BRAIN_LINK_OK = 63804
+# What a bot casts on itself the moment it takes a portal. The portal creature is not hostile so no
+# snapshot ever samples one, and a click that failed leaves nothing behind - this is the only proof a
+# portal was actually used.
+SPELL_ILLUSION_ROOM = 63988
 SPELL_HAND_OF_PROTECTION = (10278, 5599, 1022)
 
 # A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
@@ -86,9 +91,21 @@ CRUSHER_MELEE_RANGE = 10.0
 # 64167 on a Laughing Skull triggers 64168 at 30 yd, and the module's node uses the same number.
 LAUGHING_SKULL_RADIUS = 30.0
 
+# TEMPSUMMON_TIMED_DESPAWN on every portal, so the whole window a wave offers is this long.
+PORTAL_DESPAWN_MS = 25000
+
+# A bot holding a target and casting nothing for this long is not fighting, whatever else the trace
+# says about it. Set well past any cast the class has: the silence this exists to catch ran 50 s.
+FROZEN_MS = 10000
+
 # 64022 on Yogg triggers a 14 yd knock back every second, and his model sits 4.5 yd above the
 # floor, so what lands on the floor is a 13.26 yd ring. Nothing in the world can be swept for it.
 KNOCKBACK_RADIUS = 13.3
+
+# The boss platform floor samples between 324.8 and 325.6, and a thrown bot peaks at 329-331, so this
+# pair separates standing from flying without catching the ramp at the rim.
+FLOOR_Z = 325.6
+KNOCKBACK_ARC_Z = 2.0
 
 BODY = (1980.28, -25.5868)
 
@@ -113,7 +130,7 @@ PROBE_KEYS = (
     "yogg.phase", "yogg.engaged", "yogg.room", "yogg.roomstate", "yogg.cloudreach", "yogg.knockback",
     "yogg.crush", "yogg.deathray", "yogg.wave", "yogg.portal", "yogg.portalslot", "yogg.brainteam",
     "yogg.skull", "yogg.exit", "yogg.handover", "yogg.squeeze", "yogg.brainlink", "yogg.tentacle",
-    "yogg.gaze", "yogg.petguard",
+    "yogg.gaze", "yogg.petguard", "yogg.detour",
 )
 
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
@@ -343,7 +360,36 @@ def show_portals(trace: Trace) -> None:
         print(f"  reached the brain level: {len(arrived & set(team))} of {len(team)} on the team"
               f" ({len(arrived)} bots in all)")
 
+    show_portal_drop(trace, waves)
+
     show_rooms(trace, waves)
+
+
+def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
+    """How many of the wave's portals were taken, against how many bots were told to take one.
+    AddPortals spawns RAID_MODE(4, 10) of them per wave and each is one use, so the gap between
+    assigned and gone is bots that walked to a spot somebody else had already used."""
+    if not waves:
+        return
+
+    assignments: dict[int, dict[int, int]] = {}
+    for rec in notes(trace, "yogg.portalslot"):
+        assignments.setdefault(rec["t"], {})[rec.get("g", 0)] = int(rec.get("txt", 0))
+
+    print()
+    for start, ordinal in waves:
+        rounds = [when for when in assignments if when <= start]
+        plan = assignments[max(rounds)] if rounds else {}
+        stale = (start - max(rounds)) / 1000.0 if rounds else 0.0
+
+        took = {rec.get("s") for rec in trace.of("cast")
+                if rec.get("sp") == SPELL_ILLUSION_ROOM and start <= rec["t"] <= start + PORTAL_DESPAWN_MS}
+        missed = [guid for guid in plan if guid not in took]
+
+        print(f"  wave {ordinal}: {len(took)} of {len(PORTAL_SPOTS)} portals taken,"
+              f" {len(plan)} bots assigned a spot, plan was {stale:.0f} s old")
+        if missed:
+            print(f"    assigned and never went: {', '.join(sorted(trace.name(guid) for guid in missed))}")
 
 
 def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
@@ -383,6 +429,69 @@ def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
         cleared = "cleared" if states & {"tobrain", "atbrain"} else "not cleared"
         print(f"  wave {ordinal} {room:10} {bots} bots, entered {clock(entered)}, {delay}, {cleared}")
         print(f"    states: {', '.join(sorted(states)) or 'none'}")
+
+    show_frozen(trace)
+    show_vetoes(trace)
+
+
+def show_frozen(trace: Trace) -> None:
+    """The longest a bot went holding a target and casting nothing at all. This is what a vetoed
+    walk looks like from outside: somewhere to be, no way to get there, and nothing moving the bot
+    instead. One pull left five of six bots in a room doing it for fifty seconds while the tentacle
+    they were pointed at sat at 87%."""
+    roster = roster_guids(trace)
+
+    casts: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("s") in roster:
+            casts[rec["s"]].append(rec["t"])
+
+    # Only stretches where the bot had a target the whole way through. Without that every corpse and
+    # everyone waiting out a portal wave reads as frozen.
+    targeted: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            guid = row[0]
+            if guid not in roster or row[5] <= 0 or len(row) < 8 or not row[7]:
+                continue
+            runs = targeted[guid]
+            if runs and snap["t"] - runs[-1][1] <= 2000:
+                runs[-1] = (runs[-1][0], snap["t"])
+            else:
+                runs.append((snap["t"], snap["t"]))
+
+    frozen = []
+    for guid, runs in targeted.items():
+        stamps = sorted(casts.get(guid, []))
+        for start, stop in runs:
+            spoke = [when for when in stamps if start <= when <= stop]
+            edges = [start] + spoke + [stop]
+            longest = max(edges[i + 1] - edges[i] for i in range(len(edges) - 1))
+            if longest >= FROZEN_MS:
+                frozen.append((longest, start, guid))
+
+    if not frozen:
+        print(f"\n  nobody held a target for {FROZEN_MS / 1000:.0f} s without casting")
+        return
+
+    print(f"\n  held a target and cast nothing for over {FROZEN_MS / 1000:.0f} s:")
+    for longest, start, guid in sorted(frozen, reverse=True)[:8]:
+        print(f"    {trace.name(guid):14} {role_of(trace, guid):6} {longest / 1000.0:5.1f} s from {clock(start)}")
+
+
+def show_vetoes(trace: Trace) -> None:
+    """Which multiplier zeroed which action, and how often. A veto is cheap to write and easy to
+    get wrong: one that zeroes a walk with nothing walking in its place is a bot standing still, and
+    this says so long before the room view does."""
+    rows = collections.Counter()
+    for rec in trace.of("veto"):
+        rows[(str(rec.get("m", "")), str(rec.get("a", "")))] += 1
+    if not rows:
+        return
+
+    print("\n  multiplier vetoes:")
+    for (multiplier, action), count in rows.most_common(10):
+        print(f"    {count:5}  {multiplier} -> {action}")
 
 
 def position_at(trace: Trace, guid: int, when: int):
@@ -529,9 +638,14 @@ def show_phase2(trace: Trace) -> None:
         print(f"  Brain Link         : {len(links)} links, "
               f"{sum(rec.get('a', 0) for rec in link_dmg):,} damage")
         for guid, start, stop in links:
-            # Only the owner carries the aura. The partner is whoever else took 63803 alongside it.
-            hurt = {rec.get("d") for rec in link_dmg if start <= rec["t"] <= stop} - {guid}
-            partner = next(iter(hurt), None)
+            # The aura holds the partner's GUID privately, but it casts 63803 (apart) or 63804
+            # (together) on that partner every second, so the cast names the pair exactly. Damage rows
+            # only name it while the two are already too far apart, which is the half that matters
+            # least.
+            partner = next((rec.get("tgt") for rec in trace.of("cast")
+                            if rec.get("sp") in (SPELL_BRAIN_LINK_DAMAGE, SPELL_BRAIN_LINK_OK)
+                            and rec.get("s") == guid and rec.get("tgt") not in (None, 0, guid)
+                            and start <= rec["t"] <= stop), None)
             if partner is None:
                 print(f"    {clock(start)} -> {clock(stop)}  {trace.name(guid):14}"
                       f"  never ticked, so the pair stayed inside {BRAIN_LINK_RANGE:.0f} yd")
@@ -638,7 +752,65 @@ def show_crush(trace: Trace) -> None:
     if guard:
         print(f"  pet guard        : {dict(guard)}")
 
+    detour = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.detour"))
+    if detour:
+        print(f"  body detour      : {dict(detour)}")
+
+    show_launches(trace)
     show_crush_melee(trace)
+
+
+def show_launches(trace: Trace) -> None:
+    """Who the body actually threw, and what walked them in. 64020 deals no damage, so a launch
+    only shows up as the arc: on the floor one sample, well above it the next. The distance that
+    matters is the one at the last grounded sample, not the first airborne one, which is already a
+    third of a second into the flight.
+
+    The walk is the other half. Every other read of the ring asks where the bot is standing, so the
+    one thing none of them can catch is a walk whose destination is the body - which is what
+    ReachCombatTo produces for a target on the far side, since it shortens its path to halfway."""
+    roster = roster_guids(trace)
+    casts = sorted(rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_KNOCK_BACK)
+    if not casts:
+        return
+
+    tracked: dict[int, list[tuple]] = collections.defaultdict(list)
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            if row[0] in roster:
+                tracked[row[0]].append((snap["t"], row[1], row[2], row[3]))
+
+    walks = [rec for rec in trace.of("move") if rec.get("g") in roster]
+
+    launches = []
+    for guid, rows in tracked.items():
+        for before, after in zip(rows, rows[1:]):
+            if not (before[3] <= FLOOR_Z and after[3] > FLOOR_Z + KNOCKBACK_ARC_Z):
+                continue
+            if not any(before[0] <= when <= after[0] + 100 for when in casts):
+                continue
+            # The last walk before the throw that was aimed into the ring, which is the one that put
+            # the bot there. Not simply the last walk: by the time the pulse lands a dodge node has
+            # usually already issued the walk back out, and naming that one blames the rescue.
+            blame = None
+            for rec in walks:
+                if rec.get("g") != guid or rec["t"] > after[0]:
+                    continue
+                if math.dist((rec.get("x", 0), rec.get("y", 0)), BODY) <= KNOCKBACK_RADIUS:
+                    blame = rec
+            aimed = math.dist((blame.get("x", 0), blame.get("y", 0)), BODY) if blame else -1.0
+            launches.append((after[0], guid, math.dist((before[1], before[2]), BODY),
+                             blame.get("by", "?") if blame else "nothing walked it in", aimed))
+
+    if not launches:
+        print("  nothing was thrown by the body ring")
+        return
+
+    print(f"  thrown by the body ring: {len(launches)}")
+    for when, guid, flat, by, aimed in sorted(launches)[:10]:
+        where = f" -> {aimed:.1f} yd out" if aimed >= 0 else ""
+        print(f"    {clock(when):>10} {trace.name(guid):14} {role_of(trace, guid):6}"
+              f" from {flat:5.1f} yd  walked in by {by}{where}")
 
 
 def show_crush_melee(trace: Trace) -> None:
@@ -667,10 +839,23 @@ def show_crush_melee(trace: Trace) -> None:
         print(f"  nothing came inside {CRUSHER_MELEE_RANGE:.0f} yd of a Crusher")
         return
 
+    # Standing there is half of it; being pointed at it is what keeps a pet coming back, since PetAI
+    # re-picks from its own attacker and its owner's victim the moment it has no target of its own.
+    aimed: dict[int, int] = collections.Counter()
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            if len(row) > 7 and row[7] in crushers and row[0] in trace.owners:
+                aimed[row[0]] += 1
+
     print(f"  inside {CRUSHER_MELEE_RANGE:.0f} yd of a Crusher ({len(inside)}):")
     for gap, guid in inside[:8]:
         kind = role_of(trace, guid) if guid in roster else "pet"
         print(f"    {trace.name(guid):28} {kind:6} {gap:5.1f} yd")
+
+    if aimed:
+        print("  pets with a Crusher targeted:")
+        for guid, count in aimed.most_common(6):
+            print(f"    {trace.name(guid):28} {count:5} samples")
 
 
 # What each source takes off a 25-man Sanity bar, from spell_yogg_saron_sanity_reduce. Induce Madness
