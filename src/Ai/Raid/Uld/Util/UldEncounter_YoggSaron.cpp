@@ -26,6 +26,7 @@
 #include "RaidObs.h"
 #include "Spell.h"
 #include "SpellInfo.h"
+#include "UldEncounterGate.h"
 #include "Unit.h"
 
 const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS = {
@@ -77,6 +78,10 @@ struct YoggSaronEncounterState
     uint32 waveOrdinal = 0;
     uint32 slotWave = 0;
 
+    // Nothing in the world counts the transformation dialogue down, so the window is timed off the
+    // tick Yogg was first seen without his barrier.
+    uint32 handoverStartMs = 0;
+
     uint32 hazardNoteMs = 0;
     std::unordered_map<ObjectGuid, uint32> obsScanMs;
 };
@@ -97,23 +102,31 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
+    // Ahead of the sweeps, so a bot anywhere else in Ulduar pays a map lookup rather than two 200 yd
+    // grid searches a tick. Sara's own combat flag used to sit here and could not do the job: she is
+    // FACTION_FRIENDLY through phase 1, CombatManager::CanBeginCombat refuses a combat reference while
+    // either side is friendly, and InitFight's SetInCombatWithZone therefore never touches her. The
+    // boss state is IN_PROGRESS from inside InitFight itself.
+    if (!UldEncounterIsLive(botAI, ULD_BOSS_YOGGSARON))
+    {
+        TickYoggSaronObs(botAI, 0);
+        return 0;
+    }
+
     Creature* sara = bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true);
     Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
 
     uint32 phase = 0;
-    if ((sara && sara->IsInCombat()) || (yogg && yogg->IsInCombat()))
-    {
-        if (yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER))
-            phase = 2;
-        // The Brain, not the absence of a phase-1 Guardian. A test made only of absences is true
-        // between the phases it separates: the last Guardian dies ~9.5 s before the Shadow Barrier
-        // lands, and the whole raid used to run its phase 3 positioning through that gap. The Brain
-        // spawns with the first tentacle wave and lives to the end, so it is the positive fact.
-        else if (yogg && yogg->IsAlive() && bot->FindNearestCreature(NPC_BRAIN, 200.0f, true))
-            phase = 3;
-        else if (sara)
-            phase = 1;
-    }
+    if (yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER))
+        phase = 2;
+    // The Brain, not the absence of a phase-1 Guardian. A test made only of absences is true between
+    // the phases it separates: the last Guardian dies ~9.5 s before the Shadow Barrier lands, and the
+    // whole raid used to run its phase 3 positioning through that gap. The Brain spawns with the first
+    // tentacle wave and lives to the end, so it is the positive fact.
+    else if (yogg && yogg->IsAlive() && bot->FindNearestCreature(NPC_BRAIN, 200.0f, true))
+        phase = 3;
+    else if (sara)
+        phase = 1;
 
     TickYoggSaronObs(botAI, phase);
 
@@ -541,6 +554,68 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     return intent;
 }
 
+YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+
+    // Yogg without the barrier is phase 3 as well, where ACTION_YOGG_SARON_START_P3 strips it again.
+    // The Brain separates them: it is summoned in the same tick the barrier first lands, so it is up
+    // for everything after this window and absent for the whole of it.
+    bool const open = yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) &&
+                      !bot->FindNearestCreature(NPC_BRAIN, 200.0f, true);
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    YoggSaronHandover answer;
+    {
+        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+
+        if (!open)
+        {
+            state.handoverStartMs = 0;
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.handover", "clear");
+
+            return answer;
+        }
+
+        uint32 const now = getMSTime();
+        if (!state.handoverStartMs)
+            state.handoverStartMs = now;
+
+        uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
+        answer.active = true;
+        answer.msToRing =
+            elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
+    }
+
+    // Only melee and the tank are ever inside the ring when it lights up; the back line is already
+    // parked at 21.5 yd, which is 8.2 yd clear of it.
+    float const fromMiddle =
+        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+    float const walk = ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS - fromMiddle;
+
+    if (walk > 0.0f)
+    {
+        uint32 lead = ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS;
+        float const speed = bot->GetSpeed(MOVE_RUN);
+        if (speed > 0.0f)
+        {
+            lead = std::max(
+                lead, static_cast<uint32>(walk / speed * ULDUAR_YOGG_SARON_HANDOVER_LEAD_SAFETY * 1000.0f));
+        }
+
+        answer.clearing = answer.msToRing <= lead;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.handover", answer.clearing ? "clearing" : "holding");
+
+    return answer;
+}
+
 bool YoggSaronInBodyKnockback(Player* player)
 {
     return player && player->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
@@ -961,10 +1036,16 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
     {
         RaidObs::NoteDerived(bot, "yogg.cloudreach", DescribeCloudReach(bot));
 
-        if (phase == 2 || phase == 3)
-        {
+        // The ring lights up at ACTION_YOGG_SARON_APPEAR, which is also when the barrier lands and the
+        // phase read turns 2. Reading the ring through the handover as well is the only thing that
+        // says whether melee got out before it did.
+        bool const handover = phase == 1 && YoggSaronHandoverState(botAI).active;
+
+        if (phase != 1 || handover)
             RaidObs::NoteDerived(bot, "yogg.knockback", YoggSaronInBodyKnockback(bot) ? "inside" : "clear");
 
+        if (phase == 2 || phase == 3)
+        {
             std::vector<Position> const wedges = GetYoggSaronCrushWedges(botAI, ULDUAR_YOGG_SARON_CRUSH_RANGE);
             char const* crush = "clear";
             if (InYoggSaronCrushWedge(wedges, bot->GetPositionX(), bot->GetPositionY(),

@@ -16,18 +16,26 @@ So no bot ever holds threat on her, and `AI_VALUE2(Unit*, "find target", "sara")
 wipes on 2026-09-13, ~6,900 checks per trigger, zero fires. Resolve her with
 `FindNearestCreature(NPC_SARA_PHASE_1, …)`; Yogg himself is no better.
 
-**Her presence is not a pull; her combat is.** `LoadAllGrids` makes her findable from instance
-creation and `Reset()` leaves her visible with the clouds already orbiting, so a phase read made of
-"Sara exists" is true between pulls — and the Ulduar strategy runs in the non-combat engine too. The
-raid therefore walked its phase 1 stations before the pull, crossing all six orbits at a run: 76-101
-yd out at t=0, a median 20 yd by t=10 s, and **4 of the pull's 12 Guardians summoned before the first
-point of damage**, one per orbit it ran through. `InitFight` calls `SetInCombatWithZone` and
-`ACTION_YOGG_SARON_APPEAR` calls it again on Yogg, so one combat test covers all three phases.
+**Her presence is not a pull, and neither is her combat.** `LoadAllGrids` makes her findable from
+instance creation and `Reset()` leaves her visible with the clouds already orbiting, so a phase read
+made of "Sara exists" is true between pulls — and the Ulduar strategy runs in the non-combat engine
+too. Her combat flag reads no better and cost **24 s of every pull**: she is `FACTION_FRIENDLY`
+through P1, `CombatManager::CanBeginCombat` refuses a combat reference while either side is friendly
+and neither hostile, so `InitFight`'s `SetInCombatWithZone` puts her summons in combat and never
+touches her. She picks it up only when her own P1 casting first lands on somebody —
+`EVENT_SARA_P1_DOORS_CLOSE` at 15 s plus a 4 s cast, so **19 s after the pull at the earliest**,
+measured 19.2 / 19.2 / 24.2 s.
+
+**The pull is `GetBossState(BOSS_YOGGSARON) == IN_PROGRESS`**, set on `InitFight`'s first line 5 s
+after any player comes within 90 yd, and already read by `UldEncounterIsLive`. The recorder writes
+`pull src=bossstate` from it, so **trace t=0 is `InitFight`** — first damage is 20-30 s later and is
+no pull marker. Reading it as one produced the claim that 4 of 12 Guardians beat the pull; against t=0
+the first Guardian of every pull on record appears at 10.1-10.2 s, and none has ever beaten it.
 
 `YoggSaronPhase` is the single read every node routes through — phase 2 is Yogg with Shadow Barrier,
-phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all gated on that combat test — and it is
-what writes `yogg.phase`. She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by
-itself.
+phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all behind that boss-state test, which
+also spares a bot elsewhere in Ulduar two 200 yd sweeps a tick — and it is what writes `yogg.phase`.
+She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by itself.
 
 `IsBotMainTank` is false for **every** bot while a human holds main tank, which silently disabled the
 phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot tank.
@@ -193,18 +201,26 @@ cloud has somebody in reach for most of every orbit. The parked latch widens onl
 never the band: there is no margin there to spend.
 
 **Melee and tanks are leashed to Sara, not stationed on her.** Beyond `ULDUAR_YOGG_SARON_P1_LEASH`
-(15 yd, the nova's own reach to Sara) the bot walks back to the middle, and it is not released until
+(**6.5 yd**) the bot walks back to the middle, and it is not released until
 `ULDUAR_YOGG_SARON_P1_LEASH_RELEASE` — the **2.8 yd cloud-free radius**, not a boundary a step inside
 the leash. Anything between the two lets go of the bot somewhere the innermost orbit sweeps, and the
 old 12 let go of it on the orbit. The node reads a live Guardian before the phase, which is four 200 yd
 sweeps and would otherwise run every tick for melee standing outside the leash in P2 and P3; the price
 is no walk back before the first spawn.
 
+**Why 6.5, and not the 15 the nova needs to reach Sara.** Two different radii are both 15:
+65719 reaching her, and 65209/62714 reaching the raid. The back line stands at 21.5, so a Guardian
+dying more than **21.5 − 15 = 6.5 yd** out catches everyone rather than the melee pile — measured,
+novas at 2.2-4.0 yd hit 9-10 players and novas at 8.5-14.8 yd hit 22-24. A leash at 15 was set to the
+wrong one of the two and let a third of the novas through; at 6.5 a kill still counts for Sara and
+cannot reach the station. The cost is a narrower band against `reach melee`, and `yogg.p1leash` counts
+the flips.
+
 Nothing pins melee inside 2.89 yd, though — they get there because a Guardian walks to whoever holds
 threat and `meleeDistance` is 0.75. Measured they sat at **2.5-2.9 yd** and triggered no inner-orbit
 Guardian at all; all three of one pull's came from the human player at 6.7-13.4 yd. **That is the first
 thing to check** now that they hold still instead of orbiting: settle beyond 2.89 and the innermost
-cloud harvests one Guardian every 24 s, and the leash has to fire tighter than 15 yd after all.
+cloud harvests one Guardian every 24 s, and the leash has to come in past 6.5 as well.
 
 ## Targeting is direct, never a raid icon
 
@@ -322,6 +338,26 @@ combat-reach bonus, since `Spell.cpp` gates that on `IsControlledByPlayer` and t
 creature. His model sits at z 329.397 over a floor of 324.89-325.19, so it is a **13.26 yd horizontal
 ring that never goes away**. Nothing can sweep for it; it reaches a trace only as a `haz` circle and
 as `yogg.knockback`.
+
+**The ring arrives 18 s after Sara dies, on top of the melee pile.** She hits 0 and Yogg is summoned
+**invisible** in the same tick; `ACTION_YOGG_SARON_APPEAR` casts Shadow Barrier and 64022 together at
+the end of the transformation dialogue — 4 + 5 + 4.5 + 4 s of it plus the 500 ms
+`EVENT_SARA_P2_START`, measured 18.0-18.3 s. The phase reads 1 throughout and 2-6 Guardians are still
+alive, so the leash keeps hauling melee and the tank onto the middle: in every pull on record **9 of 9
+melee and the tank stand in the ring when it lights up**, against **0 of 10 ranged and 0 of 4
+healers**, already 8.2 yd clear of it on the 21.5 yd station. So the walk out belongs to melee and the
+tank alone — to `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS` along the bearing each already holds,
+which fans nine of them around the ring instead of stacking them on a point.
+
+**Yogg without Shadow Barrier is the whole window**, and `SetVisible(false)` does not hide him from a
+grid search, so `YoggSaronHandoverState` reads it from the first tick. P3 strips the barrier again and
+the Brain separates the two: it is summoned in the tick the barrier first lands, so it is up for
+everything after the window and absent for all of it. The walk is **led, not immediate** — leftover
+Guardians stop counting for Sara the moment she dies (`DamageTaken` returns early on `_secondPhase`)
+but their novas still land for 25k, and one dying at the clearance radius reaches the back line where
+one dying on the leash cannot, so the raid holds the middle until
+`ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS` out. Nothing in the world counts the dialogue down, so the
+clock is predicted off the first sighting, like the portal wave's.
 
 It costs melee nothing — Yogg's `CombatReach` is **30** (display 28817, `BoundingRadius` 0), so melee
 range on him is `1.5 + 30 + 2.67` ≈ **34 yd**, and the P3 melee spot is already 18.4 yd out. What it
@@ -479,16 +515,17 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Fourteen `yogg.` probes and a reader.** `tools/botobs/yogg_saron.py` prints phases, cloud-orbit
+**Fifteen `yogg.` probes and a reader.** `tools/botobs/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it, not
 that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `yogg.room`,
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
-`yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull` and `yogg.exit`, beside the older
-`yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`. Two hazards go to
-the timeline only because nothing can sweep for either: the body's knockback circle, and each
-Crusher's wedge carrying facing, arc and range so it can be tested by hand afterwards.
+`yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit` and
+`yogg.handover`, beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and
+`yogg.p1leash`. Two hazards go to the timeline only because nothing can sweep for either: the body's
+knockback circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
+afterwards.
 
 **Do not add a Sanity probe.** 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic

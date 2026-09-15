@@ -172,10 +172,17 @@ constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 
 constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 
 // Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
-// nova only reaches her from 15 yd - a kill further out does nothing for the phase at all. The
-// release is the cloud-free radius rather than a boundary a step inside the leash: anything between
-// the two lets go of the bot somewhere the innermost orbit sweeps, and 12 let go of it on the orbit.
-constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 15.0f;
+// nova only reaches her from 15 yd - a kill further out does nothing for the phase at all.
+//
+// The leash is the tighter of two radii, though, not that one. Shadow Nova is also 15 yd (65209 and
+// 65719 both carry radius index 18) and the back line stands at 21.5, so a Guardian dying more than
+// 21.5 - 15 = 6.5 yd out catches the whole raid instead of the melee pile. Measured over three pulls:
+// novas at 2.2-4.0 yd hit 9-10 players, novas at 8.5-14.8 yd hit 22-24.
+//
+// The release is the cloud-free radius rather than a boundary a step inside the leash: anything
+// between the two lets go of the bot somewhere the innermost orbit sweeps, and 12 let go of it on the
+// orbit.
+constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
 
 // Ranged and healers stack rather than spread, which inverts the usual rule and only holds because the
@@ -225,6 +232,21 @@ constexpr float ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE = 55.0f;
 // This costs melee nothing: Yogg's CombatReach is 30, so melee range on him is about 34 yd.
 constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS = 13.3f;
 constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS = 15.0f;
+
+// Sara hits 0 and Yogg is summoned invisible in the same tick, then ACTION_YOGG_SARON_APPEAR lights
+// the ring at the end of the transformation dialogue: 4 + 5 + 4.5 + 4 s of it plus the 500 ms
+// EVENT_SARA_P2_START. Measured 18.2 / 18.0 / 18.3 s over three pulls.
+//
+// Melee and the tank are standing in the ring when it appears in every pull on record - 9 of 9 melee
+// and the tank, against 0 of 10 ranged and 0 of 4 healers, who are already out on the 21.5 yd
+// station. So the walk out belongs to melee and the tank alone.
+//
+// It is led rather than immediate. Leftover Guardians stop counting for Sara the moment she dies but
+// their novas still land for 25k, and one dying at the clearance radius reaches the back line where
+// one dying on the leash cannot - so the raid holds the middle until the last few seconds.
+constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_MS = 18000;
+constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS = 4000;
+constexpr float ULDUAR_YOGG_SARON_HANDOVER_LEAD_SAFETY = 2.0f;
 
 // Where a bot crossing the room is sent instead of straight through the body. Wide enough that both
 // legs of the detour keep their distance: the worst case is a half-turn, whose chord passes
@@ -317,11 +339,16 @@ extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 // on a bot's threat list, so it scans for the creature instead of going through "find target", and
 // every node routes through here so trigger and action cannot answer differently.
 //
-// Combat is part of the read. Sara is a static friendly spawn that LoadAllGrids makes findable from
-// instance creation and that lives on at 1 health into phases 2 and 3, so her being there says
-// nothing; her JustEngagedWith calls SetInCombatWithZone, which does. Without that gate the whole
-// raid walked its phase 1 stations out of combat, crossing all six cloud orbits at a run and handing
-// the pull four of its twelve Guardians before the first point of damage.
+// The instance boss state is part of the read. Sara is a static friendly spawn that LoadAllGrids
+// makes findable from instance creation and that lives on at 1 health into phases 2 and 3, so her
+// being there says nothing on its own.
+//
+// Her combat flag says nothing either, which is what one build shipped and cost 24 s of every pull.
+// She is FACTION_FRIENDLY for all of phase 1 and CombatManager::CanBeginCombat refuses a combat
+// reference while either side is friendly and neither is hostile, so InitFight's SetInCombatWithZone
+// puts her summons in combat and leaves her out of it. Her flag only comes up when her own phase 1
+// casting first lands on somebody: 15 s of EVENT_SARA_P1_DOORS_CLOSE plus a 4 s cast at the very
+// earliest, and 24.2 s on the pull that found it. GetBossState is IN_PROGRESS from InitFight itself.
 uint32 YoggSaronPhase(PlayerbotAI* botAI);
 bool YoggSaronEncounterActive(PlayerbotAI* botAI);
 bool YoggSaronInPhase1(PlayerbotAI* botAI);
@@ -430,6 +457,23 @@ Position YoggSaronCloudLead(Creature* cloud);
 
 // Whether a straight walk from the bot to (x, y) stays outside every cloud's summon radius.
 bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& clouds, float x, float y);
+
+// The window between Sara dying and Yogg emerging, and how long is left of it. Yogg being here
+// without SPELL_SHADOW_BARRIER is the whole of it, because ACTION_YOGG_SARON_APPEAR casts the barrier
+// and the knockback in one call. SetVisible(false) does not hide him from a grid search, so the
+// window is readable from its first tick. msToRing is predicted off the first sighting the way the
+// portal clock predicts its first wave, since nothing in the world counts it down.
+struct YoggSaronHandover
+{
+    bool active = false;
+    // Whether it is time for this bot to walk out, which is the lead decided here rather than by each
+    // caller, so the trigger and the action cannot answer it differently. Never true for a bot that is
+    // already outside the clearance radius, which is the whole back line.
+    bool clearing = false;
+    uint32 msToRing = 0;
+};
+
+YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI);
 
 // The body's knockback ring, which has no world object behind it and so cannot be swept for.
 bool YoggSaronInBodyKnockback(Player* player);

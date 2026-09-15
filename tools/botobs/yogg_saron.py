@@ -38,6 +38,7 @@ import argparse
 import collections
 import math
 import pathlib
+import statistics
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -46,6 +47,7 @@ from analysis import roster_guids  # noqa: E402
 from obstrace import Trace, clock  # noqa: E402
 
 NPC_GUARDIAN = 33136
+NPC_YOGG_SARON = 33288
 NPC_BRAIN = 33890
 NPC_INFLUENCE_TENTACLE = 33943
 
@@ -55,6 +57,17 @@ SPELL_LUNATIC_GAZE_SKULL = 64168
 SPELL_GRIM_REPRISAL = 64039
 SPELL_CRUSH_CONE = 64147
 SPELL_KNOCK_BACK = 64020
+SPELL_SHADOW_NOVA_SARA = 65719
+
+# A Guardian's death nova is 15 yd (62714 and 65209 both carry radius index 18) and the ranged station
+# is 21.5, so a Guardian dying more than 6.5 yd from the middle catches the whole raid rather than the
+# melee pile. Measured: novas at 2.2-4.0 yd hit 9-10 players, novas at 8.5-14.8 yd hit 22-24.
+NOVA_RADIUS = 15.0
+RANGED_STATION = 21.5
+
+# 64022 on Yogg triggers a 14 yd knock back every second, and his model sits 4.5 yd above the
+# floor, so what lands on the floor is a 13.26 yd ring. Nothing in the world can be swept for it.
+KNOCKBACK_RADIUS = 13.3
 
 BODY = (1980.28, -25.5868)
 
@@ -71,7 +84,7 @@ PORTAL_SPOTS = [
 PROBE_KEYS = (
     "yogg.phase", "yogg.engaged", "yogg.room", "yogg.roomstate", "yogg.cloudreach", "yogg.knockback",
     "yogg.crush", "yogg.deathray", "yogg.wave", "yogg.portal", "yogg.portalslot", "yogg.brainteam",
-    "yogg.skull", "yogg.exit",
+    "yogg.skull", "yogg.exit", "yogg.handover",
 )
 
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
@@ -83,6 +96,24 @@ def notes(trace: Trace, key: str) -> list[dict]:
 
 def role_of(trace: Trace, guid: int) -> str:
     return trace.roles.get(guid, "?")
+
+
+def tracks(trace: Trace, guids: set[int]) -> dict[int, list[tuple[int, float, float]]]:
+    """Snapshot positions per guid, in time order."""
+    out: dict[int, list[tuple[int, float, float]]] = collections.defaultdict(list)
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            if row[0] in guids:
+                out[row[0]].append((snap["t"], row[1], row[2]))
+    return out
+
+
+def first_seen(trace: Trace, guids: set[int]) -> int | None:
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            if row[0] in guids:
+                return snap["t"]
+    return None
 
 
 def guids_of_entry(trace: Trace, entry: int) -> set[int]:
@@ -128,37 +159,82 @@ def show_phases(trace: Trace) -> None:
         print(f"  {PHASE_NAMES.get(phase, phase):8} {clock(start):>9} -> {clock(stop):>9}"
               f"  ({(stop - start) / 1000.0:6.1f} s)")
 
-    # What fired before anything was in combat. The whole raid used to walk its stations out of
-    # combat, crossing all six cloud orbits at a run to get there.
-    first_damage = min((rec["t"] for rec in trace.of("dmg")), default=None)
+    # How late the raid noticed. t=0 is the `pull src=bossstate` row, which the recorder writes when
+    # the boss state goes IN_PROGRESS - that is inside Sara's InitFight, so t=0 is the pull itself.
+    # First damage is 20-30 s later and is not a pull marker: reading it as one is what hid a build
+    # whose encounter read did not open until 24 s in.
     engaged = [rec["t"] for rec in notes(trace, "yogg.engaged") if rec.get("txt") == "engaged"]
     if engaged:
-        print(f"\n  first bot reads engaged : {clock(min(engaged))}")
-    if first_damage is not None:
-        print(f"  first damage record     : {clock(first_damage)}")
+        late = min(engaged)
+        note = "" if late < 2000 else "   <- nothing yogg-specific ran until here"
+        print()
+        print(f"  gate opens              : {clock(late)}, {late / 1000.0:.1f} s after the pull{note}")
+
+    # Phase 1 only. Guardians come back in phase 3, but the station they have to die clear of is a
+    # phase 1 thing and the ring geometry below means nothing once it is gone.
+    p1_end = next((stop for phase, _, stop in spans if phase == 1), None)
 
     guardians = guids_of_entry(trace, NPC_GUARDIAN)
-    if guardians and first_damage is not None:
-        seen: dict[int, int] = {}
-        for snap in trace.of("snap"):
-            for row in snap.get("u", []):
-                if row[0] in guardians:
-                    seen.setdefault(row[0], snap["t"])
-        early = [t for t in seen.values() if t < first_damage]
-        print(f"  Guardians summoned      : {len(seen)}, {len(early)} of them before the first damage")
-        if early:
-            spots = ", ".join(clock(t) for t in sorted(early))
-            print(f"    those arrived at      : {spots}")
+    born = {guid: pts[0][0] for guid, pts in tracks(trace, guardians).items()}
+    if born:
+        early = [t for t in born.values() if t < 0]
+        in_p1 = [t for t in born.values() if 0 <= t <= (p1_end or 0)]
+        print(f"  Guardians in phase 1    : {len(in_p1)}, {len(early)} of them before the pull")
 
-    # How close the raid stood to Sara before anybody was fighting. She is never in the snapshot, so
-    # this is measured against the platform middle, which is where she stands.
+    # Where a Guardian died decides who its nova hits, and it is the only phase 1 number that moves
+    # the back line's damage. Creature deaths are not in the `death` stream, which is roster only, so
+    # the nova it casts at Sara on the way out is the record that it died at all.
+    novas = [(rec["t"], rec.get("s")) for rec in trace.of("cast")
+             if rec.get("sp") == SPELL_SHADOW_NOVA_SARA and rec["t"] <= (p1_end or 0)]
+    where = tracks(trace, guardians)
+    radii = []
+    for when, guid in novas:
+        pts = [p for p in where.get(guid, []) if p[0] <= when]
+        if pts:
+            radii.append(math.dist((pts[-1][1], pts[-1][2]), BODY))
+    if radii:
+        wide = sum(1 for r in radii if r > RANGED_STATION - NOVA_RADIUS)
+        print(f"  Guardian deaths         : {len(radii)}, median {statistics.median(radii):.1f} yd "
+              f"from the middle")
+        print(f"    reaching the {RANGED_STATION:.1f} yd station (over "
+              f"{RANGED_STATION - NOVA_RADIUS:.1f} yd out): {wide} of {len(radii)}")
+
+    show_handover(trace)
+
+
+def show_handover(trace: Trace) -> None:
+    """Sara hits 0 and Yogg is summoned invisible in the same tick; 18 s of transformation dialogue
+    later ACTION_YOGG_SARON_APPEAR lights the knockback ring and summons the Brain together. Melee and
+    the tank are leashed to the middle right through it, so the question is who was standing in the
+    ring when it appeared."""
+    down = first_seen(trace, guids_of_entry(trace, NPC_YOGG_SARON))
+    ring = first_seen(trace, guids_of_entry(trace, NPC_BRAIN))
+    if down is None or ring is None or ring <= down:
+        return
+
+    print(f"  handover                : {clock(down)} -> {clock(ring)} "
+          f"({(ring - down) / 1000.0:.1f} s)")
+
     roster = roster_guids(trace)
-    pre = [snap for snap in trace.of("snap") if snap["t"] < 0]
-    if pre:
-        last = pre[-1]
-        close = [row for row in last.get("u", [])
-                 if row[0] in roster and math.dist((row[1], row[2]), BODY) < 30.0]
-        print(f"  within 30 yd of Sara at {clock(last['t'])}: {len(close)} bots")
+    standing: dict[int, float] = {}
+    for snap in trace.of("snap"):
+        if abs(snap["t"] - ring) > 400:
+            continue
+        for row in snap.get("u", []):
+            if row[0] in roster:
+                standing.setdefault(row[0], math.dist((row[1], row[2]), BODY))
+
+    inside: dict[str, list[bool]] = collections.defaultdict(list)
+    for guid, far in standing.items():
+        inside[role_of(trace, guid)].append(far <= KNOCKBACK_RADIUS)
+    if inside:
+        parts = ", ".join(f"{role} {sum(v)} of {len(v)}"
+                          for role, v in sorted(inside.items()) if v)
+        print(f"    in the {KNOCKBACK_RADIUS} yd ring when it lit: {parts}")
+
+    held = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.handover"))
+    if held:
+        print(f"    yogg.handover         : {dict(held)}")
 
 
 def show_clouds(trace: Trace) -> None:

@@ -65,6 +65,19 @@ const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, 
 
 bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 {
+    if (YoggSaronHandoverState(botAI).clearing)
+    {
+        // Straight out along the bearing the bot already holds, so nine melee fan around the ring
+        // rather than stacking on one point, and each of them walks the shortest line out there is.
+        float const angle = ULDUAR_YOGG_SARON_MIDDLE.GetAngle(bot->GetPositionX(), bot->GetPositionY());
+        float const radius = ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
+
+        return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX() + radius * std::cos(angle),
+                      ULDUAR_YOGG_SARON_MIDDLE.GetPositionY() + radius * std::sin(angle),
+                      ULDUAR_YOGG_SARON_MIDDLE.GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_FORCED, true, false);
+    }
+
     return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY(),
                   ULDUAR_YOGG_SARON_MIDDLE.GetPositionZ(), false, false, false, true,
                   MovementPriority::MOVEMENT_FORCED, true, false);
