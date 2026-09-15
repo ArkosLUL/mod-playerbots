@@ -404,6 +404,13 @@ Related traps:
   on a unit that never becomes a bot target. Thorim's `SPELL_SIF_CHANNEL_HOLOGRAM` (64324) is defined
   but **never cast** in this core. Prefer a boss's empower aura where one exists — it also tells you
   *which* thing is active, not just how many.
+- **A call site is not proof of its effect.** `InitFight` calls `me->SetInCombatWithZone()` on Sara,
+  which reads as the pull, but `CombatManager::CanBeginCombat` refuses a combat reference while either
+  side is friendly and neither hostile — she is `FACTION_FRIENDLY` for all of phase 1, so the call puts
+  her summons in combat and never touches her. A phase gate on `sara->IsInCombat()` therefore opened
+  **24 s late on every pull**, and she only ever picked combat up as a side effect of her own casting.
+  Finding the call says it runs, never that it reached the unit you are reading: follow it down to the
+  guard that can turn it into a no-op.
 - **Scheduled events outlive their cause.** Freya's empower events are scheduled once at pull and
   repeat unconditionally, even after the Elder dies — so a hard-mode reaction must key off the hazard
   world object, never off an Elder still being alive.

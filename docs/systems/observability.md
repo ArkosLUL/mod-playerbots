@@ -134,7 +134,10 @@ loose to name by.
 
 While a raid sits on a tracked map with no session, snapshots go to a `PreRollSeconds` ring that is
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull
-records carry a **negative** `t`. That is what makes a bad squad latch visible.
+records carry a **negative** `t`. That is what makes a bad squad latch visible. **`t=0` is the pull
+and first damage is not**: `bossstate` fires inside the boss's own init, before anything is hostile, so
+"before the first damage record" measures 20-30 s late. A Yogg-Saron plan called four of twelve
+Guardians pre-pull that way; against `t=0` none of them was.
 
 `end.out` follows the roster, not the instance script: more than half the raid dead files a `reset` or
 `idle` as `wipe`. Hodir's script reports `NOT_STARTED` on release, which filed a 23-of-24 wipe as
