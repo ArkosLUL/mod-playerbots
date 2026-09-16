@@ -1036,5 +1036,6 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDisplacementGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronMovementGuardMultiplier(botAI));
+    multipliers.push_back(new YoggSaronPhase1AoeHoldMultiplier(botAI));
     multipliers.push_back(new YoggSaronAntiFearTotemGuardMultiplier(botAI));
 }

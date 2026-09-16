@@ -116,13 +116,16 @@ INFORM_CLOUD_MIN_RANGE = 20.0
 # movers wait until a bot is inside it. A move by one of them that started further out is the gate
 # failing, or a build from before it.
 P1_ROOM_RADIUS = CLOUD_ORBITS[-1] + CLOUD_SUMMON_REACH
+# The gate reads GetDistance2d(x, y), which takes the bot's own 1.5 yd combat reach off, and the move
+# lands up to a bot tick after that read: another ~1 yd at run speed. The gated pull's worst was 71.3.
+ROOM_GATE_SLACK = 2.5
 P1_MOVERS = ("yogg-saron phase 1 station action", "yogg-saron phase 1 spacing action",
              "yogg-saron guardian positioning action", "yogg-saron guardian control action")
 
-# Two Guardian deaths this close land both novas on whoever is inside both before a heal lands. On
-# 2026-09-16 a pair 17 ms apart killed two melee from full, and one 2.5 s apart killed five at the
-# station.
-BACK_TO_BACK_MS = 3000
+# ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS. Two Guardian deaths closer than this land both novas on whoever is
+# inside both before the heals catch up. On 2026-09-16 a pair 17 ms apart killed two melee from full,
+# one 2.5 s apart killed five at the station, and three in 3.4 s killed two melee in the handover.
+NOVA_GAP_MS = 6000
 
 # Threat redirects and the single-target taunts, for --threat. Righteous Defense is left out: it is
 # aimed at the raid member being hit rather than at a Guardian, so it cannot be ranked against one.
@@ -213,10 +216,44 @@ def phase1_end(spans: list[tuple[int, int, int]]) -> int | None:
 
 
 def back_to_back(deaths: list[tuple[int, float]],
-                 window_ms: int = BACK_TO_BACK_MS) -> list[tuple[tuple[int, float], tuple[int, float]]]:
+                 window_ms: int = NOVA_GAP_MS) -> list[tuple[tuple[int, float], tuple[int, float]]]:
     """Consecutive Guardian deaths no further apart than the window, each as (t, radius)."""
     ordered = sorted(deaths)
     return [(a, b) for a, b in zip(ordered, ordered[1:]) if b[0] - a[0] <= window_ms]
+
+
+def kill_kind(on_it: int, non_tanks: int) -> str:
+    """`focus` when at least half the bot non-tanks were on the Guardian, `splash` when one at most was,
+    so splash or AoE finished it on nobody's schedule, `split` in between."""
+    if non_tanks and on_it * 2 >= non_tanks:
+        return "focus"
+    return "splash" if on_it <= 1 else "split"
+
+
+def kill_kinds(trace: Trace, deaths: list[tuple[int, int]]) -> list[str]:
+    """kill_kind for each (t, guid) death, read off the last snapshot a second before it: by the death
+    tick itself bots have already moved on."""
+    snaps = trace.of("snap")
+    stamps = [snap["t"] for snap in snaps]
+    roster = roster_guids(trace)
+    kinds = []
+    for when, guid in deaths:
+        index = bisect.bisect_right(stamps, when - 1000)
+        rows = snaps[index - 1].get("u", []) if index else []
+        bots = [row for row in rows
+                if row[0] in roster and row[0] not in trace.humans and trace.role(row[0]) != "tank"
+                and row[5] > 0 and len(row) > 7]
+        kinds.append(kill_kind(sum(1 for row in bots if row[7] == guid), len(bots)))
+    return kinds
+
+
+def interpolate(before: tuple, after: tuple | None, when: int) -> tuple[float, float]:
+    """Ground position at `when` between two (t, x, y) samples, or `before` itself with no later one.
+    A running bot is up to ~3 yd past its last snapshot."""
+    if after is None or after[0] <= before[0]:
+        return before[1], before[2]
+    share = (when - before[0]) / (after[0] - before[0])
+    return before[1] + (after[1] - before[1]) * share, before[2] + (after[2] - before[2]) * share
 
 
 def missing_probes(trace: Trace) -> list[str]:
@@ -276,10 +313,13 @@ def show_phases(trace: Trace) -> None:
              if rec.get("sp") == SPELL_SHADOW_NOVA_SARA and rec["t"] <= (p1_end or 0)]
     where = tracks(trace, guardians)
     deaths = []
+    dead = []
     for when, guid in novas:
         pts = [p for p in where.get(guid, []) if p[0] <= when]
         if pts:
             deaths.append((when, math.dist((pts[-1][1], pts[-1][2]), BODY)))
+            dead.append((when, guid))
+    kinds = dict(zip(deaths, kill_kinds(trace, dead)))
     radii = [radius for _, radius in deaths]
     if radii:
         wide = sum(1 for r in radii if r > RANGED_STATION - NOVA_RADIUS)
@@ -301,11 +341,15 @@ def show_phases(trace: Trace) -> None:
             print(f"    counting for Sara (inside {NOVA_RADIUS:.0f} yd): {counted}"
                   f"  (no Sara unit row, so her health is unknown)")
 
+        tally = collections.Counter(kinds.values())
+        print(f"    by who was on them    : focus {tally['focus']}, split {tally['split']}, "
+              f"splash {tally['splash']}   (bot non-tanks, a second before)")
+
         pairs = back_to_back(deaths)
-        print(f"    back to back (within {BACK_TO_BACK_MS / 1000:.0f} s): {len(pairs)}")
-        for (first, first_r), (second, second_r) in pairs:
-            print(f"      {clock(first):>9} at {first_r:4.1f} yd, {clock(second):>9} at {second_r:4.1f} yd"
-                  f"  ({(second - first) / 1000:.3f} s apart)")
+        print(f"    under the {NOVA_GAP_MS / 1000:.0f} s gap: {len(pairs)}")
+        for a, b in pairs:
+            print(f"      {clock(a[0]):>9} at {a[1]:4.1f} yd {kinds[a]:6}, {clock(b[0]):>9} at {b[1]:4.1f} yd "
+                  f"{kinds[b]:6}  ({(b[0] - a[0]) / 1000:.3f} s apart)")
 
     if p1_end is not None:
         show_room_gate(trace, p1_end)
@@ -314,16 +358,25 @@ def show_phases(trace: Trace) -> None:
 
 
 def show_room_gate(trace: Trace, p1_end: int) -> None:
+    moves = [rec for rec in trace.of("move")
+             if rec.get("by") in P1_MOVERS and 0 <= rec.get("t", -1) <= p1_end]
+    where = tracks(trace, {rec.get("g", 0) for rec in moves})
+    stamps = {guid: [p[0] for p in pts] for guid, pts in where.items()}
+
     outside: collections.Counter = collections.Counter()
-    for rec in trace.of("move"):
-        if rec.get("by") not in P1_MOVERS or not 0 <= rec.get("t", -1) <= p1_end:
+    for rec in moves:
+        guid = rec.get("g", 0)
+        index = bisect.bisect_right(stamps.get(guid, []), rec["t"])
+        if not index:
             continue
-        spot = position_at(trace, rec.get("g", 0), rec["t"])
-        if spot and math.dist(spot, BODY) > P1_ROOM_RADIUS:
+        pts = where[guid]
+        spot = interpolate(pts[index - 1], pts[index] if index < len(pts) else None, rec["t"])
+        if math.dist(spot, BODY) > P1_ROOM_RADIUS + ROOM_GATE_SLACK:
             outside[rec["by"]] += 1
 
     counts = ", ".join(f"{mover} {count}" for mover, count in outside.most_common()) or "none"
-    print(f"  moves begun outside the room (over {P1_ROOM_RADIUS:.1f} yd): {counts}")
+    print(f"  moves begun outside the room (over {P1_ROOM_RADIUS:.1f} yd, "
+          f"{ROOM_GATE_SLACK:.1f} yd slack): {counts}")
 
 
 def show_handover(trace: Trace) -> None:

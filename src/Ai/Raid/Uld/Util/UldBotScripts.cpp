@@ -136,8 +136,31 @@ public:
     }
 };
 
+// A Guardian's death reaches no bot on its own: a corpse looks the same a tick or a minute later. Its
+// JustDied casts 65719 once, so the cast is the moment the nova went off.
+class YoggSaronGuardianDeathListenerScript : public AllSpellScript
+{
+public:
+    YoggSaronGuardianDeathListenerScript()
+        : AllSpellScript("YoggSaronGuardianDeathListenerScript", {ALLSPELLHOOK_ON_PREPARE})
+    {
+    }
+
+    void OnSpellPrepare(Spell* /*spell*/, Unit* caster, SpellInfo const* spellInfo) override
+    {
+        if (!caster || !spellInfo || caster->GetMapId() != ULDUAR_MAP_ID)
+            return;
+
+        if (spellInfo->Id != SPELL_SHADOW_NOVA_SARA || caster->GetEntry() != NPC_GUARDIAN_OF_YS)
+            return;
+
+        YoggSaronNoteGuardianDeath(caster);
+    }
+};
+
 void AddSC_UlduarBotScripts()
 {
     new VezaxHazardListenerScript();
     new YoggSaronBrainLinkListenerScript();
+    new YoggSaronGuardianDeathListenerScript();
 }

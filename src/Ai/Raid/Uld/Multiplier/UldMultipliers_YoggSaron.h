@@ -70,6 +70,20 @@ private:
     bool MeleeReachIsWrong(Action* action);
 };
 
+// Phase 1 AoE, held while it would finish a Guardian nobody is on. With the raid on one focus, the
+// Guardian next to it on the stack still lost 5.6%/s, and two of those died 2 s apart around a focus
+// kill during the handover: three novas in 3.4 s on the melee pile. Heals are never held.
+class YoggSaronPhase1AoeHoldMultiplier : public Multiplier
+{
+public:
+    YoggSaronPhase1AoeHoldMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron phase 1 aoe hold multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 class YoggSaronAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
 {
 public:

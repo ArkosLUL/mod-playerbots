@@ -103,6 +103,9 @@ struct YoggSaronEncounterState
     // Phase 1's raid-wide kill target. See YoggSaronPhase1Focus.
     ObjectGuid phase1Focus;
 
+    // Stamped by each Guardian's 65719. 0 until the first one dies.
+    uint32 lastGuardianDeathMs = 0;
+
     uint32 hazardNoteMs = 0;
     std::unordered_map<ObjectGuid, uint32> obsScanMs;
 };
@@ -1222,9 +1225,41 @@ bool YoggSaronInPhase1Room(Player* bot)
            ULDUAR_YOGG_SARON_P1_ROOM_RADIUS;
 }
 
+void YoggSaronNoteGuardianDeath(Unit* guardian)
+{
+    if (!guardian)
+        return;
+
+    uint32 const now = getMSTime();
+
+    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+    yoggSaronStates[guardian->GetInstanceId()].lastGuardianDeathMs = now;
+}
+
+bool YoggSaronGuardianDiedWithin(Player* bot, uint32 ms)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+    return state.lastGuardianDeathMs && getMSTimeDiff(state.lastGuardianDeathMs, getMSTime()) < ms;
+}
+
+namespace
+{
+// Health first, so the lock is only taken for a Guardian close to dying.
+bool YoggSaronGuardianWaitsOutNovaGap(Player* bot, Unit* guardian)
+{
+    return guardian->GetHealthPct() < ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT &&
+           YoggSaronGuardianDiedWithin(bot, ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS);
+}
+}  // namespace
+
 bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian)
 {
     if (!guardian || !guardian->IsAlive())
+        return false;
+
+    if (YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian))
         return false;
 
     // Group walk last, so it only runs for a Guardian that is actually parked.
@@ -1289,12 +1324,49 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
         else if (abandon)
             reason = "abandoned";
         else if (held && held->IsAlive())
-            reason = "parked";
+            reason = YoggSaronGuardianWaitsOutNovaGap(bot, held) ? "spaced" : "parked";
 
         RaidObs::NoteDerived(bot, "yogg.p1focus", reason);
     }
 
     return best;
+}
+
+bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    ObjectGuid focusGuid;
+    {
+        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+        focusGuid = state.phase1Focus;
+    }
+
+    Creature* focus = focusGuid ? ObjectAccessor::GetCreature(*bot, focusGuid) : nullptr;
+    if (focus && !focus->IsAlive())
+        focus = nullptr;
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+
+    for (Creature* guardian : guardians)
+    {
+        if (guardian == focus || !guardian->IsAlive() ||
+            guardian->GetHealthPct() >= ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT)
+        {
+            continue;
+        }
+
+        // The focus side covers a parked Guardian standing next to a focus burned out at the station.
+        if (YoggSaronDistanceFromMiddle(guardian) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS ||
+            (focus && guardian->GetExactDist2d(focus) <= ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 Position YoggSaronCloudLead(Creature* cloud)

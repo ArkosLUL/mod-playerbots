@@ -53,8 +53,9 @@ phase 1 control triggers now wait for `YoggSaronInPhase1Room` (outer orbit + rea
 distance read ahead of the phase read. Combat is no gate: every Guardian's `Reset` calls
 `SetInCombatWithZone`, so the instance is in combat from ~10 s. Nor does it belong in
 `YoggSaronPhase`, whose read writes the shared `yogg.phase` latch. The gate moves *when* bots cross
-the orbits, not whether. `yogg_saron.py --phases` counts phase 1 moves begun outside it (159 and 102
-before the gate) and Guardian deaths back to back within 3 s.
+the orbits, not whether. `yogg_saron.py --phases` counts phase 1 moves begun outside it: 136 and 74
+before the gate, none after. It interpolates between snapshots and allows 2.5 yd, because
+`GetDistance2d` takes off the bot's 1.5 yd combat reach and the move lands a tick after the read.
 
 `IsBotMainTank` is false for **every** bot while a human holds main tank, which silently disabled the
 phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot tank.
@@ -324,7 +325,8 @@ pull, and the bots waiting on it dropped out of combat into `clean quest log` an
 `RtiTargetValue::Calculate` returns null on LOS failure and beyond `sightDistance` (100) in 2D. A
 direct `Attack()` has **no distance cap, only LOS**, which is what makes the Brain reachable at all.
 
-Kill order — **phase 1: one Guardian for the whole raid** (threat section below). Splitting damage is what killed the raid on 2026-09-14: two Guardians rode down in
+Kill order — **phase 1: one Guardian for the whole raid, and no two deaths inside 6 s** (threat
+section below). Splitting damage is what killed the raid on 2026-09-14: two Guardians rode down in
 lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and the **double** nova put
 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier single novas were all
 survived. Brain level: Influence Tentacle →
@@ -389,8 +391,30 @@ cover the ~12 s fetch (taunt cooldown, the walk, and a taunted Guardian that sto
 against the 1.7-1.8%/s, peaking near 3%/s, that an untargeted Guardian near the station still loses to
 splash. Without a living bot tank nothing fetches, so the floor is off. The focus is still given up
 past **15 yd** for a killable one inside **6.5**, a gap that stops a Guardian on the boundary flipping
-it. `yogg.p1focus` records each change: `picked`, `parked`, `abandoned`, `none`. AoE is untouched, so
-cleave on two Guardians on the stack can still bring both down together.
+it. `yogg.p1focus` records each change: `picked`, `parked`, `spaced`, `abandoned`, `none`.
+
+**One focus does not space the novas.** On the 17:25 pull the focus held (6.4% of phase 1 on two or
+more Guardians, no back-line nova), but an untargeted Guardian on the stack still lost **5.6%/s** to
+splash and ground AoE, against 1.2%/s at the station and 13.0%/s for the focus. 4 of 13 deaths were
+Guardians at most one bot was on. Two died in the handover at 1:53.98 and 1:55.58, the focus followed
+at 1:57.37, and two melee held in the middle went 100% → 62-75% → 15-36% → dead. So:
+
+- **Nova gap.** For `ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS` (6 s) after any Guardian dies, one below
+  **30%** (`…_NOVA_GAP_HEALTH_PCT`) is not killable: it is dropped like a parked one and the focus
+  moves on (`spaced`). The pull with no phase 1 deaths never had two novas closer than 6 s, and 30%
+  outlasts 6 s at 5.6%/s. The clock is `YoggSaronGuardianDeathListenerScript` on 65719, which only a
+  Guardian's `JustDied` casts. It holds without a bot tank, and through the handover, where the phase
+  still reads 1.
+- **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes non-heal `Aoe` actions, tanks included,
+  while a Guardian other than the focus is below 30% within 10 yd of the middle or of the focus.
+  Replayed, it came on before every splash kill (0:22.2, 1:05.2, 1:48.7) and covered 8.9% of that
+  phase 1. That is only 2.6-5.3 s of lead, so the resolver also cancels an area channel already
+  running: Blizzard, Hurricane, Volley, Rain of Fire. Mind Sear fails `IsAffectingArea` (a
+  single-target aura that triggers the area spell) and ground AoE already placed keeps ticking.
+
+`--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks
+were on it a second before, and lists pairs under the gap: 9/0/4 and 3 pairs on the 17:25 pull,
+12/2/0 and 3 on the 14:10 wipe.
 
 `YoggSaronPhase1GuardianPreferred` orders both the focus and the taunt, so the two cannot disagree.
 
@@ -558,7 +582,8 @@ grid search, so `YoggSaronHandoverState` reads it from the first tick. P3 strips
 the Brain separates the two: it is summoned in the tick the barrier first lands, so it is up for
 everything after the window and absent for all of it. The walk is **led, not immediate** — leftover
 Guardians stop counting for Sara the moment she dies (`DamageTaken` returns early on `_secondPhase`)
-but their novas still land for 25k, and one dying at the clearance radius reaches the back line where
+but their novas still land for 25k (the nova gap above spaces them here too), and one dying at the
+clearance radius reaches the back line where
 one dying on the leash cannot, so the raid holds the middle until
 `ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS` out. Nothing in the world counts the dialogue down, so the
 clock is predicted off the first sighting, like the portal wave's.

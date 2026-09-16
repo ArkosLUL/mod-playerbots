@@ -89,6 +89,7 @@ enum UlduarYoggSaronIds
     SPELL_CRUSH_CONE = 64147,  // the cone 64146 procs down the Crusher Tentacle's facing
     SPELL_DIMINISH_POWER = 64145,  // Crusher's 5 min channel, -21% damage done raid-wide
     SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
+    SPELL_SHADOW_NOVA_SARA = 65719,  // only cast from a Guardian's JustDied, so the cast is its death
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
     // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
@@ -205,6 +206,17 @@ constexpr float ULDUAR_YOGG_SARON_P1_SARA_NOVA_RADIUS = 15.0f;
 // is ~12 s (8 s taunt cooldown, the walk in, a taunted Guardian that stood still for 2 s) and an
 // untargeted Guardian near the station still loses up to ~3%/s to splash.
 constexpr float ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT = 35.0f;
+
+// Minimum time between two Guardian novas. Melee stand in every one on the stack: three in 3.4 s took
+// two of them from full, the pull with no phase 1 deaths never had two closer than 6 s.
+constexpr uint32 ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS = 6000;
+
+// Below this a Guardian is close enough to dying that the gap has to protect it. Untargeted on the
+// stack one still lost 5.6%/s, so 30% outlasts the gap.
+constexpr float ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT = 30.0f;
+
+// Death and Decay and Explosive Trap reach 10, Blizzard and Consecration 8.
+constexpr float ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS = 10.0f;
 
 // Ranged and healers stack rather than spread, which inverts the usual rule and only holds because the
 // nova cannot reach the station. A cloud is in contact for (8.5 + blob + 8.5) / 3 seconds and re-arms
@@ -599,15 +611,27 @@ bool YoggSaronGuardianOnTheStack(Unit* guardian);
 // Inside ULDUAR_YOGG_SARON_P1_ROOM_RADIUS. Plain distance, no sweep, so it goes ahead of the phase read.
 bool YoggSaronInPhase1Room(Player* bot);
 
+// Record a Guardian's death, from the spell hook that sees its 65719 go out.
+void YoggSaronNoteGuardianDeath(Unit* guardian);
+
+// Whether any Guardian in the bot's instance died in the last `ms`.
+bool YoggSaronGuardianDiedWithin(Player* bot, uint32 ms);
+
 // Whether the raid may finish this Guardian where it stands: on the stack, or still above the park
-// floor. Always true without a living bot tank, since nobody would ever fetch a parked one.
+// floor, and never below the nova gap floor while the last nova is under 6 s old. The park floor is off
+// without a living bot tank, since nobody would ever fetch a parked one. The gap never is.
 bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian);
 
 // The one Guardian every non-tank is on in phase 1, shared per instance, or null while every Guardian
-// is parked. Per-bot holds let ranged and melee lock different Guardians, and the two came down in
-// lockstep and died 17 ms apart. Held until it dies, parks, or drifts past 15 yd while a killable one
-// is on the stack.
+// is parked or waiting out the gap. Per-bot holds let ranged and melee lock different Guardians, and
+// the two came down in lockstep and died 17 ms apart. Held until it dies, parks, hits the gap floor, or
+// drifts past 15 yd while a killable one is on the stack.
 Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI);
+
+// True while a Guardian other than the focus sits below the gap floor within 10 yd of the middle or of
+// the focus, where AoE kills it on nobody's schedule. 4 of 13 deaths on one pull were that, three of
+// them within 2 s of another nova. Reads the focus without re-picking it.
+bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI);
 
 // The Guardian the tank should pull in, or null while every one of them is already where it should be
 // or already walking at a tank. The raid's focus first: the tank gets one taunt per Guardian death at

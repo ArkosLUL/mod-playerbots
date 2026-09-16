@@ -637,6 +637,17 @@ class YoggPhases(unittest.TestCase):
                          [((44556, 6.2), (44573, 2.3)), ((68300, 16.1), (70800, 17.9))])
         self.assertEqual(yogg_saron.back_to_back([(0, 1.0)]), [])
 
+    def test_kill_kind_reads_how_many_bots_were_on_the_guardian(self):
+        # The 2026-09-16 17:25 pull: a focus kill, a Guardian nobody was on, and the earlier split.
+        self.assertEqual(yogg_saron.kill_kind(22, 23), "focus")
+        self.assertEqual(yogg_saron.kill_kind(1, 23), "splash")
+        self.assertEqual(yogg_saron.kill_kind(0, 23), "splash")
+        self.assertEqual(yogg_saron.kill_kind(10, 23), "split")
+
+    def test_interpolate_puts_a_running_bot_between_its_snapshots(self):
+        self.assertEqual(yogg_saron.interpolate((0, 0.0, 0.0), (200, 4.0, 2.0), 50), (1.0, 0.5))
+        self.assertEqual(yogg_saron.interpolate((0, 3.0, 4.0), None, 50), (3.0, 4.0))
+
     def test_merge_spans_folds_one_channel_seen_on_many_raiders(self):
         # One Diminish Power channel lands on every raider a few ms apart, so the per-raider windows
         # overlap. A break and re-cast is a real gap and stays two spans.

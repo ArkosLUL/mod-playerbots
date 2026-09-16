@@ -26,6 +26,8 @@
 #include "RtiValue.h"
 #include "ScriptedCreature.h"
 #include "ServerFacade.h"
+#include "Spell.h"
+#include "SpellInfo.h"
 #include "Unit.h"
 #include "Vehicle.h"
 #include "CellImpl.h"
@@ -693,6 +695,16 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
     {
         DropTarget(currentTarget);
         currentTarget = nullptr;
+    }
+
+    // The AoE hold only stops new casts. A Blizzard already channeling keeps ticking for up to 8 s, and
+    // the hold came on 2.6-5.3 s before each splash kill it was replayed against. Channel check first,
+    // so the sweep only runs for a bot that has one going.
+    if (phaseOne)
+    {
+        Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel && channel->GetSpellInfo()->IsAffectingArea() && YoggSaronPhase1AoeHold(botAI))
+            bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
     }
 
     Unit* target = phaseOne ? YoggSaronPhase1Focus(botAI) : ResolveTarget(currentTarget);

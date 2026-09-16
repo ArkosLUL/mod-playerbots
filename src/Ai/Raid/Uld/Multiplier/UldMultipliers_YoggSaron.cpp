@@ -155,4 +155,19 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     return YoggSaronHandoverState(botAI).clearing ? 0.0f : 1.0f;
 }
 
+float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
+{
+    if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
+        return 1.0f;
+
+    if (dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    // Brain level first: no grid sweep for the bots under the floor.
+    if (YoggSaronOnBrainLevel(bot) || !YoggSaronInPhase1(botAI))
+        return 1.0f;
+
+    return YoggSaronPhase1AoeHold(botAI) ? 0.0f : 1.0f;
+}
+
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }
