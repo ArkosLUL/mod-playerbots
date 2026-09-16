@@ -9,10 +9,12 @@
 #include "Creature.h"
 #include "GameTime.h"
 #include "Map.h"
+#include "ObjectAccessor.h"
 #include "Player.h"
 #include "SpellAuras.h"
 #include "SpellInfo.h"
 #include "Timer.h"
+#include "Vehicle.h"
 
 #include <algorithm>
 #include <vector>
@@ -52,6 +54,35 @@ void AccrueDamageDealt(Unit* attacker, Unit* victim, uint32 amount)
 
 // --- combat events ------------------------------------------------------------
 
+// On a vehicle fight the hull takes the damage, and a hull has no roster slot of its own, so it is
+// logged while a tracked player rides it. Gunners sit on a turret mounted on the hull, hence one level
+// down. A hostile vehicle is skipped: a bot thrown onto Flame Leviathan's seats is riding the boss.
+static Player* TrackedRider(ObsSession& s, Unit* vehicle, bool descend)
+{
+    Vehicle* kit = vehicle->GetVehicleKit();
+    if (!kit)
+        return nullptr;
+
+    for (auto const& seat : kit->Seats)
+    {
+        if (seat.second.Passenger.Guid.IsEmpty())
+            continue;
+
+        Unit* passenger = ObjectAccessor::GetUnit(*vehicle, seat.second.Passenger.Guid);
+        if (!passenger)
+            continue;
+
+        Player* rider = passenger->ToPlayer();
+        if (!rider && descend && passenger->IsVehicle())
+            rider = TrackedRider(s, passenger, false);
+
+        if (rider && !rider->IsHostileTo(vehicle) && s.Tracks(rider))
+            return rider;
+    }
+
+    return nullptr;
+}
+
 void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amount, int32 overkill,
                 uint32 schoolMask, uint32 absorb, uint32 resist)
 {
@@ -61,10 +92,18 @@ void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amo
     AccrueDamageDealt(attacker, victim, amount);
 
     ProbeTarget probe(victim);
-    if (!probe)
+    ObsSession* session = probe ? &probe.Session() : nullptr;
+    if (!probe && victim->IsVehicle())
+    {
+        session = SessionFor(victim);
+        if (session && !TrackedRider(*session, victim, true))
+            session = nullptr;
+    }
+
+    if (!session)
         return;
 
-    ObsSession& s = probe.Session();
+    ObsSession& s = *session;
     uint32 const now = getMSTime();
 
     if (attacker)
@@ -73,10 +112,16 @@ void NoteDamage(Unit* attacker, Unit* victim, SpellInfo const* spell, uint32 amo
     uint64 const src = attacker ? GuidKey(attacker->GetGUID()) : 0;
     uint32 const spellId = spell ? spell->Id : 0;
 
-    BotTrace& trace = s.bots[GuidKey(victim->GetGUID())];
-    trace.damage.push_back({now, src, spellId, amount});
-    while (!trace.damage.empty() && getMSTimeDiff(trace.damage.front().ms, now) > g_cfg.deathRewindMs)
-        trace.damage.pop_front();
+    // A hull gets no rewind ring: the death record that would replay it is players only.
+    if (probe)
+    {
+        BotTrace& trace = probe.Trace();
+        trace.damage.push_back({now, src, spellId, amount});
+        while (!trace.damage.empty() && getMSTimeDiff(trace.damage.front().ms, now) > g_cfg.deathRewindMs)
+            trace.damage.pop_front();
+    }
+    else
+        s.EnsureUnit(victim);
 
     s.EnsureSpell(spellId);
 

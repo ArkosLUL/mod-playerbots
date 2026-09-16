@@ -9,7 +9,7 @@ import json
 import pathlib
 import sys
 
-SUPPORTED_SCHEMA = 12
+SUPPORTED_SCHEMA = 13
 
 # Columns of a `cov` row after the node id, in order. Rows are written with trailing zeros trimmed, so
 # a short row is padded back out here and a column appended in a later schema reads as zero on an
@@ -22,8 +22,10 @@ COVERAGE_COLUMNS = ("checks", "fires", "pushes", "won", "shared", "throttled", "
 # adds an optional cast field, so a pre-v8 row is just a short one. v10 adds pet rows to the snapshot
 # and an owner field on unit, so a pre-v10 file simply has no pets in it. v11 adds hdr.bin and
 # hdr.cfg, so a pre-v11 file only cannot say which build or settings produced it. v12 adds the covdef
-# and cov records, so --coverage is the one view a pre-v12 trace cannot answer.
-READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11, 12)
+# and cov records, so --coverage is the one view a pre-v12 trace cannot answer. v13 adds `dmg` rows for
+# a ridden vehicle and appends power type and power % to a snapshot row, so an older file has no hull
+# damage and reads as short rows for power.
+READABLE_SCHEMAS = (4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
 
 
 def clock(ms: int) -> str:

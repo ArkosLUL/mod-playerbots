@@ -370,6 +370,42 @@ class Geometry(unittest.TestCase):
             geometry.reference("entry:33999", trace)
 
 
+FULL_V13 = BOTOBS / "fixtures" / "full-v13.ndjson"
+SIEGE = (3 << 32) | 77
+
+
+class SchemaV13(unittest.TestCase):
+    def test_every_invariant_passes(self):
+        failures = [(label, count) for label, count, _ in verify_checks(Trace(FULL_V13)) if count]
+        self.assertEqual(failures, [])
+
+    def test_vehicle_power_reads_through_track(self):
+        track = geometry.track(Trace(FULL_V13), {SIEGE}, ("t", "power_type", "power"))
+        self.assertEqual(track[SIEGE], [(-2000, 3, 100.0), (0, 3, 100.0), (1000, 3, 60.0),
+                                        (2000, 3, 60.0), (2500, 3, 60.0)])
+
+    def test_a_v12_row_reads_as_no_power_rather_than_an_empty_bar(self):
+        self.assertEqual(geometry.track(rich(), {5001}, ("t", "power")), {})
+
+    def test_the_hull_takes_a_dmg_row(self):
+        hits = [rec for rec in Trace(FULL_V13).of("dmg") if rec["d"] == SIEGE]
+        self.assertEqual([(rec["a"], rec["hp"]) for rec in hits], [(40000, 100.0)])
+
+    def test_a_v12_width_row_under_a_v13_header_is_caught(self):
+        lines = FULL_V13.read_text(encoding="utf-8").splitlines()
+        out = []
+        for line in lines:
+            rec = json.loads(line)
+            if rec.get("e") == "snap":
+                rec["u"] = [row[:12] for row in rec["u"]]
+            out.append(json.dumps(rec))
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "short.ndjson"
+            path.write_text("\n".join(out) + "\n", encoding="utf-8")
+            failing = [label for label, count, _ in verify_checks(Trace(path)) if count]
+        self.assertIn("snapshot rows well formed", failing)
+
+
 class Spatial(unittest.TestCase):
     def test_event_spots_reads_a_cast_as_its_casters_position(self):
         found = space.event_spots(rich(), "cast:100")

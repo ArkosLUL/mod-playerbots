@@ -42,7 +42,7 @@ Two things this file will not tell you, both of which have already fooled a read
 - **The snapshot cast column only catches spells with a cast time.** Ram, Mortar and Fire Cannon are
   instant, so they never appear in it. Absence there is not evidence a seat held its fire - judge
   that from the add health deltas below.
-- **`dmg` rows are written for roster players only**, so damage to a hull never appears in one and
+- **`dmg` rows before v13 are written for roster players only**, so on those traces damage to a hull
   cannot be attributed to a spell. Every hull-attrition figure below comes from `snap` health deltas
   instead, which is why they are rates per 5 s rather than totals.
 - **Riders are not at their vehicle's exact coordinates.** A turret gunner sits 0.20 yd off its
@@ -461,9 +461,12 @@ def show_adds(trace: Trace) -> int:
               f"   ({len(engaged)} windows)")
 
     # ---- and what share of the raid's damage taken is theirs? ------------------------
+    # Players only: from v13 the hulls have dmg rows too, and they would swamp the share.
+    roster = roster_guids(trace)
     taken = collections.Counter()
     for rec in trace.of("dmg"):
-        taken[rec.get("sp")] += rec.get("a", 0)
+        if rec.get("d") in roster:
+            taken[rec.get("sp")] += rec.get("a", 0)
     total = sum(taken.values())
     if total:
         print(f"\n  Lash {LASH_SPELL} share of raid damage taken: "

@@ -46,6 +46,11 @@ std::string UnitRow(Unit* unit, uint64 dealt, std::vector<uint32>* castSpells)
     uint32 const maxMana = unit->GetMaxPower(POWER_MANA);
     float const manaPct = maxMana ? 100.0f * unit->GetPower(POWER_MANA) / maxMana : 0.0f;
 
+    // The unit's own power type, so a vehicle's Steam or Pyrite bar reads as what it is. Vehicle::Install
+    // sets it from the vehicle's power display. Bounded because GetPower asserts past MAX_POWERS.
+    Powers const powerType = unit->getPowerType();
+    float const powerPct = powerType < MAX_POWERS ? unit->GetPowerPct(powerType) : 0.0f;
+
     std::string row = "[";
     row += std::to_string(GuidKey(unit->GetGUID()));
     row += "," + Num(unit->GetPositionX());
@@ -59,6 +64,8 @@ std::string UnitRow(Unit* unit, uint64 dealt, std::vector<uint32>* castSpells)
     row += "," + std::to_string(static_cast<uint32>(unit->GetMotionMaster()->GetCurrentMovementGeneratorType()));
     row += "," + std::to_string(castingId);
     row += "," + std::to_string(dealt);
+    row += "," + std::to_string(static_cast<uint32>(powerType));
+    row += "," + Num(powerPct);
     row += "]";
 
     return row;

@@ -91,17 +91,21 @@ def verify_checks(trace: Trace) -> list[tuple[str, int, list[str]]]:
     gaps: list[str] = []
     last_dealt: dict = {}
     previous_t = None
+    # v13 appends power type and power % to every row.
+    width = 14 if trace.header.get("v", 0) >= 13 else 12
     for snap in snaps:
         now = snap.get("t", 0)
         if previous_t is not None and now >= 0 and now - previous_t > MAX_SNAP_GAP_MS:
             gaps.append(f"{now - previous_t}ms gap ending {clock(now)}")
         previous_t = now
         for row in snap.get("u", []):
-            if len(row) != 12:
+            if len(row) != width:
                 shape.append(f"{len(row)} columns at {clock(now)}")
                 continue
             if not 0 <= row[5] <= 100 or not 0 <= row[6] <= 100:
                 shape.append(f"hp {row[5]} mana {row[6]} for {trace.name(row[0])} at {clock(now)}")
+            if width > 12 and not 0 <= row[13] <= 100:
+                shape.append(f"power {row[13]} for {trace.name(row[0])} at {clock(now)}")
             if any(not math.isfinite(v) for v in row[1:4]) or max(abs(v) for v in row[1:4]) > 20000:
                 shape.append(f"position {row[1:4]} for {trace.name(row[0])} at {clock(now)}")
             if row[0] in trace.owners and row[11]:

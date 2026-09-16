@@ -23,7 +23,7 @@ from .trace import Trace
 # column, which is why it maps to None.
 COLUMNS = {
     "t": None, "guid": 0, "x": 1, "y": 2, "z": 3, "o": 4, "hp": 5, "mana": 6,
-    "target": 7, "moving": 8, "movegen": 9, "casting": 10, "dealt": 11,
+    "target": 7, "moving": 8, "movegen": 9, "casting": 10, "dealt": 11, "power_type": 12, "power": 13,
 }
 
 # How a position is picked when the ask falls between two samples.

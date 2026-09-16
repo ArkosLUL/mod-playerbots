@@ -191,7 +191,7 @@ Guardians pre-pull that way; against `t=0` none of them was.
 `reset`. **Latched during combat**, never at the close — `IdleCloseSeconds` (30 s) has by then let
 everyone release and run back alive, which filed a 31-death Flame Leviathan attempt as `idle`.
 
-## Schema (`v: 12`)
+## Schema (`v: 13`)
 
 `t` is milliseconds from the `hdr`. A guid is a type tag in the high 32 bits over
 `ObjectGuid::GetCounter()` in the low 32 — the counter alone is a separate numbering space per type, so
@@ -205,8 +205,8 @@ else `7`. `0` still means no unit.
 | `pull` / `end` | `boss`,`src`: bossstate, mark, engage, rename (then `was`) / `out`: kill, wipe, reset, idle, mapgone, shutdown |
 | `unit` | `g`,`en` entry,`n`,`lvl`,`mhp`,`b` is-boss,`own` owner guid when it has one, plus `c`,`r`,`h` for a player — once per guid |
 | `spell` | `sp`,`n` — once per spell id |
-| `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt]`, `dealt` cumulative damage to non-raid targets, 0 off the roster and on pet rows; roster players, their pets and guardians, ridden vehicles and the swept creatures; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
-| `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` before the hit |
+| `snap` | `u[]` rows `[guid,x,y,z,o,hp%,mana%,target,moving,moveGen,castingSpell,dealt,powerType,power%]`, `dealt` cumulative damage to non-raid targets, 0 off the roster and on pet rows; `powerType` the unit's own, so a vehicle's bar reads there and not in `mana%`; roster players, their pets and guardians, ridden vehicles and the swept creatures; `hz[]` swept dynamic objects `[spellId,x,y,z,radius,foe]` |
+| `dmg` | `s`,`d`,`sp`,`a`,`ok` overkill,`sc` school,`ab`,`rs`,`hp` before the hit — roster players and the non-hostile vehicles they ride |
 | `heal` | `s`,`d`,`sp`,`a`,`oh` overheal,`hp` after |
 | `abs` | `d`,`s` shield caster,`sp`,`a` |
 | `aura` | `d`,`s` caster,`sp`,`r` 1=removed,`st` stacks,`dur` ms left,`p` 1=positive |
@@ -457,11 +457,11 @@ are left bare on purpose.
 
 ## What a trace cannot tell you
 
-- **Pet damage is not recorded.** `dmg` rows are written only for raid members, so nothing involving a
-  pet as a damage source or a chain-lightning link can be confirmed from a trace. Thorim's phase 2
-  carries a median of 6 and a p90 of 25 live pets and guardians, which is the likeliest reason observed
-  chains reach 7-8 hops where an idealised formation caps at 3 — and it stays a hypothesis until
-  `Bot/Obs` logs pet damage.
+- **Pet damage is not recorded.** `dmg` rows are written only for raid members and their vehicles, so
+  nothing involving a pet as a damage source or a chain-lightning link can be confirmed from a trace.
+  Thorim's phase 2 carries a median of 6 and a p90 of 25 live pets and guardians, which is the
+  likeliest reason observed chains reach 7-8 hops where an idealised formation caps at 3 — and it
+  stays a hypothesis until `Bot/Obs` logs pet damage.
 - **`tools/botobs/bosses/flame_leviathan.py` never reads `fl.station`.** `Frame.__init__` returns at the
   vehicle branch on every trace where vehicles are in the snapshot, which is all of them, so the
   station fallback below it is dead and its `tar-lead` branch has never run — the "by station" tables
