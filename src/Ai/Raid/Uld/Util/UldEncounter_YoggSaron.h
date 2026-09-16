@@ -90,6 +90,7 @@ enum UlduarYoggSaronIds
     SPELL_DIMINISH_POWER = 64145,  // Crusher's 5 min channel, -21% damage done raid-wide
     SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
     SPELL_SHADOW_NOVA_SARA = 65719,  // only cast from a Guardian's JustDied, so the cast is its death
+    SPELL_SHATTERED_ILLUSION = 64173,  // stun on every platform tentacle once a brain room is cleared
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
     // The entries run in the same order as ACTION_ILLUSION_DRAGONS/ICECROWN/STORMWIND.
@@ -248,11 +249,18 @@ constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either s
 constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
 
 // The Crusher's own melee range on a player, centre to centre: CombatReach 8 (display 28814) + 1.5 +
-// 4/3 = 10.83, no leeway since it never moves. Ranged and healers only. Inside it a caster's weapon
-// swing or a hunter's Raptor Strike lands, any melee hit makes that bot the tentacle's victim, and the
-// next Crush lands on it: 3 of 3 Crush kills in one pull, all ranged at 5.8-6.8 yd.
+// 4/3 = 10.83, no leeway since it never moves. Melee only get it for a stun about to lift. Inside it a
+// caster's weapon swing or a hunter's Raptor Strike lands, any melee hit makes that bot the tentacle's
+// victim, and the next Crush lands on it: 3 of 3 Crush kills in one pull, all ranged at 5.8-6.8 yd.
 constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
 constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
+
+// Shattered Illusion lifts at Induce Madness end, or the moment the Brain drops under 30% and phase 3
+// starts. A Crusher swings as soon as it's free, at whoever hit it last, so melee need to be out of its
+// reach by then. 13 yd is under 2 s at run speed, doubled for the tick and the path.
+constexpr uint32 ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS = 4000;
+// Fastest the Brain went down in one pull was 5.34% in 5 s, so the lead above can cost ~4.3%.
+constexpr float ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT = 35.0f;
 
 // Death Rays walk 9 yd legs every 1625 ms along a re-rolled cardinal axis, so the gap between these
 // two is about a second of travel. The Death Orb that drops them is a marker 27 yd overhead and never
@@ -747,10 +755,18 @@ bool YoggSaronPlatformIdle(PlayerbotAI* botAI);
 std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius);
 bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y, float arcDegrees);
 
-// Every live Crusher, with no victim exemption and no swing gate: an idle one still takes a bot that
-// walks in and hits it, and for its victim, walking out is what stops the swings.
+// Every live Crusher for ranged and healers, with no victim exemption and no swing gate: an idle one
+// still takes a bot that walks in and hits it, and for its victim, walking out is what stops the
+// swings. Melee only get a stunned one whose stun is about to lift, since that's the only Crusher they
+// are ever let near.
 std::vector<Position> GetYoggSaronCrusherReaches(PlayerbotAI* botAI, float searchRadius);
 bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius);
+
+// A Crusher under Shattered Illusion can't swing or channel, so nothing it does can hurt a bot standing
+// in its reach. True only while that holds for at least ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS more: the
+// Brain is still casting Induce Madness with more than the lead left, and is above
+// ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT. Creatures take no cast pushback, so the cast bar is exact.
+bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher);
 
 // Whether a forced walk is still closing on where it was sent. MoveTo's `ok` says a command was
 // issued, never that a route exists: the core falls back to a straight-line spline, which once carried

@@ -281,8 +281,8 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
     }
 
     // No victim exemption here, unlike the wedge. The victim inside the reach is exactly who dies, and
-    // stepping out is what stops the swings.
-    if (!hazardNear && !PlayerbotAI::IsMelee(bot))
+    // stepping out is what stops the swings. Melee only read a stun about to lift.
+    if (!hazardNear)
         hazardNear = YoggSaronInCrusherReach(botAI, ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS);
 
     // The body's ring has to be read here as well as in the action: a circle the action clears but the
@@ -558,7 +558,13 @@ bool YoggSaronPetGuardTrigger::IsActive()
     if (bot->m_Controlled.empty() || !IsYoggSaronFight())
         return false;
 
-    return bot->FindNearestCreature(NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE, true);
+    // From the pet, not the owner. With their owners 38 yd out this never fired for two pets sitting on
+    // a stunned Crusher, and they ate 8 Crushes in 4 s once the stun lifted.
+    for (Unit* controlled : bot->m_Controlled)
+        if (controlled->FindNearestCreature(NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE, true))
+            return true;
+
+    return false;
 }
 
 bool YoggSaronBodyDetourTrigger::IsActive()

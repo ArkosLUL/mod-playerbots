@@ -460,7 +460,19 @@ Two concurrent Crushers is −37.6% raid damage and means the trade failed; bar 
 tentacle is alive instead. P2 can also leave melee with **nothing**: Yogg is rejected behind Shadow
 Barrier, so a window with only a Crusher up gives them no allowed target. That idle is deliberate — a
 lone Crusher means the tank is its only other candidate, so every melee bot on it is collateral on the
-tank's own Crush line.
+tank's own Crush line. The `dps target` fallback handed it to them anyway (~150 bot-seconds in one
+pull), so a fallback Crusher now takes the same test.
+
+**Shattered Illusion is the one exception.** `64173` stuns every platform tentacle (its `conditions`
+rows) from the moment a brain room clears until Induce Madness lands, and
+`UNIT_STATE_CANNOT_AUTOATTACK` includes stunned: over 171 s of stuns one pull had 0 of 710 Diminish
+Power applications and 2 of 215 Crushes, both 41 ms before a stun lifted. The Crusher keeps its victim,
+though, and swings the tick the stun ends, at Induce Madness end or the instant phase 3 starts. So
+`YoggSaronCrusherStunHolds` lets melee and pets onto one only while the Brain's `64059` cast has more
+than `ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS` (4 s) left, exact since creatures take no pushback, and the
+Brain is above `ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT` (35%; its fastest loss was 5.34% in 5 s). While
+that holds the wedge is off. Once it stops, melee drop that Crusher and leave its reach. Probed as
+`yogg.stunned` (`engage` / `clear`).
 
 **The dodge needs somewhere legal to go, and the retry has to keep the wedge.** The wedge model is
 right: 18 of 19 Crush hits landed within 8° of the tentacle's facing, exactly
@@ -488,9 +500,11 @@ fired with **no player inside 12 yd** and a Felguard at 5.5, and the closest app
 Shadowfiend 0.4, ghoul 1.1, Felguard 1.2, hunter pet 1.3 — the first actual player at 2.3. It cost
 **162,663 damage and four killing blows**, and 251 hazard rows routing 25 bots around floor that was
 never dangerous. `yogg-saron pet guard` walks `m_Controlled` and pulls anything that is a Crusher's
-victim or inside its melee range. Either half of that test is enough on its own:
-`SetInCombatWithZone` hands the tentacle a threat list holding the whole raid, so a pet that never
-attacked can still come up as the victim.
+victim or inside its melee range, measured from each pet and skipping a Crusher whose stun holds. Either
+half of that test is enough on its own: `SetInCombatWithZone` hands the tentacle a threat list holding
+the whole raid, so a pet that never attacked can still come up as the victim. Measured from the owner
+it never fired for two pets on a stunned Crusher with their owners 38 yd out, and they took 8 Crushes
+in 4 s once the stun lifted, 13 across the pull.
 
 **Pulling a pet is half a command; it also has to be given somewhere else to be.** `PetAI::UpdateAI`
 re-selects the moment the pet has no victim, and `SelectNextTarget` checks whoever is attacking the
@@ -524,9 +538,9 @@ victim then left the trigger quiet for exactly the bot being hit, though walking
 
 So for `!IsMelee`, phase 2 spacing adds every live Crusher as a circle at
 `ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS` 13 (trigger 11), in the hazards and the retry both,
-with **no victim exemption and no swing gate**. Melee are left out: they are already off 33966, and
-a Constrictor beside a Crusher would have the circle and `reach melee` trade them every tick. The
-probe reads `yogg.crush=reach`.
+with **no victim exemption and no swing gate**. Melee get it only for a stun about to lift: they are
+otherwise off 33966, and a Constrictor beside a Crusher would have the circle and `reach melee` trade
+them every tick. The probe reads `yogg.crush=reach`.
 
 ## Diminish Power is why the Crusher dies first
 
@@ -542,9 +556,9 @@ Only two things stop it. A **melee hit or melee-class spell** buys ~1.5 s: `6414
 has `ProcTypeMask 0x28` (taken melee swing, taken melee-class spell),
 `spell_yogg_saron_diminish_power_aura` breaks the channel once it is channelling but never during
 its 1.5 s cast, and `_diminishReady` is set once at 6 s and never reset, so it re-casts straight
-away. Or the tentacle dies — **2,000,001 HP** in 25-man, which the whole raid clears in 25-34 s even
-debuffed, against a respawn of 45-54 s tightening to 25-30 s by the sixth portal wave. Ten ranged
-alone would spend 50 s of that window debuffed. So the Crusher is the **top** target for everyone
+away. Shattered Illusion only pauses it. Or the tentacle dies — **2,000,001 HP** in 25-man, which
+the whole raid clears in 25-34 s even debuffed, against a respawn of 45-54 s tightening to 25-30 s by
+the sixth portal wave. Ten ranged alone would spend 50 s of that window debuffed. So the Crusher is the **top** target for everyone
 who can safely stand there — every ranged and healer — rather than something to keep away from.
 
 **Judgement breaks it from outside the reach.** Every Judgement damage spell (54158, 20187, 20467,
@@ -682,6 +696,16 @@ against 2 for the click meant `holding` did not imply clickable. Portals taken p
 bot derives the same team from its own seat. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
 `GetYoggSaronBrainTeam` is the single owner now.
+
+**Phase 2 always hands phase 3 some tentacles.** `AddPortals` cuts `_summonSpeed` by 0.1 a wave, so
+by the sixth a Crusher spawns every 20-24 s, a Corruptor every 12-16 and a Constrictor every 6-8. The
+stun is the only time the platform gains: `DelayEvents` holds every spawn timer, and nothing channels
+or swings. One pull, stock when the door opened → left when the stun lifted: 0.97 → 0, 2.09 → 0,
+1.68 → 0, 3.89 → 1.47, 2.41 → 0, 4.60 → 3.05M, clear at +45, +54, +54, never, +57, never; 61k/s
+removed live, 64k/s stunned. The last push crossed 30% at +49.8 s and cut that stun 10 s short. The
+team being every bot melee, below from +5 to +52 s of each wave, leaves the stun to ranged, pets and
+the tank, and melee found a stunned Crusher 0 times: they surfaced to none alive in four waves and one
+70 yd off in the fifth.
 
 **Brain Link's partner is readable from the cast, never from an aura.** 63802 goes on **one**
 player: `spell_yogg_saron_brain_link_aura` picks a random living player within 50 yd on apply, keeps
@@ -930,7 +954,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-four `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-five `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -938,7 +962,7 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
-`yogg.judgement`, `yogg.spread` and `yogg.sanity`,
+`yogg.judgement`, `yogg.spread`, `yogg.sanity` and `yogg.stunned`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -956,7 +980,10 @@ mid-channel and dropped it. Under `--brain`, one row per wave: room clear time, 
 and the most-held share, melee walking, the healer's distance from the middle and mates past 40 yd,
 `set behind` moves, door to first Brain hit, healer to the Brain, exit seconds left and spare, and
 Brain lost. Under `--phase2`, the windows with nothing on the platform to kill, with Sanity, idle walks
-and well arrivals. Under `--phase3`: Yogg's health and each role's target split per 10 s, one row per
+and well arrivals. Under `--tentacles`, per wave: tentacle stock when the door opened and when the
+stun lifted, what the stun took, when the platform was clear and when the team surfaced; live vs
+stunned removal; the tentacles alive at phase 3; who sat on a stunned Crusher, and any Crush within
+5 s of a stun lifting. Under `--phase3`: Yogg's health and each role's target split per 10 s, one row per
 Immortal Guardian (first victim, first hit, lowest health, share at the stack, gone at 10% or less),
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
 outside, and each healer's distance to the melee spot and facing during gazes.

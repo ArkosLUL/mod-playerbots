@@ -616,6 +616,21 @@ class Ranking(unittest.TestCase):
 
 
 class YoggPhases(unittest.TestCase):
+    def test_stun_window_ends_at_induce_madness_or_phase_3(self):
+        # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
+        self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))
+        self.assertEqual(yogg_saron.stun_window(595034, 623820, 644834), (623820, 644834))
+        self.assertEqual(yogg_saron.stun_window(595034, 623820, None), (623820, 655034))
+        self.assertIsNone(yogg_saron.stun_window(595034, 623820, 620000))
+
+    def test_hp_removed_counts_drops_inside_the_window_only(self):
+        samples = [(0, 100.0), (1000, 90.0), (2000, 95.0), (3000, 80.0), (4000, 50.0)]
+        # The drop across the start counts from the sample before it, a rise counts for nothing, and
+        # anything after the end is left out.
+        self.assertAlmostEqual(yogg_saron.hp_removed(samples, 1000, 500, 3000), 250.0)
+        self.assertAlmostEqual(yogg_saron.hp_removed(samples, 1000, 0, 4000), 550.0)
+        self.assertEqual(yogg_saron.hp_removed(samples, 1000, 5000, 6000), 0.0)
+
     def test_phase_one_ends_where_phase_two_starts(self):
         spans = [(1, 0, 157629), (2, 157629, 644303), (1, 644303, 648355)]
         self.assertEqual(yogg_saron.phase1_end(spans), 157629)

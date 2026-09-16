@@ -6,6 +6,7 @@
     yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
     yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
+    yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
     yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure
     yogg_saron.py <file> --phase3   Immortal Guardians, who hit what, beacon heals, Lunatic Gaze
     yogg_saron.py <file> --crush    Crush, the body's knockback and Death Rays, per role
@@ -232,6 +233,13 @@ SPELL_EMPOWERING_SHADOWS = (64468, 64486)
 EMPOWERING_SHADOWS_MS = 20000
 EMPOWERING_SHADOWS_RADIUS = 20.0
 SPELL_WEAKENED = 64162
+
+# Phase 2's platform tentacles, and both Crush cones (64147 in 10-man, 65201 in 25-man).
+TENTACLE_NAMES = {NPC_CRUSHER_TENTACLE: "Crusher", NPC_CONSTRICTOR_TENTACLE: "Constrictor",
+                  NPC_CORRUPTOR_TENTACLE: "Corruptor"}
+SPELL_CRUSH_CONES = (64147, 65201)
+# How long after a stun lifts a Crush still counts against it: melee get a 4 s lead to leave the reach.
+STUN_CRUSH_WATCH_MS = 5000
 
 
 def sara_kills_needed(trace: Trace) -> int | None:
@@ -1116,6 +1124,164 @@ def show_idle_platform(trace: Trace) -> None:
               f" {under} of {len(levels)} upstairs under 100, {len(trips)} idle walks, {len(at_well)} reached a well")
 
 
+def stun_window(wave: int, door: int, phase3: int | None) -> tuple[int, int] | None:
+    """Shattered Illusion's span in one wave. It starts when the brain room door opens, which the Brain
+    does in the same branch, and ends when Induce Madness lands or phase 3 starts, whichever is first."""
+    end = wave + INDUCE_MADNESS_CAST_MS
+    if phase3 is not None:
+        end = min(end, phase3)
+    return (door, end) if end > door else None
+
+
+def hp_removed(samples: list[tuple[int, float]], max_hp: int, start: int, end: int) -> float:
+    """Health taken off one unit inside [start, end] from its (t, hp%) samples. Only drops count, and a
+    drop across `start` counts from the last sample before it."""
+    removed = 0.0
+    previous = None
+    for when, pct in samples:
+        if when > end:
+            break
+        if when >= start and previous is not None:
+            removed += max(0.0, previous - pct)
+        previous = pct
+    return removed / 100.0 * max_hp
+
+
+def show_tentacles(trace: Trace) -> None:
+    """What phase 2 leaves on the platform. Shattered Illusion is the only time the raid gains on it,
+    with no spawns, no Diminish Power and no Crush, so each wave reads as the tentacle stock when the
+    brain room door opened, what the stun took off it and when the platform was clear."""
+    print("PLATFORM TENTACLES")
+
+    spans = phase_spans(trace)
+    phase2 = next(((start, stop) for phase, start, stop in spans if phase == 2), None)
+    phase3 = next((start for phase, start, _ in spans if phase == 3), None)
+    if not phase2:
+        print("  no phase 2 in this trace")
+        return
+
+    tentacles: dict[int, int] = {}
+    for entry in TENTACLE_NAMES:
+        for guid in guids_of_entry(trace, entry):
+            tentacles[guid] = entry
+    samples = {guid: [(row[0], row[6]) for row in rows]
+               for guid, rows in snapshot_rows(trace, set(tentacles)).items()}
+    stamps = {guid: [when for when, _ in rows] for guid, rows in samples.items()}
+    if not samples:
+        print("  no tentacle was ever sampled")
+        return
+
+    def alive(guid: int, when: int) -> float | None:
+        index = bisect.bisect_right(stamps[guid], when)
+        if not index:
+            return None
+        sampled, pct = samples[guid][index - 1]
+        # A live tentacle is in every snapshot, so a gap this long means it died or despawned.
+        return pct if pct > 0 and when - sampled <= 1000 else None
+
+    def stock(when: int) -> tuple[float, list[str]]:
+        total, parts = 0.0, []
+        for guid in samples:
+            pct = alive(guid, when)
+            if pct is not None:
+                total += pct / 100.0 * trace.maxhp.get(guid, 0)
+                parts.append(f"{TENTACLE_NAMES[tentacles[guid]]} {pct:.0f}%")
+        return total, parts
+
+    def removed(start: int, end: int) -> float:
+        return sum(hp_removed(rows, trace.maxhp.get(guid, 0), start, end) for guid, rows in samples.items())
+
+    waves = [(rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.wave")]
+    doors = sorted(rec["t"] for rec in notes(trace, "yogg.roomstate") if rec.get("txt") in ("tobrain", "atbrain"))
+    team = {rec.get("g", 0) for rec in notes(trace, "yogg.brainteam") if rec.get("txt") == "1"}
+    team_heights = tracks(trace, team, ("t", "z"))
+    snaps = [snap for snap in trace.of("snap") if phase2[0] <= snap["t"] <= (phase3 or phase2[1])]
+
+    stuns: list[tuple[int, int, int]] = []
+    for wave, ordinal in waves:
+        door = next((when for when in doors if wave <= when < wave + INDUCE_MADNESS_CAST_MS), None)
+        window = stun_window(wave, door, phase3) if door is not None else None
+        if not window:
+            print(f"  wave {ordinal:<2} {clock(wave)}  no door opened before Induce Madness")
+            continue
+        start, end = window
+        stuns.append((ordinal, start, end))
+
+        at_door, parts = stock(start)
+        left, _ = stock(end - 1)
+        took = removed(start, end)
+        clear = next((snap["t"] for snap in snaps if start <= snap["t"] < end
+                      and not any(row[0] in tentacles and row[5] > 0 for row in snap.get("u", []))), None)
+
+        surfaced = []
+        for guid, heights in team_heights.items():
+            rows = [(when, z) for when, z in heights if wave <= when < wave + 80000]
+            below = next((when for when, z in rows if z < BRAIN_LEVEL_Z), None)
+            up = next((when for when, z in rows if below is not None and when > below and z >= BRAIN_LEVEL_Z), None)
+            if up is not None:
+                surfaced.append(up - wave)
+
+        seconds = (end - start) / 1000.0
+        cut = " (phase 3)" if phase3 is not None and end == phase3 else ""
+        print(f"  wave {ordinal:<2} {clock(wave)}  stun +{(start - wave) / 1000:.1f} -> +{(end - wave) / 1000:.1f}{cut}"
+              f"  stock {at_door / 1e6:.2f}M -> {left / 1e6:.2f}M, took {took / 1e6:.2f}M"
+              f" ({took / seconds / 1000:.1f}k/s)"
+              f"  clear {'+%.1f' % ((clear - wave) / 1000) if clear else 'never'}"
+              f"  team up {'+%.1f' % (statistics.median(surfaced) / 1000) if surfaced else '-'}")
+        if parts:
+            print(f"      at the door: {', '.join(parts)}")
+
+    stunned = [(start, end) for _, start, end in stuns]
+    live, cursor = [], phase2[0]
+    for start, end in stunned:
+        live.append((cursor, start))
+        cursor = end
+    live.append((cursor, phase3 or phase2[1]))
+    for label, windows in (("live", live), ("stunned", stunned)):
+        seconds = sum(end - start for start, end in windows) / 1000.0
+        took = sum(removed(start, end) for start, end in windows)
+        if seconds > 0:
+            print(f"  {label:8}: {took / 1e6:.2f}M over {seconds:.0f} s = {took / seconds / 1000:.1f}k/s")
+
+    if phase3 is not None:
+        left, _ = stock(phase3)
+        standing = [guid for guid in samples if alive(guid, phase3) is not None]
+        print(f"  at phase 3 {clock(phase3)}: {len(standing)} alive, {left / 1e6:.2f}M")
+        for guid in sorted(standing, key=lambda g: samples[g][0][0]):
+            print(f"      {TENTACLE_NAMES[tentacles[guid]]:11} spawned {clock(samples[guid][0][0])}"
+                  f"  {alive(guid, phase3):.1f}%")
+
+    # Who used a stun: bot melee and pets holding a Crusher inside one, and any Crush that followed it.
+    crushers = {guid for guid, entry in tentacles.items() if entry == NPC_CRUSHER_TENTACLE}
+    on_it = collections.Counter()
+    for snap in snaps:
+        if not any(start <= snap["t"] < end for start, end in stunned):
+            continue
+        for row in snap.get("u", []):
+            if row[7] not in crushers or row[5] <= 0:
+                continue
+            if row[0] in trace.owners:
+                on_it["pet"] += 1
+            elif trace.role(row[0]) == "melee" and row[0] not in trace.humans:
+                on_it["bot melee"] += 1
+    # Each Crush writes two cast rows in the same millisecond, and only one of them names the victim.
+    after = collections.Counter()
+    for cast in trace.of("cast"):
+        victim = cast.get("tgt")
+        if cast.get("sp") not in SPELL_CRUSH_CONES or not victim or not any(
+                end <= cast["t"] < end + STUN_CRUSH_WATCH_MS for _, end in stunned):
+            continue
+        after["pet" if victim in trace.owners else trace.role(victim)] += 1
+    print(f"  on a stunned Crusher: {dict(on_it) or 'nobody'} (samples)")
+    print(f"  Crush within {STUN_CRUSH_WATCH_MS // 1000} s of a stun lifting: {sum(after.values())}"
+          f"{' ' + str(dict(after)) if after else ''}")
+    engaged = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.stunned"))
+    leaving = sum(1 for rec in notes(trace, "yogg.crush")
+                  if rec.get("txt") == "reach" and trace.role(rec.get("g", 0)) == "melee")
+    if engaged:
+        print(f"  yogg.stunned: {dict(engaged)}, melee yogg.crush=reach rows: {leaving}")
+
+
 def show_handovers(trace: Trace) -> None:
     """Two nodes trading a bot. A successful move handed to a different node inside two seconds is one
     of them undoing the other, and it is what a raid strategy with no movement guard looks like."""
@@ -1841,6 +2007,7 @@ SECTIONS = (
     ("threat", "who the Guardians were on, and taunts", show_threat),
     ("portals", "portal waves and assignments", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
+    ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
     ("brain", "brain room, the Brain, skulls", show_brain),
     ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
     ("crush", "Crush, knockback and Death Rays", show_crush),

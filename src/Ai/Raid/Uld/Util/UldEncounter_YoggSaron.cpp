@@ -1475,8 +1475,13 @@ struct PetTargetInRangeCheck
 // both plus 4/3, floored at NOMINAL_MELEE_RANGE - so with nothing in reach there is no swing and no
 // cone. Pets count: every Crush in one pull was procced by a Felguard at 5.5 yd while the nearest
 // player stood 12 yd out.
-bool YoggSaronCrusherCanSwing(Creature* crusher)
+bool YoggSaronCrusherCanSwing(PlayerbotAI* botAI, Creature* crusher)
 {
+    // Stunned can't swing. It comes back inside the stun's exit lead, so the wedge is up before the stun
+    // lifts.
+    if (YoggSaronCrusherStunHolds(botAI, crusher))
+        return false;
+
     Unit* victim = crusher->GetVictim();
 
     return victim && victim->IsAlive() && crusher->IsWithinMeleeRange(victim);
@@ -1568,7 +1573,7 @@ std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRa
         if (!crusher->IsAlive() || crusher->GetVictim() == bot)
             continue;
 
-        if (!YoggSaronCrusherCanSwing(crusher))
+        if (!YoggSaronCrusherCanSwing(botAI, crusher))
             continue;
 
         wedges.push_back(crusher->GetPosition());
@@ -1605,12 +1610,39 @@ std::vector<Position> GetYoggSaronCrusherReaches(PlayerbotAI* botAI, float searc
     std::list<Creature*> crushers;
     bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, searchRadius);
 
+    bool const melee = PlayerbotAI::IsMelee(bot);
+
     std::vector<Position> reaches;
     for (Creature* crusher : crushers)
-        if (crusher->IsAlive())
-            reaches.push_back(crusher->GetPosition());
+    {
+        if (!crusher->IsAlive())
+            continue;
+
+        // Melee are only ever let onto a stunned one, and a Constrictor next to a live one would have
+        // this circle and reach melee trade the bot every tick.
+        if (melee &&
+            (!crusher->HasAura(SPELL_SHATTERED_ILLUSION) || YoggSaronCrusherStunHolds(botAI, crusher)))
+            continue;
+
+        reaches.push_back(crusher->GetPosition());
+    }
 
     return reaches;
+}
+
+bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher)
+{
+    if (!crusher || !crusher->IsAlive() || !crusher->HasAura(SPELL_SHATTERED_ILLUSION))
+        return false;
+
+    // The stun comes off in the same tick Induce Madness lands, or when phase 3 starts.
+    Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
+    if (!brain || !brain->IsAlive() || brain->GetHealthPct() <= ULDUAR_YOGG_SARON_STUN_BRAIN_FLOOR_PCT)
+        return false;
+
+    Spell* induceMadness = brain->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return induceMadness && induceMadness->m_spellInfo->Id == SPELL_INDUCE_MADNESS &&
+           induceMadness->GetCastTimeRemaining() > static_cast<int32>(ULDUAR_YOGG_SARON_STUN_EXIT_LEAD_MS);
 }
 
 bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius)
@@ -1886,8 +1918,7 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
         {
             std::vector<Position> const wedges = GetYoggSaronCrushWedges(botAI, ULDUAR_YOGG_SARON_CRUSH_RANGE);
             char const* crush = "clear";
-            if (!PlayerbotAI::IsMelee(bot) &&
-                YoggSaronInCrusherReach(botAI, ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS))
+            if (YoggSaronInCrusherReach(botAI, ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS))
                 crush = "reach";
             else if (InYoggSaronCrushWedge(wedges, bot->GetPositionX(), bot->GetPositionY(),
                                            ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC))
@@ -1896,6 +1927,15 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
                 crush = "range";
 
             RaidObs::NoteDerived(bot, "yogg.crush", crush);
+
+            if (phase == 2 && PlayerbotAI::IsMelee(bot))
+            {
+                Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+                bool const engaged = target && target->GetEntry() == NPC_CRUSHER_TENTACLE &&
+                                     YoggSaronCrusherStunHolds(botAI, target);
+                RaidObs::NoteDerived(bot, "yogg.stunned", engaged ? "engage" : "clear");
+            }
+
             RaidObs::NoteDerived(
                 bot, "yogg.deathray",
                 bot->FindNearestCreature(NPC_DEATH_RAY, ULDUAR_YOGG_SARON_DEATH_RAY_TRIGGER_RADIUS, true) ? "inside"

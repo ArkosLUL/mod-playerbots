@@ -306,17 +306,13 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
     // The retry needs something to sweep against, and the body is the one circle that is always there.
     set.fallback.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS);
 
-    // Ranged and healers only, and kept by the retry: it killed 3 of 3 times. Melee are already off the
-    // Crusher, and a Constrictor spawned next to one would have this and reach melee trade them every
-    // tick.
-    if (!PlayerbotAI::IsMelee(bot))
+    // Kept by the retry: it killed 3 of 3 times. Melee only get a stunned Crusher whose stun is about to
+    // lift, see GetYoggSaronCrusherReaches.
+    for (Position const& reach :
+         GetYoggSaronCrusherReaches(botAI, SearchRadius() + ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS))
     {
-        for (Position const& reach :
-             GetYoggSaronCrusherReaches(botAI, SearchRadius() + ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS))
-        {
-            set.hazards.emplace_back(reach, ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS);
-            set.fallback.emplace_back(reach, ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS);
-        }
+        set.hazards.emplace_back(reach, ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS);
+        set.fallback.emplace_back(reach, ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS);
     }
 
     // Resolved once here rather than inside the sweep, which asks its filter hundreds of times.
@@ -410,10 +406,6 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
     if (owned.empty())
         return false;
 
-    std::list<Creature*> crushers;
-    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE,
-                                        ULDUAR_YOGG_SARON_CRUSH_RANGE + ULDUAR_YOGG_SARON_SPACING_SEARCH_RADIUS);
-
     Unit* target = AI_VALUE(Unit*, "current target");
     if (target && (!target->IsAlive() || target->GetEntry() == NPC_CRUSHER_TENTACLE))
         target = nullptr;
@@ -421,13 +413,19 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
     bool pulled = false;
     for (Creature* pet : owned)
     {
+        // Around the pet: a ranged owner can stand well outside any Crusher its pet is sitting on.
+        std::list<Creature*> crushers;
+        pet->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE);
+
         Creature* touching = nullptr;
         for (Creature* crusher : crushers)
         {
             // Either half is enough. Being the victim is what makes the tentacle swing, and standing
             // in reach is what lets it: SetInCombatWithZone gives it a threat list holding the whole
-            // raid, so a pet that never attacked can still come up as the victim.
-            if (crusher->IsAlive() && (crusher->GetVictim() == pet || crusher->IsWithinMeleeRange(pet)))
+            // raid, so a pet that never attacked can still come up as the victim. A stunned one can't
+            // swing, so the pet stays on it until the stun is about to lift.
+            if (crusher->IsAlive() && (crusher->GetVictim() == pet || crusher->IsWithinMeleeRange(pet)) &&
+                !YoggSaronCrusherStunHolds(botAI, crusher))
             {
                 touching = crusher;
                 break;
@@ -441,9 +439,9 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
         }
 
         // Somewhere else to be. An idle pet is what PetAI reads as "pick your own", and its first two
-        // picks are whoever is hitting the pet and whoever the owner is hitting - both this Crusher,
-        // since the owner's target is a Crusher in every tick this node fires in. A pet that has a
-        // living victim is never re-selected, so one good command is the whole fix.
+        // picks are whoever is hitting the pet and whoever the owner is hitting, usually this Crusher
+        // too. A pet that has a living victim is never re-selected, so one good command is the whole
+        // fix.
         Unit* elsewhere = target ? target : YoggSaronPetFallbackTarget(botAI, pet);
 
         pet->AttackStop();
@@ -565,9 +563,10 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
             break;
         // Crush skips its own cone test inside 2 yd and re-aims onto whoever the tentacle is swinging
         // at, so a melee bot that was clear becomes collinear without moving. No angle answers that,
-        // only not being there. Healers stay eligible: they are at range.
+        // only not being there. Healers stay eligible: they are at range. The exception is Shattered
+        // Illusion: stunned, it neither swings nor channels, until shortly before the stun lifts.
         case NPC_CRUSHER_TENTACLE:
-            allowed = !PlayerbotAI::IsMelee(bot);
+            allowed = !PlayerbotAI::IsMelee(bot) || YoggSaronCrusherStunHolds(botAI, candidate);
             break;
         case NPC_CONSTRICTOR_TENTACLE:
         case NPC_CORRUPTOR_TENTACLE:
@@ -699,9 +698,17 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         }
     }
 
+    if (target)
+        return target;
+
     // The illusion rooms hold adds the module does not enumerate, so a hard stop here would park a bot
-    // with nothing to do rather than let it shoot what is in front of it.
-    return target ? target : AI_VALUE(Unit*, "dps target");
+    // with nothing to do rather than let it shoot what is in front of it. The fallback knows nothing
+    // about Crush though: it put melee on a lone live Crusher for ~150 bot-seconds in one pull.
+    Unit* fallback = AI_VALUE(Unit*, "dps target");
+    if (fallback && fallback->GetEntry() == NPC_CRUSHER_TENTACLE && !IsAllowedTarget(fallback, brain))
+        return nullptr;
+
+    return fallback;
 }
 
 Unit* YoggSaronSetDpsPriorityAction::SpreadTarget(std::vector<Unit*> const& candidates, Unit* currentTarget,
@@ -837,7 +844,15 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
 
     Unit* target = phaseOne ? YoggSaronPhase1Focus(botAI) : ResolveTarget(currentTarget);
     if (!target)
+    {
+        // Melee still on a Crusher whose stun is about to lift. Holding it would have reach melee walk
+        // the bot back into the reach the spacing node is walking it out of.
+        if (currentTarget && currentTarget->GetEntry() == NPC_CRUSHER_TENTACLE && PlayerbotAI::IsMelee(bot) &&
+            !YoggSaronCrusherStunHolds(botAI, currentTarget))
+            DropTarget(currentTarget, false);
+
         return false;
+    }
 
     bool needsAttack = currentTarget != target;
     if (PlayerbotAI::IsMelee(bot))
