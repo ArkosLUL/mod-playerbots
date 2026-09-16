@@ -930,6 +930,40 @@ std::vector<char const*> YoggSaronInterruptSpells(Player* bot)
 
 bool YoggSaronCanInterrupt(Player* bot) { return !YoggSaronInterruptSpells(bot).empty(); }
 
+std::vector<Unit*> GetYoggSaronChannellingCrushers(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    // Grid radius counts both object sizes, so 25 already covers Judgement's ~19.5 yd. CanCastSpell
+    // makes the real range call.
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE);
+
+    std::vector<Unit*> channelling;
+    for (Creature* crusher : crushers)
+    {
+        if (!crusher->IsAlive())
+            continue;
+
+        Spell const* channel = crusher->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
+        if (channel && channel->GetSpellInfo()->Id == SPELL_DIMINISH_POWER &&
+            channel->getState() == SPELL_STATE_CASTING)
+        {
+            channelling.push_back(crusher);
+        }
+    }
+
+    return channelling;
+}
+
+std::vector<char const*> YoggSaronJudgementSpells(Player* bot)
+{
+    if (bot->getClass() != CLASS_PALADIN)
+        return {};
+
+    return {"judgement of wisdom", "judgement of light", "judgement of justice"};
+}
+
 std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
 {
     Player* bot = botAI->GetBot();
@@ -1318,6 +1352,34 @@ bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y
     return false;
 }
 
+std::vector<Position> GetYoggSaronCrusherReaches(PlayerbotAI* botAI, float searchRadius)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> crushers;
+    bot->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, searchRadius);
+
+    std::vector<Position> reaches;
+    for (Creature* crusher : crushers)
+        if (crusher->IsAlive())
+            reaches.push_back(crusher->GetPosition());
+
+    return reaches;
+}
+
+bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius)
+{
+    Player* bot = botAI->GetBot();
+
+    // The grid radius adds both object sizes, 8 yd of it the tentacle's, so this list overshoots.
+    // Centre distance is the real test.
+    for (Position const& reach : GetYoggSaronCrusherReaches(botAI, radius))
+        if (reach.GetExactDist2d(bot) <= radius)
+            return true;
+
+    return false;
+}
+
 namespace
 {
 struct YoggSaronBrainLinkPair
@@ -1578,8 +1640,11 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
         {
             std::vector<Position> const wedges = GetYoggSaronCrushWedges(botAI, ULDUAR_YOGG_SARON_CRUSH_RANGE);
             char const* crush = "clear";
-            if (InYoggSaronCrushWedge(wedges, bot->GetPositionX(), bot->GetPositionY(),
-                                      ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC))
+            if (!PlayerbotAI::IsMelee(bot) &&
+                YoggSaronInCrusherReach(botAI, ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS))
+                crush = "reach";
+            else if (InYoggSaronCrushWedge(wedges, bot->GetPositionX(), bot->GetPositionY(),
+                                           ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC))
                 crush = "wedge";
             else if (!wedges.empty())
                 crush = "range";

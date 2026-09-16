@@ -141,6 +141,7 @@ public:
         creators["yogg-saron illusion facing action"] = &RaidUlduarActionContext::yogg_saron_illusion_facing_action;
         creators["yogg-saron pet guard action"] = &RaidUlduarActionContext::yogg_saron_pet_guard_action;
         creators["yogg-saron body detour action"] = &RaidUlduarActionContext::yogg_saron_body_detour_action;
+        creators["yogg-saron diminish power judgement action"] = &RaidUlduarActionContext::yogg_saron_diminish_power_judgement_action;
         creators["algalon reset encounter state action"] = &RaidUlduarActionContext::algalon_reset_encounter_state_action;
         creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
         creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
@@ -326,6 +327,7 @@ private:
     static Action* yogg_saron_illusion_facing_action(PlayerbotAI* ai) { return new YoggSaronIllusionFacingAction(ai); }
     static Action* yogg_saron_pet_guard_action(PlayerbotAI* ai) { return new YoggSaronPetGuardAction(ai); }
     static Action* yogg_saron_body_detour_action(PlayerbotAI* ai) { return new YoggSaronBodyDetourAction(ai); }
+    static Action* yogg_saron_diminish_power_judgement_action(PlayerbotAI* ai) { return new YoggSaronDiminishPowerJudgementAction(ai); }
     static Action* algalon_reset_encounter_state_action(PlayerbotAI* ai) { return new AlgalonResetEncounterStateAction(ai); }
     static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
     static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }

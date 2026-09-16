@@ -87,6 +87,7 @@ enum UlduarYoggSaronIds
     SPELL_WEAKENED = 64162,  // Immortal Guardian's killable window; Thorim's Titanic Storm executes it
     SPELL_KNOCK_BACK_TRIGGERED = 64020,  // what 64022 fires every second off Yogg's body, 14 yd
     SPELL_CRUSH_CONE = 64147,  // the cone 64146 procs down the Crusher Tentacle's facing
+    SPELL_DIMINISH_POWER = 64145,  // Crusher's 5 min channel, -21% damage done raid-wide
     SPELL_LUNATIC_GAZE_SKULL = 64168,  // 64167 on a Laughing Skull fires this every second, 30 yd
     GO_FLEE_TO_THE_SURFACE_PORTAL = 194625,
     // One per illusion, opened by the Brain the moment the last Influence Tentacle in that room dies.
@@ -233,6 +234,13 @@ constexpr float ULDUAR_YOGG_SARON_PET_TARGET_RADIUS = 40.0f;
 constexpr float ULDUAR_YOGG_SARON_CRUSH_RANGE = 25.0f;       // DBC radius 23 plus both object sizes
 constexpr float ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC = 8.0f;  // degrees either side of the facing
 constexpr float ULDUAR_YOGG_SARON_CRUSH_CLEAR_ARC = 14.0f;   // ~4 yd of lateral room at 20 yd
+
+// The Crusher's own melee range on a player, centre to centre: CombatReach 8 (display 28814) + 1.5 +
+// 4/3 = 10.83, no leeway since it never moves. Ranged and healers only. Inside it a caster's weapon
+// swing or a hunter's Raptor Strike lands, any melee hit makes that bot the tentacle's victim, and the
+// next Crush lands on it: 3 of 3 Crush kills in one pull, all ranged at 5.8-6.8 yd.
+constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS = 11.0f;
+constexpr float ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS = 13.0f;
 
 // Death Rays walk 9 yd legs every 1625 ms along a re-rolled cardinal axis, so the gap between these
 // two is about a second of travel. The Death Orb that drops them is a marker 27 yd overhead and never
@@ -552,6 +560,16 @@ std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI);
 std::vector<char const*> YoggSaronInterruptSpells(Player* bot);
 bool YoggSaronCanInterrupt(Player* bot);
 
+// Crushers mid Diminish Power channel, not in its 1.5 s cast. 64148 on the tentacle breaks the channel
+// on a taken melee swing or melee-class spell, and only once it is channelling, so a Judgement during
+// the cast burns a 10 s cooldown for nothing.
+std::vector<Unit*> GetYoggSaronChannellingCrushers(PlayerbotAI* botAI);
+
+// Judgements in the order the node tries them, empty for anything but a paladin. All three share one
+// cooldown, and every Judgement damage spell is melee class, so any of them breaks the channel. Range
+// is 10 yd plus both combat reaches, ~19.5 yd from the tentacle's centre, well outside its swing.
+std::vector<char const*> YoggSaronJudgementSpells(Player* bot);
+
 // Guardians whose death nova this bot should leave. Ranged and healers count only one that is both
 // about to die and chasing them: at spell range nothing else can reach them. Melee stand in a nova by
 // design and count one only while Sara's Fervor is doubling it. Shared so the trigger and the action
@@ -642,8 +660,8 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius);
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
 
 // Live Crusher Tentacles to angle away from, each as its position plus the facing its Crush cone
-// follows. The one currently hitting the bot is left out: that bot is hit wherever it stands, and
-// moving only drags the cone around behind it.
+// follows. The one currently hitting the bot is left out: inside its reach that bot is hit wherever it
+// stands, and the way out is leaving the reach, which GetYoggSaronCrusherReaches covers.
 //
 // A Crusher with nothing inside its melee range is left out too. Crush is a 100% proc on the
 // tentacle's own white swing and UpdateAI will not swing at a victim out of melee range, so an
@@ -655,6 +673,11 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
 // re-facing a yard from restarting the dance.
 std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius);
 bool InYoggSaronCrushWedge(std::vector<Position> const& wedges, float x, float y, float arcDegrees);
+
+// Every live Crusher, with no victim exemption and no swing gate: an idle one still takes a bot that
+// walks in and hits it, and for its victim, walking out is what stops the swings.
+std::vector<Position> GetYoggSaronCrusherReaches(PlayerbotAI* botAI, float searchRadius);
+bool YoggSaronInCrusherReach(PlayerbotAI* botAI, float radius);
 
 // Whether a forced walk is still closing on where it was sent. MoveTo's `ok` says a command was
 // issued, never that a route exists: the core falls back to a straight-line spline, which once carried

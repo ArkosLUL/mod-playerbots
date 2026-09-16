@@ -263,6 +263,11 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
                                            ULDUAR_YOGG_SARON_CRUSH_TRIGGER_ARC);
     }
 
+    // No victim exemption here, unlike the wedge. The victim inside the reach is exactly who dies, and
+    // stepping out is what stops the swings.
+    if (!hazardNear && !PlayerbotAI::IsMelee(bot))
+        hazardNear = YoggSaronInCrusherReach(botAI, ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS);
+
     // The body's ring has to be read here as well as in the action: a circle the action clears but the
     // trigger does not leaves a band where the bot stands in a hazard and the node is never asked.
     if (!hazardNear)
@@ -295,6 +300,23 @@ bool YoggSaronDarkVolleyTrigger::IsActive()
     for (Unit* caster : GetYoggSaronDarkVolleyCasters(botAI))
         for (char const* spell : spells)
             if (botAI->CanCastSpell(spell, caster))
+                return true;
+
+    return false;
+}
+
+bool YoggSaronDiminishPowerJudgementTrigger::IsActive()
+{
+    // Class check first, the grid read only for paladins. No phase read: Crushers only exist in
+    // phase 2, on the platform.
+    std::vector<char const*> const spells = YoggSaronJudgementSpells(bot);
+    if (spells.empty())
+        return false;
+
+    // Per bot, same as the dark volley trigger: a paladin out of range must not claim the tick.
+    for (Unit* crusher : GetYoggSaronChannellingCrushers(botAI))
+        for (char const* spell : spells)
+            if (botAI->CanCastSpell(spell, crusher))
                 return true;
 
     return false;

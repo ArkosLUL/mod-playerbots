@@ -70,6 +70,15 @@ public:
     bool IsActive() override;
 };
 
+// A paladin with Judgement ready and a Crusher in reach that is mid Diminish Power channel.
+class YoggSaronDiminishPowerJudgementTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronDiminishPowerJudgementTrigger(PlayerbotAI* ai)
+        : YoggSaronTrigger(ai, "yogg-saron diminish power judgement trigger") {}
+    bool IsActive() override;
+};
+
 // Melee and tanks are leashed to Sara rather than stationed on her: a Guardian walks to whoever holds
 // threat, so where melee stand is where it dies, and only a death inside 15 yd of Sara advances the
 // phase at all.

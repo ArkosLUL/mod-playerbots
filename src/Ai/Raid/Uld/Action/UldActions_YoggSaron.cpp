@@ -296,6 +296,19 @@ bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
     // The retry needs something to sweep against, and the body is the one circle that is always there.
     set.fallback.emplace_back(ULDUAR_YOGG_SARON_MIDDLE, ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS);
 
+    // Ranged and healers only, and kept by the retry: it killed 3 of 3 times. Melee are already off the
+    // Crusher, and a Constrictor spawned next to one would have this and reach melee trade them every
+    // tick.
+    if (!PlayerbotAI::IsMelee(bot))
+    {
+        for (Position const& reach :
+             GetYoggSaronCrusherReaches(botAI, SearchRadius() + ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS))
+        {
+            set.hazards.emplace_back(reach, ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS);
+            set.fallback.emplace_back(reach, ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS);
+        }
+    }
+
     // Resolved once here rather than inside the sweep, which asks its filter hundreds of times.
     Unit* target = AI_VALUE(Unit*, "current target");
     if (target && target->IsAlive())
@@ -727,6 +740,29 @@ bool YoggSaronDarkVolleyInterruptAction::Execute(Event /*event*/)
     for (size_t i = 0; i < casters.size(); ++i)
         if (CastClassInterrupt(casters[(start + i) % casters.size()]))
             return true;
+
+    return false;
+}
+
+bool YoggSaronDiminishPowerJudgementAction::Execute(Event /*event*/)
+{
+    std::vector<char const*> const spells = YoggSaronJudgementSpells(bot);
+
+    // No walk and no target swap, only what is already in reach. No stagger either: the Judgement lands
+    // inside Spell::cast, so the next paladin's read finds the channel already gone.
+    for (Unit* crusher : GetYoggSaronChannellingCrushers(botAI))
+    {
+        for (char const* spell : spells)
+        {
+            if (!botAI->CanCastSpell(spell, crusher) || !botAI->CastSpell(spell, crusher))
+                continue;
+
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.judgement", "cast");
+
+            return true;
+        }
+    }
 
     return false;
 }

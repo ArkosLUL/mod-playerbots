@@ -216,6 +216,16 @@ private:
     int32 GetInterrupterIndex();
 };
 
+// A paladin's Judgement breaks a Crusher's Diminish Power channel from outside its swing. Each break
+// buys 1.5-3 s without the raid-wide -21%, once per 10 s cooldown.
+class YoggSaronDiminishPowerJudgementAction : public Action
+{
+public:
+    YoggSaronDiminishPowerJudgementAction(PlayerbotAI* ai) : Action(ai, "yogg-saron diminish power judgement action") {}
+
+    bool Execute(Event event) override;
+};
+
 // The TankAssist strategy swap one designated bot tank does for the raid at the start of phase 3.
 // TankFace goes with it: it would turn the tank back into Lunatic Gaze, which the face-away answers.
 class YoggSaronPhase3ControlAction : public Action

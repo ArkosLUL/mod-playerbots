@@ -612,6 +612,13 @@ class YoggPhases(unittest.TestCase):
                          [((44556, 6.2), (44573, 2.3)), ((68300, 16.1), (70800, 17.9))])
         self.assertEqual(yogg_saron.back_to_back([(0, 1.0)]), [])
 
+    def test_merge_spans_folds_one_channel_seen_on_many_raiders(self):
+        # One Diminish Power channel lands on every raider a few ms apart, so the per-raider windows
+        # overlap. A break and re-cast is a real gap and stays two spans.
+        spans = [(1200, 5000), (1000, 5000), (1100, 4990), (6500, 9000), (9000, 9500)]
+        self.assertEqual(yogg_saron.merge_spans(spans), [(1000, 5000), (6500, 9500)])
+        self.assertEqual(yogg_saron.merge_spans([]), [])
+
 
 class DuplicateDeaths(unittest.TestCase):
     """Yogg's Insane kills its owner when it comes off, and dying takes it off."""

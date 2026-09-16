@@ -35,6 +35,7 @@ that means the probe is not reaching the recorder, not that the mechanic never f
 """
 from __future__ import annotations
 
+import bisect
 import collections
 import math
 import pathlib
@@ -128,10 +129,25 @@ BACK_TO_BACK_MS = 3000
 REDIRECT_SPELLS = {34477: "Misdirection", 57934: "Tricks of the Trade"}
 TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 2649: "Growl"}
 
-# GetCombatReach of both ends plus 4/3, floored at NOMINAL_MELEE_RANGE and widened again by movement
-# leeway, so the real threshold moves. Kept generous because the question this answers is "what was in
-# there at all": every Crush in one pull had a pet at 5.5 yd and no player nearer than 12.
-CRUSHER_MELEE_RANGE = 10.0
+# The tentacle's own melee range on a player, centre to centre: CombatReach 8 on display 28814, plus
+# 1.5, plus 4/3, which is 10.83. No leeway, since it never moves. Same number as the module's
+# ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS, so the reader and the trigger agree on who is inside.
+CRUSHER_MELEE_RANGE = 11.0
+
+# 64145 is a channel, so it only exists while the tentacle keeps channelling, and the tentacle only
+# re-casts it once its victim is out of melee range. Counting cast starts misses every break that was
+# followed by a swing. The aura on the raid is the real measure.
+SPELL_DIMINISH_POWER = 64145
+CLASS_PALADIN = 2
+JUDGEMENT_SPELLS = {20271: "Judgement of Light", 53407: "Judgement of Justice", 53408: "Judgement of Wisdom"}
+
+# What a ranged bot hits a Crusher with once it is standing inside the tentacle's melee range: a
+# caster's weapon swing shows up only as its imbue proc, and a hunter inside Auto Shot's dead zone falls
+# back to its melee abilities. The trace has no DmgClass, so these are matched by name.
+MELEE_CLASS_NAMES = {"Flametongue Attack", "Windfury Attack", "Raptor Strike", "Mongoose Bite", "Wing Clip"}
+
+# How soon after a Judgement the channel has to come off to count as that Judgement breaking it.
+JUDGEMENT_BREAK_MS = 300
 
 # 64167 on a Laughing Skull triggers 64168 at 30 yd, and the module's node uses the same number.
 LAUGHING_SKULL_RADIUS = 30.0
@@ -881,8 +897,192 @@ def show_crush(trace: Trace) -> None:
     if detour:
         print(f"  body detour      : {dict(detour)}")
 
+    judged = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.judgement"))
+    if judged:
+        print(f"  judgement node   : {dict(judged)}")
+
     show_launches(trace)
     show_crush_melee(trace)
+    show_crush_hits(trace)
+    show_crusher_reach(trace)
+    show_diminish_power(trace)
+
+
+def merge_spans(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Overlapping or touching (start, end) spans folded into one, in order."""
+    merged: list[list[int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [(start, end) for start, end in merged]
+
+
+def snapshot_rows(trace: Trace, guids: set) -> dict[int, list[list]]:
+    """Every snapshot row for these guids, as [t, *row], in time order. `at` only gives a position,
+    and a Crusher's victim lives in the row's target column."""
+    rows: dict[int, list[list]] = collections.defaultdict(list)
+    for snap in trace.of("snap"):
+        for row in snap.get("u", []):
+            if row[0] in guids:
+                rows[row[0]].append([snap["t"], *row])
+    return rows
+
+
+def row_before(rows: list[list], when: int) -> list | None:
+    stamps = [row[0] for row in rows]
+    index = bisect.bisect_right(stamps, when)
+    return rows[index - 1] if index else None
+
+
+def crusher_alive_spans(trace: Trace, crushers: set) -> dict[int, tuple[int, int]]:
+    """First and last snapshot each Crusher was sampled alive."""
+    spans: dict[int, list[int]] = {}
+    for guid, rows in snapshot_rows(trace, crushers).items():
+        alive = [row[0] for row in rows if row[6] > 0]
+        if alive:
+            spans[guid] = [alive[0], alive[-1]]
+    return {guid: (start, end) for guid, (start, end) in spans.items()}
+
+
+def show_crush_hits(trace: Trace) -> None:
+    """Every Crush split by who the tentacle was swinging at. A hit on its own victim is a bot inside
+    its melee range that hit it, and for anyone but the tank walking out is what would have stopped
+    it. A hit on anyone else is the cone, and the angle is the answer there."""
+    crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
+    hits = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_CRUSH_CONE and rec.get("s") in crushers]
+    if not hits:
+        return
+
+    roster = roster_guids(trace)
+    rows = snapshot_rows(trace, crushers | roster)
+    walks = [rec for rec in trace.of("move") if rec.get("g") in roster]
+    melee_hits = [rec for rec in trace.of("cast")
+                  if rec.get("tgt") in crushers and trace.spells.get(rec.get("sp"), "") in MELEE_CLASS_NAMES]
+
+    split = collections.Counter()
+    kills = []
+    for hit in hits:
+        crusher = row_before(rows.get(hit["s"], []), hit["t"])
+        victim = row_before(rows.get(hit.get("d"), []), hit["t"])
+        on_victim = bool(crusher) and len(crusher) > 8 and crusher[8] == hit.get("d")
+        role = trace.role(hit.get("d"))
+        split[("victim" if on_victim else "cone", "tank" if role == "tank" else "other")] += 1
+        if hit.get("ok", 0) <= 0 or not crusher or not victim:
+            continue
+
+        spot = (crusher[2], crusher[3])
+        gap = math.dist(spot, (victim[2], victim[3]))
+        walked = None
+        for rec in walks:
+            if rec.get("g") == hit["d"] and rec["t"] <= hit["t"] and \
+                    math.dist((rec.get("x", 0), rec.get("y", 0)), spot) <= CRUSHER_MELEE_RANGE:
+                walked = rec
+        swung = [trace.spells.get(rec["sp"], "") for rec in melee_hits
+                 if rec.get("s") == hit["d"] and rec["tgt"] == hit["s"] and hit["t"] - 3000 <= rec["t"] <= hit["t"]]
+        kills.append((hit["t"], hit["d"], role, gap, on_victim, walked, swung))
+
+    parts = ", ".join(f"{kind} ({who}) {count}" for (kind, who), count in sorted(split.items()))
+    print(f"  Crush hits by who the tentacle was swinging at: {parts}")
+    for when, guid, role, gap, on_victim, walked, swung in kills:
+        how = f"walked in by {walked.get('by', '?')}" if walked else "nothing walked it in"
+        hit_first = f", hit it first with {', '.join(sorted(set(swung)))}" if swung else ""
+        kind = "its victim" if on_victim else "cone"
+        print(f"    killed {clock(when):>10} {trace.name(guid):14} {role:6} {gap:4.1f} yd, {kind}, {how}{hit_first}")
+
+
+def show_crusher_reach(trace: Trace) -> None:
+    """Ranged and healers inside a Crusher's melee range. Nothing but a melee hit makes a bot its
+    victim, and from there every swing is a Crush on it, so standing in there is the whole risk."""
+    crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
+    if not crushers:
+        return
+
+    backline = {guid for guid, role in trace.roles.items() if role in ("ranged", "heal")}
+    inside: collections.Counter = collections.Counter()
+    for snap in trace.of("snap"):
+        units = {row[0]: row for row in snap.get("u", [])}
+        live = [(row[1], row[2]) for guid, row in units.items() if guid in crushers and row[5] > 0]
+        if not live:
+            continue
+        for guid in backline & units.keys():
+            row = units[guid]
+            if row[5] > 0 and min(math.dist((row[1], row[2]), spot) for spot in live) <= CRUSHER_MELEE_RANGE:
+                inside[guid] += 1
+
+    print(f"  ranged/heal samples inside {CRUSHER_MELEE_RANGE:.0f} yd of a live Crusher: {sum(inside.values())}")
+    if inside:
+        print("    " + ", ".join(f"{trace.name(guid)} {count}" for guid, count in inside.most_common(6)))
+
+    rows = snapshot_rows(trace, crushers)
+    walks_in: collections.Counter = collections.Counter()
+    for rec in trace.of("move"):
+        if rec.get("g") not in backline:
+            continue
+        spots = [(row[2], row[3]) for row in (row_before(rows[guid], rec["t"]) for guid in rows)
+                 if row and row[6] > 0 and rec["t"] - row[0] < 1000]
+        if spots and min(math.dist((rec.get("x", 0), rec.get("y", 0)), spot) for spot in spots) <= CRUSHER_MELEE_RANGE:
+            walks_in[rec.get("by", "?")] += 1
+    if walks_in:
+        print(f"  ranged/heal walks aimed inside it: {dict(walks_in.most_common(6))}")
+
+    swings = collections.Counter(
+        (trace.name(rec["s"]), trace.spells.get(rec["sp"], "")) for rec in trace.of("cast")
+        if rec.get("tgt") in crushers and rec.get("s") in backline and trace.spells.get(rec.get("sp"), "") in MELEE_CLASS_NAMES)
+    if swings:
+        print(f"  melee-class hits by ranged/heal on a Crusher: {sum(swings.values())}  "
+              + ", ".join(f"{who} {spell} {count}" for (who, spell), count in swings.most_common(6)))
+
+
+def show_diminish_power(trace: Trace) -> None:
+    """How long Diminish Power was actually up, read off the aura on the raid, and whether a paladin's
+    Judgement ever broke it. 64148 on the tentacle breaks the channel on any taken melee-class hit, and
+    every Judgement's damage is melee class, from about 19.5 yd out."""
+    crushers = guids_of_entry(trace, NPC_CRUSHER_TENTACLE)
+    alive = crusher_alive_spans(trace, crushers)
+    if not alive:
+        return
+
+    end = trace.records[-1].get("t", 0) if trace.records else 0
+    open_at: dict[tuple[int, int], int] = {}
+    per_crusher: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in sorted((r for r in trace.of("aura") if r.get("sp") == SPELL_DIMINISH_POWER), key=lambda r: r["t"]):
+        key = (rec.get("s", 0), rec.get("d", 0))
+        if not rec.get("r"):
+            open_at.setdefault(key, rec["t"])
+        elif key in open_at:
+            per_crusher[key[0]].append((open_at.pop(key), rec["t"]))
+    for (source, _), start in open_at.items():
+        per_crusher[source].append((start, end))
+    channels = {guid: merge_spans(spans) for guid, spans in per_crusher.items()}
+
+    up = sum(stop - start for spans in channels.values() for start, stop in merge_spans(spans))
+    up_any = sum(stop - start for start, stop in merge_spans([s for spans in channels.values() for s in spans]))
+    lived = sum(stop - start for start, stop in alive.values())
+    breaks = sum(max(0, len(spans) - 1) for spans in channels.values())
+    share = up * 100.0 / lived if lived else 0.0
+    print(f"  Diminish Power channel: up {up / 1000:.0f} s of {lived / 1000:.0f} s Crusher-alive ({share:.0f}%),"
+          f" on the raid {up_any / 1000:.0f} s, {breaks} breaks")
+
+    paladins = {row["g"] for row in trace.header.get("roster", []) if row.get("c") == CLASS_PALADIN}
+    judgements = [rec for rec in trace.of("cast")
+                  if rec.get("sp") in JUDGEMENT_SPELLS and rec.get("s") in paladins and rec.get("tgt") in crushers]
+    if not judgements:
+        print("  no paladin Judgement reached a Crusher")
+        return
+
+    mid, broke = 0, 0
+    for rec in judgements:
+        spans = channels.get(rec["tgt"], [])
+        if not any(start <= rec["t"] < stop for start, stop in spans):
+            continue
+        mid += 1
+        if any(rec["t"] <= stop <= rec["t"] + JUDGEMENT_BREAK_MS for _, stop in spans):
+            broke += 1
+    who = collections.Counter(trace.name(rec["s"]) for rec in judgements)
+    print(f"  Judgements at a Crusher: {len(judgements)} ({dict(who)}), {mid} while it was channelling,"
+          f" {broke} followed by the channel dropping within {JUDGEMENT_BREAK_MS} ms")
 
 
 def show_launches(trace: Trace) -> None:

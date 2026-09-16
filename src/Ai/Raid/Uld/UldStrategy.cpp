@@ -872,6 +872,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron body detour trigger",
         { NextAction("yogg-saron body detour action", ACTION_RAID - 1) }));
 
+    // An instant cast, so under every raid walk and dodge, and well over the paladin's own rotation,
+    // which would only ever judge its current target.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron diminish power judgement trigger",
+        { NextAction("yogg-saron diminish power judgement action", ACTION_RAID - 0.5f) }));
+
     //
     // Algalon the Observer
     //

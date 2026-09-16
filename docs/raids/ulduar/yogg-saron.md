@@ -407,8 +407,8 @@ at 20 yd clears it. One volley caught ten raiders standing in a line behind the 
 267,908 damage over 14 hits, 6.1% of the raid's total taken.
 
 So the ranged dodge is by **angle**: reject any spot within 25 yd of a live Crusher and inside its
-arc. The bot the tentacle is currently hitting is exempt — it is hit wherever it stands, and moving
-only drags the cone around behind it.
+arc. The bot the tentacle is currently hitting is exempt from the wedge, since inside the reach it
+is hit wherever it stands. Leaving the reach is what stops it, below.
 
 **At melee range no angle works, so melee do not target the Crusher at all.** Fixing the ranged dodge
 inverted the shape underneath: collateral hits moved from a median 23.5 yd to **3.6 yd**, Crush went
@@ -473,6 +473,24 @@ its melee range**, which keeps it armed for exactly the case the guard cannot cl
 uncommandable guardian that got back in — and switches it off the rest of the time. It costs the
 Diminish Power interrupts that pet melee was buying, ~1.5 s apiece.
 
+**For ranged and healers the reach itself is the hazard.** The tentacle's melee range on a player is
+`CombatReach` 8 + 1.5 + 4/3 = **10.83 yd**, no leeway since it never moves. Inside it a ranged bot
+hits it in melee: a caster's weapon swing (visible only as its imbue proc, Flametongue Attack), or a
+hunter's Raptor Strike and Mongoose Bite, since Auto Shot's dead zone is min range + melee range =
+15.8 yd. Any melee hit makes that bot the victim through `DamageTaken`, and the next swing Crushes
+it: 25-31k plus the swing, a one-shot. **3 of 3 Crush kills in one pull** were this, all at full
+health: Stormweaver at 6.8 yd twice (Reincarnation stood him up on the spot) and Trueshot at 5.8,
+each walked in by `yogg-saron phase 2 spacing action` dodging a Death Ray, which only tested the
+wedge's angle. The same pull aimed 46 ranged and healer walks inside a reach. The wedge skipping its
+victim then left the trigger quiet for exactly the bot being hit, though walking out ends it:
+`UpdateAI` swings only at a victim in melee range.
+
+So for `!IsMelee`, phase 2 spacing adds every live Crusher as a circle at
+`ULDUAR_YOGG_SARON_CRUSHER_REACH_CLEAR_RADIUS` 13 (trigger 11), in the hazards and the retry both,
+with **no victim exemption and no swing gate**. Melee are left out: they are already off 33966, and
+a Constrictor beside a Crusher would have the circle and `reach melee` trade them every tick. The
+probe reads `yogg.crush=reach`.
+
 ## Diminish Power is why the Crusher dies first
 
 `64145 Diminish Power` is a **5-minute channel** (`DurationIndex 5`), **−21% damage done raid-wide**
@@ -483,11 +501,32 @@ flag `0x10`, not the `0x08` that makes one interruptible. It ignores LOS and imm
 reaches the brain room**: the retail exemption keyed on aura `63988` is in the DBC but that aura is
 never cast in this build.
 
-Only two things stop it. A melee hit buys ~1.5 s, because `_diminishReady` is set once at 6 s and never
-reset. Or the tentacle dies — **2,000,001 HP** in 25-man, which the whole raid clears in 25-34 s even
-debuffed, against a respawn of 45-54 s tightening to 25-30 s by the sixth portal wave. Ten ranged alone
-would spend 50 s of that window debuffed. So the Crusher is the **top** target for everyone who can
-safely stand there — every ranged and healer — rather than something to keep away from.
+Only two things stop it. A **melee hit or melee-class spell** buys ~1.5 s: `64148` on the tentacle
+has `ProcTypeMask 0x28` (taken melee swing, taken melee-class spell),
+`spell_yogg_saron_diminish_power_aura` breaks the channel once it is channelling but never during
+its 1.5 s cast, and `_diminishReady` is set once at 6 s and never reset, so it re-casts straight
+away. Or the tentacle dies — **2,000,001 HP** in 25-man, which the whole raid clears in 25-34 s even
+debuffed, against a respawn of 45-54 s tightening to 25-30 s by the sixth portal wave. Ten ranged
+alone would spend 50 s of that window debuffed. So the Crusher is the **top** target for everyone
+who can safely stand there — every ranged and healer — rather than something to keep away from.
+
+**Judgement breaks it from outside the reach.** Every Judgement damage spell (54158, 20187, 20467,
+31804, 53726, 53733) is `DmgClass 2`. They are triggered casts, but they carry
+`SPELL_ATTR3_NOT_A_PROC` and the generated proc entry for a taken-flag `PROC_TRIGGER_SPELL` aura
+gets `PROC_ATTR_TRIGGERED_CAN_PROC`, so either clears `Aura::GetProcEffectMask`. The damage is
+`SPELL_DIRECT_DAMAGE`, so `DamageTaken`'s aggro grab never fires, and 10 yd through
+`IsWithinCombatRange` is ~19.5 yd centre to centre. Nothing asked for it: 10 Judgements reached a
+Crusher in one pull, all incidental, none mid-channel. `yogg-saron diminish power judgement` (59.5)
+has any paladin with a channelling Crusher already in reach judge it (wisdom, light, justice, one
+shared cooldown), with no walk and no target change. `SPELL_STATE_CASTING` is the gate. No stagger
+is needed, since the Judgement lands inside `Spell::cast` and the next paladin finds no channel.
+Probe `yogg.judgement`; not yet seen working in a pull.
+
+**Read the channel off the aura, never off cast starts.** After a break the tentacle re-casts only
+once its victim is out of melee range, and otherwise swings, so a break followed by Crushes leaves
+no cast row. One pull had 121 s of 64145 on the raid against 348 s with a Crusher alive, held down
+mostly by the tank and pets keeping it swinging. Uptime will *rise* once ranged stop hitting it in
+melee, so judge the Judgement node on channel drops within 300 ms of a Judgement instead.
 
 ## Phase 2: the body is a wall, and the portals run on a clock
 
@@ -804,14 +843,14 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-one `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-two `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
 not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `yogg.room`,
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
-`yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard` and `yogg.detour`,
+`yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour` and `yogg.judgement`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -822,6 +861,10 @@ see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with no
 place is a bot standing still and nothing else names it. **Frozen bots**, the longest a bot held a
 target and cast nothing, which is that same failure from outside. And **launches**, matched to the
 walk that aimed into the ring rather than to the last walk issued, which is usually the dodge out.
+Under `--crush`, **Crush hits** split into the tentacle's victim and the cone, each kill with the walk
+that put it inside the reach and any melee hit first; **the reach**, ranged and healer samples and
+walks inside it; and **Diminish Power**, uptime off the aura and how many Judgements landed
+mid-channel and dropped it.
 
 **Do not add a Sanity probe.** 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic
