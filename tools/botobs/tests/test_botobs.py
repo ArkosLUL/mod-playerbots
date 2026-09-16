@@ -37,7 +37,7 @@ from raidobs.coverage import bucket, coverage_metrics  # noqa: E402
 from raidobs.encounter import boss_key, canonical_boss, prefix_matches_boss, recover_boss  # noqa: E402
 from raidobs.metrics import Side, compare  # noqa: E402
 from raidobs.probes import (  # noqa: E402
-    HOLDER, LATCH, Series, declared_keys, latch_spans, latch_windows, resolve_guids,
+    HOLDER, LATCH, Series, declared_keys, holder_spans, latch_spans, latch_windows, resolve_guids,
 )
 from raidobs.stuck import idle_windows  # noqa: E402
 from raidobs.trace import Trace, combat_deaths, death_records  # noqa: E402
@@ -599,6 +599,66 @@ class Declarations(unittest.TestCase):
         self.assertNotIn("yogg.nothing", declared_keys())
 
 
+class HolderSpans(unittest.TestCase):
+    def test_each_guid_keeps_its_own_value(self):
+        # Read as one latch, the tank's "anchor" would end the moment the healer's note arrived.
+        spans = holder_spans(rich(), "fixture.role", end=9999)
+        self.assertEqual(spans, {5001: [("anchor", -1000, 9999)], 5002: [("healer", 1100, 9999)]})
+        self.assertEqual(latch_spans(rich(), "fixture.role", end=9999)[0], ("anchor", -1000, 1100))
+
+    def test_an_unknown_key_is_empty(self):
+        self.assertEqual(holder_spans(rich(), "no.such.key"), {})
+
+
+class FlameLeviathanReader(unittest.TestCase):
+    def test_reticle_phases_split_chasing_from_stopped(self):
+        track = [(0, 0.0, 0.0), (250, 3.0, 0.0), (500, 6.0, 0.0), (750, 6.1, 0.0), (1000, 6.1, 0.1),
+                 (1250, 9.0, 0.0)]
+        self.assertEqual(flame_leviathan.reticle_phases(track), [
+            (False, 0, 500, 0.0, 0.0), (True, 500, 1000, 6.0, 0.0), (False, 1000, 1250, 6.1, 0.1),
+        ])
+
+    def test_add_fates_tell_a_timeout_from_a_kill(self):
+        lasher, ward = 33387, 34275
+        entries = {1: lasher, 2: ward, 3: lasher, 4: ward, 5: lasher}
+        tracks = {
+            1: [(0, 0, 0, 100.0, 0), (10050, 0, 0, 100.0, 0)],      # gone at full after 10 s
+            2: [(0, 0, 0, 100.0, 0), (2900, 0, 0, 100.0, 0)],       # gone at full after 3 s
+            3: [(0, 0, 0, 100.0, 0), (6000, 0, 0, 12.0, 0)],        # worn down, then gone
+            4: [(0, 0, 0, 100.0, 0), (6000, 0, 0, 100.0, 0)],       # gone at full, but not on the timer
+            5: [(0, 0, 0, 100.0, 0), (19900, 0, 0, 100.0, 0)],      # still up when the pull ended
+        }
+        fates = flame_leviathan.add_fates(tracks, entries, end=20000)
+        self.assertEqual({key: sorted(value) for key, value in fates.items()},
+                         {"died": [3], "alive": [5], "timeout": [1, 2], "vanished": [4]})
+
+    def test_crate_repeats_split_by_gunner_and_by_the_despawn_delay(self):
+        casts = [
+            {"t": 0, "s": 1, "tgt": 100}, {"t": 90, "s": 2, "tgt": 100}, {"t": 1200, "s": 1, "tgt": 100},
+            {"t": 5000, "s": 1, "tgt": 200}, {"t": 9000, "s": 2, "tgt": 200},
+        ]
+        self.assertEqual(flame_leviathan.crate_duplicates(casts),
+                         {"casts": 5, "crates": 2, "same": 1, "cross": 1, "later": 1})
+
+    def test_inferno_reach_counts_both_object_sizes(self):
+        self.assertAlmostEqual(flame_leviathan.inferno_reach(9.0, flame_leviathan.SIEGE), 17.089)
+        self.assertAlmostEqual(flame_leviathan.inferno_reach(9.0, flame_leviathan.CHOPPER), 10.389)
+        self.assertAlmostEqual(flame_leviathan.inferno_reach(9.0, 0), 9.389)
+
+    def test_ward_waves_group_by_corner_and_time(self):
+        cx, cy = flame_leviathan.ARENA_CORNERS[2]
+        tracks = {
+            1: [(34000, cx + 1, cy, 100.0, 0)], 2: [(35500, cx, cy + 2, 100.0, 0)],
+            3: [(63000, cx, cy, 100.0, 0)], 4: [(34000, 0.0, 0.0, 100.0, 0)],
+        }
+        self.assertEqual(flame_leviathan.ward_waves(tracks), [(2, 34000, [1, 2]), (2, 63000, [3])])
+
+    def test_the_post_sits_the_standoff_in_from_its_corner(self):
+        for index, corner in enumerate(flame_leviathan.ARENA_CORNERS):
+            self.assertAlmostEqual(geometry.dist2(flame_leviathan.post_point(index), corner),
+                                   flame_leviathan.CORNER_STANDOFF, places=3)
+
+
 class LatchAllValues(unittest.TestCase):
     def test_latch_spans_keeps_every_value_in_order(self):
         spans = latch_spans(rich(), "fixture.phase", end=9999)
@@ -817,10 +877,10 @@ class ShortRows(unittest.TestCase):
     """Columns 8 to 11 arrived in v8, so an older row raises if one is read without checking."""
 
     def test_the_flame_leviathan_frame_survives_a_pre_v8_row(self):
-        snap = {"t": 0, "u": [[1, 1.0, 2.0, 3.0, 0.4, 100.0]]}
-        frame = flame_leviathan.Frame(snap, rich(), {1: flame_leviathan.BOSS_ENTRY},
-                                      set(), {}, {})
+        snap = {"t": 0, "u": [[1, 1.0, 2.0, 3.0, 0.4, 100.0], [2, 5.0, 6.0, 0.0, 0.1, 80.0]]}
+        frame = flame_leviathan.Frame(snap, {1: flame_leviathan.BOSS_ENTRY, 2: flame_leviathan.SIEGE}, set())
         self.assertEqual(frame.boss, (1.0, 2.0, 0.4, 0))
+        self.assertEqual(frame.hulls[2], (5.0, 6.0, 80.0, flame_leviathan.SIEGE, 0, None))
 
     def test_idle_windows_ignore_a_row_with_no_target_column(self):
         trace = rich()
@@ -887,6 +947,8 @@ class Renderers(unittest.TestCase):
             "show_where_bad_spec": lambda: space.show_where(trace, "nonsense", "entry:33999"),
             "show_validity": lambda: validity.show_validity(trace),
             "show_validity_hardmode": lambda: validity.show_validity(trace, None, True),
+            **{f"flame_leviathan --{flag}": (lambda show=show: show(Trace(FULL_V13)))
+               for flag, _, show in flame_leviathan.SECTIONS},
         }
         for name, call in calls.items():
             with self.subTest(renderer=name):

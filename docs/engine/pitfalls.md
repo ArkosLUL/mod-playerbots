@@ -365,7 +365,10 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   upstream has now marked `// DO NOT USE, WILL BE REMOVED`** (`src/Util/EncounterHelpers.h`) against
   **163 call sites** here. It is still the right answer today and no replacement has landed; the
   mitigation when it goes is a Custom-owned copy under a different name, so the deletion is a no-op.
-  Every recommendation of it in `raids/` inherits this caveat.
+  Every recommendation of it in `raids/` inherits this caveat. It also stops at `SightDistance`
+  (100 yd): a far bot gets null, and shared encounter state reset on "no boss" is wiped for the whole
+  raid — Flame Leviathan's posted engines flapped `fl.pursued` 26 times in one pull. A boss the
+  instance script tracks resolves at any range through `InstanceScript::GetCreature`.
 - **`AvoidAoeAction` only sees three things**: a dynobject aura, a damaging trap GameObject, or a
   `UNIT_FLAG_NOT_SELECTABLE` trigger NPC. Mechanics outside those — Anub'rekhan's Impale and Locust
   Swarm, the Four Horsemen's Void Zone NPC 16697 (SmartAI, casts on update) — are invisible to it.
@@ -493,6 +496,14 @@ Related traps:
   merge that drops either side **silently unregisters raid strategies** and nothing fails to compile.
 - **`rerere` holds 123 cached resolutions and must not be trusted** on a merge that spans a refactor —
   it will replay a resolution written against code that has since moved.
+- **A core merge's SQL half does not apply itself.** The worldserver image sets
+  `AC_UPDATES_ENABLE_DATABASES=0` by design (`apps/docker/Dockerfile`), so new
+  `data/sql/updates/db_world` files run only when `ac-db-import` is rebuilt from the merged checkout
+  and run. Until then a script moved to a new `ScriptName` has no binding and the creature silently
+  keeps its old AI: after the 2026-09-16 merge brought 42 world updates, `acore_world.updates` still
+  ended at `2026_09_04_02` and Flame Leviathan's ward adds despawned at 3 s and 10 s, which read as a
+  core bug. After a core merge: `docker compose build ac-db-import && docker compose up ac-db-import`,
+  restart the worldserver, and check `acore_world.updates` holds the newest file.
 
 ### Local divergences a merge must re-apply
 

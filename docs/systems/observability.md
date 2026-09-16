@@ -98,7 +98,7 @@ reproduced Mimiron's documented phase-1 flip-flop:
 
 **`--probes` names keys the source declares that never reached a trace of their own boss.** One silent
 pull usually means the thing did not happen; silence across every pull of a boss means the recorder is
-dropping it. One today: `fl.frozen`.
+dropping it.
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
 
@@ -462,11 +462,6 @@ are left bare on purpose.
   Thorim's phase 2 carries a median of 6 and a p90 of 25 live pets and guardians, which is the
   likeliest reason observed chains reach 7-8 hops where an idealised formation caps at 3 — and it
   stays a hypothesis until `Bot/Obs` logs pet damage.
-- **`tools/botobs/bosses/flame_leviathan.py` never reads `fl.station`.** `Frame.__init__` returns at the
-  vehicle branch on every trace where vehicles are in the snapshot, which is all of them, so the
-  station fallback below it is dead and its `tar-lead` branch has never run — the "by station" tables
-  really split on the vehicle's creature entry. `victim()` likewise still guesses the pursued vehicle
-  from the boss's facing ray, while `snap.u` column 7 and `fl.pursued` each name it outright.
 - **A traced container restates itself only on its first write in a trace**, so one the pull never
   writes is absent even while it holds a value. Older builds restate nothing, and there absence can
   still be state leaking in from a previous pull rather than nothing happening.

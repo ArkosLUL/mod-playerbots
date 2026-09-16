@@ -81,5 +81,5 @@ bool FlameLeviathanDriveUrgentTrigger::IsActive()
         return false;
 
     Unit* vehicleBase = bot->GetVehicleBase();
-    return GetFlameLeviathanNearestTowerHazard(botAI, vehicleBase, towerMask, ULDUAR_FL_TOWER_HAZARD_RADIUS) != nullptr;
+    return GetFlameLeviathanNearestTowerHazard(botAI, vehicleBase, towerMask) != nullptr;
 }

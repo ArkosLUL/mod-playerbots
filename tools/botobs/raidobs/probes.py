@@ -117,6 +117,27 @@ def latch_spans(trace: Trace, key: str, end: int = 1 << 62) -> list[tuple[str, i
     return spans
 
 
+def holder_spans(trace: Trace, key: str, end: int = 1 << 62) -> dict[int, list[tuple[str, int, int]]]:
+    """`{guid: [(value, start, stop)]}` for a per-guid key: ObsGuidMap, ObsGuidSet or NoteDerived.
+
+    `latch_spans` reads every record as one trajectory, which is right for a raid-wide value and wrong
+    here: twenty bots' `fl.station` values interleave, and read as one stream each bot's value ends
+    the moment any other bot's changes.
+    """
+    marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in sorted((rec for rec in trace.of("note") if rec.get("k") == key), key=lambda rec: rec["t"]):
+        track = marks[rec.get("g", 0)]
+        held = str(rec.get("txt", ""))
+        if track and track[-1][1] == held:
+            continue
+        track.append((rec["t"], held))
+    return {
+        guid: [(held, when, track[index + 1][0] if index + 1 < len(track) else end)
+               for index, (when, held) in enumerate(track)]
+        for guid, track in marks.items()
+    }
+
+
 def latch_windows(trace: Trace, key: str, value: str) -> list[Window]:
     """The spans where a latch key held `value`.
 
