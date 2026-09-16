@@ -914,6 +914,17 @@ the gate, because the portals are in there and the next wave's tentacles must no
 already made it through. `yogg.tentacle` records how close anyone actually got: 151 casts across three
 waves and eleven bots killed none, and the Brain finished a 4 minute 42 second phase 2 at 100%.
 
+**A human's Flee portal click that does nothing never reached the server.** Nothing server-side gates
+194625, and with `autoCloseTime` 0 `GameObject::Use` never sets `GO_FLAG_IN_USE`, so another
+player's use cannot lock it. Playerbots hands each master packet to the bots after the core handler,
+and `CMSG_GAMEOBJ_USE` makes every bot log `add loot`: one burst of those `act` records is one use the
+server processed. Bursts matched the human's exits 1:1 over five pulls, and failed stands of up to 6.4 s at a
+portal had none. The case investigated was the client addon RightClick, which calls
+`MouselookStop()` on right-button release whenever a unit was hovered in the last 5 s and it or the
+current target is a live enemy, so with the Brain targeted it swallowed portal clicks. The Brain's
+~76 × 78 × 60 yd model box encloses all three portals but does not take the hover: the gear cursor
+still shows.
+
 **Walk onto a spot behind the Brain, because `set behind` cannot get there.** The Brain faces east
 (o = 0) all fight with `CombatReach` 30 (display 28951), so melee range is ~32.8 yd in 3D from a floor
 ~28 yd below it. `set behind` uses the 3D distance as a floor radius: the Chamber team, arriving from
