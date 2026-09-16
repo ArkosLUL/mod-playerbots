@@ -148,6 +148,8 @@ def death_block(trace: Trace, death: dict, index: int, brief: bool) -> None:
         # Yogg's Insane running out, the Brain killing whoever hits it early. Falling or lava does pass
         # DealDamage, and reads as a blow from the victim itself.
         print("     killed by a script, no blow recorded")
+    elif (death.get("blow") or [None])[0] == guid:
+        print("     killed by its own blow: .die, a fall or lava, none of which reach the combat log")
     else:
         print(f"     killed by {trace.name(death.get('killer'))}")
     print(f"     at ({death.get('x')}, {death.get('y')}, {death.get('z')})")

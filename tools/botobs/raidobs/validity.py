@@ -13,7 +13,7 @@ import subprocess
 
 from .encounter import boss_of, encounter_of
 from .paths import REPO
-from .trace import Trace
+from .trace import Trace, roster_guids
 
 # Raid difficulty ids. Only raid maps are tracked unless Obs.Maps names one, so these are the labels
 # that apply; a 5-man would read 0/1 as normal/heroic instead.
@@ -71,8 +71,8 @@ def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.
 DECIDING_ROLES = ("tank", "heal")
 
 # A human holding tank or heal always disqualifies: the strategy was not asked to do the job, whatever
-# the pull was testing.
-ALWAYS_DECIDABLE = {"human-role"}
+# the pull was testing. So does a raid lying dead when the trace opened, which is nobody pulling at all.
+ALWAYS_DECIDABLE = {"human-role", "raid-dead"}
 
 # The other two only disqualify once the reader says what is under test. Both are true of almost every
 # pull otherwise - the loop commits after each pull, so every trace predates HEAD, and every
@@ -108,8 +108,21 @@ def humans(trace: Trace) -> list[str]:
     return sorted(trace.name(guid) for guid in trace.humans)
 
 
+def alive_at_open(trace: Trace) -> tuple[int, int] | None:
+    """(alive, sampled) roster members in the first snapshot of the pull, or None without one."""
+    roster = roster_guids(trace)
+    for snap in trace.of("snap"):
+        if snap["t"] < 0:
+            continue
+        rows = [row for row in snap.get("u", []) if row[0] in roster]
+        if not rows:
+            return None
+        return sum(1 for row in rows if row[5] > 0), len(rows)
+    return None
+
+
 def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[dict, list[tuple[str, str]]]:
-    """The four disqualifier facts, and what is wrong with them.
+    """The disqualifier facts, and what is wrong with them.
 
     `ref` is already resolved rather than a commit-ish, because a corpus sweep would otherwise shell
     out to git once per trace. Warnings are (kind, text) so a census can group them.
@@ -162,6 +175,15 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
         warnings.append((
             "human-in-raid",
             f"{len(facts['humans'])} human(s) in the raid{detail}",
+        ))
+
+    # More than half dead, the same line the recorder calls a wipe at. One Yogg trace opened 45 s after a
+    # wipe with only the human up, who then used .die, and read as a one-death wipe.
+    alive = alive_at_open(trace)
+    if alive and alive[0] * 2 < alive[1]:
+        warnings.append((
+            "raid-dead",
+            f"only {alive[0]} of {alive[1]} raiders alive when the trace opened: nobody pulled",
         ))
 
     return facts, warnings

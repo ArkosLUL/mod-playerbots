@@ -20,12 +20,14 @@ import unittest
 BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
+import argparse  # noqa: E402
 import contextlib  # noqa: E402
 import datetime  # noqa: E402
 import io  # noqa: E402
 import math  # noqa: E402
 from unittest import mock  # noqa: E402
 
+import postmortem  # noqa: E402
 from bosses import flame_leviathan, yogg_saron  # noqa: E402
 from raidobs import (  # noqa: E402
     corpus, coverage, deathreport, encounter, geometry, probes, space, stuck, timeline, validity, verify,
@@ -397,6 +399,12 @@ class Spatial(unittest.TestCase):
     def test_scope_of_a_value_nothing_held(self):
         self.assertIsNone(space.scope(rich(), "fixture.phase=9"))
 
+    def test_clump_counts_only_the_frames_in_scope(self):
+        trace = rich()
+        self.assertEqual(dict(space.clump_histogram(trace, 10.0)), {2: 4})
+        inside = space.scope(trace, "fixture.phase=2")
+        self.assertEqual(dict(space.clump_histogram(trace, 10.0, inside)), {2: 1})
+
     def test_scope_without_during_drops_the_pre_roll(self):
         inside = space.scope(rich(), None)
         self.assertFalse(inside(-1))
@@ -460,6 +468,23 @@ class Decidability(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()) as banner:
             validity.show_validity(rich(), "2026-09-10T00:00:00")
         self.assertIn("after given", banner.getvalue())
+
+    def dead_at_open(self, dead):
+        trace = rich()
+        for snap in trace.of("snap"):
+            for row in snap["u"]:
+                if row[0] in dead:
+                    row[5] = 0.0
+        return [kind for kind, _ in validity.inspect(trace, None)[1]]
+
+    def test_a_raid_dead_when_the_trace_opened_always_decides(self):
+        self.assertIn("raid-dead", validity.decidable_kinds())
+        self.assertIn("raid-dead", self.dead_at_open({5002, 5003, 5004}))
+
+    def test_half_the_raid_dead_is_not_yet_nobody_pulling(self):
+        # The recorder's wipe line is more than half, so the two agree on what counts.
+        self.assertNotIn("raid-dead", self.dead_at_open(set()))
+        self.assertNotIn("raid-dead", self.dead_at_open({5003, 5004}))
 
     def test_a_time_with_an_offset_keeps_it(self):
         _, when = validity.resolve_since(validity.REPO, "2026-09-10T00:00:00+00:00")
@@ -715,6 +740,8 @@ class Renderers(unittest.TestCase):
             "show_idle": lambda: stuck.show_idle(trace, 1),
             "show_vetoes": lambda: stuck.show_vetoes(trace),
             "show_clump": lambda: space.show_clump(trace, 10.0),
+            "show_clump_during": lambda: space.show_clump(trace, 10.0, "fixture.phase=2"),
+            "show_clump_never_held": lambda: space.show_clump(trace, 10.0, "fixture.phase=9"),
             "show_verify": lambda: verify.show_verify(trace),
             "show_coverage": lambda: coverage.show_coverage(trace),
             "show_coverage_by_bot": lambda: coverage.show_coverage(trace, None, True),
@@ -765,6 +792,22 @@ class Renderers(unittest.TestCase):
                 self.run_quiet(call)
 
 
+class DuringScope(unittest.TestCase):
+    @staticmethod
+    def args(**given):
+        views = {view: None for view in postmortem.DURING_VIEWS}
+        return argparse.Namespace(during="fixture.phase=2", **{**views, **given})
+
+    def test_a_view_that_would_read_the_whole_pull_refuses_it(self):
+        self.assertTrue(postmortem.ignores_during(self.args(stalls=6000)))
+
+    def test_every_view_that_scopes_takes_it_even_given_bare(self):
+        # --probes and --moves arrive as "" and --threat as 0 when named without a value
+        for view, bare in (("probes", ""), ("where", "death"), ("moves", ""), ("threat", 0), ("clump", 10.0)):
+            with self.subTest(view=view):
+                self.assertFalse(postmortem.ignores_during(self.args(**{view: bare})))
+
+
 class RichFixture(unittest.TestCase):
     """The thin coverage fixture leaves most invariants iterating an empty list."""
 
@@ -788,6 +831,21 @@ class RichFixture(unittest.TestCase):
                          if not (rec.get("e") == "dmg" and rec.get("d") in victims)]
         failed = [name for name, count, _ in verify_checks(trace) if count]
         self.assertIn("every blow has a damage row behind it", failed)
+
+    def test_a_blow_from_the_victim_needs_no_damage_row(self):
+        # .die on yourself, falls and lava never reach the combat log
+        trace = rich()
+        death = trace.of("death")[0]
+        death["blow"] = [death["g"], 9000]
+        trace.records = [rec for rec in trace.records
+                         if not (rec.get("e") == "dmg" and rec.get("d") == death["g"])]
+        failed = [name for name, count, _ in verify_checks(trace) if count]
+        self.assertNotIn("every blow has a damage row behind it", failed)
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            deathreport.death_block(trace, death, 0, True)
+        self.assertIn("killed by its own blow", buffer.getvalue())
 
     def test_a_death_written_twice_is_caught(self):
         trace = rich()

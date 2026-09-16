@@ -235,12 +235,16 @@ void CloseSession(uint32 instanceId, char const* outcome)
     // only walked through opens and closes one over and over: 55 Gluth files three seconds apart, none
     // of them a pull, all of them counted by anything reading the corpus. lastCombatMs still sitting
     // at startMs means nobody in the raid was ever in combat, which is the honest test for that.
-    if (session->lastCombatMs == session->startMs)
+    //
+    // Combat alone isn't enough either: after a Yogg wipe the human re-engaged Sara with 23 of 24 dead
+    // and used .die, and that was filed as a one-death wipe.
+    bool const noCombat = session->lastCombatMs == session->startMs;
+    if (noCombat || !session->sawRaidAlive)
     {
         std::error_code discard;
         std::filesystem::remove(session->path, discard);
-        LOG_INFO("playerbots", "RaidObs: dropped {} ({}, no combat ever happened)", session->path,
-                 result);
+        LOG_INFO("playerbots", "RaidObs: dropped {} ({}, {})", session->path, result,
+                 noCombat ? "no combat ever happened" : "the raid was dead whenever anyone was in combat");
         return;
     }
 
@@ -396,7 +400,12 @@ void OnMapUpdate(Map* map, uint32 diff)
         // Sampled during the fight rather than at the close, where idleCloseMs has already given the
         // raid 30 seconds to release and run back - long enough that the check in CloseSession sees a
         // healthy roster and files a 31-death attempt as `idle`.
-        s.sawMostlyDead = s.sawMostlyDead || s.RosterMostlyDead();
+        if (!s.sawMostlyDead || !s.sawRaidAlive)
+        {
+            bool const mostlyDead = s.RosterMostlyDead();
+            s.sawMostlyDead = s.sawMostlyDead || mostlyDead;
+            s.sawRaidAlive = s.sawRaidAlive || !mostlyDead;
+        }
     }
     else if (g_cfg.idleCloseMs && getMSTimeDiff(s.lastCombatMs, now) > g_cfg.idleCloseMs)
         CloseSession(instanceId, "idle");

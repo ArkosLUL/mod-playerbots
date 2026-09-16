@@ -35,7 +35,7 @@ from raidobs.verify import verify_checks
 
 # One letter per disqualifier for the row table. Not the first letter of the kind: hardmode-off and
 # human-in-raid would collide, and those two are the pair most worth telling apart.
-FLAG = {"stale-build": "S", "hardmode-off": "M", "human-role": "R", "human-in-raid": "H"}
+FLAG = {"stale-build": "S", "hardmode-off": "M", "human-role": "R", "human-in-raid": "H", "raid-dead": "D"}
 
 # --valid drops what validity.decidable_kinds names; --strict drops any human at all. A human who held tank
 # or heal is only decidable on traces written after the recorder learned to read a human's talent tab,
@@ -85,7 +85,8 @@ def show_rows(rows: list[dict]) -> None:
         print(f"  {row['name']:<{width}}  {row['boss']:<22} {row['outcome']:<10} "
               f"{row['ms'] / 60000:5.1f} {row['roster']:4d} {row['deaths']:4d} "
               f"{flags or '-':>3} {len(row['failed']) or '-':>4}")
-    print("\n  bad: S stale build, M hard mode off, H human in the raid")
+    print("\n  bad: S stale build, M hard mode off, H human in the raid, R a human tanked or healed,"
+          " D raid dead when it opened")
 
 
 def show_census(rows: list[dict], decisive: set[str]) -> None:
@@ -188,8 +189,8 @@ def main() -> int:
                              "stale build disqualify (without it, builds are compared to HEAD for "
                              "information only)")
     parser.add_argument("--valid", action="store_true",
-                        help="drop traces where a human tanked or healed, plus a stale build with "
-                             "--since and hard mode off with --hardmode")
+                        help="drop traces where a human tanked or healed or the raid was dead when "
+                             "it opened, plus a stale build with --since and hard mode off with --hardmode")
     parser.add_argument("--strict", action="store_true",
                         help="--valid, and also drop any trace with a human in the raid")
     parser.add_argument("--census", action="store_true", help="totals only, no per-trace rows")

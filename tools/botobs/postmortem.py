@@ -38,6 +38,14 @@ from raidobs.timeline import show_bot, show_notes, show_track
 from raidobs.validity import show_validity
 from raidobs.verify import show_verify
 
+# The views --during narrows. Any other one would print the whole pull under a scope the reader asked
+# for, with nothing saying so.
+DURING_VIEWS = ("probes", "where", "moves", "threat", "clump")
+
+
+def ignores_during(args: argparse.Namespace) -> bool:
+    return bool(args.during) and all(getattr(args, view) is None for view in DURING_VIEWS)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Explain a RaidObs trace.")
@@ -62,7 +70,8 @@ def main() -> int:
     parser.add_argument(
         "--during",
         metavar="KEY=VALUE",
-        help="only while a latch held a value, e.g. mimiron.phase=1; scopes the views that take it",
+        help="only while a latch held a value, e.g. mimiron.phase=1; with --probes, --where, --moves, "
+             "--threat or --clump",
     )
     parser.add_argument(
         "--stalls",
@@ -159,6 +168,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if ignores_during(args):
+        print("--during scopes --probes, --where, --moves, --threat and --clump; this view reads the "
+              "whole pull", file=sys.stderr)
+        return 2
+
     trace = open_trace(args.file)
     if trace is None:
         return 1
@@ -192,7 +206,7 @@ def main() -> int:
     if args.threat is not None:
         return show_threat(trace, args.threat or None, args.during)
     if args.clump is not None:
-        return show_clump(trace, args.clump)
+        return show_clump(trace, args.clump, args.during)
     if args.verify:
         return show_verify(trace)
     if args.coverage is not None:

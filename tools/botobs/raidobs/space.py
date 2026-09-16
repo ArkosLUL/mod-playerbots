@@ -289,7 +289,7 @@ def show_threat(trace: Trace, entry: int | None = None, during: str | None = Non
     return 0
 
 
-def clump_histogram(trace: Trace, radius: float) -> dict[int, int]:
+def clump_histogram(trace: Trace, radius: float, inside=None) -> dict[int, int]:
     """How much of the pull had the raid stacked inside one AoE, as size -> snapshot count.
 
     Counts distinct *positions*, not bodies: passengers share their vehicle's coordinates exactly, so
@@ -300,7 +300,7 @@ def clump_histogram(trace: Trace, radius: float) -> dict[int, int]:
 
     histogram: dict = collections.defaultdict(int)
     for snap in trace.of("snap"):
-        if snap["t"] < 0:
+        if snap["t"] < 0 or (inside and not inside(snap["t"])):
             continue
         spots = {
             (round(row[1], 1), round(row[2], 1))
@@ -316,19 +316,26 @@ def clump_histogram(trace: Trace, radius: float) -> dict[int, int]:
     return histogram
 
 
-def show_clump(trace: Trace, radius: float) -> int:
-    histogram = clump_histogram(trace, radius)
-    frames = sum(histogram.values())
-    if not frames:
-        print("no snapshots with two or more live positions")
+def show_clump(trace: Trace, radius: float, during: str | None = None) -> int:
+    inside = scope(trace, during)
+    if inside is None:
+        print(f"  nothing held {during} in this trace")
         return 0
 
-    print(f"most distinct positions inside one {radius:.0f} yd circle, per snapshot\n")
+    histogram = clump_histogram(trace, radius, inside)
+    frames = sum(histogram.values())
+    scoped = f" while {during}" if during else ""
+    if not frames:
+        print(f"no snapshots with two or more live positions{scoped}")
+        return 0
+
+    whole = "the window" if during else "the pull"
+    print(f"most distinct positions inside one {radius:.0f} yd circle, per snapshot{scoped}\n")
     running = 0
     for size in sorted(histogram, reverse=True):
         running += histogram[size]
         print(
             f"  {size:3d} together  {histogram[size]:6d} frames  {100 * histogram[size] / frames:5.1f}%"
-            f"     >= {size}: {100 * running / frames:5.1f}% of the pull"
+            f"     >= {size}: {100 * running / frames:5.1f}% of {whole}"
         )
     return 0

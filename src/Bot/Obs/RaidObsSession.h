@@ -245,6 +245,9 @@ public:
     uint32 sinceFlushMs = 0;
     uint32 lastCombatMs = 0;
     bool sawMostlyDead = false;
+    // Combat while most of the roster was alive. Never set means nobody pulled: a raid lying dead after
+    // a wipe while one human is still in combat.
+    bool sawRaidAlive = false;
 
     std::vector<ObjectGuid> roster;
     std::unordered_set<uint64> seenUnits;

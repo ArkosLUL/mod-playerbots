@@ -167,7 +167,10 @@ def verify_checks(trace: Trace) -> list[tuple[str, int, list[str]]]:
             cause.append(f"{trace.name(guid)} at {clock(when)} carries both cause and blow")
         if not has_blow and not death.get("cause"):
             cause.append(f"{trace.name(guid)} at {clock(when)} has neither blow nor cause")
-        if has_blow and not any(t <= when for t in hurt_at.get(guid, ())):
+        # .die on yourself, falls and lava go through DealDamage with no combat log, so a blow from the
+        # victim never has a dmg row to find.
+        own_blow = has_blow and death["blow"][0] == guid
+        if has_blow and not own_blow and not any(t <= when for t in hurt_at.get(guid, ())):
             blow_unlogged.append(f"{trace.name(guid)} at {clock(when)}")
         rewind = death.get("rewind", [])
         if any(rewind[i][0] > rewind[i + 1][0] for i in range(len(rewind) - 1)):

@@ -44,7 +44,7 @@ postmortem.py <file> --bot NAME      one bot's timeline
 postmortem.py <file> --track NAME    position track + distance to each boss
 postmortem.py <file> --notes [KEY]   pull/note/hazard/end only; KEY narrows to one note-key prefix
 postmortem.py <file> --probes [KEY]  every probe key ranked by churn; name one exactly for its timeline
-postmortem.py <file> --during K=V    with --probes, only while a latch held a value
+postmortem.py <file> --during K=V    scope --probes/--where/--moves/--threat/--clump to a latch value
 postmortem.py <file> --stalls [MS]   held station but still issuing accepted moves - i.e. stuck
 postmortem.py <file> --idle [MS]     held a target and cast nothing - the same failure, cast side
 postmortem.py <file> --vetoes        which multiplier zeroed which action, most often first
@@ -74,7 +74,8 @@ ending further from the band than they started" - the Yogg-Saron phase 1 defect.
 A `move` carries its destination only, so `--moves` joins the snapshot before it for the origin.
 `--where` also takes `cast:<spell>`, because a creature's death reaches no record at all and what it
 cast on the way out stands in - see [engine/pitfalls.md](../engine/pitfalls.md). `--threat` with no
-entry reads every sampled hostile except the raid's own pets. All three accept `--during KEY=VALUE`.
+entry reads every sampled hostile except the raid's own pets. These three and `--clump` take
+`--during KEY=VALUE`; any other view exits 2 rather than read the whole pull under the scope.
 
 `--verify` is 18 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
 `--since REF`, `--valid`, `--census`, `--verify`, `--probes`, `--split-at REF`, `--baseline DIR` -
@@ -105,7 +106,7 @@ NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` b
 
 Every report opens with a validity banner. Establishing these by hand cost more than reading the
 trace, and getting one wrong cost a session — three Freya pulls on 2026-09-05 were read against a
-binary predating the fix by two hours. Four things can disqualify a pull; the header carries all four.
+binary predating the fix by two hours. Five things can disqualify a pull; the header carries four.
 
 **A disqualifier that fires on the whole sample rejects the whole sample and says nothing**, so two of
 them only decide once you say what is under test. The loop commits after every pull, so every trace
@@ -131,6 +132,9 @@ strategy was not asked to do the job, whatever else was being tested.
   disqualifies the pull, damage among 24 bots is recorded and not counted, and traces written before
   the fix can only say a human was present.
 - **`diff`** — rendered 10/25 normal or heroic, not a bare id.
+- **raid dead at the open** — over half the roster at 0 hp in the first in-pull snapshot: nobody
+  pulled, so it always decides (`batch.py` flag `D`). A Yogg trace opened 45 s after a wipe with only
+  the human alive, who used `.die`, and read as a one-death wipe. The recorder now drops these.
 
 `cfg` also carries `cheats` and `mapthreads`, and is a fixed short list on purpose: a full dump would
 grow with every option and bury the few that decide whether a pull counts.
@@ -152,7 +156,8 @@ long as anyone stands on it, which no 5-man is worth.
 
 A session opens on the first of: boss state → `IN_PROGRESS`, `RaidObs::MarkPull` from encounter code,
 or a boss-flagged creature engaging a raid member. It closes on kill, wipe, reset, map destruction, or
-`IdleCloseSeconds` out of combat.
+`IdleCloseSeconds` out of combat, and deletes its file if nobody fought: no roster member ever in
+combat (55 Gluth walk-throughs, 3 s apart), or combat only while over half the raid was dead.
 
 **Boss state is observed, not requested.** `SetBossState` fires its hook *before* deciding: it drops
 every change while a boss loads from the DB, and refuses `DONE` while a world-boss minion lives. The
@@ -229,9 +234,10 @@ a hit was lethal; read as an outcome it shifts a death's trajectory down a row a
 **`cause` explains a death with no `blow`.** `Unit::Kill` called directly never reaches `DealDamage`,
 so the hook feeding `blow` never fires and `killer` is the victim itself: `reset` is the master's
 `wipe` command (`WipeAction`), `self` any other script's kill - Yogg's Insane running out, the Brain
-killing whoever hits it before its tentacles die. Falling and lava do pass `DealDamage`, so they read
-as a `blow` from the victim, as `.die` does. Absent whenever there is a `blow`. 32 of 201 deaths on
-2026-08-31 — 16 of one Freya attempt's 29 — read as unexplained combat deaths without it.
+killing whoever hits it before its tentacles die. Falling, lava and `.die` on yourself do pass
+`DealDamage`, reading as a `blow` from the victim with no `dmg` row, since none reaches the combat log;
+`--verify` allows that. Absent whenever there is a `blow`. 32 of 201 deaths on 2026-08-31 — 16 of one
+Freya attempt's 29 — read as unexplained combat deaths without it.
 `postmortem.py` numbers `--death N` over the others and counts resets separately.
 
 **An aura that kills its owner when it comes off writes one death twice.** Yogg's Insane calls
