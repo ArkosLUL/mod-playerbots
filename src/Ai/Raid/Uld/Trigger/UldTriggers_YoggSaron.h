@@ -187,6 +187,25 @@ private:
     bool WalkIntoRoomRequired();
 };
 
+// The brain team's healer, back to its illusion room's middle while tentacles live. Chasing its own
+// target put it 39 yd off the middle with 57% of its mates out of heal range.
+class YoggSaronIllusionHealerStationTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronIllusionHealerStationTrigger(PlayerbotAI* ai)
+        : YoggSaronTrigger(ai, "yogg-saron illusion healer station trigger") {}
+    bool IsActive() override;
+};
+
+// Once the room's door is open, onto the spot the bot hits the Brain from. A single walk dies on the
+// healer's first heal, and melee arriving in front of the Brain get walked out of range by set behind.
+class YoggSaronBrainSpotTrigger : public YoggSaronTrigger
+{
+public:
+    YoggSaronBrainSpotTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, "yogg-saron brain spot trigger") {}
+    bool IsActive() override;
+};
+
 class YoggSaronMoveToExitPortalTrigger : public YoggSaronTrigger
 {
 public:

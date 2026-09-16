@@ -180,6 +180,34 @@ BRAIN_LINK_RANGE = 20.0
 # The boss platform floor is z 325-330 and every illusion room is z 236-244, so this separates them.
 BRAIN_LEVEL_Z = 300.0
 
+# The module's ULDUAR_YOGG_SARON_*_MIDDLE: the centroid of each room's Influence Tentacle summon group,
+# where the healer is meant to stand while tentacles live.
+ROOM_MIDDLES = {
+    "stormwind": (1927.1511, 68.507256),
+    "icecrown": (1925.6553, -121.59296),
+    "chamber": (2104.5667, -25.509348),
+}
+
+# Induce Madness is cast in the tick AddPortals spawns the wave's portals, so the wave note plus the
+# cast time is when anyone still underground loses all 100 Sanity.
+INDUCE_MADNESS_CAST_MS = 60000
+
+# Holy Light's range, for "could the healer reach this raider from where it stood".
+HEAL_RANGE = 40.0
+
+# Everything phase 2 gives the raid to kill on the platform. With none of them alive the raid has
+# nothing to do but top up Sanity.
+NPC_CONSTRICTOR_TENTACLE = 33983
+NPC_CORRUPTOR_TENTACLE = 33985
+PLATFORM_KILLABLE = (NPC_GUARDIAN, NPC_CRUSHER_TENTACLE, NPC_CONSTRICTOR_TENTACLE, NPC_CORRUPTOR_TENTACLE)
+
+# 64169, the Sanity Well's area aura: +20 Sanity every 2 s within 6 yd, and -50% damage done.
+SPELL_SANITY_WELL = 64169
+
+# The recorder writes a Judgement's cast row after the channel break it caused, a millisecond or so
+# later in the same tick, so the channel has to be read slightly before the cast.
+JUDGEMENT_LEAD_MS = 50
+
 # boss_yoggsaron.cpp yoggPortalLoc, in table order. AddPortals spawns RAID_MODE(4, 10) of them, so a
 # 10-man pull only ever gets the first four.
 PORTAL_SPOTS = [
@@ -783,6 +811,163 @@ def show_brain(trace: Trace) -> None:
         names = ", ".join(f"{trace.name(guid)}({trace.role(guid)})" for guid in caught)
         print(f"  caught by it     : {len(caught)} went Insane - {names}")
 
+    spread = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.spread"))
+    if spread:
+        print(f"  tentacle picks   : {dict(spread)}")
+
+    show_brain_waves(trace)
+
+
+def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
+    """Timestamps folded into (first, last) runs wherever neighbours sit within gap_ms, keeping only
+    runs at least min_ms long."""
+    runs: list[list[int]] = []
+    for when in sorted(stamps):
+        if runs and when - runs[-1][1] <= gap_ms:
+            runs[-1][1] = when
+        else:
+            runs.append([when, when])
+    return [(first, last) for first, last in runs if last - first >= min_ms]
+
+
+def target_split(targets: list[int]) -> tuple[int, float]:
+    """How many different units a group held in one snapshot, and the share of the group on the
+    most-held one. The group must not be empty."""
+    counts = collections.Counter(targets)
+    return len(counts), max(counts.values()) / len(targets)
+
+
+def show_brain_waves(trace: Trace) -> None:
+    """One row per wave for the brain team: how long its room took, whether it split over the
+    tentacles or walked them as one pack, where the healer stood, how the walk onto the Brain went and
+    how much of the window it used.
+
+    The room runs from the first team member below the platform to the first `tobrain`, the tick the
+    room's door opened. Induce Madness ends 60 s after the wave note, so "left" is what remained when
+    a bot decided to go and "spare" is what remained when it surfaced."""
+    waves = [(rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.wave")]
+    team = {rec.get("g", 0) for rec in notes(trace, "yogg.brainteam") if rec.get("txt") == "1"}
+    if not waves or not team:
+        return
+
+    tentacles = set()
+    for entry in (NPC_INFLUENCE_TENTACLE,) + NPC_TENTACLE_DISGUISES:
+        tentacles |= guids_of_entry(trace, entry)
+    brain = next(iter(guids_of_entry(trace, NPC_BRAIN)), None)
+    healers = {guid for guid in team if trace.role(guid) == "heal"}
+
+    rows = snapshot_rows(trace, team | ({brain} if brain else set()))
+    stamps = {guid: [row[0] for row in guid_rows] for guid, guid_rows in rows.items()}
+    snaps = trace.of("snap")
+    snap_stamps = [snap["t"] for snap in snaps]
+    room_notes = notes(trace, "yogg.room")
+    state_notes = notes(trace, "yogg.roomstate")
+    exit_notes = [rec for rec in notes(trace, "yogg.exit") if rec.get("txt") in ("leaving", "late")]
+    behind = [rec for rec in trace.of("move")
+              if rec.get("by") == "set behind" and rec.get("ok") and rec.get("g") in team
+              and rec.get("z", BRAIN_LEVEL_Z) < BRAIN_LEVEL_Z]
+
+    def near(guid: int, when: int) -> list | None:
+        index = bisect.bisect_right(stamps.get(guid, []), when)
+        return rows[guid][index - 1] if index else None
+
+    def median_or_dash(values: list[float], fmt: str) -> str:
+        return format(statistics.median(values), fmt) if values else "-"
+
+    ends = [start for start, _ in waves[1:]] + [trace.records[-1].get("t", 0)]
+    print("\n  per wave: room clear time, one-target snapshots and the top target's median share, melee walking,"
+          f"\n  healer from the room middle and mates past {HEAL_RANGE:.0f} yd, set behind moves, door to the"
+          "\n  first Brain hit, healer to the Brain, exit seconds left and spare, Brain lost")
+    for (start, ordinal), stop in zip(waves, ends):
+        im_end = start + INDUCE_MADNESS_CAST_MS
+        down = [row[0] for guid in team for row in rows.get(guid, [])
+                if start <= row[0] <= stop and row[4] < BRAIN_LEVEL_Z]
+        if not down:
+            print(f"    wave {ordinal}: nobody went down")
+            continue
+        arrived = min(down)
+
+        rooms = collections.Counter(str(rec.get("txt", "")) for rec in room_notes
+                                    if start <= rec["t"] <= stop and str(rec.get("txt", "")) in ROOM_MIDDLES)
+        room = rooms.most_common(1)[0][0] if rooms else "?"
+        middle = ROOM_MIDDLES.get(room)
+        door = next((rec["t"] for rec in state_notes
+                     if start <= rec["t"] <= stop and rec.get("txt") == "tobrain"), None)
+        fight_end = door if door else min(im_end, stop)
+
+        one, shares, held_snaps = 0, [], 0
+        for snap in snaps[bisect.bisect_left(snap_stamps, arrived):bisect.bisect_right(snap_stamps, fight_end)]:
+            held = [row[7] for row in snap.get("u", [])
+                    if row[0] in team and len(row) > 7 and row[3] < BRAIN_LEVEL_Z and row[7] in tentacles]
+            if len(held) < 2:
+                continue
+            distinct, share = target_split(held)
+            held_snaps += 1
+            one += distinct == 1
+            shares.append(share)
+
+        walked = total = 0
+        for guid in team - healers:
+            pts = [row for row in rows.get(guid, []) if arrived <= row[0] <= fight_end and row[4] < BRAIN_LEVEL_Z]
+            for a, b in zip(pts, pts[1:]):
+                span = b[0] - a[0]
+                if span > 1000:
+                    continue
+                total += span
+                if math.dist((a[2], a[3]), (b[2], b[3])) > 0.3:
+                    walked += span
+
+        from_middle, pairs, far = [], 0, 0
+        for guid in healers:
+            for row in rows.get(guid, []):
+                if not (arrived <= row[0] <= fight_end and row[4] < BRAIN_LEVEL_Z and middle):
+                    continue
+                from_middle.append(math.dist((row[2], row[3]), middle))
+                for mate in team - {guid}:
+                    other = near(mate, row[0])
+                    if other and row[0] - other[0] < 500 and other[4] < BRAIN_LEVEL_Z:
+                        pairs += 1
+                        far += math.dist(row[2:5], other[2:5]) > HEAL_RANGE
+
+        swings = sum(1 for rec in behind if (door or stop) <= rec["t"] <= min(im_end, stop))
+
+        first_hit = None
+        brain_rows = [row for row in rows.get(brain, []) if start <= row[0] <= stop] if brain else []
+        for a, b in zip(brain_rows, brain_rows[1:]):
+            if b[6] < a[6] and door and b[0] >= door:
+                first_hit = b[0]
+                break
+        lost = brain_rows[0][6] - brain_rows[-1][6] if brain_rows else 0.0
+
+        decided = {}
+        for rec in exit_notes:
+            if start <= rec["t"] <= stop and rec.get("g") in team:
+                decided.setdefault(rec["g"], rec["t"])
+        left = [(im_end - when) / 1000 for when in decided.values()]
+        spare = []
+        for guid, when in decided.items():
+            up = next((row[0] for row in rows.get(guid, []) if row[0] > when and row[4] >= BRAIN_LEVEL_Z), None)
+            if up:
+                spare.append((im_end - up) / 1000)
+
+        at_brain = []
+        if brain_rows and door:
+            spot = (brain_rows[0][2], brain_rows[0][3])
+            until = min(decided.values()) if decided else im_end
+            for guid in healers:
+                at_brain += [math.dist((row[2], row[3]), spot) for row in rows.get(guid, [])
+                             if door + 10000 <= row[0] <= until and row[4] < BRAIN_LEVEL_Z]
+
+        clear = f"{(door - arrived) / 1000:4.1f} s" if door else "  open"
+        top = median_or_dash(shares, ".2f")
+        walking = f"{walked * 100 / total:3.0f}%" if total else "  -"
+        healer = (f"{median_or_dash(from_middle, '4.1f')} yd / {far * 100 / pairs:3.0f}%"
+                  if pairs else f"{median_or_dash(from_middle, '4.1f')} yd /   -")
+        hit = f"{(first_hit - door) / 1000:4.1f} s" if first_hit and door else "   -"
+        print(f"    wave {ordinal} {room:9} {clear}  {one:3}/{held_snaps:<3} {top:>4}  {walking}  {healer}"
+              f"  behind {swings:2}  hit {hit}  healer@Brain {median_or_dash(at_brain, '4.1f')} yd"
+              f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%")
+
 
 def aura_windows(trace: Trace, spell: int) -> list[tuple[int, int, int]]:
     """(guid, applied, removed) per aura window, closed at the last record when it never lifts."""
@@ -862,6 +1047,57 @@ def show_phase2(trace: Trace) -> None:
         print("  no 63802 rows - nothing was ever linked")
 
     show_handovers(trace)
+    show_idle_platform(trace)
+
+
+def show_idle_platform(trace: Trace) -> None:
+    """Phase 2 time with nothing on the platform to kill, which is Sanity Well time. A window is a run
+    of snapshots with no Guardian, Crusher, Constrictor or Corruptor sampled alive, counted from the
+    first tentacle of the phase so the transformation before it does not read as idle."""
+    killable = set()
+    for entry in PLATFORM_KILLABLE:
+        killable |= guids_of_entry(trace, entry)
+    tentacles = killable - guids_of_entry(trace, NPC_GUARDIAN)
+    phase2 = [(start, stop) for phase, start, stop in phase_spans(trace) if phase == 2]
+    opened = first_seen(trace, tentacles) if tentacles else None
+    if not phase2 or opened is None:
+        return
+
+    empty = []
+    for snap in trace.of("snap"):
+        if not any(start <= snap["t"] <= stop for start, stop in phase2) or snap["t"] < opened:
+            continue
+        if not any(row[0] in killable and row[5] > 0 for row in snap.get("u", [])):
+            empty.append(snap["t"])
+    windows = group_runs(empty, 600, 1500)
+
+    sanity: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("aura"):
+        if rec.get("sp") == SPELL_SANITY and not rec.get("r") and rec.get("st") is not None:
+            sanity[rec.get("d", 0)].append((rec["t"], rec["st"]))
+    wells = [rec for rec in trace.of("aura") if rec.get("sp") == SPELL_SANITY_WELL and not rec.get("r")]
+    idle_notes = [rec for rec in notes(trace, "yogg.sanity") if rec.get("txt") == "idle"]
+    roster = roster_guids(trace)
+
+    reasons = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.sanity"))
+    if reasons:
+        print(f"  sanity walks       : {dict(reasons)}")
+
+    total = sum(stop - start for start, stop in windows)
+    print(f"  nothing to kill on the platform: {len(windows)} windows, {total / 1000:.1f} s")
+    for start, stop in windows:
+        levels = []
+        for guid in roster:
+            spot = at(trace, guid, start)
+            held = [stacks for when, stacks in sanity.get(guid, []) if when <= start]
+            if spot and spot[2] >= BRAIN_LEVEL_Z and held:
+                levels.append(held[-1])
+        at_well = {rec.get("d") for rec in wells if start <= rec["t"] <= stop}
+        trips = {rec.get("g") for rec in idle_notes if start <= rec["t"] <= stop}
+        under = sum(1 for level in levels if level < 100)
+        median = f"{statistics.median(levels):.0f}" if levels else "-"
+        print(f"    {clock(start)} -> {clock(stop)}  {(stop - start) / 1000:5.1f} s  Sanity median {median},"
+              f" {under} of {len(levels)} upstairs under 100, {len(trips)} idle walks, {len(at_well)} reached a well")
 
 
 def show_handovers(trace: Trace) -> None:
@@ -1128,10 +1364,11 @@ def show_diminish_power(trace: Trace) -> None:
     mid, broke = 0, 0
     for rec in judgements:
         spans = channels.get(rec["tgt"], [])
-        if not any(start <= rec["t"] < stop for start, stop in spans):
+        before = rec["t"] - JUDGEMENT_LEAD_MS
+        if not any(start <= before < stop for start, stop in spans):
             continue
         mid += 1
-        if any(rec["t"] <= stop <= rec["t"] + JUDGEMENT_BREAK_MS for _, stop in spans):
+        if any(before <= stop <= rec["t"] + JUDGEMENT_BREAK_MS for _, stop in spans):
             broke += 1
     who = collections.Counter(trace.name(rec["s"]) for rec in judgements)
     print(f"  Judgements at a Crusher: {len(judgements)} ({dict(who)}), {mid} while it was channelling,"

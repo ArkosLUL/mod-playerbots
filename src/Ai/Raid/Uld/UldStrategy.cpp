@@ -878,6 +878,18 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "yogg-saron diminish power judgement trigger",
         { NextAction("yogg-saron diminish power judgement action", ACTION_RAID - 0.5f) }));
 
+    // Level with the room walk it replaces for the healer. Heal reach still outranks it, so a mate out of
+    // range from the middle gets a step toward it first.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron illusion healer station trigger",
+        { NextAction("yogg-saron illusion healer station action", ACTION_RAID) }));
+
+    // Over reach melee and set behind, so a bot arriving in front of the Brain goes round to the spot
+    // rather than being walked out of range and back. Under the exit walk.
+    triggers.push_back(new TriggerNode(
+        "yogg-saron brain spot trigger",
+        { NextAction("yogg-saron brain spot action", ACTION_RAID) }));
+
     //
     // Algalon the Observer
     //

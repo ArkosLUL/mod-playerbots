@@ -655,6 +655,18 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.merge_spans(spans), [(1000, 5000), (6500, 9500)])
         self.assertEqual(yogg_saron.merge_spans([]), [])
 
+    def test_group_runs_splits_on_a_missed_snapshot_gap_and_drops_blips(self):
+        # Snapshots every ~250 ms; a tentacle sampled once in between splits the run, and a lone empty
+        # snapshot is not a window.
+        stamps = [1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 4000, 9000]
+        self.assertEqual(yogg_saron.group_runs(stamps, 600, 1500), [(1000, 2750)])
+        self.assertEqual(yogg_saron.group_runs(stamps, 600, 0), [(1000, 2750), (4000, 4000), (9000, 9000)])
+        self.assertEqual(yogg_saron.group_runs([], 600, 0), [])
+
+    def test_target_split_reads_a_pack_and_a_spread(self):
+        self.assertEqual(yogg_saron.target_split([7, 7, 7, 7]), (1, 1.0))
+        self.assertEqual(yogg_saron.target_split([7, 7, 8, 9]), (3, 0.5))
+
 
 class DuplicateDeaths(unittest.TestCase):
     """Yogg's Insane kills its owner when it comes off, and dying takes it off."""

@@ -547,13 +547,17 @@ Crusher in one pull, all incidental, none mid-channel. `yogg-saron diminish powe
 has any paladin with a channelling Crusher already in reach judge it (wisdom, light, justice, one
 shared cooldown), with no walk and no target change. `SPELL_STATE_CASTING` is the gate. No stagger
 is needed, since the Judgement lands inside `Spell::cast` and the next paladin finds no channel.
-Probe `yogg.judgement`; not yet seen working in a pull.
+Probe `yogg.judgement`. It works: the first pull with the node had 2 node casts and 6 incidental
+Judgements land mid-channel, each dropping 64145 raid-wide in the same millisecond, re-cast 60-80 ms
+later.
 
 **Read the channel off the aura, never off cast starts.** After a break the tentacle re-casts only
 once its victim is out of melee range, and otherwise swings, so a break followed by Crushes leaves
 no cast row. One pull had 121 s of 64145 on the raid against 348 s with a Crusher alive, held down
 mostly by the tank and pets keeping it swinging. Uptime will *rise* once ranged stop hitting it in
-melee, so judge the Judgement node on channel drops within 300 ms of a Judgement instead.
+melee, so judge the Judgement node on channel drops within 300 ms of a Judgement instead. The
+recorder writes that drop about 1 ms *before* the Judgement's cast row, so read the channel 50 ms
+before the cast or every break reads as a Judgement on a dead channel.
 
 ## Phase 2: the body is a wall, and the portals run on a clock
 
@@ -689,13 +693,24 @@ two bots on opposite sides of Yogg produce. `yogg-saron brain link` runs at `ACT
 over the dps resolver and the Sanity Well walk and under the hazard dodges, since a link costs 2
 Sanity and a shared hit a second while a Death Ray costs the bot, and closes to
 `ULDUAR_YOGG_SARON_BRAIN_LINK_CLOSE` (15, a margin under the 20 so drift does not re-break it).
-Probed as `yogg.brainlink`.
+Probed as `yogg.brainlink`. It stands down for a brain team bot whose portal intent is spreading,
+holding or late (`YoggSaronPortalWalkPending`): the link breaks by itself once the bot is 10 yd below
+its partner, and closing it cost one wave its healer, a room that fell to 14%.
 
 It was doing none of that. `TooFarFromPlayerWithAura` had an unconditional
 `return !debuffedPlayers.empty();` above its range loop and never read the `range` argument at all;
 the action walked to the first group member carrying the aura rather than to the partner; and at
 `ACTION_RAID` four nodes outranked it, so it **issued zero moves in a whole fight**. Seven pairs sat
 24-60 yd apart for the full 30 s each, for **355,013**.
+
+**Top up Sanity whenever the platform has nothing to kill.** Each well's 64169 is a 6 yd area aura
+giving +20 Sanity every 2 s and **-50% damage done**. `yogg-saron sanity` walks a bot to the nearest
+well below 40, keeps one inside 1 yd there until 100, and in phase 2 also walks it at any Sanity under
+100 while no Guardian, Crusher, Constrictor or Corruptor lives, unless it is a brain team bot with a
+portal walk pending. One pull had 66 s of that (27, 15, 11, 7 and 6 s) with 20 of 23 raiders under
+100 and wells a median 35-42 yd away. Stunned tentacles outlasted the brain team in 5 of 6 waves, so
+the idle time mostly comes after it returns. Probed as `yogg.sanity`: `low`, `topping` or `idle`,
+the walk's reason rather than a Sanity level.
 
 ## The brain room
 
@@ -705,8 +720,11 @@ Sanity and is teleported out; anyone above takes nothing. No Sanity means `63120
 a death.** A bot ending a window ~120 yd from the nearest exit portal needs ~17 s to walk it.
 
 Every millisecond of lead is damage the Brain does not take, so the lead is **measured, not flat**:
-`max(10 s, distance / runSpeed × 2)`. A flat worst-case lead threw away a third of every window for a
-bot standing next to a portal.
+`max(5 s, distance / runSpeed × 2)`. A flat worst-case lead threw away a third of every window for a
+bot standing next to a portal. From the Brain the walk out takes 1.5-2.8 s for melee and 2.9-4.2 s for
+the healer; a 10 s floor surfaced every bot with 7-8 s unused, ~2.5% of the Brain a wave at the ~41k
+DPS the team puts into it. Induce Madness is cast in the tick `AddPortals` spawns the portals, so
+`yogg.wave` + 60 s is its end: bots caught by it surface at +60.1 s.
 
 **The Brain sits at z 265 while its room's floor is z 236-244.** The three portal arrivals are 60.0 /
 67.1 / 71.9 yd from it, so a radius-to-the-Brain test is a bad proxy for "am I in the brain room" — it
@@ -766,7 +784,28 @@ is the eight real entries: 33943 plus its six disguises (33433 Suit of Armor, 33
 2150)` a Consort, else `y ∈ (−150, −90)` a Zealot, else a Suit of Armor; the wiki has Zealots and
 Suits the other way round and the script wins. The disguise is `Creature::UpdateEntry`, not an aura,
 and `UpdateEntry` **preserves current health**, so a Suit of Armor showing 6% is a full-health
-tentacle carrying 8,000 (10) / 40,000 (25).
+tentacle carrying 8,000 (10) / 40,000 (25), 49,135 in the scaled 25-man traces.
+
+**Spread the team over the tentacles, because nearest stacks it.** Tentacles never move and the team
+walks in as one pack from one landing spot, so nearest-first gave every bot the same one, and the first
+hit reverting a disguise to 33943, a tier above the disguises, pulled the rest onto it. Per wave in
+one pull: one target held in 21-80 of 85-111 snapshots, a median 0.75-1.00 of the team on the
+most-held, melee walking 61-72% of room time, 24.5-31.6 s per room. Spawns: Stormwind 8 on a ~30 yd
+ring, Icecrown 9 in three clusters of three 16-35 yd out, Chamber 8 on a 39-43 yd ring. `SpreadTarget`
+treats revealed and disguised alike and picks what the fewest other room members hold by `GetTarget`
+(humans counted, healers not), then nearest. A bot keeps its tentacle while nothing is less held, and
+always keeps one no lower GUID is also on, so two that race onto a free one settle next tick. Grim
+Reprisal (63305) reflects 60% of every hit at its attacker, so the split changes nobody's incoming
+damage. Probed as `yogg.spread`: `free`, `shared` or `kept`.
+
+**The healer holds the room middle and takes no tentacle.** A target is what `reach spell` walks it
+to: median 8-39 yd from the middle per wave, with 30% and 57% of healer-to-mate samples past 40 yd in
+two of them. The resolver gives a healer in an illusion room no target, dropping one without
+interrupting its heal. `WalkIntoRoom` skips it, since a targetless healer reads `walkingin` all wave
+and a forced walk every tick starves every heal under `ACTION_RAID`. `yogg-saron illusion healer
+station` (`ACTION_RAID`) walks it back past 10 yd while tentacles live, and heal reach still outranks it
+for a mate out of range. From within 12 yd of the Stormwind and Icecrown middles heals landed 33-40 yd
+out; the Chamber middle, 39-43 yd from its tentacles, is unmeasured.
 
 **Scope the tentacle read to the room.** The Stormwind and Chamber middles are 200.8 yd apart, so the
 old 200 yd sweep was one yard from reading the next room's tentacles — and reading it wrong is not a
@@ -841,6 +880,17 @@ the gate, because the portals are in there and the next wave's tentacles must no
 already made it through. `yogg.tentacle` records how close anyone actually got: 151 casts across three
 waves and eleven bots killed none, and the Brain finished a 4 minute 42 second phase 2 at 100%.
 
+**Walk onto a spot behind the Brain, because `set behind` cannot get there.** The Brain faces east
+(o = 0) all fight with `CombatReach` 30 (display 28951), so melee range is ~32.8 yd in 3D from a floor
+~28 yd below it. `set behind` uses the 3D distance as a floor radius: the Chamber team, arriving from
+the east in front of it, walked from 15 to 30 yd out, beyond range, and back in, ~4 s per melee. And a
+one-shot walk to the brain room middle died on the healer's first heal, leaving `reach spell` to stop
+it at the Stormwind doorway 55 yd out, which 30 yd of reach counts as in range. `yogg-saron brain
+spot` (`ACTION_RAID`, walk latch) owns the walk while `rti` is `square`, which `GoToBrainRoom` now only
+sets: melee go to `ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT` (1969.0, -25.4, 237.474), 12.3 yd west and
+30.1 yd 3D, settled z and `PATHFIND_NORMAL` under `--nav 0x09` from all three entrances; everyone else
+goes to the brain room middle, 11.5 yd from it.
+
 **No Sanity Well reaches the brain level.** All five stand on the platform and nothing restores Sanity
 underground, so `yogg-saron sanity` could only ever walk a bot at something it would never get to. It
 stands down below the floor.
@@ -864,21 +914,21 @@ after **6 s** without closing distance, probed as `yogg.walk`. Keyed per destina
 several in one tick does not wipe the others, and a gap in the asking starts a fresh attempt — or a
 give-up outlives the walk that earned it. Give-up means stand down everywhere except
 `move to exit portal`, where standing down is fatal: it cycles to the next of the three permanently
-spawned portals and only stands down once all three have failed. `go to brain room` is the one walk
-without a latch — it is one-shot behind the `rti` room tag, so there is no repeat to notice a stall in.
+spawned portals and only stands down once all three have failed.
 
 Following a master is wrong in every part of this fight — the illusion rooms are exactly where bots
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-two `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-four `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
 not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `yogg.room`,
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
-`yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour` and `yogg.judgement`,
+`yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
+`yogg.judgement`, `yogg.spread` and `yogg.sanity`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -892,9 +942,13 @@ walk that aimed into the ring rather than to the last walk issued, which is usua
 Under `--crush`, **Crush hits** split into the tentacle's victim and the cone, each kill with the walk
 that put it inside the reach and any melee hit first; **the reach**, ranged and healer samples and
 walks inside it; and **Diminish Power**, uptime off the aura and how many Judgements landed
-mid-channel and dropped it.
+mid-channel and dropped it. Under `--brain`, one row per wave: room clear time, one-target snapshots
+and the most-held share, melee walking, the healer's distance from the middle and mates past 40 yd,
+`set behind` moves, door to first Brain hit, healer to the Brain, exit seconds left and spare, and
+Brain lost. Under `--phase2`, the windows with nothing on the platform to kill, with Sanity, idle walks
+and well arrivals.
 
-**Do not add a Sanity probe.** 63050 is already in the aura stream — 467 and 819 rows across the two
+**Do not add a Sanity level probe** (`yogg.sanity` is a walk reason). 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic
 Gaze 64168 in `dmg`. A removal row carries no stack count, so skip `r:1` rows when taking a minimum or
 every bot reads as Insane.

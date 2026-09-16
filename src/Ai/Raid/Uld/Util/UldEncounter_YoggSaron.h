@@ -373,12 +373,22 @@ constexpr float ULDUAR_YOGG_SARON_ILLUSION_FACING_SEARCH_RADIUS = 15.0f;
 // anyway. Small on purpose: the constraint that matters is angular, not radial.
 constexpr float ULDUAR_YOGG_SARON_SKULL_CLEAR_RADIUS = 5.0f;
 
+// How far the brain team's healer may stray from its illusion room's middle before it walks back.
+// Every tentacle sits within 43 yd of the middle, and a heal reach step toward a mate on the far side of
+// the Chamber stays inside this.
+constexpr float ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS = 10.0f;
+
+// Close enough to the spot the Brain is hit from to stop walking. The melee spot has 2.7 yd of melee
+// range in hand, so a bot parked this far off it still reaches.
+constexpr float ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS = 3.0f;
+
 // How early to leave the brain level before Induce Madness lands. It strips all 100 Sanity from
 // anyone at or below z 300, and no Sanity means Insane, whose removal kills the player outright - so
 // a mind control is always a death. The lead is taken out of the window the raid has to damage the
 // Brain, so it is measured rather than flat: a bot standing on a portal needs the floor, one deep in
-// an illusion room can be ~120 yd out.
-constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 10000;
+// an illusion room can be ~120 yd out. From the Brain the walk out takes 1.5-2.8 s for melee and
+// 2.9-4.2 s for the healer, so 5 s still surfaces melee with about 3 s spare.
+constexpr uint32 ULDUAR_YOGG_SARON_EXIT_LEAD_FLOOR_MS = 5000;
 constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 2.0f;
 
 // Phase 3 station. The radius is what the bot is allowed to drift inside, the leash is how far a tank
@@ -421,6 +431,12 @@ extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE;
 extern const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
+
+// Where melee hit the Brain from: 12.3 yd west of it and behind it, since it faces east for the whole
+// fight. 30.1 yd 3D against a 32.8 yd melee range (CombatReach 30), on the floor by navprobe and pathed
+// from all three illusion entrances. Anywhere in front, set behind picks its spot at the 3D distance
+// as a floor radius, walks the bot 15 yd out of range, and reach melee walks it back.
+extern const Position ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE;
@@ -499,6 +515,10 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI);
 // platform. The lead is measured against the walk the bot actually faces.
 bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 
+// The spot a bot hits the Brain from once its room is done: behind it for melee, the brain room middle
+// for everyone else, which has every melee spot inside heal range.
+Position YoggSaronBrainSpot(Player* bot);
+
 // Laughing Skulls within gaze range that are in the bot's front 180 degrees, which is the exact test
 // the spell uses to pick its targets. The distance is re-checked after the grid sweep, whose own range
 // test is bounding-radius inclusive: 164 of 235 probe flips in one pull had no skull inside 30 yd.
@@ -568,6 +588,10 @@ enum YoggSaronPortalIntent : uint32
 // Nearest-first, latched for the wave so it does not churn as bots move. By group index instead, the
 // assigned walk ran a median of 41-44 yd against the 12-15 yd of the nearest live portal.
 YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot);
+
+// A brain team bot already walking to, standing on, or late for its portal. Anything that would pull it
+// elsewhere stands down: a room without its healer fell to 14% while Brain Link held that healer upstairs.
+bool YoggSaronPortalWalkPending(PlayerbotAI* botAI);
 
 // Guardians casting Dark Volley right now, for the interrupt node. Shared between trigger and action
 // so the two cannot disagree about what is being kicked.
@@ -688,6 +712,10 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius);
 // Whether the Brain is safe to hit: every Influence Tentacle in this room dead. Scoped to the room
 // rather than swept at 200 yd, which is one yard short of reaching the next room's tentacles.
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
+
+// Nothing on the platform to kill: no Guardian, Crusher, Constrictor or Corruptor alive. Phase 2 had
+// 66 s of this in one pull with most of the raid below 100 Sanity.
+bool YoggSaronPlatformIdle(PlayerbotAI* botAI);
 
 // Live Crusher Tentacles to angle away from, each as its position plus the facing its Crush cone
 // follows. The one currently hitting the bot is left out: inside its reach that bot is hit wherever it

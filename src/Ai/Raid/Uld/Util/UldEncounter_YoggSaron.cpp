@@ -57,6 +57,7 @@ const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_MIDDLE = Position(1927.1511f, 
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_MIDDLE = Position(1925.6553f, -121.59296f, 239.98965f);
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_MIDDLE = Position(2104.5667f, -25.509348f, 242.64679f);
 const Position ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE = Position(1980.1971f, -27.854689f, 236.06789f);
+const Position ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT = Position(1969.0f, -25.4f, 237.474f);
 const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE = Position(1954.06f, 21.66f, 239.71f);
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE = Position(1950.11f, -79.284f, 239.98982f);
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE = Position(2048.63f, -25.5f, 239.72f);
@@ -124,7 +125,9 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase);
 // Sweeps every Yogg trigger repeats in one pass, answered once per pass. Valid only under the id
 // UldTriggerPassId hands out, so it can't outlive the trigger checks. thread_local is fine for a cache
 // of live world state: a whole pass runs on one thread. Never turn this into a latch.
-constexpr uint32 YOGG_SARON_CACHED_CREATURES[] = {NPC_SARA_PHASE_1, NPC_YOGG_SARON, NPC_BRAIN, NPC_SANITY_WELL};
+constexpr uint32 YOGG_SARON_CACHED_CREATURES[] = {NPC_SARA_PHASE_1,         NPC_YOGG_SARON,         NPC_BRAIN,
+                                                  NPC_SANITY_WELL,          NPC_GUARDIAN_OF_YS,     NPC_CRUSHER_TENTACLE,
+                                                  NPC_CONSTRICTOR_TENTACLE, NPC_CORRUPTOR_TENTACLE};
 constexpr uint32 YOGG_SARON_CACHED_DOORS[] = {GO_CHAMBER_ILLUSION_DOORS, GO_ICECROWN_ILLUSION_DOORS,
                                               GO_STORMWIND_ILLUSION_DOORS};
 
@@ -444,6 +447,12 @@ bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI)
         RaidObs::NoteDerived(bot, "yogg.exit", branch);
 
     return leave;
+}
+
+Position YoggSaronBrainSpot(Player* bot)
+{
+    return PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsHeal(bot) ? ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT
+                                                                  : ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
 }
 
 std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
@@ -787,6 +796,15 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     }
 
     return intent;
+}
+
+bool YoggSaronPortalWalkPending(PlayerbotAI* botAI)
+{
+    Position spot;
+    YoggSaronPortalIntent const intent = YoggSaronPortalPlan(botAI, spot);
+
+    return intent == YOGG_SARON_PORTAL_SPREADING || intent == YOGG_SARON_PORTAL_HOLDING ||
+           intent == YOGG_SARON_PORTAL_LATE;
 }
 
 YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
@@ -1520,6 +1538,15 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
         reads->tentaclesCleared.emplace_back(radius, cleared);
 
     return cleared;
+}
+
+bool YoggSaronPlatformIdle(PlayerbotAI* botAI)
+{
+    for (uint32 entry : {NPC_GUARDIAN_OF_YS, NPC_CRUSHER_TENTACLE, NPC_CONSTRICTOR_TENTACLE, NPC_CORRUPTOR_TENTACLE})
+        if (YoggSaronNearestCreature(botAI, entry))
+            return false;
+
+    return true;
 }
 
 std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius)

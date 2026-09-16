@@ -172,15 +172,29 @@ bool YoggSaronSanityTrigger::IsActive()
     if (!sanityWell)
         return false;
 
-    float distanceToSanityWell = bot->GetDistance(sanityWell);
+    // Standing in the well halves damage done, so a bot only walks to one with nothing to kill, unless
+    // it is low. One that got there stays until full whatever spawns: +20 every 2 s is a short wait. A
+    // brain team bot heading for its portal keeps heading there.
+    char const* reason = nullptr;
+    if (bot->GetDistance(sanityWell) < 1.0f)
+        reason = "topping";
+    else if (sanityAuraStacks < 40)
+        reason = "low";
+    else if (IsPhase2() && YoggSaronPlatformIdle(botAI) && !YoggSaronPortalWalkPending(botAI))
+        reason = "idle";
 
-    if ((distanceToSanityWell >= 1.0f && sanityAuraStacks >= 40) ||
-        (distanceToSanityWell < 1.0f && sanityAuraStacks >= 100))
+    if (!reason)
         return false;
 
     // A well the bot cannot get to parked three of them stationary for 202, 164 and 96 s, suppressing
     // everything below this node for as long as it lasted.
-    return YoggSaronWalkMakingProgress(botAI, "sanity", sanityWell->GetPosition());
+    if (!YoggSaronWalkMakingProgress(botAI, "sanity", sanityWell->GetPosition()))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.sanity", reason);
+
+    return true;
 }
 
 bool YoggSaronPhase1SpacingTrigger::IsActive()
@@ -357,7 +371,10 @@ bool YoggSaronBrainLinkTrigger::IsActive()
     // Link puts 63802 on one end only and keeps the partner's GUID inside the aura script, so that
     // helper finds nobody to measure against. The pair comes off the cast instead, which both ends
     // can read, so this fires for the partner as well as the owner.
-    return IsPhase2() && YoggSaronBrainLinkTarget(botAI) != nullptr;
+    //
+    // A brain team bot on its way to a portal keeps going: the link drops once the two ends are 10 yd
+    // apart vertically, and closing it kept one healer upstairs for a whole wave.
+    return IsPhase2() && YoggSaronBrainLinkTarget(botAI) != nullptr && !YoggSaronPortalWalkPending(botAI);
 }
 
 bool YoggSaronMoveToEnterPortalTrigger::IsActive()
@@ -431,7 +448,9 @@ bool YoggSaronIllusionRoomTrigger::IsActive()
 
 bool YoggSaronIllusionRoomTrigger::WalkIntoRoomRequired()
 {
-    return YoggSaronRoomStateOf(botAI) == YOGG_SARON_ROOM_STATE_WALKING_IN;
+    // Not the healer: it holds no target, so its room state reads walkingin until the door opens, and a
+    // forced walk every tick would cost it every heal ranked below this node. It has its own station.
+    return YoggSaronRoomStateOf(botAI) == YOGG_SARON_ROOM_STATE_WALKING_IN && !PlayerbotAI::IsHeal(bot);
 }
 
 bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
@@ -445,6 +464,47 @@ bool YoggSaronIllusionRoomTrigger::GoToBrainRoomRequired()
 bool YoggSaronIllusionRoomTrigger::SetRtiMarkRequired()
 {
     return AI_VALUE(std::string, "rti") == "diamond";
+}
+
+bool YoggSaronIllusionHealerStationTrigger::IsActive()
+{
+    if (!PlayerbotAI::IsHeal(bot) || !botAI->CanMove())
+        return false;
+
+    Position middle;
+    if (!YoggSaronRoomMiddle(bot, middle))
+        return false;
+
+    if (bot->GetExactDist2d(middle.GetPositionX(), middle.GetPositionY()) <=
+        ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS)
+        return false;
+
+    // A cleared room hands the healer to the walk onto the Brain.
+    if (!IsYoggSaronFight() || YoggSaronInfluenceTentaclesCleared(botAI))
+        return false;
+
+    return YoggSaronWalkMakingProgress(botAI, "healer", middle);
+}
+
+bool YoggSaronBrainSpotTrigger::IsActive()
+{
+    if (!IsInBrainLevel() || !botAI->CanMove())
+        return false;
+
+    // Square goes on in the illusion room the tick its door is seen open, and the exit portal hands it
+    // back to skull, so it marks exactly the stretch from the open door to the way out.
+    if (AI_VALUE(std::string, "rti") != "square")
+        return false;
+
+    Position const spot = YoggSaronBrainSpot(bot);
+    if (bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_BRAIN_SPOT_ARRIVED_RADIUS)
+        return false;
+
+    Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
+    if (!brain || !brain->IsAlive())
+        return false;
+
+    return YoggSaronWalkMakingProgress(botAI, "brainspot", spot);
 }
 
 bool YoggSaronMoveToExitPortalTrigger::IsActive()

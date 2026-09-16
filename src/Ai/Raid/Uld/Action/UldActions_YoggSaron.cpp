@@ -606,6 +606,13 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     Acore::UnitListSearcher<AnyUnitOfEntriesInRangeCheck> searcher(bot, candidates, check);
     Cell::VisitObjects(bot, searcher, range);
 
+    // An illusion room spreads its team over the tentacles instead of ranking them. Execute keeps the
+    // healer out of here.
+    Position roomMiddle;
+    if (brainLevel && YoggSaronRoomMiddle(bot, roomMiddle))
+        if (Unit* spread = SpreadTarget(candidates, currentTarget, brain))
+            return spread;
+
     std::vector<size_t> tiers;
     tiers.reserve(candidates.size());
     for (Unit* unit : candidates)
@@ -668,10 +675,89 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     return target ? target : AI_VALUE(Unit*, "dps target");
 }
 
-void YoggSaronSetDpsPriorityAction::DropTarget(Unit* target)
+Unit* YoggSaronSetDpsPriorityAction::SpreadTarget(std::vector<Unit*> const& candidates, Unit* currentTarget,
+                                                  BrainApproach& brain)
+{
+    // Who else in this room holds what, humans included: a tentacle a player is on is taken.
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    std::vector<std::pair<ObjectGuid, ObjectGuid>> held;
+    if (Group* group = bot->GetGroup())
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || member == bot || !member->IsAlive() || PlayerbotAI::IsHeal(member) ||
+                YoggSaronRoomOf(member) != room || !member->GetTarget())
+                continue;
+
+            held.emplace_back(member->GetGUID(), member->GetTarget());
+        }
+    }
+
+    auto const heldBy = [&held](Unit* unit)
+    {
+        return static_cast<size_t>(std::count_if(held.begin(), held.end(),
+                                                 [unit](auto const& entry) { return entry.second == unit->GetGUID(); }));
+    };
+
+    // Least held first, then nearest, so line of sight is only cast until one passes.
+    struct Ranked
+    {
+        size_t held;
+        float distance;
+        Unit* unit;
+    };
+
+    std::vector<Ranked> ranked;
+    for (Unit* unit : candidates)
+        if (TierOf(unit, true) <= 1)
+            ranked.push_back({heldBy(unit), unit->GetExactDist2d(bot), unit});
+
+    std::sort(ranked.begin(), ranked.end(), [](Ranked const& left, Ranked const& right)
+              { return left.held != right.held ? left.held < right.held : left.distance < right.distance; });
+
+    Unit* best = nullptr;
+    size_t bestHeld = 0;
+    for (Ranked const& entry : ranked)
+    {
+        if (IsAllowedTarget(entry.unit, brain))
+        {
+            best = entry.unit;
+            bestHeld = entry.held;
+            break;
+        }
+    }
+
+    if (!best)
+        return nullptr;
+
+    char const* branch = bestHeld ? "shared" : "free";
+
+    // Keep a tentacle nobody less held beats, and always keep one no lower GUID is also on, so two bots
+    // that pick the same free tentacle in one tick sort themselves out in the next.
+    if (currentTarget && TierOf(currentTarget, true) <= 1 && IsAllowedTarget(currentTarget, brain))
+    {
+        bool const senior = std::none_of(held.begin(), held.end(), [this, currentTarget](auto const& entry)
+                                         { return entry.second == currentTarget->GetGUID() && entry.first < bot->GetGUID(); });
+
+        if (currentTarget == best || heldBy(currentTarget) <= bestHeld || senior)
+        {
+            best = currentTarget;
+            branch = "kept";
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.spread", branch);
+
+    return best;
+}
+
+void YoggSaronSetDpsPriorityAction::DropTarget(Unit* target, bool interruptCasts)
 {
     bot->AttackStop();
-    bot->InterruptNonMeleeSpells(true);
+    if (interruptCasts)
+        bot->InterruptNonMeleeSpells(true);
     bot->SetTarget(ObjectGuid::Empty);
     bot->SetSelection(ObjectGuid());
     context->GetValue<Unit*>("current target")->Set(nullptr);
@@ -705,6 +791,17 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
         Spell* channel = bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL);
         if (channel && channel->GetSpellInfo()->IsAffectingArea() && YoggSaronPhase1AoeHold(botAI))
             bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
+    }
+
+    // The brain team's healer takes no tentacle. A target is what reach spell walks it toward, and that
+    // put it 39 yd off its room's middle with half the team out of heal range.
+    Position roomMiddle;
+    if (PlayerbotAI::IsHeal(bot) && YoggSaronRoomMiddle(bot, roomMiddle))
+    {
+        if (currentTarget)
+            DropTarget(currentTarget, false);
+
+        return false;
     }
 
     Unit* target = phaseOne ? YoggSaronPhase1Focus(botAI) : ResolveTarget(currentTarget);
@@ -934,7 +1031,7 @@ bool YoggSaronIllusionRoomAction::Execute(Event /*event*/)
 
 bool YoggSaronIllusionRoomAction::WalkIntoRoom()
 {
-    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_WALKING_IN)
+    if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_WALKING_IN || PlayerbotAI::IsHeal(bot))
         return false;
 
     // The room's middle is the centroid of its Influence Tentacle summon group, so walking there is
@@ -978,15 +1075,29 @@ bool YoggSaronIllusionRoomAction::GoToBrainRoom(YoggSaronTrigger yoggSaronTrigge
     if (AI_VALUE(std::string, "rti") == "square" || !yoggSaronTrigger.IsBrainRoomApproachable())
         return false;
 
+    // Square is what the brain spot node walks on. A single walk from here dies on the healer's first
+    // heal, and reach spell then stops it at the Stormwind doorway, 55 yd from the Brain.
     botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("square");
 
-    // The room's middle, not its entrance: a bot parked at the doorway healed from there for 40 s while
-    // the Brain sat untouched. The dps priority resolver picks the Brain up once the bot is inside.
-    MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionX(),
-           ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionY(), ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE.GetPositionZ(),
-           false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
-
     return true;
+}
+
+bool YoggSaronIllusionHealerStationAction::Execute(Event /*event*/)
+{
+    Position middle;
+    if (!YoggSaronRoomMiddle(bot, middle))
+        return false;
+
+    return MoveTo(bot->GetMapId(), middle.GetPositionX(), middle.GetPositionY(), middle.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool YoggSaronBrainSpotAction::Execute(Event /*event*/)
+{
+    Position const spot = YoggSaronBrainSpot(bot);
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)

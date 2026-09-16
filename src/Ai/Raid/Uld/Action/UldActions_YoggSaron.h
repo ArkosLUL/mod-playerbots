@@ -209,8 +209,14 @@ private:
 
     bool IsAllowedTarget(Unit* candidate, BrainApproach& brain) const;
     Unit* ResolveTarget(Unit* currentTarget);
-    // Stops the bot, and any of its pets, hitting a phase 1 Guardian that has to be left for the tank.
-    void DropTarget(Unit* target);
+
+    // An illusion room's tentacles, one bot each while any is untaken. Nearest-first sends the whole
+    // team, which walks in as one pack, to the same tentacle every time. nullptr when none is allowed.
+    Unit* SpreadTarget(std::vector<Unit*> const& candidates, Unit* currentTarget, BrainApproach& brain);
+
+    // Stops the bot, and any of its pets, hitting `target`. The healer's cast in progress is a heal,
+    // so it keeps it.
+    void DropTarget(Unit* target, bool interruptCasts = true);
 };
 
 class YoggSaronDarkVolleyInterruptAction : public Action
@@ -298,6 +304,23 @@ private:
     bool SetRtiMark(YoggSaronTrigger yoggSaronTrigger);
     bool GoToBrainRoom(YoggSaronTrigger yoggSaronTrigger);
     bool WalkIntoRoom();
+};
+
+class YoggSaronIllusionHealerStationAction : public MovementAction
+{
+public:
+    YoggSaronIllusionHealerStationAction(PlayerbotAI* ai)
+        : MovementAction(ai, "yogg-saron illusion healer station action") {}
+
+    bool Execute(Event event) override;
+};
+
+class YoggSaronBrainSpotAction : public MovementAction
+{
+public:
+    YoggSaronBrainSpotAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron brain spot action") {}
+
+    bool Execute(Event event) override;
 };
 
 class YoggSaronMoveToExitPortalAction : public MovementAction
