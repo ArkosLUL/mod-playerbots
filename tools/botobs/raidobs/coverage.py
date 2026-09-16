@@ -13,31 +13,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from obstrace import COVERAGE_COLUMNS, Trace
-from validity import encounter_of as trace_encounter
-
-# Ulduar keys every trigger to the boss in the room, and a shut gate returns the same empty Event as a
-# condition that was false - so without this every other encounter's nodes read as NEVER on every pull.
-# Mirrors ENCOUNTER_PREFIXES in src/Ai/Raid/Uld/UldEncounterGate.cpp; change both together. `sara` is
-# Yogg-Saron's phase-one form and the one name that does not lead with its encounter.
-ULD_PREFIXES = {
-    "flame leviathan": "flame-leviathan", "ignis": "ignis", "razorscale": "razorscale",
-    "xt002": "xt-002", "iron assembly": "iron-assembly", "kologarn": "kologarn",
-    "auriaya": "auriaya", "freya": "freya", "hodir": "hodir", "mimiron": "mimiron",
-    "thorim": "thorim", "vezax": "vezax", "yogg-saron": "yogg-saron", "sara": "yogg-saron",
-    "algalon": "algalon",
-}
+from .encounter import encounter_of, node_encounter
+from .trace import COVERAGE_COLUMNS, Trace
 
 # Below this share of the bots carrying a node, a node that fires is doing so for a subset - a role
 # split, or an assignment that only ever lands on the same few. Worth seeing; not a failure.
 THIN_SHARE = 0.2
-
-
-def encounter_of(node: str) -> str | None:
-    for prefix, boss in ULD_PREFIXES.items():
-        if node.startswith(prefix):
-            return boss
-    return None
 
 
 def collect(trace: Trace) -> dict[int, dict]:
@@ -102,14 +83,14 @@ def walked(trace: Trace, prefix: str | None = None) -> tuple[list[dict], int, st
     An Ulduar node belonging to another encounter was gated off, not silent. Folding these is what
     keeps a Hodir pull from reporting ~150 phantom NEVERs.
     """
-    boss = trace_encounter(trace)
+    boss = encounter_of(trace)
     gated = 0
     rows = []
     for entry in collect(trace).values():
         node = entry["def"]["node"]
         if prefix and not node.startswith(prefix):
             continue
-        owner = encounter_of(node)
+        owner = node_encounter(node)
         if owner and boss and owner != boss and not entry["won"]:
             gated += 1
             continue

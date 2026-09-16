@@ -1,4 +1,5 @@
-"""Where a mover put people, where things happened, and who the enemy was actually on.
+"""Where a mover put people, where things happened, who the enemy was actually on, and how
+tightly the raid stacked.
 
 "957 flee moves, 96.4% ended further from the band" is the kind of answer these give, and that one
 named the Yogg-Saron phase 1 defect. Nothing in them is Yogg-specific: a mover walking the raid out
@@ -9,12 +10,13 @@ are the same questions in every fight. What the fight supplies is the point to m
 from __future__ import annotations
 
 import collections
+import math
 import statistics
 
-import geometry
-from geometry import Unknown
-from obstrace import Trace, clock
-from probes import latch_windows, parse_during
+from . import geometry
+from .geometry import Unknown
+from .probes import latch_windows, parse_during
+from .trace import Trace, clock, first_deaths, roster_guids
 
 # A mover named in fewer than this many rows is noise in the roll-up; ask for it by name to see it.
 MIN_MOVES = 5
@@ -283,4 +285,49 @@ def show_threat(trace: Trace, entry: int | None = None, during: str | None = Non
             mostly[roles.most_common(1)[0][0]] += 1
     print("  per unit, whoever held it longest: "
           + "  ".join(f"{role} {count}" for role, count in mostly.most_common()))
+    return 0
+
+
+def clump_histogram(trace: Trace, radius: float) -> dict[int, int]:
+    """How much of the pull had the raid stacked inside one AoE, as size -> snapshot count.
+
+    Counts distinct *positions*, not bodies: passengers share their vehicle's coordinates exactly, so
+    five riders in one siege engine are one thing an area spell can hit, not five.
+    """
+    roster = roster_guids(trace)
+    dead_at = first_deaths(trace)
+
+    histogram: dict = collections.defaultdict(int)
+    for snap in trace.of("snap"):
+        if snap["t"] < 0:
+            continue
+        spots = {
+            (round(row[1], 1), round(row[2], 1))
+            for row in snap.get("u", [])
+            if row[0] in roster and not (row[0] in dead_at and snap["t"] >= dead_at[row[0]])
+        }
+        if len(spots) < 2:
+            continue
+        biggest = max(
+            sum(1 for x, y in spots if math.hypot(x - cx, y - cy) <= radius) for cx, cy in spots
+        )
+        histogram[biggest] += 1
+    return histogram
+
+
+def show_clump(trace: Trace, radius: float) -> int:
+    histogram = clump_histogram(trace, radius)
+    frames = sum(histogram.values())
+    if not frames:
+        print("no snapshots with two or more live positions")
+        return 0
+
+    print(f"most distinct positions inside one {radius:.0f} yd circle, per snapshot\n")
+    running = 0
+    for size in sorted(histogram, reverse=True):
+        running += histogram[size]
+        print(
+            f"  {size:3d} together  {histogram[size]:6d} frames  {100 * histogram[size] / frames:5.1f}%"
+            f"     >= {size}: {100 * running / frames:5.1f}% of the pull"
+        )
     return 0

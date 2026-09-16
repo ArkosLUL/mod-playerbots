@@ -35,22 +35,22 @@ that means the probe is not reaching the recorder, not that the mechanic never f
 """
 from __future__ import annotations
 
-import argparse
 import collections
 import math
 import pathlib
 import statistics
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+# Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from analysis import roster_guids  # noqa: E402
-from geometry import at, first_seen, guids_of_entry  # noqa: E402
-from geometry import track as tracks  # noqa: E402
-from obstrace import Trace, clock  # noqa: E402
-from probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
-from space import show_share, threat_share  # noqa: E402
-from views import IDLE_MS, idle_windows, veto_counts  # noqa: E402
+from raidobs.cli import run_sections  # noqa: E402
+from raidobs.geometry import at, first_seen, guids_of_entry  # noqa: E402
+from raidobs.geometry import track as tracks  # noqa: E402
+from raidobs.probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
+from raidobs.space import show_share, threat_share  # noqa: E402
+from raidobs.stuck import IDLE_MS, idle_windows, veto_counts  # noqa: E402
+from raidobs.trace import Trace, clock, notes, roster_guids  # noqa: E402
 
 NPC_GUARDIAN = 33136
 NPC_YOGG_SARON = 33288
@@ -157,10 +157,6 @@ PORTAL_SPOTS = [
 ]
 
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
-
-
-def notes(trace: Trace, key: str) -> list[dict]:
-    return [rec for rec in trace.of("note") if rec.get("k") == key]
 
 
 def sara_kills_needed(trace: Trace) -> int | None:
@@ -1066,35 +1062,20 @@ def show_threat(trace: Trace) -> None:
     print(f"    landed on the focus Guardian: {on_focus} of {len(taunts)}")
 
 
+SECTIONS = (
+    ("phases", "phase timeline and the pre-pull window", show_phases),
+    ("clouds", "cloud-orbit exposure per role", show_clouds),
+    ("threat", "who the Guardians were on, and taunts", show_threat),
+    ("portals", "portal waves and assignments", show_portals),
+    ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
+    ("brain", "brain room, the Brain, skulls", show_brain),
+    ("crush", "Crush, knockback and Death Rays", show_crush),
+    ("sanity", "Sanity minima", show_sanity),
+)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("file", type=pathlib.Path)
-    parser.add_argument("--phases", action="store_true", help="phase timeline and the pre-pull window")
-    parser.add_argument("--clouds", action="store_true", help="cloud-orbit exposure per role")
-    parser.add_argument("--portals", action="store_true", help="portal waves and assignments")
-    parser.add_argument("--phase2", action="store_true", help="Constrictor, Brain Link, node handovers")
-    parser.add_argument("--brain", action="store_true", help="brain room, the Brain, skulls")
-    parser.add_argument("--crush", action="store_true", help="Crush, knockback and Death Rays")
-    parser.add_argument("--sanity", action="store_true", help="Sanity minima")
-    parser.add_argument("--threat", action="store_true", help="who the Guardians were on, and taunts")
-    args = parser.parse_args()
-
-    if not args.file.is_file():
-        print(f"no such trace: {args.file}", file=sys.stderr)
-        return 1
-
-    trace = Trace(args.file)
-    picked = (args.phases, args.clouds, args.threat, args.portals, args.phase2, args.brain,
-              args.crush, args.sanity)
-    every = not any(picked)
-
-    show_banner(trace)
-    for wanted, section in zip(picked, (show_phases, show_clouds, show_threat, show_portals,
-                                        show_phase2, show_brain, show_crush, show_sanity)):
-        if wanted or every:
-            print()
-            section(trace)
-    return 0
+    return run_sections(__doc__, SECTIONS, show_banner)
 
 
 if __name__ == "__main__":

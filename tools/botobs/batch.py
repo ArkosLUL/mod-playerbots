@@ -24,13 +24,14 @@ import pathlib
 import sys
 from collections import Counter
 
-from obstrace import Trace, find_traces, pull_time
-from metrics import Side, show_compare, trace_metrics
-from probes import silent_keys
-from validity import ON_ASK, REPO, decidable_kinds, encounter_of, inspect, resolve_since
-from views import verify_checks
-
-DEFAULT_ROOT = REPO.parents[1] / "env" / "dist" / "logs" / "botobs"
+from raidobs.corpus import find_traces, pull_time
+from raidobs.encounter import encounter_of
+from raidobs.metrics import Side, show_compare, trace_metrics
+from raidobs.paths import LOG_ROOT, REPO
+from raidobs.probes import silent_keys
+from raidobs.trace import Trace
+from raidobs.validity import ON_ASK, decidable_kinds, inspect, resolve_since
+from raidobs.verify import verify_checks
 
 # One letter per disqualifier for the row table. Not the first letter of the kind: hardmode-off and
 # human-in-raid would collide, and those two are the pair most worth telling apart.
@@ -179,7 +180,7 @@ def read_rows(paths: list[pathlib.Path], ref, with_metrics: bool) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Read the RaidObs trace corpus.")
     parser.add_argument("roots", nargs="*", type=pathlib.Path, default=None,
-                        help=f"trace files or directories (default: {DEFAULT_ROOT})")
+                        help=f"trace files or directories (default: {LOG_ROOT})")
     parser.add_argument("--boss", help="only traces whose slug matches, e.g. thorim")
     parser.add_argument("--since", metavar="REF",
                         help="commit-ish or ISO time the build must be newer than; naming one makes a "
@@ -208,7 +209,7 @@ def main() -> int:
         print(f"cannot resolve --since {args.since} to a commit or a time", file=sys.stderr)
         return 1
 
-    roots = args.roots or [DEFAULT_ROOT]
+    roots = args.roots or [LOG_ROOT]
     paths = find_traces(roots, args.boss)
     if args.limit:
         paths = paths[: args.limit]

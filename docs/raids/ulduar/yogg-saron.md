@@ -777,7 +777,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-one `yogg.` probes and a reader.** `tools/botobs/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-one `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,

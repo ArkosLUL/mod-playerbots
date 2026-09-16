@@ -262,7 +262,7 @@ mid-cast interrupt down with it unnoticed.
 wipes — he is alive at full after one — and left `vezax.slot` silent on every following pull. Slots
 are only handed out in combat, so nothing live is cleared.
 
-**`tools/botobs/general_vezax.py` reads all of it** and reproduces this doc's per-pull figures, the
+**`tools/botobs/bosses/general_vezax.py` reads all of it** and reproduces this doc's per-pull figures, the
 heal-back aside (it shows only as boss health rate): `--boss`, `--mark` (leech, escape branch, nearest
 ally, boss health per window), `--crash` (target, dodgers per block), `--field` (both halves' uptime,
 casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap returns), `--vapors`,

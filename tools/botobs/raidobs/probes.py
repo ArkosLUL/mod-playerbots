@@ -26,11 +26,9 @@ import functools
 import pathlib
 import re
 
-from obstrace import Trace, clock
-from validity import encounter_of as trace_encounter
-
-# The module's own src/, two levels up from tools/botobs/.
-SRC_ROOT = pathlib.Path(__file__).resolve().parents[2] / "src"
+from .encounter import encounter_of, prefix_matches_boss
+from .paths import SRC_ROOT
+from .trace import Trace, clock
 
 LATCH = "latch"      # one raid-wide value
 HOLDER = "holder"    # one value per guid
@@ -77,25 +75,6 @@ def declared_keys(root: pathlib.Path = SRC_ROOT) -> dict[str, tuple[str, str]]:
                 if key not in found:
                     found[key] = (kind, f"{path.name}:{text.count(chr(10), 0, match.start()) + 1}")
     return found
-
-
-def encounter_of(key: str) -> str:
-    return key.split(".", 1)[0] if "." in key else key
-
-
-def prefix_matches_boss(prefix: str, boss: str) -> bool:
-    """Whether a key prefix names the boss a trace fought.
-
-    Prefixes are written three ways and all are regular: `thorim`/`mimiron`/`algalon` spell the slug
-    out with the punctuation dropped, `fl` is the slug's initials, and `yogg` is its first word.
-    Deriving all three beats a fourth hand-mirrored prefix table - there are already two of those and
-    they drift. Without the first-word form no `yogg.*` key matches its boss, because `yoggsaron`
-    and `ys` are all the other two forms derive.
-    """
-    words = [word for word in re.split(r"[^a-z0-9]+", boss.lower()) if word]
-    flat = "".join(words)
-    initials = "".join(word[0] for word in words)
-    return prefix in (flat, initials, words[0] if words else "")
 
 
 GUID_TOKEN = re.compile(r"\b\d{4,}\b")
@@ -267,7 +246,7 @@ def silent_keys(emitted: set[str], boss: str) -> list[tuple[str, str, str]]:
     return [
         (key, kind, where)
         for key, (kind, where) in sorted(declared_keys().items())
-        if key not in emitted and prefix_matches_boss(encounter_of(key), boss)
+        if key not in emitted and prefix_matches_boss(key.partition(".")[0], boss)
     ]
 
 
@@ -365,7 +344,7 @@ def show_probes(trace: Trace, prefix: str | None = None, during: str | None = No
           "\n  rules fighting over one bot looks like from outside. Scope with --during KEY=VALUE:"
           "\n  a late-phase storm buries an early-phase defect in the whole-pull number.")
 
-    silent = silent_keys(emitted_keys(trace), trace_encounter(trace))
+    silent = silent_keys(emitted_keys(trace), encounter_of(trace))
     if silent:
         print(f"\ndeclared for this boss, silent in this pull - {len(silent)} key(s)\n")
         for key, kind, where in silent:

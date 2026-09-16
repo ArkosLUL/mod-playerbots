@@ -28,14 +28,15 @@ import argparse
 import pathlib
 import sys
 
-from coverage import show_coverage
-from deathreport import show_death, summarise
-from obstrace import Trace
-from probes import show_probes
-from space import show_moves, show_threat, show_where
-from validity import show_validity
-from views import (IDLE_MS, show_bot, show_clump, show_idle, show_notes, show_stalls, show_track,
-                   show_verify, show_vetoes)
+from raidobs.cli import open_trace
+from raidobs.coverage import show_coverage
+from raidobs.deathreport import show_death, summarise
+from raidobs.probes import show_probes
+from raidobs.space import show_clump, show_moves, show_threat, show_where
+from raidobs.stuck import IDLE_MS, show_idle, show_stalls, show_vetoes
+from raidobs.timeline import show_bot, show_notes, show_track
+from raidobs.validity import show_validity
+from raidobs.verify import show_verify
 
 
 def main() -> int:
@@ -157,11 +158,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if not args.file.is_file():
-        print(f"no such trace: {args.file}", file=sys.stderr)
+    trace = open_trace(args.file)
+    if trace is None:
         return 1
-
-    trace = Trace(args.file)
 
     if args.validity:
         return 1 if show_validity(trace, args.since, args.hardmode) else 0

@@ -11,50 +11,13 @@ import datetime
 import pathlib
 import subprocess
 
-from obstrace import Trace, boss_from_path, canonical_boss, filed_under_map, map_of, slugify
+from .encounter import boss_of, encounter_of
+from .paths import REPO
+from .trace import Trace
 
 # Raid difficulty ids. Only raid maps are tracked unless Obs.Maps names one, so these are the labels
 # that apply; a 5-man would read 0/1 as normal/heroic instead.
 DIFFICULTY = {0: "10-man normal", 1: "25-man normal", 2: "10-man heroic", 3: "25-man heroic"}
-
-
-def boss_of(trace: Trace) -> str:
-    """The corrected boss slug. hdr.boss is line one of an append-only file, so a session that opened
-    before its boss engaged still carries the map name there; the rename record is authoritative."""
-    renames = [p for p in trace.of("pull") if p.get("src") == "rename"]
-    if renames:
-        return str(renames[-1].get("boss") or "")
-    return str(trace.header.get("boss") or "")
-
-
-def engaged_of(trace: Trace) -> str:
-    """The encounter read out of the loaded records: the boss-flagged unit that traded damage.
-
-    The same recovery `obstrace.recover_boss` does off disk, but free here because the trace is
-    already in memory. Several creatures can carry the flag, so the damage is what picks one.
-    """
-    flagged = {guid for guid in trace.bosses}
-    if not flagged:
-        return ""
-    for rec in trace.of("dmg"):
-        for guid in (rec.get("s"), rec.get("d")):
-            if guid in flagged and trace.names.get(guid):
-                return canonical_boss(slugify(trace.names[guid]))
-    return ""
-
-
-def encounter_of(trace: Trace) -> str:
-    """The fight this trace belongs to, which is what a census counts and what the conf keys on. The
-    boss slug says which creature engaged, and for a council or an elder pull that is not the same.
-
-    A slug that is still the map's name joins to no encounter, so the units decide there. Nowhere
-    else: a pull filed under its encounter never gets a rename, and the first boss-flagged unit to
-    trade damage is often an add or a vehicle rather than the boss the encounter is named after.
-    """
-    filed = boss_of(trace) or boss_from_path(trace.path)
-    if filed_under_map(trace.header.get("map", map_of(trace.path)), filed):
-        return engaged_of(trace) or canonical_boss(filed)
-    return canonical_boss(filed)
 
 
 def build_time(trace: Trace) -> datetime.datetime | None:
@@ -64,13 +27,11 @@ def build_time(trace: Trace) -> datetime.datetime | None:
     return datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc)
 
 
-def head_commit(repo: pathlib.Path) -> tuple[str, datetime.datetime] | None:
-    """HEAD's short hash and commit time, or None outside a repo. This is the default thing a build is
-    compared against: the question is almost always "is the running binary newer than what I just
-    wrote", and HEAD is what was just written."""
+def _commit(repo: pathlib.Path, ref: str) -> tuple[str, datetime.datetime] | None:
+    """A ref's short hash and commit time, or None when git cannot resolve it."""
     try:
         out = subprocess.run(
-            ["git", "-C", str(repo), "log", "-1", "--format=%h %cI"],
+            ["git", "-C", str(repo), "log", "-1", "--format=%h %cI", ref],
             capture_output=True, text=True, timeout=10,
         )
     except (OSError, subprocess.SubprocessError):
@@ -82,6 +43,13 @@ def head_commit(repo: pathlib.Path) -> tuple[str, datetime.datetime] | None:
         return sha, datetime.datetime.fromisoformat(iso)
     except ValueError:
         return None
+
+
+def head_commit(repo: pathlib.Path) -> tuple[str, datetime.datetime] | None:
+    """HEAD's short hash and commit time, or None outside a repo. This is the default thing a build is
+    compared against: the question is almost always "is the running binary newer than what I just
+    wrote", and HEAD is what was just written."""
+    return _commit(repo, "HEAD")
 
 
 def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.datetime] | None:
@@ -94,20 +62,7 @@ def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.
     except ValueError:
         pass
 
-    try:
-        out = subprocess.run(
-            ["git", "-C", str(repo), "log", "-1", "--format=%h %cI", since],
-            capture_output=True, text=True, timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if out.returncode != 0 or not out.stdout.strip():
-        return None
-    sha, _, iso = out.stdout.strip().partition(" ")
-    try:
-        return sha, datetime.datetime.fromisoformat(iso)
-    except ValueError:
-        return None
+    return _commit(repo, since)
 
 
 # Roles whose absence changes what a pull proves. A human doing damage is noise; a human tanking or
@@ -150,9 +105,6 @@ def humans(trace: Trace) -> list[str]:
     only in a `unit` record, and that is the same person most likely to have picked up a role
     mid-pull. Two derivations of one predicate would disagree exactly where it matters."""
     return sorted(trace.name(guid) for guid in trace.humans)
-
-
-REPO = pathlib.Path(__file__).resolve().parents[2]
 
 
 def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[dict, list[tuple[str, str]]]:

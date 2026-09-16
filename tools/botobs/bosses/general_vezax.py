@@ -27,20 +27,20 @@ What the generic views get wrong here, and what this reads instead:
 """
 from __future__ import annotations
 
-import argparse
 import bisect
 import collections
 import pathlib
 import statistics
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+# Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from analysis import roster_guids  # noqa: E402
-from geometry import anchor, dist2, first_seen, frames, guids_of_entry, radius  # noqa: E402
-from obstrace import Trace, clock  # noqa: E402
-from probes import emitted_keys, silent_keys  # noqa: E402
-from validity import encounter_of  # noqa: E402
+from raidobs.cli import run_sections  # noqa: E402
+from raidobs.encounter import encounter_of  # noqa: E402
+from raidobs.geometry import anchor, dist2, first_seen, frames, guids_of_entry, radius  # noqa: E402
+from raidobs.probes import emitted_keys, silent_keys  # noqa: E402
+from raidobs.trace import Trace, clock, notes, roster_guids  # noqa: E402
 
 NPC_VEZAX = 33271
 NPC_SARONITE_VAPORS = 33488
@@ -85,10 +85,6 @@ EARLY_MS = 4000
 NEAREST_FROM_MS = 2000
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
-
-
-def notes(trace: Trace, key: str) -> list[dict]:
-    return [rec for rec in trace.of("note") if rec.get("k") == key]
 
 
 def pull_end(trace: Trace) -> int:
@@ -724,26 +720,7 @@ SECTIONS = (
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("file", type=pathlib.Path)
-    for flag, text, _ in SECTIONS:
-        parser.add_argument(f"--{flag}", action="store_true", help=text)
-    args = parser.parse_args()
-
-    if not args.file.is_file():
-        print(f"no such trace: {args.file}", file=sys.stderr)
-        return 1
-
-    trace = Trace(args.file)
-    picked = [getattr(args, flag) for flag, _, _ in SECTIONS]
-    every = not any(picked)
-
-    show_banner(trace)
-    for wanted, (_, _, section) in zip(picked, SECTIONS):
-        if wanted or every:
-            print()
-            section(trace)
-    return 0
+    return run_sections(__doc__, SECTIONS, show_banner)
 
 
 if __name__ == "__main__":

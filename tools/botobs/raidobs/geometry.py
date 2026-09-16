@@ -16,10 +16,8 @@ import math
 import pathlib
 import re
 
-from obstrace import Trace
-
-SRC_ROOT = pathlib.Path(__file__).resolve().parents[2] / "src"
-RAID_ROOT = SRC_ROOT / "Ai" / "Raid"
+from .paths import RAID_ROOT
+from .trace import Trace
 
 # Snapshot row columns, by the name a caller would say. `t` is the snapshot's own stamp rather than a
 # column, which is why it maps to None.

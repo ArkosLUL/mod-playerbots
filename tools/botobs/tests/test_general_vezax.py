@@ -18,8 +18,8 @@ import unittest
 BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
-import general_vezax as gv  # noqa: E402
-from obstrace import Trace  # noqa: E402
+from bosses import general_vezax as gv  # noqa: E402
+from raidobs.trace import Trace  # noqa: E402
 
 FULL = BOTOBS / "fixtures" / "full-v12.ndjson"
 

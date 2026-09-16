@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import statistics
 
-from coverage import coverage_metrics
-from obstrace import Trace
-from probes import duration_min, probe_metrics
-from views import clump_histogram, stall_windows
+from .coverage import coverage_metrics
+from .probes import duration_min, probe_metrics
+from .space import clump_histogram
+from .stuck import stall_windows
+from .trace import Trace
 
 KEY_WIDTH = 54
 STALL_MIN_MS = 6000

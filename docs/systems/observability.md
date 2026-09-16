@@ -14,24 +14,25 @@ watched set), `Lifecycle` (open/close, map and script events), `Config` (config,
 `Status`), `Combat` (damage, heal, aura, cast, death), `Engine` (verdict ticks, moves, notes),
 `Scripts` (ScriptMgr hooks).
 
-Reader: [tools/botobs/postmortem.py](../../tools/botobs/postmortem.py) — the CLI over `obstrace`
-(load), `records` (one row), `analysis` (many), `deathreport` and `views` (print).
+Readers in [tools/botobs/](../../tools/botobs/): `postmortem.py` for one pull, `batch.py` for the
+corpus, `bosses/<boss>.py` per encounter. All import the `raidobs/` package, a module per question,
+which imports none of them.
 
 ## Reading a trace
 
 Traces land in `<LogsDir>/botobs/<map>_<instance>_<boss>_<epoch>.ndjson`, named from the creature that
 engaged. `.playerbots debug obs` lists what is open.
 
-A fight with several bosses lands under whichever one engaged, so `BOSS_ALIASES` in `obstrace.py` maps
-every such slug to one encounter: the Iron Assembly's 30 pulls read as 16 Brundir and 14 Molgeim, and
-Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go through it, and so does
-`cfg.hardmode`, whose keys are these names - an unmapped slug means the hard-mode check silently never
-applies.
+A fight with several bosses lands under whichever one engaged, so `BOSS_ALIASES` in
+`raidobs/encounter.py` maps every such slug to one encounter: the Iron Assembly's 30 pulls read as 16
+Brundir and 14 Molgeim, and Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go
+through it, and so does `cfg.hardmode`, whose keys are these names - an unmapped slug means the
+hard-mode check silently never applies.
 
 `--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
 encounter, folding every node into the "gate shut this pull" line - 342 on the 2026-09-13 Yogg wipes,
 reading as a closed gate when only the join failed. So a slug still equal to its map's `Map.dbc` name
-(`obstrace.MAP_SLUGS`) resolves to the boss-flagged unit that traded damage; the flag alone is not
+(`encounter.MAP_SLUGS`) resolves to the boss-flagged unit that traded damage; the flag alone is not
 enough, as Yogg's room holds the four Keepers. **Any other slug stands**: Mimiron files under his
 encounter name, yet the first boss-flagged unit to trade damage is Leviathan Mk II. `--boss` opens
 only map-named files beyond those its name selects.
@@ -354,7 +355,7 @@ because it sits at `combat` alongside `reach melee`. `follow` and `chase` never 
 `RaidObs::MovePriority` mirrors `MovementPriority` so `Bot/Obs` stays off `Ai`, and
 `MovementActions.cpp` static_asserts the two in step.
 
-Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `obstrace.py` on any field *or value*
+Bump `SCHEMA_VERSION` in `RaidObs.h` and `SUPPORTED_SCHEMA` in `raidobs/trace.py` on any field *or value*
 change; an additive one keeps the old version in `READABLE_SCHEMAS` so traces already on disk still
 read. A new sentinel in an existing column is not additive — a reader that does not know it computes a
 wrong number.
@@ -442,7 +443,7 @@ are left bare on purpose.
   carries a median of 6 and a p90 of 25 live pets and guardians, which is the likeliest reason observed
   chains reach 7-8 hops where an idealised formation caps at 3 — and it stays a hypothesis until
   `Bot/Obs` logs pet damage.
-- **`tools/botobs/flame_leviathan.py` never reads `fl.station`.** `Frame.__init__` returns at the
+- **`tools/botobs/bosses/flame_leviathan.py` never reads `fl.station`.** `Frame.__init__` returns at the
   vehicle branch on every trace where vehicles are in the snapshot, which is all of them, so the
   station fallback below it is dead and its `tar-lead` branch has never run — the "by station" tables
   really split on the vehicle's creature entry. `victim()` likewise still guesses the pursued vehicle

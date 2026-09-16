@@ -50,17 +50,17 @@ Two things this file will not tell you, both of which have already fooled a read
 """
 from __future__ import annotations
 
-import argparse
 import collections
 import math
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+# Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from analysis import roster_guids  # noqa: E402
-import geometry  # noqa: E402
-from obstrace import Trace  # noqa: E402
+from raidobs import geometry  # noqa: E402
+from raidobs.cli import run_sections  # noqa: E402
+from raidobs.trace import Trace, first_deaths, roster_guids  # noqa: E402
 
 BOSS_ENTRY = 33113
 RETICLE_ENTRY = 33108
@@ -115,13 +115,6 @@ def stations(trace: Trace) -> dict:
     for rec in trace.of("note"):
         if rec.get("k") == "fl.station":
             out[rec["g"]] = rec.get("txt")
-    return out
-
-
-def deaths(trace: Trace) -> dict:
-    out: dict = {}
-    for rec in trace.of("death"):
-        out.setdefault(rec["g"], rec["t"])
     return out
 
 
@@ -196,7 +189,7 @@ def frames(trace: Trace):
     if boss_guid(ents) is None:
         print("warning: no Flame Leviathan in this trace", file=sys.stderr)
         return
-    roster, dead, station = roster_guids(trace), deaths(trace), stations(trace)
+    roster, dead, station = roster_guids(trace), first_deaths(trace), stations(trace)
     for snap in trace.of("snap"):
         if snap["t"] < 0:
             continue
@@ -637,41 +630,17 @@ def show_vents(trace: Trace) -> int:
     return 0
 
 
+SECTIONS = (
+    ("ram", "Battering Ram exposure only", show_ram),
+    ("fury", "Hodir's Fury only", show_fury),
+    ("adds", "Freya's Ward adds only", show_adds),
+    ("vents", "Flame Vents channels and interrupts only", show_vents),
+    ("inferno", "Mimiron's Inferno trail only", show_inferno),
+)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("file", type=pathlib.Path)
-    parser.add_argument("--ram", action="store_true", help="Battering Ram exposure only")
-    parser.add_argument("--fury", action="store_true", help="Hodir's Fury only")
-    parser.add_argument("--adds", action="store_true", help="Freya's Ward adds only")
-    parser.add_argument("--vents", action="store_true", help="Flame Vents channels and interrupts only")
-    parser.add_argument("--inferno", action="store_true", help="Mimiron's Inferno trail only")
-    args = parser.parse_args()
-
-    if not args.file.is_file():
-        print(f"no such trace: {args.file}", file=sys.stderr)
-        return 1
-
-    trace = Trace(args.file)
-    every = not (args.ram or args.fury or args.adds or args.vents or args.inferno)
-    if args.ram or every:
-        show_ram(trace)
-    if every:
-        print()
-    if args.fury or every:
-        show_fury(trace)
-    if every:
-        print()
-    if args.adds or every:
-        show_adds(trace)
-    if every:
-        print()
-    if args.vents or every:
-        show_vents(trace)
-    if every:
-        print()
-    if args.inferno or every:
-        show_inferno(trace)
-    return 0
+    return run_sections(__doc__, SECTIONS)
 
 
 if __name__ == "__main__":

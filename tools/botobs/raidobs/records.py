@@ -5,7 +5,7 @@ recognises, and absorbs the schema drift between versions on the way.
 """
 from __future__ import annotations
 
-from obstrace import Trace
+from .trace import Trace
 
 # Unit::Kill strips a dying unit's auras through the same hook the recorder listens on, so an aura
 # held right up to the death is stamped with the death's own timestamp. Anything inside this window

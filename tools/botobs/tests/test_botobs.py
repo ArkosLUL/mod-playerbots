@@ -25,24 +25,20 @@ import io  # noqa: E402
 import math  # noqa: E402
 from unittest import mock  # noqa: E402
 
-import coverage  # noqa: E402
-import deathreport  # noqa: E402
-import flame_leviathan  # noqa: E402
-import geometry  # noqa: E402
-import obstrace  # noqa: E402
-import probes  # noqa: E402
-import space  # noqa: E402
-import validity  # noqa: E402
-import views  # noqa: E402
-import yogg_saron  # noqa: E402
-from coverage import bucket, coverage_metrics  # noqa: E402
-from metrics import Side, compare  # noqa: E402
-from obstrace import Trace, boss_key, canonical_boss, pull_time, recover_boss  # noqa: E402
-from probes import (  # noqa: E402
-    HOLDER, LATCH, Series, declared_keys, latch_spans, latch_windows, prefix_matches_boss,
-    resolve_guids,
+from bosses import flame_leviathan, yogg_saron  # noqa: E402
+from raidobs import (  # noqa: E402
+    corpus, coverage, deathreport, encounter, geometry, probes, space, stuck, timeline, validity, verify,
 )
-from views import idle_windows, verify_checks  # noqa: E402
+from raidobs.corpus import pull_time  # noqa: E402
+from raidobs.coverage import bucket, coverage_metrics  # noqa: E402
+from raidobs.encounter import boss_key, canonical_boss, prefix_matches_boss, recover_boss  # noqa: E402
+from raidobs.metrics import Side, compare  # noqa: E402
+from raidobs.probes import (  # noqa: E402
+    HOLDER, LATCH, Series, declared_keys, latch_spans, latch_windows, resolve_guids,
+)
+from raidobs.stuck import idle_windows  # noqa: E402
+from raidobs.trace import Trace  # noqa: E402
+from raidobs.verify import verify_checks  # noqa: E402
 
 FIXTURE = BOTOBS / "fixtures" / "coverage-v12.ndjson"
 
@@ -458,24 +454,24 @@ class Recovery(unittest.TestCase):
     def test_the_engaged_boss_is_the_one_that_traded_damage(self):
         trace = rich()
         trace.header["boss"] = "ulduar"
-        self.assertEqual(validity.engaged_of(trace), "fixture-boss")
+        self.assertEqual(encounter.engaged_of(trace), "fixture-boss")
 
     def test_a_rename_outranks_the_units(self):
         trace = rich()
         trace.records.append({"t": 5, "e": "pull", "boss": "named-by-rename", "src": "rename"})
-        self.assertEqual(validity.encounter_of(trace), "named-by-rename")
+        self.assertEqual(encounter.encounter_of(trace), "named-by-rename")
 
     def test_a_pull_filed_under_the_map_is_named_by_its_units(self):
         trace = rich()
         trace.header["boss"] = "ulduar"
-        self.assertEqual(validity.encounter_of(trace), "fixture-boss")
+        self.assertEqual(encounter.encounter_of(trace), "fixture-boss")
 
     def test_a_pull_filed_under_its_encounter_keeps_that_name(self):
         # Mimiron's pull is filed `mimiron` and never renamed, while the first boss-flagged unit to
         # trade damage is Leviathan Mk II. The units must not overrule a name that was never the map's.
         trace = rich()
         self.assertEqual(trace.header["boss"], "fixtureboss")
-        self.assertEqual(validity.encounter_of(trace), "fixtureboss")
+        self.assertEqual(encounter.encounter_of(trace), "fixtureboss")
 
     def test_find_traces_opens_only_a_file_filed_under_the_map(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -483,8 +479,8 @@ class Recovery(unittest.TestCase):
             other = pathlib.Path(folder) / "603_4_thorim_1789500001.ndjson"
             for path in (unnamed, other):
                 path.write_bytes(FULL.read_bytes())
-            with mock.patch.object(obstrace, "recover_boss", wraps=obstrace.recover_boss) as opened:
-                found = obstrace.find_traces([folder], "fixture-boss")
+            with mock.patch.object(corpus, "recover_boss", wraps=encounter.recover_boss) as opened:
+                found = corpus.find_traces([folder], "fixture-boss")
             self.assertEqual([path.name for path in found], [unnamed.name])
             self.assertEqual([call.args[0].name for call in opened.call_args_list], [unnamed.name])
 
@@ -613,15 +609,15 @@ class Renderers(unittest.TestCase):
     def test_every_renderer_runs(self):
         trace = rich()
         calls = {
-            "show_bot": lambda: views.show_bot(trace, "Bulwark"),
-            "show_track": lambda: views.show_track(trace, "Bulwark"),
-            "show_notes": lambda: views.show_notes(trace),
-            "show_notes_prefix": lambda: views.show_notes(trace, "fixture."),
-            "show_stalls": lambda: views.show_stalls(trace, 1000),
-            "show_idle": lambda: views.show_idle(trace, 1),
-            "show_vetoes": lambda: views.show_vetoes(trace),
-            "show_clump": lambda: views.show_clump(trace, 10.0),
-            "show_verify": lambda: views.show_verify(trace),
+            "show_bot": lambda: timeline.show_bot(trace, "Bulwark"),
+            "show_track": lambda: timeline.show_track(trace, "Bulwark"),
+            "show_notes": lambda: timeline.show_notes(trace),
+            "show_notes_prefix": lambda: timeline.show_notes(trace, "fixture."),
+            "show_stalls": lambda: stuck.show_stalls(trace, 1000),
+            "show_idle": lambda: stuck.show_idle(trace, 1),
+            "show_vetoes": lambda: stuck.show_vetoes(trace),
+            "show_clump": lambda: space.show_clump(trace, 10.0),
+            "show_verify": lambda: verify.show_verify(trace),
             "show_coverage": lambda: coverage.show_coverage(trace),
             "show_coverage_by_bot": lambda: coverage.show_coverage(trace, None, True),
             "show_probes": lambda: probes.show_probes(trace),
@@ -646,8 +642,8 @@ class Renderers(unittest.TestCase):
 
     def test_the_ones_that_answer_on_stderr_still_return(self):
         trace = rich()
-        self.assertEqual(self.run_quiet(lambda: views.show_bot(trace, "Nobody")), "")
-        self.assertEqual(self.run_quiet(lambda: views.show_track(trace, "Nobody")), "")
+        self.assertEqual(self.run_quiet(lambda: timeline.show_bot(trace, "Nobody")), "")
+        self.assertEqual(self.run_quiet(lambda: timeline.show_track(trace, "Nobody")), "")
         self.run_quiet(lambda: deathreport.show_death(trace, 99))
 
     def test_the_smoke_test_catches_a_broken_renderer(self):
@@ -663,9 +659,9 @@ class Renderers(unittest.TestCase):
             bare.write_text(json.dumps({"e": "hdr", "v": 12, "boss": "bare", "roster": []}) + "\n",
                             encoding="utf-8")
             trace = Trace(bare)
-            for call in (lambda: views.show_notes(trace),
-                         lambda: views.show_vetoes(trace),
-                         lambda: views.show_idle(trace, 1000),
+            for call in (lambda: timeline.show_notes(trace),
+                         lambda: stuck.show_vetoes(trace),
+                         lambda: stuck.show_idle(trace, 1000),
                          lambda: space.show_threat(trace),
                          lambda: deathreport.summarise(trace)):
                 self.run_quiet(call)
