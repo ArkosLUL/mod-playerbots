@@ -1374,6 +1374,26 @@ bool YoggSaronGuardianWaitsOutNovaGap(Player* bot, Unit* guardian)
     return guardian->GetHealthPct() < ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT &&
            YoggSaronGuardianDiedWithin(bot, ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS);
 }
+
+// A lower Guardian inside nova chain range dies first: finishing this one beside it novas the lower one for
+// ~2.7% of its health in the same tick. The lowest is never held, so the raid always has one to finish.
+// Health first, so the sweep only runs for a Guardian close to dying.
+bool YoggSaronGuardianWaitsOnLowerNeighbour(Unit* guardian)
+{
+    if (guardian->GetHealthPct() >= ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT)
+        return false;
+
+    std::list<Creature*> guardians;
+    guardian->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS);
+    for (Creature* other : guardians)
+    {
+        if (other != guardian && other->IsAlive() && other->GetHealth() < guardian->GetHealth() &&
+            other->GetExactDist2d(guardian) <= ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS)
+            return true;
+    }
+
+    return false;
+}
 }  // namespace
 
 bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian)
@@ -1381,7 +1401,7 @@ bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian)
     if (!guardian || !guardian->IsAlive())
         return false;
 
-    if (YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian))
+    if (YoggSaronGuardianWaitsOutNovaGap(botAI->GetBot(), guardian) || YoggSaronGuardianWaitsOnLowerNeighbour(guardian))
         return false;
 
     // Group walk last, so it only runs for a Guardian that is actually parked.
@@ -1446,7 +1466,14 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
         else if (abandon)
             reason = "abandoned";
         else if (held && held->IsAlive())
-            reason = YoggSaronGuardianWaitsOutNovaGap(bot, held) ? "spaced" : "parked";
+        {
+            if (YoggSaronGuardianWaitsOutNovaGap(bot, held))
+                reason = "spaced";
+            else if (YoggSaronGuardianWaitsOnLowerNeighbour(held))
+                reason = "chain";
+            else
+                reason = "parked";
+        }
 
         RaidObs::NoteDerived(bot, "yogg.p1focus", reason);
     }
@@ -1491,11 +1518,11 @@ bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI)
     return false;
 }
 
-Position YoggSaronCloudLead(Creature* cloud)
+Position YoggSaronCloudLead(Creature* cloud, uint32 leadMs)
 {
     // An escort-AI creature faces the leg it is walking, so its own orientation is the heading - no
     // need to track the orbit or know which way round it was sent.
-    float const travel = cloud->GetSpeed(MOVE_RUN) * ULDUAR_YOGG_SARON_CLOUD_LEAD_MS / 1000.0f;
+    float const travel = cloud->GetSpeed(MOVE_RUN) * leadMs / 1000.0f;
     float const heading = cloud->GetOrientation();
 
     return Position(cloud->GetPositionX() + std::cos(heading) * travel,
@@ -1525,6 +1552,42 @@ bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& cloud
     }
 
     return true;
+}
+
+bool YoggSaronWalkCrossesCloud(Player* bot, Position const& to, Position const* exempt, float exemptRadius)
+{
+    float const leg = bot->GetExactDist2d(to.GetPositionX(), to.GetPositionY());
+
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, NPC_OMINOUS_CLOUD, leg + ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS);
+    if (found.empty())
+        return false;
+
+    // Sampled at the walk's own length rather than the full lead: a 6 s lead is a quarter of the inner
+    // orbit and would hold walks that finish long before the cloud gets there.
+    float const speed = bot->GetSpeed(MOVE_RUN);
+    uint32 const arrivalMs =
+        speed > 0.0f ? std::min(ULDUAR_YOGG_SARON_CLOUD_LEAD_MS, static_cast<uint32>(leg / speed * 1000.0f))
+                     : ULDUAR_YOGG_SARON_CLOUD_LEAD_MS;
+
+    std::vector<Position> samples;
+    for (Creature* cloud : found)
+    {
+        if (!cloud->IsAlive())
+            continue;
+
+        if (bot->GetExactDist2d(cloud) < ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS)
+            return false;
+
+        if (exempt && cloud->GetExactDist2d(exempt) <= exemptRadius)
+            continue;
+
+        samples.push_back(cloud->GetPosition());
+        samples.push_back(YoggSaronCloudLead(cloud, arrivalMs / 2));
+        samples.push_back(YoggSaronCloudLead(cloud, arrivalMs));
+    }
+
+    return !samples.empty() && !YoggSaronRouteClearOfClouds(bot, samples, to.GetPositionX(), to.GetPositionY());
 }
 
 namespace

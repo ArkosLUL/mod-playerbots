@@ -147,6 +147,11 @@ constexpr uint32 ULDUAR_YOGG_SARON_CLOUD_LEAD_MS = 6000;
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS = 17.0f;
 constexpr float ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS = 20.0f;
 
+// How close a live nova keeps a Sara's Fervor holder from walking back in: the clear radius plus 2 yd of
+// slack. With only the dodge, the station or the leash walked the bot straight back past 17 yd and 31
+// of 44 runs were back inside the blast while still holding Fervor.
+constexpr float ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS = 22.0f;
+
 // A Guardian at or under this is about to detonate. Running from every Guardian instead scatters the
 // raid to the rim and leaves bots to be picked off one at a time.
 constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
@@ -212,9 +217,14 @@ constexpr float ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT = 35.0f;
 // two of them from full, the pull with no phase 1 deaths never had two closer than 6 s.
 constexpr uint32 ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS = 6000;
 
-// Below this a Guardian is close enough to dying that the gap has to protect it. Untargeted on the
-// stack one still lost 5.6%/s, so 30% outlasts the gap.
+// Below this a Guardian is close enough to dying that the gap has to protect it. Held Guardians on the
+// stack still lost 4.2-7.9%/s to the tank, humans, DoTs and cleaves, so in practice it buys ~3 s, not 6.
 constexpr float ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT = 30.0f;
+
+// A Guardian's nova also hits every other Guardian within 15 yd for 25,000-27,501 (65209 effect 1, a
+// conditions row on entry 33136), ~2.7% of one. The focus dying 13.8 yd from one at 0.9% killed both in
+// the same tick, and two melee with them. 18 covers the 16.2 yd measured on players.
+constexpr float ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS = 18.0f;
 
 // Death and Decay and Explosive Trap reach 10, Blizzard and Consecration 8.
 constexpr float ULDUAR_YOGG_SARON_P1_AOE_HOLD_RADIUS = 10.0f;
@@ -676,14 +686,15 @@ void YoggSaronNoteGuardianDeath(Unit* guardian);
 bool YoggSaronGuardianDiedWithin(Player* bot, uint32 ms);
 
 // Whether the raid may finish this Guardian where it stands: on the stack, or still above the park
-// floor, and never below the nova gap floor while the last nova is under 6 s old. The park floor is off
-// without a living bot tank, since nobody would ever fetch a parked one. The gap never is.
+// floor. Never below the nova gap floor while the last nova is under 6 s old, or while a lower Guardian
+// stands inside nova chain range, which has to die first. The park floor is off without a living bot
+// tank, since nobody would ever fetch a parked one. The other two never are.
 bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian);
 
 // The one Guardian every non-tank is on in phase 1, shared per instance, or null while every Guardian
-// is parked or waiting out the gap. Per-bot holds let ranged and melee lock different Guardians, and
-// the two came down in lockstep and died 17 ms apart. Held until it dies, parks, hits the gap floor, or
-// drifts past 15 yd while a killable one is on the stack.
+// is parked or waiting its turn. Per-bot holds let ranged and melee lock different Guardians, and the
+// two came down in lockstep and died 17 ms apart. Held until it dies, stops being killable, or drifts
+// past 15 yd while a killable one is on the stack.
 Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI);
 
 // True while a Guardian other than the focus sits below the gap floor within 10 yd of the middle or of
@@ -703,11 +714,17 @@ Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI);
 // is there - without this a dead tank strands the melee half of the raid out of combat.
 bool YoggSaronBotTankAlive(PlayerbotAI* botAI);
 
-// Where a cloud will be one lead ahead, taken from its own facing and run speed.
-Position YoggSaronCloudLead(Creature* cloud);
+// Where a cloud will be `leadMs` ahead, taken from its own facing and run speed.
+Position YoggSaronCloudLead(Creature* cloud, uint32 leadMs = ULDUAR_YOGG_SARON_CLOUD_LEAD_MS);
 
 // Whether a straight walk from the bot to (x, y) stays outside every cloud's summon radius.
 bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& clouds, float x, float y);
+
+// Whether a walk from the bot to `to` would cross a cloud now, halfway or on arrival, so it should wait
+// for the cloud to pass (about 6 s). False while the bot already stands in one: leaving beats staying.
+// Clouds within `exemptRadius` of `exempt` are ignored.
+bool YoggSaronWalkCrossesCloud(Player* bot, Position const& to, Position const* exempt = nullptr,
+                               float exemptRadius = 0.0f);
 
 // The window between Sara dying and Yogg emerging, and how long is left of it. Yogg being here
 // without SPELL_SHADOW_BARRIER is the whole of it, because ACTION_YOGG_SARON_APPEAR casts the barrier

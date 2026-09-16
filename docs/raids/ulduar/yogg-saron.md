@@ -64,7 +64,7 @@ phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot t
 
 | Spell | Shape | Answer |
 |---|---|---|
-| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death** | ranged and healers stand off; melee and tanks must eat it |
+| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death**, also hitting other Guardians (below) | ranged and healers stand off; melee and tanks must eat it |
 | Dark Volley 63038 / 65330 | 1500 ms cast, 35 yd, `InterruptFlags` 0xF | interrupt it — distance is no answer |
 
 ~97% of raid damage across both wipes. Which of the two leads flips with how many Guardians are up:
@@ -277,6 +277,24 @@ what scattered the raid to the rim on 2026-09-14, where seven bots were picked o
 1:26 and 1:30. `GetYoggSaronNovaThreats` is the single owner of that rule, so the trigger and the action
 cannot disagree about who is running.
 
+**A Fervor run has to end out of reach, not at the edge.** The dodge fires inside 17 yd and stops at
+20, and the station, the leash or `reach melee` then walked the bot straight back: over 9 traces **31
+of 44** runs that got clear were inside 16.2 yd again while still holding Fervor (melee a median 1.1 s
+later, ranged 5.3), and 3 of 17 novas on Fervor holders killed. `yogg-saron phase 1 walk guard
+multiplier` zeroes the station, the leash (not its handover walk out), `reach melee`, `reach spell` and
+`set behind` for a Fervor holder while a Guardian at or under 50% is within
+`ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS` (22). Casting is untouched, and the spacing node still steps it
+off a cloud.
+
+**Walks back wait for a cloud to pass.** 7 of the 69 Guardians raiders marked in those traces came off
+a cloud only Fervor runners touched, each off its own ground: 4 melee at 8-10 yd, three of them walking
+back, and 3 ranged or healers at 11.9-27.3 yd. The same multiplier holds the station walk, and the
+leash and `reach melee` from outside 6.5 yd, while `YoggSaronWalkCrossesCloud` puts a cloud within 9.5
+yd of the line now, halfway or on arrival. It samples the walk's own length: the 6 s lead is a quarter
+of the inner orbit. Nothing inside the leash is held, since the inner orbit reaches most of it, nor a
+bot already standing in a cloud. The station walk ignores clouds within 14.5 yd of the spot: orbit 2
+over the stack is its designed cost, and one more bot summons nothing extra.
+
 **Ranged and healers hold one spot on the second orbit.** Guardians die on Sara, so her spot is a
 standing nova hazard for everyone who need not be in it — ranged and healers were inside it for 37%
 and 49% of one phase 1, and a 20 yd standoff alone took both to **0%**. The station is
@@ -336,9 +354,9 @@ pull, and the bots waiting on it dropped out of combat into `clean quest log` an
 `RtiTargetValue::Calculate` returns null on LOS failure and beyond `sightDistance` (100) in 2D. A
 direct `Attack()` has **no distance cap, only LOS**, which is what makes the Brain reachable at all.
 
-Kill order — **phase 1: one Guardian for the whole raid, and no two deaths inside 6 s** (threat
-section below). Splitting damage is what killed the raid on 2026-09-14: two Guardians rode down in
-lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and the **double** nova put
+Kill order — **phase 1: one Guardian for the whole raid, no two deaths inside 6 s, never beside a
+lower one** (threat section below). Splitting damage is what killed the raid on 2026-09-14: two
+Guardians rode down in lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and the **double** nova put
 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier single novas were all
 survived. Brain level: Influence Tentacle →
 nearest other illusion add → the Brain. Boss room:
@@ -421,7 +439,7 @@ cover the ~12 s fetch (taunt cooldown, the walk, and a taunted Guardian that sto
 against the 1.7-1.8%/s, peaking near 3%/s, that an untargeted Guardian near the station still loses to
 splash. Without a living bot tank nothing fetches, so the floor is off. The focus is still given up
 past **15 yd** for a killable one inside **6.5**, a gap that stops a Guardian on the boundary flipping
-it. `yogg.p1focus` records each change: `picked`, `parked`, `spaced`, `abandoned`, `none`.
+it. `yogg.p1focus` records each change: `picked`, `parked`, `spaced`, `chain`, `abandoned`, `none`.
 
 **One focus does not space the novas.** On the 17:25 pull the focus held (6.4% of phase 1 on two or
 more Guardians, no back-line nova), but an untargeted Guardian on the stack still lost **5.6%/s** to
@@ -431,20 +449,31 @@ at 1:57.37, and two melee held in the middle went 100% → 62-75% → 15-36% →
 
 - **Nova gap.** For `ULDUAR_YOGG_SARON_P1_NOVA_GAP_MS` (6 s) after any Guardian dies, one below
   **30%** (`…_NOVA_GAP_HEALTH_PCT`) is not killable: it is dropped like a parked one and the focus
-  moves on (`spaced`). The pull with no phase 1 deaths never had two novas closer than 6 s, and 30%
-  outlasts 6 s at 5.6%/s. The clock is `YoggSaronGuardianDeathListenerScript` on 65719, which only a
-  Guardian's `JustDied` casts. It holds without a bot tank, and through the handover, where the phase
-  still reads 1.
+  moves on (`spaced`). The pull with no phase 1 deaths never had two novas closer than 6 s. It buys
+  ~3 s in practice: held Guardians on the stack still lost **4.2-7.9%/s** to the bot tank (Hammer of
+  Wrath, Seal of Vengeance: tanks keep the generic picker), humans, running DoTs and cleaves not typed
+  `Aoe`, and 2 of 5 died inside 6 s (2.9, 4.3 s), killing nobody. The clock is
+  `YoggSaronGuardianDeathListenerScript` on 65719, which only a Guardian's `JustDied` casts. It holds
+  without a bot tank, and through the handover, where the phase still reads 1.
 - **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes non-heal `Aoe` actions, tanks included,
   while a Guardian other than the focus is below 30% within 10 yd of the middle or of the focus.
   Replayed, it came on before every splash kill (0:22.2, 1:05.2, 1:48.7) and covered 8.9% of that
   phase 1. That is only 2.6-5.3 s of lead, so the resolver also cancels an area channel already
   running: Blizzard, Hurricane, Volley, Rain of Fire. Mind Sear fails `IsAffectingArea` (a
   single-target aura that triggers the area spell) and ground AoE already placed keeps ticking.
+- **Nova chain.** 65209's second effect hits every other Guardian within 15 yd for 25,000-27,501 (a
+  `conditions` row on 33136), ~2.7% of 967,182. On the 20:51 kill a spaced Guardian lost the tank,
+  chased a ranged to 16 yd and was bled to 0.9% by humans and DoTs, then the focus died 13.8 yd away:
+  both in one tick, two melee dead, the far nova on the back line. Over 9 traces a neighbour at ≤3.5%
+  died in the same tick 3 times of 3, one at ≤20% within 2 s 2 of 4, one above 30% never in 92. So a
+  Guardian below 30% is not killable while a lower one stands within
+  `ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS` (18, over the 16.2 measured on players): the focus moves to
+  the lower one if it is killable, else waits (`chain`). The lowest is never held.
 
 `--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks
 were on it a second before, and lists pairs under the gap: 9/0/4 and 3 pairs on the 17:25 pull,
-12/2/0 and 3 on the 14:10 wipe.
+12/2/0 and 3 on the 14:10 wipe. It also lists deaths with another Guardian under 30% inside 18 yd:
+1:13.58 twice and 1:56.89 on the 20:51 kill.
 
 `YoggSaronPhase1GuardianPreferred` orders both the focus and the taunt, so the two cannot disagree.
 
@@ -617,13 +646,21 @@ as `yogg.knockback`.
 **The ring arrives 18 s after Sara dies, on top of the melee pile.** She hits 0 and Yogg is summoned
 **invisible** in the same tick; `ACTION_YOGG_SARON_APPEAR` casts Shadow Barrier and 64022 together at
 the end of the transformation dialogue — 4 + 5 + 4.5 + 4 s of it plus the 500 ms
-`EVENT_SARA_P2_START`, measured 18.0-18.3 s. The phase reads 1 throughout and 2-6 Guardians are still
+`EVENT_SARA_P2_START`, measured 18.0-18.3 s. The phase reads 1 throughout and Guardians are usually still
 alive, so the leash kept hauling melee and the tank onto the middle: before the walk out, in every
 pull on record **9 of 9 melee and the tank stood in the ring when it lit**, against **0 of 10 ranged
 and 0 of 4 healers**, already 8.2 yd clear of it on the 21.5 yd station. With it, 2 of 9. So the walk
 out belongs to melee and the tank alone — to `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS` along
 the bearing each already holds, which fans nine of them around the ring instead of stacking them on a
 point.
+
+**With none alive the raid drops combat and eats where it stands.** The `food` cheat's eat and drink sit
+the bot and `SetNextCheckDelay(18000 × missing%)`: no AI at all. On the 20:51 kill the last Guardian
+died 8.5 s before the ring, four melee sat down 3.3-4.4 yd out, and two were still eating when it threw
+them. Bots ate on the stack in phase 1 lulls too. `yogg-saron stack food guard multiplier` zeroes
+`food` and `drink` inside 15 yd of the middle for the whole encounter; the station keeps eating.
+`--phases` prints how long before the ring the last Guardian died, or how many were alive, and every
+meal inside 15 yd.
 
 **Yogg without Shadow Barrier is the whole window**, and `SetVisible(false)` does not hide him from a
 grid search, so `YoggSaronHandoverState` reads it from the first tick. P3 strips the barrier again and
@@ -1031,7 +1068,9 @@ Immortal Guardian (first victim, when and to whom it left a tank, first hit, low
 stack, gone at 10% or less), each bot tank's target split and Hand of Reckoning cooldown at every
 non-tank swing, `yogg.tankhold`,
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
-outside, and each healer's distance to the melee spot and facing during gazes.
+outside, and each healer's distance to the melee spot and facing during gazes. Under `--fervor`: each
+Fervor run, whether it came back inside 16.2 yd while holding and what walked it back, novas on holders,
+and Guardians only runners summoned.
 
 **Do not add a Sanity level probe** (`yogg.sanity` is a walk reason). 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic

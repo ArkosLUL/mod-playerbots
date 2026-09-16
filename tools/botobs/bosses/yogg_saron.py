@@ -4,6 +4,8 @@
     yogg_saron.py <file>            every section
     yogg_saron.py <file> --phases   phase timeline and what happened before the pull
     yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
+    yogg_saron.py <file> --fervor   Sara's Fervor runs that came back into the nova, novas on holders,
+                                    Guardians only runners summoned
     yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
@@ -129,6 +131,29 @@ P1_MOVERS = ("yogg-saron phase 1 station action", "yogg-saron phase 1 spacing ac
 # inside both before the heals catch up. On 2026-09-16 a pair 17 ms apart killed two melee from full,
 # one 2.5 s apart killed five at the station, and three in 3.4 s killed two melee in the handover.
 NOVA_GAP_MS = 6000
+
+# ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT and ..._P1_NOVA_CHAIN_RADIUS. A nova also takes 25,000-27,501,
+# ~2.7%, off every other Guardian within 15 yd, so one dying beside another that low kills both at once.
+NOVA_GAP_HEALTH_PCT = 30.0
+NOVA_CHAIN_RADIUS = 18.0
+
+# Sara's Fervor doubles the nova, so its holder runs from any Guardian at or under 50% inside 17 yd. The
+# nova reached players at 16.2, and a walk back within 6 s of the aura dropping is still the run's.
+SPELL_SARAS_FERVOR = 63138
+SPELL_SHADOW_NOVAS = (65209, 62714)
+FERVOR_NOVA_HEALTH_PCT = 50.0
+NOVA_TRIGGER_RADIUS = 17.0
+NOVA_REACH = 16.2
+FERVOR_AFTER_MS = 6000
+FERVOR_MS = 15000
+P1_SPACING = "yogg-saron phase 1 spacing action"
+# Real summons measured their approach out to 8.71 centre to centre, and a pass is read off every
+# snapshot within 0.7 s of the mark rather than the single nearest one.
+CLOUD_MARK_REACH = 8.7
+CLOUD_MARK_WINDOW_MS = 700
+STATION_BAND = 1.5
+# ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS: the food guard's radius.
+STACK_FOOD_RADIUS = 15.0
 
 # Threat redirects and the single-target taunts, for --threat. Righteous Defense is left out: it is
 # aimed at the raid member being hit rather than at a Guardian, so it cannot be ranked against one.
@@ -317,6 +342,48 @@ def interpolate(before: tuple, after: tuple | None, when: int) -> tuple[float, f
     return before[1] + (after[1] - before[1]) * share, before[2] + (after[2] - before[2]) * share
 
 
+def lower_neighbour(dying: tuple, others: list[tuple],
+                    radius: float = NOVA_CHAIN_RADIUS) -> tuple[int, float, float] | None:
+    """(guid, hp, distance) of the lowest other living Guardian under the gap floor within `radius` of
+    the dying one, every Guardian as (guid, x, y, hp)."""
+    best = None
+    for guid, x, y, hp in others:
+        if guid == dying[0] or not 0 < hp < NOVA_GAP_HEALTH_PCT:
+            continue
+        far = math.dist((x, y), dying[1:3])
+        if far <= radius and (best is None or hp < best[1]):
+            best = (guid, hp, far)
+    return best
+
+
+def home_ground(role: str, radius: float) -> bool:
+    """Whether a raider this far from the middle stands where phase 1 puts it: the 21.5 yd station for
+    ranged and healers, the leash for melee and tanks."""
+    if role in ("ranged", "heal"):
+        return abs(radius - RANGED_STATION) <= STATION_BAND
+    return radius <= P1_LEASH
+
+
+def came_back(series: list[tuple], trigger: float = NOVA_TRIGGER_RADIUS,
+              reach: float = NOVA_REACH) -> tuple[int | None, float]:
+    """One Fervor hold as (t, distance to the nearest Guardian at or under the Fervor gate, or None):
+    when the bot first came back inside the nova's reach after getting past the trigger radius, and the
+    seconds it spent inside from then on. (None, 0.0) if it never got out or never came back."""
+    points = [(t, far) for t, far in series if far is not None]
+    out = False
+    back_at = None
+    inside = 0.0
+    for index, (t, far) in enumerate(points):
+        if not out:
+            out = far >= trigger
+            continue
+        if far <= reach:
+            back_at = t if back_at is None else back_at
+            if index + 1 < len(points):
+                inside += (points[index + 1][0] - t) / 1000
+    return back_at, inside
+
+
 def missing_probes(trace: Trace) -> list[str]:
     """`yogg.*` keys the source declares and this pull never emitted. Named outright rather than
     resolved off the trace: a pull still filed under the map resolves to no boss, and a check keyed
@@ -412,10 +479,42 @@ def show_phases(trace: Trace) -> None:
             print(f"      {clock(a[0]):>9} at {a[1]:4.1f} yd {kinds[a]:6}, {clock(b[0]):>9} at {b[1]:4.1f} yd "
                   f"{kinds[b]:6}  ({(b[0] - a[0]) / 1000:.3f} s apart)")
 
+        # A death beside a low Guardian: its nova takes ~2.7% off that one too, so the pair can go in
+        # one tick. The bots hold the higher one back; humans, splash and parked Guardians can still
+        # line one up.
+        chained = chain_deaths(trace, dead, guardians)
+        print(f"    another Guardian under {NOVA_GAP_HEALTH_PCT:.0f}% inside {NOVA_CHAIN_RADIUS:.0f} yd: "
+              f"{len(chained)}")
+        for when, hp, far, after in chained:
+            gone = f"it died {after:.3f} s later" if after is not None else "it outlived phase 1"
+            print(f"      {clock(when):>9}  {hp:4.1f}% at {far:4.1f} yd, {gone}")
+
     if p1_end is not None:
         show_room_gate(trace, p1_end)
 
     show_handover(trace)
+
+
+def chain_deaths(trace: Trace, dead: list[tuple[int, int]],
+                 guardians: set) -> list[tuple[int, float, float, float | None]]:
+    """(t, hp, distance, seconds until that one died) for each (t, guid) death with another Guardian under
+    the gap floor inside chain range, read off the last snapshot before the death."""
+    snaps = trace.of("snap")
+    stamps = [snap["t"] for snap in snaps]
+    died = {guid: when for when, guid in dead}
+    rows = []
+    for when, guid in dead:
+        index = bisect.bisect_left(stamps, when)
+        if not index:
+            continue
+        here = [(row[0], row[1], row[2], row[5]) for row in snaps[index - 1].get("u", []) if row[0] in guardians]
+        dying = next((row for row in here if row[0] == guid), None)
+        found = lower_neighbour(dying, here) if dying else None
+        if found:
+            other, hp, far = found
+            after = died.get(other)
+            rows.append((when, hp, far, (after - when) / 1000 if after is not None else None))
+    return rows
 
 
 def show_room_gate(trace: Trace, p1_end: int) -> None:
@@ -473,6 +572,164 @@ def show_handover(trace: Trace) -> None:
     held = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.handover"))
     if held:
         print(f"    yogg.handover         : {dict(held)}")
+
+    # With no Guardian left the raid drops combat before the ring lights, and the non-combat engine
+    # takes over: food and drink sit a bot down with no AI for up to 18 s.
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+    deaths = {rec.get("s"): rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_SHADOW_NOVA_SARA}
+    born = {guid: pts[0][0] for guid, pts in tracks(trace, guardians).items() if pts}
+    alive = [guid for guid, when in born.items() if when <= ring and deaths.get(guid, ring + 1) > ring]
+    before = [when for when in deaths.values() if when <= ring]
+    if alive:
+        print(f"    Guardians alive at the ring: {len(alive)}")
+    elif before:
+        print(f"    last phase 1 Guardian died {(ring - max(before)) / 1000:.1f} s before the ring")
+
+    ate = []
+    for rec in trace.of("act"):
+        if rec.get("a") in ("food", "drink") and rec.get("vd") == "OK" and 0 <= rec["t"] <= ring:
+            spot = at(trace, rec.get("g"), rec["t"])
+            if spot and math.dist(spot[:2], BODY) <= STACK_FOOD_RADIUS:
+                ate.append((rec["t"], trace.name(rec.get("g")), rec["a"], math.dist(spot[:2], BODY)))
+    print(f"    ate or drank inside {STACK_FOOD_RADIUS:.0f} yd: {len(ate)}")
+    for when, name, what, far in ate:
+        print(f"      {clock(when):>9}  {name:13} {what:5} {far:4.1f} yd")
+
+
+def fervor_holds(trace: Trace, until: int) -> dict[int, list[tuple[int, int, bool]]]:
+    """guid -> (start, end, ran) for each Sara's Fervor a roster member picked up before `until`, `ran`
+    being whether the phase 1 dodge moved it while it held the aura."""
+    roster = roster_guids(trace)
+    opened: dict[int, int] = {}
+    spans: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for rec in trace.of("aura"):
+        guid = rec.get("d")
+        if rec.get("sp") != SPELL_SARAS_FERVOR or guid not in roster or rec["t"] > until:
+            continue
+        if not rec.get("r"):
+            opened.setdefault(guid, rec["t"])
+        elif guid in opened:
+            spans[guid].append((opened.pop(guid), rec["t"]))
+    for guid, start in opened.items():
+        spans[guid].append((start, start + FERVOR_MS))
+
+    dodges: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("by") == P1_SPACING:
+            dodges[rec.get("g")].append(rec["t"])
+    return {guid: [(start, end, any(start <= t <= end for t in dodges[guid])) for start, end in rows]
+            for guid, rows in spans.items()}
+
+
+def show_fervor(trace: Trace) -> None:
+    print("SARA'S FERVOR")
+    p1_end = phase1_end(phase_spans(trace))
+    if p1_end is None:
+        print("  no phase 1 in this trace")
+        return
+
+    holds = fervor_holds(trace, p1_end)
+    runs = sorted(((start, guid, end) for guid, rows in holds.items() for start, end, ran in rows if ran))
+    print(f"  holders: {sum(len(rows) for rows in holds.values())}, ran from a nova: {len(runs)}")
+
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+    snaps = trace.of("snap")
+    stamps = [snap["t"] for snap in snaps]
+    moves: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        moves[rec.get("g")].append(rec)
+
+    # Past the trigger radius the dodge stands down, and the station, the leash or a reach walks the bot
+    # straight back. A run that ends up inside the nova's reach again while holding Fervor was undone.
+    back = 0
+    for start, guid, end in runs:
+        series = []
+        for snap in snaps[bisect.bisect_left(stamps, start):bisect.bisect_right(stamps, end)]:
+            rows = {row[0]: row for row in snap.get("u", [])}
+            me = rows.get(guid)
+            if not me or me[5] <= 0:
+                continue
+            lows = [math.dist(me[1:3], row[1:3]) for other, row in rows.items()
+                    if other in guardians and 0 < row[5] <= FERVOR_NOVA_HEALTH_PCT]
+            series.append((snap["t"], min(lows) if lows else None))
+        back_at, inside = came_back(series)
+        head = f"    {trace.name(guid):13} {trace.role(guid):6} {clock(start):>9} -> {clock(end):>9}"
+        if back_at is None:
+            print(f"{head}  stayed out")
+            continue
+        back += 1
+        walkers = collections.Counter(rec.get("by") for rec in moves[guid]
+                                      if back_at - 1500 <= rec["t"] <= back_at and rec.get("by") != P1_SPACING)
+        print(f"{head}  back inside {NOVA_REACH} yd at {clock(back_at)}, {inside:.1f} s inside, "
+              f"walked back by {dict(walkers)}")
+    print(f"  back inside the nova while holding: {back} of {len(runs)}")
+
+    died: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in death_records(trace):
+        died[rec.get("g")].append(rec["t"])
+    hits = []
+    for rec in trace.of("dmg"):
+        guid = rec.get("d")
+        if rec.get("sp") not in SPELL_SHADOW_NOVAS or not rec.get("a") or guid not in holds:
+            continue
+        if any(start <= rec["t"] <= end for start, end, _ in holds[guid]):
+            hits.append((rec["t"], guid, rec["a"], any(0 <= t - rec["t"] <= 1500 for t in died[guid])))
+    print(f"  novas on Fervor holders: {len(hits)}, lethal {sum(1 for hit in hits if hit[3])}")
+    for when, guid, amount, lethal in hits:
+        print(f"    {clock(when):>9}  {trace.name(guid):13} {amount:6d}{'  died' if lethal else ''}")
+
+    show_runner_spawns(trace, holds, p1_end, guardians)
+
+
+def show_runner_spawns(trace: Trace, holds: dict, p1_end: int, guardians: set) -> None:
+    """Guardians whose cloud only Fervor runners marked: everybody in reach at the mark was mid-run or
+    walking back from one, and off its own ground. Orbit 2 over the stacked station is never one of these."""
+    roster = roster_guids(trace)
+    clouds = guids_of_entry(trace, NPC_OMINOUS_CLOUD)
+    snaps = trace.of("snap")
+    stamps = [snap["t"] for snap in snaps]
+
+    def running(guid: int, when: int) -> bool:
+        return any(ran and start <= when <= end + FERVOR_AFTER_MS for start, end, ran in holds.get(guid, []))
+
+    born: dict[int, tuple[int, list]] = {}
+    for snap in snaps:
+        for row in snap.get("u", []):
+            if row[0] in guardians and row[0] not in born:
+                born[row[0]] = (snap["t"], row[1:3])
+
+    summoned = []
+    for when, where in sorted(born.values(), key=lambda value: value[0]):
+        if not 0 <= when <= p1_end:
+            continue
+        spawn = {row[0]: row for row in snaps[min(bisect.bisect_left(stamps, when), len(snaps) - 1)].get("u", [])}
+        near = sorted((math.dist(spawn[cloud][1:3], where), cloud) for cloud in clouds if cloud in spawn)
+        if not near or near[0][0] > 4.0:
+            continue
+        cloud = near[0][1]
+
+        mark = when - CLOUD_SUMMON_DELAY_MS
+        who: dict[int, tuple[float, int, float]] = {}
+        for snap in snaps[bisect.bisect_left(stamps, mark - CLOUD_MARK_WINDOW_MS):
+                          bisect.bisect_right(stamps, mark + CLOUD_MARK_WINDOW_MS)]:
+            rows = {row[0]: row for row in snap.get("u", [])}
+            if cloud not in rows:
+                continue
+            for member in roster:
+                row = rows.get(member)
+                if not row:
+                    continue
+                gap = math.dist(row[1:3], rows[cloud][1:3])
+                if gap <= CLOUD_MARK_REACH and (member not in who or gap < who[member][0]):
+                    who[member] = (gap, snap["t"], math.dist(row[1:3], BODY))
+
+        if who and all(running(member, t) and not home_ground(trace.role(member), far)
+                       for member, (_, t, far) in who.items()):
+            summoned.append((when, [(trace.name(member), trace.role(member), far) for member, (_, _, far) in who.items()]))
+
+    print(f"  Guardians only runners summoned: {len(summoned)}")
+    for when, who in summoned:
+        print(f"    {clock(when):>9}  " + ", ".join(f"{name}/{role} {far:.1f} yd out" for name, role, far in who))
 
 
 def show_clouds(trace: Trace) -> None:
@@ -2077,6 +2334,7 @@ def show_phase3(trace: Trace) -> None:
 SECTIONS = (
     ("phases", "phase timeline and the pre-pull window", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
+    ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
     ("threat", "who the Guardians were on, and taunts", show_threat),
     ("portals", "portal waves and assignments", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),

@@ -88,6 +88,40 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Food and drink sit a bot down with no AI at all for up to 18 s. With no Guardian alive the raid drops
+// combat and eats wherever it stands: four melee sat down in the ring 8 s before it lit, and two were
+// still eating when it threw them. The back line on the 21.5 yd station keeps eating.
+class YoggSaronStackFoodGuardMultiplier : public Multiplier
+{
+public:
+    YoggSaronStackFoodGuardMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron stack food guard multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
+// Phase 1 walks back to the stack or the station, held in two cases:
+// - A Sara's Fervor holder near a live nova. The dodge only fires inside 17 yd, so the station, the
+//   leash and the reach nodes walked the bot straight back in: 31 of 44 runs were inside the blast
+//   again while still holding Fervor, and three of those bots died.
+// - A walk that would cross a cloud. 7 Guardians in 9 pulls came off a cloud that only a bot running
+//   from Fervor or walking back from it touched. The walk waits for the cloud to pass instead.
+class YoggSaronPhase1WalkGuardMultiplier : public Multiplier
+{
+public:
+    YoggSaronPhase1WalkGuardMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron phase 1 walk guard multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+
+private:
+    bool WalkCrossesCloud(bool station, bool reachMelee);
+};
+
 class YoggSaronAntiFearTotemGuardMultiplier : public RaidAntiFearTotemGuardMultiplier
 {
 public:

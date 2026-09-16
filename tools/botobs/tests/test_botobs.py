@@ -792,6 +792,26 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.interpolate((0, 0.0, 0.0), (200, 4.0, 2.0), 50), (1.0, 0.5))
         self.assertEqual(yogg_saron.interpolate((0, 3.0, 4.0), None, 50), (3.0, 4.0))
 
+    def test_lower_neighbour_takes_the_lowest_low_guardian_in_chain_range(self):
+        dying = (1, 0.0, 0.0, 1.8)
+        others = [dying, (2, 13.8, 0.0, 0.9), (3, 5.0, 0.0, 12.0), (4, 30.0, 0.0, 0.5), (5, 2.0, 0.0, 45.0)]
+        # 1789581096 at 1:13.582: the one at 0.9% 13.8 yd away, not the dying one, not one out of range.
+        self.assertEqual(yogg_saron.lower_neighbour(dying, others), (2, 0.9, 13.8))
+        self.assertIsNone(yogg_saron.lower_neighbour(dying, [dying, (5, 2.0, 0.0, 45.0), (6, 1.0, 0.0, 0.0)]))
+
+    def test_home_ground_is_the_station_band_or_the_leash(self):
+        self.assertTrue(yogg_saron.home_ground("ranged", 22.8))
+        self.assertFalse(yogg_saron.home_ground("heal", 27.3))
+        self.assertTrue(yogg_saron.home_ground("melee", 6.1))
+        self.assertFalse(yogg_saron.home_ground("tank", 9.4))
+
+    def test_came_back_needs_the_run_to_get_out_first(self):
+        series = [(0, 10.0), (200, 18.0), (400, None), (600, 17.5), (800, 15.0), (1000, 14.0), (1200, 19.0)]
+        self.assertEqual(yogg_saron.came_back(series), (800, 0.4))
+        # Never past the trigger radius: a bot still standing in it has not come back.
+        self.assertEqual(yogg_saron.came_back([(0, 10.0), (200, 12.0)]), (None, 0.0))
+        self.assertEqual(yogg_saron.came_back([(0, 10.0), (200, 20.0), (400, 19.0)]), (None, 0.0))
+
     def test_merge_spans_folds_one_channel_seen_on_many_raiders(self):
         # One Diminish Power channel lands on every raider a few ms apart, so the per-raider windows
         # overlap. A break and re-cast is a real gap and stays two spans.

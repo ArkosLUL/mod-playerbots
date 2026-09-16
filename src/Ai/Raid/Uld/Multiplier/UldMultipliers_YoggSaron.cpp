@@ -228,4 +228,75 @@ float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
     return YoggSaronPhase1AoeHold(botAI) ? 0.0f : 1.0f;
 }
 
+float YoggSaronStackFoodGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    if (name != "food" && name != "drink")
+        return 1.0f;
+
+    if (bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) >=
+        ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
+        return 1.0f;
+
+    return YoggSaronEncounterActive(botAI) ? 0.0f : 1.0f;
+}
+
+float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    std::string const name = action->getName();
+    bool const positioning = name == "yogg-saron guardian positioning action";
+    bool const station = name == "yogg-saron phase 1 station action";
+    bool const reachMelee = name == "reach melee";
+    if (!positioning && !station && !reachMelee && name != "reach spell" && name != "set behind")
+        return 1.0f;
+
+    // Plain distance and height before any sweep: this weighs every reach in Ulduar, and the brain room
+    // sits under the middle of the platform.
+    if (!YoggSaronInPhase1Room(bot) || bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return 1.0f;
+
+    // Fervor is Sara's, so its sweep only ever runs in phase 1. The cloud sweep waits for the phase read,
+    // which is answered once per trigger pass: melee stand outside the leash all of phases 2 and 3.
+    bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR) &&
+                        !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS).empty();
+    if ((!fervor && !positioning && !station && !reachMelee) || !YoggSaronInPhase1(botAI))
+        return 1.0f;
+
+    if (!fervor && !WalkCrossesCloud(station, reachMelee))
+        return 1.0f;
+
+    // The positioning node's ring walk at the handover heads out, away from both.
+    return positioning && YoggSaronHandoverState(botAI).clearing ? 1.0f : 0.0f;
+}
+
+bool YoggSaronPhase1WalkGuardMultiplier::WalkCrossesCloud(bool station, bool reachMelee)
+{
+    if (station)
+    {
+        // The second orbit passing over the stack is the station's own cost, and one more bot joining
+        // it summons nothing extra.
+        Position const& spot = ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
+        return YoggSaronWalkCrossesCloud(bot, spot, &spot,
+                                         ULDUAR_YOGG_SARON_CLOUD_AVOID_RADIUS + ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS);
+    }
+
+    // Never inside the leash: the inner orbit reaches most of it, so a step on the stack would be held
+    // every time that cloud came round.
+    Position const& middle = ULDUAR_YOGG_SARON_MIDDLE;
+    if (bot->GetDistance2d(middle.GetPositionX(), middle.GetPositionY()) <= ULDUAR_YOGG_SARON_P1_LEASH)
+        return false;
+
+    if (!reachMelee)
+        return YoggSaronWalkCrossesCloud(bot, middle);
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    return target && YoggSaronWalkCrossesCloud(bot, target->GetPosition());
+}
+
 bool YoggSaronAntiFearTotemGuardMultiplier::FearWindowActive() { return YoggSaronFearWindowActive(botAI); }
