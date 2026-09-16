@@ -163,7 +163,11 @@ bool YoggSaronSanityTrigger::IsActive()
 
     int sanityAuraStacks = sanityAura->GetStackAmount();
 
-    Creature* sanityWell = bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f);
+    // Full Sanity is false whatever the well lookup below finds, so skip the sweep.
+    if (sanityAuraStacks >= 100)
+        return false;
+
+    Creature* sanityWell = YoggSaronNearestCreature(botAI, NPC_SANITY_WELL);
 
     if (!sanityWell)
         return false;
@@ -324,8 +328,12 @@ bool YoggSaronDiminishPowerJudgementTrigger::IsActive()
 
 bool YoggSaronMaladyOfTheMindTrigger::IsActive()
 {
+    if (!IsPhase2())
+        return false;
+
     TooCloseToPlayerWithDebuffTrigger tooCloseToPlayerWithDebuffTrigger(botAI);
-    return IsPhase2() && tooCloseToPlayerWithDebuffTrigger.TooCloseToPlayerWithDebuff(SPELL_MALADY_OF_THE_MIND, 15.0f) && botAI->CanMove();
+    return tooCloseToPlayerWithDebuffTrigger.TooCloseToPlayerWithDebuff(SPELL_MALADY_OF_THE_MIND, 15.0f) &&
+           botAI->CanMove();
 }
 
 bool YoggSaronPhase3ControlTrigger::IsActive()
@@ -522,7 +530,7 @@ bool YoggSaronLunaticGazeTrigger::IsActive()
     // 64163 is a 4-second aura Yogg puts on himself, ticking 64164 once a second at 130 yd through his
     // front 180 degrees - not a channel, so GetCurrentSpell never saw it. And "find target" walks the
     // bot's own threat list, which Yogg is not reliably on.
-    Creature* yoggsaron = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+    Creature* yoggsaron = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
 
     return yoggsaron && yoggsaron->IsAlive() && yoggsaron->HasAura(SPELL_LUNATIC_GAZE_YS);
 }
@@ -639,7 +647,7 @@ bool YoggSaronSanityConservationTrigger::IsActive()
         return false;
 
     // If a Sanity Well is reachable (a Keeper set with Freya), the normal sanity action handles recovery.
-    if (bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f))
+    if (YoggSaronNearestCreature(botAI, NPC_SANITY_WELL))
         return false;
 
     // Boss room only: the spot this retreats to is behind Yogg, who is not down there.

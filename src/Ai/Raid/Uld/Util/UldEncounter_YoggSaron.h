@@ -431,6 +431,12 @@ extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 // casting first lands on somebody: 15 s of EVENT_SARA_P1_DOORS_CLOSE plus a 4 s cast at the very
 // earliest, and 24.2 s on the pull that found it. GetBossState is IN_PROGRESS from InitFight itself.
 uint32 YoggSaronPhase(PlayerbotAI* botAI);
+
+// FindNearestCreature(entry, 200, alive) for Sara, Yogg, the Brain and the Sanity Wells, which nearly
+// every Yogg trigger asks again. Answered once per trigger pass (see UldTriggerPassId), live anywhere
+// else and for any other entry.
+Creature* YoggSaronNearestCreature(PlayerbotAI* botAI, uint32 entry);
+
 bool YoggSaronEncounterActive(PlayerbotAI* botAI);
 bool YoggSaronInPhase1(PlayerbotAI* botAI);
 bool YoggSaronInPhase2(PlayerbotAI* botAI);

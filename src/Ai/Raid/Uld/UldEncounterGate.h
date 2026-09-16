@@ -56,6 +56,14 @@ bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId);
 // The encounter's name, for a trace that could not name itself. Null for an id with no entry.
 char const* UldEncounterName(uint32 bossId);
 
+// Non-zero only while this bot's gated trigger is inside Check, and different for every trigger pass.
+// Engine::ProcessTriggers checks every trigger before any action runs and no Ulduar or class trigger
+// changes the world, so a read cached under one id is exact for the rest of that pass. Actions,
+// multipliers and isUseful always get 0: an action returning false can still drop a target or damage
+// the Brain past 30%, so nothing may be cached past the checks. Reset is not guaranteed to run, which
+// is why this is tied to Check rather than to the gate pass.
+uint32 UldTriggerPassId(PlayerbotAI* botAI);
+
 // Wraps rather than subclasses. All 165 derive from Trigger directly, so one decorator applied where
 // the context builds them beats editing every class, and leaves their IsActive bodies alone.
 class UldGatedTrigger : public Trigger

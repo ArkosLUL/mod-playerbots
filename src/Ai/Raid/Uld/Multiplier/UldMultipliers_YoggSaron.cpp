@@ -41,21 +41,17 @@ float YoggSaronDpsTargetGuardMultiplier::GetValue(Action* action)
 {
     // Cheap tests first: the read below is two 200 yd grid sweeps, and this runs for every action the
     // engine weighs.
-    if (!action || botAI->IsTank(bot))
-        return 1.0f;
-
+    //
     // "attack rti target" is deliberately left alone: bots no longer set marks here, but a mark a
     // player sets should still win. Nor is TankAssistAction zeroed - the resolver excludes tanks, so
     // that would strand them with nothing in its place.
-    if (!dynamic_cast<DpsAssistAction*>(action))
+    if (!dynamic_cast<DpsAssistAction*>(action) || botAI->IsTank(bot))
         return 1.0f;
 
     // The resolver owns every non-tank's target for the whole encounter now that phase 1 has a kill
     // order of its own. This is literally the test YoggSaronSetDpsPriorityTrigger fires on: zeroing
     // the assist over a wider window than the resolver covers leaves a bot with no target source.
-    YoggSaronTrigger yoggSaronTrigger(botAI);
-
-    return yoggSaronTrigger.IsYoggSaronFight() ? 0.0f : 1.0f;
+    return YoggSaronEncounterActive(botAI) ? 0.0f : 1.0f;
 }
 
 float YoggSaronDisplacementGuardMultiplier::GetValue(Action* action)

@@ -14,6 +14,7 @@
 #include "Vehicle.h"
 
 #include <functional>
+#include <optional>
 #include <set>
 #include <vector>
 
@@ -198,7 +199,15 @@ public:
 private:
     // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
     static size_t TierOf(Unit* unit, bool brainLevel);
-    bool IsAllowedTarget(Unit* candidate, bool brainApproachable) const;
+
+    // Whether the Brain is open to hit. Only worked out once a Brain turns up, most calls never meet one.
+    struct BrainApproach
+    {
+        bool brainLevel = false;
+        std::optional<bool> approachable;
+    };
+
+    bool IsAllowedTarget(Unit* candidate, BrainApproach& brain) const;
     Unit* ResolveTarget(Unit* currentTarget);
     // Stops the bot, and any of its pets, hitting a phase 1 Guardian that has to be left for the tank.
     void DropTarget(Unit* target);

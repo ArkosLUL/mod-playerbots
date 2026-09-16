@@ -113,6 +113,28 @@ namespace
     // Per thread, not shared: a bot's whole pass runs on one map thread, start to finish.
     thread_local GatePass gatePass;
 
+    // Kept out of GatePass: opening a pass and Reset both overwrite it, and an id that restarts
+    // would hand a new pass the previous one's cached reads.
+    thread_local uint32 gatePassCounter = 0;
+    thread_local uint32 gatePassId = 0;
+
+    // Only set while an inner trigger is being checked. See UldTriggerPassId.
+    struct CheckScope
+    {
+        PlayerbotAI* botAI = nullptr;
+        uint32 passId = 0;
+    };
+
+    thread_local CheckScope checkScope;
+
+    struct CheckScopeGuard
+    {
+        CheckScope saved;
+
+        CheckScopeGuard(PlayerbotAI* botAI, uint32 passId) : saved(checkScope) { checkScope = {botAI, passId}; }
+        ~CheckScopeGuard() { checkScope = saved; }
+    };
+
     bool UldEncounterGateOpenInPass(PlayerbotAI* botAI, uint32 bossId)
     {
         if (!botAI)
@@ -124,6 +146,11 @@ namespace
             gatePass = GatePass();
             gatePass.botAI = botAI;
             gatePass.atMs = now;
+
+            // 0 means no pass, so skip it on wrap.
+            gatePassId = ++gatePassCounter;
+            if (!gatePassId)
+                gatePassId = ++gatePassCounter;
 
             Player* bot = botAI->GetBot();
             InstanceScript* instance = bot ? bot->GetInstanceScript() : nullptr;
@@ -160,6 +187,11 @@ namespace
 
         return (gatePass.inProgressMask & ~bit) == 0;
     }
+}
+
+uint32 UldTriggerPassId(PlayerbotAI* botAI)
+{
+    return botAI && checkScope.botAI == botAI ? checkScope.passId : 0;
 }
 
 bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId)
@@ -201,7 +233,12 @@ Event UldGatedTrigger::Check()
     if (!inner || !UldEncounterGateOpenInPass(botAI, bossId))
         return Event();
 
-    Event event = inner->Check();
+    Event event = [this]()
+    {
+        CheckScopeGuard const scope(botAI, gatePassId);
+        return inner->Check();
+    }();
+
     if (!event)
         return event;
 

@@ -42,6 +42,9 @@ the first Guardian of every pull on record appears at 10.1-10.2 s, and none has 
 phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all behind that boss-state test, which
 also spares a bot elsewhere in Ulduar two 200 yd sweeps a tick — and it is what writes `yogg.phase`.
 She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by itself.
+The phase read's sweeps and the other 200 yd reads — Sanity Wells, illusion doors, the tentacle check,
+skulls in arc — are answered once per trigger pass through `UldTriggerPassId`, and live in actions
+and multipliers, where an earlier action can already have moved the phase.
 
 **Phase 1 positioning waits for the room, not the pull.** With the raid still 72-96 yd out at t=0,
 every mover fired at once on 2026-09-16. Most bots took no damage until 25-53 s, and ranged running in

@@ -476,6 +476,16 @@ are left bare on purpose.
   any node took a cheat branch. An encounter that stopped cheating reads identically before and
   after; only the body can show it.
 
+## Server stalls
+
+**Snapshot gaps time the world.** `snap` is written from `OnMapUpdate` every `SnapshotIntervalMs`, so
+gaps run ~220-320 ms; a stall is a second or more with no record of any kind. The
+first ~10 minutes after a server start carry ~1.1 s whole-server stalls every 30-40 s while
+`RandomPlayerbotMgr` logs in its random bots, until Playerbots.log prints the last `N/N Bot ... logged
+in`: pull after that, or discount them. Cross-check against the mod-chronicle combat log on a shared
+event, never the clock — RaidObs `t` counts `getMSTime()` from a wall-clock `hdr.ts`, and under WSL2
+the two sat 13 s apart.
+
 ## Timing a bot: `.playerbots pmon`
 
 `PlayerbotCommandScript.cpp:63`, `SEC_GAMEMASTER`. `pmon toggle` to arm, `pmon reset` at the pull,

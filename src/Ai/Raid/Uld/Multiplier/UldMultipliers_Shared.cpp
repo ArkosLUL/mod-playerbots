@@ -204,9 +204,9 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
 
     if ((yoggSaron && yoggSaron->IsInCombat()) || (saraPhaseOne && saraPhaseOne->IsInCombat()))
     {
-        bool const phaseThree = YoggSaronInPhase3(botAI);
+        uint32 const phase = YoggSaronPhase(botAI);
 
-        return {phaseThree || YoggSaronInPhase2(botAI), phaseThree};
+        return {phase == 2 || phase == 3, phase == 3};
     }
 
     return {};

@@ -206,7 +206,13 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   (`Value.h:71-85`), so each `GetFirstAliveUnitByEntry` or `"nearest npcs"` read is a fresh
   sight-range sweep, and Ulduar code took 20-60 of them per bot per tick. One **per-bot scan stamped
   with `getMSTime()`** collapses them (`RazorscaleScan`, `IronAssemblyScan`): a bot never ticks twice
-  in one ms, and world state holds still for the length of one tick.
+  in one ms.
+- **World state holds still only through the trigger checks.** `ProcessTriggers` checks every trigger
+  before any action runs, and no trigger changes the world; an action returning `false` still can —
+  drop a target, command a pet, turn the bot, push Yogg-Saron's Brain to 30% and strip Shadow Barrier —
+  so a ms stamp can hand a later multiplier or action a stale read. An exact cache keys on
+  `UldTriggerPassId`: non-zero only inside `UldGatedTrigger::Check`, new each pass, because `Reset` is
+  not guaranteed to close the gate pass. Yogg-Saron's 200 yd reads use it.
 - **Grid sweeps walk every `SIZE_OF_GRID_CELL` (66.67 yd) cell inside the radius**, and twenty-five
   bots re-answer the same instance-wide question every tick — EoE peaked near 250 identical sweeps a
   tick. One instance-keyed creature cache collapses that to one. **Cache guids, not pointers**, so a

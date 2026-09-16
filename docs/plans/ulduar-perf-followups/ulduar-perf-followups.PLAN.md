@@ -87,6 +87,19 @@ This one should go first — it is the only item here that changes what bots do.
 The code and the equivalence harness landed; the rebuild, the PerfMon A/B and a confirming pull did
 not.
 
+### 9. Yogg-Saron detour walk latches grow without bound
+
+`YoggSaronBodyDetourAction` keys `YoggSaronWalkMakingProgress` on its arc waypoint, which moves with
+the bot, so each yard adds a latch that lives for the server run and a detour never reaches the 6 s
+give-up. Latches are split per node, so only detour scans pay. Evicting or re-keying changes which
+latch matches: a behaviour change, not a saving.
+
+### 10. The Yogg-Saron lunatic gaze trigger sweeps 200 yd for every bot in Ulduar
+
+`YoggSaronLunaticGazeTrigger` runs `FindNearestCreature(NPC_YOGG_SARON, 200)` every tick for every bot
+while its gate is open, which is the whole instance between pulls. Gating it on `UldEncounterIsLive`
+answers differently if Yogg outlives `IN_PROGRESS` at a wipe.
+
 ## Method, so it is not re-derived a seventh time
 
 **Cost symbols** used across all six reviews: **S** = one `"possible targets no los"` read (a

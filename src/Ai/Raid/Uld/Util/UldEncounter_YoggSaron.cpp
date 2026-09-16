@@ -7,8 +7,10 @@
 #include "UldEncounter_YoggSaron.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 #include <list>
 #include <mutex>
 #include <string>
@@ -115,12 +117,106 @@ YoggSaronEncounterState& YoggSaronStateFor(Player* bot)
 }
 
 void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase);
-}  // namespace
 
-uint32 YoggSaronPhase(PlayerbotAI* botAI)
+// Sweeps every Yogg trigger repeats in one pass, answered once per pass. Valid only under the id
+// UldTriggerPassId hands out, so it can't outlive the trigger checks. thread_local is fine for a cache
+// of live world state: a whole pass runs on one thread. Never turn this into a latch.
+constexpr uint32 YOGG_SARON_CACHED_CREATURES[] = {NPC_SARA_PHASE_1, NPC_YOGG_SARON, NPC_BRAIN, NPC_SANITY_WELL};
+constexpr uint32 YOGG_SARON_CACHED_DOORS[] = {GO_CHAMBER_ILLUSION_DOORS, GO_ICECROWN_ILLUSION_DOORS,
+                                              GO_STORMWIND_ILLUSION_DOORS};
+
+struct YoggSaronPassReads
+{
+    PlayerbotAI* botAI = nullptr;
+    uint32 passId = 0;
+
+    std::array<bool, std::size(YOGG_SARON_CACHED_CREATURES)> creatureRead{};
+    std::array<ObjectGuid, std::size(YOGG_SARON_CACHED_CREATURES)> creature{};
+
+    std::array<bool, std::size(YOGG_SARON_CACHED_DOORS)> doorRead{};
+    std::array<ObjectGuid, std::size(YOGG_SARON_CACHED_DOORS)> door{};
+
+    // YoggSaronInfluenceTentaclesCleared asks at one of two radii depending on the room.
+    std::vector<std::pair<float, bool>> tentaclesCleared;
+
+    bool skullsInArcRead = false;
+    std::vector<ObjectGuid> skullsInArc;
+};
+
+thread_local YoggSaronPassReads yoggSaronPassReads;
+
+// Null outside a trigger pass, meaning read live.
+YoggSaronPassReads* YoggSaronPassReadsFor(PlayerbotAI* botAI)
+{
+    uint32 const passId = UldTriggerPassId(botAI);
+    if (!passId)
+        return nullptr;
+
+    if (yoggSaronPassReads.botAI != botAI || yoggSaronPassReads.passId != passId)
+    {
+        yoggSaronPassReads = YoggSaronPassReads();
+        yoggSaronPassReads.botAI = botAI;
+        yoggSaronPassReads.passId = passId;
+    }
+
+    return &yoggSaronPassReads;
+}
+
+// -1 for an entry the pass cache doesn't hold.
+int32 YoggSaronCacheSlot(uint32 const* entries, size_t count, uint32 entry)
+{
+    for (size_t slot = 0; slot < count; ++slot)
+        if (entries[slot] == entry)
+            return static_cast<int32>(slot);
+
+    return -1;
+}
+
+GameObject* YoggSaronNearestDoor(PlayerbotAI* botAI, uint32 entry)
 {
     Player* bot = botAI->GetBot();
 
+    int32 const slot =
+        YoggSaronCacheSlot(YOGG_SARON_CACHED_DOORS, std::size(YOGG_SARON_CACHED_DOORS), entry);
+    YoggSaronPassReads* reads = slot < 0 ? nullptr : YoggSaronPassReadsFor(botAI);
+    if (!reads)
+        return bot->FindNearestGameObject(entry, 200.0f);
+
+    if (!reads->doorRead[slot])
+    {
+        GameObject* found = bot->FindNearestGameObject(entry, 200.0f);
+        reads->doorRead[slot] = true;
+        reads->door[slot] = found ? found->GetGUID() : ObjectGuid::Empty;
+        return found;
+    }
+
+    return reads->door[slot] ? ObjectAccessor::GetGameObject(*bot, reads->door[slot]) : nullptr;
+}
+}  // namespace
+
+Creature* YoggSaronNearestCreature(PlayerbotAI* botAI, uint32 entry)
+{
+    Player* bot = botAI->GetBot();
+
+    int32 const slot =
+        YoggSaronCacheSlot(YOGG_SARON_CACHED_CREATURES, std::size(YOGG_SARON_CACHED_CREATURES), entry);
+    YoggSaronPassReads* reads = slot < 0 ? nullptr : YoggSaronPassReadsFor(botAI);
+    if (!reads)
+        return bot->FindNearestCreature(entry, 200.0f, true);
+
+    if (!reads->creatureRead[slot])
+    {
+        Creature* found = bot->FindNearestCreature(entry, 200.0f, true);
+        reads->creatureRead[slot] = true;
+        reads->creature[slot] = found ? found->GetGUID() : ObjectGuid::Empty;
+        return found;
+    }
+
+    return reads->creature[slot] ? ObjectAccessor::GetCreature(*bot, reads->creature[slot]) : nullptr;
+}
+
+uint32 YoggSaronPhase(PlayerbotAI* botAI)
+{
     // Ahead of the sweeps, so a bot anywhere else in Ulduar pays a map lookup rather than two 200 yd
     // grid searches a tick. Sara's own combat flag used to sit here and could not do the job: she is
     // FACTION_FRIENDLY through phase 1, CombatManager::CanBeginCombat refuses a combat reference while
@@ -132,8 +228,7 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
         return 0;
     }
 
-    Creature* sara = bot->FindNearestCreature(NPC_SARA_PHASE_1, 200.0f, true);
-    Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
 
     uint32 phase = 0;
     if (yogg && yogg->IsAlive() && yogg->HasAura(SPELL_SHADOW_BARRIER))
@@ -142,9 +237,10 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
     // the phases it separates: the last Guardian dies ~9.5 s before the Shadow Barrier lands, and the
     // whole raid used to run its phase 3 positioning through that gap. The Brain spawns with the first
     // tentacle wave and lives to the end, so it is the positive fact.
-    else if (yogg && yogg->IsAlive() && bot->FindNearestCreature(NPC_BRAIN, 200.0f, true))
+    else if (yogg && yogg->IsAlive() && YoggSaronNearestCreature(botAI, NPC_BRAIN))
         phase = 3;
-    else if (sara)
+    // Sara last: only phase 1 needs her, so phases 2 and 3 skip her sweep.
+    else if (YoggSaronNearestCreature(botAI, NPC_SARA_PHASE_1))
         phase = 1;
 
     TickYoggSaronObs(botAI, phase);
@@ -233,7 +329,7 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI)
         // A radius cannot answer it from in here: the Chamber's far tentacles are 167 yd out.
         case YOGG_SARON_ROOM_BRAIN:
             for (uint32 entry = GO_CHAMBER_ILLUSION_DOORS; entry <= GO_STORMWIND_ILLUSION_DOORS; ++entry)
-                if (GameObject* open = bot->FindNearestGameObject(entry, 200.0f))
+                if (GameObject* open = YoggSaronNearestDoor(botAI, entry))
                     if (open->GetGoState() == GO_STATE_ACTIVE)
                         return true;
 
@@ -251,7 +347,7 @@ bool YoggSaronBrainRoomApproachable(PlayerbotAI* botAI)
             return false;
     }
 
-    GameObject* door = bot->FindNearestGameObject(doorEntry, 200.0f);
+    GameObject* door = YoggSaronNearestDoor(botAI, doorEntry);
 
     return door && door->GetGoState() == GO_STATE_ACTIVE;
 }
@@ -303,7 +399,7 @@ bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
-    Creature const* brain = bot->FindNearestCreature(NPC_BRAIN, 200.0f, true);
+    Creature const* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
     if (!brain || !brain->IsAlive())
         return false;
 
@@ -351,6 +447,18 @@ std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
+    // Both brain level facing triggers ask this every pass, and nothing in a pass turns the bot.
+    YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
+    if (reads && reads->skullsInArcRead)
+    {
+        std::vector<Unit*> cached;
+        for (ObjectGuid const& guid : reads->skullsInArc)
+            if (Creature* skull = ObjectAccessor::GetCreature(*bot, guid))
+                cached.push_back(skull);
+
+        return cached;
+    }
+
     std::list<Creature*> skulls;
     bot->GetCreatureListWithEntryInGrid(skulls, NPC_LAUGHING_SKULL, ULDUAR_YOGG_SARON_LAUGHING_SKULL_RADIUS);
 
@@ -369,6 +477,13 @@ std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
         // are the same set.
         if (bot->HasInArc(static_cast<float>(M_PI), skull))
             inArc.push_back(skull);
+    }
+
+    if (reads)
+    {
+        reads->skullsInArcRead = true;
+        for (Unit* skull : inArc)
+            reads->skullsInArc.push_back(skull->GetGUID());
     }
 
     return inArc;
@@ -530,8 +645,6 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     if (!wave.active)
         return YOGG_SARON_PORTAL_NOT_TEAM;
 
-    std::vector<Player*> const team = GetYoggSaronBrainTeam(botAI);
-
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
     uint32 const spotCount = bot->GetRaidDifficulty() == Difficulty::RAID_DIFFICULTY_10MAN_NORMAL
@@ -541,19 +654,35 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     // The wave the spread is for: the one that is up, or the next one if none is.
     uint32 const assignmentWave = wave.ordinal + (wave.portalsUp ? 0 : 1);
 
+    // Latched per wave. Nearest-first off live positions churns every tick as bots walk, and two
+    // bots swapping spots mid-approach costs both of them the window.
+    //
+    // Rebuilt once more when the portals actually arrive. The wave the plan is for is the same
+    // number before and after they spawn, so without the second test the assignment stands from
+    // the moment the previous wave's portals despawned - 55 s and a whole room fight earlier, off
+    // positions nobody is standing in any more.
+    auto const planStale = [&state, &wave, assignmentWave]()
+    { return state.slotWave != assignmentWave || (wave.portalsUp && !state.slotPortalsUp); };
+
+    bool rebuild = false;
+    {
+        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+        rebuild = planStale();
+    }
+
+    // Only a rebuild needs the team, and that's a couple of times a wave. Built outside the lock,
+    // IsTank on a human takes another mutex.
+    std::vector<Player*> team;
+    if (rebuild)
+        team = GetYoggSaronBrainTeam(botAI);
+
     uint8 slot = 0;
     bool assigned = false;
     {
         std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
 
-        // Latched per wave. Nearest-first off live positions churns every tick as bots walk, and two
-        // bots swapping spots mid-approach costs both of them the window.
-        //
-        // Rebuilt once more when the portals actually arrive. The wave the plan is for is the same
-        // number before and after they spawn, so without the second test the assignment stands from
-        // the moment the previous wave's portals despawned - 55 s and a whole room fight earlier, off
-        // positions nobody is standing in any more.
-        if (state.slotWave != assignmentWave || (wave.portalsUp && !state.slotPortalsUp))
+        // Still stale: only this instance's map thread writes its plan.
+        if (rebuild && planStale())
         {
             state.slotWave = assignmentWave;
             state.slotPortalsUp = wave.portalsUp;
@@ -661,13 +790,13 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
-    Creature* yogg = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+    Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
 
     // Yogg without the barrier is phase 3 as well, where ACTION_YOGG_SARON_START_P3 strips it again.
     // The Brain separates them: it is summoned in the same tick the barrier first lands, so it is up
     // for everything after this window and absent for the whole of it.
     bool const open = yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) &&
-                      !bot->FindNearestCreature(NPC_BRAIN, 200.0f, true);
+                      !YoggSaronNearestCreature(botAI, NPC_BRAIN);
 
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
@@ -811,19 +940,20 @@ namespace
 {
 struct YoggSaronWalkLatch
 {
-    std::string node;
     Position destination;
     float bestDistance = 0.0f;
     uint32 lastProgressMs = 0;
     uint32 lastAskedMs = 0;
 };
 
-// Per instance, then per bot, never evicted - the destinations are a handful of fixed spots and three
-// portals, so the vector stays short enough for a linear scan. Not thread_local: a map is updated by
-// one thread at a time but is never pinned to one, and per-thread copies would hand the same bot a
-// fresh latch whenever the pool reassigns its map.
+// Per instance, per bot, per node, never evicted. Most nodes walk to a handful of fixed spots, but the
+// detour waypoint moves with the bot and piles up a new latch every yard, so each node gets its own
+// list and only detour pays for that. Not thread_local: a map is updated by one thread at a time but is
+// never pinned to one, and per-thread copies would hand the same bot a fresh latch whenever the pool
+// reassigns its map.
 std::mutex yoggSaronWalkLatchesMutex;
-std::unordered_map<uint32 /*instanceId*/, std::unordered_map<ObjectGuid, std::vector<YoggSaronWalkLatch>>>
+std::unordered_map<uint32 /*instanceId*/,
+                   std::unordered_map<ObjectGuid, std::unordered_map<std::string, std::vector<YoggSaronWalkLatch>>>>
     yoggSaronWalkLatches;
 }  // namespace
 
@@ -837,12 +967,13 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
     char const* branch = "walking";
     {
         std::lock_guard<std::mutex> guard(yoggSaronWalkLatchesMutex);
-        std::vector<YoggSaronWalkLatch>& latches = yoggSaronWalkLatches[bot->GetInstanceId()][bot->GetGUID()];
+        std::vector<YoggSaronWalkLatch>& latches =
+            yoggSaronWalkLatches[bot->GetInstanceId()][bot->GetGUID()][node];
 
         YoggSaronWalkLatch* latch = nullptr;
         for (YoggSaronWalkLatch& candidate : latches)
         {
-            if (candidate.node == node && candidate.destination.GetExactDist(destination) < 1.0f)
+            if (candidate.destination.GetExactDist(destination) < 1.0f)
             {
                 latch = &candidate;
                 break;
@@ -851,7 +982,7 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
 
         if (!latch)
         {
-            latches.push_back(YoggSaronWalkLatch{node, destination, distance, now, now});
+            latches.push_back(YoggSaronWalkLatch{destination, distance, now, now});
             latch = &latches.back();
         }
 
@@ -1306,7 +1437,17 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
                              ? ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS + ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS
                              : ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
 
-    return !YoggSaronLiveIllusionMob(botAI, radius);
+    YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
+    if (reads)
+        for (std::pair<float, bool> const& answer : reads->tentaclesCleared)
+            if (answer.first == radius)
+                return answer.second;
+
+    bool const cleared = !YoggSaronLiveIllusionMob(botAI, radius);
+    if (reads)
+        reads->tentaclesCleared.emplace_back(radius, cleared);
+
+    return cleared;
 }
 
 std::vector<Position> GetYoggSaronCrushWedges(PlayerbotAI* botAI, float searchRadius)

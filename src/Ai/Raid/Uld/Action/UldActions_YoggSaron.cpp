@@ -85,7 +85,7 @@ bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 
 bool YoggSaronSanityAction::Execute(Event /*event*/)
 {
-    Creature* sanityWell = bot->FindNearestCreature(NPC_SANITY_WELL, 200.0f);
+    Creature* sanityWell = YoggSaronNearestCreature(botAI, NPC_SANITY_WELL);
     if (!sanityWell)
         return false;
 
@@ -525,31 +525,42 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
     }
 }
 
-bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, bool brainApproachable) const
+bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproach& brain) const
 {
-    if (!candidate || !candidate->IsAlive() || !bot->IsWithinLOSInMap(candidate))
+    if (!candidate || !candidate->IsAlive())
         return false;
 
+    bool allowed = true;
     switch (candidate->GetEntry())
     {
         case NPC_BRAIN:
-            return brainApproachable;
+            if (!brain.approachable)
+                brain.approachable = brain.brainLevel && YoggSaronBrainRoomApproachable(botAI);
+
+            allowed = *brain.approachable;
+            break;
         // Crush skips its own cone test inside 2 yd and re-aims onto whoever the tentacle is swinging
         // at, so a melee bot that was clear becomes collinear without moving. No angle answers that,
         // only not being there. Healers stay eligible: they are at range.
         case NPC_CRUSHER_TENTACLE:
-            return !PlayerbotAI::IsMelee(bot);
+            allowed = !PlayerbotAI::IsMelee(bot);
+            break;
         // Below 10% it is Weakened, and nothing but Thorim's Titanic Storm can finish one, so holding
         // there is a dead tick for the rest of the fight.
         case NPC_IMMORTAL_GUARDIAN:
         case NPC_MARKED_IMMORTAL_GUARDIAN:
-            return candidate->GetHealthPct() > 10;
+            allowed = candidate->GetHealthPct() > 10;
+            break;
         // Shadow Barrier is what phase 2 is read off, and it makes him immune.
         case NPC_YOGG_SARON:
-            return !candidate->HasAura(SPELL_SHADOW_BARRIER);
+            allowed = !candidate->HasAura(SPELL_SHADOW_BARRIER);
+            break;
         default:
-            return true;
+            break;
     }
+
+    // Line of sight last, it's the only raycast here.
+    return allowed && bot->IsWithinLOSInMap(candidate);
 }
 
 Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
@@ -557,8 +568,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     constexpr size_t none = std::numeric_limits<size_t>::max();
     constexpr float targetSwitchDistance = 10.0f;
 
-    YoggSaronTrigger yoggSaronTrigger(botAI);
-    bool const brainLevel = yoggSaronTrigger.IsInBrainLevel();
+    bool const brainLevel = YoggSaronOnBrainLevel(bot);
 
     std::vector<uint32> entries;
     size_t tierCount = 0;
@@ -584,7 +594,8 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     // The door as well as the tentacles. The Brain opens it in the same branch that fires when the
     // last Influence Tentacle in the room dies, so a bot reading the tentacles alone can start hitting
     // the Brain through a wall it has not been let through yet.
-    bool const brainApproachable = brainLevel && YoggSaronBrainRoomApproachable(botAI);
+    BrainApproach brain;
+    brain.brainLevel = brainLevel;
 
     // "nearest npcs" cut down to these entries before its LOS test instead of after. Same units in the
     // same order, without a raycast for every pet and totem in the raid.
@@ -593,46 +604,48 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     Acore::UnitListSearcher<AnyUnitOfEntriesInRangeCheck> searcher(bot, candidates, check);
     Cell::VisitObjects(bot, searcher, range);
 
-    std::vector<Unit*> perTier(tierCount, nullptr);
+    std::vector<size_t> tiers;
+    tiers.reserve(candidates.size());
     for (Unit* unit : candidates)
-    {
-        size_t const tier = TierOf(unit, brainLevel);
-        if (tier >= tierCount || !IsAllowedTarget(unit, brainApproachable))
-            continue;
+        tiers.push_back(TierOf(unit, brainLevel));
 
-        Unit*& selected = perTier[tier];
-        if (!selected)
-        {
-            selected = unit;
-            continue;
-        }
-
-        // Guardians go down lowest first so the raid's damage finishes one instead of spreading over
-        // three; everything else is nearest, which is the shortest walk into range.
-        bool better;
-        if (IsYoggSaronFocusedGuardian(unit))
-            better = unit->GetHealth() < selected->GetHealth();
-        else
-            better = unit->GetExactDist2d(bot) < selected->GetExactDist2d(bot);
-
-        if (better)
-            selected = unit;
-    }
-
+    // Best tier first, and stop at the first one with anything allowed in it: only that tier is ever
+    // used, so the rest would just be line of sight rays for nothing. Keep the visit order inside a
+    // tier, ties go to whichever was found first.
     Unit* target = nullptr;
     size_t desiredTier = none;
-    for (size_t tier = 0; tier < tierCount; ++tier)
+    for (size_t tier = 0; tier < tierCount && !target; ++tier)
     {
-        if (perTier[tier])
+        for (size_t i = 0; i < candidates.size(); ++i)
         {
-            target = perTier[tier];
-            desiredTier = tier;
-            break;
+            Unit* unit = candidates[i];
+            if (tiers[i] != tier || !IsAllowedTarget(unit, brain))
+                continue;
+
+            if (!target)
+            {
+                target = unit;
+                continue;
+            }
+
+            // Guardians go down lowest first so the raid's damage finishes one instead of spreading
+            // over three; everything else is nearest, which is the shortest walk into range.
+            bool better;
+            if (IsYoggSaronFocusedGuardian(unit))
+                better = unit->GetHealth() < target->GetHealth();
+            else
+                better = unit->GetExactDist2d(bot) < target->GetExactDist2d(bot);
+
+            if (better)
+                target = unit;
         }
+
+        if (target)
+            desiredTier = tier;
     }
 
     size_t currentTier = none;
-    if (currentTarget && IsAllowedTarget(currentTarget, brainApproachable))
+    if (currentTarget && IsAllowedTarget(currentTarget, brain))
         currentTier = TierOf(currentTarget, brainLevel);
 
     if (currentTier != none && currentTier <= desiredTier)
@@ -670,8 +683,7 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
 {
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-    YoggSaronTrigger yoggSaronTrigger(botAI);
-    bool const phaseOne = !yoggSaronTrigger.IsInBrainLevel() && YoggSaronInPhase1(botAI);
+    bool const phaseOne = !YoggSaronOnBrainLevel(bot) && YoggSaronInPhase1(botAI);
 
     // Phase 1 is one shared target and no "dps target" fallback. A parked Guardian stays parked even
     // when nothing else is killable: two killed out at the station on 2026-09-16 novaed the back line
@@ -1047,7 +1059,7 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
 
 bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
 {
-    Creature* boss = bot->FindNearestCreature(NPC_YOGG_SARON, 200.0f, true);
+    Creature* boss = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
     if (!boss || !boss->IsAlive())
         return false;
 
