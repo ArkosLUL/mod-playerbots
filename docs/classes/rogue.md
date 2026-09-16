@@ -1,7 +1,9 @@
 # Rogue â€” Combat and Assassination
 
-Subtlety aliases the Assassination strategy (`AiFactory.cpp:379-380`) and inherits whatever improves
-there. Engine semantics are in [../engine/action-selection.md](../engine/action-selection.md).
+Strategy keys: `combat` (`CombatRogueStrategy`), `assassin` (`AssassinationRogueStrategy`). Subtlety
+gets `assassin` (`AiFactory::AddDefaultCombatStrategies`) and inherits whatever improves there;
+`SubtletyRogueStrategy` is written but unregistered. Engine semantics are in
+[../engine/action-selection.md](../engine/action-selection.md).
 
 **`GenericRogueStrategy` must stay parented to `MeleeCombatStrategy`.** Upstream parents it to
 `CombatStrategy`, and `MeleeCombatStrategy` is the only source of the `"enemy out of melee"` trigger
@@ -58,7 +60,7 @@ nothing failing to compile. It is a local divergence to re-apply on each merge â
 
 ## Current ladders
 
-Combat (`DpsRogueStrategy`):
+Combat (`CombatRogueStrategy`):
 
 | Rel | Trigger | Action |
 |---|---|---|

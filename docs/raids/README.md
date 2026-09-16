@@ -10,14 +10,15 @@ vehicles, movement stability, reach and per-raid cost are in
 
 A raid is a folder under `src/Ai/Raid/<Raid>/` mirroring `src/Ai/Raid/Gruul/`, the reference
 implementation: `<X>Strategy`, `<X>Triggers` + `<X>TriggerContext.h`, `<X>Actions` +
-`<X>ActionContext.h`, `<X>Multipliers`, `<X>Helpers`. Large raids split per boss under `Action/` and
-`Trigger/` and keep a thin umbrella header (`UldActions.h`) that includes the parts, so contexts and
-registration maps need no edits.
+`<X>ActionContext.h`, `<X>Multipliers`, `<X>Helpers`, and `<X>ValueContext.h` for cached lookups.
+Large raids split per boss under `Action/` and `Trigger/` and keep a thin umbrella header
+(`UldActions.h`) that includes the parts, so contexts and registration maps need no edits.
 
 Four registration sites: `RaidStrategyContext.h` (key → strategy), `BuildSharedTriggerContexts.cpp`,
 `BuildSharedActionContexts.cpp`, and `PlayerbotAI::ApplyInstanceStrategies` — both the
-`allInstanceStrategies` list *and* the `case <mapId>:` arm. There is no `CMakeLists.txt`; new `.cpp`
-files are globbed automatically.
+`allInstanceStrategies` list *and* the `case <mapId>:` arm. A value context adds a fifth,
+`BuildSharedValueContexts.cpp`; pblint does not check value names. There is no `CMakeLists.txt`;
+new `.cpp` files are globbed automatically.
 
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.

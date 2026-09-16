@@ -85,10 +85,10 @@ public:
     bool IsActive() override;
 };
 
-class VigilanceTrigger : public BuffOnPartyTrigger
+class VigilanceTrigger : public BuffTrigger
 {
 public:
-    VigilanceTrigger(PlayerbotAI* botAI) : BuffOnPartyTrigger(botAI, "vigilance") {}
+    VigilanceTrigger(PlayerbotAI* botAI) : BuffTrigger(botAI, "vigilance", 5 * IN_MILLISECONDS) {}
 
     bool IsActive() override;
 };
