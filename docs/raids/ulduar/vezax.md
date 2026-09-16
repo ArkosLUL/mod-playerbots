@@ -26,7 +26,7 @@ permanently** for that pull.
 **Nothing deliberately touches the vapors**, and killing one is the only way a puddle ever exists, so
 a raid that ignores them never makes one. But deleting the kill-vapor and puddle nodes was not enough:
 a vapor is an ordinary hostile that pulses damage on anyone near it, so the **generic** pickers took
-one anyway — an off-tank held a vapor as its target for **56-74% of every traced pull** — and the
+one anyway — an off-tank held a vapor as its target for **60-78% of every traced pull** — and the
 Animus never spawned after eight summons, which only happens once `DoAction(1)` has fired. Hence the
 target guard below.
 
@@ -174,13 +174,13 @@ position brings bots back and the dodge throws them out. It stays blind to field
 search that would fix it is the one that scattered the camp before, and the group vector is what keeps
 the formation intact.
 
-**So the fix is the walk back.** Soak travel is **20 yd** — a clear field sits within 15 for 27% of
-out-of-field time and within 20 for 40%. Past 25 it outgrows the local hazard sweep, and a wider cap
-lets one group cross to the other's field. The move runs at `MOVEMENT_FORCED`: at `MOVEMENT_COMBAT` a
-quarter of soak moves were swallowed by the dodge's own destination, still latched in
-`IsWaitingForLastMove` long after the dodge stopped wanting it. Safe only because the dodge outranks
-the soak in the ladder, so the soak runs only on a tick the dodge declined, and it already refuses any
-field under a pending missile.
+**So the fix is the walk back.** Soak travel is **20 yd** — a clear field sits within 15 for 33% of
+out-of-field time, within 20 for 49% and within 25 for 57% (`--field`). Past 25 it outgrows the local
+hazard sweep, and a wider cap lets one group cross to the other's field. The move runs at
+`MOVEMENT_FORCED`: at `MOVEMENT_COMBAT` a quarter of soak moves were swallowed by the dodge's own
+destination, still latched in `IsWaitingForLastMove` long after the dodge stopped wanting it. Safe only
+because the dodge outranks the soak in the ladder, so the soak runs only on a tick the dodge declined,
+and it already refuses any field under a pending missile.
 
 **Everyone with a mana bar soaks, healers included**, on the same test that hands out camp slots. The
 −75% healing done is real — a field is 0.25x per cast and 0.83x per point of mana — but nothing else
@@ -236,8 +236,8 @@ a presence gate had bots prepositioning through walls while their generic movers
 `VezaxFormationActive` wants the bot inside a 45 yd bubble around the anchor plus a 10 yd height band.
 The hall runs 70 yd north and west, so the bubble stops short of the entrance on purpose: outside it
 the multiplier is inert, generic movement carries a bot in, and the gate opens on arrival. Widening it
-is what puts a bot back on a path through a wall. Resistance and state reset stay presence-gated;
-everything else is combat-gated.
+is what puts a bot back on a path through a wall. Resistance stays presence-gated, the state reset
+fires once he is dead or out of combat, and everything else is combat-gated.
 
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
 `PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement
@@ -258,6 +258,24 @@ from `spell->m_targets`, never `GetUniqueTargetInfo()`: 62660's effects are both
 unit list is empty. Reading it logged zero missile hazards across 21 crashes in one pull, and took the
 mid-cast interrupt down with it unnoticed.
 
+**The reset fires on a wipe, not only a kill.** Waiting for him to be gone carried slots across
+wipes — he is alive at full after one — and left `vezax.slot` silent on every following pull. Slots
+are only handed out in combat, so nothing live is cleared.
+
+**`tools/botobs/general_vezax.py` reads all of it** and reproduces this doc's per-pull figures, the
+heal-back aside (it shows only as boss health rate): `--boss`, `--mark` (leech, escape branch, nearest
+ally, boss health per window), `--crash` (target, dodgers per block), `--field` (both halves' uptime,
+casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap returns), `--vapors`,
+`--band`. Its banner names declared probes the pull never wrote. No probe was added for it: fields are
+`snap.hz`, crashes `haz`, the mark an aura, the leech `dmg`, vapor targeting `snap.u[7]`; the vapors
+themselves are never sampled.
+
+**Of the generic views, `--vetoes` covers the four multipliers and `--idle` counts the cast hold as
+idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp
+is boss-relative: radius from the anchor is off by a median 7.8-15.6 yd, wider than the band, so use
+the reader's `--band`. `--during` pools every bot's rows and cannot scope a `vezax.` key. Whether the
+last cycle helped: `batch.py --boss general-vezax --split-at 867fd6529`, once pulls on it exist.
+
 ## Hard mode — the reference implementation
 
 Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** spawns; Vezax gains an
@@ -269,17 +287,17 @@ this doc claimed both before 2026-09-13 and neither was ever in the code.
 
 The guard against killing a vapor is the target guard and drop-vapor node above, nothing wider: there
 is no AoE suppression and no explicit pet control. **A stray cleave or an off-passive pet can still
-kill one**, and that silently ends hard mode; if hard mode starts failing, measure
+kill one**, and that silently ends hard mode; if hard mode starts failing, `--vapors` reads
 `vezax.target = vapor` first, then whether an Animus ever spawned after the sixth summon.
 
 ## Known gaps
 
-**65269 uptime trails 63277 by 11-15% on every bot.** They are linked (`63277 → 65269`,
+**65269 uptime trails 63277 on every bot**, 9-22% in the kill pull. They are linked (`63277 → 65269`,
 `-63277 → -65269`) and should be identical, and 65269 is the half carrying the −70% mana cost, so the
 shortfall falls on the one mana source that works. Cause not yet found.
 
 **A fire mage has no mana plan here.** Same field uptime as the arcane one and 2.8× the cost per cast,
-so it hits 0% mana at 1:16 and wands for the rest — and it still casts Mana Shield, which spends the
+so it hits 0% mana at 1:06 and wands for the rest — and it still casts Mana Shield, which spends the
 one resource that cannot be replaced. Class-side, not Vezax-side.
 
 **Melee do not dodge Shadow Crash.** `DodgesShadowCrash` requires `IsRanged`, and the table above says

@@ -64,10 +64,11 @@ radii for `--band` - parsed out of the source the way probe keys are, so nothing
 every trace on disk can be measured against any of them. A unique suffix is enough
 (`YOGG_SARON_MIDDLE`), an ambiguous one lists the candidates, and a name two files declare with
 different values (12 radii, `LEASH_RADIUS` among them) is refused with both listed. `--band` also
-takes a bare number. `--from entry:<N>` measures from a creature, refusing an entry that more than one
-sampled creature shares. This turns "`move.by` churned 2,396 times" into "957 `flee` moves, median
-21.5 yd out to 24.9, 96% ending further from the band than they started" - the Yogg-Saron phase 1
-defect.
+takes a bare number. `--from entry:<N>` measures from a creature's spot at the pull, refusing an entry
+that more than one sampled creature shares. That spot stays put while the creature walks, so a
+boss-relative formation needs its own reader: Vezax's camp reads a median 8-16 yd off against one.
+This turns "`move.by` churned 2,396 times" into "957 `flee` moves, median 21.5 yd out to 24.9, 96%
+ending further from the band than they started" - the Yogg-Saron phase 1 defect.
 
 A `move` carries its destination only, so `--moves` joins the snapshot before it for the origin.
 `--where` also takes `cast:<spell>`, because a creature's death reaches no record at all and what it
