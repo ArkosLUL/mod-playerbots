@@ -32,6 +32,8 @@
 #include "UldTriggers.h"
 #include "VehicleActions.h"
 
+#include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 
@@ -43,8 +45,11 @@ float YoggSaronDpsTargetGuardMultiplier::GetValue(Action* action)
     // engine weighs.
     //
     // "attack rti target" is deliberately left alone: bots no longer set marks here, but a mark a
-    // player sets should still win. Nor is TankAssistAction zeroed - the resolver excludes tanks, so
-    // that would strand them with nothing in its place.
+    // player sets should still win. The resolver excludes tanks, so TankAssistAction only stands down
+    // where guardian control gives a tank its target instead.
+    if (dynamic_cast<TankAssistAction*>(action))
+        return TankAssistGuard();
+
     if (!dynamic_cast<DpsAssistAction*>(action) || botAI->IsTank(bot))
         return 1.0f;
 
@@ -52,6 +57,20 @@ float YoggSaronDpsTargetGuardMultiplier::GetValue(Action* action)
     // order of its own. This is literally the test YoggSaronSetDpsPriorityTrigger fires on: zeroing
     // the assist over a wider window than the resolver covers leaves a bot with no target source.
     return YoggSaronEncounterActive(botAI) ? 0.0f : 1.0f;
+}
+
+float YoggSaronDpsTargetGuardMultiplier::TankAssistGuard()
+{
+    // Its picker ranks by "not attacking me", then nearest by GetDistance, which takes off Yogg's 30 yd
+    // combat reach, so Yogg always reads as nearest. It held one bot tank on him for all of phase 3 with
+    // no Guardian ever targeted. Guardian control hands out a Guardian while one can still be held; 70 yd
+    // covers the whole spawn ring, 38-48 yd round Yogg, from the melee spot 18.5 yd behind him.
+    constexpr float guardianSearchRadius = 70.0f;
+
+    if (!botAI->IsTank(bot) || !YoggSaronHoldableGuardianWithin(bot, guardianSearchRadius))
+        return 1.0f;
+
+    return YoggSaronInPhase3(botAI) ? 0.0f : 1.0f;
 }
 
 float YoggSaronDisplacementGuardMultiplier::GetValue(Action* action)
@@ -107,6 +126,43 @@ bool YoggSaronMovementGuardMultiplier::MeleeReachIsWrong(Action* action)
     return target && !YoggSaronGuardianOnTheStack(target) && YoggSaronBotTankAlive(botAI);
 }
 
+float YoggSaronMovementGuardMultiplier::SetBehindGuard()
+{
+    // Arithmetic first. Below the platform there is no body, and the phase read is two 200 yd sweeps.
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return 1.0f;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
+        return 1.0f;
+
+    // Both spots SetBehindTargetAction::Execute picks from: 108 degrees either side of the target's
+    // facing, at the bot's current distance from it. Guardians are tanked 18.5 yd from the middle and are
+    // several yards across, so one pull's melee aimed 67 of 631 of these inside the ring and were thrown
+    // 52 times walking them. Guardians have no frontal attack, so not getting behind costs parries only.
+    float const distance =
+        std::max(bot->GetExactDist(target), bot->GetMeleeRange(target) / 2.0f) - bot->GetCombatReach();
+    Position const& middle = ULDUAR_YOGG_SARON_MIDDLE;
+
+    bool intoRing = false;
+    for (float const side : {1.0f, -1.0f})
+    {
+        float const angle = Position::NormalizeOrientation(target->GetOrientation() +
+                                                           side * 3.0f * static_cast<float>(M_PI) / 5.0f);
+        float const x = target->GetPositionX() + std::cos(angle) * distance;
+        float const y = target->GetPositionY() + std::sin(angle) * distance;
+
+        intoRing = intoRing || middle.GetExactDist2d(x, y) < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS ||
+                   !YoggSaronRouteClearOfBody(bot, x, y);
+    }
+
+    if (!intoRing)
+        return 1.0f;
+
+    uint32 const phase = YoggSaronPhase(botAI);
+    return phase == 2 || phase == 3 ? 0.0f : 1.0f;
+}
+
 float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 {
     if (!action)
@@ -114,6 +170,9 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 
     if (dynamic_cast<FleeAction*>(action))
         return FleeGuard();
+
+    if (dynamic_cast<SetBehindTargetAction*>(action))
+        return SetBehindGuard();
 
     if (!dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
@@ -142,9 +201,8 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
 
     // Exactly the radius the phase 2 spacing trigger fires at, so reach stands down only while that
     // node owns the bot and is free again the moment it has been walked clear. A wider band here would
-    // leave a ring where neither node moves anybody. Phase 3 is left out: its spacing node does not
-    // run, so nothing down here would walk the bot out in its place.
-    if (phase == 2 && fromMiddle < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS)
+    // leave a ring where neither node moves anybody. The spacing node runs in phase 3 too.
+    if ((phase == 2 || phase == 3) && fromMiddle < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS)
         return 0.0f;
 
     if (phase != 1 && phase != 2)

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstdio>
 #include <iterator>
+#include <limits>
 #include <list>
 #include <mutex>
 #include <string>
@@ -35,8 +36,10 @@
 #include "Spell.h"
 #include "SpellInfo.h"
 #include "SpellMgr.h"
+#include "ThreatManager.h"
 #include "UldEncounterGate.h"
 #include "Unit.h"
+#include "Vehicle.h"
 #include "WorldSession.h"
 
 const std::vector<uint32> ULDUAR_YOGG_SARON_ILLUSION_MOBS = {
@@ -961,6 +964,101 @@ bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& way
                         destination.GetPositionZ());
 
     return true;
+}
+
+Position YoggSaronBodyRoute(Player* bot, Position const& spot)
+{
+    Position waypoint;
+    if (!YoggSaronBodyDetour(bot, spot, waypoint))
+        return spot;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.detour", "spot");
+
+    return waypoint;
+}
+
+bool IsYoggSaronHoldableGuardian(Unit* unit)
+{
+    if (!unit || !unit->IsAlive())
+        return false;
+
+    uint32 const entry = unit->GetEntry();
+    if (entry != NPC_IMMORTAL_GUARDIAN && entry != NPC_MARKED_IMMORTAL_GUARDIAN)
+        return false;
+
+    return !unit->HasAura(SPELL_WEAKENED);
+}
+
+bool YoggSaronHoldableGuardianWithin(Player* bot, float radius)
+{
+    for (uint32 const entry : {NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN})
+    {
+        std::list<Creature*> guardians;
+        bot->GetCreatureListWithEntryInGrid(guardians, entry, radius);
+        for (Creature* guardian : guardians)
+            if (IsYoggSaronHoldableGuardian(guardian))
+                return true;
+    }
+
+    return false;
+}
+
+bool YoggSaronGuardianThreatAllows(Player* bot, Unit* guardian, bool holding)
+{
+    // Heal threat reaches every Guardian in combat, so a fresh one leaves its threatless first victim
+    // for a healer about a second after it spawns. A victim that is not a tank means nobody hits it
+    // until a taunt lands.
+    Player* tank = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
+    if (!tank || !PlayerbotAI::IsTank(tank))
+    {
+        Group* group = bot->GetGroup();
+        if (!group)
+            return true;
+
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (member && member->IsAlive() && PlayerbotAI::IsTank(member))
+                return false;
+        }
+
+        return true;
+    }
+
+    float const share =
+        holding ? ULDUAR_YOGG_SARON_GUARDIAN_THREAT_KEEP_SHARE : ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE;
+
+    return guardian->GetThreatMgr().GetThreat(bot) < share * guardian->GetThreatMgr().GetThreat(tank);
+}
+
+float YoggSaronTankThreatLead(Player* tank, Unit* guardian)
+{
+    float highest = 0.0f;
+    for (ThreatReference const* ref : guardian->GetThreatMgr().GetUnsortedThreatList())
+    {
+        Player* player = ref->GetVictim() ? ref->GetVictim()->ToPlayer() : nullptr;
+        if (player && PlayerbotAI::IsTank(player))
+            continue;
+
+        highest = std::max(highest, ref->GetThreat());
+    }
+
+    float const own = guardian->GetThreatMgr().GetThreat(tank);
+    if (highest <= 0.0f)
+        return own > 0.0f ? std::numeric_limits<float>::max() : 0.0f;
+
+    return own / highest;
+}
+
+bool YoggSaronConstrictorHolding(Unit* unit)
+{
+    // The grab is a Lunge onto the tentacle's seat, so the passenger is the whole signal.
+    if (!unit || !unit->IsAlive() || unit->GetEntry() != NPC_CONSTRICTOR_TENTACLE)
+        return false;
+
+    Vehicle* seat = unit->GetVehicleKit();
+    return seat && seat->IsVehicleInUse();
 }
 
 namespace

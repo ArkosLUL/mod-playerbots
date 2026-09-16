@@ -102,9 +102,14 @@ bool YoggSaronSanityAction::Execute(Event /*event*/)
     if (!YoggSaronWalkMakingProgress(botAI, "sanity", sanityWell->GetPosition()))
         return false;
 
-    return MoveTo(bot->GetMapId(), sanityWell->GetPositionX(), sanityWell->GetPositionY(), sanityWell->GetPositionZ(),
-                  false, false, false, true, MovementPriority::MOVEMENT_FORCED,
-                  true, false);
+    // Round the body once there is one. Phase 1 has Sara in the middle and clouds on the detour radius.
+    Position const destination = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON)
+                                     ? YoggSaronBodyRoute(bot, sanityWell->GetPosition())
+                                     : sanityWell->GetPosition();
+
+    return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
+                  destination.GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_FORCED, true,
+                  false);
 }
 
 bool YoggSaronSpacingAction::Execute(Event /*event*/)
@@ -199,7 +204,11 @@ bool YoggSaronSpacingAction::Execute(Event /*event*/)
         return false;
 
     // MOVEMENT_FORCED: IsWaitingForLastMove yields only to a strictly higher priority, and at combat
-    // priority a reach-spell walk already in flight wins the tick.
+    // priority a reach-spell walk already in flight wins the tick. Not even forced beats another forced
+    // walk, so a dodge allowed to cut in drops that walk's hold first.
+    if (OverridesWalkInFlight())
+        AI_VALUE(LastMovement&, "last movement").clear();
+
     if (!MoveTo(bot->GetMapId(), safe.GetPositionX(), safe.GetPositionY(), safe.GetPositionZ(), false, false, false,
                 true, MovementPriority::MOVEMENT_FORCED, true, false))
         return false;
@@ -278,12 +287,19 @@ bool YoggSaronPhase1StationAction::Execute(Event /*event*/)
 
 bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 {
+    inDeathRay = false;
+
     std::list<Creature*> rays;
     bot->GetCreatureListWithEntryInGrid(rays, NPC_DEATH_RAY,
                                         SearchRadius() + ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
     for (Creature* ray : rays)
-        if (ray->IsAlive())
-            set.hazards.emplace_back(ray->GetPosition(), ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
+    {
+        if (!ray->IsAlive())
+            continue;
+
+        set.hazards.emplace_back(ray->GetPosition(), ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS);
+        inDeathRay = inDeathRay || bot->GetExactDist2d(ray) < ULDUAR_YOGG_SARON_DEATH_RAY_CLEAR_RADIUS;
+    }
 
     // Yogg's body, which is a hazard from the moment he emerges and stays one: 64022 triggers a 14 yd
     // knock back off him every second for the rest of the fight, and nothing in the world can be swept
@@ -525,13 +541,15 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
         // the raid does, multiplicative across tentacles, undispellable and unkickable - only a melee
         // hit (worth ~1.5 s) or the tentacle's death stops it.
         case NPC_CRUSHER_TENTACLE:
-            return 3;
-        case NPC_CONSTRICTOR_TENTACLE:
             return 4;
+        // Ahead of the Crusher while it holds somebody. 99k health dies in about 2 s under the ranged,
+        // and one pull left four raiders squeezed for 11.5-23.3 s with all nine ranged on a Crusher.
+        case NPC_CONSTRICTOR_TENTACLE:
+            return YoggSaronConstrictorHolding(unit) ? 3 : 5;
         case NPC_CORRUPTOR_TENTACLE:
-            return 5;
-        case NPC_YOGG_SARON:
             return 6;
+        case NPC_YOGG_SARON:
+            return 7;
         default:
             return none;
     }
@@ -543,7 +561,7 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
         return false;
 
     // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg
-    // and only hit a Guardian that has come to the tank.
+    // and only hit a Guardian that has come to the tank. Nobody hits one a tank is not holding.
     auto const phaseThreeMelee = [this, &brain]()
     {
         if (!brain.phaseThreeMelee)
@@ -573,13 +591,14 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
             allowed = !phaseThreeMelee();
             break;
         // Below 10% it is Weakened, and nothing but Thorim's Titanic Storm can finish one, so holding
-        // there is a dead tick for the rest of the fight.
+        // there is a dead tick for the rest of the fight. Above it, only once a tank leads on threat.
         case NPC_IMMORTAL_GUARDIAN:
         case NPC_MARKED_IMMORTAL_GUARDIAN:
             allowed = candidate->GetHealthPct() > 10 &&
                       (!phaseThreeMelee() ||
                        candidate->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
-                           ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE);
+                           ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE) &&
+                      YoggSaronGuardianThreatAllows(bot, candidate, candidate->GetGUID() == bot->GetTarget());
             break;
         // Shadow Barrier is what phase 2 is read off, and it makes him immune.
         case NPC_YOGG_SARON:
@@ -613,7 +632,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         entries = {NPC_GUARDIAN_OF_YS,     NPC_CRUSHER_TENTACLE,  NPC_CONSTRICTOR_TENTACLE,
                    NPC_CORRUPTOR_TENTACLE, NPC_IMMORTAL_GUARDIAN, NPC_MARKED_IMMORTAL_GUARDIAN,
                    NPC_YOGG_SARON};
-        tierCount = 7;
+        tierCount = 8;
     }
 
     // The brain level needs the reach: its floor sits ~25 yd below the Brain and a portal drops the bot
@@ -703,9 +722,11 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     // The illusion rooms hold adds the module does not enumerate, so a hard stop here would park a bot
     // with nothing to do rather than let it shoot what is in front of it. The fallback knows nothing
-    // about Crush though: it put melee on a lone live Crusher for ~150 bot-seconds in one pull.
+    // about Crush or Guardian threat though: it put melee on a lone live Crusher for ~150 bot-seconds
+    // in one pull.
     Unit* fallback = AI_VALUE(Unit*, "dps target");
-    if (fallback && fallback->GetEntry() == NPC_CRUSHER_TENTACLE && !IsAllowedTarget(fallback, brain))
+    if (fallback && (fallback->GetEntry() == NPC_CRUSHER_TENTACLE || IsYoggSaronFocusedGuardian(fallback)) &&
+        !IsAllowedTarget(fallback, brain))
         return nullptr;
 
     return fallback;
@@ -1000,10 +1021,7 @@ bool YoggSaronMoveToEnterPortalAction::Execute(Event /*event*/)
     // Straight across the room is straight through the body, which throws the bot back once a second
     // for as long as it is inside the ring. One waypoint turns the crossing into an arc, and each leg
     // halves the turn the next one has to make.
-    Position destination = spot;
-    Position waypoint;
-    if (YoggSaronBodyDetour(bot, spot, waypoint))
-        destination = waypoint;
+    Position const destination = YoggSaronBodyRoute(bot, spot);
 
     return MoveNear(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
                     destination.GetPositionZ(), sPlayerbotAIConfig.contactDistance,
@@ -1282,23 +1300,21 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
 bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
 {
     // A tank is only ever walked back on the leash: wherever it drifted to, a guardian took it there.
-    if (botAI->IsTank(bot))
+    if (!botAI->IsTank(bot))
     {
-        return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-                      ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
-                      ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_FORCED, true, false);
+        YoggSaronTrigger yoggSaronTrigger(botAI);
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (target && target->IsAlive() && !yoggSaronTrigger.PhaseThreeStationReaches(target))
+            return false;
     }
 
-    Position const& spot = YoggSaronPhaseThreeSpot(bot);
+    // Round the body. The brain team surfaces west of Yogg and the melee spot is east of him: the
+    // straight line passed 2 yd from his middle, and one pull's melee were thrown 31 times walking it.
+    Position const destination = YoggSaronBodyRoute(bot, YoggSaronPhaseThreeSpot(bot));
 
-    YoggSaronTrigger yoggSaronTrigger(botAI);
-    Unit* target = AI_VALUE(Unit*, "current target");
-    if (target && target->IsAlive() && !yoggSaronTrigger.PhaseThreeStationReaches(target))
-        return false;
-
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
-                  true, MovementPriority::MOVEMENT_FORCED, true, false);
+    return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
+                  destination.GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_FORCED, true,
+                  false);
 }
 
 bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
@@ -1310,44 +1326,102 @@ bool YoggSaronGuardianControlAction::Execute(Event /*event*/)
     if (YoggSaronInPhase1(botAI))
         return ControlPhaseOne();
 
-    // Hold the melee stack so taunted guardians pile onto the melee bots to be cleaved down.
-    if (bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > 5.0f)
-    {
-        return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionX(),
-                      ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionY(),
-                      ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_FORCED, true, false);
-    }
+    return ControlPhaseThree();
+}
 
-    // Taunt the nearest loose guardian (not already coming to a tank) so it comes to the stack.
-    GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
-    Unit* looseGuardian = nullptr;
-    float nearestDistance = std::numeric_limits<float>::max();
+bool YoggSaronGuardianControlAction::ControlPhaseThree()
+{
+    Position const& spot = ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+
+    GuidVector const targets = AI_VALUE(GuidVector, "nearest npcs");
+    std::vector<std::pair<float, Unit*>> loose;
+    std::vector<Unit*> inReach;
+    std::vector<Unit*> atSpot;
     for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        if (!IsYoggSaronHoldableGuardian(unit))
             continue;
 
-        if (unit->GetEntry() != NPC_IMMORTAL_GUARDIAN && unit->GetEntry() != NPC_MARKED_IMMORTAL_GUARDIAN)
-            continue;
+        Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
+        if (!victim || !PlayerbotAI::IsTank(victim))
+            loose.emplace_back(bot->GetDistance(unit), unit);
 
-        Player* targetedPlayer = botAI->GetPlayer(unit->GetTarget());
-        if (targetedPlayer && botAI->IsTank(targetedPlayer))
-            continue;
+        if (bot->IsWithinMeleeRange(unit))
+            inReach.push_back(unit);
+        else if (unit->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE)
+            atSpot.push_back(unit);
+    }
 
-        float distance = bot->GetDistance(unit);
-        if (distance < nearestDistance)
+    // Loose ones before the leash: a taunt is a cast, not a walk, and the Guardian is already heading
+    // for a healer or a ranged while the tank would still be walking home. Heal threat pulls a fresh one
+    // off its threatless first victim about a second after it spawns.
+    std::sort(loose.begin(), loose.end(),
+              [](auto const& left, auto const& right) { return left.first < right.first; });
+    for (auto const& [distance, guardian] : loose)
+    {
+        if (Taunt(guardian))
         {
-            nearestDistance = distance;
-            looseGuardian = unit;
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.tankhold", "taunt");
+
+            return true;
+        }
+
+        if (Defend(guardian))
+        {
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.tankhold", "defense");
+
+            return true;
         }
     }
 
-    if (!looseGuardian)
+    // Hold the melee stack so taunted guardians pile onto the melee bots to be cleaved down.
+    if (bot->GetDistance(spot) > 5.0f)
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.tankhold", "leash");
+
+        Position const destination = YoggSaronBodyRoute(bot, spot);
+
+        return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(),
+                      destination.GetPositionZ(), false, false, false, true, MovementPriority::MOVEMENT_FORCED,
+                      true, false);
+    }
+
+    // A taunt with no threat behind it lasts 3 s, and Hand of Reckoning is back after 8. One bot tank
+    // taunted 41 times in a phase 3 while hitting Yogg, and 29 of 36 swings on the raid came with it
+    // on cooldown. Hold the one where the lead is thinnest, in reach before merely near the spot so
+    // holding it is not a walk off the leash.
+    Unit* hold = nullptr;
+    float holdLead = 0.0f;
+    for (Unit* guardian : inReach.empty() ? atSpot : inReach)
+    {
+        float const lead = YoggSaronTankThreatLead(bot, guardian);
+        if (!hold || lead < holdLead)
+        {
+            hold = guardian;
+            holdLead = lead;
+        }
+    }
+
+    Unit* current = AI_VALUE(Unit*, "current target");
+    if (!hold || current == hold)
         return false;
 
-    return Taunt(looseGuardian);
+    if (IsYoggSaronHoldableGuardian(current) &&
+        current->GetExactDist2d(spot) <= ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE)
+    {
+        float const currentLead = YoggSaronTankThreatLead(bot, current);
+        if (currentLead <= ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD || currentLead <= holdLead)
+            return false;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.tankhold", "attack");
+
+    return Attack(hold);
 }
 
 bool YoggSaronGuardianControlAction::ControlPhaseOne()
@@ -1394,6 +1468,20 @@ bool YoggSaronGuardianControlAction::Taunt(Unit* guardian)
         default:
             return false;
     }
+}
+
+bool YoggSaronGuardianControlAction::Defend(Unit* guardian)
+{
+    if (bot->getClass() != CLASS_PALADIN)
+        return false;
+
+    // Only the ally has to be in the spell's 40 yd. The effect casts 31790 triggered on up to 3 of its
+    // attackers, and 31790's range is 50,000 yd, so it reaches a Guardian still walking in from the ring.
+    Player* victim = guardian->GetVictim() ? guardian->GetVictim()->ToPlayer() : nullptr;
+    if (!victim || victim == bot || !victim->IsAlive())
+        return false;
+
+    return botAI->CastSpell("righteous defense", victim);
 }
 
 bool YoggSaronSanityConservationAction::Execute(Event /*event*/)

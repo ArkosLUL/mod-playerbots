@@ -8,8 +8,9 @@
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
     yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure
-    yogg_saron.py <file> --phase3   Immortal Guardians, who hit what, beacon heals, Lunatic Gaze
-    yogg_saron.py <file> --crush    Crush, the body's knockback and Death Rays, per role
+    yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
+                                    targets and taunts, beacon heals, Lunatic Gaze
+    yogg_saron.py <file> --crush    Crush, the body's knockback and who walked into it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima and where they went
 
 The fight has three rooms, five mechanics that kill and nothing in the world to sweep for two of
@@ -168,10 +169,16 @@ TENTACLE_SPENT_PCT = 20.0
 # floor, so what lands on the floor is a 13.26 yd ring. Nothing in the world can be swept for it.
 KNOCKBACK_RADIUS = 13.3
 
-# The boss platform floor samples between 324.8 and 325.6, and a thrown bot peaks at 329-331, so this
-# pair separates standing from flying without catching the ramp at the rim.
-FLOOR_Z = 325.6
-KNOCKBACK_ARC_Z = 2.0
+# A thrown bot's movement generator reads EFFECT_MOTION_TYPE from the first sample of the flight. Height
+# missed most throws: one launched from 324.9 was only at 327.3 a sample later. A switch to it this near
+# the body, on the platform, is the body's knock back.
+EFFECT_MOTION_TYPE = 16
+LAUNCH_RADIUS = 18.0
+PLATFORM_Z = (320.0, 335.0)
+
+# How far back a throw looks for the walk that crossed the ring. A refused re-issue of the same walk
+# is not written as issued, so the one that counts can be a few throws old: 27 s at one phase 3 opening.
+LAUNCH_BLAME_MS = 30000
 
 BODY = (1980.28, -25.5868)
 
@@ -233,6 +240,8 @@ SPELL_EMPOWERING_SHADOWS = (64468, 64486)
 EMPOWERING_SHADOWS_MS = 20000
 EMPOWERING_SHADOWS_RADIUS = 20.0
 SPELL_WEAKENED = 64162
+SPELL_HAND_OF_RECKONING = 62124
+TAUNT_COOLDOWN_MS = 8000
 
 # Phase 2's platform tentacles, and both Crush cones (64147 in 10-man, 65201 in 25-man).
 TENTACLE_NAMES = {NPC_CRUSHER_TENTACLE: "Crusher", NPC_CONSTRICTOR_TENTACLE: "Constrictor",
@@ -1557,57 +1566,82 @@ def show_diminish_power(trace: Trace) -> None:
           f" {broke} followed by the channel dropping within {JUDGEMENT_BREAK_MS} ms")
 
 
+def closest_approach(start: tuple, end: tuple, point: tuple) -> float:
+    """How near the straight walk from start to end passes to point, in 2d."""
+    leg_x, leg_y = end[0] - start[0], end[1] - start[1]
+    leg_squared = leg_x * leg_x + leg_y * leg_y
+    along = 0.0
+    if leg_squared > 0:
+        along = ((point[0] - start[0]) * leg_x + (point[1] - start[1]) * leg_y) / leg_squared
+        along = max(0.0, min(1.0, along))
+    return math.dist((start[0] + leg_x * along, start[1] + leg_y * along), point[:2])
+
+
+def body_launches(rows: list[list]) -> list[list]:
+    """The rows, snapshot_rows shaped, on which this unit's flight off the body began: effect motion
+    where the sample before was not, within LAUNCH_RADIUS of the body, on the platform."""
+    launched = []
+    for before, after in zip(rows, rows[1:]):
+        if after[10] != EFFECT_MOTION_TYPE or before[10] == EFFECT_MOTION_TYPE:
+            continue
+        if PLATFORM_Z[0] < before[4] < PLATFORM_Z[1] and math.dist(before[2:4], BODY) < LAUNCH_RADIUS:
+            launched.append(after)
+    return launched
+
+
 def show_launches(trace: Trace) -> None:
-    """Who the body actually threw, and what walked them in. 64020 deals no damage, so a launch
-    only shows up as the arc: on the floor one sample, well above it the next. The distance that
-    matters is the one at the last grounded sample, not the first airborne one, which is already a
-    third of a second into the flight.
+    """Who the body actually threw, and what walked them in. 64020 deals no damage, so a launch only
+    shows up in the movement.
 
     The walk is the other half. Every other read of the ring asks where the bot is standing, so the
-    one thing none of them can catch is a walk whose destination is the body - which is what
-    ReachCombatTo produces for a target on the far side, since it shortens its path to halfway."""
+    one thing none of them can catch is a walk that crosses the body - a straight line to a spot on
+    the far side, or a spot behind a target that sits inside the ring. The blame goes to the last walk
+    issued before the throw whose line passed inside the ring, not the one after it: by the time the
+    pulse lands a dodge node has usually already issued the walk back out."""
     roster = roster_guids(trace)
-    casts = sorted(rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_KNOCK_BACK)
-    if not casts:
-        return
-
-    tracked: dict[int, list[tuple]] = collections.defaultdict(list)
-    for snap in trace.of("snap"):
-        for row in snap.get("u", []):
-            if row[0] in roster:
-                tracked[row[0]].append((snap["t"], row[1], row[2], row[3]))
-
-    walks = [rec for rec in trace.of("move") if rec.get("g") in roster]
+    rows = snapshot_rows(trace, roster)
+    spans = phase_spans(trace)
+    walks: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("g") in roster and rec.get("ok") == 1:
+            walks[rec["g"]].append(rec)
 
     launches = []
-    for guid, rows in tracked.items():
-        for before, after in zip(rows, rows[1:]):
-            if not (before[3] <= FLOOR_Z and after[3] > FLOOR_Z + KNOCKBACK_ARC_Z):
-                continue
-            if not any(before[0] <= when <= after[0] + 100 for when in casts):
-                continue
-            # The last walk before the throw that was aimed into the ring, which is the one that put
-            # the bot there. Not simply the last walk: by the time the pulse lands a dodge node has
-            # usually already issued the walk back out, and naming that one blames the rescue.
-            blame = None
-            for rec in walks:
-                if rec.get("g") != guid or rec["t"] > after[0]:
+    for guid, own in rows.items():
+        stamps = [row[0] for row in own]
+        for row in body_launches(own):
+            blame = "nothing walked it in"
+            for rec in reversed(walks[guid]):
+                if rec["t"] > row[0]:
                     continue
-                if math.dist((rec.get("x", 0), rec.get("y", 0)), BODY) <= KNOCKBACK_RADIUS:
-                    blame = rec
-            aimed = math.dist((blame.get("x", 0), blame.get("y", 0)), BODY) if blame else -1.0
-            launches.append((after[0], guid, math.dist((before[1], before[2]), BODY),
-                             blame.get("by", "?") if blame else "nothing walked it in", aimed))
+                if row[0] - rec["t"] > LAUNCH_BLAME_MS:
+                    break
+                index = bisect.bisect_right(stamps, rec["t"])
+                if not index:
+                    break
+                origin = own[index - 1]
+                if closest_approach(origin[2:4], (rec.get("x", 0), rec.get("y", 0)), BODY) < KNOCKBACK_RADIUS:
+                    blame = rec.get("by", "?")
+                    break
+            phase = next((phase for phase, first, last in spans if first <= row[0] < last), 0)
+            launches.append((row[0], guid, phase, blame))
 
     if not launches:
         print("  nothing was thrown by the body ring")
         return
 
-    print(f"  thrown by the body ring: {len(launches)}")
-    for when, guid, flat, by, aimed in sorted(launches)[:10]:
-        where = f" -> {aimed:.1f} yd out" if aimed >= 0 else ""
-        print(f"    {clock(when):>10} {trace.name(guid):14} {trace.role(guid):6}"
-              f" from {flat:5.1f} yd  walked in by {by}{where}")
+    per_phase = collections.Counter(phase for _, _, phase, _ in launches)
+    print(f"  thrown by the body ring: {len(launches)}"
+          f" ({', '.join(f'{PHASE_NAMES.get(phase, phase)} {count}' for phase, count in sorted(per_phase.items()))})")
+    for phase in sorted(per_phase):
+        mine = [entry for entry in launches if entry[2] == phase]
+        blamed = collections.Counter(entry[3] for entry in mine)
+        bots = collections.Counter(trace.name(entry[1]) for entry in mine)
+        label = PHASE_NAMES.get(phase, phase)
+        print(f"    {label} walked in by: {', '.join(f'{by} {n}' for by, n in blamed.most_common())}")
+        print(f"    {label} per bot     : {', '.join(f'{name} {n}' for name, n in bots.most_common())}")
+    for when, guid, _, by in sorted(launches)[:10]:
+        print(f"    {clock(when):>10} {trace.name(guid):14} {trace.role(guid):6} walked in by {by}")
 
 
 def show_crush_melee(trace: Trace) -> None:
@@ -1842,6 +1876,17 @@ def target_kind(target: int, entry: int | None) -> str:
     return "yogg" if entry == NPC_YOGG_SARON else "other"
 
 
+def first_off_tank(rows: list[list], tanks: set) -> list | None:
+    """The first snapshot_rows row on which this Guardian had a victim that was not a tank."""
+    return next((row for row in rows if row[8] and row[8] not in tanks), None)
+
+
+def on_cooldown(casts: list[int], when: int, cooldown_ms: int) -> bool:
+    """Whether the last of these sorted cast times before `when` is still inside the cooldown."""
+    index = bisect.bisect_right(casts, when)
+    return bool(index) and when - casts[index - 1] < cooldown_ms
+
+
 def show_phase3(trace: Trace) -> None:
     """Phase 3: whether ranged took the Guardians while melee stayed on Yogg, what the Guardians did to
     the raid, whether a beacon's heal reached Yogg, and what each Lunatic Gaze cost.
@@ -1902,13 +1947,16 @@ def show_phase3(trace: Trace) -> None:
 
     teleports = {rec.get("s"): rec["t"] for rec in trace.of("cast") if rec.get("sp") == 64195}
     melee_hits = [rec for rec in trace.of("dmg") if rec.get("s") in guardians and rec.get("sp") == 0]
-    weakened = collections.Counter(rec.get("d") for rec in trace.of("aura")
-                                   if rec.get("sp") == SPELL_WEAKENED and not rec.get("r"))
+    # The Guardian casts Weakened on itself, and that cast row reaches the file where the aura row may not.
+    weakened = {rec.get("d") for rec in trace.of("aura") if rec.get("sp") == SPELL_WEAKENED and not rec.get("r")}
+    weakened |= {rec.get("s") for rec in trace.of("cast") if rec.get("sp") == SPELL_WEAKENED}
     # Thorim is not a watched creature, so Titanic Storm never reaches the file. A Guardian that leaves
     # the snapshots while the raid is still alive, last seen at 10% or less, is the kill it makes. The
     # sweep drops the Guardians once nobody is left alive to anchor it.
     stormed = 0
-    print(f"\n  Immortal Guardians : {len(guardians)}, Weakened applications {sum(weakened.values())}")
+    tanks = {guid for guid in roster if trace.role(guid) == "tank"}
+    flips = []
+    print(f"\n  Immortal Guardians : {len(guardians)}, Weakened {len(weakened & guardians)}")
     for guid in sorted(guardians, key=lambda g: rows[g][0][0] if rows.get(g) else 0):
         own = rows.get(guid)
         if not own:
@@ -1920,15 +1968,40 @@ def show_phase3(trace: Trace) -> None:
         at_stack = sum(1 for row in own if math.dist(row[2:4], PHASE_3_MELEE_SPOT[:2]) <= PHASE_3_MELEE_GUARDIAN_RANGE)
         gone = own[-1][0] < alive_end - 2000
         stormed += gone and own[-1][6] <= 10
+        flip = first_off_tank(own, tanks)
+        flip_role = (trace.role(flip[8]) if flip[8] in roster else "other") if flip else ""
+        if flip:
+            flips.append(((flip[0] - spawned) / 1000, flip_role))
         print(f"    {clock(spawned)}  first victim"
               f" {trace.role(victim[8]) if victim else '-':6} +{max(0, (victim[0] if victim else spawned) - spawned) / 1000:4.1f} s"
+              f"  off a tank {flip_role or '-':6} +{max(0, (flip[0] if flip else spawned) - spawned) / 1000:4.1f} s"
               f"  first hit {trace.role(hit['d']) if hit else '-':6}"
               f" +{((hit['t'] if hit else spawned) - spawned) / 1000:4.1f} s  lowest {lowest:5.1f}%"
               f"  at the stack {at_stack * 100 // len(own):3}%  {'gone ' + clock(own[-1][0]) if gone else 'alive'}"
-              f"{'  Weakened' if weakened.get(guid) else ''}")
+              f"{'  Weakened' if guid in weakened else ''}")
     by_role = collections.Counter(trace.role(rec.get("d")) for rec in melee_hits)
     print(f"    gone at 10% or less (Titanic Storm): {stormed}")
     print(f"    melee hits by victim role: {dict(by_role)}")
+    if flips:
+        print(f"    first off a tank : {len(flips)} of {len(guardians)}, median"
+              f" +{statistics.median(seconds for seconds, _ in flips):.1f} s,"
+              f" to {dict(collections.Counter(role for _, role in flips))}")
+
+    # A bot tank's target, and whether its taunt was even available when a Guardian swung at the raid.
+    swings = [rec for rec in melee_hits if trace.role(rec.get("d")) != "tank"]
+    for guid in sorted(tanks - set(trace.humans), key=trace.name):
+        kinds = collections.Counter(target_kind(row[8], trace.entries.get(row[8]))
+                                    for row in rows.get(guid, []) if start <= row[0] <= alive_end and row[6] > 0)
+        total = sum(kinds.values()) or 1
+        taunts = sorted(rec["t"] for rec in trace.of("cast")
+                        if rec.get("s") == guid and rec.get("sp") == SPELL_HAND_OF_RECKONING)
+        down = sum(1 for rec in swings if on_cooldown(taunts, rec["t"], TAUNT_COOLDOWN_MS))
+        print(f"  bot tank {trace.name(guid):14}: targets guardian {kinds['guardian'] / total:.2f}"
+              f" tentacle {kinds['tentacle'] / total:.2f} yogg {kinds['yogg'] / total:.2f} none {kinds['none'] / total:.2f};"
+              f" Hand of Reckoning on cooldown at {down} of {len(swings)} swings on non-tanks")
+    held = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.tankhold"))
+    if held:
+        print(f"    yogg.tankhold    : {dict(held)}")
 
     beacons = [rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_SHADOW_BEACON and start <= rec["t"] <= stop]
     heals = [rec for rec in trace.of("cast") if rec.get("sp") in SPELL_EMPOWERING_SHADOWS and start <= rec["t"] <= stop]

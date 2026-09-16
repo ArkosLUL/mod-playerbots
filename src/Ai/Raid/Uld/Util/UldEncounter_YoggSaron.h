@@ -410,6 +410,17 @@ constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
 // to 14 yd.
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
 
+// A non-tank starts on an Immortal Guardian only while its own threat on it is under the start share of
+// the tank holding it, and lets go past the keep share. Taking one over needs 110% in melee and 130% at
+// range. Without a gate one pull put 36 swings of 26-41k on non-tanks, 11 of them killing blows.
+constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE = 0.8f;
+constexpr float ULDUAR_YOGG_SARON_GUARDIAN_THREAT_KEEP_SHARE = 0.95f;
+
+// The tank leaves the Guardian it is hitting only once its lead there, over the highest non-tank, is past
+// this, and only for one where the lead is thinner. 1.3 is what pulls one at range. Without switching the
+// raid waits on the newest Guardian until the oldest reaches Weakened.
+constexpr float ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD = 1.5f;
+
 // Smallest angle between a bot's target and Yogg, seen from the bot, that still has a heading with the
 // target inside set facing's 45 degrees and Yogg outside the gaze's 90. 65 degrees, which leaves 10 on
 // each side.
@@ -725,6 +736,27 @@ bool YoggSaronRouteClearOfBody(Player* bot, float x, float y);
 // A point to cross the room through when the straight line would go over the body. One is enough:
 // each leg halves the turn the next one has to make, so the bot walks the arc rather than the chord.
 bool YoggSaronBodyDetour(Player* bot, Position const& destination, Position& waypoint);
+
+// Where a walk to a fixed spot should aim this tick: the spot, or the detour waypoint when the straight
+// line to it crosses the body. Latch a walk on the spot, never on this: the waypoint moves with the bot.
+Position YoggSaronBodyRoute(Player* bot, Position const& spot);
+
+// An Immortal Guardian still worth a taunt or a hit: alive and not Weakened. A Weakened one has no
+// Empowered stacks left and only Titanic Storm can finish it.
+bool IsYoggSaronHoldableGuardian(Unit* unit);
+bool YoggSaronHoldableGuardianWithin(Player* bot, float radius);
+
+// Whether a non-tank may hit this Guardian: a tank is its victim and leads the bot's threat on it by
+// the start share, or the keep share for one the bot is already on. With no tank alive in the group
+// nothing could ever pass, so everyone may.
+bool YoggSaronGuardianThreatAllows(Player* bot, Unit* guardian, bool holding);
+
+// This tank's threat on the Guardian over the highest non-tank's, pets included. Zero when nobody has
+// any, since heal threat is about to land there; float max when only tanks do.
+float YoggSaronTankThreatLead(Player* tank, Unit* guardian);
+
+// A Constrictor with somebody squeezed in its seat.
+bool YoggSaronConstrictorHolding(Unit* unit);
 
 // Any live Influence Tentacle within `radius`, disguise included. A tentacle is re-stamped as a Suit
 // of Armor, a Deathsworn Zealot or a Consort the instant it spawns and only reverts to entry 33943

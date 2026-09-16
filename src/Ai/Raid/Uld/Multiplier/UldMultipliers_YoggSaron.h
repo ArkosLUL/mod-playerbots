@@ -22,6 +22,9 @@ public:
     }
 
     float GetValue(Action* action) override;
+
+private:
+    float TankAssistGuard();
 };
 
 // Everything that moves a bot somewhere nobody picked. In phase 1 the room is six fixed cloud orbits
@@ -67,6 +70,7 @@ public:
 
 private:
     float FleeGuard();
+    float SetBehindGuard();
     bool MeleeReachIsWrong(Action* action);
 };
 

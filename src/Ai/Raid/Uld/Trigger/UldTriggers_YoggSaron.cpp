@@ -290,7 +290,13 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
     if (!hazardNear)
         hazardNear = YoggSaronInBodyKnockback(bot);
 
-    return hazardNear && IsPhase2();
+    if (!hazardNear)
+        return false;
+
+    // Phase 3 as well: the body ring outlives phase 2, and with no node walking bots out of it one pull's
+    // melee were thrown 93 times in phase 3.
+    uint32 const phase = YoggSaronPhase(botAI);
+    return phase == 2 || phase == 3;
 }
 
 bool YoggSaronSetDpsPriorityTrigger::IsActive()
@@ -569,7 +575,7 @@ bool YoggSaronPetGuardTrigger::IsActive()
 
 bool YoggSaronBodyDetourTrigger::IsActive()
 {
-    if (!botAI->CanMove() || !IsYoggSaronFight() || !IsPhase2())
+    if (!botAI->CanMove() || !IsYoggSaronFight())
         return false;
 
     // Platform only. The illusion rooms are 93 yd underneath and have no body in them, and the brain
@@ -581,13 +587,23 @@ bool YoggSaronBodyDetourTrigger::IsActive()
     if (!target || !target->IsAlive())
         return false;
 
-    // Nothing to route while the bot can already shoot from where it stands - that is exactly when
-    // reach stands down too, so claiming the tick here would only cost it a cast.
-    float const reach = botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
-    if (bot->GetExactDist2d(target) <= reach)
+    // No way round to a target inside the ring, and Yogg himself stands at its middle. The movement guard
+    // keeps reach from walking in after one.
+    if (target->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <
+        ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
         return false;
 
-    return !YoggSaronRouteClearOfBody(bot, target->GetPositionX(), target->GetPositionY());
+    // Nothing to route while the bot can already hit from where it stands - that is exactly when reach
+    // stands down too, so claiming the tick here would only cost it a cast. Combat reach counts: a
+    // full-health Guardian is several yards across.
+    bool const inReach = botAI->IsMelee(bot) ? bot->IsWithinMeleeRange(target)
+                                             : bot->IsWithinCombatRange(target, sPlayerbotAIConfig.spellDistance);
+    if (inReach || YoggSaronRouteClearOfBody(bot, target->GetPositionX(), target->GetPositionY()))
+        return false;
+
+    // Phase 3 as well, where the brain team surfaces on the far side of the body from its Guardians.
+    uint32 const phase = YoggSaronPhase(botAI);
+    return phase == 2 || phase == 3;
 }
 
 bool YoggSaronLunaticGazeTrigger::IsActive()
@@ -684,19 +700,24 @@ bool YoggSaronGuardianControlTrigger::IsActive()
     if (phase != 3)
         return false;
 
-    // Fire while any guardian is loose - alive and not yet held by a tank.
+    // Fire while a guardian is loose - not Weakened and not held by a tank - or while one at the stack is
+    // not the bot's target. Taunting without hitting builds nothing to keep it, and the action decides
+    // whether the lead on the one it holds is worth leaving.
+    Unit* current = AI_VALUE(Unit*, "current target");
+
     GuidVector targets = AI_VALUE(GuidVector, "nearest npcs");
     for (ObjectGuid const& guid : targets)
     {
         Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
+        if (!IsYoggSaronHoldableGuardian(unit))
             continue;
 
-        if (unit->GetEntry() != NPC_IMMORTAL_GUARDIAN && unit->GetEntry() != NPC_MARKED_IMMORTAL_GUARDIAN)
-            continue;
+        Player* victim = unit->GetVictim() ? unit->GetVictim()->ToPlayer() : nullptr;
+        if (!victim || !PlayerbotAI::IsTank(victim))
+            return true;
 
-        Player* targetedPlayer = botAI->GetPlayer(unit->GetTarget());
-        if (!targetedPlayer || !botAI->IsTank(targetedPlayer))
+        if (unit != current && unit->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
+                                   ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE)
             return true;
     }
 

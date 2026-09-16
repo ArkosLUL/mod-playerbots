@@ -631,6 +631,39 @@ class YoggPhases(unittest.TestCase):
         self.assertAlmostEqual(yogg_saron.hp_removed(samples, 1000, 0, 4000), 550.0)
         self.assertEqual(yogg_saron.hp_removed(samples, 1000, 5000, 6000), 0.0)
 
+    def test_closest_approach_clamps_to_the_walk(self):
+        # 1789581096's phase 3 opening: surfaced west of Yogg, walked to the melee spot east of him.
+        self.assertLess(yogg_saron.closest_approach((1924.7, -25.4), (1998.54, -22.9), yogg_saron.BODY), 2.1)
+        # A walk that stops short is judged from its end, not from the line carried on.
+        self.assertAlmostEqual(yogg_saron.closest_approach((0.0, 0.0), (10.0, 0.0), (20.0, 0.0)), 10.0)
+        self.assertAlmostEqual(yogg_saron.closest_approach((5.0, 5.0), (5.0, 5.0), (8.0, 9.0)), 5.0)
+
+    def test_a_body_launch_is_the_switch_to_effect_motion_near_the_body(self):
+        body_x, body_y = yogg_saron.BODY
+
+        def row(t, distance, z, movegen):
+            return [t, 1, body_x + distance, body_y, z, 0.0, 100.0, 100.0, 0, 1, movegen, 0, 0]
+
+        rows = [row(0, 10.0, 324.9, 8), row(223, 12.8, 327.3, 16), row(446, 15.7, 328.8, 16),
+                row(669, 30.0, 324.9, 8), row(892, 30.0, 324.9, 16), row(1115, 9.0, 237.5, 8),
+                row(1338, 9.0, 237.5, 16)]
+        # Only the first sample of a flight, only near the body, only on the platform: the brain room
+        # sits under it at z 237.
+        self.assertEqual([hit[0] for hit in yogg_saron.body_launches(rows)], [223])
+
+    def test_first_off_tank_skips_tank_victims_and_no_victim(self):
+        rows = [[0, 9, 0, 0, 0, 0, 100.0, 0, 0], [100, 9, 0, 0, 0, 0, 100.0, 0, 5105],
+                [200, 9, 0, 0, 0, 0, 100.0, 0, 5131], [300, 9, 0, 0, 0, 0, 100.0, 0, 5105]]
+        self.assertEqual(yogg_saron.first_off_tank(rows, {5105, 256463})[0], 200)
+        self.assertIsNone(yogg_saron.first_off_tank(rows[:2], {5105}))
+
+    def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
+        casts = [1000, 20000]
+        self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))
+        self.assertTrue(yogg_saron.on_cooldown(casts, 8999, 8000))
+        self.assertFalse(yogg_saron.on_cooldown(casts, 9000, 8000))
+        self.assertTrue(yogg_saron.on_cooldown(casts, 20000, 8000))
+
     def test_phase_one_ends_where_phase_two_starts(self):
         spans = [(1, 0, 157629), (2, 157629, 644303), (1, 644303, 648355)]
         self.assertEqual(yogg_saron.phase1_end(spans), 157629)

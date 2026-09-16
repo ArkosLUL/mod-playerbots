@@ -207,20 +207,31 @@ oscillating against hazards that never stop moving:
   bot lands in a hazard and the spacing node walks it out again — **1565 handovers** in one phase 2,
   77 per melee bot and 69 per ranged, 754 yd of melee walking to finish 88 yd from the start.
 
+- **A Death Ray dodge cuts into a walk in flight.** `IsWaitingForLastMove` yields only to a strictly
+  higher priority, so a forced dodge is refused behind any forced walk until that walk arrives. A 4.6 s
+  body detour walked two ranged into a ray while their dodges sat refused for 1.7 and 2.1 s; that pull
+  took 96,860 Death Ray damage behind detours. Inside a ray's clear radius `OverridesWalkInFlight` has
+  the action clear `last movement` before moving. Rays only: a Crush wedge or the ring cutting in too
+  would trade every tick with the detour.
+
 **Yogg-Saron was the only anchored Ulduar encounter with no movement guard.** Iron Assembly, Mimiron
 and Thorim each zero `ReachTargetAction` while a positioning node owns the bot
 ([../README.md](../README.md)); Yogg had a dps-target guard and a displacement guard, neither of which
-sees it. `YoggSaronMovementGuardMultiplier` closes the two windows where the generic reach is simply
-wrong and no others — it is the only way a bot closes on anything, so a blanket zero strands the raid,
+sees it. `YoggSaronMovementGuardMultiplier` closes the windows where the generic reach or `set behind`
+is simply wrong and no others — it is the only way a bot closes on anything, so a blanket zero strands the raid,
 and `reach party member to heal` is exempt outright:
 
 - **The walk out of the knockback ring**, which spans the phase boundary: the window is phase 1 and
   the 6 s hold that outlives it is phase 2. Two nodes at `MOVEMENT_FORCED` and `MOVEMENT_COMBAT` traded
   the bot every ~300 ms for the whole walk.
-- **Inside the ring in phase 2**, at exactly `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS` — the radius the
-  spacing trigger fires at, so reach stands down only while that node owns the bot and is free the
-  moment it is walked clear. A wider band leaves a ring where neither node moves anybody. Phase 3 is
-  left out: its spacing node does not run, so nothing would walk the bot out in its place.
+- **Inside the ring in phases 2 and 3**, at exactly `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS` — the
+  radius the spacing trigger fires at, so reach stands down only while that node owns the bot and is
+  free the moment it is walked clear. A wider band leaves a ring where neither node moves anybody.
+- **`set behind` into the ring**, phases 2 and 3. Both spots `SetBehindTargetAction::Execute` picks
+  from (±108° off the target's facing, at the bot's current distance) are computed, and the move is
+  zeroed if either lands inside the clear radius or its line crosses the ring. Guardians are tanked
+  18.5 yd from the middle and are yards across: one phase 3 aimed 67 of 631 inside and was thrown 52
+  times. Guardians have no frontal attack, so it costs parries only.
 
 **A third window was tried below the platform and cost a whole room.** Zeroing reach while a
 Laughing Skull was in arc left five bots in the Chamber holding a tentacle at 87% for **fifty
@@ -332,7 +343,7 @@ lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and t
 survived. Brain level: Influence Tentacle →
 nearest other illusion add → the Brain. Boss room:
 **leftover Guardian of Yogg-Saron** → **Marked** Immortal Guardian (36064) → Immortal Guardian (33988) →
-Crusher (**ranged only**, below) → Constrictor → Corruptor → Yogg. Phase 3 melee skip Constrictor and
+a Constrictor holding somebody → Crusher (**ranged only**, below) → Constrictor → Corruptor → Yogg. Phase 3 melee skip Constrictor and
 Corruptor and take a Guardian only within 20 yd of the phase 3 melee spot
 (`ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE`).
 
@@ -347,9 +358,18 @@ prevent.
 the transition as well. Ranked above the Immortal Guardians, a Crusher and two Corruptors 38-45 yd out
 took one pull's first 50 s of phase 3 (80-100% of raid targets, Guardians ≤ 4%, Yogg ≤ 6%) while five
 Guardians spawned untouched; they killed the raid inside 77 s and none went below 74%. A 25-man
-Guardian has 425,000 health, so ten ranged reach Weakened in about 6 s. Melee wait for guardian control
+Guardian has 527,555 health, so ten ranged reach Weakened in about 7.5 s. Melee wait for guardian control
 to bring one to the tank: it holds the tank within 5 yd of the spot, and a full-health Guardian swings
 from up to 14 yd.
+
+**Nobody hits a Guardian a tank does not lead on.** `SetInCombatWithZone` hands a fresh one a
+threatless first victim, and heal threat reaches every Guardian in combat, so one pull's left the tank
+a median **+1.0 s** after spawning (43 of 45: healer 21, melee 10, pet 7, ranged 5) and put 36 swings of
+26-41k on non-tanks, 11 of them killing blows. `YoggSaronGuardianThreatAllows` lets a non-tank start
+one only while its victim is a tank and the bot's threat is under
+`ULDUAR_YOGG_SARON_GUARDIAN_THREAT_START_SHARE` (0.8) of that tank's, and keep it under `…_KEEP_SHARE`
+(0.95); taking one over needs 110% in melee, 130% at range. A bot held off drops to the next tier, Yogg
+at worst, and the `dps target` fallback takes the same test. With no tank alive in the group it opens.
 
 Every Guardian tier is picked lowest-health first and then held outright: an order that flips mid-fight
 resets every swing and cast timer in the raid. Phase 1 replaces both with a shared focus, below. An
@@ -623,9 +643,9 @@ movement guard below keeps `reach melee` off the bot for the same window.
 
 It costs melee nothing — Yogg's `CombatReach` is **30** (display 28817, `BoundingRadius` 0), so melee
 range on him is `1.5 + 30 + 2.67` ≈ **34 yd**, and the P3 melee spot is already 18.4 yd out. What it
-costs is the *crossing*: **42%** of portal walks routed the bot within 12 yd of the body. So P2
-spacing carries the ring as a standing hazard circle, its trigger reads it too, and both the spacing
-walk and the portal walk filter the route. A bot already inside the ring is exempt from that filter —
+costs is the *crossing*: **42%** of portal walks routed the bot within 12 yd of the body. So P2 and P3
+spacing carry the ring as a standing hazard circle, the trigger reads it too, and both the spacing
+walk and the walks to a fixed spot filter the route. A bot already inside the ring is exempt from that filter —
 every short step out passes close to the middle by definition, so judging those would reject the only
 walks that end the problem. A blocked crossing gets one waypoint at
 `ULDUAR_YOGG_SARON_BODY_DETOUR_RADIUS` (24 yd) on the bisector of the shorter arc: each leg halves the
@@ -644,6 +664,17 @@ straight line passes inside the ring, it owns the approach and walks the same ar
 portal spread uses, then stands down. Under every raid node and over `charge` and both `reach melee`
 entries, so the price is one shadowed gap-closer for the length of the arc leg. Probed as
 `yogg.detour`.
+
+**Phase 3 kept the body and lost every rule for it:** 106 launches against phase 2's 7, 93 of them on
+the eight melee. The brain team surfaces west of Yogg, and `yogg-saron phase 3 positioning` sent it in
+one forced straight line to the melee spot east of him, 2.0 yd past his middle. Between throws the
+re-issue came back a duplicate, so each bot stood 4 s and walked the same line again. Blamed walks:
+`set behind` 52, positioning 31, `reach melee` 11, `reach spell` 9. The spacing trigger, the reach
+veto and the detour now run in phases 2 and 3, and every walk to a fixed spot (the P3 station and tank
+leash, guardian control's leash, a Sanity Well once Yogg is up, a portal) aims at `YoggSaronBodyRoute`:
+the spot, or its detour waypoint, probed `yogg.detour=spot`. The detour trigger skips a target inside
+the clear radius, Yogg included, where no arc arrives, and tests reach with combat reach: centre
+distance never passes on Yogg or a full-health Guardian.
 
 The 13.3 yd model held up under test: 23 launches matched a Knock Away cast and the last grounded
 sample before each was **7.8 to 12.9 yd** out. Measure that sample, not the first airborne one,
@@ -965,7 +996,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-five `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-six `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -973,7 +1004,7 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
-`yogg.judgement`, `yogg.spread`, `yogg.sanity` and `yogg.stunned`,
+`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned` and `yogg.tankhold`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -982,8 +1013,9 @@ afterwards.
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
 place is a bot standing still and nothing else names it. **Frozen bots**, the longest a bot held a
-target and cast nothing, which is that same failure from outside. And **launches**, matched to the
-walk that aimed into the ring rather than to the last walk issued, which is usually the dodge out.
+target and cast nothing, which is that same failure from outside. And **launches**, read off the switch to
+effect movement near the body (height missed most) and matched to the last walk whose line crossed
+the ring rather than to the last walk issued, which is usually the dodge out; per phase, bot and node.
 Under `--crush`, **Crush hits** split into the tentacle's victim and the cone, each kill with the walk
 that put it inside the reach and any melee hit first; **the reach**, ranged and healer samples and
 walks inside it; and **Diminish Power**, uptime off the aura and how many Judgements landed
@@ -995,7 +1027,9 @@ and well arrivals. Under `--tentacles`, per wave: tentacle stock when the door o
 stun lifted, what the stun took, when the platform was clear and when the team surfaced; live vs
 stunned removal; the tentacles alive at phase 3; who sat on a stunned Crusher, and any Crush within
 5 s of a stun lifting. Under `--phase3`: Yogg's health and each role's target split per 10 s, one row per
-Immortal Guardian (first victim, first hit, lowest health, share at the stack, gone at 10% or less),
+Immortal Guardian (first victim, when and to whom it left a tank, first hit, lowest health, share at the
+stack, gone at 10% or less), each bot tank's target split and Hand of Reckoning cooldown at every
+non-tank swing, `yogg.tankhold`,
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
 outside, and each healer's distance to the melee spot and facing during gazes.
 
@@ -1107,9 +1141,9 @@ Sanity drains, and whether anything can be done:
 path is Thorim's Titanic Storm, filtered to a target carrying `SPELL_WEAKENED` (64162), applied under
 10% health where the Empowered stack count also falls to 0, and armed at the start of P3; its 2 s
 period against a 10 s spawn outpaces spawns 5:1 once the raid burns each guardian that low. So the
-raid's whole job is Weakened. **Not yet observed:** no pull has had a guardian under 10%, and Thorim's
-casts never reach the recorder, so `--phase3` counts a guardian leaving the snapshots at 10% or less
-as the Storm's kill.
+raid's whole job is Weakened. Observed: one kill's 45 guardians each cast Weakened and 43 left the
+snapshots at 10% or less. Thorim's casts never reach the recorder, so `--phase3` counts that as the
+Storm's kill.
 
 **A phase 3 without Thorim is therefore a forced wipe** — accepted, not a defect: the price of playing
 it straight everywhere. Guardians spawn one per 10 s with no cap and a live one never
@@ -1134,11 +1168,30 @@ so the spot stays and marked guardians die first; `--phase3` reads Yogg's health
 Keepers, so demanding both asked for exactly the case where Thorim is least likely to be there — and
 guardians parked on a tank beat guardians loose among the casters even where none of them can die.
 
-Open risks: one tank cannot hold them, since it taunts every 8-10 s against a guardian spawning 38-48 yd
-out every 10 s, each picking a victim on spawn and swinging within 3-8 s, and one pull's guardians put
-45 of 71 melee hits (median 23k, max 57k) on non-tanks; and the sanity-conservation behaviour (stand behind
-Yogg facing away below 15 stacks) **nearly benches a bot** — sanity never recovers Thorim-only, so a
-bot that drops to 15 stays there.
+**The bot tank has to hit the Guardians, not only taunt them.** `FindTankTargetSmartStrategy` ranks
+by not attacking the tank, then nearest by `GetDistance`, which takes off Yogg's 30 yd combat reach:
+he always reads nearest and never attacks anyone. One kill's bot tank held the leftover Corruptor,
+then Yogg, for all of phase 3, a Guardian in 0 snapshots, so each of its 41 Hand of Reckoning taunts
+wore off with nothing behind it and 29 of 36 non-tank swings came while it was on its 8 s cooldown.
+So in phase 3 `yogg-saron guardian control`, in order:
+
+1. Taunts the nearest loose guardian (not Weakened, victim not a tank). Failing Hand of Reckoning, a
+   paladin casts Righteous Defense on that guardian's victim: 40 yd to the ally, and its dummy effect
+   (`SpellEffects.cpp`) casts 31790, range 50,000 yd, triggered on up to 3 of the ally's attackers, so
+   it reaches one still walking in.
+2. Walks the 5 yd leash home, round the body.
+3. `Attack`s the guardian its lead (`YoggSaronTankThreatLead`, over the highest non-tank, pets
+   included) is thinnest on, in melee reach before merely near the spot, leaving its current one only
+   past `ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD` (1.5).
+
+`YoggSaronDpsTargetGuardMultiplier` zeroes `TankAssistAction` for tanks in phase 3 while a guardian
+that can still be held lives within 70 yd, or the picker hands Yogg straight back. Probed as
+`yogg.tankhold` (`taunt` / `defense` / `leash` / `attack`).
+
+Open risks: whether one bot tank keeps pace with a guardian every 10 s alone is untested, since that
+kill had a human second tank; and the sanity-conservation behaviour (stand behind Yogg facing away
+below 15 stacks) **nearly benches a bot** — sanity never recovers Thorim-only, so a bot that drops to
+15 stays there.
 
 ## Squeeze breaks on immunity
 
@@ -1146,6 +1199,10 @@ Removing the Squeeze aura (64125 / 64126) kills the Constrictor Tentacle and dro
 `yogg-saron squeeze escape` at `ACTION_RAID + 1` has a grabbed mage cast Ice Block and a paladin cast
 Divine Shield. Hunter Feign Death and rogue Vanish are deliberately not used — neither removes a
 periodic damage aura.
+
+**A Constrictor holding somebody outranks the Crusher** (`YoggSaronConstrictorHolding`: its vehicle
+seat is in use). 99k health dies in about 2 s under the ranged, and one pull left four raiders
+squeezed 11.5-23.3 s with all nine ranged on a Crusher.
 
 **A paladin can do it for somebody else with Hand of Protection**, which covers the other eight
 classes. 10278 grants `SPELL_AURA_SCHOOL_IMMUNITY` over school mask 1 and carries

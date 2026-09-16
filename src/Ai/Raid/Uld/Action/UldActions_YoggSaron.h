@@ -87,6 +87,11 @@ protected:
     // default: for most hazards crossing one to leave another still beats standing still.
     virtual bool RouteAcceptable(float /*x*/, float /*y*/) const { return true; }
 
+    // Whether this tick's dodge may cut into a walk already in flight. A forced walk holds off every
+    // other forced move until it arrives, and one body detour walked two ranged into a Death Ray that
+    // way while their dodges sat refused for 1.7 and 2.1 s. Asked after Collect.
+    virtual bool OverridesWalkInFlight() const { return false; }
+
 private:
     // Held destination. The hazards move - clouds orbit at 3 yd/s, a Crusher re-faces onto whoever it
     // is hitting - so a fresh sweep every tick answers a different question every tick and the bot
@@ -131,6 +136,12 @@ protected:
     float SearchRadius() const override { return ULDUAR_YOGG_SARON_P2_SPACING_SEARCH_RADIUS; }
     float MaxFromMiddle() const override { return ULDUAR_YOGG_SARON_P2_SPACING_MAX_FROM_MIDDLE; }
     bool RouteAcceptable(float x, float y) const override;
+    bool OverridesWalkInFlight() const override { return inDeathRay; }
+
+private:
+    // Death Rays only: they move onto a bot and kill in three ticks. Letting a Crush wedge or the body
+    // ring cut in as well would have the detour and the dodge trade every tick.
+    bool inDeathRay = false;
 };
 
 // Stand so that facing the tentacle faces away from the skulls. Facing itself cannot be held - set
@@ -363,16 +374,19 @@ public:
 // Immortal Guardians to Weakened for Thorim's Titanic Storm; phase 1 does it because a Guardian's
 // death location is the phase, and one that dies out among the casters neither hurts Sara nor spares
 // the back line.
-class YoggSaronGuardianControlAction : public MovementAction
+class YoggSaronGuardianControlAction : public AttackAction
 {
 public:
-    YoggSaronGuardianControlAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron guardian control action") {}
+    YoggSaronGuardianControlAction(PlayerbotAI* ai) : AttackAction(ai, "yogg-saron guardian control action") {}
 
     bool Execute(Event event) override;
 
 private:
     bool ControlPhaseOne();
+    bool ControlPhaseThree();
     bool Taunt(Unit* guardian);
+    // Righteous Defense on whoever the Guardian is hitting, for when the taunt is down.
+    bool Defend(Unit* guardian);
 };
 
 // Reduced-Keeper hard mode: retreat to a safe ranged spot and face away from Yogg to conserve sanity.
