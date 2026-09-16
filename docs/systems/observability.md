@@ -485,11 +485,14 @@ are left bare on purpose.
 ## Server stalls
 
 **Snapshot gaps time the world.** `snap` is written from `OnMapUpdate` every `SnapshotIntervalMs`, so
-gaps run ~220-320 ms; a stall is a second or more with no record of any kind. Match RaidObs against
-the mod-chronicle combat log or `docker logs --timestamps` on a shared event, never the clock: `t`
-counts `getMSTime()` from a wall-clock `hdr.ts`, and under WSL2 the steady clock runs ~5.5% slower
-than wall time, which steps forward ~1.6 s every ~30 s, so the two drift apart along a trace (36 s
-over 11 minutes).
+gaps run ~220-320 ms; a stall is a second or more with no record of any kind. `t` counts
+`getMSTime()` from a wall-clock `hdr.ts`, so it keeps wall time only while the steady clock does.
+Under WSL2 that failed until 2026-09-16: Ubuntu's `systemd-timesyncd` (on by default in WSL) stepped
+the clock ~1.6 s every ~30 s toward NTP while WSL's hidden `chronyd` held it to the Windows host, so
+chrony slowed the kernel tick and the steady clock, with every server timer, ran ~5.5% slow (36 s
+over 11 minutes). On older traces, match RaidObs against the mod-chronicle combat log or
+`docker logs --timestamps` on a shared event, never the clock. timesyncd is now disabled; if the
+steps return, run `systemctl disable --now systemd-timesyncd`, then `wsl --shutdown` to reset chrony.
 
 **The login ramp used to stall.** For ~10 minutes after a start `RandomPlayerbotMgr` issues 60
 logins every ~31 s, and the DB callbacks logged the whole batch in during one world tick: ~1.1-1.7 s
