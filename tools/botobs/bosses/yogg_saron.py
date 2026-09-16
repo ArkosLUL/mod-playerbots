@@ -111,6 +111,18 @@ CLOUD_SUMMON_REACH = 8.5
 CLOUD_SUMMON_DELAY_MS = 10000
 INFORM_CLOUD_MIN_RANGE = 20.0
 
+# ULDUAR_YOGG_SARON_P1_ROOM_RADIUS: past the outer orbit's reach no cloud touches a bot, and the phase 1
+# movers wait until a bot is inside it. A move by one of them that started further out is the gate
+# failing, or a build from before it.
+P1_ROOM_RADIUS = CLOUD_ORBITS[-1] + CLOUD_SUMMON_REACH
+P1_MOVERS = ("yogg-saron phase 1 station action", "yogg-saron phase 1 spacing action",
+             "yogg-saron guardian positioning action", "yogg-saron guardian control action")
+
+# Two Guardian deaths this close land both novas on whoever is inside both before a heal lands. On
+# 2026-09-16 a pair 17 ms apart killed two melee from full, and one 2.5 s apart killed five at the
+# station.
+BACK_TO_BACK_MS = 3000
+
 # Threat redirects and the single-target taunts, for --threat. Righteous Defense is left out: it is
 # aimed at the raid member being hit rather than at a Guardian, so it cannot be ranked against one.
 REDIRECT_SPELLS = {34477: "Misdirection", 57934: "Tricks of the Trade"}
@@ -184,6 +196,13 @@ def phase1_end(spans: list[tuple[int, int, int]]) -> int | None:
     return next((stop for phase, _, stop in spans if phase == 1), None)
 
 
+def back_to_back(deaths: list[tuple[int, float]],
+                 window_ms: int = BACK_TO_BACK_MS) -> list[tuple[tuple[int, float], tuple[int, float]]]:
+    """Consecutive Guardian deaths no further apart than the window, each as (t, radius)."""
+    ordered = sorted(deaths)
+    return [(a, b) for a, b in zip(ordered, ordered[1:]) if b[0] - a[0] <= window_ms]
+
+
 def missing_probes(trace: Trace) -> list[str]:
     """`yogg.*` keys the source declares and this pull never emitted. Named outright rather than
     resolved off the trace: a pull still filed under the map resolves to no boss, and a check keyed
@@ -240,11 +259,12 @@ def show_phases(trace: Trace) -> None:
     novas = [(rec["t"], rec.get("s")) for rec in trace.of("cast")
              if rec.get("sp") == SPELL_SHADOW_NOVA_SARA and rec["t"] <= (p1_end or 0)]
     where = tracks(trace, guardians)
-    radii = []
+    deaths = []
     for when, guid in novas:
         pts = [p for p in where.get(guid, []) if p[0] <= when]
         if pts:
-            radii.append(math.dist((pts[-1][1], pts[-1][2]), BODY))
+            deaths.append((when, math.dist((pts[-1][1], pts[-1][2]), BODY)))
+    radii = [radius for _, radius in deaths]
     if radii:
         wide = sum(1 for r in radii if r > RANGED_STATION - NOVA_RADIUS)
         print(f"  Guardian deaths         : {len(radii)}, median {statistics.median(radii):.1f} yd "
@@ -265,7 +285,29 @@ def show_phases(trace: Trace) -> None:
             print(f"    counting for Sara (inside {NOVA_RADIUS:.0f} yd): {counted}"
                   f"  (no Sara unit row, so her health is unknown)")
 
+        pairs = back_to_back(deaths)
+        print(f"    back to back (within {BACK_TO_BACK_MS / 1000:.0f} s): {len(pairs)}")
+        for (first, first_r), (second, second_r) in pairs:
+            print(f"      {clock(first):>9} at {first_r:4.1f} yd, {clock(second):>9} at {second_r:4.1f} yd"
+                  f"  ({(second - first) / 1000:.3f} s apart)")
+
+    if p1_end is not None:
+        show_room_gate(trace, p1_end)
+
     show_handover(trace)
+
+
+def show_room_gate(trace: Trace, p1_end: int) -> None:
+    outside: collections.Counter = collections.Counter()
+    for rec in trace.of("move"):
+        if rec.get("by") not in P1_MOVERS or not 0 <= rec.get("t", -1) <= p1_end:
+            continue
+        spot = position_at(trace, rec.get("g", 0), rec["t"])
+        if spot and math.dist(spot, BODY) > P1_ROOM_RADIUS:
+            outside[rec["by"]] += 1
+
+    counts = ", ".join(f"{mover} {count}" for mover, count in outside.most_common()) or "none"
+    print(f"  moves begun outside the room (over {P1_ROOM_RADIUS:.1f} yd): {counts}")
 
 
 def show_handover(trace: Trace) -> None:
@@ -1036,6 +1078,11 @@ def show_threat(trace: Trace) -> None:
     else:
         print("  no live Guardian was ever sampled with a target")
 
+    split = focus_split(trace, guardians, roster, p1_end)
+    if split:
+        print(f"  bot non-tanks on one Guardian: {split[0]:4.1f}%   on two or more: {split[1]:4.1f}%"
+              f"   (of the time any of them was on one)")
+
     redirects = [rec for rec in trace.of("cast")
                  if rec.get("sp") in REDIRECT_SPELLS and 0 <= rec["t"] <= p1_end]
     if redirects:
@@ -1072,6 +1119,28 @@ def show_threat(trace: Trace) -> None:
         print(f"    {clock(rec['t']):>9}  {TAUNT_SPELLS[rec['sp']]:<18}"
               f" rank {rank or '?'}/{len(live):<2}  target {radius} yd out")
     print(f"    landed on the focus Guardian: {on_focus} of {len(taunts)}")
+
+
+def focus_split(trace: Trace, guardians: set, roster: set, p1_end: int) -> tuple[float, float] | None:
+    """Share of phase 1 the bot non-tanks spent on one live Guardian against two or more, weighted by
+    the gap to the next snapshot. Two at once is how a pair comes down in lockstep. Humans are left out:
+    nothing picks their target."""
+    frames = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end]
+    one = many = 0
+    for snap, following in zip(frames, frames[1:]):
+        rows = snap.get("u", [])
+        live = {row[0] for row in rows if row[0] in guardians and row[5] > 0}
+        targets = {row[7] for row in rows
+                   if row[0] in roster and row[0] not in trace.humans and len(row) > 7
+                   and trace.role(row[0]) != "tank" and row[7] in live}
+        span = following["t"] - snap["t"]
+        if len(targets) == 1:
+            one += span
+        elif len(targets) > 1:
+            many += span
+
+    total = one + many
+    return (one * 100.0 / total, many * 100.0 / total) if total else None
 
 
 SECTIONS = (

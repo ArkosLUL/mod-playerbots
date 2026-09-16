@@ -137,7 +137,7 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
 
     // A live phase-1 Guardian before the phase read, which is four 200 yd sweeps - melee sit outside
     // this leash for most of phases 2 and 3. The price is no walk back before the first spawn.
-    bool const active = beyond &&
+    bool const active = beyond && fromSara <= ULDUAR_YOGG_SARON_P1_ROOM_RADIUS &&
                         bot->FindNearestCreature(NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance, true) &&
                         YoggSaronInPhase1(botAI);
 
@@ -181,7 +181,7 @@ bool YoggSaronSanityTrigger::IsActive()
 
 bool YoggSaronPhase1SpacingTrigger::IsActive()
 {
-    if (!botAI->CanMove())
+    if (!botAI->CanMove() || !YoggSaronInPhase1Room(bot))
         return false;
 
     // Short-radius hazard reads first, phase read last. The gate leaves every Yogg trigger open
@@ -220,6 +220,9 @@ bool YoggSaronPhase1StationTrigger::IsActive()
     // Distance only, no sweep, so both reads cost nothing before the phase read.
     float const fromSara =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
+    if (fromSara > ULDUAR_YOGG_SARON_P1_ROOM_RADIUS)
+        return false;
+
     float const fromSpot = bot->GetDistance2d(ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionX(),
                                               ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetPositionY());
 
@@ -568,7 +571,7 @@ bool YoggSaronGuardianControlTrigger::IsActive()
     {
         // The designated bot tank rather than the main tank: IsBotMainTank goes false for every bot
         // the moment a human holds main tank, which is how the phase 3 node stayed silent for a pull.
-        if (!IsDesignatedBotTank())
+        if (!IsDesignatedBotTank() || !YoggSaronInPhase1Room(bot))
             return false;
 
         return YoggSaronPhase1TauntTarget(botAI) != nullptr;

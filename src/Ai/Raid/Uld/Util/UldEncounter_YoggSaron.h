@@ -175,6 +175,12 @@ constexpr float ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE = 1.0f;
 constexpr float ULDUAR_YOGG_SARON_CLOUD_ORBITS[] = {11.6f, 21.4f, 31.2f, 41.0f, 50.9f, 60.8f};
 constexpr float ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH = 8.5f;
 
+// Past the outer orbit's reach no cloud can touch a bot, so phase 1 positioning waits until the bot is
+// inside it. The core opens the pull from 90 yd and bots used to run in from there before anyone was
+// fighting. Combat is no gate: every Guardian's Reset puts the whole instance in combat.
+constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
+    ULDUAR_YOGG_SARON_CLOUD_ORBITS[5] + ULDUAR_YOGG_SARON_CLOUD_SUMMON_REACH;
+
 // Melee and tanks are held near Sara because a Guardian walks to whoever holds threat, and its death
 // nova only reaches her from 15 yd - a kill further out does nothing for the phase at all.
 //
@@ -193,6 +199,11 @@ constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_
 // the wider one on purpose - the leash decides where a bot stands, this decides when the raid gives
 // up on a Guardian, and keeping them apart is what stops a focus flipping on a yard of drift.
 constexpr float ULDUAR_YOGG_SARON_P1_SARA_NOVA_RADIUS = 15.0f;
+
+// A Guardian outside the leash is only worn down to here, then left for the tank to fetch. The fetch
+// is ~12 s (8 s taunt cooldown, the walk in, a taunted Guardian that stood still for 2 s) and an
+// untargeted Guardian near the station still loses up to ~3%/s to splash.
+constexpr float ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT = 35.0f;
 
 // Ranged and healers stack rather than spread, which inverts the usual rule and only holds because the
 // nova cannot reach the station. A cloud is in contact for (8.5 + blob + 8.5) / 3 seconds and re-arms
@@ -560,6 +571,19 @@ bool YoggSaronPhase1GuardianPreferred(Unit* candidate, Unit* incumbent);
 // enough that the blast stops at the melee pile instead of the 21.5 yd station.
 bool YoggSaronGuardianCountsForSara(Unit* guardian);
 bool YoggSaronGuardianOnTheStack(Unit* guardian);
+
+// Inside ULDUAR_YOGG_SARON_P1_ROOM_RADIUS. Plain distance, no sweep, so it goes ahead of the phase read.
+bool YoggSaronInPhase1Room(Player* bot);
+
+// Whether the raid may finish this Guardian where it stands: on the stack, or still above the park
+// floor. Always true without a living bot tank, since nobody would ever fetch a parked one.
+bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian);
+
+// The one Guardian every non-tank is on in phase 1, shared per instance, or null while every Guardian
+// is parked. Per-bot holds let ranged and melee lock different Guardians, and the two came down in
+// lockstep and died 17 ms apart. Held until it dies, parks, or drifts past 15 yd while a killable one
+// is on the stack.
+Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI);
 
 // The Guardian the tank should pull in, or null while every one of them is already where it should be
 // or already walking at a tank. The raid's focus first: the tank gets one taunt per Guardian death at

@@ -605,6 +605,13 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.phase1_end([(1, 0, 90000)]), 90000)
         self.assertIsNone(yogg_saron.phase1_end([]))
 
+    def test_back_to_back_pairs_only_neighbours_inside_the_window(self):
+        # The 2026-09-16 wipe: a same-tick pair on the melee, a 2.5 s pair on the station, then a gap.
+        deaths = [(70800, 17.9), (44556, 6.2), (44573, 2.3), (68300, 16.1), (78300, 3.3)]
+        self.assertEqual(yogg_saron.back_to_back(deaths),
+                         [((44556, 6.2), (44573, 2.3)), ((68300, 16.1), (70800, 17.9))])
+        self.assertEqual(yogg_saron.back_to_back([(0, 1.0)]), [])
+
 
 class DuplicateDeaths(unittest.TestCase):
     """Yogg's Insane kills its owner when it comes off, and dying takes it off."""

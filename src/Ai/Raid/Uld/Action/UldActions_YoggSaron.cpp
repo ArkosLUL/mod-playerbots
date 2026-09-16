@@ -232,10 +232,12 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     // With nothing about to detonate, a melee bot dodging a cloud otherwise steps out of its own swing
     // range and reach melee hauls it straight back - the two traded the tick 252 times in one pull.
     // Requiring the candidate to stay in reach ends the trade, and the retry drops it when nothing
-    // satisfies both.
+    // satisfies both. Only toward a target on the stack: one further out is the tank's to fetch, and
+    // chasing it put melee at a median 12-14 yd, on the inner orbit, in both pulls of 2026-09-16.
     if (novas.empty() && PlayerbotAI::IsMelee(bot))
     {
-        if (Unit* target = AI_VALUE(Unit*, "current target"))
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (target && YoggSaronGuardianOnTheStack(target))
         {
             Position const at = target->GetPosition();
             float const reach = sPlayerbotAIConfig.meleeDistance;
@@ -456,7 +458,7 @@ void YoggSaronPetGuardAction::Unhush(Creature* pet)
         pet->SetReactState(REACT_DEFENSIVE);
 }
 
-size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool phaseOne)
+size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
 {
     constexpr size_t none = std::numeric_limits<size_t>::max();
 
@@ -478,11 +480,6 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel, bool p
 
         return entry == NPC_BRAIN ? 2 : none;
     }
-
-    // Phase 1 has one tier because one Guardian at a time is the whole point: splitting damage let
-    // two come down together once, and the double nova killed all eight melee inside 16 ms.
-    if (phaseOne)
-        return entry == NPC_GUARDIAN_OF_YS ? 0 : none;
 
     // One boss-room ladder for both phases, led by whatever phase 1 left alive. Those carry over,
     // keep casting a 35 yd Dark Volley nothing can be walked out of, and regenerate to full the moment
@@ -549,7 +546,6 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     YoggSaronTrigger yoggSaronTrigger(botAI);
     bool const brainLevel = yoggSaronTrigger.IsInBrainLevel();
-    bool const phaseOne = !brainLevel && YoggSaronInPhase1(botAI);
 
     std::vector<uint32> entries;
     size_t tierCount = 0;
@@ -558,11 +554,6 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         entries = ULDUAR_YOGG_SARON_ILLUSION_MOBS;
         entries.push_back(NPC_BRAIN);
         tierCount = 3;
-    }
-    else if (phaseOne)
-    {
-        entries = {NPC_GUARDIAN_OF_YS};
-        tierCount = 1;
     }
     else
     {
@@ -592,7 +583,7 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     std::vector<Unit*> perTier(tierCount, nullptr);
     for (Unit* unit : candidates)
     {
-        size_t const tier = TierOf(unit, brainLevel, phaseOne);
+        size_t const tier = TierOf(unit, brainLevel);
         if (tier >= tierCount || !IsAllowedTarget(unit, brainApproachable))
             continue;
 
@@ -604,13 +595,9 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
         }
 
         // Guardians go down lowest first so the raid's damage finishes one instead of spreading over
-        // three; everything else is nearest, which is the shortest walk into range. Phase 1 puts a
-        // Guardian standing where its death counts ahead of a lower-health one that is not, because
-        // there the kill location is the phase and not just who eats the nova.
+        // three; everything else is nearest, which is the shortest walk into range.
         bool better;
-        if (phaseOne && IsYoggSaronFocusedGuardian(unit))
-            better = YoggSaronPhase1GuardianPreferred(unit, selected);
-        else if (IsYoggSaronFocusedGuardian(unit))
+        if (IsYoggSaronFocusedGuardian(unit))
             better = unit->GetHealth() < selected->GetHealth();
         else
             better = unit->GetExactDist2d(bot) < selected->GetExactDist2d(bot);
@@ -633,26 +620,16 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
 
     size_t currentTier = none;
     if (currentTarget && IsAllowedTarget(currentTarget, brainApproachable))
-        currentTier = TierOf(currentTarget, brainLevel, phaseOne);
+        currentTier = TierOf(currentTarget, brainLevel);
 
     if (currentTier != none && currentTier <= desiredTier)
     {
-        // The one place a Guardian hold is dropped. A phase 1 focus that has drifted past 15 yd cannot
-        // damage Sara at all, so finishing it there is a kill thrown away and a nova over the back
-        // line; one pull lost four of its thirteen that way and wiped a kill short. Give up at 15 and
-        // pick up only inside 6.5 - the gap is what stops a Guardian on the boundary flipping the
-        // raid's target, and while nothing is on the stack the hold survives and the tank fetches.
-        bool const abandon = phaseOne && IsYoggSaronFocusedGuardian(currentTarget) &&
-                             !YoggSaronGuardianCountsForSara(currentTarget) &&
-                             YoggSaronGuardianOnTheStack(target);
-
         // Never downgrade off something at least as urgent, and inside one tier only switch for
         // something meaningfully closer - otherwise two tentacles ping-pong the whole raid. Guardians
         // hold outright: that tier is ordered by health, and an order that flips mid-fight would reset
         // every swing and cast timer in the raid.
-        if (!abandon &&
-            (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
-             target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot)))
+        if (currentTier < desiredTier || !target || IsYoggSaronFocusedGuardian(currentTarget) ||
+            target->GetExactDist2d(bot) + targetSwitchDistance >= currentTarget->GetExactDist2d(bot))
         {
             target = currentTarget;
         }
@@ -663,10 +640,37 @@ Unit* YoggSaronSetDpsPriorityAction::ResolveTarget(Unit* currentTarget)
     return target ? target : AI_VALUE(Unit*, "dps target");
 }
 
+void YoggSaronSetDpsPriorityAction::DropTarget(Unit* target)
+{
+    bot->AttackStop();
+    bot->InterruptNonMeleeSpells(true);
+    bot->SetTarget(ObjectGuid::Empty);
+    bot->SetSelection(ObjectGuid());
+    context->GetValue<Unit*>("current target")->Set(nullptr);
+
+    for (Unit* minion : bot->m_Controlled)
+        if (minion && minion->GetVictim() == target)
+            minion->AttackStop();
+}
+
 bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
 {
     Unit* currentTarget = AI_VALUE(Unit*, "current target");
-    Unit* target = ResolveTarget(currentTarget);
+
+    YoggSaronTrigger yoggSaronTrigger(botAI);
+    bool const phaseOne = !yoggSaronTrigger.IsInBrainLevel() && YoggSaronInPhase1(botAI);
+
+    // Phase 1 is one shared target and no "dps target" fallback. A parked Guardian stays parked even
+    // when nothing else is killable: two killed out at the station on 2026-09-16 novaed the back line
+    // 2.5 s apart and took five raiders.
+    if (phaseOne && currentTarget && currentTarget->GetEntry() == NPC_GUARDIAN_OF_YS &&
+        !YoggSaronPhase1GuardianKillable(botAI, currentTarget))
+    {
+        DropTarget(currentTarget);
+        currentTarget = nullptr;
+    }
+
+    Unit* target = phaseOne ? YoggSaronPhase1Focus(botAI) : ResolveTarget(currentTarget);
     if (!target)
         return false;
 

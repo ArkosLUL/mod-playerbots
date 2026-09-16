@@ -197,9 +197,11 @@ public:
 
 private:
     // Kill order for wherever the bot is standing, as a tier index. npos means "not a target here".
-    static size_t TierOf(Unit* unit, bool brainLevel, bool phaseOne);
+    static size_t TierOf(Unit* unit, bool brainLevel);
     bool IsAllowedTarget(Unit* candidate, bool brainApproachable) const;
     Unit* ResolveTarget(Unit* currentTarget);
+    // Stops the bot, and any of its pets, hitting a phase 1 Guardian that has to be left for the tank.
+    void DropTarget(Unit* target);
 };
 
 class YoggSaronDarkVolleyInterruptAction : public Action

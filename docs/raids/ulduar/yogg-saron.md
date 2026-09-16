@@ -43,6 +43,16 @@ phase 3 is Yogg without it plus the Brain, phase 1 is Sara, all behind that boss
 also spares a bot elsewhere in Ulduar two 200 yd sweeps a tick — and it is what writes `yogg.phase`.
 She lives into P2/P3 at 1 health, so "Sara is alive" is no phase test by itself.
 
+**Phase 1 positioning waits for the room, not the pull.** With the raid still 72-96 yd out at t=0,
+every mover fired at once on 2026-09-16. Most bots took no damage until 25-53 s, and ranged running in
+crossed orbits 4 and 3 as clouds passed: two Guardians by 16 s. The station, spacing, leash and
+phase 1 control triggers now wait for `YoggSaronInPhase1Room` (outer orbit + reach, 69.3 yd), a
+distance read ahead of the phase read. Combat is no gate: every Guardian's `Reset` calls
+`SetInCombatWithZone`, so the instance is in combat from ~10 s. Nor does it belong in
+`YoggSaronPhase`, whose read writes the shared `yogg.phase` latch. The gate moves *when* bots cross
+the orbits, not whether. `yogg_saron.py --phases` counts phase 1 moves begun outside it (159 and 102
+before the gate) and Guardian deaths back to back within 3 s.
+
 `IsBotMainTank` is false for **every** bot while a human holds main tank, which silently disabled the
 phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot tank.
 
@@ -181,7 +191,10 @@ oscillating against hazards that never stop moving:
   target is hauled straight back by `reach melee`, and the two traded the tick **252 times** in one
   pull while the spacing node returned FAILED 582 times against 618 OK. With nothing about to
   detonate, phase 1 puts "still within `meleeDistance` of my target" in `set.clear` and the cloud
-  circles in `set.fallback`, so the retry drops the reach and keeps the clearance.
+  circles in `set.fallback`, so the retry drops the reach and keeps the clearance. **Only toward a
+  target on the stack**: toward one further out the dodge *is* the chase. On 2026-09-16, 49 of 61 and
+  69 of 86 melee spacing moves that left the leash had a target outside it, and landed at a median
+  12-14 yd, on the innermost orbit.
 
 - **Phase 2 does the same by preference.** `set.preferred` is tried ahead of `accept` and dropped when
   nothing satisfies both, so a bot in a hazard still moves: it asks for a spot still inside
@@ -308,8 +321,7 @@ pull, and the bots waiting on it dropped out of combat into `clean quest log` an
 `RtiTargetValue::Calculate` returns null on LOS failure and beyond `sightDistance` (100) in 2D. A
 direct `Attack()` has **no distance cap, only LOS**, which is what makes the Brain reachable at all.
 
-Kill order — **phase 1: one tier, and inside it the Guardian nearest Sara before the lowest-health
-one** (below). Splitting damage is what killed the raid on 2026-09-14: two Guardians rode down in
+Kill order — **phase 1: one Guardian for the whole raid** (threat section below). Splitting damage is what killed the raid on 2026-09-14: two Guardians rode down in
 lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and the **double** nova put
 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier single novas were all
 survived. Brain level: Influence Tentacle →
@@ -325,9 +337,8 @@ and 21.2%, while dealing 735,989 back. That is the same split-damage failure pha
 prevent.
 
 Every Guardian tier is picked lowest-health first and then held outright: an order that flips mid-fight
-resets every swing and cast timer in the raid. Phase 1 is the one exception on both counts, and the
-threat section below is why.
- Below 10% a guardian is Weakened and only Thorim's Titanic Storm can finish it, so it stops
+resets every swing and cast timer in the raid. Phase 1 replaces both with a shared focus, below. An
+Immortal Guardian below 10% is Weakened and only Thorim's Titanic Storm can finish it, so it stops
 being a target at all.
 
 ## Threat: the redirects are fine, the taunt budget does not stretch
@@ -353,16 +364,32 @@ than phase 3's 5.0 and taunting `YoggSaronPhase1TauntTarget`: the raid's focus f
 Guardian already inside the leash or already walking at a tank. Taunt reaches 30 yd, which covers the
 whole 21.5 yd back line, so this never walks the tank out after one.
 
-**A taunt only pays if the raid waits for the walk.** One pull taunted the focus Guardian at 22.4 yd
-and killed it at **18.0 yd, 6.4 s later** — mid-walk, and wasted. So the phase 1 kill order puts a
-Guardian inside the leash ahead of a lower-health one outside it, and drops a held focus that has
-drifted past **15 yd** for one inside **6.5**. The two radii are far apart deliberately: give up where
-the kill stops counting, pick up where it lands on the melee pile, and a Guardian on the boundary never
-flips the raid's target. While nothing is inside, the hold survives and the tank fetches.
+**A taunt only pays if the raid waits for the walk**, and per-bot kill orders cannot wait. One pull
+taunted the focus at 22.4 yd and killed it at **18.0 yd, 6.4 s later**. Preferring a Guardian inside
+the leash, with each bot holding its own lock, then failed both ways on 2026-09-16:
 
-`YoggSaronPhase1GuardianPreferred` owns that comparison for both the kill order and the taunt. They run
-on different bots and never exchange state, so agreeing means computing the same answer from the same
-world.
+- **Split.** Ranged dropped a Guardian that chased a caster to 17 yd. Six melee kept it, busy in the
+  spacing node (62) instead of the resolver (61), and once it walked back inside 15 yd nothing
+  re-merged them. The two rode down 65/65% → 1/3% and died **17 ms** apart. Bot non-tanks spent
+  **28.6%** of that phase 1 on two or more Guardians, against 8.0% the pull before (`--threat`).
+- **Fallback.** With nothing on the stack, lowest health anywhere won. One Guardian was burned 16 yd
+  out 4 s after the tank's taunt landed, and its nova one-shot a Fervor holder. The next was already
+  pulled by Righteous Defense, died 1.7 s later at 18 yd, and two back-line novas **2.5 s** apart
+  killed five.
+
+So phase 1 has **one focus per instance**, `YoggSaronPhase1Focus`. Every non-tank attacks it, and only
+a bot inside the room re-picks it. A Guardian outside the leash is worn down only to **35%**
+(`ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT`) and then parked: the focus moves on, a bot still on it drops it
+(pets too), and there is no `dps target` fallback. The taunt already takes the lowest-health Guardian
+outside the leash, which is the parked one, and inside 6.5 yd it is killable again. The floor has to
+cover the ~12 s fetch (taunt cooldown, the walk, and a taunted Guardian that stood still for 2 s)
+against the 1.7-1.8%/s, peaking near 3%/s, that an untargeted Guardian near the station still loses to
+splash. Without a living bot tank nothing fetches, so the floor is off. The focus is still given up
+past **15 yd** for a killable one inside **6.5**, a gap that stops a Guardian on the boundary flipping
+it. `yogg.p1focus` records each change: `picked`, `parked`, `abandoned`, `none`. AoE is untouched, so
+cleave on two Guardians on the stack can still bring both down together.
+
+`YoggSaronPhase1GuardianPreferred` orders both the focus and the taunt, so the two cannot disagree.
 
 ## Crush is a ±5° cone that tracks its victim
 

@@ -98,6 +98,9 @@ struct YoggSaronEncounterState
     // one tentacle. Keyed by victim rather than by window because grabs overlap.
     std::unordered_map<ObjectGuid, uint32> squeezeClaims;
 
+    // Phase 1's raid-wide kill target. See YoggSaronPhase1Focus.
+    ObjectGuid phase1Focus;
+
     uint32 hazardNoteMs = 0;
     std::unordered_map<ObjectGuid, uint32> obsScanMs;
 };
@@ -1046,6 +1049,87 @@ bool YoggSaronBotTankAlive(PlayerbotAI* botAI)
     }
 
     return false;
+}
+
+bool YoggSaronInPhase1Room(Player* bot)
+{
+    return bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) <=
+           ULDUAR_YOGG_SARON_P1_ROOM_RADIUS;
+}
+
+bool YoggSaronPhase1GuardianKillable(PlayerbotAI* botAI, Unit* guardian)
+{
+    if (!guardian || !guardian->IsAlive())
+        return false;
+
+    // Group walk last, so it only runs for a Guardian that is actually parked.
+    return YoggSaronGuardianOnTheStack(guardian) ||
+           guardian->GetHealthPct() > ULDUAR_YOGG_SARON_P1_PARK_HEALTH_PCT || !YoggSaronBotTankAlive(botAI);
+}
+
+Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    ObjectGuid heldGuid;
+    {
+        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+        heldGuid = state.phase1Focus;
+    }
+
+    // Guid lookup rather than the sweep, so a bot at the edge of sight range still sees the raid's pick.
+    Creature* held = heldGuid ? ObjectAccessor::GetCreature(*bot, heldGuid) : nullptr;
+    bool const heldKillable = YoggSaronPhase1GuardianKillable(botAI, held);
+
+    // Only bots in the room re-pick. From outside it the sweep can miss half the room and would hand
+    // the raid a worse target than the one it has.
+    if (!YoggSaronInPhase1Room(bot))
+        return heldKillable ? held : nullptr;
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, sPlayerbotAIConfig.sightDistance);
+
+    Unit* best = nullptr;
+    bool killableOnStack = false;
+    for (Creature* guardian : guardians)
+    {
+        if (!YoggSaronPhase1GuardianKillable(botAI, guardian))
+            continue;
+
+        killableOnStack = killableOnStack || YoggSaronGuardianOnTheStack(guardian);
+        if (YoggSaronPhase1GuardianPreferred(guardian, best))
+            best = guardian;
+    }
+
+    // Give up at 15 yd, pick up only inside 6.5: the gap stops a Guardian on the boundary flipping the
+    // raid's target back and forth.
+    bool const abandon = heldKillable && !YoggSaronGuardianCountsForSara(held) && killableOnStack;
+    if (heldKillable && !abandon)
+        return held;
+
+    ObjectGuid const next = best ? best->GetGUID() : ObjectGuid::Empty;
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+        changed = state.phase1Focus != next;
+        state.phase1Focus = next;
+    }
+
+    if (changed && RaidObs::Active())
+    {
+        char const* reason = "picked";
+        if (!best)
+            reason = "none";
+        else if (abandon)
+            reason = "abandoned";
+        else if (held && held->IsAlive())
+            reason = "parked";
+
+        RaidObs::NoteDerived(bot, "yogg.p1focus", reason);
+    }
+
+    return best;
 }
 
 Position YoggSaronCloudLead(Creature* cloud)
