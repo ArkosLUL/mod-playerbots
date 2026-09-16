@@ -577,7 +577,13 @@ void Engine::ObsDrainCoverage()
 
 void Engine::ProcessTriggers(bool minimal)
 {
-    std::unordered_map<Trigger*, Event> fires;
+    // The index of the node that fired rides along, for the coverage count in the second loop.
+    struct Fired
+    {
+        Event event;
+        std::size_t node = 0;
+    };
+    std::unordered_map<Trigger*, Fired> fires;
     uint32 now = getMSTime();
 
     // Asked once for the whole pass rather than once per node: Active() is an acquire-load and
@@ -650,7 +656,7 @@ void Engine::ProcessTriggers(bool minimal)
             if (trigger->IsBuffTrigger() && !trigger->IsDebuffTrigger())
                 botAI->forceRebuff.NoteBuffProposed();
 
-            fires[trigger] = event;
+            fires[trigger] = {event, i};
             LogAction("T:%s", trigger->getName().c_str());
         }
         else if (obs)
@@ -663,15 +669,23 @@ void Engine::ProcessTriggers(bool minimal)
     {
         TriggerNode* node = triggers[i];
         Trigger* trigger = node->getTrigger();
-        if (fires.find(trigger) == fires.end())
+        auto const fired = fires.find(trigger);
+        if (fired == fires.end())
             continue;
 
-        Event event = fires[trigger];
+        Event event = fired->second.event;
         // Handlers offered, not baskets created: Queue::Push folds a duplicate action name into the
         // basket already queued. Offered is the right grain - a folded push is still this node asking.
         bool const pushed = MultiplyAndPush(node->getHandlers(), 0.0f, false, event, "trigger");
         if (obs && pushed)
+        {
             ++coverage[i].pushes;
+            // A sibling reached before the one that fired was counted as a check that said no, yet it
+            // is pushed all the same. TimerTrigger turns true on a new wall-clock second, and that
+            // second can start between two nodes of one pass.
+            if (i < fired->second.node)
+                ++coverage[i].shared;
+        }
     }
 
     for (std::vector<TriggerNode*>::iterator i = triggers.begin(); i != triggers.end(); i++)

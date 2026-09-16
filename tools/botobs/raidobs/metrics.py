@@ -16,7 +16,7 @@ from .coverage import coverage_metrics
 from .probes import duration_min, probe_metrics
 from .space import clump_histogram
 from .stuck import stall_windows
-from .trace import Trace
+from .trace import Trace, combat_deaths
 
 KEY_WIDTH = 54
 STALL_MIN_MS = 6000
@@ -28,7 +28,7 @@ def trace_metrics(trace: Trace) -> dict[str, float]:
 
     metrics: dict[str, float] = {
         "mins": round(minutes, 2),
-        "deaths.per_min": round(len(trace.of("death")) / minutes, 2),
+        "deaths.per_min": round(len(combat_deaths(trace)) / minutes, 2),
     }
 
     # `snap.u[11]` is cumulative damage dealt, kept up to date by AccrueDamageDealt with its own
@@ -119,11 +119,15 @@ def compare(before: Side, after: Side, limit: int = 40) -> list[dict]:
             findings.append({"key": key, "before": left, "after": right, "moved": True,
                              "delta": None, "only": "after" if left is None else "before"})
             continue
+        # The same bar a one-sided stream has to clear. A phase only one of two pulls reached leaves that
+        # pull's value alone on its side, and a single value is a range nothing overlaps.
+        thin = any(side.n > 1 and side.pulls_with(key) * 2 <= side.n for side in (before, after))
         delta = right[0] - left[0]
         # Disjoint ranges, but also a gap big enough to see: the printed row carries two decimals, and
         # calling 0.14 against 0.13 a move puts noise at the top of a list read for signal.
         scale = max(abs(left[0]), abs(right[0]))
-        moved = ((left[2] < right[1] or right[2] < left[1])
+        moved = (not thin
+                 and (left[2] < right[1] or right[2] < left[1])
                  and abs(delta) >= MIN_EFFECT * scale
                  and f"{left[0]:.2f}" != f"{right[0]:.2f}")
         findings.append({"key": key, "before": left, "after": right, "moved": moved,
@@ -145,7 +149,7 @@ def show_compare(before: Side, after: Side) -> int:
     def cell(stat: tuple[float, float, float] | None) -> str:
         if stat is None:
             return f"{'-':>20}"
-        return f"{stat[0]:7.2f} [{stat[1]:.1f}-{stat[2]:.1f}]".rjust(20)
+        return f"{stat[0]:7.2f} [{stat[1]:.2f}-{stat[2]:.2f}]".rjust(20)
 
     print(f"\n  {'metric':<{KEY_WIDTH}} {'before':>20} {'after':>20}   moved")
     for finding in compare(before, after):

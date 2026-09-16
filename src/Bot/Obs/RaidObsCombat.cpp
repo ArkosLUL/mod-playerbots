@@ -7,6 +7,7 @@
 #include "RaidObsSession.h"
 
 #include "Creature.h"
+#include "GameTime.h"
 #include "Map.h"
 #include "Player.h"
 #include "SpellAuras.h"
@@ -107,6 +108,7 @@ void NoteKillingBlow(Unit* attacker, Unit* victim, uint32 amount)
     BotTrace& trace = probe.Trace();
     trace.killBlowSource = attacker ? GuidKey(attacker->GetGUID()) : 0;
     trace.killBlowAmount = amount;
+    trace.killBlowTick = GameTime::GetGameTimeMS().count();
 }
 
 void NoteScriptedWipe(Player* bot)
@@ -313,11 +315,28 @@ void NoteDeath(Unit* unit, Unit* killer)
     uint64 const key = GuidKey(unit->GetGUID());
     BotTrace& trace = s.bots[key];
 
+    // One death can get here twice. An aura that kills its owner when it comes off - Yogg's Insane -
+    // is stripped by Unit::Kill, calls Unit::Kill again, and that nested kill fires this hook before
+    // the outer one does. Both land in one world tick, which a real second death never can.
+    uint64 const tick = GameTime::GetGameTimeMS().count();
+    if (trace.deathTick == tick)
+        return;
+    trace.deathTick = tick;
+
     // The pass the bot died in is the one worth reading and nothing else will close it.
     s.FlushTick(key, trace);
 
+    uint64 const blowSource = trace.killBlowTick == tick ? trace.killBlowSource : 0;
+    uint32 const blowAmount = trace.killBlowTick == tick ? trace.killBlowAmount : 0;
+
+    // The nested kill names the victim as its own killer, but the hit that started the outer one is
+    // already here: only a lethal blow is kept, so its source is what killed the bot.
+    uint64 killerKey = killer ? GuidKey(killer->GetGUID()) : 0;
+    if (killer == unit && blowAmount && blowSource && blowSource != key)
+        killerKey = blowSource;
+
     std::string fields = "\"g\":" + std::to_string(key);
-    fields += ",\"killer\":" + std::to_string(killer ? GuidKey(killer->GetGUID()) : 0);
+    fields += ",\"killer\":" + std::to_string(killerKey);
     fields += ",\"x\":" + Num(unit->GetPositionX());
     fields += ",\"y\":" + Num(unit->GetPositionY());
     fields += ",\"z\":" + Num(unit->GetPositionZ());
@@ -395,20 +414,21 @@ void NoteDeath(Unit* unit, Unit* killer)
     rewindJson += "]";
     fields += ",\"rewind\":" + rewindJson;
 
-    if (trace.killBlowAmount)
+    if (blowAmount)
     {
-        fields += ",\"blow\":[" + std::to_string(trace.killBlowSource);
-        fields += "," + std::to_string(trace.killBlowAmount) + "]";
+        fields += ",\"blow\":[" + std::to_string(blowSource);
+        fields += "," + std::to_string(blowAmount) + "]";
     }
 
     // Both of these reach Unit::Kill without passing DealDamage, so there is no blow to point at and
     // `killer` is the bot itself. Saying which one it was is the difference between a death worth
     // reading and one that should never have been counted.
-    if (!trace.killBlowAmount && killer == unit)
+    if (!blowAmount && killer == unit)
         fields += trace.scriptedWipe ? ",\"cause\":\"reset\"" : ",\"cause\":\"self\"";
 
     trace.killBlowSource = 0;
     trace.killBlowAmount = 0;
+    trace.killBlowTick = 0;
     trace.scriptedWipe = false;
 
     if (trace.lastHpMs)

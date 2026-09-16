@@ -189,6 +189,8 @@ ObsSession* SessionFor(Unit* unit)
     return FindSession(map->GetInstanceId());
 }
 
+uint32 RegistryGeneration() { return g_registryGeneration.load(std::memory_order_acquire); }
+
 // Call with the registry lock held and after the map itself has changed.
 void RefreshActiveFlag()
 {

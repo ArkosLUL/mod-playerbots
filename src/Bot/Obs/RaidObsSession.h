@@ -146,6 +146,10 @@ struct BotTrace
     // script kill - and a bot that dies to one of those otherwise leaves no trace of what did it.
     uint64 killBlowSource = 0;
     uint32 killBlowAmount = 0;
+    // World tick of the blow and of the last death record. OnDamage runs before god mode or a duel can
+    // cancel the hit, so a blow from any other tick killed nothing.
+    uint64 killBlowTick = 0;
+    uint64 deathTick = 0;
     // Set by NoteScriptedWipe when the master's `wipe` command is what killed the bot, so the death
     // record can say so instead of naming the bot as its own killer with nothing behind it.
     bool scriptedWipe = false;

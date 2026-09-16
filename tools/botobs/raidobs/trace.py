@@ -177,6 +177,39 @@ def roster_guids(trace: Trace) -> set:
     return {member["g"] for member in trace.header.get("roster", [])}
 
 
+# An aura that kills its owner when it comes off - Yogg's Insane - is stripped by Unit::Kill and calls
+# it again, so older recorders wrote that death twice, 0-2 ms apart. The quickest real second death on
+# disk, a Reincarnation, took 2 s.
+DUPLICATE_DEATH_MS = 50
+
+
+def death_records(trace: Trace) -> list[dict]:
+    """Death records, with a death written twice folded into one.
+
+    The nested kill is written first and carries the blow and the cause, but names the victim as its
+    own killer; the outer one names the real killer. Keep the first, with the second's killer.
+    """
+    kept: list[dict] = []
+    last: dict[int, int] = {}
+    for rec in trace.of("death"):
+        guid = rec.get("g")
+        index = last.get(guid)
+        if index is not None and rec["t"] - kept[index]["t"] <= DUPLICATE_DEATH_MS:
+            if kept[index].get("killer") == guid and rec.get("killer") not in (None, 0, guid):
+                kept[index] = {**kept[index], "killer": rec["killer"]}
+            continue
+        last[guid] = len(kept)
+        kept.append(rec)
+    return kept
+
+
+def combat_deaths(trace: Trace) -> list[dict]:
+    """Deaths worth reading. The master's `wipe` command kills through Unit::Kill, which never reaches
+    DealDamage, so those records carry no blow and name the bot as its own killer - 16 of one Freya
+    attempt's 29. Numbering over these keeps --death N pointing at deaths that have a cause."""
+    return [d for d in death_records(trace) if d.get("cause") != "reset"]
+
+
 def first_deaths(trace: Trace) -> dict[int, int]:
     """guid -> `t` of its first death record."""
     dead_at: dict[int, int] = {}

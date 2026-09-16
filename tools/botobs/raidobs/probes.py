@@ -103,8 +103,13 @@ def latch_spans(trace: Trace, key: str, end: int = 1 << 62) -> list[tuple[str, i
     `end`. Pass the trace's last stamp for a span you mean to print; the default is only useful for
     testing whether a time falls inside one.
     """
-    marks = sorted((rec["t"], str(rec.get("txt", ""))) for rec in trace.of("note")
-                   if rec.get("k") == key)
+    marks: list[tuple[int, str]] = []
+    for when, held in sorted((rec["t"], str(rec.get("txt", ""))) for rec in trace.of("note")
+                             if rec.get("k") == key):
+        # A traced container restates its value when a trace opens, which is not a change.
+        if marks and marks[-1][1] == held:
+            continue
+        marks.append((when, held))
     spans = []
     for index, (when, held) in enumerate(marks):
         stop = marks[index + 1][0] if index + 1 < len(marks) else end
@@ -321,7 +326,12 @@ def show_probes(trace: Trace, prefix: str | None = None, during: str | None = No
     series = [s for s in series if s.rows]
     if not series:
         scope = f" matching {prefix!r}" if prefix else ""
-        print(f"no probe keys{scope} in this trace")
+        # --during drops the rows outside its windows, so a key can be in the trace and still come back
+        # empty - most often one that took its value before the window and never changed inside it.
+        if windows and collect(trace, prefix):
+            print(f"no probe rows{scope} while {during}, though the trace has some outside it")
+        else:
+            print(f"no probe keys{scope} in this trace")
         return 0
 
     # One key asked for by name gets the whole trajectory; a prefix or nothing gets the ranking.

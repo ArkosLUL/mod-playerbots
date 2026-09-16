@@ -6,7 +6,7 @@ import math
 import statistics
 from collections import defaultdict
 
-from .trace import COVERAGE_COLUMNS, Trace, clock, roster_guids
+from .trace import COVERAGE_COLUMNS, DUPLICATE_DEATH_MS, Trace, clock, roster_guids
 
 
 # Every field that emits a guid or a spell id. The doc's "name every id in the file" rule is the one
@@ -207,6 +207,17 @@ def verify_checks(trace: Trace) -> list[tuple[str, int, list[str]]]:
                     band = f"{min(spans) - slack:.1f}-{max(spans) + slack:.1f}"
                     dist.append(f"{trace.name(other)} from {trace.name(guid)}: {stated} not in {band}")
     report("a death carries a blow or a cause, never both", cause)
+
+    # Every reader folds these, but the file still carries them: an aura that kills its owner on removal
+    # re-entered Unit::Kill, and the recorder wrote the one death twice.
+    twice: list[str] = []
+    previous: dict[int, int] = {}
+    for death in deaths:
+        guid, when = death["g"], death["t"]
+        if guid in previous and when - previous[guid] <= DUPLICATE_DEATH_MS:
+            twice.append(f"{trace.name(guid)} at {clock(when)}, {when - previous[guid]} ms after the last")
+        previous[guid] = when
+    report("no death is recorded twice", twice)
     report("every blow has a damage row behind it", blow_unlogged)
     report("`death.rewind` is in time order", rewind_order)
     report("`death.auras` is removed after it is applied", aura_order)
@@ -243,8 +254,8 @@ def verify_checks(trace: Trace) -> list[tuple[str, int, list[str]]]:
             name = trace.covnodes[node_id]["node"]
             if counts["fires"] > counts["checks"]:
                 over_fired.append(f"{name}: {counts['fires']} fires from {counts['checks']} checks")
-            # A node whose Trigger* fired via a sibling is pushed without being checked itself, so
-            # `shared` belongs on this side of the comparison.
+            # A node whose Trigger* fired via a sibling, before or after it in the pass, is pushed
+            # without firing itself, so `shared` belongs on this side of the comparison.
             if counts["pushes"] > counts["fires"] + counts["shared"]:
                 over_pushed.append(
                     f"{name}: {counts['pushes']} pushes from {counts['fires']}+{counts['shared']}")

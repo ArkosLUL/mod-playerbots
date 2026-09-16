@@ -50,7 +50,7 @@ from raidobs.geometry import track as tracks  # noqa: E402
 from raidobs.probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
 from raidobs.space import show_share, threat_share  # noqa: E402
 from raidobs.stuck import IDLE_MS, idle_windows, veto_counts  # noqa: E402
-from raidobs.trace import Trace, clock, notes, roster_guids  # noqa: E402
+from raidobs.trace import Trace, clock, combat_deaths, death_records, notes, roster_guids  # noqa: E402
 
 NPC_GUARDIAN = 33136
 NPC_YOGG_SARON = 33288
@@ -175,6 +175,15 @@ def phase_spans(trace: Trace) -> list[tuple[int, int, int]]:
             for value, start, stop in latch_spans(trace, "yogg.phase", end)]
 
 
+def phase1_end(spans: list[tuple[int, int, int]]) -> int | None:
+    """Where phase 1 stopped. Phase 2's start first: the latch is back on 1 once Sara respawns after a
+    wipe, and a trace that lost its opening mark has only that tail left to call phase 1."""
+    start2 = next((start for phase, start, _ in spans if phase == 2), None)
+    if start2 is not None:
+        return start2
+    return next((stop for phase, _, stop in spans if phase == 1), None)
+
+
 def missing_probes(trace: Trace) -> list[str]:
     """`yogg.*` keys the source declares and this pull never emitted. Named outright rather than
     resolved off the trace: a pull still filed under the map resolves to no boss, and a check keyed
@@ -186,7 +195,8 @@ def show_banner(trace: Trace) -> None:
     gone = missing_probes(trace)
     if gone:
         print(f"probes absent from this trace: {', '.join(gone)}")
-        print("  a key declared in source and absent from every row means the recorder is dropping it")
+        print("  one pull is weak evidence: a phase it never reached stays silent too, and batch.py --probes"
+              "\n  shows which of these no pull of this boss has ever written")
     else:
         print("all yogg.* probes present")
 
@@ -215,7 +225,7 @@ def show_phases(trace: Trace) -> None:
 
     # Phase 1 only. Guardians come back in phase 3, but the station they have to die clear of is a
     # phase 1 thing and the ring geometry below means nothing once it is gone.
-    p1_end = next((stop for phase, _, stop in spans if phase == 1), None)
+    p1_end = phase1_end(spans)
 
     guardians = guids_of_entry(trace, NPC_GUARDIAN)
     born = {guid: pts[0][0] for guid, pts in tracks(trace, guardians).items()}
@@ -810,10 +820,12 @@ def show_crush(trace: Trace) -> None:
             killed = sum(1 for rec in hits if rec.get("ok", 0) > 0)
             print(f"  {label}: {len(hits)} hits, {total:,} damage, {killed} killing blows")
 
-    deaths = trace.of("death")
-    if deaths:
+    deaths = combat_deaths(trace)
+    resets = len(death_records(trace)) - len(deaths)
+    if deaths or resets:
         by_role = collections.Counter(trace.role(rec.get("g", 0)) for rec in deaths)
-        print(f"  deaths by role: {dict(by_role)}")
+        wiped = f"  (+{resets} to a wipe command)" if resets else ""
+        print(f"  deaths by role: {dict(by_role)}{wiped}")
 
     lanes = [rec for rec in trace.of("haz") if rec.get("shape") == "wedge"]
     circles = [rec for rec in trace.of("haz") if rec.get("sp") == SPELL_KNOCK_BACK]
@@ -1010,7 +1022,7 @@ def show_threat(trace: Trace) -> None:
     """
     print("THREAT")
     spans = phase_spans(trace)
-    p1_end = next((stop for phase, _, stop in spans if phase == 1), None)
+    p1_end = phase1_end(spans)
     if p1_end is None:
         print("  no phase 1 in this trace")
         return

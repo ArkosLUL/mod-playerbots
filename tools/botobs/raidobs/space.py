@@ -16,7 +16,7 @@ import statistics
 from . import geometry
 from .geometry import Unknown
 from .probes import latch_windows, parse_during
-from .trace import Trace, clock, first_deaths, roster_guids
+from .trace import Trace, clock, combat_deaths, first_deaths, roster_guids
 
 # A mover named in fewer than this many rows is noise in the roll-up; ask for it by name to see it.
 MIN_MOVES = 5
@@ -49,7 +49,8 @@ def event_spots(trace: Trace, spec: str, inside=None) -> list[tuple[int, int, tu
     found: list[tuple[int, int, tuple]] = []
 
     if kind == "death":
-        for rec in trace.of("death"):
+        # The wipe command kills everyone wherever they stand, which says nothing about where.
+        for rec in combat_deaths(trace):
             if rec.get("x") is None or (inside and not inside(rec["t"])):
                 continue
             found.append((rec["t"], rec.get("g", 0), (rec["x"], rec["y"], rec.get("z", 0.0))))

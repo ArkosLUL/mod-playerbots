@@ -29,7 +29,7 @@ from raidobs.encounter import encounter_of
 from raidobs.metrics import Side, show_compare, trace_metrics
 from raidobs.paths import LOG_ROOT, REPO
 from raidobs.probes import silent_keys
-from raidobs.trace import Trace
+from raidobs.trace import Trace, combat_deaths
 from raidobs.validity import ON_ASK, decidable_kinds, inspect, resolve_since
 from raidobs.verify import verify_checks
 
@@ -67,7 +67,7 @@ def row_for(trace: Trace, ref, with_metrics: bool = False) -> dict:
         "warnings": warnings,
         "failed": [label for label, count, _ in checks if count],
         "checks": len(checks),
-        "deaths": len(trace.of("death")),
+        "deaths": len(combat_deaths(trace)),
         "truncated": trace.truncated,
         "keys": Counter(rec.get("k", "") for rec in trace.of("note")),
         "built": facts["built"],

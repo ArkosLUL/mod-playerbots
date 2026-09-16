@@ -76,22 +76,23 @@ A `move` carries its destination only, so `--moves` joins the snapshot before it
 cast on the way out stands in - see [engine/pitfalls.md](../engine/pitfalls.md). `--threat` with no
 entry reads every sampled hostile except the raid's own pets. All three accept `--during KEY=VALUE`.
 
-`--verify` is 17 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
+`--verify` is 18 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
 `--since REF`, `--valid`, `--census`, `--verify`, `--probes`, `--split-at REF`, `--baseline DIR` -
 streaming one trace at a time, because 130 of them are 1.4 GB. Extra positionals are more roots, which
 is how a baseline survives the 7-day retention.
 
 **`--split-at REF` answers "did the change help".** It compares pulls before a commit against pulls
-after it on every metric either side carries - deaths, stalls, clumping, coverage buckets, and churn
-per probe key and per action pair - reporting median and range per side, and calling a metric *moved*
-only when the two ranges are disjoint **and** the gap is at least a tenth of the larger side and
-visible at the printed precision - without those, 0.14 against 0.13 ranks as a finding. A stream only
-one side carries has to appear in most of that side's pulls and be non-zero there: the sides are
-rarely the same size, so with twelve pulls before and three after, anything occasional shows up on the
-bigger side and nowhere else, which is what put `apply oil <-> clean quest log` beside the raid
-streams. Splits
-on `hdr.bin` where there is one, else on the pull's own timestamp, which assumes you rebuilt before
-pulling. Unprompted, it reproduced Mimiron's documented phase-1 flip-flop:
+after it on every metric either side carries - deaths less the wipe command's, stalls, clumping,
+coverage buckets, and churn per probe key and per action pair - reporting median and range per side,
+and calling a metric *moved* only when the two ranges are disjoint **and** the gap is at least a tenth
+of the larger side and visible at the printed precision - without those, 0.14 against 0.13 ranks as a
+finding. A stream has to appear in most of each side's pulls, and a one-sided one be non-zero there.
+The sides are rarely the same size, so with twelve pulls before and three after, anything occasional
+shows up on the bigger side and nowhere else - `apply oil <-> clean quest log` beside the raid streams.
+Two-sided is no safer: a phase one of two pulls reached leaves that pull's value alone, which no
+range overlaps - 25 rows of `--split-at 64802c8ec` moved that way. Splits on `hdr.bin` where there is
+one, else on the pull's own timestamp, which assumes you rebuilt before pulling. Unprompted, it
+reproduced Mimiron's documented phase-1 flip-flop:
 `flip.act.won:follow <-> mimiron arc spread action` at 10.3/min before `eb9db6855`, absent after.
 
 **`--probes` names keys the source declares that never reached a trace of their own boss.** One silent
@@ -227,9 +228,18 @@ a hit was lethal; read as an outcome it shifts a death's trajectory down a row a
 
 **`cause` explains a death with no `blow`.** `Unit::Kill` called directly never reaches `DealDamage`,
 so the hook feeding `blow` never fires and `killer` is the victim itself: `reset` is the master's
-`wipe` command (`WipeAction`), `self` is environmental damage. Absent whenever there is a `blow`. 32
-of 201 deaths on 2026-08-31 — 16 of one Freya attempt's 29 — read as unexplained combat deaths without
-it. `postmortem.py` numbers `--death N` over the others and counts resets separately.
+`wipe` command (`WipeAction`), `self` any other script's kill - Yogg's Insane running out, the Brain
+killing whoever hits it before its tentacles die. Falling and lava do pass `DealDamage`, so they read
+as a `blow` from the victim, as `.die` does. Absent whenever there is a `blow`. 32 of 201 deaths on
+2026-08-31 — 16 of one Freya attempt's 29 — read as unexplained combat deaths without it.
+`postmortem.py` numbers `--death N` over the others and counts resets separately.
+
+**An aura that kills its owner when it comes off writes one death twice.** Yogg's Insane calls
+`Unit::Kill` from `OnRemove` and dying strips it, so the kill re-enters and `OnUnitDeath` fires nested
+first: 14 pairs in 3 of 17 Yogg traces, all Insane, and a summary of 12 deaths where 6 were real. The
+recorder drops a second death in one world tick (`GameTime::GetGameTimeMS`) and takes the killer from
+that tick's lethal blow, since the nested call names the victim. Readers fold older traces within
+50 ms (`trace.death_records`); `--verify` still flags the file.
 
 **Name every id in the file.** `unit` and `spell` are written once each, so later records carry a bare
 number and the trace still reads standalone: `spell 63511` needs a DBC open beside it, `Frozen Blows
@@ -375,7 +385,9 @@ RaidObs::ObsGuidSet ringArrived{"thorim.ringarrived"};     // membership latch
 RaidObs::ObsValue<uint32> runicSmashSide{"thorim.smashside"};  // per-instance scalar
 ```
 
-They emit only on real change. Non-const iteration and iterator-`erase` exist for prune loops and
+They emit only on real change since the trace opened: they outlive the pull, so their first write in
+a trace restates the whole container - Yogg's second pull on one build once had no `yogg.phase=1`.
+Non-const iteration and iterator-`erase` exist for prune loops and
 deliberately emit nothing — dropping a departed member is not an assignment. `erase(guid)` does emit,
 on both containers: clearing one named bot is a wipe reset or a boss that is gone, which is real news.
 Keep scan timestamps and cached guid lookups in bare types; tracing bookkeeping is noise.
@@ -449,9 +461,9 @@ are left bare on purpose.
   station fallback below it is dead and its `tar-lead` branch has never run — the "by station" tables
   really split on the vehicle's creature entry. `victim()` likewise still guesses the pursued vehicle
   from the boss's facing ray, while `snap.u` column 7 and `fl.pursued` each name it outright.
-- **`ObsValue` / `ObsGuidMap::Set` emit only on change**, so a missing note means "unchanged", not
-  "never set". That makes absence the signature of state leaking in from a previous pull rather than
-  evidence of nothing happening.
+- **A traced container restates itself only on its first write in a trace**, so one the pull never
+  writes is absent even while it holds a value. Older builds restate nothing, and there absence can
+  still be state leaking in from a previous pull rather than nothing happening.
 - **A friendly boss is never sampled, so its health is invisible.** The snapshot sweep keeps only
   units hostile to the anchor, and Yogg-Saron's Sara is `FACTION_FRIENDLY` for all of phase 1 — the
   phase whose entire progress is her health bar. No trace can say how close a phase-1 attempt came;

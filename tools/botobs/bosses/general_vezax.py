@@ -40,7 +40,7 @@ from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import anchor, dist2, first_seen, frames, guids_of_entry, radius  # noqa: E402
 from raidobs.probes import emitted_keys, silent_keys  # noqa: E402
-from raidobs.trace import Trace, clock, notes, roster_guids  # noqa: E402
+from raidobs.trace import Trace, clock, combat_deaths, notes, roster_guids  # noqa: E402
 
 NPC_VEZAX = 33271
 NPC_SARONITE_VAPORS = 33488
@@ -229,7 +229,7 @@ def show_banner(trace: Trace) -> None:
     end = pull_end(trace)
     outcome = trace.of("end")[-1].get("out", "?") if trace.of("end") else "no end record"
     encounter = encounter_of(trace)
-    print(f"{encounter}  {outcome} at {clock(end)}  {len(trace.of('death'))} death(s)")
+    print(f"{encounter}  {outcome} at {clock(end)}  {len(combat_deaths(trace))} death(s)")
 
     # the probe check matches keys to the encounter, so on another boss it would pass on nothing
     if encounter != "vezax":

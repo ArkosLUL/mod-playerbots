@@ -38,7 +38,7 @@ from raidobs.probes import (  # noqa: E402
     HOLDER, LATCH, Series, declared_keys, latch_spans, latch_windows, resolve_guids,
 )
 from raidobs.stuck import idle_windows  # noqa: E402
-from raidobs.trace import Trace  # noqa: E402
+from raidobs.trace import Trace, combat_deaths, death_records  # noqa: E402
 from raidobs.verify import verify_checks  # noqa: E402
 
 FIXTURE = BOTOBS / "fixtures" / "coverage-v12.ndjson"
@@ -156,6 +156,11 @@ class LatchWindows(unittest.TestCase):
     def test_a_value_never_held_has_no_window(self):
         trace = self.FakeTrace([(0, "1")])
         self.assertEqual(latch_windows(trace, "p.phase", "4"), [])
+
+    def test_a_restated_value_does_not_split_its_window(self):
+        # A traced container writes its state again when a trace opens, which is not a change.
+        trace = self.FakeTrace([(0, "1"), (300, "1"), (500, "2")])
+        self.assertEqual(latch_windows(trace, "p.phase", "1"), [(0, 500)])
 
 
 class Buckets(unittest.TestCase):
@@ -575,6 +580,72 @@ class Ranking(unittest.TestCase):
         before, after = self.sides([{"k": 0.0}, {"k": 0.0}], [{}])
         self.assertEqual([f for f in compare(before, after) if f["key"] == "k"], [])
 
+    def test_a_value_only_one_of_two_pulls_carries_is_not_a_move(self):
+        # Only one of the two pulls reached the phase that writes the key, so its side is one value.
+        before, after = self.sides([{"k": 1.0}, {"k": 2.0}, {"k": 1.5}], [{"k": 9.0}, {}])
+        self.assertFalse(self.find(compare(before, after), "k")["moved"])
+
+    def test_the_same_shift_in_every_pull_still_is(self):
+        before, after = self.sides([{"k": 1.0}, {"k": 2.0}, {"k": 1.5}], [{"k": 9.0}, {"k": 8.0}])
+        self.assertTrue(self.find(compare(before, after), "k")["moved"])
+
+
+class YoggPhases(unittest.TestCase):
+    def test_phase_one_ends_where_phase_two_starts(self):
+        spans = [(1, 0, 157629), (2, 157629, 644303), (1, 644303, 648355)]
+        self.assertEqual(yogg_saron.phase1_end(spans), 157629)
+
+    def test_a_lost_opening_mark_does_not_make_the_wipe_tail_phase_one(self):
+        # Sara respawns after a wipe and the latch goes back to 1, which is all that is left when the
+        # trace never recorded the phase 1 it opened on.
+        spans = [(2, 131198, 181581), (1, 181581, 181753)]
+        self.assertEqual(yogg_saron.phase1_end(spans), 131198)
+
+    def test_a_pull_that_never_left_phase_one(self):
+        self.assertEqual(yogg_saron.phase1_end([(1, 0, 90000)]), 90000)
+        self.assertIsNone(yogg_saron.phase1_end([]))
+
+
+class DuplicateDeaths(unittest.TestCase):
+    """Yogg's Insane kills its owner when it comes off, and dying takes it off."""
+
+    class FakeTrace:
+        def __init__(self, deaths):
+            self.deaths = deaths
+
+        def of(self, *events):
+            return list(self.deaths)
+
+    def test_a_blow_and_the_real_killer_become_one_record(self):
+        trace = self.FakeTrace([
+            {"t": 322890, "g": 7, "killer": 7, "blow": [99, 457]},
+            {"t": 322891, "g": 7, "killer": 99},
+        ])
+        folded = death_records(trace)
+        self.assertEqual(len(folded), 1)
+        self.assertEqual(folded[0]["killer"], 99)
+        self.assertEqual(folded[0]["blow"], [99, 457])
+
+    def test_a_wipe_keeps_its_cause(self):
+        trace = self.FakeTrace([
+            {"t": 614012, "g": 7, "killer": 7, "cause": "reset"},
+            {"t": 614013, "g": 7, "killer": 7, "cause": "self"},
+        ])
+        self.assertEqual([d["cause"] for d in death_records(trace)], ["reset"])
+        self.assertEqual(combat_deaths(trace), [])
+
+    def test_a_real_second_death_is_kept(self):
+        trace = self.FakeTrace([
+            {"t": 475069, "g": 7, "killer": 99, "blow": [99, 30984]},
+            {"t": 478045, "g": 7, "killer": 99, "blow": [99, 30663]},
+        ])
+        self.assertEqual(len(death_records(trace)), 2)
+
+    def test_the_fold_leaves_the_record_it_read_alone(self):
+        first = {"t": 10, "g": 7, "killer": 7, "blow": [99, 1]}
+        death_records(self.FakeTrace([first, {"t": 11, "g": 7, "killer": 99}]))
+        self.assertEqual(first["killer"], 7)
+
 
 class ShortRows(unittest.TestCase):
     """Columns 8 to 11 arrived in v8, so an older row raises if one is read without checking."""
@@ -683,7 +754,7 @@ class Renderers(unittest.TestCase):
 class RichFixture(unittest.TestCase):
     """The thin coverage fixture leaves most invariants iterating an empty list."""
 
-    def test_all_seventeen_pass_on_a_trace_that_exercises_them(self):
+    def test_every_check_passes_on_a_trace_that_exercises_them(self):
         failed = [name for name, count, _ in verify_checks(rich()) if count]
         self.assertEqual(failed, [])
 
@@ -703,6 +774,14 @@ class RichFixture(unittest.TestCase):
                          if not (rec.get("e") == "dmg" and rec.get("d") in victims)]
         failed = [name for name, count, _ in verify_checks(trace) if count]
         self.assertIn("every blow has a damage row behind it", failed)
+
+    def test_a_death_written_twice_is_caught(self):
+        trace = rich()
+        death = trace.of("death")[0]
+        at = trace.records.index(death)
+        trace.records.insert(at + 1, {**death, "t": death["t"] + 1})
+        failed = [name for name, count, _ in verify_checks(trace) if count]
+        self.assertIn("no death is recorded twice", failed)
 
     def test_a_dealt_column_going_backwards_is_caught(self):
         trace = rich()

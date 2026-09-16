@@ -44,6 +44,10 @@ extern std::atomic<bool> g_active;
 
 inline bool Active() { return g_active.load(std::memory_order_acquire); }
 
+// Bumped on every trace open and close. The traced containers below compare against it, because their
+// change-only rule is otherwise relative to the last pull and not to the trace being written.
+uint32 RegistryGeneration();
+
 void LoadConfig();
 void Shutdown();
 
@@ -125,7 +129,7 @@ struct NodeCoverage
     uint32 checks = 0;     // needCheck said yes and Trigger::Check() ran
     uint32 fires = 0;      // Check() returned a truthy Event
     uint32 pushes = 0;     // that fire turned into at least one queue entry
-    uint32 shared = 0;     // another node's Trigger* had already fired this pass; loop 2 still pushes
+    uint32 shared = 0;     // pushed on a Trigger* a sibling fired this pass, before or after this node
     uint32 throttled = 0;  // checkInterval had not elapsed
     uint32 minimal = 0;    // minimal mode dropped it for sitting under relevance 100
     uint32 dead = 0;       // the name resolved to no creator this bot's context stack carries
@@ -283,6 +287,12 @@ std::string DescribeAssignment(T value)
         return std::to_string(value);
 }
 
+// Every container here outlives the trace it writes into, and a value one pull leaves behind is a value
+// the next pull never hears about: yogg.phase ended a wipe on 1, so the following pull opened on 1 and
+// its trace had no phase 1 at all. Each one therefore writes its whole state once per trace, on the
+// first write after the generation moved, and stamps the generation whether or not a session took it -
+// an instance that is not recording gets another bump when it starts.
+
 // Scalar assignment. Emits when the value actually changes, not on every write.
 template <typename T>
 class ObsValue
@@ -293,11 +303,18 @@ public:
 
     ObsValue& operator=(T value)
     {
-        if (!(_value == value))
-        {
+        bool const changed = !(_value == value);
+        if (changed)
             _value = std::move(value);
-            if (Active())
-                Note(nullptr, _kind, DescribeAssignment(_value));
+
+        if (!Active())
+            return *this;
+
+        uint32 const generation = RegistryGeneration();
+        if (changed || _generation != generation)
+        {
+            _generation = generation;
+            Note(nullptr, _kind, DescribeAssignment(_value));
         }
 
         return *this;
@@ -309,6 +326,7 @@ public:
 private:
     char const* _kind;
     T _value{};
+    uint32 _generation = 0;
 };
 
 // Guid-keyed assignment map. operator[] hands back a proxy so an assignment through it is seen;
@@ -343,6 +361,8 @@ public:
 
     void Set(ObjectGuid guid, V value)
     {
+        Rebaseline();
+
         auto it = _values.find(guid);
         if (it != _values.end() && it->second == value)
             return;
@@ -367,6 +387,8 @@ public:
     // try_emplace returns, because call sites read the iterator back out of it.
     std::pair<typename Container::iterator, bool> try_emplace(ObjectGuid guid, V value)
     {
+        Rebaseline();
+
         auto it = _values.find(guid);
         if (it != _values.end())
             return {it, false};
@@ -385,6 +407,8 @@ public:
     // so unlike the prune loops' iterator-erase it is news.
     std::size_t erase(ObjectGuid guid)
     {
+        Rebaseline();
+
         std::size_t const removed = _values.erase(guid);
         if (removed && Active())
             NoteAssignment(guid, _kind, "0");
@@ -400,8 +424,24 @@ public:
 private:
     friend class Ref;
 
+    // Before the mutation, so the trace reads the carried-over state first and the change after it.
+    void Rebaseline()
+    {
+        if (!Active())
+            return;
+
+        uint32 const generation = RegistryGeneration();
+        if (_generation == generation)
+            return;
+
+        _generation = generation;
+        for (auto const& [guid, held] : _values)
+            NoteAssignment(guid, _kind, DescribeAssignment(held));
+    }
+
     char const* _kind;
     Container _values;
+    uint32 _generation = 0;
 };
 
 // Guid set for membership latches - arrived, bailing, stripped. Emits on the transition only.
@@ -412,6 +452,8 @@ public:
 
     void insert(ObjectGuid guid)
     {
+        Rebaseline();
+
         if (!_values.insert(guid).second)
             return;
 
@@ -421,6 +463,8 @@ public:
 
     std::size_t erase(ObjectGuid guid)
     {
+        Rebaseline();
+
         std::size_t const removed = _values.erase(guid);
         if (!removed)
             return 0;
@@ -440,8 +484,23 @@ public:
     std::unordered_set<ObjectGuid>::const_iterator end() const { return _values.end(); }
 
 private:
+    void Rebaseline()
+    {
+        if (!Active())
+            return;
+
+        uint32 const generation = RegistryGeneration();
+        if (_generation == generation)
+            return;
+
+        _generation = generation;
+        for (ObjectGuid guid : _values)
+            NoteAssignment(guid, _kind, "1");
+    }
+
     char const* _kind;
     std::unordered_set<ObjectGuid> _values;
+    uint32 _generation = 0;
 };
 }  // namespace RaidObs
 

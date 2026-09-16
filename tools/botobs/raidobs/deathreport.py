@@ -10,7 +10,7 @@ import sys
 from collections import defaultdict
 
 from .records import act_row, aura_line, held_to_death, is_debuff
-from .trace import Trace, clock
+from .trace import Trace, clock, combat_deaths, death_records
 
 
 # How close an impact marker or a hazard creature has to be to count as "on top of the bot". A
@@ -93,13 +93,6 @@ def damage_summary(trace: Trace, rewind: list[list]) -> list[tuple[str, int, int
     return rows
 
 
-def combat_deaths(trace: Trace) -> list[dict]:
-    """Deaths worth reading. The master's `wipe` command kills through Unit::Kill, which never reaches
-    DealDamage, so those records carry no blow and name the bot as its own killer - 16 of one Freya
-    attempt's 29. Numbering over these keeps --death N pointing at deaths that have a cause."""
-    return [d for d in trace.of("death") if d.get("cause") != "reset"]
-
-
 def summarise(trace: Trace) -> None:
     hdr = trace.header
     print(f"trace   {trace.path.name}")
@@ -136,7 +129,7 @@ def summarise(trace: Trace) -> None:
         print("        *** trace hit the size cap and stopped early ***")
 
     combat = combat_deaths(trace)
-    reset = len(trace.of("death")) - len(combat)
+    reset = len(death_records(trace)) - len(combat)
     print(f"deaths  {len(combat)}" + (f"  (+{reset} to a wipe command)" if reset else ""))
     print()
 
@@ -151,8 +144,10 @@ def death_block(trace: Trace, death: dict, index: int, brief: bool) -> None:
     if cause == "reset":
         print("     killed by the wipe command")
     elif cause == "self":
-        # Environmental damage bypasses the combat log, so there is no blow and no rewind entry either.
-        print("     died to self or environmental damage, no killing blow recorded")
+        # A script calling Unit::Kill skips DealDamage, so there is no blow and no rewind entry either:
+        # Yogg's Insane running out, the Brain killing whoever hits it early. Falling or lava does pass
+        # DealDamage, and reads as a blow from the victim itself.
+        print("     killed by a script, no blow recorded")
     else:
         print(f"     killed by {trace.name(death.get('killer'))}")
     print(f"     at ({death.get('x')}, {death.get('y')}, {death.get('z')})")
