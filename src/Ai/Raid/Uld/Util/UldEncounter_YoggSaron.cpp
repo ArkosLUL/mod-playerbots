@@ -455,6 +455,12 @@ Position YoggSaronBrainSpot(Player* bot)
                                                                   : ULDUAR_YOGG_SARON_BRAIN_ROOM_MIDDLE;
 }
 
+Position const& YoggSaronPhaseThreeSpot(Player* bot)
+{
+    return PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT
+                                                                   : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+}
+
 std::vector<Unit*> GetYoggSaronSkullsInArc(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();

@@ -61,6 +61,14 @@ bool IsYoggSaronFocusedGuardian(Unit* unit)
 
     return entry == NPC_GUARDIAN_OF_YS || entry == NPC_IMMORTAL_GUARDIAN || entry == NPC_MARKED_IMMORTAL_GUARDIAN;
 }
+
+// How far one heading is off another, 0 to pi either way round.
+float HeadingGap(float from, float to)
+{
+    float const gap = Position::NormalizeOrientation(from - to);
+
+    return gap > static_cast<float>(M_PI) ? 2.0f * static_cast<float>(M_PI) - gap : gap;
+}
 }  // namespace
 
 const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, -24.871964f, 324.88956f, 6.247805f);
@@ -504,21 +512,25 @@ size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)
     {
         case NPC_GUARDIAN_OF_YS:
             return 0;
+        // Immortal Guardians only exist in phase 3, and they go before the tentacles phase 2 leaves
+        // behind. One pull spent phase 3's first 50 s on a Crusher and two Corruptors while five loose
+        // Guardians killed the raid.
+        // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
+        // it over 20 s, 176% of its own max health, and into Yogg too when he is within 20 yd of it.
+        // Focusing it is the only way it reaches Weakened before that lands, and the entry swap makes it
+        // a free signal.
+        case NPC_MARKED_IMMORTAL_GUARDIAN:
+            return 1;
+        case NPC_IMMORTAL_GUARDIAN:
+            return 2;
         // Then the Crusher. Diminish Power is a 5-minute channel taking 21% off every point of damage
         // the raid does, multiplicative across tentacles, undispellable and unkickable - only a melee
         // hit (worth ~1.5 s) or the tentacle's death stops it.
         case NPC_CRUSHER_TENTACLE:
-            return 1;
-        case NPC_CONSTRICTOR_TENTACLE:
-            return 2;
-        case NPC_CORRUPTOR_TENTACLE:
             return 3;
-        // Shadow Beacon swaps a guardian's entry to the marked one, then pours 750,000 of healing into
-        // it over 20 s - 176% of its own max health. Focusing it is the only way it reaches Weakened
-        // before that lands, and the entry swap makes it a free signal.
-        case NPC_MARKED_IMMORTAL_GUARDIAN:
+        case NPC_CONSTRICTOR_TENTACLE:
             return 4;
-        case NPC_IMMORTAL_GUARDIAN:
+        case NPC_CORRUPTOR_TENTACLE:
             return 5;
         case NPC_YOGG_SARON:
             return 6;
@@ -531,6 +543,16 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
 {
     if (!candidate || !candidate->IsAlive())
         return false;
+
+    // Phase 3 splits the raid: ranged take the Guardians and the phase 2 leftovers, melee stay on Yogg
+    // and only hit a Guardian that has come to the tank.
+    auto const phaseThreeMelee = [this, &brain]()
+    {
+        if (!brain.phaseThreeMelee)
+            brain.phaseThreeMelee = !brain.brainLevel && PlayerbotAI::IsMelee(bot) && YoggSaronInPhase3(botAI);
+
+        return *brain.phaseThreeMelee;
+    };
 
     bool allowed = true;
     switch (candidate->GetEntry())
@@ -547,11 +569,18 @@ bool YoggSaronSetDpsPriorityAction::IsAllowedTarget(Unit* candidate, BrainApproa
         case NPC_CRUSHER_TENTACLE:
             allowed = !PlayerbotAI::IsMelee(bot);
             break;
+        case NPC_CONSTRICTOR_TENTACLE:
+        case NPC_CORRUPTOR_TENTACLE:
+            allowed = !phaseThreeMelee();
+            break;
         // Below 10% it is Weakened, and nothing but Thorim's Titanic Storm can finish one, so holding
         // there is a dead tick for the rest of the fight.
         case NPC_IMMORTAL_GUARDIAN:
         case NPC_MARKED_IMMORTAL_GUARDIAN:
-            allowed = candidate->GetHealthPct() > 10;
+            allowed = candidate->GetHealthPct() > 10 &&
+                      (!phaseThreeMelee() ||
+                       candidate->GetExactDist2d(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) <=
+                           ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE);
             break;
         // Shadow Barrier is what phase 2 is read off, and it makes him immune.
         case NPC_YOGG_SARON:
@@ -793,10 +822,12 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
             bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
     }
 
-    // The brain team's healer takes no tentacle. A target is what reach spell walks it toward, and that
-    // put it 39 yd off its room's middle with half the team out of heal range.
+    // Healers take no target in an illusion room or in phase 3. A target is what reach spell walks them
+    // toward: 39 yd off a room's middle with half the team out of heal range, and in phase 3 41-45 yd
+    // from the tank chasing tentacles. With none, nothing turns them back toward Yogg either.
     Position roomMiddle;
-    if (PlayerbotAI::IsHeal(bot) && YoggSaronRoomMiddle(bot, roomMiddle))
+    if (PlayerbotAI::IsHeal(bot) && (YoggSaronRoomMiddle(bot, roomMiddle) ||
+                                     (!YoggSaronOnBrainLevel(bot) && YoggSaronInPhase3(botAI))))
     {
         if (currentTarget)
             DropTarget(currentTarget, false);
@@ -1165,11 +1196,7 @@ bool YoggSaronLaughingSkullAction::Execute(Event /*event*/)
     // all of them, and the middle of the ones that are in arc is the heading that clears the most.
     float const away = Position::NormalizeOrientation(bot->GetAngle(x, y) + static_cast<float>(M_PI));
 
-    float drift = std::fabs(Position::NormalizeOrientation(bot->GetOrientation() - away));
-    if (drift > static_cast<float>(M_PI))
-        drift = 2.0f * static_cast<float>(M_PI) - drift;
-
-    if (drift <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+    if (HeadingGap(bot->GetOrientation(), away) <= ULDUAR_YOGG_SARON_FACING_TOLERANCE)
         return false;
 
     bot->SetFacingTo(away);
@@ -1186,9 +1213,53 @@ bool YoggSaronLunaticGazeAction::Execute(Event /*event*/)
     if (!boss || !boss->IsAlive())
         return false;
 
-    float angle = bot->GetAngle(boss);
-    float newAngle = Position::NormalizeOrientation(angle + M_PI);  // Add 180 degrees (PI radians)
-    bot->SetFacingTo(newAngle);
+    float const pi = static_cast<float>(M_PI);
+    float const towardYogg = bot->GetAngle(boss);
+    float const away = Position::NormalizeOrientation(towardYogg + pi);
+
+    // No heal needs facing, so a healer keeps its back to him and keeps casting. The tick stays free:
+    // claiming it cut raid healing from 10.7k to 6.7k a second for every 4 s gaze.
+    if (PlayerbotAI::IsHeal(bot))
+    {
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "yogg.gaze", "healer");
+
+        if (!bot->isMoving() && HeadingGap(bot->GetOrientation(), away) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+            bot->SetFacingTo(away);
+
+        return false;
+    }
+
+    // A target far enough round from Yogg has a heading that keeps both. Set facing leaves the bot alone
+    // with its target inside 45 degrees (AttackAction and CastSpell inside 60), and the gaze needs Yogg
+    // inside 90. Turning (135 - separation) / 2 off the target, away from him, splits the spare evenly.
+    // Not while moving: a walk faces wherever it goes.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive() && !bot->isMoving())
+    {
+        float const towardTarget = bot->GetAngle(target);
+        float const offset = Position::NormalizeOrientation(towardTarget - towardYogg);
+        float const separation = offset > pi ? 2.0f * pi - offset : offset;
+
+        if (separation >= ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION)
+        {
+            float const turn = std::max(0.0f, (0.75f * pi - separation) / 2.0f);
+            float const heading = Position::NormalizeOrientation(towardTarget + (offset > pi ? -turn : turn));
+
+            if (RaidObs::Active())
+                RaidObs::NoteDerived(bot, "yogg.gaze", "angled");
+
+            if (HeadingGap(bot->GetOrientation(), heading) > ULDUAR_YOGG_SARON_FACING_TOLERANCE)
+                bot->SetFacingTo(heading);
+
+            return false;
+        }
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.gaze", "away");
+
+    bot->SetFacingTo(away);
 
     return true;
 }
@@ -1204,8 +1275,7 @@ bool YoggSaronPhase3PositioningAction::Execute(Event /*event*/)
                       MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    Position const& spot =
-        botAI->IsRanged(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+    Position const& spot = YoggSaronPhaseThreeSpot(bot);
 
     YoggSaronTrigger yoggSaronTrigger(botAI);
     Unit* target = AI_VALUE(Unit*, "current target");

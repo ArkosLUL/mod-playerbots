@@ -560,7 +560,7 @@ class Declarations(unittest.TestCase):
         self.assertIn("yogg.deathray", declared_keys())
 
     def test_a_key_nothing_declares_is_absent(self):
-        self.assertNotIn("yogg.gaze", declared_keys())
+        self.assertNotIn("yogg.nothing", declared_keys())
 
 
 class LatchAllValues(unittest.TestCase):
@@ -666,6 +666,26 @@ class YoggPhases(unittest.TestCase):
     def test_target_split_reads_a_pack_and_a_spread(self):
         self.assertEqual(yogg_saron.target_split([7, 7, 7, 7]), (1, 1.0))
         self.assertEqual(yogg_saron.target_split([7, 7, 8, 9]), (3, 0.5))
+
+    def test_separation_is_the_smaller_angle_either_way_round(self):
+        self.assertAlmostEqual(yogg_saron.separation((0, 0), (1, 0), (0, 1)), 90.0)
+        self.assertAlmostEqual(yogg_saron.separation((0, 0), (1, 0), (-1, 0)), 180.0)
+        # -170 and 170 degrees are 20 apart, not 340.
+        self.assertAlmostEqual(yogg_saron.separation((0, 0), (-1, -0.176327), (-1, 0.176327)), 20.0, places=3)
+
+    def test_facing_away_puts_the_source_outside_the_front_half(self):
+        # Yogg due east of a bot at the origin.
+        self.assertFalse(yogg_saron.facing_away(0.0, (0, 0), (10, 0)))
+        self.assertFalse(yogg_saron.facing_away(math.radians(80), (0, 0), (10, 0)))
+        self.assertTrue(yogg_saron.facing_away(math.radians(100), (0, 0), (10, 0)))
+        self.assertTrue(yogg_saron.facing_away(math.pi, (0, 0), (10, 0)))
+
+    def test_target_kind_sorts_the_phase_3_targets(self):
+        self.assertEqual(yogg_saron.target_kind(0, None), "none")
+        self.assertEqual(yogg_saron.target_kind(5, yogg_saron.NPC_IMMORTAL_GUARDIAN), "guardian")
+        self.assertEqual(yogg_saron.target_kind(5, yogg_saron.NPC_CORRUPTOR_TENTACLE), "tentacle")
+        self.assertEqual(yogg_saron.target_kind(5, yogg_saron.NPC_YOGG_SARON), "yogg")
+        self.assertEqual(yogg_saron.target_kind(5, 1234), "other")
 
 
 class DuplicateDeaths(unittest.TestCase):

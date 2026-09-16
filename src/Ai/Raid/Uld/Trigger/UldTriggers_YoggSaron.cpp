@@ -69,8 +69,7 @@ bool YoggSaronTrigger::IsInBrainLevel() { return YoggSaronOnBrainLevel(bot); }
 
 bool YoggSaronTrigger::PhaseThreeStationReaches(Unit* target)
 {
-    Position const& spot =
-        botAI->IsRanged(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+    Position const& spot = YoggSaronPhaseThreeSpot(bot);
     float const reach = botAI->IsMelee(bot) ? sPlayerbotAIConfig.meleeDistance : sPlayerbotAIConfig.spellDistance;
 
     return spot.GetExactDist2d(target->GetPositionX(), target->GetPositionY()) -
@@ -587,12 +586,19 @@ bool YoggSaronBodyDetourTrigger::IsActive()
 
 bool YoggSaronLunaticGazeTrigger::IsActive()
 {
-    // 64163 is a 4-second aura Yogg puts on himself, ticking 64164 once a second at 130 yd through his
-    // front 180 degrees - not a channel, so GetCurrentSpell never saw it. And "find target" walks the
-    // bot's own threat list, which Yogg is not reliably on.
+    // 64163 is a 4-second aura Yogg puts on himself, ticking 64164 once a second at 130 yd on everyone
+    // with him in their own front 180 degrees. It is not a channel, so GetCurrentSpell never saw it. And
+    // "find target" walks the bot's own threat list, which Yogg is not reliably on.
     Creature* yoggsaron = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    if (!yoggsaron || !yoggsaron->IsAlive())
+        return false;
 
-    return yoggsaron && yoggsaron->IsAlive() && yoggsaron->HasAura(SPELL_LUNATIC_GAZE_YS);
+    // Healers keep their back to him for all of phase 3, not just while it ticks: none of their heals
+    // need facing, so it costs them nothing and no tick lands while they turn.
+    if (PlayerbotAI::IsHeal(bot) && IsPhase3())
+        return true;
+
+    return yoggsaron->HasAura(SPELL_LUNATIC_GAZE_YS);
 }
 
 bool YoggSaronPhase3PositioningTrigger::IsActive()
@@ -609,8 +615,7 @@ bool YoggSaronPhase3PositioningTrigger::IsActive()
     if (botAI->IsTank(bot))
         return bot->GetDistance(ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT) > ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH;
 
-    Position const& spot =
-        botAI->IsRanged(bot) ? ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT : ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
+    Position const& spot = YoggSaronPhaseThreeSpot(bot);
 
     if (bot->GetDistance2d(spot.GetPositionX(), spot.GetPositionY()) <= ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS)
     {

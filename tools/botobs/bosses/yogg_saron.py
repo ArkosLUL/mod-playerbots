@@ -7,6 +7,7 @@
     yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure
+    yogg_saron.py <file> --phase3   Immortal Guardians, who hit what, beacon heals, Lunatic Gaze
     yogg_saron.py <file> --crush    Crush, the body's knockback and Death Rays, per role
     yogg_saron.py <file> --sanity   Sanity minima and where they went
 
@@ -216,6 +217,21 @@ PORTAL_SPOTS = [
 ]
 
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
+
+# Phase 3. The module's ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT, where the tank holds Guardians and the
+# healers stand, and ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE, how close to it melee take one.
+NPC_IMMORTAL_GUARDIAN = 33988
+PHASE_3_MELEE_SPOT = (1998.5377, -22.90317, 324.8895)
+PHASE_3_MELEE_GUARDIAN_RANGE = 20.0
+SPELL_LUNATIC_GAZE_YOGG = 64163
+LUNATIC_GAZE_MS = 4000
+SPELL_SHADOW_BEACON = 64465
+# 64486, the 25-man heal a marked Guardian casts 10 s after the beacon: 37,500 a second for 20 s on
+# every ally within 20 yd of its centre, Yogg included.
+SPELL_EMPOWERING_SHADOWS = (64468, 64486)
+EMPOWERING_SHADOWS_MS = 20000
+EMPOWERING_SHADOWS_RADIUS = 20.0
+SPELL_WEAKENED = 64162
 
 
 def sara_kills_needed(trace: Trace) -> int | None:
@@ -1633,6 +1649,192 @@ def focus_split(trace: Trace, guardians: set, roster: set, p1_end: int) -> tuple
     return (one * 100.0 / total, many * 100.0 / total) if total else None
 
 
+def separation(origin: tuple, first: tuple, second: tuple) -> float:
+    """Degrees between two points as seen from origin, 0 to 180, on the ground plane."""
+    one = math.atan2(first[1] - origin[1], first[0] - origin[0])
+    two = math.atan2(second[1] - origin[1], second[0] - origin[0])
+    gap = abs(one - two) % (2 * math.pi)
+    return math.degrees(min(gap, 2 * math.pi - gap))
+
+
+def facing_away(orientation: float, origin: tuple, source: tuple) -> bool:
+    """Whether a unit at origin facing orientation has source outside its front 180 degrees, which is
+    all Lunatic Gaze tests (HasInArc(M_PI, caster) on the victim)."""
+    bearing = math.atan2(source[1] - origin[1], source[0] - origin[0])
+    gap = abs(orientation - bearing) % (2 * math.pi)
+    return min(gap, 2 * math.pi - gap) > math.pi / 2
+
+
+def target_kind(target: int, entry: int | None) -> str:
+    """What a snapshot's target column points at, in phase 3 terms."""
+    if not target:
+        return "none"
+    if entry == NPC_IMMORTAL_GUARDIAN:
+        return "guardian"
+    if entry in (NPC_CRUSHER_TENTACLE, NPC_CONSTRICTOR_TENTACLE, NPC_CORRUPTOR_TENTACLE):
+        return "tentacle"
+    return "yogg" if entry == NPC_YOGG_SARON else "other"
+
+
+def show_phase3(trace: Trace) -> None:
+    """Phase 3: whether ranged took the Guardians while melee stayed on Yogg, what the Guardians did to
+    the raid, whether a beacon's heal reached Yogg, and what each Lunatic Gaze cost.
+
+    Snapshot rows from snapshot_rows are [t, guid, x, y, z, o, hp, mana, target, moving, movegen,
+    casting, dealt]. A marked Guardian keeps its first entry in the trace, so marked and unmarked read
+    alike here; the Empowering Shadows cast is what names the marked ones."""
+    print("PHASE 3")
+    span = next(((start, stop) for phase, start, stop in phase_spans(trace) if phase == 3), None)
+    if not span:
+        print("  never reached")
+        return
+    start, stop = span
+
+    roster = roster_guids(trace)
+    yogg = next(iter(guids_of_entry(trace, NPC_YOGG_SARON)), None)
+    guardians = {guid for guid in guids_of_entry(trace, NPC_IMMORTAL_GUARDIAN)
+                 if (first_seen(trace, [guid]) or 0) >= start - 1000}
+    rows = snapshot_rows(trace, roster | guardians | ({yogg} if yogg else set()))
+    snaps = [snap for snap in trace.of("snap") if start <= snap["t"] <= stop]
+
+    # Up to the last snapshot anyone on the roster was still alive, so a wipe's tail does not water
+    # down the rates.
+    alive_end = max((snap["t"] for snap in snaps
+                     if any(row[0] in roster and row[5] > 0 for row in snap.get("u", []))), default=stop)
+    deaths = sorted(rec["t"] for rec in death_records(trace) if rec.get("g") in roster and start <= rec["t"] <= stop)
+    first_death = f"{clock(deaths[0])} (+{(deaths[0] - start) / 1000:.1f} s)" if deaths else "none"
+    print(f"  {clock(start)} -> {clock(stop)}, roster alive until {clock(alive_end)}, {len(deaths)} deaths,"
+          f" first {first_death}")
+
+    if yogg and rows.get(yogg):
+        line = []
+        for when in range(start, alive_end + 1, 10000):
+            row = row_before(rows[yogg], when)
+            if row:
+                line.append(f"{clock(when)} {row[6]:.2f}")
+        print(f"  Yogg hp            : {', '.join(line)}")
+
+    print("\n  targets per 10 s, share of alive bots: guardian / tentacle / yogg / none")
+    for when in range(start, alive_end, 10000):
+        counts: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+        for snap in snaps:
+            if not when <= snap["t"] < when + 10000:
+                continue
+            for row in snap.get("u", []):
+                if row[0] not in roster or row[0] in trace.humans or row[5] <= 0 or len(row) <= 7:
+                    continue
+                role = trace.role(row[0])
+                group = "melee" if role in ("melee", "tank") else role
+                counts[group][target_kind(row[7], trace.entries.get(row[7]))] += 1
+        cells = []
+        for group in ("ranged", "melee", "heal"):
+            total = sum(counts[group].values())
+            if total:
+                share = [counts[group][kind] / total for kind in ("guardian", "tentacle", "yogg", "none")]
+                cells.append(f"{group} {' '.join(f'{value:.2f}' for value in share)}")
+        print(f"    {clock(when)}  {' | '.join(cells)}")
+
+    teleports = {rec.get("s"): rec["t"] for rec in trace.of("cast") if rec.get("sp") == 64195}
+    melee_hits = [rec for rec in trace.of("dmg") if rec.get("s") in guardians and rec.get("sp") == 0]
+    weakened = collections.Counter(rec.get("d") for rec in trace.of("aura")
+                                   if rec.get("sp") == SPELL_WEAKENED and not rec.get("r"))
+    # Thorim is not a watched creature, so Titanic Storm never reaches the file. A Guardian that leaves
+    # the snapshots while the raid is still alive, last seen at 10% or less, is the kill it makes. The
+    # sweep drops the Guardians once nobody is left alive to anchor it.
+    stormed = 0
+    print(f"\n  Immortal Guardians : {len(guardians)}, Weakened applications {sum(weakened.values())}")
+    for guid in sorted(guardians, key=lambda g: rows[g][0][0] if rows.get(g) else 0):
+        own = rows.get(guid)
+        if not own:
+            continue
+        spawned = teleports.get(guid, own[0][0])
+        victim = next((row for row in own if row[8] in roster), None)
+        hit = next((rec for rec in melee_hits if rec.get("s") == guid), None)
+        lowest = min(row[6] for row in own)
+        at_stack = sum(1 for row in own if math.dist(row[2:4], PHASE_3_MELEE_SPOT[:2]) <= PHASE_3_MELEE_GUARDIAN_RANGE)
+        gone = own[-1][0] < alive_end - 2000
+        stormed += gone and own[-1][6] <= 10
+        print(f"    {clock(spawned)}  first victim"
+              f" {trace.role(victim[8]) if victim else '-':6} +{max(0, (victim[0] if victim else spawned) - spawned) / 1000:4.1f} s"
+              f"  first hit {trace.role(hit['d']) if hit else '-':6}"
+              f" +{((hit['t'] if hit else spawned) - spawned) / 1000:4.1f} s  lowest {lowest:5.1f}%"
+              f"  at the stack {at_stack * 100 // len(own):3}%  {'gone ' + clock(own[-1][0]) if gone else 'alive'}"
+              f"{'  Weakened' if weakened.get(guid) else ''}")
+    by_role = collections.Counter(trace.role(rec.get("d")) for rec in melee_hits)
+    print(f"    gone at 10% or less (Titanic Storm): {stormed}")
+    print(f"    melee hits by victim role: {dict(by_role)}")
+
+    beacons = [rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_SHADOW_BEACON and start <= rec["t"] <= stop]
+    heals = [rec for rec in trace.of("cast") if rec.get("sp") in SPELL_EMPOWERING_SHADOWS and start <= rec["t"] <= stop]
+    print(f"\n  Shadow Beacons     : {len(beacons)}")
+    yogg_spot = at(trace, yogg, start) if yogg else None
+    for group in group_runs([rec["t"] for rec in heals], 1000, 0):
+        casters = [rec for rec in heals if group[0] <= rec["t"] <= group[1]]
+        reach = []
+        for rec in casters:
+            spot = at(trace, rec.get("s"), rec["t"])
+            if spot and yogg_spot:
+                reach.append(math.dist(spot, yogg_spot))
+        before = row_before(rows.get(yogg, []), group[0]) if yogg else None
+        after = row_before(rows.get(yogg, []), group[0] + EMPOWERING_SHADOWS_MS) if yogg else None
+        change = f"{after[6] - before[6]:+.2f}%" if before and after else "-"
+        inside = sum(1 for yards in reach if yards <= EMPOWERING_SHADOWS_RADIUS)
+        print(f"    {clock(group[0])}  {len(casters)} heals, Guardians {', '.join(f'{yards:.1f}' for yards in reach)} yd"
+              f" from Yogg ({inside} inside {EMPOWERING_SHADOWS_RADIUS:.0f}), Yogg {change} over the next 20 s")
+
+    gazes = [(rec["t"], rec["t"] + LUNATIC_GAZE_MS) for rec in trace.of("cast")
+             if rec.get("sp") == SPELL_LUNATIC_GAZE_YOGG and start <= rec["t"] <= alive_end]
+
+    def inside_gaze(when: int) -> bool:
+        return any(first <= when <= last for first, last in gazes)
+
+    if gazes:
+        gaze_s = sum(min(last, alive_end) - first for first, last in gazes) / 1000
+        rest_s = max((alive_end - start) / 1000 - gaze_s, 0.001)
+        casts = [rec["t"] for rec in trace.of("cast") if rec.get("s") in roster and not rec.get("tr")]
+        during = sum(1 for when in casts for first, last in gazes if first <= when <= last)
+        before = sum(1 for when in casts for first, _ in gazes if first - LUNATIC_GAZE_MS <= when < first)
+        heal_in = heal_out = 0
+        for rec in trace.of("heal"):
+            if rec.get("s") in roster and start <= rec["t"] <= alive_end:
+                amount = rec.get("a", 0) - rec.get("oh", 0)
+                if inside_gaze(rec["t"]):
+                    heal_in += amount
+                else:
+                    heal_out += amount
+        dealt_in = dealt_out = 0
+        for guid in roster:
+            own = [row for row in rows.get(guid, []) if len(row) > 12 and start - 2000 <= row[0] <= alive_end]
+            for previous, row in zip(own, own[1:]):
+                if row[0] < start:
+                    continue
+                gain = max(0, row[12] - previous[12])
+                if inside_gaze(row[0]):
+                    dealt_in += gain
+                else:
+                    dealt_out += gain
+        print(f"\n  Lunatic Gaze       : {len(gazes)}, {gaze_s:.0f} s of {(alive_end - start) / 1000:.0f}")
+        print(f"    cast starts      : {during / len(gazes):.1f} per gaze vs {before / len(gazes):.1f} in the 4 s before")
+        print(f"    healing/s        : {heal_in / gaze_s:,.0f} inside vs {heal_out / rest_s:,.0f} outside")
+        print(f"    damage/s         : {dealt_in / gaze_s:,.0f} inside vs {dealt_out / rest_s:,.0f} outside")
+    picks = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.gaze"))
+    if picks:
+        print(f"    yogg.gaze        : {dict(picks)}")
+
+    healers = [guid for guid in roster if trace.role(guid) == "heal" and guid not in trace.humans]
+    if healers and yogg_spot:
+        print(f"\n  healers: median distance to the melee spot, facing away from Yogg during gazes")
+        for guid in healers:
+            own = [row for row in rows.get(guid, []) if start <= row[0] <= alive_end and row[6] > 0]
+            if not own:
+                continue
+            spot = statistics.median(math.dist(row[2:4], PHASE_3_MELEE_SPOT[:2]) for row in own)
+            gazing = [row for row in own if inside_gaze(row[0])]
+            away = sum(1 for row in gazing if facing_away(row[5], row[2:4], yogg_spot))
+            share = f"{away * 100 // len(gazing)}% of {len(gazing)}" if gazing else "-"
+            print(f"    {trace.name(guid):14} {spot:5.1f} yd  away {share}")
+
+
 SECTIONS = (
     ("phases", "phase timeline and the pre-pull window", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
@@ -1640,6 +1842,7 @@ SECTIONS = (
     ("portals", "portal waves and assignments", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("brain", "brain room, the Brain, skulls", show_brain),
+    ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
     ("crush", "Crush, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima", show_sanity),
 )

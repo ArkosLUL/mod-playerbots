@@ -331,8 +331,10 @@ lockstep from 63.6%/82.3% to 1.4%/2.8% and crossed zero inside one second, and t
 228,396 over 16 hits and killed all eight melee in **16 ms**. Four earlier single novas were all
 survived. Brain level: Influence Tentacle →
 nearest other illusion add → the Brain. Boss room:
-**leftover Guardian of Yogg-Saron** → Crusher (**ranged only**, below) → Constrictor → Corruptor →
-**Marked** Immortal Guardian (36064) → Immortal Guardian (33988) → Yogg.
+**leftover Guardian of Yogg-Saron** → **Marked** Immortal Guardian (36064) → Immortal Guardian (33988) →
+Crusher (**ranged only**, below) → Constrictor → Corruptor → Yogg. Phase 3 melee skip Constrictor and
+Corruptor and take a Guardian only within 20 yd of the phase 3 melee spot
+(`ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE`).
 
 **The leftovers lead the boss room, and leaving them off it cost a pull.** They survive the transition,
 keep casting a 35 yd Dark Volley nothing walks out of, and regenerate to full the moment the raid takes
@@ -340,6 +342,14 @@ a portal. With no tier they fell through to the `dps target` fallback, which is 
 five of them took **~1,978,370** — two Guardians' worth — for **zero kills**, four ending between 11.9%
 and 21.2%, while dealing 735,989 back. That is the same split-damage failure phase 1 has a kill order to
 prevent.
+
+**Phase 3 splits the raid: ranged kill Guardians, melee stay on Yogg.** Phase 2's tentacles outlive
+the transition as well. Ranked above the Immortal Guardians, a Crusher and two Corruptors 38-45 yd out
+took one pull's first 50 s of phase 3 (80-100% of raid targets, Guardians ≤ 4%, Yogg ≤ 6%) while five
+Guardians spawned untouched; they killed the raid inside 77 s and none went below 74%. A 25-man
+Guardian has 425,000 health, so ten ranged reach Weakened in about 6 s. Melee wait for guardian control
+to bring one to the tank: it holds the tank within 5 yd of the spot, and a full-health Guardian swings
+from up to 14 yd.
 
 Every Guardian tier is picked lowest-health first and then held outright: an order that flips mid-fight
 resets every swing and cast timer in the raid. Phase 1 replaces both with a shared focus, below. An
@@ -946,7 +956,10 @@ mid-channel and dropped it. Under `--brain`, one row per wave: room clear time, 
 and the most-held share, melee walking, the healer's distance from the middle and mates past 40 yd,
 `set behind` moves, door to first Brain hit, healer to the Brain, exit seconds left and spare, and
 Brain lost. Under `--phase2`, the windows with nothing on the platform to kill, with Sanity, idle walks
-and well arrivals.
+and well arrivals. Under `--phase3`: Yogg's health and each role's target split per 10 s, one row per
+Immortal Guardian (first victim, first hit, lowest health, share at the stack, gone at 10% or less),
+each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
+outside, and each healer's distance to the melee spot and facing during gazes.
 
 **Do not add a Sanity level probe** (`yogg.sanity` is a walk reason). 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic
@@ -964,14 +977,29 @@ orb, one orb every 22 s.
 ## `64163 Lunatic Gaze` is an aura, not a channel
 
 Yogg puts it on himself for 4 s, ticking `64164` once a second for 5699 damage and 4 sanity at 130 yd
-through his front 180°. `AttributesEx` 200 carries no `SPELL_ATTR1_IS_CHANNELED` bit, so
-`GetCurrentSpell(CURRENT_CHANNELED_SPELL)` never saw it — detect it with `HasAura`.
+on every unit with him in its own front 180°. `AttributesEx` 200 carries no `SPELL_ATTR1_IS_CHANNELED`
+bit, so `GetCurrentSpell(CURRENT_CHANNELED_SPELL)` never saw it — detect it with `HasAura`.
 
-Facing away is a real defence (`spell_yogg_saron_lunatic_gaze::FilterTargets` needs
-`HasInArc(M_PI, caster)`), which is why P3 swaps the designated tank off `TankFaceStrategy` — that
-strategy would turn it back into the gaze. **Known-open:** a bot facing away from Yogg is facing away
-from its target and cannot cast, and the gaze was the #2 damage source at 660,442 over 244 hits. That
-tension is a design question, not a defect.
+**Facing away is the whole defence, and there is no safe side.**
+`spell_yogg_saron_lunatic_gaze::FilterTargets` tests only the victim's facing (`HasInArc(M_PI, caster)`),
+so standing behind Yogg buys nothing. P3 swaps the designated tank off `TankFaceStrategy`, which would
+turn it back into the gaze. One pull took 660,442 from it over 244 hits, its #2 damage source.
+
+**Only a bot with no safe heading stops for a gaze.** The node used to claim every tick for all 4 s:
+5 gazes took 19 of one phase 3's 77 s, cast starts fell from ~34 per 4 s to under 2, healing from
+10.7k/s to 6.7k/s and damage from 75k/s to 53k/s. Probed as `yogg.gaze`:
+
+- **`healer`**: keeps its back to Yogg all of phase 3 and never claims the tick. Every heal has
+  `FacingCasterFlags` 0, the core checks nothing else, and `PlayerbotAI::CastSpell` only turns a bot
+  for `SPELL_FACING_FLAG_INFRONT`, so a healer facing away heals anyone in range and sight.
+- **`angled`**: a still bot whose target is at least 65° from Yogg as seen from the bot
+  (`ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION`) turns `(135° − separation) / 2` off its target, away
+  from Yogg, and keeps attacking. `set facing` leaves it alone inside ±45° (`IsFacingValue`,
+  `HasInArc(M_PI_2)`), `AttackAction` and `CastSpell` inside ±60° (`CAST_ANGLE_IN_FRONT`), and the
+  gaze needs Yogg inside ±90°, so both margins are `(separation − 45°) / 2`. Facing the target outright
+  needs 100°, which 6-8% of ranged gaze samples had against 23-60% at 60°.
+- **`away`**: everyone else, including any moving bot since a walk faces its path, faces away and
+  claims the tick.
 
 **`rti` is a room tag, so never write one as a targeting hint.** `"cross"` is Stormwind's tag: a
 boss-room bot given it is teleported into Stormwind by `yogg-saron fall from floor` the moment it dips
@@ -1002,6 +1030,13 @@ there costs it nothing and releases it otherwise, probed as `yogg.station`. Nami
 deliberate — a rule written as a list goes stale the first time a new add appears. Tanks keep a 30 yd
 leash instead of a station, because `yogg-saron guardian control` outranks this node and brings them
 back whenever a guardian is loose; the leash is only the way home once nothing is.
+
+**Healers take the melee spot and no target.** A target is what the station releases a bot for: one
+pull's healers chased tentacles to a median 41-45 yd from the tank and 58-66 yd from the ranged spot.
+The resolver gives a phase 3 healer none, dropped without interrupting its heal, and
+`YoggSaronPhaseThreeSpot` stations it at `ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT`: 18.5 yd straight
+behind Yogg, who faces west (o 3.14) all phase, outside his 14 yd knockback, 20.6 yd from the ranged
+spot, and where a Guardian chasing a healer's threat walks into the tank.
 
 A sanity well the bot cannot reach is the same failure by another route: `yogg-saron sanity` parked
 three bots stationary for 202, 164 and 96 s on a well they never got to, suppressing every node below
@@ -1034,7 +1069,9 @@ Sanity drains, and whether anything can be done:
 path is Thorim's Titanic Storm, filtered to a target carrying `SPELL_WEAKENED` (64162), applied under
 10% health where the Empowered stack count also falls to 0, and armed at the start of P3; its 2 s
 period against a 10 s spawn outpaces spawns 5:1 once the raid burns each guardian that low. So the
-raid's whole job is Weakened.
+raid's whole job is Weakened. **Not yet observed:** no pull has had a guardian under 10%, and Thorim's
+casts never reach the recorder, so `--phase3` counts a guardian leaving the snapshots at 10% or less
+as the Storm's kill.
 
 **A phase 3 without Thorim is therefore a forced wipe** — accepted, not a defect: the price of playing
 it straight everywhere. Guardians spawn one per 10 s with no cap and a live one never
@@ -1043,20 +1080,25 @@ gives +180% damage per stack at `healthPct / 10` capped at 9, so an untouched gu
 ×17.2; and anything under 85% starts Drain Life — 16,665 damage and **166,650 self-heal, 39.2% of its
 own max health**, every ~14.5 s on a *random* player within 40 yd with no LOS and no threat component.
 
-**Shadow Beacon heals guardians, not the boss.** It marks 3 guardians in 25-man every 45 s, and
-Empowering Shadows is a **20 yd friendly AoE worth 750,000 over 20 s — 176% of a guardian's own max
-health**. `spell_yogg_saron_shadow_beacon_aura::OnApply` swaps the marked guardian's entry to 36064 —
-a free signal: `TierOf` puts Marked above unmarked so the raid reaches Weakened before the heal
-lands. Whether that 20 yd radius also reaches Yogg is **geometric inference,
-not an observed log** — his combat reach is 30 yd and guardians sit 28-40 yd from his centre, so by
-static reading it does not. Watch for net health gain on a guardian across a beacon.
+**Shadow Beacon heals the marked guardians, and Yogg when they stand near him.** It marks 3 guardians
+in 25-man every 45 s, and 10 s later each casts Empowering Shadows (64486): **37,500 a second for 20 s
+on every ally within 20 yd, 750,000 — 176% of a guardian's own max health**.
+`spell_yogg_saron_shadow_beacon_aura::OnApply` swaps the marked guardian's entry to 36064 — a free
+signal: `TierOf` puts Marked above unmarked so the raid reaches Weakened before the heal lands. The
+area check compares centre distance to 20 with no combat reach added for a creature caster, and
+Empowered's +50% scale per stack lets a full-health guardian swing from a median 9.6 yd (max 14.0). On
+the tank at the P3 melee spot, 19.0 yd from Yogg in 3D, three marked guardians stood 11-16 yd from him
+and healed him **+3.84%, 1.69M of 44.0M**, over exactly those 20 s, against −0.98% from the raid in
+the 56 s before. Only a tank spot ~34 yd out keeps them clear, and melee cannot reach Yogg from there,
+so the spot stays and marked guardians die first; `--phase3` reads Yogg's health across every beacon.
 
 `yogg-saron guardian control` is **not** gated on Thorim, or on hard mode. Hard mode means *fewer*
 Keepers, so demanding both asked for exactly the case where Thorim is least likely to be there — and
 guardians parked on a tank beat guardians loose among the casters even where none of them can die.
 
-Open risks: Lunatic Gaze "freezes" bots, so guardian DPS may stall between gazes; a guardian spawns up
-to 48 yd out, so confirm taunt pickup is prompt; and the sanity-conservation behaviour (stand behind
+Open risks: one tank cannot hold them, since it taunts every 8-10 s against a guardian spawning 38-48 yd
+out every 10 s, each picking a victim on spawn and swinging within 3-8 s, and one pull's guardians put
+45 of 71 melee hits (median 23k, max 57k) on non-tanks; and the sanity-conservation behaviour (stand behind
 Yogg facing away below 15 stacks) **nearly benches a bot** — sanity never recovers Thorim-only, so a
 bot that drops to 15 stays there.
 

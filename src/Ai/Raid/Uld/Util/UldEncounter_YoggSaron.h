@@ -397,6 +397,16 @@ constexpr float ULDUAR_YOGG_SARON_EXIT_LEAD_SAFETY = 2.0f;
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_STATION_RADIUS = 15.0f;
 constexpr float ULDUAR_YOGG_SARON_PHASE_3_TANK_LEASH = 30.0f;
 
+// Phase 3 melee only take a Guardian this close to the melee spot, everything else goes to Yogg.
+// Guardian control keeps the tank within 5 yd of the spot and a full-health Guardian swings from up
+// to 14 yd.
+constexpr float ULDUAR_YOGG_SARON_PHASE_3_MELEE_GUARDIAN_RANGE = 20.0f;
+
+// Smallest angle between a bot's target and Yogg, seen from the bot, that still has a heading with the
+// target inside set facing's 45 degrees and Yogg outside the gaze's 90. 65 degrees, which leaves 10 on
+// each side.
+constexpr float ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION = 1.1345f;
+
 // How long a forced walk may fail to close distance before the bot stops trying, and how close counts
 // as having got there. The arrival radius is generous because MoveTo stops where its own tolerance
 // leaves the bot, not on the point it was handed.
@@ -518,6 +528,11 @@ bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI);
 // The spot a bot hits the Brain from once its room is done: behind it for melee, the brain room middle
 // for everyone else, which has every melee spot inside heal range.
 Position YoggSaronBrainSpot(Player* bot);
+
+// A bot's phase 3 station. Healers take the melee spot with the tank: it is 18.5 yd straight behind
+// Yogg, outside his knockback and within heal range of the ranged spot, and a Guardian chasing a healer
+// walks into the tank there.
+Position const& YoggSaronPhaseThreeSpot(Player* bot);
 
 // Laughing Skulls within gaze range that are in the bot's front 180 degrees, which is the exact test
 // the spell uses to pick its targets. The distance is re-checked after the grid sweep, whose own range

@@ -205,6 +205,8 @@ private:
     {
         bool brainLevel = false;
         std::optional<bool> approachable;
+        // Filled on first use: most resolves never test a Guardian or a leftover tentacle.
+        std::optional<bool> phaseThreeMelee;
     };
 
     bool IsAllowedTarget(Unit* candidate, BrainApproach& brain) const;
