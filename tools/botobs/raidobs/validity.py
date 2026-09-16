@@ -53,16 +53,17 @@ def head_commit(repo: pathlib.Path) -> tuple[str, datetime.datetime] | None:
 
 
 def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.datetime] | None:
-    """`since` is a commit-ish or an ISO timestamp; absent, HEAD is used."""
+    """`since` is a commit-ish or an ISO timestamp; absent, HEAD is used. A timestamp without an offset
+    is local time, the way git reads one."""
     if since is None:
         return head_commit(repo)
 
     try:
-        return "given", datetime.datetime.fromisoformat(since)
+        given = datetime.datetime.fromisoformat(since)
     except ValueError:
-        pass
-
-    return _commit(repo, since)
+        return _commit(repo, since)
+    # build and pull stamps are aware, and comparing a naive time with either raises
+    return "given", given if given.tzinfo else given.astimezone()
 
 
 # Roles whose absence changes what a pull proves. A human doing damage is noise; a human tanking or

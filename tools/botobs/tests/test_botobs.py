@@ -21,6 +21,7 @@ BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
 import contextlib  # noqa: E402
+import datetime  # noqa: E402
 import io  # noqa: E402
 import math  # noqa: E402
 from unittest import mock  # noqa: E402
@@ -446,6 +447,18 @@ class Decidability(unittest.TestCase):
             counted = validity.show_validity(rich(), "HEAD~no-such-ref")
         self.assertEqual(counted, 1)
         self.assertIn("cannot resolve", banner.getvalue())
+
+    def test_a_time_without_an_offset_is_read_as_local(self):
+        # build and pull stamps are aware, so a naive ref can't be compared with either
+        _, when = validity.resolve_since(validity.REPO, "2026-09-10T00:00:00")
+        self.assertEqual(when, datetime.datetime(2026, 9, 10).astimezone())
+        with contextlib.redirect_stdout(io.StringIO()) as banner:
+            validity.show_validity(rich(), "2026-09-10T00:00:00")
+        self.assertIn("after given", banner.getvalue())
+
+    def test_a_time_with_an_offset_keeps_it(self):
+        _, when = validity.resolve_since(validity.REPO, "2026-09-10T00:00:00+00:00")
+        self.assertEqual(when, datetime.datetime(2026, 9, 10, tzinfo=datetime.timezone.utc))
 
 
 class Recovery(unittest.TestCase):

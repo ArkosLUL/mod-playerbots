@@ -183,7 +183,8 @@ def main() -> int:
                         help=f"trace files or directories (default: {LOG_ROOT})")
     parser.add_argument("--boss", help="only traces whose slug matches, e.g. thorim")
     parser.add_argument("--since", metavar="REF",
-                        help="commit-ish or ISO time the build must be newer than; naming one makes a "
+                        help="commit-ish or ISO time (local without an offset) the build must be "
+                             "newer than; naming one makes a "
                              "stale build disqualify (without it, builds are compared to HEAD for "
                              "information only)")
     parser.add_argument("--valid", action="store_true",
@@ -196,7 +197,8 @@ def main() -> int:
     parser.add_argument("--probes", action="store_true",
                         help="probe keys declared in source that never reach a trace")
     parser.add_argument("--split-at", metavar="REF",
-                        help="compare pulls built before REF against pulls built after it")
+                        help="compare pulls built before REF against pulls built after it; REF reads "
+                             "like --since")
     parser.add_argument("--baseline", metavar="DIR", type=pathlib.Path,
                         help="compare the selection against the traces kept in DIR")
     parser.add_argument("--limit", type=int, help="stop after N traces, newest first")

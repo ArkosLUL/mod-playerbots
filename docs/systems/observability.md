@@ -118,7 +118,8 @@ strategy was not asked to do the job, whatever else was being tested.
   `docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver` reports. It stands in
   for a build hash because nothing better exists — this module has no `CMakeLists.txt` to stamp one
   from, and AzerothCore's revision names the core. Read once at load from `/proc/self/exe`, so 0 off
-  Linux. Compared against HEAD's commit time; `--since` takes a commit-ish or ISO time instead.
+  Linux. Compared against HEAD's commit time; `--since` takes a commit-ish or ISO time instead
+  (local without an offset, as for `--split-at`).
 - **`cfg.hardmode`** — the eight `Ulduar*HardMode` toggles, keyed by the conf's boss names so the
   banner joins them against the boss the trace names. A kill with the toggle off is not a hard-mode
   kill — that disqualified the only kill in five Thorim pulls on 2026-09-12.

@@ -149,7 +149,8 @@ def main() -> int:
     parser.add_argument(
         "--since",
         metavar="REF",
-        help="commit-ish or ISO time the build must be newer than; naming one makes it disqualify",
+        help="commit-ish or ISO time (local without an offset) the build must be newer than; "
+             "naming one makes it disqualify",
     )
     parser.add_argument(
         "--hardmode",
