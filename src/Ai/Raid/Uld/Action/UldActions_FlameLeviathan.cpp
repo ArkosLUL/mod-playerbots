@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "AiObjectContext.h"
+#include "CharmInfo.h"
 #include "DBCEnums.h"
 #include "GameObject.h"
 #include "Group.h"
@@ -154,10 +155,47 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
     return false;
 }
 
+// A barrel lobs for 1-3 s, so the stack read off the aura lags every cast. A landing shows on our own
+// aura as a stack gained or the duration jumping back up, and the last one timed is the lead a refresh
+// is thrown with.
+Aura* FlameLeviathanVehicleAction::TrackBarrels(Unit* target)
+{
+    Aura* own = target->GetAura(SPELL_FL_BLUE_PYRITE_DOT, vehicleBase_->GetGUID());
+    uint8 const stacks = own ? own->GetStackAmount() : 0;
+    int32 const duration = own ? own->GetDuration() : 0;
+    uint32 const now = getMSTime();
+
+    if (target->GetGUID() != barrelTarget_)
+    {
+        barrelTarget_ = target->GetGUID();
+        barrelsInFlight_.clear();
+    }
+    else if (own && !barrelsInFlight_.empty() &&
+             (stacks > lastPyriteStacks_ || duration > lastPyriteDurationMs_ + 250))
+    {
+        barrelLeadMs_ = std::clamp<uint32>(getMSTimeDiff(barrelsInFlight_.front(), now), 500,
+                                           ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS);
+        size_t const landed = std::min<size_t>(std::max(int(stacks) - int(lastPyriteStacks_), 1), barrelsInFlight_.size());
+        barrelsInFlight_.erase(barrelsInFlight_.begin(), barrelsInFlight_.begin() + landed);
+    }
+
+    barrelsInFlight_.erase(std::remove_if(barrelsInFlight_.begin(), barrelsInFlight_.end(),
+                                          [now](uint32 cast)
+                                          { return getMSTimeDiff(cast, now) >= ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS; }),
+                           barrelsInFlight_.end());
+
+    lastPyriteStacks_ = stacks;
+    lastPyriteDurationMs_ = duration;
+    return own;
+}
+
 bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
 {
     if (!target)
         return false;
+
+    // Ahead of the thaw, which returns early: a landing nobody reads is timed out as a lost barrel.
+    Aura* own = TrackBarrels(target);
 
     // Thawing outranks damage: a frozen vehicle is a full minute of nothing, and Hurl Boulder is free.
     // It is aimed at the ally on purpose - the boulder's blast is enemy-only, and the Flames it
@@ -169,22 +207,68 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
             return true;
 
     // Our own barrel stack, not the raid's: every demolisher carries its own Blue Pyrite aura, and
-    // reading the pooled one would let one bot coast on another's refreshes.
-    Aura* own = target->GetAura(SPELL_FL_BLUE_PYRITE_DOT, vehicleBase_->GetGUID());
-    bool const needBarrel = !own || own->GetDuration() <= 5000 || own->GetStackAmount() < 10;
+    // reading the pooled one would let one bot coast on another's refreshes. Barrels go on him only,
+    // since the tank never refills itself; adds and trash get boulders.
+    char const* barrel = "not boss";
+    bool wantBarrel = false;
+    if (target->GetEntry() == NPC_FLAME_LEVIATHAN)
+    {
+        uint32 const energy = vehicleBase_->GetPower(POWER_ENERGY);
+        uint32 const stacks = std::min<uint32>((own ? own->GetStackAmount() : 0) + barrelsInFlight_.size(),
+                                               ULDUAR_FL_PYRITE_MAX_STACKS);
+        uint32 const burst = energy >= (ULDUAR_FL_PYRITE_MAX_STACKS - stacks) * ULDUAR_FL_PYRITE_BARREL_COST +
+                                           ULDUAR_FL_PYRITE_REFRESH_RESERVE
+                                 ? ULDUAR_FL_PYRITE_MAX_STACKS
+                                 : ULDUAR_FL_PYRITE_BURST_STACKS;
+
+        uint32 const lead = barrelLeadMs_ ? barrelLeadMs_ : ULDUAR_FL_PYRITE_FLIGHT_MS;
+
+        if (energy < ULDUAR_FL_PYRITE_BARREL_COST)
+            barrel = "dry";
+        else if (stacks < burst)
+        {
+            barrel = "burst";
+            wantBarrel = true;
+        }
+        else if (own && barrelsInFlight_.empty() &&
+                 own->GetDuration() <= int32(lead + ULDUAR_FL_PYRITE_REFRESH_SLACK_MS))
+        {
+            barrel = "refresh";
+            wantBarrel = true;
+        }
+        else
+            barrel = "hold";
+    }
+
+    // Our own cooldown and the GCD a boulder shares are waits, not refusals, so only a cast the core
+    // turned down (range, facing, LOS) reads as "fail".
+    SpellInfo const* barrelInfo = sSpellMgr->GetSpellInfo(SPELL_FL_HURL_PYRITE_BARREL);
+    CharmInfo* charm = vehicleBase_->GetCharmInfo();
+    bool const ready = barrelInfo && !vehicleBase_->HasSpellCooldown(SPELL_FL_HURL_PYRITE_BARREL) &&
+                       !(charm && charm->GetGlobalCooldownMgr().HasGlobalCooldown(barrelInfo));
+
+    bool thrown = false;
+    if (wantBarrel && ready)
+    {
+        thrown = CastVehicle(SPELL_FL_HURL_PYRITE_BARREL, target);
+        if (thrown)
+            barrelsInFlight_.push_back(getMSTime());
+        else
+            barrel = "fail";
+    }
 
     // Stacks only, never the duration: the duration ticks every pass and would emit a note a tick.
     // Read off the aura rather than inferred from tick damage, which is what made the first pass at
     // this report stacks dropping one at a time - they cannot; the aura refreshes or it falls off
     // whole, and partially resisted ticks were rounding into the wrong bucket.
     if (RaidObs::Active())
+    {
         RaidObs::NoteDerived(bot, "fl.pyrite", std::to_string(own ? own->GetStackAmount() : 0));
+        RaidObs::NoteDerived(bot, "fl.barrel", barrel);
+    }
 
-    // The demolisher does not regenerate, so a full tank is 20 barrels. Below the reserve it drops
-    // to free boulders and keeps enough pyrite for the gunner's Increased Speed when Pursued lands.
-    if (needBarrel && vehicleBase_->GetPower(POWER_ENERGY) >= ULDUAR_FL_PYRITE_RESERVE)
-        if (CastVehicle(SPELL_FL_HURL_PYRITE_BARREL, target))
-            return true;
+    if (thrown)
+        return true;
 
     // Pyrite is this seat's job, so adds only get what the barrel does not want. Ram is the
     // exception: it is free, it knocks back, and it covers the 15 yd an add has to be inside to be
@@ -195,7 +279,7 @@ bool FlameLeviathanVehicleAction::DemolisherAction(Unit* target)
             if (CastVehicle(SPELL_FL_DEMOLISHER_RAM, add, 4000))
                 return true;
 
-    if (!needBarrel)
+    if (!wantBarrel)
         if (Unit* add = FlameLeviathanBestAdd(botAI, vehicleBase_, ULDUAR_FL_HURL_BOULDER_MIN_RANGE,
                                               ULDUAR_FL_HURL_BOULDER_MAX_RANGE, ULDUAR_FL_CANNON_SPLASH))
             if (CastVehicle(SPELL_FL_HURL_BOULDER, add))
@@ -229,14 +313,13 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
             if (!crate || crate->GetEntry() != NPC_FL_PYRITE_CONTAINER)
                 continue;
 
-            if (crate->GetDistance(bot) >= ULDUAR_FL_CRATE_GRAB_RANGE || FlameLeviathanCrateClaimed(bot, guid))
+            // No claim: spell_vehicle_grab_pyrite credits every hit until the crate despawns, and the
+            // credit goes to the grabbing gunner's own demolisher, so two gunners both gain from it.
+            if (crate->GetDistance(bot) >= ULDUAR_FL_CRATE_GRAB_RANGE)
                 continue;
 
             if (CastVehicle(SPELL_FL_GRAB_CRATE, crate))
-            {
-                FlameLeviathanClaimCrate(bot, guid);
                 return true;
-            }
         }
     }
 
@@ -499,7 +582,7 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
     }
 
     if (vehicleBase_->GetEntry() == NPC_SALVAGED_DEMOLISHER &&
-        vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_PYRITE_RESERVE)
+        vehicleBase_->GetPower(POWER_ENERGY) < ULDUAR_FL_CRATE_DETOUR_ENERGY)
         if (DetourToCrate(boss))
         {
             branch("crate");
@@ -534,7 +617,7 @@ Unit* FlameLeviathanDriveAction::NearestCrate(float radius)
         if (!crate || crate->GetEntry() != NPC_FL_PYRITE_CONTAINER)
             continue;
 
-        if (vehicleBase_->GetExactDist2d(crate) > radius || FlameLeviathanCrateClaimed(bot, guid))
+        if (vehicleBase_->GetExactDist2d(crate) > radius)
             continue;
 
         if (!nearest || vehicleBase_->GetExactDist2d(crate) < vehicleBase_->GetExactDist2d(nearest))

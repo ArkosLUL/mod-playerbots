@@ -3,7 +3,7 @@
 
     flame_leviathan.py <file>            every section
     flame_leviathan.py <file> --hulls    why the vehicles died, crews on foot, drive branches, Pursued
-    flame_leviathan.py <file> --pyrite   Blue Pyrite stacks per demolisher, and the crate ledger
+    flame_leviathan.py <file> --pyrite   Blue Pyrite per demolisher: stacks, barrel decisions, losses, crates
     flame_leviathan.py <file> --ram      Battering Ram exposure
     flame_leviathan.py <file> --fury     Hodir's Fury: chase, fuse, strike, and the dodge scan
     flame_leviathan.py <file> --inferno  Mimiron's Inferno trail, measured to each hull's reach
@@ -32,6 +32,13 @@ adds both object sizes: a siege engine (7.7) burns out to 17.1 yd from a patch c
 `npc_freya_ward_summon` keeps each add until it dies and zone-engages it. That binding is world DB
 update 2026_09_10_03; without it the adds run SmartAI and despawn at their summon duration, 3 s for a
 Ward of Life and 10 s for a Lasher. `--adds` and `--corners` detect that and say so.
+
+**Blue Pyrite (68605)** is one stack per landed Hurl Pyrite Barrel, 10 s, 10 stacks, each landing
+resetting the duration. `fl.barrel` names the driver's decision: `burst`, `refresh`, `hold`, `dry` (no
+energy), `fail` (the core refused the cast: range, facing, LOS) or `not boss`. `--pyrite` blames every
+stack that falls to 0 on the worst decision in the 10 s before it, and counts barrels and crate credits
+off the demolisher's v13 power column. Every Grab Crate hit credits +25 until the crate despawns
+1300 ms later, repeats included.
 
 **Flame Vents (62396)** is a 10 s self-channel every 20 s that ticks 63847 eleven times. Only
 Electroshock stops it (`boss_flame_leviathan.cpp` breaks the channel on spell 62522 hitting him), so
@@ -103,9 +110,14 @@ VENT_GAP_MS = 4000              # ticks are ~1 s apart, so a longer gap is a new
 INFERNO_SPELL = 62910           # the ground fire, a dynamic object rather than a creature
 
 GRAB_CRATE = 62482
-CRATE_CLAIM_MS = 1300           # ULDUAR_FL_CRATE_CLAIM_MS: spell_vehicle_grab_pyrite's despawn delay
+CRATE_CREDIT_SPELL = 62496      # cast once per Grab Crate hit, repeats on the same crate included
+CRATE_DESPAWN_MS = 1300         # spell_vehicle_grab_pyrite's despawn delay
 CRATE_GRAB_CEILING = 75
+CRATE_CREDIT = 25
 BARREL_RANGE = 70.0
+BARREL_COST = 5
+BARREL_STATES = ("burst", "refresh", "hold", "dry", "fail", "not boss")
+LOSS_WINDOW_MS = 10000          # Blue Pyrite's duration: whatever stopped the refresh happened inside it
 
 DRIVE_ACTION = "flame leviathan drive"
 VENT_ACTION = "flame leviathan interrupt vents"
@@ -543,7 +555,7 @@ def show_pursued(fl: Fight) -> None:
 # --pyrite
 # ---------------------------------------------------------------------------------------------------
 
-def crate_duplicates(casts: list[dict], claim_ms: int = CRATE_CLAIM_MS) -> dict[str, int]:
+def crate_duplicates(casts: list[dict], despawn_ms: int = CRATE_DESPAWN_MS) -> dict[str, int]:
     """A Grab Crate ledger from `cast` rows: every grab after the first on the same crate, split by
     whether the same gunner or another one made it, and whether it fell inside the despawn delay."""
     ledger = {"casts": len(casts), "crates": 0, "same": 0, "cross": 0, "later": 0}
@@ -554,7 +566,7 @@ def crate_duplicates(casts: list[dict], claim_ms: int = CRATE_CLAIM_MS) -> dict[
     for grabs in by_crate.values():
         first = grabs[0]
         for grab in grabs[1:]:
-            if grab["t"] - first["t"] > claim_ms:
+            if grab["t"] - first["t"] > despawn_ms:
                 ledger["later"] += 1
             elif grab.get("s") == first.get("s"):
                 ledger["same"] += 1
@@ -563,24 +575,69 @@ def crate_duplicates(casts: list[dict], claim_ms: int = CRATE_CLAIM_MS) -> dict[
     return ledger
 
 
+def energy_steps(track: list[tuple[int, float]]) -> tuple[int, int]:
+    """`(barrels, credits)` off a demolisher's power track `[(t, energy)]`. Nothing else spends its
+    energy and nothing but a crate refills it, so a drop is barrels at 5 each and a rise is a credit,
+    counted once per 25 because the cap at 100 can clip one."""
+    barrels = credits = 0
+    for (_, before), (_, after) in zip(track, track[1:]):
+        delta = after - before
+        if delta <= -1.0:
+            barrels += max(1, round(-delta / BARREL_COST))
+        elif delta >= 1.0:
+            credits += max(1, math.ceil(delta / CRATE_CREDIT - 1e-6))
+    return barrels, credits
+
+
+def stack_losses(pyrite, barrel, window_ms: int = LOSS_WINDOW_MS) -> list[tuple[int, int, int, str | None]]:
+    """`(t, stacks, landed, cause)` for every fall of `fl.pyrite` spans to 0, `landed` being when the
+    stack that fell was reached. The cause is the worst `fl.barrel` state held in the window before the
+    fall: `dry`, then `fail`, then `not boss`. Anything else means the refresh landed too late or never
+    ran (`late`). None when no `fl.barrel` state covers the window."""
+    out = []
+    previous, reached = 0, 0
+    for value, start, _stop in pyrite:
+        count = int(value) if value.isdigit() else 0
+        if count == 0 and previous:
+            seen = {held for held, begin, stop in barrel or () if begin < start and stop > start - window_ms}
+            cause = None
+            if seen:
+                cause = next((state for state in ("dry", "fail", "not boss") if state in seen), "late")
+            out.append((start, previous, reached, cause))
+        previous, reached = count, start
+    return out
+
+
+def span_shares(spans, start: int, stop: int) -> dict[str, float]:
+    """Share of `[start, stop)` each value held, clipped to the window."""
+    held: dict[str, float] = collections.Counter()
+    for value, begin, end in spans or ():
+        overlap = min(end, stop) - max(begin, start)
+        if overlap > 0:
+            held[value] += overlap
+    return {value: amount / (stop - start) for value, amount in held.items()} if stop > start else {}
+
+
 def show_pyrite(trace: Trace) -> int:
     fl = fight(trace)
     life = fl.hull_life()
     crews = fl.crews()
-    print("Blue Pyrite: stacks per demolisher driver, and what the crates were worth\n")
+    print("Blue Pyrite: stacks per demolisher driver, what stopped them, and what the crates were worth\n")
 
     stacks = holder_spans(trace, "fl.pyrite", fl.end)
+    decisions = holder_spans(trace, "fl.barrel", fl.end)
     if not stacks:
         print("  no fl.pyrite notes in this trace")
     else:
         print(f"  {'driver':14s} {'held':>19s} {'mean':>5s} {'at 10':>6s} {'at 0':>5s} {'worst 0':>8s}"
               f" {'d(boss)':>8s} {'>70 yd':>7s}")
-    windows: dict[int, int] = {}
+    windows: dict[int, tuple[int, int]] = {}
+    areas: dict[int, float] = {}
     for bot, track in sorted(stacks.items(), key=lambda kv: trace.name(kv[0])):
         hull = crews.get(bot)
         stop = min(fl.deaths.get(bot, fl.end), life[hull]["gone"] if hull in life else fl.end, fl.end)
         start = track[0][1]
-        windows[bot] = stop
+        windows[bot] = (start, stop)
         span = (stop - start) / 1000.0
         if span <= 0:
             continue
@@ -598,12 +655,63 @@ def show_pyrite(trace: Trace) -> int:
                 worst = max(worst, run)
             else:
                 run = 0.0
+        areas[bot] = area
         ranges = [math.hypot(f.hulls[hull][0] - f.boss[0], f.hulls[hull][1] - f.boss[1])
                   for f in fl.frames if start <= f.t <= stop and hull in f.hulls]
         far = f"{100 * sum(1 for d in ranges if d > BARREL_RANGE) / len(ranges):6.0f}%" if ranges else "      -"
         middle = f"{statistics.median(ranges):8.0f}" if ranges else "       -"
         print(f"  {trace.name(bot):14s} {clock(start):>9s}-{clock(stop):>9s} {area / span:5.1f} {100 * at10 / span:5.0f}%"
               f" {100 * at0 / span:4.0f}% {worst:7.1f}s {middle} {far}")
+
+    if stacks:
+        print("\n  barrel decisions (fl.barrel, share of the driver's time) and energy (v13 power column):")
+        print(f"  {'driver':14s}" + "".join(f" {state:>8s}" for state in BARREL_STATES)
+              + f" {'barrels/min':>12s} {'energy/100 stack-s':>19s} {'credits':>8s}")
+        for bot in sorted(windows, key=trace.name):
+            start, stop = windows[bot]
+            if stop <= start:
+                continue
+            hull = crews.get(bot)
+            shares = span_shares(decisions.get(bot), start, stop)
+            cells = "".join(f" {100 * shares[state]:7.0f}%" if state in shares else f" {'-':>8s}"
+                            for state in BARREL_STATES)
+            power = [(f.t, f.hulls[hull][5]) for f in fl.frames
+                     if start <= f.t <= stop and hull in f.hulls and f.hulls[hull][5] is not None]
+            if power:
+                barrels, credits = energy_steps(power)
+                rate = f"{barrels / ((stop - start) / 60000.0):12.1f}"
+                spend = (f"{100 * barrels * BARREL_COST / areas[bot]:19.1f}" if areas.get(bot)
+                         else f"{'-':>19s}")
+                gained = f"{credits:8d}"
+            else:
+                rate, spend, gained = f"{'pre-v13':>12s}", f"{'-':>19s}", f"{'-':>8s}"
+            print(f"  {trace.name(bot):14s}{cells} {rate} {spend} {gained}")
+
+        # Below 10 the last landing is when the barrels stopped, and the hull often drifts out of range
+        # only afterwards. A full stack's last refresh does not show, so that one reads the whole window.
+        print(f"\n  stacks lost (fl.pyrite fell to 0), blamed on fl.barrel in the {LOSS_WINDOW_MS // 1000} s before;"
+              " d(boss) when the barrels stopped:")
+        causes: collections.Counter = collections.Counter()
+        for bot in sorted(windows, key=trace.name):
+            start, stop = windows[bot]
+            hull = crews.get(bot)
+            for when, count, landed, cause in stack_losses(stacks[bot], decisions.get(bot)):
+                if when > stop:
+                    break
+                since = landed if count < 10 else when - LOSS_WINDOW_MS
+                until = landed + 1000 if count < 10 else when
+                ranges = [math.hypot(f.hulls[hull][0] - f.boss[0], f.hulls[hull][1] - f.boss[1])
+                          for f in fl.frames if since <= f.t <= until and hull in f.hulls]
+                distance = statistics.median(ranges) if ranges else None
+                if cause is None:
+                    cause = ">70 yd, no probe" if distance is not None and distance > BARREL_RANGE else "unknown, no probe"
+                causes[cause] += 1
+                shown = f"{distance:5.0f} yd" if distance is not None else "     - "
+                print(f"     {trace.name(bot):14s} {clock(when):>9s}  from {count:2d}  {cause:18s} d(boss) {shown}")
+        if causes:
+            print("     by cause: " + ", ".join(f"{cause} {count}" for cause, count in causes.most_common()))
+        else:
+            print("     none")
 
     if stacks and fl.frames:
         print("\n  fleet stacks against boss health per 30 s:")
@@ -612,7 +720,7 @@ def show_pyrite(trace: Trace) -> int:
             samples = []
             for when in range(begin, min(end, fl.end), 1000):
                 samples.append(sum(int(value_at(track, when, "0")) if value_at(track, when, "0").isdigit() else 0
-                                   for bot, track in stacks.items() if when < windows.get(bot, fl.end)))
+                                   for bot, track in stacks.items() if when < windows.get(bot, (0, fl.end))[1]))
             health = [f.boss_hp for f in fl.frames if begin <= f.t < end and f.boss_hp is not None]
             # A wipe resets him to full inside the last window, which is not negative damage.
             if samples and len(health) > 1 and health[-1] <= health[0]:
@@ -626,9 +734,10 @@ def show_pyrite(trace: Trace) -> int:
         return 0
     ledger = crate_duplicates(casts)
     repeats = ledger["same"] + ledger["cross"]
-    print(f"  Grab Crate: {ledger['casts']} bot casts on {ledger['crates']} crates; {repeats} on a crate already"
-          f" grabbed ({100 * repeats / ledger['casts']:.0f}%), same gunner {ledger['same']},"
-          f" another {ledger['cross']}; {ledger['later']} more than {CRATE_CLAIM_MS} ms after the first")
+    credits = sum(1 for rec in trace.of("cast") if rec.get("sp") == CRATE_CREDIT_SPELL and rec.get("s") not in trace.humans)
+    print(f"  Grab Crate: {ledger['casts']} bot casts on {ledger['crates']} crates, {credits} credits;"
+          f" {repeats} repeats inside the {CRATE_DESPAWN_MS} ms despawn, each credited"
+          f" (same gunner {ledger['same']}, another {ledger['cross']}); {ledger['later']} later")
 
     energy = []
     for rec in casts:

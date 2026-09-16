@@ -640,6 +640,26 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual(flame_leviathan.crate_duplicates(casts),
                          {"casts": 5, "crates": 2, "same": 1, "cross": 1, "later": 1})
 
+    def test_energy_steps_count_barrels_and_credits(self):
+        # Two barrels between samples, a clipped credit at the cap, and float noise that is neither.
+        track = [(0, 100.0), (250, 95.0), (500, 85.0), (750, 85.4), (1000, 100.0), (1250, 75.0), (1500, 100.0)]
+        self.assertEqual(flame_leviathan.energy_steps(track), (8, 2))
+
+    def test_stack_losses_blame_the_worst_decision_before_the_fall(self):
+        pyrite = [("0", 0, 1000), ("10", 1000, 30000), ("0", 30000, 40000), ("4", 40000, 50000),
+                  ("0", 50000, 70000), ("6", 70000, 80000), ("0", 80000, 99999)]
+        barrel = [("burst", 1000, 5000), ("hold", 5000, 22000), ("fail", 22000, 23000), ("hold", 23000, 45000),
+                  ("dry", 45000, 60000), ("hold", 60000, 99999)]
+        self.assertEqual(flame_leviathan.stack_losses(pyrite, barrel),
+                         [(30000, 10, 1000, "fail"), (50000, 4, 40000, "dry"), (80000, 6, 70000, "late")])
+
+    def test_stack_losses_without_the_probe_have_no_cause(self):
+        self.assertEqual(flame_leviathan.stack_losses([("3", 0, 5000), ("0", 5000, 9000)], None), [(5000, 3, 0, None)])
+
+    def test_span_shares_clip_to_the_window(self):
+        spans = [("burst", 0, 2000), ("hold", 2000, 10000)]
+        self.assertEqual(flame_leviathan.span_shares(spans, 1000, 5000), {"burst": 0.25, "hold": 0.75})
+
     def test_inferno_reach_counts_both_object_sizes(self):
         self.assertAlmostEqual(flame_leviathan.inferno_reach(9.0, flame_leviathan.SIEGE), 17.089)
         self.assertAlmostEqual(flame_leviathan.inferno_reach(9.0, flame_leviathan.CHOPPER), 10.389)

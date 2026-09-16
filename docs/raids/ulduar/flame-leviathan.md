@@ -42,16 +42,41 @@ gunner's Grab Crate runs `62496 → 62473 Reload Ammo` = `SPELL_EFFECT_ENERGIZE`
 demolisher**. Anti-Air Rocket reaches 1000 yd and lifts spawn far outside the arena, so targets are
 restricted to the arena box — a crate that lands across the zone is a crate nobody drives to.
 
-**One grab per crate.** `spell_vehicle_grab_pyrite` energizes, then despawns the crate 1300 ms later,
-so a spent crate stays grabbable: 46% / 51% of bot grabs on 2026-09-16 hit one. `FlameLeviathanClaimCrate`
-claims it instance-wide for that long, which covers a second gunner too. A demolisher under the pyrite
-reserve detours only to 41 yd of a crate (the gunner grabs from 49), and only while that stop stays
-within his reach + `FlameLeviathanDemolisherStandDist` + the deadband of his centre: unleashed, starved
-demolishers sat past the barrel's 70 yd for 22–47% of a pull.
+**Every grab credits, repeats included.** `spell_vehicle_grab_pyrite` runs on each 62482 hit and only
+despawns the crate 1300 ms later. The gunner's 62496 goes to the nearest 33167 (`conditions`
+13/1/62496), its own seat, which force-casts 62473: +25 to itself (`TARGET_UNIT_CASTER`) and +25 to
+its vehicle (`TARGET_UNIT_VEHICLE`). Every repeat grab on 2026-09-16 drew its own 62496 (31/31, 33/33),
+so gunners hold no claim: another demolisher's repeat is real energy, and the same gunner's mostly
+overflows past 100. The seat pays for Increased Speed, so nothing reserves the demolisher's energy. A
+demolisher under `ULDUAR_FL_CRATE_DETOUR_ENERGY` detours only to 41 yd of a crate (the gunner grabs
+from 49), and only while that stop stays within his reach + `FlameLeviathanDemolisherStandDist` + the
+deadband of his centre: unleashed, starved demolishers sat past the barrel's 70 yd for 22–47% of a pull.
 
-The mechanic seat's own 100 is **never** refilled (`62473` targets the demolisher, not the seat), so
-its Increased Speed is capped at four casts for the fight. Ample: a given demolisher takes Pursued
-once or twice.
+**Hurl Pyrite Barrel** needs no ammo (no `CasterAuraSpell`), only 5 energy. It lands `62489` (54000 in
+20 yd), which applies `68605 Blue Pyrite`: 10 s, 10 stacks, one per landing. Every landing also resets
+the duration, at 10 stacks too (`Aura::ModStackAmount`), and a periodic damage refresh keeps its tick
+timer (`AuraEffect::CalculatePeriodic`), so a refresh landing just before expiry loses no tick. Each
+demolisher carries its **own** aura instance, read through the caster-scoped overload.
+
+**Burst to 6, then refresh just before expiry.** On a ~9 s refresh cycle, a refresh at 10 stacks buys
+~90 stack-seconds, while burst barrel *k* only brings stack *k* forward by the cycles it skips: #2 81,
+#6 45, #7 36, #10 9. `DemolisherAction` bursts to `ULDUAR_FL_PYRITE_BURST_STACKS` (6), or to 10 while
+energy covers the rest plus `ULDUAR_FL_PYRITE_REFRESH_RESERVE` (four refreshes), counting barrels in
+flight. It then throws one refresh once the duration is down to the last timed flight +
+`ULDUAR_FL_PYRITE_REFRESH_SLACK_MS`, each adding a stack on the way to 10. A landing is timed off our
+own aura: a stack gained, or the duration jumping back up. Barrels go on him only. The rule this
+replaced refreshed at ≤5 s left and ignored barrels in flight, so 2–3 went out per ~8 s cycle at 10
+stacks (~15–20 a minute against ~7), behind a 30-energy reserve that idled 5 barrels. On 2026-09-16
+barrels stopped at 3–8 stacks in range, the stack expired exactly 10 s after the last landing, and
+throwing resumed 1.3–3.1 s after the gunner's next credit.
+
+**Read stacks off `fl.pyrite`, never tick damage.** Ticks arrive partially reduced (a parallel series
+at 0.8×), so `amount / 12120` rounds a full stack into a lower bucket and invents one-stack drops the
+aura cannot produce: it refreshes whole or falls off whole. Use `amount + resisted`, or `fl.pyrite`
+(`GetStackAmount`). Tick *count* needs no correction and is the number that matters: uptime, one tick
+per second, measured at 20–75% per demolisher over five wipes. `fl.barrel` names each decision
+(`burst`, `refresh`, `hold`, `dry`, `fail`, `not boss`), and `--pyrite` blames every stack lost on the
+worst one in the 10 s before it.
 
 `spell_vehicle_grab_pyrite`'s **chopper** branch loads a crate into the chopper's rear seat to ferry
 to other vehicles. That is the retail supply line and no bot code uses it — see the gap list.
@@ -134,14 +159,6 @@ despite the name**, and never ignites anything.
   facing, so it only escapes when he is already behind us.
 - **Shield Generator 64677** is `SCHOOL_ABSORB` **15** for 5s on a 60s cooldown. Wired because it is
   free, not because it matters.
-- **Hurl Pyrite Barrel needs no ammo** — no `CasterAuraSpell`, 5 energy is the only gate. It triggers
-  `62489` (54000 AoE) which applies stacking `68605 Blue Pyrite` (10s, 10 stacks). Each demolisher
-  carries its **own** aura instance, so the refresh check reads the caster-scoped overload. **Do not
-  infer the stack count from tick damage**: ticks arrive partially reduced (a parallel series at
-  0.8×), so `amount / 12120` rounds a full stack into a lower bucket and invents one-stack drops the
-  aura cannot produce — it refreshes whole or falls off whole. Use `amount + resisted`, or read the
-  `fl.pyrite` probe, which emits `GetStackAmount`. Tick *count* needs no correction and is the number
-  that matters: uptime, one tick per second, measured at 20–75% per demolisher over five wipes.
 
 ## Vehicle spells that must be self-cast
 
@@ -156,7 +173,7 @@ side of the chopper.
 
 `FlameLeviathanDriveAction` is the only thing that steers a vehicle, with internal precedence:
 kite when Pursued → clear a hard-mode hazard → back out of Battering Ram → drive to a corner post →
-detour to a crate below the pyrite reserve → hold station, the tar lead included. `fl.drive` names
+detour to a crate below `ULDUAR_FL_CRATE_DETOUR_ENERGY` → hold station, the tar lead included. `fl.drive` names
 the branch that owned each tick. Hazard clearance used to be a separate action at a higher priority; that is
 the two-owner bounce with the priorities swapped, so it was folded in rather than re-ordered. The
 action is wired to two trigger nodes, `drive urgent` at `ACTION_RAID + 3` and the routine one at
@@ -455,8 +472,9 @@ means anything. Reproduce with `flame_leviathan.py <trace>`.
 | first accepted kite move in those | +0.9 to +7.3 s | +0.3 to +4.8 s | under 0.5 s |
 | Fury scan time against a reticle that could not strike | 88% | 89% | 0 |
 | Fury strikes that caught a hull | 0 of 21 | 0 of 11 | 0 |
-| bot Grab Crate casts on a spent crate | 31 of 68 | 32 of 63 | under 5% |
+| bot Grab Crate repeats inside the despawn, each credited | 31 of 68 | 32 of 63 | - |
 | demolisher mean stacks / frames past 70 yd | 3.5–7.2 / 23–47% | 2.8–7.4 / 22–31% | past 70 yd under 15% |
+| stacks lost with the demolisher in range when barrels stopped | 8 of 15 | 4 of 8 | `late` 0–1 per pull |
 | first siege engine at a post | 0:56 | 0:47 | before wave 1 at 0:34 |
 
 ## Known gaps
@@ -481,6 +499,10 @@ means anything. Reproduce with `flame_leviathan.py <trace>`.
 - **Vezax's `hold cast outside field` multiplier fires during this fight** and vetoed resurrections on
   2026-09-16: a Vezax gate leak.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
+- **The pyrite refresh timing is unverified in the field.** `ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s)
+  assumes ~1.1 s between decisions: `--pyrite` losses blamed on `late` mean it runs short, and on `fail`
+  a refused refresh, which costs the whole stack. The seat's +25 is read off the DBC and `conditions`,
+  not a trace.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**
   (`PlayerbotAI.h:558`), so there is no ground-targeting and tar cannot be ignited deliberately.

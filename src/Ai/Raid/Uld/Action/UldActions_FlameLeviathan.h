@@ -12,6 +12,7 @@
 #include "Vehicle.h"
 
 #include <optional>
+#include <vector>
 
 //
 //  Flame Leviathan
@@ -32,6 +33,9 @@ protected:
     bool SiegeEngineTurretAction(Unit* target);
     bool ChopperAction(Unit* target);
 
+    // Reads our own Blue Pyrite on the target and matches landings to the barrels in flight.
+    Aura* TrackBarrels(Unit* target);
+
     // Casts and records the cooldown the core will not apply itself: Spell::SendSpellCooldown
     // returns early for creature casters, so without this the action re-fires every tick.
     bool CastVehicle(uint32 spellId, Unit* target, uint32 cooldownMs = 1000);
@@ -39,6 +43,13 @@ protected:
     Unit* FindMechanolift();
 
     Unit* vehicleBase_ = nullptr;
+
+    // Cast times of barrels not yet seen landing, and the last flight timed.
+    std::vector<uint32> barrelsInFlight_;
+    uint32 barrelLeadMs_ = 0;  // ULDUAR_FL_PYRITE_FLIGHT_MS until a landing has been timed
+    ObjectGuid barrelTarget_;
+    uint8 lastPyriteStacks_ = 0;
+    int32 lastPyriteDurationMs_ = 0;
 };
 
 class FlameLeviathanEnterVehicleAction : public MovementAction

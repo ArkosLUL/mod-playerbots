@@ -7,7 +7,6 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERFLAMELEVIATHAN_H
 #define PLAYERBOTS_ULDENCOUNTERFLAMELEVIATHAN_H
 
-#include "ObjectGuid.h"
 #include "Position.h"
 #include "UldData.h"
 
@@ -187,6 +186,24 @@ constexpr uint32 ULDUAR_FL_SPEED_BOOST_COST = 50;
 constexpr uint32 ULDUAR_FL_INCREASED_SPEED_COST = 25;
 constexpr uint32 ULDUAR_FL_PYRITE_BARREL_COST = 5;
 
+// Blue Pyrite 68605: 10 s, 10 stacks. Every barrel that lands adds a stack and resets the duration,
+// and a periodic damage refresh keeps its tick timer, so one landing just before expiry loses nothing.
+// A refresh at 10 stacks buys ~90 stack-seconds. A burst barrel only brings its stack forward by the
+// refreshes it skips: #6 45, #7 36, #10 9. So the burst stops at 6 unless the tank covers the rest of
+// it plus four refreshes (~36 s), and refreshes take the stack the rest of the way.
+constexpr uint32 ULDUAR_FL_PYRITE_MAX_STACKS = 10;
+constexpr uint32 ULDUAR_FL_PYRITE_BURST_STACKS = 6;
+constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_RESERVE = 20;
+
+// A refresh goes out this far ahead of the measured flight: the ~1.1 s between decisions plus the 1 s
+// GCD a boulder may have just started. Late loses the whole stack, early only a second or two of it.
+constexpr uint32 ULDUAR_FL_PYRITE_REFRESH_SLACK_MS = 2000;
+
+// A barrel lobs for 1-3 s. The first refresh leads by this until a landing has been timed, and a
+// barrel not seen landing within the timeout was lost.
+constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_MS = 3000;
+constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS = 5000;
+
 // Steam Rush charges this far along the hull's facing (62346, EffectRadiusIndex 21).
 constexpr float ULDUAR_FL_STEAM_RUSH_DIST = 35.0f;
 
@@ -272,14 +289,10 @@ constexpr uint32 ULDUAR_FL_CRATE_GRAB_CEILING = 75;
 // A yard inside Grab Crate's 50 yd range (62479).
 constexpr float ULDUAR_FL_CRATE_GRAB_RANGE = 49.0f;
 
-// spell_vehicle_grab_pyrite credits the energy and only then despawns the crate, 1300 ms later, so a
-// spent crate stays grabbable that long: 46-51% of bot grabs on 2026-09-16 hit one.
-constexpr uint32 ULDUAR_FL_CRATE_CLAIM_MS = 1300;
-
 // Demolishers do not regenerate energy (no UNIT_FLAG2_REGENERATE_POWER), so a full tank is 20
-// barrels and pyrite crates are the only refill. Barrel above the reserve, boulder below it; the
-// reserve is what keeps Increased Speed (25) affordable when Pursued lands.
-constexpr uint32 ULDUAR_FL_PYRITE_RESERVE = 30;
+// barrels and pyrite crates are the only refill. Below this a starved demolisher detours to a crate.
+// Nothing else needs the demolisher's energy: the mechanic seat pays for Increased Speed from its own.
+constexpr uint32 ULDUAR_FL_CRATE_DETOUR_ENERGY = 30;
 constexpr float ULDUAR_FL_CRATE_DETOUR_RADIUS = 60.0f;  // how far a starved demolisher leaves its band
 
 // Wall-hugging kite ring. The corners are inset off the walls so MoveTo has mesh to land on, and
@@ -401,11 +414,6 @@ bool FlameLeviathanInArena(Position const& pos, float margin = 0.0f);
 // Where a demolisher parks outward from his combat reach: the band, clamped so reach plus the
 // arrival deadband stays inside Hurl Pyrite Barrel's 70 yd.
 float FlameLeviathanDemolisherStandDist(Unit* boss);
-
-// One Grab Crate per crate. A claim lapses after ULDUAR_FL_CRATE_CLAIM_MS, by which time the crate is
-// gone.
-bool FlameLeviathanCrateClaimed(Player* bot, ObjectGuid crate);
-void FlameLeviathanClaimCrate(Player* bot, ObjectGuid crate);
 
 // How close a vehicle's centre can get to this hazard before it is hit. See ULDUAR_FL_FURY_RADIUS.
 float FlameLeviathanHazardReach(Unit* hazard, Unit* vehicle);

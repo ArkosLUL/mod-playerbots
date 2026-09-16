@@ -92,9 +92,6 @@ struct FlameLeviathanState
     std::unordered_map<ObjectGuid, uint32> furyStunnedMs;
     RaidObs::ObsGuidSet furyArmed{"fl.fury"};
 
-    // Pyrite crates already grabbed, and when.
-    std::unordered_map<ObjectGuid, uint32> crateClaims;
-
     uint32 scanMs = 0;
 };
 
@@ -229,7 +226,6 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         state.furyReticles.clear();
         state.furyStunnedMs.clear();
         state.furyArmed.clear();
-        state.crateClaims.clear();
         return;
     }
 
@@ -796,31 +792,6 @@ float FlameLeviathanDemolisherStandDist(Unit* boss)
 {
     return std::min(ULDUAR_FL_DEMOLISHER_BAND,
                     ULDUAR_FL_HURL_BOULDER_MAX_RANGE - boss->GetCombatReach() - 2.0f * ULDUAR_FL_ARRIVE_TOLERANCE);
-}
-
-bool FlameLeviathanCrateClaimed(Player* bot, ObjectGuid crate)
-{
-    FlameLeviathanState const& state = FlameLeviathanStateFor(bot);
-    auto const it = state.crateClaims.find(crate);
-    return it != state.crateClaims.end() && getMSTimeDiff(it->second, getMSTime()) < ULDUAR_FL_CRATE_CLAIM_MS;
-}
-
-void FlameLeviathanClaimCrate(Player* bot, ObjectGuid crate)
-{
-    FlameLeviathanState& state = FlameLeviathanStateFor(bot);
-    uint32 const now = getMSTime();
-
-    // Pruned by the only writer, so the map never holds more than the crates grabbed in the last
-    // claim window.
-    for (auto it = state.crateClaims.begin(); it != state.crateClaims.end();)
-    {
-        if (getMSTimeDiff(it->second, now) >= ULDUAR_FL_CRATE_CLAIM_MS)
-            it = state.crateClaims.erase(it);
-        else
-            ++it;
-    }
-
-    state.crateClaims[crate] = now;
 }
 
 namespace
