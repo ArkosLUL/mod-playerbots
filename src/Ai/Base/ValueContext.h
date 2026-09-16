@@ -137,6 +137,7 @@ public:
         creators["party member to heal"] = &ValueContext::party_member_to_heal;
         creators["healer low mana"] = &ValueContext::healer_low_mana;
         creators["party member to resurrect"] = &ValueContext::party_member_to_resurrect;
+        creators["party member to battle resurrect"] = &ValueContext::party_member_to_battle_resurrect;
         creators["current target"] = &ValueContext::current_target;
         creators["self target"] = &ValueContext::self_target;
         creators["group leader"] = &ValueContext::group_leader;
@@ -462,6 +463,10 @@ private:
     static UntypedValue* party_member_to_heal(PlayerbotAI* botAI) { return new PartyMemberToHeal(botAI); }
     static UntypedValue* healer_low_mana(PlayerbotAI* botAI) { return new HealerLowMana(botAI); }
     static UntypedValue* party_member_to_resurrect(PlayerbotAI* botAI) { return new PartyMemberToResurrect(botAI); }
+    static UntypedValue* party_member_to_battle_resurrect(PlayerbotAI* botAI)
+    {
+        return new PartyMemberToResurrect(botAI, "party member to battle resurrect", true);
+    }
     static UntypedValue* party_member_to_dispel(PlayerbotAI* botAI) { return new PartyMemberToDispel(botAI); }
     static UntypedValue* party_member_to_protect(PlayerbotAI* botAI) { return new PartyMemberToProtect(botAI); }
     static UntypedValue* party_member_to_protect_no_tank(PlayerbotAI* botAI)

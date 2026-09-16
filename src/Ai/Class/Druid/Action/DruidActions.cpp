@@ -197,10 +197,11 @@ std::vector<NextAction> CastReviveAction::getPrerequisites()
                              ResurrectPartyMemberAction::getPrerequisites());
 }
 
+// No reach prereq: isUseful already wants the target in range, and the inherited reach follows
+// the unfiltered rez target, so it could walk the druid to a soulstoned corpse.
 std::vector<NextAction> CastRebirthAction::getPrerequisites()
 {
-    return NextAction::merge({ NextAction("caster form") },
-                             ResurrectPartyMemberAction::getPrerequisites());
+    return { NextAction("caster form") };
 }
 
 bool CastRebirthAction::isUseful()

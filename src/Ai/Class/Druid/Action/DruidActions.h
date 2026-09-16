@@ -84,6 +84,7 @@ class CastRebirthAction : public ResurrectPartyMemberAction
 public:
     CastRebirthAction(PlayerbotAI* botAI) : ResurrectPartyMemberAction(botAI, "rebirth") {}
 
+    std::string const GetTargetName() override { return "party member to battle resurrect"; }
     std::vector<NextAction> getPrerequisites() override;
     bool isUseful() override;
 };

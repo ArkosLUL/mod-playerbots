@@ -165,7 +165,7 @@ class CombatPartyMemberDeadTrigger : public Trigger
 {
 public:
     CombatPartyMemberDeadTrigger(PlayerbotAI* ai) : Trigger(ai, "combat party member to resurrect", 1) {}
-    std::string const GetTargetName() override { return "party member to resurrect"; }
+    std::string const GetTargetName() override { return "party member to battle resurrect"; }
     bool IsActive() override;
 };
 

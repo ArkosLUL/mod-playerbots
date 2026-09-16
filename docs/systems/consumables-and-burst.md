@@ -265,6 +265,26 @@ Ids to confirm against the DB rather than trust: Soulwell GO ~181621, Ritual of 
 (R1) / 58887 (R2), and the participant requirement, which lives in the ritual GO's
 `gameobject_template` row (`type = 18`, `GAMEOBJECT_TYPE_RITUAL`).
 
+## Battle rez
+
+With `BattleRezBossOnly` on, Druid Rebirth and a shaman's Reincarnation self-res wait for
+`AttackersValue::IsInBossFight` (an encounter `IN_PROGRESS`, or a boss-flagged group attacker).
+Soulstone self-res is never gated.
+
+**Rebirth skips anyone who can still get up on their own.** It targets
+`"party member to battle resurrect"`, which drops a corpse whose `PLAYER_SELF_RES_SPELL` is set
+(Soulstone or Reincarnation pending). Two traps:
+
+- The core does not clear that field on spirit release, so a ghost's value is stale: ghosts
+  (`PLAYER_FLAGS_GHOST`) stay eligible.
+- Filter in the value's predicate, not the trigger: `FindPartyMember` returns the first match, so a
+  soulstoned corpse would hide a second one that needs Rebirth.
+
+Out-of-combat rezzes keep the unfiltered `"party member to resurrect"`, deliberately: they cost
+nothing, and a human holding an unclicked soulstone would otherwise never get one. Rebirth has no
+reach prerequisite: `isUseful` already requires range, and the inherited reach follows the
+unfiltered target, so it could walk the druid to a soulstoned corpse.
+
 ## Config
 
 | Key | Default | Meaning |
@@ -272,3 +292,4 @@ Ids to confirm against the DB rather than trust: Soulwell GO ~181621, Ritual of 
 | `AiPlayerbot.BurstOnBossOnly` | 1 | Grouped bots hold burst for dungeon/world bosses instead of trash |
 | `AiPlayerbot.OffensivePotions` | 1 | Stock and use DPS offensive potions |
 | `AiPlayerbot.LimitGearExpansion` | 1 | Also gates the potion ladder by expansion |
+| `AiPlayerbot.BattleRezBossOnly` | 1 | Rebirth and Reincarnation self-res wait for a boss fight |
