@@ -6,6 +6,6 @@
 
 - **Never read a call site as proof of its effect:** a core call can be a no-op for the unit it names, behind a guard several frames down — `SetInCombatWithZone` leaves a friendly creature out of combat. Follow it to those guards before keying a bot on the state it is meant to set. See [docs/engine/pitfalls.md](docs/engine/pitfalls.md).
 
-- **Never read an empty search as proof:** spell behaviour is spread across the DBC, `spell_linked_spell` and `EffectTriggerSpell` chains well below the spellbook entry, so a clean negative usually means the wrong table. Check all three before calling a mechanic impossible. See [docs/engine/pitfalls.md](docs/engine/pitfalls.md).
+- **Never call a mechanic impossible from a partial check:** a stat comparison misses the unit's own spells (a siege engine "too slow" to escape carries Steam Rush), and a clean negative usually means the wrong table, since spell behaviour is spread across the DBC, `spell_linked_spell` and `EffectTriggerSpell` chains well below the spellbook entry. Check the unit's spellbook and all three first. See [docs/engine/pitfalls.md](docs/engine/pitfalls.md).
 
 - **Close a finished implementation cycle with `git add` + `git commit`**, no prompt needed. Stage only the files you changed: other sessions edit this tree at the same time.
