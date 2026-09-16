@@ -28,6 +28,7 @@
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
+#include "Timer.h"
 #include "WorldSession.h"
 #include "WorldSessionMgr.h"
 #include <algorithm>
@@ -66,6 +67,7 @@ private:
 
 std::unordered_set<ObjectGuid> BotInitGuard::botsBeingInitialized;
 std::unordered_map<ObjectGuid, uint32> PlayerbotHolder::botLoading;
+std::deque<std::shared_ptr<PlayerbotLoginQueryHolder>> PlayerbotHolder::pendingLogins;
 
 PlayerbotHolder::PlayerbotHolder() : PlayerbotAIBase(false) {}
 class PlayerbotLoginQueryHolder : public LoginQueryHolder
@@ -102,14 +104,16 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
     bool sameAccount = sPlayerbotAIConfig.allowAccountBots && accountId == masterAccountId;
     Guild* guild = masterPlayer ? sGuildMgr->GetGuildById(masterPlayer->GetGuildId()) : nullptr;
     bool sameGuild = sPlayerbotAIConfig.allowGuildBots && guild && guild->GetMember(playerGuid);
-    bool addClassBot = sRandomPlayerbotMgr.IsAddclassBot(playerGuid.GetCounter());
-    bool linkedAccount = sPlayerbotAIConfig.allowTrustedAccountBots && IsAccountLinked(accountId, masterAccountId);
+    // Cheap checks first: the add class and linked account checks each hit the DB synchronously.
+    bool ownerAllowed = isRndbot || sameAccount || sameGuild ||
+                        sRandomPlayerbotMgr.IsAddclassBot(playerGuid.GetCounter()) ||
+                        (sPlayerbotAIConfig.allowTrustedAccountBots && IsAccountLinked(accountId, masterAccountId));
 
     bool allowed = true;
     std::ostringstream out;
     std::string botName;
     sCharacterCache->GetCharacterNameByGuid(playerGuid, botName);
-    if (!isRndbot && !sameAccount && !sameGuild && !addClassBot && !linkedAccount)
+    if (!ownerAllowed)
     {
         allowed = false;
         out << "Failure: You are not allowed to control bot " << botName.c_str();
@@ -155,37 +159,64 @@ void PlayerbotHolder::AddPlayerBot(ObjectGuid playerGuid, uint32 masterAccountId
 
     // Always login in with world session to avoid race condition
     sWorld->AddQueryHolderCallback(CharacterDatabase.DelayQueryHolder(holder))
-        .AfterComplete(
-            [](SQLQueryHolderBase const& queryHolder)
-            {
-                PlayerbotLoginQueryHolder const& holder = static_cast<PlayerbotLoginQueryHolder const&>(queryHolder);
-                uint32 masterAccountId = holder.GetMasterAccountId();
+        .AfterComplete([holder](SQLQueryHolderBase const&) { pendingLogins.push_back(holder); });
+}
 
-                if (masterAccountId)
-                {
-                    // verify and find current world session of master
-                    WorldSession* masterSession = sWorldSessionMgr->FindSession(masterAccountId);
-                    Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
+void PlayerbotHolder::ProcessPendingLogins()
+{
+    // a login runs ~20 ms, so this is usually one per tick
+    static constexpr uint32 LOGIN_BUDGET_MS = 10;
 
-                    if (masterPlayer)
-                    {
-                        PlayerbotHolder* mgr = PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer);
+    uint32 const start = getMSTime();
+    while (!pendingLogins.empty())
+    {
+        // pop before dispatching: loading consumes the holder's results, it can't run twice
+        std::shared_ptr<PlayerbotLoginQueryHolder> const holder = std::move(pendingLogins.front());
+        pendingLogins.pop_front();
 
-                        if (mgr != nullptr)
-                        {
-                            mgr->HandlePlayerBotLoginCallback(holder);
+        ObjectGuid const guid = holder->GetGuid();
+        uint32 const masterAccountId = holder->GetMasterAccountId();
 
-                            return;
-                        }
+        // the character may have come online or changed account while it waited
+        if (ObjectAccessor::FindConnectedPlayer(guid) ||
+            sCharacterCache->GetCharacterAccountIdByGuid(guid) != holder->GetAccountId())
+        {
+            botLoading.erase(guid);
+        }
+        else if (masterAccountId)
+        {
+            WorldSession* masterSession = sWorldSessionMgr->FindSession(masterAccountId);
+            Player* masterPlayer = masterSession ? masterSession->GetPlayer() : nullptr;
+            PlayerbotHolder* mgr = masterPlayer ? PlayerbotsMgr::instance().GetPlayerbotMgr(masterPlayer) : nullptr;
 
-                        PlayerbotHolder::botLoading.erase(holder.GetGuid());
+            // Master gone: drop the alt. Logging it in as a random bot would put a real
+            // character into a bot guild, and nothing ever logs it out.
+            if (mgr)
+                mgr->HandlePlayerBotLoginCallback(*holder);
+            else
+                botLoading.erase(guid);
+        }
+        else
+        {
+            RandomPlayerbotMgr::instance().HandlePlayerBotLoginCallback(*holder);
+        }
 
-                        return;
-                    }
-                }
+        if (GetMSTimeDiffToNow(start) >= LOGIN_BUDGET_MS)
+            break;
+    }
+}
 
-                RandomPlayerbotMgr ::instance().HandlePlayerBotLoginCallback(holder);
-            });
+void PlayerbotHolder::DropPendingLogins(bool randomOnly)
+{
+    std::erase_if(pendingLogins,
+                  [randomOnly](std::shared_ptr<PlayerbotLoginQueryHolder> const& holder)
+                  {
+                      if (randomOnly && holder->GetMasterAccountId())
+                          return false;
+
+                      botLoading.erase(holder->GetGuid());
+                      return true;
+                  });
 }
 
 bool PlayerbotHolder::IsAccountLinked(uint32 accountId, uint32 linkedAccountId)
@@ -590,8 +621,9 @@ void PlayerbotHolder::OnBotLogin(Player* const bot)
     }
 
     bot->SaveToDB(false, false);
-    bool addClassBot = sRandomPlayerbotMgr.IsAccountType(accountId, 2);
-    if (addClassBot && master && abs((int)master->GetLevel() - (int)bot->GetLevel()) > 3)
+    // account type last, it's a synchronous query
+    if (master && abs((int)master->GetLevel() - (int)bot->GetLevel()) > 3 &&
+        sRandomPlayerbotMgr.IsAccountType(accountId, 2))
     {
         // PlayerbotFactory factory(bot, master->GetLevel());
         // factory.Randomize(false);

@@ -479,12 +479,30 @@ are left bare on purpose.
 ## Server stalls
 
 **Snapshot gaps time the world.** `snap` is written from `OnMapUpdate` every `SnapshotIntervalMs`, so
-gaps run ~220-320 ms; a stall is a second or more with no record of any kind. The
-first ~10 minutes after a server start carry ~1.1 s whole-server stalls every 30-40 s while
-`RandomPlayerbotMgr` logs in its random bots, until Playerbots.log prints the last `N/N Bot ... logged
-in`: pull after that, or discount them. Cross-check against the mod-chronicle combat log on a shared
-event, never the clock — RaidObs `t` counts `getMSTime()` from a wall-clock `hdr.ts`, and under WSL2
-the two sat 13 s apart.
+gaps run ~220-320 ms; a stall is a second or more with no record of any kind. Match RaidObs against
+the mod-chronicle combat log or `docker logs --timestamps` on a shared event, never the clock: `t`
+counts `getMSTime()` from a wall-clock `hdr.ts`, and under WSL2 the steady clock runs ~5.5% slower
+than wall time, which steps forward ~1.6 s every ~30 s, so the two drift apart along a trace (36 s
+over 11 minutes).
+
+**The login ramp used to stall.** For ~10 minutes after a start `RandomPlayerbotMgr` issues 60
+logins every ~31 s, and the DB callbacks logged the whole batch in during one world tick: ~1.1-1.7 s
+with the world thread busy and the map threads idle. A login cost ~20 ms and ~77 synchronous queries
+from module hooks — ~46 of them mod-individual-progression's account-name lookup, ~22
+mod-weapon-visual's per-item subquery. `PlayerbotHolder::ProcessPendingLogins` now queues loaded
+characters and logs them in under a 10 ms budget per world tick (at least one), so a batch enters
+over ~1.5-2.5 s; an alt whose master left while it was queued is dropped, not logged in as a random
+bot. Traces from older builds still carry these stalls: discount gaps until Playerbots.log prints the
+last `N/N Bot ... logged in`. Both modules carry local patches (account kind cached per account, no
+per-item query while loading); losing them makes each login slower again, the queue still spreads
+them.
+
+**Attributing a stall**, read-only on a live server:
+- sample `/proc/<pid>/task/<tid>/{stat,wchan,io}` every ~20-30 ms. The main thread (tid = pid) is
+  the world thread, `wchan` `wait_woken` is a MySQL socket read, and `io` `syscw` counts round trips;
+- diff `performance_schema.events_statements_summary_by_digest` and `prepared_statements_instances`
+  counts across one stall and a quiet window of the same length to name the queries;
+  `OWNER_THREAD_ID` tells a sync connection from an async worker.
 
 ## Timing a bot: `.playerbots pmon`
 

@@ -7,6 +7,9 @@
 #ifndef PLAYERBOTS_PLAYERBOTMGR_H
 #define PLAYERBOTS_PLAYERBOTMGR_H
 
+#include <deque>
+#include <memory>
+
 #include "ObjectGuid.h"
 #include "Player.h"
 #include "PlayerbotAIBase.h"
@@ -28,6 +31,10 @@ public:
     void AddPlayerBot(ObjectGuid guid, uint32 masterAccountId);
     bool IsAccountLinked(uint32 accountId, uint32 masterAccountId);
     void HandlePlayerBotLoginCallback(PlayerbotLoginQueryHolder const& holder);
+
+    // World thread only. Logs in queued bots until a few ms of this tick are spent, at least one.
+    static void ProcessPendingLogins();
+    static void DropPendingLogins(bool randomOnly);
 
     void LogoutPlayerBot(ObjectGuid guid);
     void DisablePlayerBot(ObjectGuid guid);
@@ -59,6 +66,11 @@ protected:
 
     PlayerBotMap playerBots;
     static std::unordered_map<ObjectGuid, uint32> botLoading;
+
+private:
+    // Loaded characters waiting for a world tick. A batch logged in straight from the DB callback
+    // stalls every map for a second, each login is ~20 ms of synchronous module queries.
+    static std::deque<std::shared_ptr<PlayerbotLoginQueryHolder>> pendingLogins;
 };
 
 class PlayerbotMgr : public PlayerbotHolder

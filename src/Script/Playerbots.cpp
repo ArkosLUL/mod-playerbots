@@ -364,7 +364,8 @@ class PlayerbotsWorldScript : public WorldScript
 public:
     PlayerbotsWorldScript() : WorldScript("PlayerbotsWorldScript", {
         WORLDHOOK_ON_BEFORE_WORLD_INITIALIZED,
-        WORLDHOOK_ON_UPDATE
+        WORLDHOOK_ON_UPDATE,
+        WORLDHOOK_ON_SHUTDOWN
     }) {}
 
     void OnBeforeWorldInitialized() override
@@ -401,9 +402,13 @@ public:
 
     void OnUpdate(uint32 diff) override
     {
+        PlayerbotHolder::ProcessPendingLogins();
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
     }
+
+    // queued holders keep DB results alive, free them before the DB library shuts down
+    void OnShutdown() override { PlayerbotHolder::DropPendingLogins(false); }
 };
 
 class PlayerbotsScript : public PlayerbotScript

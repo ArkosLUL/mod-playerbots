@@ -356,6 +356,7 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 /*elapsed*/, bool /*minimal*/)
                 time(nullptr) > RealPlayerLastTimeSeen + sPlayerbotAIConfig.disabledWithoutRealPlayerLogoutDelay)
             {
                 LogoutAllBots();
+                DropPendingLogins(true);
                 LOG_INFO("playerbots", "Logout all bots due no real player session.");
             }
         }
