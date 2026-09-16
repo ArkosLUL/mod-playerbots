@@ -1,16 +1,12 @@
 """Where a unit was, and how far that is from something the encounter named.
 
-Every view that asks a spatial question used to answer it alone: six `position_at` implementations
-across three files with three different policies, forty-odd open-coded `math.dist` calls in two
-dialects, and "distance from a fixed point" written out seven times for one Yogg constant without
-ever becoming a function. The questions are the same in every fight - who was inside the band, where
-did this mover put people, how far out did they die - so they belong in one place and the fight
-supplies only the point to measure from.
+The spatial questions are the same in every fight: who was inside the band, where did this mover put
+people, how far out did they die. So they live here once, and the fight supplies only the point to
+measure from.
 
 Those points already exist, named, in the raid tree: `const Position ULDUAR_YOGG_SARON_MIDDLE` and
 `constexpr float ULDUAR_YOGG_SARON_P1_LEASH`. They are parsed out of the source for the same reason
-probe keys are - a second copy kept by hand drifts, and the one in probes.py had already drifted
-before it was a week old.
+probe keys are: a copy kept by hand drifts.
 """
 from __future__ import annotations
 
@@ -40,10 +36,6 @@ NEAREST = "nearest"  # the closer of the two, subject to `tol`
 def dist2(a, b) -> float:
     """Ground distance. Takes anything subscriptable, so a 3-tuple from `at()` drops in unchanged."""
     return math.hypot(a[0] - b[0], a[1] - b[1])
-
-
-def dist3(a, b) -> float:
-    return math.dist(a[:3], b[:3])
 
 
 def nearest(point, candidates):
@@ -81,8 +73,8 @@ def frames(trace: Trace) -> list[dict]:
 def _index(trace: Trace):
     """guid -> (stamps, spots), both in time order, so `at()` can bisect instead of rescanning.
 
-    The version this replaces walked every snapshot on every call and was reached from inside a
-    double loop.
+    Built once per trace: callers ask for positions from inside loops over every record, and a
+    snapshot scan per ask is quadratic on a 30k-line trace.
     """
     cached = getattr(trace, "_geom_index", None)
     if cached is not None:
@@ -159,58 +151,70 @@ def first_seen(trace: Trace, guids) -> int | None:
     return min(when) if when else None
 
 
-# `Position(1980.28f, -25.5868f, 329.397f)` and `constexpr float X = 6.5f;`. Both are declared one per
-# line across the raid tree, so a line scan is enough and there is no need to parse C++.
+NUMBER = r"(-?(?:\d+\.?\d*|\.\d+))f?"
+
+# A named Position written any of the ways the raid tree writes one: `= Position(x, y, z)`,
+# `= { x, y, z }` or `NAME{ x, y, z }`, with `const` on either side of the type. Arrays don't match.
 ANCHOR_DECL = re.compile(
-    r"\bconst\s+Position\s+([A-Z][A-Z0-9_]*)\s*=\s*Position\s*\(\s*"
-    r"(-?\d+(?:\.\d+)?)f?\s*,\s*(-?\d+(?:\.\d+)?)f?\s*,\s*(-?\d+(?:\.\d+)?)f?")
-RADIUS_DECL = re.compile(r"\bconstexpr\s+float\s+([A-Z][A-Z0-9_]*)\s*=\s*(-?\d+(?:\.\d+)?)f?\s*;")
+    r"\b(?:const\s+Position|Position\s+const)\s+([A-Z][A-Z0-9_]*)\s*"
+    r"(?:=\s*Position\s*[({]|=\s*\{|[({])\s*" + NUMBER + r"\s*,\s*" + NUMBER + r"\s*,\s*" + NUMBER)
+RADIUS_DECL = re.compile(r"\bconstexpr\s+float\s+([A-Z][A-Z0-9_]*)\s*=\s*" + NUMBER + r"\s*;")
 
 
 @functools.lru_cache(maxsize=4)
 def _declared(root: pathlib.Path = RAID_ROOT):
-    points: dict[str, tuple[float, float, float]] = {}
-    spans: dict[str, float] = {}
+    """Every declaration of each name, as name -> [(value, "file:line")].
+
+    All of them rather than the first: the same name is declared with different values in different
+    raids, and keeping only one would score against whichever file sorted first.
+    """
+    points: dict[str, list[tuple[tuple[float, float, float], str]]] = {}
+    spans: dict[str, list[tuple[float, str]]] = {}
     for path in sorted(root.rglob("*.h")) + sorted(root.rglob("*.cpp")):
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for line in text.splitlines():
-            found = ANCHOR_DECL.search(line)
-            if found:
-                points.setdefault(found.group(1),
-                                  (float(found.group(2)), float(found.group(3)), float(found.group(4))))
-                continue
-            found = RADIUS_DECL.search(line)
-            if found:
-                spans.setdefault(found.group(1), float(found.group(2)))
+        # Whole text, not line by line: a brace initialiser often puts its numbers on the next line.
+        for found in ANCHOR_DECL.finditer(text):
+            where = f"{path.name}:{text.count(chr(10), 0, found.start()) + 1}"
+            point = (float(found.group(2)), float(found.group(3)), float(found.group(4)))
+            points.setdefault(found.group(1), []).append((point, where))
+        for found in RADIUS_DECL.finditer(text):
+            where = f"{path.name}:{text.count(chr(10), 0, found.start()) + 1}"
+            spans.setdefault(found.group(1), []).append((float(found.group(2)), where))
     return points, spans
 
 
-def anchors(root: pathlib.Path = RAID_ROOT) -> dict[str, tuple[float, float, float]]:
+def anchors(root: pathlib.Path = RAID_ROOT) -> dict[str, list[tuple[tuple[float, float, float], str]]]:
     return _declared(root)[0]
 
 
-def radii(root: pathlib.Path = RAID_ROOT) -> dict[str, float]:
+def radii(root: pathlib.Path = RAID_ROOT) -> dict[str, list[tuple[float, str]]]:
     return _declared(root)[1]
 
 
 class Unknown(LookupError):
-    """A name that matched no constant, or more than one."""
+    """A name that matched no constant, more than one, or one declared with conflicting values."""
 
 
 def _lookup(table: dict, name: str, kind: str):
     if name in table:
-        return table[name]
+        key = name
+    else:
+        wanted = name.upper()
+        near = [key for key in table if key == wanted or key.endswith("_" + wanted)]
+        if not near:
+            raise Unknown(f"no {kind} named {name}")
+        if len(near) > 1:
+            raise Unknown(f"{name} matches {len(near)} {kind}s: {', '.join(sorted(near)[:6])}")
+        key = near[0]
 
-    wanted = name.upper()
-    near = [key for key in table if key == wanted or key.endswith("_" + wanted)]
-    if len(near) == 1:
-        return table[near[0]]
-    if near:
-        raise Unknown(f"{name} matches {len(near)} {kind}s: {', '.join(sorted(near)[:6])}")
-    raise Unknown(f"no {kind} named {name}")
+    declared = table[key]
+    if len({value for value, _ in declared}) > 1:
+        sites = ", ".join(f"{value} at {where}" for value, where in declared)
+        raise Unknown(f"{key} is declared with different values: {sites}")
+    return declared[0][0]
 
 
 def anchor(name: str, root: pathlib.Path = RAID_ROOT):
@@ -227,14 +231,16 @@ def radius(name: str, root: pathlib.Path = RAID_ROOT) -> float:
 def reference(name: str, trace: Trace | None = None, root: pathlib.Path = RAID_ROOT):
     """A point to measure from, given either a constant's name or `entry:N` for a creature's own spot.
 
-    The creature form exists because some fights have no named anchor worth the constant - the thing
-    to measure from is wherever the boss happens to be standing.
+    The creature form is for fights with no named anchor worth the constant, where the thing to
+    measure from is wherever the boss stands. It takes that creature's spot nearest the pull, and
+    refuses an entry more than one sampled creature shares, since any pick among them is arbitrary.
     """
     if trace is not None and name.lower().startswith("entry:"):
         guids = guids_of_entry(trace, int(name.split(":", 1)[1]))
-        spots = [at(trace, guid, 0, NEAREST) for guid in guids]
-        spots = [spot for spot in spots if spot]
+        spots = [spot for spot in (at(trace, guid, 0, NEAREST) for guid in guids) if spot]
         if not spots:
             raise Unknown(f"no creature of {name} was sampled in this trace")
+        if len(spots) > 1:
+            raise Unknown(f"{name} is {len(spots)} creatures in this trace, so it names no single point")
         return spots[0]
     return anchor(name, root)

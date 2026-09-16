@@ -45,11 +45,12 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from analysis import roster_guids  # noqa: E402
-from geometry import at, dist2, first_seen, guids_of_entry  # noqa: E402
+from geometry import at, first_seen, guids_of_entry  # noqa: E402
 from geometry import track as tracks  # noqa: E402
 from obstrace import Trace, clock  # noqa: E402
 from probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
-from validity import encounter_of  # noqa: E402
+from space import show_share, threat_share  # noqa: E402
+from views import IDLE_MS, idle_windows, veto_counts  # noqa: E402
 
 NPC_GUARDIAN = 33136
 NPC_YOGG_SARON = 33288
@@ -126,10 +127,6 @@ LAUGHING_SKULL_RADIUS = 30.0
 # TEMPSUMMON_TIMED_DESPAWN on every portal, so the whole window a wave offers is this long.
 PORTAL_DESPAWN_MS = 25000
 
-# A bot holding a target and casting nothing for this long is not fighting, whatever else the trace
-# says about it. Set well past any cast the class has: the silence this exists to catch ran 50 s.
-FROZEN_MS = 10000
-
 # A creature that stops being sampled below this was almost certainly killed; one that vanishes near
 # full health was despawned by the phase. Nothing records a creature death, so this is the line.
 TENTACLE_SPENT_PCT = 20.0
@@ -159,16 +156,6 @@ PORTAL_SPOTS = [
     (1960.22, -26.14), (1976.30, -47.83), (1997.69, -37.46), (1998.07, -13.36), (1976.99, -3.96),
 ]
 
-# Every key this file reads. A key in source and absent from every trace of its own boss means the
-# recorder is dropping it - flame_leviathan.py has read fl.station for a year and never once got a
-# row, because an early return shadows it.
-PROBE_KEYS = (
-    "yogg.phase", "yogg.engaged", "yogg.room", "yogg.roomstate", "yogg.cloudreach", "yogg.knockback",
-    "yogg.crush", "yogg.deathray", "yogg.wave", "yogg.portal", "yogg.portalslot", "yogg.brainteam",
-    "yogg.skull", "yogg.exit", "yogg.handover", "yogg.squeeze", "yogg.brainlink", "yogg.tentacle",
-    "yogg.gaze", "yogg.petguard", "yogg.detour",
-)
-
 PHASE_NAMES = {0: "idle", 1: "phase 1", 2: "phase 2", 3: "phase 3"}
 
 
@@ -193,9 +180,10 @@ def phase_spans(trace: Trace) -> list[tuple[int, int, int]]:
 
 
 def missing_probes(trace: Trace) -> list[str]:
-    """Declared for this boss and absent from this pull, read out of the source rather than a list
-    kept here: the list this replaces had already gone stale on three keys the file itself reads."""
-    return [key for key, _, _ in silent_keys(emitted_keys(trace), encounter_of(trace))]
+    """`yogg.*` keys the source declares and this pull never emitted. Named outright rather than
+    resolved off the trace: a pull still filed under the map resolves to no boss, and a check keyed
+    on that matches no key at all and reports every one present."""
+    return [key for key, _, _ in silent_keys(emitted_keys(trace), "yogg-saron")]
 
 
 def show_banner(trace: Trace) -> None:
@@ -561,53 +549,23 @@ def show_frozen(trace: Trace) -> None:
     walk looks like from outside: somewhere to be, no way to get there, and nothing moving the bot
     instead. One pull left five of six bots in a room doing it for fifty seconds while the tentacle
     they were pointed at sat at 87%."""
-    roster = roster_guids(trace)
-
-    casts: dict[int, list[int]] = collections.defaultdict(list)
-    for rec in trace.of("cast"):
-        if rec.get("s") in roster:
-            casts[rec["s"]].append(rec["t"])
-
-    # Only stretches where the bot had a target the whole way through. Without that every corpse and
-    # everyone waiting out a portal wave reads as frozen.
-    targeted: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
-    for snap in trace.of("snap"):
-        for row in snap.get("u", []):
-            guid = row[0]
-            if guid not in roster or row[5] <= 0 or len(row) < 8 or not row[7]:
-                continue
-            runs = targeted[guid]
-            if runs and snap["t"] - runs[-1][1] <= 2000:
-                runs[-1] = (runs[-1][0], snap["t"])
-            else:
-                runs.append((snap["t"], snap["t"]))
-
-    frozen = []
-    for guid, runs in targeted.items():
-        stamps = sorted(casts.get(guid, []))
-        for start, stop in runs:
-            spoke = [when for when in stamps if start <= when <= stop]
-            edges = [start] + spoke + [stop]
-            longest = max(edges[i + 1] - edges[i] for i in range(len(edges) - 1))
-            if longest >= FROZEN_MS:
-                frozen.append((longest, start, guid))
-
+    frozen = idle_windows(trace, IDLE_MS)
     if not frozen:
-        print(f"\n  nobody held a target for {FROZEN_MS / 1000:.0f} s without casting")
+        print(f"\n  nobody held a target for {IDLE_MS / 1000:.0f} s without casting")
         return
 
-    print(f"\n  held a target and cast nothing for over {FROZEN_MS / 1000:.0f} s:")
-    for longest, start, guid in sorted(frozen, reverse=True)[:8]:
-        print(f"    {trace.name(guid):14} {trace.role(guid):6} {longest / 1000.0:5.1f} s from {clock(start)}")
+    print(f"\n  held a target and cast nothing for over {IDLE_MS / 1000:.0f} s:")
+    for window in sorted(frozen, key=lambda w: (w["quiet"], w["start"], w["guid"]), reverse=True)[:8]:
+        guid = window["guid"]
+        print(f"    {trace.name(guid):14} {trace.role(guid):6} {window['quiet'] / 1000.0:5.1f} s"
+              f" from {clock(window['start'])}")
 
 
 def show_vetoes(trace: Trace) -> None:
     """Which multiplier zeroed which action, and how often. A veto is cheap to write and easy to
     get wrong: one that zeroes a walk with nothing walking in its place is a bot standing still, and
     this says so long before the room view does."""
-    rows = collections.Counter()
-    for rec in trace.of("veto"):
-        rows[(str(rec.get("m", "")), str(rec.get("a", "")))] += 1
+    rows = veto_counts(trace)
     if not rows:
         return
 
@@ -653,7 +611,7 @@ def show_brain(trace: Trace) -> None:
     tentacles = guids_of_entry(trace, NPC_INFLUENCE_TENTACLE)
     if tentacles:
         # Nothing in the trace says a creature died: the death stream is roster only, and so is dmg,
-        # so the old count read zero on every trace ever taken. The snapshot does carry the last
+        # so counting deaths there always reads zero. The snapshot does carry the last
         # health each one was sampled at before it stopped appearing - a few percent for one the raid
         # killed, near full for one the phase despawned - so that is what gets reported.
         last = [rows[-1][1] for rows in tracks(trace, tentacles, ("t", "hp")).values() if rows]
@@ -1064,24 +1022,9 @@ def show_threat(trace: Trace) -> None:
     guardians = guids_of_entry(trace, NPC_GUARDIAN)
     roster = roster_guids(trace)
 
-    held = collections.Counter()
-    frames = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end]
-    for index, snap in enumerate(frames):
-        step = (frames[index + 1]["t"] - snap["t"]) if index + 1 < len(frames) else 0
-        for row in snap.get("u", []):
-            # Pre-v8 traces are short rows and carry no target column at all.
-            if row[0] not in guardians or len(row) < 8 or row[5] <= 0:
-                continue
-            target = row[7]
-            held[trace.role(target) if target in roster else
-                 ("nobody" if not target else "other")] += step
-
-    total = sum(held.values())
-    if total:
-        shares = "  ".join(f"{role}: {span * 100.0 / total:4.1f}%"
-                           for role, span in held.most_common())
-        print(f"  Guardian time on target  {shares}")
-        print(f"    on a tank: {held['tank'] * 100.0 / total:.1f}%")
+    held, _ = threat_share(trace, guardians, lambda when: 0 <= when <= p1_end)
+    if sum(held.values()):
+        show_share(held, "Guardian time on target")
     else:
         print("  no live Guardian was ever sampled with a target")
 
@@ -1103,6 +1046,8 @@ def show_threat(trace: Trace) -> None:
     if not taunts:
         print("\n  no single-target taunt was cast in phase 1")
         return
+
+    frames = [snap for snap in trace.of("snap") if 0 <= snap["t"] <= p1_end]
 
     print(f"\n  taunts: {len(taunts)}   (rank 1 = the lowest-health Guardian, the one the raid is on)")
     on_focus = 0

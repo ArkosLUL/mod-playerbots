@@ -59,6 +59,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from analysis import roster_guids  # noqa: E402
+import geometry  # noqa: E402
 from obstrace import Trace  # noqa: E402
 
 BOSS_ENTRY = 33113
@@ -140,7 +141,7 @@ class Frame:
             entry = ents.get(row[0])
             if entry == BOSS_ENTRY:
                 # The target column arrived in v8, so an older row stops before it. Reading it blind
-                # raised on the first frame carrying the boss and took every view in this file with it.
+                # raises on the first frame carrying the boss and takes every view in this file down.
                 self.boss = (row[1], row[2], row[4], row[7] if len(row) > 7 else 0)
             elif entry == RETICLE_ENTRY:
                 self.reticles.append((row[0], row[1], row[2]))
@@ -355,10 +356,6 @@ def pick(seq, quantile):
     return seq[min(int(len(seq) * quantile), len(seq) - 1)]
 
 
-def nearest_corner(x, y):
-    return min(((math.hypot(x - cx, y - cy), i) for i, (cx, cy) in enumerate(ARENA_CORNERS)))
-
-
 def show_adds(trace: Trace) -> int:
     snapshots = list(frames(trace))
     if not snapshots:
@@ -381,7 +378,7 @@ def show_adds(trace: Trace) -> int:
     wander = []
     for points in tracks.values():
         _, x0, y0, _ = points[0]
-        corners[nearest_corner(x0, y0)[1]] += 1
+        corners[geometry.nearest((x0, y0), enumerate(ARENA_CORNERS))[0]] += 1
         wander.append(max(math.hypot(p[1] - x0, p[2] - y0) for p in points))
     wander.sort()
     print(f"  adds seen: {len(tracks)}   spawn corner: "
@@ -510,16 +507,13 @@ def show_inferno(trace: Trace) -> int:
         fires = inferno_patches(snap)
         concurrent.append(len(fires))
 
-        def edge(x, y):
-            return min((math.hypot(x - fx, y - fy) - fr for fx, fy, fr in fires), default=1e9)
-
         for guid, entry in hulls.items():
             if guid not in pos or pos[guid][2] <= 0:
                 continue
-            inside_hull[VEHICLE_NAME[entry], edge(*pos[guid][:2]) < 0] += 1
+            inside_hull[VEHICLE_NAME[entry], geometry.edge(pos[guid], fires) < 0] += 1
         for guid in roster:
             if guid in pos:
-                inside_bot[edge(*pos[guid][:2]) < 0] += 1
+                inside_bot[geometry.edge(pos[guid], fires) < 0] += 1
 
         if prev is not None:
             dt = (snap["t"] - prev[0]) / 1000.0
@@ -531,7 +525,7 @@ def show_inferno(trace: Trace) -> int:
                     if was[2] <= 0 or now[2] <= 0:
                         continue
                     drop = max(0.0, was[2] - now[2])
-                    d = prev[2](was[0], was[1])
+                    d = geometry.edge(was, fires)
                     for lo, hi, label in bands:
                         if lo <= d < hi:
                             lost[label] += drop
@@ -539,7 +533,7 @@ def show_inferno(trace: Trace) -> int:
                             break
                     total_lost += drop
                     by_zone["inside" if d < 0 else ("near" if d < 10 else "clear")] += drop
-        prev = (snap["t"], pos, edge)
+        prev = (snap["t"], pos)
 
     print("Mimiron's Inferno: a walking head drops a 9 yd patch every 2 s, each burning 30 s\n")
     if not concurrent or not max(concurrent):

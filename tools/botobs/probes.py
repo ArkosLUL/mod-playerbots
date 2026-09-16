@@ -70,8 +70,7 @@ def declared_keys(root: pathlib.Path = SRC_ROOT) -> dict[str, tuple[str, str]]:
         if "Obs" not in text and "Note" not in text:
             continue
         # Whole text, not line by line: a call wrapped after its opening paren puts the key on the
-        # next line, and reading one line at a time misses it. `yogg.deathray` is written that way
-        # and so was never declared as far as the mute check could tell.
+        # next line, and reading one line at a time misses it. `yogg.deathray` is written that way.
         for pattern, kind in DECLARATIONS:
             for match in pattern.finditer(text):
                 key = match.group(1)
@@ -90,8 +89,8 @@ def prefix_matches_boss(prefix: str, boss: str) -> bool:
     Prefixes are written three ways and all are regular: `thorim`/`mimiron`/`algalon` spell the slug
     out with the punctuation dropped, `fl` is the slug's initials, and `yogg` is its first word.
     Deriving all three beats a fourth hand-mirrored prefix table - there are already two of those and
-    they drift. Without the first-word form all 25 `yogg.*` keys were invisible to the mute check,
-    because `yoggsaron` and `ys` are the only names it could derive.
+    they drift. Without the first-word form no `yogg.*` key matches its boss, because `yoggsaron`
+    and `ys` are all the other two forms derive.
     """
     words = [word for word in re.split(r"[^a-z0-9]+", boss.lower()) if word]
     flat = "".join(words)

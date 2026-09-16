@@ -34,7 +34,7 @@ from obstrace import Trace
 from probes import show_probes
 from space import show_moves, show_threat, show_where
 from validity import show_validity
-from views import (show_bot, show_clump, show_idle, show_notes, show_stalls, show_track,
+from views import (IDLE_MS, show_bot, show_clump, show_idle, show_notes, show_stalls, show_track,
                    show_verify, show_vetoes)
 
 
@@ -75,9 +75,9 @@ def main() -> int:
         "--idle",
         nargs="?",
         type=int,
-        const=10000,
+        const=IDLE_MS,
         metavar="MS",
-        help="bots that held a target and cast nothing at all (default 10000ms)",
+        help=f"bots that held a target and cast nothing at all (default {IDLE_MS}ms)",
     )
     parser.add_argument(
         "--vetoes",

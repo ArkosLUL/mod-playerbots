@@ -229,9 +229,11 @@ def idle_windows(trace: Trace, min_ms: int) -> list[dict]:
         for start, stop in runs:
             spoke = [when for when in stamps if start <= when <= stop]
             edges = [start] + spoke + [stop]
-            longest = max(edges[index + 1] - edges[index] for index in range(len(edges) - 1))
+            # `start` is where the silence began, not where the target was picked up.
+            longest, began = max(((edges[index + 1] - edges[index], edges[index])
+                                  for index in range(len(edges) - 1)), key=lambda gap: gap[0])
             if longest >= min_ms:
-                found.append({"guid": guid, "start": start, "quiet": longest})
+                found.append({"guid": guid, "start": began, "quiet": longest})
     return found
 
 
@@ -248,15 +250,18 @@ def show_idle(trace: Trace, min_ms: int) -> int:
     return 0
 
 
+def veto_counts(trace: Trace) -> Counter:
+    """How often each (multiplier, action) pair zeroed the action."""
+    return Counter((str(rec.get("m", "")), str(rec.get("a", ""))) for rec in trace.of("veto"))
+
+
 def show_vetoes(trace: Trace, limit: int = 20) -> int:
     """Which multiplier zeroed which action, and how often.
 
     A veto is cheap to write and easy to get wrong. One that zeroes a walk with nothing walking in
     its place is a bot standing still, which this says long before the position views do.
     """
-    rows = Counter()
-    for rec in trace.of("veto"):
-        rows[(str(rec.get("m", "")), str(rec.get("a", "")))] += 1
+    rows = veto_counts(trace)
     if not rows:
         print("no multiplier vetoed anything in this pull")
         return 0

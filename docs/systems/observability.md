@@ -29,12 +29,12 @@ Freya's 11 three-elder pulls as Stonebark. Selection and grouping both go throug
 applies.
 
 `--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
-encounter - so on a trace nothing renamed, every boss's nodes used to fold away into the "gate shut
-this pull" line, 342 of them on the 2026-09-13 Yogg wipes, which reads as a closed gate and is only
-the join failing. Where no rename record exists the units now decide instead: several creatures can
-carry the boss flag - Yogg's room has the four Keepers standing in it - so the one that traded damage
-is the encounter. `--boss` opens a file its name ruled out rather than dropping it, but only on the
-miss, so a boss that files itself correctly still costs nothing.
+encounter, folding every node into the "gate shut this pull" line - 342 on the 2026-09-13 Yogg wipes,
+reading as a closed gate when only the join failed. So a slug still equal to its map's `Map.dbc` name
+(`obstrace.MAP_SLUGS`) resolves to the boss-flagged unit that traded damage; the flag alone is not
+enough, as Yogg's room holds the four Keepers. **Any other slug stands**: Mimiron files under his
+encounter name, yet the first boss-flagged unit to trade damage is Leviathan Mk II. `--boss` opens
+only map-named files beyond those its name selects.
 
 ```
 postmortem.py <file>                 summary + a block per death
@@ -58,19 +58,21 @@ postmortem.py <file> --validity      only the banner below; non-zero exit if any
 postmortem.py <file> --since REF     compare the build against REF rather than HEAD
 ```
 
-**The fight supplies the point, `geometry.py` the rest.** `--from` names a `const Position`
-declared anywhere under `src/Ai/Raid/` - 195 of them, plus 696 `constexpr float` radii for `--band` -
-parsed out of the source the way probe keys are, so nothing is kept by hand and every trace on disk
-can be measured against any of them. A unique suffix is enough (`YOGG_SARON_MIDDLE`), an ambiguous one
-lists the candidates, `--band` also takes a bare number, and `--from entry:<N>` measures from a
-creature. This turns "`move.by` churned 2,396 times" into "957 `flee` moves, median 21.5 yd out to
-24.9, 96% ending further from the band than they started" - the Yogg-Saron phase 1 defect, reachable
-before this only through a script written for one pull and thrown away.
+**The fight supplies the point, `geometry.py` the rest.** `--from` names a `const Position`, in any
+initialiser form, declared anywhere under `src/Ai/Raid/` - 320 of them, plus 716 `constexpr float`
+radii for `--band` - parsed out of the source the way probe keys are, so nothing is kept by hand and
+every trace on disk can be measured against any of them. A unique suffix is enough
+(`YOGG_SARON_MIDDLE`), an ambiguous one lists the candidates, and a name two files declare with
+different values (12 radii, `LEASH_RADIUS` among them) is refused with both listed. `--band` also
+takes a bare number. `--from entry:<N>` measures from a creature, refusing an entry that more than one
+sampled creature shares. This turns "`move.by` churned 2,396 times" into "957 `flee` moves, median
+21.5 yd out to 24.9, 96% ending further from the band than they started" - the Yogg-Saron phase 1
+defect.
 
 A `move` carries its destination only, so `--moves` joins the snapshot before it for the origin.
 `--where` also takes `cast:<spell>`, because a creature's death reaches no record at all and what it
-cast on the way out stands in - see [engine/pitfalls.md](../engine/pitfalls.md). All three accept
-`--during KEY=VALUE`.
+cast on the way out stands in - see [engine/pitfalls.md](../engine/pitfalls.md). `--threat` with no
+entry reads every sampled hostile except the raid's own pets. All three accept `--during KEY=VALUE`.
 
 `--verify` is 17 checks. `batch.py` runs the corpus rather than one pull - `--boss SLUG`,
 `--since REF`, `--valid`, `--census`, `--verify`, `--probes`, `--split-at REF`, `--baseline DIR` -
@@ -106,8 +108,9 @@ binary predating the fix by two hours. Four things can disqualify a pull; the he
 them only decide once you say what is under test. The loop commits after every pull, so every trace
 predates HEAD; every normal-mode pull of a hard-mode-capable boss has hard mode off. Left decisive
 they returned 0 of 15 Yogg pulls and 0 of 55 Gluth ones. `--since REF` names the change being tested
-and makes the build decide; `--hardmode` says the pull was meant to be one. A human holding tank or
-heal always decides — the strategy was not asked to do the job, whatever else was being tested.
+and makes the build decide, so a REF that does not resolve disqualifies too (`batch.py` exits 1);
+`--hardmode` says the pull was meant to be one. A human holding tank or heal always decides — the
+strategy was not asked to do the job, whatever else was being tested.
 
 - **`bin`** — the worldserver binary's mtime, epoch ms: what
   `docker exec ac-worldserver ls -l --time-style=+%F_%R env/dist/bin/worldserver` reports. It stands in

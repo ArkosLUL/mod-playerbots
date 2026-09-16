@@ -31,8 +31,8 @@ def trace_metrics(trace: Trace) -> dict[str, float]:
     }
 
     # `snap.u[11]` is cumulative damage dealt, kept up to date by AccrueDamageDealt with its own
-    # pet-to-owner attribution, and until now read by nothing but an invariant check. A change that
-    # fixes positioning and quietly costs the raid a third of its damage should not read as a win.
+    # pet-to-owner attribution. A change that fixes positioning and quietly costs the raid a third of
+    # its damage should not read as a win.
     # Cumulative per unit and monotonic, so the last value each one reached is its total, and the
     # raid's is the sum of those - a corpse stops being sampled and must still count what it did.
     dealt: dict[int, int] = {}

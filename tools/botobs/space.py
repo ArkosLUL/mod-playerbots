@@ -1,12 +1,10 @@
 """Where a mover put people, where things happened, and who the enemy was actually on.
 
-These three questions came out of the Yogg-Saron phase 1 investigation, where each was answered by a
-script written for that pull and thrown away - "957 flee moves, 96.4% ended further from the band"
-was the finding that identified the defect, and none of it was reachable from the CLI afterwards.
-Nothing in them is Yogg-specific: a mover walking the raid out of a band, a kill landing too far from
-where it counts, and adds parked on somebody who is not a tank are the same questions in every
-fight. What the fight supplies is the point to measure from, and `geometry` reads those out of the
-raid tree by name.
+"957 flee moves, 96.4% ended further from the band" is the kind of answer these give, and that one
+named the Yogg-Saron phase 1 defect. Nothing in them is Yogg-specific: a mover walking the raid out
+of a band, a kill landing too far from where it counts, and adds parked on somebody who is not a tank
+are the same questions in every fight. What the fight supplies is the point to measure from, and
+`geometry` reads those out of the raid tree by name.
 """
 from __future__ import annotations
 
@@ -130,7 +128,7 @@ def move_rows(trace: Trace, origin, inside):
     """Per move: the action that asked, the role, and the radius it started and ended at.
 
     A `move` record carries its destination and not its origin, so where the bot was standing comes
-    from the snapshot before it - the join every one of these questions needs and none of them had.
+    from the snapshot before it.
     """
     rows = []
     for rec in trace.of("move"):
@@ -218,6 +216,45 @@ def role_held(trace: Trace, target: int) -> str:
     return "pet" if target in trace.owners else "other"
 
 
+def threat_share(trace: Trace, subjects: set[int] | None, inside):
+    """Milliseconds each hostile spent on each role, as `(total, per_unit)` Counters.
+
+    `subjects` narrows it to those guids; None means every hostile, which leaves out the raid's own
+    pets as well as the raid (the snapshot carries pets since v10). A frame counts until the next
+    snapshot, in scope or not, so a gap between two `--during` windows is never credited to the last
+    frame before it.
+    """
+    roster = set(trace.roles)
+    held = collections.Counter()
+    per_unit: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    frames = geometry.frames(trace)
+    for index, snap in enumerate(frames):
+        if not inside(snap["t"]):
+            continue
+        step = (frames[index + 1]["t"] - snap["t"]) if index + 1 < len(frames) else 0
+        for row in snap.get("u", []):
+            guid = row[0]
+            # Pre-v8 rows stop before the target column, and a corpse holds whatever it died on.
+            if len(row) < 8 or row[5] <= 0 or guid in roster:
+                continue
+            if subjects is not None:
+                if guid not in subjects:
+                    continue
+            elif not row[7] or trace.owners.get(guid) in roster:
+                continue
+            role = role_held(trace, row[7])
+            held[role] += step
+            per_unit[guid][role] += step
+    return held, per_unit
+
+
+def show_share(held: collections.Counter, label: str = "time on target") -> None:
+    total = sum(held.values())
+    print(f"  {label}  " + "  ".join(f"{role}: {span * 100.0 / total:4.1f}%"
+                                     for role, span in held.most_common()))
+    print(f"    on a tank: {held['tank'] * 100.0 / total:.1f}%")
+
+
 def show_threat(trace: Trace, entry: int | None = None, during: str | None = None) -> int:
     """Who the hostiles were beating on, by role, weighted by how long they held it.
 
@@ -229,37 +266,16 @@ def show_threat(trace: Trace, entry: int | None = None, during: str | None = Non
         print(f"  nothing held {during} in this trace")
         return 0
 
-    roster = set(trace.roles)
     subjects = geometry.guids_of_entry(trace, entry) if entry else None
+    held, per_unit = threat_share(trace, subjects, inside)
 
-    held = collections.Counter()
-    per_unit: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
-    frames = [snap for snap in geometry.frames(trace) if inside(snap["t"])]
-    for index, snap in enumerate(frames):
-        step = (frames[index + 1]["t"] - snap["t"]) if index + 1 < len(frames) else 0
-        for row in snap.get("u", []):
-            guid = row[0]
-            # Pre-v8 rows stop before the target column, and a corpse holds whatever it died on.
-            if len(row) < 8 or row[5] <= 0 or guid in roster:
-                continue
-            if subjects is not None and guid not in subjects:
-                continue
-            target = row[7]
-            if subjects is None and not target:
-                continue
-            held[role_held(trace, target)] += step
-            per_unit[guid][role_held(trace, target)] += step
-
-    total = sum(held.values())
     label = f"entry {entry}" if entry else "every hostile sampled"
     print(f"threat, {label}{' while ' + during if during else ''}")
-    if not total:
+    if not sum(held.values()):
         print("  nothing hostile was ever sampled holding a target")
         return 0
 
-    print("  time on target  " + "  ".join(f"{role}: {span * 100.0 / total:4.1f}%"
-                                           for role, span in held.most_common()))
-    print(f"    on a tank: {held['tank'] * 100.0 / total:.1f}%")
+    show_share(held)
 
     mostly = collections.Counter()
     for guid, roles in per_unit.items():

@@ -11,7 +11,7 @@ import datetime
 import pathlib
 import subprocess
 
-from obstrace import Trace, boss_from_path, canonical_boss, slugify
+from obstrace import Trace, boss_from_path, canonical_boss, filed_under_map, map_of, slugify
 
 # Raid difficulty ids. Only raid maps are tracked unless Obs.Maps names one, so these are the labels
 # that apply; a 5-man would read 0/1 as normal/heroic instead.
@@ -47,14 +47,14 @@ def encounter_of(trace: Trace) -> str:
     """The fight this trace belongs to, which is what a census counts and what the conf keys on. The
     boss slug says which creature engaged, and for a council or an elder pull that is not the same.
 
-    Where no rename ever landed the slug is the map's name, which joins to no encounter at all, so
-    the units decide instead - otherwise the coverage view reports every node gated off.
+    A slug that is still the map's name joins to no encounter, so the units decide there. Nowhere
+    else: a pull filed under its encounter never gets a rename, and the first boss-flagged unit to
+    trade damage is often an add or a vehicle rather than the boss the encounter is named after.
     """
-    filed = canonical_boss(boss_of(trace) or boss_from_path(trace.path))
-    renamed = any(p.get("src") == "rename" for p in trace.of("pull"))
-    if renamed:
-        return filed
-    return engaged_of(trace) or filed
+    filed = boss_of(trace) or boss_from_path(trace.path)
+    if filed_under_map(trace.header.get("map", map_of(trace.path)), filed):
+        return engaged_of(trace) or canonical_boss(filed)
+    return canonical_boss(filed)
 
 
 def build_time(trace: Trace) -> datetime.datetime | None:
@@ -121,8 +121,8 @@ ALWAYS_DECIDABLE = {"human-role"}
 # The other two only disqualify once the reader says what is under test. Both are true of almost every
 # pull otherwise - the loop commits after each pull, so every trace predates HEAD, and every
 # normal-mode pull of a hard-mode-capable boss has hard mode off. A disqualifier that fires on the
-# whole sample rejects the whole sample and says nothing, which is the vacuity `human-in-raid` had
-# before it was demoted. Lives here rather than in a view, so one definition decides for all of them.
+# whole sample rejects the whole sample and says nothing. Lives here rather than in a view, so one
+# definition decides for all of them.
 ON_ASK = {"stale-build": "--since", "hardmode-off": "--hardmode"}
 
 
@@ -187,7 +187,7 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
             )
 
     hard = cfg.get("hardmode") or {}
-    key = encounter_of(trace)
+    key = facts["encounter"]
     if key in hard:
         facts["hardmode"] = bool(hard[key])
         if not hard[key]:
@@ -220,6 +220,9 @@ def show_validity(trace: Trace, since: str | None = None, hardmode: bool = False
     ref = resolve_since(REPO, since)
     decisive = decidable_kinds(since, hardmode)
     facts, warnings = inspect(trace, ref)
+    # Naming a ref is what makes the build count, so a typo in one can't quietly pass the pull.
+    if since and ref is None:
+        warnings.append(("stale-build", f"cannot resolve --since {since}: the build was not checked"))
 
     if facts["built"] is None:
         print("build   unknown (trace predates schema v11)")

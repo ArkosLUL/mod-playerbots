@@ -213,6 +213,48 @@ def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
+# Every instanced map's Map.dbc name, slugged the way the recorder slugs it. A session that opens
+# before it can see a boss files itself under this name, and the recorder only ever renames that one.
+MAP_SLUGS = {
+    33: "shadowfang-keep", 34: "stormwind-stockade", 36: "deadmines", 43: "wailing-caverns",
+    47: "razorfen-kraul", 48: "blackfathom-deeps", 70: "uldaman", 90: "gnomeregan",
+    109: "sunken-temple", 129: "razorfen-downs", 169: "emerald-dream", 189: "scarlet-monastery",
+    209: "zul-farrak", 229: "blackrock-spire", 230: "blackrock-depths", 249: "onyxia-s-lair",
+    269: "opening-of-the-dark-portal", 289: "scholomance", 309: "zul-gurub", 329: "stratholme",
+    349: "maraudon", 389: "ragefire-chasm", 409: "molten-core", 429: "dire-maul",
+    469: "blackwing-lair", 509: "ruins-of-ahn-qiraj", 531: "ahn-qiraj-temple", 532: "karazhan",
+    533: "naxxramas", 534: "the-battle-for-mount-hyjal",
+    540: "hellfire-citadel-the-shattered-halls", 542: "hellfire-citadel-the-blood-furnace",
+    543: "hellfire-citadel-ramparts", 544: "magtheridon-s-lair", 545: "coilfang-the-steamvault",
+    546: "coilfang-the-underbog", 547: "coilfang-the-slave-pens",
+    548: "coilfang-serpentshrine-cavern", 550: "tempest-keep", 552: "tempest-keep-the-arcatraz",
+    553: "tempest-keep-the-botanica", 554: "tempest-keep-the-mechanar",
+    555: "auchindoun-shadow-labyrinth", 556: "auchindoun-sethekk-halls",
+    557: "auchindoun-mana-tombs", 558: "auchindoun-auchenai-crypts",
+    560: "the-escape-from-durnholde", 564: "black-temple", 565: "gruul-s-lair", 568: "zul-aman",
+    574: "utgarde-keep", 575: "utgarde-pinnacle", 576: "the-nexus", 578: "the-oculus",
+    580: "the-sunwell", 585: "magister-s-terrace", 595: "the-culling-of-stratholme",
+    599: "halls-of-stone", 600: "drak-tharon-keep", 601: "azjol-nerub", 602: "halls-of-lightning",
+    603: "ulduar", 604: "gundrak", 608: "violet-hold", 615: "the-obsidian-sanctum",
+    616: "the-eye-of-eternity", 619: "ahn-kahet-the-old-kingdom", 624: "vault-of-archavon",
+    631: "icecrown-citadel", 632: "the-forge-of-souls", 649: "trial-of-the-crusader",
+    650: "trial-of-the-champion", 658: "pit-of-saron", 668: "halls-of-reflection",
+    724: "the-ruby-sanctum",
+}
+
+
+def map_of(path: pathlib.Path) -> int | None:
+    """The map id the recorder puts first in the file name."""
+    head = path.stem.split("_", 1)[0]
+    return int(head) if head.isdigit() else None
+
+
+def filed_under_map(map_id: int | None, slug: str) -> bool:
+    """Whether a boss slug is only the map's name. That is the one case where the name says nothing
+    about the encounter: any other slug came from a creature the recorder saw engage."""
+    return bool(slug) and MAP_SLUGS.get(map_id) == slug
+
+
 def recover_boss(path: pathlib.Path) -> str:
     """The encounter a trace belongs to, read out of its own units rather than its name.
 
@@ -262,9 +304,9 @@ def find_traces(roots, boss: str | None = None) -> list[pathlib.Path]:
     """Trace paths under `roots`, newest first, deduplicated by resolved path.
 
     Filtering on the filename means a boss sweep never opens the other files; the corpus runs to
-    1.4 GB and individual traces reach 21 MB. A file the name rules out is opened rather than
-    dropped, because a pull the recorder never renamed carries the map's name and is otherwise
-    unreachable - but only on the miss, so a boss that files itself correctly still costs nothing.
+    1.4 GB and individual traces reach 21 MB. The one exception is a file still named after its map,
+    which is what a pull the recorder never renamed looks like. Only those get opened, to see who
+    engaged.
     """
     wanted = canonical_boss(boss) if boss else None
     found: dict[pathlib.Path, float] = {}
@@ -272,7 +314,9 @@ def find_traces(roots, boss: str | None = None) -> list[pathlib.Path]:
         root = pathlib.Path(root)
         candidates = [root] if root.is_file() else sorted(root.glob("*.ndjson"))
         for path in candidates:
-            if wanted and boss_key(path) != wanted and recover_boss(path) != wanted:
+            if wanted and boss_key(path) != wanted and not (
+                    filed_under_map(map_of(path), boss_from_path(path))
+                    and recover_boss(path) == wanted):
                 continue
             resolved = path.resolve()
             if resolved not in found:

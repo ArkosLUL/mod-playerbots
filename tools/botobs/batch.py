@@ -182,9 +182,12 @@ def main() -> int:
                         help=f"trace files or directories (default: {DEFAULT_ROOT})")
     parser.add_argument("--boss", help="only traces whose slug matches, e.g. thorim")
     parser.add_argument("--since", metavar="REF",
-                        help="commit-ish or ISO time the build must be newer than (default: HEAD)")
+                        help="commit-ish or ISO time the build must be newer than; naming one makes a "
+                             "stale build disqualify (without it, builds are compared to HEAD for "
+                             "information only)")
     parser.add_argument("--valid", action="store_true",
-                        help="drop traces with a stale build or the wrong hard-mode setting")
+                        help="drop traces where a human tanked or healed, plus a stale build with "
+                             "--since and hard mode off with --hardmode")
     parser.add_argument("--strict", action="store_true",
                         help="--valid, and also drop any trace with a human in the raid")
     parser.add_argument("--census", action="store_true", help="totals only, no per-trace rows")
@@ -200,6 +203,11 @@ def main() -> int:
                         help="the pulls were meant to be hard mode, so hard mode off disqualifies")
     args = parser.parse_args()
 
+    ref = resolve_since(REPO, args.since)
+    if args.since and not ref:
+        print(f"cannot resolve --since {args.since} to a commit or a time", file=sys.stderr)
+        return 1
+
     roots = args.roots or [DEFAULT_ROOT]
     paths = find_traces(roots, args.boss)
     if args.limit:
@@ -209,7 +217,6 @@ def main() -> int:
         print(f"no traces{where} under {', '.join(str(r) for r in roots)}", file=sys.stderr)
         return 1
 
-    ref = resolve_since(REPO, args.since)
     decisive = decidable_kinds(args.since, args.hardmode)
     comparing = bool(args.split_at or args.baseline)
 

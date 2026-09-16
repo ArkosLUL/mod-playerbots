@@ -23,15 +23,18 @@ sys.path.insert(0, str(BOTOBS))
 import contextlib  # noqa: E402
 import io  # noqa: E402
 import math  # noqa: E402
+from unittest import mock  # noqa: E402
 
 import coverage  # noqa: E402
 import deathreport  # noqa: E402
 import flame_leviathan  # noqa: E402
 import geometry  # noqa: E402
+import obstrace  # noqa: E402
 import probes  # noqa: E402
 import space  # noqa: E402
 import validity  # noqa: E402
 import views  # noqa: E402
+import yogg_saron  # noqa: E402
 from coverage import bucket, coverage_metrics  # noqa: E402
 from metrics import Side, compare  # noqa: E402
 from obstrace import Trace, boss_key, canonical_boss, pull_time, recover_boss  # noqa: E402
@@ -264,9 +267,6 @@ class Geometry(unittest.TestCase):
     def test_dist2_ignores_height(self):
         self.assertAlmostEqual(geometry.dist2((0, 0, 100), (3, 4, -50)), 5.0)
 
-    def test_dist3_uses_it(self):
-        self.assertAlmostEqual(geometry.dist3((0, 0, 0), (0, 3, 4)), 5.0)
-
     def test_edge_is_signed(self):
         self.assertAlmostEqual(geometry.edge((0, 0), [(0, 0, 10)]), -10.0)
         self.assertAlmostEqual(geometry.edge((20, 0), [(0, 0, 10)]), 10.0)
@@ -324,6 +324,47 @@ class Geometry(unittest.TestCase):
         with self.assertRaises(geometry.Unknown):
             geometry.anchor("NO_SUCH_ANCHOR_ANYWHERE")
 
+    def declared_in(self, folder: str, **files: str) -> pathlib.Path:
+        root = pathlib.Path(folder)
+        for name, text in files.items():
+            (root / f"{name}.h").write_text(text, encoding="utf-8")
+        return root
+
+    def test_every_way_the_tree_writes_a_position_is_read(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = self.declared_in(folder, spots=(
+                "const Position CALL_SPOT = Position(1.0f, 2.0f, 3.0f);\n"
+                "const Position BRACE_SPOT =\n    { 1.5f, -2.0f, 3.0f };\n"
+                "inline Position const FLIPPED_SPOT = { 4.0f, 5.0f, 6.0f, 0.5f };\n"
+                "static const Position DIRECT_SPOT{ 7, 8, 9 };\n"
+                "const Position ROW_SPOTS[2] = { { 1.0f, 2.0f, 3.0f }, { 4.0f, 5.0f, 6.0f } };\n"))
+            self.assertEqual(geometry.anchor("CALL_SPOT", root), (1.0, 2.0, 3.0))
+            self.assertEqual(geometry.anchor("BRACE_SPOT", root), (1.5, -2.0, 3.0))
+            self.assertEqual(geometry.anchor("FLIPPED_SPOT", root), (4.0, 5.0, 6.0))
+            self.assertEqual(geometry.anchor("DIRECT_SPOT", root), (7.0, 8.0, 9.0))
+            with self.assertRaises(geometry.Unknown):
+                geometry.anchor("ROW_SPOTS", root)
+
+    def test_a_name_two_files_disagree_on_is_refused(self):
+        # Neither file is more right than the other, so neither value gets to win.
+        with tempfile.TemporaryDirectory() as folder:
+            root = self.declared_in(folder, lich="constexpr float LEASH = 40.0f;\n",
+                                    valithria="constexpr float LEASH = 35.0f;\n",
+                                    twins="constexpr float SAME = 5.0f;\n",
+                                    twins_copy="constexpr float SAME = 5.0f;\n")
+            with self.assertRaises(geometry.Unknown) as caught:
+                geometry.radius("LEASH", root)
+            self.assertIn("40.0", str(caught.exception))
+            self.assertIn("35.0", str(caught.exception))
+            self.assertAlmostEqual(geometry.radius("SAME", root), 5.0)
+
+    def test_an_entry_several_creatures_share_names_no_point(self):
+        trace = rich()
+        self.assertEqual(geometry.reference("entry:33999", trace)[:2], (0.0, 0.0))
+        trace.entries[5001] = 33999
+        with self.assertRaises(geometry.Unknown):
+            geometry.reference("entry:33999", trace)
+
 
 class Spatial(unittest.TestCase):
     def test_event_spots_reads_a_cast_as_its_casters_position(self):
@@ -375,6 +416,22 @@ class Spatial(unittest.TestCase):
         self.assertEqual(space.role_held(trace, 0), "nobody")
         self.assertEqual(space.role_held(trace, 111222333), "other")
 
+    def test_the_raids_own_pets_are_not_hostiles(self):
+        trace = rich()
+        for snap in trace.of("snap"):
+            for row in snap["u"]:
+                if row[0] == 5005:
+                    row[7] = 4294967400
+        _, per_unit = space.threat_share(trace, None, lambda when: when >= 0)
+        self.assertNotIn(5005, per_unit)
+        self.assertIn(4294967400, per_unit)
+
+    def test_a_frame_counts_until_the_next_snapshot_not_the_next_one_in_scope(self):
+        # Snapshots at 0, 1000, 2000 and 2500. Scoped to 0 and 2000 only, the frame at 0 holds for
+        # 1000 ms and not for the 2000 ms up to the next frame that passed the scope.
+        held, _ = space.threat_share(rich(), None, lambda when: when in (0, 2000))
+        self.assertEqual(dict(held), {"tank": 1500, "ranged": 1000})
+
 
 class Decidability(unittest.TestCase):
     def test_a_human_role_always_decides(self):
@@ -387,6 +444,12 @@ class Decidability(unittest.TestCase):
     def test_hard_mode_only_decides_when_asked_for(self):
         self.assertNotIn("hardmode-off", validity.decidable_kinds())
         self.assertIn("hardmode-off", validity.decidable_kinds(hardmode=True))
+
+    def test_a_since_that_does_not_resolve_disqualifies(self):
+        with contextlib.redirect_stdout(io.StringIO()) as banner:
+            counted = validity.show_validity(rich(), "HEAD~no-such-ref")
+        self.assertEqual(counted, 1)
+        self.assertIn("cannot resolve", banner.getvalue())
 
 
 class Recovery(unittest.TestCase):
@@ -402,6 +465,34 @@ class Recovery(unittest.TestCase):
         trace.records.append({"t": 5, "e": "pull", "boss": "named-by-rename", "src": "rename"})
         self.assertEqual(validity.encounter_of(trace), "named-by-rename")
 
+    def test_a_pull_filed_under_the_map_is_named_by_its_units(self):
+        trace = rich()
+        trace.header["boss"] = "ulduar"
+        self.assertEqual(validity.encounter_of(trace), "fixture-boss")
+
+    def test_a_pull_filed_under_its_encounter_keeps_that_name(self):
+        # Mimiron's pull is filed `mimiron` and never renamed, while the first boss-flagged unit to
+        # trade damage is Leviathan Mk II. The units must not overrule a name that was never the map's.
+        trace = rich()
+        self.assertEqual(trace.header["boss"], "fixtureboss")
+        self.assertEqual(validity.encounter_of(trace), "fixtureboss")
+
+    def test_find_traces_opens_only_a_file_filed_under_the_map(self):
+        with tempfile.TemporaryDirectory() as folder:
+            unnamed = pathlib.Path(folder) / "603_4_ulduar_1789500000.ndjson"
+            other = pathlib.Path(folder) / "603_4_thorim_1789500001.ndjson"
+            for path in (unnamed, other):
+                path.write_bytes(FULL.read_bytes())
+            with mock.patch.object(obstrace, "recover_boss", wraps=obstrace.recover_boss) as opened:
+                found = obstrace.find_traces([folder], "fixture-boss")
+            self.assertEqual([path.name for path in found], [unnamed.name])
+            self.assertEqual([call.args[0].name for call in opened.call_args_list], [unnamed.name])
+
+    def test_the_yogg_probe_check_does_not_depend_on_the_filed_name(self):
+        trace = rich()
+        trace.header["boss"] = "ulduar"
+        self.assertIn("yogg.phase", yogg_saron.missing_probes(trace))
+
     def test_recover_boss_reads_it_off_disk(self):
         self.assertEqual(recover_boss(FULL), "fixture-boss")
 
@@ -414,7 +505,7 @@ class Recovery(unittest.TestCase):
 
 class Prefixes(unittest.TestCase):
     def test_the_first_word_of_a_slug_counts(self):
-        # Without this every yogg.* key was invisible to the mute check.
+        # Otherwise no yogg.* key matches its own boss.
         self.assertTrue(prefix_matches_boss("yogg", "yogg-saron"))
 
     def test_the_other_two_forms_still_count(self):
@@ -477,7 +568,7 @@ class Ranking(unittest.TestCase):
 
 
 class ShortRows(unittest.TestCase):
-    """Columns 8 to 11 arrived in v8. Reading one off an older row used to raise."""
+    """Columns 8 to 11 arrived in v8, so an older row raises if one is read without checking."""
 
     def test_the_flame_leviathan_frame_survives_a_pre_v8_row(self):
         snap = {"t": 0, "u": [[1, 1.0, 2.0, 3.0, 0.4, 100.0]]}
@@ -492,12 +583,25 @@ class ShortRows(unittest.TestCase):
         self.assertEqual(idle_windows(trace, 1), [])
 
 
+class Idle(unittest.TestCase):
+    def test_the_window_starts_where_the_silence_did(self):
+        # Target held from 0 to 30 s, casts at 2 s and 5 s: quiet for 25 s from 5 s, not from 0.
+        rows = [{"e": "hdr", "v": 12, "boss": "idle", "roster": [{"g": 1, "n": "Still", "r": "ranged"}]}]
+        rows += [{"t": when, "e": "snap", "u": [[1, 0.0, 0.0, 0.0, 0.0, 100.0, 100.0, 99, 0, 0, 0, 0]]}
+                 for when in range(0, 30001, 1000)]
+        rows += [{"t": when, "e": "cast", "s": 1, "sp": 100, "tgt": 99} for when in (2000, 5000)]
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "603_4_idle_1789500000.ndjson"
+            path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+            found = idle_windows(Trace(path), 10000)
+        self.assertEqual(found, [{"guid": 1, "start": 5000, "quiet": 25000}])
+
+
 class Renderers(unittest.TestCase):
     """Every printing entry point, against a fixture carrying one of every record.
 
-    These do not check what is printed - they check that it prints. The defect that prompted them
-    was an undefined name in `show_validity`, which no amount of testing the pure functions under it
-    would ever have reached.
+    These do not check what is printed - they check that it prints. An undefined name inside a
+    renderer is invisible to every test of the pure functions under it, and this is what catches it.
     """
 
     def run_quiet(self, call):
@@ -548,7 +652,7 @@ class Renderers(unittest.TestCase):
 
     def test_the_smoke_test_catches_a_broken_renderer(self):
         def broken():
-            print(undefined_name_just_like_the_one_that_shipped)  # noqa: F821
+            print(undefined_name)  # noqa: F821
 
         with self.assertRaises(NameError):
             self.run_quiet(broken)
