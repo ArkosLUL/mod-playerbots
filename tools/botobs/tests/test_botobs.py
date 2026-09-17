@@ -610,6 +610,25 @@ class HolderSpans(unittest.TestCase):
         self.assertEqual(holder_spans(rich(), "no.such.key"), {})
 
 
+class _HoldFrame:
+    """The two things hold_quality asks a frame for."""
+
+    def __init__(self, t, hulls):
+        self.t, self.hulls = t, hulls
+
+
+class _HoldFight:
+    """Frames and the guid -> entry map, which is all hold_quality touches on a Fight."""
+
+    def __init__(self, frames, entries):
+        self.frames = frames
+        self.trace = argparse.Namespace(entries=entries)
+
+    def frame_at(self, when, tol=1500):
+        usable = [frame for frame in self.frames if frame.t <= when and when - frame.t <= tol]
+        return usable[-1] if usable else None
+
+
 class FlameLeviathanReader(unittest.TestCase):
     def test_reticle_phases_split_chasing_from_stopped(self):
         track = [(0, 0.0, 0.0), (250, 3.0, 0.0), (500, 6.0, 0.0), (750, 6.1, 0.0), (1000, 6.1, 0.1),
@@ -708,6 +727,48 @@ class FlameLeviathanReader(unittest.TestCase):
         for index, corner in enumerate(flame_leviathan.ARENA_CORNERS):
             self.assertAlmostEqual(geometry.dist2(flame_leviathan.post_point(index), corner),
                                    flame_leviathan.CORNER_STANDOFF, places=3)
+
+    def test_hammer_share_follows_the_core_falloff(self):
+        radius = flame_leviathan.HAMMER_RADIUS
+        self.assertEqual(flame_leviathan.hammer_share(0.0), 1.0)
+        self.assertEqual(flame_leviathan.hammer_share(radius), 1.0)
+        # dist - 6 is clamped at 1, so just outside the circle is never worth more than a direct hit
+        self.assertEqual(flame_leviathan.hammer_share(radius - 0.5), 1.0)
+        self.assertAlmostEqual(flame_leviathan.hammer_share(7.5), 1 / 1.5)
+        self.assertAlmostEqual(flame_leviathan.hammer_share(56.0), 1 / 50.0)
+
+    def test_off_cone_deg_folds_both_ways_round(self):
+        self.assertAlmostEqual(flame_leviathan.off_cone_deg((0.0, 0.0, 0.0), (10.0, 0.0)), 0.0)
+        self.assertAlmostEqual(flame_leviathan.off_cone_deg((0.0, 0.0, 0.0), (0.0, 10.0)), 90.0)
+        self.assertAlmostEqual(flame_leviathan.off_cone_deg((0.0, 0.0, 0.0), (0.0, -10.0)), 90.0)
+        self.assertAlmostEqual(flame_leviathan.off_cone_deg((0.0, 0.0, math.pi), (10.0, 0.0)), 180.0)
+
+    def test_hold_quality_separates_taking_an_add_from_being_able_to_shoot_it(self):
+        engine = 50
+        # The hull sits at the origin facing +x and never moves. One add parks 5 yd behind it: inside
+        # Ram's range but behind the arc, and under Fire Cannon's floor, which is the dead band. The
+        # other sits 20 yd ahead, where the cannon bears.
+        frames = [_HoldFrame(t, {engine: (0.0, 0.0, 100.0, flame_leviathan.SIEGE, 0, 100.0, 0.0)})
+                  for t in range(0, 4001, 1000)]
+        fl = _HoldFight(frames, {engine: flame_leviathan.SIEGE})
+        tracks = {
+            1: [(0, -5.0, 0.0, 100.0, 0), (1000, -5.0, 0.0, 100.0, engine),
+                (3000, -5.0, 0.0, 96.0, engine)],
+            2: [(0, 20.0, 0.0, 100.0, 0), (1000, 20.0, 0.0, 100.0, engine),
+                (3000, 20.0, 0.0, 60.0, engine)],
+        }
+        deaf, covered = flame_leviathan.hold_quality(tracks, fl)
+        self.assertEqual((deaf["took"], deaf["frames"]), (1000, 2))
+        self.assertEqual((deaf["under_floor"], deaf["blind"]), (2, 2))
+        self.assertAlmostEqual(deaf["rate"], 2.0)
+        # 20 yd out is past Ram, but that is the band Fire Cannon is for, so nothing is blind here
+        self.assertEqual((covered["under_floor"], covered["blind"]), (0, 0))
+        self.assertAlmostEqual(covered["rate"], 20.0)
+
+    def test_hold_quality_reports_an_add_no_engine_ever_claimed(self):
+        fl = _HoldFight([_HoldFrame(0, {})], {})
+        rows = flame_leviathan.hold_quality({1: [(0, 0.0, 0.0, 100.0, 0)]}, fl)
+        self.assertEqual((rows[0]["took"], rows[0]["frames"], rows[0]["rate"]), (None, 0, None))
 
 
 class LatchAllValues(unittest.TestCase):
@@ -951,7 +1012,7 @@ class ShortRows(unittest.TestCase):
         snap = {"t": 0, "u": [[1, 1.0, 2.0, 3.0, 0.4, 100.0], [2, 5.0, 6.0, 0.0, 0.1, 80.0]]}
         frame = flame_leviathan.Frame(snap, {1: flame_leviathan.BOSS_ENTRY, 2: flame_leviathan.SIEGE}, set())
         self.assertEqual(frame.boss, (1.0, 2.0, 0.4, 0))
-        self.assertEqual(frame.hulls[2], (5.0, 6.0, 80.0, flame_leviathan.SIEGE, 0, None))
+        self.assertEqual(frame.hulls[2], (5.0, 6.0, 80.0, flame_leviathan.SIEGE, 0, None, 0.1))
 
     def test_idle_windows_ignore_a_row_with_no_target_column(self):
         trace = rich()

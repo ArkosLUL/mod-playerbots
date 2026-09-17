@@ -234,7 +234,7 @@ periodic ground event:
 
 | Tower | Boss aura | Ground NPC | Hazard |
 |---|---|---|---|
-| Storm | 65076 | 33364 (8 spawn) | Static lightning strikes at 8 fixed marks, ~5s telegraph |
+| Storm | 65076 | 33364 (8 spawn) | 8 marks at once in a 200x200 box, each firing 5-20 s later |
 | Flame | 65075 | 33369 | Escort-path **moving** fire trail, drops fire every 2s |
 | Frost | 65077 | 33108 (2 spawn) | Chases a random target, commits once it stops, strikes ~6 s later |
 | Life | 64482 | 33367 (4 spawn) | Adds that live until killed — contain, not dodge |
@@ -308,13 +308,16 @@ ties — not by nearest alone. Adds clump at a median of 2, p75 3 and max 9 insi
 the extra bodies are usually there to be had. It skips an add a posted engine is holding — victim a
 siege hull inside `ULDUAR_FL_CORNER_HOLD_RADIUS` (30 yd) of a post — unless the shooter rides that
 hull: a 76k Fire Cannon hit from elsewhere passes the 130% switch and drags the add out of the corner.
+**The claim lapses where the holder has no shot** - inside Fire Cannon's floor and outside Ram's cone -
+or it shields the add from everyone: see below.
 
-**Corner containment: one siege engine per corner, never all of them.** Each wave should spawn in front
-of an engine parked `ULDUAR_FL_CORNER_STANDOFF` (12 yd) in from its corner and facing it, which takes
-threat first, throws the adds back in (Ram's knockback is away from the caster) and cannons them there:
-an add meleeing the hull is inside Fire Cannon's 10 yd minimum, one thrown back is outside it. A wave
-is 694k (504k + 190k), about nine cannon shots against a 29 s interval. The posted turret shoots adds
-within 30 yd of its post before anything else; a posted driver fires Ram only at what is in its cone.
+**Corner containment: one siege engine per corner, never all of them.** Each wave spawns in front of an
+engine parked `ULDUAR_FL_CORNER_STANDOFF` (12 yd) in from its corner, which takes threat, throws the
+adds back in (Ram's knockback is away from the caster) and cannons them there: an add meleeing the hull
+is inside Fire Cannon's 10 yd minimum, one thrown back is outside it. A wave is 694k (504k + 190k),
+about nine cannon shots against a 29 s interval. The posted turret shoots adds within 30 yd of its post
+before anything else. `DriveTo` parks anywhere inside `ULDUAR_FL_ARRIVE_TOLERANCE`, so the hull really
+sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reaches melee.
 
 - **Slots.** Siege hulls are ranked by guid once per pull, and ranks 1–4 own corners 0–3. Ranking the
   live ones renumbered everyone below a loss, so a dead hull leaves its corner unmanned instead.
@@ -331,6 +334,14 @@ within 30 yd of its post before anything else; a posted driver fires Ram only at
   once into a running one, never landing in the ram sphere. The interrupt stops the hull before
   turning: a moving spline overrides `SetFacingTo`, and a reserve that drove past him at 22 yd, 33–87°
   off, never fired.
+
+  **It is also the only interrupter.** With four corners manned the other engines sat 51-211 yd out for
+  the whole lost channel on 2026-09-17, and `FlameLeviathanIsVentInterrupter` needs cone range, so a
+  dodge that walks the reserve past 40 yd drops the duty rather than a shot: the trigger stopped firing
+  and the channel ran all 11 ticks. Inside the vent window it therefore dodges on the strict circle
+  (margin 0, not the 8 yd band), steps to a point that keeps him in cone range rather than the nearest
+  clear one, and holds Steam Rush back while a dodge is due - a `MOVEMENT_FORCED` leg cancels the
+  charge, which cost 40 energy 0.2 s after the rush went out.
 - **Posting starts at engage**, gated on his Tower of Life aura 64482, which `ActivateTowers` applies in
   `JustEngagedWith` 34 s before wave 1. The old gate was the first add seen, i.e. wave 1 itself, with
   engines standing 12–27 s of driving from their posts.
@@ -338,6 +349,16 @@ within 30 yd of its post before anything else; a posted driver fires Ram only at
   yd/s otherwise. The corner drive stays `MOVEMENT_COMBAT`, below the `MOVEMENT_FORCED` Fury dodge,
   which must never wait out a corner leg: up to `MaxWaitForMove` (5 s) of a 6.5 s fuse.
 - **No reachability gate.** He came within 40 yd of any post for 0–1.7% of a pull.
+
+**A post that will not turn cannot kill what it holds.** Taking the add was never the problem - on
+2026-09-17 a posted engine out-threatened the chopper the zone-engage picked within **1.0-3.2 s**, for
+8 of 8 adds. Then the add closed to a median **9.7 yd**, inside the cannon floor for **76.8%** of held
+frames, and came back at the engine from the arena side; with the facing locked to the corner,
+**71.7%** of held frames had neither gun bearing. Those adds lost **1.8 %/s** against **12.1** where
+one did: Wards of Life lived 24-52 s, seven adds were alive at once, and Lash was 15.3% of hull damage,
+almost all of it on the two posted engines. So a posted engine owes its facing to the corner only
+while it has nothing to shoot; with an add inside Ram's 15 yd it turns onto it, and the corner drive
+faces the same add the cast node picked. `--corners` scores the hold, not the first victim.
 
 **A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
 turned, while `DriveTo`'s park block re-faces the boss every tick. `HoldStation` therefore faces
@@ -362,6 +383,12 @@ Hammer (7) are creature casts at a destination, and `WorldObjectSpellAreaTargetC
 size to those, so they are flat from the hull's centre; Inferno adds both sizes, above. The scan counts
 a hazard within `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) of its reach, and `ClearHazard` steps out to
 reach + 16.
+
+**Thorim's Hammer is not the circle it looks like.** `spell_thorims_hammer` deals full damage inside
+7 yd and `base / max(dist - 6, 1)` outside, so every strike hits every hull on the map. On 2026-09-17,
+116 of 117 hits landed outside the circle for a median 4.1k, scaling to a direct hit near 150k: the
+circle is worth dodging and the tail is a floor, not a missed dodge. Its 8 marks also arrive together
+and live 24 s, so at the 8 yd warning band a hull near him is inside one almost continuously.
 
 **Fire frees a frozen vehicle, and the demolisher already carries it.** `Hurl Boulder 62306` triggers
 `Boulder 62307`, whose third effect triggers `Flames 65045`; the gunner's `Mortar 62634` → `62635`
@@ -520,8 +547,28 @@ victim and ward-add fixes above. Reproduce with `flame_leviathan.py <trace>`.
 | Ram blasts with nobody Pursued / Ram damage to station holders | 16 of 46 / 43% | 2 of 23 / 28% | 0 / under 10% |
 | adds timed out at their summon duration | 34 of 60 | 6 of 23 | 0 |
 
-Thorim's Hammer is no longer a non-event: its hull hits land a median 48 yd from the marker for a
-median 2.7k, outside the 7 yd reach the dodge uses.
+Thorim's Hammer is no longer a non-event, but it is not a dodge failure either: it is arena-wide with
+1/d falloff, so those hits are the floor described above.
+
+## Baseline to beat - 2026-09-17 17:34, four towers up
+
+`603_2_flame-leviathan_1789666489`, built on `9ed7440bb`, and the first trace with the re-target, vent
+rush, kite and ram-victim fixes in. A kill, but a short one: his health steps 91.26% -> 23.73% in one
+0.2 s frame at t=37 (the 09-16 pull did the same at t=82), and he loses ~15%/min otherwise, so 1:58
+covers only 4 vent channels and 5 ward waves. Ram and the long-fight measures have almost no data in it.
+
+| | measured | target |
+|---|---|---|
+| Battering Ram / Inferno hull damage | 0 / 0 | hold |
+| drive COMBAT moves refused `wait`: demolisher / siege / chopper | 19 / 14 / 11% | under 10% |
+| demolisher mean stacks / frames past 70 yd | 3.3-5.9 / 17-40% | above 6 / under 15% |
+| pyrite stacks lost: fail / dry / late | 4 / 3 / 1 | fail 0-1 |
+| Vents channels run full with a siege engine alive | 1 of 4 | 0 |
+| held-add frames with neither gun bearing | 71.7% | under 25% |
+| held-add %/s: a gun bears / none does | 12.1 / 1.8 | both above 6 |
+| adds alive at once, peak | 7 | under 4 |
+| hull damage: Missile Barrage / Vents / Lash / Hammer | 40 / 30 / 15 / 15% | Vents and Lash under 5% |
+| adds timed out at their summon duration | 1 of 15 | 0 |
 
 ## Known gaps
 
@@ -537,8 +584,9 @@ median 2.7k, outside the 7 yd reach the dodge uses.
   so `--fury` must keep catching no hull. Siege engines boxed out by the Inferno trail at 25 yd may
   drop the vent interrupt. The kite ring's chamfer passes ~28 yd from each post, inside Ram's sphere
   round a Pursued vehicle driving it. An add thrown against the wall may land inside Fire Cannon's
-  minimum, and `DoZoneInCombat` leaves the first victim arbitrary until someone hits the add. `--corners`
-  scores the last three once the DB update is in.
+  minimum. The first victim is now measured: `DoZoneInCombat` gives it to the first roster entry's hull
+  (a chopper, 11 of 15 adds on 2026-09-17), and the post takes it back in 1-3.2 s, so it costs the add's
+  walk out and back, not the hold.
 - **A siege engine at station starts every Pursued span inside Ram's cast range**
   (`ULDUAR_FL_SIEGE_STAND_DIST` 8 against a 7.7 hull). If the first Ram still lands now that the kite
   starts at once, back off before the 31 s switch.
@@ -548,9 +596,17 @@ median 2.7k, outside the 7 yd reach the dodge uses.
 - **The pyrite refresh slack held on 2026-09-17**: `late` lost 1–2 stacks a pull against 25 `fail` of
   34, nearly all past 70 yd. More `late` losses mean `ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s) runs
   short. The seat's +25 is read off the DBC and `conditions`, not a trace.
-- **Demolishers may still fall past 70 yd while he runs faster than their 7 yd/s** (32% / 12% of
-  station frames on 2026-09-17). If that outlives the re-target fix, tighten
-  `ULDUAR_FL_DEMOLISHER_BAND` or spend Increased Speed out of range.
+- **Demolishers may still fall past 70 yd while he runs faster than their 7 yd/s** (17-40% of station
+  frames on 2026-09-17, and 383 of 385 barrel `fail` frames were out there). The station point now
+  leads him by `ULDUAR_FL_STATION_LEAD_S` of his own travel, capped at 10 yd so the band cannot fall
+  into Battering Ram's 25. If that is not enough, tighten `ULDUAR_FL_DEMOLISHER_BAND` or spend
+  Increased Speed out of range. A lead he turns out of is worse than a stale point, so watch `fail`
+  and the refusal rate together.
+- **The crate grab ceiling is not holding and nobody knows why.** 30 of 46 grabs on 2026-09-17 went out
+  at 80-100 energy against `ULDUAR_FL_CRATE_GRAB_CEILING` (75), wasting part of the +25. Reading the
+  bar 1.5 s earlier gives the same figures, so it is not the energize landing inside the sample, and
+  `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. Find the path before moving
+  the constant.
 - **A siege engine Pursued late is caught on speed.** At his ~8 yd/s by 2:50 one kept a 20–36 yd gap
   and took a blast every 2 s; Steam Rush every 15 s buys ~5 s.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.

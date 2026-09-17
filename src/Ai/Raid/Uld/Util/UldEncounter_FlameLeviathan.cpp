@@ -503,6 +503,12 @@ uint32 FlameLeviathanMsToNextVent(Player* bot, Unit* boss)
     return ULDUAR_FL_VENT_INTERVAL_MS - getMSTimeDiff(start, getMSTime()) % ULDUAR_FL_VENT_INTERVAL_MS;
 }
 
+bool FlameLeviathanVentWindowOpen(Player* bot, Unit* boss)
+{
+    uint32 const toVent = FlameLeviathanMsToNextVent(bot, boss);
+    return toVent == 0 || toVent <= ULDUAR_FL_VENT_RUSH_LEAD_MS;
+}
+
 bool FlameLeviathanCrewUsable(Player* member)
 {
     if (!member || !member->IsAlive())
@@ -559,11 +565,26 @@ static bool FlameLeviathanHeldByAnotherPost(Unit* add, Unit* from)
     if (from == victim || from->GetVehicleBase() == victim)
         return false;
 
+    bool posted = false;
     for (uint8 i = 0; i < ULDUAR_FL_ARENA_CORNERS.size(); ++i)
         if (victim->GetExactDist2d(FlameLeviathanCornerPostPoint(i)) <= ULDUAR_FL_CORNER_HOLD_RADIUS)
-            return true;
+        {
+            posted = true;
+            break;
+        }
 
-    return false;
+    if (!posted)
+        return false;
+
+    // The claim only means something while the holder can still shoot it. Fire Cannon will not fire
+    // under 10 yd (62358, RangeIndex 164), so inside that floor the post's whole answer is Ram, and
+    // Ram is a cone. On 2026-09-17 adds parked at a median 9.7 yd with 87% of those frames outside
+    // the engine's arc, and they lost 1.5-2.1%/s against 7-22%/s for the ones the fleet could reach:
+    // one Ward of Life lived 52 s inside a corner nobody was allowed to help with.
+    if (add->GetExactDist2d(victim) >= ULDUAR_FL_FIRE_CANNON_MIN_RANGE)
+        return true;
+
+    return FlameLeviathanInCone(victim, add, ULDUAR_FL_RAM_CONE_HALF_ANGLE, ULDUAR_FL_RAM_CONE_RADIUS);
 }
 
 Unit* FlameLeviathanBestAdd(PlayerbotAI* botAI, Unit* from, float minRange, float maxRange, float splash,
@@ -918,13 +939,13 @@ bool FlameLeviathanFuryArmed(Player* bot, Unit* reticle)
     return bot && reticle && FlameLeviathanStateFor(bot).furyArmed.count(reticle->GetGUID());
 }
 
-Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask)
+Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float margin)
 {
     if (!botAI || !from)
         return nullptr;
 
     Unit* nearest = nullptr;
-    float best = ULDUAR_FL_TOWER_HAZARD_MARGIN;
+    float best = margin;
 
     ForEachTowerHazard(botAI, towerMask,
                        [&](Unit* hazard)
@@ -1030,9 +1051,26 @@ float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float r
     return (static_cast<float>(index) - static_cast<float>(count - 1) * 0.5f) * spread;
 }
 
-Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffset)
+float FlameLeviathanStationLead(Unit* boss)
 {
-    return FlameLeviathanOffsetPoint(boss, boss->GetOrientation() + M_PI + bearingOffset, standDist);
+    if (!boss || !boss->isMoving())
+        return 0.0f;
+
+    return std::min(boss->GetSpeed(MOVE_RUN) * ULDUAR_FL_STATION_LEAD_S, ULDUAR_FL_STATION_LEAD_MAX);
+}
+
+Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffset, float lead)
+{
+    Position point = FlameLeviathanOffsetPoint(boss, boss->GetOrientation() + M_PI + bearingOffset, standDist);
+    if (lead <= 0.0f)
+        return point;
+
+    // Along his heading, which shortens the gap rather than widening it: the point sits behind him,
+    // so leading it moves it toward him. That is the safe direction to be wrong in, because a
+    // demolisher loses its barrel at 70 yd and loses nothing at all until Hurl Boulder's 10 yd floor.
+    point.Relocate(point.GetPositionX() + std::cos(boss->GetOrientation()) * lead,
+                   point.GetPositionY() + std::sin(boss->GetOrientation()) * lead, point.GetPositionZ());
+    return point;
 }
 
 Position FlameLeviathanLeadPoint(Unit* boss, float standDist)

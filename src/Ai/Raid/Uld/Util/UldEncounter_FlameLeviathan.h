@@ -163,6 +163,16 @@ constexpr float ULDUAR_FL_CHOPPER_STAND_DIST = 20.0f;
 // which Hurl Pyrite Barrel shares: reach (15) plus this plus the arrival deadband lands outside 70,
 // and a barrel that will not cast drops the stack the raid does its boss damage with.
 constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;
+
+// How far ahead of a moving boss a demolisher's station point is placed, as seconds of his own
+// travel, and the ceiling on what that comes to. A goal built off where he is now is short by
+// however long the hull takes to reach it: 2026-09-17 had demolishers past 70 yd 17-40% of the time
+// and 383 of 385 barrel `fail` frames were out there. He runs a straight line between turns, so his
+// heading is the lead. The cap keeps the closest the band can end up - reach plus band minus this,
+// about 44 yd from his centre - well outside Battering Ram's 25, which is the only thing that makes
+// being nearer expensive. Demolishers only: a chopper stands at 20 and would be led into that sphere.
+constexpr float ULDUAR_FL_STATION_LEAD_S = 1.5f;
+constexpr float ULDUAR_FL_STATION_LEAD_MAX = 10.0f;
 constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
 
 // Re-facing costs a spline, so only correct a facing that has really drifted. Roughly 6 degrees.
@@ -356,6 +366,11 @@ void FlameLeviathanClaimVentChannel(Player* bot);
 // skipped channel keeps the 20 s cadence rather than going negative.
 uint32 FlameLeviathanMsToNextVent(Player* bot, Unit* boss);
 
+// A channel running, or one close enough that giving up the firing position now loses it. Only the
+// vent reserve reads this: there is exactly one engine in Electroshock range of him at a time, so
+// whatever walks it out of range costs the whole channel and not just a shot.
+bool FlameLeviathanVentWindowOpen(Player* bot, Unit* boss);
+
 // A cone spell lands nothing unless the vehicle is genuinely pointed at him, and CastVehicleSpell
 // only turns for targets outside 120 degrees - wider than any of these cones. Returns true when the
 // shot is on; otherwise starts the turn and leaves the cast for a later tick.
@@ -447,9 +462,15 @@ float FlameLeviathanHazardReach(Unit* hazard, Unit* vehicle);
 bool FlameLeviathanFuryArmed(Player* bot, Unit* reticle);
 
 // Nearest active-tower ground hazard to `from` (Storm strike, Flame trail, armed Frost reticle),
-// measured to its reach, counting only those within ULDUAR_FL_TOWER_HAZARD_MARGIN of it. Life tower
-// is adds, not a ground hazard, so it is never considered. Returns nullptr if none are in range.
-Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask);
+// measured to its reach, counting only those within `margin` of it. Life tower is adds, not a ground
+// hazard, so it is never considered. Returns nullptr if none are in range.
+//
+// Pass 0 for a hull that owes the raid a firing position. The Storm tower drops eight marks at once
+// across a 200x200 box, so at the default margin a siege engine near him is inside the warning band
+// of one almost continuously: on 2026-09-17 the vent reserve dodged for a whole 10s channel while
+// standing in the real 7 yd circle for about one second of it, and lost the channel.
+Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask,
+                                          float margin = ULDUAR_FL_TOWER_HAZARD_MARGIN);
 
 // Every active-tower ground hazard within radius of `from`, into `out`, an unarmed Fury excepted.
 // The Flame trail is a line of patches rather than one circle, so a step that only knows about the
@@ -457,7 +478,13 @@ Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32
 void GetFlameLeviathanTowerHazards(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float radius,
                                    std::vector<Unit*>& out);
 
-Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffset = 0.0f);
+// `lead` shifts the point along his heading, so a hull that spends a second or two driving to it
+// arrives where he will be rather than where he was. See FlameLeviathanStationLead.
+Position FlameLeviathanRearPoint(Unit* boss, float standDist, float bearingOffset = 0.0f, float lead = 0.0f);
+
+// How far ahead of him a station point is placed while he is moving, capped by
+// ULDUAR_FL_STATION_LEAD_MAX. Zero when he is standing still.
+float FlameLeviathanStationLead(Unit* boss);
 
 // Where this vehicle sits in its class's fan, as an angle off the class bearing. One station point
 // per class stacked the whole class on one spot, and a single Hodir's Fury then froze all of it.

@@ -323,6 +323,14 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   re-fires forever at `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards
   past the trigger radius, and fall back to the tight value only where overlap leaves nothing wider.
 
+- **A warning band is a permanent dodge once the field carries enough marks.** Padding a hazard's reach
+  buys reaction time per mark and costs coverage per volley: Thorim's Hammer drops 8 marks at once
+  across a 200x200 box for 24 s, so at `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) Flame Leviathan's vent
+  reserve dodged through a whole 10 s channel while inside the real 7 yd circle for one second of it,
+  and lost the channel by drifting out of Electroshock range. A hull that owes the raid a firing
+  position dodges on the strict circle and steps somewhere it can still fire from; nearest-clear is the
+  wrong ranking for it.
+
 - **A gather node is a damage amplifier whenever the AoE it faces is wider than the camp — and the
   spread that fixes it usually costs more.** Freya's ranged camp pulls the raid into a 10 yd ball for
   the Detonating Lasher wave and Detonate reaches 15.5 yd: each of the ten deaths in a wave hits ~10
@@ -343,6 +351,13 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   Zeroing the chase does hold the formation, but a formation spaced wider than the bots' own reach
   cannot fight from its slots. Exempt the heal and resurrect reaches at minimum, or anyone standing
   outside the formation — a tank on the boss — stops being reachable.
+
+- **A claim that says "this one is mine to kill" needs a liveness test, or it shields the target.**
+  `FlameLeviathanHeldByAnotherPost` keeps the fleet off an add a posted siege engine has aggro on, so
+  the post kills it in its corner instead of a stray splash dragging it out. But the post's guns leave
+  a dead band - Fire Cannon will not fire under 10 yd, Ram is a cone - and an add sitting in it was
+  safe from the post and from everyone else: 71.7% of held frames on 2026-09-17, dying at 1.8 %/s
+  against 12.1 where a gun bore. Gate the claim on the holder still having a shot, not on it holding.
 
 - **A conjunctive gate can be dead code for a dozen pulls.** Freya's step-out, frost nova and trap all
   hung off "3+ lashers within 8 yd *and* none above 20% health", which held **once in six pulls**: the

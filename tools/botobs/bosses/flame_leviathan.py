@@ -96,6 +96,13 @@ RAM_HIT_WINDOW_MS = 1000        # a blast's dmg rows land within this of its cas
 RAM_HIT_LEAD_MS = 50            # and can be written a few ms before the cast row itself
 ELECTROSHOCK_RADIUS = 25.0      # cone radius; the cone adds his reach, so 40 yd from his centre
 VENT_RUSH_LEAD_MS = 5000        # ULDUAR_FL_VENT_RUSH_LEAD_MS
+RAM_CONE_RADIUS = geometry.radius("ULDUAR_FL_RAM_CONE_RADIUS")
+RAM_CONE_HALF_DEG = 50.0        # ULDUAR_FL_RAM_CONE_HALF_ANGLE, in degrees
+FIRE_CANNON_MIN = geometry.radius("ULDUAR_FL_FIRE_CANNON_MIN_RANGE")
+# spell_thorims_hammer: full damage inside HAMMER_RADIUS, then base / max(dist - 6, 1). So a strike
+# reaches every hull on the map and only the circle is dodgeable; the rest is a floor.
+HAMMER_FALLOFF_FLOOR = 6.0
+HAMMER_SPELL = 62912            # what npc_thorims_hammer casts at the mark
 FURY_RADIUS = geometry.radius("ULDUAR_FL_FURY_RADIUS")
 HAMMER_RADIUS = geometry.radius("ULDUAR_FL_HAMMER_RADIUS")
 INFERNO_RADIUS = geometry.radius("ULDUAR_FL_INFERNO_RADIUS")
@@ -182,7 +189,7 @@ class Frame:
         self.t = snap["t"]
         self.boss = None        # (x, y, o, target)
         self.boss_hp = None
-        self.hulls = {}         # guid -> (x, y, hp, entry, moving, power or None)
+        self.hulls = {}         # guid -> (x, y, hp, entry, moving, power or None, orientation)
         self.bots = {}          # guid -> (x, y, hp)
         self.adds = {}          # guid -> (x, y, hp, target)
         self.reticles = {}      # guid -> (x, y)
@@ -200,7 +207,7 @@ class Frame:
                 self.boss_hp = row[5]
             elif entry in VEHICLE_SIZE:
                 self.hulls[guid] = (row[1], row[2], row[5], entry, row[8] if len(row) > 8 else 0,
-                                    row[13] if len(row) > 13 else None)
+                                    row[13] if len(row) > 13 else None, row[4])
             elif entry in ADD_ENTRIES:
                 self.adds[guid] = (row[1], row[2], row[5], row[7] if len(row) > 7 else 0)
             elif entry == RETICLE_ENTRY:
@@ -256,7 +263,7 @@ class Fight:
         if self._hull_life is None:
             life: dict[int, dict] = {}
             for frame in self.frames:
-                for guid, (_x, _y, hp, entry, _mv, _pw) in frame.hulls.items():
+                for guid, (_x, _y, hp, entry, _mv, _pw, _o) in frame.hulls.items():
                     cell = life.setdefault(guid, {"entry": entry, "first": frame.t, "gone": None, "last": frame.t})
                     cell["last"] = frame.t
                     if hp <= 0 and cell["gone"] is None:
@@ -486,6 +493,31 @@ def show_hulls(trace: Trace) -> int:
         print(f"\n  hull damage by spell ({len(hits)} dmg rows, {logged:,} damage, {cover}):")
         for spell, amount in by_spell.most_common(10):
             print(f"     {trace.spell(spell):40s} {100 * amount / logged:5.1f}%")
+
+        # Thorim's Hammer is the one source here that hits everything on the map. Splitting it keeps
+        # a big share from reading as a dodge that never fires: outside the circle there is nothing
+        # to dodge, only a number that gets smaller the further out you already are.
+        strikes = [rec for rec in hits if rec.get("sp") == HAMMER_SPELL]
+        if strikes:
+            direct = 0
+            implied = []
+            for rec in strikes:
+                frame = fl.frame_at(rec["t"])
+                hull = frame.hulls.get(rec["d"]) if frame else None
+                gap = min((math.hypot(hull[0] - hx, hull[1] - hy) for hx, hy in frame.hammers),
+                          default=math.inf) if hull and frame.hammers else math.inf
+                if gap <= HAMMER_RADIUS:
+                    direct += 1
+                elif gap < math.inf:
+                    implied.append(rec.get("a", 0) / hammer_share(gap))
+            print(f"\n  Thorim's Hammer: {direct} inside the {HAMMER_RADIUS:.0f} yd circle, {len(implied)} falloff"
+                  f" (damage / max(dist - {HAMMER_FALLOFF_FLOOR:.0f}, 1), so every hull on the map is hit)")
+            if implied:
+                # Which mark fired is not in the trace, so the nearest one is a guess and this is a
+                # scale rather than a number. It is the size that matters: the circle is worth
+                # dodging and everything outside it is a floor.
+                print(f"     the falloff hits scale to a direct one of roughly"
+                      f" {statistics.median(implied):,.0f}")
     else:
         print("\n  no hull dmg rows: a pre-v13 trace, so the causes above are positional only")
 
@@ -801,6 +833,9 @@ def show_pyrite(trace: Trace) -> int:
           f" {repeats} repeats inside the {CRATE_DESPAWN_MS} ms despawn, each credited"
           f" (same gunner {ledger['same']}, another {ledger['cross']}); {ledger['later']} later")
 
+    # The last snapshot at or before the cast, so this is the bar the gate read and not the one the
+    # +25 left behind. Reading 1.5 s further back gives the same figures on 2026-09-17, so a grab
+    # above the ceiling there is a real one and not the energize landing inside the sample.
     energy = []
     for rec in casts:
         hull = crews.get(rec.get("s"))
@@ -811,7 +846,7 @@ def show_pyrite(trace: Trace) -> int:
     if energy:
         energy.sort()
         over = sum(1 for value in energy if value > CRATE_GRAB_CEILING)
-        print(f"  demolisher energy at the grab: median {statistics.median(energy):.0f}%,"
+        print(f"  demolisher energy before the grab: median {statistics.median(energy):.0f}%,"
               f" above the {CRATE_GRAB_CEILING} ceiling {over} of {len(energy)}")
     else:
         print("  no power column: a pre-v13 trace, so energy at the grab is unknown")
@@ -871,7 +906,7 @@ def show_ram(trace: Trace) -> int:
         # He cannot fire from further out than his own cast test allows.
         if math.hypot(victim[0] - bx, victim[1] - by) > BOSS_REACH + RAM_CAST_RANGE + VEHICLE_SIZE[victim[3]]:
             continue
-        for guid, (x, y, hp, entry, _mv, _pw) in frame.hulls.items():
+        for guid, (x, y, hp, entry, _mv, _pw, _o) in frame.hulls.items():
             if hp <= 0 or (x, y) == (victim[0], victim[1]):
                 continue
             role = value_at(stations.get(drivers.get(guid)), frame.t) or VEHICLE_NAME[entry]
@@ -1039,7 +1074,7 @@ def show_fury(trace: Trace) -> int:
     frames_by_class = collections.Counter()
     inside = collections.Counter()
     for frame in fl.frames:
-        for guid, (x, y, hp, entry, _mv, _pw) in frame.hulls.items():
+        for guid, (x, y, hp, entry, _mv, _pw, _o) in frame.hulls.items():
             if hp <= 0:
                 continue
             frames_by_class[entry] += 1
@@ -1150,6 +1185,65 @@ def show_inferno(trace: Trace) -> int:
 # ---------------------------------------------------------------------------------------------------
 # --adds
 # ---------------------------------------------------------------------------------------------------
+
+def hammer_share(dist: float) -> float:
+    """Fraction of a full Thorim's Hammer a hull that far from the mark takes.
+
+    Mirrors spell_thorims_hammer::RecalculateDamage. A hit 50 yd out is about 1/44 of a direct one,
+    which is why hammer damage is most of a pull without anybody standing in a circle.
+    """
+    if dist <= HAMMER_RADIUS:
+        return 1.0
+    return 1.0 / max(dist - HAMMER_FALLOFF_FLOOR, 1.0)
+
+
+def off_cone_deg(origin: tuple[float, float, float], point: tuple[float, float]) -> float:
+    """Degrees between where `origin` (x, y, orientation) is facing and `point`, 0-180."""
+    bearing = math.atan2(point[1] - origin[1], point[0] - origin[0])
+    return abs(math.degrees((bearing - origin[2] + math.pi) % (2 * math.pi) - math.pi))
+
+
+def hold_quality(tracks: dict[int, list[tuple]], fl: Fight) -> list[dict]:
+    """Per add: how long a siege engine took to claim it, and whether that engine could then shoot it.
+
+    Deliberately not the add's first victim. `npc_freya_ward_summon` zone-engages every player, pet
+    and vehicle within 250 yd at zero threat, so the first victim is settled before any bot can act
+    and it reads as a miss for every post. What a post is judged on is how fast it out-threats that,
+    and whether its guns bear afterwards.
+
+    `blind` is the dead band those guns leave: Fire Cannon will not fire under FIRE_CANNON_MIN and Ram
+    is a RAM_CONE_RADIUS cone, so an add inside the floor and outside the arc is one the post cannot
+    touch - and one FlameLeviathanHeldByAnotherPost keeps the rest of the fleet off.
+    """
+    rows = []
+    for guid, track in sorted(tracks.items(), key=lambda kv: kv[1][0][0]):
+        spawn = track[0]
+        taken = next((p for p in track if p[4] and fl.trace.entries.get(p[4]) == SIEGE), None)
+        row = {
+            "guid": guid, "spawn": spawn[0], "life": track[-1][0] - spawn[0],
+            "took": None if not taken else taken[0] - spawn[0],
+            "moved": None if not taken else math.hypot(taken[1] - spawn[1], taken[2] - spawn[2]),
+            "frames": 0, "under_floor": 0, "blind": 0, "rate": None,
+        }
+        if taken:
+            held = [p for p in track if p[0] >= taken[0]]
+            for point in held:
+                frame = fl.frame_at(point[0])
+                engine = frame.hulls.get(taken[4]) if frame else None
+                if not engine:
+                    continue
+                gap = math.hypot(point[1] - engine[0], point[2] - engine[1])
+                rammable = gap <= RAM_CONE_RADIUS and off_cone_deg(
+                    (engine[0], engine[1], engine[6]), (point[1], point[2])) <= RAM_CONE_HALF_DEG
+                row["frames"] += 1
+                row["under_floor"] += gap < FIRE_CANNON_MIN
+                row["blind"] += gap < FIRE_CANNON_MIN and not rammable
+            seconds = (held[-1][0] - held[0][0]) / 1000.0
+            if seconds > 1:
+                row["rate"] = (held[0][3] - held[-1][3]) / seconds
+        rows.append(row)
+    return rows
+
 
 def add_tracks(fl: Fight) -> dict[int, list[tuple]]:
     """add guid -> [(t, x, y, hp, target)]"""
@@ -1310,7 +1404,7 @@ def show_corners(trace: Trace) -> int:
     # ---- arrival at each post after engage -------------------------------------------------------
     arrived: dict[int, tuple[int, int]] = {}
     for frame in fl.frames:
-        for guid, (x, y, hp, entry, _mv, _pw) in frame.hulls.items():
+        for guid, (x, y, hp, entry, _mv, _pw, _o) in frame.hulls.items():
             if entry != SIEGE or hp <= 0:
                 continue
             for index, (px, py) in enumerate(posts):
@@ -1330,7 +1424,9 @@ def show_corners(trace: Trace) -> int:
 
     drives = holder_spans(trace, "fl.drive", fl.end)
     drivers = fl.drivers()
-    print(f"\n  {'wave':>9s} {'post':>4s} {'adds':>4s} {'engine':>7s} {'driving':>8s} {'held':>5s} {'thrown':>6s}"
+    quality = {row["guid"]: row for row in hold_quality(tracks, fl)}
+
+    print(f"\n  {'wave':>9s} {'post':>4s} {'adds':>4s} {'engine':>7s} {'driving':>8s} {'took':>5s} {'thrown':>6s}"
           f" {'travel':>7s} {'left':>5s} {'kill':>6s} {'hull lost':>9s}")
     manned = first_on_post = total_adds = left_manned = 0
     for corner, start, adds in ward_waves(tracks):
@@ -1342,12 +1438,13 @@ def show_corners(trace: Trace) -> int:
                                                if h[3] == SIEGE and h[2] > 0})
             engine = near[0] if near and near[1] <= POSTED_YD else None
         driving = value_at(drives.get(drivers.get(engine)), start, "-") if engine else "-"
-        held = thrown = left = 0
+        thrown = left = 0
+        took = []
         travel, kills = 0.0, []
         for guid in adds:
             track = tracks[guid]
-            victim = next((p[4] for p in track if p[4]), 0)
-            held += engine is not None and victim == engine
+            if quality[guid]["took"] is not None:
+                took.append(quality[guid]["took"] / 1000.0)
             for a, b in zip(track, track[1:]):
                 if b[0] - a[0] <= 1000 and math.hypot(b[1] - a[1], b[2] - a[2]) > KNOCKBACK_YD:
                     thrown += 1
@@ -1363,11 +1460,12 @@ def show_corners(trace: Trace) -> int:
         total_adds += len(adds)
         if engine is not None:
             manned += 1
-            first_on_post += held
+            first_on_post += len(took)
             left_manned += left
         kill = f"{statistics.median(kills):.0f}s" if kills else "-"
+        claim = f"{statistics.median(took):.1f}s" if took else "-"
         print(f"  {clock(start):>9s} {corner:4d} {len(adds):4d} {engine & 0xffffffff if engine else '-':>7}"
-              f" {driving:>8s} {held:5d} {thrown:6d} {travel:6.0f}y {left:5d} {kill:>6s} {lost:>9s}")
+              f" {driving:>8s} {claim:>5s} {thrown:6d} {travel:6.0f}y {left:5d} {kill:>6s} {lost:>9s}")
 
     waves = len(ward_waves(tracks))
     print(f"\n  waves with an engine on the post: {manned} of {waves}")
@@ -1376,8 +1474,28 @@ def show_corners(trace: Trace) -> int:
                                                     math.hypot(h[0] - posts[corner][0], h[1] - posts[corner][1]) <= POSTED_YD
                                                     for h in fl.frame_at(start).hulls.values()))
     if manned_adds:
-        print(f"  adds at a manned post whose first victim was that engine: {first_on_post} of {manned_adds}")
+        print(f"  adds at a manned post a siege engine took over: {first_on_post} of {manned_adds}")
         print(f"  adds at a manned post that left {CORNER_HOLD_RADIUS:.0f} yd of it: {left_manned} of {manned_adds}")
+
+    # Taking the add is the easy half. Whether the post can then shoot it is what decides the wave:
+    # Fire Cannon will not fire under 10 yd and Ram is a cone, so an add in melee behind the engine
+    # that claimed it is safe from the post AND from the fleet, which FlameLeviathanHeldByAnotherPost
+    # holds off.
+    rows = [row for row in quality.values() if row["frames"]]
+    if rows:
+        frames = sum(row["frames"] for row in rows)
+        floor = sum(row["under_floor"] for row in rows)
+        blind = sum(row["blind"] for row in rows)
+        print(f"\n  once a siege engine holds it ({len(rows)} adds, {frames} frames):")
+        print(f"     under Fire Cannon's {FIRE_CANNON_MIN:.0f} yd floor   : {100 * floor / frames:5.1f}%")
+        print(f"     and outside its Ram cone too      : {100 * blind / frames:5.1f}%")
+        rates = [(row["rate"], row) for row in rows if row["rate"] is not None]
+        shot = [rate for rate, row in rates if row["blind"] * 2 < row["frames"]]
+        deaf = [rate for rate, row in rates if row["blind"] * 2 >= row["frames"]]
+        if shot:
+            print(f"     %/s while a gun bears             : {statistics.median(shot):5.1f}  ({len(shot)} adds)")
+        if deaf:
+            print(f"     %/s while none does               : {statistics.median(deaf):5.1f}  ({len(deaf)} adds)")
     return 0
 
 
@@ -1427,6 +1545,9 @@ def show_vents(trace: Trace) -> int:
         reach = ELECTROSHOCK_RADIUS + BOSS_REACH
         drivers = fl.drivers()
         rushes = [rec for rec in trace.of("note") if rec.get("k") == "fl.rush"]
+        branch_at = drive_branch_at(fl)
+        forced = [rec for rec in trace.of("move")
+                  if rec.get("by") == DRIVE_ACTION and rec.get("pr") == "forced"]
         print(f"\n  the fl.reserve engine per channel (Electroshock reaches {reach:.0f} yd from his centre;"
               " rush is fl.rush, else a step faster than any hull drives):")
         for start, stop, ticks in scored:
@@ -1449,6 +1570,19 @@ def show_vents(trace: Trace) -> int:
             print(f"     {clock(start):>9s}  {ticks:2d} ticks  {trace.name(driver) if driver else '-':12s}"
                   f"  start {during[0][1]:5.1f}  closest {min(d for _, d in during):5.1f}  in reach {take(inside):>7s}"
                   f"  rush {take(rush):>7s}  {', '.join(fired) or 'no shot'}")
+
+            # What it was doing instead. A hazard branch here is the whole story of a lost channel:
+            # the dodge outranks the interrupt, and a hull it walks past the reach above drops the
+            # duty altogether, because the interrupter test is a range test.
+            dodging = [b for b in (branch_at(hull, t) for t, _ in during) if b.startswith("hazard")]
+            lost = rush is not None and any(rush <= rec["t"] <= rush + 1000 and rec.get("g") == driver
+                                            for rec in forced)
+            if dodging or lost:
+                worst = collections.Counter(dodging).most_common(1)
+                note = f"{100 * len(dodging) / len(during):.0f}% of the channel in {worst[0][0]}" if worst else ""
+                if lost:
+                    note = ", ".join(filter(None, [note, "a forced leg overrode the rush within 1 s"]))
+                print(f"     {'':>9s}  {'':8s}  {note}")
 
     # Same window shape as the add attrition, so the two numbers can be read side by side.
     windows = collections.defaultdict(lambda: [None, None, 0, 0])

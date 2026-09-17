@@ -86,7 +86,9 @@ protected:
     // Names the branch it took, kite:detour when it steered round the Inferno trail.
     bool Kite(Unit* boss, char const*& branch);
     std::optional<Position> KiteAroundFire(Unit* boss, Position const& node);
-    bool ClearHazard(Unit* hazard);
+    // `keepInReachOf`, when set, ranks the clear points by whether the hull can still shoot him from
+    // there rather than by nearest, and parks facing him. Only the vent reserve passes it.
+    bool ClearHazard(Unit* hazard, Unit* keepInReachOf = nullptr);
     bool ClearBatteringRam(Unit* boss);
     bool DetourToCrate(Unit* boss);
     bool HoldStation(Unit* boss);
