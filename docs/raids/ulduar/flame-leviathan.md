@@ -607,6 +607,12 @@ covers only 4 vent channels and 5 ward waves. Ram and the long-fight measures ha
   bar 1.5 s earlier gives the same figures, so it is not the energize landing inside the sample, and
   `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. Find the path before moving
   the constant.
+- **The turn, the lapsed claim and the strict circle are unverified in the field.** A post now turns
+  for adds, so two on opposite sides could leave it facing neither — watch `fl.corner` for a facing
+  that never settles. A claim that lapses hands the add to the fleet, which is exactly what
+  `ULDUAR_FL_CORNER_HOLD_RADIUS` exists to prevent, so adds leaving manned posts means it lapses too
+  easily. And a reserve on the strict circle can take a direct hammer hit, which `--hulls` names at
+  once.
 - **A siege engine Pursued late is caught on speed.** At his ~8 yd/s by 2:50 one kept a 20–36 yd gap
   and took a blast every 2 s; Steam Rush every 15 s buys ~5 s.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
