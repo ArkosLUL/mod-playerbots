@@ -282,12 +282,19 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   the `else` of `if (action->isPossible() && relevance > 0)`, so a vetoed action is indistinguishable
   in the act stream from one whose spell is unknown, out of range or on cooldown. The `veto` rows
   name the multiplier that did it; read those before concluding an ability is broken.
-- **A hard mode switch is a config read, not an encounter gate.** `IsMimironHardModeActive` returns
-  `sPlayerbotAIConfig.ulduarMimironHardMode` and nothing else, and one
-  `RaidUlduarStrategy::InitMultipliers` registers every boss's multipliers, so a guard gated on it
-  alone runs in every fight in the instance: Mimiron's `avoid aoe` veto landed 15 times in Thorim's
-  gauntlet, and its formation guard swept 200 yd twice a tick there. Pair the switch with a live-boss
-  test, and put a room screen (`IsNearMimironRoom`) in front of any grid scan.
+- **Nothing scopes a multiplier but itself.** `UldEncounterGate` wraps triggers only, and one
+  `RaidUlduarStrategy::InitMultipliers` registers every boss's, so each runs against every action of
+  every bot for the whole instance. Neither of these is the encounter gate it reads as:
+  - a **config read**: `IsMimironHardModeActive` returns `sPlayerbotAIConfig.ulduarMimironHardMode`
+    and nothing else, so Mimiron's `avoid aoe` veto landed 15 times in Thorim's gauntlet and its
+    formation guard swept 200 yd twice a tick there.
+  - a **live-boss test over a guid lookup**: `InstanceScript::GetCreature` answers from anywhere on
+    the map, so `VezaxEncounterActive`'s "he is alive" went true the moment his grid loaded and zeroed
+    `dps assist`, `tank assist` and caster damage instance-wide. On 2026-09-17 all 116 `dps assist`
+    ticks of a Razorscale pull were vetoed and the bots did nothing but follow the master.
+
+  Gate on the boss being **in combat**, screen any grid scan by room (`IsNearMimironRoom`), and prefer
+  a proximity lookup (`FirstNpc`, `GetIgnisIf`) over a guid one.
 - **A registered POINT generator does not mean the unit is moving.**
   `PointMovementGenerator::DoInitialize` returns **without launching a spline** while the unit has
   `UNIT_STATE_NOT_MOVE` (`ROOT|STUNNED|DIED|DISTRACTED`), and `MoveTo` reports success as soon as it

@@ -228,8 +228,12 @@ bot already holds. `VezaxTargetGuardMultiplier` zeroes `DpsAssistAction`, `TankA
 `CastDebuffSpellOnAttackerAction` — the debuff one matters, it is what lands DoTs on whatever a caster
 drifted onto — and the drop-vapor-target node re-attacks the boss for a bot already on one.
 
-A multiplier keeps all of these inside the encounter and writes a `veto` row naming the action it
-zeroed, so a trace says outright whether it fired.
+Each writes a `veto` row naming the action it zeroed, so a trace says outright whether it fired —
+which is how 2026-09-17 caught the guard running raid-wide. `VezaxEncounterActive` asked only whether
+he was alive, `InstanceScript::GetCreature` answers from anywhere on the map, and all 116 `dps assist`
+ticks of a Razorscale pull were vetoed: the bots followed the master and dealt nothing. **Nothing else
+scopes a multiplier** — `UldEncounterGate` wraps triggers, not these — so every one here keys on
+`IsInCombat` on the boss.
 
 **Positioning is gated on the room, not just on presence.** Vezax is visible from outside his hall, and
 a presence gate had bots prepositioning through walls while their generic movers were already zeroed.
@@ -241,8 +245,8 @@ fires once he is dead or out of combat, and everything else is combat-gated.
 
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
 `PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement
-multiplier asks once per action per pass. It has no liveness filter of its own, so a dead boss is
-rejected explicitly.
+multiplier asks once per action per pass. It has neither a liveness filter nor a range of its own, so
+a dead boss is rejected explicitly and presence alone gates nothing.
 
 ## The trace
 

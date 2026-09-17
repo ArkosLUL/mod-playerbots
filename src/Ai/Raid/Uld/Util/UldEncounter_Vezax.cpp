@@ -155,7 +155,16 @@ Unit* GetVezax(PlayerbotAI* botAI)
     return vezax && vezax->IsAlive() ? vezax : nullptr;
 }
 
-bool VezaxEncounterActive(PlayerbotAI* botAI) { return GetVezax(botAI) != nullptr; }
+// He is the authority on his own pull, and combat is the only part of him that says so: the guid
+// lookup above answers for the whole instance, so a bare "he is alive" test goes true the moment his
+// grid loads. The guards hanging off this one zero the generic target pickers and hold caster damage,
+// so an untested one shuts the raid down wherever it actually is - 2026-09-17 lost every `dps assist`
+// on Razorscale to it.
+bool VezaxEncounterActive(PlayerbotAI* botAI)
+{
+    Unit* vezax = GetVezax(botAI);
+    return vezax && vezax->IsInCombat();
+}
 
 bool VezaxFormationActive(PlayerbotAI* botAI)
 {
