@@ -132,14 +132,16 @@ despite the name**, and never ignites anything.
   ahead, never tripped that test at all yet sat in the sphere 15–32% of the time. Distance to the
   pursued vehicle is the whole rule, and needs no switch prediction: it re-aims itself the moment the
   aura moves. Predicting the 31s cadence instead was tried, and was where those false alarms came
-  from. The aura beats `GetVictim()`.
+  from. The aura beats `GetVictim()` — but with nobody holding it (the Pursued hull died, up to 31 s)
+  he rams his threat victim: 16 of one 2026-09-17 pull's 46 blasts, mostly on hulls holding station.
+  `fl.ramtarget` names that victim's hull: it kites like a Pursued one and the rest back off it.
 - **A Pursued siege engine outruns him if it starts at once.** Steam Rush (every 15 s, ~35 yd) makes
   ~9.3 yd/s against his 5.1–7.5. Escapes failed in the first seconds instead: the kite ran at
   `MOVEMENT_COMBAT`, the station walk in flight had the same priority, and `IsWaitingForLastMove`
   yields only to a strictly higher one, so the hull kept driving at him for 3–7 s. The kite now goes
   `MOVEMENT_FORCED`, and `ResetKite` drops the last-move priority when Pursued ends so the next dodge
   does not wait out a kite leg. A Pursued engine is out of the vent-interrupter election: in 4 of 12
-  spans it turned to face him mid-escape.
+  spans it turned to face him mid-escape. A Pursued demolisher runs 14 yd/s on Increased Speed.
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
   `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
   opener fires and five wipes left no trace at all. `FlameLeviathanEngaged` calls `MarkPull` to cover
@@ -156,7 +158,8 @@ despite the name**, and never ignites anything.
   `GetThreatenedByMeList()`, and threat here belongs to the vehicle creature. He is resolved by entry
   instead; `"attackers"` is kept only for picking adds.
 - **Steam Rush 62346** is `CHARGE_DEST` at `TARGET_DEST_CASTER_FRONT`: a forward dash along our own
-  facing, so it only escapes when he is already behind us.
+  facing, so it only escapes when he is already behind us. It starts 2 s of GCD category 133, which
+  Electroshock and Ram share.
 - **Shield Generator 64677** is `SCHOOL_ABSORB` **15** for 5s on a 60s cooldown. Wired because it is
   free, not because it matters.
 
@@ -179,6 +182,12 @@ the two-owner bounce with the priorities swapped, so it was folded in rather tha
 action is wired to two trigger nodes, `drive urgent` at `ACTION_RAID + 3` and the routine one at
 `+0.5` — the engine caches actions by name, so both nodes drive one instance and one latched
 destination.
+
+**The drive never waits out its own leg.** `IsWaitingForLastMove` refuses a move not strictly above
+the one in flight, and with one mover that leg is always its own: on 2026-09-17, 57–59% of COMBAT
+re-targets were refused (demolishers 74–76%), so hulls drove up to 5 s toward where he had been and
+the demolishers ended past 70 yd. `DriveToImpl` drops the stored priority one step before re-issuing
+and restores it if nothing issued. A strictly higher leg, a FORCED dodge, still blocks.
 
 Positioning: siege engines and non-lead choppers hold his **rear arc**; demolishers hold a 50 yd band
 and never close; one chopper (lowest guid, neither Pursued nor frozen) runs *ahead* of him, back
@@ -204,13 +213,19 @@ first, falling back to the rider's so the approach still counts.
 
 `FlameLeviathanKiteRing()` builds eight nodes from the four `NPC_FREYA_WARD_TARGET` spawn points —
 `(159.4, 64.1)`, `(382.9, 74.0)`, `(374.0, -141.0)`, `(157.7, -140.3)` — inset 15 yd off the walls
-with each corner chamfered into two nodes 35 yd out. The direction is latched per instance on the
-first Pursued and **never reversed**; nodes within 50 yd of him are skipped so the ring never routes
+with each corner chamfered into two nodes 35 yd out. The direction is picked per kite, toward the
+neighbour node farther from him, and **never reversed** mid-kite (a pull-wide latch sent a demolisher
+134 yd out up the wall into him); nodes within 50 yd of him are skipped so the ring never routes
 through him; and the vehicle **advances on approach at 30 yd, never on arrival**.
 
 That last rule is the whole point. The old kite drove corner to corner and only switched once within
 5 yd, so the vehicle buried itself in the corner while he cut the diagonal — and its advance was also
 conditioned on him being within 50 yd, which made progress depend on already being caught.
+
+**The kite steers round the Inferno trail itself**, because it outranks the hazard dodge. The trail
+loops 33–56 yd inside the ring, and every Inferno hit in one 2026-09-17 pull (1.19 M) landed on a
+kiting hull driving one straight leg across it. `KiteAroundFire` checks the next 30 yd of the leg and
+fans a 25 yd detour that never closes on him (`fl.drive` `kite:detour`).
 
 ## Hard mode
 
@@ -247,8 +262,8 @@ past the movement multiplier: **22 s to kill one add**.
 
 **The wards fire all pull, and the adds stay until killed.** `ActivateTowers` schedules `EVENT_FREYA`
 **once** at 30 s, so four wards spawn one per arena corner (`ULDUAR_FL_ARENA_CORNERS`), each firing a
-wave on its own 29 s timer from 34 s. Since core `f4763cc9e`, `npc_freya_ward_summon::IsSummonedBy`
-makes each add `TEMPSUMMON_MANUAL_DESPAWN` and calls `DoZoneInCombat`: every player within 250 yd,
+wave on its own 29 s timer from 34 s. `npc_freya_ward_summon` makes each add
+`TEMPSUMMON_MANUAL_DESPAWN` and calls `DoZoneInCombat`: every player within 250 yd,
 their pets and **their vehicle bases**, at zero threat. `ThreatManager::AddThreat` sends a rider's
 threat to its vehicle (a gunner's through the turret to the hull), and the victim switches only at
 110% melee / 130% ranged, so **the first hull to hit a fresh add holds it**. `CanAIAttack` skips riders
@@ -256,11 +271,13 @@ on Leviathan's seats and anything out of LOS. The 2026-09-05 add figures (a medi
 20% of raid damage taken, hulls losing 2.57%/5 s with an add in melee against 1.96% without) are from
 the old `npc_freya_ward`, which re-ran `SelectNearestTarget(200)` on every summon each wave.
 
-**That script needs world DB update `2026_09_10_03.sql`**, which binds `npc_freya_ward_summon` to 33387
-and 34275. Without it the adds run SmartAI and despawn at their summon duration — Ward of Life 3 s
-(62907, DurationIndex 27), Lasher 10 s (62947, DurationIndex 1): on 2026-09-16, 49 of 58 vanished at
-full health. `--adds` prints that diagnosis instead of scoring add handling. See the upstream-merge
-pitfall in [../../engine/pitfalls.md](../../engine/pitfalls.md).
+**The adds live only with world DB update `2026_09_10_03.sql` and core `4d4ae4f95`.** The update binds
+`npc_freya_ward_summon` to 33387 and 34275; without it they run SmartAI (49 of 58 vanished at full
+health on 2026-09-16). `f4763cc9e` set the despawn type in `IsSummonedBy`, which the summon call
+overwrites on its way out, so bound adds still left at exactly their summon duration on 2026-09-17:
+Ward of Life 3 s (62907, DurationIndex 27), Lasher 10 s (62947, DurationIndex 1). Upstream
+`4d4ae4f95` defers it a tick. `--adds` prints that diagnosis instead of scoring add handling. See the
+upstream-merge pitfalls in [../../engine/pitfalls.md](../../engine/pitfalls.md).
 
 | Add | Entry | Health | AI |
 |---|---|---|---|
@@ -306,12 +323,20 @@ within 30 yd of its post before anything else; a posted driver fires Ram only at
   usable, non-Pursued engine nearest him, kept until it freezes, dies or is Pursued: re-electing each
   scan would drag a posted engine in and back out for one Hodir's Fury. When it is not rank 0, rank 0
   takes its corner.
+
+  Holding the siege station does not keep it in reach: he drives 38–93 yd per channel, and in one
+  2026-09-17 pull it started 42–129 yd from his centre (reach 40) and never got inside in any of the 10
+  full channels it lived through. So it Steam Rushes when over a charge from his edge, 2–5 s before
+  the next channel (`EVENT_VENT` every 20 s, so the rush's GCD is over when the shock is due) or at
+  once into a running one, never landing in the ram sphere. The interrupt stops the hull before
+  turning: a moving spline overrides `SetFacingTo`, and a reserve that drove past him at 22 yd, 33–87°
+  off, never fired.
 - **Posting starts at engage**, gated on his Tower of Life aura 64482, which `ActivateTowers` applies in
   `JustEngagedWith` 34 s before wave 1. The old gate was the first add seen, i.e. wave 1 itself, with
   engines standing 12–27 s of driving from their posts.
 - **The commute rushes**: Steam Rush when the post is over 43 yd away and within the front 45°, 7.0
-  yd/s otherwise. The corner drive stays `MOVEMENT_COMBAT`: a Fury dodge is `MOVEMENT_FORCED`, and an
-  equal-priority move waits out the one in flight for up to `MaxWaitForMove` (5 s) of a 6.5 s fuse.
+  yd/s otherwise. The corner drive stays `MOVEMENT_COMBAT`, below the `MOVEMENT_FORCED` Fury dodge,
+  which must never wait out a corner leg: up to `MaxWaitForMove` (5 s) of a 6.5 s fuse.
 - **No reachability gate.** He came within 40 yd of any post for 0–1.7% of a pull.
 
 **A cone weapon and a parked facing will fight each other.** Ram and Sonic Horn need the vehicle
@@ -477,6 +502,27 @@ means anything. Reproduce with `flame_leviathan.py <trace>`.
 | stacks lost with the demolisher in range when barrels stopped | 8 of 15 | 4 of 8 | `late` 0–1 per pull |
 | first siege engine at a post | 0:56 | 0:47 | before wave 1 at 0:34 |
 
+## Baseline to beat — 2026-09-17, four towers up
+
+`603_2_flame-leviathan_1789594987` (391 s to a manual kill) and `_1789596106` (194 s, boss at half
+health after a restart), 25-man, built on `0da90ab99`: before the re-target, vent rush, kite, ram
+victim and ward-add fixes above. Reproduce with `flame_leviathan.py <trace>`.
+
+| | `…4987` | `…6106` | target |
+|---|---|---|---|
+| Vents channels run full with nobody firing | 11 | 5 | 0–2 |
+| full channels: `fl.reserve` never inside 40 yd / inside but no shot | 10 / 0 | 2 / 3 | 0 / 0 |
+| drive COMBAT re-targets refused `wait`: demolisher / siege / chopper | 76 / 68 / 49% | 74 / 66 / 46% | under 10% |
+| demolisher mean stacks / frames past 70 yd | 2.0–3.3 / 62–70% | 1.4–3.0 / 48–72% | above 6 / under 25% |
+| pyrite stacks lost: fail / dry / late | 19 / 2 / 2 | 6 / 4 / 1 | late 0–1 |
+| hull damage: Vents / Ram / Missile Barrage / Thorim's Hammer / Inferno | 43 / 22 / 18 / 9 / 7% | 47 / 22 / 18 / 8 / 4% | Vents under 25% |
+| Inferno damage on kiting hulls | 100% of 1.19 M | 57% of 0.38 M | under 0.2 M |
+| Ram blasts with nobody Pursued / Ram damage to station holders | 16 of 46 / 43% | 2 of 23 / 28% | 0 / under 10% |
+| adds timed out at their summon duration | 34 of 60 | 6 of 23 | 0 |
+
+Thorim's Hammer is no longer a non-event: its hull hits land a median 48 yd from the marker for a
+median 2.7k, outside the 7 yd reach the dodge uses.
+
 ## Known gaps
 
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
@@ -499,10 +545,14 @@ means anything. Reproduce with `flame_leviathan.py <trace>`.
 - **Vezax's `hold cast outside field` multiplier fires during this fight** and vetoed resurrections on
   2026-09-16: a Vezax gate leak.
 - **No chopper pyrite ferry**, so crates only reach a demolisher that drives to them itself.
-- **The pyrite refresh timing is unverified in the field.** `ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s)
-  assumes ~1.1 s between decisions: `--pyrite` losses blamed on `late` mean it runs short, and on `fail`
-  a refused refresh, which costs the whole stack. The seat's +25 is read off the DBC and `conditions`,
-  not a trace.
+- **The pyrite refresh slack held on 2026-09-17**: `late` lost 1–2 stacks a pull against 25 `fail` of
+  34, nearly all past 70 yd. More `late` losses mean `ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s) runs
+  short. The seat's +25 is read off the DBC and `conditions`, not a trace.
+- **Demolishers may still fall past 70 yd while he runs faster than their 7 yd/s** (32% / 12% of
+  station frames on 2026-09-17). If that outlives the re-target fix, tighten
+  `ULDUAR_FL_DEMOLISHER_BAND` or spend Increased Speed out of range.
+- **A siege engine Pursued late is caught on speed.** At his ~8 yd/s by 2:50 one kept a 20–36 yd gap
+  and took a blast every 2 s; Steam Rush every 15 s buys ~5 s.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**
   (`PlayerbotAI.h:558`), so there is no ground-targeting and tar cannot be ignited deliberately.

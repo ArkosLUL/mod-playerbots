@@ -4,7 +4,7 @@
     flame_leviathan.py <file>            every section
     flame_leviathan.py <file> --hulls    why the vehicles died, crews on foot, drive branches, Pursued
     flame_leviathan.py <file> --pyrite   Blue Pyrite per demolisher: stacks, barrel decisions, losses, crates
-    flame_leviathan.py <file> --ram      Battering Ram exposure
+    flame_leviathan.py <file> --ram      Battering Ram exposure, and every blast by target and splash
     flame_leviathan.py <file> --fury     Hodir's Fury: chase, fuse, strike, and the dodge scan
     flame_leviathan.py <file> --inferno  Mimiron's Inferno trail, measured to each hull's reach
     flame_leviathan.py <file> --adds     Freya's Ward adds, and whether the world DB lets them live
@@ -16,6 +16,8 @@
 EffectRadiusIndex 20. It is therefore a 25 yd sphere centred on the **pursued vehicle**, not a cone
 off the boss's front. `--ram` scores every other vehicle against that sphere, the same test the module
 backs off on (`FlameLeviathanInBatteringRamBlast`), with the pursued vehicle read from `fl.pursued`.
+With nobody Pursued he still rams his threat victim, which the module tracks as `fl.ramtarget`; the
+per-blast list names which of the two each cast was aimed at.
 
 **Hodir's Fury** follows a random target at 12 yd/s and commits only once that target has stopped:
 `FollowMovementGenerator` informs on a finished spline with the target within 0.5 yd. It then stuns
@@ -29,9 +31,10 @@ patches are dynamic objects (62910), which is how `snap.hz` sees them, and `DynO
 adds both object sizes: a siege engine (7.7) burns out to 17.1 yd from a patch centre.
 
 **Freya's Ward** spawns four wards 30 s in, at the arena corners, each firing a wave every 29 s.
-`npc_freya_ward_summon` keeps each add until it dies and zone-engages it. That binding is world DB
-update 2026_09_10_03; without it the adds run SmartAI and despawn at their summon duration, 3 s for a
-Ward of Life and 10 s for a Lasher. `--adds` and `--corners` detect that and say so.
+`npc_freya_ward_summon` keeps each add until it dies and zone-engages it. It is bound by world DB
+update 2026_09_10_03, and its despawn type only sticks with core 4d4ae4f95. Without either the adds
+leave at their summon duration, 3 s for a Ward of Life and 10 s for a Lasher, damaged or not. `--adds`
+and `--corners` detect that and say so.
 
 **Blue Pyrite (68605)** is one stack per landed Hurl Pyrite Barrel, 10 s, 10 stacks, each landing
 resetting the duration. `fl.barrel` names the driver's decision: `burst`, `refresh`, `hold`, `dry` (no
@@ -43,7 +46,7 @@ off the demolisher's v13 power column. Every Grab Crate hit credits +25 until th
 **Flame Vents (62396)** is a 10 s self-channel every 20 s that ticks 63847 eleven times. Only
 Electroshock stops it (`boss_flame_leviathan.cpp` breaks the channel on spell 62522 hitting him), so
 a channel with fewer than eleven ticks is an interrupt. `--vents` counts those, reads the `fl.vent`
-notes, and names channels nobody fired at.
+notes, names channels nobody fired at, and follows the `fl.reserve` engine through each channel.
 
 Things this file will not tell you, each of which has already fooled a reading of these traces:
 
@@ -88,6 +91,11 @@ DEFAULT_OBJECT_SIZE = 0.389     # DEFAULT_WORLD_OBJECT_SIZE, a dynamic object's 
 BOSS_REACH = 15.0
 RAM_RADIUS = 25.0
 RAM_CAST_RANGE = 15.0           # boss_flame_leviathan.cpp: IsWithinCombatRange(victim, 15.0f)
+RAM_SPELL = 62376
+RAM_HIT_WINDOW_MS = 1000        # a blast's dmg rows land within this of its cast
+RAM_HIT_LEAD_MS = 50            # and can be written a few ms before the cast row itself
+ELECTROSHOCK_RADIUS = 25.0      # cone radius; the cone adds his reach, so 40 yd from his centre
+VENT_RUSH_LEAD_MS = 5000        # ULDUAR_FL_VENT_RUSH_LEAD_MS
 FURY_RADIUS = geometry.radius("ULDUAR_FL_FURY_RADIUS")
 HAMMER_RADIUS = geometry.radius("ULDUAR_FL_HAMMER_RADIUS")
 INFERNO_RADIUS = geometry.radius("ULDUAR_FL_INFERNO_RADIUS")
@@ -97,8 +105,8 @@ FURY_STRIKE_WINDOW_MS = 4000    # how long after 33212 appears a 62297 row still
 SPELL_FURY_STUN = 62297
 
 ADD_ENTRIES = {33387: "Writhing Lasher", 34275: "Ward of Life"}
-# 62947 -> 33387 DurationIndex 1 and 62907 -> 34275 DurationIndex 27. An add gone at full health after
-# this long timed out, which it only does without npc_freya_ward_summon.
+# 62947 -> 33387 DurationIndex 1 and 62907 -> 34275 DurationIndex 27. An add gone after exactly this long
+# timed out, which it only does with npc_freya_ward_summon unbound or its despawn type overwritten.
 ADD_SUMMON_MS = {33387: 10000, 34275: 3000}
 ADD_TIMEOUT_SLACK_MS = 700
 LASH_SPELL = 65062
@@ -336,6 +344,49 @@ def edge_gap(hull, boss) -> float:
     return math.hypot(hull[0] - boss[0], hull[1] - boss[1]) - BOSS_REACH - VEHICLE_SIZE[hull[3]]
 
 
+def as_guid(value) -> int:
+    """A guid note payload as an int, 0 for none."""
+    return int(value) if value and str(value).isdigit() else 0
+
+
+def drive_branch_at(fl: Fight):
+    """`(hull, t) -> fl.drive branch` of the bot driving that hull, or "no bot driver"."""
+    drives = holder_spans(fl.trace, "fl.drive", fl.end)
+    drivers = fl.drivers()
+
+    def branch(hull: int, when: int) -> str:
+        bot = drivers.get(hull)
+        return value_at(drives.get(bot), when, "-") if bot else "no bot driver"
+    return branch
+
+
+def first_within(track: list[tuple[int, float]], reach: float) -> int | None:
+    """The first `t` of `[(t, distance)]` at or inside `reach`."""
+    return next((when for when, distance in track if distance <= reach), None)
+
+
+def first_rush(points: list[tuple[int, float, float]]) -> int | None:
+    """The first `t` of `[(t, x, y)]` a hull leaves faster than any hull drives: a Steam Rush."""
+    for (t0, x0, y0), (t1, x1, y1) in zip(points, points[1:]):
+        dt = (t1 - t0) / 1000.0
+        if 0 < dt <= 0.4 and math.hypot(x1 - x0, y1 - y0) / dt > RUSH_SPEED:
+            return t0
+    return None
+
+
+def move_outcomes(moves: list[dict]) -> dict[str, list[int]]:
+    """`{priority: [issued, refused "wait"]}` over `move` records. `IsWaitingForLastMove` refuses a move
+    that is not strictly above the one in flight; other refusals are left out."""
+    out: dict[str, list[int]] = {}
+    for rec in moves:
+        cell = out.setdefault(rec.get("pr", "?"), [0, 0])
+        if rec.get("ok") == 1:
+            cell[0] += 1
+        elif rec.get("r") == "wait":
+            cell[1] += 1
+    return out
+
+
 # ---------------------------------------------------------------------------------------------------
 # --hulls
 # ---------------------------------------------------------------------------------------------------
@@ -499,6 +550,22 @@ def show_drive_branches(fl: Fight) -> None:
         shares = "  ".join(f"{value} {100 * ms / total:.0f}%" for value, ms in held.most_common())
         print(f"     {trace.name(bot):14s} {shares}")
 
+    # A refused re-target leaves the hull driving to a goal up to MaxWaitForMove old.
+    life = fl.hull_life()
+    hull_of = {bot: hull for hull, bot in fl.drivers().items()}
+    by_class: dict[str, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("by") == DRIVE_ACTION and hull_of.get(rec.get("g")) in life:
+            by_class[VEHICLE_NAME.get(life[hull_of[rec["g"]]]["entry"], "?")].append(rec)
+    if by_class:
+        print("\n  drive moves issued / refused 'wait', by hull class and priority:")
+        for name, recs in sorted(by_class.items()):
+            cells = []
+            for priority, (issued, refused) in sorted(move_outcomes(recs).items()):
+                if issued + refused:
+                    cells.append(f"{priority} {issued}/{refused} ({100 * refused / (issued + refused):.0f}% refused)")
+            print(f"     {name:10s} {'  '.join(cells)}")
+
 
 def show_pursued(fl: Fight) -> None:
     trace = fl.trace
@@ -524,12 +591,7 @@ def show_pursued(fl: Fight) -> None:
             continue
         driver = drivers.get(hull)
         accepted = next((m["t"] for m in moves.get(driver, []) if start <= m["t"] <= stop and m.get("ok") == 1), None)
-        rush = None
-        for (t0, a, _), (t1, b, _) in zip(track, track[1:]) if track[0][1][3] == SIEGE else ():
-            dt = (t1 - t0) / 1000.0
-            if 0 < dt <= 0.4 and math.hypot(b[0] - a[0], b[1] - a[1]) / dt > RUSH_SPEED:
-                rush = t0
-                break
+        rush = first_rush([(t, ride[0], ride[1]) for t, ride, _ in track]) if track[0][1][3] == SIEGE else None
         fired = sum(1 for t in shocks.get(driver, []) if start <= t <= stop)
         gaps = []
         for offset in (0, 2000, 4000):
@@ -760,6 +822,39 @@ def show_pyrite(trace: Trace) -> int:
 # --ram
 # ---------------------------------------------------------------------------------------------------
 
+def ram_blasts(casts: list[dict], hits: list[dict], window_ms: int = RAM_HIT_WINDOW_MS,
+               lead_ms: int = RAM_HIT_LEAD_MS) -> list[tuple[dict, list[dict]]]:
+    """Each Battering Ram cast with the hull `dmg` rows it produced: from `lead_ms` before it to
+    `window_ms` after, and never into the next cast's lead."""
+    casts = sorted(casts, key=lambda rec: rec["t"])
+    hits = sorted(hits, key=lambda rec: rec["t"])
+    out = []
+    for index, cast in enumerate(casts):
+        until = cast["t"] + window_ms
+        if index + 1 < len(casts):
+            until = min(until, casts[index + 1]["t"] - lead_ms - 1)
+        out.append((cast, [rec for rec in hits if cast["t"] - lead_ms <= rec["t"] <= until]))
+    return out
+
+
+def blast_kind(target: int, pursued: int, rammed: int) -> str:
+    """What a cast was aimed at: the Pursued hull, another hull while someone held Pursued, the
+    `fl.ramtarget` victim, or a victim with nobody Pursued that no probe named."""
+    if pursued:
+        return "pursued" if target == pursued else "other"
+    return "victim" if rammed and target == rammed else "no aura"
+
+
+def blast_roles(blasts, branch_at) -> collections.Counter:
+    """Ram damage by `(target | splash, drive branch at the hit)`."""
+    roles: collections.Counter = collections.Counter()
+    for cast, rows in blasts:
+        for rec in rows:
+            role = "target" if rec.get("d") == cast.get("tgt") else "splash"
+            roles[role, branch_at(rec.get("d"), rec["t"])] += rec.get("a", 0)
+    return roles
+
+
 def show_ram(trace: Trace) -> int:
     fl = fight(trace)
     drivers = fl.drivers()
@@ -808,6 +903,47 @@ def show_ram(trace: Trace) -> int:
         print(f"     to the victim  p25 {pick(lead_to_victim, .25):5.1f}  median {pick(lead_to_victim, .5):5.1f}"
               f"  p75 {pick(lead_to_victim, .75):5.1f}")
         print(f"     inside the blast: {inside}/{len(lead_to_victim)} = {100 * inside / len(lead_to_victim):.1f}%")
+
+    life = fl.hull_life()
+    casts = [rec for rec in trace.of("cast") if rec.get("sp") == RAM_SPELL]
+    hits = [rec for rec in trace.of("dmg") if rec.get("sp") == RAM_SPELL and rec.get("d") in life]
+    if not casts or not hits:
+        print("\n  no Ram casts with hull dmg rows: a pre-v13 trace, so no per-blast list")
+        return 0
+
+    pursued_latch = latch_spans(trace, "fl.pursued", fl.end)
+    rammed_latch = latch_spans(trace, "fl.ramtarget", fl.end)
+    branch_at = drive_branch_at(fl)
+    blasts = [(cast, rows) for cast, rows in ram_blasts(casts, hits) if rows]
+    kinds: collections.Counter = collections.Counter()
+    print(f"\n  every blast that hit a hull ({len(blasts)} of {len(casts)} casts): aimed at, then splash with its"
+          " distance to the target")
+    for cast, rows in blasts:
+        target = cast.get("tgt")
+        kind = blast_kind(target, as_guid(value_at(pursued_latch, cast["t"])),
+                          as_guid(value_at(rammed_latch, cast["t"])))
+        kinds[kind] += 1
+        frame = fl.frame_at(cast["t"], 600)
+        aim = frame.hulls.get(target) if frame else None
+        parts = []
+        for rec in rows:
+            hull = rec["d"]
+            label = f"{VEHICLE_NAME.get(life[hull]['entry'], '?')}/{branch_at(hull, rec['t'])} {rec.get('a', 0) // 1000}k"
+            if hull == target:
+                parts.insert(0, label)
+                continue
+            ride = frame.hulls.get(hull) if frame else None
+            where = f" @{math.hypot(ride[0] - aim[0], ride[1] - aim[1]):.0f} yd" if ride and aim else ""
+            parts.append(f"splash {label}{where}")
+        print(f"     {clock(cast['t']):>9s} {kind:8s} {'  '.join(parts)}")
+    print("     casts by aim: " + "  ".join(f"{kind} {count}" for kind, count in kinds.most_common()))
+
+    roles = blast_roles(blasts, branch_at)
+    total = sum(roles.values())
+    if total:
+        print("\n  Ram hull damage by role and drive branch:")
+        for (role, branch), amount in roles.most_common(12):
+            print(f"     {role:7s} {branch:16s} {100 * amount / total:5.1f}%")
     return 0
 
 
@@ -995,6 +1131,19 @@ def show_inferno(trace: Trace) -> int:
         print("\n  share of all hull health lost:")
         for key, label in (("inside", "inside the reach"), ("near", "within 8 yd of it"), ("clear", "clear of it")):
             print(f"     {label:18s} {100 * by_zone[key] / total_lost:5.1f}%")
+
+    # The kite outranks the hazard dodge, so a kiting hull has to steer round the trail on its own.
+    life = fl.hull_life()
+    hits = [rec for rec in trace.of("dmg") if rec.get("sp") == INFERNO_SPELL and rec.get("d") in life]
+    if hits:
+        branch_at = drive_branch_at(fl)
+        by_branch: collections.Counter = collections.Counter()
+        for rec in hits:
+            by_branch[branch_at(rec["d"], rec["t"])] += rec.get("a", 0)
+        burned = sum(by_branch.values())
+        print(f"\n  Inferno hull damage by drive branch at the hit ({burned:,} damage):")
+        for branch, amount in by_branch.most_common():
+            print(f"     {branch:18s} {100 * amount / burned:5.1f}%")
     return 0
 
 
@@ -1012,34 +1161,35 @@ def add_tracks(fl: Fight) -> dict[int, list[tuple]]:
 
 
 def add_fates(tracks: dict[int, list[tuple]], entries: dict[int, int], end: int) -> dict[str, list[int]]:
-    """Which adds died, which were still up at the end, and which vanished at full health - split into
-    the ones gone after exactly their summon duration (`timeout`) and the rest (`vanished`)."""
+    """Which adds were still up at the end, which left after exactly their summon duration (`timeout`,
+    damaged or not), which died, and which vanished at full health otherwise (`vanished`). A timeout is
+    tested before health: the raid wears adds down, and one last seen at 40% can still have timed out."""
     fates: dict[str, list[int]] = {"died": [], "alive": [], "timeout": [], "vanished": []}
     for guid, track in tracks.items():
         first, last = track[0], track[-1]
         if last[0] >= end - 300:
             fates["alive"].append(guid)
-        elif last[3] < 90:
-            fates["died"].append(guid)
         elif abs(last[0] - first[0] - ADD_SUMMON_MS.get(entries.get(guid), -10 ** 9)) <= ADD_TIMEOUT_SLACK_MS:
             fates["timeout"].append(guid)
+        elif last[3] < 90:
+            fates["died"].append(guid)
         else:
             fates["vanished"].append(guid)
     return fates
 
 
 def timed_out(fl: Fight) -> str | None:
-    """The DB diagnosis, when most adds left at full health after exactly their summon duration."""
+    """The despawn diagnosis, when most adds left after exactly their summon duration."""
     tracks = add_tracks(fl)
     if not tracks:
         return None
     fates = add_fates(tracks, fl.trace.entries, fl.end)
     if len(fates["timeout"]) * 2 < len(tracks):
         return None
-    return (f"{len(fates['timeout'])} of {len(tracks)} adds vanished at full health after their summon duration"
-            " (3 s Ward of Life, 10 s Lasher).\n  The world DB lacks 2026_09_10_03.sql, so npc_freya_ward_summon is"
-            " not bound and the adds run SmartAI.\n  Apply the pending world updates; add handling in this pull"
-            " cannot be scored.")
+    return (f"{len(fates['timeout'])} of {len(tracks)} adds left exactly at their summon duration"
+            " (3 s Ward of Life, 10 s Lasher).\n  npc_freya_ward_summon is unbound (world DB 2026_09_10_03) or its"
+            " TEMPSUMMON_MANUAL_DESPAWN was overwritten (core 4d4ae4f95).\n  Add handling in this pull cannot be"
+            " scored.")
 
 
 def show_adds(trace: Trace) -> int:
@@ -1053,8 +1203,8 @@ def show_adds(trace: Trace) -> int:
     fates = add_fates(tracks, trace.entries, fl.end)
     spans = sorted((track[-1][0] - track[0][0]) / 1000.0 for track in tracks.values())
     print(f"  adds seen {len(tracks)}: died {len(fates['died'])}, alive at the end {len(fates['alive'])},"
-          f" gone at full health {len(fates['timeout']) + len(fates['vanished'])}"
-          f" ({len(fates['timeout'])} exactly at their summon duration)")
+          f" timed out at their summon duration {len(fates['timeout'])},"
+          f" gone early at full health {len(fates['vanished'])}")
     print(f"  lifespan: median {statistics.median(spans):.1f} s, p25 {pick(spans, .25):.1f}, p75 {pick(spans, .75):.1f}")
     diagnosis = timed_out(fl)
     if diagnosis:
@@ -1271,6 +1421,34 @@ def show_vents(trace: Trace) -> int:
         print(f"  ran full with nobody firing and a siege engine alive: {len(unclaimed)}")
         for start, ticks, alive, nearest in unclaimed:
             print(f"     {clock(start):>9s}  {ticks:2d} ticks  {alive} alive, nearest {nearest:.1f} yd from his centre")
+
+    reserve = latch_spans(trace, "fl.reserve", fl.end)
+    if scored and any(as_guid(held) for held, _, _ in reserve):
+        reach = ELECTROSHOCK_RADIUS + BOSS_REACH
+        drivers = fl.drivers()
+        rushes = [rec for rec in trace.of("note") if rec.get("k") == "fl.rush"]
+        print(f"\n  the fl.reserve engine per channel (Electroshock reaches {reach:.0f} yd from his centre;"
+              " rush is fl.rush, else a step faster than any hull drives):")
+        for start, stop, ticks in scored:
+            # A second past the last tick, so a channel cut at once still has frames and the shot that cut it.
+            hull = as_guid(value_at(reserve, start))
+            points = [(f.t, f.hulls[hull], f.boss) for f in fl.frames
+                      if start - VENT_RUSH_LEAD_MS - 1000 <= f.t <= stop + 1000 and hull in f.hulls]
+            during = [(t, math.hypot(ride[0] - boss[0], ride[1] - boss[1])) for t, ride, boss in points if t >= start]
+            if not hull or not during:
+                print(f"     {clock(start):>9s}  {ticks:2d} ticks  no reserve hull")
+                continue
+            driver = drivers.get(hull)
+            noted = next((rec["t"] for rec in rushes if rec.get("g") == driver
+                          and start - VENT_RUSH_LEAD_MS - 1000 <= rec["t"] <= stop), None)
+            rush = noted if noted is not None else first_rush([(t, ride[0], ride[1]) for t, ride, _ in points])
+            inside = first_within(during, reach)
+            fired = [f"{trace.name(rec['g'])} {rec.get('txt')} +{(rec['t'] - start) / 1000:.1f}s" for rec in shots
+                     if start - 1500 <= rec["t"] <= stop + 1000]
+            take = lambda when: f"{(when - start) / 1000:+.1f}s" if when is not None else "never"  # noqa: E731
+            print(f"     {clock(start):>9s}  {ticks:2d} ticks  {trace.name(driver) if driver else '-':12s}"
+                  f"  start {during[0][1]:5.1f}  closest {min(d for _, d in during):5.1f}  in reach {take(inside):>7s}"
+                  f"  rush {take(rush):>7s}  {', '.join(fired) or 'no shot'}")
 
     # Same window shape as the add attrition, so the two numbers can be read side by side.
     windows = collections.defaultdict(lambda: [None, None, 0, 0])

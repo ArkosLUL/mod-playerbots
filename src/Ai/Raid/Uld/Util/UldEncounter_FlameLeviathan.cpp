@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -72,6 +73,14 @@ struct FlameLeviathanState
     // The vehicle currently wearing Pursued. Battering Ram is a 25 yd sphere centred on it, so this
     // is the thing every other vehicle measures itself against.
     RaidObs::ObsValue<ObjectGuid> pursuedVehicle{"fl.pursued"};
+
+    // The hull he rams while nobody is Pursued: his threat victim's. Empty whenever the aura is on
+    // someone, so fl.pursued keeps meaning the aura.
+    RaidObs::ObsValue<ObjectGuid> ramTarget{"fl.ramtarget"};
+
+    // When the running or last Flame Vents channel began, stamped on the first scan that sees it.
+    uint32 ventStartMs = 0;
+    bool ventChanneling = false;
 
     // Vehicles that cannot move. Hodir's Fury carries an undispellable 60 s stun, and a frozen
     // vehicle has to be counted out rather than waited on - it still holds roles otherwise.
@@ -164,6 +173,26 @@ void TickHodirsFury(FlameLeviathanState& state, PlayerbotAI* botAI, Player* bot)
     }
 }
 
+// The hull a threat victim belongs to. Threat here sits on the vehicle creature, but a turret or a
+// rider can hold it too, so walk up the seats.
+Unit* FlameLeviathanHullOf(Unit* unit)
+{
+    for (Unit* each = unit; each; each = each->GetVehicleBase())
+    {
+        switch (each->GetEntry())
+        {
+            case NPC_SALVAGED_SIEGE_ENGINE:
+            case NPC_SALVAGED_DEMOLISHER:
+            case NPC_VEHICLE_CHOPPER:
+                return each;
+            default:
+                break;
+        }
+    }
+
+    return nullptr;
+}
+
 void ElectVentReserve(FlameLeviathanState& state, Player* bot, Unit* boss)
 {
     // With the Life tower down nobody posts, and every engine holds station as it always did.
@@ -220,7 +249,10 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         state.pullTraced = false;
         state.ventClaimedBy = ObjectGuid::Empty;
         state.pursuedVehicle = ObjectGuid::Empty;
+        state.ramTarget = ObjectGuid::Empty;
         state.ventReserve = ObjectGuid::Empty;
+        state.ventStartMs = 0;
+        state.ventChanneling = false;
         state.frozen.clear();
         state.siegeOrder.clear();
         state.furyReticles.clear();
@@ -235,8 +267,12 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
         RaidObs::MarkPull(bot->GetMap(), boss);
     }
 
-    if (!FlameLeviathanIsVentChanneling(boss))
+    bool const channeling = FlameLeviathanIsVentChanneling(boss);
+    if (!channeling)
         state.ventClaimedBy = ObjectGuid::Empty;
+    else if (!state.ventChanneling)
+        state.ventStartMs = getMSTime();
+    state.ventChanneling = channeling;
 
     TickHodirsFury(state, botAI, bot);
 
@@ -269,6 +305,14 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
     }
 
     state.pursuedVehicle = pursued;
+
+    // With the Pursued hull dead he rams his threat victim until the next Pursued lands: 13 blasts on
+    // hulls holding station in 27 s on 2026-09-17, with nothing backing off.
+    ObjectGuid rammed;
+    if (!pursued)
+        if (Unit* hull = FlameLeviathanHullOf(boss->GetVictim()))
+            rammed = hull->GetGUID();
+    state.ramTarget = rammed;
 
     ElectVentReserve(state, bot, boss);
 }
@@ -447,6 +491,18 @@ void FlameLeviathanClaimVentChannel(Player* bot)
         FlameLeviathanStateFor(bot).ventClaimedBy = bot->GetGUID();
 }
 
+uint32 FlameLeviathanMsToNextVent(Player* bot, Unit* boss)
+{
+    if (FlameLeviathanIsVentChanneling(boss))
+        return 0;
+
+    uint32 const start = bot ? FlameLeviathanStateFor(bot).ventStartMs : 0;
+    if (!start)
+        return std::numeric_limits<uint32>::max();
+
+    return ULDUAR_FL_VENT_INTERVAL_MS - getMSTimeDiff(start, getMSTime()) % ULDUAR_FL_VENT_INTERVAL_MS;
+}
+
 bool FlameLeviathanCrewUsable(Player* member)
 {
     if (!member || !member->IsAlive())
@@ -573,38 +629,54 @@ Unit* FlameLeviathanPursuedVehicle(PlayerbotAI* botAI, Player* bot)
     return guid ? botAI->GetUnit(guid) : nullptr;
 }
 
-bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* pursued)
+Unit* FlameLeviathanRamCentre(PlayerbotAI* botAI, Player* bot)
 {
-    if (!vehicleBase || !pursued || vehicleBase == pursued)
+    if (Unit* pursued = FlameLeviathanPursuedVehicle(botAI, bot))
+        return pursued;
+
+    ObjectGuid const guid = botAI && bot ? FlameLeviathanStateFor(bot).ramTarget.Get() : ObjectGuid::Empty;
+    return guid ? botAI->GetUnit(guid) : nullptr;
+}
+
+bool FlameLeviathanIsRamTarget(Player* bot)
+{
+    Unit* hull = FlameLeviathanRiddenVehicle(bot);
+    ObjectGuid const target = hull ? FlameLeviathanStateFor(bot).ramTarget.Get() : ObjectGuid::Empty;
+    return target && hull->GetGUID() == target;
+}
+
+bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* centre)
+{
+    if (!vehicleBase || !centre || vehicleBase == centre)
         return false;
 
     // Battering Ram is TARGET_DEST_TARGET_ENEMY with a 25 yd radius, cast on the boss's victim. The
-    // blast is a sphere around the Pursued vehicle, so his facing has nothing to do with it - the
-    // frontal-arc test this replaced was reading the wrong object and missed two thirds of the hits.
-    return vehicleBase->GetExactDist2d(pursued) <= ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize();
+    // blast is a sphere around that vehicle, so his facing has nothing to do with it - the frontal-arc
+    // test this replaced was reading the wrong object and missed two thirds of the hits.
+    return vehicleBase->GetExactDist2d(centre) <= ULDUAR_FL_BATTERING_RAM_RADIUS + vehicleBase->GetObjectSize();
 }
 
 bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot)
 {
-    // Standing in his own blast is the pursued vehicle's whole job, and it is already kiting.
-    if (!bot || FlameLeviathanIsPursued(bot))
+    // Standing in his own blast is the rammed vehicle's whole job, and it is already kiting.
+    if (!bot || FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot))
         return false;
 
     // The ridden vehicle, not the seat: a gunner's GetVehicleBase is the bolted-on turret, whose
     // position is the parent's anyway but whose object size is not.
     Unit* vehicleBase = FlameLeviathanRiddenVehicle(bot);
-    Unit* pursued = FlameLeviathanPursuedVehicle(botAI, bot);
+    Unit* centre = FlameLeviathanRamCentre(botAI, bot);
     Unit* boss = FlameLeviathanBoss(botAI);
-    if (!vehicleBase || !pursued || !boss)
+    if (!vehicleBase || !centre || !boss)
         return false;
 
     // He only fires inside his own cast test, so outside it the blast cannot land however close the
     // fleet is packed. Borrowed verbatim from the script rather than reconstructed, because
     // IsWithinCombatRange adds both combat reaches and a hand-rolled 15 yd would be far too tight.
-    if (!boss->IsWithinCombatRange(pursued, ULDUAR_FL_BATTERING_RAM_CAST_RANGE))
+    if (!boss->IsWithinCombatRange(centre, ULDUAR_FL_BATTERING_RAM_CAST_RANGE))
         return false;
 
-    return FlameLeviathanInBatteringRamBlast(vehicleBase, pursued);
+    return FlameLeviathanInBatteringRamBlast(vehicleBase, centre);
 }
 
 bool FlameLeviathanIsTarLead(PlayerbotAI* /*botAI*/, Player* bot)

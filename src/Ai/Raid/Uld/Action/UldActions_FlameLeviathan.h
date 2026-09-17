@@ -83,11 +83,17 @@ public:
     bool Execute(Event event) override;
 
 protected:
-    bool Kite(Unit* boss);
+    // Names the branch it took, kite:detour when it steered round the Inferno trail.
+    bool Kite(Unit* boss, char const*& branch);
+    std::optional<Position> KiteAroundFire(Unit* boss, Position const& node);
     bool ClearHazard(Unit* hazard);
     bool ClearBatteringRam(Unit* boss);
     bool DetourToCrate(Unit* boss);
     bool HoldStation(Unit* boss);
+
+    // The vent reserve's Steam Rush into Electroshock reach. True while it owns the tick, turning or
+    // dashing.
+    bool RushToVents(Unit* boss);
 
     // Reach-then-hold. Returns true while genuinely travelling and false once parked and facing, so
     // lower-priority nodes still run and a silently failing move shows up as a stationary vehicle.
@@ -112,6 +118,7 @@ protected:
     bool parked_ = false;
 
     int32 kiteIdx_ = -1;
+    int8 kiteDir_ = 0;  // picked at the start of each kite, then held
 };
 
 #endif

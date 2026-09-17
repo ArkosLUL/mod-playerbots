@@ -60,8 +60,9 @@ enum UlduarFlameLeviathanIds
     // 29s for the rest of the pull. npc_freya_ward_summon makes each add TEMPSUMMON_MANUAL_DESPAWN and
     // zone-engages it at zero threat on every player, pet and vehicle within 250 yd. A rider's threat
     // goes to its hull, and a victim only changes at 110% melee / 130% ranged, so the first hull to
-    // hit a fresh add holds it. That script is bound by world DB update 2026_09_10_03; without it the
-    // adds run SmartAI and despawn after their summon duration, 3s and 10s.
+    // hit a fresh add holds it. That script is bound by world DB update 2026_09_10_03, and its type only
+    // sticks with core 4d4ae4f95: both summon paths reset it after IsSummonedBy. Without either the adds
+    // despawn after their summon duration, 3s and 10s.
     NPC_FL_FREYA_WARD_TARGET = 33366,  // reticle at the corner
     NPC_FL_FREYA_WARD = 33367,         // the summoner itself, parked 40 yd overhead
     NPC_FL_WRITHING_LASHER = 33387,    // 190k hp, melees and Lashes its victim every 2s
@@ -207,6 +208,12 @@ constexpr uint32 ULDUAR_FL_PYRITE_FLIGHT_TIMEOUT_MS = 5000;
 // Steam Rush charges this far along the hull's facing (62346, EffectRadiusIndex 21).
 constexpr float ULDUAR_FL_STEAM_RUSH_DIST = 35.0f;
 
+// Steam Rush starts 2 s of GCD category 133, which Electroshock shares (62346 StartRecoveryTime), so
+// the vent reserve dashes 2-5 s ahead of a channel when it can. EVENT_VENT repeats every 20 s.
+constexpr uint32 ULDUAR_FL_STEAM_RUSH_GCD_MS = 2000;
+constexpr uint32 ULDUAR_FL_VENT_RUSH_LEAD_MS = 5000;
+constexpr uint32 ULDUAR_FL_VENT_INTERVAL_MS = 20000;
+
 // Ram, Electroshock and Sonic Horn are TARGET_UNIT_CONE_ENEMY_104: a frontal cone whose reach is
 // the effect radius, not the spell range. Electroshock and Sonic Horn carry RangeEntry ID 1, which
 // Spell::CheckRange short-circuits, so for those two the effect radius is the only limit there is.
@@ -303,6 +310,11 @@ constexpr float ULDUAR_FL_KITE_CORNER_CHAMFER = 35.0f;
 constexpr float ULDUAR_FL_KITE_ADVANCE_DIST = 30.0f;    // switch nodes on approach, never on arrival
 constexpr float ULDUAR_FL_KITE_BOSS_CLEARANCE = 50.0f;  // a node this close to him is not a destination
 
+// The Inferno trail loops 33-56 yd inside the ring, so a leg cutting across it burns. The next stretch
+// of a leg is checked against it every tick, and a blocked one steps round it this far at a time.
+constexpr float ULDUAR_FL_KITE_FIRE_LOOKAHEAD = 30.0f;
+constexpr float ULDUAR_FL_KITE_DETOUR_STEP = 25.0f;
+
 // Flame Leviathan. The whole fight is from vehicles, and a trigger and its action must call the
 // same helper here or the two derivations disagree about who is doing what.
 
@@ -340,6 +352,10 @@ bool FlameLeviathanIsVentInterrupter(PlayerbotAI* botAI, Player* bot);
 // Called once the interrupt has actually gone out.
 void FlameLeviathanClaimVentChannel(Player* bot);
 
+// Milliseconds to the next Flame Vents channel: 0 while one runs, UINT32_MAX before the first. A
+// skipped channel keeps the 20 s cadence rather than going negative.
+uint32 FlameLeviathanMsToNextVent(Player* bot, Unit* boss);
+
 // A cone spell lands nothing unless the vehicle is genuinely pointed at him, and CastVehicleSpell
 // only turns for targets outside 120 degrees - wider than any of these cones. Returns true when the
 // shot is on; otherwise starts the turn and leaves the cast for a later tick.
@@ -360,16 +376,24 @@ bool FlameLeviathanCrewUsable(Player* member);
 // the seat is not stunned when only the hull is, and Mortar has no minimum range.
 Unit* FlameLeviathanFrozenVehicle(Player* bot, Unit* from, float minRange, float maxRange);
 
-// The vehicle currently wearing Pursued, or null. Everything Battering Ram is measured against.
+// The vehicle currently wearing Pursued, or null.
 Unit* FlameLeviathanPursuedVehicle(PlayerbotAI* botAI, Player* bot);
 
-// True while this vehicle is inside the 25 yd sphere Battering Ram drops on the Pursued vehicle.
-bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* pursued);
+// Where Battering Ram lands next: the Pursued vehicle, else his threat victim's hull. With nobody
+// Pursued he still rams whoever holds threat, for up to 31 s after the Pursued hull died.
+Unit* FlameLeviathanRamCentre(PlayerbotAI* botAI, Player* bot);
+
+// True for the crew of the hull he rams while nobody is Pursued. He chases it like a Pursued one, so it
+// kites like one.
+bool FlameLeviathanIsRamTarget(Player* bot);
+
+// True while this vehicle is inside the 25 yd sphere Battering Ram drops on `centre`.
+bool FlameLeviathanInBatteringRamBlast(Unit* vehicleBase, Unit* centre);
 
 // The whole "get out of the blast" test in one place, because the urgent-drive trigger and the drive
 // action both ask it and a trigger that fires wider than its action just demotes the cast node for
-// nothing. True when this vehicle shares the blast with the Pursued one and he is close enough to
-// fire. No switch prediction: the rule re-aims itself the moment the Pursued guid changes.
+// nothing. True when this vehicle shares the blast with the ram centre and he is close enough to
+// fire. No switch prediction: the rule re-aims itself the moment the centre changes.
 bool FlameLeviathanShouldClearBatteringRam(PlayerbotAI* botAI, Player* bot);
 
 // Lowest-guid chopper driver that is neither Pursued nor frozen. It runs ahead of the boss dropping

@@ -272,6 +272,12 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   1.5 s after they issued, and all seven died inside a blast they had already left. Reordering
   relevance does not fix it on its own — stand the frequent one down, in its trigger or a
   multiplier, for as long as any lethal one is live.
+
+  A single mover is refused its own re-target. An action that issues every leg itself, chasing a goal
+  that moves, re-issues at the priority already in flight and waits out its own stale leg: Flame
+  Leviathan's drive had 57–59% of COMBAT re-targets refused, and its hulls drove up to 5 s toward
+  where the boss had been. Such an owner lowers `last movement`'s priority one step before
+  re-issuing, and restores it when nothing issued.
 - **A multiplier that zeroes relevance is reported as `IMPOSSIBLE`.** `Engine::DoNextAction` takes
   the `else` of `if (action->isPossible() && relevance > 0)`, so a vetoed action is indistinguishable
   in the act stream from one whose spell is unknown, out of range or on cooldown. The `veto` rows
@@ -501,9 +507,16 @@ Related traps:
   `data/sql/updates/db_world` files run only when `ac-db-import` is rebuilt from the merged checkout
   and run. Until then a script moved to a new `ScriptName` has no binding and the creature silently
   keeps its old AI: after the 2026-09-16 merge brought 42 world updates, `acore_world.updates` still
-  ended at `2026_09_04_02` and Flame Leviathan's ward adds despawned at 3 s and 10 s, which read as a
-  core bug. After a core merge: `docker compose build ac-db-import && docker compose up ac-db-import`,
-  restart the worldserver, and check `acore_world.updates` holds the newest file.
+  ended at `2026_09_04_02` and Flame Leviathan's ward adds despawned at 3 s and 10 s (applied, they
+  still did: see the next entry). After a core merge: `docker compose build ac-db-import && docker
+  compose up ac-db-import`, restart the worldserver, and check `acore_world.updates` holds the newest
+  file.
+- **`IsSummonedBy` cannot set a summon's despawn type.** `Map::SummonCreature` runs `InitSummon` →
+  `IsSummonedBy` before it returns, then `WorldObject::SummonCreature` (`Object.cpp:2454`) and
+  `Spell::EffectSummonType`'s `default:` branch (`SpellEffects.cpp:2497`) re-apply the duration's type.
+  Upstream `f4763cc9e` set `TEMPSUMMON_MANUAL_DESPAWN` there for Flame Leviathan's ward adds, and
+  `4d4ae4f95` defers it a tick through `m_Events` (`UpdateAI` is skipped while evading). A tree with the
+  first and not the second loses those adds at 3 s and 10 s with the DB fully applied.
 
 ### Local divergences a merge must re-apply
 

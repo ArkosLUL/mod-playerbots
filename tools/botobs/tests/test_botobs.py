@@ -620,17 +620,48 @@ class FlameLeviathanReader(unittest.TestCase):
 
     def test_add_fates_tell_a_timeout_from_a_kill(self):
         lasher, ward = 33387, 34275
-        entries = {1: lasher, 2: ward, 3: lasher, 4: ward, 5: lasher}
+        entries = {1: lasher, 2: ward, 3: lasher, 4: ward, 5: lasher, 6: lasher}
         tracks = {
             1: [(0, 0, 0, 100.0, 0), (10050, 0, 0, 100.0, 0)],      # gone at full after 10 s
             2: [(0, 0, 0, 100.0, 0), (2900, 0, 0, 100.0, 0)],       # gone at full after 3 s
             3: [(0, 0, 0, 100.0, 0), (6000, 0, 0, 12.0, 0)],        # worn down, then gone
             4: [(0, 0, 0, 100.0, 0), (6000, 0, 0, 100.0, 0)],       # gone at full, but not on the timer
             5: [(0, 0, 0, 100.0, 0), (19900, 0, 0, 100.0, 0)],      # still up when the pull ended
+            6: [(0, 0, 0, 100.0, 0), (9950, 0, 0, 40.0, 0)],        # worn down, gone on the timer anyway
         }
         fates = flame_leviathan.add_fates(tracks, entries, end=20000)
         self.assertEqual({key: sorted(value) for key, value in fates.items()},
-                         {"died": [3], "alive": [5], "timeout": [1, 2], "vanished": [4]})
+                         {"died": [3], "alive": [5], "timeout": [1, 2, 6], "vanished": [4]})
+
+    def test_move_outcomes_count_issued_and_waiting_by_priority(self):
+        moves = [{"pr": "combat", "ok": 1}, {"pr": "combat", "ok": 0, "r": "wait"},
+                 {"pr": "combat", "ok": 0, "r": "wait"}, {"pr": "forced", "ok": 1},
+                 {"pr": "forced", "ok": 0, "r": "dup"}]
+        self.assertEqual(flame_leviathan.move_outcomes(moves), {"combat": [1, 2], "forced": [1, 0]})
+
+    def test_first_within_and_first_rush(self):
+        self.assertEqual(flame_leviathan.first_within([(0, 60.0), (1000, 45.0), (2000, 39.0), (3000, 20.0)], 40.0),
+                         2000)
+        self.assertIsNone(flame_leviathan.first_within([(0, 60.0)], 40.0))
+        # 7 yd/s driving, then 10 yd in 0.25 s
+        self.assertEqual(flame_leviathan.first_rush([(0, 0.0, 0.0), (250, 1.75, 0.0), (500, 11.75, 0.0)]), 250)
+        self.assertIsNone(flame_leviathan.first_rush([(0, 0.0, 0.0), (250, 1.75, 0.0)]))
+
+    def test_blast_kind_names_what_he_rammed(self):
+        self.assertEqual(flame_leviathan.blast_kind(7, 7, 0), "pursued")
+        self.assertEqual(flame_leviathan.blast_kind(7, 8, 0), "other")
+        self.assertEqual(flame_leviathan.blast_kind(7, 0, 7), "victim")
+        self.assertEqual(flame_leviathan.blast_kind(7, 0, 0), "no aura")
+
+    def test_ram_blasts_split_target_from_splash(self):
+        casts = [{"t": 1000, "tgt": 7}, {"t": 1500, "tgt": 8}]
+        # the second cast's row is written 3 ms ahead of its cast row
+        hits = [{"t": 1000, "d": 7, "a": 30}, {"t": 1001, "d": 9, "a": 20}, {"t": 1497, "d": 8, "a": 40},
+                {"t": 4000, "d": 8, "a": 99}]
+        blasts = flame_leviathan.ram_blasts(casts, hits)
+        self.assertEqual([[rec["d"] for rec in rows] for _, rows in blasts], [[7, 9], [8]])
+        roles = flame_leviathan.blast_roles(blasts, lambda hull, when: "station" if hull == 9 else "kite")
+        self.assertEqual(roles, {("target", "kite"): 70, ("splash", "station"): 20})
 
     def test_crate_repeats_split_by_gunner_and_by_the_despawn_delay(self):
         casts = [
