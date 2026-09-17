@@ -73,6 +73,19 @@ public:
     RendDebuffTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "rend", 1, true) {}
 };
 
+// own Rend missing, or all its ticks already landed. A recast resets the tick timer, so casting
+// any earlier throws away part of a tick
+bool ShouldCastRend(PlayerbotAI* botAI, Unit* target);
+
+class RendRefreshTrigger : public DebuffTrigger
+{
+public:
+    RendRefreshTrigger(PlayerbotAI* botAI) : DebuffTrigger(botAI, "rend", 1, true) {}
+
+    std::string const getName() override { return "rend refresh"; }
+    bool IsActive() override { return ShouldCastRend(botAI, GetTarget()); }
+};
+
 // DPS warriors are the raid's Sunder providers when no protection warrior is around, and a
 // DEBUFF_TRIGGER only fires while the debuff is entirely absent, so it cannot drive the 1->5 stack
 // ramp. Mirrors the conditions in CastSunderArmorAction::isUseful.

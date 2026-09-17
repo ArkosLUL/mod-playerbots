@@ -8,6 +8,7 @@
 #include "AiFactory.h"
 #include "ArmorDebuff.h"
 #include "Playerbots.h"
+#include "WarriorTriggers.h"
 
 namespace
 {
@@ -19,6 +20,8 @@ constexpr uint32 SPELL_VIGILANCE = 50720;
 constexpr uint32 SPELL_SHATTERING_THROW = 64382;
 constexpr uint32 SPELL_IMPROVED_SLAM_RANKS[] = { 12862, 12330 };
 }
+
+bool CastRendAction::isUseful() { return CastSpellAction::isUseful() && ShouldCastRend(botAI, GetTarget()); }
 
 bool CastSlamAction::isUseful()
 {

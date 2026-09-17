@@ -58,6 +58,7 @@ public:
         creators["recklessness"] = &WarriorTriggerFactoryInternal::recklessness;
         creators["battle shout"] = &WarriorTriggerFactoryInternal::battle_shout;
         creators["rend"] = &WarriorTriggerFactoryInternal::rend;
+        creators["rend refresh"] = &WarriorTriggerFactoryInternal::rend_refresh;
         creators["rend on attacker"] = &WarriorTriggerFactoryInternal::rend_on_attacker;
         creators["bloodrage"] = &WarriorTriggerFactoryInternal::bloodrage;
         creators["shield bash"] = &WarriorTriggerFactoryInternal::shield_bash;
@@ -117,6 +118,7 @@ private:
     static Trigger* recklessness(PlayerbotAI* botAI) { return new RecklessnessTrigger(botAI); }
     static Trigger* battle_shout(PlayerbotAI* botAI) { return new BattleShoutTrigger(botAI); }
     static Trigger* rend(PlayerbotAI* botAI) { return new RendDebuffTrigger(botAI); }
+    static Trigger* rend_refresh(PlayerbotAI* botAI) { return new RendRefreshTrigger(botAI); }
     static Trigger* rend_on_attacker(PlayerbotAI* botAI) { return new RendDebuffOnAttackerTrigger(botAI); }
     static Trigger* bloodrage(PlayerbotAI* botAI) { return new BloodrageBuffTrigger(botAI); }
     static Trigger* shield_bash(PlayerbotAI* botAI) { return new ShieldBashInterruptSpellTrigger(botAI); }

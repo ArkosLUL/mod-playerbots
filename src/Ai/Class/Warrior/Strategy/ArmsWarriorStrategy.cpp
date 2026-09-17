@@ -114,11 +114,13 @@ void ArmsWarriorStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         )
     );
 
+    // Rend goes above everything else on the GCD: Taste for Blood procs off its ticks. A recast
+    // resets the tick timer, so "rend refresh" waits until the last tick has landed.
     triggers.push_back(
         new TriggerNode(
-            "rend",
+            "rend refresh",
             {
-                NextAction("rend", ACTION_HIGH + 3)
+                NextAction("rend", ACTION_HIGH + 8)
             }
         )
     );

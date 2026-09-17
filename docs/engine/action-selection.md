@@ -104,6 +104,10 @@ registration maps then need no edits.
 - `beforeDuration` (ms, default 0) is the refresh window on both. **0 is a real choice, not an
   oversight**: priest DoTs must expire before re-applying, rogue sets 2000 on Slice and Dice / Hunger
   for Blood / Rupture on purpose. Do not "make them consistent".
+- **A recast restarts a non-stacking DoT's tick timer** (`Spell.cpp:3146`, `StackAmount < 2`), so a
+  refresh window throws away the elapsed part of the current tick. Ticks stop at
+  `AuraEffect::GetTotalTicks()` (max duration / interval, floored); once `GetTickNumber()` reaches it,
+  the rest of the aura is dead time and a recast is free.
 - `DebuffTrigger`'s `needLifeTime` is a **time-to-die** test —
   `target->GetHealth() / AI_VALUE(float, "estimated group dps")` (`GenericTriggers.cpp:311-319`) — not
   a DoT-remaining test. Overriding `IsActive()` to call `BuffTrigger::IsActive()` throws that guard

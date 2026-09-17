@@ -68,7 +68,15 @@ public:
         : OffGlobalCooldownAction<CastMeleeSpellAction>(botAI, "heroic strike") {}
 };
 REACH_ACTION(CastChargeAction, "charge", 8.0f);
-DEBUFF_CHECKISOWNER_ACTION(CastRendAction, "rend");
+// base isUseful rejects a Rend that's still up, which blocks the free recast after its last tick
+class CastRendAction : public CastDebuffSpellAction
+{
+public:
+    CastRendAction(PlayerbotAI* botAI) : CastDebuffSpellAction(botAI, "rend", true) {}
+
+    bool isUseful() override;
+};
+
 // DEBUFF_ENEMY_ACTION(CastRendOnAttackerAction, "rend");
 
 class CastRendOnAttackerAction : public CastDebuffSpellOnMeleeAttackerAction

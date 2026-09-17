@@ -8,6 +8,8 @@
 
 #include "ArmorDebuff.h"
 #include "Playerbots.h"
+#include "SpellAuraEffects.h"
+#include "SpellAuras.h"
 
 namespace
 {
@@ -17,6 +19,26 @@ constexpr uint32 SPELL_DIVINE_SHIELD = 642;
 constexpr uint32 SPELL_ICE_BLOCK = 45438;
 constexpr uint32 SPELL_BLESSING_OF_PROTECTION = 41450;
 constexpr uint32 SPELL_COMMANDING_PRESENCE_RANKS[] = { 12318, 12857, 12858, 12860, 12861 };
+constexpr float REND_MIN_TIME_TO_DIE = 8.0f;
+}
+
+bool ShouldCastRend(PlayerbotAI* botAI, Unit* target)
+{
+    if (!target || !target->IsAlive() || !target->IsInWorld())
+        return false;
+
+    float groupDps = botAI->GetAiObjectContext()->GetValue<float>("estimated group dps")->Get();
+    if (target->GetHealth() / groupDps < REND_MIN_TIME_TO_DIE)
+        return false;
+
+    Aura* rend = botAI->GetAura("rend", target, true);
+    if (!rend)
+        return true;
+
+    // hasted Rend (mod-spell-tweaks, Trauma) usually has dead time after its last tick, since the
+    // core caps ticks at max duration / interval. Recasting there costs nothing
+    AuraEffect const* dot = rend->GetEffect(EFFECT_0);
+    return dot && dot->GetTotalTicks() > 0 && dot->GetTickNumber() >= uint32(dot->GetTotalTicks());
 }
 
 bool BloodrageBuffTrigger::IsActive()

@@ -29,11 +29,11 @@ Arms (`arms` + `aoe`):
 | 90 | critical health | enraged regeneration |
 | 41 / 40 | shattering throw / victory rush, enemy out of melee | shattering throw / victory rush, charge |
 | 30 / 29 | battle stance / battle shout | battle stance / battle shout |
-| 27 | medium aoe | sweeping strikes |
+| 28 | rend refresh | rend |
+| 27 | medium aoe / taste for blood | sweeping strikes / overpower |
 | 26 | mortal strike available, medium aoe | mortal strike, bladestorm |
 | 25 | target critical health / sudden death | execute |
-| 24 | overpower / taste for blood | overpower |
-| 23 | rend | rend |
+| 24 | overpower | overpower |
 | 22 | bloodrage / death wish | *(off-GCD)* |
 | 21 | bladestorm available | bladestorm |
 | 20 | hamstring, medium aoe | piercing howl, cleave *(off-GCD)* |
@@ -67,6 +67,15 @@ Arms (`arms` + `aoe`):
   `SunderArmorStackTrigger` mirrors that `isUseful` (in a group, no warrior tank, debuff below 5
   stacks or under 6s left), so it goes quiet at 5 stacks and costs one refresh per ~24s. The old
   `"sunder armor"` `DEBUFF_TRIGGER` still exists so `TankWarriorStrategy` is untouched.
+- **Rend lapsed for several GCDs** — the `"rend"` `DEBUFF_TRIGGER` fired only once Rend was gone, at
+  23 under Mortal Strike, Execute and both Overpowers. mod-spell-tweaks' `SpellTweaks.RendTrauma.Enable`
+  (default 1) gives Trauma (46854 / 46855) holders Rend ticks that crit and come faster with melee
+  haste at fixed duration, and Taste for Blood procs off them. Arms now runs `"rend refresh"` at 28,
+  top of the GCD band. No `beforeDuration` window, it costs tick time (see
+  [../engine/action-selection.md](../engine/action-selection.md)): `ShouldCastRend` fires only when
+  the bot's own Rend is missing or all its ticks have landed, i.e. in the dead tail hasted Rend leaves
+  (unhasted 15s / 21s divides evenly by 3s). `CastRendAction::isUseful` mirrors it, since the base
+  rejects a present aura. Tanks keep the plain `"rend"` trigger.
 
 ### Off-GCD abilities and `SetNextCheckDelay(0)`
 
@@ -106,9 +115,11 @@ there, not against an equipped piece. Server config was never involved.
 
 ## Open
 
-- **Bladestorm on cooldown** is now in the Arms single-target priority at 21. It is a 6s channel, so
-  it will occasionally push back one Mortal Strike or Execute. This matches the WotLK Arms priority,
-  but it is the first thing to try lowering if Arms still trails.
+- **Bladestorm on cooldown** is now in the Arms single-target priority at 21. For 6s it blocks every
+  cast but Heroic Strike / Cleave (aura 263 sets `PLAYER_ALLOW_ONLY_ABILITY`), so it will occasionally
+  push back one Mortal Strike or Execute, and Rend can lapse mid-spin (accepted over refreshing Rend
+  early, user decision). This matches the WotLK Arms priority, but it is the first thing to try
+  lowering if Arms still trails.
 - **Talents (G2) and glyphs (G4) need the DB checked first.** `PremadeSpecLink.1.0.80` decodes to
   55 Arms / 8 Fury / 8 Prot, and the Prot points land in Improved Bloodrage / Improved Thunder Clap /
   Incite — no raid-DPS value. Decode against a live character before moving them. Warrior glyph sets
@@ -117,8 +128,9 @@ there, not against an equipped piece. Server config was never involved.
   Wind (29838) and needs a guard.
 - Against the wowtbc.gg guides, still open: Bloodsurge Slam should rank *above* Bloodthirst and
   Whirlwind (a 5s proc window against a 6s BT and 8s WW cooldown means procs get eaten); AoE should
-  reprioritise Whirlwind over Bloodthirst; Taste for Blood Overpower should rank above Mortal Strike;
-  Rend should sit at the top of the Arms priority rather than under MS/Execute/Overpower.
+  reprioritise Whirlwind over Bloodthirst.
+- **Rend haste re-snapshot** (Bloodlust, Berserking, haste procs) is deferred: ~1 extra tick per lust,
+  and it would copy mod-spell-tweaks' Trauma + attack-speed formula into playerbots.
 - Arms registers a `death wish` trigger, but Death Wish is Fury tier 5 — unreachable in a PvE Arms
   build. Verify against the Arms premade spec before removing.
 
