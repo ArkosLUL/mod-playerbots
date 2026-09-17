@@ -535,16 +535,20 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
     }
     else if ((cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ENHANCEMENT))
     {
-        stats_weights_[STATS_TYPE_AGILITY] += 1.4f;
+        // Haste has to be worth over 2 AP or +40 AP gems beat Quick King's Amber, but past ~2.7 the
+        // Thundering Skyflare proc outscores Relentless Earthsiege. Agility has to stay above crit or
+        // Chaotic Skyflare takes the meta, since both carry the same 3% crit damage. Hit and expertise
+        // stay above haste so under-cap bots still gem them.
+        stats_weights_[STATS_TYPE_AGILITY] += 1.8f;
         stats_weights_[STATS_TYPE_STRENGTH] += 1.1f;
         stats_weights_[STATS_TYPE_INTELLECT] += 0.3f;
         stats_weights_[STATS_TYPE_ATTACK_POWER] += 1.0f;
         stats_weights_[STATS_TYPE_SPELL_POWER] += 0.5f;
         stats_weights_[STATS_TYPE_ARMOR_PENETRATION] += 0.9f;
-        stats_weights_[STATS_TYPE_HIT] += 2.1f;
+        stats_weights_[STATS_TYPE_HIT] += 2.8f;
         stats_weights_[STATS_TYPE_CRIT] += 1.5f;
-        stats_weights_[STATS_TYPE_HASTE] += 1.8f;
-        stats_weights_[STATS_TYPE_EXPERTISE] += 2.0f;
+        stats_weights_[STATS_TYPE_HASTE] += 2.5f;
+        stats_weights_[STATS_TYPE_EXPERTISE] += 2.7f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 8.5f;
     }
     else if (cls == CLASS_WARLOCK ||

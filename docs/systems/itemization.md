@@ -20,7 +20,7 @@ Two startup caches feed it, built in `PlayerbotFactory::Init()`:
 is worth and **must mirror `ApplyEnchantAndGemsNew`'s eligibility filters exactly** — level gates,
 expansion gates, progression gates, item-side skill gates. Otherwise item *scoring* values sockets by
 gems the bot cannot actually slot. There is one deliberate exception, documented at
-`StatsWeightCalculator.cpp:818`: the tank cap-priority flag stays **off** in `BestGemScore` (see
+`StatsWeightCalculator.cpp:864`: the tank cap-priority flag stays **off** in `BestGemScore` (see
 below).
 
 ## The scoring pipeline
@@ -45,7 +45,7 @@ below).
 ### Talent-driven stat weights
 
 `GenerateBasicWeights` is flat per spec; **stat-conversion talents belong in
-`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:661-707`), gated on `HasAura` — safe there
+`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:666-716`), gated on `HasAura` — safe there
 because `Randomize` runs `InitTalentsTree` (`PlayerbotFactory.cpp:959`) before `InitEquipment` and
 `ApplyEnchantAndGemsNew`. Convention: **added weight = conversion ratio × the target stat's weight**.
 Careful Aim and Mental Dexterity each convert 100% of Intellect to attack power and each add 1.1
@@ -56,7 +56,7 @@ against an attack power weight of 1.0.
 collects that full weight and outscores anything below it — which is why holy paladins gemmed Runed
 (pure spell power) in every socket while Intellect sat at 0.9.
 
-**Holy paladin Intellect is 1.3** (0.9 + 0.4, `:697`). Holy Guidance rank 5 (`31841`) converts 20% of
+**Holy paladin Intellect is 1.3** (0.9 + 0.4, `:709`). Holy Guidance rank 5 (`31841`) converts 20% of
 total Intellect to healing power, and Divine Intellect and Blessing of Kings each add 10% on top, so
 a point on gear is worth 0.24 healing — plus roughly 0.2 for the spell crit it carries
 (`1.21 / 166.6 %` × `45.9` rating per % × crit weight `0.6`), value a flat weight cannot scale. Gated
@@ -283,11 +283,37 @@ would never switch off and every socket would go into a dead stat permanently.
 re-rank whole gear pieces and churn equips as it crosses the cap. The cost is a slightly conservative
 socket estimate for under-cap tanks.
 
-**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:617`), raised from 0.5 so `3849 'Titanium
+**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:622`), raised from 0.5 so `3849 'Titanium
 Plating'` (+81 block value, 56.7) takes a tank shield over `1071 '+18 Stamina'` (55.8) — a 0.9 margin,
 so the shield enchant is not stable across gear changes. Gemming cannot move: no gem in the DBC carries
 `ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move — `StatsCollector.cpp:54`
 feeds `proto->Block` into the stat sum, and raid shields carry 0–259 of it (mean 223).
+
+## Enhancement shaman gemming
+
+Target: haste in yellow and blue sockets, Stark Ametrine (+20 AP +10 haste) as the red-socket bonus
+filler, Relentless Earthsiege meta with one Tear. Each weight in the branch
+(`StatsWeightCalculator.cpp:536-553`) holds a boundary, so **re-check gem picks before moving any**:
+
+- **HASTE 2.5, above 2.0:** below 2 AP per point, Bright Cardinal Ruby (+40 AP) beats Quick King's
+  Amber (+20 haste). Under the ×1.2 colour nudge 2.5 gives Quick in yellow/blue and Stark in red. At
+  2.2 Stark ties Nightmare Tear in red and jewelcrafters keep +68 AP Dragon's Eyes.
+- **HASTE below ~2.7:** Thundering Skyflare's proc (`55380` → `55379`, 480 haste, 6 s, 40 s cooldown)
+  averages ~62.6 haste in the collector and takes the meta above that.
+- **AGILITY 1.8, above CRIT 1.5:** Relentless (+21 Agi) and Chaotic Skyflare (+21 crit) carry the same
+  3% crit damage spell (aura 163, scored as 90 crit), so Agility vs crit alone picks the meta. 1.8 =
+  1 AP + 0.55 crit rating per point (83.3 Agi vs 45.9 rating per 1%). At 1.4 bots ran Chaotic and fed
+  its blue ≥2 condition with Balanced Dreadstones.
+- **HIT 2.8, EXPERTISE 2.7, above haste:** under-cap bots still gem Rigid / Accurate / Precise;
+  `ApplyOverflowPenalty` hands later sockets to haste once capped.
+
+Relentless condition `149` is red ≥1 AND yellow ≥1 AND blue ≥1: Stark covers red and yellow, a Tear
+(colour 14, all three) covers blue. Nightmare Tear `49110` and Enchanted Tear `42702` are
+unique-equipped, so greedy or the meta fixup places exactly one — no factory special case.
+
+Measured at ilvl 80, hit-capped: Relentless 207.4 vs Chaotic 199.8; red Stark 54, yellow Quick 60,
+blue Tear 52.8 then Quick 50, jewelcrafter Quick Dragon's Eye 85. Gear #1 changes in 3 of 13 slots
+(T10 shoulders and chest, Band of the Bone Colossus).
 
 ## Progression gating (mod-individual-progression)
 
