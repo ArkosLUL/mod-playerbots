@@ -52,9 +52,10 @@ bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, Movemen
 
 bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distance,
                                              MovementPriority priority, bool fallbackUnfiltered,
-                                             bool interrupt, char const* what)
+                                             bool interrupt, char const* what, float clearRadius)
 {
-    return FleeFan(from, nullptr, distance, priority, fallbackUnfiltered, interrupt, what);
+    return FleeFan(from, nullptr, distance, priority, fallbackUnfiltered, interrupt, what,
+                   clearRadius);
 }
 
 bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPriority priority,
@@ -238,7 +239,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
-            if (!IsMimironSpotFireBotSafe(bot, hazards, dest))
+            if (!IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND))
             {
                 ++refusedSpray;
                 continue;
@@ -883,8 +884,8 @@ bool MimironDodgeFlamesAction::Execute(Event /*event*/)
         // FORCED, like every other hazard here. At MOVEMENT_COMBAT it tied with the ranged
         // formation, and IsWaitingForLastMove wants a strictly higher priority, so a formation leg
         // blocked the dodge for its whole duration - 1249 moves refused against 387 issued, and the
-        // bot stood in the fire for all of them. Capped because a FORCED leg blocks the Rapid Burst
-        // and Frost Bomb dodges in turn, and Rapid Burst has no telegraph to stand down for.
+        // bot stood in the fire for all of them. Capped because a FORCED leg blocks the Frost Bomb and
+        // Rocket Strike dodges in turn for as long as it runs.
         float const hop = std::min(ULDUAR_MIMIRON_FLAMES_RADIUS + spread + step,
                                    ULDUAR_MIMIRON_FLAMES_MAX_HOP);
 
@@ -942,44 +943,15 @@ bool MimironFireBotAction::Execute(Event /*event*/)
         }
     }
 
-    if (!nearest || IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition()))
+    if (!nearest ||
+        IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE))
         return false;
 
-    return MoveAwayClearOfMines(*nearest, ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE + 2.0f - nearestDist,
-                                MovementPriority::MOVEMENT_FORCED, true, false, "siren");
-}
-
-bool MimironRapidBurstAction::isUseful()
-{
-    MimironRapidBurstTrigger mimironRapidBurstTrigger(botAI);
-    return mimironRapidBurstTrigger.IsActive();
-}
-
-bool MimironRapidBurstAction::Execute(Event /*event*/)
-{
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
-    if (!vx001)
-        return false;
-
-    MimironRapidBurstWindow const window = GetMimironRapidBurstWindow(botAI, bot, vx001);
-    if (!window.valid || window.escape <= 0.0f)
-        return false;
-
-    // Out the near edge, keeping the radius the bot is already standing at: it is in casting or melee
-    // range there, so nothing pulls it back afterwards, and moving in or out changes nothing against a
-    // 100 yd cone. Exactly on the centreline both edges cost the same and the sign is arbitrary.
-    float const side = window.offset >= 0.0f ? 1.0f : -1.0f;
-    float const bearing = Position::NormalizeOrientation(
-        window.centreline +
-        side * (ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE + ULDUAR_MIMIRON_RAPID_BURST_MARGIN));
-    float const radius = bot->GetExactDist2d(vx001);
-
-    Position const dest(vx001->GetPositionX() + radius * std::cos(bearing),
-                        vx001->GetPositionY() + radius * std::sin(bearing), bot->GetPositionZ());
-
-    // MOVEMENT_FORCED so a formation leg already in flight cannot swallow it: the whole window is 3 s
-    // and IsWaitingForLastMove refuses anything not strictly above the move it is holding.
-    return MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, true, true, "rapidburst");
+    // Every bearing lands on the flee circle, past where the formation and the other dodges are
+    // allowed to put the bot back, so the fire bot has to walk a few yards before it comes up again.
+    return MoveAwayClearOfMines(*nearest, ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE - nearestDist,
+                                MovementPriority::MOVEMENT_FORCED, true, false, "siren",
+                                ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE);
 }
 
 bool MimironFrostBombAction::isUseful()
@@ -998,9 +970,11 @@ bool MimironFrostBombAction::Execute(Event /*event*/)
     // ten second fuse otherwise: one healer issued the right 38 yd escape, had it held, and died 23 yd
     // from the bomb still walking a flames hop. Unfiltered fallback because a 30 yd blast can leave no
     // clean bearing at all, and moving somewhere beats standing in it.
+    // Per-bearing hop onto the clearance circle: one radial gap swept over the fan only reaches it
+    // straight away, and the rest land between 30 and 34, where the trigger fires again.
     float const gap = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE - bot->GetExactDist2d(frostBomb);
     return MoveAwayClearOfMines(frostBomb, gap, MovementPriority::MOVEMENT_FORCED, true, true,
-                                "frostbomb");
+                                "frostbomb", ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE);
 }
 
 std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriorityList()

@@ -49,12 +49,11 @@ protected:
     bool MoveAwayClearOfMines(Position const& from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
-                              char const* what = "flee");
+                              char const* what = "flee", float clearRadius = 0.0f);
 
     // Same fan again, aimed at a destination instead of away from a hazard, by fleeing the point
     // mirrored through the bot - so the straight-ahead bearing is the destination itself and the
-    // sweep supplies the alternatives. The Rapid Burst cone has no point to run from: leaving it
-    // means turning around VX-001, and the target of that turn is a place, not a distance.
+    // sweep supplies the alternatives.
     bool MoveTowardClearOfMines(Position const& dest,
                                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                                 bool fallbackUnfiltered = true, bool interrupt = false,
@@ -130,19 +129,6 @@ class MimironRocketStrikeAction : public MimironFleeAction
 {
 public:
     MimironRocketStrikeAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron rocket strike action") {}
-
-    bool Execute(Event event) override;
-    bool isUseful() override;
-};
-
-// Sidestep out of VX-001's Rapid Burst cone. Not a flee - the cone is 100 yd deep, so distance buys
-// nothing and the only exit is sideways round the boss. Worth taking because the cone is narrow: 60
-// degrees, held on one bearing for the whole 3 s the aura runs, which for half the raid is under six
-// yards of arc and saves four of the six ticks.
-class MimironRapidBurstAction : public MimironFleeAction
-{
-public:
-    MimironRapidBurstAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron rapid burst action") {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

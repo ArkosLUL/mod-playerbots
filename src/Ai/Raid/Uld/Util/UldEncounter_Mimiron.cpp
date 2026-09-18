@@ -21,6 +21,7 @@
 #include "SpellAuras.h"
 #include "ThreatManager.h"
 #include "Timer.h"
+#include "UldEncounterGate.h"
 #include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
@@ -148,7 +149,9 @@ bool IsMimironSpotMineSafe(Player* bot, Position const& dest, float clearance)
     return true;
 }
 
-MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI)
+namespace
+{
+MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
 {
     MimironFirefighterHazards hazards;
     if (!botAI || !IsMimironHardModeActive(botAI))
@@ -179,6 +182,7 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI)
 
     return hazards;
 }
+}  // namespace
 
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest)
 {
@@ -192,26 +196,18 @@ bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position co
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest)
 {
     for (Position const& bomb : hazards.bombs)
-        if (dest.GetExactDist2d(bomb.GetPositionX(), bomb.GetPositionY()) < ULDUAR_MIMIRON_FROST_BOMB_RADIUS)
+        if (dest.GetExactDist2d(bomb.GetPositionX(), bomb.GetPositionY()) < ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS)
             return false;
 
     return true;
 }
 
-bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest)
+bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest)
 {
-    if (hazards.fireBots.empty())
-        return true;
-
-    bool const silenced = bot && (PlayerbotAI::IsCaster(bot) || PlayerbotAI::IsHeal(bot)) &&
-                          bot->GetMap()->Is25ManRaid();
-
     for (Position const& fireBot : hazards.fireBots)
     {
         float const dx = dest.GetPositionX() - fireBot.GetPositionX();
         float const dy = dest.GetPositionY() - fireBot.GetPositionY();
-        if (silenced && std::sqrt(dx * dx + dy * dy) < ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE)
-            return false;
 
         // The line only reaches forward: HasInLine checks the front half-circle first.
         float const facing = fireBot.GetOrientation();
@@ -219,10 +215,27 @@ bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& haza
         float const side = dy * std::cos(facing) - dx * std::sin(facing);
         if (ahead >= 0.0f && ahead < ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH &&
             std::fabs(side) < ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH)
-            return false;
+            return true;
     }
 
-    return true;
+    return false;
+}
+
+bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest,
+                              float sirenRadius)
+{
+    if (hazards.fireBots.empty())
+        return true;
+
+    bool const silenced = bot && (PlayerbotAI::IsCaster(bot) || PlayerbotAI::IsHeal(bot)) &&
+                          bot->GetMap()->Is25ManRaid();
+
+    if (silenced)
+        for (Position const& fireBot : hazards.fireBots)
+            if (dest.GetExactDist2d(fireBot.GetPositionX(), fireBot.GetPositionY()) < sirenRadius)
+                return false;
+
+    return !IsMimironSpotInFireBotSpray(hazards, dest);
 }
 
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
@@ -247,7 +260,7 @@ struct MimironMarkers
     Position shockCentre;
 };
 
-MimironMarkers GetMimironMarkers(PlayerbotAI* botAI)
+MimironMarkers ReadMimironMarkers(PlayerbotAI* botAI)
 {
     MimironMarkers markers;
     for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
@@ -272,6 +285,60 @@ MimironMarkers GetMimironMarkers(PlayerbotAI* botAI)
     return markers;
 }
 
+// The fire field, the markers and the Rapid Burst carrier, answered once per trigger pass: the flames
+// dodge, the formation, the approach and the fire bot triggers all ask, and each ask walks 50 to 60
+// fire nodes or the whole group. Valid only under the id UldTriggerPassId hands out, so an action or
+// a multiplier, which may run after something changed the world, always reads live.
+struct MimironPassReads
+{
+    PlayerbotAI* botAI = nullptr;
+    uint32 passId = 0;
+
+    bool hazardsRead = false;
+    MimironFirefighterHazards hazards;
+
+    bool markersRead = false;
+    MimironMarkers markers;
+
+    bool burstRead = false;
+    MimironRapidBurstWindow burst;
+};
+
+// thread_local is fine: a whole pass runs on one map thread.
+thread_local MimironPassReads mimironPassReads;
+
+// Null outside a trigger pass, meaning read live.
+MimironPassReads* MimironPassReadsFor(PlayerbotAI* botAI)
+{
+    uint32 const passId = UldTriggerPassId(botAI);
+    if (!passId)
+        return nullptr;
+
+    if (mimironPassReads.botAI != botAI || mimironPassReads.passId != passId)
+    {
+        mimironPassReads = MimironPassReads();
+        mimironPassReads.botAI = botAI;
+        mimironPassReads.passId = passId;
+    }
+
+    return &mimironPassReads;
+}
+
+MimironMarkers GetMimironMarkers(PlayerbotAI* botAI)
+{
+    MimironPassReads* pass = MimironPassReadsFor(botAI);
+    if (!pass)
+        return ReadMimironMarkers(botAI);
+
+    if (!pass->markersRead)
+    {
+        pass->markers = ReadMimironMarkers(botAI);
+        pass->markersRead = true;
+    }
+
+    return pass->markers;
+}
+
 bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers const& markers,
                             MimironFirefighterHazards const& hazards)
 {
@@ -294,7 +361,7 @@ bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers co
     // it straight back, and it paces on the edge until it burns down; without the bomb half the
     // formation walks the raid back into the blast while the fuse runs.
     return IsMimironSpotFireSafe(hazards, dest) && IsMimironSpotBombSafe(hazards, dest) &&
-           IsMimironSpotFireBotSafe(bot, hazards, dest);
+           IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND);
 }
 
 // The straight walk from `from` to `dest` against the fire. Nodes `from` already stands in are left
@@ -331,6 +398,21 @@ bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const&
     return true;
 }
 }  // namespace
+
+MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI)
+{
+    MimironPassReads* pass = MimironPassReadsFor(botAI);
+    if (!pass)
+        return ReadMimironFirefighterHazards(botAI);
+
+    if (!pass->hazardsRead)
+    {
+        pass->hazards = ReadMimironFirefighterHazards(botAI);
+        pass->hazardsRead = true;
+    }
+
+    return pass->hazards;
+}
 
 bool IsMimironWalkFireSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest)
 {
@@ -729,12 +811,25 @@ struct MimironFightState
     std::vector<ObjectGuid> keptFireBots;
     uint32 fireBotScanMs = 0;
 
-    // When each bot last got itself out of the fire.
-    std::unordered_map<ObjectGuid, uint32> fireDodgeMs;
+    // The wedge slide in force, and the focus it was worked out against.
+    uint32 shiftFocusEntry = 0;
+    float shiftX = 0.0f;
+    float shiftY = 0.0f;
 };
 
 std::mutex mimironFightStatesMutex;
 std::unordered_map<uint32 /*instanceId*/, MimironFightState> mimironFightStates;
+
+// When each bot last got itself out of the fire. Not in MimironFightState: that resets on every scan
+// of a handover, the stretch the raid follows its master through the fire and most needs the hold.
+// Never reset; a stamp stops counting after ULDUAR_MIMIRON_FLAMES_HOLD_MS.
+std::unordered_map<uint32 /*instanceId*/, std::unordered_map<ObjectGuid, uint32>> mimironFireDodges;
+
+std::unordered_map<ObjectGuid, uint32>& MimironFireDodgesFor(Player* bot)
+{
+    std::lock_guard<std::mutex> guard(mimironFightStatesMutex);
+    return mimironFireDodges[bot->GetInstanceId()];
+}
 
 MimironFightState& MimironFightStateFor(Player* bot)
 {
@@ -983,7 +1078,7 @@ void NoteMimironFireDodge(Player* bot)
     if (!bot)
         return;
 
-    MimironFightStateFor(bot).fireDodgeMs[bot->GetGUID()] = getMSTime();
+    MimironFireDodgesFor(bot)[bot->GetGUID()] = getMSTime();
 }
 
 bool IsMimironFireHoldActive(Player* bot)
@@ -991,10 +1086,9 @@ bool IsMimironFireHoldActive(Player* bot)
     if (!bot)
         return false;
 
-    MimironFightState& state = MimironFightStateFor(bot);
-    auto const it = state.fireDodgeMs.find(bot->GetGUID());
-    return it != state.fireDodgeMs.end() &&
-           GetMSTimeDiffToNow(it->second) < ULDUAR_MIMIRON_FLAMES_HOLD_MS;
+    std::unordered_map<ObjectGuid, uint32> const& dodges = MimironFireDodgesFor(bot);
+    auto const it = dodges.find(bot->GetGUID());
+    return it != dodges.end() && GetMSTimeDiffToNow(it->second) < ULDUAR_MIMIRON_FLAMES_HOLD_MS;
 }
 
 bool ClaimMimironPlasmaWindow(Player* bot)
@@ -1132,7 +1226,9 @@ Position const& GetMimironPhase1StackAnchor(PlayerbotAI* botAI, Player* bot)
     return ULDUAR_MIMIRON_PHASE1_STACK_SPOTS[best];
 }
 
-MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
+namespace
+{
+MimironRapidBurstWindow ReadMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
 {
     MimironRapidBurstWindow window;
     if (!botAI || !bot || !vx001 || !vx001->IsAlive())
@@ -1155,21 +1251,23 @@ MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* b
 
     window.valid = true;
     window.centreline = vx001->GetAngle(carrier->GetPositionX(), carrier->GetPositionY());
-
-    float const mine = vx001->GetAngle(bot->GetPositionX(), bot->GetPositionY());
-    float off = Position::NormalizeOrientation(mine - window.centreline);
-    if (off > static_cast<float>(M_PI))
-        off -= 2.0f * static_cast<float>(M_PI);
-    window.offset = off;
-
-    // Arc, not chord: the bot leaves the cone by turning around VX-001, and how far that is scales
-    // with how far out it is standing. Zero once it is already clear, which is most of the raid.
-    float const inside = ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE - std::fabs(window.offset);
-    window.escape = inside <= 0.0f
-                        ? 0.0f
-                        : (inside + ULDUAR_MIMIRON_RAPID_BURST_MARGIN) * bot->GetExactDist2d(vx001);
-
     return window;
+}
+}  // namespace
+
+MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001)
+{
+    MimironPassReads* pass = MimironPassReadsFor(botAI);
+    if (!pass)
+        return ReadMimironRapidBurstWindow(botAI, bot, vx001);
+
+    if (!pass->burstRead)
+    {
+        pass->burst = ReadMimironRapidBurstWindow(botAI, bot, vx001);
+        pass->burstRead = true;
+    }
+
+    return pass->burst;
 }
 
 bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& window,
@@ -1443,16 +1541,31 @@ void MimironWedgeSlot(float firstRow, uint32 rows, uint32 index, uint32 count, f
 // move and the wedge keeps its shape. A player's reach rather than the asking bot's own, so a gnome
 // and a tauren get the same wedge. Only the floor distance can be walked off, so a unit hovering
 // overhead leaves less of it.
-void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, float& shiftX, float& shiftY)
+float MimironWedgeReach(Unit* focus)
+{
+    return std::max(sPlayerbotAIConfig.spellDistance + focus->GetCombatReach() + DEFAULT_COMBAT_REACH -
+                        ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN,
+                    1.0f);
+}
+
+// How far past `reach` of `focus` a slot sits once slid, on the floor. Negative inside it.
+float MimironSlotExcess(Position const& slot, Unit* focus, float reach, float shiftX, float shiftY)
+{
+    float const dz = focus->GetPositionZ() - slot.GetPositionZ();
+    float const floor = std::sqrt(std::max(reach * reach - dz * dz, 0.0f));
+    return focus->GetExactDist2d(slot.GetPositionX() + shiftX, slot.GetPositionY() + shiftY) - floor;
+}
+
+// `inset` pulls the limit in, so the farthest slot lands that far inside it.
+void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, float& shiftX, float& shiftY,
+                           float inset = 0.0f)
 {
     shiftX = 0.0f;
     shiftY = 0.0f;
     if (!focus)
         return;
 
-    float const reach = std::max(sPlayerbotAIConfig.spellDistance + focus->GetCombatReach() +
-                                     DEFAULT_COMBAT_REACH - ULDUAR_MIMIRON_SPREAD_RANGE_MARGIN,
-                                 1.0f);
+    float const reach = std::max(MimironWedgeReach(focus) - inset, 1.0f);
 
     // One pass puts the farthest slot on the limit, but a rigid move can leave a second one just past
     // it at a different bearing, so settle it a couple more times.
@@ -1463,16 +1576,12 @@ void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, floa
         float worstY = 0.0f;
         for (Position const& slot : slots)
         {
-            float const x = slot.GetPositionX() + shiftX;
-            float const y = slot.GetPositionY() + shiftY;
-            float const dz = focus->GetPositionZ() - slot.GetPositionZ();
-            float const floor = std::sqrt(std::max(reach * reach - dz * dz, 0.0f));
-            float const excess = focus->GetExactDist2d(x, y) - floor;
+            float const excess = MimironSlotExcess(slot, focus, reach, shiftX, shiftY);
             if (excess > worst)
             {
                 worst = excess;
-                worstX = x;
-                worstY = y;
+                worstX = slot.GetPositionX() + shiftX;
+                worstY = slot.GetPositionY() + shiftY;
             }
         }
 
@@ -1483,6 +1592,40 @@ void MimironShiftIntoRange(std::vector<Position> const& slots, Unit* focus, floa
         shiftX += worst * std::cos(bearing);
         shiftY += worst * std::sin(bearing);
     }
+}
+
+// MimironShiftIntoRange, held raid-wide while it still works. Recomputed SLACK inside the limit, so
+// the unit can drift that far off before any slot leaves range, and kept until one does or the
+// fresh answer is SLACK away. Otherwise every yard the unit moved slid every slot a yard, and the
+// bots walked after them: 358 slot moves in one phase 3, a yard each.
+void MimironStickyShiftIntoRange(Player* bot, std::vector<Position> const& slots, Unit* focus, float& shiftX,
+                                 float& shiftY)
+{
+    MimironShiftIntoRange(slots, focus, shiftX, shiftY, ULDUAR_MIMIRON_SHIFT_SLACK);
+    if (!bot || !focus)
+        return;
+
+    MimironFightState& state = MimironFightStateFor(bot);
+    if (state.shiftFocusEntry == focus->GetEntry())
+    {
+        float const reach = MimironWedgeReach(focus);
+        bool const inReach = std::all_of(slots.begin(), slots.end(),
+                                         [&](Position const& slot)
+                                         {
+                                             return MimironSlotExcess(slot, focus, reach, state.shiftX,
+                                                                      state.shiftY) <= 0.0f;
+                                         });
+        if (inReach && std::hypot(state.shiftX - shiftX, state.shiftY - shiftY) <= ULDUAR_MIMIRON_SHIFT_SLACK)
+        {
+            shiftX = state.shiftX;
+            shiftY = state.shiftY;
+            return;
+        }
+    }
+
+    state.shiftFocusEntry = focus->GetEntry();
+    state.shiftX = shiftX;
+    state.shiftY = shiftY;
 }
 
 // Every slot of the Firefighter phase 1 camp: a wedge on the tank spot, centreline through the live
@@ -1681,7 +1824,7 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     // room together whenever its victim was one of these bots.
     float shiftX = 0.0f;
     float shiftY = 0.0f;
-    MimironShiftIntoRange(slots, focus, shiftX, shiftY);
+    MimironStickyShiftIntoRange(bot, slots, focus, shiftX, shiftY);
 
     Position const& mine = slots[std::min(index, count - 1)];
     out = Position(mine.GetPositionX() + shiftX, mine.GetPositionY() + shiftY, mine.GetPositionZ());

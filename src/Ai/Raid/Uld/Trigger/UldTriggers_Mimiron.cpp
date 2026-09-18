@@ -151,10 +151,7 @@ bool MimironArcSpreadTrigger::IsActive()
         GetMimironSlotApproaches(botAI, bot, slot, GetMimironFirefighterHazards(botAI)).empty())
         return false;
 
-    // Do not walk a bot back into a live Rapid Burst. Tested on the slot rather than through
-    // MimironRapidBurstTrigger, which only answers true while the bot is still inside the cone - the
-    // formation would otherwise reclaim it the instant the step worked and put it back for the
-    // remaining ticks.
+    // Never walk a bot into a live Rapid Burst: wait the 3 s out wherever it stands.
     if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
     {
         MimironRapidBurstWindow const burst = GetMimironRapidBurstWindow(botAI, bot, vx001);
@@ -163,26 +160,6 @@ bool MimironArcSpreadTrigger::IsActive()
     }
 
     return true;
-}
-
-bool MimironRapidBurstTrigger::IsActive()
-{
-    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
-    if (!vx001)
-        return false;
-
-    // The phase 4 main tank holds instead. Its spot is what keeps the chassis parked, and the Laser
-    // Barrage cone radiates from a VX-001 that only stays still while the tank does.
-    if (PlayerbotAI::IsMainTank(bot) && IsMimironPhase4(bot))
-        return false;
-
-    MimironRapidBurstWindow const window = GetMimironRapidBurstWindow(botAI, bot, vx001);
-
-    // Zero escape means already outside the cone. Past the cap the walk does not finish inside the
-    // 3 s window and the boss has re-aimed at somebody else before the bot arrives, so standing
-    // still and eating it is the cheaper answer.
-    return window.valid && window.escape > 0.0f &&
-           window.escape <= ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP;
 }
 
 bool MimironAerialCommandUnitTrigger::IsActive()
@@ -301,6 +278,12 @@ bool MimironApproachTargetTrigger::IsActive()
     if (!target || !target->IsAlive())
         return false;
 
+    // The formation places ranged and healers, in range of the boss it is built around. Closing on
+    // some other target from there only has the formation walk the bot straight back.
+    Position slot;
+    if (GetMimironSpreadSlot(botAI, bot, slot))
+        return false;
+
     Position approach;
     return GetMimironTargetApproach(botAI, bot, target, GetMimironApproachRange(botAI, bot),
                                     approach);
@@ -333,28 +316,11 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (frostBomb.IsActive())
         return false;
 
-    // Last of the five: this one walks the group to build its cone window, where the others answer
-    // off a cast bar or a nearby creature.
-    MimironRapidBurstTrigger rapidBurst(botAI);
-    if (rapidBurst.IsActive())
-        return false;
-
-    // The fire nodes are non-selectable trigger creatures, so they never show up in attack-target
-    // lists - scan the raw nearby-npc list instead.
+    // Off the pass's shared hazard read, which the fire bot, formation and approach triggers ask for too.
     uint32 nodes = 0;
-    GuidVector npcs = AI_VALUE(GuidVector, "nearest npcs");
-    for (auto const& guid : npcs)
-    {
-        Unit* unit = botAI->GetUnit(guid);
-        if (!unit || !unit->IsAlive())
-            continue;
-
-        if (unit->GetEntry() != NPC_FLAMES_SPREAD && unit->GetEntry() != NPC_FLAMES_INITIAL)
-            continue;
-
-        if (bot->GetExactDist2d(unit) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+    for (Position const& node : GetMimironFirefighterHazards(botAI).flames)
+        if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_RADIUS)
             ++nodes;
-    }
 
     if (!nodes)
         return false;
@@ -378,7 +344,23 @@ bool MimironFireBotTrigger::IsActive()
         return false;
 
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
-    return !IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition());
+    if (IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE))
+        return false;
+
+    if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition()))
+        return true;
+
+    // Only the siren left. A bot already walking somewhere clear of it is leaving anyway, and a
+    // sidestep here would cancel that walk and hand the formation a fresh one: a 35 yd leg got cut
+    // three times like that. Walking through a silence costs nothing, nobody casts on the move.
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    if (bot->isMoving() && bot->GetMotionMaster()->GetDestination(x, y, z) &&
+        IsMimironSpotFireBotSafe(bot, hazards, Position(x, y, z), ULDUAR_MIMIRON_FIREBOT_SIREN_STAND))
+        return false;
+
+    return true;
 }
 
 bool MimironFrostBombTrigger::IsActive()

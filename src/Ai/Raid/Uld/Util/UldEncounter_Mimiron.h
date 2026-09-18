@@ -116,6 +116,11 @@ constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
 
+// Step size of the phase 3 wedge's slide toward the Aerial Command Unit. The wedge holds a slide
+// until a slot leaves casting range or the slide it needs has moved this far, instead of following
+// every yard the unit drifts. Under the tolerance, so one step never walks a bot off its own slot.
+constexpr float ULDUAR_MIMIRON_SHIFT_SLACK = 4.0f;
+
 // How far inside the bot's own spell range the outermost wedge row is allowed to sit, which is what
 // caps the row count. Bots cast out to AiPlayerbot.SpellDistance, 28.5 by default, and a slot past
 // that does not self-correct: "reach spell" is ACTION_HIGH and the formation is ACTION_RAID, so the
@@ -296,13 +301,18 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
 
 // Whether `dest` clears every gathered hazard of that kind. Two calls rather than one because the
 // flee fan counts the two refusals apart, and which filter emptied a fan is the thing the trace has
-// to be able to name.
+// to be able to name. The bomb test is a destination test: it screens at
+// ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS, past where the flee trigger lets go.
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 
-// Out of every Emergency Fire Bot's Water Spray line, and for a caster or healer in 25-man also out of
-// its silence aura. Takes the bot because only the second half depends on who is asking.
-bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest);
+// Out of every Emergency Fire Bot's Water Spray line, and for a caster or healer in 25-man also more
+// than `sirenRadius` from it. Takes the bot because only the second half depends on who is asking.
+// The bot's own spot is judged at ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE, a destination at
+// ULDUAR_MIMIRON_FIREBOT_SIREN_STAND.
+bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest,
+                              float sirenRadius);
+bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest);
 
 // The fire bots the raid leaves alone for now, so they keep putting the fire out: the
 // ULDUAR_MIMIRON_FIREBOT_KEEP oldest, in phase 3, until the Aerial Command Unit is low enough that
@@ -528,15 +538,11 @@ struct MimironRapidBurstWindow
 {
     bool valid = false;
     float centreline = 0.0f;  // world bearing from VX-001 to the aura carrier
-    float offset = 0.0f;      // this bot's own bearing off it, signed, radians
-    float escape = 0.0f;      // arc this bot must cover to clear the cone, yards; 0 when already out
 };
 
 MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* bot, Unit* vx001);
 
-// Whether `dest` is outside the cone as it is pointing now. The true 60 degrees only, with no margin:
-// the margin belongs to whoever is choosing somewhere to stand, and folding it in here would refuse a
-// step aimed at exactly the edge it was told to clear.
+// Whether `dest` is outside the cone as it is pointing now, the true 60 degrees with no margin.
 bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& window,
                                  Position const& dest);
 
@@ -572,6 +578,10 @@ constexpr float ULDUAR_MIMIRON_DRINK_FIRE_CLEARANCE = 15.0f;
 // on a burning flame node - 64623's condition rows require entry 34121 carrying aura 64561 - and its
 // SmartAI detonates 10 s after the spawn, which is the whole warning.
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_RADIUS = 30.0f;
+// Where a destination has to be. The flee trigger's FindNearestCreature adds both bounding radii to
+// the 30 and lets go near 31, so a spot picked at 30.5 flees again on the next tick. Two pulls
+// had 136 of 211 accepted escapes land short of the 34 they aimed for, 19 of them under 32.
+constexpr float ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS = 32.0f;
 // Where to stand rather than what the blast reaches: the extra clears the knockback and the yard or
 // two a leg overshoots by.
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
@@ -600,6 +610,11 @@ constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH = 3.5f;
 // Deafening Siren 64616 is a 10 yd area silence, on the 25-man bot only (creature_template_addon), and
 // area auras add both object sizes to the radius.
 constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
+// Where a caster's destination has to be, and where the siren dodge aims. The kept bots walk to the
+// next flame, which is usually in the raid: formation spots picked just past 13 (median 15.7) had
+// the bot walked back into at 13.2 a moment later, 212 times in one phase 3.
+constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_STAND = 17.0f;
+constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE = 19.0f;
 // How close a kept fire bot may get to the bot, or to what it is hitting, before damage AoE is held.
 // Bots cannot aim AoE away from one, and the kept ones walk into the raid after the fire.
 constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 30.0f;
@@ -653,16 +668,8 @@ constexpr float ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT = 0.5f;
 // the DBC's TARGET_UNIT_CONE_ENEMY_104 default - but that table is not trusted on its own here, since
 // its row for the Laser Barrage does not match observed behaviour. This one is measured: bucket every
 // bot past 14 yd by its bearing at the tick before a hit and the hit rate holds around 80 % out to 30
-// degrees, then drops to 9 % at 30-40 and about 1 % beyond. The margin is the yard or two a leg
-// overshoots by plus the boss's own turn between the aura landing and the bot arriving.
+// degrees, then drops to 9 % at 30-40 and about 1 % beyond.
 constexpr float ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE = 30.0f * static_cast<float>(M_PI) / 180.0f;
-constexpr float ULDUAR_MIMIRON_RAPID_BURST_MARGIN = 8.0f * static_cast<float>(M_PI) / 180.0f;
-
-// Longest arc worth walking to leave the cone. The window is 3 s and ticks twice a second, so a step
-// only pays while it finishes inside it; measured, half the victims needed under 6 yd and two thirds
-// under 9, and past that the boss has re-aimed at somebody else before the bot arrives. Above this a
-// bot stands still and eats it, which is the honest answer rather than a walk that buys nothing.
-constexpr float ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP = 9.0f;
 
 // VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
 // point holds still while the mechs turn and charge about.

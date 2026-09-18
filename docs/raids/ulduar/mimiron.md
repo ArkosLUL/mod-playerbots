@@ -111,7 +111,8 @@ Firefighter-only; normal mode has no fire and keeps the room centre, the ring an
 
 VX-001 casts 64623 at `SPELLVALUE_MAX_TARGETS 1` from 1 s into phases 2 and 4, repeating every 45 s.
 `acore_world.conditions` restricts it to entry **34121 carrying aura 64561**, so it never targets a
-player: it picks a burning flame node, which summons `NPC_FROST_BOMB` (34149). That creature's
+player: it picks a burning flame node, which summons `NPC_FROST_BOMB` (34149) at the end of 64623's
+2 s cast and flight, 2.5-4 s after VX-001 starts it, and a cast can summon nothing. The bomb's
 SmartAI detonates **exactly 10 s later** — 65333 in 25-man, **30 yd, 47124 base**, plus a knockback,
 plus a dummy effect that despawns every flame it catches. It is the raid's fire extinguisher as much
 as its hazard, and gathering the fire into one part of the room is what aims it. Bots avoid the bomb
@@ -131,8 +132,8 @@ trigger and every spot test, `ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE` 34 for where 
 The node also has to win the tick. Rocket strike, the flames dodge and the frost bomb all sat on
 `ACTION_RAID + 4`; `Queue::findHighestRelevanceBasket` breaks an exact tie by push order and
 `Engine::DoNextAction` stops at the first action returning true, so the flames step ended the tick
-143-221 times a pull against 6-13 reaching the bomb. The ladder is now rapid burst +8, barrage +7,
-frost bomb +6, shock blast +5.5, rocket strike +5, flames +4, fire bot +3.
+143-221 times a pull against 6-13 reaching the bomb. The ladder is now barrage +7, frost bomb +6,
+shock blast +5.5, rocket strike +5, flames +4, fire bot +3.
 
 It worked. Across the two 2026-09-08 pulls the bomb did **83,180 (2.2%) and 0**, against 697,314 and
 612,008, and killed **one bot and none** against 13-15 at once.
@@ -146,6 +147,14 @@ taking 45k at 24.8 yd when the Rapid Burst cone refused her last flees. `Mimiron
 only vetoes `reach melee`, and only while the trigger is active. `MimironFrostBombGuardMultiplier` now
 zeroes all four and `follow` inside `FROST_BOMB_CLEARANCE + _HOLD_MARGIN` (38 yd) of a live bomb; a
 healer may be out of range of a far tank for the 10 s.
+
+**Then the escape landed on the edge itself**, the Shock Blast defect again: one radial gap swept
+over the fan reaches the clearance only straight away. On 2026-09-18 **136 of 211** accepted
+escapes landed short of 34 yd, 19 of them under 32. They now take the per-bearing hop to
+`_CLEARANCE`, and every destination screen (`IsMimironSpotBombSafe`) tests
+`ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS` (32), past where the trigger lets go at ~31: run 30, stand
+32, flee 34. The guard also zeroes `mimiron approach target action`, which walked ranged back in
+from a flee 48-56 yd out onto the edge: 85, 31 and 26 `approach target <-> frost bomb` A-B-A.
 
 ## Two dodges fought over the fire, and both were too short
 
@@ -209,8 +218,8 @@ that leg's whole duration and the bot burned through it
 
 It is `MOVEMENT_FORCED` now, like every other hazard node here.
 `ULDUAR_MIMIRON_FLAMES_MAX_HOP` (**12 yd**, about 1.7 s of lock) caps the leg, because a FORCED leg
-blocks the Rapid Burst and Frost Bomb dodges in turn and Rapid Burst has no telegraph to stand down
-for; the barrage does, and the trigger stands down for it outright. The fan also counts what the
+blocks the Frost Bomb and Rocket Strike dodges in turn; the barrage has a telegraph, and the trigger
+stands down for it outright. The fan also counts what the
 mover refused — `move` in the `mimiron.flee` note, and a `locked` outcome from testing the lock once
 up front instead of 44 times — because reading a mover refusal as a hazard refusal is what hid this.
 On 2026-09-13 that read **1303 `locked` on every one of the four rungs** against 590 `ok` on rung 1:
@@ -259,17 +268,22 @@ now `follow <-> dodge flames`, 276 and 205 across the two handovers.
 Two answers, because the hazard has two shapes. `MimironFireHoldGuardMultiplier` zeroes the five
 names the Frost Bomb guard already lists — `reach melee`, `reach spell`, `reach party member to
 heal`, `set behind`, `follow` — for `ULDUAR_MIMIRON_FLAMES_HOLD_MS` (2500) after this bot's last
-accepted dodge (`fireDodgeMs` in `MimironFightState`). A **hold**, not a veto: fire covers a third
-of the floor for all of phase 3, so gating on fire being near would strand the raid. It does
-suppress `follow` for most of a handover, which is free while nothing is attackable — but if the
-master walks the raid during one, the bots will lag.
+accepted dodge. A **hold**, not a veto: fire covers a third of the floor for all of phase 3, so
+gating on fire being near would strand the raid. It does suppress `follow` for most of a handover,
+which is free while nothing is attackable — but if the master walks the raid during one, the bots
+will lag. The stamps live outside `MimironFightState`, which `TickMimironObs` resets on every scan
+while nothing is attackable: inside it the hold never reached a handover, and on 2026-09-18 follow
+came back **173 times in 213** under 2.5 s there (`follow <-> dodge flames` 155, 68, 136) while
+mid-phase it never did.
 
 `mimiron approach target action` (`ACTION_RAID - 2`) is the other, because melee stood in fire 29.1%
 of phase 3 while their own target stood in it 31.1%: the exposure is the add, not the walk, and a
 hold cannot fix that. `GetMimironTargetApproach` sweeps 12 bearings round the target at the bot's
 own stop distance less `ULDUAR_MIMIRON_APPROACH_INSET` (2), starting from the bearing toward the
 bot; if that one is clear it returns false and the generic node does its own job. Destination
-screened by `IsMimironSpotStandable` and the Rapid Burst cone, noted `mimiron.close round`.
+screened by `IsMimironSpotStandable` and the Rapid Burst cone, noted `mimiron.close round`. Bots the
+formation places are left out: their slot is in range of the boss it is built round, and closing on
+another target only had the formation walk them back, 19-27 yd each way (26 A-B-A in one phase 3).
 
 **It has to be a node, not a screen inside `reach melee`.** The three reach actions share one body,
 `MovementAction::ReachCombatTo`, which does compute a point — but
@@ -302,9 +316,7 @@ against 175 issued, `rocket locked` 58-74, `frostbomb locked` 85.
 Both halves of the fix are needed. `mimiron shock blast trigger` moved from `ACTION_RAID + 3` to
 **`+ 5.5`**, above the fire dodge at `+ 4` — but relevance only picks which action runs, not which
 move the lock accepts, so `MimironDodgeFlamesTrigger` **also stands down** whenever the barrage,
-Shock Blast, a Rocket Strike, the Frost Bomb or Rapid Burst is live. Rapid Burst is tested last of
-the five: it walks the group to build its cone window where the others read a cast bar or a nearby
-creature.
+Shock Blast, a Rocket Strike or the Frost Bomb is live.
 
 It held. Across two 2026-09-10 pulls on the fix Shock Blast went from 597,868 damage and seven deaths
 to **nothing at all**, then one hit and one death; `shock locked` fell 127 → 21 and 43, and
@@ -586,7 +598,7 @@ distance before the add has picked anyone.
 
 Both used to be handled by a main-tank `unit->Kill()` gated on `BotCheatMask::raid`. That is gone.
 
-## Rapid Burst is a 60° cone, and it can be sidestepped
+## Rapid Burst is a 60° cone, and a bot cannot sidestep it in time
 
 `EVENT_SPELL_RAPID_BURST` picks a random player within 80 yd every **3.2 s**, casts **63382 on that
 player**, then `SetFacingToObject`. 63382 is a 3000 ms aura with a 500 ms periodic dummy — **six
@@ -603,23 +615,15 @@ falls off a cliff: **9%** at 30-40°, 3-7% to 60°, ~1% beyond. The residue is s
 Unlike the barrage there is no aim lead to confound it: the boss faces its target once and holds for
 the whole 3 s.
 
-The escape is therefore short. 93-97% of hits land inside ±30°, and the arc a victim had to cover to
-clear it was **median 6.3-6.7 yd** — 46% under 6, 65% under 9, p90 17.
-A ~1 s step saves four of the six ticks. `MimironRapidBurstAction` takes it whenever the arc is at or
-under `ULDUAR_MIMIRON_RAPID_BURST_MAX_STEP` (9) and stands still above that, because past there the
-boss has re-aimed at somebody else before the bot arrives. On the centreline that is ~13.6 yd from
-VX-001, so a raid arriving from 40 yd eats all six ticks (see the handovers).
-
-Three things stop it costing more than it buys. It **keeps the bot's own radius**, moving purely
-tangentially, so casting range and melee range both survive and neither `reach spell` nor
-`reach melee` fires afterwards. The **arc spread yields on the slot**, not on the trigger — testing
-the trigger would hand the bot back the instant the step worked, for the remaining ticks. And the
-shared fan **screens for the cone**, so no other dodge can sweep a bearing into it.
-
-It sits at `ACTION_RAID + 8`, top of the ladder, and that costs nothing: Rapid Burst exists only in
-phase 2, so it never contends with the barrage, and the two lethal nodes it outranks there — Frost
-Bomb on a 10 s fuse, Rocket Strike on 5 — both have seconds a 3 s cone does not. It is **not** behind
-the hard-mode check, because Rapid Burst is scheduled unconditionally when phase 2 starts.
+**So there is no step.** One ran until 2026-09-18 and paid for nothing: issued 1.1-1.8 s into the
+window in every role, it still took 0.5-1.3 hits after step + 1 s, and a stepping bot took **2.32**
+ticks a cast against 2.75 and 2.41 for one standing still in the cone, ~700 damage saved. Its costs
+were bigger. `rapidburst locked` 285 and 424 against 182 and 251 issued held the lock against the
+lethal dodges, and the walk back to the slot was the largest piece of phase 2 formation walking,
+630 of 1,556 yd and 1,130 of 2,556 (`arc spread <-> rapid burst` 59 and 111). What stays is the
+screen: the fan, the slot approaches, the target approach and the arc spread's slot test refuse a
+destination inside the live cone (`IsMimironSpotRapidBurstSafe`), so nothing walks into one, and a
+bot in it waits the 3 s out.
 
 **Hand Pulse (64348/64352, 64536/64537 on 25-man) is the same 60° cone**, every 1.75 s in phase 4,
 and is not covered. The one long phase 4 (2026-09-11 night) took 1.86M from it, 56-82k on most of the
@@ -669,6 +673,15 @@ recent batch, **85% and 53% of it followed one seeded inside phase 2 itself**. W
 anchor buys is a raid arriving on empty ground with a dodge ladder that has somewhere to go — which
 is when it is at full strength, and when both 2026-09-09 pulls began dying, 15 s in.
 
+**On 2026-09-18 the race was lost while healers walked.** Heat Wave was 39% and 52% of phase 2
+intake, Rapid Burst 44% and 39%, Flames 17% and 9%, and living healers spent **38-39% of the phase
+moving and 32% casting**, ranged 34-39% moving: the formation walking back after a dodge 15-16% of
+healer time, the Rapid Burst step 6-9%, Rocket Strike 3-6%, the Frost Bomb 3-4%. The deaths follow
+the walks. Every bomb that landed in the wedge had 15-21 of 25 inside 30 yd and ranged and healers
+50-61% moving and 14-40% casting over the fuse, and in one pull the 3:26 bomb landed on a Heat Wave
+pulse: healers 42-71% moving, raid health 83% → 50%, ten dead in eight seconds. The one stretch
+with nobody walking, VX-001's 14.5 s Spinning Up and barrage, took the raid back to 97%.
+
 ## Phase 3 wants a wedge, not a ring
 
 The add summon pads (GO 194740-194748) sit on **three arms** leaving the room centre at 180°, +59.4°
@@ -709,7 +722,12 @@ centre-fixed wedge left south slots **35-45 yd 3D** from it on 2026-09-11, past 
 **100** `arc spread <-> reach spell` a phase, one mage 38% casting. `MimironShiftIntoRange`, shared
 with the phase 1 camp, moves the whole wedge toward the unit's ground point until its outermost slot
 is inside `spellDistance + unit reach + 1.5 − margin` in 3D, which leaves ~26.7 yd of floor under a
-hover.
+hover. Worked out afresh every scan, every yard the unit drifted slid every slot a yard (358 slot
+moves in one 2026-09-18 phase 3) and the formation walked 961 yd after nothing but itself, so the
+phase 3 slide is held: `MimironStickyShiftIntoRange` keeps it raid-wide while every slot is in reach
+and the fresh one is within `ULDUAR_MIMIRON_SHIFT_SLACK` (4, under the 5 yd tolerance), and
+recomputes it `SLACK` inside the limit. The phase 1 camp keeps the plain shift, since that inset
+would pull its middle row inside Napalm's 24.5 yd floor.
 
 Holding still is also the whole Bomb Bot fix. They spawn on the unit (`SPELL_SUMMON_BOMB_BOT` is cast
 on self), so once the wedge stops chasing, the unit's own 30 yd standoff is what a Bomb Bot has to
@@ -812,6 +830,10 @@ became attackable.
 was still at **87.4% after 135 s**, the raid went 19 alive at 5:00 to 9 at 7:00, and the master
 called it. Living bots spent **65%** of their phase 3 ticks on Assault Bots, 16.8% on the ACU, 9.5%
 on Bomb Bots, 1.4% on fire bots.
+
+2026-09-18: one pull died in phase 2 (86 s in, see the healing race); the other took the MK II in
+76 s, VX-001 in 115 s and the ACU in 201 s, then lost 20 of 25 in phase 4's 32 s, **63.6%** of its
+intake Hand Pulse.
 
 ## A dodge that returns false hands the tick to Charge
 
@@ -936,6 +958,16 @@ one is within 30 yd of the bot or its target. `IsMimironSpotFireBotSafe` refuses
 ahead, 3.5 each side) for everyone and 13 yd for casters and healers in 25-man, in `IsMimironSpotSafe`
 and the flee fan; `mimiron fire bot` (`ACTION_RAID + 3`) steps sideways out of the line, or away from
 the siren.
+
+**The siren needs a stand radius past its run radius.** The kept pair walks to the next flame, which
+is in the wedge, so formation spots picked just past 13 yd (median 15.7) were walked into at 13.2
+soon after: **212** `arc spread <-> fire bot` A-B-A in one 2026-09-18 phase 3, and 2,433 of the
+4,758 yd the formation walked came after a fire bot dodge. Destinations now clear
+`ULDUAR_MIMIRON_FIREBOT_SIREN_STAND` (17) and the siren dodge takes the per-bearing hop to
+`_SIREN_FLEE` (19), while the bot's own spot is still judged at 13. A bot already walking somewhere
+clear of the siren does not dodge it at all: the sidestep cancelled the walk and the formation
+issued a fresh one, three times on one 35 yd leg, and nobody casts on the move anyway. The spray
+line still dodges.
 
 The next phase 3 culled one at 4:48 and kept two until 6:04 and 6:25, before phase 4: one Water Spray
 hit, and 18 siren applications against 45 before, 6 of them on casters and healers against 19, most in
@@ -1086,7 +1118,7 @@ Divine Protection on health at 0:53 after an external, or a second claim at 0:54
 lapsed. The 12 s claim and the hold give windows 1-3 one button each on a replay of those pulls;
 windows 4-5 stay bare, as they were (min HP 74-82%).
 
-**Still untested in a pull**, three running: a human has main-tanked every Firefighter attempt since,
+**Still untested in a pull**, five running: a human has main-tanked every Firefighter attempt since,
 so no bot tank has taken a Plasma Blast and none of this has been exercised.
 
 ## The tank leaves with three seconds of threat and the boss does not follow
@@ -1254,8 +1286,8 @@ that dodged successfully is by definition clear.
 Second, quieter trap: the flee and the arc spread both issued at `MOVEMENT_COMBAT`, so a dodge
 starting mid-walk was dropped with no trace (the movement lock is in
 [../../engine/pitfalls.md](../../engine/pitfalls.md)). Shock Blast and Rocket Strike now issue at
-`MOVEMENT_FORCED`, as do the Frost Bomb, Rapid Burst and — since it turned out to be losing every
-contested tick to the formation — the flames dodge. Only the genuinely low-stakes avoids, mines and
+`MOVEMENT_FORCED`, as do the Frost Bomb and — since it turned out to be losing every contested tick
+to the formation — the flames dodge. Only the genuinely low-stakes avoids, mines and
 bomb bots, stay at `MOVEMENT_COMBAT`, where they cannot stomp a real emergency.
 
 **Mimiron is where two `MOVEMENT_FORCED` dodges deadlocking was first paid for.** The barrage dodge
@@ -1282,6 +1314,9 @@ Frost Bomb for the mirror reason — otherwise the formation walks the raid back
 the whole ten second fuse. The fan screens both too, so a Shock Blast or barrage dodge no longer
 lands in the fire it will have to leave again. Both come from one `GetMimironFirefighterHazards`
 pass, because the fan tests eleven bearings and rescanning a 50-node field per bearing is not free.
+That read, `GetMimironMarkers` and the Rapid Burst carrier are also answered once per trigger pass
+under `UldTriggerPassId`, since the flames, formation, approach and fire bot triggers all ask;
+actions and multipliers read live.
 
 ## What a trace answers
 
@@ -1298,14 +1333,18 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline and the ring radius |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `rapidburst`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast or Frost Bomb |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast or Frost Bomb |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot) or `detour ±N` (degrees off the direct bearing) |
-| `close` | A melee or caster approach steered round the fire instead of straight at the target |
+| `close` | A melee approach steered round the fire instead of straight at the target |
 | `dpsrule` | Which priority rule chose the target, `held:` when the hold kept it, `fallback`, `p3hold` or `p4hold` |
 
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,
 which leaves a dodge that refuses all twelve completely silent.
+
+`tools/botobs/bosses/mimiron.py` reads the rest: phases and deaths, the phase 2 healing race, walking
+time charged to the mover that started it, A-B-A and formation yards by what displaced the bot,
+Rapid Burst ticks by cone position, Frost Bomb evacuations from the summon, and slot churn.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms — `lead`, `sweep`, `rate`, `live`,
 originated on VX-001, which in phase 4 is the chassis, so a drifting apex shows. Written by hand

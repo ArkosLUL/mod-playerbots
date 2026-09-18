@@ -193,13 +193,15 @@ float MimironFrostBombGuardMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
+    // The approach node too. Its spot clears the bomb, but the walk back in from a flee 48 to 56 yd
+    // out ends on the edge and the flee fires again, so the two trade the bot for the whole fuse.
     std::string const name = action->getName();
     if (name != "reach melee" && name != "reach spell" && name != "reach party member to heal" &&
-        name != "set behind" && name != "follow")
+        name != "set behind" && name != "follow" && name != "mimiron approach target action")
         return 1.0f;
 
     // Room test before the grid scan: the hard mode switch is a config read that holds all over
-    // Ulduar, and the five nodes above are asked for on every tick of every fight in the instance.
+    // Ulduar, and the nodes above are asked for on every tick of every fight in the instance.
     if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
         return 1.0f;
 
