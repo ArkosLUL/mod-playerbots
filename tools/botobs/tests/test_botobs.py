@@ -28,7 +28,7 @@ import math  # noqa: E402
 from unittest import mock  # noqa: E402
 
 import postmortem  # noqa: E402
-from bosses import flame_leviathan, yogg_saron  # noqa: E402
+from bosses import flame_leviathan, hodir, yogg_saron  # noqa: E402
 from raidobs import (  # noqa: E402
     corpus, coverage, deathreport, encounter, geometry, probes, space, stuck, timeline, validity, verify,
 )
@@ -771,6 +771,40 @@ class FlameLeviathanReader(unittest.TestCase):
         self.assertEqual((rows[0]["took"], rows[0]["frames"], rows[0]["rate"]), (None, 0, None))
 
 
+class HodirReader(unittest.TestCase):
+    def test_singed_stacks_climb_cap_and_reset(self):
+        curve = hodir.singed_curve([0, 1000, 2000], cap=2, duration=5000)
+        self.assertEqual([stacks for _, stacks, _ in curve], [1, 2, 2])
+        self.assertEqual(hodir.stacks_at(curve, 2500), 2)
+        self.assertEqual(hodir.stacks_at(curve, 7001), 0)
+        restarted = hodir.singed_curve([0, 1000, 9000], cap=25, duration=5000)
+        self.assertEqual([stacks for _, stacks, _ in restarted], [1, 2, 1])
+
+    def test_mean_stacks_counts_the_gap_as_zero(self):
+        curve = hodir.singed_curve([0], cap=25, duration=1000)
+        self.assertAlmostEqual(hodir.mean_stacks(curve, 0, 2000, step=500), 0.75)
+
+    def test_latch_windows_clip_to_the_range(self):
+        marks = [(-500, "centre"), (1000, "7"), (3000, "centre")]
+        self.assertEqual(hodir.latch_windows(marks, 0, 4000),
+                         [(0, 1000, "centre"), (1000, 3000, "7"), (3000, 4000, "centre")])
+
+    def test_a_round_trip_is_all_undone_and_a_straight_walk_none(self):
+        there_and_back = [(0, 0.0, 0.0), (1000, 3.0, 0.0), (2000, 0.0, 0.0)]
+        self.assertEqual(hodir.walked_and_undone(there_and_back), (6.0, 6.0))
+        straight = [(0, 0.0, 0.0), (1000, 3.0, 0.0), (2000, 6.0, 0.0)]
+        self.assertEqual(hodir.walked_and_undone(straight), (6.0, 0.0))
+
+    def test_aba_flips_collapse_repeats_and_respect_the_window(self):
+        sequence = [(0, "dodge"), (100, "dodge"), (400, "reach melee"), (900, "dodge"), (9000, "reach melee")]
+        self.assertEqual(hodir.aba_flips(sequence, within=5000), [(("dodge", "reach melee"), 900)])
+
+    def test_zones_cluster_by_spot_and_split_on_a_gap(self):
+        rows = [(0, 1.0, 1.0, 11.0), (250, 1.1, 1.0, 11.0), (500, 20.0, 1.0, 11.0), (5000, 1.0, 1.0, 11.0)]
+        zones = hodir.cluster_zones(rows)
+        self.assertEqual([(zone["t0"], zone["t1"]) for zone in zones], [(0, 250), (500, 500), (5000, 5000)])
+
+
 class LatchAllValues(unittest.TestCase):
     def test_latch_spans_keeps_every_value_in_order(self):
         spans = latch_spans(rich(), "fixture.phase", end=9999)
@@ -1081,6 +1115,9 @@ class Renderers(unittest.TestCase):
             "show_validity_hardmode": lambda: validity.show_validity(trace, None, True),
             **{f"flame_leviathan --{flag}": (lambda show=show: show(Trace(FULL_V13)))
                for flag, _, show in flame_leviathan.SECTIONS},
+            "hodir banner": lambda: hodir.show_banner(Trace(FULL_V13)),
+            **{f"hodir --{flag}": (lambda show=show: show(Trace(FULL_V13)))
+               for flag, _, show in hodir.SECTIONS},
         }
         for name, call in calls.items():
             with self.subTest(renderer=name):

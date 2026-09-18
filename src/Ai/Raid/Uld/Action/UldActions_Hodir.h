@@ -64,8 +64,8 @@ private:
     float _legDist = 0.0f;
 };
 
-// Hold the bot's anchor: a fixed corner spot for the two tanks, a formation slot for ranged and
-// healers.
+// Hold the bot's anchor: a spot just past the hold point for the two tanks, a formation slot for
+// ranged and healers.
 class HodirRaidPositionAction : public MovementAction
 {
 public:

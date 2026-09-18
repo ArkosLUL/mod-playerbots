@@ -41,11 +41,24 @@ enum UlduarHodirIds
     NPC_TOASTY_FIRE = 33342,
     NPC_HODIR_FLASH_FREEZE_BLOCK = 32938,   // ice block encasing a frozen helper; kill it to free them
     NPC_HODIR_FLASH_FREEZE_PLAYER = 32926,  // same, on a raider - the next Flash Freeze instakills them
-    // Starlight is an 8 yd zone centred on whichever druid helper this raid's faction and size got.
+    // The helpers, by faction. The _10 row spawns in both sizes, the _25 row only in 25man. Each block
+    // is summoned by the helper inside it, so the summoner's entry says who a block holds.
+    NPC_HODIR_MAGE_ALLIANCE_10 = 32893,
+    NPC_HODIR_MAGE_ALLIANCE_25 = 33327,
+    NPC_HODIR_MAGE_HORDE_10 = 32946,
+    NPC_HODIR_MAGE_HORDE_25 = 33331,
     NPC_HODIR_DRUID_ALLIANCE_10 = 32901,
     NPC_HODIR_DRUID_ALLIANCE_25 = 33325,
     NPC_HODIR_DRUID_HORDE_10 = 32941,
     NPC_HODIR_DRUID_HORDE_25 = 33333,
+    NPC_HODIR_SHAMAN_ALLIANCE_10 = 32900,
+    NPC_HODIR_SHAMAN_ALLIANCE_25 = 33328,
+    NPC_HODIR_SHAMAN_HORDE_10 = 32950,
+    NPC_HODIR_SHAMAN_HORDE_25 = 33332,
+    NPC_HODIR_PRIEST_ALLIANCE_10 = 32897,
+    NPC_HODIR_PRIEST_ALLIANCE_25 = 33326,
+    NPC_HODIR_PRIEST_HORDE_10 = 32948,
+    NPC_HODIR_PRIEST_HORDE_25 = 33330,
     SPELL_FLASH_FREEZE = 61968,
     SPELL_BITING_COLD_PLAYER_AURA = 62039,
     SPELL_HODIR_FLASH_FREEZE_TRAPPED = 61969,
@@ -125,67 +138,30 @@ constexpr float ULDUAR_HODIR_BIG_SHARDS_CLEAR = 9.0f;
 constexpr uint32 ULDUAR_HODIR_ICICLE_SPENT_MS = 3300;
 
 // Slots are laid out concentrically at a minimum separation of 4.5 yd, because 62457 splashes 4, so
-// one icicle catches one bot instead of five. The ring is sized to fit inside a Toasty Fire - a slot
-// outside one is a bot walking a Biting Cold shuttle instead of standing still and casting - but it
-// only ever sits in a fire that lands inside the caster band, and this mage drops them 33 to 43 yd
-// from Hodir, so in practice the ring forms on the fixed anchor and pays the shuttle.
+// one icicle catches one bot instead of five. The outer ring sits 4.5 yd beyond the inner one so a bot
+// shedding Biting Cold can step outward without closing on its neighbours.
 //
-// The outer ring sits 4.5 yd beyond the inner one so a bot shedding Biting Cold can step outward
-// without closing on its neighbours.
+// No fire version any more. Ranged are Starlight first and only stand in a fire that happens to reach
+// them; a ring that re-centred on fires re-seated all 14 slots 50-100 times a pull and threw out 56-91
+// Starlight stands for leaving the fire.
 constexpr float ULDUAR_HODIR_RAID_RING_INNER = 4.5f;
 constexpr float ULDUAR_HODIR_RAID_RING_OUTER = 9.0f;
 constexpr uint32 ULDUAR_HODIR_RAID_RING_INNER_SLOTS = 6;
 
-// The same ring, shrunk, for the one case that is worth the spacing: a centre that is a Toasty Fire.
-// The mage holds 30 yd off Hodir (AttackStartCaster in boss_hodir.cpp) and drops the fire at its own
-// feet, so a fire sits 23-30 yd out and the 9 yd ring plus 2 yd of tolerance cannot fit inside the
-// caster band with it. At 4.5 the far side of a fire 28 yd out lands at 34.5, still inside the band.
-//
-// This deliberately packs the raid tighter than Ice Shards' 4 yd splash, which the wide ring exists to
-// beat. It is the trade the fire is worth: standing in one sheds Biting Cold on every tick exactly as
-// moving does, so the ring stops paying the shuttle - 45% of dps-bot time in one trace - and the raid
-// casts instead. Watch 62457 damage and --clump, not this constant, to say whether it paid.
-constexpr float ULDUAR_HODIR_FIRE_RING_INNER = 2.5f;
-constexpr float ULDUAR_HODIR_FIRE_RING_OUTER = 4.5f;
-static_assert(ULDUAR_HODIR_FIRE_RING_OUTER > ULDUAR_HODIR_FIRE_RING_INNER,
-              "the fire ring's two rings have to stay distinct");
-static_assert(ULDUAR_HODIR_FIRE_RING_OUTER < ULDUAR_HODIR_RAID_RING_OUTER,
-              "the fire ring only exists because it is tighter than the anchor ring");
-
 // Arrival tolerance doubles as the re-anchor threshold.
 constexpr float ULDUAR_HODIR_RING_SPOT_TOLERANCE = 2.0f;
-constexpr float ULDUAR_HODIR_MAINTANK_SPOT_TOLERANCE = 3.0f;
-// Exact at 9 + 2 = 11, so a bot sitting at the far edge of its tolerance is on the fire's boundary.
-static_assert(ULDUAR_HODIR_RAID_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE <=
-                  ULDUAR_HODIR_TOASTY_FIRE_RADIUS,
-              "the outer ring plus its arrival tolerance has to stay inside a Toasty Fire");
+constexpr float ULDUAR_HODIR_TANK_HOLD_TOLERANCE = 3.0f;
 static_assert(ULDUAR_HODIR_RAID_RING_OUTER - ULDUAR_HODIR_RAID_RING_INNER > ULDUAR_HODIR_ICE_SHARDS_RADIUS,
               "the two rings have to sit more than one Ice Shards radius apart");
-static_assert(ULDUAR_HODIR_FIRE_RING_OUTER + ULDUAR_HODIR_RING_SPOT_TOLERANCE <=
-                  ULDUAR_HODIR_TOASTY_FIRE_RADIUS,
-              "the fire ring plus its arrival tolerance has to stay well inside a Toasty Fire");
 
-// Measured against Hodir himself, not the tank spot, which he leaves: he drifted 10-25 yd off it and
-// a fixed-point gate let the centre land 6.8 yd from him with a 4.5 yd inner ring. The gap does not
-// have to clear the whole ring - a slot that still lands close to him simply never gets walked to,
-// because the position trigger checks that the slot is clear before it fires.
-constexpr float ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP = 15.0f;
-
-// The far end of the same band: how far from Hodir a caster may stand and still reach him. Both the
-// fire and the Starlight zone are tested against this, because both are reasons to stand somewhere
-// other than the ring slot, and a spot that cannot reach the boss is worth nothing whatever else it
-// gives.
+// How far from Hodir a caster may stand and still reach him. The Starlight stand is tested against
+// it, because a spot that cannot reach the boss is worth nothing whatever haste it carries.
 //
 // 35, not the 30 a Shadow Bolt's book range says. Spell range is measured to the target's bounding
 // radius and Hodir is a giant, so the book number understates him: binned by distance, ranged bots
 // dealt 7693 dps each from 30-35 yd against 7844 from 20-25, and casts aimed at him were started out
 // to 40.1 (p99 36.2). 35-40 is where it falls off, to 4854, so the band ends there and not before.
-//
-// Picking fires off the fixed anchor instead let the centre drift to a p75 of 29 yd from him and a
-// max of 52, with the ring's far side 45 out and the casters walking a reach spell back in.
 constexpr float ULDUAR_HODIR_CASTER_MAX_BOSS_GAP = 35.0f;
-static_assert(ULDUAR_HODIR_CENTRE_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
-              "the caster band has to have room between its ends");
 
 constexpr float ULDUAR_HODIR_DODGE_LEASH = 12.0f;
 constexpr float ULDUAR_HODIR_DECLUMP_RADIUS = 4.5f;
@@ -247,23 +223,26 @@ static_assert(ULDUAR_HODIR_STARLIGHT_SHED_RADIUS < ULDUAR_HODIR_STARLIGHT_RADIUS
 // 13 yd, and Frozen Blows turns one of his swings into 20000-30000, so a caster inside this is one
 // swing from dead whether or not it has aggro.
 constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
+static_assert(ULDUAR_HODIR_RANGED_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
+              "the caster band has to have room between its ends");
 
-// How far past a Toasty Fire the tank stands when dragging Hodir onto one. He stops at roughly the
-// same 13 yd his reach plus a raider's makes, so standing this far beyond the fire lands him on it and
-// the melee stacked behind him well inside its 11 yd. The tank itself ends up just outside and keeps
-// the shuttle, which is the cheap half of the trade - it already walks for Biting Cold without leaving
-// the corner.
-constexpr float ULDUAR_HODIR_FIRE_TANK_OFFSET = 13.0f;
+// How far past the hold point a tank stands. Hodir stops a median 5.0 yd from whoever holds him
+// (p10 3.9, p90 7.0) and 3.6-4.2 yd back along the way he was dragged, so this lands him on the point.
+// The old 13 parked him about 9 yd short of the fire and left the far-side melee outside its 11 yd.
+constexpr float ULDUAR_HODIR_HOLD_TANK_OFFSET = 4.5f;
 
-// And how much further out the off-tank stands, matching the 5.5 yd the corner's two spots already sit
-// apart. Further out rather than to one side, so a Frozen Blows taunt pulls him off the fire's far
-// edge instead of back through the raid.
-constexpr float ULDUAR_HODIR_FIRE_OFFTANK_GAP = 5.5f;
+// How far from ULDUAR_HODIR_CENTRE a fire may sit and still get him dragged onto it. Measured from the
+// centre, not from him, so he never leaves the box that keeps all eight helpers inside their stand-off.
+// That also keeps every tank spot 40+ yd inside the y band he evades outside.
+constexpr float ULDUAR_HODIR_HOLD_FIRE_LEASH = 12.0f;
 
-// How far the tank will go to put him on a fire. A fire lives 60s and the next one lands 30 yd from
-// wherever he is standing by then, so without a leash this is a permanent tour of the room; with one,
-// the drag is a single move per fire and the corner stays the fallback.
-constexpr float ULDUAR_HODIR_FIRE_DRAG_LEASH = 40.0f;
+// How far toward the ranged ring a fire may sit. The ring rides the hold point, so a fire behind the
+// centre would walk the whole formation into the chamfered corner.
+constexpr float ULDUAR_HODIR_HOLD_FIRE_BACKSTEP = 2.0f;
+
+// Closer than this and a bearing from Hodir to the point means nothing, so the tank takes the fixed
+// outward one instead.
+constexpr float ULDUAR_HODIR_HOLD_BEARING_MIN_GAP = 3.0f;
 
 // How far a bot may drift from its slot before it is walked home regardless of anything else. The
 // slot is not a restoring force any more, so without a hard leash a bot that stepped out for one
@@ -291,7 +270,6 @@ constexpr float ULDUAR_HODIR_RETURN_LEASH = 20.0f;
 // because a fire sheds on every tick exactly as moving does - so this governs only the bots that have
 // none, and it should be dropped back toward 3 the moment deaths or Biting Cold damage climb.
 constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
-constexpr float ULDUAR_HODIR_SHUTTLE_BEARING = -0.785398f;  // -pi/4, parallel to the SW bevel
 constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 5;
 
 // Standing in Starlight is worth a stack: +50% to every cast and swing against what the tick costs.
@@ -307,8 +285,14 @@ constexpr uint32 ULDUAR_HODIR_TRAPPED_ALLY_BREAKERS = 5;
 // A helper block is the same creature but a very different problem: one Flash Freeze freezes every
 // helper at once - measured at 8 blocks a cycle, 11 cycles out of 11 - so a per-block cap multiplies
 // by that. 8 x 5 slots over 18 eligible bots put every dps on ice, up to 11 of them on one block a
-// median 21 yd from the boss. This is the ceiling across every block that is up, one breaker each.
+// median 21 yd from the boss. This is the ceiling across every block that is up.
 constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_BREAKERS = 8;
+
+// Breakers per mage block; every other block gets one. A mage casts its first Toasty Fire 6s after
+// it is freed, and with one breaker on a 110675 hp block the next fire took 17.9-40.8s (28.5 on
+// average) after each freeze. That is longer than Singed's 25s, so Hodir lost all 25 stacks every
+// cycle, and the raid ran 238k dps with a fire up against 127k without. Three take it in about 5s.
+constexpr uint32 ULDUAR_HODIR_MAGE_BLOCK_BREAKERS = 3;
 
 // Never empty the ranged group for ice. Sized off who is actually there rather than off raid size,
 // so eight blocks against a 10-man's three ranged still leaves someone on the boss.
@@ -320,8 +304,7 @@ constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
 
 constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
 
-extern const Position ULDUAR_HODIR_MAINTANK_SPOT;
-extern const Position ULDUAR_HODIR_OFFTANK_SPOT;
+extern const Position ULDUAR_HODIR_CENTRE;
 extern const Position ULDUAR_HODIR_RAID_ANCHOR;
 
 // Hodir. By entry, not "find target": that value walks only the bot's own threat list, so any bot
@@ -361,17 +344,6 @@ Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot);
 float GetHodirShelterPark(Creature* shelter);
 float GetHodirShelterRelease(Creature* shelter);
 
-// The Toasty Fire the ranged formation forms on, or nullptr. Picked nearest Hodir rather than nearest
-// the bot because the ring is one shared formation: a per-bot answer here has each bot centring the
-// ring somewhere else, and the slots it hands out never agree.
-//
-// A fire only qualifies if the whole ring still reaches him from it, and that is measured against the
-// tighter ULDUAR_HODIR_FIRE_RING_OUTER rather than the anchor ring - the mage drops fires 23-30 yd out
-// and the 9 yd ring cannot fit inside the caster band with one. Against the old 9 yd ring and a 30 yd
-// band, exactly one fire in a five minute pull ever qualified, for 14 seconds, and the raid ran at
-// 246708 dps while it held against ~120000 after it lapsed.
-Creature* GetHodirRaidFire(PlayerbotAI* botAI, Player* bot);
-
 // The bot carrying Storm Cloud right now, or nullptr. Swept off the group rather than the grid so a
 // carrier standing outside anyone's sweep is still found, and taken as the first carrier in roster
 // order so every bot answers the same when the boss has stacked two.
@@ -386,40 +358,32 @@ Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot);
 // the carrier already committed to.
 bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, Position& out);
 
-// Where the ranged formation is centred: a Toasty Fire when one sits inside the caster band,
-// otherwise ULDUAR_HODIR_RAID_ANCHOR. The fire is what the ring wants to be inside - it stops Biting
-// Cold, which is the difference between standing still and walking a shuttle. Deriving it fresh on
-// every call is deliberate: a cached centre shared across the raid but validated against one bot's
-// own state gets rewritten by whichever bot has stepped out, and the formation thrashes.
-//
-// onFire says whether the centre is a fire rather than the anchor. Callers need it because the rules
-// that only hold inside a fire cannot be told from the position alone, and asking again would cost a
-// second grid sweep.
-Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot, bool* onFire = nullptr);
+// Where the ranged formation is centred: ULDUAR_HODIR_RAID_ANCHOR moved by however far Hodir's hold
+// point sits from ULDUAR_HODIR_CENTRE. So it is the anchor while he is on the centre and shifts with
+// him, never toward him, when the tanks put him on a fire, and the gap to him stays 24.45.
+Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot);
 
-// Where this bot belongs and how far it may stray. Tanks get their fixed corner spots; ranged and
-// healers get a formation slot, swapped for a spot inside a Starlight zone whenever one has landed
-// within reach of that slot. Melee are unanchored and get false. Trigger and action both go through
-// here so they cannot disagree.
+// Where this bot belongs and how far it may stray. Tanks stand just past the hold point (the centre,
+// or a fire near it) so Hodir stops on it; ranged and healers get a formation slot, swapped for a spot
+// inside a Starlight zone whenever one has landed within reach of that slot. Melee are unanchored and
+// get false. Trigger and action both go through here so they cannot disagree.
 bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
 
-// This bot's formation slot: centre, then an inner ring, then an outer ring, all inside the fire.
-// Ranged dps are ranked ahead of healers and ties break on guid, so every bot derives the same layout
-// without sharing state. The raw point is validated against the ground and the collision mesh before
-// it is returned - MoveTo rejects an off-mesh destination silently.
-// onFire picks the radii: a fire centre uses the tighter ULDUAR_HODIR_FIRE_RING_* pair so the far side
-// of the ring still reaches Hodir from a fire 23-30 yd out.
-bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, bool onFire, Position& out);
+// This bot's formation slot: centre, then an inner ring, then an outer ring. Ranged dps are ranked
+// ahead of healers and ties break on guid, so every bot derives the same layout without sharing
+// state. The raw point is validated against the ground and the collision mesh before it is returned,
+// because MoveTo rejects an off-mesh destination silently.
+bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out);
 
 // The Starlight zone this bot is standing in, or false. The centre, not the bot's own spot, so the
 // shuttle can be laid out around it.
 bool GetHodirStarlightZoneAt(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // Where this bot walks to shed Biting Cold when jumping on the spot has not shed it. Tanks alternate
-// between two fixed points beside their spot so the boss cannot be walked out of the corner; a bot in
-// a Starlight zone shuttles across the zone so it keeps the aura; everyone else takes the nearest
-// point clear of the rest of the raid, of every live icicle, and - if it has to shoot from range - of
-// Hodir. Legs are long enough to cover two aura ticks.
+// between two points either side of their hold spot, across the ranged ring's line so Hodir never
+// walks at it; a bot in a Starlight zone shuttles across the zone so it keeps the aura; everyone else
+// takes the nearest point clear of the rest of the raid, of every live icicle, and - if it has to
+// shoot from range - of Hodir. Legs are long enough to cover two aura ticks.
 bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // True when the shed would start walking a bot that is currently standing still: it holds at least
@@ -436,6 +400,11 @@ bool IsHodirBitingColdShedArmed(Player* bot);
 // that corpse as live both inflates the hazard set past what any dodge can clear and keeps bots
 // walking back and forth over a spot that is already safe.
 bool IsHodirIcicleLethal(Creature* icicle);
+
+// True when the straight walk from the bot to dest, both ends included, passes within smallRadius of a
+// small icicle or bigRadius of a drift that has not detonated yet. The dodge only steps a bot out of the
+// pool; anything that walks it straight back in re-arms the dodge, so movers ask this first.
+bool IsHodirWalkThroughLiveIcicle(Player* bot, Position const& dest, float smallRadius, float bigRadius);
 
 // Where every icicle that has not detonated yet is standing, each carrying the distance its own pool
 // needs. The drift entry is included because it is lethal on the way down; once it lands it marks the
@@ -464,6 +433,10 @@ bool IsHodirTrappedAllyBreaker(PlayerbotAI* botAI, Player* bot, Unit* block);
 // rather than per block, and drawn from the ranged only - a melee that leaves makes a 21 yd round trip
 // for a block a ranged bot can shoot from nearer where it already stands. Asked once per bot rather
 // than once per block, because the sweep it needs is not cheap and one Flash Freeze puts up eight.
+// Mages first with ULDUAR_HODIR_MAGE_BLOCK_BREAKERS each, then druids, shamans and priests.
 Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot);
+
+// "mage", "druid", "shaman" or "priest" for a helper's ice block, nullptr for anything else.
+char const* GetHodirHelperBlockKind(Unit* block);
 
 #endif

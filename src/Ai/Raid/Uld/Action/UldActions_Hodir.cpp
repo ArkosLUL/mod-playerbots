@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include "AiObjectContext.h"
@@ -302,8 +303,15 @@ bool HodirSetDpsPriorityAction::Execute(Event /*event*/)
     if (!target)
         return false;
 
+    // The helper's kind rides along so a reader can time the mage blocks, which gate the next fire.
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.dpstarget", RaidObs::DescribeAssignment(target->GetGUID()));
+    {
+        std::string value = RaidObs::DescribeAssignment(target->GetGUID());
+        if (char const* kind = GetHodirHelperBlockKind(target))
+            value = std::string(kind) + " " + value;
+
+        RaidObs::NoteDerived(bot, "hodir.dpstarget", value);
+    }
 
     // No threat wipe in this fight, and it is a race - nobody should be throttling.
     if (target == GetHodir(botAI))

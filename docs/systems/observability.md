@@ -470,6 +470,11 @@ are left bare on purpose.
   phase whose entire progress is her health bar. No trace can say how close a phase-1 attempt came;
   Guardian deaths inside 15 yd of her are the only proxy. `yogg.phase` supplies the boundaries, which
   is why an encounter with an unsampled boss needs one.
+- **An aura on a creature is never recorded.** `NoteAura` goes through `ObsSession::Tracks`, which
+  wants a player (`RaidObsSession.cpp:349`), so a boss debuff has no `aura` row — Hodir's doc once read
+  that silence as Singed never landing, when 115-173 procs a pull had. A proc debuff still shows as a
+  triggered `cast` (`tr:1`) with `tgt` the creature: count those and model the stacks, as
+  `bosses/hodir.py --singed` does.
 - **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
   anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies

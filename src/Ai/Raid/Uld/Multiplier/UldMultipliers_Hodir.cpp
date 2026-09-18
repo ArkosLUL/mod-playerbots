@@ -110,8 +110,23 @@ float HodirGuardMultiplier::GetValue(Action* action)
         return freezeMovers.count(action->getName()) ? 1.0f : 0.0f;
     }
 
-    // Only the two tanks and the ranged half stand on a spot. Melee ride the boss in the corner, so
-    // they keep every generic mover - SetBehindTargetAction in particular.
+    // Don't walk back through a pool the dodge just stepped the bot out of. Of the reach melee and set
+    // behind moves right after a dodge, 25-52% ended within 4.5 yd of an icicle still due to blow, and
+    // the dodge fired again: dodge <-> reach melee was the top flip at 70-77 a pull. Held only until
+    // the icicle goes off, 3.3s at most. Icicle sweep last, it's the expensive part.
+    if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) &&
+        (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<SetBehindTargetAction*>(action)))
+    {
+        Unit* hodir = GetHodir(botAI);
+        if (hodir && AI_VALUE(Unit*, "current target") == hodir &&
+            IsHodirWalkThroughLiveIcicle(bot, hodir->GetPosition(),
+                                         ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
+                                         ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
+            return 0.0f;
+    }
+
+    // Only the two tanks and the ranged half stand on a spot. Melee ride the boss, so they keep every
+    // generic mover - SetBehindTargetAction in particular.
     if (!botAI->IsMainTank(bot) && !botAI->IsAssistTankOfIndex(bot, 0, true) && !botAI->IsRanged(bot))
         return 1.0f;
 
