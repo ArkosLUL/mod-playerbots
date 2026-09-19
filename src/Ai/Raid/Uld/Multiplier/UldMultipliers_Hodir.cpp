@@ -96,6 +96,13 @@ float HodirGuardMultiplier::GetValue(Action* action)
         if (dynamic_cast<CastReachTargetSpellAction*>(action))
             return 0.0f;
 
+        // Plain spell actions that throw the bot, so the MovementAction filter below misses them. A
+        // shelter sits close enough to him for "enemy too close" to fire, and a Disengage threw a
+        // hunter 12 yd out of one 2.5s before the landing.
+        std::string const& name = action->getName();
+        if (name == "disengage" || name == "blink")
+            return 0.0f;
+
         if (!dynamic_cast<MovementAction*>(action))
             return 1.0f;
 
@@ -107,19 +114,28 @@ float HodirGuardMultiplier::GetValue(Action* action)
         static std::set<std::string> const freezeMovers = {"hodir move snowpacked icicle",
                                                            "hodir icicle dodge action"};
 
-        return freezeMovers.count(action->getName()) ? 1.0f : 0.0f;
+        if (freezeMovers.count(name))
+            return 1.0f;
+
+        // The shed only inside a landed shelter, where its legs stay in the park ring. Its own gate
+        // still decides whether it runs at all.
+        if (name == "hodir biting cold shed" && IsHodirInLandedShelter(botAI, bot))
+            return 1.0f;
+
+        return 0.0f;
     }
 
     // Don't walk back through a pool the dodge just stepped the bot out of. Of the reach melee and set
     // behind moves right after a dodge, 25-52% ended within 4.5 yd of an icicle still due to blow, and
-    // the dodge fired again: dodge <-> reach melee was the top flip at 70-77 a pull. Held only until
+    // the dodge fired again: dodge <-> reach melee was the top flip at 70-77 a pull. Any target, not
+    // just Hodir: ranged walking to helper ice blocks made 50 such walks in one pull. Held only until
     // the icicle goes off, 3.3s at most. Icicle sweep last, it's the expensive part.
     if (!botAI->IsTank(bot) && !botAI->IsHeal(bot) &&
         (dynamic_cast<ReachTargetAction*>(action) || dynamic_cast<SetBehindTargetAction*>(action)))
     {
-        Unit* hodir = GetHodir(botAI);
-        if (hodir && AI_VALUE(Unit*, "current target") == hodir &&
-            IsHodirWalkThroughLiveIcicle(bot, hodir->GetPosition(),
+        Unit* target = AI_VALUE(Unit*, "current target");
+        if (target &&
+            IsHodirWalkThroughLiveIcicle(bot, target->GetPosition(),
                                          ULDUAR_HODIR_ICE_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN,
                                          ULDUAR_HODIR_BIG_SHARDS_RADIUS + ULDUAR_HODIR_DODGE_TRIGGER_MARGIN))
             return 0.0f;

@@ -307,6 +307,13 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   `bot->GetPositionZ()` re-issues a different point as soon as the bot moves on a sloped floor, and
   the pathfinding branch stores the navmesh-resolved Z rather than the requested one. What actually
   throttles a re-issuing action is the arrival tolerance plus the movement lock above.
+- **A walk stopped short is never re-issued.** The same check refuses an *exact* repeat for
+  `MaxWaitForMove` (5000 ms) whether or not the bot is still moving, so an action that holds its
+  destination gets `Duplicate` while the bot stands wherever something stopped it:
+  `UseItemAction::Execute` calls `StopMoving()` on a moving bot (`UseItemAction.cpp:188-193`) and a mana
+  gem runs at relevance 90, and Disengage throws a hunter back. Hodir lost a mage 6.5 yd short of its
+  dodge and a hunter out of its shelter that way. Clear `last movement` once the bot has stood still a
+  beat past the issue (`ReleaseStalledWalk`, 500 ms).
 
 - **Every `MoveTo` calls `mm->Clear()`.** So a high-priority node that re-derives its destination each
   tick cancels whatever walk a lower node had in flight, even when its own answer moved the bot a yard.

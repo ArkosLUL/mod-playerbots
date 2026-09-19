@@ -231,18 +231,32 @@ static_assert(ULDUAR_HODIR_RANGED_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GA
 // The old 13 parked him about 9 yd short of the fire and left the far-side melee outside its 11 yd.
 constexpr float ULDUAR_HODIR_HOLD_TANK_OFFSET = 4.5f;
 
-// How far from ULDUAR_HODIR_CENTRE a fire may sit and still get him dragged onto it. Measured from the
-// centre, not from him, so he never leaves the box that keeps all eight helpers inside their stand-off.
-// That also keeps every tank spot 40+ yd inside the y band he evades outside.
+// The hold box: how far from ULDUAR_HODIR_CENTRE his hold point may go. Measured from the centre, not
+// from him, so the ring never shifts more than this and every tank spot stays 40+ yd inside the y band
+// he evades outside. It does not pin the helpers: they drift over a pull (one mage's block went from
+// 6 to 24 yd off the centre), so fires land outside it too.
 constexpr float ULDUAR_HODIR_HOLD_FIRE_LEASH = 12.0f;
 
-// How far toward the ranged ring a fire may sit. The ring rides the hold point, so a fire behind the
-// centre would walk the whole formation into the chamfered corner.
+// How far toward the ranged ring the hold point may sit. The ring rides the hold point, so a point
+// behind the centre would walk the whole formation into the chamfered corner.
 constexpr float ULDUAR_HODIR_HOLD_FIRE_BACKSTEP = 2.0f;
+
+// A fire outside the box still gets him held at the box point nearest it, if that point is within this
+// of the fire. Melee sit p50 6.4 yd from him and pets 5.2; with him 0-6 yd from a fire 71-89% of them
+// stood in it, 51-86% at 6-8 yd, 24-54% at 8-10. At 7 every fire of the 2026-09-19 pull qualified over
+// 0-3:00 (110s) against 66s for "inside the box".
+constexpr float ULDUAR_HODIR_HOLD_FIRE_REACH = 7.0f;
 
 // Closer than this and a bearing from Hodir to the point means nothing, so the tank takes the fixed
 // outward one instead.
 constexpr float ULDUAR_HODIR_HOLD_BEARING_MIN_GAP = 3.0f;
+
+// He only walks toward whoever holds him. Shoved past the tank spot (a shelter run, a knockback) he
+// parks there with the spot already in reach, 7.5-9 yd off the point for 113s of 186 in one pull. Still
+// and this far off for this long, the bearing is re-aimed from where he stands. He normally stops within
+// 1-2 yd of the point, so 5 only catches the parked case.
+constexpr float ULDUAR_HODIR_HOLD_REAIM_GAP = 5.0f;
+constexpr uint32 ULDUAR_HODIR_HOLD_REAIM_MS = 2000;
 
 // How far a bot may drift from its slot before it is walked home regardless of anything else. The
 // slot is not a restoring force any more, so without a hard leash a bot that stepped out for one
@@ -259,23 +273,36 @@ constexpr float ULDUAR_HODIR_RETURN_LEASH = 20.0f;
 // from length/speedXY, so a 0.01 yd hop is airborne for about 1.4ms and never covers a tick, let
 // alone two. A jump long enough to span two ticks is a 7 yd walk, which is what this already does.
 //
-// The shuttle is the single most expensive thing in the fight: at 2 stacks it won 18.7% of every
-// engine pass and 32.4% of accepted moves, while dps bots held the aura 45% of their time and the raid
-// cast on 32% of ticks against 48% with a fire up. The tick is cheap until very late - 800 at 2, 6400
-// at 5 - so 5 buys back most of that movement for damage the healers were already covering: they ran
-// 33553/s effective with 16025/s of overheal against 17372/s taken.
+// Arming at 2 made the shuttle 32.4% of accepted moves; arming at 5 let a bot stand still through 3-5
+// stacks, and with ranged no longer standing in fires that was 739 bot-seconds over 0-3:00, 66% of
+// Biting Cold damage and two of three deaths in one pull. 4 is the middle.
 //
-// 6 is one stack from 12800/s, which is a third of a pool a second, so this is the ceiling and not a
-// starting point. A bot in a fire never gets here at all - the check below short-circuits on the aura,
-// because a fire sheds on every tick exactly as moving does - so this governs only the bots that have
-// none, and it should be dropped back toward 3 the moment deaths or Biting Cold damage climb.
+// A bot in a fire never gets here: the check below short-circuits on the aura, since a fire sheds on
+// every tick exactly as moving does.
 constexpr float ULDUAR_HODIR_SHUTTLE_HALF_LEG = 3.0f;
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 5;
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS = 4;
 
 // Standing in Starlight is worth a stack: +50% to every cast and swing against what the tick costs.
-constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 6;
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT = 5;
 static_assert(ULDUAR_HODIR_BITING_COLD_SHED_STACKS_IN_STARLIGHT <= 6,
-              "62039 caps at 8 stacks and 200*2^7 is 25600 a tick - past 6 the shed arms too late to matter");
+              "62039 caps at 8 stacks and 200*2^7 is 25600 a tick, so past 6 the shed arms too late to matter");
+
+// Where a shed stops. The last stack ticks 400 and takes 2s of walking to drop, and standing 4s puts
+// it straight back on.
+constexpr uint32 ULDUAR_HODIR_BITING_COLD_SHED_FLOOR = 1;
+static_assert(ULDUAR_HODIR_BITING_COLD_SHED_FLOOR < ULDUAR_HODIR_BITING_COLD_SHED_STACKS,
+              "a shed has to have somewhere to go");
+
+// Legs for a bot shedding inside a landed shelter while Flash Freeze is being cast. Both ends stay
+// inside the park ring, so the shelter run never fires on them.
+constexpr float ULDUAR_HODIR_SHELTER_SHED_RADIUS = 3.0f;
+static_assert(ULDUAR_HODIR_SHELTER_SHED_RADIUS < ULDUAR_HODIR_SAFE_AREA_TOLERANCE,
+              "the shelter shuttle has to stay inside the park ring");
+
+// How long a bot may stand still short of a walk it was sent on before the walk is issued again.
+// MoveTo refuses the same point as a duplicate for MaxWaitForMove (5s) whether or not the bot is
+// still moving, so an item use (StopMoving) or a Disengage leaves it standing where it stopped.
+constexpr uint32 ULDUAR_HODIR_STALL_MS = 500;
 
 // A trapped raider dies to the next Flash Freeze 48s later, so freeing them outranks the boss - but
 // the block has little health, so only the nearest few bots leave what they were doing.
@@ -344,6 +371,10 @@ Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot);
 float GetHodirShelterPark(Creature* shelter);
 float GetHodirShelterRelease(Creature* shelter);
 
+// True when the bot's shelter is a landed Snowpacked Icicle Target, not a drift still falling, and the
+// bot stands inside its park ring.
+bool IsHodirInLandedShelter(PlayerbotAI* botAI, Player* bot);
+
 // The bot carrying Storm Cloud right now, or nullptr. Swept off the group rather than the grid so a
 // carrier standing outside anyone's sweep is still found, and taken as the first carrier in roster
 // order so every bot answers the same when the boss has stacked two.
@@ -379,17 +410,17 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
 // shuttle can be laid out around it.
 bool GetHodirStarlightZoneAt(PlayerbotAI* botAI, Player* bot, Position& out);
 
-// Where this bot walks to shed Biting Cold when jumping on the spot has not shed it. Tanks alternate
-// between two points either side of their hold spot, across the ranged ring's line so Hodir never
-// walks at it; a bot in a Starlight zone shuttles across the zone so it keeps the aura; everyone else
-// takes the nearest point clear of the rest of the raid, of every live icicle, and - if it has to
-// shoot from range - of Hodir. Legs are long enough to cover two aura ticks.
+// Where this bot walks to shed Biting Cold. Tanks alternate between two points either side of their
+// hold spot, across the ranged ring's line so Hodir never walks at it. A bot in a landed shelter while
+// Flash Freeze is cast, or in a Starlight zone, shuttles across it so it keeps the cover or the buff.
+// Everyone else takes the nearest point clear of the rest of the raid, of every live icicle, and (if
+// it shoots from range) of Hodir. Legs are long enough to cover two aura ticks.
 bool GetHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // True when the shed would start walking a bot that is currently standing still: it holds at least
 // the stacks the shuttle arms at, and it is not in a fire that sheds them for free. Says nothing
-// about a shed already running - the action latches that itself and carries it down to zero, which
-// is why HodirBitingColdTrigger still fires on any stack.
+// about a shed already running: the action latches that itself and carries it down to
+// ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, which is why HodirBitingColdTrigger still fires on any stack.
 //
 // Anything that steps aside for the shed has to ask this rather than the trigger. 87% of the time a
 // bot holds Biting Cold it holds exactly one stack, 32.8% of the fight each, and in that window the

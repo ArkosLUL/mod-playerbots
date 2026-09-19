@@ -32,14 +32,20 @@ bool HodirBitingColdTrigger::IsActive()
     if (bot->HasAura(SPELL_HODIR_TOASTY_FIRE_AURA))
         return false;
 
-    // Stateless on purpose. The action owns the arm-at-two-stacks threshold and the shed-until-clear
-    // latch, because it is the cached instance - anything held here is lost by a stack-allocated copy.
+    // Stateless on purpose. The action owns the arm threshold and the shed-to-floor latch, because it
+    // is the cached instance and anything held here is lost by a stack-allocated copy.
     return bot->HasAura(SPELL_BITING_COLD_PLAYER_AURA);
 }
 
 bool HodirNearSnowpackedIcicleTrigger::IsActive()
 {
     if (!GetHodir(botAI))
+        return false;
+
+    // Only while the cast is up. A target outlives the freeze by about 7s, and running to it after the
+    // landing bought nothing: 134 of 358 shelter moves in one pull, and the tank flipped between the
+    // shelter and his spot 8 times in 7s, dragging Hodir 8 yd off the centre.
+    if (!IsHodirFlashFreezeIncoming(botAI))
         return false;
 
     // A drift counts, at its own wider radius: it detonates for 14000 in 7 yd at 3.7s, so the raid

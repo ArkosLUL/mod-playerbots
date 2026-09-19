@@ -9,6 +9,7 @@
 #include "AiObjectContext.h"
 #include "DBCEnums.h"
 #include "Group.h"
+#include "LastMovementValue.h"
 #include "Map.h"
 #include "ObjectGuid.h"
 #include "PlayerbotAI.h"
@@ -18,6 +19,7 @@
 #include "Position.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
+#include "Timer.h"
 #include "UldEncounter_Hodir.h"
 #include "UldScripts.h"
 #include "EncounterHelpers.h"
@@ -53,6 +55,17 @@ void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
         botAI->RequestSpellInterrupt();
 }
 
+// MoveTo refuses the point it already issued for MaxWaitForMove (5s), moving or not. So a walk stopped
+// short (UseItemAction calls StopMoving on a moving bot, Disengage throws it back) is never issued
+// again, and a mage stood 2.7s under two drifts that way. Drop the booking once the bot has stood
+// still past ULDUAR_HODIR_STALL_MS, which a spline that was just issued never does.
+void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_HODIR_STALL_MS)
+        last.clear();
+}
+
 }  // namespace
 
 bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
@@ -68,6 +81,7 @@ bool HodirMoveSnowpackedIcicleAction::Execute(Event /*event*/)
     // MoveInside answers false for a bot already inside the radius, so one caught inside a falling
     // drift's blast falls through to the dodge below, which collects drifts at the same clear and
     // walks it out. Nothing here has to push.
+    ReleaseStalledWalk(botAI, bot);
     return MoveInside(bot->GetMapId(), shelter->GetPositionX(), shelter->GetPositionY(),
                       shelter->GetPositionZ(), GetHodirShelterPark(shelter),
                       MovementPriority::MOVEMENT_COMBAT);
@@ -109,6 +123,7 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
         if (remaining <= _destDist + ULDUAR_HODIR_DODGE_SLIP)
         {
             _destDist = std::min(_destDist, remaining);
+            ReleaseStalledWalk(botAI, bot);
             return MoveTo(bot->GetMapId(), _dest.GetPositionX(), _dest.GetPositionY(), _dest.GetPositionZ(),
                           false, false, false, false, MovementPriority::MOVEMENT_FORCED);
         }
@@ -165,10 +180,23 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
     if (!_shedding && !IsHodirBitingColdShedArmed(bot))
         return false;
 
-    // Once started, keep going until the aura is gone. A stack comes off only on the second moving
-    // tick and any stationary tick in between resets that progress, so stopping early wastes the
+    // Once started, keep going down to the floor. A stack comes off only on the second moving tick and
+    // any stationary tick in between resets that progress, so stopping between stacks wastes the
     // movement already spent.
+    if (_shedding && cold->GetStackAmount() <= ULDUAR_HODIR_BITING_COLD_SHED_FLOOR)
+    {
+        _shedding = false;
+        _leg = Position();
+        return false;
+    }
+
     _shedding = true;
+
+    // A channel pins the feet for its whole length, so the legs below would be accepted and never
+    // walked: a warlock's 15s Drain Soul held it still from 3 stacks to 5. A normal cast ends and then
+    // walks, so only a channel is broken.
+    if (bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL) && bot->IsMovementPreventedByCasting())
+        botAI->RequestSpellInterrupt();
 
     // The walk holds one leg instead of re-deriving under its own walk. Stateless it issued 6686 moves
     // against 4122 refusals and turned the bot around a median 879ms apart, which is the movement slot
@@ -188,6 +216,7 @@ bool HodirBitingColdShedAction::Execute(Event /*event*/)
             if (RaidObs::Active())
                 RaidObs::NoteDerived(bot, "hodir.shuttle", "held");
 
+            ReleaseStalledWalk(botAI, bot);
             return MoveTo(bot->GetMapId(), _leg.GetPositionX(), _leg.GetPositionY(), _leg.GetPositionZ(),
                           false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
         }

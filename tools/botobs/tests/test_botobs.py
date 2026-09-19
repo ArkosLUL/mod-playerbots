@@ -804,6 +804,64 @@ class HodirReader(unittest.TestCase):
         zones = hodir.cluster_zones(rows)
         self.assertEqual([(zone["t0"], zone["t1"]) for zone in zones], [(0, 250), (500, 500), (5000, 5000)])
 
+    @staticmethod
+    def rel(along, side):
+        """A point `along` yd out from the centre and `side` yd across, in the box's own frame."""
+        ux, uy = hodir.outward()
+        return hodir.CENTRE[0] + along * ux - side * uy, hodir.CENTRE[1] + along * uy + side * ux
+
+    def assert_near(self, got, want):
+        self.assertAlmostEqual(got[0], want[0], places=3)
+        self.assertAlmostEqual(got[1], want[1], places=3)
+
+    def test_box_point_keeps_a_point_inside(self):
+        self.assert_near(hodir.box_point(*self.rel(3, 4)), self.rel(3, 4))
+
+    def test_box_point_projects_onto_the_backstep_line(self):
+        self.assert_near(hodir.box_point(*self.rel(-5, 1)), self.rel(-2, 1))
+
+    def test_box_point_scales_onto_the_leash(self):
+        self.assert_near(hodir.box_point(*self.rel(20, 0)), self.rel(12, 0))
+
+    def test_box_point_takes_a_corner_when_nothing_else_is_inside(self):
+        half = (12 ** 2 - 2 ** 2) ** 0.5
+        self.assert_near(hodir.box_point(*self.rel(-10, 20)), self.rel(-2, half))
+
+    def test_box_point_prefers_the_arc_when_it_is_nearer_than_the_corner(self):
+        radius = (3 ** 2 + 20 ** 2) ** 0.5
+        self.assert_near(hodir.box_point(*self.rel(-3, 20)), self.rel(-3 * 12 / radius, 20 * 12 / radius))
+
+    def test_a_fire_qualifies_within_reach_of_the_box(self):
+        self.assertTrue(hodir.fire_in_reach(*self.rel(-5, 0)))
+        self.assertFalse(hodir.fire_in_reach(*self.rel(-10, 0)))
+
+    def test_hold_point_is_the_ring_offset_from_the_anchor(self):
+        self.assert_near(hodir.hold_point_from_ring(*hodir.RAID_ANCHOR), hodir.CENTRE)
+
+    def test_off_point_counts_each_sample_until_the_next(self):
+        samples = [(0, 0.0, 0.0), (1000, 10.0, 0.0), (2000, 0.0, 0.0), (3000, 0.0, 0.0)]
+        self.assertEqual(hodir.off_point_ms(samples, [(0, (0.0, 0.0))], 0, 3000), (1000, 3000))
+
+    def test_a_walk_stopped_short_is_a_stall_and_an_arrival_is_not(self):
+        stopped = [(0, 0.0, 0.0, 1), (300, 2.0, 0.0, 1), (600, 4.0, 0.0, 0), (1200, 4.0, 0.0, 0),
+                   (1700, 4.0, 0.0, 0)]
+        self.assertEqual(hodir.stalled_walks([(0, 10.0, 0.0, hodir.DODGE)], stopped)[hodir.DODGE], 1)
+        arrived = [(0, 0.0, 0.0, 1), (600, 10.0, 0.0, 0), (1200, 10.0, 0.0, 0), (1800, 10.0, 0.0, 0)]
+        self.assertEqual(hodir.stalled_walks([(0, 10.0, 0.0, hodir.DODGE)], arrived), {})
+        superseded = [(0, 10.0, 0.0, hodir.DODGE), (900, 4.0, 0.0, "hodir raid position action")]
+        self.assertEqual(hodir.stalled_walks(superseded, stopped), {})
+
+    def test_after_landing_counts_moves_outside_every_cast(self):
+        self.assertEqual(hodir.after_landing([15000, 19500, 30000], [10000]), 2)
+
+    def test_band_counts_time_at_the_floor_or_more(self):
+        changes = [(0, 1), (4000, 2), (8000, 4), (10000, 5), (12000, 1)]
+        self.assertEqual(hodir.band_ms(changes, 0, 20000, 4), 4000)
+        self.assertEqual(hodir.stacks_before(changes, 9000), 4)
+
+    def test_union_merges_overlaps(self):
+        self.assertEqual(hodir.union_ms([(0, 10), (5, 20), (30, 40)], 0, 35), 25)
+
 
 class LatchAllValues(unittest.TestCase):
     def test_latch_spans_keeps_every_value_in_order(self):

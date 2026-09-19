@@ -5,9 +5,12 @@ The room is x 1965-2041, y -170 to -298, and he evades outside that y band. Ever
 at a fixed `AttackStartCaster` stand-off and drops its zone at its own feet — priest 17 (`:710`),
 druid 22 (`:827`, Starlight cast at `:877`), shaman 25 (`:944`), mage 30 (`:1068`, fire cast at
 `:1117`) — and all eight spawn round the middle (`boss_hodir.cpp` `hhd`), inside their stand-off
-from the centre: priests 16.3/15.5, druids 21.6/5.4, shamans 14.5/9.3, mages 23.2/6.5. So none
-walks, and zones land where they spawned: Starlight a median 9.8 yd from a druid's spawn and
-**west** of him (29 of 36), fires 8.2 yd from a mage's and **east** (36 of 53). The old south-west
+from the centre: priests 16.3/15.5, druids 21.6/5.4, shamans 14.5/9.3, mages 23.2/6.5. So early on
+none walks, and zones land where they spawned: Starlight a median 9.8 yd from a druid's spawn and
+**west** of him (29 of 36), fires 8.2 yd from a mage's and **east** (36 of 53). **They still drift**:
+on 2026-09-19 one mage's block sat 6.2 yd from the centre at three freezes, then 14.0 and 24.2.
+`ChaseRange(range)` has MinRange 0, so none backs away, and why they moved is out of reach: helpers
+are friendly, snapshots skip them, and their ice blocks are the only position fix. The old south-west
 corner hold dragged him 30-55 yd out to every fire and back — 913 of the 1,106 yd he walked over
 three pulls, at 2.88 yd/s against 0.87 on a fire. navprobe settles the centre and 6/12 yd rings round
 it at 432.687.
@@ -46,15 +49,17 @@ out 56-91 Starlight stands a pull for leaving the fire, and held ranged Starligh
 up ~90% of the time.
 
 **One hold point per instance, read by both tanks and the ring** (`DeriveHodirHold`,
-`HodirBotLatches::hold`): the live Toasty Fire nearest the centre within `_HOLD_FIRE_LEASH` 12 **of the
-centre** — never of Hodir, so he stays where every helper keeps still — and at most
-`_HOLD_FIRE_BACKSTEP` 2 toward the ring, which would shift the ring into the **chamfered** SW corner
-(the floor bevels from ~(1966, -274) to ~(1990, -298)); otherwise the centre. Nothing puts a fire out
-but Flash Freeze (`npc_ulduar_toasty_fire::DoAction(1)` at `:682`, called only from `SpellHitTarget`
-on `SPELL_FLASH_FREEZE_VISUAL` at `:325`), so the pick holds until the fire dies — re-picking while
-one burns walks him between two. Against 2026-09-18's
-fires one qualified 22-40% of 0-3:00, before the mage-first blocks below. `hodir.tankhold` reads the
-fire guid or `centre`.
+`HodirBotLatches::hold`): the centre, or for the live Toasty Fire nearest the centre, the point of the
+**hold box** nearest it (`HodirFireHoldPoint`). The box is `_HOLD_FIRE_LEASH` 12 **of the centre**,
+never of Hodir, so the ring shifts at most 12, cut at `_HOLD_FIRE_BACKSTEP` 2 toward the ring, which
+would otherwise shift into the **chamfered** SW corner (the floor bevels from ~(1966, -274) to
+~(1990, -298)). A fire qualifies when that point is within `_HOLD_FIRE_REACH` 7 of it: melee sit p50
+6.4 yd from him and pets 5.2, and with him 0-6 yd from a fire 71-89% of them stood in it, 51-86% at
+6-8, 24-54% at 8-10. On 2026-09-19 requiring the fire itself inside the box held one 67 of the 111 s
+one burned over 0-3:00; reach 7 covers all 111. Nothing puts a fire out but Flash Freeze
+(`npc_ulduar_toasty_fire::DoAction(1)` at `:682`, called only from `SpellHitTarget` on
+`SPELL_FLASH_FREEZE_VISUAL` at `:325`), so the pick holds until the fire dies — re-picking while one
+burns walks him between two. `hodir.tankhold` reads the fire guid or `centre`.
 
 - **The main tank stands `_HOLD_TANK_OFFSET` 4.5 past the point**, on the far side from where he stood
   when it was adopted. He stops a median 5.0 yd from whoever holds him (p10 3.9, p90 7.0) and 3.6-4.2
@@ -64,6 +69,11 @@ fire guid or `centre`.
   every tick, so the tank pre-positions past the centre from his spawn; a wipe drops the latch.
 - **The off-tank stands 4.5 off the point, square to the ring's line**, so a Frozen Blows taunt walks
   him ~6 yd sideways, not at the ring. The tank Biting Cold shuttle runs its ±3 yd legs on that axis.
+- **Parked off the point, he is re-aimed.** He only walks toward whoever holds him, so once shoved past
+  the spot (the tank flipping to a shelter after a freeze, a knockback) he parks with it already in
+  reach: 5+ yd off for 80 s of 113 in centre windows over 0-3:00 on 2026-09-19, which also put the
+  western Starlight zone inside the 15 yd gap. Still and over `_HOLD_REAIM_GAP` 5 off for
+  `_HOLD_REAIM_MS` 2 s, the bearing is re-taken from where he stands; he normally stops within 1-2 yd.
 
 **Singed lands on Hodir, and no `aura` row can show it.** `NoteAura` goes through `ObsSession::Tracks`,
 which drops every non-player (`RaidObsSession.cpp:349`), so a trace holds no creature aura at all — an
@@ -75,7 +85,10 @@ DONE_SPELL_MAGIC_DMG_CLASS_NEG`: white swings never proc it, melee spells and pe
 the target is whoever was hit, at any range. It stacks to **25** for 25s with aura **87
 `MOD_DAMAGE_PERCENT_TAKEN` +2 per stack**, school mask 126 (magic only) — **+50% magic damage taken**
 at cap, plus 3,000 fire. Modelled +1 a proc, he held a mean 19.2 / 7.1 / 18.6 stacks over 0-3:00: 25
-through every fire window, 0 within 25s of the last fire. A player can Singe itself too: Biting Cold's
+through every fire window, 0 within 25s of the last fire. On 2026-09-19, with ranged in a fire 6.8% of
+the time against 14-24%, 117 procs (pets 69, melee 22, ranged 14, tanks 12) gave 18.0 over 0-3:00 and
+14.7 over the kill: 25 from 0:45 to 1:45 while the freeze-to-fire gap (20 s) stayed under 25 s, 1-4 for
+the last 1:40 with no fire held. Singed now rides on the hold. A player can Singe itself too: Biting Cold's
 tick (`CastCustomSpell(target, SPELL_BITING_COLD_DAMAGE)`, `:1290`) is a magic-negative cast by the
 player on the player.
 
@@ -87,7 +100,9 @@ A freed mage casts its first fire 6s later (`EVENT_TRY_FREE_HELPER`, `ScheduleAb
 `:1094-1124`). At one breaker a block, the next fire came **17.9-40.8s (28.5 mean) after each freeze
 landed** and 0:18-0:26 into the pull — longer than Singed's 25s, so it reset every cycle. With a fire
 held the raid ran **238k over 223s; without, 127k over 316s**, a gap that also carries the
-block-breaking.
+block-breaking. Mage first, the next fire came 20.0 / 23.9 / 26.3 / 31.5 s after each landing on
+2026-09-19, but the first mage block still took 7.5-19.8 s, not ~5: its breakers first cast on it
+0.5-13 s after it spawned, held by the post-freeze shelter run, the shed and dodges.
 
 **Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
 exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
@@ -129,8 +144,10 @@ spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses
   ends stood the trigger down the tick it arrived and handed the next tick to the ring anchor —
   measured walking bots 18-22 yd back out with the freeze 2s away.
 - **Every other mover stands down for the whole cast, every role.** `HodirGuardMultiplier` zeroes
-  gap-closers (`CastReachTargetSpellAction` — Charge, Intercept, both Feral Charges) and every
-  `MovementAction` bar the shelter run and the icicle dodge. `ReachTargetAction` is in scope;
+  gap-closers (`CastReachTargetSpellAction` — Charge, Intercept, both Feral Charges), `disengage` and
+  `blink` (spell actions that throw the bot: a Disengage 6 yd from Hodir threw a hunter 12 yd out of its
+  shelter 2.5 s before the landing), and every `MovementAction` bar the shelter run, the icicle dodge
+  and the shed inside a landed shelter. `ReachTargetAction` is in scope;
   `AttackAction` is exempt because it only sets a target. Measured before the gate: 68 of 125
   bot-freeze pairs had their last accepted move come from something else, 36 of them the ring anchor
   and 25 `reach melee` / `reach spell`.
@@ -143,6 +160,10 @@ spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses
   `UNIT_STATE_CASTING` plus `FindCurrentSpellBySpellId` over **every** cast slot rather than
   `CURRENT_GENERIC_SPELL`: which slot a scripted boss cast lands in is the script's business, and
   guessing wrong opens the window on nothing. `UldTriggers_Mimiron.cpp:31` is the same shape.
+- **The shelter run is gated on the cast too.** A 33174 outlives the freeze by ~7 s, and keyed on
+  targets alone the run fired after the landing for 134 of 358 shelter moves on 2026-09-19 (96 of 278
+  on 09-18), buying nothing and flipping the tank 8 times in 7 s between a shelter and his spot, which
+  dragged Hodir 8 yd off the centre.
 - **Stage on the drift; do not wait for the target.** Keying the run on 33174 existing wasted the
   first 3.9s of every cast, because `HodirGuardMultiplier` zeroes every mover from cast start: the
   raid moved **20.9%** of that half against a **51.7%** whole-fight baseline, then had 6.2s to cover
@@ -215,26 +236,40 @@ channel, pinned the same one for the **3.5 s** it had left, each ending in `6245
 dodge's accepted destination 4-6 yd away. It costs **101 bot-seconds a pull, 2.9% of ranged alive
 time** (Hurricane 29 s, Mind Flay 12 s, Evocation 11 s). The dodge and the shelter run therefore call
 `PlayerbotAI::RequestSpellInterrupt` first thing — both triggers already gate on a bot that is in
-danger and has to relocate, and a 3.3 s fuse leaves room for a 6 yd leg. **The shed does not**: it
-holds the movement slot for 22% of movement time, and Biting Cold at the arm threshold is 800 a tick
-against Ice Shards' 14,000.
+danger and has to relocate, and a 3.3 s fuse leaves room for a 6 yd leg. **The shed breaks only a
+channel**: a normal cast ends and then walks, but a warlock's 15 s Drain Soul held one from 3 stacks to
+5, the freeze cast added two, and the 7-stack tick killed it.
+
+**A walk stopped short is never issued again on its own.** `IsDuplicateMove` refuses the same point
+for `MaxWaitForMove` (5 s) whether or not the bot is still moving
+([pitfalls](../../engine/pitfalls.md)). On 2026-09-19 a mage's Mana Sapphire (`UseItemAction`,
+relevance 90 over the dodge's 65) stopped it 6.5 yd short of its dodge, 5.2 / 5.7 yd from two drifts
+that had landed within 4 yd of each other, and it stood there until both went off; the Disengaged
+hunter above was refused its way back into the shelter the same way. `ReleaseStalledWalk` clears
+`last movement` once the bot has stood still `ULDUAR_HODIR_STALL_MS` 500 short of the dodge's
+destination, the shelter or a shed leg, which a fresh spline never does.
 
 **Biting Cold sheds on sustained movement only, and jumping cannot fake it.** A stack comes off on the
 second *consecutive* tick where the server reads `isMoving()`, and any stationary tick between resets
 that progress, so it needs more than a second of unbroken travel: the shuttle walks 6 yd legs
-(`_SHUTTLE_HALF_LEG` 3.0), chaining until the aura is gone.
-It arms at **5 stacks, 6 in Starlight** (`ULDUAR_HODIR_BITING_COLD_SHED_STACKS`). The tick is
-`200·2^stacks` and `62039` caps at 8, so that is 6,400/s at the arm point and 12,800 one stack later
-— bought because the shuttle was the most expensive thing in the fight (18.7% of won engine passes,
-32.4% of accepted moves) while healers ran **33,553/s effective with 16,025/s of overheal against
-17,372/s taken**. It is a ceiling, not a starting point: six raiders already dipped under 15% health
-at the old arm point of 2. `IsHodirBitingColdShedArmed` short-circuits on the fire aura, so this
-governs only bots that have none and is worth less the better the fire work lands — **drop it back
-toward 3 the moment deaths or Biting Cold damage climb**. What it spends is real but not the bulk of
-the problem: **57.1%** of the 17,554/s the raid takes is the raid-wide `64545` Frozen Blows tick that
-nothing avoids. Passing 2 stacks also clears
+(`_SHUTTLE_HALF_LEG` 3.0), chaining down to `_SHED_FLOOR` **1**: the last stack ticks 400, takes 2 s of
+walking to drop, and 4 s standing puts it back. It arms at **4 stacks, 5 in Starlight**
+(`ULDUAR_HODIR_BITING_COLD_SHED_STACKS`); the tick is `200·2^stacks` and `62039` caps at 8. Arming at 2
+made the shuttle 32.4% of accepted moves (18.7% of won engine passes) while six raiders dipped under
+15% health. Arming at 5 stood bots through 3-5 stacks once ranged stopped standing in fires (6.8% of
+the time against 14-24%): on 2026-09-19 Biting Cold ran **1.70M over 0-3:00** against 0.84-1.41M, 44%
+of it at 4+ stacks over 344 bot-seconds; a hunter bled out at 4 stacks under Frozen Blows (the raid took
+53.8k/s against 37.3k/s healed), and healers spent 42-77% of that window moving, mostly shedding.
+**3 is the next step** if deaths or Biting Cold damage stay high. `IsHodirBitingColdShedArmed` short-circuits on the fire aura, so this governs only bots that have
+none. What it spends is real but not the bulk of the problem: **57.1%** of the 17,554/s the raid
+takes is the raid-wide `64545` Frozen Blows tick that nothing avoids. Passing 2 stacks also clears
 `bAchievGettingCold` (`:566` via `SetData(2, 1)` at `:1281`), which the Rare Cache does not care
 about.
+
+**Inside a landed shelter the shed keeps running through the freeze cast**, shuttling
+`_SHELTER_SHED_RADIUS` 3 across it, inside the 6 yd park so the run never fires on it;
+`HodirGuardMultiplier` lets it through only there (`IsHodirInLandedShelter`). Standing out the 9 s cast
+adds two stacks, and four of five freezes on 2026-09-19 had a bot gain two.
 
 `isMoving()` is the raw `MOVEMENTFLAG_MASK_MOVING` and does include the flags a jump raises, but
 `MotionMaster::MoveJump` splines to its point and takes the duration from `length / speedXY` — an
@@ -253,7 +288,7 @@ for ranged and healers only — **Hodir at `_RANGED_MIN_BOSS_GAP`**. Allies alon
 an icicle inside fourteen seconds and left a warlock dead at 7.7 yd from the boss.
 
 **Ask `IsHodirBitingColdShedArmed`, never `HodirBitingColdTrigger`, before standing a node down for
-the shed.** The trigger fires on *any* stack because the action owns the shed-to-zero latch — but 87%
+the shed.** The trigger fires on *any* stack because the action owns the shed-to-floor latch — but 87%
 of the time a bot holds Biting Cold it holds exactly one, **32.8% of the fight each**, and there the
 shuttle does nothing at all. `HodirRaidPositionTrigger` deferring to the trigger is what kept the
 ranged out of Starlight: a usable zone was in range on **85%** of their ticks while they stood in one
@@ -269,8 +304,8 @@ for **22%**.
   pulls from its spot past the centre.
 - **Melee get no anchor**: they ride the boss and get a fire only because the tank parks *him* on one;
   nothing walks a melee bot to a fire or a zone. From the corner, zones sat a median 21.6 yd from him
-  and melee stood in one 1.8% of ticks; the centre puts one druid's spawn 5.4 yd from him, so
-  re-measure.
+  and melee stood in one 1.8% of ticks. From the centre, 6 of 12 zones on 2026-09-19 landed 5-15 yd
+  from it, inside the ranged gap, and melee held Starlight 9.6% of the time (1.0-5.7% before).
 - **The Storm Cloud carrier holds still and the raid comes to it.** `boss_hodir.cpp:1462` casts Storm
   Power `CastSpell((Unit*)nullptr, ...)` — an area pulse at the carrier, so how many it hits is
   bounded only by who stands inside 3 yd, and `_DECLUMP_RADIUS` 4.5 is wider than that. Lapping the
@@ -304,9 +339,9 @@ for **22%**.
   target's back with `moving` and `moveGen` both zero, so nothing sweeps for it and the dodge only
   ever evaluates from where the bot currently stands. One 4.5 yd relocation landed **1.7 yd** from a
   live `62457` and killed the rogue 0.4 s later, mid-shed-leg.
-- Healers are excluded from the targeting node entirely, and **5** non-healers break each ice block —
-  raider and helper alike, picked by a GUID window offset per block so several blocks draw disjoint
-  sets instead of the same five. Freeing outranks the boss (the trapped raider dies to the next
+- Healers are excluded from the targeting node entirely, and **5** non-healers break a trapped
+  raider's block, picked by a GUID window offset per block so several blocks draw disjoint sets
+  instead of the same five; helper blocks go by the mage-first budget above. Freeing outranks the boss (the trapped raider dies to the next
   freeze) but the block has little health, so only bots within 45 yd leave what they were doing.
 
 ## Every mover here thrashes unless it latches
@@ -345,6 +380,17 @@ holding him 40-95%: **0-3:00 boss dps 172.6k / 159.1k / 188.1k**, health at 3:00
 18-19% issued from inside the 4 yd that kills — and Ice Shards is solved: 7-13 hits over 0-3:00,
 almost all on the tank.
 
+Traced 2026-09-19 on the centre-hold build, a **kill at 4:13 without Heroism** (Exhaustion from the
+pull), Bulwark holding him throughout: **0-3:00 169.5k**, 21.7% left at 3:00; fire windows 234k (67 s),
+centre 133k (113 s); Hodir walked **169 yd** over 0-3:00 against 311-425. Walking 15.7k yd, **52.9%**
+undone within 5 s (46.3%): the shed doubled to 837 accepted moves (22% of all) and heads the flips,
+shed ↔ dodge 103 and shed ↔ `set facing` 93, while dodge ↔ `reach melee` fell 73 → 0 and
+`reach melee` moves 497 → 228. Ranged Starlight fell to **9.5%**: all ten latched the western zone but
+stood in it 12-41% of its best minute (the freeze and post-freeze shelter pull took ~16 s of 58,
+dodges at 8-27 each, the shed and block walks the rest), and the last zones landed north, 41 yd from
+the ring and outside the 30 yd search. Three bot deaths, all battle-rezzed: the stalled dodge, the
+Frozen Blows bleed at 4 Biting Cold stacks, and the channel plus freeze cast at 7, each fixed above.
+
 **Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
 `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
 3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did the same 192 times at 780 ms, which
@@ -353,8 +399,9 @@ symptom of how much walking the fight demands rather than of a latch that flaps.
 
 **Re-measure the movement economy after each change, never after several.** Every figure above moved
 under one edit at a time, and the three-latch pull is the one that cannot say which latch did what.
-`tools/botobs/bosses/hodir.py <file>` prints every 2026-09-18 figure here (`--pace`, `--hold`,
-`--singed`, `--buffs`, `--churn`, `--blocks`).
+`tools/botobs/bosses/hodir.py <file>` prints every 2026-09-18 and -19 figure here (`--pace`, `--hold`,
+`--singed`, `--buffs`, `--churn`, `--blocks`), including time off the hold point, fire in reach,
+Biting Cold by stack, post-freeze shelter moves and stalled walks.
 
 Each cause below is separate, and all of them are still easy to reintroduce.
 
@@ -378,11 +425,12 @@ Each cause below is separate, and all of them are still easy to reintroduce.
   survivor each time — which is what turned a bad pull into a cascade.
 - **Nothing walks a bot back into a pool the dodge just left** (`IsHodirWalkThroughLiveIcicle`). The
   ring anchor tests the walk against each live icicle's clear; `reach melee`, `reach spell` and
-  `set behind` (`HodirGuardMultiplier`, target Hodir, not tanks or healers) and the Storm Power
-  collect test it against the dodge's own trigger radius, 4.5 / 7.5, and wait out the ≤3.3s. Before,
-  the move right after a dodge ended inside a live pool 45-120 times a pull for `reach melee`, 34-38
-  `set behind`, 9-57 the collect and 14-26 `reach spell`, against 0-3 for the ring; dodge ↔
-  `reach melee` was the top flip at 70-77 a pull.
+  `set behind` (`HodirGuardMultiplier`, toward any current target, not tanks or healers) and the Storm
+  Power collect test it against the dodge's own trigger radius, 4.5 / 7.5, and wait out the ≤3.3s.
+  Before, the move right after a dodge ended inside a live pool 45-120 times a pull for `reach melee`,
+  34-38 `set behind`, 9-57 the collect and 14-26 `reach spell`, against 0-3 for the ring; dodge ↔
+  `reach melee` was the top flip at 70-77 a pull. With the check on Hodir only, `reach spell` toward
+  helper ice blocks still did it 50 times on 2026-09-19.
 - **Tanks do not run the icicle dodge.** They ate a ~50 yd walk around the room and took Hodir with
   them; Bulwark ended up 70 yd from the boss while alive. Tanks eat the 14,000 instead, and the
   Biting Cold shuttle already gives them the movement they need without leaving the spot.
@@ -423,7 +471,7 @@ accepted moves and zero `OK` verdicts, and `NearThorimEncounter` excludes his fl
 four and six in six minutes, unprompted.
 
 **The pace is short, and sustain is the whole gap.** 2026-09-18's best 0-3:00 ran **188.1k** and fire
-windows **238k**, so what is left is the no-fire time after each freeze — the mage-first blocks and the
+windows **238k**, and 2026-09-19 ran 169.5k with no Heroism, so what is left is the no-fire time after each freeze — the mage-first blocks and the
 centre hold target exactly that. The best kill runs **5:04.3** at **128k** dps on
 the boss against the **216.5k** a 38.97M pool wants in 180 s. The 0:30-1:00 window reaches **246.7k**
 — above the deadline pace — so the ceiling is not the problem. What ends it is the fire lapsing: a

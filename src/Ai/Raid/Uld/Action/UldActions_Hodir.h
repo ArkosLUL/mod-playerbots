@@ -48,8 +48,8 @@ private:
 };
 
 // Shed Biting Cold by moving. A stack only comes off on the second consecutive tick the server reads
-// the bot as moving, so this chains 6 yd legs until the aura is gone, holding each one until it is
-// walked rather than deriving a new one under its own walk.
+// the bot as moving, so this chains 6 yd legs down to ULDUAR_HODIR_BITING_COLD_SHED_FLOOR, holding each
+// one until it is walked rather than deriving a new one under its own walk.
 class HodirBitingColdShedAction : public MovementAction
 {
 public:

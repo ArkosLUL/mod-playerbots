@@ -18,6 +18,7 @@
 #include "SpellAuras.h"
 #include "SpellMgr.h"
 #include "TemporarySummon.h"
+#include "Timer.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
@@ -35,10 +36,11 @@ using namespace EncounterHelpers;
 // Where Hodir is held when no fire qualifies. The eight helpers spawn round the middle of the room
 // (boss_hodir.cpp hhd) and from here every one is inside its AttackStartCaster stand-off: priests
 // 16.3/15.5 of 17, druids 21.6/5.4 of 22, shamans 14.5/9.3 of 25, mages 23.2/6.5 of 30. So none of
-// them walks, and their zones land where they spawned: Starlight a median 9.8 yd from a druid's
-// spawn, fires 8.2 from a mage's. The old corner hold dragged him 30-55 yd out to every fire and back,
-// 913 of the 1106 yd he walked across three pulls. navprobe settles this point and 6/12 yd rings
-// round it at 432.687.
+// them has to walk to reach him, and early on their zones land near where they spawned: Starlight a
+// median 9.8 yd from a druid's spawn, fires 8.2 from a mage's. They still drift later in a pull, for
+// reasons the trace can't show (friendly NPCs are not swept). The old corner hold dragged him 30-55 yd
+// out to every fire and back, 913 of the 1106 yd he walked across three pulls. navprobe settles this
+// point and 6/12 yd rings round it at 432.687.
 const Position ULDUAR_HODIR_CENTRE = Position(1998.0f, -235.5f, 432.687f);
 
 // Centre of the ranged ring while he is on ULDUAR_HODIR_CENTRE, 24.45 yd south-west of it, so the ring's
@@ -135,13 +137,15 @@ struct HodirStormRally
 
 // Where Hodir is held, one per instance: both tanks and the ranged ring read it, so all three agree.
 // fire is empty while the point is ULDUAR_HODIR_CENTRE. bearing points from where he stood when the
-// point was adopted to the point, so the tank stands on the far side and he trails onto it.
+// point was adopted to the point, so the tank stands on the far side and he trails onto it. offSince
+// is when he was last seen parked off the point, 0 while he is on it.
 struct HodirHoldLatch
 {
     bool set = false;
     ObjectGuid fire;
     Position point;
     float bearing = 0.0f;
+    uint32 offSince = 0;
 };
 
 struct HodirBotLatches
@@ -241,22 +245,73 @@ Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
     return best;
 }
 
-// A fire worth dragging him onto: near the centre, and not behind it from the ranged ring's side.
-// Fires never move and neither does the centre, so a fire that qualifies once always does.
-static bool HodirFireQualifiesForHold(Creature* fire)
+bool IsHodirInLandedShelter(PlayerbotAI* botAI, Player* bot)
 {
-    float const dx = fire->GetPositionX() - ULDUAR_HODIR_CENTRE.GetPositionX();
-    float const dy = fire->GetPositionY() - ULDUAR_HODIR_CENTRE.GetPositionY();
-    if (std::hypot(dx, dy) > ULDUAR_HODIR_HOLD_FIRE_LEASH)
-        return false;
-
-    float const outward = HodirOutwardBearing();
-    return dx * std::cos(outward) + dy * std::sin(outward) >= -ULDUAR_HODIR_HOLD_FIRE_BACKSTEP;
+    Creature* shelter = GetHodirShelter(botAI, bot);
+    return shelter && shelter->GetEntry() == NPC_SNOWPACKED_ICICLE &&
+           bot->GetExactDist2d(shelter) <= GetHodirShelterPark(shelter);
 }
 
-// Where Hodir is held: the qualifying Toasty Fire nearest the centre, else the centre itself. Standing
-// in a fire sheds Biting Cold every tick exactly as moving does, and melee spells and pets in one proc
-// Singed on him, +2% magic damage taken a stack up to 25. That is why it is worth the short drag.
+// Where he is held for this fire: the point of the hold box nearest it, or false when that point is
+// further than ULDUAR_HODIR_HOLD_FIRE_REACH from it. The box is the leash disc cut by the backstep line,
+// so the nearest point is the fire itself or the nearest in-box one of: its projection onto the line,
+// its projection onto the circle, the two corners. Fires never move and neither does the box, so the
+// answer for a fire never changes.
+static bool HodirFireHoldPoint(Creature* fire, Position& out)
+{
+    float const outward = HodirOutwardBearing();
+    float const ux = std::cos(outward);
+    float const uy = std::sin(outward);
+    float const leash = ULDUAR_HODIR_HOLD_FIRE_LEASH;
+    float const back = ULDUAR_HODIR_HOLD_FIRE_BACKSTEP;
+
+    // Relative to the centre from here on.
+    float const fx = fire->GetPositionX() - ULDUAR_HODIR_CENTRE.GetPositionX();
+    float const fy = fire->GetPositionY() - ULDUAR_HODIR_CENTRE.GetPositionY();
+
+    // 1 cm of slack so a candidate built on an edge is not thrown out by float rounding.
+    auto inBox = [&](float x, float y)
+    { return std::hypot(x, y) <= leash + 0.01f && x * ux + y * uy >= -back - 0.01f; };
+
+    float bestX = fx;
+    float bestY = fy;
+    float bestGap = inBox(fx, fy) ? 0.0f : -1.0f;
+    auto consider = [&](float x, float y)
+    {
+        if (bestGap == 0.0f || !inBox(x, y))
+            return;
+
+        float const gap = std::hypot(fx - x, fy - y);
+        if (bestGap < 0.0f || gap < bestGap)
+        {
+            bestX = x;
+            bestY = y;
+            bestGap = gap;
+        }
+    };
+
+    float const along = fx * ux + fy * uy;
+    consider(fx - (along + back) * ux, fy - (along + back) * uy);
+
+    if (float const radius = std::hypot(fx, fy); radius > 0.0f)
+        consider(fx * leash / radius, fy * leash / radius);
+
+    float const half = std::sqrt(leash * leash - back * back);
+    consider(-back * ux - uy * half, -back * uy + ux * half);
+    consider(-back * ux + uy * half, -back * uy - ux * half);
+
+    if (bestGap < 0.0f || bestGap > ULDUAR_HODIR_HOLD_FIRE_REACH)
+        return false;
+
+    out = Position(ULDUAR_HODIR_CENTRE.GetPositionX() + bestX, ULDUAR_HODIR_CENTRE.GetPositionY() + bestY,
+                   ULDUAR_HODIR_CENTRE.GetPositionZ());
+    return true;
+}
+
+// Where Hodir is held: the box point for the qualifying Toasty Fire nearest the centre, else the centre
+// itself. Standing in a fire sheds Biting Cold every tick exactly as moving does, and melee spells and
+// pets in one proc Singed on him, +2% magic damage taken a stack up to 25. That is why it is worth the
+// short drag.
 //
 // Nothing but Flash Freeze puts a fire out (npc_ulduar_toasty_fire::DoAction), so the pick holds until
 // the fire dies; re-picking while one burns walks him between two of them.
@@ -272,11 +327,13 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
     bot->GetCreatureListWithEntryInGrid(found, NPC_TOASTY_FIRE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
 
     Creature* pick = nullptr;
+    Position pickPoint;
     if (!hold.fire.IsEmpty())
         for (Creature* fire : found)
             if (fire && fire->IsAlive() && fire->GetGUID() == hold.fire)
             {
                 pick = fire;
+                pickPoint = hold.point;
                 break;
             }
 
@@ -285,13 +342,15 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
         float bestDist = 0.0f;
         for (Creature* fire : found)
         {
-            if (!fire || !fire->IsAlive() || !HodirFireQualifiesForHold(fire))
+            Position point;
+            if (!fire || !fire->IsAlive() || !HodirFireHoldPoint(fire, point))
                 continue;
 
             float const dist = fire->GetExactDist2d(&ULDUAR_HODIR_CENTRE);
             if (!pick || dist < bestDist)
             {
                 pick = fire;
+                pickPoint = point;
                 bestDist = dist;
             }
         }
@@ -307,8 +366,8 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
     {
         hold.set = engaged;
         hold.fire = fire;
-        hold.point = pick ? Position(pick->GetPositionX(), pick->GetPositionY(), ULDUAR_HODIR_CENTRE.GetPositionZ())
-                          : ULDUAR_HODIR_CENTRE;
+        hold.point = pick ? pickPoint : ULDUAR_HODIR_CENTRE;
+        hold.offSince = 0;
 
         // He trails the tank, so the tank stands past the point on the side away from him and he stops
         // on it. Right on top of the point there is no side, and the outward bearing keeps the tank
@@ -318,6 +377,22 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
                                         hold.point.GetPositionX() - hodir->GetPositionX())
                            : HodirOutwardBearing();
     }
+    else if (!hodir->isMoving() && hodir->GetExactDist2d(&hold.point) > ULDUAR_HODIR_HOLD_REAIM_GAP)
+    {
+        // Parked off the point with the tank spot already in his reach, so nothing brings him back.
+        // Aim again from where he stands; the tank walks round to the far side and he trails onto it.
+        uint32 const now = getMSTime();
+        if (!hold.offSince)
+            hold.offSince = now;
+        else if (getMSTimeDiff(hold.offSince, now) >= ULDUAR_HODIR_HOLD_REAIM_MS)
+        {
+            hold.bearing = std::atan2(hold.point.GetPositionY() - hodir->GetPositionY(),
+                                      hold.point.GetPositionX() - hodir->GetPositionX());
+            hold.offSince = 0;
+        }
+    }
+    else
+        hold.offSince = 0;
 
     // Which fire, not where: the spot is already in hodir.anchor and hodir.centre.
     if (RaidObs::Active())
@@ -802,6 +877,27 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         // cannot refuse it for repeating the last destination.
         out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
         how = "tank";
+        return true;
+    }
+
+    // Inside a landed shelter while Flash Freeze is cast: shed across it rather than out of it, same
+    // shape as the Starlight shuttle below. Standing out the 9s cast adds two stacks, which is how a
+    // warlock went 5 -> 7 and died on the landing.
+    if (IsHodirFlashFreezeIncoming(botAI) && IsHodirInLandedShelter(botAI, bot))
+    {
+        Creature* shelter = GetHodirShelter(botAI, bot);
+        float const bearing = std::atan2(bot->GetPositionY() - shelter->GetPositionY(),
+                                         bot->GetPositionX() - shelter->GetPositionX());
+        float const dx = std::cos(bearing) * ULDUAR_HODIR_SHELTER_SHED_RADIUS;
+        float const dy = std::sin(bearing) * ULDUAR_HODIR_SHELTER_SHED_RADIUS;
+
+        Position const legA = ValidateFloorPoint(
+            bot, Position(shelter->GetPositionX() + dx, shelter->GetPositionY() + dy, shelter->GetPositionZ()));
+        Position const legB = ValidateFloorPoint(
+            bot, Position(shelter->GetPositionX() - dx, shelter->GetPositionY() - dy, shelter->GetPositionZ()));
+
+        out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
+        how = "shelter";
         return true;
     }
 

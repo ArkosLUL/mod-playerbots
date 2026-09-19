@@ -3,10 +3,10 @@
 
     hodir.py <file>            every section
     hodir.py <file> --pace     health at each 30 s, boss dps per 15 s, 0-3:00 against the cache pace
-    hodir.py <file> --hold     hodir.tankhold windows: his path and the boss dps in each; fire gaps
+    hodir.py <file> --hold     hodir.tankhold windows: his path, boss dps, time off the point; fire gaps
     hodir.py <file> --singed   65280 on the boss by caster kind, and the stack count that implies
-    hodir.py <file> --buffs    Starlight, Toasty Fire, Storm Power, Biting Cold by role; Starlight zones
-    hodir.py <file> --churn    walking undone in 5 s, A-B-A flips, moves by action, dodge walk-backs
+    hodir.py <file> --buffs    Starlight, Toasty Fire, Storm Power, Biting Cold by role and by stack
+    hodir.py <file> --churn    walking undone, A-B-A flips, moves by action, stalls, dodge walk-backs
     hodir.py <file> --blocks   helper ice blocks per Flash Freeze, by the helper inside them
 
 What the generic views get wrong here, and what this reads instead:
@@ -20,9 +20,13 @@ What the generic views get wrong here, and what this reads instead:
 - **The helper inside a block is not in the trace.** Helpers are friendly and never sampled, so the
   kind comes from `hodir.dpstarget`, which writes it in front of the block guid from the centre-hold
   build on. Older traces read `?`.
+- **The hold point is read off `hodir.centre`**, the ring centre, which the centre-hold build (87be6d955)
+  keeps at the raid anchor plus the hold point's offset from the centre. On older builds the ring
+  followed fires by another rule, so "off the hold point" means nothing there.
 """
 from __future__ import annotations
 
+import bisect
 import collections
 import math
 import pathlib
@@ -52,6 +56,7 @@ SPELL_BITING_COLD_DAMAGE = 62188
 SPELL_ICE_SHARDS = 62457
 
 DODGE = "hodir icicle dodge action"
+SHELTER = "hodir move snowpacked icicle"
 # The movers that can walk a bot straight back into the pool it just dodged out of.
 WALK_BACKS = ("reach melee", "set behind", "hodir collect storm power", "reach spell",
               "hodir raid position action", "hodir biting cold shed")
@@ -68,6 +73,21 @@ FREEZE_LANDS_MS = 9000
 FIRE_MIN_LIFE_MS = 500
 UNDO_WINDOW_MS = 5000
 FLIP_WINDOW_MS = 5000
+
+# The hold box and its fire rule, as UldEncounter_Hodir.h has them.
+CENTRE = (1998.0, -235.5)
+RAID_ANCHOR = (1986.56, -257.11)
+HOLD_LEASH = 12.0
+HOLD_BACKSTEP = 2.0
+HOLD_FIRE_REACH = 7.0
+# He normally stops within 1-2 yd of the point, so past this he is parked off it.
+OFF_POINT_YD = 5.0
+# A stalled walk: still this long, this far short of where the move was sent, before any newer move.
+STALL_MS = 1000
+STALL_SHORT_YD = 1.5
+STALL_SETTLE_MS = 300
+# Where the shed arms outside Starlight.
+BITING_COLD_ARM = 4
 
 
 # Pure pieces, kept free of the trace so the tests can hand them numbers.
@@ -166,6 +186,127 @@ def covered(spans: list[tuple[int, int]], low: int, high: int) -> int:
     return sum(max(0, min(stop, high) - max(start, low)) for start, stop in spans)
 
 
+def union_ms(spans: list[tuple[int, int]], low: int, high: int) -> int:
+    """Time inside at least one span, clipped to `[low, high)`."""
+    total = 0
+    reach = low
+    for start, stop in sorted(spans):
+        start, stop = max(start, reach), min(stop, high)
+        if stop > start:
+            total += stop - start
+            reach = stop
+    return total
+
+
+def outward() -> tuple[float, float]:
+    dx, dy = CENTRE[0] - RAID_ANCHOR[0], CENTRE[1] - RAID_ANCHOR[1]
+    length = math.hypot(dx, dy)
+    return dx / length, dy / length
+
+
+def box_point(x: float, y: float) -> tuple[float, float]:
+    """The point of the hold box nearest `(x, y)`, as HodirFireHoldPoint derives it: the point itself,
+    or the nearest in-box one of its projection onto the backstep line, its projection onto the leash
+    circle, and the two corners where they meet."""
+    ux, uy = outward()
+    fx, fy = x - CENTRE[0], y - CENTRE[1]
+
+    def inside(px: float, py: float) -> bool:
+        return math.hypot(px, py) <= HOLD_LEASH + 0.01 and px * ux + py * uy >= -HOLD_BACKSTEP - 0.01
+
+    if inside(fx, fy):
+        return x, y
+    along = fx * ux + fy * uy
+    candidates = [(fx - (along + HOLD_BACKSTEP) * ux, fy - (along + HOLD_BACKSTEP) * uy)]
+    radius = math.hypot(fx, fy)
+    if radius:
+        candidates.append((fx * HOLD_LEASH / radius, fy * HOLD_LEASH / radius))
+    half = math.sqrt(HOLD_LEASH ** 2 - HOLD_BACKSTEP ** 2)
+    candidates.append((-HOLD_BACKSTEP * ux - uy * half, -HOLD_BACKSTEP * uy + ux * half))
+    candidates.append((-HOLD_BACKSTEP * ux + uy * half, -HOLD_BACKSTEP * uy - ux * half))
+    px, py = min((c for c in candidates if inside(*c)), key=lambda c: math.hypot(fx - c[0], fy - c[1]))
+    return CENTRE[0] + px, CENTRE[1] + py
+
+
+def fire_in_reach(x: float, y: float) -> bool:
+    point = box_point(x, y)
+    return math.hypot(point[0] - x, point[1] - y) <= HOLD_FIRE_REACH
+
+
+def hold_point_from_ring(x: float, y: float) -> tuple[float, float]:
+    return x - RAID_ANCHOR[0] + CENTRE[0], y - RAID_ANCHOR[1] + CENTRE[1]
+
+
+def off_point_ms(samples: list[tuple[int, float, float]], points: list[tuple[int, tuple[float, float]]],
+                 low: int, high: int, gap: float = OFF_POINT_YD) -> tuple[int, int]:
+    """`(ms off, ms sampled)` inside `[low, high)`. Each sample counts until the next, against the hold
+    point in force when it was taken."""
+    off = total = 0
+    for (when, x, y), (after, _, _) in zip(samples, samples[1:]):
+        start, stop = max(when, low), min(after, high)
+        if stop <= start:
+            continue
+        point = None
+        for mark, value in points:
+            if mark > when:
+                break
+            point = value
+        if point is None:
+            continue
+        total += stop - start
+        if math.hypot(x - point[0], y - point[1]) > gap:
+            off += stop - start
+    return off, total
+
+
+def stalled_walks(moves: list[tuple[int, float, float, str]], rows: list[tuple[int, float, float, int]],
+                  movers=(DODGE, SHELTER)) -> collections.Counter:
+    """Accepted moves by `movers` after which the bot stood still `STALL_MS` or more, over
+    `STALL_SHORT_YD` short of where it was sent, before any newer accepted move. `moves` and `rows` are
+    one bot's, in time order."""
+    out = collections.Counter()
+    times = [row[0] for row in rows]
+    for index, (when, x, y, by) in enumerate(moves):
+        if by not in movers:
+            continue
+        stop = moves[index + 1][0] if index + 1 < len(moves) else when + UNDO_WINDOW_MS
+        since = None
+        for t, px, py, moving in rows[bisect.bisect_left(times, when + STALL_SETTLE_MS):]:
+            if t >= stop:
+                break
+            if not moving and math.hypot(px - x, py - y) > STALL_SHORT_YD:
+                since = t if since is None else since
+                if t - since >= STALL_MS:
+                    out[by] += 1
+                    break
+            else:
+                since = None
+    return out
+
+
+def after_landing(times: list[int], casts: list[int], cast_ms: int = FREEZE_LANDS_MS) -> int:
+    """How many of `times` fall outside every Flash Freeze cast."""
+    return sum(1 for when in times if not any(cast <= when <= cast + cast_ms + 100 for cast in casts))
+
+
+def stacks_before(changes: list[tuple[int, int]], when: int) -> int:
+    held = 0
+    for mark, stacks in changes:
+        if mark > when:
+            break
+        held = stacks
+    return held
+
+
+def band_ms(changes: list[tuple[int, int]], low: int, high: int, floor: int) -> int:
+    """Time at `floor` stacks or more inside `[low, high)`."""
+    total = 0
+    for (mark, stacks), (after, _) in zip(changes, changes[1:] + [(high, 0)]):
+        if stacks >= floor:
+            total += max(0, min(after, high) - max(mark, low))
+    return total
+
+
 # Trace readers.
 
 def pull_end(trace: Trace) -> int:
@@ -260,6 +401,29 @@ def tank_holder(trace: Trace) -> int | None:
     return max(tanks, key=counts.get) if tanks else (counts.most_common(1)[0][0] if counts else None)
 
 
+def hold_points(trace: Trace) -> list[tuple[int, tuple[float, float]]]:
+    """`(t, point)` from every `hodir.centre` note. The ring centre is one latch per instance, so every
+    writer's note is current when written and they merge in time order."""
+    out = []
+    for rec in notes(trace, "hodir.centre"):
+        parts = str(rec.get("txt", "")).split(",")
+        try:
+            out.append((rec["t"], hold_point_from_ring(float(parts[0]), float(parts[1]))))
+        except (ValueError, IndexError):
+            continue
+    return sorted(out)
+
+
+def stack_changes(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    """Biting Cold stacks per raider, as `(t, stacks)` in time order, 0 once it comes off."""
+    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    roster = roster_guids(trace)
+    for rec in trace.of("aura"):
+        if rec.get("sp") == SPELL_BITING_COLD and rec.get("d") in roster:
+            out[rec["d"]].append((rec["t"], 0 if rec.get("r") else rec.get("st", 1)))
+    return out
+
+
 def missing_probes(trace: Trace) -> list[str]:
     return [key for key, _, _ in silent_keys(emitted_keys(trace), encounter_of(trace))]
 
@@ -338,6 +502,24 @@ def show_hold(trace: Trace) -> None:
         if ms:
             print(f"  total {kind:7} {ms / 1000:5.0f}s  {path:5.0f} yd, {path / (ms / 1000):.2f} yd/s"
                   f"  boss dps {weighted / ms / 1000:.0f}k")
+
+    points = hold_points(trace)
+    if points:
+        samples = [(row[0], row[1], row[2]) for row in rows]
+        off: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+        for low, high, value in latch_windows(marks, 0, end):
+            kind = value if value in ("corner", "centre", "offfloor") else "fire"
+            away, sampled = off_point_ms(samples, points, low, high)
+            off[kind][0] += away
+            off[kind][1] += sampled
+        print(f"  Hodir more than {OFF_POINT_YD:.0f} yd off the hold point: " + ", ".join(
+            f"{kind} {away / 1000:.0f}s of {sampled / 1000:.0f}s" for kind, (away, sampled) in off.items()))
+
+    burned = [zone for zone in zones_of(trace, SPELL_TOASTY_FIRE) if zone["t1"] - zone["t0"] >= FIRE_MIN_LIFE_MS]
+    alive = union_ms([(zone["t0"], zone["t1"]) for zone in burned], 0, end)
+    reach = union_ms([(zone["t0"], zone["t1"]) for zone in burned if fire_in_reach(zone["x"], zone["y"])], 0, end)
+    print(f"  fire 0-{clock(end)[:4]}: alive {alive / 1000:.0f}s, in reach of the hold box {reach / 1000:.0f}s,"
+          f" held {totals['fire'][0] / 1000 if 'fire' in totals else 0:.0f}s")
 
     firsts = fire_starts(trace)
     print(f"\n  first fire after the pull {clock(min(firsts)) if firsts else '-'}")
@@ -425,6 +607,33 @@ def show_buffs(trace: Trace) -> None:
     print(f"  Biting Cold {cold_total:,} ({cold_total / max(1, taken) * 100:.1f}% of damage taken), peak {peak} stacks;"
           f" Ice Shards {len(shards)} hits for {sum(rec.get('a', 0) for rec in shards):,}")
 
+    changes = stack_changes(trace)
+    team = bots(trace)
+    stop = min(end, DEADLINE_MS)
+    early = [rec for rec in cold if rec["t"] < stop]
+    early_total = sum(rec.get("a", 0) for rec in early)
+    # The stack a tick was dealt at is the one standing just before it: the tick and its own stack
+    # change share a millisecond.
+    at_arm = sum(rec.get("a", 0) for rec in early
+                 if stacks_before(changes.get(rec.get("d"), []), rec["t"] - 5) >= BITING_COLD_ARM)
+    seconds = sum(band_ms(rows, 0, stop, BITING_COLD_ARM) for guid, rows in changes.items() if guid in team) / 1000
+    print(f"  Biting Cold 0-{clock(stop)[:4]} {early_total:,}, {at_arm / max(1, early_total) * 100:.0f}% of it at"
+          f" {BITING_COLD_ARM}+ stacks; bots spent {seconds:.0f} bot-seconds at {BITING_COLD_ARM}+")
+
+    boss = boss_guid(trace)
+    gains = []
+    for cast in freeze_casts(trace, boss) if boss is not None else []:
+        worst = 0
+        for guid, rows in changes.items():
+            if guid not in team:
+                continue
+            before = stacks_before(rows, cast)
+            during = [stacks for when, stacks in rows if cast <= when <= cast + FREEZE_LANDS_MS + 100]
+            worst = max(worst, max(during + [before]) - before)
+        gains.append(f"{clock(cast)[:4]} +{worst}")
+    if gains:
+        print("  most stacks a bot gained over a freeze cast: " + ", ".join(gains))
+
 
 def show_churn(trace: Trace) -> None:
     print("CHURN")
@@ -462,6 +671,22 @@ def show_churn(trace: Trace) -> None:
     for action, counts in sorted(by_action.items(), key=lambda kv: -sum(kv[1].values()))[:10]:
         rest = " ".join(f"{reason}={count}" for reason, count in counts.most_common() if reason != "ok")
         print(f"    {action:34} {counts['ok']:5} ok ({counts['ok'] / max(1, accepted) * 100:4.1f}%)  {rest}")
+
+    boss = boss_guid(trace)
+    casts = freeze_casts(trace, boss) if boss is not None else []
+    sheltering = [rec["t"] for rec in moves if rec.get("ok") and rec.get("by") == SHELTER]
+    print(f"  {after_landing(sheltering, casts)} of {len(sheltering)} shelter moves came after the freeze landed")
+
+    issued: dict[int, list[tuple[int, float, float, str]]] = collections.defaultdict(list)
+    for rec in moves:
+        if rec.get("ok") and rec.get("x") is not None:
+            issued[rec["g"]].append((rec["t"], rec["x"], rec["y"], rec.get("by", "?")))
+    samples = track(trace, team, ("t", "x", "y", "moving"))
+    stalls = collections.Counter()
+    for guid, sequence in issued.items():
+        stalls.update(stalled_walks(sequence, samples.get(guid, [])))
+    print(f"  stalled walks (still {STALL_MS / 1000:.0f} s+, over {STALL_SHORT_YD} yd short): "
+          + (", ".join(f"{action} {count}" for action, count in stalls.most_common()) or "none"))
 
     icicles = []
     for guid, rows in track(trace, guids_of_entry(trace, NPC_ICICLE_SMALL), ("t", "x", "y")).items():
