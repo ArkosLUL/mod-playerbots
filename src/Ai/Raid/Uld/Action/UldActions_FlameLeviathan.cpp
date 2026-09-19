@@ -146,6 +146,27 @@ Unit* FlameLeviathanVehicleAction::FindMechanolift()
     return nullptr;
 }
 
+// Only what is already fighting, so a cannon with 70 yd of reach never opens on a pack nobody pulled.
+Unit* FlameLeviathanVehicleAction::NearestFightingHostile()
+{
+    Unit* nearest = nullptr;
+    for (auto const& guid : AI_VALUE(GuidVector, "possible targets"))
+    {
+        Unit* unit = botAI->GetUnit(guid);
+        if (!unit || !unit->IsAlive() || !unit->IsInCombat())
+            continue;
+
+        uint32 const entry = unit->GetEntry();
+        if (entry == NPC_FLAME_LEVIATHAN || entry == NPC_FL_TURRET || entry == NPC_FL_DEFENSE_TURRET)
+            continue;
+
+        if (!nearest || vehicleBase_->GetExactDist(unit) < vehicleBase_->GetExactDist(nearest))
+            nearest = unit;
+    }
+
+    return nearest;
+}
+
 bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
 {
     vehicleBase_ = bot->GetVehicleBase();
@@ -175,6 +196,11 @@ bool FlameLeviathanVehicleAction::Execute(Event /*event*/)
     // Only once he is fighting: the instance lookup finds him from anywhere in Ulduar, so on the
     // approach every seat aimed at a non-attackable boss 1000 yd off and the trash went unshot.
     Unit* target = boss && boss->IsInCombat() ? boss : add;
+
+    // "attackers" is built from the riders' own threat references, and the core hands a rider's threat
+    // to its vehicle, so the trash a vehicle is fighting may never appear in it.
+    if (!target)
+        target = NearestFightingHostile();
 
     switch (vehicleBase_->GetEntry())
     {

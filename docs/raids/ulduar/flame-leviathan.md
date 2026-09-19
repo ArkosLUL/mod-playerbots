@@ -156,9 +156,10 @@ despite the name**, and never ignites anything.
   yd/s, a siege engine or demolisher is a flat 7.0, a chopper 14.0. He out-runs a siege engine after
   roughly two minutes, which is why the kite path has to be efficient and why Steam Rush, Increased
   Speed and Speed Boost carry the late fight.
-- **`"attackers"` usually does not contain him.** `AttackersValue` walks the *bot player's*
-  `GetThreatenedByMeList()`, and threat here belongs to the vehicle creature. He is resolved by entry
-  instead; `"attackers"` is kept only for picking adds.
+- **`"attackers"` usually does not contain him, and may miss the trash.** `AttackersValue` walks the
+  *bot player's* `GetThreatenedByMeList()`, and `ThreatManager::AddThreat` sends a rider's threat to its
+  vehicle. He is resolved through the instance instead, and short of him the weapons fall back from
+  `"attackers"` to the nearest hostile already in combat in `"possible targets"`.
 - **Steam Rush 62346** is `CHARGE_DEST` at `TARGET_DEST_CASTER_FRONT`: a forward dash along our own
   facing, so it only escapes when he is already behind us. It starts 2 s of GCD category 133, which
   Electroshock and Ram share.
@@ -672,9 +673,8 @@ channel was cut at 1 tick.
 - **A siege engine Pursued on its corner post starts boxed in.** Every kite exit crosses his front: on
   2026-09-19 the gap went 62 → 2 yd in 9 s with the rush locked. If a working rush does not clear it,
   the kite needs its own way out of a corner.
-- **Trash on the approach relies on `"attackers"` listing it for a rider**, which the Life-tower
-  paragraph above found empty for ward adds. The weapons shot trash before `db464a426`, which only
-  fits if it does; confirm on the next approach.
+- **Trash on the approach is unverified in the field**, and no trace on disk covers the approach:
+  check on the next run that the fleet shoots the Defenders and Colossi.
 - **`FlameLeviathanEngaged` falls back to the rider's combat** while he is attackable but not yet
   fighting (after the Colossi die), so bots on leftover trash there run the boss drive and the
   movement veto. Unverified.

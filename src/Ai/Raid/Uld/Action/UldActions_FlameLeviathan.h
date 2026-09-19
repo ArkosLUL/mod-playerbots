@@ -42,6 +42,9 @@ protected:
 
     Unit* FindMechanolift();
 
+    // The nearest hostile already in combat, him and his turrets aside: what to shoot on the approach.
+    Unit* NearestFightingHostile();
+
     Unit* vehicleBase_ = nullptr;
 
     // Cast times of barrels not yet seen landing, and the last flight timed.
