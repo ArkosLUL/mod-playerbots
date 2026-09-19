@@ -277,7 +277,10 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   that moves, re-issues at the priority already in flight and waits out its own stale leg: Flame
   Leviathan's drive had 57–59% of COMBAT re-targets refused, and its hulls drove up to 5 s toward
   where the boss had been. Such an owner lowers `last movement`'s priority one step before
-  re-issuing, and restores it when nothing issued.
+  re-issuing, and restores it when nothing issued. That also takes away the hold a re-planned dodge
+  was getting for free: its legs now replace each other, and Flame Leviathan's siege engines, inside
+  several Inferno patches at once, flipped sides of the trail every 200-400 ms and burned in place.
+  Latch such a goal and re-validate it, as below.
 - **A multiplier that zeroes relevance is reported as `IMPOSSIBLE`.** `Engine::DoNextAction` takes
   the `else` of `if (action->isPossible() && relevance > 0)`, so a vetoed action is indistinguishable
   in the act stream from one whose spell is unknown, out of range or on cooldown. The `veto` rows
@@ -291,7 +294,8 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   - a **live-boss test over a guid lookup**: `InstanceScript::GetCreature` answers from anywhere on
     the map, so `VezaxEncounterActive`'s "he is alive" went true the moment his grid loaded and zeroed
     `dps assist`, `tank assist` and caster damage instance-wide. On 2026-09-17 all 116 `dps assist`
-    ticks of a Razorscale pull were vetoed and the bots did nothing but follow the master.
+    ticks of a Razorscale pull were vetoed and the bots did nothing but follow the master. Flame
+    Leviathan's weapon target took him the same way and stopped shooting approach trash.
 
   Gate on the boss being **in combat**, screen any grid scan by room (`IsNearMimironRoom`), and prefer
   a proximity lookup (`FirstNpc`, `GetIgnisIf`) over a guid one.
@@ -336,7 +340,9 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   reserve dodged through a whole 10 s channel while inside the real 7 yd circle for one second of it,
   and lost the channel by drifting out of Electroshock range. A hull that owes the raid a firing
   position dodges on the strict circle and steps somewhere it can still fire from; nearest-clear is the
-  wrong ranking for it.
+  wrong ranking for it. Against a short-lived mark only: the same rules against Mimiron's Inferno, a
+  patch that burns 30 s and costs a siege engine 10% a tick, let three reserves wait until inside one
+  and then drive across the trail toward him.
 
 - **A gather node is a damage amplifier whenever the AoE it faces is wider than the camp — and the
   spread that fixes it usually costs more.** Freya's ranged camp pulls the raid into a 10 yd ball for
@@ -463,6 +469,11 @@ Related traps:
   **24 s late on every pull**, and she only ever picked combat up as a side effect of her own casting.
   Finding the call says it runs, never that it reached the unit you are reading: follow it down to the
   guard that can turn it into a no-op.
+- **A cast call's `true` is not a cast.** `PlayerbotAI::CastVehicleSpell` returns true when `CheckCast`
+  refused, so anything stamped on that answer records a cast that never happened. Flame Leviathan's
+  `CastVehicleSelfSpell` stamped Steam Rush's 15 s cooldown on a refusal from the Ram GCD, and a
+  Pursued siege engine went 15.2 s without its escape. Confirm with a receipt: energy spent, the aura
+  landed, the channel stopped.
 - **Scheduled events outlive their cause.** Freya's empower events are scheduled once at pull and
   repeat unconditionally, even after the Elder dies — so a hard-mode reaction must key off the hazard
   world object, never off an Elder still being alive.

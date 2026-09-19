@@ -852,10 +852,8 @@ bool FlameLeviathanIsVentReserve(Player* bot)
     return hull && reserve && hull->GetGUID() == reserve;
 }
 
-Position FlameLeviathanCornerPostPoint(uint8 index)
+Position FlameLeviathanArenaCentre()
 {
-    Position const& corner = ULDUAR_FL_ARENA_CORNERS[index % ULDUAR_FL_ARENA_CORNERS.size()];
-
     float centreX = 0.0f;
     float centreY = 0.0f;
     for (Position const& each : ULDUAR_FL_ARENA_CORNERS)
@@ -863,13 +861,20 @@ Position FlameLeviathanCornerPostPoint(uint8 index)
         centreX += each.GetPositionX();
         centreY += each.GetPositionY();
     }
-    centreX /= static_cast<float>(ULDUAR_FL_ARENA_CORNERS.size());
-    centreY /= static_cast<float>(ULDUAR_FL_ARENA_CORNERS.size());
+
+    float const count = static_cast<float>(ULDUAR_FL_ARENA_CORNERS.size());
+    return Position(centreX / count, centreY / count, ULDUAR_FL_ARENA_CORNERS.front().GetPositionZ());
+}
+
+Position FlameLeviathanCornerPostPoint(uint8 index)
+{
+    Position const& corner = ULDUAR_FL_ARENA_CORNERS[index % ULDUAR_FL_ARENA_CORNERS.size()];
+    Position const centre = FlameLeviathanArenaCentre();
 
     // Toward the middle, so the engine ends up between the spawn point and the raid and Ram's
     // knockback drives what it catches back into the corner instead of out at the fleet.
-    float dx = centreX - corner.GetPositionX();
-    float dy = centreY - corner.GetPositionY();
+    float dx = centre.GetPositionX() - corner.GetPositionX();
+    float dy = centre.GetPositionY() - corner.GetPositionY();
     float const len = std::sqrt(dx * dx + dy * dy);
     if (len > 0.0f)
     {
@@ -889,6 +894,22 @@ float FlameLeviathanDemolisherStandDist(Unit* boss)
 
 namespace
 {
+uint32 FlameLeviathanHazardTower(uint32 entry)
+{
+    switch (entry)
+    {
+        case NPC_FL_THORIM_HAMMER_TARGET:
+            return FL_TOWER_STORM;
+        case NPC_FL_MIMIRONS_INFERNO_TARGET:
+        case NPC_FL_MIMIRONS_INFERNO:
+            return FL_TOWER_FLAMES;
+        case NPC_FL_HODIRS_FURY_TARGET:
+            return FL_TOWER_FROST;
+        default:
+            return 0;
+    }
+}
+
 bool IsFlameLeviathanTowerHazard(uint32 entry, uint32 towerMask)
 {
     // Both Mimiron entries: the target is the head of the trail, and NPC_FL_MIMIRONS_INFERNO is each
@@ -939,19 +960,21 @@ bool FlameLeviathanFuryArmed(Player* bot, Unit* reticle)
     return bot && reticle && FlameLeviathanStateFor(bot).furyArmed.count(reticle->GetGUID());
 }
 
-Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float margin)
+Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask, float margin,
+                                          uint32 strictMask)
 {
     if (!botAI || !from)
         return nullptr;
 
     Unit* nearest = nullptr;
-    float best = margin;
+    float best = 0.0f;
 
     ForEachTowerHazard(botAI, towerMask,
                        [&](Unit* hazard)
                        {
                            float const gap = from->GetExactDist2d(hazard) - FlameLeviathanHazardReach(hazard, from);
-                           if (gap < best)
+                           float const pad = (strictMask & FlameLeviathanHazardTower(hazard->GetEntry())) ? 0.0f : margin;
+                           if (gap < pad && (!nearest || gap < best))
                            {
                                best = gap;
                                nearest = hazard;
@@ -1002,8 +1025,11 @@ static Position FlameLeviathanOffsetPoint(Unit* boss, float bearing, float stand
                     boss->GetPositionY() + std::sin(bearing) * dist, boss->GetPositionZ());
 }
 
-float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius)
+float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius, float* fanHalf)
 {
+    if (fanHalf)
+        *fanHalf = 0.0f;
+
     Group* group = bot ? bot->GetGroup() : nullptr;
     if (!group || !vehicleBase || radius <= 0.0f)
         return 0.0f;
@@ -1048,7 +1074,26 @@ float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float r
     // far slots back in his front. Cap the whole fan instead and accept less spacing when it bites.
     spread = std::min(spread, ULDUAR_FL_STATION_MAX_ARC / static_cast<float>(count - 1));
 
+    if (fanHalf)
+        *fanHalf = static_cast<float>(count - 1) * 0.5f * spread;
+
     return (static_cast<float>(index) - static_cast<float>(count - 1) * 0.5f) * spread;
+}
+
+float FlameLeviathanCentreTurn(Unit* boss, float fanHalf)
+{
+    Position const centre = FlameLeviathanArenaCentre();
+    if (!boss || boss->GetExactDist2d(centre) <= ULDUAR_FL_CENTRE_TURN_DEADZONE)
+        return 0.0f;
+
+    // NormalizeOrientation lands in [0, 2PI), so fold it into (-PI, PI] for a signed turn.
+    float turn = Position::NormalizeOrientation(boss->GetAngle(centre.GetPositionX(), centre.GetPositionY()) -
+                                                (boss->GetOrientation() + float(M_PI)));
+    if (turn > float(M_PI))
+        turn -= 2.0f * float(M_PI);
+
+    float const cap = std::max(0.0f, float(M_PI) / 2.0f - fanHalf);
+    return std::clamp(turn, -cap, cap);
 }
 
 float FlameLeviathanStationLead(Unit* boss)

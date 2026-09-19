@@ -770,6 +770,42 @@ class FlameLeviathanReader(unittest.TestCase):
         rows = flame_leviathan.hold_quality({1: [(0, 0.0, 0.0, 100.0, 0)]}, fl)
         self.assertEqual((rows[0]["took"], rows[0]["frames"], rows[0]["rate"]), (None, 0, None))
 
+    def test_rush_times_counts_a_charge_once_across_its_frames(self):
+        points = [(0, 0.0, 0.0), (250, 10.0, 0.0), (500, 20.0, 0.0), (750, 21.75, 0.0),
+                  (5000, 21.75, 0.0), (5250, 31.75, 0.0)]
+        self.assertEqual(flame_leviathan.rush_times(points), [0, 5000])
+
+    def test_rush_ready_waits_for_energy_and_the_last_charge_cooldown(self):
+        power = [(1000, 20.0), (2000, 60.0), (9000, 60.0), (21000, 60.0)]
+        # A window opening at 6 s after a charge at 5 s waits out its cooldown, energy or not.
+        self.assertEqual(flame_leviathan.rush_ready(power, [5000], 6000, 30000), 21000)
+        self.assertEqual(flame_leviathan.rush_ready(power, [], 1000, 30000), 2000)
+        self.assertIsNone(flame_leviathan.rush_ready(power, [], 1000, 1500))
+
+    def test_reversed_legs_counts_only_a_quick_turn_back(self):
+        legs = [(0, 10.0, 0.0), (300, -10.0, 1.0), (600, 10.0, 0.0), (5000, -10.0, 0.0), (5300, -10.0, 5.0)]
+        # two flips inside the window; the 5 s gap and the 27 degree turn after it do not count
+        self.assertEqual(flame_leviathan.reversed_legs(legs), 2)
+
+    def test_vent_window_splits_the_lead_in_from_the_channel(self):
+        channels = [(20000, 21000, 2)]
+        self.assertEqual(flame_leviathan.vent_window(channels, 14000), "-")
+        self.assertEqual(flame_leviathan.vent_window(channels, 16000), "pre")
+        self.assertEqual(flame_leviathan.vent_window(channels, 20500), "chan")
+        self.assertEqual(flame_leviathan.vent_window(channels, 22000), "-")
+
+    def test_side_of_him_reads_his_heading(self):
+        boss = (0.0, 0.0, 0.0)
+        self.assertEqual(flame_leviathan.side_of_him(boss, (30.0, 5.0)), "front")
+        self.assertEqual(flame_leviathan.side_of_him(boss, (0.0, -30.0)), "flank")
+        self.assertEqual(flame_leviathan.side_of_him(boss, (-30.0, 5.0)), "rear")
+
+    def test_outside_him_measures_from_the_arena_centre(self):
+        cx, cy = flame_leviathan.arena_centre()
+        him = (cx + 50.0, cy)
+        self.assertTrue(flame_leviathan.outside_him(him, (cx + 80.0, cy)))
+        self.assertFalse(flame_leviathan.outside_him(him, (cx + 10.0, cy + 20.0)))
+
 
 class HodirReader(unittest.TestCase):
     def test_singed_stacks_climb_cap_and_reset(self):

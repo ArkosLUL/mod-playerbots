@@ -149,6 +149,8 @@ despite the name**, and never ignites anything.
 - **Resolve him through the instance script** (`FlameLeviathanBoss`). The entry scan stops at
   `SightDistance` (100 yd), posts sit 98–188 yd from him, and `TickFlameLeviathan` resets the shared
   state on "no boss": `fl.pursued` flapped 26 times in one 2026-09-16 pull, each with a bot 117–147 yd out.
+  It finds him anywhere in Ulduar, so the weapon target takes him only once he is in combat: from
+  `db464a426` every seat on the approach aimed at him, non-attackable 1000 yd off, and shot no trash.
 - **He accelerates all fight.** `Gathering Speed 62375` is `MOD_SPEED_ALWAYS +5%`, **stacks to 20**,
   600s, re-applied every 15s and cleared only on reset. Against `speed_run`: he goes 5.0 → **10.0**
   yd/s, a siege engine or demolisher is a flat 7.0, a chopper 14.0. He out-runs a siege engine after
@@ -172,6 +174,11 @@ also be passed the vehicle base as their target: `CastVehicleSpell` turns the ve
 *other* target first, which would aim Steam Rush straight at him and drop the tar pool on the wrong
 side of the chopper.
 
+`CastVehicleSpell` returns true when `CheckCast` refused, so `CastVehicleSelfSpell` skips a spell in its
+category GCD and stamps the cooldown only once the energy has gone (a free spell, with no receipt, as
+before): a stamped refusal inside a Ram's GCD locked a Pursued siege engine's Steam Rush for 15.2 s on
+2026-09-19, through five Rams (`--hulls` prints `ready` against `rush`).
+
 ## One action owns all movement
 
 `FlameLeviathanDriveAction` is the only thing that steers a vehicle, with internal precedence:
@@ -187,12 +194,18 @@ destination.
 the one in flight, and with one mover that leg is always its own: on 2026-09-17, 57–59% of COMBAT
 re-targets were refused (demolishers 74–76%), so hulls drove up to 5 s toward where he had been and
 the demolishers ended past 70 yd. `DriveToImpl` drops the stored priority one step before re-issuing
-and restores it if nothing issued. A strictly higher leg, a FORCED dodge, still blocks.
+and restores it if nothing issued. A strictly higher leg, a FORCED dodge, still blocks. Equal legs
+replace each other, so anything that must commit to one latches it itself: the kite its node,
+`ClearHazard` its goal (below).
 
 Positioning: siege engines and non-lead choppers hold his **rear arc**; demolishers hold a 50 yd band
 and never close; one chopper (lowest guid, neither Pursued nor frozen) runs *ahead* of him, back
 turned, so its tar pool lands in his path — clamped to stop short of the Battering Ram sphere, and
-giving the slot up entirely when the chase leaves no room. Each class fans out by guid rank.
+giving the slot up entirely when the chase leaves no room. Each class fans out by guid rank. The
+demolisher fan swings from his rear toward the arena centre (`FlameLeviathanCentreTurn`), capped so its
+outer slot stays in his rear half: he runs a median 55 yd from the centre, a demolisher out-drives him
+by only 0.7–1.5 yd/s, and on 2026-09-19 they trailed on the outside of his circle in 65% of their
+out-of-range station frames.
 
 **Every stand distance is measured outward from his combat reach**, so a 50 yd band puts a demolisher
 65 yd from his centre and the arrival deadband takes it past Hurl Pyrite Barrel's 70. `HoldStation`
@@ -224,8 +237,10 @@ conditioned on him being within 50 yd, which made progress depend on already bei
 
 **The kite steers round the Inferno trail itself**, because it outranks the hazard dodge. The trail
 loops 33–56 yd inside the ring, and every Inferno hit in one 2026-09-17 pull (1.19 M) landed on a
-kiting hull driving one straight leg across it. `KiteAroundFire` checks the next 30 yd of the leg and
-fans a 25 yd detour that never closes on him (`fl.drive` `kite:detour`).
+kiting hull driving one straight leg across it. `DetourAroundFire` checks the next 30 yd of the leg and
+fans a 25 yd detour that never closes on him (`fl.drive` `kite:detour`). Station legs take the same
+detour, free to close on him (`station:detour`): on 2026-09-19 the trail walled the vent reserve off
+for 20 s while he drove 90 yd away, and a 10-tick channel went through.
 
 ## Hard mode
 
@@ -246,6 +261,13 @@ standing in one loses **51-54% of its health per 5 s** (`--inferno`), and on 202
 **61%** of every hull point the fleet lost out of ~6% of hull-seconds. Both entries count now, and
 `ClearHazard` fans off the radial to a point clear of *every* patch within 45 yd — straight out from
 the nearest lands in the next as often as it escapes.
+
+**A dodge re-planned off the nearest patch flips sides of the trail.** A siege engine sits inside
+several patches, so the nearest changes as it moves and each re-plan replaces the last leg: on
+2026-09-19 one alternated between goals 70 yd apart every 200-400 ms and burned in place (siege hazard
+legs turning back within 1 s: 11 of 120; 0 on 2026-09-16, before `9ed7440bb`). `ClearHazard` latches
+its goal while it stays clear, and the leg may enter no reach the hull is not already in. Inferno was
+21.5% of that pull's hull damage, all on siege engines, 90% mid-dodge.
 
 **It reaches further than 9 yd.** 62910 is a dynamic-object aura, and `DynObjAura::FillTargetMap`
 tests `IsWithinDistInMap`, which adds both object sizes: 9 + 0.39 + the hull's, so a siege engine
@@ -338,10 +360,13 @@ sits 16-21 yd from the spawn: the gunner opens the wave and Ram is for what reac
   **It is also the only interrupter.** With four corners manned the other engines sat 51-211 yd out for
   the whole lost channel on 2026-09-17, and `FlameLeviathanIsVentInterrupter` needs cone range, so a
   dodge that walks the reserve past 40 yd drops the duty rather than a shot: the trigger stopped firing
-  and the channel ran all 11 ticks. Inside the vent window it therefore dodges on the strict circle
-  (margin 0, not the 8 yd band), steps to a point that keeps him in cone range rather than the nearest
-  clear one, and holds Steam Rush back while a dodge is due - a `MOVEMENT_FORCED` leg cancels the
-  charge, which cost 40 energy 0.2 s after the rush went out.
+  and the channel ran all 11 ticks. Inside the vent window it therefore dodges a Hammer mark on the
+  strict circle (margin 0, not the 8 yd band), steps to a point that keeps him in cone range rather
+  than the nearest clear one, and holds Steam Rush back while a dodge is due - a `MOVEMENT_FORCED` leg
+  cancels the charge, which cost 40 energy 0.2 s after the rush went out. **Hammer marks only**: on
+  2026-09-19 the same rules against the Inferno let three reserves wait until they were inside a patch
+  and then drive across the trail toward him, 9-16 yd deep at 10% of the hull a tick, and all three
+  died. Nor does the rush charge across fire.
 - **Posting starts at engage**, gated on his Tower of Life aura 64482, which `ActivateTowers` applies in
   `JustEngagedWith` 34 s before wave 1. The old gate was the first add seen, i.e. wave 1 itself, with
   engines standing 12–27 s of driving from their posts.
@@ -570,6 +595,29 @@ covers only 4 vent channels and 5 ward waves. Ram and the long-fight measures ha
 | hull damage: Missile Barrage / Vents / Lash / Hammer | 40 / 30 / 15 / 15% | Vents and Lash under 5% |
 | adds timed out at their summon duration | 1 of 15 | 0 |
 
+## Baseline to beat - 2026-09-19, four towers up
+
+`603_1_flame-leviathan_1789827051`, built 10 h after `73dd95884`: the first trace with the corner turn,
+strict circle and station lead, before the same-date fixes above. A wipe at 6:45, him at 44.3%, no
+health step: 12%/min with the fleet whole, ~1%/min after 4:30. Siege engines died at 2:17, 3:10 and
+4:39 in the Inferno, each the vent reserve, at 3:00 to Ram while Pursued, at 5:58 to adds; from 4:40
+nothing could Electroshock and the unchecked channels took the rest. While the reserve lived every
+channel was cut at 1 tick.
+
+| | measured | target |
+|---|---|---|
+| trash shot on the approach | none | all |
+| siege engines alive at 4:40 | 1 of 5 | 4 or more |
+| Inferno hull damage / share while dodging | 21.5% / 90% | under 5% |
+| siege hazard legs turning back within 1 s | 11 of 120 | 0 |
+| Vents channels run full | 4 of 14 | 0 |
+| Pursued siege engine: rush ready / out | +0.0 / +15.3 s | out within 2 s of ready |
+| demolisher station frames past 70 yd / of those outside his line | 41-50% / 46-84% | under 25% / under 40% |
+| demolisher mean stacks | 2.7-5.3 | above 6 |
+| held-add frames with neither gun bearing | 28.7% | hold under 30% |
+| Hammer hits in the circle / Ram frames in the sphere | 0 of 301 / 0 | hold |
+| hull damage: Missile Barrage / Inferno / Vents / Hammer / Lash | 28 / 22 / 21 / 14 / 8% | Inferno and Vents under 5% |
+
 ## Known gaps
 
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
@@ -596,23 +644,40 @@ covers only 4 vent channels and 5 ward waves. Ram and the long-fight measures ha
 - **The pyrite refresh slack held on 2026-09-17**: `late` lost 1–2 stacks a pull against 25 `fail` of
   34, nearly all past 70 yd. More `late` losses mean `ULDUAR_FL_PYRITE_REFRESH_SLACK_MS` (2 s) runs
   short. The seat's +25 is read off the DBC and `conditions`, not a trace.
-- **Demolishers may still fall past 70 yd while he runs faster than their 7 yd/s** (17-40% of station
-  frames on 2026-09-17, and 383 of 385 barrel `fail` frames were out there). The station point now
-  leads him by `ULDUAR_FL_STATION_LEAD_S` of his own travel, capped at 10 yd so the band cannot fall
-  into Battering Ram's 25. If that is not enough, tighten `ULDUAR_FL_DEMOLISHER_BAND` or spend
-  Increased Speed out of range. A lead he turns out of is worse than a stale point, so watch `fail`
-  and the refusal rate together.
-- **The crate grab ceiling is not holding and nobody knows why.** 30 of 46 grabs on 2026-09-17 went out
-  at 80-100 energy against `ULDUAR_FL_CRATE_GRAB_CEILING` (75), wasting part of the +25. Reading the
+- **Demolishers fall past 70 yd by trailing him, not from a bad goal** (383 of 385 barrel `fail`
+  frames were out there on 2026-09-17). On 2026-09-19 the station point sat a median 45 yd from his
+  centre and the hulls a median 51-79 yd from it, past range for 40-59% of the pull (17-40% on
+  2026-09-17). The fan now swings toward the centre on top of the `ULDUAR_FL_STATION_LEAD_S` lead,
+  capped at 10 yd so the band cannot fall into Battering Ram's 25. If trailing on the inside still
+  loses range, spend Increased Speed out of range or tighten `ULDUAR_FL_DEMOLISHER_BAND`. A lead he
+  turns out of is worse than a stale point, so watch `fail` and the refusal rate together.
+- **The crate grab ceiling is not holding and nobody knows why.** 30 of 46 grabs on 2026-09-17 and 47
+  of 91 on 2026-09-19 went out above `ULDUAR_FL_CRATE_GRAB_CEILING` (75), wasting part of the +25. Reading the
   bar 1.5 s earlier gives the same figures, so it is not the energize landing inside the sample, and
   `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. Find the path before moving
   the constant.
-- **The turn, the lapsed claim and the strict circle are unverified in the field.** A post now turns
-  for adds, so two on opposite sides could leave it facing neither — watch `fl.corner` for a facing
-  that never settles. A claim that lapses hands the add to the fleet, which is exactly what
-  `ULDUAR_FL_CORNER_HOLD_RADIUS` exists to prevent, so adds leaving manned posts means it lapses too
-  easily. And a reserve on the strict circle can take a direct hammer hit, which `--hulls` names at
-  once.
+- **The turn works; its edges are unchecked.** Held-add frames with no gun bearing fell from 71.7% to
+  28.7% on 2026-09-19. Two adds on opposite sides could still leave a post facing neither — watch
+  `fl.corner` for a facing that never settles. A claim that lapses hands the add to the fleet, which is
+  exactly what `ULDUAR_FL_CORNER_HOLD_RADIUS` exists to prevent, so adds leaving manned posts (2 of 17)
+  means it lapses too easily. A reserve on the strict Hammer circle can take a direct hit, which
+  `--hulls` names at once (none of 301).
+- **The dodge latch, the leg test and the station detour are unverified in the field.** A latched goal
+  must drop as the trail slides, which is why both tests re-run every tick. A station detour may circle
+  a trail end instead of waiting for it to pass. The reserve now dodges the Inferno on the full band
+  inside the vent window, which can walk it out of Electroshock range and cost a channel, though not
+  the hull. Centre-side demolishers may meet more Inferno, adds and the Pursued hull's Ram sphere
+  mid-arena, where he passes a p10 31 yd from the centre: watch their `hazard:inferno` share, Lash and
+  `--ram`.
+- **A siege engine Pursued on its corner post starts boxed in.** Every kite exit crosses his front: on
+  2026-09-19 the gap went 62 → 2 yd in 9 s with the rush locked. If a working rush does not clear it,
+  the kite needs its own way out of a corner.
+- **Trash on the approach relies on `"attackers"` listing it for a rider**, which the Life-tower
+  paragraph above found empty for ward adds. The weapons shot trash before `db464a426`, which only
+  fits if it does; confirm on the next approach.
+- **`FlameLeviathanEngaged` falls back to the rider's combat** while he is attackable but not yet
+  fighting (after the Colossi die), so bots on leftover trash there run the boss drive and the
+  movement veto. Unverified.
 - **A siege engine Pursued late is caught on speed.** At his ~8 yd/s by 2:50 one kept a 20–36 yd gap
   and took a blast every 2 s; Steam Rush every 15 s buys ~5 s.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.

@@ -137,7 +137,11 @@ LOSS_WINDOW_MS = 10000          # Blue Pyrite's duration: whatever stopped the r
 DRIVE_ACTION = "flame leviathan drive"
 VENT_ACTION = "flame leviathan interrupt vents"
 RUSH_SPEED = 20.0               # yd/s: no hull drives this fast, so a faster step is a Steam Rush
+RUSH_COST = 40                  # ULDUAR_FL_STEAM_RUSH_COST
+RUSH_COOLDOWN_MS = 15000        # Steam Rush 62346's own cooldown
 PURSUED_FLAP_MS = 1500
+REVERSAL_WINDOW_MS = 1000       # a dodge leg turning back on the last one this soon is flipping sides
+REVERSAL_DEG = 120.0
 
 # The four NPC_FREYA_WARD_TARGET spawn points, boss_flame_leviathan.cpp SummonTowerHelpers.
 ARENA_CORNERS = [(159.4, 64.1), (382.9, 74.0), (374.0, -141.0), (157.7, -140.3)]
@@ -168,10 +172,15 @@ def pick(seq, quantile):
     return seq[min(int(len(seq) * quantile), len(seq) - 1)]
 
 
+def arena_centre() -> tuple[float, float]:
+    """FlameLeviathanArenaCentre: the mean of the four corners."""
+    return (sum(x for x, _ in ARENA_CORNERS) / len(ARENA_CORNERS),
+            sum(y for _, y in ARENA_CORNERS) / len(ARENA_CORNERS))
+
+
 def post_point(index: int) -> tuple[float, float]:
     """FlameLeviathanCornerPostPoint: ULDUAR_FL_CORNER_STANDOFF in from the corner, toward the centre."""
-    cx = sum(x for x, _ in ARENA_CORNERS) / len(ARENA_CORNERS)
-    cy = sum(y for _, y in ARENA_CORNERS) / len(ARENA_CORNERS)
+    cx, cy = arena_centre()
     x, y = ARENA_CORNERS[index]
     length = math.hypot(cx - x, cy - y) or 1.0
     return x + (cx - x) / length * CORNER_STANDOFF, y + (cy - y) / length * CORNER_STANDOFF
@@ -374,11 +383,70 @@ def first_within(track: list[tuple[int, float]], reach: float) -> int | None:
 
 def first_rush(points: list[tuple[int, float, float]]) -> int | None:
     """The first `t` of `[(t, x, y)]` a hull leaves faster than any hull drives: a Steam Rush."""
+    rushes = rush_times(points)
+    return rushes[0] if rushes else None
+
+
+def rush_times(points: list[tuple[int, float, float]], gap_ms: int = 1500) -> list[int]:
+    """Every `t` of `[(t, x, y)]` a charge starts, one per charge however many frames it spans."""
+    out: list[int] = []
     for (t0, x0, y0), (t1, x1, y1) in zip(points, points[1:]):
         dt = (t1 - t0) / 1000.0
         if 0 < dt <= 0.4 and math.hypot(x1 - x0, y1 - y0) / dt > RUSH_SPEED:
-            return t0
+            if not out or t0 - out[-1] > gap_ms:
+                out.append(t0)
+    return out
+
+
+def rush_ready(power: list[tuple[int, float]], rushes: list[int], start: int, stop: int,
+               cost: float = RUSH_COST, cooldown_ms: int = RUSH_COOLDOWN_MS) -> int | None:
+    """The first `t` of a power track `[(t, energy)]` inside `[start, stop]` a siege engine could have
+    charged: the energy for it, and no charge in the cooldown before. A rush landing well after this was
+    held back by something the trace does not show, such as a cooldown stamped on a refused cast."""
+    for when, energy in power:
+        if not start <= when <= stop or energy is None or energy < cost:
+            continue
+        if any(0 <= when - rush < cooldown_ms for rush in rushes):
+            continue
+        return when
     return None
+
+
+def reversed_legs(legs: list[tuple[int, float, float]], window_ms: int = REVERSAL_WINDOW_MS,
+                  min_deg: float = REVERSAL_DEG) -> int:
+    """How many of one hull's legs `[(t, dx, dy)]`, in order, point more than `min_deg` away from the
+    leg before and were issued within `window_ms` of it: a dodge flipping sides of what it dodges."""
+    count = 0
+    for (t0, x0, y0), (t1, x1, y1) in zip(legs, legs[1:]):
+        if t1 - t0 > window_ms:
+            continue
+        turn = abs((math.degrees(math.atan2(y1, x1) - math.atan2(y0, x0)) + 180.0) % 360.0 - 180.0)
+        if turn > min_deg:
+            count += 1
+    return count
+
+
+def vent_window(channels, when: int, lead_ms: int = VENT_RUSH_LEAD_MS) -> str:
+    """`chan` inside a Flame Vents channel, `pre` in the `lead_ms` before one, else `-`: the stretch
+    the vent reserve dodges by different rules."""
+    for start, stop, _ticks in channels:
+        if start <= when <= stop:
+            return "chan"
+        if start - lead_ms <= when < start:
+            return "pre"
+    return "-"
+
+
+def side_of_him(boss: tuple[float, float, float], point: tuple[float, float]) -> str:
+    """`front`, `flank` or `rear`: where `point` sits against his heading, split at 60 and 120 degrees."""
+    off = off_cone_deg(boss, point)
+    return "front" if off < 60.0 else ("flank" if off < 120.0 else "rear")
+
+
+def outside_him(boss: tuple[float, float], point: tuple[float, float]) -> bool:
+    """Whether `point` is further from the arena centre than he is: the long way round his circle."""
+    cx, cy = arena_centre()
+    return math.hypot(point[0] - cx, point[1] - cy) > math.hypot(boss[0] - cx, boss[1] - cy)
 
 
 def move_outcomes(moves: list[dict]) -> dict[str, list[int]]:
@@ -614,8 +682,8 @@ def show_pursued(fl: Fight) -> None:
         if rec.get("a") == VENT_ACTION and rec.get("vd") == "OK":
             shocks[rec["g"]].append(rec["t"])
 
-    print("\n  Pursued spans (hull health, first accepted kite move, first Steam Rush, Electroshocks by")
-    print("  its driver, gap from the hull's edge to his at +0/+2/+4 s):")
+    print("\n  Pursued spans (hull health, first accepted kite move, when a Steam Rush was first ready and")
+    print("  when one went out, Electroshocks by its driver, gap from the hull's edge to his at +0/+2/+4 s):")
     close_losses = []
     for hull, start, stop in fl.pursued:
         track = [(f.t, f.hulls[hull], f.boss) for f in fl.frames if start <= f.t <= stop and hull in f.hulls]
@@ -623,7 +691,12 @@ def show_pursued(fl: Fight) -> None:
             continue
         driver = drivers.get(hull)
         accepted = next((m["t"] for m in moves.get(driver, []) if start <= m["t"] <= stop and m.get("ok") == 1), None)
-        rush = first_rush([(t, ride[0], ride[1]) for t, ride, _ in track]) if track[0][1][3] == SIEGE else None
+        rush = ready = None
+        if track[0][1][3] == SIEGE:
+            rush = first_rush([(t, ride[0], ride[1]) for t, ride, _ in track])
+            whole = [(f.t, f.hulls[hull]) for f in fl.frames if hull in f.hulls]
+            ready = rush_ready([(t, ride[5]) for t, ride in whole],
+                               rush_times([(t, ride[0], ride[1]) for t, ride in whole if t < start]), start, stop)
         fired = sum(1 for t in shocks.get(driver, []) if start <= t <= stop)
         gaps = []
         for offset in (0, 2000, 4000):
@@ -637,8 +710,8 @@ def show_pursued(fl: Fight) -> None:
             close_losses.append(hp_in - hp_out)
         take = lambda when: f"+{(when - start) / 1000:.1f}s" if when is not None else "none"  # noqa: E731
         print(f"     {VEHICLE_NAME[entry]:10s} {hull & 0xffffffff:6d} {clock(start):>9s} {(stop - start) / 1000:5.1f}s"
-              f"  hp {hp_in:5.1f}->{hp_out:5.1f}  kite {take(accepted):>7s}  rush {take(rush):>7s}"
-              f"  shocks {fired}  gap {' '.join(gaps)}  {trace.name(driver) if driver else '-'}")
+              f"  hp {hp_in:5.1f}->{hp_out:5.1f}  kite {take(accepted):>7s}  ready {take(ready):>7s}"
+              f"  rush {take(rush):>7s}  shocks {fired}  gap {' '.join(gaps)}  {trace.name(driver) if driver else '-'}")
     if close_losses:
         close_losses.sort()
         print(f"     started within 40 yd of his edge: {len(close_losses)} spans, hull health lost median "
@@ -758,6 +831,32 @@ def show_pyrite(trace: Trace) -> int:
               f" {100 * at0 / span:4.0f}% {worst:7.1f}s {middle} {far}")
 
     if stacks:
+        # A demolisher out-drives him by 1-2 yd/s at best, so one that falls behind on the outside of the
+        # circle he runs stays out of range for tens of seconds. The station fan swings toward the
+        # centre for that reason, and this is what it has to shrink.
+        branch_at = drive_branch_at(fl)
+        print("\n  station frames past 70 yd, by where he had the demolisher and whether it was outside his line:")
+        for bot in sorted(windows, key=trace.name):
+            start, stop = windows[bot]
+            hull = crews.get(bot)
+            station = far = outside = 0
+            sides: collections.Counter = collections.Counter()
+            for f in fl.frames:
+                ride = f.hulls.get(hull) if start <= f.t <= stop else None
+                if not ride or not branch_at(hull, f.t).startswith("station"):
+                    continue
+                station += 1
+                if math.hypot(ride[0] - f.boss[0], ride[1] - f.boss[1]) <= BARREL_RANGE:
+                    continue
+                far += 1
+                sides[side_of_him(f.boss, ride[:2])] += 1
+                outside += outside_him(f.boss, ride[:2])
+            if not station:
+                continue
+            split = "  ".join(f"{side} {100 * sides[side] / far:3.0f}%" for side in ("front", "flank", "rear")) if far else ""
+            tail = f"  outside {100 * outside / far:3.0f}%" if far else ""
+            print(f"     {trace.name(bot):14s} {station:5d} frames, past 70 yd {100 * far / station:3.0f}%  {split}{tail}")
+
         print("\n  barrel decisions (fl.barrel, share of the driver's time) and energy (v13 power column):")
         print(f"  {'driver':14s}" + "".join(f" {state:>8s}" for state in BARREL_STATES)
               + f" {'barrels/min':>12s} {'energy/100 stack-s':>19s} {'credits':>8s}")
@@ -1167,18 +1266,50 @@ def show_inferno(trace: Trace) -> int:
         for key, label in (("inside", "inside the reach"), ("near", "within 8 yd of it"), ("clear", "clear of it")):
             print(f"     {label:18s} {100 * by_zone[key] / total_lost:5.1f}%")
 
-    # The kite outranks the hazard dodge, so a kiting hull has to steer round the trail on its own.
+    # The kite outranks the hazard dodge, so a kiting hull has to steer round the trail on its own. The
+    # vent window is split out because the reserve dodges by different rules inside it.
     life = fl.hull_life()
+    branch_at = drive_branch_at(fl)
     hits = [rec for rec in trace.of("dmg") if rec.get("sp") == INFERNO_SPELL and rec.get("d") in life]
     if hits:
-        branch_at = drive_branch_at(fl)
+        channels = vent_channels(trace)
         by_branch: collections.Counter = collections.Counter()
         for rec in hits:
-            by_branch[branch_at(rec["d"], rec["t"])] += rec.get("a", 0)
+            key = (VEHICLE_NAME[life[rec["d"]]["entry"]], branch_at(rec["d"], rec["t"]), vent_window(channels, rec["t"]))
+            by_branch[key] += rec.get("a", 0)
         burned = sum(by_branch.values())
-        print(f"\n  Inferno hull damage by drive branch at the hit ({burned:,} damage):")
-        for branch, amount in by_branch.most_common():
-            print(f"     {branch:18s} {100 * amount / burned:5.1f}%")
+        print(f"\n  Inferno hull damage by hull, drive branch and vent window at the hit ({burned:,} damage;"
+              f" pre is the {VENT_RUSH_LEAD_MS // 1000} s before a channel):")
+        for (name, branch, window), amount in by_branch.most_common():
+            print(f"     {name:10s} {branch:18s} {window:4s} {100 * amount / burned:5.1f}%")
+
+    # DriveTo replaces its own legs, so a dodge that re-plans off whichever patch is nearest can flip
+    # sides of the trail every tick. A non-hazard leg in between ends the run.
+    hull_of = {bot: hull for hull, bot in fl.drivers().items()}
+    runs: dict[int, list[list[tuple[int, float, float]]]] = collections.defaultdict(lambda: [[]])
+    legs: collections.Counter = collections.Counter()
+    for rec in trace.of("move"):
+        hull = hull_of.get(rec.get("g"))
+        if rec.get("by") != DRIVE_ACTION or rec.get("ok") != 1 or rec.get("pr") != "forced" or hull not in life:
+            continue
+        if not branch_at(hull, rec["t"]).startswith("hazard"):
+            if runs[hull][-1]:
+                runs[hull].append([])
+            continue
+        frame = fl.frame_at(rec["t"], 600)
+        ride = frame.hulls.get(hull) if frame else None
+        if ride:
+            runs[hull][-1].append((rec["t"], rec["x"] - ride[0], rec["y"] - ride[1]))
+            legs[VEHICLE_NAME[life[hull]["entry"]]] += 1
+    if legs:
+        flips: collections.Counter = collections.Counter()
+        for hull, chains in runs.items():
+            flips[VEHICLE_NAME[life[hull]["entry"]]] += sum(reversed_legs(chain) for chain in chains)
+        print(f"\n  hazard dodge legs turning back on the last one (>{REVERSAL_DEG:.0f} deg within"
+              f" {REVERSAL_WINDOW_MS} ms), all hazards:")
+        for name in VEHICLE_NAME.values():
+            if legs[name]:
+                print(f"     {name:12s} {flips[name]:4d} of {legs[name]:4d}")
     return 0
 
 

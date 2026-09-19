@@ -85,13 +85,17 @@ public:
 protected:
     // Names the branch it took, kite:detour when it steered round the Inferno trail.
     bool Kite(Unit* boss, char const*& branch);
-    std::optional<Position> KiteAroundFire(Unit* boss, Position const& node);
+    // A step round the Inferno trail when the straight leg to `goal` crosses it. A kite passes
+    // `mayClose` false, since a detour toward him trades a burn for Battering Ram.
+    std::optional<Position> DetourAroundFire(Unit* boss, Position const& goal, bool mayClose);
     // `keepInReachOf`, when set, ranks the clear points by whether the hull can still shoot him from
-    // there rather than by nearest, and parks facing him. Only the vent reserve passes it.
+    // there rather than by nearest, and parks facing him. Only the vent reserve passes it, and only
+    // against a Hammer mark.
     bool ClearHazard(Unit* hazard, Unit* keepInReachOf = nullptr);
     bool ClearBatteringRam(Unit* boss);
     bool DetourToCrate(Unit* boss);
-    bool HoldStation(Unit* boss);
+    // Sets `branch` to station:detour when it steered round the Inferno trail.
+    bool HoldStation(Unit* boss, char const*& branch);
 
     // The vent reserve's Steam Rush into Electroshock reach. True while it owns the tick, turning or
     // dashing.
@@ -121,6 +125,9 @@ protected:
 
     int32 kiteIdx_ = -1;
     int8 kiteDir_ = 0;  // picked at the start of each kite, then held
+
+    // Held until it stops being clear or the hull parks on it, and dropped once no hazard owns the tick.
+    std::optional<Position> dodgeGoal_;
 };
 
 #endif

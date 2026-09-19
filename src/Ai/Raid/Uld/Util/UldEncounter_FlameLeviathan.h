@@ -173,6 +173,13 @@ constexpr float ULDUAR_FL_DEMOLISHER_BAND = 50.0f;
 // being nearer expensive. Demolishers only: a chopper stands at 20 and would be led into that sphere.
 constexpr float ULDUAR_FL_STATION_LEAD_S = 1.5f;
 constexpr float ULDUAR_FL_STATION_LEAD_MAX = 10.0f;
+
+// A demolisher's fan swings from his rear toward the arena centre, so a hull that falls behind cuts
+// the inside of the circle he runs instead of chasing round the outside. On 2026-09-19 he ran a median
+// 55 yd from the centre, demolishers out-drove him by only 0.7-1.5 yd/s, and 65% of their station
+// frames past barrel range had them on the outside. Inside this he is near enough the middle that
+// the bearing to it is noise.
+constexpr float ULDUAR_FL_CENTRE_TURN_DEADZONE = 15.0f;
 constexpr float ULDUAR_FL_TAR_LEAD_DIST = 30.0f;      // how far ahead of him the lead chopper parks
 
 // Re-facing costs a spline, so only correct a facing that has really drifted. Roughly 6 degrees.
@@ -465,12 +472,13 @@ bool FlameLeviathanFuryArmed(Player* bot, Unit* reticle);
 // measured to its reach, counting only those within `margin` of it. Life tower is adds, not a ground
 // hazard, so it is never considered. Returns nullptr if none are in range.
 //
-// Pass 0 for a hull that owes the raid a firing position. The Storm tower drops eight marks at once
-// across a 200x200 box, so at the default margin a siege engine near him is inside the warning band
-// of one almost continuously: on 2026-09-17 the vent reserve dodged for a whole 10s channel while
-// standing in the real 7 yd circle for about one second of it, and lost the channel.
+// Hazards from towers in `strictMask` only count once `from` is inside their reach. Pass
+// FL_TOWER_STORM for a hull that owes the raid a firing position: eight marks land at once across a
+// 200x200 box, and on 2026-09-17 the vent reserve dodged a whole channel on the warning band while
+// inside the real 7 yd circle for about a second. Never Flames: a patch burns 30 s, and on 2026-09-19
+// three reserves that waited until they were inside one burned getting out.
 Unit* GetFlameLeviathanNearestTowerHazard(PlayerbotAI* botAI, Unit* from, uint32 towerMask,
-                                          float margin = ULDUAR_FL_TOWER_HAZARD_MARGIN);
+                                          float margin = ULDUAR_FL_TOWER_HAZARD_MARGIN, uint32 strictMask = 0);
 
 // Every active-tower ground hazard within radius of `from`, into `out`, an unarmed Fury excepted.
 // The Flame trail is a line of patches rather than one circle, so a step that only knows about the
@@ -488,7 +496,14 @@ float FlameLeviathanStationLead(Unit* boss);
 
 // Where this vehicle sits in its class's fan, as an angle off the class bearing. One station point
 // per class stacked the whole class on one spot, and a single Hodir's Fury then froze all of it.
-float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius);
+// `fanHalf`, when given, gets the angle from the fan's middle to its outermost slot.
+float FlameLeviathanStationBearingOffset(Player* bot, Unit* vehicleBase, float radius, float* fanHalf = nullptr);
+
+// How far to swing a fan built off his rear toward the arena centre, signed, and capped so its
+// outermost slot stays in his rear half. Zero within ULDUAR_FL_CENTRE_TURN_DEADZONE of the centre.
+float FlameLeviathanCentreTurn(Unit* boss, float fanHalf);
+
+Position FlameLeviathanArenaCentre();
 Position FlameLeviathanLeadPoint(Unit* boss, float standDist);
 
 // How far ahead of him the lead chopper can sit without parking inside Battering Ram's sphere.
