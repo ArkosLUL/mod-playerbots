@@ -749,3 +749,11 @@ isolates.
   and a ten-kill phase. Anything that turns a boss's health into a count — adds to kill, casts to
   survive, a burn window — takes it from the trace's `unit` row (`mhp`), never from the DB, and never
   from a figure another doc quotes without saying which it came from.
+- **It rescales mid-fight, and that used to cost a boss its aura health.** Any map-data change — the
+  player count, or the rounded average creature level as summons spawn — re-runs
+  `ModifyCreatureAttributes` on every creature in the map: it sets the max to the aura-free base,
+  scales current health against the old aura-inflated max, then `UpdateAllStats` puts the auras back
+  on the max alone. A creature holding `MOD_INCREASE_HEALTH_PERCENT` lost that whole multiplier in one
+  frame — Flame Leviathan 92.6% -> 24.0% with four +40% towers up, in 4 of 10 traces. The module
+  clone restores the percentage since 2026-09-20; the signature in a trace is a one-frame drop with no
+  damage row whose ratio equals the creature's aura multiplier.

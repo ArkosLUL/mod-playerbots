@@ -255,6 +255,13 @@ periodic ground event:
 | Frost | 65077 | 33108 (2 spawn) | Chases a random target, commits once it stops, strikes ~6 s later |
 | Life | 64482 | 33367 (4 spawn) | Adds that live until killed — contain, not dodge |
 
+Each aura is **+40% max health** (aura 133, base points 39), so four towers put him at 1.4^4 =
+**3.84x** his 70.0 M template pool: `mhp` 268.9 M since `DungeonScale.DisabledHealthID` exempted him
+from `mod-dungeon-scale`, 322.7 M before. A rescale mid-fight used to divide his *current* health by
+that same 3.84 in one frame (92.6% -> 24.0% at 0:30 on 2026-09-19, 4 of the 10 traces on disk), so
+**a pull carrying a step is not a damage baseline** — see
+[../../engine/pitfalls.md](../../engine/pitfalls.md).
+
 **Mimiron's Inferno is a trail, not a circle.** 33369 walks a waypoint path and every 2 s summons
 **33370**, each burning **30 s** — about fifteen 9 yd patches in a line behind a moving head, median
 14 on the ground at once. Scanning only 33369 dodges the head and leaves the trail unseen: a hull
@@ -580,7 +587,8 @@ Thorim's Hammer is no longer a non-event, but it is not a dodge failure either: 
 
 `603_2_flame-leviathan_1789666489`, built on `9ed7440bb`, and the first trace with the re-target, vent
 rush, kite and ram-victim fixes in. A kill, but a short one: his health steps 91.26% -> 23.73% in one
-0.2 s frame at t=37 (the 09-16 pull did the same at t=82), and he loses ~15%/min otherwise, so 1:58
+0.2 s frame at t=37 (the rescale step above; the 09-16 pull did the same at t=82), and he loses
+~15%/min otherwise, so 1:58
 covers only 4 vent channels and 5 ward waves. Ram and the long-fight measures have almost no data in it.
 
 | | measured | target |
