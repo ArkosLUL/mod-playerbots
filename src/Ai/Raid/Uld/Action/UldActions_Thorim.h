@@ -187,16 +187,4 @@ public:
     bool Execute(Event event) override;
 };
 
-// Hard mode: ranged and healers back off past Sif's Frost Nova root, which reaches 3 yd further than
-// the damage does. Same radius as the trigger, or the bot stops inside the root and fires again.
-class ThorimSifFrostNovaAction : public MoveAwayFromCreatureAction
-{
-public:
-    ThorimSifFrostNovaAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "thorim sif frost nova action", NPC_SIF,
-                                     ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS)
-    {
-    }
-};
-
 #endif

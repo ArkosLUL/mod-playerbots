@@ -184,17 +184,26 @@ dark — `ThorimChargedThunderOrb` returns null, so it handed back 0 and the rin
 bearing — making every charge cycle two whole-ring turns: **307 of 352 melee destination changes turned
 more than 60°, median 90, p90 178, with the boss having moved 0.0 yd**, an 11.3 yd run each way. It
 also solved coverage against the **live** anchor bearing while each bot's destination used
-`LatchedRingBearing`, so it was solving for a ring the bots were not standing on. And it did not work:
+each bot's latched bearing, so it was solving for a ring the bots were not standing on. And it did not work:
 **every Lightning Charge hit on a melee bot landed while that bot was running** — 7 of 9 and 4 of 4,
 against 0 of 8 hits on stationary ranged. The dodge was causing the damage.
 
-What replaced it is a closed-form per-slot step-out (`LightningChargeOffset`) to the nearer cone edge at
+What replaced it is a closed-form per-slot step-out to the nearer cone edge at
 `CONE/2 + MARGIN + RING_CONE_CLEARANCE` (37.5 + 15 + 5°), **solved from the latched bearing rather than
 from wherever the last cone left the bot**: over 20,000 simulated random cones, chaining offsets drifts
 the three slots out of their 90° spacing until two share a point, which is what the rigid turn was
 really buying. Result: **1.49 slot-moves per cone against 3.00**, median 4.3 yd and p90 7.3 against
-11.31 yd every time, and nobody ever left inside the cone. The accepted cost is a displaced slot sitting
-4.5 yd off a neighbour instead of 11.3 — inside the jump — 16.6% of the time.
+11.31 yd every time, and nobody ever left inside the cone.
+
+**Solved per bot, that step-out merged the ring anyway.** Each bot latched its own bearing off a live
+anchor and then dodged the cone and the Blizzard alone, blind to the other slots: **73-81%** of
+`thorim.ringspot` notes carried an offset, spread inside one slot ran 3-33°, and one slot's composed
+bearings spanned **166°** and reached its neighbour's median. `SolveRingBearings` answers all three at
+once for the instance now — everyone in a slot reads the same point, and no candidate is taken within
+`ULDUAR_THORIM_RING_SLOT_SEPARATION` (60°, exactly the 8 yd jump at r 8) of another slot or of the tank
+anchor. When the arc will not hold everything the cheapest thing goes first: zones (~3k a tick), then
+separation (a 40-90k hop), never the cone (~20k in one instant). The note now reads
+`slot N bearing B solved S`, and the gap between two slots' `solved` is what Chain Lightning reads.
 
 A rotation always exists: sampling the r=8 ring every 10° across 890 snapshots with a Blizzard up, it is
 never fully covered, the clear fraction bottoms at 53%, and the arc to the nearest clear bearing is a
@@ -325,14 +334,18 @@ a single 15 yd circle; the same clustering feeds Dark Rune Champion Whirlwind (1
 ## Hard mode
 
 Sif is summoned every pull and normally channels, then despawns after the 150s dominion timer. If the
-raid clears the gauntlet fast enough she joins instead and casts Frostbolt Volley (**62604**, raid-wide
-and unavoidable — healed through), Blizzard and Frost Nova (62605, teleport then point-blank). Her
-single-target **Frostbolt is 62601**.
+raid clears the gauntlet fast enough she joins instead and casts Frostbolt Volley (**62580**, raid-wide
+and unavoidable — healed through), Blizzard and Frost Nova (**62597**, teleport then point-blank). Her
+single-target **Frostbolt is 62583**.
 
-**Three of her casts are not worth building against, and here is why.** Frostbolt Volley 62604 is
-instant with `InterruptFlags 0`. Chain Lightning **64390** carries `InterruptFlags 1`, so only Thorim's
-own movement breaks it and **it cannot be kicked**. Frostbolt 62601 *is* kickable (`InterruptFlags 15`)
-but has never been a counted death, so no kick node was built.
+**Her ids do not split by difficulty.** `boss_thorim.cpp:56-59` casts 62580 / 62583 / 62597 flat in both
+sizes. The twin rows 62604 / 62601 / 62605 are what this doc carried before and **none of them is ever
+cast**; everything below was re-measured against the three that are.
+
+**Only Frost Nova can be kicked, and it is not worth a node.** Frostbolt Volley 62580 and Frostbolt
+62583 are both `InterruptFlags 0` — the 62601 twin's `15` is what made Frostbolt look kickable, and it
+never lands. Frost Nova 62597 is `15`, but she casts it straight out of a teleport and it is 2-4% of
+incoming. Chain Lightning **64390** carries `InterruptFlags 1`, so only Thorim's own movement breaks it.
 
 **Blizzard is a trail, not a circle.** Every 36-41s a `NPC_SIF_BLIZZARD` 32879 spawns at
 (2108.7, -280.04) and walks a fixed eight-waypoint loop for 30s. Its aura (62577/62603) drops a 10s, 8 yd
@@ -345,13 +358,23 @@ generic dodge's **trigger** radius, not a damage radius. The damage-side constan
 `ULDUAR_THORIM_RING_BLIZZARD_CLEARANCE = 11.0` — the measured 9.8 yd reach (corrected DBC 8 plus both
 combat reaches through `IsWithinDistInMap`) plus a yard.
 
-**Frost Nova is two radii too, and the root is the wider one.** 62605 damages at **12 yd** and roots at
-**15**, so a 12 yd clearance dodges the hit and eats the root: roots reach p90 **14.3-14.9**, last
-**~6 s**, and **25-47%** land on bots already clear of the damage. Rooted, a camp bot cannot walk home,
-take a shelter or leave a Blizzard zone — the most-rooted pull refused **31** positioning moves and **11**
-Blizzard escapes, and was also the worst Blizzard pull. Hence
-`ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS = 16`. The damage stays teleport luck: she casts 2.5 s after
-teleporting, ~8.6 yd of travel under the Volley slow, so nobody she lands on escapes either radius.
+**Frost Nova is two radii too, and the root is the wider one.** 62597 damages at **12 yd**
+(`EffectRadiusIndex` 32) and roots at **15** (index 18). Measured, hits stop at **11.6 yd** and roots
+reach **14.9**, last **~6 s**, and **10-62%** land on ranged and healers already clear of the damage.
+Rooted, a camp bot cannot walk home, take a shelter or leave a Blizzard zone: the most-rooted 12 Sep
+pull refused **31** positioning moves and **11** Blizzard escapes, and was also its worst Blizzard pull.
+The damage stays teleport luck: she casts 2.5 s after teleporting, ~8.6 yd of travel under the Volley
+slow, so nobody she lands on escapes either radius.
+
+**The 16 yd back-off built for that root is deleted, and it had never once run.**
+`thorim sif frost nova trigger` was asked **25,823x per pull and never returned true**, in all four
+19 Sep pulls, because it resolved Sif through `GetFirstAliveUnitByEntry` →
+`"possible targets no los"`, and `AttackersValue::IsPossibleTarget` drops `UNIT_FLAG_NOT_SELECTABLE`
+— which Sif carries in `creature_template.unit_flags` (33587200) and nothing in the boss script clears.
+**Anything that resolves Sif through a targets value cannot see her; use `FindNearestCreature`, which
+the Blizzard trigger already does.** Repairing it was rejected on its own merits too: ranged sit inside
+16 yd of her **20-34%** of the arena phase, so it would have fired constantly against a spell worth 2-4%
+of incoming whose damage never reaches past 11.6 yd.
 
 **The generic 30 yd flee was producing the damage it dodged.** `MoveAwayFromCreatureAction` scores 8
 compass rays out to 30 yd and takes the **furthest**, so every accepted melee flee asked for the full
@@ -370,6 +393,8 @@ Thorim: `MOD_DAMAGE_PERCENT_DONE` **-40%**, `MOD_INCREASE_HEALTH_PERCENT` **-30%
 is therefore **17.57 M**, not 25.101 M: any figure carried across the two compares different bosses, and
 DPS from a normal-mode kill overstates the raid by **~43%**. The 6:31 and 5:34 "kills" used as
 yardsticks were both normal mode: Sif vanished and dealt zero, against 520k-1.04M in hard-mode pulls.
+**The first real one is `603_1_thorim_1789848059`**, 19 Sep: Sif in the fight, the full 25,101,000
+taken, three deaths, 187 s of arena.
 
 ## The arena adds, and what to kill first
 
@@ -458,24 +483,36 @@ Kologarn, Freya, and VoA's Emalon and Archavon share the mechanism.
 **The wipe is a damage race, and nothing positional answers it.** Tank intake reaches **190-260k per
 20 s by +100 s** (Thorim's melee 110-150k of it) against **180-210k healed**; the Lightning Charge stack
 buff takes his melee from **6.8k to 15.6k a swing by +140 s**, Lightning Charge **13k → 28k**, and Chain
-Lightning peaks at **31.5k**. The tanks fall at **+155-170 s**; across five pulls the raid survived
-**166-178 s** against the **217-254 s** its **99-116k** boss DPS needs, taking **4.19-4.68 M** in phase 2
-where normal mode takes **0.64 M**. **Sif is about half of that and most of it is undodgeable** —
-Frostbolt Volley 62604 is a **200 yd** radius carrying a **-51% slow**, which also doubles every
-reposition. Mana is the wall, and not for want of cooldowns: healers run **29-30% overheal** and hit
-**8-20% mana by +150 s** with Innervate, Mana Tide, Hymn of Hope, Shadowfiend, gems and potions all
-already spent. This is the encounter's actual remaining problem.
+Lightning peaks at **31.5k**. **The survival ceiling is ~190-200 s**: past it the tanks fall with
+healers at 13-17% mean mana and the rest melts in 20-30 s. Boss DPS over the arena's first 150 s
+measured **112.8 / 120.6 / 122.8 / 132.8k** on 19 Sep, so 25.101 M needs **189-222 s** — the kill did
+it in **187 s at 132.8k**, and the two wipes that ran the clock out died at **3.1% and 3.6%**, about
+seven seconds of raid damage short. Phase 2 intake is **3.0-5.0 M** against normal mode's **0.64 M**.
+**Sif is about half of that and most of it is undodgeable** — Frostbolt Volley 62580 is a **200 yd**
+radius carrying a **-51% slow**, which also doubles every reposition. Mana is the wall, and not for want
+of cooldowns: healers run **29-30% overheal** with Innervate, Mana Tide, Hymn of Hope, Shadowfiend, gems
+and potions all already spent. This is the encounter's actual remaining problem.
 
-**Chain Lightning kills from hop 5.** The multipliers are 1, 1.5, 2.25, 3.4, 5.1, 7.6, 11.4, 17.1 on a
-4625-5375 base — hops 6-8 kill outright and hop 5 kills cloth. Melee ring slots are 90° apart (11.3 yd
-at r 8) but cone offsets reach 57.5° and Blizzard slides ±180°, so the ring chains as one; steady risk
-is **0.35-0.56 lethal hops per cast**. The camp is stacked by construction — 14 bots share 6 slots, so
-the tightest occupied pair is **0.00 yd in every pull** — which is pre-existing and accepted.
+**Chain Lightning is a hop-count problem.** 64390 carries `EffectChainAmplitude` **1.5**, so the
+multipliers are 1, 1.5, 2.25, 3.4, 5.1, 7.6, 11.4, 17.1 on a 4625-5375 base: hops 1-4 are noise, hop 5
+kills cloth, hops 6-8 kill outright. One measured cast ran 5,574 → 7,831 → 12,683 → 21,153 →
+17,923 → 43,189 → 69,855 → **89,760**, and two of those took three and four melee bots. Every jump
+seen was ≤ 7.9 yd against the 8.0 yd reach; the seed is `SelectTarget(Random)` off the threat list every
+**15 s**. **The tanks bridge**: at 3.4-7.6 yd off the boss they are inside the jump of more than one
+slot, which is how a chain crossed the ring, and why the separation floor counts the anchor too. The
+camp is stacked by construction — 14 bots share 6 slots, so the tightest occupied pair is **0.00 yd in every
+pull** — which is pre-existing and accepted.
 
-**Pets as chain links are unmeasurable today.** A median of 6 and p90 of 25 live pets and guardians are
-up in phase 2, and they are the most likely reason observed chains reach 7-8 where an idealised
-formation caps at 3 — but the recorder writes `dmg` only for raid members, so no trace can confirm it.
-Extending `Bot/Obs` to log pet damage is the prerequisite.
+**Pets chain, and the recorder cannot see it.** `dmg` is written for raid members only — **0 of
+1,223-1,317 rows per pull** name a pet — so every hop count here is a floor. The core settles what the
+trace cannot: `WorldObjectSpellTargetCheck` skips **totems and nothing else** under `TARGET_CHECK_ENEMY`,
+so pets and guardians take hops and can be the seed. Inside 10 yd of the boss sit **4.5-6.3 guardian and
+3.2-4.4 steerable pet bodies** per snapshot, 100% of them within 8 yd of a melee bot, and PetAI parks a
+pet anywhere in a 90° arc behind him — straight into the gaps the slot separation opens. They are chased
+onto their owner's slot bearing instead (`ThorimPetsOffRingSlot`, on the pet leash node), which costs no
+uptime: at ring radius a pet is still inside the 9.1 yd melee reach on any bearing. **A guardian with no
+`CharmInfo` still takes a move order**, so Army and Feral Spirits steer here even though a player cannot
+command them. Logging pet damage in `Bot/Obs` is still what it would take to count the real hops.
 
 **A bot-only raid never walks the corridor at all.** `ThorimGauntletPositioningTrigger` opens with
 `if (!master) return false;` and derives progress from the master's waypoint.
@@ -493,11 +530,12 @@ squad loses its corridor node for the final stretch and finishes on `follow`.
 `ULDUAR_THORIM_NEAR_ENTRANCE_POSITION` (first accepted corridor move at 0:27.7 / 0:24.8). It is left in
 because it is the difference between missing and making the clock.
 
-**The clock is missed about two pulls in five.** Margins from the Touch of Dominion cast ran
-**+25.6 / +32.8 / +32.2 / -4.0 / -11.1 s**, and the whole **30-44 s** spread is corridor-trash time: Iron
-Honor Guard held **531/729** target-snapshots on the pulls that made it against **1202/1358** on the ones
-that did not, while Colossus and Rune Giant time was identical in all five. Snapshot cadence never moved
-(p50 227-229 ms), so it is bot behaviour, not load.
+**The clock was beaten 4/4 on 19 Sep and 3/5 the week before.** Margins from the Touch of Dominion cast
+ran **+6.8 / +23.4 / +24.2 / +37.9 s**, against **+25.6 / +32.8 / +32.2 / -4.0 / -11.1 s** on 12 Sep. The
+spread is corridor-trash time and it is still Iron Honor Guard: **92.8 s** held on the slow pull against
+**48.6-51.4 s** on the rest, with Colossus and Rune Giant time identical in all four. That pull is the
+one that finished on **+6.8 s**, with a raider already dead before the floor and 2-3x the Champion
+damage after it. Snapshot cadence never moved (p50 227-229 ms), so it is bot behaviour, not load.
 
 **The shelter run is uncapped.** Observed distances to the shelter when the note fired were **52.1 and
 60.6 yd** against a table solved for 25.6, and a bot that does not make it takes the cone while moving.

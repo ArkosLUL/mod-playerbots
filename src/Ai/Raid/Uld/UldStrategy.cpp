@@ -535,10 +535,6 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         "thorim sif blizzard trigger",
         { NextAction("thorim sif blizzard action", ACTION_RAID + 3) }));
 
-    triggers.push_back(new TriggerNode(
-        "thorim sif frost nova trigger",
-        { NextAction("thorim sif frost nova action", ACTION_RAID + 3) }));
-
     // Charge Orb: it only ever fires while Thorim is still on the balcony. 3k a second for 15s across a
     // 32 yd circle is phase 1's largest avoidable damage source, so it has to beat the ring and the add
     // chase both. Lightning Charge has no node of its own - the cone answer is baked into the phase 2

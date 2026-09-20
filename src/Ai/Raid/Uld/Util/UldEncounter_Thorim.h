@@ -12,6 +12,7 @@
 #include "RaidObs.h"
 #include "UldData.h"
 
+#include <array>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -81,13 +82,6 @@ constexpr float ULDUAR_THORIM_AXIS_Z_PATHING_ISSUE_DETECT = 410.0f;
 // was measured landing at 15.4. At 12 the dodge stopped while still standing in it.
 constexpr float ULDUAR_THORIM_SIF_BLIZZARD_RADIUS = 15.0f;
 
-// How far ranged and healers keep off Sif herself. 62605 is two effects at two radii: 12 yd of damage
-// and a 15 yd root, so clearing only 12 dodges the hit and eats a 6s root. Roots were measured out to
-// 14.9, a quarter to a half of them on bots already clear of the damage, and a rooted camp bot cannot
-// walk home, take a shelter or leave a Blizzard zone. She teleports and casts 2.5s later, so this only
-// saves the ones already outside 12 - nothing helps whoever she lands on.
-constexpr float ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS = 16.0f;
-
 // How far the melee ring and the camp keep off a Blizzard zone, and deliberately not the 15 above: that
 // one is the generic flee's trigger radius and is meant to fire early. Damage stops at 9.8 - measured
 // over 161 ticks, the corrected DBC 8 plus both combat reaches - so 11 leaves a yard of slack. At 15 the
@@ -142,10 +136,23 @@ constexpr float ULDUAR_THORIM_BARRIER_RESUME_HEALTH_PCT = 80.0f;
 constexpr float ULDUAR_THORIM_BARRIER_BAIL_DISTANCE = 14.0f;  // clear of the 9.1 yd melee reach
 
 // Thorim's combat reach is 6.25 and a player's is 1.5, so melee connects out to 9.1 yd centre to
-// centre. A radius 8 ring is inside that, and puts its three slots 11.3 yd apart - clear of Chain
-// Lightning, whose jump radius is 5.0 here (spell_jump_distance overrides the 10 yd DBC default).
+// centre, and a radius 8 ring is inside that. Three slots 90 degrees apart stand 11.3 yd from each
+// other, clear of Chain Lightning's 8.0 yd jump - but only while they stay there, which is what the
+// separation below is for.
 constexpr float ULDUAR_THORIM_MELEE_RING_RADIUS = 8.0f;
 constexpr uint8 ULDUAR_THORIM_MELEE_SLOTS = 3;
+
+// Closest two ring bearings may end up once the cone and Blizzard slides have moved them. At radius 8
+// two points d degrees apart are 2*8*sin(d/2) yd, so 60 degrees is exactly the 8.0 yd the spell jumps.
+// Tight on purpose: a lit cone forbids 105 degrees, and three slots plus the tank anchor need 240 of
+// the 255 that leaves. Slides that ignored this merged two slots and turned a 3-hop chain into an
+// 8-hop one, and at 1.5x a hop the eighth landed 89,760 against a first hop of 5,574.
+constexpr float ULDUAR_THORIM_RING_SLOT_SEPARATION = 1.0472f;  // 60 degrees
+
+// How far a pet may sit off its owner's ring bearing before it is sent back, and the tolerance the
+// chase itself is given. About 3 yd of arc at a pet's contact distance - tight enough to keep it out
+// of the gap between two slots, wide enough that it is not re-pathing every tick.
+constexpr float ULDUAR_THORIM_PET_SLOT_TOLERANCE = 0.3927f;  // 22.5 degrees
 
 // Chain Lightning is 8 targets at 1.5x per jump, so the eighth takes about 17x the first, and it jumps
 // 8.0 yd centre to centre: spell_jump_distance overrides 64390 to 5.0 and the reach test adds both
@@ -164,8 +171,10 @@ constexpr uint32 ULDUAR_THORIM_OPENING_HOLD_MAX_MS = 25000;
 // He settles 4.1-6.1 yd off the tank spot and is 12-23 yd off it while being dragged.
 constexpr float ULDUAR_THORIM_OPENING_SETTLED_RADIUS = 8.0f;
 
-// The off-tank sits just off the main tank's bearing: close enough to taunt through the Unbalancing
-// Strike swap, far enough that Chain Lightning does not treat the pair as one clump.
+// The off-tank sits just off the main tank's bearing, close enough to taunt through the Unbalancing
+// Strike swap. It does not separate the pair for Chain Lightning and never could: 20 degrees at the
+// 4-6 yd they hold off the boss is under 2 yd, and the two were measured 1.6-4.7 yd apart, well inside
+// the 8 yd jump. The chain routes through them from one slot to another.
 constexpr float ULDUAR_THORIM_OFFTANK_BEARING_OFFSET = 0.3491f;  // 20 degrees
 
 // Reach then hold. A tight deadband against a ring recomputed from a moving boss has the bot sliding
@@ -355,26 +364,22 @@ struct ThorimEncounterState
     // When he first dropped below the floor line in combat. The whole opening is timed off this.
     RaidObs::ObsValue<uint32> phase2StartMs{"thorim.p2start"};
 
-    // Each melee bot's bearing off Thorim, struck the first time it needs a phase 2 spot. The point
-    // was derived live from the tank's bearing and a rotation re-solved every call, and between them
-    // six melee spent 74 to 92% of phase 2 walking - 950 to 1430 yd each, at 58% of the ranged dps.
-    std::unordered_map<ObjectGuid, float> ringBearings;
-
-    // How far one melee bot sits off its latched bearing to clear the Lightning Charge cone, and the
-    // orb that answer was struck against. Per bot, because only the slot the cone actually covers has
-    // to move. Turning the whole ring together cost all eight of them an 11 yd run per charge and
-    // another one back when the orb died, and every charge that did hit a melee bot caught it running.
-    struct RingOffset
+    // The melee ring, one entry per slot rather than per bot. Every bot used to latch its own bearing
+    // off a live anchor and then dodge the cone and the Blizzard alone, blind to the other slots: 73
+    // to 81% of ring points sat off their slot, one slot's answers spread 166 degrees, and two slots
+    // regularly shared a bearing. Solved as a set now, so the three hold
+    // ULDUAR_THORIM_RING_SLOT_SEPARATION and everyone in a slot walks to the same point.
+    struct RingSlot
     {
-        ObjectGuid orb;
-        float offset = 0.0f;
+        float latched = 0.0f;   // off the anchor, struck once for the phase
+        float composed = 0.0f;  // where the cone and Blizzard slides left it
     };
 
-    std::unordered_map<ObjectGuid, RingOffset> ringOffsets;
-
-    // Same idea for the ring's Blizzard slide, kept apart from the cone offset because the two answer
-    // to different things: the cone only moves when a new orb lights, a zone can land any tick.
-    std::unordered_map<ObjectGuid, float> blizzardOffsets;
+    std::array<RingSlot, ULDUAR_THORIM_MELEE_SLOTS> ringSlots;
+    float ringAnchor = 0.0f;
+    bool ringLatched = false;
+    ObjectGuid ringOrb;
+    uint32 ringSolveMs = 0;
 
     // Whether one camp bot is standing on its shelter instead of its spot, and which orb decided that.
     // Held while that orb is lit and wiped when it goes dark, so the walk home is over before the next
@@ -664,6 +669,18 @@ bool ThorimStrayPets(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
 // Sends one strayed pet home and records it. Recall only - it never commands an attack, so it cannot
 // undo a stay or a follow the way the pet-attack trigger CombatStrategy dropped used to.
 void ThorimRecallPet(Player* bot, Unit* pet);
+
+// Pets and guardians of a ring bot that have drifted off its bearing. Chain Lightning does not care
+// whose body it lands on and PetAI parks a pet anywhere in a 90 degree arc behind the boss, so 8 to 10
+// pet bodies sit inside 10 yd of him every tick, all of them within 8 yd of a melee bot, and one
+// standing between two slots joins them back up. The trace cannot see this - RaidObs logs no damage to
+// a pet at all - so the core is the source: the chain skips totems and nothing else.
+bool ThorimPetsOffRingSlot(PlayerbotAI* botAI, Player* bot, std::vector<Unit*>& out);
+
+// Puts one pet back on its owner's ring bearing without taking it off the boss. A chase angle is
+// measured from the target's facing, so it is worked out again from Thorim's live orientation every
+// time rather than stored.
+void ThorimSendPetToRingSlot(PlayerbotAI* botAI, Player* bot, Unit* pet);
 
 // Where this bot stands in the arena. The tank holds the centre, ranged and healers get a ring slot
 // around him, and melee get the centre only while out of combat - pinning them in the fight would

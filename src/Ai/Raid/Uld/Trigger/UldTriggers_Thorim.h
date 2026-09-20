@@ -125,12 +125,4 @@ public:
     bool IsActive() override;
 };
 
-// Hard mode: ranged/healer standing within Sif's point-blank Frost Nova range.
-class ThorimSifFrostNovaTrigger : public Trigger
-{
-public:
-    ThorimSifFrostNovaTrigger(PlayerbotAI* ai) : Trigger(ai, "thorim sif frost nova trigger") {}
-    bool IsActive() override;
-};
-
 #endif

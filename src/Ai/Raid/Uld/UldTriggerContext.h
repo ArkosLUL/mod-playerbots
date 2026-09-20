@@ -183,7 +183,6 @@ public:
         creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
         creators["thorim tank pickup trigger"] = &RaidUlduarTriggerContext::thorim_tank_pickup_trigger;
         creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
-        creators["thorim sif frost nova trigger"] = &RaidUlduarTriggerContext::thorim_sif_frost_nova_trigger;
         creators["thorim runic smash trigger"] = &RaidUlduarTriggerContext::thorim_runic_smash_trigger;
         creators["thorim runic barrier bail trigger"] = &RaidUlduarTriggerContext::thorim_runic_barrier_bail_trigger;
         creators["thorim reset encounter state trigger"] = &RaidUlduarTriggerContext::thorim_reset_encounter_state_trigger;
@@ -387,7 +386,6 @@ private:
     static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
     static Trigger* thorim_tank_pickup_trigger(PlayerbotAI* ai) { return new ThorimTankPickupTrigger(ai); }
     static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
-    static Trigger* thorim_sif_frost_nova_trigger(PlayerbotAI* ai) { return new ThorimSifFrostNovaTrigger(ai); }
     static Trigger* thorim_runic_smash_trigger(PlayerbotAI* ai) { return new ThorimRunicSmashTrigger(ai); }
     static Trigger* thorim_runic_barrier_bail_trigger(PlayerbotAI* ai) { return new ThorimRunicBarrierBailTrigger(ai); }
     static Trigger* thorim_reset_encounter_state_trigger(PlayerbotAI* ai) { return new ThorimResetEncounterStateTrigger(ai); }

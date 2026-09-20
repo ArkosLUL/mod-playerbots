@@ -183,7 +183,6 @@ public:
         creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
         creators["thorim tank pickup action"] = &RaidUlduarActionContext::thorim_tank_pickup_action;
         creators["thorim sif blizzard action"] = &RaidUlduarActionContext::thorim_sif_blizzard_action;
-        creators["thorim sif frost nova action"] = &RaidUlduarActionContext::thorim_sif_frost_nova_action;
         creators["thorim runic smash action"] = &RaidUlduarActionContext::thorim_runic_smash_action;
         creators["thorim runic barrier bail action"] = &RaidUlduarActionContext::thorim_runic_barrier_bail_action;
         creators["thorim reset encounter state action"] = &RaidUlduarActionContext::thorim_reset_encounter_state_action;
@@ -374,7 +373,6 @@ private:
     static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
     static Action* thorim_tank_pickup_action(PlayerbotAI* ai) { return new ThorimTankPickupAction(ai); }
     static Action* thorim_sif_blizzard_action(PlayerbotAI* ai) { return new ThorimSifBlizzardAction(ai); }
-    static Action* thorim_sif_frost_nova_action(PlayerbotAI* ai) { return new ThorimSifFrostNovaAction(ai); }
     static Action* thorim_runic_smash_action(PlayerbotAI* ai) { return new ThorimRunicSmashAction(ai); }
     static Action* thorim_runic_barrier_bail_action(PlayerbotAI* ai) { return new ThorimRunicBarrierBailAction(ai); }
     static Action* thorim_reset_encounter_state_action(PlayerbotAI* ai) { return new ThorimResetEncounterStateAction(ai); }

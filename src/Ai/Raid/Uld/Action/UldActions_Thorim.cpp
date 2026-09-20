@@ -98,14 +98,20 @@ bool ThorimPetLeashAction::isUseful()
 
 bool ThorimPetLeashAction::Execute(Event /*event*/)
 {
-    std::vector<Unit*> stray;
-    if (!ThorimStrayPets(botAI, bot, stray))
-        return false;
+    std::vector<Unit*> pets;
 
     // All of them in one pass. A bot can have a pet and a guardian up at once, and leaving the second
     // one out there for another tick is a pack pulled for no reason.
-    for (Unit* pet : stray)
-        ThorimRecallPet(bot, pet);
+    if (ThorimStrayPets(botAI, bot, pets))
+        for (Unit* pet : pets)
+            ThorimRecallPet(bot, pet);
+
+    // Home first, bearing second: a pet still out in the corridor is pulling packs, one standing in the
+    // gap between two ring slots is only joining them up for the next Chain Lightning. The recall above
+    // stamps the same throttle, so a pet that just got sent home is left alone for a tick.
+    if (ThorimPetsOffRingSlot(botAI, bot, pets))
+        for (Unit* pet : pets)
+            ThorimSendPetToRingSlot(botAI, bot, pet);
 
     // False on purpose, same as the Razorscale and Mimiron pet nodes: this walked a pet, not the bot,
     // so the bot still needs whatever node was going to act this tick.

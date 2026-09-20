@@ -114,10 +114,6 @@ bool ThorimArenaPositioningTrigger::IsActive()
     if (blizzard.IsActive())
         return false;
 
-    ThorimSifFrostNovaTrigger frostNova(botAI);
-    if (frostNova.IsActive())
-        return false;
-
     return ThorimArenaAnchorNeedsMove(botAI, bot, anchor);
 }
 
@@ -140,10 +136,6 @@ bool ThorimPhase2PositioningTrigger::IsActive()
     // trace were also the four who ran the furthest, in and out of it.
     ThorimSifBlizzardTrigger blizzard(botAI);
     if (blizzard.IsActive())
-        return false;
-
-    ThorimSifFrostNovaTrigger frostNova(botAI);
-    if (frostNova.IsActive())
         return false;
 
     ThorimPhase2Role const role = GetThorimPhase2Role(botAI, bot);
@@ -222,8 +214,8 @@ bool ThorimRunicBarrierBailTrigger::IsActive()
 
 bool ThorimPetLeashTrigger::IsActive()
 {
-    std::vector<Unit*> stray;
-    return ThorimStrayPets(botAI, bot, stray);
+    std::vector<Unit*> pets;
+    return ThorimStrayPets(botAI, bot, pets) || ThorimPetsOffRingSlot(botAI, bot, pets);
 }
 
 bool ThorimChargedOrbTrigger::IsActive()
@@ -370,24 +362,4 @@ bool ThorimSifBlizzardTrigger::IsActive()
 
     TooCloseToCreatureTrigger tooCloseToBlizzard(botAI);
     return tooCloseToBlizzard.TooCloseToCreature(NPC_SIF_BLIZZARD, ULDUAR_THORIM_SIF_BLIZZARD_RADIUS);
-}
-
-bool ThorimSifFrostNovaTrigger::IsActive()
-{
-    if (!IsThorimHardModeActive(botAI))
-        return false;
-
-    // Melee stay on Sif; only ranged/healers keep clear of her point-blank Frost Nova.
-    if (!PlayerbotAI::IsRanged(bot))
-        return false;
-
-    // Sif is spawned at Thorim's throne in both modes and only drops onto the arena floor once she
-    // interrupts her channel to join the fight. While she is still up there she casts nothing, so
-    // backing away from her would only stall gauntlet DPS during the timed race.
-    Unit* sif = GetFirstAliveUnitByEntry(botAI, NPC_SIF);
-    if (!sif || sif->GetPositionZ() >= ULDUAR_THORIM_AXIS_Z_FLOOR_THRESHOLD)
-        return false;
-
-    TooCloseToCreatureTrigger tooCloseToSif(botAI);
-    return tooCloseToSif.TooCloseToCreature(NPC_SIF, ULDUAR_THORIM_SIF_FROST_NOVA_ROOT_RADIUS);
 }

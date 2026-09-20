@@ -101,8 +101,7 @@ float ThorimArenaLeashMultiplier::GetValue(Action* action)
     static std::set<std::string> const encounterMovers = {"thorim arena leash action",
                                                           "thorim arena positioning action",
                                                           "thorim charged orb action",
-                                                          "thorim sif blizzard action",
-                                                          "thorim sif frost nova action"};
+                                                          "thorim sif blizzard action"};
 
     if (encounterMovers.count(action->getName()))
         return 1.0f;
@@ -252,8 +251,7 @@ float ThorimArenaAnchorGuardMultiplier::GetValue(Action* action)
     static std::set<std::string> const encounterMovers = {"thorim arena positioning action",
                                                           "thorim arena leash action",
                                                           "thorim charged orb action",
-                                                          "thorim sif blizzard action",
-                                                          "thorim sif frost nova action"};
+                                                          "thorim sif blizzard action"};
 
     if (encounterMovers.count(action->getName()))
         return 1.0f;
@@ -277,8 +275,7 @@ float ThorimMovementGuardMultiplier::GetValue(Action* action)
     // exactly why nothing caught the gap.
     static std::set<std::string> const encounterMovers = {"thorim phase 2 positioning action",
                                                           "thorim balcony advance action",
-                                                          "thorim sif blizzard action",
-                                                          "thorim sif frost nova action"};
+                                                          "thorim sif blizzard action"};
 
     if (encounterMovers.count(action->getName()))
         return 1.0f;
