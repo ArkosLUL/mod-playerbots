@@ -56,7 +56,7 @@ bool HodirNearSnowpackedIcicleTrigger::IsActive()
         return false;
 
     // Release, not the park distance the action aims for. Testing the same number at both ends stands
-    // this trigger down the tick the bot arrives, and the ring anchor - which is suppressed only while
+    // this trigger down the tick the bot arrives, and the position anchor - which is suppressed only while
     // this is active - takes the very next tick and walks it back out of the shelter.
     return bot->GetExactDist2d(shelter) > GetHodirShelterRelease(shelter);
 }
@@ -78,7 +78,7 @@ bool HodirIcicleDodgeTrigger::IsActive()
         return false;
 
     // Tanks eat the icicle. Hodir follows, so a tank that steps 12 yd off its spot drags him with
-    // it and the ranged formation is suddenly standing in melee. The Biting Cold shuttle already
+    // it and the ranged are suddenly standing in his melee. The Biting Cold shuttle already
     // gives them the movement they need without leaving the spot.
     if (botAI->IsTank(bot))
         return false;
@@ -127,46 +127,47 @@ bool HodirRaidPositionTrigger::IsActive()
     if (IsHodirBitingColdShedArmed(bot))
         return false;
 
+    // With a spot in hand - a tank's hold spot, a buff stand for everyone else - that is the whole
+    // question: walk there or stay. Both finders re-check their latched stand against the caster band
+    // every tick, so a stand that is still offered is still a spot worth standing on, and the rules
+    // below are for bots that have none.
     Position anchor;
     float tolerance = 0.0f;
-    if (!GetHodirAnchor(botAI, bot, anchor, tolerance))
-        return false;
+    if (GetHodirAnchor(botAI, bot, anchor, tolerance))
+    {
+        // The dodge stands down the moment the bot is clear, but the icicle it stepped out of stays
+        // lethal for another 3.7s. Testing the whole walk back and not just the spot at the end of it
+        // is what stops the anchor and the dodge trading the bot back and forth for that window.
+        if (IsHodirWalkThroughLiveIcicle(bot, anchor, ULDUAR_HODIR_ICE_SHARDS_CLEAR,
+                                         ULDUAR_HODIR_BIG_SHARDS_CLEAR))
+            return false;
 
-    // The dodge stands down the moment the bot is clear, but the icicle it stepped out of stays lethal
-    // for another 3.7s. Testing the whole walk back and not just the spot at the end of it is what
-    // stops the anchor and the dodge trading the bot back and forth for the rest of that window.
-    if (IsHodirWalkThroughLiveIcicle(bot, anchor, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR))
-        return false;
+        return bot->GetExactDist2d(&anchor) > tolerance;
+    }
 
-    // Reactive, not restoring. Walking to the slot whenever the bot is off it makes the anchor a
-    // spring: every dodge displaces further than the tolerance, so every dodge buys a return trip and
-    // the two actions trade the bot for the rest of the icicle's life. Firing only on a broken
-    // constraint issues one destination and then goes quiet, and the movement layer walks it out.
-    if (bot->GetExactDist2d(&anchor) <= tolerance)
-        return false;
-
-    // Tanks keep the spring. Their anchor is the hold spot and Hodir follows whoever holds him, so a
-    // tank that drifts takes the boss with it and lands him on the ranged formation. They also never
-    // run the generic dodge, so nothing is fighting them for the spot.
+    // Tanks always have one, so nothing below is theirs. Hodir follows whoever holds him and every
+    // rule here wants the bot further from him, which would drag the boss off the fire.
     if (botAI->IsTank(bot))
-        return true;
+        return false;
 
-    // Home regardless. Without a hard leash nothing pulls a bot back that dodged its way out of heal
-    // range, because none of the constraints below care how far from the raid it ended up.
-    if (bot->GetExactDist2d(&anchor) > ULDUAR_HODIR_RETURN_LEASH)
-        return true;
+    // Reactive, not restoring: each of these fires on a constraint that is actually broken and the
+    // action walks the shortest step that fixes it. A spot the bot is sent back to whenever it is off
+    // makes the anchor a spring - every dodge displaces further than any tolerance, so every dodge
+    // buys a return trip and the two actions trade the bot for the rest of the icicle's life.
 
-    // Standing in his melee with Frozen Blows up is one swing from dead. Gated on the slot being
-    // clear as well: when he has walked onto the formation the slot is no better than here, and
-    // firing anyway just slides the bot around inside his reach.
+    // Standing in his melee with Frozen Blows up is one swing from dead.
     Unit* hodir = GetHodir(botAI);
-    if (hodir && bot->GetExactDist2d(hodir) < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP &&
-        anchor.GetExactDist2d(hodir) >= ULDUAR_HODIR_RANGED_MIN_BOSS_GAP)
+    if (hodir && bot->GetExactDist2d(hodir) < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP)
         return true;
 
-    // Nothing here tests Starlight. 62807 reaches about 4 yd, not the 8 its DBC row claims, so a bot
-    // is outside every zone almost all of the time and a constraint on it can never be satisfied -
-    // it just walks. GetHodirAnchor hands a zone to the one bot whose slot is already beside it.
+    // Or out of range of him entirely. Nothing walks a bot home any more, so without this one that
+    // dodged its way to the far wall stands there shooting nothing.
+    if (hodir && bot->GetExactDist2d(hodir) > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+        return true;
+
+    // Nothing here tests Starlight or a fire. Both reach a few yards, so a bot is outside every zone
+    // almost all of the time and a constraint on that can never be satisfied - it just walks.
+    // GetHodirAnchor is what offers one, and only when it is worth the walk.
 
     // Clumped. One icicle splashes 4 yd, so neighbours inside the declump radius mean one landing
     // catches both.
@@ -273,7 +274,7 @@ bool HodirCollectStormPowerTrigger::IsActive()
         return false;
 
     // Release rather than the park distance the action aims for. Testing one number at both ends
-    // stands this down the tick the bot arrives and hands the next tick to the ring anchor, which
+    // stands this down the tick the bot arrives and hands the next tick to the position anchor, which
     // walks it straight back out - the same trap the shelter run's park/release pair exists for.
     return gap > ULDUAR_HODIR_STORM_CLOUD_COLLECT_RELEASE;
 }

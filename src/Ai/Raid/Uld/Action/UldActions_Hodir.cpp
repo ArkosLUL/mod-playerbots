@@ -159,7 +159,7 @@ bool HodirIcicleDodgeAction::Execute(Event /*event*/)
 
     // FORCED so the dodge outranks the anchor walking the bot back in. A second icicle arriving
     // mid-dodge still cannot preempt this one - IsWaitingForLastMove only yields to a strictly higher
-    // priority - which is what the 4.5 yd formation spacing is for. Do not escalate further.
+    // priority - which is what the 4.5 yd declump spacing is for. Do not escalate further.
     return MoveTo(bot->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false,
                   false, false, false, MovementPriority::MOVEMENT_FORCED);
 }
@@ -240,21 +240,57 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
 {
     Position anchor;
     float tolerance = 0.0f;
-    if (!GetHodirAnchor(botAI, bot, anchor, tolerance))
+    if (GetHodirAnchor(botAI, bot, anchor, tolerance))
+    {
+        // No arrival latch here. The trigger stands down inside the tolerance, which is what the latch
+        // used to be for, and holding one across ticks would swallow a re-anchor: a bot that has to
+        // move because Hodir walked onto its stand is usually still well inside twice the tolerance,
+        // so a latched action would refuse the move the trigger just asked for.
+        if (bot->GetExactDist2d(&anchor) <= tolerance)
+            return false;
+
+        // The exact point, not MoveInside: that one offsets the destination by the tolerance at the
+        // bot's follow angle, which parks the bot a couple of yards outside the zone it was sent to.
+        return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(),
+                      false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
+    }
+
+    // No stand worth walking to, so the trigger fired on a broken constraint instead: too close to
+    // Hodir, too far to reach him, or sharing an icicle splash with a neighbour. Step to the nearest
+    // spot that fixes all three at once rather than to a formation spot - there isn't one any more,
+    // and inventing one is what used to walk bots back out of the buffs they were standing in.
+    std::vector<HazardCircle> hazards;
+
+    for (auto const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
+    {
+        Unit* ally = botAI->GetUnit(guid);
+        if (ally && ally->IsAlive() && ally != bot && bot->GetExactDist2d(ally) <= ULDUAR_HODIR_DODGE_LEASH)
+            hazards.emplace_back(ally->GetPosition(), ULDUAR_HODIR_DECLUMP_RADIUS);
+    }
+
+    for (HazardCircle const& icicle : CollectHodirIcicleHazards(bot, ULDUAR_HODIR_ROOM_SEARCH_RADIUS,
+                                                               ULDUAR_HODIR_ICE_SHARDS_CLEAR,
+                                                               ULDUAR_HODIR_BIG_SHARDS_CLEAR))
+        hazards.push_back(icicle);
+
+    Unit* hodir = GetHodir(botAI);
+    if (hodir)
+        hazards.emplace_back(hodir->GetPosition(), ULDUAR_HODIR_RANGED_MIN_BOSS_GAP);
+
+    // The far end of the band is a cap, not a circle to stand outside of, so it rides along as an
+    // accept rule. Without it the sweep rings outward and happily answers with a spot further out
+    // than the one that fired the trigger.
+    auto inBand = [&](float x, float y)
+    { return !hodir || hodir->GetExactDist2d(x, y) <= ULDUAR_HODIR_CASTER_MAX_BOSS_GAP; };
+
+    Position const dest = FindNearestPositionClearOfHazards(
+        bot, hazards, ULDUAR_HODIR_CASTER_MAX_BOSS_GAP, 2.0f, static_cast<float>(M_PI) / 8.0f, nullptr, inBand);
+    if (IsEmptyPosition(dest))
         return false;
 
-    // No arrival latch here. The trigger stands down inside the tolerance, which is what the latch
-    // used to be for, and holding one across ticks would swallow the reactive re-anchors: a bot that
-    // has to move because it is clumped or standing in Hodir's melee is usually still well inside
-    // twice the tolerance, so a latched action would refuse the move the trigger just asked for.
-    if (bot->GetExactDist2d(&anchor) <= tolerance)
-        return false;
-
-    // The exact slot, not MoveInside: that one offsets the destination by the tolerance at the bot's
-    // follow angle, which parks everyone a couple of yards off-formation in an unrelated direction
-    // and eats the spacing the layout is built on.
-    return MoveTo(bot->GetMapId(), anchor.GetPositionX(), anchor.GetPositionY(), anchor.GetPositionZ(), false,
-                  false, false, false, MovementPriority::MOVEMENT_COMBAT);
+    ReleaseStalledWalk(botAI, bot);
+    return MoveTo(bot->GetMapId(), dest.GetPositionX(), dest.GetPositionY(), dest.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT);
 }
 
 Unit* HodirSetDpsPriorityAction::ResolveTarget()
@@ -390,7 +426,7 @@ bool HodirSpreadStormCloudAction::Execute(Event /*event*/)
     // Holding still is the whole job. Storm Power is an area pulse at the carrier's own feet reaching
     // 3 yd, and the carry has 6 charges spent about one a second, so a carrier that keeps walking
     // spends them on whoever it happens to pass - measured p50 0-1 raiders inside the pulse, and 4.4%
-    // of raider-samples during a live carry. Lapping the ring was the best available answer while the
+    // of raider-samples during a live carry. Lapping the raid was the best available answer while the
     // carrier was the only thing that could move; now the receivers come instead.
     //
     // The rally is seeded from where this bot was standing when the cloud landed, so MoveInside

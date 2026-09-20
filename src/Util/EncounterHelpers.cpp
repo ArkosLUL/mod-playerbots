@@ -17,6 +17,7 @@
 #include "InstanceScript.h"
 #include "MageActions.h"
 #include "PaladinActions.h"
+#include "PathGenerator.h"
 #include "Playerbots.h"
 #include "CreatureAI.h"
 #include "RogueActions.h"
@@ -823,6 +824,33 @@ Position ValidateFloorPoint(Player* bot, Position const& point)
 
     bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                    bot->GetPositionZ(), x, y, z, false);
+
+    return Position(x, y, z);
+}
+
+Position ValidateStaticFloorPoint(Player* bot, Position const& point)
+{
+    float x = point.GetPositionX();
+    float y = point.GetPositionY();
+
+    float z = bot->GetMapWaterOrGroundLevel(x, y, point.GetPositionZ());
+    if (z <= INVALID_HEIGHT)
+        z = point.GetPositionZ();
+
+    // Same navmesh raycast Map::CheckCollisionAndGetValidCoords runs first, and the same path-type
+    // filter, so an off-mesh point still gets pulled back onto the floor.
+    PathGenerator path(bot);
+    path.SetUseRaycast(true);
+    if (path.CalculatePath(bot->GetPositionX(), bot->GetPositionY(), bot->GetPositionZ(), x, y, z, false) &&
+        !(path.GetPathType() & ~(PATHFIND_NORMAL | PATHFIND_SHORTCUT | PATHFIND_INCOMPLETE | PATHFIND_FARFROMPOLY_END)))
+    {
+        G3D::Vector3 const& end = path.GetPath().back();
+        x = end.x;
+        y = end.y;
+
+        float const ground = bot->GetMapWaterOrGroundLevel(x, y, end.z);
+        z = ground > INVALID_HEIGHT ? ground : end.z;
+    }
 
     return Position(x, y, z);
 }

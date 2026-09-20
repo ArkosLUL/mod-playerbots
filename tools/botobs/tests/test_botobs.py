@@ -840,39 +840,43 @@ class HodirReader(unittest.TestCase):
         zones = hodir.cluster_zones(rows)
         self.assertEqual([(zone["t0"], zone["t1"]) for zone in zones], [(0, 250), (500, 500), (5000, 5000)])
 
-    @staticmethod
-    def rel(along, side):
-        """A point `along` yd out from the centre and `side` yd across, in the box's own frame."""
-        ux, uy = hodir.outward()
-        return hodir.CENTRE[0] + along * ux - side * uy, hodir.CENTRE[1] + along * uy + side * ux
-
     def assert_near(self, got, want):
         self.assertAlmostEqual(got[0], want[0], places=3)
         self.assertAlmostEqual(got[1], want[1], places=3)
 
-    def test_box_point_keeps_a_point_inside(self):
-        self.assert_near(hodir.box_point(*self.rel(3, 4)), self.rel(3, 4))
+    def test_a_fire_qualifies_inside_the_leash_of_the_centre(self):
+        self.assertTrue(hodir.fire_in_leash(hodir.CENTRE[0] + 24.0, hodir.CENTRE[1]))
+        self.assertFalse(hodir.fire_in_leash(hodir.CENTRE[0] + 26.0, hodir.CENTRE[1]))
 
-    def test_box_point_projects_onto_the_backstep_line(self):
-        self.assert_near(hodir.box_point(*self.rel(-5, 1)), self.rel(-2, 1))
+    def test_a_stand_is_the_nearest_point_inside_the_zone(self):
+        zone = (0.0, 0.0)
+        self.assert_near(hodir.stand_point((20.0, 0.0), zone, 8.0), (8.0, 0.0))
+        # Already inside: the bot keeps the spot it is on rather than walking to the edge.
+        self.assert_near(hodir.stand_point((3.0, 0.0), zone, 8.0), (3.0, 0.0))
 
-    def test_box_point_scales_onto_the_leash(self):
-        self.assert_near(hodir.box_point(*self.rel(20, 0)), self.rel(12, 0))
+    def test_a_stand_outside_the_caster_band_is_not_usable(self):
+        boss = (0.0, 0.0)
+        # The fire is on him, so every point of it is inside his reach.
+        self.assertIsNone(hodir.usable_within((14.0, 0.0), boss, [(6.0, 0.0)], 8.0))
+        # A fire 28 yd out: the bot walks 5 yd to its near edge, which is 20 from him.
+        self.assertAlmostEqual(hodir.usable_within((15.0, 0.0), boss, [(28.0, 0.0)], 8.0), 5.0)
 
-    def test_box_point_takes_a_corner_when_nothing_else_is_inside(self):
-        half = (12 ** 2 - 2 ** 2) ** 0.5
-        self.assert_near(hodir.box_point(*self.rel(-10, 20)), self.rel(-2, half))
+    def test_a_stand_further_than_the_walk_is_not_usable(self):
+        boss = (0.0, 0.0)
+        self.assertIsNone(hodir.usable_within((0.0, 30.0), boss, [(50.0, 0.0)], 8.0, walk=15.0))
 
-    def test_box_point_prefers_the_arc_when_it_is_nearer_than_the_corner(self):
-        radius = (3 ** 2 + 20 ** 2) ** 0.5
-        self.assert_near(hodir.box_point(*self.rel(-3, 20)), self.rel(-3 * 12 / radius, 20 * 12 / radius))
+    def test_singed_reaches_the_cap_and_the_hole_is_only_counted_with_a_fire_up(self):
+        curve = hodir.singed_curve([1000, 2000, 3000], cap=3, duration=4000)
+        self.assertEqual(hodir.ramp_ms(curve, 500, cap=3), 2500)
+        self.assertIsNone(hodir.ramp_ms(curve, 500, cap=4))
+        self.assertEqual(hodir.stacks_ms(curve, 0, 8000, 3), 4500)
+        # The stack expires at 7000; a fire burning after that is the hole worth reporting.
+        self.assertEqual(hodir.dark_ms(curve, [(7000, 8000)], 0, 8000), 500)
+        self.assertEqual(hodir.dark_ms(curve, [(0, 500)], 0, 8000), 1000)
 
-    def test_a_fire_qualifies_within_reach_of_the_box(self):
-        self.assertTrue(hodir.fire_in_reach(*self.rel(-5, 0)))
-        self.assertFalse(hodir.fire_in_reach(*self.rel(-10, 0)))
-
-    def test_hold_point_is_the_ring_offset_from_the_anchor(self):
-        self.assert_near(hodir.hold_point_from_ring(*hodir.RAID_ANCHOR), hodir.CENTRE)
+    def test_inside_the_fire_takes_the_edge(self):
+        self.assertTrue(hodir.inside_circle((11.0, 0.0), (0.0, 0.0), hodir.FIRE_RADIUS))
+        self.assertFalse(hodir.inside_circle((11.5, 0.0), (0.0, 0.0), hodir.FIRE_RADIUS))
 
     def test_off_point_counts_each_sample_until_the_next(self):
         samples = [(0, 0.0, 0.0), (1000, 10.0, 0.0), (2000, 0.0, 0.0), (3000, 0.0, 0.0)]

@@ -84,7 +84,7 @@ float HodirGuardMultiplier::GetValue(Action* action)
     // issued, so from the second tick of a run its Execute returns false and the engine descends past
     // ACTION_RAID + 6 to whatever is below - which then takes the movement slot at equal priority and
     // clears the MotionMaster. Measured: 68 of 125 bot-freeze pairs had their last accepted move
-    // before the freeze come from something else, 36 of them the ring anchor and 21 reach melee, and
+    // before the freeze come from something else, 36 of them the position anchor and 21 reach melee, and
     // bots that had already reached the shelter were walked 18-22 yd back out of it.
     //
     // Returning true from the shelter action instead would silence its casting for six seconds, seven
@@ -150,7 +150,7 @@ float HodirGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     // AttackAction derives from MovementAction, so a blanket zero would also kill targeting;
-    // ReachTargetAction is what walks a healer into range of someone the ring cannot reach.
+    // ReachTargetAction is what walks a healer into range of someone standing out of it.
     if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
         return 1.0f;
 

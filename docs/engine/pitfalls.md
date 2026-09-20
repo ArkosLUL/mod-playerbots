@@ -211,6 +211,17 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   above both endpoints, matching `IsWithinLOSInMap`. **GameObject collision needs a live server**, and
   a map with no vmap tree reads every ray as clear - `coverage` warns.
 
+- **A floor check clips a derived point back to a gameobject's edge.**
+  `EncounterHelpers::ValidateFloorPoint` runs `Map::CheckCollisionAndGetValidCoords` **from the bot**,
+  and that raycasts the **dynamic** tree as well as the navmesh (`Map.cpp:3477`), so any point behind
+  a solid gameobject comes back pulled to that object's near edge — silently, with no verdict to read.
+  Hodir's Toasty Fire is the case: `62819` summons GO **194300**, display 7748
+  `Bonfirenorthrend_01.m2`, bounds ±2.4 yd at scale 0.5, and it is in `vmaps/GameObjectModels.dtree`,
+  so four tank anchors meant to sit 4.5 yd past a fire landed **1.2-1.7 yd** from its centre instead.
+  Nothing on the server collides a walking bot with a gameobject, so the pass buys nothing for a spot
+  meant to sit on or past a prop: use `ValidateStaticFloorPoint`, the same navmesh raycast and
+  path-type filter without the dynamic-tree pass.
+
 - **`NAV_MAGMA` is in the player path filter** (`PathGenerator::CreateFilter`), so a destination the
   navmesh flags as magma is **reachable, not rejected**. Do not discard a hand-measured point for
   sitting on lava — Obsidian Sanctum's pull-drag corner is exactly that.

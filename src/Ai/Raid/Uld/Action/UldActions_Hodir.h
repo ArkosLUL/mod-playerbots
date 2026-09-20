@@ -64,8 +64,8 @@ private:
     float _legDist = 0.0f;
 };
 
-// Hold the bot's anchor: a spot just past the hold point for the two tanks, a formation slot for
-// ranged and healers.
+// Hold the bot's anchor: a spot just past the hold point for the two tanks, a Starlight or fire
+// stand for ranged and healers, and the nearest spot that fixes a broken constraint when there is none.
 class HodirRaidPositionAction : public MovementAction
 {
 public:

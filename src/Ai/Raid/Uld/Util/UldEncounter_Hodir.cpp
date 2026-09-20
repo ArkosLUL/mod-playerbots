@@ -43,21 +43,10 @@ using namespace EncounterHelpers;
 // point and 6/12 yd rings round it at 432.687.
 const Position ULDUAR_HODIR_CENTRE = Position(1998.0f, -235.5f, 432.687f);
 
-// Centre of the ranged ring while he is on ULDUAR_HODIR_CENTRE, 24.45 yd south-west of it, so the ring's
-// 9 yd sits inside the 15-35 yd caster band.
-const Position ULDUAR_HODIR_RAID_ANCHOR = Position(1986.56f, -257.11f, 432.687f);
-
-// The ring's slot 1 bearing. Fixed so the layout never rotates and nobody's slot changes when the
-// anchor moves.
-constexpr float ULDUAR_HODIR_RING_BEARING = -2.1512f;
-
-// From the ranged ring out through the centre. Tanks shuttle across it and the off-tank stands off it,
-// so neither walks Hodir at the ring.
-static float HodirOutwardBearing()
-{
-    return std::atan2(ULDUAR_HODIR_CENTRE.GetPositionY() - ULDUAR_HODIR_RAID_ANCHOR.GetPositionY(),
-                      ULDUAR_HODIR_CENTRE.GetPositionX() - ULDUAR_HODIR_RAID_ANCHOR.GetPositionX());
-}
+// Which way the tank stands off the hold point when Hodir is already on top of it and the bearing to
+// him means nothing. North-east into the open floor, so the degenerate case never puts the tank spot
+// in the chamfered south-west corner.
+constexpr float ULDUAR_HODIR_HOLD_FALLBACK_BEARING = 1.0845f;
 
 Unit* GetHodir(PlayerbotAI* botAI) { return GetFirstAliveUnitByEntry(botAI, NPC_HODIR); }
 
@@ -125,6 +114,14 @@ struct HodirStarlightLatch
     Position stand;
 };
 
+// The fire a bot stands in, latched the same way and for the same reason: what makes a stand usable is
+// measured against a boss who moves, so a stateless sweep swaps fires whenever he drifts.
+struct HodirFireLatch
+{
+    ObjectGuid fire;
+    Position stand;
+};
+
 // One entry per carry, keyed on the carrier rather than on the bot reading it: the carrier and every
 // receiver have to gather on the same point, so the first to derive it publishes and the rest read.
 // applied is the aura's apply time, which is what tells two carries apart - stacks only ever fall, so
@@ -135,8 +132,8 @@ struct HodirStormRally
     Position rally;
 };
 
-// Where Hodir is held, one per instance: both tanks and the ranged ring read it, so all three agree.
-// fire is empty while the point is ULDUAR_HODIR_CENTRE. bearing points from where he stood when the
+// Where Hodir is held, one per instance so both tanks agree. fire is empty while the point is
+// ULDUAR_HODIR_CENTRE. bearing points from where he stood when the
 // point was adopted to the point, so the tank stands on the far side and he trails onto it. offSince
 // is when he was last seen parked off the point, 0 while he is on it.
 struct HodirHoldLatch
@@ -152,7 +149,13 @@ struct HodirBotLatches
 {
     std::unordered_map<ObjectGuid, ObjectGuid> shelter;
     std::unordered_map<ObjectGuid, HodirStarlightLatch> starlight;
+    std::unordered_map<ObjectGuid, HodirFireLatch> fireStand;
     std::unordered_map<ObjectGuid, HodirStormRally> stormRally;
+
+    // Where each ice-breaking candidate stood when the first block of a wave went up. Cleared once no
+    // block is left, so the next wave reads fresh positions.
+    std::unordered_map<ObjectGuid, Position> blockRank;
+
     HodirHoldLatch hold;
 };
 
@@ -252,66 +255,10 @@ bool IsHodirInLandedShelter(PlayerbotAI* botAI, Player* bot)
            bot->GetExactDist2d(shelter) <= GetHodirShelterPark(shelter);
 }
 
-// Where he is held for this fire: the point of the hold box nearest it, or false when that point is
-// further than ULDUAR_HODIR_HOLD_FIRE_REACH from it. The box is the leash disc cut by the backstep line,
-// so the nearest point is the fire itself or the nearest in-box one of: its projection onto the line,
-// its projection onto the circle, the two corners. Fires never move and neither does the box, so the
-// answer for a fire never changes.
-static bool HodirFireHoldPoint(Creature* fire, Position& out)
-{
-    float const outward = HodirOutwardBearing();
-    float const ux = std::cos(outward);
-    float const uy = std::sin(outward);
-    float const leash = ULDUAR_HODIR_HOLD_FIRE_LEASH;
-    float const back = ULDUAR_HODIR_HOLD_FIRE_BACKSTEP;
-
-    // Relative to the centre from here on.
-    float const fx = fire->GetPositionX() - ULDUAR_HODIR_CENTRE.GetPositionX();
-    float const fy = fire->GetPositionY() - ULDUAR_HODIR_CENTRE.GetPositionY();
-
-    // 1 cm of slack so a candidate built on an edge is not thrown out by float rounding.
-    auto inBox = [&](float x, float y)
-    { return std::hypot(x, y) <= leash + 0.01f && x * ux + y * uy >= -back - 0.01f; };
-
-    float bestX = fx;
-    float bestY = fy;
-    float bestGap = inBox(fx, fy) ? 0.0f : -1.0f;
-    auto consider = [&](float x, float y)
-    {
-        if (bestGap == 0.0f || !inBox(x, y))
-            return;
-
-        float const gap = std::hypot(fx - x, fy - y);
-        if (bestGap < 0.0f || gap < bestGap)
-        {
-            bestX = x;
-            bestY = y;
-            bestGap = gap;
-        }
-    };
-
-    float const along = fx * ux + fy * uy;
-    consider(fx - (along + back) * ux, fy - (along + back) * uy);
-
-    if (float const radius = std::hypot(fx, fy); radius > 0.0f)
-        consider(fx * leash / radius, fy * leash / radius);
-
-    float const half = std::sqrt(leash * leash - back * back);
-    consider(-back * ux - uy * half, -back * uy + ux * half);
-    consider(-back * ux + uy * half, -back * uy - ux * half);
-
-    if (bestGap < 0.0f || bestGap > ULDUAR_HODIR_HOLD_FIRE_REACH)
-        return false;
-
-    out = Position(ULDUAR_HODIR_CENTRE.GetPositionX() + bestX, ULDUAR_HODIR_CENTRE.GetPositionY() + bestY,
-                   ULDUAR_HODIR_CENTRE.GetPositionZ());
-    return true;
-}
-
-// Where Hodir is held: the box point for the qualifying Toasty Fire nearest the centre, else the centre
-// itself. Standing in a fire sheds Biting Cold every tick exactly as moving does, and melee spells and
-// pets in one proc Singed on him, +2% magic damage taken a stack up to 25. That is why it is worth the
-// short drag.
+// Where Hodir is held: the Toasty Fire nearest the centre that is inside ULDUAR_HODIR_HOLD_FIRE_LEASH
+// of it, else the centre itself. On the fire and not near it, because the melee pack wraps round him
+// (p50 1.2 yd behind his centre) rather than lining up behind, so a fire at his feet is the one that
+// covers them - and it is the bots standing in a fire that proc Singed, never the fire itself.
 //
 // Nothing but Flash Freeze puts a fire out (npc_ulduar_toasty_fire::DoAction), so the pick holds until
 // the fire dies; re-picking while one burns walks him between two of them.
@@ -327,13 +274,11 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
     bot->GetCreatureListWithEntryInGrid(found, NPC_TOASTY_FIRE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
 
     Creature* pick = nullptr;
-    Position pickPoint;
     if (!hold.fire.IsEmpty())
         for (Creature* fire : found)
             if (fire && fire->IsAlive() && fire->GetGUID() == hold.fire)
             {
                 pick = fire;
-                pickPoint = hold.point;
                 break;
             }
 
@@ -342,15 +287,16 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
         float bestDist = 0.0f;
         for (Creature* fire : found)
         {
-            Position point;
-            if (!fire || !fire->IsAlive() || !HodirFireHoldPoint(fire, point))
+            if (!fire || !fire->IsAlive())
                 continue;
 
             float const dist = fire->GetExactDist2d(&ULDUAR_HODIR_CENTRE);
+            if (dist > ULDUAR_HODIR_HOLD_FIRE_LEASH)
+                continue;
+
             if (!pick || dist < bestDist)
             {
                 pick = fire;
-                pickPoint = point;
                 bestDist = dist;
             }
         }
@@ -366,16 +312,15 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
     {
         hold.set = engaged;
         hold.fire = fire;
-        hold.point = pick ? pickPoint : ULDUAR_HODIR_CENTRE;
+        hold.point = pick ? pick->GetPosition() : ULDUAR_HODIR_CENTRE;
         hold.offSince = 0;
 
         // He trails the tank, so the tank stands past the point on the side away from him and he stops
-        // on it. Right on top of the point there is no side, and the outward bearing keeps the tank
-        // off the ranged ring.
+        // on it. Right on top of the point there is no side, so it falls back to a fixed bearing.
         hold.bearing = hodir->GetExactDist2d(&hold.point) > ULDUAR_HODIR_HOLD_BEARING_MIN_GAP
                            ? std::atan2(hold.point.GetPositionY() - hodir->GetPositionY(),
                                         hold.point.GetPositionX() - hodir->GetPositionX())
-                           : HodirOutwardBearing();
+                           : ULDUAR_HODIR_HOLD_FALLBACK_BEARING;
     }
     else if (!hodir->isMoving() && hodir->GetExactDist2d(&hold.point) > ULDUAR_HODIR_HOLD_REAIM_GAP)
     {
@@ -394,12 +339,32 @@ static HodirHoldLatch const* DeriveHodirHold(PlayerbotAI* botAI, Player* bot)
     else
         hold.offSince = 0;
 
-    // Which fire, not where: the spot is already in hodir.anchor and hodir.centre.
     if (RaidObs::Active())
+    {
+        // Which fire, and where he is being held. Two probes because they change on different
+        // schedules: the fire swaps once a minute, the point also moves when the bearing is re-aimed.
         RaidObs::NoteDerived(bot, "hodir.tankhold",
                              pick ? RaidObs::DescribeAssignment(fire) : std::string("centre"));
+        RaidObs::NoteDerived(bot, "hodir.hold", RaidObs::DescribeDerived(hold.point));
+    }
 
     return &hold;
+}
+
+// Where a tank stands so Hodir stops on the hold point. The main tank goes past it on the far side
+// from where he came, and he trails onto it. The off-tank stands a quarter turn off that line, so a
+// Frozen Blows taunt walks him about 6 yd sideways and leaves him on the fire either way.
+//
+// Static floor check: the campfire gameobject a fire summons is in the dynamic tree, so the ordinary
+// one clips a spot behind a fire back to the fire's near edge - which is exactly the spot this asks
+// for, and how the tank ended up between Hodir and the fire he was meant to stand on.
+static Position HodirTankSpot(Player* bot, HodirHoldLatch const& hold, bool offTank)
+{
+    float const angle = offTank ? hold.bearing - static_cast<float>(M_PI) / 2.0f : hold.bearing;
+    return ValidateStaticFloorPoint(
+        bot, Position(hold.point.GetPositionX() + std::cos(angle) * ULDUAR_HODIR_HOLD_TANK_OFFSET,
+                      hold.point.GetPositionY() + std::sin(angle) * ULDUAR_HODIR_HOLD_TANK_OFFSET,
+                      hold.point.GetPositionZ()));
 }
 
 Player* GetHodirStormCloudCarrier(PlayerbotAI* botAI, Player* bot)
@@ -453,132 +418,10 @@ bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, P
         // already in the middle of whichever half of the raid the carrier belongs to: a melee carrier
         // holds the melee on the boss, a ranged one holds the formation. Picking one point for the
         // whole raid instead would walk half of it across the room for six seconds of buff.
-        entry.rally = ValidateFloorPoint(bot, carrier->GetPosition());
+        entry.rally = ValidateStaticFloorPoint(bot, carrier->GetPosition());
     }
 
     out = entry.rally;
-    return true;
-}
-
-Position GetHodirRingCentre(PlayerbotAI* botAI, Player* bot)
-{
-    Position centre = ULDUAR_HODIR_RAID_ANCHOR;
-
-    // Moves with the hold point and only when it does, once per fire at most. The leash and the
-    // backstep keep that shift under 12 yd and never toward him.
-    if (HodirHoldLatch const* hold = DeriveHodirHold(botAI, bot))
-        centre = Position(ULDUAR_HODIR_RAID_ANCHOR.GetPositionX() + hold->point.GetPositionX() -
-                              ULDUAR_HODIR_CENTRE.GetPositionX(),
-                          ULDUAR_HODIR_RAID_ANCHOR.GetPositionY() + hold->point.GetPositionY() -
-                              ULDUAR_HODIR_CENTRE.GetPositionY(),
-                          ULDUAR_HODIR_RAID_ANCHOR.GetPositionZ());
-
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.centre", RaidObs::DescribeDerived(centre));
-
-    return centre;
-}
-
-// The ring roster, in the order every bot derives identically. The dead keep their slots: indexing by
-// the living instead shifts every bot after the corpse, so one death re-seats the whole formation and
-// the raid walks the layout again mid-fight - exactly when it can least afford to. A vacant slot
-// costs nothing; someone zoned out is a different case, because they are not coming back to it.
-static bool BuildHodirRingMembers(Player* bot, std::vector<Player*>& out)
-{
-    Group* group = bot->GetGroup();
-    if (!group)
-        return false;
-
-    out.clear();
-    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
-    {
-        Player* member = ref->GetSource();
-        if (!member || member->GetMapId() != bot->GetMapId())
-            continue;
-
-        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
-        if (!memberAI || !memberAI->IsRanged(member) || memberAI->IsTank(member))
-            continue;
-
-        out.push_back(member);
-    }
-
-    if (out.empty())
-        return false;
-
-    // Ranged dps ahead of healers, then guid. Both keys are identical on every bot, so nobody has to
-    // be told which slot is theirs.
-    std::sort(out.begin(), out.end(), [](Player* left, Player* right)
-    {
-        bool const leftDps = GET_PLAYERBOT_AI(left)->IsRangedDps(left);
-        bool const rightDps = GET_PLAYERBOT_AI(right)->IsRangedDps(right);
-        if (leftDps != rightDps)
-            return leftDps;
-        return left->GetGUID() < right->GetGUID();
-    });
-
-    return true;
-}
-
-// Raw ring geometry for one slot, no ground or collision pass. Cheap enough to run for the whole
-// roster, which is what deciding who owns a Starlight zone needs.
-static Position HodirRingSlotPoint(Position const& centre, size_t slot, size_t total)
-{
-    size_t const inner = std::min<size_t>(ULDUAR_HODIR_RAID_RING_INNER_SLOTS, total > 0 ? total - 1 : 0);
-
-    float const baseAngle = ULDUAR_HODIR_RING_BEARING;
-    float radius = 0.0f;
-    float angle = baseAngle;
-
-    if (!slot)
-    {
-        // Slot 0 stands on the centre itself, the only one never within 4 yd of two neighbours at once.
-        radius = 0.0f;
-    }
-    else if (slot <= inner)
-    {
-        radius = ULDUAR_HODIR_RAID_RING_INNER;
-        angle = baseAngle + 2.0f * static_cast<float>(M_PI) * static_cast<float>(slot - 1) / static_cast<float>(inner);
-    }
-    else
-    {
-        size_t const outerCount = total - inner - 1;
-        size_t const outerSlot = slot - inner - 1;
-        radius = ULDUAR_HODIR_RAID_RING_OUTER;
-        angle = baseAngle +
-                2.0f * static_cast<float>(M_PI) * static_cast<float>(outerSlot) / static_cast<float>(outerCount);
-    }
-
-    angle = Position::NormalizeOrientation(angle);
-
-    return Position(centre.GetPositionX() + std::cos(angle) * radius,
-                    centre.GetPositionY() + std::sin(angle) * radius, centre.GetPositionZ());
-}
-
-bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, Position& out)
-{
-    std::vector<Player*> ringMembers;
-    if (!BuildHodirRingMembers(bot, ringMembers))
-        return false;
-
-    size_t slot = ringMembers.size();
-    for (size_t i = 0; i < ringMembers.size(); ++i)
-        if (ringMembers[i] == bot)
-            slot = i;
-
-    if (slot >= ringMembers.size())
-        return false;
-
-    size_t const total = ringMembers.size();
-    out = ValidateFloorPoint(bot, HodirRingSlotPoint(centre, slot, total));
-
-    // The slot index and the size of the ring it was cut from, so a formation that re-seated is
-    // readable without re-deriving the sort from the roster.
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "hodir.slot",
-                             std::to_string(slot) + "/" + std::to_string(total) + " " +
-                                 RaidObs::DescribeDerived(out));
-
     return true;
 }
 
@@ -586,22 +429,21 @@ bool GetHodirRingSlot(PlayerbotAI* botAI, Player* bot, Position const& centre, P
 // all three attack timers, the fight's biggest throughput lever, and it is worth stacking for: one
 // Ice Shards hit is 41% of a health pool (p90 54%), so an icicle catching two bots in one zone costs
 // two heals rather than two lives. Any number may share a zone; what each gets is a bearing of its
-// own, taken from the slot it came from, so they spread around it instead of piling on a point.
+// own, taken from where it stands, so they spread around it instead of piling on a point.
 //
-// Usable means the resulting spot still reaches Hodir and is still out of his reach; the nearest zone
-// to the slot wins among those, so the detour stays short.
+// Usable means the resulting spot still reaches Hodir, is still out of his reach, and is within
+// ULDUAR_HODIR_BUFF_WALK of the bot; the nearest zone wins among those.
 //
-// The pick is latched per bot and held until the zone expires, because both of its inputs move. Zones
-// are ranked against the slot and the bearing is taken from the slot, so every centre change - 3
-// distinct ones in a six minute kill - rewrites all 14 slots and with them the answer here. Stateless,
-// that came out as 739 anchor changes across 23 bots, a median 11 yd jump every 3.4s, and Starlight
-// windows lasting 1.6s against zones that live a minute.
-static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position const& slot, Position& out)
+// The pick is latched per bot and held until the zone expires, because the boss moves under it. A
+// stand that stops qualifying is held rather than dropped: erasing it re-sweeps, and a fresh sweep
+// while Hodir is a yard past the band hands the bot a different zone that rejects on the next tick
+// and back - 1201 anchor moves a median 320ms apart, ten of them per distinct point.
+static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& out)
 {
     std::unordered_map<ObjectGuid, HodirStarlightLatch>& latched = HodirLatchesFor(bot).starlight;
 
     // Bounded rather than the room radius: this runs per bot per tick, and a zone further out than
-    // this cannot be within reach of any slot the bot could be standing on anyway.
+    // this is well past what the bot would walk for anyway.
     std::vector<Position> const zones =
         GetDynamicObjectPositions(bot, ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS, SPELL_HODIR_STARLIGHT);
     if (zones.empty())
@@ -625,10 +467,8 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
 
     // The rule that keeps a bot off a stand point, or nullptr when it passes. Shared so a latched
     // point is re-checked against exactly what a fresh pick faces, since the boss moves and a point
-    // that was good when it was picked can stop being one.
-    //
-    // No fire leash. Ranged are Starlight first; holding the stand inside a fire-centred ring threw out
-    // 56-91 stands a pull and kept ranged Starlight at 11-14% with a zone up 90% of the time.
+    // that was good when it was picked can stop being one. The walk gate is not in here: it decides
+    // which zone is worth starting for, and a bot already on its way is past that question.
     auto standRejects = [&](Position const& stand) -> char const*
     {
         // Both ends of the caster band. A zone the bot cannot shoot the boss from is not a throughput
@@ -658,12 +498,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
 
         if (stillUp)
         {
-            // Held through a reject rather than dropped. Erasing here re-swept, and the sweep ranks by
-            // walk from the slot, so Hodir drifting a yard past the caster band handed the bot a
-            // different zone that rejected on the next tick and back: 1201 anchor moves a median 320ms
-            // apart, ten of them per distinct point, 1137 of them with a stand in force. Falling back
-            // to the ring slot for the ticks a stand does not qualify costs one walk; swapping zones
-            // cost the walk every tick.
+            // Held through a reject rather than dropped, for the reason above the function.
             if (char const* reject = standRejects(held->second.stand))
             {
                 // "held" so a latched stand standing down reads differently from a sweep that found
@@ -694,14 +529,22 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
 
     for (Position const& zone : zones)
     {
-        float const walk = slot.GetExactDist2d(&zone);
+        float const walk = bot->GetExactDist2d(&zone);
+        if (walk > ULDUAR_HODIR_BUFF_WALK)
+        {
+            if (!found)
+                how = "far";
+
+            continue;
+        }
+
         if (found && walk >= bestWalk)
             continue;
 
-        float const bearing = std::atan2(slot.GetPositionY() - zone.GetPositionY(),
-                                         slot.GetPositionX() - zone.GetPositionX());
+        float const bearing = std::atan2(bot->GetPositionY() - zone.GetPositionY(),
+                                         bot->GetPositionX() - zone.GetPositionX());
 
-        Position const stand = ValidateFloorPoint(
+        Position const stand = ValidateStaticFloorPoint(
             bot, Position(zone.GetPositionX() + std::cos(bearing) * ULDUAR_HODIR_STARLIGHT_STAND_RADIUS,
                           zone.GetPositionY() + std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_STAND_RADIUS,
                           zone.GetPositionZ()));
@@ -731,6 +574,98 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position co
                              found ? "stand " + RaidObs::DescribeDerived(bestZone) : std::string(how));
 
     return found;
+}
+
+// Where this bot stands if a Toasty Fire is close enough to be worth the walk: the point nearest it
+// that is inside ULDUAR_HODIR_FIRE_STAND_RADIUS of the fire, which is the bot's own spot once it is
+// already in one. Second choice behind Starlight - +50% haste beats what a fire gives - but the two
+// are not exclusive, and a bot that has neither is walking for Biting Cold and procs nothing.
+//
+// The fire Hodir is held on needs no special case: with him standing on it, nothing within 8 yd of it
+// is 15 yd from him, so the caster band throws it out on its own.
+static bool FindHodirFireStand(PlayerbotAI* botAI, Player* bot, Position& out)
+{
+    std::unordered_map<ObjectGuid, HodirFireLatch>& latched = HodirLatchesFor(bot).fireStand;
+
+    std::list<Creature*> found;
+    bot->GetCreatureListWithEntryInGrid(found, NPC_TOASTY_FIRE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS);
+
+    Unit* hodir = GetHodir(botAI);
+
+    // Both ends of the caster band, same rule the Starlight stand answers to: a spot the bot cannot
+    // shoot him from is worth nothing, and one inside his reach is a Frozen Blows swing from dead.
+    auto standRejects = [&](Position const& stand)
+    {
+        if (!hodir)
+            return false;
+
+        float const gap = stand.GetExactDist2d(hodir);
+        return gap < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP;
+    };
+
+    // Nearest point of this fire to the bot, capped at the stand radius so it never sits on the aura's
+    // edge. A bot already inside keeps the spot it is on, which is the whole walk saved.
+    auto standFor = [&](Creature* fire)
+    {
+        float const gap = bot->GetExactDist2d(fire);
+        if (gap <= ULDUAR_HODIR_FIRE_STAND_RADIUS)
+            return bot->GetPosition();
+
+        float const bearing = std::atan2(bot->GetPositionY() - fire->GetPositionY(),
+                                         bot->GetPositionX() - fire->GetPositionX());
+        return ValidateStaticFloorPoint(
+            bot, Position(fire->GetPositionX() + std::cos(bearing) * ULDUAR_HODIR_FIRE_STAND_RADIUS,
+                          fire->GetPositionY() + std::sin(bearing) * ULDUAR_HODIR_FIRE_STAND_RADIUS,
+                          fire->GetPositionZ()));
+    };
+
+    auto held = latched.find(bot->GetGUID());
+    if (held != latched.end())
+    {
+        for (Creature* fire : found)
+            if (fire && fire->IsAlive() && fire->GetGUID() == held->second.fire)
+            {
+                if (standRejects(held->second.stand))
+                    return false;
+
+                out = held->second.stand;
+                return true;
+            }
+
+        // The fire burned out or was put out by a Flash Freeze, so the sweep below is what counts.
+        latched.erase(held);
+    }
+
+    bool picked = false;
+    float bestWalk = 0.0f;
+    ObjectGuid bestFire;
+
+    for (Creature* fire : found)
+    {
+        if (!fire || !fire->IsAlive())
+            continue;
+
+        float const walk = bot->GetExactDist2d(fire);
+        if (walk > ULDUAR_HODIR_BUFF_WALK + ULDUAR_HODIR_FIRE_STAND_RADIUS)
+            continue;
+
+        if (picked && walk >= bestWalk)
+            continue;
+
+        Position const stand = standFor(fire);
+        if (bot->GetExactDist2d(&stand) > ULDUAR_HODIR_BUFF_WALK || standRejects(stand))
+            continue;
+
+        out = stand;
+        bestFire = fire->GetGUID();
+        bestWalk = walk;
+        picked = true;
+    }
+
+    if (picked)
+        latched[bot->GetGUID()] = HodirFireLatch{bestFire, out};
+
+    return picked;
 }
 
 bool GetHodirStarlightZoneAt(PlayerbotAI* /*botAI*/, Player* bot, Position& out)
@@ -848,29 +783,30 @@ bool GetHodirDodgePreference(PlayerbotAI* botAI, Player* bot, Position& out)
     return true;
 }
 
-static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
-
 static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out, char const*& how)
 {
     if (!bot)
         return false;
 
-    if (botAI->IsMainTank(bot) || botAI->IsAssistTankOfIndex(bot, 0, true))
+    bool const mainTank = botAI->IsMainTank(bot);
+    if (mainTank || botAI->IsAssistTankOfIndex(bot, 0, true))
     {
-        // Two points either side of the hold spot rather than wandering, because Hodir follows. Across
-        // the ranged ring's line, so neither end walks him at it, and 6 yd apart covers two aura ticks.
-        Position spot;
-        float tolerance = 0.0f;
-        if (!DeriveHodirAnchor(botAI, bot, spot, tolerance))
+        // Two points either side of the hold spot rather than wandering, because Hodir follows. Square
+        // to the line he is held on, so neither end drags him off the fire, and 6 yd apart covers two
+        // aura ticks.
+        HodirHoldLatch const* hold = DeriveHodirHold(botAI, bot);
+        if (!hold)
             return false;
 
-        float const axis = HodirOutwardBearing() + static_cast<float>(M_PI) / 2.0f;
+        Position const spot = HodirTankSpot(bot, *hold, !mainTank);
+
+        float const axis = hold->bearing + static_cast<float>(M_PI) / 2.0f;
         float const dx = std::cos(axis) * ULDUAR_HODIR_SHUTTLE_HALF_LEG;
         float const dy = std::sin(axis) * ULDUAR_HODIR_SHUTTLE_HALF_LEG;
 
-        Position const legA = ValidateFloorPoint(
+        Position const legA = ValidateStaticFloorPoint(
             bot, Position(spot.GetPositionX() + dx, spot.GetPositionY() + dy, spot.GetPositionZ()));
-        Position const legB = ValidateFloorPoint(
+        Position const legB = ValidateStaticFloorPoint(
             bot, Position(spot.GetPositionX() - dx, spot.GetPositionY() - dy, spot.GetPositionZ()));
 
         // Whichever end is further away, so the leg is always the full 6 yd and IsDuplicateMove
@@ -891,9 +827,9 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         float const dx = std::cos(bearing) * ULDUAR_HODIR_SHELTER_SHED_RADIUS;
         float const dy = std::sin(bearing) * ULDUAR_HODIR_SHELTER_SHED_RADIUS;
 
-        Position const legA = ValidateFloorPoint(
+        Position const legA = ValidateStaticFloorPoint(
             bot, Position(shelter->GetPositionX() + dx, shelter->GetPositionY() + dy, shelter->GetPositionZ()));
-        Position const legB = ValidateFloorPoint(
+        Position const legB = ValidateStaticFloorPoint(
             bot, Position(shelter->GetPositionX() - dx, shelter->GetPositionY() - dy, shelter->GetPositionZ()));
 
         out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
@@ -915,9 +851,9 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
         float const dx = std::cos(bearing) * ULDUAR_HODIR_STARLIGHT_SHED_RADIUS;
         float const dy = std::sin(bearing) * ULDUAR_HODIR_STARLIGHT_SHED_RADIUS;
 
-        Position const legA = ValidateFloorPoint(
+        Position const legA = ValidateStaticFloorPoint(
             bot, Position(zone.GetPositionX() + dx, zone.GetPositionY() + dy, zone.GetPositionZ()));
-        Position const legB = ValidateFloorPoint(
+        Position const legB = ValidateStaticFloorPoint(
             bot, Position(zone.GetPositionX() - dx, zone.GetPositionY() - dy, zone.GetPositionZ()));
 
         out = bot->GetExactDist2d(&legA) > bot->GetExactDist2d(&legB) ? legA : legB;
@@ -1021,18 +957,6 @@ bool IsHodirBitingColdShedArmed(Player* bot)
     return cold->GetStackAmount() >= arm;
 }
 
-// Where a tank stands so Hodir stops on the hold point. The main tank goes past it on the far side
-// from where he came, and he trails onto it. The off-tank stands off to one side of it, across the
-// ranged ring's line, so a Frozen Blows taunt walks him about 6 yd sideways rather than at the ring.
-static Position HodirTankSpot(Player* bot, HodirHoldLatch const& hold, bool offTank)
-{
-    float const angle = offTank ? HodirOutwardBearing() - static_cast<float>(M_PI) / 2.0f : hold.bearing;
-    return ValidateFloorPoint(
-        bot, Position(hold.point.GetPositionX() + std::cos(angle) * ULDUAR_HODIR_HOLD_TANK_OFFSET,
-                      hold.point.GetPositionY() + std::sin(angle) * ULDUAR_HODIR_HOLD_TANK_OFFSET,
-                      hold.point.GetPositionZ()));
-}
-
 static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
 {
     if (!GetHodir(botAI))
@@ -1055,28 +979,38 @@ static bool DeriveHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, fl
     if (!botAI->IsRanged(bot))
         return false;
 
-    // Derived once and passed down, since every call sweeps the grid for fires and writes a note.
-    Position const centre = GetHodirRingCentre(botAI, bot);
-    if (!GetHodirRingSlot(botAI, bot, centre, out))
-        return false;
-
-    tolerance = ULDUAR_HODIR_RING_SPOT_TOLERANCE;
-
-    // The step is here rather than in the position trigger so one place decides where the bot stands.
-    // A trigger that fired on "no Starlight" while the action still walked to the slot would move the
-    // bot forever without ever arriving, which is what the old raid-wide constraint did.
+    // Ranged and healers get a buff or nothing. No boss mechanic asks them to stand anywhere in
+    // particular, so a home spot only ever walks them back out of the zone they just reached - which
+    // is what kept them in Starlight or a fire for 23-24% of a pull while one was in reach on half of
+    // their samples.
     //
-    // Deliberately not gated on already holding the aura: that would hand the bot back its ring slot
-    // the moment the buff landed, walk it out of the zone, and start the whole trip again. The anchor
-    // stays on the zone until the zone expires.
+    // Starlight first: +50% to every cast and swing beats what a fire gives, and the two are not
+    // exclusive anyway. Neither is gated on already holding the aura - that would hand the bot a new
+    // destination the moment the buff landed and start the trip again.
+    bool found = false;
+    char const* kind = "none";
     Position stand;
-    if (FindHodirStarlightStand(botAI, bot, out, stand))
+    if (FindHodirStarlightStand(botAI, bot, stand))
     {
         out = stand;
         tolerance = ULDUAR_HODIR_STARLIGHT_STAND_TOLERANCE;
+        kind = "starlight";
+        found = true;
+    }
+    else if (FindHodirFireStand(botAI, bot, stand))
+    {
+        out = stand;
+        tolerance = ULDUAR_HODIR_FIRE_STAND_TOLERANCE;
+        kind = "fire";
+        found = true;
     }
 
-    return true;
+    // Which buff, if any. hodir.anchor carries the point and hodir.starlight the rule that kept a bot
+    // out of a zone; neither says whether the bot ended up on a fire instead.
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "hodir.stand", kind);
+
+    return found;
 }
 
 bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance)
@@ -1330,8 +1264,12 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
         if (candidate && candidate->IsAlive())
             blocks.push_back(candidate);
 
+    std::unordered_map<ObjectGuid, Position>& ranks = HodirLatchesFor(bot).blockRank;
     if (blocks.empty())
+    {
+        ranks.clear();
         return nullptr;
+    }
 
     // Helper kind, then guid; guid, not live distance, on the bots. Distances to the bot change every
     // tick, so ranking on them re-shuffles the assignment constantly and bots drop off a block and back
@@ -1366,29 +1304,19 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
     else
         budget = std::min<size_t>(budget, 1);
 
-    // Rank on the formation slot, not on where the bot happens to be. The slot comes out of the same
-    // guid-sorted roster and a fixed centre, so it reads identically on every bot and holds still
-    // between ticks - the stability the guid rotation was buying - while still handing each block to
-    // the bot that stands nearest it. Bots were spending 61.6% of their time on ice walking to it.
-    //
-    // The anchor rather than the adopted centre: this is a ranking key, not a spot anyone walks to,
-    // and asking for the real centre would cost a second fire sweep every tick for nothing.
-    std::vector<Player*> ringMembers;
-    BuildHodirRingMembers(bot, ringMembers);
-
+    // Rank on where each bot stood when the wave went up, latched until no block is left. Live
+    // distances re-shuffle the assignment every tick and bots flick between a block and the boss; a
+    // guid rotation holds still but hands blocks to bots across the room, and they were spending
+    // 61.6% of their time on ice walking to one. The latch is both: every bot reads the same numbers
+    // for as long as the wave lasts, and they are the positions that were actually nearest.
     std::vector<Position> spots(total);
     for (size_t i = 0; i < total; ++i)
     {
-        size_t slot = ringMembers.size();
-        for (size_t r = 0; r < ringMembers.size(); ++r)
-            if (ringMembers[r] == candidates[i])
-                slot = r;
-
-        // Only the melee fallback lands here, and it has no slot to rank from. Its own position is
-        // still the same number on every bot that reads it, so the raid keeps agreeing.
-        spots[i] = slot < ringMembers.size()
-                       ? HodirRingSlotPoint(ULDUAR_HODIR_RAID_ANCHOR, slot, ringMembers.size())
-                       : candidates[i]->GetPosition();
+        auto const known = ranks.find(candidates[i]->GetGUID());
+        if (known != ranks.end())
+            spots[i] = known->second;
+        else
+            spots[i] = ranks[candidates[i]->GetGUID()] = candidates[i]->GetPosition();
     }
 
     // Seat order, every seat taking the nearest slot still free.

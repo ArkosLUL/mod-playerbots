@@ -20,8 +20,8 @@ What the generic views get wrong here, and what this reads instead:
 - **The helper inside a block is not in the trace.** Helpers are friendly and never sampled, so the
   kind comes from `hodir.dpstarget`, which writes it in front of the block guid from the centre-hold
   build on. Older traces read `?`.
-- **The hold point is read off `hodir.centre`**, the ring centre, which the centre-hold build (87be6d955)
-  keeps at the raid anchor plus the hold point's offset from the centre. On older builds the ring
+- **The hold point is read off `hodir.hold`**; traces from before it carry `hodir.centre`, the ring
+  centre, which is the hold point plus the ring's own offset. On builds older than 87be6d955 the ring
   followed fires by another rule, so "off the hold point" means nothing there.
 """
 from __future__ import annotations
@@ -74,12 +74,18 @@ FIRE_MIN_LIFE_MS = 500
 UNDO_WINDOW_MS = 5000
 FLIP_WINDOW_MS = 5000
 
-# The hold box and its fire rule, as UldEncounter_Hodir.h has them.
+# The hold and the stands, as UldEncounter_Hodir.h has them.
 CENTRE = (1998.0, -235.5)
-RAID_ANCHOR = (1986.56, -257.11)
-HOLD_LEASH = 12.0
-HOLD_BACKSTEP = 2.0
-HOLD_FIRE_REACH = 7.0
+HOLD_LEASH = 25.0
+FIRE_RADIUS = 11.0
+FIRE_STAND_RADIUS = 8.0
+STARLIGHT_STAND_RADIUS = 1.5
+BUFF_WALK = 15.0
+BAND = (15.0, 35.0)
+# Melee this close to him are the pack a fire at his feet is meant to cover.
+MELEE_NEAR_YD = 10.0
+# Centre of the ranged ring on builds before the ring was removed, for reading their traces.
+LEGACY_RING_ANCHOR = (1986.56, -257.11)
 # He normally stops within 1-2 yd of the point, so past this he is parked off it.
 OFF_POINT_YD = 5.0
 # A stalled walk: still this long, this far short of where the move was sent, before any newer move.
@@ -198,43 +204,61 @@ def union_ms(spans: list[tuple[int, int]], low: int, high: int) -> int:
     return total
 
 
-def outward() -> tuple[float, float]:
-    dx, dy = CENTRE[0] - RAID_ANCHOR[0], CENTRE[1] - RAID_ANCHOR[1]
-    length = math.hypot(dx, dy)
-    return dx / length, dy / length
+def fire_in_leash(x: float, y: float) -> bool:
+    """A fire he is worth being dragged onto: inside HOLD_LEASH of the centre."""
+    return math.hypot(x - CENTRE[0], y - CENTRE[1]) <= HOLD_LEASH
 
 
-def box_point(x: float, y: float) -> tuple[float, float]:
-    """The point of the hold box nearest `(x, y)`, as HodirFireHoldPoint derives it: the point itself,
-    or the nearest in-box one of its projection onto the backstep line, its projection onto the leash
-    circle, and the two corners where they meet."""
-    ux, uy = outward()
-    fx, fy = x - CENTRE[0], y - CENTRE[1]
-
-    def inside(px: float, py: float) -> bool:
-        return math.hypot(px, py) <= HOLD_LEASH + 0.01 and px * ux + py * uy >= -HOLD_BACKSTEP - 0.01
-
-    if inside(fx, fy):
-        return x, y
-    along = fx * ux + fy * uy
-    candidates = [(fx - (along + HOLD_BACKSTEP) * ux, fy - (along + HOLD_BACKSTEP) * uy)]
-    radius = math.hypot(fx, fy)
-    if radius:
-        candidates.append((fx * HOLD_LEASH / radius, fy * HOLD_LEASH / radius))
-    half = math.sqrt(HOLD_LEASH ** 2 - HOLD_BACKSTEP ** 2)
-    candidates.append((-HOLD_BACKSTEP * ux - uy * half, -HOLD_BACKSTEP * uy + ux * half))
-    candidates.append((-HOLD_BACKSTEP * ux + uy * half, -HOLD_BACKSTEP * uy - ux * half))
-    px, py = min((c for c in candidates if inside(*c)), key=lambda c: math.hypot(fx - c[0], fy - c[1]))
-    return CENTRE[0] + px, CENTRE[1] + py
+def stand_point(bot: tuple[float, float], zone: tuple[float, float],
+                radius: float) -> tuple[float, float]:
+    """Where a bot stands to hold `zone`: the point of it nearest the bot, capped at `radius` from the
+    centre. A bot already inside keeps the spot it is on, which is what the encounter derives."""
+    dx, dy = bot[0] - zone[0], bot[1] - zone[1]
+    gap = math.hypot(dx, dy)
+    if gap <= radius or not gap:
+        return bot
+    return zone[0] + dx / gap * radius, zone[1] + dy / gap * radius
 
 
-def fire_in_reach(x: float, y: float) -> bool:
-    point = box_point(x, y)
-    return math.hypot(point[0] - x, point[1] - y) <= HOLD_FIRE_REACH
+def in_band(point: tuple[float, float], boss: tuple[float, float], band: tuple[float, float] = BAND) -> bool:
+    gap = math.hypot(point[0] - boss[0], point[1] - boss[1])
+    return band[0] <= gap <= band[1]
 
 
-def hold_point_from_ring(x: float, y: float) -> tuple[float, float]:
-    return x - RAID_ANCHOR[0] + CENTRE[0], y - RAID_ANCHOR[1] + CENTRE[1]
+def usable_within(bot: tuple[float, float], boss: tuple[float, float],
+                  zones: list[tuple[float, float]], radius: float, walk: float = BUFF_WALK) -> float | None:
+    """The walk to the nearest stand among `zones` that is in the caster band and no further than
+    `walk`, or None when there is none - what the encounter would have offered this bot."""
+    best = None
+    for zone in zones:
+        stand = stand_point(bot, zone, radius)
+        gap = math.hypot(stand[0] - bot[0], stand[1] - bot[1])
+        if gap > walk or not in_band(stand, boss):
+            continue
+        best = gap if best is None else min(best, gap)
+    return best
+
+
+def inside_circle(point: tuple[float, float], centre: tuple[float, float], radius: float) -> bool:
+    return math.hypot(point[0] - centre[0], point[1] - centre[1]) <= radius
+
+
+def ramp_ms(curve: list[tuple[int, int, int]], since: int, cap: int = SINGED_CAP) -> int | None:
+    """How long after `since` the stack first reached `cap`, or None if it never did."""
+    return next((proc - since for proc, stacks, _ in curve if proc >= since and stacks >= cap), None)
+
+
+def stacks_ms(curve: list[tuple[int, int, int]], low: int, high: int, floor: int, step: int = 500) -> int:
+    """Time inside `[low, high)` at `floor` stacks or more."""
+    return sum(step for when in range(low, high, step) if stacks_at(curve, when) >= floor)
+
+
+def dark_ms(curve: list[tuple[int, int, int]], fires: list[tuple[int, int]], low: int, high: int,
+            step: int = 500) -> int:
+    """Time with no stacks at all while a fire was burning somewhere - the hole that costs the most,
+    because a fire was there to stand in and nobody did."""
+    return sum(step for when in range(low, high, step)
+               if not stacks_at(curve, when) and any(start <= when <= stop for start, stop in fires))
 
 
 def off_point_ms(samples: list[tuple[int, float, float]], points: list[tuple[int, tuple[float, float]]],
@@ -402,16 +426,65 @@ def tank_holder(trace: Trace) -> int | None:
 
 
 def hold_points(trace: Trace) -> list[tuple[int, tuple[float, float]]]:
-    """`(t, point)` from every `hodir.centre` note. The ring centre is one latch per instance, so every
-    writer's note is current when written and they merge in time order."""
+    """`(t, point)` for where he was being held. The hold is one latch per instance, so every writer's
+    note is current when written and they merge in time order. Traces from before `hodir.hold` carry
+    the ring centre instead, which is the point plus the ring's own offset."""
     out = []
+    for rec in notes(trace, "hodir.hold"):
+        parts = str(rec.get("txt", "")).split(",")
+        try:
+            out.append((rec["t"], (float(parts[0]), float(parts[1]))))
+        except (ValueError, IndexError):
+            continue
+    if out:
+        return sorted(out)
+
     for rec in notes(trace, "hodir.centre"):
         parts = str(rec.get("txt", "")).split(",")
         try:
-            out.append((rec["t"], hold_point_from_ring(float(parts[0]), float(parts[1]))))
+            out.append((rec["t"], (float(parts[0]) - LEGACY_RING_ANCHOR[0] + CENTRE[0],
+                                   float(parts[1]) - LEGACY_RING_ANCHOR[1] + CENTRE[1])))
         except (ValueError, IndexError):
             continue
     return sorted(out)
+
+
+def held_fire_coverage(trace: Trace, boss: int, points: list[tuple[int, tuple[float, float]]],
+                       windows: list[tuple[int, int, str]]) -> dict[int, tuple[int, int]]:
+    """`(inside, near)` per window start: melee bots and pets standing within MELEE_NEAR_YD of him, and
+    how many of those were inside the fire he was being held on. That share is what the hold is for -
+    the fire procs nothing by itself, the bots standing in it do."""
+    roles = {guid: trace.role(guid) for guid in roster_guids(trace)}
+    out = {low: [0, 0] for low, _, _ in windows}
+    for snap in frames(trace):
+        window = next((low for low, high, _ in windows if low <= snap["t"] < high), None)
+        if window is None:
+            continue
+        rows = {row[0]: row for row in snap.get("u", [])}
+        him = rows.get(boss)
+        fires = [(row[1], row[2]) for row in snap.get("hz", []) if row[0] == SPELL_TOASTY_FIRE]
+        if not him or not fires:
+            continue
+
+        point = None
+        for mark, value in points:
+            if mark > snap["t"]:
+                break
+            point = value
+        aim = point if point else (him[1], him[2])
+        held = min(fires, key=lambda fire: math.hypot(fire[0] - aim[0], fire[1] - aim[1]))
+
+        for guid, row in rows.items():
+            owner = trace.owners.get(guid)
+            if not owner and roles.get(guid) != "melee":
+                continue
+            if len(row) < 6 or row[5] <= 0:
+                continue
+            if not inside_circle((row[1], row[2]), (him[1], him[2]), MELEE_NEAR_YD):
+                continue
+            out[window][1] += 1
+            out[window][0] += inside_circle((row[1], row[2]), held, FIRE_RADIUS)
+    return {low: (inside, near) for low, (inside, near) in out.items()}
 
 
 def stack_changes(trace: Trace) -> dict[int, list[tuple[int, int]]]:
@@ -483,8 +556,12 @@ def show_hold(trace: Trace) -> None:
     end = min(fight_end(trace), DEADLINE_MS)
     marks = [(rec["t"], str(rec.get("txt", ""))) for rec in notes(trace, "hodir.tankhold") if rec["g"] == holder]
     totals: dict[str, list[float]] = collections.defaultdict(lambda: [0.0, 0.0, 0.0])
+    windows = latch_windows(marks, 0, end)
+    points = hold_points(trace)
+    coverage = held_fire_coverage(trace, boss, points,
+                                  [w for w in windows if w[2] not in ("corner", "centre", "offfloor")])
     print(f"  as {trace.name(holder)} read it, 0-{clock(end)[:4]}")
-    for low, high, value in latch_windows(marks, 0, end):
+    for low, high, value in windows:
         kind = value if value in ("corner", "centre", "offfloor") else "fire"
         inside = [row for row in rows if low <= row[0] <= high]
         if len(inside) < 2:
@@ -493,8 +570,12 @@ def show_hold(trace: Trace) -> None:
         seconds = (inside[-1][0] - inside[0][0]) / 1000
         dps = (inside[0][3] - inside[-1][3]) / 100 * max_hp / seconds if seconds else 0.0
         held = sum(1 for row in inside if row[4] == holder) / len(inside)
+        pack = ""
+        if low in coverage and coverage[low][1]:
+            covers, near = coverage[low]
+            pack = f"  pack in the fire {covers / near * 100:3.0f}% of {near}"
         print(f"  {kind:7} {clock(low)}-{clock(high)} {(high - low) / 1000:5.1f}s  path {path:5.1f} yd"
-              f"  {trace.name(holder)} holds {held * 100:3.0f}%  boss dps {dps / 1000:4.0f}k")
+              f"  {trace.name(holder)} holds {held * 100:3.0f}%  boss dps {dps / 1000:4.0f}k{pack}")
         totals[kind][0] += high - low
         totals[kind][1] += path
         totals[kind][2] += dps * (high - low)
@@ -503,11 +584,16 @@ def show_hold(trace: Trace) -> None:
             print(f"  total {kind:7} {ms / 1000:5.0f}s  {path:5.0f} yd, {path / (ms / 1000):.2f} yd/s"
                   f"  boss dps {weighted / ms / 1000:.0f}k")
 
-    points = hold_points(trace)
+    near_total = sum(near for _, near in coverage.values())
+    if near_total:
+        covers_total = sum(covers for covers, _ in coverage.values())
+        print(f"  melee and pets within {MELEE_NEAR_YD:.0f} yd of him, inside the held fire:"
+              f" {covers_total}/{near_total} = {covers_total / near_total * 100:.0f}%")
+
     if points:
         samples = [(row[0], row[1], row[2]) for row in rows]
         off: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
-        for low, high, value in latch_windows(marks, 0, end):
+        for low, high, value in windows:
             kind = value if value in ("corner", "centre", "offfloor") else "fire"
             away, sampled = off_point_ms(samples, points, low, high)
             off[kind][0] += away
@@ -517,9 +603,9 @@ def show_hold(trace: Trace) -> None:
 
     burned = [zone for zone in zones_of(trace, SPELL_TOASTY_FIRE) if zone["t1"] - zone["t0"] >= FIRE_MIN_LIFE_MS]
     alive = union_ms([(zone["t0"], zone["t1"]) for zone in burned], 0, end)
-    reach = union_ms([(zone["t0"], zone["t1"]) for zone in burned if fire_in_reach(zone["x"], zone["y"])], 0, end)
-    print(f"  fire 0-{clock(end)[:4]}: alive {alive / 1000:.0f}s, in reach of the hold box {reach / 1000:.0f}s,"
-          f" held {totals['fire'][0] / 1000 if 'fire' in totals else 0:.0f}s")
+    reach = union_ms([(zone["t0"], zone["t1"]) for zone in burned if fire_in_leash(zone["x"], zone["y"])], 0, end)
+    print(f"  fire 0-{clock(end)[:4]}: alive {alive / 1000:.0f}s, inside the {HOLD_LEASH:.0f} yd leash"
+          f" {reach / 1000:.0f}s, held {totals['fire'][0] / 1000 if 'fire' in totals else 0:.0f}s")
 
     firsts = fire_starts(trace)
     print(f"\n  first fire after the pull {clock(min(firsts)) if firsts else '-'}")
@@ -558,6 +644,17 @@ def show_singed(trace: Trace) -> None:
     mean = mean_stacks(curve, 0, stop)
     print(f"  0-{clock(stop)[:4]} mean {mean:.1f} stacks, +{2 * mean:.0f}% magic damage taken")
 
+    firsts = fire_starts(trace)
+    if firsts:
+        ramp = ramp_ms(curve, min(firsts))
+        print(f"  first fire {clock(min(firsts))[:7]}, {SINGED_CAP} stacks"
+              f" {f'{ramp / 1000:.1f}s later' if ramp is not None else 'never'}")
+
+    burned = [zone for zone in zones_of(trace, SPELL_TOASTY_FIRE) if zone["t1"] - zone["t0"] >= FIRE_MIN_LIFE_MS]
+    fires = [(zone["t0"], zone["t1"]) for zone in burned]
+    print(f"  0-{clock(stop)[:4]} at {SINGED_CAP} stacks {stacks_ms(curve, 0, stop, SINGED_CAP) / 1000:.0f}s,"
+          f" at none with a fire burning {dark_ms(curve, fires, 0, stop) / 1000:.0f}s")
+
 
 def show_buffs(trace: Trace) -> None:
     print("BUFFS")
@@ -592,11 +689,42 @@ def show_buffs(trace: Trace) -> None:
     life = statistics.mean([(z["t1"] - z["t0"]) / 1000 for z in zones]) if zones else 0.0
     print(f"  {len(zones)} Starlight zones, one up {up * 500 / max(1, end) * 100:.0f}% of the pull, mean life {life:.1f}s")
 
+    boss = boss_guid(trace)
+    casters = [guid for guid in bots(trace) if trace.role(guid) in ("ranged", "heal")]
+    if boss is not None and casters:
+        reach: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+        for snap in frames(trace):
+            if not 0 <= snap["t"] < end:
+                continue
+            rows = {row[0]: row for row in snap.get("u", [])}
+            him = rows.get(boss)
+            if not him:
+                continue
+            stars = [(row[1], row[2]) for row in snap.get("hz", []) if row[0] == SPELL_STARLIGHT]
+            fires = [(row[1], row[2]) for row in snap.get("hz", []) if row[0] == SPELL_TOASTY_FIRE]
+            for guid in casters:
+                row = rows.get(guid)
+                if not row or len(row) < 6 or row[5] <= 0:
+                    continue
+                spot, aim = (row[1], row[2]), (him[1], him[2])
+                counts = reach[trace.role(guid)]
+                counts[1] += 1
+                counts[0] += (usable_within(spot, aim, stars, STARLIGHT_STAND_RADIUS) is not None
+                              or usable_within(spot, aim, fires, FIRE_STAND_RADIUS) is not None)
+        for role, (got, total) in reach.items():
+            if total:
+                print(f"  {role:6} a usable stand was within {BUFF_WALK:.0f} yd of where it stood on"
+                      f" {got / total * 100:.1f}% of samples")
+
     rules = collections.Counter()
     for rec in notes(trace, "hodir.starlight"):
         words = str(rec.get("txt", "")).split(" ")
         rules[" ".join(words[:2]) if words[0] == "held" else words[0]] += 1
     print("  hodir.starlight " + ", ".join(f"{rule} {count}" for rule, count in rules.most_common()))
+
+    stands = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "hodir.stand"))
+    if stands:
+        print("  hodir.stand " + ", ".join(f"{kind} {count}" for kind, count in stands.most_common()))
 
     cold = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_BITING_COLD_DAMAGE and 0 <= rec["t"] < end]
     taken = sum(rec.get("a", 0) for rec in trace.of("dmg") if 0 <= rec["t"] < end)

@@ -128,6 +128,10 @@ bool IsAoeThreatAction(Player* bot, Action* action);
 // Snaps a point onto walkable ground and clears the path to it. Raw formation geometry is exactly
 // the shape that lands off the navmesh, and MoveTo would then fail without telling anyone.
 Position ValidateFloorPoint(Player* bot, Position const& point);
+// Same, minus the gameobject pass. A gameobject between the bot and the point (Hodir's campfires)
+// clips the point back to its own edge, yet nothing on the server collides a walking bot with one,
+// so use this wherever a derived spot is meant to sit on or past a prop.
+Position ValidateStaticFloorPoint(Player* bot, Position const& point);
 // Class taunt. Non-tank classes return false.
 bool CastClassTaunt(PlayerbotAI* botAI, Unit* target);
 
