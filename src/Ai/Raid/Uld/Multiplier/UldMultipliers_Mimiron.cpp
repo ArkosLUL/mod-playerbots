@@ -215,27 +215,61 @@ float MimironFireHoldGuardMultiplier::GetValue(Action* action)
     if (!action)
         return 1.0f;
 
-    // The same five the Frost Bomb guard holds: every mover that picks its destination from a unit
+    // The same six the Frost Bomb guard holds: every mover that picks its destination from a unit
     // rather than from the floor.
     std::string const name = action->getName();
     if (name != "reach melee" && name != "reach spell" && name != "reach party member to heal" &&
-        name != "set behind" && name != "follow")
+        name != "set behind" && name != "follow" && name != "mimiron approach target action")
         return 1.0f;
 
     // Room test before the state lookup: the hard mode switch is a config read that holds all over
-    // Ulduar, and these five are asked for on every tick of every fight in the instance.
+    // Ulduar, and these six are asked for on every tick of every fight in the instance.
     if (!IsMimironHardModeActive(botAI) || !IsNearMimironRoom(bot))
         return 1.0f;
 
-    return IsMimironFireHoldActive(bot) ? 0.0f : 1.0f;
+    if (IsMimironFireHoldActive(bot))
+        return 0.0f;
+
+    // Water Spray is instant, a 15 yd line, and 23000 to 26000 against a 22000 to 24000 pool, so
+    // nothing may walk a bot back into one: two died to a spray 3.5 s after a "reach melee" leg put
+    // them in the line.
+    return IsMimironSpotInFireBotSpray(GetMimironFirefighterHazards(botAI), bot->GetPosition())
+               ? 0.0f
+               : 1.0f;
 }
+
+namespace
+{
+// Whether this action actually splashes. The threat type does not say: CastHealingSpellAction
+// declares Aoe, while whirlwind, divine storm, consecration, death and decay, starfall, swipe and
+// pestilence declare something else and hit everything nearby anyway - all of them ran in a
+// Firefighter phase 3 with the guard up. The spell says instead: IsTargetingArea covers the area
+// and cone selection categories, IsAffectingArea adds the persistent area auras.
+bool MimironActionSplashes(PlayerbotAI* botAI, Action* action)
+{
+    // Totem and trap summons stay invisible to that test - the summon is single-target and the area
+    // lives on what it summons - so they are named.
+    static std::set<std::string> const summoners = {"magma totem", "fire nova", "explosive trap",
+                                                    "trap launcher: explosive trap"};
+    if (summoners.count(action->getName()))
+        return true;
+
+    CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
+    if (!spellAction || dynamic_cast<CastHealingSpellAction*>(action))
+        return false;
+
+    uint32 const spellId =
+        botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spellAction->getSpell())->Get();
+    SpellInfo const* spellInfo = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
+    return spellInfo && (spellInfo->IsTargetingArea() || spellInfo->IsAffectingArea());
+}
+}  // namespace
 
 float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
 {
-    if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
-        return 1.0f;
-
-    if (dynamic_cast<CastHealingSpellAction*>(action))
+    // The spell test first: it answers off the action alone, while the kept list walks the bot's
+    // whole target list, and this runs for every action of every bot in the instance.
+    if (!action || !MimironActionSplashes(botAI, action))
         return 1.0f;
 
     std::vector<ObjectGuid> const kept = GetMimironKeptFireBots(botAI, bot);

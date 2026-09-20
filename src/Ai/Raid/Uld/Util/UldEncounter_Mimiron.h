@@ -97,14 +97,19 @@ constexpr float ULDUAR_MIMIRON_BARRAGE_STEP = 40.0f * static_cast<float>(M_PI) /
 // that, and an orbit at their own radius runs through the model.
 constexpr float ULDUAR_MIMIRON_BARRAGE_RING_MARGIN = 6.0f;
 
-// The phase 4 main tank orbits inside the chassis's chase range instead, so the MK II stays put and
-// the cone apex with it. It cannot simply hold its spot: 20000 per 250 ms tick kills it outright.
-//
-// 1.5 is chosen against Unit::GetMeleeRange - reach 8 plus a player's 1.5 plus 4/3, so 10.83 yd. A
-// tank orbiting at 9.5 never leaves that, so the chassis never chases and the apex holds still.
-// This is load-bearing for every other bot: simulation clears every bearing, radius and offset
-// against a stationary apex, and only ever fails once the apex is dragged around under the raid.
-constexpr float ULDUAR_MIMIRON_BARRAGE_TANK_RING_MARGIN = 1.5f;
+// Melee, the phase 4 main tank included, orbit on a tight ring instead, so they keep swinging
+// through the whole window. Two limits it has to sit inside: Unit::GetMeleeRange, reach 8 plus a
+// player's 1.5 plus 4/3, so 10.83 yd, or the chassis chases the tank and drags the cone apex with
+// it; and the bot's own "reach melee" test, IsWithinCombatRange at MeleeDistance 0.75, so 10.25 yd,
+// or that node fires and the charge guard vetoes it every tick. 9.0 leaves a yard of spline slop
+// under both, and stays well past the 2.0 yd boundary radius where the cone check stops testing
+// bearing at all. A stationary apex is load-bearing for every other bot: every bearing, radius and
+// offset here is cleared against one, and only fails once the apex is dragged under the raid.
+constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN = 1.0f;
+
+// How far in the fire shift may pull a melee bot off that ring. Inside 5 the orbit runs through
+// VX-001's model, and a 40 degree step on a 5 yd ring is 3.5 yd of travel, which is still a move.
+constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN = 5.0f;
 
 // A bot turns around VX-001 at (7.0 yd/s / radius) against a 10.6 deg/s sweep. Holding the raid
 // inside this radius makes the worst-case 52 degree rotation fit the 4 s Spinning Up warning and
@@ -115,6 +120,11 @@ constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS_MAX = 24.0f;
 // fits the Spinning Up window. The tolerance is what stops bots pacing over a yard of drift.
 constexpr float ULDUAR_MIMIRON_SPREAD_RADIUS = 22.0f;
 constexpr float ULDUAR_MIMIRON_SPREAD_TOLERANCE = 5.0f;
+
+// How long a re-aimed Firefighter wedge holds its new centreline before another barrage may move it
+// again. One barrage is one re-aim: the sector is worked out from the ignition cone, and a second
+// look during the same Spinning Up would walk the raid twice for one cast.
+constexpr uint32 ULDUAR_MIMIRON_WEDGE_REAIM_MS = 20000;
 
 // Step size of the phase 3 wedge's slide toward the Aerial Command Unit. The wedge holds a slide
 // until a slot leaves casting range or the slide it needs has moved this far, instead of following
@@ -217,6 +227,18 @@ constexpr float ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE = 60.0f * static_cast<flo
 constexpr float ULDUAR_MIMIRON_CORE_LOOT_RANGE = 5.0f;
 constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 
+// How many cores the carrier banks before spending any. DO_DISABLE_AERIAL delays the unit's event
+// map 25 s and its UpdateAI returns for the whole 20 s aura, so a landing is 45 s with no Assault
+// Bot - and the Assault Bot is the only core source. Cores arrive 30 s apart with the unit up and
+// 65 to 75 s apart across a landing, so two chained cost one delay instead of two.
+constexpr uint32 ULDUAR_MIMIRON_CORE_BANK = 2;
+
+// Escape hatches out of that hold. item_template 46029 has duration 60, so a banked core expires;
+// the observed wait for a second was 32 s and 52 s, which is what this margin has to survive. And
+// below the health release the phase ends before another core could be spent at all.
+constexpr uint32 ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS = 10000;
+constexpr float ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT = 25.0f;
+
 // How far the carrier will go looking for an Assault Bot corpse. They die wherever the raid stopped
 // them, and the corpse only lasts 25 s, so the node has to start walking rather than wait for the bot
 // to happen to be standing on one.
@@ -268,6 +290,12 @@ constexpr float ULDUAR_MIMIRON_MINE_MAX_STEP = 5.0f;
 // long as it lives, or a bot that dodged walks straight back onto it.
 constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
 
+// Where the dodge actually fires. 63041 is EffectRadiusIndex 15, a flat 3.0 yd, and a creature
+// caster adds no combat reach in WorldObjectSpellAreaTargetCheck, so 5 covers the blast with slop
+// while the 8 above stays the stand-off radius. Run/stand hysteresis, like the bomb and the siren:
+// one marker used to move five to eleven bots off the ring for a blast that hit one of them.
+constexpr float ULDUAR_MIMIRON_ROCKET_RUN_RADIUS = 5.0f;
+
 // Napalm Shell splashes 5 yd around its target. Bomb Bots blast 5 yd on melee contact (63801) and
 // match player run speed, so the extra yard here only buys time for ranged to kill them.
 constexpr float ULDUAR_MIMIRON_NAPALM_RADIUS = 6.0f;
@@ -314,9 +342,9 @@ bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& haza
                               float sirenRadius);
 bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest);
 
-// The fire bots the raid leaves alone for now, so they keep putting the fire out: the
-// ULDUAR_MIMIRON_FIREBOT_KEEP oldest, in phase 3, until the Aerial Command Unit is low enough that
-// the cleanup has to start. Empty otherwise. Raid-wide, so every bot spares the same ones.
+// The fire bots the raid leaves alone for now, so they keep putting the fire out: every living one,
+// in phase 3, until the Aerial Command Unit is low enough that the cleanup has to start. Empty
+// otherwise. Raid-wide, so every bot spares the same ones.
 std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot);
 bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot);
 
@@ -354,7 +382,9 @@ struct MimironApproach
 // - a slot that is not clear gives way, outside phase 1, to the nearest clear point within
 //   ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS that keeps ULDUAR_MIMIRON_DISPERSE_DISTANCE off everyone;
 // - a walk through fire goes via one waypoint whose two legs both miss it.
-// Empty as well when the bot already stands on clear ground within the substitute radius.
+// Empty as well when the bot already stands on clear ground within the substitute radius. Every
+// candidate is screened against the Laser Barrage cone with its own travel time, like a flee
+// bearing: this is the largest mover in the fight and its legs outlive the sweep that kills.
 std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player* bot, Position const& slot,
                                                       MimironFirefighterHazards const& hazards);
 
@@ -591,16 +621,13 @@ constexpr float ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE = 34.0f;
 constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
 
 // Emergency Fire Bots are kept alive through phase 3 to put the fire out. They never attack anyone:
-// each walks to the nearest Flames (Spread) and hits it with Water Spray 64619. Two stay and any more
-// are culled, which keeps the silence and the spray line rare and the cleanup before phase 4 short.
-constexpr uint32 ULDUAR_MIMIRON_FIREBOT_KEEP = 2;
-// How many unkept ones alive at once make the cull urgent enough to outrank the mech. One extra
-// costs a spray line the movement nodes already dodge, and chasing it drops the boss for 361
-// bot-seconds. Letting them pile up instead is worse: six alive put 248000 Water Spray into a
-// 25-man raid and killed six of them, which is half a phase 3.
-constexpr uint32 ULDUAR_MIMIRON_FIREBOT_CULL_AT = 2;
-// Aerial Command Unit health at which the kept ones go on the kill list too. None may reach phase 4,
-// where they spray straight into the rendezvous.
+// each walks to the nearest Flames (Spread) and hits it with Water Spray 64619. Every one of them is
+// left alone until the cleanup: three spawn every 45 s, the fire is 41 to 46 % of all phase 3 intake
+// with 23 to 26 nodes alive at a time, and culling down to a pair held the field at that size while
+// the raid spent 6 % of its phase 3 shooting the fire brigade.
+//
+// Aerial Command Unit health at which they all go on the kill list. None may reach phase 4, where
+// they spray straight into the rendezvous.
 constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
 // Water Spray is SPELL_ATTR0_CU_CONE_LINE: a line 15 yd ahead of the bot, as wide as both object
 // sizes, about 2.3 yd each side. 18850 to 21150 frost plus Emergency Mode's 25 % and a knockback,
@@ -616,8 +643,12 @@ constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
 constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_STAND = 17.0f;
 constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_FLEE = 19.0f;
 // How close a kept fire bot may get to the bot, or to what it is hitting, before damage AoE is held.
-// Bots cannot aim AoE away from one, and the kept ones walk into the raid after the fire.
-constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 30.0f;
+// Bots cannot aim AoE away from one, and the kept ones walk into the raid after the fire. It was 30,
+// which is affordable for a pair and switches the raid's AoE off for all of phase 3 once nine to
+// fifteen are alive - and phase 3 is where a Junk Bot arrives every 10 s. The widest raid AoE in
+// play is about 10 yd (Death and Decay, Hurricane, Blizzard), so 12 covers the splash that reaches
+// one of them.
+constexpr float ULDUAR_MIMIRON_FIREBOT_AOE_CLEARANCE = 12.0f;
 
 // Health below which a bot is willing to pay for a fire dodge. Above it the fire is cheaper than the
 // trip: a node ticks about 3100 against a 22000 to 24000 pool, and the round trip out and back is

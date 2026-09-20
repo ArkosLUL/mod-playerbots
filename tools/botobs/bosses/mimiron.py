@@ -9,11 +9,15 @@
     mimiron.py <file> --burst    every Rapid Burst: carrier, cone, outside, and the ticks each took
     mimiron.py <file> --bomb     every Frost Bomb: who had to run, casting lost, where escapes landed
     mimiron.py <file> --slots    how often formation slots moved, and why
+    mimiron.py <file> --spin     every Laser Barrage window, and the storm in the 15 s after it
+    mimiron.py <file> --p3       phase 3: the fire brigade, Water Spray, and the grounded windows
 
 What the generic views get wrong here, and what this reads instead:
 
 - **Phases come from `mimiron.phase`**: 1 to 4, 5 for a handover, 0 for nothing attackable, which
   also covers the gap between the MK II dying and VX-001 arriving. They print as P1..P4, H1.., Z1..
+  A phase that comes round twice gets a letter (`P4`, then `P4b`), or one pull's deaths and walks
+  are counted under both spans.
 - **`snap.u[8]` says a bot is moving, not why.** Walking is charged to the bot's last accepted move
   inside 6 s before the sample.
 - **A Frost Bomb's fuse starts at its summon, not at VX-001's cast.** 64623 has a 2 s cast and a
@@ -41,6 +45,9 @@ from raidobs.trace import Trace, clock, combat_deaths, death_records, notes, ros
 
 NPC_VX001 = 33651
 NPC_FROST_BOMB = 34149
+NPC_AERIAL_COMMAND_UNIT = 33670
+NPC_ASSAULT_BOT = 34057
+NPC_EMERGENCY_FIRE_BOT = 34147
 
 SPELL_RAPID_BURST = 63382
 SPELL_RAPID_BURST_HITS = (64531, 64532, 63387, 64019)
@@ -50,6 +57,7 @@ SPELL_FROST_BOMB = 64623
 SPELL_FROST_BOMB_EXPLOSIONS = (64626, 65333)
 SPELL_SPINNING_UP = 63414
 SPELL_ROCKET_STRIKE = (64402, 65034)
+SPELL_WATER_SPRAY = 64619
 
 FORMATION = "mimiron arc spread action"
 BOMB_DODGE = "mimiron frost bomb action"
@@ -63,6 +71,12 @@ BOMB_CLEARANCE = radius("ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE")
 # ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE is an expression the source parser does not read.
 BURST_HALF_ANGLE = math.radians(30.0)
 BURST_WINDOW_MS = 3400  # the 3 s aura plus the last tick landing
+# Spinning Up's 4 s channel plus the 10 s barrage, and the stretch after it in which the frozen
+# event map unloads Heat Wave, Rocket Strike and Frost Bomb within a few seconds of each other.
+SPIN_WINDOW_MS = 14500
+SPIN_AFTER_MS = 15000
+# Unit::GetMeleeRange against VX-001: its combat reach of 8, a player's 1.5, plus 4/3.
+MELEE_RANGE = 10.83
 FUSE_MS = 10000
 # 64623's 2 s cast plus the flight to the node it picked.
 LANDING_MS = 6000
@@ -104,9 +118,14 @@ def phases(trace: Trace) -> list[tuple[int, int, str]]:
     for index, (when, value) in enumerate(marks):
         stop = marks[index + 1][0] if index + 1 < len(marks) else end
         label = PHASE_NAMES.get(value, value)
+        seen[label] += 1
         if label in ("H", "Z"):
-            seen[label] += 1
             label = f"{label}{seen[label]}"
+        elif seen[label] > 1:
+            # A phase can come round twice - one pull went P4, H4, P4 - and every view here keys on
+            # the label, so the second span would print under the first and double its deaths and
+            # yards. The first keeps its plain name, so span_of("P4") still finds the phase.
+            label += chr(ord("a") + seen[label] - 1)
         out.append((when, stop, label))
     return out
 
@@ -691,6 +710,262 @@ def show_slots(trace: Trace) -> None:
         print(f"  {label:4} " + "  ".join(parts))
 
 
+# ----------------------------------------------------------------------------------------------- spin
+
+def raid_hp(units: dict[int, list], roster) -> float | None:
+    alive = [unit[5] for guid, unit in units.items() if guid in roster and living(unit)]
+    return statistics.mean(alive) if alive else None
+
+
+def dealt_between(samples: Samples, roster, low: int, high: int) -> int:
+    """What the raid put into everything that is not a raid member, off snap.u[11]'s running total."""
+    first, last = samples.before(low), samples.before(high)
+    total = 0
+    for guid in roster:
+        was, now = first.get(guid), last.get(guid)
+        if was and now and len(was) > 11 and len(now) > 11:
+            total += max(now[11] - was[11], 0)
+    return total
+
+
+def spin_rows(trace: Trace) -> list[dict]:
+    """One row per Spinning Up cast. VX-001's UpdateAI returns early for the whole channel and
+    barrage, so the window is 14.5 s in which nothing but the fire touches the raid - and then every
+    overdue event fires one per tick, which is what the 15 s after it measures."""
+    roster = roster_guids(trace)
+    vx = guids_of_entry(trace, NPC_VX001)
+    spans = phases(trace)
+    samples = Samples(trace)
+    moves = accepted_moves(trace)
+
+    rows = []
+    for cast in trace.of("cast"):
+        if cast.get("sp") != SPELL_SPINNING_UP:
+            continue
+
+        start = cast["t"]
+        stop = start + SPIN_WINDOW_MS
+        after = stop + SPIN_AFTER_MS
+        row = {
+            "t": start, "phase": phase_at(spans, start),
+            "before": role_shares(trace, start - SPIN_WINDOW_MS, start),
+            "inside": role_shares(trace, start, stop),
+            "dealt_before": dealt_between(samples, roster, start - SPIN_WINDOW_MS, start),
+            "dealt_inside": dealt_between(samples, roster, start, stop),
+            "melee_rows": 0, "melee_in_range": 0, "fire": 0, "deaths": [],
+            "hp_before": raid_hp(samples.before(stop), roster),
+            "hp_after": raid_hp(samples.before(after), roster),
+            "taken": 0, "healed": 0, "legs": 0, "yards": 0.0,
+            "heal_moving": role_shares(trace, stop, after).get("heal", {}).get("moving"),
+        }
+        rows.append(row)
+
+        for units in samples.window(start, stop):
+            boss = next((units[guid] for guid in vx if guid in units), None)
+            for guid, unit in units.items():
+                if guid not in roster or not living(unit) or trace.role(guid) != "melee":
+                    continue
+                row["melee_rows"] += 1
+                if boss and dist2((unit[1], unit[2]), (boss[1], boss[2])) <= MELEE_RANGE:
+                    row["melee_in_range"] += 1
+
+        # Off combat_deaths, like the phases section: a trace can carry the same death twice.
+        row["deaths"] = [trace.name(rec["g"]) for rec in combat_deaths(trace)
+                         if start <= rec["t"] < stop]
+
+        for rec in trace.records:
+            when = rec.get("t", 0)
+            kind = rec.get("e")
+            if start <= when < stop:
+                if kind == "dmg" and rec.get("d") in roster and rec.get("sp") == SPELL_FLAMES:
+                    row["fire"] += rec.get("a", 0)
+            elif stop <= when < after:
+                if kind == "dmg" and rec.get("d") in roster:
+                    row["taken"] += rec.get("a", 0)
+                elif kind == "heal" and rec.get("d") in roster:
+                    row["healed"] += rec.get("a", 0) - rec.get("oh", 0)
+
+        for guid, recs in moves.items():
+            if trace.role(guid) not in ("ranged", "heal"):
+                continue
+            for rec in recs:
+                if stop <= rec["t"] < after and rec.get("by") == FORMATION:
+                    unit = samples.before(rec["t"]).get(guid)
+                    if unit:
+                        row["legs"] += 1
+                        row["yards"] += dist2((unit[1], unit[2]), (rec["x"], rec["y"]))
+    return rows
+
+
+def show_spin(trace: Trace) -> None:
+    print("SPIN")
+    rows = spin_rows(trace)
+    if not rows:
+        print("  no Spinning Up cast")
+        return
+
+    def share(shares, role, key):
+        return f"{shares[role][key] * 100:3.0f}%" if role in shares else "   -"
+
+    for row in rows:
+        gap = row["dealt_inside"] - row["dealt_before"]
+        print(f"  {clock(row['t'])} {row['phase']:4} window {SPIN_WINDOW_MS / 1000:.1f} s:"
+              f" raid dealt {row['dealt_inside']:,} against {row['dealt_before']:,} in the 14.5 s"
+              f" before ({gap:+,})")
+        print("            " + "  ".join(
+            f"{role} moving {share(row['inside'], role, 'moving')}"
+            f"/{share(row['before'], role, 'moving')}"
+            f" casting {share(row['inside'], role, 'casting')}"
+            f"/{share(row['before'], role, 'casting')}"
+            for role in ROLES if role in row["inside"]))
+        melee = row["melee_in_range"] / row["melee_rows"] * 100 if row["melee_rows"] else 0.0
+        print(f"            melee within {MELEE_RANGE:.1f} yd of VX-001 {melee:3.0f}% of the window;"
+              f" fire {row['fire'] // 1000}k; {len(row['deaths'])} dead"
+              + (f" ({', '.join(row['deaths'])})" if row["deaths"] else ""))
+        hp = ("    -" if row["hp_before"] is None or row["hp_after"] is None
+              else f"{row['hp_before']:.0f} -> {row['hp_after']:.0f}")
+        moved = "   -" if row["heal_moving"] is None else f"{row['heal_moving'] * 100:3.0f}%"
+        print(f"            the 15 s after: raid hp {hp}, taken {row['taken']:,},"
+              f" healed {row['healed']:,}, healers moving {moved},"
+              f" formation {row['legs']} legs / {row['yards']:.0f} yd")
+    print("\n  'inside/before' is the window against the 14.5 s before it")
+
+
+# ------------------------------------------------------------------------------------------------- p3
+
+def p3_rows(trace: Trace) -> dict:
+    """Phase 3 as the fire brigade and the Magnetic Core decide it: how long each Emergency Fire Bot
+    lived and how much of the raid was shooting it, what Water Spray cost, and how much faster the
+    Aerial Command Unit dies on the floor than in the air."""
+    span = span_of(phases(trace), "P3")
+    if not span:
+        return {}
+
+    low, high = span
+    roster = roster_guids(trace)
+    samples = Samples(trace)
+    bots = guids_of_entry(trace, NPC_EMERGENCY_FIRE_BOT)
+    assaults = guids_of_entry(trace, NPC_ASSAULT_BOT)
+    acu = guids_of_entry(trace, NPC_AERIAL_COMMAND_UNIT)
+
+    firebots: dict[int, dict] = {}
+    seen_assault: dict[int, list] = {}
+    alive_counts: list[int] = []
+    bot_rows = aimed = 0
+    for index, snap in enumerate(samples.snaps):
+        when = snap["t"]
+        if not low <= when < high:
+            continue
+
+        units = samples.rows(index)
+        living_bots = [guid for guid in bots if guid in units and living(units[guid])]
+        alive_counts.append(len(living_bots))
+        for guid in living_bots:
+            cell = firebots.setdefault(guid, {"first": when, "last": when, "hp": 100.0, "aimed": 0})
+            cell["last"] = when
+            cell["hp"] = units[guid][5]
+
+        for guid in assaults:
+            if guid in units and living(units[guid]):
+                seen_assault.setdefault(guid, [when, when])[1] = when
+
+        for guid, unit in units.items():
+            if guid not in roster or not living(unit) or guid in trace.humans:
+                continue
+            bot_rows += 1
+            target = unit[7] if len(unit) > 7 else 0
+            if target in bots:
+                aimed += 1
+                if target in firebots:
+                    firebots[target]["aimed"] += 1
+
+    spray = sum(rec.get("a", 0) for rec in trace.of("dmg")
+                if low <= rec["t"] < high and rec.get("d") in roster
+                and rec.get("sp") == SPELL_WATER_SPRAY)
+    spray_deaths = sum(1 for rec in combat_deaths(trace)
+                       if low <= rec["t"] < high
+                       and trace.entries.get(rec.get("killer")) == NPC_EMERGENCY_FIRE_BOT)
+
+    # `mimiron.core` latches 1 while a core has the unit on the floor, 0 when it climbs back.
+    windows: list[tuple[int, int]] = []
+    start = None
+    for rec in notes(trace, "mimiron.core"):
+        if str(rec.get("txt", "")) == "1" and start is None:
+            start = rec["t"]
+        elif str(rec.get("txt", "")) == "0" and start is not None:
+            windows.append((start, rec["t"]))
+            start = None
+    if start is not None:
+        windows.append((start, high))
+
+    def acu_hp(when: int):
+        units = samples.before(when)
+        row = next((units[guid] for guid in acu if guid in units), None)
+        return row[5] if row else None
+
+    def drop(begin: int, end: int) -> float:
+        was, now = acu_hp(begin), acu_hp(end)
+        return was - now if was is not None and now is not None else 0.0
+
+    grounded_ms = sum(stop - begin for begin, stop in windows)
+    grounded_drop = sum(drop(begin, stop) for begin, stop in windows)
+    air = []
+    mark = low
+    for begin, stop in windows:
+        air.append((mark, begin))
+        mark = stop
+    air.append((mark, high))
+
+    return {
+        "span": span,
+        "firebots": firebots,
+        "alive_mean": statistics.mean(alive_counts) if alive_counts else 0.0,
+        "alive_max": max(alive_counts) if alive_counts else 0,
+        "aimed_share": aimed / bot_rows if bot_rows else 0.0,
+        "aimed_seconds": aimed * SAMPLE_MS / 1000.0,
+        "spray": spray,
+        "spray_deaths": spray_deaths,
+        "assaults": sorted((stamps[1] - stamps[0]) for stamps in seen_assault.values()),
+        "coresteps": collections.Counter(
+            str(rec.get("txt", "")) for rec in notes(trace, "mimiron.corestep")
+            if low <= rec["t"] < high),
+        "grounded": (grounded_ms, grounded_drop),
+        "airborne": (sum(stop - begin for begin, stop in air),
+                     sum(drop(begin, stop) for begin, stop in air)),
+    }
+
+
+def show_p3(trace: Trace) -> None:
+    print("P3")
+    rows = p3_rows(trace)
+    if not rows:
+        print("  no phase 3 in this pull")
+        return
+
+    low, high = rows["span"]
+    print(f"  {clock(low)} .. {clock(high)}, {(high - low) / 1000:.0f} s")
+    print(f"  fire bots {rows['alive_mean']:.1f} alive on average, {rows['alive_max']} at most,"
+          f" {len(rows['firebots'])} seen; the raid aimed at one for {rows['aimed_seconds']:.0f}"
+          f" bot-s ({rows['aimed_share'] * 100:.1f}% of the phase)")
+    for guid, cell in sorted(rows["firebots"].items(), key=lambda item: item[1]["first"]):
+        print(f"      {clock(cell['first'])} .. {clock(cell['last'])}"
+              f"  {(cell['last'] - cell['first']) / 1000:5.1f} s  ended at {cell['hp']:3.0f}%"
+              f"  aimed at {cell['aimed'] * SAMPLE_MS / 1000:5.1f} bot-s")
+    print(f"  Water Spray {rows['spray']:,} into the raid, {rows['spray_deaths']} dead to a fire bot")
+
+    lived = rows["assaults"]
+    if lived:
+        print(f"  Assault Bots {len(lived)}, alive {statistics.median(lived) / 1000:.0f} s median,"
+              f" {min(lived) / 1000:.0f} to {max(lived) / 1000:.0f} s")
+    if rows["coresteps"]:
+        print("  core steps: " + ", ".join(f"{step} {n}" for step, n in rows["coresteps"].most_common()))
+
+    for label, (ms, points) in (("grounded", rows["grounded"]), ("airborne", rows["airborne"])):
+        rate = points / (ms / 1000.0) if ms else 0.0
+        print(f"  {label:9} {ms / 1000:5.0f} s of the phase, unit down {points:5.1f} points"
+              f" ({rate:.2f} %/s)")
+
+
 SECTIONS = (
     ("phases", "phase spans and deaths by phase", show_phases),
     ("heal", "the phase 2 healing race, 2.5 s at a time", show_heal),
@@ -699,6 +974,8 @@ SECTIONS = (
     ("burst", "Rapid Burst carrier, cone and outside ticks", show_burst),
     ("bomb", "Frost Bomb evacuations and where escapes landed", show_bomb),
     ("slots", "formation slot churn per phase", show_slots),
+    ("spin", "each Laser Barrage window and the storm after it", show_spin),
+    ("p3", "phase 3 fire bots, Water Spray and the grounded windows", show_p3),
 )
 
 

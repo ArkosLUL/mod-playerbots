@@ -54,18 +54,21 @@ protected:
     // Same fan again, aimed at a destination instead of away from a hazard, by fleeing the point
     // mirrored through the bot - so the straight-ahead bearing is the destination itself and the
     // sweep supplies the alternatives.
+    // allowFire drops the ground-fire screen. Only for an escape from something that outdamages a
+    // node: a node is ~3100 a second, and a fan that refuses all eleven bearings for fire leaves
+    // the bot standing in a Water Spray line that one-shots it.
     bool MoveTowardClearOfMines(Position const& dest,
                                 MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                                 bool fallbackUnfiltered = true, bool interrupt = false,
-                                char const* what = "step");
+                                char const* what = "step", bool allowFire = false);
 
 private:
     // The fan itself. `fallbackFrom` is the unit the two public overloads were asked about, and is
     // only ever used for the unfiltered MoveAway once every bearing has been refused; the point
     // overload has no unit to hand it, so it walks straight away from `from` instead.
     bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
-                 bool fallbackUnfiltered, bool interrupt, char const* what,
-                 float clearRadius = 0.0f);
+                 bool fallbackUnfiltered, bool interrupt, char const* what, float clearRadius = 0.0f,
+                 bool allowFire = false);
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,

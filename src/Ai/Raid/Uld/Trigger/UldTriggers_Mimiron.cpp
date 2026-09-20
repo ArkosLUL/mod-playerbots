@@ -124,12 +124,6 @@ bool MimironP3Wx2LaserBarrageTrigger::IsActive()
 
 bool MimironArcSpreadTrigger::IsActive()
 {
-    // Stand down for the whole Spinning Up window and barrage: the dodge owns positioning then, and
-    // walking a bot back to its ring slot mid-cone kills it.
-    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
-    if (barrage.IsActive())
-        return false;
-
     // No "is a mech up" gate of its own. GetMimironSpreadSlot answers false when neither a live nor a
     // staging focus resolves, and that is also what keeps this quiet before the pull and after a wipe.
     Position slot;
@@ -140,6 +134,29 @@ bool MimironArcSpreadTrigger::IsActive()
     // gathers the fire field.
     if (bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) <= ULDUAR_MIMIRON_SPREAD_TOLERANCE)
         return false;
+
+    // During a barrage the walk only happens inside the safe sector: both endpoints clear of the
+    // swept band means the straight leg between them is clear too, since that sector is under half
+    // a turn wide. Standing the formation down for the whole window instead left the raid to walk
+    // back in the 15 s after it, where the event map unloads Heat Wave, Rocket Strike and Frost Bomb
+    // within four seconds of each other and half the healers are moving. The leg issues at
+    // MOVEMENT_COMBAT, so a dodge at MOVEMENT_FORCED can still take the bot off it mid-walk - that
+    // ordering is what makes this safe, and it is why the leg must not be raised.
+    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    {
+        MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
+        if (window.valid)
+        {
+            float const speed = bot->GetSpeed(MOVE_RUN);
+            float const travel =
+                speed > 0.0f ? bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY()) / speed
+                             : 0.0f;
+
+            if (!IsMimironSpotBarrageSafe(vx001, window, bot->GetPosition(), 0.0f) ||
+                !IsMimironSpotBarrageSafe(vx001, window, slot, travel))
+                return false;
+        }
+    }
 
     // The test is on the slot, not the bot. A Rocket Strike prefers targets past 15 yd, which is the
     // ring itself, so a bot that dodged one is standing clear while its slot still has the marker
@@ -201,7 +218,10 @@ bool MimironRocketStrikeTrigger::IsActive()
     if (!rocketStrikeN)
         return false;
 
-    return bot->GetDistance2d(rocketStrikeN->GetPositionX(), rocketStrikeN->GetPositionY()) <= 10.0f;
+    // Centre to centre against the blast the rocket actually lands. GetDistance2d takes off both
+    // object sizes first, so the old 10 fired at 11.5 yd for a 3 yd blast: with the ranged ring 6 yd
+    // apart one marker moved five to eleven bots, 40 to 149 accepted legs a pull against one hit.
+    return bot->GetExactDist2d(rocketStrikeN) <= ULDUAR_MIMIRON_ROCKET_RUN_RADIUS;
 }
 
 bool MimironPhase4FocusTrigger::IsActive()
@@ -272,6 +292,13 @@ bool MimironApproachTargetTrigger::IsActive()
     if (!IsMimironHardModeActive(botAI) || !IsMimironEngaged(botAI))
         return false;
 
+    // The barrage dodge owns positioning for the window, melee ring included, and this node's
+    // destinations are never screened against the cone. Left in, the two traded the bot 78 times in
+    // one phase 4.
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (barrage.IsActive())
+        return false;
+
     // Nothing to close on while a hazard owns the tick, and every one of those runs above this
     // node anyway - asking here only saves the hazard scan below.
     Unit* target = AI_VALUE(Unit*, "current target");
@@ -300,10 +327,6 @@ bool MimironDodgeFlamesTrigger::IsActive()
     // 22000 pool and fires ~2500 times a pull, so it wins on volume and the escapes lose. Measured:
     // seven bots issued a Shock Blast escape, had it cancelled by a fire leg 1.5 s later, and died
     // to the blast still 9 to 15 yd out.
-    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
-    if (barrage.IsActive())
-        return false;
-
     MimironShockBlastTrigger shockBlast(botAI);
     if (shockBlast.IsActive())
         return false;
@@ -316,9 +339,28 @@ bool MimironDodgeFlamesTrigger::IsActive()
     if (frostBomb.IsActive())
         return false;
 
+    // Only for the bots the cone owns, not the whole raid: the barrage dodge at ACTION_RAID + 7
+    // takes those anyway and its fan screens every hop against the remaining sweep. Standing the
+    // fire down for everybody left two thirds of the raid parked in it for the whole window, which
+    // is 22 to 26 % of phase 2 and carried 36 to 76 % of its fire damage.
+    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    {
+        MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
+        if (window.valid && !IsMimironSpotBarrageSafe(vx001, window, bot->GetPosition(), 0.0f))
+            return false;
+    }
+
     // Off the pass's shared hazard read, which the fire bot, formation and approach triggers ask for too.
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+
+    // Water Spray is instant, 15 yd of line, and 23000 to 26000 against a 22000 to 24000 pool, so
+    // getting out of the line comes first: a node ticks 3100 and the fire leg holds the movement
+    // lock long enough to cancel the escape, which is how three bots died mid-dodge.
+    if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition()))
+        return false;
+
     uint32 nodes = 0;
-    for (Position const& node : GetMimironFirefighterHazards(botAI).flames)
+    for (Position const& node : hazards.flames)
         if (bot->GetExactDist2d(node.GetPositionX(), node.GetPositionY()) < ULDUAR_MIMIRON_FLAMES_RADIUS)
             ++nodes;
 
@@ -423,7 +465,8 @@ bool MimironMagneticCoreTrigger::IsActive()
     if (!GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
         return false;
 
-    // Holding one, the action decides whether it may go down yet and says so in the trace.
+    // Holding one, the action decides whether to bank a second, hold, walk or spend it, and says so
+    // in the trace.
     if (bot->HasItemCount(ITEM_MIMIRON_MAGNETIC_CORE, 1, false))
         return true;
 

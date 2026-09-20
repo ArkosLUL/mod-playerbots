@@ -60,7 +60,7 @@ bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distanc
 
 bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPriority priority,
                                                bool fallbackUnfiltered, bool interrupt,
-                                               char const* what)
+                                               char const* what, bool allowFire)
 {
     float const distance = bot->GetExactDist2d(dest.GetPositionX(), dest.GetPositionY());
     if (distance <= 0.0f)
@@ -72,12 +72,13 @@ bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPri
     Position const mirror(2.0f * bot->GetPositionX() - dest.GetPositionX(),
                           2.0f * bot->GetPositionY() - dest.GetPositionY(), bot->GetPositionZ());
 
-    return FleeFan(mirror, nullptr, distance, priority, fallbackUnfiltered, interrupt, what);
+    return FleeFan(mirror, nullptr, distance, priority, fallbackUnfiltered, interrupt, what, 0.0f,
+                   allowFire);
 }
 
 bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float distance,
                                 MovementPriority priority, bool fallbackUnfiltered, bool interrupt,
-                                char const* what, float clearRadius)
+                                char const* what, float clearRadius, bool allowFire)
 {
     if (distance <= 0.0f)
         return false;
@@ -209,7 +210,7 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
             // Firefighter only, and empty otherwise. Without these a Shock Blast or barrage dodge
             // lands the bot in the fire it is about to have to leave again, and a fire dodge steps
             // out of one node straight into the next - the nodes are 7 yd apart and the hops were 4.
-            if (!IsMimironSpotFireSafe(hazards, dest))
+            if (!allowFire && !IsMimironSpotFireSafe(hazards, dest))
             {
                 ++refusedFire;
                 continue;
@@ -270,12 +271,15 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         return false;
     }
 
-    // Still never into the two that kill outright. Standing in a fire node costs ~3.1k a second, and
-    // this leg is forced, so it would also lock out the Shock Blast escape until it expires.
+    // Still never into the three that kill outright. Standing in a fire node costs ~3.1k a second,
+    // and this leg is forced, so it would also lock out the Shock Blast escape until it expires.
+    // The cone is reachable here now that the fire dodge runs during a barrage.
     Position const straightAway(bot->GetPositionX() + cos(away) * distance,
                                 bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
+    float const fallbackTravel = speed > 0.0f ? distance / speed : 0.0f;
     if (!IsMimironSpotShockSafe(botAI, straightAway) ||
-        !IsMimironSpotBombSafe(hazards, straightAway))
+        !IsMimironSpotBombSafe(hazards, straightAway) ||
+        !IsMimironSpotBarrageSafe(vx001, barrage, straightAway, fallbackTravel))
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                         refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
@@ -440,29 +444,54 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     // That is how the far side of the room used to report safe while the beams swept across it.
     float const cw = Position::NormalizeOrientation(window.lead - boss->GetAngle(bot));
 
+    // Distance does not affect safety - the cone is 50000 yd long - so a ranged bot changes bearing
+    // and leaves its radius alone, which is the shortest bearing change there is, with a floor so it
+    // never orbits through the model. GetExactDist2d, not GetDistance2d: the latter subtracts both
+    // object sizes, and this radius is paired with a centre-based bearing to build a point measured
+    // from VX-001's centre.
+    //
+    // Melee, the phase 4 main tank included, orbit on the fixed ring rather than wherever they were
+    // standing. A floor of reach + 6 parked them at 14 yd, outside their own 10.25 yd "reach melee"
+    // test, and the charge guard then vetoed that node for the rest of the window: eight melee sat
+    // still for 13 s a barrage. The tight ring also turns faster - 7.0 yd/s over 9 yd is 44 deg/s
+    // against 28 at 14 - so the worst crossing of the band drops from 5.9 s to 3.9.
+    bool const melee = botAI->IsMelee(bot);
+    float const minRing =
+        boss->GetCombatReach() +
+        (melee ? ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN : ULDUAR_MIMIRON_BARRAGE_RING_MARGIN);
+    float const radius =
+        melee ? minRing
+              : std::clamp(bot->GetExactDist2d(boss), minRing, ULDUAR_MIMIRON_SPREAD_RADIUS_MAX);
+
     // Two fringes: ahead of the leading edge, and behind where the trailing edge finishes. Returning
     // false rather than true is deliberate - bots that were never in danger keep casting.
     if (cw > window.sweep + clearance && cw < twoPi - clearance)
     {
+        // Clear of the band means the bearing is right and only the radius is wrong, so a melee bot
+        // an earlier hop left out at the ranged ring steps back in along the bearing it already
+        // holds - same bearing, same safety. One step, and then it is swinging again.
+        if (melee && bot->GetExactDist2d(boss) > radius + 1.0f)
+        {
+            float const bearing = boss->GetAngle(bot);
+            Position const inward(boss->GetPositionX() + radius * cos(bearing),
+                                  boss->GetPositionY() + radius * sin(bearing),
+                                  boss->GetPositionZ());
+
+            if (IsMimironSpotMineSafe(bot, inward) &&
+                IsMimironSpotFireSafe(GetMimironFirefighterHazards(botAI), inward))
+            {
+                NoteBarrageDecision("stepin", nullptr, cw);
+                bot->CastStop();
+                MoveTo(boss->GetMapId(), inward.GetPositionX(), inward.GetPositionY(),
+                       inward.GetPositionZ(), false, false, false, true,
+                       MovementPriority::MOVEMENT_FORCED, true);
+                return true;
+            }
+        }
+
         NoteBarrageDecision("clear", nullptr, cw);
         return false;
     }
-
-    // Distance does not affect safety - the cone is 50000 yd long - so change bearing and leave the
-    // radius alone, which is the shortest bearing change there is. The floor is the exception: melee
-    // sit inside VX-001's combat reach, and orbiting at their own radius runs through the model.
-    // GetExactDist2d, not GetDistance2d: the latter subtracts both object sizes, and this radius is
-    // paired with a centre-based bearing to build a point measured from VX-001's centre.
-    //
-    // The phase 4 main tank gets a tighter floor. It cannot simply hold its spot - 20000 damage every
-    // 250 ms - but every yard it runs drags the chassis and the cone apex with it, so it orbits inside
-    // the chassis's chase range and the MK II stays where it is.
-    bool const phase4MainTank = PlayerbotAI::IsMainTank(bot) && boss->GetVehicleBase();
-    float const minRing = boss->GetCombatReach() + (phase4MainTank
-                                                        ? ULDUAR_MIMIRON_BARRAGE_TANK_RING_MARGIN
-                                                        : ULDUAR_MIMIRON_BARRAGE_RING_MARGIN);
-    float const radius =
-        std::clamp(bot->GetExactDist2d(boss), minRing, ULDUAR_MIMIRON_SPREAD_RADIUS_MAX);
 
     // Direction is chosen on **time spent inside the cone**, not on distance travelled. Distance is
     // what the old model compared, and it is the wrong currency: the short way round is frequently
@@ -525,10 +554,10 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
     float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
 
-    // Radius is free here, so spend it on the fire. The flame dodge stands down for the whole barrage,
-    // so a fixed-radius orbit walks straight onto burning ground and the bot stays there. No clean
-    // radius means keep the step anyway: the cone kills outright, the fire does not.
-    float stepRadius = radius;
+    // Radius is free here, so spend it on the fire - the walk as well as the endpoint. An orbit step
+    // at 22 yd crosses 60 to 80 degrees of floor, and a bot that has to stop and dodge a node
+    // halfway round loses the bearing the step was buying. No clean radius at all means keep the
+    // step: the cone kills outright, the fire does not.
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
     auto const onOrbit = [&](float r)
     {
@@ -536,19 +565,34 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                         boss->GetPositionZ());
     };
 
-    if (!IsMimironSpotFireSafe(hazards, onOrbit(radius)))
-    {
-        for (float shift : {2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f, -8.0f})
-        {
-            float const candidate = radius + shift;
-            if (candidate < minRing || candidate > ULDUAR_MIMIRON_SPREAD_RADIUS_MAX)
-                continue;
+    // Melee only give ground inward: their ring is already the smallest that clears the model, and
+    // widening it puts them back outside their own reach test.
+    float const shiftMin = melee ? ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN : minRing;
+    float const shiftMax = melee ? radius : ULDUAR_MIMIRON_SPREAD_RADIUS_MAX;
 
-            if (IsMimironSpotFireSafe(hazards, onOrbit(candidate)))
-            {
-                stepRadius = candidate;
-                break;
-            }
+    float stepRadius = radius;
+    bool settled = false;
+    for (float shift : {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f, -8.0f})
+    {
+        float const candidate = radius + shift;
+        if (candidate < shiftMin || candidate > shiftMax)
+            continue;
+
+        Position const spot = onOrbit(candidate);
+        if (!IsMimironSpotFireSafe(hazards, spot))
+            continue;
+
+        // First clean endpoint is the fallback; keep looking for one whose walk is clean too.
+        if (!settled)
+        {
+            stepRadius = candidate;
+            settled = true;
+        }
+
+        if (IsMimironWalkFireSafe(bot, hazards, spot))
+        {
+            stepRadius = candidate;
+            break;
         }
     }
 
@@ -653,11 +697,14 @@ bool MimironRocketStrikeAction::Execute(Event /*event*/)
     if (!rocketStrikeN)
         return false;
 
-    // 63041 blasts 3 yd; 10 covers the bot's footprint and pathing slop. The old phase 3/4 branch
-    // teleported instead, off a stale pointer left over from the mech sweep. MOVEMENT_FORCED so the
-    // arc-spread leg the bot is usually mid-way through cannot swallow the dodge.
-    return MoveAwayClearOfMines(rocketStrikeN, 10.0f, MovementPriority::MOVEMENT_FORCED, true, true,
-                                "rocket");
+    // Onto the clearance circle, not a flat run from wherever the bot stood: one radial gap swept
+    // over a fan only reaches the circle straight away and the other bearings land short, so bots
+    // kept walking further than the 3 yd blast needed and the formation paid 421 to 499 yd a phase
+    // for the way back. MOVEMENT_FORCED so the arc-spread leg the bot is usually mid-way through
+    // cannot swallow the dodge.
+    float const gap = ULDUAR_MIMIRON_ROCKET_CLEARANCE - bot->GetExactDist2d(rocketStrikeN);
+    return MoveAwayClearOfMines(rocketStrikeN, gap, MovementPriority::MOVEMENT_FORCED, true, true,
+                                "rocket", ULDUAR_MIMIRON_ROCKET_CLEARANCE);
 }
 
 bool MimironPhase4FocusAction::Execute(Event /*event*/)
@@ -927,7 +974,11 @@ bool MimironFireBotAction::Execute(Event /*event*/)
         Position const dest(bot->GetPositionX() - out * step * std::sin(facing),
                             bot->GetPositionY() + out * step * std::cos(facing), bot->GetPositionZ());
 
-        return MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, true, true, "spray");
+        // Fire-tolerant. Water Spray is instant and 23000 to 26000 against a 22000 to 24000 pool, so
+        // the whole pool rides on this leg; a node is 3100 a second. Two bots logged all eleven
+        // bearings refused by the fire screen and died 0.15 s later on the unscreened fallback.
+        return MoveTowardClearOfMines(dest, MovementPriority::MOVEMENT_FORCED, true, true, "spray",
+                                      true);
     }
 
     // Otherwise the silence. No interrupt: losing a cast to step out of a silence defeats the point.
@@ -1032,22 +1083,21 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         priority.emplace_back(NPC_BOMB_BOT, SelectByEntry(currentTarget, NPC_BOMB_BOT, reachable));
     }
 
-    // Fire bots that are not being kept, in three tiers for ranged. The cleanup sweep is the urgent
-    // one - none may reach phase 4, where they spray straight into the rendezvous. A pile-up is the
-    // other: each one alive is a Water Spray line and a siren, and past ULDUAR_MIMIRON_FIREBOT_CULL_AT
-    // of them the overlap does more damage than the mech is worth. A single extra is neither, and
-    // ranking that above the mech had the whole ranged group drop the boss the moment a third one
-    // spawned, for 361 bot-seconds while the Aerial Command Unit took 43k dps - so one waits behind
-    // the mech. Melee get them after the Assault Bot in every tier. Nobody culls in phase 4: a stray
-    // bot is a spray line, and anything that pulls a bot off the rendezvous costs the whole phase.
+    // Fire bots that are not being kept, in two tiers for ranged. Every one alive is protected until
+    // the Aerial Command Unit reaches the cleanup threshold, so above it this list is empty and the
+    // raid never stops for one: the fire is 41 to 46 % of phase 3 intake and three spawn every 45 s,
+    // so the brigade is worth more than the seconds spent shooting it. The cleanup sweep is the
+    // urgent tier - none may reach phase 4, where they spray straight into the rendezvous - and what
+    // is left over, a stray after a handover, waits behind the mech. Melee get them after the
+    // Assault Bot in either tier. Nobody culls in phase 4: anything that pulls a bot off the
+    // rendezvous costs the whole phase.
     bool const hardMode = IsMimironHardModeActive(botAI);
     bool const phase4 = IsMimironPhase4(bot);
     bool const cullFireBots = hardMode && !phase4;
     bool const fireBotSweep =
         cullFireBots && aerialCommandUnit &&
         aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT;
-    bool const fireBotPileUp = cullFireBots && fireBots.size() >= ULDUAR_MIMIRON_FIREBOT_CULL_AT;
-    if ((fireBotSweep || fireBotPileUp) && PlayerbotAI::IsRangedDps(bot))
+    if (fireBotSweep && PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
@@ -1083,7 +1133,7 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         if (mech)
             priority.emplace_back(mech->GetEntry(), mech);
 
-    if (cullFireBots && !fireBotSweep && !fireBotPileUp && PlayerbotAI::IsRangedDps(bot))
+    if (cullFireBots && !fireBotSweep && PlayerbotAI::IsRangedDps(bot))
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
@@ -1430,49 +1480,99 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         return false;
     }
 
+    uint32 const held = bot->GetItemCount(ITEM_MIMIRON_MAGNETIC_CORE, false);
     Item* core = bot->GetItemByEntry(ITEM_MIMIRON_MAGNETIC_CORE);
-    if (!core)
+
+    // 46029 has item_template duration 60, so a banked core expires in the bags; a template with no
+    // duration reads 0 and never does. The unit being this low ends the phase before another core
+    // could be spent at all.
+    uint32 const remaining = core ? core->GetUInt32Value(ITEM_FIELD_DURATION) : 0;
+    bool const expiring = remaining && remaining * 1000u <= ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS;
+    bool const acuLow = aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT;
+
+    // Wait where a core is spent rather than where the last corpse fell, so a release costs the
+    // 2 s climb and not a walk: one pull logged walk-acu at 6:30.3 and the use at 6:55.1. False
+    // once the carrier is standing there, so the rest of its tick still runs.
+    auto const waitUnderAcu = [&](char const* step)
+    {
+        NoteCoreStep(step);
+        if (bot->GetExactDist2d(aerialCommandUnit) <= ULDUAR_MIMIRON_CORE_USE_RANGE)
+            return false;
+
+        return MoveTo(aerialCommandUnit->GetMapId(), aerialCommandUnit->GetPositionX(),
+                      aerialCommandUnit->GetPositionY(), bot->GetPositionZ(), false, false, false,
+                      true, MovementPriority::MOVEMENT_COMBAT, true);
+    };
+
+    // Collect up to the bank before spending any: holding one used to send the node straight to the
+    // use branch, and the next corpse rotted where it fell. Never while the held core is on its way
+    // out or the phase is ending, or the carrier chases a corpse and loses the one it has.
+    if (held < ULDUAR_MIMIRON_CORE_BANK && !expiring && !acuLow)
     {
         Creature* corpse = GetMimironCoreCorpse(bot);
-        if (!corpse)
+        if (!corpse && !core)
         {
             NoteCoreStep("no-corpse");
             return false;
         }
 
-        // Go and get it. The corpse lasts 25 s and the Assault Bot dies wherever the raid stopped it,
-        // so the node has to walk: the old version only ever fired if the carrier happened to already
-        // be standing on one, which is why the core never reached the Aerial Command Unit.
-        if (bot->GetExactDist2d(corpse) > ULDUAR_MIMIRON_CORE_LOOT_RANGE)
+        if (corpse)
         {
-            NoteCoreStep("walk-corpse");
-            return MoveTo(corpse->GetMapId(), corpse->GetPositionX(), corpse->GetPositionY(),
-                          corpse->GetPositionZ(), false, false, false, true,
-                          MovementPriority::MOVEMENT_COMBAT, true);
-        }
+            // Go and get it. The corpse lasts 25 s and the Assault Bot dies wherever the raid
+            // stopped it, so the node has to walk: the old version only ever fired if the carrier
+            // happened to already be standing on one, which is why the core never reached the
+            // Aerial Command Unit.
+            if (bot->GetExactDist2d(corpse) > ULDUAR_MIMIRON_CORE_LOOT_RANGE)
+            {
+                NoteCoreStep(core ? "walk-corpse-second" : "walk-corpse");
+                return MoveTo(corpse->GetMapId(), corpse->GetPositionX(), corpse->GetPositionY(),
+                              corpse->GetPositionZ(), false, false, false, true,
+                              MovementPriority::MOVEMENT_COMBAT, true);
+            }
 
-        // Bots have no in-combat loot path - looting is only wired into LootNonCombatStrategy - and
-        // 46029 is a white consumable the loot strategies discard as junk even when one is open. The
-        // Assault Bot drops it at 100%, so a real raid always leaves this fight holding one. Handing
-        // it over stands in for the missing packet exchange, gated on what a player would still have
-        // to do: kill the bot, stand on the corpse, and not already be carrying one. The core comes
-        // off that corpse, once, or it would hand out a new one every time the last was used.
-        if (!TakeMimironCore(bot, corpse))
-        {
-            NoteCoreStep("bags-full");
-            return false;
-        }
+            // Bots have no in-combat loot path - looting is only wired into LootNonCombatStrategy -
+            // and 46029 is a white consumable the loot strategies discard as junk even when one is
+            // open. The Assault Bot drops it at 100%, so a real raid always leaves this fight
+            // holding one. Handing it over stands in for the missing packet exchange, gated on what
+            // a player would still have to do: kill the bot, stand on the corpse, and have room for
+            // it. The core comes off that corpse, once, or it would hand out a new one every time
+            // the last was used.
+            if (TakeMimironCore(bot, corpse))
+            {
+                NoteCoreStep(core ? "loot-second" : "loot");
+                return true;
+            }
 
-        NoteCoreStep("loot");
-        return true;
+            if (!core)
+            {
+                NoteCoreStep("bags-full");
+                return false;
+            }
+        }
+    }
+
+    if (!core)
+    {
+        NoteCoreStep("no-corpse");
+        return false;
     }
 
     // One core per landing. A second one while the first is live makes the unit climb with the aura
     // still on and pushes every add timer back another 25 s.
     if (!IsMimironCoreUseReady(botAI, bot))
+        return waitUnderAcu("pending");
+
+    // Then chain the bank instead of spending each core as it arrives. DO_DISABLE_AERIAL delays the
+    // unit's event map 25 s and its UpdateAI returns for the whole 20 s aura, so every landing is
+    // 45 s with no Assault Bot and therefore no next core: two cores back to back cost one of those
+    // holes rather than two. Three ways out, and the second one is the escape that fires on a slow
+    // pull - the observed wait for a second core was 32 s and 52 s against a 60 s item.
+    if (held < ULDUAR_MIMIRON_CORE_BANK && !acuLow)
     {
-        NoteCoreStep("pending");
-        return false;
+        if (!expiring)
+            return waitUnderAcu("hold");
+
+        NoteCoreStep("hold-expiring");
     }
 
     // 64444 places its summon by nearest entry, so the core only reaches the ACU from underneath it.

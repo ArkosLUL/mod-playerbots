@@ -32,6 +32,13 @@ BULWARK = 5004  # tank
 
 HOME = {AGONY: (22.0, 0.0), TREE: (0.0, 22.0), SHADOW: (3.0, 0.0), BULWARK: (-3.0, 0.0)}
 
+ROSTER = [
+    {"g": AGONY, "n": "Agony", "r": "ranged", "c": "warlock", "h": 0},
+    {"g": TREE, "n": "Tree", "r": "heal", "c": "druid", "h": 0},
+    {"g": SHADOW, "n": "Shadow", "r": "melee", "c": "rogue", "h": 0},
+    {"g": BULWARK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
+]
+
 
 def spot(guid: int, when: int) -> tuple[float, float]:
     # Agony is knocked 8 yd off her slot by the Rapid Burst step and walked back by the formation.
@@ -65,11 +72,7 @@ def move(when: int, guid: int, by: str, x: float, y: float) -> dict:
 def mimiron_pull() -> list[dict]:
     records = [
         {"e": "hdr", "v": 13, "ts": 1789700000000, "map": 603, "inst": 2, "diff": 1, "boss": "mimiron",
-         "roster": [
-             {"g": AGONY, "n": "Agony", "r": "ranged", "c": "warlock", "h": 0},
-             {"g": TREE, "n": "Tree", "r": "heal", "c": "druid", "h": 0},
-             {"g": SHADOW, "n": "Shadow", "r": "melee", "c": "rogue", "h": 0},
-             {"g": BULWARK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0}]},
+         "roster": ROSTER},
         {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
         {"t": 1, "e": "unit", "g": VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
         {"t": 1, "e": "unit", "g": BOMB, "en": mm.NPC_FROST_BOMB, "n": "Frost Bomb"},
@@ -110,6 +113,102 @@ def mimiron_pull() -> list[dict]:
         {"t": 40000, "e": "end", "out": "wipe"},
     ]
     records += [snap(when) for when in range(0, 40000, 250)]
+    return records
+
+
+# A second pull for the sections that need a barrage window and a phase 3: the Spinning Up cast at
+# 16 s, its 14.5 s window and the 15 s after it all sit inside phase 2, so nothing phase 3 does
+# lands in the storm the --spin section measures.
+LATE_VX = 4294971000
+LATE_ACU = 4294971001
+FIREBOT_A = 4294971002
+FIREBOT_B = 4294971003
+ASSAULT = 4294971004
+
+SPIN_AT = 16000
+P3_AT = 50000
+
+
+def late_spot(guid: int, when: int) -> tuple[float, float]:
+    # Shadow is inside melee range of VX-001 for exactly the barrage window and out of it otherwise.
+    if guid == SHADOW:
+        return (9.0, 0.0) if SPIN_AT <= when < SPIN_AT + mm.SPIN_WINDOW_MS else (14.0, 0.0)
+    return HOME[guid]
+
+
+def late_target(guid: int, when: int) -> int:
+    return FIREBOT_B if guid == AGONY and 51000 <= when < 53000 else LATE_VX
+
+
+def late_acu_hp(when: int) -> float:
+    """1 point a second in the air, 4 on the floor: grounded runs 53 s to 57 s."""
+    if when < 53000:
+        return 60.0 - (when - P3_AT) / 1000.0
+    if when < 57000:
+        return 57.0 - 4.0 * (when - 53000) / 1000.0
+    return 41.0 - (when - 57000) / 1000.0
+
+
+def late_snap(when: int) -> dict:
+    rows = [[LATE_VX, 0.0, 0.0, 364.0, 0.0, 90.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0]]
+    for guid in HOME:
+        x, y = late_spot(guid, when)
+        alive = 0.0 if guid == SHADOW and when > 54100 else 100.0
+        # Tree walks for the whole 15 s after the barrage, and only Agony deals damage: 10 a second.
+        walking = int(guid == TREE and 30500 <= when < 45500)
+        dealt = 10 * (when // 1000) if guid == AGONY else 0
+        rows.append([guid, x, y, 364.0, 0.0, alive, 80.0, late_target(guid, when), walking, 0, 0,
+                     dealt, 0, 0.0])
+    if P3_AT <= when <= 65000:
+        rows.append([LATE_ACU, 0.0, 0.0, 380.0, 0.0, late_acu_hp(when), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0])
+    if P3_AT <= when < 62000:
+        rows.append([FIREBOT_A, 12.0, 12.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+    if P3_AT <= when < 55000:
+        rows.append([FIREBOT_B, -12.0, 12.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+    if P3_AT <= when < 54000:
+        rows.append([ASSAULT, 5.0, 5.0, 364.0, 0.0, 100.0, 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0])
+    return {"t": when, "e": "snap", "u": rows, "hz": []}
+
+
+def late_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789700000000, "map": 603, "inst": 3, "diff": 1, "boss": "mimiron",
+         "roster": ROSTER},
+        {"t": 0, "e": "pull", "boss": "mimiron", "src": "engage"},
+        {"t": 1, "e": "unit", "g": LATE_VX, "en": mm.NPC_VX001, "n": "VX-001", "b": 1},
+        {"t": 1, "e": "unit", "g": LATE_ACU, "en": mm.NPC_AERIAL_COMMAND_UNIT, "n": "Aerial Command Unit",
+         "b": 1},
+        {"t": 1, "e": "unit", "g": FIREBOT_A, "en": mm.NPC_EMERGENCY_FIRE_BOT, "n": "Emergency Fire Bot"},
+        {"t": 1, "e": "unit", "g": FIREBOT_B, "en": mm.NPC_EMERGENCY_FIRE_BOT, "n": "Emergency Fire Bot"},
+        {"t": 1, "e": "unit", "g": ASSAULT, "en": mm.NPC_ASSAULT_BOT, "n": "Assault Bot"},
+
+        # phase 4 twice, with a handover between them
+        {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "2"},
+        {"t": P3_AT, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "3"},
+        {"t": 62000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+        {"t": 68000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "5"},
+        {"t": 71000, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "4"},
+
+        {"t": SPIN_AT, "e": "cast", "s": LATE_VX, "sp": mm.SPELL_SPINNING_UP, "tgt": 0, "ct": 4000},
+        {"t": 17000, "e": "dmg", "s": LATE_VX, "d": TREE, "sp": mm.SPELL_FLAMES, "a": 5000},
+
+        # the storm after the window: one hit, one heal, one formation leg
+        {"t": 31000, "e": "dmg", "s": LATE_VX, "d": BULWARK, "sp": mm.SPELL_HEAT_WAVE, "a": 40000},
+        {"t": 31500, "e": "heal", "s": TREE, "d": BULWARK, "sp": 48441, "a": 10000, "oh": 2000},
+        move(32000, TREE, mm.FORMATION, 0.0, 20.0),
+
+        {"t": 51000, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "hold"},
+        {"t": 52900, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "use"},
+        {"t": 53000, "e": "note", "g": AGONY, "k": "mimiron.core", "txt": "1"},
+        {"t": 54000, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "pending"},
+        {"t": 57000, "e": "note", "g": AGONY, "k": "mimiron.core", "txt": "0"},
+
+        {"t": 54000, "e": "dmg", "s": FIREBOT_A, "d": TREE, "sp": mm.SPELL_WATER_SPRAY, "a": 23000},
+        {"t": 54100, "e": "death", "g": SHADOW, "killer": FIREBOT_A, "blow": [FIREBOT_A, 24000],
+         "x": 14.0, "y": 0.0},
+        {"t": 75000, "e": "end", "out": "wipe"},
+    ]
+    records += [late_snap(when) for when in range(0, 75000, 250)]
     return records
 
 
@@ -176,6 +275,57 @@ class SyntheticPull(unittest.TestCase):
         first = mm.heal_rows(self.trace)[0]
         self.assertEqual(first["heat"], 2000)
         self.assertEqual(first["healed"], 2000)
+
+
+class LaterPhases(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "603_3_mimiron_1789700001.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in late_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_a_phase_that_comes_round_twice_gets_its_own_label(self):
+        self.assertEqual(mm.phases(self.trace),
+                         [(0, 50000, "P2"), (50000, 62000, "P3"), (62000, 68000, "P4"),
+                          (68000, 71000, "H1"), (71000, 75000, "P4b")])
+
+    def test_the_barrage_window_is_measured_against_the_time_before_it(self):
+        rows = mm.spin_rows(self.trace)
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual((row["dealt_before"], row["dealt_inside"]), (150, 140))
+        self.assertEqual(row["melee_in_range"], row["melee_rows"])
+        self.assertEqual(row["fire"], 5000)
+        self.assertEqual(row["deaths"], [])
+
+    def test_the_storm_after_the_window_is_its_own_count(self):
+        row = mm.spin_rows(self.trace)[0]
+        self.assertEqual((row["taken"], row["healed"]), (40000, 8000))
+        self.assertEqual(row["heal_moving"], 1.0)
+        self.assertEqual((row["legs"], row["yards"]), (1, 2.0))
+
+    def test_phase_3_counts_every_fire_bot_and_who_shot_one(self):
+        rows = mm.p3_rows(self.trace)
+        self.assertEqual(rows["alive_max"], 2)
+        self.assertAlmostEqual(rows["alive_mean"], 68 / 48)
+        self.assertEqual(rows["firebots"][FIREBOT_B]["aimed"], 8)
+        self.assertEqual(rows["aimed_seconds"], 2.0)
+        self.assertEqual(rows["assaults"], [3750])
+
+    def test_water_spray_damage_and_the_death_it_caused(self):
+        rows = mm.p3_rows(self.trace)
+        self.assertEqual((rows["spray"], rows["spray_deaths"]), (23000, 1))
+        self.assertEqual(dict(rows["coresteps"]), {"hold": 1, "use": 1, "pending": 1})
+
+    def test_the_unit_only_dies_on_the_floor(self):
+        rows = mm.p3_rows(self.trace)
+        self.assertEqual(rows["grounded"], (4000, 16.0))
+        self.assertEqual(rows["airborne"], (8000, 8.0))
 
 
 class EveryView(unittest.TestCase):

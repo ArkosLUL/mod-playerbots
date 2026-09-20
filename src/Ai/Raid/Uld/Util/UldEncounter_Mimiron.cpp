@@ -84,7 +84,11 @@ float GetMimironSpinningUpSeconds(Unit* vx001)
     return std::max(0.0f, static_cast<float>(spinningUp->GetCastTimeRemaining()) / 1000.0f);
 }
 
-MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001)
+namespace
+{
+// The raw read. The public wrapper below folds it onto the trigger pass: it costs a 250 yd grid
+// scan for the DB Target, and four nodes ask for the same cone on the same pass.
+MimironBarrageWindow ReadMimironBarrageWindow(Player* bot, Unit* vx001)
 {
     MimironBarrageWindow window;
     if (!bot || !vx001)
@@ -126,6 +130,7 @@ MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001)
 
     return window;
 }
+}  // namespace
 
 bool IsMimironSpotMineSafe(Player* bot, Position const& dest, float clearance)
 {
@@ -302,6 +307,9 @@ struct MimironPassReads
 
     bool burstRead = false;
     MimironRapidBurstWindow burst;
+
+    bool barrageRead = false;
+    MimironBarrageWindow barrage;
 };
 
 // thread_local is fine: a whole pass runs on one map thread.
@@ -398,6 +406,22 @@ bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const&
     return true;
 }
 }  // namespace
+
+MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001)
+{
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    MimironPassReads* pass = botAI ? MimironPassReadsFor(botAI) : nullptr;
+    if (!pass)
+        return ReadMimironBarrageWindow(bot, vx001);
+
+    if (!pass->barrageRead)
+    {
+        pass->barrage = ReadMimironBarrageWindow(bot, vx001);
+        pass->barrageRead = true;
+    }
+
+    return pass->barrage;
+}
 
 MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI)
 {
@@ -496,15 +520,30 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
     MimironRapidBurstWindow const burst =
         vx001 ? GetMimironRapidBurstWindow(botAI, bot, vx001) : MimironRapidBurstWindow();
+    MimironBarrageWindow const barrage =
+        vx001 ? GetMimironBarrageWindow(bot, vx001) : MimironBarrageWindow();
+
+    // Judged at arrival, like a flee bearing. These are the longest legs anything in the fight
+    // issues and the cone turns about 10.6 degrees a second, so a slot that is clear when the walk
+    // starts can be under the beams when it ends.
+    float const speed = bot->GetSpeed(MOVE_RUN);
+    auto const coneClear = [&](Position const& spot)
+    {
+        float const travel = speed > 0.0f
+                                 ? bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) / speed
+                                 : 0.0f;
+        return IsMimironSpotBarrageSafe(vx001, barrage, spot, travel);
+    };
+
     auto const standable = [&](Position const& spot)
     {
         return IsMimironSpotStandable(bot, spot, markers, hazards) &&
-               IsMimironSpotRapidBurstSafe(vx001, burst, spot);
+               IsMimironSpotRapidBurstSafe(vx001, burst, spot) && coneClear(spot);
     };
 
     Position goal = slot;
     char const* how = "direct";
-    if (!IsMimironSpotStandable(bot, slot, markers, hazards))
+    if (!IsMimironSpotStandable(bot, slot, markers, hazards) || !coneClear(slot))
     {
         // Already on clear ground beside it: stay. A substitute moves every time the fire grows, and
         // chasing it is a walk every tick.
@@ -810,6 +849,11 @@ struct MimironFightState
 
     std::vector<ObjectGuid> keptFireBots;
     uint32 fireBotScanMs = 0;
+
+    // Where the Firefighter wedge points once a barrage has moved it off the east centreline. A
+    // bearing of zero is a real one, so wedgeAimedMs is what says whether it has been aimed.
+    float wedgeBearing = 0.0f;
+    uint32 wedgeAimedMs = 0;
 
     // The wedge slide in force, and the focus it was worked out against.
     uint32 shiftFocusEntry = 0;
@@ -1438,16 +1482,15 @@ std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)
         bot->GetCreatureListWithEntryInGrid(fireBots, NPC_EMERGENCY_FIRE_BOT,
                                             ULDUAR_MIMIRON_STAGING_SEARCH_RANGE);
 
-        // Lowest guid is the oldest, so a new wave never displaces the pair already working.
+        // Every one of them. Keeping a pair held the field at 23 to 26 nodes and 41 to 46 % of all
+        // phase 3 intake, and the pair died to splash anyway; three spawn every 45 s, and one with
+        // no flame within 150 yd stops moving and never sprays, so a cleared field quiets itself.
         std::vector<ObjectGuid> alive;
         for (Creature* fireBot : fireBots)
             if (fireBot && fireBot->IsAlive())
                 alive.push_back(fireBot->GetGUID());
 
         std::sort(alive.begin(), alive.end());
-        if (alive.size() > ULDUAR_MIMIRON_FIREBOT_KEEP)
-            alive.resize(ULDUAR_MIMIRON_FIREBOT_KEEP);
-
         state.keptFireBots = alive;
     }
 
@@ -1831,6 +1874,70 @@ bool GetMimironPhase3Slot(Player* bot, Group* group, Unit* focus, Position& out,
     return true;
 }
 
+// Where the Firefighter wedge points. It starts on the east gap between the add arms and gives way
+// to a Laser Barrage, because 120 degrees of wedge overlapping the swept band cannot be walked out
+// of once the beams ignite - and the wedge is where the whole raid stands.
+//
+// The safe sector's bisector is lead + pi - sweep/2: the band runs the sweep plus two clearances
+// clockwise from the ignition centreline, so what is left is centred opposite that line and pulled
+// back by half the sweep. Measured over six barrages it came out 117 to 126 degrees wide, which is
+// the wedge's own width, so the fit is exact and the aim has to be.
+float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
+{
+    float const east = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
+        ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionX(), ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionY());
+
+    MimironFightState& state = MimironFightStateFor(bot);
+    float const current = state.wedgeAimedMs ? state.wedgeBearing : east;
+
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    if (!vx001)
+        return current;
+
+    // Only while it is still spinning up: once the beams are lit, lead and sweep describe what is
+    // left of the cast, so the bisector they give moves every tick and would walk the raid round
+    // the room under the beams. One re-aim a barrage, latched for everyone.
+    MimironBarrageWindow const window = GetMimironBarrageWindow(bot, vx001);
+    if (!window.valid || window.untilLive <= 0.0f)
+        return current;
+
+    if (state.wedgeAimedMs && GetMSTimeDiffToNow(state.wedgeAimedMs) < ULDUAR_MIMIRON_WEDGE_REAIM_MS)
+        return current;
+
+    // A cone that misses the wedge is worth sitting through: moving costs 25 bots a walk each, and
+    // the fire convergence the wedge exists for is paid for in where it sits.
+    auto const onWedge = [&](float bearing)
+    {
+        return Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() +
+                            ULDUAR_MIMIRON_SPREAD_RADIUS * std::cos(bearing),
+                        ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() +
+                            ULDUAR_MIMIRON_SPREAD_RADIUS * std::sin(bearing),
+                        ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+    };
+
+    bool clear = true;
+    for (float edge :
+         {-ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, 0.0f, ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE})
+        clear = clear && IsMimironSpotBarrageSafe(vx001, window, onWedge(current + edge), 0.0f);
+
+    if (clear)
+        return current;
+
+    state.wedgeBearing =
+        Position::NormalizeOrientation(window.lead + static_cast<float>(M_PI) - 0.5f * window.sweep);
+    state.wedgeAimedMs = getMSTime();
+
+    if (RaidObs::Active())
+    {
+        char line[24];
+        snprintf(line, sizeof(line), "reaim %.0f",
+                 state.wedgeBearing * 180.0f / static_cast<float>(M_PI));
+        RaidObs::NoteDerived(bot, "mimiron.wedge", line);
+    }
+
+    return state.wedgeBearing;
+}
+
 // `branch` names which shape answered, and is what a trace records: the coordinate on its own cannot
 // tell a wedge slot from a ring slot that happens to land near it, and which shape a bot was given is
 // the thing that goes wrong.
@@ -1987,11 +2094,11 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
                          ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE, ULDUAR_MIMIRON_PHASE3_SPACING, radius,
                          offset);
 
-        // Bearing off the room centre, not off the anchor: the sector has to stay put in the room for
-        // the fire to pile up in it, and it is the same east gap phase 3 already forms up in.
-        float const centreline = ULDUAR_MIMIRON_ROOM_CENTER.GetAngle(
-            ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionX(), ULDUAR_MIMIRON_PHASE3_STAGE.GetPositionY());
-        float const bearing = Position::NormalizeOrientation(centreline + offset);
+        // Bearing off the room centre, not off the anchor: the sector has to stay put in the room
+        // for the fire to pile up in it. It starts on the same east gap phase 3 forms up in, and
+        // gives way to the barrage cone, which is the one thing that outranks the fire.
+        float const bearing =
+            Position::NormalizeOrientation(GetMimironWedgeCentreline(botAI, bot) + offset);
 
         out = Position(anchor.GetPositionX() + radius * cos(bearing),
                        anchor.GetPositionY() + radius * sin(bearing),
