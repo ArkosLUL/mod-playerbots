@@ -3,7 +3,7 @@
 
     mimiron.py <file>            every section
     mimiron.py <file> --phases   phase spans, and every death by phase and killer
-    mimiron.py <file> --heal     the phase 2 healing race, 2.5 s at a time
+    mimiron.py <file> --heal     the phase 2 healing race, 2.5 s at a time, and where the cooldowns went
     mimiron.py <file> --walk     walking time per phase and role, charged to the move that started it
     mimiron.py <file> --flips    A-B-A between one bot's moves, and what the formation walked back from
     mimiron.py <file> --burst    every Rapid Burst: carrier, cone, outside, and the ticks each took
@@ -60,6 +60,11 @@ SPELL_SPINNING_UP = 63414
 SPELL_ROCKET_STRIKE = (64402, 65034)
 SPELL_WATER_SPRAY = 64619
 SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
+SPELL_LASER_BARRAGE = 63293
+# Raid cooldowns, named in --heal's events off the caster's cast record. Tranquility is every
+# player rank of the channel.
+COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
+                   **{rank: "tranq" for rank in (740, 8918, 9862, 9863, 26983, 48446, 48447)}}
 
 FORMATION = "mimiron arc spread action"
 BOMB_DODGE = "mimiron frost bomb action"
@@ -72,6 +77,8 @@ BOMB_CLEARANCE = radius("ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE")
 SPRAY_LENGTH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH")
 SPRAY_HALF_WIDTH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH")
 SPRAY_REACH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH")
+# Inside this the beams hit at any bearing.
+BARRAGE_BOUNDARY = radius("ULDUAR_MIMIRON_BARRAGE_BOUNDARY")
 # How long before a spray hit the victim is checked against the lanes: time enough to step out.
 SPRAY_LEAD_MS = 1000
 
@@ -310,6 +317,7 @@ def heal_rows(trace: Trace, label: str = "P2") -> list[dict]:
 
     events = {SPELL_FROST_BOMB: "BOMB", SPELL_SPINNING_UP: "spinup", SPELL_HEAT_WAVE: "heatwave"}
     events.update({spell: "rocket" for spell in SPELL_ROCKET_STRIKE})
+    events.update(COOLDOWN_EVENTS)
     for rec in trace.records:
         when = rec.get("t", 0)
         if not low <= when < high:
@@ -759,7 +767,7 @@ def spin_rows(trace: Trace) -> list[dict]:
             "inside": role_shares(trace, start, stop),
             "dealt_before": dealt_between(samples, roster, start - SPIN_WINDOW_MS, start),
             "dealt_inside": dealt_between(samples, roster, start, stop),
-            "melee_rows": 0, "melee_in_range": 0, "fire": 0, "deaths": [],
+            "melee_rows": 0, "melee_in_range": 0, "fire": 0, "beam": 0, "boundary": 0, "deaths": [],
             "hp_before": raid_hp(samples.before(stop), roster),
             "hp_after": raid_hp(samples.before(after), roster),
             "taken": 0, "healed": 0, "legs": 0, "yards": 0.0,
@@ -786,6 +794,13 @@ def spin_rows(trace: Trace) -> list[dict]:
             if start <= when < stop:
                 if kind == "dmg" and rec.get("d") in roster and rec.get("sp") == SPELL_FLAMES:
                     row["fire"] += rec.get("a", 0)
+                elif kind == "dmg" and rec.get("d") in roster and rec.get("sp") == SPELL_LASER_BARRAGE:
+                    row["beam"] += 1
+                    units = samples.before(when)
+                    boss = next((units[guid] for guid in vx if guid in units), None)
+                    victim = units.get(rec["d"])
+                    if boss and victim and dist2((victim[1], victim[2]), (boss[1], boss[2])) < BARRAGE_BOUNDARY:
+                        row["boundary"] += 1
             elif stop <= when < after:
                 if kind == "dmg" and rec.get("d") in roster:
                     row["taken"] += rec.get("a", 0)
@@ -827,7 +842,8 @@ def show_spin(trace: Trace) -> None:
             for role in ROLES if role in row["inside"]))
         melee = row["melee_in_range"] / row["melee_rows"] * 100 if row["melee_rows"] else 0.0
         print(f"            melee within {MELEE_RANGE:.1f} yd of VX-001 {melee:3.0f}% of the window;"
-              f" fire {row['fire'] // 1000}k; {len(row['deaths'])} dead"
+              f" fire {row['fire'] // 1000}k; beam ticks {row['beam']},"
+              f" {row['boundary']} inside {BARRAGE_BOUNDARY:.1f} yd of VX-001; {len(row['deaths'])} dead"
               + (f" ({', '.join(row['deaths'])})" if row["deaths"] else ""))
         hp = ("    -" if row["hp_before"] is None or row["hp_after"] is None
               else f"{row['hp_before']:.0f} -> {row['hp_after']:.0f}")
@@ -1058,7 +1074,7 @@ def show_p3(trace: Trace) -> None:
 
 SECTIONS = (
     ("phases", "phase spans and deaths by phase", show_phases),
-    ("heal", "the phase 2 healing race, 2.5 s at a time", show_heal),
+    ("heal", "the phase 2 healing race, 2.5 s at a time, cooldowns included", show_heal),
     ("walk", "walking time per phase and role, by mover", show_walk),
     ("flips", "A-B-A between moves, and formation yards by cause", show_flips),
     ("burst", "Rapid Burst carrier, cone and outside ticks", show_burst),

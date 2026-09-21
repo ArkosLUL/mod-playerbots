@@ -470,6 +470,20 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
     // false rather than true is deliberate - bots that were never in danger keep casting.
     if (cw > window.sweep + clearance && cw < twoPi - clearance)
     {
+        // Under the model the beams hit at any bearing, so clear by bearing isn't clear. Straight out
+        // on the bearing it holds, which the band hasn't reached. No screening: the beams are
+        // certain, a marker on the ring isn't, and the flee fan refuses this circle.
+        if (bot->GetExactDist2d(boss) < ULDUAR_MIMIRON_BARRAGE_BOUNDARY)
+        {
+            float const bearing = boss->GetAngle(bot);
+            NoteBarrageDecision("boundary", nullptr, cw);
+            bot->CastStop();
+            MoveTo(boss->GetMapId(), boss->GetPositionX() + radius * cos(bearing),
+                   boss->GetPositionY() + radius * sin(bearing), boss->GetPositionZ(), false, false, false,
+                   true, MovementPriority::MOVEMENT_FORCED, true);
+            return true;
+        }
+
         // Clear of the band means the bearing is right and only the radius is wrong, so a melee bot
         // an earlier hop left out at the ranged ring steps back in along the bearing it already
         // holds - same bearing, same safety. One step, and then it is swinging again.
@@ -480,8 +494,9 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                                   boss->GetPositionY() + radius * sin(bearing),
                                   boss->GetPositionZ());
 
-            if (IsMimironSpotMineSafe(bot, inward) &&
-                IsMimironSpotFireSafe(GetMimironFirefighterHazards(botAI), inward))
+            MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+            if (IsMimironSpotMineSafe(bot, inward) && IsMimironSpotFireSafe(hazards, inward) &&
+                IsMimironSpotBombSafe(hazards, inward) && IsMimironSpotRocketSafe(botAI, inward))
             {
                 NoteBarrageDecision("stepin", nullptr, cw);
                 bot->CastStop();
@@ -581,8 +596,11 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         if (candidate < shiftMin || candidate > shiftMax)
             continue;
 
+        // A rocket or the bomb kills outright, so a spot in either isn't even a fallback. The step
+        // is MOVEMENT_FORCED and locks the rocket dodge out until it lands.
         Position const spot = onOrbit(candidate);
-        if (!IsMimironSpotFireSafe(hazards, spot))
+        if (!IsMimironSpotRocketSafe(botAI, spot) || !IsMimironSpotBombSafe(hazards, spot) ||
+            !IsMimironSpotFireSafe(hazards, spot))
             continue;
 
         // First clean endpoint is the fallback; keep looking for one whose walk is clean too.

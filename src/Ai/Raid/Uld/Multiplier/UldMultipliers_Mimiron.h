@@ -153,4 +153,14 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Mimiron phase 2: Divine Sacrifice, Divine Hymn and Power Infusion wait until the raid is really
+// dropping. Their trigger fires on the walk-in Rapid Burst, which the healers top off anyway, and then
+// all three are on cooldown for the stretch after the first barrage where the pulls die.
+class MimironStormCooldownHoldMultiplier : public Multiplier
+{
+public:
+    MimironStormCooldownHoldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron storm cooldown hold") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

@@ -79,6 +79,12 @@ constexpr float ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE = 52.0f * static_cast<float>(M
 // about one bot reaction tick with nothing to spare. This still leaves a 120 degree safe wedge.
 constexpr float ULDUAR_MIMIRON_BARRAGE_MARGIN = 15.0f * static_cast<float>(M_PI) / 180.0f;
 
+// Inside this the beams hit whatever the bearing. The cone check skips bearing for anything within
+// IsWithinBoundaryRadius of VX-001, max(bounding radius, MIN_MELEE_REACH 2.0) centre to centre, so
+// 2.0 plus a yard. A fire dodge can park a melee bot under the model, and the bearing test calls
+// that spot clear.
+constexpr float ULDUAR_MIMIRON_BARRAGE_BOUNDARY = 3.0f;
+
 // Waypoint velocity on path 13395. NPC 33576 laps a 707 yd polygon that a circle of radius 113.2
 // centred 2.7 yd from ULDUAR_MIMIRON_ROOM_CENTER fits, so predicting its position by rotating it
 // about the room centre lands within a couple of degrees of bearing over a whole barrage. Clockwise.
@@ -359,6 +365,10 @@ bool IsMimironFireBotProtected(PlayerbotAI* botAI, Player* bot, Unit* fireBot);
 // dodge can carry one in from outside.
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest);
 
+// Whether `dest` is ULDUAR_MIMIRON_ROCKET_CLEARANCE clear of every live Rocket Strike marker. For
+// moves that screen the fire themselves and still have to miss the 5000000 blast.
+bool IsMimironSpotRocketSafe(PlayerbotAI* botAI, Position const& dest);
+
 // Same idea for anywhere a bot is asked to stand rather than flee to: mines, any Rocket Strike marker
 // still burning its fuse and a Shock Blast being cast, and under hard mode the ground fire, the
 // Frost Bomb and the fire bots. Positioning that ignores markers walks a bot that just dodged one
@@ -507,6 +517,16 @@ bool IsMimironEngaged(PlayerbotAI* botAI);
 // and the phase is at its most time-critical after that, not over.
 bool IsMimironPhase4(Player* bot);
 
+// Phase 2: VX-001 on the floor on its own. Riding the chassis is phase 4.
+bool IsMimironPhase2(PlayerbotAI* botAI);
+
+// Raid members within heal distance at or under LowHealth before Divine Sacrifice, Divine Hymn and
+// Power Infusion may go out in phase 2. Their shared trigger wants 6 at 65 %, which the walk-in Rapid
+// Burst meets in the first seconds, and all three are then on cooldown for the Heat Wave, bomb and
+// bursts that land together after the first barrage. Before that barrage the count at 45 % peaked at
+// 4, after it at 11 to 17.
+constexpr uint32 ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT = 6;
+
 // Phase 3: the Aerial Command Unit up on its own. "possible targets no los" drops unselectable units,
 // so the idle MK II and VX-001 are not in it and the unit only is once it can be attacked.
 bool IsMimironPhase3(PlayerbotAI* botAI);
@@ -559,6 +579,7 @@ MimironBarrageWindow GetMimironBarrageWindow(Player* bot, Unit* vx001);
 // 2.6 s for an 18 yd Shock Blast flee - and the cone turns about 10.6 degrees a second, so "clear when
 // the move was issued" is the wrong question to ask. Measured clockwise from the ignition centreline
 // and never folded to a signed angle: the band is 240 degrees wide at the room centre, wider off it.
+// The ULDUAR_MIMIRON_BARRAGE_BOUNDARY circle is refused whatever the bearing.
 //
 // Takes the window rather than reading it, because GetMimironBarrageWindow runs a grid scan for the
 // DB Target and callers test a fan of a dozen bearings against the same cast.

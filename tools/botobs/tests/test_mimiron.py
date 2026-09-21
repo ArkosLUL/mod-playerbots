@@ -89,6 +89,7 @@ def mimiron_pull() -> list[dict]:
 
         {"t": 9000, "e": "dmg", "s": VX, "d": TREE, "sp": mm.SPELL_HEAT_WAVE, "a": 2000},
         {"t": 9100, "e": "heal", "s": TREE, "d": AGONY, "sp": 48441, "a": 3000, "oh": 1000},
+        {"t": 9200, "e": "cast", "s": BULWARK, "sp": 64205, "tgt": 0, "ct": 0},
 
         # step, walk back, step again: one A-B-A, and the walk back charged to the step
         move(10000, AGONY, mm.BURST_STEP, 22.0, 8.0),
@@ -135,6 +136,9 @@ def late_spot(guid: int, when: int) -> tuple[float, float]:
     # Shadow is inside melee range of VX-001 for exactly the barrage window and out of it otherwise.
     if guid == SHADOW:
         return (9.0, 0.0) if SPIN_AT <= when < SPIN_AT + mm.SPIN_WINDOW_MS else (14.0, 0.0)
+    # Bulwark stands under the model for the window, where the beams hit at any bearing.
+    if guid == BULWARK and SPIN_AT <= when < SPIN_AT + mm.SPIN_WINDOW_MS:
+        return (-2.0, 0.0)
     return HOME[guid]
 
 
@@ -195,6 +199,8 @@ def late_pull() -> list[dict]:
 
         {"t": SPIN_AT, "e": "cast", "s": LATE_VX, "sp": mm.SPELL_SPINNING_UP, "tgt": 0, "ct": 4000},
         {"t": 17000, "e": "dmg", "s": LATE_VX, "d": TREE, "sp": mm.SPELL_FLAMES, "a": 5000},
+        {"t": 21000, "e": "dmg", "s": LATE_VX, "d": BULWARK, "sp": mm.SPELL_LASER_BARRAGE, "a": 20000},
+        {"t": 21000, "e": "dmg", "s": LATE_VX, "d": SHADOW, "sp": mm.SPELL_LASER_BARRAGE, "a": 20000},
 
         # the storm after the window: one hit, one heal, one formation leg
         {"t": 31000, "e": "dmg", "s": LATE_VX, "d": BULWARK, "sp": mm.SPELL_HEAT_WAVE, "a": 40000},
@@ -286,6 +292,7 @@ class SyntheticPull(unittest.TestCase):
         first = mm.heal_rows(self.trace)[0]
         self.assertEqual(first["heat"], 2000)
         self.assertEqual(first["healed"], 2000)
+        self.assertIn("guardian", first["events"])
 
 
 class LaterPhases(unittest.TestCase):
@@ -312,6 +319,7 @@ class LaterPhases(unittest.TestCase):
         self.assertEqual((row["dealt_before"], row["dealt_inside"]), (150, 140))
         self.assertEqual(row["melee_in_range"], row["melee_rows"])
         self.assertEqual(row["fire"], 5000)
+        self.assertEqual((row["beam"], row["boundary"]), (2, 1))
         self.assertEqual(row["deaths"], [])
 
     def test_the_storm_after_the_window_is_its_own_count(self):

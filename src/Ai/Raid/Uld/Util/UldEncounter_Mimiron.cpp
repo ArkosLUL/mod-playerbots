@@ -487,6 +487,19 @@ bool IsMimironSpotSafe(Player* bot, Position const& dest)
     return IsMimironSpotStandable(bot, dest, GetMimironMarkers(botAI), GetMimironFirefighterHazards(botAI));
 }
 
+bool IsMimironSpotRocketSafe(PlayerbotAI* botAI, Position const& dest)
+{
+    if (!botAI)
+        return true;
+
+    MimironMarkers const markers = GetMimironMarkers(botAI);
+    for (Position const& rocket : markers.rockets)
+        if (dest.GetExactDist2d(rocket.GetPositionX(), rocket.GetPositionY()) < ULDUAR_MIMIRON_ROCKET_CLEARANCE)
+            return false;
+
+    return true;
+}
+
 float GetMimironApproachRange(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot)
@@ -687,6 +700,9 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
 {
     if (!vx001 || !window.valid)
         return true;
+
+    if (vx001->GetExactDist2d(dest.GetPositionX(), dest.GetPositionY()) < ULDUAR_MIMIRON_BARRAGE_BOUNDARY)
+        return false;
 
     float const clearance = ULDUAR_MIMIRON_BARRAGE_HALF_ANGLE + ULDUAR_MIMIRON_BARRAGE_MARGIN;
     float const twoPi = 2.0f * static_cast<float>(M_PI);
@@ -1034,6 +1050,15 @@ bool IsMimironPhase4(Player* bot)
                 return seated->GetEntry() == NPC_VX001;
 
     return false;
+}
+
+bool IsMimironPhase2(PlayerbotAI* botAI)
+{
+    if (!botAI || GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
+        return false;
+
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    return vx001 && !vx001->GetVehicleBase();
 }
 
 bool IsMimironPhase3(PlayerbotAI* botAI)

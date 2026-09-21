@@ -320,6 +320,21 @@ float MimironPlasmaDefensiveHoldMultiplier::GetValue(Action* action)
     return IsMimironEngaged(botAI) && MimironPhase1Active(botAI) ? 0.0f : 1.0f;
 }
 
+float MimironStormCooldownHoldMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // Holding "divine sacrifice" holds its cancel too: a continuer only follows a cast that went out.
+    static std::set<std::string> const held = {"divine sacrifice", "divine hymn", "power infusion"};
+
+    // Name first: this runs for every action in the queue.
+    if (!held.count(action->getName()) || !IsMimironPhase2(botAI))
+        return 1.0f;
+
+    return AI_VALUE2(uint8, "aoe heal", "low") < ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT ? 0.0f : 1.0f;
+}
+
 float MimironTargetGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

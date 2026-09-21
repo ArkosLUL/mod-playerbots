@@ -519,6 +519,16 @@ worst crossing of the band drops from 5.9 s to 3.9. A melee bot the band never r
 earlier hop left out wide steps radially back in **on the bearing it already holds** — same bearing,
 same safety — and holds the tick for that one step only, so a bot in range keeps swinging.
 
+**The boundary is a place a bot can stop, not only a margin.** On 2026-09-21 a fire dodge parked
+Totemist **1.72 yd** from VX-001's centre 1.7 s before Spinning Up. Its bearing was 180° off the cone,
+so the dodge logged `clear 180` and left it there, and two ticks killed it through Reincarnation:
+`IsWithinBoundaryRadius`, max(bounding radius, `MIN_MELEE_REACH` 2.0) centre to centre
+(`Unit.cpp:820`), is tested before bearing (`Spell.cpp:9263`). Bots that only walked through the
+circle were not hit, and those were the only beam ticks in seven windows. `IsMimironSpotBarrageSafe`
+now refuses `ULDUAR_MIMIRON_BARRAGE_BOUNDARY` (3.0) at any bearing, and a clear bot inside it steps
+straight out on its own bearing to its ring (`boundary`), unscreened: the beams are certain, a
+marker on the ring is not.
+
 `mimiron approach target` stands down for the window as well: the barrage dodge owns melee
 positioning then, that node's destinations are never cone-screened, and the two traded one bot
 **78** times in a phase 4.
@@ -751,6 +761,38 @@ in both wipes, but the drink guard vetoed every handover drink in three of four 
 15 yd of a raid that follows its master), so they entered phase 2 at 45-65% and finished the long
 pulls at 0-20%. The guard stays — a chain grows 1.22 yd/s toward whoever is nearest, and a bot
 sitting through a 12-18 s drink is that.
+
+**2026-09-21 evening: two wipes lost the storm by a few thousand health a bot**, on the same phase 2
+code as that morning's one-death pull:
+
+| P2 | 0059 | 5139 | 8867 |
+|---|---|---|---|
+| length, deaths | 99.5 s, 1 | 139 s, 21 (wipe) | 104 s, 17 (wipe) |
+| intake / effective heal | 33.7k / 32.7k/s | 27.3k / 23.5k/s | 27.8k / 23.6k/s |
+| healer output per standing second | 7.85k | 6.55k | 6.40k |
+| healer mana entering (sum of four) | 321 | 262 | 272 |
+| lowest raid hp 10-35 s after barrage 1 | 56% | 45% | 39% |
+
+Four healers top out at 26-31k/s standing against 28-34k/s of intake, a ceiling the roster sets. The
+mana gap came from a longer phase 1 and, in 8867, a handover that took 615k (488k of it fire) against
+251k. Every storm death had 0.0-2.3k overkill, where 20% off its last 6 s was 3.1-5.9k.
+
+**So the raid cooldowns wait for the storm.** Divine Sacrifice (Divine Guardian, 70940: 20% off the
+raid for 6 s; both paladins grant it), Divine Hymn and Power Infusion share "medium group heal
+setting", 6 members at 65% or less within 38.5 yd, and the walk-in Rapid Burst meets that at once. In
+all seven hard-mode pulls since 2026-09-19 they went out 2.7-20 s into phase 2 at 67-85% raid health
+and sat out the storm on 2-8 min cooldowns. `MimironStormCooldownHoldMultiplier` zeroes the three in
+phase 2 (`IsMimironPhase2`, both modes, like Heat Wave) until `"aoe heal" "low"` reaches
+`ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT` (6 at 45% or less), a count that peaked at 3-4 before
+barrage 1 and 11-17 after it. Holding the cast holds its `cancel divine sacrifice` continuer too.
+Aura Mastery stays free, since the holy paladin runs Concentration. Tranquility never fires: its
+strategy left the default resto set in `278be80c9`, and in 3.3 it heals only the druid's party.
+
+**A Frost Bomb near VX-001 packs the raid, and that is recorded rather than fixed.** Landing 10.6 yd
+off it, the only bomb-safe ground in casting range is a far-side crescent: 15 of 24 stood within 45°,
+and two bursts on a Heat Wave hit 17 and 16, eight dead in 1.5 s. The morning pull's bomb put eight
+melee on one point for a 15-bot, 190k burst and lived. Over a whole phase Rapid Burst lands on each
+role in proportion, so it is geometry, not a formation bug.
 
 ## Phase 3 wants a wedge, not a ring
 
@@ -1517,6 +1559,14 @@ fan also widened from ±90° to ±112.5° — two stacked filters can empty the 
 guard that the destination must be strictly further from the hazard than the bot already is, because
 past roughly 120° off the escape bearing the geometry turns back inward.
 
+**The cone dodge needed the mirror fix.** Its orbit step screened only fire, so on 2026-09-21 a
+ranged bot stepped onto a live Rocket Strike marker, and its own forced leg then held the lock
+against the rocket flee (`rocket locked`, then 7.26M). The radius search now also refuses a spot
+within `ULDUAR_MIMIRON_ROCKET_CLEARANCE` of a marker (`IsMimironSpotRocketSafe`) or inside a Frost
+Bomb's stand radius, even as the fire fallback, since both kill outright; `stepin` gets the same
+screen, and no clean radius still takes the plain step. Fire stays the gap: two bots died in a node
+a step landed them in, their flames flee `locked` behind the leg.
+
 `IsMimironSpotSafe` covers Firefighter's ground fire on the same argument, behind the hard-mode check:
 without it the flames node at `ACTION_RAID + 4` pushes a bot out of a burning slot and the formation at
 `ACTION_RAID` pulls it straight back, and it paces on the edge until it burns down. It covers the
@@ -1542,7 +1592,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
-| `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
+| `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
@@ -1553,10 +1603,12 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 `flee` has no substitute: a refused bearing reaches no MotionMaster and so writes no `move` record,
 which leaves a dodge that refuses all twelve completely silent.
 
-`tools/botobs/bosses/mimiron.py` reads the rest: phases and deaths, the phase 2 healing race, walking
-time charged to the mover that started it, A-B-A and formation yards by what displaced the bot,
-Rapid Burst ticks by cone position, Frost Bomb evacuations from the summon, slot churn, each barrage
-window against the 14.5 s before it and the storm after (`--spin`), and phase 3's fire brigade,
+`tools/botobs/bosses/mimiron.py` reads the rest: phases and deaths, the phase 2 healing race with
+the raid cooldowns placed in it (`--heal`), walking time charged to the mover that started it, A-B-A
+and formation yards by what displaced the bot, Rapid Burst ticks by cone position, Frost Bomb
+evacuations from the summon, slot churn, each barrage window against the 14.5 s before it, its beam
+ticks and how many landed inside the boundary, and the storm after (`--spin`), and phase 3's
+fire brigade,
 grounded windows, Water Spray hits (share resisted, how many landed on a Frost Resistance Aura
 holder, how many victims stood in a spray lane 1 s before: 18 of 26 on 2026-09-21) and a core ledger
 (looted, used, never spent, seconds held, spent by a chain) (`--p3`). A phase that comes round
