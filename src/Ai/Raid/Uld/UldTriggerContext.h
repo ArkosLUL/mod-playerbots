@@ -95,6 +95,7 @@ public:
         creators["thorim phase 2 positioning trigger"] = &RaidUlduarTriggerContext::thorim_phase2_positioning_trigger;
         creators["mimiron reset encounter state trigger"] = &RaidUlduarTriggerContext::mimiron_reset_encounter_state_trigger;
         creators["mimiron fire resistance trigger"] = &RaidUlduarTriggerContext::mimiron_fire_resistance_trigger;
+        creators["mimiron frost resistance trigger"] = &RaidUlduarTriggerContext::mimiron_frost_resistance_trigger;
         creators["mimiron shock blast trigger"] = &RaidUlduarTriggerContext::mimiron_shock_blast_trigger;
         creators["mimiron phase 1 positioning trigger"] = &RaidUlduarTriggerContext::mimiron_phase_1_positioning_trigger;
         creators["mimiron p3wx2 laser barrage trigger"] = &RaidUlduarTriggerContext::mimiron_p3wx2_laser_barrage_trigger;
@@ -293,6 +294,7 @@ private:
     static Trigger* thorim_fall_from_floor_trigger(PlayerbotAI* ai) { return new ThorimFallFromFloorTrigger(ai); }
     static Trigger* thorim_phase2_positioning_trigger(PlayerbotAI* ai) { return new ThorimPhase2PositioningTrigger(ai); }
     static Trigger* mimiron_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "mimiron"); }
+    static Trigger* mimiron_frost_resistance_trigger(PlayerbotAI* ai) { return new MimironFrostResistanceTrigger(ai); }
     static Trigger* mimiron_shock_blast_trigger(PlayerbotAI* ai) { return new MimironShockBlastTrigger(ai); }
     static Trigger* mimiron_reset_encounter_state_trigger(PlayerbotAI* ai) { return new MimironResetEncounterStateTrigger(ai); }
     static Trigger* mimiron_phase_1_positioning_trigger(PlayerbotAI* ai) { return new MimironPhase1PositioningTrigger(ai); }

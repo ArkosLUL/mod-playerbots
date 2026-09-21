@@ -126,6 +126,14 @@ public:
     bool IsActive() override;
 };
 
+// This bot is the phase 3 Frost Resistance Aura paladin and is not running it yet.
+class MimironFrostResistanceTrigger : public Trigger
+{
+public:
+    MimironFrostResistanceTrigger(PlayerbotAI* ai) : Trigger(ai, "mimiron frost resistance trigger") {}
+    bool IsActive() override;
+};
+
 // Hard mode (Firefighter): bot is standing in a persistent ground-fire node and must step out.
 class MimironDodgeFlamesTrigger : public Trigger
 {

@@ -583,6 +583,10 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("mimiron fire resistance action", ACTION_RAID) }));
 
     triggers.push_back(new TriggerNode(
+        "mimiron frost resistance trigger",
+        { NextAction("mimiron frost resistance action", ACTION_RAID) }));
+
+    triggers.push_back(new TriggerNode(
         "mimiron phase 1 positioning trigger",
         { NextAction("mimiron phase 1 positioning action", ACTION_RAID) }));
 
@@ -964,6 +968,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironFireHoldGuardMultiplier(botAI));
     multipliers.push_back(new MimironFireBotAoeGuardMultiplier(botAI));
     multipliers.push_back(new MimironPlasmaDefensiveHoldMultiplier(botAI));
+    multipliers.push_back(new MimironPaladinAuraMultiplier(botAI));
 
     // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a
     // generic mover walking the bot back into the blast or by a gap-closer teleporting it there, and

@@ -6,6 +6,7 @@
 
 #include "UldEncounter_Mimiron.h"
 
+#include "BossAuraTriggers.h"
 #include "Creature.h"
 #include "EncounterHelpers.h"
 #include "Group.h"
@@ -162,6 +163,8 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
     if (!botAI || !IsMimironHardModeActive(botAI))
         return hazards;
 
+    // Only spread flames draw a spray: the fire bot searches for NPC_FLAMES_SPREAD alone.
+    std::vector<Position> spread;
     for (ObjectGuid const& guid : botAI->GetAiObjectContext()->GetValue<GuidVector>("nearest npcs")->Get())
     {
         Unit* unit = botAI->GetUnit(guid);
@@ -171,6 +174,9 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
         switch (unit->GetEntry())
         {
             case NPC_FLAMES_SPREAD:
+                spread.push_back(unit->GetPosition());
+                hazards.flames.push_back(unit->GetPosition());
+                break;
             case NPC_FLAMES_INITIAL:
                 hazards.flames.push_back(unit->GetPosition());
                 break;
@@ -183,6 +189,34 @@ MimironFirefighterHazards ReadMimironFirefighterHazards(PlayerbotAI* botAI)
             default:
                 break;
         }
+    }
+
+    // Two lanes per bot: the live line, for a spray already lined up, and the one its next check
+    // aims, toward the nearest spread flame from where the walk there stops.
+    for (Position const& fireBot : hazards.fireBots)
+    {
+        hazards.sprayLanes.push_back(fireBot);
+
+        Position const* target = nullptr;
+        float targetDist = 0.0f;
+        for (Position const& flame : spread)
+        {
+            float const dist = fireBot.GetExactDist2d(flame.GetPositionX(), flame.GetPositionY());
+            if (!target || dist < targetDist)
+            {
+                target = &flame;
+                targetDist = dist;
+            }
+        }
+
+        if (!target)
+            continue;
+
+        float const facing = fireBot.GetAngle(target->GetPositionX(), target->GetPositionY());
+        float const walk = std::max(targetDist - ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH, 0.0f);
+        hazards.sprayLanes.emplace_back(fireBot.GetPositionX() + walk * std::cos(facing),
+                                        fireBot.GetPositionY() + walk * std::sin(facing),
+                                        fireBot.GetPositionZ(), facing);
     }
 
     return hazards;
@@ -207,19 +241,19 @@ bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position co
     return true;
 }
 
-bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest)
+bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest,
+                                 float halfWidth)
 {
-    for (Position const& fireBot : hazards.fireBots)
+    for (Position const& lane : hazards.sprayLanes)
     {
-        float const dx = dest.GetPositionX() - fireBot.GetPositionX();
-        float const dy = dest.GetPositionY() - fireBot.GetPositionY();
+        float const dx = dest.GetPositionX() - lane.GetPositionX();
+        float const dy = dest.GetPositionY() - lane.GetPositionY();
 
         // The line only reaches forward: HasInLine checks the front half-circle first.
-        float const facing = fireBot.GetOrientation();
+        float const facing = lane.GetOrientation();
         float const ahead = dx * std::cos(facing) + dy * std::sin(facing);
         float const side = dy * std::cos(facing) - dx * std::sin(facing);
-        if (ahead >= 0.0f && ahead < ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH &&
-            std::fabs(side) < ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH)
+        if (ahead >= 0.0f && ahead < ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH && std::fabs(side) < halfWidth)
             return true;
     }
 
@@ -227,7 +261,7 @@ bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Posit
 }
 
 bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest,
-                              float sirenRadius)
+                              float sirenRadius, float sprayHalfWidth)
 {
     if (hazards.fireBots.empty())
         return true;
@@ -240,7 +274,7 @@ bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& haza
             if (dest.GetExactDist2d(fireBot.GetPositionX(), fireBot.GetPositionY()) < sirenRadius)
                 return false;
 
-    return !IsMimironSpotInFireBotSpray(hazards, dest);
+    return !IsMimironSpotInFireBotSpray(hazards, dest, sprayHalfWidth);
 }
 
 bool IsMimironSpotShockSafe(PlayerbotAI* botAI, Position const& dest)
@@ -369,7 +403,8 @@ bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers co
     // it straight back, and it paces on the edge until it burns down; without the bomb half the
     // formation walks the raid back into the blast while the fuse runs.
     return IsMimironSpotFireSafe(hazards, dest) && IsMimironSpotBombSafe(hazards, dest) &&
-           IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND);
+           IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
+                                    ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH);
 }
 
 // The straight walk from `from` to `dest` against the fire. Nodes `from` already stands in are left
@@ -999,6 +1034,91 @@ bool IsMimironPhase4(Player* bot)
                 return seated->GetEntry() == NPC_VX001;
 
     return false;
+}
+
+bool IsMimironPhase3(PlayerbotAI* botAI)
+{
+    return botAI && GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) &&
+           !GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) && !GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+}
+
+Player* GetMimironFrostResistancePaladin(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !IsMimironHardModeActive(botAI) || !IsMimironPhase3(botAI))
+        return nullptr;
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    // The fire carrier is whoever the shared boss node gave "rfire", dead or not. That node takes the
+    // first alive paladin in group order, so once its pick dies the next one down would read as the
+    // carrier and frost would hop to someone else. Nobody holding it means the node has not run yet,
+    // and then its pick is the first alive paladin.
+    Player* fire = nullptr;
+    Player* firstAlive = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member->getClass() != CLASS_PALADIN)
+            continue;
+
+        if (!firstAlive && member->IsAlive())
+            firstAlive = member;
+
+        PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+        if (!fire && memberAI && memberAI->HasStrategy("rfire", BotState::BOT_STATE_COMBAT))
+            fire = member;
+    }
+
+    if (!fire)
+        fire = firstAlive;
+
+    static uint32 const ranks[] = {SPELL_FROST_RESISTANCE_AURA_RANK_5, SPELL_FROST_RESISTANCE_AURA_RANK_4,
+                                   SPELL_FROST_RESISTANCE_AURA_RANK_3, SPELL_FROST_RESISTANCE_AURA_RANK_2,
+                                   SPELL_FROST_RESISTANCE_AURA_RANK_1};
+
+    Player* tank = nullptr;
+    Player* dps = nullptr;
+    Player* healer = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == fire || !member->IsAlive() || member->getClass() != CLASS_PALADIN ||
+            member->GetMapId() != bot->GetMapId() || !GET_PLAYERBOT_AI(member))
+            continue;
+
+        bool knows = false;
+        for (uint32 rank : ranks)
+            if (member->HasActiveSpell(rank))
+            {
+                knows = true;
+                break;
+            }
+
+        if (!knows)
+            continue;
+
+        if (PlayerbotAI::IsTank(member))
+        {
+            if (!tank)
+                tank = member;
+        }
+        else if (PlayerbotAI::IsHeal(member))
+        {
+            if (!healer)
+                healer = member;
+        }
+        else if (!dps)
+        {
+            dps = member;
+        }
+    }
+
+    if (tank)
+        return tank;
+
+    return dps ? dps : healer;
 }
 
 Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)

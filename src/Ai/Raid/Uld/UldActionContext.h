@@ -95,6 +95,7 @@ public:
         creators["thorim fall from floor action"] = &RaidUlduarActionContext::thorim_fall_from_floor_action;
         creators["mimiron reset encounter state action"] = &RaidUlduarActionContext::mimiron_reset_encounter_state_action;
         creators["mimiron fire resistance action"] = &RaidUlduarActionContext::mimiron_fire_resistance_action;
+        creators["mimiron frost resistance action"] = &RaidUlduarActionContext::mimiron_frost_resistance_action;
         creators["mimiron shock blast action"] = &RaidUlduarActionContext::mimiron_shock_blast_action;
         creators["mimiron phase 1 positioning action"] = &RaidUlduarActionContext::mimiron_phase_1_positioning_action;
         creators["mimiron p3wx2 laser barrage action"] = &RaidUlduarActionContext::mimiron_p3wx2_laser_barrage_action;
@@ -280,6 +281,7 @@ private:
     static Action* thorim_phase2_positioning_action(PlayerbotAI* ai) { return new ThorimPhase2PositioningAction(ai); }
     static Action* thorim_fall_from_floor_action(PlayerbotAI* ai) { return new ThorimFallFromFloorAction(ai); }
     static Action* mimiron_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "mimiron"); }
+    static Action* mimiron_frost_resistance_action(PlayerbotAI* ai) { return new MimironFrostResistanceAction(ai); }
     static Action* mimiron_shock_blast_action(PlayerbotAI* ai) { return new MimironShockBlastAction(ai); }
     static Action* mimiron_reset_encounter_state_action(PlayerbotAI* ai) { return new MimironResetEncounterStateAction(ai); }
     static Action* mimiron_phase_1_positioning_action(PlayerbotAI* ai) { return new MimironPhase1PositioningAction(ai); }

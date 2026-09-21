@@ -10,7 +10,7 @@
     mimiron.py <file> --bomb     every Frost Bomb: who had to run, casting lost, where escapes landed
     mimiron.py <file> --slots    how often formation slots moved, and why
     mimiron.py <file> --spin     every Laser Barrage window, and the storm in the 15 s after it
-    mimiron.py <file> --p3       phase 3: the fire brigade, Water Spray, and the grounded windows
+    mimiron.py <file> --p3       phase 3: the fire brigade, Water Spray, the cores, the grounded windows
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -48,6 +48,7 @@ NPC_FROST_BOMB = 34149
 NPC_AERIAL_COMMAND_UNIT = 33670
 NPC_ASSAULT_BOT = 34057
 NPC_EMERGENCY_FIRE_BOT = 34147
+NPC_FLAMES_SPREAD = 34121
 
 SPELL_RAPID_BURST = 63382
 SPELL_RAPID_BURST_HITS = (64531, 64532, 63387, 64019)
@@ -58,6 +59,7 @@ SPELL_FROST_BOMB_EXPLOSIONS = (64626, 65333)
 SPELL_SPINNING_UP = 63414
 SPELL_ROCKET_STRIKE = (64402, 65034)
 SPELL_WATER_SPRAY = 64619
+SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 
 FORMATION = "mimiron arc spread action"
 BOMB_DODGE = "mimiron frost bomb action"
@@ -67,6 +69,11 @@ BURST_STEP = "mimiron rapid burst action"
 BOMB_RADIUS = radius("ULDUAR_MIMIRON_FROST_BOMB_RADIUS")
 BOMB_STAND = radius("ULDUAR_MIMIRON_FROST_BOMB_STAND_RADIUS")
 BOMB_CLEARANCE = radius("ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE")
+SPRAY_LENGTH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH")
+SPRAY_HALF_WIDTH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH")
+SPRAY_REACH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH")
+# How long before a spray hit the victim is checked against the lanes: time enough to step out.
+SPRAY_LEAD_MS = 1000
 
 # ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE is an expression the source parser does not read.
 BURST_HALF_ANGLE = math.radians(30.0)
@@ -833,6 +840,54 @@ def show_spin(trace: Trace) -> None:
 
 # ------------------------------------------------------------------------------------------------- p3
 
+def spray_lanes(units: dict[int, list], firebot: int, flames: set[int]) -> list[tuple[float, float, float]]:
+    """`(x, y, facing)` of each line this fire bot can spray down next, built the way the hazard read
+    in the source builds them: its live facing, and the lane toward its nearest spread flame from
+    where its walk there stops."""
+    row = units.get(firebot)
+    if not row or not living(row):
+        return []
+
+    lanes = [(row[1], row[2], row[4])]
+    here = (row[1], row[2])
+    near = min(((unit[1], unit[2]) for guid, unit in units.items() if guid in flames and living(unit)),
+               key=lambda spot: dist2(spot, here), default=None)
+    if near is not None:
+        facing = math.atan2(near[1] - here[1], near[0] - here[0])
+        walk = max(dist2(near, here) - SPRAY_REACH, 0.0)
+        lanes.append((here[0] + walk * math.cos(facing), here[1] + walk * math.sin(facing), facing))
+    return lanes
+
+
+def in_spray_lane(lane: tuple[float, float, float], point) -> bool:
+    dx, dy = point[0] - lane[0], point[1] - lane[1]
+    ahead = dx * math.cos(lane[2]) + dy * math.sin(lane[2])
+    side = dy * math.cos(lane[2]) - dx * math.sin(lane[2])
+    return 0.0 <= ahead < SPRAY_LENGTH and abs(side) < SPRAY_HALF_WIDTH
+
+
+def core_ledger(trace: Trace, low: int, high: int) -> dict:
+    """Magnetic Cores from `mimiron.corestep`: taken, spent, never spent, how long each sat in the bags
+    before it went down (first in, first out per carrier), and how many a chain spent."""
+    bags: dict[int, collections.deque] = collections.defaultdict(collections.deque)
+    held: list[int] = []
+    looted = used = chained = 0
+    for rec in notes(trace, "mimiron.corestep"):
+        if not low <= rec["t"] < high:
+            continue
+        step = str(rec.get("txt", ""))
+        if step in ("loot", "loot-second"):
+            looted += 1
+            bags[rec.get("g")].append(rec["t"])
+        elif step == "use":
+            used += 1
+            if bags[rec.get("g")]:
+                held.append(rec["t"] - bags[rec.get("g")].popleft())
+        elif step == "chain":
+            chained += 1
+    return {"looted": looted, "used": used, "lost": looted - used, "held": held, "chained": chained}
+
+
 def p3_rows(trace: Trace) -> dict:
     """Phase 3 as the fire brigade and the Magnetic Core decide it: how long each Emergency Fire Bot
     lived and how much of the raid was shooting it, what Water Spray cost, and how much faster the
@@ -879,9 +934,30 @@ def p3_rows(trace: Trace) -> dict:
                 if target in firebots:
                     firebots[target]["aimed"] += 1
 
-    spray = sum(rec.get("a", 0) for rec in trace.of("dmg")
-                if low <= rec["t"] < high and rec.get("d") in roster
-                and rec.get("sp") == SPELL_WATER_SPRAY)
+    hits = [rec for rec in trace.of("dmg")
+            if low <= rec["t"] < high and rec.get("d") in roster and rec.get("sp") == SPELL_WATER_SPRAY]
+    spray = sum(rec.get("a", 0) for rec in hits)
+    resisted = sum(rec.get("rs", 0) for rec in hits)
+
+    frost: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("aura"):
+        if rec.get("sp") in SPELL_FROST_RESISTANCE_AURA:
+            frost[rec.get("d")].append(rec)
+
+    # The lane test takes the source off the damage record: casts are not logged for every fire bot.
+    flames = guids_of_entry(trace, NPC_FLAMES_SPREAD)
+    on_aura = in_lane = 0
+    for rec in hits:
+        applied = [aura for aura in frost.get(rec["d"], []) if aura["t"] <= rec["t"]]
+        if applied and not max(applied, key=lambda aura: aura["t"]).get("r"):
+            on_aura += 1
+
+        units = samples.before(rec["t"] - SPRAY_LEAD_MS)
+        victim = units.get(rec["d"])
+        if victim and any(in_spray_lane(lane, (victim[1], victim[2]))
+                          for lane in spray_lanes(units, rec.get("s"), flames)):
+            in_lane += 1
+
     spray_deaths = sum(1 for rec in combat_deaths(trace)
                        if low <= rec["t"] < high
                        and trace.entries.get(rec.get("killer")) == NPC_EMERGENCY_FIRE_BOT)
@@ -925,6 +1001,11 @@ def p3_rows(trace: Trace) -> dict:
         "aimed_seconds": aimed * SAMPLE_MS / 1000.0,
         "spray": spray,
         "spray_deaths": spray_deaths,
+        "spray_hits": len(hits),
+        "spray_resisted": resisted / (spray + resisted) if spray + resisted else 0.0,
+        "spray_on_aura": on_aura,
+        "spray_in_lane": in_lane,
+        "cores": core_ledger(trace, low, high),
         "assaults": sorted((stamps[1] - stamps[0]) for stamps in seen_assault.values()),
         "coresteps": collections.Counter(
             str(rec.get("txt", "")) for rec in notes(trace, "mimiron.corestep")
@@ -952,6 +1033,10 @@ def show_p3(trace: Trace) -> None:
               f"  {(cell['last'] - cell['first']) / 1000:5.1f} s  ended at {cell['hp']:3.0f}%"
               f"  aimed at {cell['aimed'] * SAMPLE_MS / 1000:5.1f} bot-s")
     print(f"  Water Spray {rows['spray']:,} into the raid, {rows['spray_deaths']} dead to a fire bot")
+    if rows["spray_hits"]:
+        print(f"      {rows['spray_hits']} hits, {rows['spray_resisted'] * 100:.0f}% resisted,"
+              f" {rows['spray_on_aura']} on a Frost Resistance Aura holder, {rows['spray_in_lane']}"
+              f" standing in a spray lane {SPRAY_LEAD_MS / 1000:.0f} s before")
 
     lived = rows["assaults"]
     if lived:
@@ -959,6 +1044,11 @@ def show_p3(trace: Trace) -> None:
               f" {min(lived) / 1000:.0f} to {max(lived) / 1000:.0f} s")
     if rows["coresteps"]:
         print("  core steps: " + ", ".join(f"{step} {n}" for step, n in rows["coresteps"].most_common()))
+    cores = rows["cores"]
+    if cores["looted"]:
+        held = "/".join(f"{ms / 1000:.0f}" for ms in cores["held"]) or "-"
+        print(f"  cores looted {cores['looted']}, used {cores['used']}, never spent {cores['lost']};"
+              f" held {held} s before use; {cores['chained']} spent by a chain")
 
     for label, (ms, points) in (("grounded", rows["grounded"]), ("airborne", rows["airborne"])):
         rate = points / (ms / 1000.0) if ms else 0.0
@@ -975,7 +1065,7 @@ SECTIONS = (
     ("bomb", "Frost Bomb evacuations and where escapes landed", show_bomb),
     ("slots", "formation slot churn per phase", show_slots),
     ("spin", "each Laser Barrage window and the storm after it", show_spin),
-    ("p3", "phase 3 fire bots, Water Spray and the grounded windows", show_p3),
+    ("p3", "phase 3 fire bots, Water Spray, cores and the grounded windows", show_p3),
 )
 
 

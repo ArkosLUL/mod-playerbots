@@ -124,6 +124,8 @@ LATE_ACU = 4294971001
 FIREBOT_A = 4294971002
 FIREBOT_B = 4294971003
 ASSAULT = 4294971004
+# A spread flame up and left of fire bot A, so its next spray lane runs straight through Tree.
+FLAME = 4294971005
 
 SPIN_AT = 16000
 P3_AT = 50000
@@ -163,6 +165,7 @@ def late_snap(when: int) -> dict:
         rows.append([LATE_ACU, 0.0, 0.0, 380.0, 0.0, late_acu_hp(when), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0])
     if P3_AT <= when < 62000:
         rows.append([FIREBOT_A, 12.0, 12.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
+        rows.append([FLAME, 6.0, 17.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
     if P3_AT <= when < 55000:
         rows.append([FIREBOT_B, -12.0, 12.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
     if P3_AT <= when < 54000:
@@ -181,6 +184,7 @@ def late_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": FIREBOT_A, "en": mm.NPC_EMERGENCY_FIRE_BOT, "n": "Emergency Fire Bot"},
         {"t": 1, "e": "unit", "g": FIREBOT_B, "en": mm.NPC_EMERGENCY_FIRE_BOT, "n": "Emergency Fire Bot"},
         {"t": 1, "e": "unit", "g": ASSAULT, "en": mm.NPC_ASSAULT_BOT, "n": "Assault Bot"},
+        {"t": 1, "e": "unit", "g": FLAME, "en": mm.NPC_FLAMES_SPREAD, "n": "Flames (Spread)"},
 
         # phase 4 twice, with a handover between them
         {"t": 0, "e": "note", "g": AGONY, "k": "mimiron.phase", "txt": "2"},
@@ -197,13 +201,20 @@ def late_pull() -> list[dict]:
         {"t": 31500, "e": "heal", "s": TREE, "d": BULWARK, "sp": 48441, "a": 10000, "oh": 2000},
         move(32000, TREE, mm.FORMATION, 0.0, 20.0),
 
+        # two cores banked, the first spent at 52.9 s and the second chained as the landing ends
+        {"t": 50500, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "loot"},
         {"t": 51000, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "hold"},
+        {"t": 51500, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "loot-second"},
         {"t": 52900, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "use"},
         {"t": 53000, "e": "note", "g": AGONY, "k": "mimiron.core", "txt": "1"},
         {"t": 54000, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "pending"},
         {"t": 57000, "e": "note", "g": AGONY, "k": "mimiron.core", "txt": "0"},
+        {"t": 57500, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "chain"},
+        {"t": 57500, "e": "note", "g": AGONY, "k": "mimiron.corestep", "txt": "use"},
 
-        {"t": 54000, "e": "dmg", "s": FIREBOT_A, "d": TREE, "sp": mm.SPELL_WATER_SPRAY, "a": 23000},
+        {"t": 52000, "e": "aura", "d": TREE, "s": BULWARK, "sp": 48945, "r": 0, "st": 1, "dur": -1, "p": 1},
+        {"t": 54000, "e": "dmg", "s": FIREBOT_A, "d": TREE, "sp": mm.SPELL_WATER_SPRAY, "a": 23000,
+         "rs": 5000},
         {"t": 54100, "e": "death", "g": SHADOW, "killer": FIREBOT_A, "blow": [FIREBOT_A, 24000],
          "x": 14.0, "y": 0.0},
         {"t": 75000, "e": "end", "out": "wipe"},
@@ -320,7 +331,20 @@ class LaterPhases(unittest.TestCase):
     def test_water_spray_damage_and_the_death_it_caused(self):
         rows = mm.p3_rows(self.trace)
         self.assertEqual((rows["spray"], rows["spray_deaths"]), (23000, 1))
-        self.assertEqual(dict(rows["coresteps"]), {"hold": 1, "use": 1, "pending": 1})
+        self.assertEqual(dict(rows["coresteps"]),
+                         {"loot": 1, "hold": 1, "loot-second": 1, "use": 2, "pending": 1, "chain": 1})
+
+    def test_a_spray_reads_its_resist_the_aura_and_the_lane_it_came_down(self):
+        rows = mm.p3_rows(self.trace)
+        self.assertEqual(rows["spray_hits"], 1)
+        self.assertAlmostEqual(rows["spray_resisted"], 5000 / 28000)
+        self.assertEqual(rows["spray_on_aura"], 1)
+        self.assertEqual(rows["spray_in_lane"], 1)
+
+    def test_the_core_ledger_pairs_each_use_with_the_oldest_core_held(self):
+        cores = mm.p3_rows(self.trace)["cores"]
+        self.assertEqual((cores["looted"], cores["used"], cores["lost"], cores["chained"]), (2, 2, 0, 1))
+        self.assertEqual(cores["held"], [2400, 6000])
 
     def test_the_unit_only_dies_on_the_floor(self):
         rows = mm.p3_rows(self.trace)

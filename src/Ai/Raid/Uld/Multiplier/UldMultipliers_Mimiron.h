@@ -132,6 +132,16 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Holds the paladin aura slot open for the phase 3 Frost Resistance Aura. The slot is exclusive, so
+// without this the bot's own aura strategy puts Devotion straight back. Only the one chosen paladin is
+// held, and the hold lifts with phase 3, which is what hands Devotion back.
+class MimironPaladinAuraMultiplier : public Multiplier
+{
+public:
+    MimironPaladinAuraMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron paladin aura") {}
+    float GetValue(Action* action) override;
+};
+
 // Mimiron phase 1: the main tank's own cooldowns go out only through the Plasma Blast window claim.
 // The class nodes fire on health, so they spent Divine Protection mid window after a healer external
 // had already covered it, and the next window got nothing and killed the tank.

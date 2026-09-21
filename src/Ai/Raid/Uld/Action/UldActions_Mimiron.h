@@ -157,6 +157,21 @@ public:
 
 private:
     void NoteCoreStep(char const* step);
+
+    // Set by every spend and cleared once the bags are empty with no core on the floor, so the next
+    // core in hand goes down the moment the live landing ends instead of waiting to bank again. The
+    // count alone can't tell: one core left after spending the first of a pair reads as a bank of one.
+    bool chaining = false;
+};
+
+// Raise Frost Resistance Aura for phase 3. Cast directly rather than through ChangeStrategy: nothing
+// removes an added "rfrost", so the pick would outlive the phase. MimironPaladinAuraMultiplier holds
+// the slot open while it runs.
+class MimironFrostResistanceAction : public Action
+{
+public:
+    MimironFrostResistanceAction(PlayerbotAI* ai) : Action(ai, "mimiron frost resistance action") {}
+    bool Execute(Event event) override;
 };
 
 // One big defensive on the tank for the Plasma Blast window, spent when the cast starts rather than

@@ -240,7 +240,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
-            if (!IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND))
+            if (!IsMimironSpotFireBotSafe(bot, hazards, dest, ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
+                                          ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH))
             {
                 ++refusedSpray;
                 continue;
@@ -271,15 +272,17 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
         return false;
     }
 
-    // Still never into the three that kill outright. Standing in a fire node costs ~3.1k a second,
+    // Still never into the four that kill outright. Standing in a fire node costs ~3.1k a second,
     // and this leg is forced, so it would also lock out the Shock Blast escape until it expires.
-    // The cone is reachable here now that the fire dodge runs during a barrage.
+    // The cone is reachable here now that the fire dodge runs during a barrage, and a spray still
+    // kills a hurt bot outright through the frost aura: bots at 64 to 82 % needed 27 to 34 % resisted.
     Position const straightAway(bot->GetPositionX() + cos(away) * distance,
                                 bot->GetPositionY() + sin(away) * distance, bot->GetPositionZ());
     float const fallbackTravel = speed > 0.0f ? distance / speed : 0.0f;
     if (!IsMimironSpotShockSafe(botAI, straightAway) ||
         !IsMimironSpotBombSafe(hazards, straightAway) ||
-        !IsMimironSpotBarrageSafe(vx001, barrage, straightAway, fallbackTravel))
+        !IsMimironSpotBarrageSafe(vx001, barrage, straightAway, fallbackTravel) ||
+        IsMimironSpotInFireBotSpray(hazards, straightAway, ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
     {
         NoteFleeOutcome(what, "unsafe", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
                         refusedBomb, refusedBurst, refusedShock, refusedSpray, refusedMove);
@@ -956,13 +959,13 @@ bool MimironFireBotAction::Execute(Event /*event*/)
 {
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
 
-    // The spray line first, since it hurts. Out the near side: running away along the line stays in
+    // The spray lanes first, since they hurt. Out the near side: running away along a lane stays in
     // it for 15 yd.
-    for (Position const& fireBot : hazards.fireBots)
+    for (Position const& lane : hazards.sprayLanes)
     {
-        float const dx = bot->GetPositionX() - fireBot.GetPositionX();
-        float const dy = bot->GetPositionY() - fireBot.GetPositionY();
-        float const facing = fireBot.GetOrientation();
+        float const dx = bot->GetPositionX() - lane.GetPositionX();
+        float const dy = bot->GetPositionY() - lane.GetPositionY();
+        float const facing = lane.GetOrientation();
         float const ahead = dx * std::cos(facing) + dy * std::sin(facing);
         float const side = dy * std::cos(facing) - dx * std::sin(facing);
         if (ahead < 0.0f || ahead >= ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH ||
@@ -995,7 +998,8 @@ bool MimironFireBotAction::Execute(Event /*event*/)
     }
 
     if (!nearest ||
-        IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE))
+        IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE,
+                                 ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return false;
 
     // Every bearing lands on the flee circle, past where the formation and the other dodges are
@@ -1490,6 +1494,15 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     bool const expiring = remaining && remaining * 1000u <= ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS;
     bool const acuLow = aerialCommandUnit->GetHealthPct() <= ULDUAR_MIMIRON_CORE_HOLD_RELEASE_PCT;
 
+    // One core per landing. A second one while the first is live makes the unit climb with the aura
+    // still on and pushes every add timer back another 25 s.
+    bool const ready = IsMimironCoreUseReady(botAI, bot);
+
+    // The chain is spent once the bags are empty with nothing on the floor. Not on empty bags alone:
+    // a core looted while the last landing runs still follows it down.
+    if (!core && ready)
+        chaining = false;
+
     // Wait where a core is spent rather than where the last corpse fell, so a release costs the
     // 2 s climb and not a walk: one pull logged walk-acu at 6:30.3 and the use at 6:55.1. False
     // once the carrier is standing there, so the rest of its tick still runs.
@@ -1506,8 +1519,9 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
 
     // Collect up to the bank before spending any: holding one used to send the node straight to the
     // use branch, and the next corpse rotted where it fell. Never while the held core is on its way
-    // out or the phase is ending, or the carrier chases a corpse and loses the one it has.
-    if (held < ULDUAR_MIMIRON_CORE_BANK && !expiring && !acuLow)
+    // out or the phase is ending, or the carrier chases a corpse and loses the one it has. Nor while
+    // a chain has a core to spend right now: that one goes down first, the corpse after.
+    if (held < ULDUAR_MIMIRON_CORE_BANK && !expiring && !acuLow && !(chaining && core && ready))
     {
         Creature* corpse = GetMimironCoreCorpse(bot);
         if (!corpse && !core)
@@ -1557,22 +1571,23 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         return false;
     }
 
-    // One core per landing. A second one while the first is live makes the unit climb with the aura
-    // still on and pushes every add timer back another 25 s.
-    if (!IsMimironCoreUseReady(botAI, bot))
+    if (!ready)
         return waitUnderAcu("pending");
 
-    // Then chain the bank instead of spending each core as it arrives. DO_DISABLE_AERIAL delays the
-    // unit's event map 25 s and its UpdateAI returns for the whole 20 s aura, so every landing is
-    // 45 s with no Assault Bot and therefore no next core: two cores back to back cost one of those
-    // holes rather than two. Three ways out, and the second one is the escape that fires on a slow
-    // pull - the observed wait for a second core was 32 s and 52 s against a 60 s item.
-    if (held < ULDUAR_MIMIRON_CORE_BANK && !acuLow)
+    // Then chain the bank rather than spending each core as it arrives, for one unbroken 40 s on the
+    // floor; the adds lose 45 s per landing either way. Three ways out of the hold, and the expiry is
+    // the one that fires on a slow pull: the observed wait for a second core was 32 s and 52 s
+    // against a 60 s item. The reason is noted at the use itself, since noting it here alternates
+    // with walk-acu on every tick of the walk.
+    char const* release = nullptr;
+    if (chaining)
+        release = "chain";
+    else if (held < ULDUAR_MIMIRON_CORE_BANK && !acuLow)
     {
         if (!expiring)
             return waitUnderAcu("hold");
 
-        NoteCoreStep("hold-expiring");
+        release = "hold-expiring";
     }
 
     // 64444 places its summon by nearest entry, so the core only reaches the ACU from underneath it.
@@ -1606,6 +1621,9 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
         return false;
     }
 
+    if (release)
+        NoteCoreStep(release);
+
     NoteCoreStep("use");
 
     uint8 const bagIndex = core->GetBagSlot();
@@ -1625,5 +1643,11 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     packet << (uint32)TARGET_FLAG_NONE;
 
     bot->GetSession()->HandleUseItemOpcode(packet);
+    chaining = true;
     return true;
+}
+
+bool MimironFrostResistanceAction::Execute(Event /*event*/)
+{
+    return botAI->DoSpecificAction("frost resistance aura", Event(), true);
 }

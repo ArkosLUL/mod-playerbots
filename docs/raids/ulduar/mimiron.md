@@ -921,6 +921,10 @@ on Bomb Bots, 1.4% on fire bots.
 76 s, VX-001 in 115 s and the ACU in 201 s, then lost 20 of 25 in phase 4's 32 s, **63.6%** of its
 intake Hand Pulse.
 
+2026-09-21: phase 2 held (99.5 s, one death) and phase 3 lost the pull: **348 s**, 17 deaths, 12 of
+them Water Spray, and the berserk at 10:17 with the ACU at 19%. It was grounded 80 s at 0.60 %/s
+against 268 s in the air at 0.11 %/s, and two of six cores never went down (see the core section).
+
 ## A dodge that returns false hands the tick to Charge
 
 Shock Blast (63631) is a **4 s cast**, `TARGET_SRC_CASTER`, 15 yd, 100000 damage, every 30 s. Four
@@ -996,24 +1000,36 @@ only when `IsMimironCoreUseReady`: airborne, no 64436, and no live 34068 within 
 carrier notes `pending`. The next pull into phase 3 used **two cores off two corpses**, 34 s apart, and
 landed cleanly twice.
 
-**Each core costs the next one, so bank two and chain them.** The 45 s hole the landing puts in the
-event map is a hole in the Assault Bot cadence too, and the Assault Bot is the only core source:
-2026-09-19 measured them **30-31 s apart** with the unit up and **65-75 s** across a landing. Two
-cores spent back to back pay that once instead of twice, and the second goes down the moment the
-first's aura ends and 34068 despawns, since `IsMimironCoreUseReady` already refuses while one is
-live. So the carrier loots up to `ULDUAR_MIMIRON_CORE_BANK` (2) — holding one used to send the node
-straight to the use branch and the next corpse rotted where it fell — and holds the first until one
+**Bank two and chain them, for one 40 s window rather than fewer holes.** The 45 s hole a landing
+puts in the event map is a hole in the Assault Bot cadence, the only core source: 2026-09-19
+measured them **30-31 s apart** with the unit up and **65-75 s** across a landing. Chaining does not
+merge two holes, since every landing runs `DO_DISABLE_AERIAL` and its `DelayEvents(25s)` again; it
+puts them end to end and keeps the unit on the floor 40 s in one piece. The second goes down the
+moment the first's aura ends and 34068 despawns, since `IsMimironCoreUseReady` refuses while one is
+live. The carrier loots up to `ULDUAR_MIMIRON_CORE_BANK` (2), since holding one used to send the node
+straight to the use branch and the next corpse rotted where it fell, and holds the first until one
 of three escapes: the second is in the bags, the held one has under
 `ULDUAR_MIMIRON_CORE_HOLD_EXPIRY_MS` (10 s) of its life left, or the unit is at or below
 `_CORE_HOLD_RELEASE_PCT` (25%), where the phase ends before another core could matter. The expiry
 escape is the one that fires on a slow pull: `item_template` 46029 has **`duration` 60**, and the
 observed wait for a second core was 32 s and 52 s.
 
+**The chain needs a latch, because the count cannot tell.** One core left after spending the first
+of a pair reads as a bank of one: on 2026-09-21 the second went back to `hold` when the landing ended
+at 8:26.8 and waited out its own expiry to 8:47.6. Every spend now sets `chaining` on the action,
+cleared once the bags are empty with no 34068 live; while it is set, a core in hand goes down as
+soon as the unit is ready, ahead of any corpse, and one looted during the landing follows it down.
+That pull also priced the bank: 5 cores looted and 4 used, held **52, 37, 50 and 49 s** first; one
+died in the carrier's bags, and one corpse rotted while the carrier, already holding a core, got the
+movement lock twice in 12 s against the Bomb Bot step-out, the spray and siren escapes and `reach
+melee`.
+
 **Waiting happens under the unit, not where the last corpse fell.** 0879 logged `walk-acu` at
 6:30.3 and the `use` at 6:55.1 — **25 s** of the window spent walking — so a carrier that is holding
 or waiting out a live core walks to within `_CORE_USE_RANGE` and stands there, and hands the tick
-back once it arrives. The trace tells the bank apart from the old wait: `hold`, `hold-expiring`,
-`loot-second`, `walk-corpse-second`.
+back once it arrives. The trace tells the bank apart from the old wait: `hold`, `loot-second`,
+`walk-corpse-second`, and at the use itself `chain` or `hold-expiring`. Those two are noted there
+because a note before the walk alternated with `walk-acu` every tick, 17 times for one release.
 
 Melee and pets switch to it for the window — `IsAllowedTarget` used to refuse melee the Aerial Command
 Unit outside phase 4 unconditionally, and the pet node only ever looked for adds, so both sat it out.
@@ -1059,10 +1075,10 @@ The raid now **keeps every one of them** through phase 3: `GetMimironKeptFireBot
 folded every 250 ms. At 15% ACU health (`_FIREBOT_CLEANUP_PCT`) they all join the kill list at once,
 and in the phase 4 handover `MimironSetDpsPriorityTrigger` fires with nothing engaged while a fire
 bot is in the room. `MimironFireBotAoeGuardMultiplier` holds splash while a kept one is within
-`_FIREBOT_AOE_CLEARANCE` of the bot or its target. `IsMimironSpotFireBotSafe` refuses the spray
-strip (16 ahead, 3.5 each side) for everyone and 13 yd for casters and healers in 25-man, in
+`_FIREBOT_AOE_CLEARANCE` of the bot or its target. `IsMimironSpotFireBotSafe` refuses every spray
+lane (16 ahead; see below) for everyone and 13 yd for casters and healers in 25-man, in
 `IsMimironSpotSafe` and the flee fan; `mimiron fire bot` (`ACTION_RAID + 3`) steps sideways out of
-the line, or away from the siren.
+the lane, or away from the siren.
 
 **The siren needs a stand radius past its run radius.** A kept bot walks to the next flame, which
 is in the wedge, so formation spots picked just past 13 yd (median 15.7) were walked into at 13.2
@@ -1142,6 +1158,38 @@ do; `RaidUlduarStrategy` now excludes the kept set there, which covers the tank 
 on 2026-09-19 only **43 and 9 bot-samples** aimed at a protected bot all phase, every one inside the
 first second after a spawn while the 250 ms kept-list scan caught up. The pair died to splash the
 guard could not see, which is what the two changes above are for.
+
+**The spray has to be predicted, because it gives no warning.** The script faces the nearest
+`NPC_FLAMES_SPREAD` every 15 s, or 5 s after a spray, and sprays at once if it is within 5 yd, else
+walks to 5 yd short of it and sprays on arrival, facing the way it walked. So the live line, the
+bot's current facing from where it stands, only appears as it fires: of 14 hits matched to a cast on
+2026-09-21, one victim had been in it 0.5 s before. The lane toward the nearest spread flame, from
+`ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH` (5) short of it, read 2 s ahead pointed within 20° of the real
+spray in 90% of 126, started within 3 yd in 83%, and held 13 of the 14 victims.
+`ReadMimironFirefighterHazards` puts both in `sprayLanes` and every spray test walks them, at little
+cost: 0.76 of ~18 living raid members stood in some lane at a time. The bot's own spot runs at 3.5
+each side, a destination stands at `_SPRAY_STAND_HALF_WIDTH` (4.5) and the sidestep lands at 5.0,
+since a lane jumps whenever a spray puts out its flame. The flee fan's unfiltered fallback refuses a
+lane too.
+
+**Frost resistance works on it now, so a second paladin runs Frost Resistance Aura in phase 3.**
+Until core `c1c9ff79b` it did nothing: 64619 has no damage class, so `Unit::SpellHitResult` never
+rolls it, and its knockback made `SpellMgr`'s binary heuristic flag it, so `CalcAbsorbResist` skipped
+partial resists as well. On 2026-09-21 **0 of 26** hits resisted anything, against 541 of 541 Flames
+ticks. It now takes partial resists in 10% bands and never a full one. The average is R / (R + 506.5)
+against the level 83 bots, and Gift of the Wild's 54 shares exclusive aura type 143 with the paladin
+auras, so only the higher counts: 9.6% on the druid buff alone, with 28% of sprays unresisted, and
+20.4% on the aura's 130, with none unresisted and three in four losing 20% or more. Replayed over
+that pull's 12 spray kills by overkill, the fix alone leaves ~8.9 and the aura ~6.9: the five killed
+from full health needed 3-11% resisted, and the rest were already hurt, which is the lanes' job.
+
+`GetMimironFrostResistancePaladin` picks it in hard mode phase 3: never the fire carrier, which is
+the bot holding `rfire` from the shared `BossFireResistanceTrigger`, dead or alive, else the first
+alive paladin that node would pick; then a tank, a non-healer, a healer. A lone paladin keeps fire,
+which resists 22-31% of the Flames. The tank is the right carrier: 24 of 26 hits landed within its
+40 yd, and 91% of the living raid stood inside it. `MimironFrostResistanceAction` casts it directly,
+and `MimironPaladinAuraMultiplier` holds the slot against every other aura and the shared fire node,
+lifting with phase 3 so Devotion comes back.
 
 ## Pets need telling twice, in two different phases
 
@@ -1490,13 +1538,13 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `phase` | 0 none, 1-4 the phase, 5 a handover. Per instance |
 | `core` | The Magnetic Core window is open. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
-| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `hold-expiring` (spent because the held one is about to), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use` |
+| `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) or `hold-expiring` (the held one was about to) |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast or Frost Bomb |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot) or `detour ±N` (degrees off the direct bearing) |
 | `close` | A melee approach steered round the fire instead of straight at the target |
@@ -1509,8 +1557,11 @@ which leaves a dodge that refuses all twelve completely silent.
 time charged to the mover that started it, A-B-A and formation yards by what displaced the bot,
 Rapid Burst ticks by cone position, Frost Bomb evacuations from the summon, slot churn, each barrage
 window against the 14.5 s before it and the storm after (`--spin`), and phase 3's fire brigade,
-Water Spray and grounded windows (`--p3`). A phase that comes round twice — one pull went P4, H4,
-P4 — gets a letter, `P4b`, or its deaths and yards are counted under both spans.
+grounded windows, Water Spray hits (share resisted, how many landed on a Frost Resistance Aura
+holder, how many victims stood in a spray lane 1 s before: 18 of 26 on 2026-09-21) and a core ledger
+(looted, used, never spent, seconds held, spent by a chain) (`--p3`). A phase that comes round
+twice — one pull went P4, H4, P4 — gets a letter, `P4b`, or its deaths and yards are counted under
+both spans.
 
 The Laser Barrage cone is a `haz` `sweep` row every 250 ms — `lead`, `sweep`, `rate`, `live`,
 originated on VX-001, which in phase 4 is the chassis, so a drifting apex shows. Written by hand

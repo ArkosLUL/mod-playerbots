@@ -233,7 +233,8 @@ float MimironFireHoldGuardMultiplier::GetValue(Action* action)
     // Water Spray is instant, a 15 yd line, and 23000 to 26000 against a 22000 to 24000 pool, so
     // nothing may walk a bot back into one: two died to a spray 3.5 s after a "reach melee" leg put
     // them in the line.
-    return IsMimironSpotInFireBotSpray(GetMimironFirefighterHazards(botAI), bot->GetPosition())
+    return IsMimironSpotInFireBotSpray(GetMimironFirefighterHazards(botAI), bot->GetPosition(),
+                                       ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH)
                ? 0.0f
                : 1.0f;
 }
@@ -289,6 +290,23 @@ float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
     }
 
     return 1.0f;
+}
+
+float MimironPaladinAuraMultiplier::GetValue(Action* action)
+{
+    if (!action || bot->getClass() != CLASS_PALADIN)
+        return 1.0f;
+
+    // The shared fire node is here too: after its own pick dies it would hand this bot "rfire".
+    static std::set<std::string> const competingAuras = {
+        "devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
+        "shadow resistance aura", "fire resistance aura", "mimiron fire resistance action"};
+
+    // Name first: this runs for every action in the queue, and the paladin lookup walks the group.
+    if (!competingAuras.count(action->getName()))
+        return 1.0f;
+
+    return GetMimironFrostResistancePaladin(botAI, bot) == bot ? 0.0f : 1.0f;
 }
 
 float MimironPlasmaDefensiveHoldMultiplier::GetValue(Action* action)

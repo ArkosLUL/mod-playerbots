@@ -356,7 +356,7 @@ bool MimironDodgeFlamesTrigger::IsActive()
     // Water Spray is instant, 15 yd of line, and 23000 to 26000 against a 22000 to 24000 pool, so
     // getting out of the line comes first: a node ticks 3100 and the fire leg holds the movement
     // lock long enough to cancel the escape, which is how three bots died mid-dodge.
-    if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition()))
+    if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return false;
 
     uint32 nodes = 0;
@@ -386,10 +386,11 @@ bool MimironFireBotTrigger::IsActive()
         return false;
 
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
-    if (IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE))
+    if (IsMimironSpotFireBotSafe(bot, hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE,
+                                 ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return false;
 
-    if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition()))
+    if (IsMimironSpotInFireBotSpray(hazards, bot->GetPosition(), ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH))
         return true;
 
     // Only the siren left. A bot already walking somewhere clear of it is leaving anyway, and a
@@ -399,7 +400,8 @@ bool MimironFireBotTrigger::IsActive()
     float y = 0.0f;
     float z = 0.0f;
     if (bot->isMoving() && bot->GetMotionMaster()->GetDestination(x, y, z) &&
-        IsMimironSpotFireBotSafe(bot, hazards, Position(x, y, z), ULDUAR_MIMIRON_FIREBOT_SIREN_STAND))
+        IsMimironSpotFireBotSafe(bot, hazards, Position(x, y, z), ULDUAR_MIMIRON_FIREBOT_SIREN_STAND,
+                                 ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH))
         return false;
 
     return true;
@@ -484,12 +486,19 @@ bool MimironPetControlTrigger::IsActive()
     if (IsMimironPhase4(bot))
         return true;
 
-    // Phase 3, tested the same way MimironAerialCommandUnitTrigger does. Not by MOVEMENTFLAG_HOVER on
-    // its own: the flag survives the phase 3 defeat and the vehicle boarding, so it says nothing about
-    // which phase this is, and keying off it used to stop every pet in the raid for all of phase 4.
-    return GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT) &&
-           !GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-           !GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    // Not by MOVEMENTFLAG_HOVER on its own: the flag survives the phase 3 defeat and the vehicle
+    // boarding, so it says nothing about which phase this is, and keying off it used to stop every pet
+    // in the raid for all of phase 4.
+    return IsMimironPhase3(botAI);
+}
+
+bool MimironFrostResistanceTrigger::IsActive()
+{
+    // Class first: the pick walks the group, and this runs for every bot in the instance.
+    if (bot->getClass() != CLASS_PALADIN || botAI->HasAura("frost resistance aura", bot))
+        return false;
+
+    return GetMimironFrostResistancePaladin(botAI, bot) == bot;
 }
 
 bool MimironSlowBombBotTrigger::IsActive()

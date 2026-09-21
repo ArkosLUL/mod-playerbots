@@ -227,10 +227,10 @@ constexpr float ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE = 60.0f * static_cast<flo
 constexpr float ULDUAR_MIMIRON_CORE_LOOT_RANGE = 5.0f;
 constexpr float ULDUAR_MIMIRON_CORE_USE_RANGE = 12.0f;
 
-// How many cores the carrier banks before spending any. DO_DISABLE_AERIAL delays the unit's event
-// map 25 s and its UpdateAI returns for the whole 20 s aura, so a landing is 45 s with no Assault
-// Bot - and the Assault Bot is the only core source. Cores arrive 30 s apart with the unit up and
-// 65 to 75 s apart across a landing, so two chained cost one delay instead of two.
+// How many cores the carrier banks before spending any, then spends back to back for one unbroken
+// 40 s on the floor. Not fewer add holes: DO_DISABLE_AERIAL delays the unit's event map 25 s on every
+// landing and its UpdateAI returns for the whole 20 s aura, so each landing is 45 s with no Assault
+// Bot, chained or not.
 constexpr uint32 ULDUAR_MIMIRON_CORE_BANK = 2;
 
 // Escape hatches out of that hold. item_template 46029 has duration 60, so a banked core expires;
@@ -323,6 +323,9 @@ struct MimironFirefighterHazards
     std::vector<Position> flames;
     std::vector<Position> bombs;
     std::vector<Position> fireBots;  // orientation is where the Water Spray line points
+    // Origin and facing of every line a spray can take next: each bot's live line, plus the one toward
+    // its nearest spread flame, which is where the script aims the next spray.
+    std::vector<Position> sprayLanes;
 };
 
 MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
@@ -334,13 +337,15 @@ MimironFirefighterHazards GetMimironFirefighterHazards(PlayerbotAI* botAI);
 bool IsMimironSpotFireSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 bool IsMimironSpotBombSafe(MimironFirefighterHazards const& hazards, Position const& dest);
 
-// Out of every Emergency Fire Bot's Water Spray line, and for a caster or healer in 25-man also more
+// Out of every Emergency Fire Bot's Water Spray lane, and for a caster or healer in 25-man also more
 // than `sirenRadius` from it. Takes the bot because only the second half depends on who is asking.
-// The bot's own spot is judged at ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE, a destination at
-// ULDUAR_MIMIRON_FIREBOT_SIREN_STAND.
+// The bot's own spot is judged at ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE and
+// ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH, a destination at ULDUAR_MIMIRON_FIREBOT_SIREN_STAND and
+// ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH.
 bool IsMimironSpotFireBotSafe(Player* bot, MimironFirefighterHazards const& hazards, Position const& dest,
-                              float sirenRadius);
-bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest);
+                              float sirenRadius, float sprayHalfWidth);
+bool IsMimironSpotInFireBotSpray(MimironFirefighterHazards const& hazards, Position const& dest,
+                                 float halfWidth);
 
 // The fire bots the raid leaves alone for now, so they keep putting the fire out: every living one,
 // in phase 3, until the Aerial Command Unit is low enough that the cleanup has to start. Empty
@@ -502,6 +507,18 @@ bool IsMimironEngaged(PlayerbotAI* botAI);
 // and the phase is at its most time-critical after that, not over.
 bool IsMimironPhase4(Player* bot);
 
+// Phase 3: the Aerial Command Unit up on its own. "possible targets no los" drops unselectable units,
+// so the idle MK II and VX-001 are not in it and the unit only is once it can be attacked.
+bool IsMimironPhase3(PlayerbotAI* botAI);
+
+// The paladin that swaps to Frost Resistance Aura for phase 3 of hard mode, or nullptr. Water Spray
+// is frost and takes partial resists, and a topped bot survives it at 20 % resisted: the aura puts
+// every spray at 10 % or more, where Gift of the Wild's 54 alone leaves 28 % unresisted. The two
+// share an exclusive aura type, so only the higher counts. Never the fire carrier, that aura holds
+// a fifth of the fire off everyone; a tank first, since it stands central (24 of 26 spray hits
+// landed within its 40 yd), then a non-healer, then a healer. A lone paladin keeps fire.
+Player* GetMimironFrostResistancePaladin(PlayerbotAI* botAI, Player* bot);
+
 // What this bot should be hitting in phase 4. nullptr means hold - everything it is allowed to touch is
 // already at ULDUAR_MIMIRON_PHASE4_HOLD_PCT, and pushing a part under early costs the whole rendezvous.
 // `melee` is a parameter rather than derived from the bot so the pet node can ask for a melee answer on
@@ -634,6 +651,16 @@ constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
 // most of a bot's pool. The extra covers a step's overshoot and the bot turning to its next flame.
 constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_LENGTH = 16.0f;
 constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_HALF_WIDTH = 3.5f;
+// Where a destination has to stay off a lane. The sidestep lands at the run width plus 1.5, past
+// this, and a lane jumps whenever a spray puts out the flame it points at, so without the gap a
+// formation slot just outside the run width flips with the dodge.
+constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH = 4.5f;
+// The script's reach: a fire bot with its nearest spread flame this close sprays at once, else it
+// walks to this far short of the flame and sprays on arrival, facing the way it walked. So the next
+// spray is predictable. A stationary bot turns and fires in the same tick, and a walking bot's line
+// starts where it stops, which is why the live line alone warned one victim in 14; the lane toward
+// the nearest flame, read 2 s ahead, held 13 of the 14.
+constexpr float ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH = 5.0f;
 // Deafening Siren 64616 is a 10 yd area silence, on the 25-man bot only (creature_template_addon), and
 // area auras add both object sizes to the radius.
 constexpr float ULDUAR_MIMIRON_FIREBOT_SIREN_CLEARANCE = 13.0f;
