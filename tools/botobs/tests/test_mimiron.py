@@ -166,7 +166,10 @@ def late_snap(when: int) -> dict:
         rows.append([guid, x, y, 364.0, 0.0, alive, 80.0, late_target(guid, when), walking, 0, 0,
                      dealt, 0, 0.0])
     if P3_AT <= when <= 65000:
-        rows.append([LATE_ACU, 0.0, 0.0, 380.0, 0.0, late_acu_hp(when), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0])
+        # Down on the floor for the first second of the core window, then back up with the aura still
+        # on, which is what a second core inside a live one does to it.
+        z = 364.0 if 53000 <= when < 54000 else (385.0 if 54000 <= when < 57000 else 380.0)
+        rows.append([LATE_ACU, 0.0, 0.0, z, 0.0, late_acu_hp(when), 0.0, BULWARK, 0, 0, 0, 0, 0, 0.0])
     if P3_AT <= when < 62000:
         rows.append([FIREBOT_A, 12.0, 12.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
         rows.append([FLAME, 6.0, 17.0, 364.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0, 0, 0.0])
@@ -364,6 +367,13 @@ class LaterPhases(unittest.TestCase):
         rows = mm.p3_rows(self.trace)
         self.assertEqual(rows["grounded"], (4000, 16.0))
         self.assertEqual(rows["airborne"], (8000, 8.0))
+
+    def test_a_latched_landing_that_climbs_back_counts_only_the_floor(self):
+        landing = mm.p3_rows(self.trace)["landings"][0]
+        self.assertEqual(landing["span"], (53000, 57000))
+        # 4 of the window's 17 samples are on the floor, and one use fed it.
+        self.assertAlmostEqual(landing["floor"], 4.0 * 4 / 17)
+        self.assertEqual(landing["cores"], 1)
 
 
 class EveryView(unittest.TestCase):

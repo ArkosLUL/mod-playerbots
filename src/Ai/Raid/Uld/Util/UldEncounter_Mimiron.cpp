@@ -915,6 +915,9 @@ struct MimironFightState
     // Assault Bot corpses that already gave their Magnetic Core.
     std::unordered_set<ObjectGuid> coreCorpses;
 
+    // When the last Magnetic Core went in, so the next one waits its arming out.
+    uint32 coreSpentMs = 0;
+
     std::vector<ObjectGuid> keptFireBots;
     uint32 fireBotScanMs = 0;
 
@@ -1618,8 +1621,19 @@ bool IsMimironCoreUseReady(PlayerbotAI* botAI, Player* bot)
         return false;
 
     // Hover alone is not enough: it stays set for the 3 s before a core arms, and the script sets it
-    // again while an aura is still on, so a carrier going by it chains core after core.
+    // again while an aura is still on, so a carrier going by it chains core after core. Nor is the
+    // core on the floor, which is not there to be found for the first few hundred ms of that arming.
+    MimironFightState const& state = MimironFightStateFor(bot);
+    if (state.coreSpentMs && GetMSTimeDiffToNow(state.coreSpentMs) < ULDUAR_MIMIRON_CORE_ARM_MS)
+        return false;
+
     return !bot->FindNearestCreature(NPC_MAGNETIC_CORE, ULDUAR_MIMIRON_CORE_PENDING_RANGE);
+}
+
+void NoteMimironCoreSpent(Player* bot)
+{
+    if (bot)
+        MimironFightStateFor(bot).coreSpentMs = getMSTime();
 }
 
 std::vector<ObjectGuid> GetMimironKeptFireBots(PlayerbotAI* botAI, Player* bot)

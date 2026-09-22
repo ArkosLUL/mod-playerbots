@@ -11,7 +11,8 @@
     mimiron.py <file> --bomb     every Frost Bomb: who had to run, casting lost, where escapes landed
     mimiron.py <file> --slots    how often formation slots moved, and why
     mimiron.py <file> --spin     every Laser Barrage window, and the storm in the 15 s after it
-    mimiron.py <file> --p3       phase 3: the fire brigade, Water Spray, the cores, the grounded windows
+    mimiron.py <file> --p3       phase 3: the fire brigade, Water Spray, the Junk Bot pile, and how
+                                 long each core actually kept the unit on the floor
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -48,6 +49,7 @@ NPC_VX001 = 33651
 NPC_FROST_BOMB = 34149
 NPC_AERIAL_COMMAND_UNIT = 33670
 NPC_ASSAULT_BOT = 34057
+NPC_JUNK_BOT = 33855
 NPC_EMERGENCY_FIRE_BOT = 34147
 NPC_FLAMES_SPREAD = 34121
 
@@ -82,6 +84,12 @@ SPRAY_REACH = radius("ULDUAR_MIMIRON_FIREBOT_SPRAY_REACH")
 BARRAGE_BOUNDARY = radius("ULDUAR_MIMIRON_BARRAGE_BOUNDARY")
 # How long before a spray hit the victim is checked against the lanes: time enough to step out.
 SPRAY_LEAD_MS = 1000
+# The Aerial Command Unit rests at z 379.3 hovering and lands on 364.3, so anything above this is in
+# the air whatever the Magnetic Core latch says.
+ACU_FLOOR_Z = 366.3
+# How far back a landing looks for the uses that fed it: 64436 reaches the unit 3.8 to 4.4 s after the
+# use, and a banked second core goes in within a second of the first.
+CORE_LANDING_LOOKBACK_MS = 12000
 
 # ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE is an expression the source parser does not read.
 BURST_HALF_ANGLE = math.radians(30.0)
@@ -941,12 +949,15 @@ def p3_rows(trace: Trace) -> dict:
     samples = Samples(trace)
     bots = guids_of_entry(trace, NPC_EMERGENCY_FIRE_BOT)
     assaults = guids_of_entry(trace, NPC_ASSAULT_BOT)
+    junk = guids_of_entry(trace, NPC_JUNK_BOT)
     acu = guids_of_entry(trace, NPC_AERIAL_COMMAND_UNIT)
 
     firebots: dict[int, dict] = {}
     seen_assault: dict[int, list] = {}
     alive_counts: list[int] = []
-    bot_rows = aimed = 0
+    junk_counts: list[int] = []
+    acu_z: list[tuple[int, float]] = []
+    bot_rows = aimed = junk_aimed = assault_aimed = 0
     for index, snap in enumerate(samples.snaps):
         when = snap["t"]
         if not low <= when < high:
@@ -964,11 +975,18 @@ def p3_rows(trace: Trace) -> dict:
             if guid in units and living(units[guid]):
                 seen_assault.setdefault(guid, [when, when])[1] = when
 
+        junk_counts.append(sum(1 for guid in junk if guid in units and living(units[guid])))
+        row = next((units[guid] for guid in acu if guid in units), None)
+        if row:
+            acu_z.append((when, row[3]))
+
         for guid, unit in units.items():
             if guid not in roster or not living(unit) or guid in trace.humans:
                 continue
             bot_rows += 1
             target = unit[7] if len(unit) > 7 else 0
+            junk_aimed += target in junk
+            assault_aimed += target in assaults
             if target in bots:
                 aimed += 1
                 if target in firebots:
@@ -1023,6 +1041,24 @@ def p3_rows(trace: Trace) -> dict:
         was, now = acu_hp(begin), acu_hp(end)
         return was - now if was is not None and now is not None else 0.0
 
+    # What the latch cannot say. A second core inside a live window replaces the first aura, the script
+    # runs its lift-off on that removal, and the unit climbs back out of melee reach with the new aura
+    # still on - latched the whole 20 s, on the floor for half a second of it.
+    def floor_seconds(begin: int, end: int) -> float:
+        inside = [z for when, z in acu_z if begin <= when <= end]
+        if not inside:
+            return 0.0
+
+        return (end - begin) / 1000.0 * sum(1 for z in inside if z <= ACU_FLOOR_Z) / len(inside)
+
+    uses = [rec["t"] for rec in notes(trace, "mimiron.corestep")
+            if low <= rec["t"] < high and str(rec.get("txt", "")) == "use"]
+    landings = [{"span": (begin, stop), "floor": floor_seconds(begin, stop),
+                 "drop": drop(begin, stop),
+                 "cores": sum(1 for when in uses
+                              if begin - CORE_LANDING_LOOKBACK_MS <= when <= stop)}
+                for begin, stop in windows]
+
     grounded_ms = sum(stop - begin for begin, stop in windows)
     grounded_drop = sum(drop(begin, stop) for begin, stop in windows)
     air = []
@@ -1046,6 +1082,12 @@ def p3_rows(trace: Trace) -> dict:
         "spray_on_aura": on_aura,
         "spray_in_lane": in_lane,
         "cores": core_ledger(trace, low, high),
+        "landings": landings,
+        "junk_seen": len(junk),
+        "junk_mean": statistics.mean(junk_counts) if junk_counts else 0.0,
+        "junk_max": max(junk_counts) if junk_counts else 0,
+        "junk_aimed": junk_aimed,
+        "assault_aimed": assault_aimed,
         "assaults": sorted((stamps[1] - stamps[0]) for stamps in seen_assault.values()),
         "coresteps": collections.Counter(
             str(rec.get("txt", "")) for rec in notes(trace, "mimiron.corestep")
@@ -1082,6 +1124,11 @@ def show_p3(trace: Trace) -> None:
     if lived:
         print(f"  Assault Bots {len(lived)}, alive {statistics.median(lived) / 1000:.0f} s median,"
               f" {min(lived) / 1000:.0f} to {max(lived) / 1000:.0f} s")
+    if rows["junk_seen"]:
+        print(f"  Junk Bots {rows['junk_seen']} seen, {rows['junk_mean']:.1f} alive on average,"
+              f" {rows['junk_max']} at most; the raid aimed at one for"
+              f" {rows['junk_aimed'] * SAMPLE_MS / 1000:.0f} bot-s against"
+              f" {rows['assault_aimed'] * SAMPLE_MS / 1000:.0f} on Assault Bots")
     if rows["coresteps"]:
         print("  core steps: " + ", ".join(f"{step} {n}" for step, n in rows["coresteps"].most_common()))
     cores = rows["cores"]
@@ -1090,10 +1137,18 @@ def show_p3(trace: Trace) -> None:
         print(f"  cores looted {cores['looted']}, used {cores['used']}, never spent {cores['lost']};"
               f" held {held} s before use; {cores['chained']} spent by a chain")
 
+    for landing in rows["landings"]:
+        begin, stop = landing["span"]
+        print(f"      {clock(begin)} .. {clock(stop)}  {(stop - begin) / 1000:4.1f} s latched,"
+              f" {landing['floor']:4.1f} s on the floor, {landing['cores']} core(s) in,"
+              f" unit down {landing['drop']:.1f} points")
+
+    floor = sum(landing["floor"] for landing in rows["landings"])
     for label, (ms, points) in (("grounded", rows["grounded"]), ("airborne", rows["airborne"])):
         rate = points / (ms / 1000.0) if ms else 0.0
+        tail = f", {floor:.0f} s of it on the floor" if label == "grounded" else ""
         print(f"  {label:9} {ms / 1000:5.0f} s of the phase, unit down {points:5.1f} points"
-              f" ({rate:.2f} %/s)")
+              f" ({rate:.2f} %/s){tail}")
 
 
 SECTIONS = (
@@ -1105,7 +1160,8 @@ SECTIONS = (
     ("bomb", "Frost Bomb evacuations and where escapes landed", show_bomb),
     ("slots", "formation slot churn per phase", show_slots),
     ("spin", "each Laser Barrage window and the storm after it", show_spin),
-    ("p3", "phase 3 fire bots, Water Spray, cores and the grounded windows", show_p3),
+    ("p3", "phase 3 fire bots, Water Spray, the Junk Bot pile and what each core landing was worth",
+     show_p3),
 )
 
 

@@ -257,6 +257,12 @@ constexpr float ULDUAR_MIMIRON_CORE_SEARCH_RANGE = 60.0f;
 // every landing pushes all the add timers back another 25 s with no cap.
 constexpr float ULDUAR_MIMIRON_CORE_PENDING_RANGE = 100.0f;
 
+// A core the carrier just used is invisible to that check for its whole arming: 64444 is instant, but
+// the summon is not there to be found on the next tick and its 64436 only reaches the unit 3.8 to
+// 4.4 s later. Two cores 0.2 s apart both went in that way, and the unit spent half a second on the
+// floor instead of 19, so the carrier has to remember its own use for this long.
+constexpr uint32 ULDUAR_MIMIRON_CORE_ARM_MS = 6000;
+
 // Phase 4 only ends when all three parts are channelling Self Repair at once, and that cast is 15 s,
 // so they have to come down level rather than one at a time. Percent, not raw health: the Aerial
 // Command Unit's HealthModifier is 200 against 300, so ordering on raw health ranked it last every
@@ -467,8 +473,12 @@ Creature* GetMimironCoreCorpse(Player* bot);
 // Moves that corpse's core into the bot's bags and marks the corpse spent. False on full bags.
 bool TakeMimironCore(Player* bot, Creature* corpse);
 
-// Whether a core may go down now: the unit is in the air and no earlier core is still live.
+// Whether a core may go down now: the unit is in the air and no earlier core is still live or arming.
 bool IsMimironCoreUseReady(PlayerbotAI* botAI, Player* bot);
+
+// Starts that arming window. Held per instance, so a new carrier picking the next core up still sees
+// the one its predecessor sent down.
+void NoteMimironCoreSpent(Player* bot);
 
 // The ranged snare this bot can put on a Bomb Bot, or empty for a class that has none. Roots are
 // deliberately absent, but not because they break: neither Entangling Roots nor Frost Nova carries
@@ -681,6 +691,13 @@ constexpr float ULDUAR_MIMIRON_FROST_BOMB_HOLD_MARGIN = 4.0f;
 // Aerial Command Unit health at which they all go on the kill list. None may reach phase 4, where
 // they spray straight into the rendezvous.
 constexpr float ULDUAR_MIMIRON_FIREBOT_CLEANUP_PCT = 15.0f;
+// How many Junk Bots have to be up before the melee leave the Assault Bot for them. One arrives every
+// 10 s with 251k health and nothing else kills them: they reached nine alive, lived 63 s each and took
+// 627k off the raid, more than any other source in phase 3. Melee pay almost nothing to switch, since
+// the nearest is 3.4 yd away with four inside a cleave, while the Assault Bot stands 7.7 yd off the
+// pile. Ranged and healers keep it, because it is the only Magnetic Core source.
+constexpr uint32 ULDUAR_MIMIRON_JUNK_BOT_PILE = 4;
+
 // Water Spray is SPELL_ATTR0_CU_CONE_LINE: a line 15 yd ahead of the bot, as wide as both object
 // sizes, about 2.3 yd each side. 18850 to 21150 frost plus Emergency Mode's 25 % and a knockback,
 // most of a bot's pool. The extra covers a step's overshoot and the bot turning to its next flame.

@@ -1149,6 +1149,16 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
     if (aerialCommandUnit && botAI->IsMelee(bot) && IsMimironAcuGrounded(botAI))
         priority.emplace_back(NPC_AERIAL_COMMAND_UNIT, aerialCommandUnit);
 
+    // An Assault Bot is up most of the phase, so below it the Junk Bots were never reached and piled
+    // up on the raid. Melee take the pile once it builds: they are standing in it either way, and
+    // their cleave covers several of it, which nothing else in the raid does. Once on one they finish
+    // it, so the count falling back under the bar does not leave half-dead ones behind.
+    if (botAI->IsMelee(bot) && (junkBots.size() >= ULDUAR_MIMIRON_JUNK_BOT_PILE ||
+                                (currentTarget && currentTarget->GetEntry() == NPC_JUNK_BOT)))
+    {
+        priority.emplace_back(NPC_JUNK_BOT, SelectByEntry(currentTarget, NPC_JUNK_BOT, junkBots));
+    }
+
     priority.emplace_back(NPC_ASSAULT_BOT, SelectByEntry(currentTarget, NPC_ASSAULT_BOT, assaultBots));
 
     if (cullFireBots && !PlayerbotAI::IsRangedDps(bot))
@@ -1679,6 +1689,7 @@ bool MimironMagneticCoreAction::Execute(Event /*event*/)
     packet << (uint32)TARGET_FLAG_NONE;
 
     bot->GetSession()->HandleUseItemOpcode(packet);
+    NoteMimironCoreSpent(bot);
     chaining = true;
     return true;
 }

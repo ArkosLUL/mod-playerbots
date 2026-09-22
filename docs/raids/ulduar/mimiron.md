@@ -998,6 +998,20 @@ intake Hand Pulse.
 them Water Spray, and the berserk at 10:17 with the ACU at 19%. It was grounded 80 s at 0.60 %/s
 against 268 s in the air at 0.11 %/s, and two of six cores never went down (see the core section).
 
+2026-09-22: phase 2 held with no deaths and phase 3 lost it again — **293 s**, 27 deaths, the unit
+left at **53.9%**. Both landings were wasted (see the core section), and the raid spent the phase on
+the wrong add. An Assault Bot was up **71%** of it and outranks the Junk Bot for every role, so melee
+gave the pile **7%** of their samples and ranged **4%**, against 53% and 46% on the Assault Bot, while
+melee had no target at all in **27%**. Seventeen Junk Bots arrived (one per 10 s, 251k each), lived
+**63 s median**, reached nine alive, and did **627k** into the raid, more than the fire (591k), the
+unit (537k) or Water Spray (497k).
+
+**So melee clear the pile and the rest keep the core source.** Above `ULDUAR_MIMIRON_JUNK_BOT_PILE`
+(4) alive, melee take a Junk Bot ahead of the Assault Bot, and hold the one they are on when the count
+falls back under it. It costs them nothing: the nearest is **3.4 yd** away with **4** inside a cleave,
+while the Assault Bot stands 7.7 yd off the pile, which is why melee AoE was not reaching it. Ranged
+and healers keep the Assault Bot, the only Magnetic Core source; a grounded unit still outranks both.
+
 ## A dodge that returns false hands the tick to Charge
 
 Shock Blast (63631) is a **4 s cast**, `TARGET_SRC_CASTER`, 15 yd, 100000 damage, every 30 s. Four
@@ -1072,6 +1086,17 @@ per-instance claimed set for a corpse whose loot was never filled (`TakeMimironC
 only when `IsMimironCoreUseReady`: airborne, no 64436, and no live 34068 within 100 yd; until then the
 carrier notes `pending`. The next pull into phase 3 used **two cores off two corpses**, 34 s apart, and
 landed cleanly twice.
+
+**The floor is what pays, and neither gate covers the arming.** 2026-09-22 spent both banked cores
+into one landing, **0.2 s apart**, twice: 64444 is instant but its 34068 is not there to be found on
+the next tick, and the 64436 that creature casts only reaches the unit **3.8-4.4 s** later, so between
+the use and the aura `IsMimironCoreUseReady` sees nothing. Two applications landed 10 ms apart, the
+first removal ran `DO_ENABLE_AERIAL`, and the unit climbed **20-30 yd** over the floor with the second
+aura still on: latched 19.9 and 20.2 s, **on the floor 0.5 and 0.3 s**, worth 3.6 and 2.2 points
+against 8.0-16.0 for each single-core landing the day before. `ULDUAR_MIMIRON_CORE_ARM_MS` (6 s)
+stamps the use in `MimironFightState`, per instance so a new carrier inherits it; the 34068 check
+stays, for a core a player placed. `--p3` now measures the floor off the unit's own Z instead of the
+latch: one core holds it down **18.4-19.0 s** of the 20 s.
 
 **Bank two and chain them, for one 40 s window rather than fewer holes.** The 45 s hole a landing
 puts in the event map is a hole in the Assault Bot cadence, the only core source: 2026-09-19
@@ -1617,7 +1642,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | Key | Says |
 |---|---|
 | `phase` | 0 none, 1-4 the phase, 5 a handover. Per instance |
-| `core` | The Magnetic Core window is open. Per instance |
+| `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) or `hold-expiring` (the held one was about to) |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `ring`, `none` — with index/count and the point |
@@ -1640,8 +1665,9 @@ and formation yards by what displaced the bot, Rapid Burst ticks by cone positio
 and ranged (`--burst`), Frost Bomb evacuations from the summon, slot churn, each barrage window
 against the 14.5 s before it, its beam
 ticks and how many landed inside the boundary, and the storm after (`--spin`), and phase 3's
-fire brigade,
-grounded windows, Water Spray hits (share resisted, how many landed on a Frost Resistance Aura
+fire brigade, the Junk Bot pile against the attention the Assault Bots took, each landing measured
+off the unit's own Z rather than the latch (seconds on the floor, cores in, health it cost), Water
+Spray hits (share resisted, how many landed on a Frost Resistance Aura
 holder, how many victims stood in a spray lane 1 s before: 18 of 26 on 2026-09-21) and a core ledger
 (looted, used, never spent, seconds held, spent by a chain) (`--p3`). A phase that comes round
 twice — one pull went P4, H4, P4 — gets a letter, `P4b`, or its deaths and yards are counted under
@@ -1653,7 +1679,8 @@ because the cone has no world object, and neither has the DB Target it aims at: 
 hostile, so the snapshot sweep skips it too.
 
 Still invisible: **creature auras**, because `NoteAura` is roster-gated, so 64436 on the Aerial
-Command Unit never appears and `mimiron.core` is the only record of the window; and **anything past
+Command Unit never appears and `mimiron.core` is the only record of the window, which says a core is
+on the unit and not that the unit is down: its Z in `snap.u` is what says that; and **anything past
 the nearest 40 hazard creatures under Firefighter**, since fire spreads all fight: a Proximity Mine or
 a Frost Bomb can drop out of the snapshot, and so of the containment test a death is measured against,
 and a fire count reads 40 at most.
