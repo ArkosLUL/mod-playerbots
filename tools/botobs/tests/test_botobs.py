@@ -888,6 +888,23 @@ class HodirReader(unittest.TestCase):
         self.assertEqual(hodir.role_split(tally), "m7 r1 h2")
         self.assertEqual(hodir.role_split(collections.Counter()), "")
 
+    def test_reach_shares_measure_both_against_every_sample(self):
+        walks = [2.0, 20.0, 40.0, None, None]
+        there, within = hodir.reach_shares(walks, (15.0, 30.0))
+        self.assertEqual(there, 60.0)
+        self.assertEqual(within, (20.0, 40.0))
+        self.assertEqual(hodir.reach_shares([], (15.0,)), (0.0, (0.0,)))
+
+    def test_the_dps_split_reads_the_fire_at_the_sample_that_opens_each_step(self):
+        samples = [(0, 100.0), (1000, 90.0), (2000, 85.0), (3000, 80.0)]
+        split = hodir.dps_split(samples, [(0, 500)], max_hp=1000, end=3000)
+        self.assertEqual(split["fire"], (100.0, 1000))
+        self.assertEqual(split["none"], (50.0, 2000))
+
+    def test_the_dps_split_drops_a_step_longer_than_the_cap(self):
+        samples = [(0, 100.0), (5000, 50.0)]
+        self.assertEqual(hodir.dps_split(samples, [], max_hp=1000, end=9000), {})
+
     def test_off_point_counts_each_sample_until_the_next(self):
         samples = [(0, 0.0, 0.0), (1000, 10.0, 0.0), (2000, 0.0, 0.0), (3000, 0.0, 0.0)]
         self.assertEqual(hodir.off_point_ms(samples, [(0, (0.0, 0.0))], 0, 3000), (1000, 3000))

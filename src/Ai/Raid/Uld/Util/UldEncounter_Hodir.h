@@ -216,10 +216,16 @@ static_assert(ULDUAR_HODIR_FIRE_STAND_RADIUS + ULDUAR_HODIR_FIRE_STAND_TOLERANCE
                   ULDUAR_HODIR_TOASTY_FIRE_RADIUS,
               "a bot at the edge of its tolerance has to still be inside the fire");
 
-// How far ranged and healers walk for a buff. A usable Starlight zone or fire sat within 15 yd of
-// where the bot already stood on 74/57/65% of ranged samples across three pulls and the curve
-// flattens past that, so a longer walk gives up more casting than the buff returns.
+// How far ranged and healers walk for a buff, and why there are two of these. A bot already in
+// Starlight or a fire gives up one it holds to chase another, so it keeps the short leash. A bot with
+// neither gives up only the walk: 30 yd is about 4s at run speed, against a Starlight zone that lives
+// 51s and carries +50% haste. The long one has to be generous because Hodir is parked on a fire, and
+// every zone a caster may legally stand in is therefore out on the helper arc: 15 yd reaches 6.7% of
+// the legal stands that are up, 30 reaches 30.5%.
 constexpr float ULDUAR_HODIR_BUFF_WALK = 15.0f;
+constexpr float ULDUAR_HODIR_BUFF_WALK_UNBUFFED = 30.0f;
+static_assert(ULDUAR_HODIR_BUFF_WALK_UNBUFFED <= ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS,
+              "walking further than the zone sweep looks would find nothing to walk to");
 
 // Ranged and healers hold at least this far from Hodir. His combat reach plus a raider's is roughly
 // 13 yd, and Frozen Blows turns one of his swings into 20000-30000, so a caster inside this is one
@@ -309,8 +315,17 @@ constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_BREAKERS = 8;
 // Breakers per mage block; every other block gets one. A mage casts its first Toasty Fire 6s after
 // it is freed, and with one breaker on a 110675 hp block the next fire took 17.9-40.8s (28.5 on
 // average) after each freeze. That is longer than Singed's 25s, so Hodir lost all 25 stacks every
-// cycle, and the raid ran 238k dps with a fire up against 127k without. Three take it in about 5s.
-constexpr uint32 ULDUAR_HODIR_MAGE_BLOCK_BREAKERS = 3;
+// cycle, and the raid ran 238k dps with a fire up against 127k without. Three breakers free it in
+// 4.4-11.0s, and the block carries no mechanic, so that time scales with how many are shooting it.
+constexpr uint32 ULDUAR_HODIR_MAGE_BLOCK_BREAKERS = 5;
+
+// The ceiling once no mage block is left. Nothing on ice is holding up the next fire then, and the
+// druid, shaman and priest behind it are not worth the whole ranged group: 170-176 bot-seconds a pull
+// go on ice after the last mage is already free, close to a tenth of all the time the ranged group
+// has, and the fire is what the wave was for.
+constexpr uint32 ULDUAR_HODIR_LATE_BLOCK_BREAKERS = 3;
+static_assert(ULDUAR_HODIR_LATE_BLOCK_BREAKERS <= ULDUAR_HODIR_HELPER_BLOCK_BREAKERS,
+              "the wave standing down cannot pull in more bots than it had while a mage was iced");
 
 // Never empty the ranged group for ice. Sized off who is actually there rather than off raid size,
 // so eight blocks against a 10-man's three ranged still leaves someone on the boss.
@@ -381,10 +396,10 @@ bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, P
 
 // Where this bot belongs and how far it may stray. Tanks stand just past the hold point (the centre,
 // or a fire within the leash of it) so Hodir stops on it. Ranged and healers get a buff stand -
-// Starlight first, a fire otherwise - and nothing at all when neither is within ULDUAR_HODIR_BUFF_WALK:
-// no boss mechanic asks them to stand anywhere in particular, and a home spot they get walked back to
-// is a home spot they get walked out of the buff for. Melee are unanchored and get false. Trigger and
-// action both go through here so they cannot disagree.
+// Starlight first, a fire otherwise - and nothing at all when neither is inside the walk the bot will
+// make for one: no boss mechanic asks them to stand anywhere in particular, and a home spot they get
+// walked back to is a home spot they get walked out of the buff for. Melee are unanchored and get
+// false. Trigger and action both go through here so they cannot disagree.
 bool GetHodirAnchor(PlayerbotAI* botAI, Player* bot, Position& out, float& tolerance);
 
 // The Starlight zone this bot is standing in, or false. The centre, not the bot's own spot, so the

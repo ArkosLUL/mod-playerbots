@@ -81,6 +81,8 @@ FIRE_RADIUS = 11.0
 FIRE_STAND_RADIUS = 8.0
 STARLIGHT_STAND_RADIUS = 1.5
 BUFF_WALK = 15.0
+# What a bot with neither Starlight nor a fire walks; the short one is for a bot that already holds one.
+BUFF_WALK_UNBUFFED = 30.0
 BAND = (15.0, 35.0)
 # Melee this close to him are the pack a fire at his feet is meant to cover.
 MELEE_NEAR_YD = 10.0
@@ -241,6 +243,33 @@ def usable_within(bot: tuple[float, float], boss: tuple[float, float],
             continue
         best = gap if best is None else min(best, gap)
     return best
+
+
+def reach_shares(walks: list[float | None], budgets: tuple[float, ...]) -> tuple[float, tuple[float, ...]]:
+    """`(share of samples where a legal stand existed at all, share inside each budget)`, as
+    percentages of every sample. Both denominators are the whole sample count: the share a bot could
+    reach only means something beside the share that was there to reach."""
+    if not walks:
+        return 0.0, tuple(0.0 for _ in budgets)
+    live = [walk for walk in walks if walk is not None]
+    return (len(live) / len(walks) * 100,
+            tuple(sum(1 for walk in live if walk <= budget) / len(walks) * 100 for budget in budgets))
+
+
+def dps_split(samples: list[tuple[int, float]], lit: list[tuple[int, int]], max_hp: int, end: int,
+              step_cap: int = 2000) -> dict[str, tuple[float, int]]:
+    """Boss dps over `[0, end)` split by whether a fire was burning anywhere, as
+    `{"fire": (dps, ms)}`. A pair of samples further apart than `step_cap` is a hole in the trace
+    rather than a window anything held over, so it counts for neither."""
+    acc = {"fire": [0.0, 0], "none": [0.0, 0]}
+    for (when, health), (nxt, after) in zip(samples, samples[1:]):
+        span = min(nxt, end) - when
+        if when < 0 or when >= end or span <= 0 or nxt - when > step_cap:
+            continue
+        key = "fire" if any(start <= when < stop for start, stop in lit) else "none"
+        acc[key][0] += max(0.0, health - after) / 100 * max_hp
+        acc[key][1] += span
+    return {key: (damage / (ms / 1000), ms) for key, (damage, ms) in acc.items() if ms}
 
 
 def inside_circle(point: tuple[float, float], centre: tuple[float, float], radius: float) -> bool:
@@ -657,6 +686,15 @@ def show_hold(trace: Trace) -> None:
     print(f"  fire 0-{clock(end)[:4]}: alive {alive / 1000:.0f}s, inside the {HOLD_LEASH:.0f} yd leash"
           f" {reach / 1000:.0f}s, held {totals['fire'][0] / 1000 if 'fire' in totals else 0:.0f}s")
 
+    # Keyed on the fire rather than on hodir.tankhold: the windows above say where he was parked, this
+    # says what a fire burning anywhere was worth, which is the number the whole fight turns on.
+    split = dps_split([(row[0], row[3]) for row in rows],
+                      [(zone["t0"], zone["t1"]) for zone in burned], max_hp, end)
+    if split:
+        print("  boss dps " + ", ".join(
+            f"{'with a fire burning' if key == 'fire' else 'with none'}"
+            f" {dps / 1000:.0f}k over {ms / 1000:.0f}s" for key, (dps, ms) in sorted(split.items())))
+
     firsts = fire_starts(trace)
     print(f"\n  first fire after the pull {clock(min(firsts)) if firsts else '-'}")
     for cast in freeze_casts(trace, boss):
@@ -742,7 +780,7 @@ def show_buffs(trace: Trace) -> None:
     boss = boss_guid(trace)
     casters = [guid for guid in bots(trace) if trace.role(guid) in ("ranged", "heal")]
     if boss is not None and casters:
-        reach: dict[str, list[int]] = collections.defaultdict(lambda: [0, 0])
+        walks: dict[tuple[str, str], list[float | None]] = collections.defaultdict(list)
         for snap in frames(trace):
             if not 0 <= snap["t"] < end:
                 continue
@@ -757,14 +795,15 @@ def show_buffs(trace: Trace) -> None:
                 if not row or len(row) < 6 or row[5] <= 0:
                     continue
                 spot, aim = (row[1], row[2]), (him[1], him[2])
-                counts = reach[trace.role(guid)]
-                counts[1] += 1
-                counts[0] += (usable_within(spot, aim, stars, STARLIGHT_STAND_RADIUS) is not None
-                              or usable_within(spot, aim, fires, FIRE_STAND_RADIUS) is not None)
-        for role, (got, total) in reach.items():
-            if total:
-                print(f"  {role:6} a usable stand was within {BUFF_WALK:.0f} yd of where it stood on"
-                      f" {got / total * 100:.1f}% of samples")
+                for name, here, radius in (("Starlight", stars, STARLIGHT_STAND_RADIUS),
+                                           ("fire", fires, FIRE_STAND_RADIUS)):
+                    walks[(trace.role(guid), name)].append(
+                        usable_within(spot, aim, here, radius, walk=math.inf))
+        budgets = (BUFF_WALK, BUFF_WALK_UNBUFFED)
+        for (role, name), got in sorted(walks.items()):
+            there, within = reach_shares(got, budgets)
+            print(f"  {role:6} a legal {name} stand existed on {there:.1f}% of samples, " + ", ".join(
+                f"inside {budget:.0f} yd {share:.1f}%" for budget, share in zip(budgets, within)))
 
     rules = collections.Counter()
     for rec in notes(trace, "hodir.starlight"):
@@ -901,6 +940,24 @@ def show_churn(trace: Trace) -> None:
         print(f"    {action:34} {count:4}  {into[action]:4} into a live pool")
 
 
+def block_target_spans(trace: Trace, blocks: set[int]) -> dict[int, list[tuple[int, int]]]:
+    """Per bot, the windows hodir.dpstarget named one of `blocks` - the time it was shooting ice
+    instead of Hodir. Humans are left out: nothing assigns them a block."""
+    marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "hodir.dpstarget"):
+        if rec["g"] not in trace.humans:
+            marks[rec["g"]].append((rec["t"], str(rec.get("txt", "")).split(" ")[-1]))
+
+    end = pull_end(trace)
+    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for guid, rows in marks.items():
+        rows.sort()
+        for index, (when, value) in enumerate(rows):
+            if value.isdigit() and int(value) in blocks:
+                out[guid].append((when, rows[index + 1][0] if index + 1 < len(rows) else end))
+    return out
+
+
 def show_blocks(trace: Trace) -> None:
     print("BLOCKS")
     boss = boss_guid(trace)
@@ -924,6 +981,19 @@ def show_blocks(trace: Trace) -> None:
         next_fire = next((when for when in fires if when > spawned), None)
         fire = f"{(next_fire - spawned) / 1000:.1f}s later" if next_fire else "none"
         print(f"  {label}: {len(batch)} blocks from {clock(spawned)}, next fire {fire}")
+
+        # Only the mage block holds up the next fire, so bot-time on ice after the last one is down is
+        # time the boss could have had. Split out because the two are worth arguing about separately.
+        spans = block_target_spans(trace, {guid for guid, _ in batch})
+        mages = [rows[-1][0] for guid, rows in batch if kinds.get(guid) == "mage"]
+        stop = min(high, end)
+        on_ice = sum(covered(rows, spawned, stop) for rows in spans.values())
+        after = sum(covered(rows, max(mages), stop) for rows in spans.values()) if mages else 0
+        if on_ice:
+            tail = (f", {after / 1000:.0f}s of it after the last mage was free" if mages
+                    else " (no mage block named in this trace)")
+            print(f"    bots on ice {on_ice / 1000:.0f}s{tail}")
+
         for guid, rows in sorted(batch, key=lambda item: item[1][-1][0]):
             life = (rows[-1][0] - rows[0][0]) / 1000
             print(f"    {kinds.get(guid, '?'):6} {life:5.1f}s  died {clock(rows[-1][0])}")

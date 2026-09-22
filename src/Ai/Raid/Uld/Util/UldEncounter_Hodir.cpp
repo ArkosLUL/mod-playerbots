@@ -425,6 +425,14 @@ bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, P
     return true;
 }
 
+// A bot already holding a buff has something to lose by walking, so it keeps the short leash.
+static float HodirBuffWalk(Player* bot)
+{
+    return bot->HasAura(SPELL_HODIR_STARLIGHT) || bot->HasAura(SPELL_HODIR_TOASTY_FIRE_AURA)
+               ? ULDUAR_HODIR_BUFF_WALK
+               : ULDUAR_HODIR_BUFF_WALK_UNBUFFED;
+}
+
 // Where this bot stands if there is a Starlight zone it can use. Starlight is +50% to cast time and
 // all three attack timers, the fight's biggest throughput lever, and it is worth stacking for: one
 // Ice Shards hit is 41% of a health pool (p90 54%), so an icicle catching two bots in one zone costs
@@ -432,7 +440,7 @@ bool GetHodirStormCloudRally(PlayerbotAI* botAI, Player* bot, Player* carrier, P
 // own, taken from where it stands, so they spread around it instead of piling on a point.
 //
 // Usable means the resulting spot still reaches Hodir, is still out of his reach, and is within
-// ULDUAR_HODIR_BUFF_WALK of the bot; the nearest zone wins among those.
+// the walk this bot will make for a buff; the nearest zone wins among those.
 //
 // The pick is latched per bot and held until the zone expires, because the boss moves under it. A
 // stand that stops qualifying is held rather than dropped: erasing it re-sweeps, and a fresh sweep
@@ -530,7 +538,7 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
     for (Position const& zone : zones)
     {
         float const walk = bot->GetExactDist2d(&zone);
-        if (walk > ULDUAR_HODIR_BUFF_WALK)
+        if (walk > HodirBuffWalk(bot))
         {
             if (!found)
                 how = "far";
@@ -646,14 +654,14 @@ static bool FindHodirFireStand(PlayerbotAI* botAI, Player* bot, Position& out)
             continue;
 
         float const walk = bot->GetExactDist2d(fire);
-        if (walk > ULDUAR_HODIR_BUFF_WALK + ULDUAR_HODIR_FIRE_STAND_RADIUS)
+        if (walk > HodirBuffWalk(bot) + ULDUAR_HODIR_FIRE_STAND_RADIUS)
             continue;
 
         if (picked && walk >= bestWalk)
             continue;
 
         Position const stand = standFor(fire);
-        if (bot->GetExactDist2d(&stand) > ULDUAR_HODIR_BUFF_WALK || standRejects(stand))
+        if (bot->GetExactDist2d(&stand) > HodirBuffWalk(bot) || standRejects(stand))
             continue;
 
         out = stand;
@@ -1297,8 +1305,14 @@ Unit* GetHodirAssignedHelperBlock(PlayerbotAI* botAI, Player* bot)
             seats.push_back(block);
     }
 
+    // While a mage is still iced the wave is holding up the next fire, so it gets the ranged group.
+    // After that, what is left on ice is worth a few bots and the rest belong back on the boss.
+    bool const mageIced = std::any_of(blocks.begin(), blocks.end(), [](Creature* block)
+                                      { return GetHodirHelperKind(block) == HodirHelperKind::Mage; });
+
     size_t const total = candidates.size();
-    size_t budget = std::min<size_t>(ULDUAR_HODIR_HELPER_BLOCK_BREAKERS, seats.size());
+    size_t budget = std::min<size_t>(
+        mageIced ? ULDUAR_HODIR_HELPER_BLOCK_BREAKERS : ULDUAR_HODIR_LATE_BLOCK_BREAKERS, seats.size());
     if (total > ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE)
         budget = std::min(budget, total - ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE);
     else

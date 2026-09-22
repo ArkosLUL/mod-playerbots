@@ -35,6 +35,15 @@ pass/fail: three of those shelters sat 7.6-8.2 yd off Sif's Blizzard track again
 reach, because clearance was a solver preference it was free to trade away. Parse the shipped table back
 out of the source to check it — the solver's own output only proves the solver agrees with itself.
 
+**A tuned constant carries its trace's layout as an unwritten premise.** Hodir's `_BUFF_WALK` 15 was
+fitted to pulls where a usable buff stand sat inside 15 yd on 53.7% of ranged samples. A later change
+parked the boss on the Toasty Fire, moving every stand a caster may legally use out to the helper arc:
+the same 15 then reached **6.6%**, so the rule quietly became "never walk" while 57-60% of legal stands
+sat on the floor. Nothing asserts a distance against what is inside it, so it kept looking right. When
+a change moves what a fitted constant measures against, re-derive it in the same cycle, and print the
+availability it is fitted to beside the share it lets through — a reader showing only the second cannot
+tell a tight budget from a dead one.
+
 **A navprobe-clean point can still be a wrong point.** Navprobe answers "is this on the mesh", which is
 one constraint out of several. A nine-spot Thorim camp solve ignored Sif's Blizzard lane and put two
 points 5.6 and 6.8 yd from the bunny's path; both probed clean. So the hazard check is its own step,

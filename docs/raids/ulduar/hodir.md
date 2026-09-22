@@ -41,17 +41,24 @@ dealt **7,693 dps each from 30-35 yd against 7,844 from 20-25**, casts aimed at 
 particular, so `DeriveHodirAnchor` offers a **buff stand or nothing**: Starlight first, since +50%
 haste beats what a fire gives, else the nearest point of a live fire, capped at `_FIRE_STAND_RADIUS` 8
 of its centre — park 8 / release 10 inside the aura's 11, and a bot already inside keeps the spot it
-is on. Either only when the walk is under `_BUFF_WALK` **15** and the stand sits in the caster band.
+is on. Either only when the stand sits in the caster band and inside the walk the bot will make.
 The fire *he* is held on needs no special case: with him on it, nothing within 8 yd of it is 15 from
 him. `hodir.stand` reads `starlight` / `fire` / `none`.
+
+**The walk depends on what the bot already holds** (`HodirBuffWalk`): `_BUFF_WALK` **15** for a bot in
+Starlight or a fire, which gives up one it has to chase another, and `_BUFF_WALK_UNBUFFED` **30** for
+one with neither, which gives up only the travel. 30 is the zone sweep's own radius, `static_assert`ed,
+so nothing it finds is thrown away unread. **One flat number cannot serve both**, and which one it
+should have been moved when the hold did: a legal Starlight stand sat inside 15 yd on **53.7%** of
+ranged samples on 2026-09-19 and on **6.6%** on the fire-hold build — same 15, same code, 57-60% of
+stands still on the floor and out of reach. See [pitfalls](../../engine/pitfalls.md).
 
 The two concentric rings round a fixed anchor are gone: a leftover of the corner hold, and also what
 kept ranged out of the buffs. Over the three 2026-09-19 evening pulls a usable stand sat within 15 yd
 of where the bot already stood on **73 / 55 / 65%** of samples while ranged held Starlight or a fire
 **24 / 23 / 24%** of the time (healers 24 / 31 / 31%), and the ring anchor was 12-14% of every accepted
 move — walking bots off zones they had reached, with 314-487 `dup` and 411-431 `wait` refusals behind
-it. 15 is where the availability curve flattens; past it the walk gives up more casting than the buff
-returns.
+it.
 
 **One hold point per instance, read by both tanks** (`DeriveHodirHold`, `HodirBotLatches::hold`): the
 centre, or the live Toasty Fire nearest the centre that is within `_HOLD_FIRE_LEASH` **25** of it —
@@ -117,8 +124,10 @@ there at all. A player can Singe itself too: Biting Cold's tick (`CastCustomSpel
 SPELL_BITING_COLD_DAMAGE)`, `:1290`) is a magic-negative cast by the player on the player.
 
 **Helper blocks are broken mage first** (`GetHodirAssignedHelperBlock`):
-`ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` 3 each, then druid, shaman, priest at one each, inside the 8-breaker
-budget. A block (32938, 110,675 hp) is summoned by the helper inside it, so
+`ULDUAR_HODIR_MAGE_BLOCK_BREAKERS` **5** each, then druid, shaman, priest at one each, inside the
+8-breaker budget — **which drops to `_LATE_BLOCK_BREAKERS` 3 once no mage block is left**, since
+nothing still on ice holds up the next fire and **170-176 bot-seconds a pull**, near a tenth of the
+ranged group's whole fight, went on ice after the last mage was already free. A block (32938, 110,675 hp) is summoned by the helper inside it, so
 `ToTempSummon()->GetSummonerUnit()` names it, and `hodir.dpstarget` writes that kind before the guid.
 A freed mage casts its first fire 6s later (`EVENT_TRY_FREE_HELPER`, `ScheduleAbilities`,
 `:1094-1124`). At one breaker a block, the next fire came **17.9-40.8s (28.5 mean) after each freeze
@@ -126,7 +135,9 @@ landed** and 0:18-0:26 into the pull — longer than Singed's 25s, so it reset e
 held the raid ran **238k over 223s; without, 127k over 316s**, a gap that also carries the
 block-breaking. Mage first, the next fire came 20.0 / 23.9 / 26.3 / 31.5 s after each landing on
 2026-09-19, but the first mage block still took 7.5-19.8 s, not ~5: its breakers first cast on it
-0.5-13 s after it spawned, held by the post-freeze shelter run, the shed and dodges.
+0.5-13 s after it spawned, held by the post-freeze shelter run, the shed and dodges. Three breakers
+free it in **4.4-11.0 s**, and the block carries no mechanic, so that time scales with how many shoot
+it.
 
 **Toasty Fire grants no Flash-Freeze exemption.** It is 11 yd and only blocks Biting Cold. The one
 exemption is `SPELL_SAFE_AREA_TRIGGERED (62464)`, off `65705` on **NPC 33174**, radius index 40 → 9 yd.
@@ -441,6 +452,32 @@ half with it: melee crowding the 15-35 band fed the clump rule, the sweep rang o
 at a **32.6 yd** median from him, and a usable stand was within `_BUFF_WALK` on **39%** of their
 samples against 73 / 55 / 65%.
 
+Traced 2026-09-22 evening on the melee-gate build, two pulls wiped at 3:30 with 0-3:00 boss dps
+**161.9k / 191.1k**. The gate holds: `hodir raid position action` reads `r357 h186 t13` with no melee
+in it, their median gap to him is **6.8 / 6.3 yd**, inside the 8 yd it takes to swing 68 / 70%, and
+Singed reaches cap 12.2 s after the first fire and holds it 148 s of 180.
+
+**One number carries the rest: 225k with a Toasty Fire burning anywhere against 142k with none**, and
+a fire burned for only 108 s of 180. Coverage alone cannot close the gap — 150 s at those two rates is
+210.6k — so the no-fire windows have to rise too. Two things hold them down. Ranged and healers cannot
+reach the buffs: a legal Starlight stand existed on **57-60%** of their samples and sat inside 15 yd on
+**6.6%**, the nearest zone a median 29.6 yd off, so they held Starlight 3.7% and a fire 33.9% and
+carried Biting Cold **52.5%** of the fight. And 8 of 10 ranged leave the boss after every freeze until
+the last block dies, **574-680 bot-seconds** of ice a pull.
+
+**That is also what killed them.** Biting Cold was **26.4%** of all damage taken (38.5% and peak 7
+stacks in the worse pull), and the shed is not at fault: once at 4 stacks bots are back under it in a
+**2.0 s** median with 93% of them moving. The cost is sitting at 1-3 stacks out of a fire, where a fire
+sheds on every tick for free. Every ranged and healer death was their own Biting Cold plus the Frozen
+Blows raid tick (`64545`), 39-44 yd from him. The tank died at 2:54 to four Frozen Blows swings with
+Divine Shield and Ardent Defender already spent, which is a **roster** problem: the second tank slot
+was the human, so `HodirFrozenBlowsSwapTrigger` had no partner to hand him to.
+
+**Storm Power is at its cap — not a lever, do not re-open it.** 10-12 Storm Cloud windows a pull
+delivered 43 and 55 Storm Power, **5.4-5.5 per cloud against a hard 6**, because every application
+spends a charge (`spell_hodir_storm_power_aura::OnApply`). Only the split is arguably wrong: melee took
+31 of 55.
+
 **Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
 `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
 3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did the same 192 times at 780 ms, which
@@ -453,8 +490,10 @@ under one edit at a time, and the three-latch pull is the one that cannot say wh
 `--buffs`, `--churn`, `--blocks`): time off the hold point, fire inside the leash against fire held,
 the melee pack inside the held fire and what share of it was on him at all, the melee gap to him
 against the 8 yd it takes to swing, the Singed ramp and the time at none with a fire burning, how
-often a usable stand was within `_BUFF_WALK`, Biting Cold by stack, post-freeze shelter moves, stalled
-walks, and **the roles each mover walked** — the one line that names a gate that stopped gating.
+**boss dps with a fire burning against with none**, whether a legal buff stand existed at all against
+whether it was inside each walk budget, Biting Cold by stack, the bot-seconds a block wave spent on ice
+after the last mage was free, post-freeze shelter moves, stalled walks, and **the roles each mover
+walked** — the one line that names a gate that stopped gating.
 Traces older than `hodir.hold` fall back to `hodir.centre`.
 
 Each cause below is separate, and all of them are still easy to reintroduce.
