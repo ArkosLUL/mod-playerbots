@@ -49,4 +49,9 @@ struct BurstHoldState
 // timer from the previous fight satisfies the dwell instantly on the next pull.
 bool TankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwellMs);
 
+// True for bosses whose script never sets a victim, so TankHasHeldBoss can never come back true on
+// one and a caller waiting for the dwell waits for the whole fight. Keyed on entry because the
+// reason lives in the boss script, not in anything readable off the unit.
+bool BossTakesNoVictim(Unit const* boss);
+
 #endif

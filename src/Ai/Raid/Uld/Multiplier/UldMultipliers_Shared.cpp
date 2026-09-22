@@ -140,6 +140,17 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         }
     }
 
+    // The sweep above reads a cached list, so a bot whose copy has not caught up with the pull or a
+    // phase change resolves no mech, falls through to the permissive default at the bottom and lusts
+    // on a boss that holds it. A direct grid search has no such lag.
+    if (!leviathanMkII)
+        leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, sPlayerbotAIConfig.sightDistance, true);
+    if (!vx001)
+        vx001 = bot->FindNearestCreature(NPC_VX001, sPlayerbotAIConfig.sightDistance, true);
+    if (!aerialCommandUnit)
+        aerialCommandUnit =
+            bot->FindNearestCreature(NPC_AERIAL_COMMAND_UNIT, sPlayerbotAIConfig.sightDistance, true);
+
     // The sweep above is capped at SightDistance, and her second flight point (619, -238, 475) sits
     // past 100yd from most of the raid - so she has to be resolved off the threat list as well, or
     // the fall-through at the bottom opens the gate instead of closing it. DoZoneInCombat() on her
@@ -158,10 +169,13 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
     }
 
-    // Damage in P1-P3 counts, so only lust waits. All three mechs up at once is phase 4, the burn
-    // the fight is actually balanced around - and it outlasts a 10-minute lust.
+    // Damage in P1-P3 counts, so only lust waits, and it waits for phase 2. That phase is a healing
+    // race the raid loses at about 30k/s taken, and 40 s of haste on the healers is the only lever
+    // there. Phase 4 is the bigger burn but the raid reached it in 4 of 17 hard-mode pulls, and
+    // berserk at 10:00 against a 10-minute cooldown means one window or the other, never both.
+    // VX-001 still riding the chassis is the handover, where it does nothing.
     if (leviathanMkII || vx001 || aerialCommandUnit)
-        return {true, leviathanMkII && vx001 && aerialCommandUnit};
+        return {true, vx001 && !leviathanMkII && !aerialCommandUnit && !vx001->GetVehicleBase()};
 
     // The council members resurrect each other until one is left, so only the survivor is a real
     // kill. Covers the hard mode too, where that survivor is the empowered phase-3 Steelbreaker.

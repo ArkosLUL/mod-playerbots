@@ -90,6 +90,7 @@ def mimiron_pull() -> list[dict]:
         {"t": 9000, "e": "dmg", "s": VX, "d": TREE, "sp": mm.SPELL_HEAT_WAVE, "a": 2000},
         {"t": 9100, "e": "heal", "s": TREE, "d": AGONY, "sp": 48441, "a": 3000, "oh": 1000},
         {"t": 9200, "e": "cast", "s": BULWARK, "sp": 64205, "tgt": 0, "ct": 0},
+        {"t": 9300, "e": "cast", "s": AGONY, "sp": 32182, "tgt": 0, "ct": 0},
 
         # step, walk back, step again: one A-B-A, and the walk back charged to the step
         move(10000, AGONY, mm.BURST_STEP, 22.0, 8.0),
@@ -302,6 +303,11 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(first["heat"], 2000)
         self.assertEqual(first["healed"], 2000)
         self.assertIn("guardian", first["events"])
+
+    def test_the_lust_lands_in_the_bucket_it_was_cast_in(self):
+        rows = mm.heal_rows(self.trace)
+        self.assertIn("lust", rows[0]["events"])
+        self.assertNotIn("lust", rows[1]["events"])
 
 
 class LaterPhases(unittest.TestCase):

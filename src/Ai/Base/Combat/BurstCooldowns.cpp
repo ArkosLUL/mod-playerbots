@@ -44,11 +44,22 @@ namespace
         "fire elemental totem", "elemental mastery",
         // consumable
         "offensive potion"};
+
+    // Bosses that never take a victim at all, so nothing is ever "held" on them. VX-001 overrides
+    // AttackStart to do nothing and its UpdateAI never calls UpdateVictim, so neither GetVictim()
+    // nor the threat manager's pick is ever set: it faces whoever Rapid Burst rolled and swings at
+    // nobody.
+    std::unordered_set<uint32> const noVictimBosses = {33651};
 }  // namespace
 
 bool IsBurstCooldownAction(std::string const& actionName)
 {
     return burstCooldownNames.find(actionName) != burstCooldownNames.end();
+}
+
+bool BossTakesNoVictim(Unit const* boss)
+{
+    return boss && noVictimBosses.find(boss->GetEntry()) != noVictimBosses.end();
 }
 
 bool IsManaReturnCooldown(Player* bot, std::string const& actionName)

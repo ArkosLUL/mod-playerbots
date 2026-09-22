@@ -727,6 +727,24 @@ second**. Overheal there is 22-27% where phase 1 runs 68-72%, so there is no sla
 one-shots any more; the raid runs out of health from 3:20. Fire and Rapid Burst are the only
 avoidable slices left in that budget, and every other decision on this boss is drawn against it.
 
+**2026-09-22 evening priced that deficit.** 6827 took **35.7k/s** against **21.9k/s** of effective
+healing and died in 30 s; 7114 took 30.2 against 25.4 and lasted 120 s; 0476 broke even at 30.6
+against 30.5 and was the only one of the three to reach phase 3. Overheal in 6827 was **14%** against
+31-34% in the other two, so the healers had nothing spare: every heal landed on someone already hurt.
+
+**Heroism goes in phase 2, and two gates had to move for it.** `UlduarBurstWindowMultiplier` wanted
+all three mechs alive, which is phase 4. Behind it `HoldBurstUntilTankEngagedMultiplier` waits for a
+tank to hold the boss 3 s, and VX-001 never takes a victim: `boss_mimiron.cpp` overrides
+`AttackStart` to do nothing and never calls `UpdateVictim`, so its snapshot victim is empty **100%**
+of phase 2 and the longest tank hold is **0.0 s**, against 72-91 s on the MK II and 45-59 s on the
+ACU. Multipliers only suppress, so no raid node could undo that; `BossTakesNoVictim`
+(`BurstCooldowns`) exempts such a boss beside the existing vehicle escape. The old window paid out in
+**2 of 17 pulls**: 10 never lusted, 4 leaked it at 0:18-0:20 of phase 1 and 1 at the phase 2
+handover, where a cold `possible targets no los` resolved no mech and the permissive fall-through
+opened the gate — a direct `FindNearestCreature` closes it. Two of the four pulls that did reach
+phase 4 had already spent it. Berserk at 10:00 against a 10-minute cooldown makes it one window or
+the other, and every pull sees phase 2.
+
 **A clean arena buys the opening of phase 2, not the phase.** Mimiron seeds every 30 s throughout, so
 the field rebuilds around wherever the raid is standing: attributing phase-2 flame damage to the most
 recent batch, **85% and 53% of it followed one seeded inside phase 2 itself**. What the phase-1 west
@@ -977,7 +995,6 @@ With one core per corpse it took 129 s: the two landings took 21% and 33%, the u
 the air at ~32k, and no third Assault Bot came, since each landing freezes the add timers ~45 s. That
 pull reached the berserk ~32 s short, six bots down in phase 4 (two to mines, three to Hand Pulse and
 Plasma Ball, one to a Frost Bomb).
-Heroism is held for phase 4 (`UlduarBurstWindowMultiplier`), deliberately, and went out 4 s into it.
 
 2026-09-12 missed by **~30 s**: berserk at 10:00.175 with 2,327,568 left, and 15 of its 31 deaths in
 the four seconds after it. Phase 3 is still where the time goes — only **54%** of output reached the
@@ -1011,6 +1028,18 @@ unit (537k) or Water Spray (497k).
 falls back under it. It costs them nothing: the nearest is **3.4 yd** away with **4** inside a cleave,
 while the Assault Bot stands 7.7 yd off the pile, which is why melee AoE was not reaching it. Ranged
 and healers keep the Assault Bot, the only Magnetic Core source; a grounded unit still outranks both.
+
+2026-09-22 evening: two pulls, neither past phase 2. 6827 wiped at 3:00.710 with 13 phase 2 deaths in
+29.9 s, Rapid Burst **74%** of its intake at 26.3k/s against the usual 13k/s and melee/ranged cross
+39%. 7114 wiped at 4:41.231 with 25 phase 2 deaths over 120.3 s, 8 of them to Flames in 26 s inside
+the second barrage window, which took **214k** of fire against 22k in the first.
+
+**Open, not fixed: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the whole
+30 s handover, melee and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**,
+so the first cast lands at P2 −0.2 s and the first two to four cones hit everybody: **567,766** and
+365,385 in the first 10 s, against a phase rate of 13k/s. The shape only starts forming once
+`IsMimironPhase2` turns true, which needs VX-001 off the chassis — the same instant Rapid Burst
+starts. The 30 s handover is free time the raid spends standing in a pile.
 
 ## A dodge that returns false hands the tick to Charge
 
@@ -1660,9 +1689,10 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 which leaves a dodge that refuses all twelve completely silent.
 
 `tools/botobs/bosses/mimiron.py` reads the rest: phases and deaths, the phase 2 healing race with
-the raid cooldowns placed in it (`--heal`), walking time charged to the mover that started it, A-B-A
-and formation yards by what displaced the bot, Rapid Burst ticks by cone position and between melee
-and ranged (`--burst`), Frost Bomb evacuations from the summon, slot churn, each barrage window
+the raid cooldowns placed in it, lust included (`--heal`), walking time charged to the mover that
+started it, A-B-A and formation yards by what displaced the bot, Rapid Burst ticks by cone position
+and between melee and ranged (`--burst`), Frost Bomb evacuations from the summon, slot churn,
+each barrage window
 against the 14.5 s before it, its beam
 ticks and how many landed inside the boundary, and the storm after (`--spin`), and phase 3's
 fire brigade, the Junk Bot pile against the attention the Assault Bots took, each landing measured

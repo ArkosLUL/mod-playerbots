@@ -65,8 +65,10 @@ SPELL_WATER_SPRAY = 64619
 SPELL_FROST_RESISTANCE_AURA = (19888, 19897, 19898, 27152, 48945)
 SPELL_LASER_BARRAGE = 63293
 # Raid cooldowns, named in --heal's events off the caster's cast record. Tranquility is every
-# player rank of the channel.
+# player rank of the channel. Heroism and Bloodlust share a name here: only one of the two is ever
+# castable in a raid, and which it is says nothing but the faction.
 COOLDOWN_EVENTS = {64205: "guardian", 64843: "hymn", 31821: "mastery", 10060: "PI", 33206: "painsup",
+                   32182: "lust", 2825: "lust",
                    **{rank: "tranq" for rank in (740, 8918, 9862, 9863, 26983, 48446, 48447)}}
 
 FORMATION = "mimiron arc spread action"

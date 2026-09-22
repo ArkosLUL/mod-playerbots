@@ -79,8 +79,9 @@ float HoldBurstUntilTankEngagedMultiplier::GetValue(Action* action)
     }
 
     // A boss riding a vehicle has no threat table of its own - the XT-002 Heart is the case that
-    // matters - so waiting for a tank to hold it waits for something that never happens.
-    if (target->GetVehicle())
+    // matters - so waiting for a tank to hold it waits for something that never happens. Same for
+    // one whose script never takes a victim, Mimiron's VX-001 being the one we have.
+    if (target->GetVehicle() || BossTakesNoVictim(target))
     {
         holdState.Reset();
         return 1.0f;
