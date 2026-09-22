@@ -670,6 +670,14 @@ targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
   `dispelAuraDuration` (default 700 ms) remaining.
 - Class dispel nodes sit **below** `ACTION_RAID`: mage `remove curse on party` at 40, druid at 57
   against `ACTION_RAID` 60. Any raid positioning node outranks them.
+- **A raid positioning node outranks `reach melee` too** (`ACTION_HIGH + 1`, ~21), and `Engine` stops
+  at the first action that returns true, so a reactive rule keyed on "too close to the boss" must
+  exclude melee: their correct position breaks it every tick, the node walks them out, `reach melee`
+  walks them back, and the two trade the bot all fight with nothing logged as an error. On Hodir that
+  cost **45% of the raid's damage** in one pull — melee median gap to him 6 → 14.4 yd, 1,044 accepted
+  moves from a node that had issued none to melee before. Put the gate on the trigger beside the role
+  predicate the node's anchor already uses, so the two cannot drift apart, and split accepted moves by
+  role in the reader; nothing else names a gate that stopped gating.
 - **`IsTank` flickers, and a role test that reads false once has lasting consequences.** It is
   `ContainsStrategy(STRATEGY_TYPE_TANK)`, so a bot the roster records as a tank can answer false — on
   one Thorim pull that dropped him past `IsMainTank` and `IsAssistTankOfIndex` into the melee ring,

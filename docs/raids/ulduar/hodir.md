@@ -326,8 +326,11 @@ for **22%**.
   the shelter, and is never dodged.
 - The anchor is **not combat-gated**: `MoveInLineOfSight` is a no-op, so bots pre-position and the tank
   pulls from its spot past the centre.
-- **Melee get no anchor**: they ride the boss and get a fire only because the tank parks *him* on one;
-  nothing walks a melee bot to a fire or a zone. From the corner, zones sat a median 21.6 yd from him
+- **Melee are out of the position node entirely, not just its anchor.** `IsActive` gates on the same
+  `!IsRanged` the anchor uses, because every fall-through rule below it wants the bot further from him
+  and a melee bot doing its job breaks the 15 yd one on every tick. They ride the boss and get a fire
+  only because the tank parks *him* on one; nothing walks a melee bot to a fire or a zone. From the
+  corner, zones sat a median 21.6 yd from him
   and melee stood in one 1.8% of ticks. From the centre, 6 of 12 zones on 2026-09-19 landed 5-15 yd
   from it, inside the ranged gap, and melee held Starlight 9.6% of the time (1.0-5.7% before).
 - **The Storm Cloud carrier holds still and the raid comes to it.** `boss_hodir.cpp:1462` casts Storm
@@ -425,6 +428,19 @@ melee and pets within 10 yd of him stood in the held fire **71 / 87 / 82%** of s
 **38%**, and windows with the fire on the tank's side of him ran 33-85% against 80-100% with it beside
 or behind him — the campfire clip and the box, both fixed above.
 
+Traced 2026-09-22 on the fire-hold build, a **wipe at 5:03 with 11 deaths** and 0-3:00 boss dps
+**116.5k** against 190-208k. The hold did what it was built for: the fire was held for all 78 s one
+burned inside the leash, **93%** of the melee and pets standing within 10 yd of him were in it, and
+Singed reached 25 stacks **12.5 s** after the first fire against ~22, holding cap 126 s of 180. **The
+pack was not there to cover.** Taking the tank-only gate off the position trigger's fall-through rules
+dropped melee into the "inside 15 yd of him" one: their median gap to him went 5.7-6.0 → **14.4 yd**,
+samples inside the 8 yd it takes to swing 70-77% → **10%**, the node issued **1,044** accepted moves to
+melee against **0** in every earlier pull, and `hodir raid position action` ↔ `reach melee` became the
+top flip at **494 at 1,330 ms** — the loop in [pitfalls](../../engine/pitfalls.md). It took the ranged
+half with it: melee crowding the 15-35 band fed the clump rule, the sweep rang outward, ranged settled
+at a **32.6 yd** median from him, and a usable stand was within `_BUFF_WALK` on **39%** of their
+samples against 73 / 55 / 65%.
+
 **Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
 `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
 3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did the same 192 times at 780 ms, which
@@ -433,11 +449,13 @@ symptom of how much walking the fight demands rather than of a latch that flaps.
 
 **Re-measure the movement economy after each change, never after several.** Every figure above moved
 under one edit at a time, and the three-latch pull is the one that cannot say which latch did what.
-`tools/botobs/bosses/hodir.py <file>` prints every 2026-09-18 and -19 figure here (`--pace`, `--hold`,
-`--singed`, `--buffs`, `--churn`, `--blocks`): time off the hold point, fire inside the leash against
-fire held, the melee pack inside the held fire, the Singed ramp and the time at none with a fire
-burning, how often a usable stand was within `_BUFF_WALK`, Biting Cold by stack, post-freeze shelter
-moves and stalled walks. Traces older than `hodir.hold` fall back to `hodir.centre`.
+`tools/botobs/bosses/hodir.py <file>` prints every figure here (`--pace`, `--hold`, `--singed`,
+`--buffs`, `--churn`, `--blocks`): time off the hold point, fire inside the leash against fire held,
+the melee pack inside the held fire and what share of it was on him at all, the melee gap to him
+against the 8 yd it takes to swing, the Singed ramp and the time at none with a fire burning, how
+often a usable stand was within `_BUFF_WALK`, Biting Cold by stack, post-freeze shelter moves, stalled
+walks, and **the roles each mover walked** — the one line that names a gate that stopped gating.
+Traces older than `hodir.hold` fall back to `hodir.centre`.
 
 Each cause below is separate, and all of them are still easy to reintroduce.
 
@@ -452,9 +470,13 @@ Each cause below is separate, and all of them are still easy to reintroduce.
   with a stand in hand `HodirRaidPositionTrigger` asks one question — walk there or stay — and with
   none it is purely reactive, firing only on a broken constraint (inside
   `ULDUAR_HODIR_RANGED_MIN_BOSS_GAP` 15 of him, past `_CASTER_MAX_BOSS_GAP` 35, clumped under
-  `_DECLUMP_RADIUS` 4.5). The action then sweeps for the nearest spot clear of all three at once
+  `_DECLUMP_RADIUS` 4.5). Those three are **ranged and healers only**, gated on the same `!IsRanged`
+  the anchor uses so the two cannot drift apart, and the clump rule counts only ranged and healer
+  neighbours — the action's sweep filters allies the same way, or it walks a bot out over a clump
+  nothing complained about. The action then sweeps for the nearest spot clear of all three at once
   rather than inventing a home to walk to; with a stand it walks to the stand and holds no arrival
-  latch, which would swallow a re-anchor. Tanks keep the spring: Hodir follows whoever holds him.
+  latch, which would swallow a re-anchor. Tanks keep the spring through their anchor: Hodir follows
+  whoever holds him.
 - **Rank the ice-block breakers on latched positions, not live ones.** Live distances re-shuffle the
   assignment every tick and bots flick between a block and the boss; a guid rotation holds still but
   hands blocks to bots across the room, and they were spending 61.6% of their time on ice walking to

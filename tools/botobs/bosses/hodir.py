@@ -84,6 +84,10 @@ BUFF_WALK = 15.0
 BAND = (15.0, 35.0)
 # Melee this close to him are the pack a fire at his feet is meant to cover.
 MELEE_NEAR_YD = 10.0
+# Inside this one a melee bot is actually swinging, so it is the uptime number the pack share needs
+# beside it: a high share of a pack that is not there says nothing.
+MELEE_REACH_YD = 8.0
+ROLE_TAGS = (("melee", "m"), ("ranged", "r"), ("heal", "h"), ("tank", "t"))
 # Centre of the ranged ring on builds before the ring was removed, for reading their traces.
 LEGACY_RING_ANCHOR = (1986.56, -257.11)
 # He normally stops within 1-2 yd of the point, so past this he is parked off it.
@@ -241,6 +245,18 @@ def usable_within(bot: tuple[float, float], boss: tuple[float, float],
 
 def inside_circle(point: tuple[float, float], centre: tuple[float, float], radius: float) -> bool:
     return math.hypot(point[0] - centre[0], point[1] - centre[1]) <= radius
+
+
+def gap_profile(gaps: list[float], limit: float) -> tuple[float, float]:
+    """`(median, share at or inside limit as a percentage)` for a list of distances."""
+    if not gaps:
+        return 0.0, 0.0
+    return statistics.median(gaps), sum(1 for gap in gaps if gap <= limit) / len(gaps) * 100
+
+
+def role_split(roles: collections.Counter) -> str:
+    """`m12 r3 h1` for a role tally, always in that order, skipping the roles with none."""
+    return " ".join(f"{tag}{roles[name]}" for name, tag in ROLE_TAGS if roles[name])
 
 
 def ramp_ms(curve: list[tuple[int, int, int]], since: int, cap: int = SINGED_CAP) -> int | None:
@@ -451,11 +467,12 @@ def hold_points(trace: Trace) -> list[tuple[int, tuple[float, float]]]:
 
 def held_fire_coverage(trace: Trace, boss: int, points: list[tuple[int, tuple[float, float]]],
                        windows: list[tuple[int, int, str]]) -> dict[int, tuple[int, int]]:
-    """`(inside, near)` per window start: melee bots and pets standing within MELEE_NEAR_YD of him, and
-    how many of those were inside the fire he was being held on. That share is what the hold is for -
-    the fire procs nothing by itself, the bots standing in it do."""
+    """`(inside, near, live)` per window start: melee bots and pets inside the fire he was being held
+    on, how many stood within MELEE_NEAR_YD of him, and how many were alive at all. The first share is
+    what the hold is for, since the fire procs nothing by itself and the bots standing in it do; the
+    second says whether the pack was even there to be covered."""
     roles = {guid: trace.role(guid) for guid in roster_guids(trace)}
-    out = {low: [0, 0] for low, _, _ in windows}
+    out = {low: [0, 0, 0] for low, _, _ in windows}
     for snap in frames(trace):
         window = next((low for low, high, _ in windows if low <= snap["t"] < high), None)
         if window is None:
@@ -480,11 +497,34 @@ def held_fire_coverage(trace: Trace, boss: int, points: list[tuple[int, tuple[fl
                 continue
             if len(row) < 6 or row[5] <= 0:
                 continue
+            out[window][2] += 1
             if not inside_circle((row[1], row[2]), (him[1], him[2]), MELEE_NEAR_YD):
                 continue
             out[window][1] += 1
             out[window][0] += inside_circle((row[1], row[2]), held, FIRE_RADIUS)
-    return {low: (inside, near) for low, (inside, near) in out.items()}
+    return {low: tuple(counts) for low, counts in out.items()}
+
+
+def melee_gaps(trace: Trace, boss: int, end: int) -> list[float]:
+    """Distance to him for every live melee bot sample up to `end`. Pets are left out: they follow
+    their owner, so counting them hides how far the bots themselves stood."""
+    roles = {guid: trace.role(guid) for guid in bots(trace)}
+    dead = first_death(trace)
+    out = []
+    for snap in frames(trace):
+        if not 0 <= snap["t"] < end:
+            continue
+        rows = {row[0]: row for row in snap.get("u", [])}
+        him = rows.get(boss)
+        if not him:
+            continue
+        for guid, row in rows.items():
+            if roles.get(guid) != "melee" or len(row) < 6 or row[5] <= 0:
+                continue
+            if snap["t"] >= dead.get(guid, end):
+                continue
+            out.append(math.hypot(row[1] - him[1], row[2] - him[2]))
+    return out
 
 
 def stack_changes(trace: Trace) -> dict[int, list[tuple[int, int]]]:
@@ -572,8 +612,9 @@ def show_hold(trace: Trace) -> None:
         held = sum(1 for row in inside if row[4] == holder) / len(inside)
         pack = ""
         if low in coverage and coverage[low][1]:
-            covers, near = coverage[low]
-            pack = f"  pack in the fire {covers / near * 100:3.0f}% of {near}"
+            covers, near, live = coverage[low]
+            pack = (f"  pack {near / live * 100:.0f}% on him,"
+                    f" {covers / near * 100:.0f}% of those in the fire")
         print(f"  {kind:7} {clock(low)}-{clock(high)} {(high - low) / 1000:5.1f}s  path {path:5.1f} yd"
               f"  {trace.name(holder)} holds {held * 100:3.0f}%  boss dps {dps / 1000:4.0f}k{pack}")
         totals[kind][0] += high - low
@@ -584,11 +625,20 @@ def show_hold(trace: Trace) -> None:
             print(f"  total {kind:7} {ms / 1000:5.0f}s  {path:5.0f} yd, {path / (ms / 1000):.2f} yd/s"
                   f"  boss dps {weighted / ms / 1000:.0f}k")
 
-    near_total = sum(near for _, near in coverage.values())
+    near_total = sum(near for _, near, _ in coverage.values())
     if near_total:
-        covers_total = sum(covers for covers, _ in coverage.values())
-        print(f"  melee and pets within {MELEE_NEAR_YD:.0f} yd of him, inside the held fire:"
-              f" {covers_total}/{near_total} = {covers_total / near_total * 100:.0f}%")
+        covers_total = sum(covers for covers, _, _ in coverage.values())
+        live_total = sum(live for _, _, live in coverage.values())
+        print(f"  melee and pets: {near_total}/{live_total} ="
+              f" {near_total / live_total * 100:.0f}% stood within {MELEE_NEAR_YD:.0f} yd of him,"
+              f" and {covers_total} = {covers_total / near_total * 100:.0f}% of those"
+              f" were inside the held fire")
+
+    gaps = melee_gaps(trace, boss, end)
+    if gaps:
+        median, reach = gap_profile(gaps, MELEE_REACH_YD)
+        print(f"  melee bots: gap to him p50 {median:.1f} yd, inside {MELEE_REACH_YD:.0f} yd"
+              f" {reach:.0f}% of {len(gaps)} samples")
 
     if points:
         samples = [(row[0], row[1], row[2]) for row in rows]
@@ -793,12 +843,18 @@ def show_churn(trace: Trace) -> None:
     moves = [rec for rec in trace.of("move") if rec.get("g") in team and 0 <= rec["t"] < end]
     accepted = sum(1 for rec in moves if rec.get("ok"))
     by_action: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    # Which roles each mover walked. A role showing up under a node that was never meant to move it is
+    # the whole symptom of a gate that stopped gating, and nothing else here says it out loud.
+    by_role: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     for rec in moves:
         by_action[rec.get("by", "?")]["ok" if rec.get("ok") else rec.get("r", "?")] += 1
+        if rec.get("ok"):
+            by_role[rec.get("by", "?")][trace.role(rec["g"])] += 1
     print(f"  {accepted} accepted moves")
     for action, counts in sorted(by_action.items(), key=lambda kv: -sum(kv[1].values()))[:10]:
         rest = " ".join(f"{reason}={count}" for reason, count in counts.most_common() if reason != "ok")
-        print(f"    {action:34} {counts['ok']:5} ok ({counts['ok'] / max(1, accepted) * 100:4.1f}%)  {rest}")
+        print(f"    {action:34} {counts['ok']:5} ok ({counts['ok'] / max(1, accepted) * 100:4.1f}%)"
+              f"  {role_split(by_role[action]):22} {rest}")
 
     boss = boss_guid(trace)
     casts = freeze_casts(trace, boss) if boss is not None else []

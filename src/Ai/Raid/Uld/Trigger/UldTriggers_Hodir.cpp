@@ -145,9 +145,10 @@ bool HodirRaidPositionTrigger::IsActive()
         return bot->GetExactDist2d(&anchor) > tolerance;
     }
 
-    // Tanks always have one, so nothing below is theirs. Hodir follows whoever holds him and every
-    // rule here wants the bot further from him, which would drag the boss off the fire.
-    if (botAI->IsTank(bot))
+    // Ranged and healers only. A tank that steps back drags the boss off the fire, and a melee sits
+    // inside the gap rule below every tick it is doing its job, so this node and reach melee would
+    // trade it back and forth all fight. Same predicate the anchor uses, so the two cannot drift.
+    if (!botAI->IsRanged(bot))
         return false;
 
     // Reactive, not restoring: each of these fires on a constraint that is actually broken and the

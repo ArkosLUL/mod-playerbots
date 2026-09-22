@@ -261,10 +261,18 @@ bool HodirRaidPositionAction::Execute(Event /*event*/)
     // and inventing one is what used to walk bots back out of the buffs they were standing in.
     std::vector<HazardCircle> hazards;
 
+    // Only the neighbours the trigger's declump rule counts. Melee are stacked on him by design, so
+    // making them hazards walks the bot out over a clump nothing ever complained about.
     for (auto const& guid : AI_VALUE(GuidVector, "nearest friendly players"))
     {
         Unit* ally = botAI->GetUnit(guid);
-        if (ally && ally->IsAlive() && ally != bot && bot->GetExactDist2d(ally) <= ULDUAR_HODIR_DODGE_LEASH)
+        if (!ally || ally == bot || !ally->IsAlive() || !ally->IsPlayer())
+            continue;
+
+        if (!PlayerbotAI::IsRanged(ally->ToPlayer()) && !PlayerbotAI::IsHeal(ally->ToPlayer()))
+            continue;
+
+        if (bot->GetExactDist2d(ally) <= ULDUAR_HODIR_DODGE_LEASH)
             hazards.emplace_back(ally->GetPosition(), ULDUAR_HODIR_DECLUMP_RADIUS);
     }
 

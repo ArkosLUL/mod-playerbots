@@ -21,6 +21,7 @@ BOTOBS = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BOTOBS))
 
 import argparse  # noqa: E402
+import collections  # noqa: E402
 import contextlib  # noqa: E402
 import datetime  # noqa: E402
 import io  # noqa: E402
@@ -877,6 +878,15 @@ class HodirReader(unittest.TestCase):
     def test_inside_the_fire_takes_the_edge(self):
         self.assertTrue(hodir.inside_circle((11.0, 0.0), (0.0, 0.0), hodir.FIRE_RADIUS))
         self.assertFalse(hodir.inside_circle((11.5, 0.0), (0.0, 0.0), hodir.FIRE_RADIUS))
+
+    def test_the_gap_profile_takes_the_limit_as_inclusive(self):
+        self.assertEqual(hodir.gap_profile([2.0, 4.0, 6.0, 20.0], 6.0), (5.0, 75.0))
+        self.assertEqual(hodir.gap_profile([], 6.0), (0.0, 0.0))
+
+    def test_the_role_split_keeps_its_order_and_drops_empty_roles(self):
+        tally = collections.Counter({"heal": 2, "melee": 7, "ranged": 1})
+        self.assertEqual(hodir.role_split(tally), "m7 r1 h2")
+        self.assertEqual(hodir.role_split(collections.Counter()), "")
 
     def test_off_point_counts_each_sample_until_the_next(self):
         samples = [(0, 0.0, 0.0), (1000, 10.0, 0.0), (2000, 0.0, 0.0), (3000, 0.0, 0.0)]
