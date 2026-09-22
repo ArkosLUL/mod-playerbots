@@ -6,7 +6,8 @@
     mimiron.py <file> --heal     the phase 2 healing race, 2.5 s at a time, and where the cooldowns went
     mimiron.py <file> --walk     walking time per phase and role, charged to the move that started it
     mimiron.py <file> --flips    A-B-A between one bot's moves, and what the formation walked back from
-    mimiron.py <file> --burst    every Rapid Burst: carrier, cone, outside, and the ticks each took
+    mimiron.py <file> --burst    every Rapid Burst: carrier, cone, outside, the ticks each took, and how
+                                 many crossed between melee and ranged
     mimiron.py <file> --bomb     every Frost Bomb: who had to run, casting lost, where escapes landed
     mimiron.py <file> --slots    how often formation slots moved, and why
     mimiron.py <file> --spin     every Laser Barrage window, and the storm in the 15 s after it
@@ -556,6 +557,23 @@ def burst_rows(trace: Trace) -> list[dict]:
     return rows
 
 
+def burst_group(trace: Trace, guid) -> str:
+    return "melee" if trace.role(guid) in ("melee", "tank") else "ranged"
+
+
+def burst_cross(trace: Trace, rows: list[dict]) -> collections.Counter:
+    """Rapid Burst ticks keyed by (carrier group, victim group), melee and tanks against ranged and
+    healers. A bot standing in the other group's line takes every burst aimed at that group, which
+    is what the phase 2 melee sector opposite the wedge is for."""
+    ticks: collections.Counter = collections.Counter()
+    for row in rows:
+        side = burst_group(trace, row["carrier"])
+        ticks[(side, side)] += row["carrier_ticks"]
+        for guid, count, _ in row["cone"] + row["outside"]:
+            ticks[(side, burst_group(trace, guid))] += count
+    return ticks
+
+
 def show_burst(trace: Trace) -> None:
     print("BURST")
     rows = burst_rows(trace)
@@ -579,6 +597,12 @@ def show_burst(trace: Trace) -> None:
     print(f"  cone      {len(still):4} bot-casts  {mean_ticks(still):4.2f} ticks each"
           + ("  (stood still)" if stepped else ""))
     print(f"  outside   {len(outside):4} bot-casts  {mean_ticks(outside):4.2f} ticks each")
+
+    cross = burst_cross(trace, rows)
+    pairs = (("melee", "melee"), ("melee", "ranged"), ("ranged", "melee"), ("ranged", "ranged"))
+    crossed = cross[("melee", "ranged")] + cross[("ranged", "melee")]
+    print("  carrier -> victim ticks  " + "  ".join(f"{a}>{b} {cross[(a, b)]}" for a, b in pairs)
+          + f"  cross {crossed * 100 / max(sum(cross.values()), 1):.0f}%")
 
 
 # ----------------------------------------------------------------------------------------------- bomb
@@ -1077,7 +1101,7 @@ SECTIONS = (
     ("heal", "the phase 2 healing race, 2.5 s at a time, cooldowns included", show_heal),
     ("walk", "walking time per phase and role, by mover", show_walk),
     ("flips", "A-B-A between moves, and formation yards by cause", show_flips),
-    ("burst", "Rapid Burst carrier, cone and outside ticks", show_burst),
+    ("burst", "Rapid Burst carrier, cone and outside ticks, melee/ranged cross", show_burst),
     ("bomb", "Frost Bomb evacuations and where escapes landed", show_bomb),
     ("slots", "formation slot churn per phase", show_slots),
     ("spin", "each Laser Barrage window and the storm after it", show_spin),

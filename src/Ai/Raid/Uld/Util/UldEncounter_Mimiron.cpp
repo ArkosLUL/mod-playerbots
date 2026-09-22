@@ -606,8 +606,17 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
             !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT))
             return approaches;
 
+        // Hard-mode phase 2 melee: a stand-in still has to reach VX-001 without going under it, and
+        // must not slide round into the wedge's line. The ring packs them ~1.6 yd apart, so the Napalm
+        // spacing test below would refuse every spot on it.
+        bool const meleeRing = vx001 && !PlayerbotAI::IsRanged(bot) && IsMimironPhase2(botAI);
+        MimironBurstSector const sector =
+            meleeRing ? GetMimironOtherGroupSector(botAI, bot, vx001) : MimironBurstSector();
+        float const meleeReach =
+            vx001 ? vx001->GetCombatReach() + ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN : 0.0f;
+
         std::vector<Position> others;
-        if (Group* group = bot->GetGroup())
+        if (Group* group = meleeRing ? nullptr : bot->GetGroup())
         {
             for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
             {
@@ -634,6 +643,14 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
                                          slot.GetPositionZ());
                 if (!standable(candidate))
                     continue;
+
+                if (meleeRing)
+                {
+                    float const reach = candidate.GetExactDist2d(vx001);
+                    if (reach < ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN || reach > meleeReach ||
+                        IsMimironSpotInSector(vx001, sector, candidate))
+                        continue;
+                }
 
                 bool crowded = false;
                 for (Position const& other : others)
@@ -2176,6 +2193,41 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
+    // Hard-mode phase 2 melee, tanks too: a sector opposite the ranged wedge. Rapid Burst is a 60
+    // degree cone on a random player, so melee in the wedge's line share every burst with the ranged
+    // behind them, and VX-001 never swings, so which side they hit it from doesn't matter. Measured
+    // from VX-001 itself, not the room-clamped anchor, on the same ring the barrage dodge orbits.
+    if (firefighter && focus->GetEntry() == NPC_VX001 && !focus->GetVehicleBase() &&
+        !PlayerbotAI::IsRanged(bot))
+    {
+        for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+        {
+            Player* member = ref->GetSource();
+            if (!member || !member->IsAlive() || PlayerbotAI::IsRanged(member))
+                continue;
+
+            if (member == bot)
+                index = count;
+
+            ++count;
+        }
+
+        if (count == 0)
+            return false;
+
+        branch = "p2melee";
+
+        float const half = ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE;
+        float const offset = -half + 2.0f * half * (static_cast<float>(index) + 0.5f) / static_cast<float>(count);
+        float const bearing = Position::NormalizeOrientation(GetMimironWedgeCentreline(botAI, bot) +
+                                                             static_cast<float>(M_PI) + offset);
+        float const radius = focus->GetCombatReach() + ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN;
+        out = Position(focus->GetPositionX() + radius * std::cos(bearing),
+                       focus->GetPositionY() + radius * std::sin(bearing),
+                       ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ());
+        return true;
+    }
+
     // Melee stand on whatever they are hitting, so only ranged and healers get a slot from here on.
     if (!PlayerbotAI::IsRanged(bot))
         return false;
@@ -2260,6 +2312,35 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     return true;
 }
 }  // namespace
+
+MimironBurstSector GetMimironOtherGroupSector(PlayerbotAI* botAI, Player* bot, Unit* vx001)
+{
+    MimironBurstSector sector;
+    if (!botAI || !bot || !vx001 || !IsMimironHardModeActive(botAI) || !IsMimironPhase2(botAI))
+        return sector;
+
+    bool const ranged = PlayerbotAI::IsRanged(bot);
+    sector.valid = true;
+    sector.centre = Position::NormalizeOrientation(GetMimironWedgeCentreline(botAI, bot) +
+                                                   (ranged ? static_cast<float>(M_PI) : 0.0f));
+    sector.halfWidth =
+        (ranged ? ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE : ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE) +
+        ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE;
+    return sector;
+}
+
+bool IsMimironSpotInSector(Unit* vx001, MimironBurstSector const& sector, Position const& dest)
+{
+    if (!vx001 || !sector.valid)
+        return false;
+
+    float const bearing = vx001->GetAngle(dest.GetPositionX(), dest.GetPositionY());
+    float off = Position::NormalizeOrientation(bearing - sector.centre);
+    if (off > static_cast<float>(M_PI))
+        off -= 2.0f * static_cast<float>(M_PI);
+
+    return std::fabs(off) < sector.halfWidth;
+}
 
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out)
 {

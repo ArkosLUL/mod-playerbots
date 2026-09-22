@@ -590,7 +590,7 @@ bool IsMimironSpotBarrageSafe(Unit* vx001, MimironBarrageWindow const& window, P
 // around VX-001, whose facing swings to whoever it last Rapid Burst. Returns false for roles this does
 // not place, and for everyone during a handover - the raid follows its master between phases, and only
 // the phase 4 main tank has a spot to hold. Trigger and action must both call this or the two disagree
-// about where the bot belongs.
+// about where the bot belongs. Hard-mode phase 2 melee get the sector opposite the ranged wedge.
 bool GetMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out);
 
 // The cannon's Plasma Blast cast, or nullptr when it is between casts. Matches both ids:
@@ -613,6 +613,20 @@ MimironRapidBurstWindow GetMimironRapidBurstWindow(PlayerbotAI* botAI, Player* b
 // Whether `dest` is outside the cone as it is pointing now, the true 60 degrees with no margin.
 bool IsMimironSpotRapidBurstSafe(Unit* vx001, MimironRapidBurstWindow const& window,
                                  Position const& dest);
+
+// Hard-mode phase 2: the bearings off VX-001 where this bot would share every Rapid Burst aimed at
+// the other group. For melee that's the ranged wedge, for ranged the melee sector, each widened by
+// the cone's half-width. Not valid anywhere else.
+struct MimironBurstSector
+{
+    bool valid = false;
+    float centre = 0.0f;  // world bearing from VX-001
+    float halfWidth = 0.0f;
+};
+
+MimironBurstSector GetMimironOtherGroupSector(PlayerbotAI* botAI, Player* bot, Unit* vx001);
+
+bool IsMimironSpotInSector(Unit* vx001, MimironBurstSector const& sector, Position const& dest);
 
 // Firefighter ground fire. A node's damage aura 64566 reaches 3 yd, so 5 covers the node footprint
 // and pathing slop. Chains grow in 7 yd steps and 50 to 60 nodes are alive by the middle of the
@@ -749,6 +763,15 @@ constexpr float ULDUAR_MIMIRON_FLEE_MIN_PROGRESS_PCT = 0.5f;
 // bot past 14 yd by its bearing at the tick before a hit and the hit rate holds around 80 % out to 30
 // degrees, then drops to 9 % at 30-40 and about 1 % beyond.
 constexpr float ULDUAR_MIMIRON_RAPID_BURST_HALF_ANGLE = 30.0f * static_cast<float>(M_PI) / 180.0f;
+
+// Hard-mode phase 2 melee sector, centred opposite the ranged wedge. The 5 yd slot tolerance on the
+// 9 yd ring is ~32 degrees of slack, so a melee bot can sit 77 off centre and still be past the 90
+// where the wedge's 60 plus the Rapid Burst cone's 30 ends.
+constexpr float ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE = 45.0f * static_cast<float>(M_PI) / 180.0f;
+
+// Added to VX-001's combat reach for the furthest a melee stand-in may sit: 10.0, inside the 10.25
+// where "reach melee" fires and walks the bot straight at the boss off its sector.
+constexpr float ULDUAR_MIMIRON_PHASE2_MELEE_REACH_MARGIN = 2.0f;
 
 // VX-001 fights here and the Aerial Command Unit is summoned overhead, so a ring anchored to this
 // point holds still while the mechs turn and charge about.

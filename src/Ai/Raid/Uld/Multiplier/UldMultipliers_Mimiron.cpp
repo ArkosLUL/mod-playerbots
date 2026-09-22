@@ -335,6 +335,22 @@ float MimironStormCooldownHoldMultiplier::GetValue(Action* action)
     return AI_VALUE2(uint8, "aoe heal", "low") < ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT ? 0.0f : 1.0f;
 }
 
+float MimironVx001FacingGuardMultiplier::GetValue(Action* action)
+{
+    if (!action)
+        return 1.0f;
+
+    // Name and type first: this runs for every action in the queue. TankFaceAction by type, like
+    // the tank anchor guard.
+    if (action->getName() != "set behind" && !dynamic_cast<TankFaceAction*>(action))
+        return 1.0f;
+
+    if (PlayerbotAI::IsRanged(bot) || !IsMimironHardModeActive(botAI) || !IsMimironPhase2(botAI))
+        return 1.0f;
+
+    return 0.0f;
+}
+
 float MimironTargetGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

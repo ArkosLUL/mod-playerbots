@@ -156,6 +156,12 @@ escapes landed short of 34 yd, 19 of them under 32. They now take the per-bearin
 32, flee 34. The guard also zeroes `mimiron approach target action`, which walked ranged back in
 from a flee 48-56 yd out onto the edge: 85, 31 and 26 `approach target <-> frost bomb` A-B-A.
 
+**Then it ran the melee through the boss.** Straight away from a bomb on the far side of VX-001 is
+through VX-001 and out along the ranged line (see phase 2's healing race). In hard-mode phase 2 the
+flee screens `IsMimironSpotInSector`: melee refuse the wedge ±90° (60 plus the 30° cone), ranged the
+melee sector ±75°, counted as `burst`. A fan that empties sweeps again unscreened before the
+fallback: the other group's line costs a burst, the blast kills.
+
 ## Two dodges fought over the fire, and both were too short
 
 Standing in fire totals only ~204-258 bot-seconds a pull. The damage is all in the tail, where 5-14%
@@ -674,6 +680,19 @@ The ring survives the correction. Six fixed phase-2 spots used to stack the raid
 which is the worst shape against anything conical whatever its width; a ring of radius 22 with one
 index-derived slot per ranged bot is not. The bearing is never keyed off VX-001's facing.
 
+**Under Firefighter the melee stand opposite the wedge.** A bot in the other group's line takes every
+burst aimed at that group: in all nine hard-mode pulls 2026-09-19 to 09-22, **21-39%** of phase 2
+Rapid Burst damage crossed between melee and ranged, 643k and 18% of phase 2 intake in one, against a
+~400k healing deficit. Melee stood wherever `set behind` put them, and VX-001 never swings
+(`AttackStart` is empty, no `DoMeleeAttackIfReady`) and only turns to each burst carrier and the
+barrage arc, so "behind" moved every 3.2 s: a top-three melee mover, 52-199 moves a phase 2.
+`p2melee` gives melee and tanks slots on the barrage melee ring (reach + 1.0, 9.0) spread over
+`ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE` (±45°) opposite the wedge centreline, following its barrage
+re-aim. The 5 yd slot tolerance is ~32° there, and 77° off stays past the 90° where wedge plus cone
+ends. Mid-barrage the slot is in the swept band, so the arc spread waits and the barrage dodge owns
+the melee. A melee substitute stays 5.0-10.0 yd from VX-001 and off the wedge's line, and skips the
+Napalm spacing test. `MimironVx001FacingGuardMultiplier` zeroes `set behind` and `tank face` there.
+
 **The ring centres on the mech, not the room.** Bots cast out to `AiPlayerbot.SpellDistance` — 28.5
 here, with no `AC_` override — so a ring pinned to the room centre puts the far half of the raid out
 of range after about six yards of boss drift. It does not recover on its own either: `reach spell` is
@@ -788,11 +807,22 @@ barrage 1 and 11-17 after it. Holding the cast holds its `cancel divine sacrific
 Aura Mastery stays free, since the holy paladin runs Concentration. Tranquility never fires: its
 strategy left the default resto set in `278be80c9`, and in 3.3 it heals only the druid's party.
 
-**A Frost Bomb near VX-001 packs the raid, and that is recorded rather than fixed.** Landing 10.6 yd
-off it, the only bomb-safe ground in casting range is a far-side crescent: 15 of 24 stood within 45°,
-and two bursts on a Heat Wave hit 17 and 16, eight dead in 1.5 s. The morning pull's bomb put eight
-melee on one point for a 15-bot, 190k burst and lived. Over a whole phase Rapid Burst lands on each
-role in proportion, so it is geometry, not a formation bug.
+**2026-09-22: the hold worked, and Rapid Burst between the groups killed the raid.** In 8912 the
+held three went out at 3:21-3:25 with 6-10 members at 45% or less, and the storm after barrage 1
+killed nobody; the raid died in the next one, 3:34-3:57, with them spent. In 9541 a real opener
+storm (12 at 45% or less) freed Divine Hymn at 2:41.
+
+**A Frost Bomb near VX-001 packs the raid because of the melee, not the room.** With the bomb
+10.6-15.1 yd off VX-001, ground at least 32 yd from it spans 155-178° of bearing at 28 yd from VX-001
+and 97-145° at 24, so the far side has room. The pack is the melee clump carried out by the
+straight-away flee. In 9541 eight melee stood at 6 yd on 192-196°, in line with three healers at
+12-24 yd, and a bomb 15.1 yd out on 6° ran them through the boss to 209-216° at 20 yd, between the
+wedge's rows: bursts hit 17 and 16 bots for 164k and 143k, seven dead in 3.6 s. Its opener was the
+same, a bomb 30.6 yd west pushing the melee to 3.5 yd east inside the wedge, three bursts on 13-17
+for 125-154k, and so were 8867 (eight dead in 1.5 s) and 0059 (15 bots, 190k). All five of 9541's
+heaviest bursts and 8912's heaviest (15 bots, 123k) followed a bomb flee, against 10-11 bots a cast
+on average. The fixes are the phase 2 melee sector (Rapid Burst section) and the bomb flee's sector
+screen (Frost Bomb section).
 
 ## Phase 3 wants a wedge, not a ring
 
@@ -863,6 +893,7 @@ caught **20-30% of the living raid per tick under the wedge against 22-25% under
 the same number. The first reading of it — 1 victim per tick rising to 3 — was measuring a raid the
 Frost Bomb had already cut to 7-10 alive, and is the reason to normalise anything per-tick by the
 living count. `ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE` is the knob if the fire still fans out.
+Phase 2 melee get `p2melee` opposite it (Rapid Burst section).
 
 **The Laser Barrage is the one thing that outranks the fire convergence, so `hmwedge` gives way to
 it.** A 120° wedge overlapping the swept band cannot be walked out of once the beams ignite, and
@@ -1589,7 +1620,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `core` | The Magnetic Core window is open. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) or `hold-expiring` (the held one was about to) |
-| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
@@ -1605,8 +1636,9 @@ which leaves a dodge that refuses all twelve completely silent.
 
 `tools/botobs/bosses/mimiron.py` reads the rest: phases and deaths, the phase 2 healing race with
 the raid cooldowns placed in it (`--heal`), walking time charged to the mover that started it, A-B-A
-and formation yards by what displaced the bot, Rapid Burst ticks by cone position, Frost Bomb
-evacuations from the summon, slot churn, each barrage window against the 14.5 s before it, its beam
+and formation yards by what displaced the bot, Rapid Burst ticks by cone position and between melee
+and ranged (`--burst`), Frost Bomb evacuations from the summon, slot churn, each barrage window
+against the 14.5 s before it, its beam
 ticks and how many landed inside the boundary, and the storm after (`--spin`), and phase 3's
 fire brigade,
 grounded windows, Water Spray hits (share resisted, how many landed on a Frost Resistance Aura

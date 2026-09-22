@@ -271,6 +271,12 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(rows[0]["cone"], [(SHADOW, 1, False)])
         self.assertEqual({guid for guid, _, _ in rows[0]["outside"]}, {TREE, BULWARK})
 
+    def test_a_burst_on_ranged_that_hits_melee_is_a_cross_tick(self):
+        cross = mm.burst_cross(self.trace, mm.burst_rows(self.trace))
+        self.assertEqual(cross[("ranged", "ranged")], 3)
+        self.assertEqual(cross[("ranged", "melee")], 1)
+        self.assertEqual(sum(cross.values()), 4)
+
     def test_the_fuse_runs_from_the_summon(self):
         rows = mm.bomb_rows(self.trace)
         self.assertEqual(len(rows), 1)

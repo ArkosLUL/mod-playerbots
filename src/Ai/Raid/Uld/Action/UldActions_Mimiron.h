@@ -39,10 +39,13 @@ protected:
     // destination that far from `from`. One radius swept over a fan only reaches it on the
     // straight-away bearing; every other lands short, which is how an escape sweeps eleven
     // headings and stays inside the circle it was running from.
+    // sectorScreen keeps a hard-mode phase 2 bot off the other group's Rapid Burst line
+    // (GetMimironOtherGroupSector) while any bearing on its own side is left.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
-                              char const* what = "flee", float clearRadius = 0.0f);
+                              char const* what = "flee", float clearRadius = 0.0f,
+                              bool sectorScreen = false);
 
     // Same fan, run away from a point rather than a unit. The ground fire is a field of 50 to 60
     // nodes with no single unit to flee, so the flames dodge hands in its centroid.
@@ -68,7 +71,7 @@ private:
     // overload has no unit to hand it, so it walks straight away from `from` instead.
     bool FleeFan(Position const& from, Unit* fallbackFrom, float distance, MovementPriority priority,
                  bool fallbackUnfiltered, bool interrupt, char const* what, float clearRadius = 0.0f,
-                 bool allowFire = false);
+                 bool allowFire = false, bool sectorScreen = false);
 
     void NoteFleeOutcome(char const* what, char const* outcome, float const* taken, uint32 refusedBack,
                          uint32 refusedMine, uint32 refusedCone, uint32 refusedFire, uint32 refusedBomb,

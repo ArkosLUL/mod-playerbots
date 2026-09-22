@@ -41,13 +41,13 @@ using namespace EncounterHelpers;
 
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
                                              bool fallbackUnfiltered, bool interrupt, char const* what,
-                                             float clearRadius)
+                                             float clearRadius, bool sectorScreen)
 {
     if (!from)
         return false;
 
     return FleeFan(from->GetPosition(), from, distance, priority, fallbackUnfiltered, interrupt, what,
-                   clearRadius);
+                   clearRadius, false, sectorScreen);
 }
 
 bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distance,
@@ -78,7 +78,7 @@ bool MimironFleeAction::MoveTowardClearOfMines(Position const& dest, MovementPri
 
 bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float distance,
                                 MovementPriority priority, bool fallbackUnfiltered, bool interrupt,
-                                char const* what, float clearRadius, bool allowFire)
+                                char const* what, float clearRadius, bool allowFire, bool sectorScreen)
 {
     if (distance <= 0.0f)
         return false;
@@ -126,6 +126,8 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
     MimironRapidBurstWindow const burst =
         vx001 ? GetMimironRapidBurstWindow(botAI, bot, vx001) : MimironRapidBurstWindow();
     MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    MimironBurstSector const sector =
+        sectorScreen && vx001 ? GetMimironOtherGroupSector(botAI, bot, vx001) : MimironBurstSector();
 
     // Past about 120 degrees off the escape bearing the geometry turns back inward, so the fan stops
     // short of that. It was 90; two stacked filters can empty the first quadrant, and the alternative
@@ -231,6 +233,14 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
                 continue;
             }
 
+            // Counted with the cone. An escape that crosses VX-001 puts melee in the wedge's line, or
+            // ranged in the melee sector, and every burst after that hits both groups.
+            if (IsMimironSpotInSector(vx001, sector, dest))
+            {
+                ++refusedBurst;
+                continue;
+            }
+
             // Including the Shock Blast escape itself. The comment this used to carry reasoned
             // about where the bot starts, but the test is on the destination, and an escape that
             // ends inside the circle is not one.
@@ -265,6 +275,12 @@ bool MimironFleeAction::FleeFan(Position const& from, Unit* fallbackFrom, float 
 
     // Every bearing in the fan was refused - by a mine, the barrage, the fire, the bomb, the Rapid
     // Burst cone, a fire bot, or collision leaving the bot no further from the hazard than it started.
+    // Nothing clear on the bot's own side: sweep again without the sector screen before any fallback.
+    // The other group's line costs a burst or two, the thing it's running from kills.
+    if (sector.valid)
+        return FleeFan(from, fallbackFrom, distance, priority, fallbackUnfiltered, interrupt, what,
+                       clearRadius, allowFire, false);
+
     if (!fallbackUnfiltered)
     {
         NoteFleeOutcome(what, "none", nullptr, refusedBack, refusedMine, refusedCone, refusedFire,
@@ -1045,9 +1061,11 @@ bool MimironFrostBombAction::Execute(Event /*event*/)
     // clean bearing at all, and moving somewhere beats standing in it.
     // Per-bearing hop onto the clearance circle: one radial gap swept over the fan only reaches it
     // straight away, and the rest land between 30 and 34, where the trigger fires again.
+    // Sector screen: straight away from a bomb on the far side of VX-001 runs the melee clump
+    // through the boss and out into the wedge's line.
     float const gap = ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE - bot->GetExactDist2d(frostBomb);
     return MoveAwayClearOfMines(frostBomb, gap, MovementPriority::MOVEMENT_FORCED, true, true,
-                                "frostbomb", ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE);
+                                "frostbomb", ULDUAR_MIMIRON_FROST_BOMB_CLEARANCE, true);
 }
 
 std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriorityList()

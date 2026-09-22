@@ -163,4 +163,14 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Mimiron phase 2 under Firefighter: melee hold the sector opposite the ranged wedge, so "set behind"
+// and "tank face" have nothing to do. VX-001 never swings and only turns to face each Rapid Burst
+// target, so "behind" moves every 3.2 s and walks the melee off their sector after it.
+class MimironVx001FacingGuardMultiplier : public Multiplier
+{
+public:
+    MimironVx001FacingGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "mimiron vx001 facing guard") {}
+    float GetValue(Action* action) override;
+};
+
 #endif
