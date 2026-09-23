@@ -9,6 +9,7 @@
 #include "InstanceScript.h"
 #include "SpellAuraDefines.h"
 #include "Map.h"
+#include "ObjectMgr.h"
 #include "ScriptMgr.h"
 #include "Spell.h"
 #include "SpellAuraEffects.h"
@@ -155,7 +156,8 @@ class RaidObsGlobalScript : public GlobalScript
 public:
     RaidObsGlobalScript()
         : GlobalScript("RaidObsGlobalScript",
-                       {GLOBALHOOK_ON_AURA_APPLICATION_CLIENT_UPDATE, GLOBALHOOK_ON_BEFORE_SET_BOSS_STATE})
+                       {GLOBALHOOK_ON_AURA_APPLICATION_CLIENT_UPDATE, GLOBALHOOK_ON_BEFORE_SET_BOSS_STATE,
+                        GLOBALHOOK_ON_AFTER_UPDATE_ENCOUNTER_STATE})
     {
     }
 
@@ -177,6 +179,24 @@ public:
             return;
 
         RaidObs::OnBossState(id, instance);
+    }
+
+    // Fires on every Map::UpdateEncounterState call, matched row or not.
+    void OnAfterUpdateEncounterState(Map* map, EncounterCreditType type, uint32 creditEntry, Unit* /*source*/,
+                                     Difficulty /*difficulty_fixed*/, DungeonEncounterList const* encounters,
+                                     uint32 /*dungeonCompleted*/, bool /*updated*/) override
+    {
+        if (!map || !encounters)
+            return;
+
+        for (DungeonEncounter const* encounter : *encounters)
+        {
+            if (encounter->creditType == type && encounter->creditEntry == creditEntry)
+            {
+                RaidObs::OnEncounterCredit(map);
+                return;
+            }
+        }
     }
 };
 

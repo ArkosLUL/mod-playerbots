@@ -29,6 +29,12 @@ Brundir and 14 Molgeim, and Freya's 11 three-elder pulls as Stonebark. Selection
 through it, and so does `cfg.hardmode`, whose keys are these names - an unmapped slug means the
 hard-mode check silently never applies.
 
+Trial of the Crusader: `gormok-the-impaler`, `acidmaw`, `dreadscale`, `icehowl` and `fire-bomb` →
+`northrend-beasts`; the 28 champions of `ToCHelpers_FactionChampions.h`, both factions →
+`faction-champions`; `fjola-lightbane`, `eydis-darkbane` → `val-kyr-twins`. Jaraxxus and Anub'arak
+engage under their encounter's slug. Never alias `the-lich-king`: ICC's boss, and a passive
+boss-flagged unit here. `anub-arak` is also Azjol-Nerub's boss, so a slug cannot tell the two apart.
+
 `--coverage` and `--probes` join on that name too, and the map-name fallback (`ulduar`) matches no
 encounter, folding every node into the "gate shut this pull" line - 342 on the 2026-09-13 Yogg wipes,
 reading as a closed gate when only the join failed. So a slug still equal to its map's `Map.dbc` name
@@ -36,6 +42,12 @@ reading as a closed gate when only the join failed. So a slug still equal to its
 enough, as Yogg's room holds the four Keepers. **Any other slug stands**: Mimiron files under his
 encounter name, yet the first boss-flagged unit to trade damage is Leviathan Mk II. `--boss` opens
 only map-named files beyond those its name selects.
+
+A shut encounter gate reads like a false condition, so `--coverage` folds a node owned by another
+encounter of the raid into that gated line rather than list it NEVER. The owner is the trigger-name
+prefix the node leads with: `ULD_PREFIXES` mirrors `UldEncounterGate.cpp`, and `TOC_PREFIXES` holds
+`gormok`, `northrend worms`, `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr`, `anubarak`.
+Every per-encounter ToC trigger name leads with one, so a new ToC encounter prefix needs a row.
 
 ```
 postmortem.py <file>                 summary + a block per death
@@ -99,6 +111,11 @@ reproduced Mimiron's documented phase-1 flip-flop:
 **`--probes` names keys the source declares that never reached a trace of their own boss.** One silent
 pull usually means the thing did not happen; silence across every pull of a boss means the recorder is
 dropping it.
+
+A key's boss comes from its prefix. `NOTE_PREFIXES` decides alone where it has a row: `nb`,
+`jaraxxus`, `fc`, `tv`, `anub` name ToC's five encounters, and `toc` is raid-wide, matching all five;
+the table is also what keeps `anub` off Naxx's `anub-rekhan`. Any other prefix matches as the slug
+spelled out (`thorim`), its initials (`fl`) or its first word (`yogg`).
 
 NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` beats parsing 15 MB.
 
@@ -164,6 +181,33 @@ every change while a boss loads from the DB, and refuses `DONE` while a world-bo
 hook only queues the boss id; the next map update reads the state that stuck. That delay also lets the
 engage hook name the trace after the creature rather than the map — the core runs `SetBossState`
 before `OnUnitEnterCombat`.
+
+**A script without boss state closes on a credit or a fall.** ToC and Vault of Archavon keep none
+(`GetEncounterCount()` 0), so two other signals close their traces:
+
+- **`kill`**: a DBC encounter credit (`OnAfterUpdateEncounterState`). The hook fires inside
+  `Unit::Kill` or `Spell::cast` (Tirion's 68184 for Faction Champions), often mid bot action, and a
+  close drains every roster engine's coverage, so it only queues. Boss-state scripts ignore it: their
+  `DONE` already closed. The next map update closes `kill` if `IsEncounterInProgress` has fallen,
+  which a kill's `DONE` does in the credit's own call stack. If it is still true the credit only
+  latches: heroic Beasts credits on Icehowl, summoned at 340 s whether or not the worms are dead, so a
+  worm or Gormok can outlive him. A latched trace closes `kill` at the fall unless most of the raid is
+  dead, and always at the idle close, since VoA's override stays true through Wintergrasp.
+- **`reset`**: `IsEncounterInProgress()`, polled each map update, falling after the roster was in
+  combat while it was true. ToC raises it before the pull (Beasts walk-in, champions released, twins
+  3.25 s early, Anub'arak from the Lich King scene), so a fall without that combat ends no pull. The
+  roster rule below files it `wipe` when most of the raid died.
+
+**Never call `IsEncounterInProgress` with nobody alive.** ToC's override, finding no alive non-GM
+player, resets its encounter to `NOT_STARTED`, and `InstanceCleanup` then charges the wipe no heroic
+attempt. The poll runs that same player test first and reads a failure as false.
+
+Two gaps. A Twins kill carries no credit, filing `reset` (or `wipe`), only if no player ever hit
+Eydis: her engage zeroes her damage requirement (`LowerPlayerDamageReq` in `JustEngagedWith`), so
+whichever twin takes the last blow, the kill credits through her loot recipient. VoA's override stays
+true through Wintergrasp war time, the 10 min before it, and with no WG battlefield, so a wipe that
+leaves anyone alive closes on idle (a full wipe still reads false), and a war ending mid-pull closes
+as `reset`.
 
 **A trace can rename itself.** Opened by `bossstate` or `MarkPull` with nothing engaged yet, it has
 only the map name to use — three traces were filed `ulduar`: an Iron Assembly and a Thorim wipe on
@@ -425,7 +469,8 @@ retries at tick rate whenever the 8 s taunt cooldown is not up, so it is unprobe
 in one pass, while the one the bot goes for is already in `hodir.dpstarget`.
 
 Prefix every note key with the encounter that owns it — that is what `--notes KEY` filters on, and Iron
-Assembly legitimately spans three bosses under one slug.
+Assembly legitimately spans three bosses under one slug. A prefix the slug does not derive needs a row
+in `NOTE_PREFIXES`, or `--probes` never ties the key to its boss.
 
 A pull no instance script reports — a gauntlet, trash, a mid-phase re-engage — needs `MarkPull(map,
 source)`, where `source` names the file. Thorim's corridor uses it.
