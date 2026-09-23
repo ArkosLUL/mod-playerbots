@@ -17,6 +17,7 @@
 #include "PlayerbotAI.h"
 #include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "ServerFacade.h"
 #include "SpellAuras.h"
@@ -31,7 +32,6 @@
 #include <algorithm>
 #include <cmath>
 #include <list>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -875,24 +875,13 @@ struct MimironObsState
     uint32 scanMs = 0;
 };
 
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, so
-// per-thread copies hand the same instance a fresh state whenever the pool reassigns it, which
-// silently resets every latch mid-pull. References into an unordered_map survive rehashing, so the
-// lock only has to cover the lookup.
-std::mutex mimironObsStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, MimironObsState> mimironObsStates;
+RaidInstanceState<MimironObsState> mimironObsStates;
 
-MimironObsState& MimironObsStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(mimironObsStatesMutex);
-    return mimironObsStates[bot->GetInstanceId()];
-}
+MimironObsState& MimironObsStateFor(Player* bot) { return mimironObsStates.For(bot->GetInstanceId()); }
 
 // Raid-wide phase 1 answers, and both have to be the same for every bot in the instance. A tank
 // hold each bot latched for itself would let the formation start walking while the tank was still
-// building threat; a stack anchor picked per bot is not a stack. Same locking as the state above -
-// the map is only touched by one thread at a time but is not pinned to one, and references into it
-// survive rehashing, so the guard only has to cover the lookup.
+// building threat; a stack anchor picked per bot is not a stack.
 struct MimironFightState
 {
     // One-way per pull. Set when the main tank's threat lead on the MK II is real, or when the hold
@@ -932,25 +921,19 @@ struct MimironFightState
     float shiftY = 0.0f;
 };
 
-std::mutex mimironFightStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, MimironFightState> mimironFightStates;
+RaidInstanceState<MimironFightState> mimironFightStates;
 
 // When each bot last got itself out of the fire. Not in MimironFightState: that resets on every scan
 // of a handover, the stretch the raid follows its master through the fire and most needs the hold.
-// Never reset; a stamp stops counting after ULDUAR_MIMIRON_FLAMES_HOLD_MS.
-std::unordered_map<uint32 /*instanceId*/, std::unordered_map<ObjectGuid, uint32>> mimironFireDodges;
+// Only dropped with the instance; a stamp stops counting after ULDUAR_MIMIRON_FLAMES_HOLD_MS.
+RaidInstanceState<std::unordered_map<ObjectGuid, uint32>> mimironFireDodges;
 
 std::unordered_map<ObjectGuid, uint32>& MimironFireDodgesFor(Player* bot)
 {
-    std::lock_guard<std::mutex> guard(mimironFightStatesMutex);
-    return mimironFireDodges[bot->GetInstanceId()];
+    return mimironFireDodges.For(bot->GetInstanceId());
 }
 
-MimironFightState& MimironFightStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(mimironFightStatesMutex);
-    return mimironFightStates[bot->GetInstanceId()];
-}
+MimironFightState& MimironFightStateFor(Player* bot) { return mimironFightStates.For(bot->GetInstanceId()); }
 
 // Everything the trace needs once per instance per tick rather than once per bot: the phase, the
 // Magnetic Core window, who holds the core, and the Laser Barrage cone.
