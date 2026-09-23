@@ -206,8 +206,9 @@ erases it. A has-state check, such as a reset trigger's gate, must use `Find`: `
 entry a reset just erased.
 
 - **Locking:** only the lookup is locked, the reference is used unlocked. Safe because one worker
-  updates an instance map at a time and bot code runs inside that update or on the world thread, never
-  alongside it. Never keep the reference past the tick.
+  updates an instance map at a time (`MapInstanced::Update` schedules each instance once per tick and
+  `MapMgr::Update` waits for the pool) and bot code runs inside that update or on the world thread,
+  never alongside it. Never keep the reference past the tick.
 - **Eviction:** `RaidInstanceStateMapScript` drops the instance from every store on `OnDestroyMap`.
   It is the only lifetime cleanup: Ulduar's reset nodes are gated off once the boss is DONE, and a
   saved lockout entered again after its map unloaded comes back with the same instance id. Mid-fight

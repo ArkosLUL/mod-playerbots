@@ -9,6 +9,7 @@
 #include "Group.h"
 #include "GroupReference.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "EncounterHelpers.h"
 #include "RaidObs.h"
 #include "Unit.h"
@@ -16,8 +17,6 @@
 #include <array>
 #include <cmath>
 #include <list>
-#include <mutex>
-#include <unordered_map>
 #include <unordered_set>
 
 using namespace EncounterHelpers;
@@ -59,16 +58,11 @@ struct EncounterState
 // One state per instance, shared by every bot and by every trigger/action/multiplier: they each hold
 // separate helper instances and cannot agree through a member. The corridor in particular has to be
 // raid-wide, or half the raid dodges to one gap and half to the other.
+RaidInstanceState<EncounterState> encounterStates;
+
 EncounterState& StateFor(Unit* boss)
 {
-    // Instances update on parallel map threads, so the container lookup needs guarding. The state
-    // itself is only ever touched by the map thread that owns the instance, and unordered_map nodes
-    // keep their address across rehashes.
-    static std::mutex mutex;
-    static std::unordered_map<uint32, EncounterState> states;
-
-    std::lock_guard<std::mutex> guard(mutex);
-    EncounterState& state = states[boss->GetInstanceId()];
+    EncounterState& state = encounterStates.For(boss->GetInstanceId());
     uint32 const now = getMSTime();
     // Rebuilt every tick he is out of combat, so fightStartMs lands within a tick of the pull and every
     // latch below re-arms on a wipe. The staleness check cannot do that on its own: PortalSquadMember
