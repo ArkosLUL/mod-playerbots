@@ -100,14 +100,15 @@ public:
     bool IsActive() override;
 };
 
-// Holding a Saronite Vapor as a target. They are hostile and the generic pickers take them, but
-// killing one ends hard mode, so a bot that has one has to be pushed back onto the boss.
-class VezaxDropVaporTargetTrigger : public Trigger
+// Not on the boss and not on the Animus. The target guard silences the generic pickers here, so this
+// is the only thing that hands a bot a target at all - and a bot with none never calls Attack, never
+// reaches the combat engine and spends the fight buffing.
+class VezaxHoldTargetTrigger : public Trigger
 {
 public:
-    static constexpr char const* Name = "vezax drop vapor target";
+    static constexpr char const* Name = "vezax hold target";
 
-    VezaxDropVaporTargetTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    VezaxHoldTargetTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

@@ -45,7 +45,7 @@ void DefineVezax(EncounterBuilder& e)
     e.Node<VezaxMarkOfTheFacelessTrigger, VezaxMarkOfTheFacelessAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<VezaxSurgeOfDarknessTrigger, VezaxSurgeOfDarknessAction>(ACTION_EMERGENCY + 5);
     e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 5);
-    e.Node<VezaxDropVaporTargetTrigger, VezaxDropVaporTargetAction>(ACTION_RAID + 4);
+    e.Node<VezaxHoldTargetTrigger, VezaxHoldTargetAction>(ACTION_RAID + 4);
     e.Node<VezaxShadowCrashSoakTrigger, VezaxShadowCrashSoakAction>(ACTION_RAID + 2, EncounterRow::Mover);
     e.Node(
         "vezax shadow resistance",
@@ -67,8 +67,11 @@ void DefineVezax(EncounterBuilder& e)
 
     // Saronite Vapors are hostile, pulse damage on anyone near them, and the generic pickers happily
     // take one. Killing one calls DoAction(1) on the boss and ends hard mode for good. The debuff
-    // family matters as much as the two pickers: it lands DoTs on whatever a caster drifted onto. The
-    // drop vapor target row clears a vapor a bot already holds.
+    // family matters as much as the two pickers: it lands DoTs on whatever a caster drifted onto.
+    //
+    // This takes away the only generic source of a target, so the hold target row above has to be the
+    // one that gives it back. Without it no bot ever calls Attack, the combat engine never starts and
+    // the raid stands there healing itself - two pulls on 2026-09-23 left him at 99% health.
     e.OwnTargeting("vezax target guard multiplier", Role::Any, VezaxEncounterActive,
                    Family::DpsAssist | Family::TankAssist | Family::DebuffOnAttacker);
 

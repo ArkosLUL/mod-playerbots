@@ -246,6 +246,20 @@ def show_banner(trace: Trace) -> None:
         print("  earlier pull, so nothing was assigned in this one")
 
 
+def searing_flames(trace: Trace, boss: int) -> tuple[list[int], list[int], list[dict]]:
+    """Every 62661 cast, the ones that did damage, and every hit.
+
+    A kicked cast leaves no damage at all, so hits counted against casts read as if every cast landed:
+    7 of the 8 on 2026-09-23 were kicked and the line said "19 hits across 8 casts".
+    """
+    hits = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_SEARING_FLAMES]
+    starts = sorted(rec["t"] for rec in trace.of("cast")
+                    if rec.get("s") == boss and rec.get("sp") == SPELL_SEARING_FLAMES)
+    landed = sorted({starts[bisect.bisect_right(starts, rec["t"]) - 1]
+                     for rec in hits if starts and rec["t"] >= starts[0]})
+    return starts, landed, hits
+
+
 def show_boss(trace: Trace) -> None:
     print("BOSS")
     boss = boss_guid(trace)
@@ -257,9 +271,12 @@ def show_boss(trace: Trace) -> None:
     for spell, count in casts.most_common():
         print(f"  {count:4}  {trace.spell(spell)}")
 
-    flames = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_SEARING_FLAMES]
-    print(f"\n  Searing Flames landed {len(flames)} hit(s) for {sum(r.get('a', 0) for r in flames):,}"
-          f" across {casts.get(SPELL_SEARING_FLAMES, 0)} cast(s)")
+    starts, landed, hits = searing_flames(trace, boss)
+    print(f"\n  Searing Flames landed {len(landed)} of {len(starts)} cast(s) for"
+          f" {sum(r.get('a', 0) for r in hits):,} over {len(hits)} hit(s)")
+    if landed and len(landed) < len(starts):
+        print(f"  landed at {', '.join(clock(when) for when in landed)};"
+              f" the other {len(starts) - len(landed)} did no damage")
 
     held = sorted({trace.name(rec["g"]) for rec in notes(trace, "vezax.interrupter")
                    if rec.get("txt") == "1"})

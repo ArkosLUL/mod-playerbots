@@ -104,13 +104,13 @@ public:
     bool Execute(Event event) override;
 };
 
-// Put the boss back under the bot's crosshair, off a Saronite Vapor.
-class VezaxDropVaporTargetAction : public AttackAction
+// Put the boss under the bot's crosshair, whether it was on a Saronite Vapor or on nothing at all.
+class VezaxHoldTargetAction : public AttackAction
 {
 public:
-    static constexpr char const* Name = "vezax drop vapor target action";
+    static constexpr char const* Name = "vezax hold target action";
 
-    VezaxDropVaporTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    VezaxHoldTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };

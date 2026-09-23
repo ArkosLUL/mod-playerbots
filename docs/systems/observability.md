@@ -123,7 +123,7 @@ NDJSON is one record per line with no enclosing array, so `grep '"e":"death"'` b
 
 Every report opens with a validity banner. Establishing these by hand cost more than reading the
 trace, and getting one wrong cost a session — three Freya pulls on 2026-09-05 were read against a
-binary predating the fix by two hours. Five things can disqualify a pull; the header carries four.
+binary predating the fix by two hours. Six things can disqualify a pull; the header carries four.
 
 **A disqualifier that fires on the whole sample rejects the whole sample and says nothing**, so two of
 them only decide once you say what is under test. The loop commits after every pull, so every trace
@@ -152,6 +152,11 @@ strategy was not asked to do the job, whatever else was being tested.
 - **raid dead at the open** — over half the roster at 0 hp in the first in-pull snapshot: nobody
   pulled, so it always decides (`batch.py` flag `D`). A Yogg trace opened 45 s after a wipe with only
   the human alive, who used `.die`, and read as a one-death wipe. The recorder now drops these.
+- **no combat engine** — no `covdef` row tagged `c`: no bot ever entered combat, so nothing in the
+  trace measures a fight. `Attack()` is what enters that engine, so an encounter zeroing the target
+  pickers without assigning one of its own reads exactly like this — two Vezax pulls on 2026-09-23
+  sat at 99% boss health buffing themselves. Always decides; pre-v12 traces have no `covdef` and
+  cannot answer.
 
 `cfg` also carries `cheats` and `mapthreads`, and is a fixed short list on purpose: a full dump would
 grow with every option and bury the few that decide whether a pull counts.

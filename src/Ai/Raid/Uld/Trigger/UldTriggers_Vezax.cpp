@@ -157,13 +157,20 @@ bool VezaxShadowCrashSoakTrigger::IsActive()
            ULDUAR_VEZAX_SHADOW_CRASH_SOAK_MAX_TRAVEL;
 }
 
-bool VezaxDropVaporTargetTrigger::IsActive()
+bool VezaxHoldTargetTrigger::IsActive()
 {
     if (!VezaxEncounterActive(botAI))
         return false;
 
     Unit* target = AI_VALUE(Unit*, "current target");
-    return target && target->GetEntry() == NPC_VEZAX_SARONITE_VAPORS;
+    if (!target)
+        return true;
+
+    // The animus row above owns the switch while one is up, and its action returns false once the bot
+    // is already on it, so the engine falls through to here - without this test the two would hand the
+    // target back and forth every tick. Entry rather than GetVezax: this is asked of every bot every
+    // tick and that is a creature lookup.
+    return target->GetEntry() != NPC_VEZAX && target->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS;
 }
 
 bool VezaxRaidPositionTrigger::IsActive()

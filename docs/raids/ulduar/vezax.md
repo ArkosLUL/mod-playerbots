@@ -205,9 +205,9 @@ only hazard here with a deadline. The interrupt is `+8`: losing a kick costs the
 fire at once. Then the two halves of Mark of the Faceless — **break at `+7`, carry at `+6`** — in that
 order, because the bot holding the mark is the one person its leech skips and so is never the one
 taking damage. Surge of darkness closes the EMERGENCY band at `+5`. The RAID band is the reward half
-and numbers separately: animus `+5`, drop-vapor-target `+4`, field soak `+2`, resistance `+1`,
-position last. Drop-vapor sits under the animus on purpose — in hard mode both fire on a bot holding a
-vapor, and the animus is the correct answer.
+and numbers separately: animus `+5`, hold-target `+4`, field soak `+2`, resistance `+1`,
+position last. Hold-target sits under the animus on purpose — in hard mode both fire on a bot
+that is off the animus, and the animus is the correct answer.
 
 **Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40),
 below `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every
@@ -226,7 +226,12 @@ comparable caster did. Even gated at 60% mana they still spent 61-65% of their c
 **The raid is kept off Saronite Vapors by two pieces**, because a suppressor alone leaves whatever a
 bot already holds. The target guard rule zeroes the `DpsAssist`, `TankAssist` and `DebuffOnAttacker`
 families (the debuff one matters, it is what lands DoTs on whatever a caster drifted onto), and the
-drop-vapor-target node re-attacks the boss for a bot already on one.
+hold-target node attacks the boss for anyone not already on him or on the Animus.
+
+**That node is also the raid's only target source**, since the guard takes the generic ones away.
+While it waited for a vapor already held it never fired: on 2026-09-23 no bot ever had a target, so
+none called `Attack`, none reached the combat engine, and two pulls ended at 99% boss health with the
+raid healing itself. The tell is a `covdef` carrying no `c` engine.
 
 Each writes a `veto` row naming the action it zeroed, so a trace says outright whether it fired —
 which is how 2026-09-17 caught the guard running raid-wide. `VezaxEncounterActive` asked only whether
@@ -252,10 +257,10 @@ of its own, so a dead boss is rejected explicitly and presence alone gates nothi
 
 `vezax.slot` is the stored assignment; `vezax.formation`, `vezax.block`
 (`L`/`R`/`tank`/`unslotted`), `vezax.dodge` (`strafe`/`search`/`none`), `vezax.mark`
-(`side`/`south`/`break`/`none`), `vezax.target` (`vapor`) and `vezax.interrupter` are derived, each
-probed inside the helper that derives it so two call sites cannot disagree. `vezax.formation`
-(`outside`/`noboss`/`idle`/`on`) is the exception: the encounter's tick writes it, since the
-formation gate is a rule predicate and runs only when the cheaper checks pass.
+(`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`) and `vezax.interrupter`
+are derived, each probed inside the helper that derives it so two call sites cannot disagree.
+`vezax.formation` (`outside`/`noboss`/`idle`/`on`) is the exception: the encounter's tick writes
+it, since the formation gate is a rule predicate and runs only when the cheaper checks pass.
 
 **The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world
 object until it lands and the ~3s a bot can act in would otherwise be invisible. Take the destination
@@ -291,7 +296,7 @@ each bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420
 Animus faster. There is **no** Bloodlust gate and **no** taunt or assist-tank wiring for the Animus —
 this doc claimed both before 2026-09-13 and neither was ever in the code.
 
-The guard against killing a vapor is the target guard and drop-vapor node above, nothing wider: there
+The guard against killing a vapor is the target guard and hold-target node above, nothing wider: there
 is no AoE suppression and no explicit pet control. **A stray cleave or an off-passive pet can still
 kill one**, and that silently ends hard mode; if hard mode starts failing, `--vapors` reads
 `vezax.target = vapor` first, then whether an Animus ever spawned after the sixth summon.

@@ -67,6 +67,13 @@ def vezax_pull() -> list[dict]:
         {"t": 14000, "e": "dmg", "s": BOSS, "d": AGONY, "sp": gv.SPELL_MARK_LEECH, "a": 3000},
 
         # One crash on Agony, and one bot from each block dodges it.
+        # Three Searing Flames, only the middle one gets through.
+        {"t": 2000, "e": "cast", "s": BOSS, "sp": gv.SPELL_SEARING_FLAMES, "tgt": 0, "ct": 2000},
+        {"t": 6000, "e": "cast", "s": BOSS, "sp": gv.SPELL_SEARING_FLAMES, "tgt": 0, "ct": 2000},
+        {"t": 8000, "e": "dmg", "s": BOSS, "d": AGONY, "sp": gv.SPELL_SEARING_FLAMES, "a": 14000},
+        {"t": 8000, "e": "dmg", "s": BOSS, "d": TREE, "sp": gv.SPELL_SEARING_FLAMES, "a": 13000},
+        {"t": 10000, "e": "cast", "s": BOSS, "sp": gv.SPELL_SEARING_FLAMES, "tgt": 0, "ct": 2000},
+
         {"t": 5000, "e": "haz", "sp": gv.SPELL_SHADOW_CRASH_IMPACT, "shape": "circle",
          "x": 30.0, "y": 0.0, "z": 0.0, "ttl": 3000, "rad": 10.0},
         {"t": 5500, "e": "move", "g": AGONY, "k": "point", "x": 45.0, "y": 0.0, "z": 0.0,
@@ -138,6 +145,12 @@ class SyntheticPull(unittest.TestCase):
         agony = next(row for row in rows if row["guid"] == AGONY)
         self.assertAlmostEqual(agony["median"], 30.0)
         self.assertEqual(agony["inside"], 0.0)
+
+    def test_a_kicked_searing_flames_is_not_counted_as_one_that_landed(self):
+        starts, landed, hits = gv.searing_flames(self.trace, BOSS)
+        self.assertEqual(len(starts), 3)
+        self.assertEqual(landed, [6000])
+        self.assertEqual(len(hits), 2)
 
     def test_per_bot_latch_spans_do_not_pool_bots(self):
         spans = gv.latch_spans_for(self.trace, "vezax.formation", "on")

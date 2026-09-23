@@ -152,6 +152,12 @@ executes — no multiplier chain. So a guard can only ever silence nodes that ar
 typically the class ones; anything an encounter fires directly is immune to it by construction. Build
 the encounter's own suppression into the action, not into a multiplier that will never see it.
 
+**A veto that covers targeting must be paired with a node that assigns one.** `DpsAssistAction` and
+`TankAssistAction` are how a bot gets a target at all, and `AttackAction::Attack` is what calls
+`ChangeEngine(BOT_STATE_COMBAT)`, so zeroing them with nothing behind them strands every bot
+targetless in the non-combat engine: it buffs and heals and never fights. Vezax did this for two pulls
+that ended at 99% boss health. The trace tell is a `covdef` with no `c` engine.
+
 **Test the action before resolving anything.** `Multiplier::GetValue` runs on every popped action that
 passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup for every rotation
 spell that falls through — one Ulduar chain pass reached roughly 150 line-of-sight raycasts before

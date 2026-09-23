@@ -162,13 +162,22 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
                   MovementPriority::MOVEMENT_FORCED, true);
 }
 
-bool VezaxDropVaporTargetAction::Execute(Event /*event*/)
+bool VezaxHoldTargetAction::Execute(Event /*event*/)
 {
     Unit* vezax = GetVezax(botAI);
     if (!vezax)
         return false;
 
-    RaidObs::NoteDerived(bot, "vezax.target", "vapor");
+    // What the bot was on, because the three cases mean different things: a vapor is hard mode about
+    // to end, nothing at all is the target guard with no source behind it.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    char const* had = "other";
+    if (!target)
+        had = "none";
+    else if (target->GetEntry() == NPC_VEZAX_SARONITE_VAPORS)
+        had = "vapor";
+
+    RaidObs::NoteDerived(bot, "vezax.target", had);
     return Attack(vezax);
 }
 

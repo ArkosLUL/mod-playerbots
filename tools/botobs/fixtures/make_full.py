@@ -77,9 +77,9 @@ def build(version: int) -> list[dict]:
         add(t=1, e="spell", sp=spell, n=name)
 
     add(t=2, e="covdef", d=[
-        [1, "fixture tank trigger", "fixture", "combat", ""],
-        [2, "fixture heal trigger", "fixture", "combat", ""],
-        [3, "fixture dodge trigger", "fixture", "combat", "dodge"],
+        [1, "fixture tank trigger", "fixture", "c", ""],
+        [2, "fixture heal trigger", "fixture", "c", ""],
+        [3, "fixture dodge trigger", "fixture", "c", "dodge"],
     ])
     add(t=0, e="pull", boss="fixtureboss", src="bossstate")
 

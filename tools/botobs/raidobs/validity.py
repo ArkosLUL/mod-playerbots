@@ -71,8 +71,9 @@ def resolve_since(repo: pathlib.Path, since: str | None) -> tuple[str, datetime.
 DECIDING_ROLES = ("tank", "heal")
 
 # A human holding tank or heal always disqualifies: the strategy was not asked to do the job, whatever
-# the pull was testing. So does a raid lying dead when the trace opened, which is nobody pulling at all.
-ALWAYS_DECIDABLE = {"human-role", "raid-dead"}
+# the pull was testing. So does a raid lying dead when the trace opened, which is nobody pulling at all,
+# and a raid that never entered combat, which is the same thing on its feet.
+ALWAYS_DECIDABLE = {"human-role", "raid-dead", "no-combat"}
 
 # The other two only disqualify once the reader says what is under test. Both are true of almost every
 # pull otherwise - the loop commits after each pull, so every trace predates HEAD, and every
@@ -106,6 +107,19 @@ def humans(trace: Trace) -> list[str]:
     only in a `unit` record, and that is the same person most likely to have picked up a role
     mid-pull. Two derivations of one predicate would disagree exactly where it matters."""
     return sorted(trace.name(guid) for guid in trace.humans)
+
+
+def combat_engine_ran(trace: Trace) -> bool | None:
+    """Whether any bot's combat engine walked a single node, or None before v12, which has no covdef.
+
+    A node only enters the coverage map when an engine walked it, and AiFactory tags the three engines
+    c, n and d, so no c anywhere means no bot was ever in combat. Attack() is what calls
+    ChangeEngine(BOT_STATE_COMBAT), so an encounter that silences the target pickers without handing
+    out a target of its own reads exactly like this.
+    """
+    if not trace.covnodes:
+        return None
+    return any(node["engine"] == "c" for node in trace.covnodes.values())
 
 
 def alive_at_open(trace: Trace) -> tuple[int, int] | None:
@@ -184,6 +198,15 @@ def inspect(trace: Trace, ref: tuple[str, datetime.datetime] | None) -> tuple[di
         warnings.append((
             "raid-dead",
             f"only {alive[0]} of {alive[1]} raiders alive when the trace opened: nobody pulled",
+        ))
+
+    # Invisible in every other view, and two Vezax pulls on 2026-09-23 spent an evening looking like a
+    # tuning problem before this said it in a line.
+    if combat_engine_ran(trace) is False:
+        warnings.append((
+            "no-combat",
+            "no bot entered combat: the combat engine never walked a node, so nothing here is a "
+            "measurement of what the strategy does in a fight",
         ))
 
     return facts, warnings

@@ -523,6 +523,21 @@ class Decidability(unittest.TestCase):
         self.assertNotIn("raid-dead", self.dead_at_open(set()))
         self.assertNotIn("raid-dead", self.dead_at_open({5003, 5004}))
 
+    def engines(self, tags):
+        trace = rich()
+        trace.covnodes = {i: {"node": f"n{i}", "strategy": "", "engine": tag, "alias": ""}
+                          for i, tag in enumerate(tags)}
+        return [kind for kind, _ in validity.inspect(trace, None)[1]]
+
+    def test_a_raid_that_never_entered_combat_always_decides(self):
+        self.assertIn("no-combat", validity.decidable_kinds())
+        self.assertIn("no-combat", self.engines(["n", "n", "d"]))
+        self.assertNotIn("no-combat", self.engines(["n", "c", "d"]))
+
+    def test_a_trace_without_coverage_cannot_say_whether_anyone_fought(self):
+        # Pre-v12 has no covdef at all, and silence there is not the same answer as no combat engine.
+        self.assertNotIn("no-combat", self.engines([]))
+
     def test_a_time_with_an_offset_keeps_it(self):
         _, when = validity.resolve_since(validity.REPO, "2026-09-10T00:00:00+00:00")
         self.assertEqual(when, datetime.datetime(2026, 9, 10, tzinfo=datetime.timezone.utc))
