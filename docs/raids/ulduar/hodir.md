@@ -301,6 +301,14 @@ takes is the raid-wide `64545` Frozen Blows tick that nothing avoids. Passing 2 
 `bAchievGettingCold` (`:566` via `SetData(2, 1)` at `:1281`), which the Rare Cache does not care
 about.
 
+**A crowd or solo leg must travel at least `_SHUTTLE_HALF_LEG`** (`goesSomewhere` in
+`DeriveHodirShuttleLeg`). At the room's edge the collision check pulls every probe on the wall side back
+onto the bot's own spot, which is clear of every hazard, so it won the ring and `MoveTo` refused it as
+`there`/`dup`: on 2026-09-23 two casters stood ~12 s at the east edge while Biting Cold went 4 → 7, and
+died to their own tick. Legs come out full or collapsed, nothing between (108 of 284 crowd/solo legs
+to a standing bot over five pulls sat under 0.5 yd), so half a leg is a clean floor. The tank, shelter
+and Starlight branches take the farther of two fixed ends and cannot collapse.
+
 **Inside a landed shelter the shed keeps running through the freeze cast**, shuttling
 `_SHELTER_SHED_RADIUS` 3 across it, inside the 6 yd park so the run never fires on it;
 `HodirGuardMultiplier` lets it through only there (`IsHodirInLandedShelter`). Standing out the 9 s cast
@@ -478,6 +486,21 @@ delivered 43 and 55 Storm Power, **5.4-5.5 per cloud against a hard 6**, because
 spends a charge (`spell_hodir_storm_power_aura::OnApply`). Only the split is arguably wrong: melee took
 31 of 55.
 
+Traced 2026-09-23 on the buff-walk build, 24-man with one bot tank (Hodir's hp scales with the roster:
+38.57M, so the cache wants 214.3k). **The 16:08 pull ran 215.4k over 0-2:39 with no deaths** until a
+wipe command killed the raid at 2:39.5 with him at 10.9%; its own rates put the kill at 2:59-3:01.
+Against the 22:49 pull: dps with a fire 225k → **253k**, without one 142k → 145k, the fire back
+14.9-16.2 s after a freeze and alive 66% of the pull, ranged / healers in Starlight 3.7 / 2.9% →
+**20.0 / 29.1%**, bots on ice over the first three waves 387 → 309 s. The 16:03 pull lost two casters
+to the collapsed shed leg above, took 14-16 s on the mage blocks because `hodir raid position action`
+walked the breakers 41 times in the wave (14 in 16:08), and the raid left at 2:07.
+
+**A mage's fire lands ~9 s after its block breaks, and only the block time is a lever.**
+`npc_ulduar_hodir_mage` polls its release every 1 s, then schedules Toasty Fire 6 s out behind its
+Fireball and Melt Ice casts (`boss_hodir.cpp:1078-1125`). With the first mage free at 5.1 s the fire
+came 13.8-15.0 s into the wave. The opener has the same shape: mage blocks down at 8.8 / 9.7 s, first
+fire at 18.4 s, 73k dps until then.
+
 **Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
 `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
 3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did the same 192 times at 780 ms, which
@@ -491,9 +514,10 @@ under one edit at a time, and the three-latch pull is the one that cannot say wh
 the melee pack inside the held fire and what share of it was on him at all, the melee gap to him
 against the 8 yd it takes to swing, the Singed ramp and the time at none with a fire burning, how
 **boss dps with a fire burning against with none**, whether a legal buff stand existed at all against
-whether it was inside each walk budget, Biting Cold by stack, the bot-seconds a block wave spent on ice
-after the last mage was free, post-freeze shelter moves, stalled walks, and **the roles each mover
-walked** — the one line that names a gate that stopped gating.
+whether it was inside each walk budget, Biting Cold by stack, time stood still at the shed's arm point
+out of a fire, the bot-seconds a block wave spent on ice after the last mage was free, post-freeze
+shelter moves, stalled walks, shed legs sent onto the bot's own spot (refused, so the stall count
+cannot see them), and **the roles each mover walked** — the one line that names a gate that stopped gating.
 Traces older than `hodir.hold` fall back to `hodir.centre`.
 
 Each cause below is separate, and all of them are still easy to reintroduce.

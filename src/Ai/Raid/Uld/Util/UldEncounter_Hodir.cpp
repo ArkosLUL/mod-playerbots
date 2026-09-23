@@ -907,10 +907,16 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
     Position preference;
     Position const* preferNear = GetHodirDodgePreference(botAI, bot, preference) ? &preference : nullptr;
 
+    // At the room's edge the collision check pulls every probe on that side back onto the bot's own
+    // spot. That spot is clear of everything, so it can win, MoveTo refuses it as already there and
+    // the bot stands still while the stacks climb.
+    auto const goesSomewhere = [bot](float x, float y)
+    { return bot->GetExactDist2d(x, y) >= ULDUAR_HODIR_SHUTTLE_HALF_LEG; };
+
     Position leg = FindNearestPositionClearOfHazards(
         bot, sweepFor(ULDUAR_HODIR_DECLUMP_RADIUS, ULDUAR_HODIR_ICE_SHARDS_CLEAR, ULDUAR_HODIR_BIG_SHARDS_CLEAR),
         ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG, static_cast<float>(M_PI) / 8.0f,
-        preferNear);
+        preferNear, goesSomewhere);
 
     // Nothing clear with margin. The clears carry 2 yd over the radius that actually kills and the
     // declump only stops two bots sharing one icicle, so both are worth giving up before standing
@@ -921,7 +927,7 @@ static bool DeriveHodirShuttleLeg(PlayerbotAI* botAI, Player* bot, Position& out
             sweepFor(ULDUAR_HODIR_SHUTTLE_HALF_LEG, ULDUAR_HODIR_ICE_SHARDS_RADIUS + 0.5f,
                      ULDUAR_HODIR_BIG_SHARDS_RADIUS + 0.5f),
             2.0f * ULDUAR_HODIR_DODGE_LEASH, 2.0f * ULDUAR_HODIR_SHUTTLE_HALF_LEG,
-            static_cast<float>(M_PI) / 8.0f, preferNear);
+            static_cast<float>(M_PI) / 8.0f, preferNear, goesSomewhere);
 
     if (!leg.GetPositionX() && !leg.GetPositionY())
         return false;

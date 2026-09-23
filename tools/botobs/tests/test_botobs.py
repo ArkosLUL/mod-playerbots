@@ -918,6 +918,26 @@ class HodirReader(unittest.TestCase):
         superseded = [(0, 10.0, 0.0, hodir.DODGE), (900, 4.0, 0.0, "hodir raid position action")]
         self.assertEqual(hodir.stalled_walks(superseded, stopped), {})
 
+    def test_still_at_the_arm_point_counts_only_standing_out_of_a_fire(self):
+        changes = [(0, 4)]
+        standing = [(0, 0), (1000, 0), (2000, 1), (3000, 0), (4000, 0)]
+        self.assertEqual(hodir.still_armed_ms(standing, changes, [], [], 0, 4000), 3000)
+        self.assertEqual(hodir.still_armed_ms(standing, changes, [(0, 1000)], [], 0, 4000), 2000)
+
+    def test_starlight_moves_the_arm_point_up_one(self):
+        samples = [(0, 0), (1000, 0)]
+        self.assertEqual(hodir.still_armed_ms(samples, [(0, 4)], [], [(0, 1000)], 0, 1000), 0)
+        self.assertEqual(hodir.still_armed_ms(samples, [(0, 5)], [], [(0, 1000)], 0, 1000), 1000)
+
+    def test_still_at_the_arm_point_drops_a_step_longer_than_the_cap(self):
+        self.assertEqual(hodir.still_armed_ms([(0, 0), (5000, 0)], [(0, 6)], [], [], 0, 9000), 0)
+
+    def test_a_shed_leg_onto_a_standing_bot_goes_nowhere(self):
+        standing = [(0, 10.0, 10.0, 0)]
+        walking = [(0, 10.0, 10.0, 1)]
+        self.assertEqual(hodir.own_spot_legs([(100, 10.1, 10.0), (200, 16.0, 10.0)], standing), 1)
+        self.assertEqual(hodir.own_spot_legs([(100, 10.1, 10.0)], walking), 0)
+
     def test_after_landing_counts_moves_outside_every_cast(self):
         self.assertEqual(hodir.after_landing([15000, 19500, 30000], [10000]), 2)
 

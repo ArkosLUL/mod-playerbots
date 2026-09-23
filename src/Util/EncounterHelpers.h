@@ -111,7 +111,9 @@ Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle
 // bot wants to end up - on Hodir that walked melee a yard further out of melee range per hop.
 //
 // accept vetoes spots a circle can't describe, like a cone or a range cap. Asked after the collision
-// check, so it judges the spot the bot would really stand on.
+// check, so it judges the spot the bot would really stand on. A caller that moves just to keep moving
+// needs a minimum travel here: at a wall that check can hand back the bot's own spot, and when the bot
+// isn't standing in a hazard nothing else turns it down.
 Position FindNearestPositionClearOfHazards(Player* bot, std::vector<HazardCircle> const& hazards, float maxRadius,
                                            float distanceStep = 2.0f,
                                            float angleStep = static_cast<float>(M_PI) / 8.0f,

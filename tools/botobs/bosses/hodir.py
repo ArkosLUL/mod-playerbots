@@ -5,8 +5,10 @@
     hodir.py <file> --pace     health at each 30 s, boss dps per 15 s, 0-3:00 against the cache pace
     hodir.py <file> --hold     hodir.tankhold windows: his path, boss dps, time off the point; fire gaps
     hodir.py <file> --singed   65280 on the boss by caster kind, and the stack count that implies
-    hodir.py <file> --buffs    Starlight, Toasty Fire, Storm Power, Biting Cold by role and by stack
-    hodir.py <file> --churn    walking undone, A-B-A flips, moves by action, stalls, dodge walk-backs
+    hodir.py <file> --buffs    Starlight, Toasty Fire, Storm Power, Biting Cold by role and by stack,
+                               time stood still at the shed's arm point
+    hodir.py <file> --churn    walking undone, A-B-A flips, moves by action, stalls, shed legs that
+                               went nowhere, dodge walk-backs
     hodir.py <file> --blocks   helper ice blocks per Flash Freeze, by the helper inside them
 
 What the generic views get wrong here, and what this reads instead:
@@ -98,8 +100,12 @@ OFF_POINT_YD = 5.0
 STALL_MS = 1000
 STALL_SHORT_YD = 1.5
 STALL_SETTLE_MS = 300
-# Where the shed arms outside Starlight.
+# Where the shed arms outside Starlight, and inside it.
 BITING_COLD_ARM = 4
+BITING_COLD_ARM_IN_STARLIGHT = 5
+SHED = "hodir biting cold shed"
+# A shed leg this close to where the bot already stands goes nowhere: MoveTo calls it there or a dup.
+OWN_SPOT_YD = 0.5
 
 
 # Pure pieces, kept free of the trace so the tests can hand them numbers.
@@ -374,6 +380,39 @@ def band_ms(changes: list[tuple[int, int]], low: int, high: int, floor: int) -> 
         if stacks >= floor:
             total += max(0, min(after, high) - max(mark, low))
     return total
+
+
+def still_armed_ms(samples: list[tuple[int, int]], changes: list[tuple[int, int]], fires: list[tuple[int, int]],
+                   stars: list[tuple[int, int]], low: int, high: int, step_cap: int = 2000) -> int:
+    """Time inside `[low, high)` one bot stood still at the stacks the shed arms at or more, with no
+    fire on it. `samples` are `(t, moving)`, each counting until the next. The arm point is one higher
+    in Starlight, where standing at 4 is on purpose. A step wider than `step_cap` is a hole in the trace."""
+    total = 0
+    for (when, moving), (nxt, _) in zip(samples, samples[1:]):
+        if moving or when < low or when >= high or nxt - when > step_cap:
+            continue
+        if any(start <= when < stop for start, stop in fires):
+            continue
+        arm = BITING_COLD_ARM_IN_STARLIGHT if any(start <= when < stop for start, stop in stars) else BITING_COLD_ARM
+        if stacks_before(changes, when) >= arm:
+            total += min(nxt, high) - when
+    return total
+
+
+def own_spot_legs(moves: list[tuple[int, float, float]], rows: list[tuple[int, float, float, int]],
+                  within: float = OWN_SPOT_YD) -> int:
+    """How many of one bot's shed moves, accepted or refused, point within `within` of where its
+    latest sample has it. Only samples taken standing still count: a walking bot's lags where it is."""
+    times = [row[0] for row in rows]
+    count = 0
+    for when, x, y in moves:
+        index = bisect.bisect_right(times, when) - 1
+        if index < 0:
+            continue
+        _, px, py, moving = rows[index]
+        if not moving and math.hypot(x - px, y - py) < within:
+            count += 1
+    return count
 
 
 # Trace readers.
@@ -837,6 +876,17 @@ def show_buffs(trace: Trace) -> None:
     print(f"  Biting Cold 0-{clock(stop)[:4]} {early_total:,}, {at_arm / max(1, early_total) * 100:.0f}% of it at"
           f" {BITING_COLD_ARM}+ stacks; bots spent {seconds:.0f} bot-seconds at {BITING_COLD_ARM}+")
 
+    # At the arm point a bot should be walking or in a fire. Standing there means the shed isn't
+    # getting it anywhere, which the stack totals above can't tell apart from a shed doing its job.
+    fires = aura_spans(trace, [SPELL_TOASTY_FIRE])
+    stars = aura_spans(trace, [SPELL_STARLIGHT])
+    still = {guid: still_armed_ms(rows, changes.get(guid, []), fires.get(guid, []), stars.get(guid, []), 0, stop)
+             for guid, rows in track(trace, team, ("t", "moving")).items()}
+    worst = sorted(((ms, guid) for guid, ms in still.items() if ms), reverse=True)[:3]
+    print(f"  standing still at the arm point out of a fire: {sum(still.values()) / 1000:.0f} bot-seconds"
+          + "".join(f"{'; ' if index == 0 else ', '}{trace.name(guid)} {ms / 1000:.1f}s"
+                    for index, (ms, guid) in enumerate(worst)))
+
     boss = boss_guid(trace)
     gains = []
     for cast in freeze_casts(trace, boss) if boss is not None else []:
@@ -910,6 +960,16 @@ def show_churn(trace: Trace) -> None:
         stalls.update(stalled_walks(sequence, samples.get(guid, [])))
     print(f"  stalled walks (still {STALL_MS / 1000:.0f} s+, over {STALL_SHORT_YD} yd short): "
           + (", ".join(f"{action} {count}" for action, count in stalls.most_common()) or "none"))
+
+    # Refused moves too: a leg onto the bot's own spot never gets accepted, so the stall count above
+    # can't see it.
+    legs: dict[int, list[tuple[int, float, float]]] = collections.defaultdict(list)
+    for rec in moves:
+        if rec.get("by") == SHED and rec.get("x") is not None:
+            legs[rec["g"]].append((rec["t"], rec["x"], rec["y"]))
+    nowhere = sum(own_spot_legs(sequence, samples.get(guid, [])) for guid, sequence in legs.items())
+    print(f"  shed legs sent to where the bot already stood (under {OWN_SPOT_YD} yd): {nowhere} of"
+          f" {sum(len(sequence) for sequence in legs.values())}")
 
     icicles = []
     for guid, rows in track(trace, guids_of_entry(trace, NPC_ICICLE_SMALL), ("t", "x", "y")).items():

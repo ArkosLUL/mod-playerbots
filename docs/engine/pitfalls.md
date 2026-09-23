@@ -354,6 +354,13 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   re-fires forever at `MOVEMENT_FORCED`, starving everything under it. Size the clearance a few yards
   past the trigger radius, and fall back to the tight value only where overlap leaves nothing wider.
 
+- **A sweep that moves for the sake of moving needs a travel floor.** `FindNearestPositionClearOfHazards`
+  re-checks each spot against the hazards after the collision check pulls it back, which protects a
+  dodge: the bot's own spot is inside what it flees. A bot that only has to keep moving already stands
+  clear, so at a wall the pulled-back probe *is* its own spot, it wins the ring, and `MoveTo` refuses it
+  as `there`/`dup`. Hodir's Biting Cold shed stood two casters still for ~12 s this way until their
+  stacks killed them. Pass an `accept` that rejects spots under the travel the mechanic needs.
+
 - **A warning band is a permanent dodge once the field carries enough marks.** Padding a hazard's reach
   buys reaction time per mark and costs coverage per volley: Thorim's Hammer drops 8 marks at once
   across a 200x200 box for 24 s, so at `ULDUAR_FL_TOWER_HAZARD_MARGIN` (8 yd) Flame Leviathan's vent
