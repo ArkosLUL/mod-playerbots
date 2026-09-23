@@ -13,12 +13,12 @@
 #include <iterator>
 #include <limits>
 #include <list>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "AiObjectContext.h"
+#include "RaidInstanceState.h"
 #include "CellImpl.h"
 #include "ObjectAccessor.h"
 #include "ObjectGuid.h"
@@ -73,10 +73,6 @@ namespace
 // Raid-wide answers folded once per instance, and the per-bot exposure probes paced off the same
 // state. Every number the last two attempts were read from came out of a throwaway script over raw
 // snapshot rows, which is the definition of a missing probe.
-//
-// Not thread_local: a map is updated by one thread at a time but is never pinned to one, so
-// per-thread copies would hand the same instance a fresh latch whenever the pool reassigns it.
-// References into an unordered_map survive rehashing, so the lock only has to cover the lookup.
 struct YoggSaronEncounterState
 {
     RaidObs::ObsValue<uint32> phase{"yogg.phase"};
@@ -114,14 +110,9 @@ struct YoggSaronEncounterState
     std::unordered_map<ObjectGuid, uint32> obsScanMs;
 };
 
-std::mutex yoggSaronStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, YoggSaronEncounterState> yoggSaronStates;
+RaidInstanceState<YoggSaronEncounterState> yoggSaronStates;
 
-YoggSaronEncounterState& YoggSaronStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-    return yoggSaronStates[bot->GetInstanceId()];
-}
+YoggSaronEncounterState& YoggSaronStateFor(Player* bot) { return yoggSaronStates.For(bot->GetInstanceId()); }
 
 void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase);
 
@@ -556,7 +547,6 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
 
     if (YoggSaronPhase(botAI) != 2)
     {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
         state.phase2StartMs = 0;
         state.lastWaveMs = 0;
         state.nextWaveMs = 0;
@@ -565,8 +555,6 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
 
     bool const portalsUp =
         bot->FindNearestCreature(NPC_DESCEND_INTO_MADNESS, ULDUAR_YOGG_SARON_PORTAL_SEARCH_RADIUS, true) != nullptr;
-
-    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
 
     if (!state.phase2StartMs)
     {
@@ -682,68 +670,48 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot)
     // number before and after they spawn, so without the second test the assignment stands from
     // the moment the previous wave's portals despawned - 55 s and a whole room fight earlier, off
     // positions nobody is standing in any more.
-    auto const planStale = [&state, &wave, assignmentWave]()
-    { return state.slotWave != assignmentWave || (wave.portalsUp && !state.slotPortalsUp); };
-
-    bool rebuild = false;
+    if (state.slotWave != assignmentWave || (wave.portalsUp && !state.slotPortalsUp))
     {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-        rebuild = planStale();
-    }
+        state.slotWave = assignmentWave;
+        state.slotPortalsUp = wave.portalsUp;
+        state.portalSlot.clear();
+        state.brainTeam.clear();
 
-    // Only a rebuild needs the team, and that's a couple of times a wave. Built outside the lock,
-    // IsTank on a human takes another mutex.
-    std::vector<Player*> team;
-    if (rebuild)
-        team = GetYoggSaronBrainTeam(botAI);
+        std::vector<bool> taken(spotCount, false);
+        for (Player* member : GetYoggSaronBrainTeam(botAI))
+        {
+            state.brainTeam.insert(member->GetGUID());
+
+            uint32 best = spotCount;
+            float bestDistance = 0.0f;
+            for (uint32 candidate = 0; candidate < spotCount; ++candidate)
+            {
+                if (taken[candidate])
+                    continue;
+
+                float const distance = member->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[candidate]);
+                if (best == spotCount || distance < bestDistance)
+                {
+                    best = candidate;
+                    bestDistance = distance;
+                }
+            }
+
+            if (best == spotCount)
+                break;
+
+            taken[best] = true;
+            state.portalSlot[member->GetGUID()] = static_cast<uint8>(best);
+        }
+    }
 
     uint8 slot = 0;
     bool assigned = false;
+    auto const assignment = state.portalSlot.find(bot->GetGUID());
+    if (assignment != state.portalSlot.end())
     {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-
-        // Still stale: only this instance's map thread writes its plan.
-        if (rebuild && planStale())
-        {
-            state.slotWave = assignmentWave;
-            state.slotPortalsUp = wave.portalsUp;
-            state.portalSlot.clear();
-            state.brainTeam.clear();
-
-            std::vector<bool> taken(spotCount, false);
-            for (Player* member : team)
-            {
-                state.brainTeam.insert(member->GetGUID());
-
-                uint32 best = spotCount;
-                float bestDistance = 0.0f;
-                for (uint32 candidate = 0; candidate < spotCount; ++candidate)
-                {
-                    if (taken[candidate])
-                        continue;
-
-                    float const distance = member->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[candidate]);
-                    if (best == spotCount || distance < bestDistance)
-                    {
-                        best = candidate;
-                        bestDistance = distance;
-                    }
-                }
-
-                if (best == spotCount)
-                    break;
-
-                taken[best] = true;
-                state.portalSlot[member->GetGUID()] = static_cast<uint8>(best);
-            }
-        }
-
-        auto const mine = state.portalSlot.find(bot->GetGUID());
-        if (mine != state.portalSlot.end())
-        {
-            slot = mine->second;
-            assigned = true;
-        }
+        slot = assignment->second;
+        assigned = true;
     }
 
     YoggSaronPortalIntent intent = YOGG_SARON_PORTAL_NOT_TEAM;
@@ -832,36 +800,31 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 
     YoggSaronHandover answer;
     bool holding = false;
+    uint32 const now = getMSTime();
+    if (open)
     {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
+        state.handoverRingMs = 0;
+        if (!state.handoverStartMs)
+            state.handoverStartMs = now;
 
-        uint32 const now = getMSTime();
-        if (open)
+        uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
+        answer.active = true;
+        answer.msToRing = elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
+    }
+    else
+    {
+        // The window and the ring are the same tick, so the moment the window closes is the moment
+        // to start the hold from.
+        if (state.handoverStartMs)
         {
+            state.handoverRingMs = now;
+            state.handoverStartMs = 0;
+        }
+
+        holding =
+            state.handoverRingMs && getMSTimeDiff(state.handoverRingMs, now) < ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS;
+        if (!holding)
             state.handoverRingMs = 0;
-            if (!state.handoverStartMs)
-                state.handoverStartMs = now;
-
-            uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
-            answer.active = true;
-            answer.msToRing =
-                elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
-        }
-        else
-        {
-            // The window and the ring are the same tick, so the moment the window closes is the moment
-            // to start the hold from.
-            if (state.handoverStartMs)
-            {
-                state.handoverRingMs = now;
-                state.handoverStartMs = 0;
-            }
-
-            holding = state.handoverRingMs &&
-                      getMSTimeDiff(state.handoverRingMs, now) < ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS;
-            if (!holding)
-                state.handoverRingMs = 0;
-        }
     }
 
     if (!answer.active && !holding)
@@ -1071,15 +1034,12 @@ struct YoggSaronWalkLatch
     uint32 lastAskedMs = 0;
 };
 
-// Per instance, per bot, per node, never evicted. Most nodes walk to a handful of fixed spots, but the
-// detour waypoint moves with the bot and piles up a new latch every yard, so each node gets its own
-// list and only detour pays for that. Not thread_local: a map is updated by one thread at a time but is
-// never pinned to one, and per-thread copies would hand the same bot a fresh latch whenever the pool
-// reassigns its map.
-std::mutex yoggSaronWalkLatchesMutex;
-std::unordered_map<uint32 /*instanceId*/,
-                   std::unordered_map<ObjectGuid, std::unordered_map<std::string, std::vector<YoggSaronWalkLatch>>>>
-    yoggSaronWalkLatches;
+// Per bot, per node, never pruned while the instance lives. Most nodes walk to a handful of fixed
+// spots, but the detour waypoint moves with the bot and piles up a new latch every yard, so each node
+// gets its own list and only detour pays for that.
+using YoggSaronWalkLatches =
+    std::unordered_map<ObjectGuid, std::unordered_map<std::string, std::vector<YoggSaronWalkLatch>>>;
+RaidInstanceState<YoggSaronWalkLatches> yoggSaronWalkLatches;
 }  // namespace
 
 bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position const& destination)
@@ -1090,45 +1050,41 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
 
     bool giveUp = false;
     char const* branch = "walking";
+    std::vector<YoggSaronWalkLatch>& latches = yoggSaronWalkLatches.For(bot->GetInstanceId())[bot->GetGUID()][node];
+
+    YoggSaronWalkLatch* latch = nullptr;
+    for (YoggSaronWalkLatch& candidate : latches)
     {
-        std::lock_guard<std::mutex> guard(yoggSaronWalkLatchesMutex);
-        std::vector<YoggSaronWalkLatch>& latches =
-            yoggSaronWalkLatches[bot->GetInstanceId()][bot->GetGUID()][node];
-
-        YoggSaronWalkLatch* latch = nullptr;
-        for (YoggSaronWalkLatch& candidate : latches)
+        if (candidate.destination.GetExactDist(destination) < 1.0f)
         {
-            if (candidate.destination.GetExactDist(destination) < 1.0f)
-            {
-                latch = &candidate;
-                break;
-            }
+            latch = &candidate;
+            break;
         }
+    }
 
-        if (!latch)
-        {
-            latches.push_back(YoggSaronWalkLatch{destination, distance, now, now});
-            latch = &latches.back();
-        }
+    if (!latch)
+    {
+        latches.push_back(YoggSaronWalkLatch{destination, distance, now, now});
+        latch = &latches.back();
+    }
 
-        // A gap in the asking starts a new attempt rather than continuing the old one. Without it a
-        // give-up outlives the walk that earned it: the node stands down, the bot ends up somewhere
-        // else entirely, and every later walk reads as "no closer than last time" forever.
-        bool const fresh = getMSTimeDiff(latch->lastAskedMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS;
-        bool const arrived = distance <= ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS;
-        latch->lastAskedMs = now;
+    // A gap in the asking starts a new attempt rather than continuing the old one. Without it a
+    // give-up outlives the walk that earned it: the node stands down, the bot ends up somewhere
+    // else entirely, and every later walk reads as "no closer than last time" forever.
+    bool const fresh = getMSTimeDiff(latch->lastAskedMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS;
+    bool const arrived = distance <= ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS;
+    latch->lastAskedMs = now;
 
-        if (fresh || arrived || distance < latch->bestDistance)
-        {
-            latch->bestDistance = distance;
-            latch->lastProgressMs = now;
-            branch = arrived ? "arrived" : "walking";
-        }
-        else if (getMSTimeDiff(latch->lastProgressMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS)
-        {
-            giveUp = true;
-            branch = "gaveup";
-        }
+    if (fresh || arrived || distance < latch->bestDistance)
+    {
+        latch->bestDistance = distance;
+        latch->lastProgressMs = now;
+        branch = arrived ? "arrived" : "walking";
+    }
+    else if (getMSTimeDiff(latch->lastProgressMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS)
+    {
+        giveUp = true;
+        branch = "gaveup";
     }
 
     if (RaidObs::Active())
@@ -1352,17 +1308,12 @@ void YoggSaronNoteGuardianDeath(Unit* guardian)
     if (!guardian)
         return;
 
-    uint32 const now = getMSTime();
-
-    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-    yoggSaronStates[guardian->GetInstanceId()].lastGuardianDeathMs = now;
+    yoggSaronStates.For(guardian->GetInstanceId()).lastGuardianDeathMs = getMSTime();
 }
 
 bool YoggSaronGuardianDiedWithin(Player* bot, uint32 ms)
 {
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
-
-    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
     return state.lastGuardianDeathMs && getMSTimeDiff(state.lastGuardianDeathMs, getMSTime()) < ms;
 }
 
@@ -1413,12 +1364,7 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
-
-    ObjectGuid heldGuid;
-    {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-        heldGuid = state.phase1Focus;
-    }
+    ObjectGuid const heldGuid = state.phase1Focus;
 
     // Guid lookup rather than the sweep, so a bot at the edge of sight range still sees the raid's pick.
     Creature* held = heldGuid ? ObjectAccessor::GetCreature(*bot, heldGuid) : nullptr;
@@ -1451,12 +1397,8 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
         return held;
 
     ObjectGuid const next = best ? best->GetGUID() : ObjectGuid::Empty;
-    bool changed = false;
-    {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-        changed = state.phase1Focus != next;
-        state.phase1Focus = next;
-    }
+    bool const changed = state.phase1Focus != next;
+    state.phase1Focus = next;
 
     if (changed && RaidObs::Active())
     {
@@ -1484,13 +1426,7 @@ Unit* YoggSaronPhase1Focus(PlayerbotAI* botAI)
 bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
-
-    ObjectGuid focusGuid;
-    {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-        focusGuid = state.phase1Focus;
-    }
+    ObjectGuid const focusGuid = YoggSaronStateFor(bot).phase1Focus;
 
     Creature* focus = focusGuid ? ObjectAccessor::GetCreature(*bot, focusGuid) : nullptr;
     if (focus && !focus->IsAlive())
@@ -1829,8 +1765,7 @@ struct YoggSaronBrainLinkPair
 };
 
 // Per instance, a handful of entries at a time - one link is up at once and each is 30 s long.
-std::mutex yoggSaronBrainLinkPairsMutex;
-std::unordered_map<uint32 /*instanceId*/, std::vector<YoggSaronBrainLinkPair>> yoggSaronBrainLinkPairs;
+RaidInstanceState<std::vector<YoggSaronBrainLinkPair>> yoggSaronBrainLinkPairs;
 }  // namespace
 
 void YoggSaronNoteBrainLinkPair(Unit* owner, Unit* partner)
@@ -1839,9 +1774,7 @@ void YoggSaronNoteBrainLinkPair(Unit* owner, Unit* partner)
         return;
 
     uint32 const now = getMSTime();
-
-    std::lock_guard<std::mutex> guard(yoggSaronBrainLinkPairsMutex);
-    std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs[owner->GetInstanceId()];
+    std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs.For(owner->GetInstanceId());
 
     for (YoggSaronBrainLinkPair& pair : pairs)
     {
@@ -1868,29 +1801,23 @@ Player* YoggSaronBrainLinkTarget(PlayerbotAI* botAI)
     // Whichever end of the pair the bot is. Only the owner carries 63802 and the partner's GUID lives
     // inside the aura script, so a HasAura test here would leave the partner standing still while the
     // owner chased it - and chasing a bot walking away at the same speed never arrives.
+    uint32 const now = getMSTime();
+    std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs.For(bot->GetInstanceId());
+
+    // Three missed ticks. The link casts on the partner once a second whether the two are apart
+    // (63803) or together (63804), so silence for that long means the aura has gone.
+    pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                               [now](YoggSaronBrainLinkPair const& pair)
+                               { return getMSTimeDiff(pair.seenMs, now) > ULDUAR_YOGG_SARON_BRAIN_LINK_PAIR_TTL_MS; }),
+                pairs.end());
+
     ObjectGuid other;
+    for (YoggSaronBrainLinkPair const& pair : pairs)
     {
-        uint32 const now = getMSTime();
-
-        std::lock_guard<std::mutex> guard(yoggSaronBrainLinkPairsMutex);
-        std::vector<YoggSaronBrainLinkPair>& pairs = yoggSaronBrainLinkPairs[bot->GetInstanceId()];
-
-        // Three missed ticks. The link casts on the partner once a second whether the two are apart
-        // (63803) or together (63804), so silence for that long means the aura has gone.
-        pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
-                                   [now](YoggSaronBrainLinkPair const& pair) {
-                                       return getMSTimeDiff(pair.seenMs, now) >
-                                              ULDUAR_YOGG_SARON_BRAIN_LINK_PAIR_TTL_MS;
-                                   }),
-                    pairs.end());
-
-        for (YoggSaronBrainLinkPair const& pair : pairs)
-        {
-            if (pair.owner == bot->GetGUID())
-                other = pair.partner;
-            else if (pair.partner == bot->GetGUID())
-                other = pair.owner;
-        }
+        if (pair.owner == bot->GetGUID())
+            other = pair.partner;
+        else if (pair.partner == bot->GetGUID())
+            other = pair.owner;
     }
 
     Player* partner = other ? ObjectAccessor::FindPlayer(other) : nullptr;
@@ -1948,8 +1875,6 @@ bool ClaimYoggSaronSqueezeRescue(PlayerbotAI* botAI, Player* victim)
         return false;
 
     YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
-
-    std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
 
     uint32 const now = getMSTime();
     uint32& claimed = state.squeezeClaims[victim->GetGUID()];
@@ -2032,24 +1957,20 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
     Player* bot = botAI->GetBot();
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
+    uint32 const now = getMSTime();
+    uint32& last = state.obsScanMs[bot->GetGUID()];
+    if (last && getMSTimeDiff(last, now) < ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS)
+        return;
+
+    last = now;
+    state.phase = phase;
+
     bool noteHazards = false;
+    if (phase &&
+        (!state.hazardNoteMs || getMSTimeDiff(state.hazardNoteMs, now) >= ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS))
     {
-        std::lock_guard<std::mutex> guard(yoggSaronStatesMutex);
-
-        uint32 const now = getMSTime();
-        uint32& last = state.obsScanMs[bot->GetGUID()];
-        if (last && getMSTimeDiff(last, now) < ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS)
-            return;
-
-        last = now;
-        state.phase = phase;
-
-        if (phase && (!state.hazardNoteMs ||
-                      getMSTimeDiff(state.hazardNoteMs, now) >= ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS))
-        {
-            state.hazardNoteMs = now;
-            noteHazards = true;
-        }
+        state.hazardNoteMs = now;
+        noteHazards = true;
     }
 
     // Per bot, not per instance: the gate closing for one bot while the fight runs is exactly what
