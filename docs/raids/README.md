@@ -116,14 +116,15 @@ It is **unusable** for Anub'rekhan, Gothik and Heigan (AI class file-local to it
 `TaskScheduler`-driven script. Fall back to the plain-`AiObject` + timer-model shape used by
 `GluthBossHelper` and `HeiganBossHelper`.
 
-For a clock every bot in the instance must agree on, use `HeiganBossHelper::PhaseStateFor`: a static
-mutex plus `unordered_map<instanceId, State>`, re-anchored on phase edges with a staleness guard.
+For a clock every bot in the instance must agree on, keep it in a
+[`RaidInstanceState`](#per-instance-state), re-anchored on phase edges with a staleness guard as
+`HeiganBossHelper::PhaseStateFor` does.
 Remember that trigger, action and multiplier each hold **separate** helper instances — anything they
 must agree on needs a file-static, GUID-keyed map defined in exactly one `.cpp`.
 
 Resolve bosses with `AI_VALUE2(Unit*, "find target", "<lowercase name>")` **only** when the bot is
 reliably on that creature's threat list; otherwise use `GetFirstAliveUnitByEntry`
-(`RaidBossHelpers.h:29`), noting it is **deprecated upstream** — see
+(`src/Util/EncounterHelpers.h`), noting it is **deprecated upstream** — see
 [../engine/pitfalls.md](../engine/pitfalls.md). A melee bot parked on Thane never resolves Zeliek.
 `SetInCombatWithZone()` in a script's `JustEngagedWith` is what makes `"find target"` work from the
 pull on some bosses.
@@ -145,7 +146,7 @@ so the "heroic comes free" reasoning does not apply. See [ulduar/README.md](uldu
 
 ## Anti-fear (`RaidAntiFear.h`)
 
-One shared component, next to `RaidBossHelpers.h`, replacing what used to be five hand-copied
+One shared component in `src/Ai/Raid/`, replacing what used to be five hand-copied
 per-boss implementations (BWL Nefarian, Kara Nightbane, TK Solarian, TK Kael'thas, Hyjal Archimonde).
 `RaidAntiFearTrigger` / `RaidAntiFearAction` / `RaidAntiFearTotemGuardMultiplier` are abstract;
 concrete subclasses supply only `FearWindowActive()`.
@@ -195,6 +196,29 @@ does not exist in this build.
 
 `SPELL_FEAR_WARD = 6346` is defined here, but still duplicated in `KaraHelpers.h`, `TKHelpers.h`,
 `SSCHelpers.h` and `HyjalHelpers.h` — deliberately left alone to keep the change contained.
+
+## Per-instance state
+
+Cross-bot state an encounter latches per instance (slots, clocks, held choices) lives in a
+`static RaidInstanceState<State>` in the boss `.cpp` (`src/Ai/Raid/RaidInstanceState.h`), never in a
+hand-rolled mutex + `unordered_map`. `For(id)` creates the entry, `Find(id)` never does, `Reset(id)`
+erases it. A has-state check, such as a reset trigger's gate, must use `Find`: `For` re-creates the
+entry a reset just erased.
+
+- **Locking:** only the lookup is locked, the reference is used unlocked. Safe because one worker
+  updates an instance map at a time and bot code runs inside that update or on the world thread, never
+  alongside it. Never keep the reference past the tick.
+- **Eviction:** `RaidInstanceStateMapScript` drops the instance from every store on `OnDestroyMap`.
+  It is the only lifetime cleanup: Ulduar's reset nodes are gated off once the boss is DONE, and a
+  saved lockout entered again after its map unloaded comes back with the same instance id. Mid-fight
+  resets (wipe, boss out of combat) stay in the boss code.
+- **Testing:** `tools/nativetest/run.sh` builds `tools/nativetest/*_test.cpp` in the build image under
+  ThreadSanitizer, without the core, so the header must stay std-only.
+
+Not migrated, on purpose: Naxx (upstream still edits `NaxxBossHelper.h`) and ICC (clears on its own
+`OnDestroyMap`). **Known gap:** BT, SSC, SWP, Hyjal, Mag, Kara, TK, ZA and RS (`RSActions_SAV.cpp`,
+`RSActions_BAL.cpp`) share unlocked `extern` maps across instances, a data race once two raids run at
+once. Move them here when touched.
 
 ## Raid cheats are on by default
 

@@ -15,7 +15,6 @@
 #include <array>
 #include <cstddef>
 #include <ctime>
-#include <unordered_map>
 #include <vector>
 
 class GameObject;
@@ -124,13 +123,8 @@ public:
 private:
     Unit* _boss;
 
-    // A map to track the last role swap *per bot* by their GUID
-    static std::unordered_map<ObjectGuid, std::time_t> _lastRoleSwapTime;
-
     // The cooldown that applies to every bot
     static const std::time_t _roleSwapCooldown = 10;
-
-    static std::unordered_map<ObjectGuid, time_t> _harpoonCooldowns;
 };
 
 // Per-bot cache for the lookups every Razorscale trigger, action and multiplier repeats each tick.

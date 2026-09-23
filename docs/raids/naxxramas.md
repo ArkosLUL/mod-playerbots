@@ -80,9 +80,9 @@ Melee are not positioned at all: they stay on their target and eat the splash.
 melee branch must still restore the chase** — the swarm stack leaves a point-move behind and no raid
 action re-issues one, so without an explicit `ChaseTo` melee stand where the stack left them.
 
-Predicting the clock was tried and reverted: re-issuing moves inside a 3s pre-warning, plus a
+Predicting the Impale clock was tried and reverted: re-issuing moves inside a 3s pre-warning, plus a
 `FleePosition` de-clump nudge, left bots walking instead of casting and cost more DPS than the splash
-avoided. `AnubrekhanBossHelper` no longer keeps the clock.
+avoided. `AnubrekhanBossHelper` keeps only the Locust Swarm clock.
 
 Locust Swarm inverts the spread — it is what puts people in the aura — so for the window non-tanks
 drop their slots and **stack on the room centre**, on a 5 yd de-clump ring. Boss-anchored stacking

@@ -32,7 +32,7 @@ bool VezaxResetEncounterStateTrigger::IsActive()
     if (vezax && vezax->IsInCombat())
         return false;
 
-    return vezaxEncounterStates.find(bot->GetInstanceId()) != vezaxEncounterStates.end();
+    return VezaxHasEncounterState(bot);
 }
 
 bool VezaxMarkOfTheFacelessTrigger::IsActive()

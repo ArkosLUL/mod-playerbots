@@ -159,14 +159,14 @@ twenty-five of them agree anyway:
 - **Derive, don't communicate.** A roster sorted by guid is identical on every bot. So is "rank by
   energy descending, guid ascending" — and that one **self-rotates**, because acting costs energy and
   drops the actor to the back of its own queue.
-- **Latch per instance, not per bot**: `std::unordered_map<uint32 /*instanceId*/, T>` behind a
-  `std::mutex`. Use it for phase, creature lookups, layout choices and any held heading. **Never
+- **Latch per instance, not per bot**: a `RaidInstanceState<T>`
+  ([../raids/README.md](../raids/README.md#per-instance-state)). Use it for phase, creature lookups,
+  layout choices and any held heading. **Never
   `thread_local`** — `MapUpdater::schedule_update` pushes maps onto a shared queue with no thread
   affinity, so above `MapUpdate.Threads` 1 (**6 here**, set by `AC_MAP_UPDATE_THREADS` over the
   conf's 1) the pool hands the same instance to a different worker and each worker gets its own
   empty latch. The signature is one note per bot **per thread that ever ticked the pull** — six
-  identical rows, which reads as a bot re-deciding several times a second. References into an
-  `unordered_map` survive rehashing, so the lock only has to cover the lookup. A time-bounded
+  identical rows, which reads as a bot re-deciding several times a second. A time-bounded
   **cache** of live world state is exempt: a rebuild on another thread recomputes the same answer.
   Only a **latch** is corrupted by being duplicated.
 - **Read the world, not your bookkeeping.** "Has someone already done this?" is answered by the aura

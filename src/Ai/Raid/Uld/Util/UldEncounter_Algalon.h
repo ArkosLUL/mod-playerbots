@@ -12,7 +12,6 @@
 #include "RaidObs.h"
 #include "UldData.h"
 
-#include <unordered_map>
 #include <vector>
 
 class Player;
@@ -148,8 +147,6 @@ struct AlgalonEncounterState
     uint32 lastTickMs = 0;
 };
 
-extern std::unordered_map<uint32 /*instanceId*/, AlgalonEncounterState> algalonEncounterStates;
-
 // By entry, never "find target": that value walks only the bot's own threat list, so healers and
 // anyone off Algalon's threat list would fail to resolve him and silently lose every reaction the
 // encounter has - Big Bang included. It also has to see him through the intro, while he is still
@@ -230,5 +227,6 @@ bool TryGetAlgalonSlot(Player* bot, Position& position);
 // Drop this instance's state once Algalon is gone, or the next pull inherits a stale Big Bang clock
 // and bots walk to slots nobody is standing in.
 void ResetAlgalonEncounterState(Player* bot, bool clearInstance);
+bool AlgalonHasEncounterState(Player* bot);
 
 #endif

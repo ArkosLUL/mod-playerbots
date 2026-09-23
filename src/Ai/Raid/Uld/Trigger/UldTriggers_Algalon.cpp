@@ -29,7 +29,7 @@ bool AlgalonResetEncounterStateTrigger::IsActive()
     if (bot->GetMapId() != ULDUAR_MAP_ID || AlgalonEncounterActive(botAI))
         return false;
 
-    return algalonEncounterStates.find(bot->GetInstanceId()) != algalonEncounterStates.end();
+    return AlgalonHasEncounterState(bot);
 }
 
 // Big Bang is 76312 on 10-man and 107249 on 25-man to everyone the spell can see, at any range.

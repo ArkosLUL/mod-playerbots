@@ -17,6 +17,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "SpellAuras.h"
 #include "Timer.h"
 #include "UldScripts.h"
@@ -32,10 +33,21 @@
 
 using namespace EncounterHelpers;
 
-// Prevent harpoon spam
-std::unordered_map<ObjectGuid, time_t> RazorscaleBossHelper::_harpoonCooldowns;
-// Prevent role assignment spam
-std::unordered_map<ObjectGuid, std::time_t> RazorscaleBossHelper::_lastRoleSwapTime;
+namespace
+{
+
+struct RazorscaleInstanceState
+{
+    // Prevent harpoon spam
+    std::unordered_map<ObjectGuid, std::time_t> harpoonCooldowns;
+    // Prevent role assignment spam, per bot
+    std::unordered_map<ObjectGuid, std::time_t> lastRoleSwapTime;
+};
+
+RaidInstanceState<RazorscaleInstanceState> razorscaleStates;
+
+}  // namespace
+
 const std::time_t RazorscaleBossHelper::_roleSwapCooldown;
 
 bool RazorscaleBossHelper::UpdateBossAI()
@@ -160,8 +172,9 @@ bool RazorscaleBossHelper::IsHarpoonReady(GameObject* harpoonGO)
     if (harpoonGO->HasGameObjectFlag(GO_FLAG_NOT_SELECTABLE))
         return false;
 
-    auto it = _harpoonCooldowns.find(harpoonGO->GetGUID());
-    if (it != _harpoonCooldowns.end())
+    auto const& harpoonCooldowns = razorscaleStates.For(harpoonGO->GetInstanceId()).harpoonCooldowns;
+    auto it = harpoonCooldowns.find(harpoonGO->GetGUID());
+    if (it != harpoonCooldowns.end())
     {
         time_t currentTime = std::time(nullptr);
         time_t elapsedTime = currentTime - it->second;
@@ -178,7 +191,7 @@ void RazorscaleBossHelper::SetHarpoonOnCooldown(GameObject* harpoonGO)
         return;
 
     time_t currentTime = std::time(nullptr);
-    _harpoonCooldowns[harpoonGO->GetGUID()] = currentTime;
+    razorscaleStates.For(harpoonGO->GetInstanceId()).harpoonCooldowns[harpoonGO->GetGUID()] = currentTime;
 }
 
 GameObject* RazorscaleBossHelper::FindNearestHarpoon(float x, float y, float z) const
@@ -247,11 +260,12 @@ bool RazorscaleBossHelper::CanSwapRoles() const
         return false;
 
     // If no entry exists yet for this bot, initialize it to 0
-    auto it = _lastRoleSwapTime.find(botGuid);
-    if (it == _lastRoleSwapTime.end())
+    auto& lastRoleSwapTime = razorscaleStates.For(bot->GetInstanceId()).lastRoleSwapTime;
+    auto it = lastRoleSwapTime.find(botGuid);
+    if (it == lastRoleSwapTime.end())
     {
-        _lastRoleSwapTime[botGuid] = 0;
-        it = _lastRoleSwapTime.find(botGuid);
+        lastRoleSwapTime[botGuid] = 0;
+        it = lastRoleSwapTime.find(botGuid);
     }
 
     // Compare the current time against the stored time
@@ -324,7 +338,7 @@ void RazorscaleBossHelper::AssignRolesBasedOnHealth()
         return;
 
     // Set current time in the cooldown map for this bot to start cooldown
-    _lastRoleSwapTime[botGuid] = std::time(nullptr);
+    razorscaleStates.For(bot->GetInstanceId()).lastRoleSwapTime[botGuid] = std::time(nullptr);
 }
 
 namespace

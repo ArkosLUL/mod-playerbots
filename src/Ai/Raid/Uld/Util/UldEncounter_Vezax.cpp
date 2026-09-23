@@ -13,6 +13,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "Spell.h"
 #include "SpellAuras.h"
 #include "UldScripts.h"
@@ -29,7 +30,7 @@ using namespace EncounterHelpers;
 // Vezax' own spawn point, and the point the Saronite Vapors charge to when they merge.
 const Position ULDUAR_VEZAX_ANCHOR = Position(1852.78f, 81.3856f, 342.461f);
 
-std::unordered_map<uint32, VezaxEncounterState> vezaxEncounterStates;
+static RaidInstanceState<VezaxEncounterState> vezaxEncounterStates;
 
 namespace
 {
@@ -127,13 +128,12 @@ uint8 VezaxManaPct(Player* bot)
 // assignment rather than where the bot currently stands, so a group keeps its shape.
 bool TryGetVezaxDodgeSlot(Player* bot, uint8& slotIndex)
 {
-    auto const stateItr = bot ? vezaxEncounterStates.find(bot->GetInstanceId())
-                              : vezaxEncounterStates.end();
-    if (stateItr == vezaxEncounterStates.end())
+    VezaxEncounterState const* state = bot ? vezaxEncounterStates.Find(bot->GetInstanceId()) : nullptr;
+    if (!state)
         return false;
 
-    auto const assignmentItr = stateItr->second.slotAssignments.find(bot->GetGUID());
-    if (assignmentItr == stateItr->second.slotAssignments.end())
+    auto const assignmentItr = state->slotAssignments.find(bot->GetGUID());
+    if (assignmentItr == state->slotAssignments.end())
         return false;
 
     slotIndex = assignmentItr->second;
@@ -284,7 +284,7 @@ void EnsureVezaxSlotAssignments(Player* bot)
     if (!group || bot->GetMapId() != ULDUAR_MAP_ID)
         return;
 
-    VezaxEncounterState& state = vezaxEncounterStates[bot->GetInstanceId()];
+    VezaxEncounterState& state = vezaxEncounterStates.For(bot->GetInstanceId());
 
     // Drop assignments whose holder left the instance or changed role.
     std::vector<ObjectGuid> stale;
@@ -358,13 +358,12 @@ bool TryGetVezaxSlot(Player* bot, Position& position)
 
     EnsureVezaxSlotAssignments(bot);
 
-    auto const stateItr = vezaxEncounterStates.find(bot->GetInstanceId());
-    if (stateItr == vezaxEncounterStates.end())
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(bot->GetInstanceId());
+    if (!state)
         return false;
 
-    VezaxEncounterState& state = stateItr->second;
-    auto const assignmentItr = state.slotAssignments.find(bot->GetGUID());
-    if (assignmentItr == state.slotAssignments.end())
+    auto const assignmentItr = state->slotAssignments.find(bot->GetGUID());
+    if (assignmentItr == state->slotAssignments.end())
     {
         // The camp is full - 21 or more healers and ranged between them. From here the bot holds no
         // position at all and falls through to the melee de-clump, which walks it onto the boss.
@@ -571,15 +570,20 @@ void ResetVezaxEncounterState(Player* bot, bool clearInstance)
 
     if (clearInstance)
     {
-        vezaxEncounterStates.erase(bot->GetInstanceId());
+        vezaxEncounterStates.Reset(bot->GetInstanceId());
         return;
     }
 
-    auto const stateItr = vezaxEncounterStates.find(bot->GetInstanceId());
-    if (stateItr == vezaxEncounterStates.end())
+    VezaxEncounterState* state = vezaxEncounterStates.Find(bot->GetInstanceId());
+    if (!state)
         return;
 
-    stateItr->second.slotAssignments.erase(bot->GetGUID());
+    state->slotAssignments.erase(bot->GetGUID());
+}
+
+bool VezaxHasEncounterState(Player* bot)
+{
+    return bot && vezaxEncounterStates.Find(bot->GetInstanceId());
 }
 
 char const* VezaxReadyInterrupt(Player* bot, Unit* target)

@@ -13,7 +13,6 @@
 
 #include "ObjectGuid.h"
 
-#include <unordered_map>
 #include <vector>
 
 class Player;
@@ -193,8 +192,6 @@ struct VezaxEncounterState
     RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
 };
 
-extern std::unordered_map<uint32 /*instanceId*/, VezaxEncounterState> vezaxEncounterStates;
-
 // From the instance script rather than a target sweep. "find target" walks only the bot's own threat
 // list, so a bot that switched to the Animus or a vapor would stop seeing the boss; the entry sweep
 // that replaced it recalculates a 100 yd search on every call, and the movement multiplier asks once
@@ -255,6 +252,7 @@ bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);
 // Drop this instance's assignments once Vezax is gone, or they survive into the next pull and bots
 // walk to slots nobody is standing in.
 void ResetVezaxEncounterState(Player* bot, bool clearInstance);
+bool VezaxHasEncounterState(Player* bot);
 
 // The interrupt this bot could land on target right now, or nullptr. Stuns are deliberately absent:
 // Vezax is a boss and immune to them, so bash and hammer of justice would never connect.

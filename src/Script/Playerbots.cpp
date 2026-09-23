@@ -558,6 +558,7 @@ void AddSC_HyjalSummitBotScripts();
 void AddSC_SunwellPlateauBotScripts();
 void AddSC_UlduarBotScripts();
 void AddSC_IcecrownBotScripts();
+void AddSC_RaidInstanceStateScripts();
 void AddSC_RubySanctumBotScripts();
 void AddSC_randombot_level_mgr();
 void AddSC_playerbots_raid_obs();
@@ -582,6 +583,7 @@ void AddPlayerbotsScripts()
     AddSC_SunwellPlateauBotScripts();
     AddSC_UlduarBotScripts();
     AddSC_IcecrownBotScripts();
+    AddSC_RaidInstanceStateScripts();
     AddSC_RubySanctumBotScripts();
     AddSC_randombot_level_mgr();
     AddSC_playerbots_raid_obs();

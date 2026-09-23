@@ -11,6 +11,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "EncounterHelpers.h"
 #include "Timer.h"
 #include "Unit.h"
@@ -26,7 +27,7 @@ using namespace EncounterHelpers;
 const Position ULDUAR_ALGALON_ROOM_CENTER = Position(1632.668f, -302.7656f, 417.3211f);
 const Position ULDUAR_ALGALON_TANK_SLOT = Position(1632.7f, -321.5f, 417.321f);
 
-std::unordered_map<uint32, AlgalonEncounterState> algalonEncounterStates;
+static RaidInstanceState<AlgalonEncounterState> algalonEncounterStates;
 
 namespace
 {
@@ -171,7 +172,7 @@ void AlgalonTickEncounterState(PlayerbotAI* botAI)
     if (!bot || bot->GetMapId() != ULDUAR_MAP_ID)
         return;
 
-    AlgalonEncounterState& state = algalonEncounterStates[bot->GetInstanceId()];
+    AlgalonEncounterState& state = algalonEncounterStates.For(bot->GetInstanceId());
     if (state.lastTickMs && GetMSTimeDiffToNow(state.lastTickMs) < ULDUAR_ALGALON_STATE_TICK_MS)
         return;
 
@@ -205,11 +206,11 @@ bool AlgalonBigBangWithin(PlayerbotAI* botAI, uint32 seconds)
     if (!bot)
         return false;
 
-    auto const stateItr = algalonEncounterStates.find(bot->GetInstanceId());
-    if (stateItr == algalonEncounterStates.end() || !stateItr->second.firstBigBangMs)
+    AlgalonEncounterState const* state = algalonEncounterStates.Find(bot->GetInstanceId());
+    if (!state || !state->firstBigBangMs)
         return false;
 
-    uint32 const sinceLast = GetMSTimeDiffToNow(stateItr->second.lastBigBangMs);
+    uint32 const sinceLast = GetMSTimeDiffToNow(state->lastBigBangMs);
     uint32 const intoCycle = sinceLast % ULDUAR_ALGALON_BIG_BANG_INTERVAL_MS;
     return ULDUAR_ALGALON_BIG_BANG_INTERVAL_MS - intoCycle <= seconds * IN_MILLISECONDS;
 }
@@ -233,7 +234,7 @@ Unit* GetAlgalonShelter(Player* bot)
     if (!botAI)
         return nullptr;
 
-    AlgalonEncounterState& state = algalonEncounterStates[bot->GetInstanceId()];
+    AlgalonEncounterState& state = algalonEncounterStates.For(bot->GetInstanceId());
     std::vector<Unit*> const shelters = CollectAlgalonShelters(botAI);
 
     // Hold the one already chosen. Holes land wherever a star died, so a fresh one appearing closer
@@ -294,7 +295,7 @@ Player* GetAlgalonBigBangSoaker(PlayerbotAI* botAI)
     if (!group)
         return nullptr;
 
-    AlgalonEncounterState& state = algalonEncounterStates[bot->GetInstanceId()];
+    AlgalonEncounterState& state = algalonEncounterStates.For(bot->GetInstanceId());
 
     uint8 tier = 0xFF;
     Player* latched = FindGroupMember(group, state.bigBangSoaker);
@@ -380,7 +381,7 @@ Unit* GetAlgalonKiteHole(Player* bot, Unit* constellation)
     if (shelters.size() <= 1 && AlgalonBigBangWithin(botAI, ULDUAR_ALGALON_SHELTER_WINDOW_SECONDS))
         return nullptr;
 
-    AlgalonEncounterState& state = algalonEncounterStates[bot->GetInstanceId()];
+    AlgalonEncounterState& state = algalonEncounterStates.For(bot->GetInstanceId());
 
     auto const latched = state.kiteHoleAssignments.find(bot->GetGUID());
     if (latched != state.kiteHoleAssignments.end())
@@ -447,9 +448,9 @@ bool AlgalonStarKillWindowOpen(PlayerbotAI* botAI)
     if (!bot)
         return false;
 
-    auto const stateItr = algalonEncounterStates.find(bot->GetInstanceId());
-    if (stateItr != algalonEncounterStates.end() && stateItr->second.lastStarDeathMs &&
-        GetMSTimeDiffToNow(stateItr->second.lastStarDeathMs) < ULDUAR_ALGALON_STAR_PACING_GAP_MS)
+    AlgalonEncounterState const* state = algalonEncounterStates.Find(bot->GetInstanceId());
+    if (state && state->lastStarDeathMs &&
+        GetMSTimeDiffToNow(state->lastStarDeathMs) < ULDUAR_ALGALON_STAR_PACING_GAP_MS)
     {
         return false;
     }
@@ -544,7 +545,7 @@ void EnsureAlgalonSlotAssignments(Player* bot)
     if (!group || bot->GetMapId() != ULDUAR_MAP_ID)
         return;
 
-    AlgalonEncounterState& state = algalonEncounterStates[bot->GetInstanceId()];
+    AlgalonEncounterState& state = algalonEncounterStates.For(bot->GetInstanceId());
 
     std::vector<ObjectGuid> stale;
     for (auto const& assignment : state.slotAssignments)
@@ -612,12 +613,12 @@ bool TryGetAlgalonSlot(Player* bot, Position& position)
 
         EnsureAlgalonSlotAssignments(bot);
 
-        auto const stateItr = algalonEncounterStates.find(bot->GetInstanceId());
-        if (stateItr == algalonEncounterStates.end())
+        AlgalonEncounterState const* state = algalonEncounterStates.Find(bot->GetInstanceId());
+        if (!state)
             return false;
 
-        auto const assignmentItr = stateItr->second.slotAssignments.find(bot->GetGUID());
-        if (assignmentItr == stateItr->second.slotAssignments.end())
+        auto const assignmentItr = state->slotAssignments.find(bot->GetGUID());
+        if (assignmentItr == state->slotAssignments.end())
             return false;
 
         if (!TryGetAlgalonSlotPosition(assignmentItr->second, slot))
@@ -655,15 +656,20 @@ void ResetAlgalonEncounterState(Player* bot, bool clearInstance)
 
     if (clearInstance)
     {
-        algalonEncounterStates.erase(bot->GetInstanceId());
+        algalonEncounterStates.Reset(bot->GetInstanceId());
         return;
     }
 
-    auto const stateItr = algalonEncounterStates.find(bot->GetInstanceId());
-    if (stateItr == algalonEncounterStates.end())
+    AlgalonEncounterState* state = algalonEncounterStates.Find(bot->GetInstanceId());
+    if (!state)
         return;
 
-    stateItr->second.slotAssignments.erase(bot->GetGUID());
-    stateItr->second.shelterAssignments.erase(bot->GetGUID());
-    stateItr->second.kiteHoleAssignments.erase(bot->GetGUID());
+    state->slotAssignments.erase(bot->GetGUID());
+    state->shelterAssignments.erase(bot->GetGUID());
+    state->kiteHoleAssignments.erase(bot->GetGUID());
+}
+
+bool AlgalonHasEncounterState(Player* bot)
+{
+    return bot && algalonEncounterStates.Find(bot->GetInstanceId());
 }
