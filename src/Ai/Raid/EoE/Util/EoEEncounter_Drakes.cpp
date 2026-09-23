@@ -8,13 +8,13 @@
 #include "CreatureAI.h"
 #include "EoEEncounter_Malygos.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "SpellAuraEffects.h"
 #include "Timer.h"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <mutex>
 #include <unordered_map>
 
 namespace
@@ -41,7 +41,7 @@ struct DrakeFixate
     uint32 seen = 0;
 };
 
-// One state per instance, never evicted. Fixates are keyed on the bot rather than its drake, because
+// One state per instance, kept until the instance unloads. Fixates are keyed on the bot rather than its drake, because
 // bot guids are stable while a Skytalon is summoned fresh every pull and the map would grow forever.
 struct DrakeInstanceState
 {
@@ -50,20 +50,9 @@ struct DrakeInstanceState
     std::unordered_map<ObjectGuid, DrakeFixate> fixates;
 };
 
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
-// pool reassigns it: the stack heading jumps back to where it started and a fixate reads as fresh on
-// every thread that has not seen it yet. The healer roster is only a 2 s cache and would survive the
-// split, but it lives here with the other two. References into an unordered_map survive rehashing, so
-// the lock only has to cover the lookup.
-std::mutex drakeStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, DrakeInstanceState> drakeStates;
+RaidInstanceState<DrakeInstanceState> drakeStates;
 
-DrakeInstanceState& DrakeStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(drakeStatesMutex);
-    return drakeStates[bot->GetInstanceId()];
-}
+DrakeInstanceState& DrakeStateFor(Player* bot) { return drakeStates.For(bot->GetInstanceId()); }
 
 // Both come back -1 when there is no power cost worth checking, which callers read as yes.
 bool GetDrakeSpellCost(Unit* drake, uint32 spellId, int32& cost, int32& available)

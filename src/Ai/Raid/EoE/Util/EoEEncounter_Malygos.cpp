@@ -12,6 +12,7 @@
 #include "Map.h"
 #include "ObjectAccessor.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "SpellAuraEffects.h"
 #include "Timer.h"
 #include "Vehicle.h"
@@ -20,7 +21,6 @@
 #include <cmath>
 #include <limits>
 #include <list>
-#include <mutex>
 #include <unordered_map>
 
 namespace
@@ -67,20 +67,9 @@ struct MalygosInstanceState
     std::unordered_map<uint32 /*entry*/, CreatureCacheEntry> creatures;
 };
 
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
-// pool reassigns it. Three of these four are time-bounded caches a rebuild recomputes the same way, so
-// they would have survived the split; layout would not, because its latched flag is a one-way switch
-// and each thread had its own to throw. References into an unordered_map survive rehashing, so the lock
-// only has to cover the lookup.
-std::mutex malygosStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, MalygosInstanceState> malygosStates;
+RaidInstanceState<MalygosInstanceState> malygosStates;
 
-MalygosInstanceState& MalygosStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(malygosStatesMutex);
-    return malygosStates[bot->GetInstanceId()];
-}
+MalygosInstanceState& MalygosStateFor(Player* bot) { return malygosStates.For(bot->GetInstanceId()); }
 
 // AllCreaturesOfEntryInRange measures from the object it was constructed with, so a sweep anchored
 // on a fixed point needs its own check.

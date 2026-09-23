@@ -350,9 +350,8 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   the most clearance, and boss-ward was often that direction, which put the flight inside Arcane
   Pulse and killed it faster than the field would have.
   Two details matter as much as the ring itself. **The whole phase is one slow lap, always forward**
-  — the heading is latched per instance (in `DrakeInstanceState`, behind `drakeStatesMutex`, keyed
-  on the instance like the phase and creature caches) and the sweep starts from wherever the flight
-  already is,
+  — the heading is latched per instance (in `DrakeInstanceState`, a `RaidInstanceState` like the
+  phase and creature caches) and the sweep starts from wherever the flight already is,
   never from `DRAKE_STACK_ANGLE`. Both halves of that are load-bearing. Sweeping backwards picks the
   ground the flight has just crossed, where the field it dodged is still live. And re-sweeping from
   a fixed base is the subtler one: an expiring field frees a heading *behind* the flight, the sweep
@@ -592,9 +591,8 @@ list.
   constructed with, so visiting cells around a different point does not move its range test, and a
   radius of 0 filters everything out rather than disabling it. **Guids are cached, not pointers** — a
   creature that despawns inside the window drops out of the answer instead of coming back as a
-  dangling read. The whole state struct sits behind `malygosStatesMutex`: a map is updated by one
-  thread at a time but is **never pinned to one**, so `thread_local` would hand each worker its own
-  copy (see [../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md)).
+  dangling read. The whole state struct is a `RaidInstanceState`, never `thread_local` (see
+  [../engine/raid-mechanics-lessons.md](../engine/raid-mechanics-lessons.md)).
 - **A killed Power Spark stays `IsAlive()` for 60 s.** `npc_power_spark::DamageTaken` zeroes the
   damage, sets `UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE | UNIT_FLAG_DISABLE_MOVE` and
   despawns on a timer, so for a full minute after every spark `PowerSparkTrigger` kept firing, both
