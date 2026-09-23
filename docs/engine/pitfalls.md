@@ -496,6 +496,13 @@ Related traps:
   **24 s late on every pull**, and she only ever picked combat up as a side effect of her own casting.
   Finding the call says it runs, never that it reached the unit you are reading: follow it down to the
   guard that can turn it into a no-op.
+- **An area aura never lands on its source.** An enemy area aura (effect 129,
+  `SPELL_EFFECT_APPLY_AREA_AURA_ENEMY`) skips its owner (`UnitAura::FillTargetMap`), a persistent one
+  its caster (`DynObjAura::FillTargetMap`; `Unit::_IsValidAttackTarget` refuses self), so `HasAura`
+  there never fires: read it on a target. No Frost Sphere ever carries its own Permafrost.
+- **A debuff can sit below the cast.** It may be an `EffectTriggerSpell` or a `spell_linked_spell`
+  row, so keying on the cast id's aura leaves the node dead: ToC's Burning Bite/Spray carry no aura,
+  the debuff is Burning Bile 66869.
 - **A cast call's `true` is not a cast.** `PlayerbotAI::CastVehicleSpell` returns true when `CheckCast`
   refused, so anything stamped on that answer records a cast that never happened. Flame Leviathan's
   `CastVehicleSelfSpell` stamped Steam Rush's 15 s cooldown on a refusal from the Ram GCD, and a

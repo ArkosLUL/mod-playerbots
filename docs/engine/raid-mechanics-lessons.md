@@ -226,7 +226,8 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   `checkInterval == 1 ? 1 : (checkInterval < 100 ? checkInterval * 1000 : checkInterval)` — pass
   `200` for 200 ms, and **never pass 2–99**, which silently means seconds. Any trigger starting a
   multi-tick reaction the `MotionMaster` carries on with runs at 200–300 ms invisibly; triggers
-  gating positioning or vehicle steering must stay per-tick.
+  gating positioning or vehicle steering must stay per-tick. A wrapper trigger (`ToCGatedTrigger`)
+  must copy the inner one's interval: its own default of 1 promotes a throttled trigger to every tick.
 - `Engine::ProcessTriggers` `Check()`s an inactive trigger **once per node** referencing it, so a
   trigger wired to three nodes is evaluated three times while it is quiet.
 
@@ -274,5 +275,12 @@ scripted raid encounters.
   `SPELL_EFFECT_INTERRUPT_CAST`, which silences the raid's school for 10s — the damage number says
   nothing about the mechanic that matters. Read `EffectRadiusIndex` on every effect too; index 28 is
   50000 yd, i.e. raid-wide and undodgeable.
+- **A script may keep no boss state.** Without `SetBossNumber` (`GetEncounterCount()` 0: ToC, VoA)
+  boss state and its hooks say nothing; read the script's own progress `GetData` and
+  `IsEncounterInProgress`. That override can write: ToC's resets its encounter to `NOT_STARTED` when
+  no alive non-GM player is on the map, so never call it with nobody alive.
+- **`OnAfterUpdateEncounterState` fires on every `Map::UpdateEncounterState` call**, matched row or
+  not, synchronously inside `Unit::Kill` or `Spell::cast`: match credit type and entry in the handler
+  and defer heavy work to the map update.
 - **Flags beat `GetData`.** `UNIT_FLAG_PACIFIED | UNIT_FLAG_DISABLE_MOVE` on a boss is an exact,
   lag-free statement that he is now a fixed point worth anchoring geometry on.
