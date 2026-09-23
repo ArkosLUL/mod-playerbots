@@ -117,6 +117,18 @@ constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MARGIN = 1.0f;
 // VX-001's model, and a 40 degree step on a 5 yd ring is 3.5 yd of travel, which is still a move.
 constexpr float ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN = 5.0f;
 
+// Radius shifts off the orbit, nearest first, for stepping round fire at a given bearing.
+constexpr float ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS[] = {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f, -8.0f};
+
+// Spare time a bot inside the ignition cone needs to walk all the way out the trailing side before
+// the beams light: two beam ticks for the leg to start and land. Out the leading side means
+// outrunning the sweep round the whole band to its far edge, and whatever fire is sitting there.
+constexpr float ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER = 0.5f;
+
+// Bearing step when looking inside the safe sector for ground that isn't burning. Under 2 yd at the
+// ranged ring, against a 5 yd flame radius.
+constexpr float ULDUAR_MIMIRON_BARRAGE_REFUGE_PROBE = 5.0f * static_cast<float>(M_PI) / 180.0f;
+
 // A bot turns around VX-001 at (7.0 yd/s / radius) against a 10.6 deg/s sweep. Holding the raid
 // inside this radius makes the worst-case 52 degree rotation fit the 4 s Spinning Up warning and
 // still leaves 1.6x speed margin; break-even is 38 yd, where a bot can never out-turn the cone.

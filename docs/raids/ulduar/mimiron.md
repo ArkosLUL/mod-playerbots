@@ -463,7 +463,7 @@ bot sits:
 | Where the bot is | Direction | Why |
 |---|---|---|
 | More than 52° clockwise of the centreline | **clockwise** | The beams have not reached it. Running clockwise keeps it that way at zero cost; turning back walks it into a cone it is currently in front of. |
-| Inside the cone, leading side | whichever edge is **sooner** | Counter-clockwise rides the sweep out through the trailing edge at `turnRate + rate`; clockwise pushes out through the leading edge against it at `turnRate − rate`. Crossover lands near 30° off the centreline. |
+| Inside the cone, leading side | whichever edge is **sooner**, except the Spinning Up trailing exit (below) | Counter-clockwise rides the sweep out through the trailing edge at `turnRate + rate`; clockwise pushes out through the leading edge against it at `turnRate − rate`. Crossover lands near 30° off the centreline. |
 | Counter-clockwise of the centreline | **counter-clockwise** | The sweep is already carrying it clear; it is out in a fraction of a second. |
 
 **During Spinning Up neither direction gets help from the sweep.** The boss aims once and holds for
@@ -472,6 +472,16 @@ that wrong is not cosmetic: it made a bot 25° inside the ignition cone at 24 yd
 92° of travel against the 67° its four seconds actually bought — and it was still in the cone when the
 beams lit. With the rate corrected it leaves by the near edge in 1.6 s and is ahead of the sweep for
 the rest of the cast.
+
+**But the near edge is not where the walk ends.** Clockwise out of the ignition cone commits a bot to
+outrunning the sweep round the whole band, `sweep + clearance − cw` or 150-200°, to its far edge;
+counter-clockwise is `cw + clearance`, 67-97°, onto ground the beams are leaving. On 2026-09-23 (8079)
+that far edge sat in a 60° fire blob, and every bot that left counter-clockwise lived while 10 of the 11
+fire deaths had gone clockwise, the `inside cw` bots at spin-up among them. So during Spinning Up an
+`inside` bot exits counter-clockwise whenever `(cw + clearance) / turnRate` fits in `untilLive` less
+`ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER` (0.5 s, two beam ticks), and falls back to the near edge
+otherwise. `ahead` bots keep clockwise: they would cross the whole ignition cone, and a leg delayed
+there is inside it when it lights.
 
 A simulation over the real waypoint path — every combination of DB Target phase, bot bearing, the
 ranged orbit radius 14–24 yd and chassis offset out to 30 yd in eight directions — clears
@@ -544,7 +554,7 @@ positioning then, that node's destinations are never cone-screened, and the two 
 healers the next pull, until they burned; screening only the endpoint then sent `ahead cw` bots
 across 60-80° of burning floor at 22 yd to reach a clean one. A step now takes the nearest radius
 within ±8 whose destination **and** straight leg are clear, falling back to a clean endpoint and
-then to the plain step, because the cone kills outright and fire does not. The search stays inside
+then to the plain step, because the cone kills in a tick. The search stays inside
 `[14, 24]` for ranged and `[5, 9]` for melee, who give ground inward only — widening would put them
 back out of reach.
 
@@ -556,6 +566,27 @@ window closed. Bots already told `clear` or `hold` stood in one or two nodes for
 — where the barrage dodge at `ACTION_RAID + 7` takes it anyway, and screens every hop against the
 remaining sweep — and `FleeFan`'s unfiltered fallback screens the cone too, now that it is reachable
 mid-barrage.
+
+**A burning band edge is not a place to stop, and fire does kill outright.** Fire nodes inside the
+re-aimed wedge at the re-aim, against fire deaths in the next 15 s:
+
+| barrage | fire in wedge | fire deaths |
+|---|---|---|
+| 8079 #1 | 27/38 | 11 |
+| 7114 #2 | 22/38 | 8 |
+| 0476 #2 | 11/34 | 0 |
+| 7695 #1 | 4/24 | 0 |
+| 7114 #1, 0476 #1 | 1/12, 0/3 | 0 |
+
+`ahead` bots `hold` within a yard of the band edge, which in 8079 was inside that fire blob. The fire
+dodge's fan then refused every bearing (`cone9-10 fire1-2`): band behind, fire ahead, hops capped at
+12 yd. Bots stood within 3 yd of 3-5 nodes at 3.3-4.7k a tick, **12-15k/s**, and died from full in
+under 2 s. Two rules now probe the ring in 5° steps (`_REFUGE_PROBE`) over the same radius shifts,
+clean meaning clear of fire, the bomb and rockets. A walk ending on a burning edge carries on into the
+safe sector to the first clean bearing: all of the sector stays clear for the rest of the cast, since
+the far edge is fixed and the trailing side only opens. And a bot already clear but standing in fire
+walks the ring to the nearest clean bearing in the sector (`refuge`); that outranks the fire dodge,
+which gets the tick only when nothing is clean.
 
 ## Which dodges interrupt the cast, and which keep it
 
@@ -740,10 +771,15 @@ of phase 2 and the longest tank hold is **0.0 s**, against 72-91 s on the MK II 
 ACU. Multipliers only suppress, so no raid node could undo that; `BossTakesNoVictim`
 (`BurstCooldowns`) exempts such a boss beside the existing vehicle escape. The old window paid out in
 **2 of 17 pulls**: 10 never lusted, 4 leaked it at 0:18-0:20 of phase 1 and 1 at the phase 2
-handover, where a cold `possible targets no los` resolved no mech and the permissive fall-through
-opened the gate — a direct `FindNearestCreature` closes it. Two of the four pulls that did reach
-phase 4 had already spent it. Berserk at 10:00 against a 10-minute cooldown makes it one window or
-the other, and every pull sees phase 2.
+handover, where `possible targets no los`, which lags and drops unselectable units, resolved no mech
+and the permissive fall-through opened the gate. A direct `FindNearestCreature` closes that, but it
+also finds the MK II, which the core never kills: phase 1 ends with its damage zeroed,
+`UNIT_FLAG_NOT_SELECTABLE` set and the chassis parked at (2795, 2598) at 0.1% through phases 2 and 3.
+On 2026-09-23 that vetoed all 84 phase 2 lust evaluations. So the window keys on selectability:
+VX-001 selectable and off the chassis, neither other mech selectable. All three templates start
+unselectable and VX-001 clears it in `SetData(1, 2)`, so the handover stays shut. Two of the four
+pulls that did reach phase 4 had already spent it. Berserk at 10:00 against a 10-minute cooldown
+makes it one window or the other, and every pull sees phase 2.
 
 **A clean arena buys the opening of phase 2, not the phase.** Mimiron seeds every 30 s throughout, so
 the field rebuilds around wherever the raid is standing: attributing phase-2 flame damage to the most
@@ -1033,6 +1069,11 @@ and healers keep the Assault Bot, the only Magnetic Core source; a grounded unit
 29.9 s, Rapid Burst **74%** of its intake at 26.3k/s against the usual 13k/s and melee/ranged cross
 39%. 7114 wiped at 4:41.231 with 25 phase 2 deaths over 120.3 s, 8 of them to Flames in 26 s inside
 the second barrage window, which took **214k** of fire against 22k in the first.
+
+2026-09-23: 7695 wiped at 4:03.834, a plain healing race: 83.8 s of phase 2 at 30.3k/s taken against
+26.0k/s healed, bots at 20-50% finished by Rapid Burst and Heat Wave, and a barrage that killed
+nobody. 8079 wiped at 3:46.275 with 11 of its 14 phase 2 deaths to Flames in 3:08-3:12, inside its
+only barrage (473k fire, 83% of the phase's).
 
 **Open, not fixed: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the whole
 30 s handover, melee and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**,
@@ -1677,7 +1718,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
-| `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing` plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
+| `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
 | `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |

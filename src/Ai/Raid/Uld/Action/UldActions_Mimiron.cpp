@@ -482,6 +482,110 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         melee ? minRing
               : std::clamp(bot->GetExactDist2d(boss), minRing, ULDUAR_MIMIRON_SPREAD_RADIUS_MAX);
 
+    // Melee only give ground inward: their ring is already the smallest that clears the model, and
+    // widening it puts them back outside their own reach test.
+    float const shiftMin = melee ? ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN : minRing;
+    float const shiftMax = melee ? radius : ULDUAR_MIMIRON_SPREAD_RADIUS_MAX;
+
+    // The safe sector runs from sweep + clearance to 2pi - clearance clockwise of the centreline, and
+    // all of it stays clear for the rest of the cast: the far edge is fixed in world space and the
+    // trailing side only opens up as the beams move off it.
+    float const sectorWidth = std::max(twoPi - 2.0f * clearance - window.sweep, 0.0f);
+
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    auto const onOrbit = [&](float heading, float r)
+    {
+        return Position(boss->GetPositionX() + r * cos(heading), boss->GetPositionY() + r * sin(heading),
+                        boss->GetPositionZ());
+    };
+
+    // Going round VX-001 from `bearing`, direction +1 counter-clockwise and -1 clockwise, the first
+    // offset up to `span` where some radius off the ring is clear of fire, the bomb and every rocket.
+    // Negative when all of it burns.
+    auto const fireFreeOffset = [&](float bearing, float direction, float span)
+    {
+        for (float offset = 0.0f; offset <= span; offset += ULDUAR_MIMIRON_BARRAGE_REFUGE_PROBE)
+        {
+            for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
+            {
+                float const candidate = radius + shift;
+                if (candidate < shiftMin || candidate > shiftMax)
+                    continue;
+
+                Position const spot = onOrbit(bearing + direction * offset, candidate);
+                if (IsMimironSpotFireSafe(hazards, spot) && IsMimironSpotBombSafe(hazards, spot) &&
+                    IsMimironSpotRocketSafe(botAI, spot))
+                    return offset;
+            }
+        }
+
+        return -1.0f;
+    };
+
+    // Walk the ring one bounded step at a time, `remaining` radians still to go, positive
+    // counter-clockwise. Aiming a single move at the far side draws a chord that cuts through VX-001
+    // (creatures are not in the navmesh), and a chord across the apex crosses every bearing the cone
+    // covers. MOVEMENT_FORCED serialises the legs by itself: IsWaitingForLastMove refuses the next one
+    // until the current leg's lock expires.
+    auto const stepRing = [&](float remaining, char const* branch)
+    {
+        float const stepped =
+            std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
+        float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
+
+        // Radius is free here, so spend it on the fire, the walk as well as the endpoint. An orbit step
+        // at 22 yd crosses 60 to 80 degrees of floor, and a bot that has to stop and dodge a node
+        // halfway round loses the bearing the step was buying. No clean radius at all means keep the
+        // step anyway: the cone kills in a tick, and the step is headed for clean ground.
+        float stepRadius = radius;
+        bool settled = false;
+        for (float shift : ULDUAR_MIMIRON_BARRAGE_RADIUS_SHIFTS)
+        {
+            float const candidate = radius + shift;
+            if (candidate < shiftMin || candidate > shiftMax)
+                continue;
+
+            // A rocket or the bomb kills outright, so a spot in either isn't even a fallback. The step
+            // is MOVEMENT_FORCED and locks the rocket dodge out until it lands.
+            Position const spot = onOrbit(heading, candidate);
+            if (!IsMimironSpotRocketSafe(botAI, spot) || !IsMimironSpotBombSafe(hazards, spot) ||
+                !IsMimironSpotFireSafe(hazards, spot))
+                continue;
+
+            // First clean endpoint is the fallback; keep looking for one whose walk is clean too.
+            if (!settled)
+            {
+                stepRadius = candidate;
+                settled = true;
+            }
+
+            if (IsMimironWalkFireSafe(bot, hazards, spot))
+            {
+                stepRadius = candidate;
+                break;
+            }
+        }
+
+        NoteBarrageDecision(branch, remaining < 0.0f ? "cw" : (remaining > 0.0f ? "ccw" : nullptr), cw);
+
+        // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all.
+        // See the note on MoveAwayClearOfMines.
+        bot->CastStop();
+
+        Position const step = onOrbit(heading, stepRadius);
+        MoveTo(boss->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false,
+               false, false, true, MovementPriority::MOVEMENT_FORCED, true);
+
+        // Re-check fast while relocating: the cone lands damage every 250 ms and turns nearly three
+        // degrees in that time, so a normal interval is most of a cone width. Only while moving: a bot
+        // already clear only gets clearer as the sweep retreats from it.
+        botAI->SetNextCheckDelay(100);
+
+        // Hold the tick. Spinning Up is only 4s of warning and the cone kills outright, so a relocating
+        // bot must not stop to finish a cast.
+        return true;
+    };
+
     // Two fringes: ahead of the leading edge, and behind where the trailing edge finishes. Returning
     // false rather than true is deliberate - bots that were never in danger keep casting.
     if (cw > window.sweep + clearance && cw < twoPi - clearance)
@@ -500,6 +604,23 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
             return true;
         }
 
+        // Clear of the beams but standing in fire. By the band edge the fire dodge is boxed in, its fan
+        // refusing the band one way and more fire the other, and 3 to 5 overlapping nodes take a bot
+        // from full to dead in under 2 s. So walk the ring to the nearest clean ground in the sector.
+        // Nothing clean anywhere leaves the tick to that dodge.
+        if (!IsMimironSpotFireSafe(hazards, bot->GetPosition()))
+        {
+            // Clockwise raises cw toward the trailing side, counter-clockwise lowers it toward the far edge.
+            float const bearing = boss->GetAngle(bot);
+            float const cwOffset = fireFreeOffset(bearing, -1.0f, twoPi - clearance - cw);
+            float const ccwOffset = fireFreeOffset(bearing, 1.0f, cw - window.sweep - clearance);
+            if (cwOffset >= 0.0f && (ccwOffset < 0.0f || cwOffset <= ccwOffset))
+                return stepRing(-cwOffset, "refuge");
+
+            if (ccwOffset >= 0.0f)
+                return stepRing(ccwOffset, "refuge");
+        }
+
         // Clear of the band means the bearing is right and only the radius is wrong, so a melee bot
         // an earlier hop left out at the ranged ring steps back in along the bearing it already
         // holds - same bearing, same safety. One step, and then it is swinging again.
@@ -510,7 +631,6 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
                                   boss->GetPositionY() + radius * sin(bearing),
                                   boss->GetPositionZ());
 
-            MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
             if (IsMimironSpotMineSafe(bot, inward) && IsMimironSpotFireSafe(hazards, inward) &&
                 IsMimironSpotBombSafe(hazards, inward) && IsMimironSpotRocketSafe(botAI, inward))
             {
@@ -553,6 +673,15 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
             branch = "ahead";
             goClockwise = true;
         }
+        else if (window.untilLive > 0.0f && turnRate > 0.0f &&
+                 (cw + clearance) / turnRate <= window.untilLive - ULDUAR_MIMIRON_BARRAGE_IGNITION_BUFFER)
+        {
+            // Inside the ignition cone with time to walk all the way out the trailing side before it
+            // lights, so go that way: nothing follows a bot behind the beams. The leading edge is
+            // nearer, but past it the bot has to outrun the sweep round the whole band and stop at its
+            // far edge, where a fire field leaves it nowhere to go.
+            branch = "inside";
+        }
         else
         {
             branch = "inside";
@@ -571,7 +700,18 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
 
     float const ccwTravel = Position::NormalizeOrientation(cw + clearance);
     float const cwTravel = Position::NormalizeOrientation(window.sweep + clearance - cw);
-    float const remaining = goClockwise ? -cwTravel : ccwTravel;
+    float remaining = goClockwise ? -cwTravel : ccwTravel;
+
+    // The band edge is only where the beams stop. A fire field on it pins a bot there, beams behind
+    // and fire ahead, so keep going into the sector to the first clean ground. Nothing clean anywhere
+    // in it: stop at the edge as before.
+    if (!hazards.flames.empty())
+    {
+        float const direction = goClockwise ? -1.0f : 1.0f;
+        float const beyond = fireFreeOffset(boss->GetAngle(bot) + remaining, direction, sectorWidth);
+        if (beyond > 0.0f)
+            remaining += direction * beyond;
+    }
 
     // Under a yard of travel left; call it arrived rather than issuing a move nothing can act on.
     if (std::fabs(remaining) * radius < 1.0f)
@@ -580,77 +720,7 @@ bool MimironP3Wx2LaserBarrageAction::Execute(Event /*event*/)
         return false;
     }
 
-    // Walk the ring one bounded step at a time. Aiming a single move at the far side draws a chord
-    // that cuts through VX-001 - creatures are not in the navmesh - and a chord across the apex
-    // crosses every bearing the cone covers. MOVEMENT_FORCED serialises the legs by itself:
-    // IsWaitingForLastMove refuses the next one until the current leg's lock expires.
-    float const stepped =
-        std::copysign(std::min(std::fabs(remaining), ULDUAR_MIMIRON_BARRAGE_STEP), remaining);
-    float const heading = Position::NormalizeOrientation(boss->GetAngle(bot) + stepped);
-
-    // Radius is free here, so spend it on the fire - the walk as well as the endpoint. An orbit step
-    // at 22 yd crosses 60 to 80 degrees of floor, and a bot that has to stop and dodge a node
-    // halfway round loses the bearing the step was buying. No clean radius at all means keep the
-    // step: the cone kills outright, the fire does not.
-    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
-    auto const onOrbit = [&](float r)
-    {
-        return Position(boss->GetPositionX() + r * cos(heading), boss->GetPositionY() + r * sin(heading),
-                        boss->GetPositionZ());
-    };
-
-    // Melee only give ground inward: their ring is already the smallest that clears the model, and
-    // widening it puts them back outside their own reach test.
-    float const shiftMin = melee ? ULDUAR_MIMIRON_BARRAGE_MELEE_RING_MIN : minRing;
-    float const shiftMax = melee ? radius : ULDUAR_MIMIRON_SPREAD_RADIUS_MAX;
-
-    float stepRadius = radius;
-    bool settled = false;
-    for (float shift : {0.0f, 2.0f, -2.0f, 4.0f, -4.0f, 6.0f, -6.0f, 8.0f, -8.0f})
-    {
-        float const candidate = radius + shift;
-        if (candidate < shiftMin || candidate > shiftMax)
-            continue;
-
-        // A rocket or the bomb kills outright, so a spot in either isn't even a fallback. The step
-        // is MOVEMENT_FORCED and locks the rocket dodge out until it lands.
-        Position const spot = onOrbit(candidate);
-        if (!IsMimironSpotRocketSafe(botAI, spot) || !IsMimironSpotBombSafe(hazards, spot) ||
-            !IsMimironSpotFireSafe(hazards, spot))
-            continue;
-
-        // First clean endpoint is the fallback; keep looking for one whose walk is clean too.
-        if (!settled)
-        {
-            stepRadius = candidate;
-            settled = true;
-        }
-
-        if (IsMimironWalkFireSafe(bot, hazards, spot))
-        {
-            stepRadius = candidate;
-            break;
-        }
-    }
-
-    NoteBarrageDecision(branch, goClockwise ? "cw" : "ccw", cw);
-
-    // Nothing survives standing in this to finish a cast, and a casting bot cannot be moved at all -
-    // see the note on MoveAwayClearOfMines.
-    bot->CastStop();
-
-    Position const step = onOrbit(stepRadius);
-    MoveTo(boss->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false,
-           false, false, true, MovementPriority::MOVEMENT_FORCED, true);
-
-    // Re-check fast while relocating: the cone lands damage every 250 ms and turns nearly three degrees
-    // in that time, so a normal interval is most of a cone width. Only while moving - a bot already
-    // clear only gets clearer as the sweep retreats from it.
-    botAI->SetNextCheckDelay(100);
-
-    // Hold the tick. Spinning Up is only 4s of warning and the cone kills outright, so a relocating
-    // bot must not stop to finish a cast.
-    return true;
+    return stepRing(remaining, branch);
 }
 
 bool MimironArcSpreadAction::isUseful()

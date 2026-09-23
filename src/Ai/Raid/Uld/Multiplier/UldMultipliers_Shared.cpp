@@ -140,9 +140,9 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         }
     }
 
-    // The sweep above reads a cached list, so a bot whose copy has not caught up with the pull or a
-    // phase change resolves no mech, falls through to the permissive default at the bottom and lusts
-    // on a boss that holds it. A direct grid search has no such lag.
+    // The sweep above reads a cached list that lags the pull and drops unselectable units, and every
+    // mech is unselectable through a handover. A bot that resolves none falls through to the
+    // permissive default at the bottom and lusts, so the grid search finds them whatever their flags.
     if (!leviathanMkII)
         leviathanMkII = bot->FindNearestCreature(NPC_LEVIATHAN_MKII, sPlayerbotAIConfig.sightDistance, true);
     if (!vx001)
@@ -173,9 +173,13 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
     // race the raid loses at about 30k/s taken, and 40 s of haste on the healers is the only lever
     // there. Phase 4 is the bigger burn but the raid reached it in 4 of 17 hard-mode pulls, and
     // berserk at 10:00 against a 10-minute cooldown means one window or the other, never both.
-    // VX-001 still riding the chassis is the handover, where it does nothing.
+    // Selectable is what counts as fighting: a beaten mech isn't killed, the core parks it alive and
+    // unselectable (the MK II sits at 0.1% through P2 and P3), and VX-001 only turns selectable as
+    // P2 starts. Riding the chassis is P4.
+    auto const fighting = [](Unit const* mech) { return mech && !mech->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); };
     if (leviathanMkII || vx001 || aerialCommandUnit)
-        return {true, vx001 && !leviathanMkII && !aerialCommandUnit && !vx001->GetVehicleBase()};
+        return {true, fighting(vx001) && !fighting(leviathanMkII) && !fighting(aerialCommandUnit) &&
+                          !vx001->GetVehicleBase()};
 
     // The council members resurrect each other until one is left, so only the survivor is a real
     // kill. Covers the hard mode too, where that survivor is the empowered phase-3 Steelbreaker.
