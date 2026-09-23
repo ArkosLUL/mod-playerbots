@@ -2,6 +2,7 @@
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
 #include "Creature.h"
+#include "SpellMgr.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -21,17 +22,28 @@ bool AnubarakSubmerged(PlayerbotAI* botAI)
     // unselectable while submerged, so it may not resolve here, but the spike check above is the
     // primary signal for the rest of the phase.
     Unit* anubarak = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ANUBARAK));
-    return anubarak && anubarak->HasAura(static_cast<uint32>(ToCSpells::SPELL_SUBMERGE_ANUB));
+    return anubarak && anubarak->HasAura(SPELL_SUBMERGE_ANUB);
 }
 
 bool AnubarakLeechingSwarmActive(PlayerbotAI* botAI)
 {
-    Unit* anubarak = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ANUBARAK));
-    if (!anubarak)
-        return false;
+    Player* bot = botAI->GetBot();
+    if (bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_LEECHING_SWARM, bot)))
+        return true;
 
-    return anubarak->HasAura(static_cast<uint32>(ToCSpells::SPELL_LEECHING_SWARM)) ||
-           anubarak->GetHealthPct() < 30.0f;
+    Unit* anubarak = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ANUBARAK));
+    return anubarak && anubarak->GetHealthPct() < 30.0f;
+}
+
+bool IsFrostSphereFlying(Unit* sphere)
+{
+    return sphere && sphere->IsAlive() && sphere->HasAura(SPELL_FROST_SPHERE) &&
+           !sphere->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE);
+}
+
+bool IsPermafrostPatch(Unit* sphere)
+{
+    return sphere && sphere->IsAlive() && !sphere->HasAura(SPELL_FROST_SPHERE);
 }
 
 Unit* GetNearestPermafrost(Player* bot, float radius)
@@ -46,8 +58,7 @@ Unit* GetNearestPermafrost(Player* bot, float radius)
     float nearestDist = radius;
     for (Creature* sphere : spheres)
     {
-        // A grounded Permafrost patch carries the Permafrost aura; flying spheres do not despawn spikes
-        if (!sphere->HasAura(static_cast<uint32>(ToCSpells::SPELL_PERMAFROST)))
+        if (!IsPermafrostPatch(sphere))
             continue;
 
         float const dist = bot->GetExactDist2d(sphere);

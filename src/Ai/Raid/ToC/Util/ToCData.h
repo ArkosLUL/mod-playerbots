@@ -52,59 +52,54 @@ enum class ToCNpcs : uint32
     NPC_DARK_ESSENCE        = 34567, // portal NPC; its gossip grants the Dark Essence aura
 };
 
-// From the spell enum of the boss script named on each section.
-enum class ToCSpells : uint32
-{
-    // Northrend Beasts - Gormok the Impaler (boss_northrend_beasts.cpp GormokSpells)
-    SPELL_IMPALE            = 66331, // stacking bleed on the current tank; drives the tank swap
+// From the spell enum of the boss script named on each section, as the 10N id. Every cast carries
+// the map difficulty's id, so read a remapped one through sSpellMgr->GetSpellIdForDifficulty.
 
-    // Acidmaw & Dreadscale (boss_northrend_beasts.cpp JormungarSpells). The bite/spray spells carry
-    // the debuff aura directly.
-    SPELL_BURNING_BITE      = 66879,
-    SPELL_BURNING_SPRAY     = 66902,
-    // Sweep: 15 yd knockback circle around the worm (DBC TargetB 15). SPELL_SWEEP_1 is its 25H id
-    // (spelldifficulty 614: 66794/67644/67645/67646), not a second form.
-    SPELL_SWEEP_0           = 66794,
-    SPELL_SWEEP_1           = 67646,
+// Northrend Beasts - Gormok the Impaler (boss_northrend_beasts.cpp GormokSpells)
+constexpr uint32 SPELL_IMPALE            = 66331; // stacking bleed on the current tank, drives the tank swap
 
-    // Icehowl (boss_northrend_beasts.cpp IcehowlSpells). Massive Crash is applied to players with a
-    // difficulty-specific spell id.
-    SPELL_MASSIVE_CRASH_10N = 66683,
-    SPELL_MASSIVE_CRASH_25N = 67660,
-    SPELL_MASSIVE_CRASH_10H = 67661,
-    SPELL_MASSIVE_CRASH_25H = 67662,
+// Acidmaw & Dreadscale (boss_northrend_beasts.cpp JormungarSpells). No aura of their own on any
+// difficulty: they apply Burning Bile 66869 through a triggered or linked spell.
+constexpr uint32 SPELL_BURNING_BITE      = 66879;
+constexpr uint32 SPELL_BURNING_SPRAY     = 66902;
+// 15 yd knockback circle around the worm (DBC radius index 18)
+constexpr uint32 SPELL_SWEEP             = 66794;
 
-    // Lord Jaraxxus (boss_lord_jaraxxus.cpp JaraxxusSpells)
-    SPELL_FEL_FIREBALL      = 66532, // interruptible cast on the current tank
-    SPELL_INCINERATE_FLESH  = 66237, // heal-absorb debuff on a random player
-    SPELL_LEGION_FLAME      = 66197, // spawns the pursuing ground fire
+// Icehowl (boss_northrend_beasts.cpp IcehowlSpells)
+constexpr uint32 SPELL_MASSIVE_CRASH_10N = 66683;
+constexpr uint32 SPELL_MASSIVE_CRASH_25N = 67660;
+constexpr uint32 SPELL_MASSIVE_CRASH_10H = 67661;
+constexpr uint32 SPELL_MASSIVE_CRASH_25H = 67662;
 
-    // Nether Power: stacking spell-power buff on the boss (one id per difficulty)
-    SPELL_NETHER_POWER_10N  = 66228,
-    SPELL_NETHER_POWER_25N  = 67106,
-    SPELL_NETHER_POWER_10H  = 67107,
-    SPELL_NETHER_POWER_25H  = 67108,
+// Lord Jaraxxus (boss_lord_jaraxxus.cpp JaraxxusSpells)
+constexpr uint32 SPELL_FEL_FIREBALL      = 66532; // interruptible cast on the current tank
+constexpr uint32 SPELL_INCINERATE_FLESH  = 66237; // heal-absorb debuff on a random player
+constexpr uint32 SPELL_LEGION_FLAME      = 66197; // spawns the pursuing ground fire
 
-    // Anub'arak (boss_anubarak_trial.cpp AnubSpells)
-    SPELL_MARK              = 67574, // on the player the Pursuing Spike is chasing
-    SPELL_PERMAFROST        = 66193, // aura on a grounded Frost Sphere; despawns a spike that reaches it
-    SPELL_LEECHING_SWARM    = 66118, // raid-wide drain on the boss during phase 3 (<30%)
-    SPELL_SUBMERGE_ANUB     = 65981, // boss submerge aura (phase 2)
+// Nether Power: stacking spell-power buff on the boss
+constexpr uint32 SPELL_NETHER_POWER_10N  = 66228;
+constexpr uint32 SPELL_NETHER_POWER_25N  = 67106;
+constexpr uint32 SPELL_NETHER_POWER_10H  = 67107;
+constexpr uint32 SPELL_NETHER_POWER_25H  = 67108;
 
-    // Twin Val'kyr (boss_twin_valkyr.cpp ValkyrSpells) - player essence auras (granted by the portal
-    // NPCs' gossip)
-    SPELL_LIGHT_ESSENCE     = 65686, // matches Light Vortex / Light Touch
-    SPELL_DARK_ESSENCE      = 65684, // matches Dark Vortex / Dark Touch
-    // Vortex raid-wide pulses (cast by the matching twin); detected via the boss's current spell
-    SPELL_LIGHT_VORTEX      = 66046,
-    SPELL_DARK_VORTEX       = 66058,
-    // Touch DoTs (heroic only) placed on an opposite-essence player; remedy is to swap colour
-    SPELL_LIGHT_TOUCH       = 67297,
-    SPELL_DARK_TOUCH        = 67282,
-    // Twin's Pact: channeled heal-to-full at EVENT_SPECIAL (Fjola casts Light, Eydis casts Dark)
-    SPELL_LIGHT_TWIN_PACT   = 65876,
-    SPELL_DARK_TWIN_PACT    = 65875,
-};
+// Anub'arak (boss_anubarak_trial.cpp AnubSpells)
+constexpr uint32 SPELL_MARK              = 67574; // on the player the Pursuing Spike is chasing
+constexpr uint32 SPELL_LEECHING_SWARM    = 66118; // P3 area aura, carried by the players and never by the boss
+constexpr uint32 SPELL_SUBMERGE_ANUB     = 65981; // boss submerge aura (P2)
+
+// Twin Val'kyr (boss_twin_valkyr.cpp ValkyrSpells). Essences are player auras from the portal
+// NPCs' gossip.
+constexpr uint32 SPELL_LIGHT_ESSENCE     = 65686; // matches Light Vortex / Light Touch
+constexpr uint32 SPELL_DARK_ESSENCE      = 65684; // matches Dark Vortex / Dark Touch
+// Vortex casts, read from the casting twin's current spell
+constexpr uint32 SPELL_LIGHT_VORTEX      = 66046;
+constexpr uint32 SPELL_DARK_VORTEX       = 66058;
+// Touch DoTs, heroic only. The script casts the 10H ids 67297/67282, same difficulty rows.
+constexpr uint32 SPELL_LIGHT_TOUCH       = 65950;
+constexpr uint32 SPELL_DARK_TOUCH        = 66001;
+// Twin's Pact heal-to-full 15 s cast (Fjola casts Light, Eydis Dark)
+constexpr uint32 SPELL_LIGHT_TWIN_PACT   = 65876;
+constexpr uint32 SPELL_DARK_TWIN_PACT    = 65875;
 
 }
 

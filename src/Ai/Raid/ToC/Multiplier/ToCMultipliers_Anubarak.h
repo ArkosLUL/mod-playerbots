@@ -25,15 +25,6 @@ public:
     float GetValue(Action* action) override;
 };
 
-// Hold Bloodlust/Heroism until the phase 3 Leeching Swarm burn
-class AnubarakDelayBloodlustUntilLeechingSwarmMultiplier : public Multiplier
-{
-public:
-    AnubarakDelayBloodlustUntilLeechingSwarmMultiplier(
-        PlayerbotAI* botAI) : Multiplier(botAI, "anubarak delay bloodlust until leeching swarm multiplier") {}
-    float GetValue(Action* action) override;
-};
-
 void AddToCAnubarakMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCAnubarakBurstWindow(PlayerbotAI* botAI);

@@ -91,7 +91,7 @@ bool TwinValkyrSwapEssenceForVortexAction::Execute(Event /*event*/)
 bool TwinValkyrSwapEssenceForTouchAction::Execute(Event /*event*/)
 {
     // Light Touch is mitigated by Light Essence; Dark Touch by Dark Essence
-    return AcquireEssence(bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_LIGHT_TOUCH)));
+    return AcquireEssence(HasLightTouch(bot));
 }
 
 bool TwinValkyrAcquireInitialEssenceAction::Execute(Event /*event*/)

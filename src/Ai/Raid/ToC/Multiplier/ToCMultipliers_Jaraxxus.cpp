@@ -1,5 +1,6 @@
 #include "ToCMultipliers_Jaraxxus.h"
 #include "ToCData.h"
+#include "ToCEncounterGate.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
 
@@ -7,7 +8,13 @@ using namespace TrialOfTheCrusaderHelpers;
 
 float JaraxxusControlTankMovementMultiplier::GetValue(Action* action)
 {
+    if (!dynamic_cast<CombatFormationMoveAction*>(action))
+        return 1.0f;
+
     if (!botAI->IsTank(bot))
+        return 1.0f;
+
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::Jaraxxus))
         return 1.0f;
 
     Unit* victim = bot->GetVictim();
@@ -20,13 +27,7 @@ float JaraxxusControlTankMovementMultiplier::GetValue(Action* action)
         entry == static_cast<uint32>(ToCNpcs::NPC_MISTRESS_OF_PAIN) ||
         entry == static_cast<uint32>(ToCNpcs::NPC_FEL_INFERNAL);
 
-    if (!tankingJaraxxus)
-        return 1.0f;
-
-    if (dynamic_cast<CombatFormationMoveAction*>(action))
-        return 0.0f;
-
-    return 1.0f;
+    return tankingJaraxxus ? 0.0f : 1.0f;
 }
 
 void AddToCJaraxxusMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)

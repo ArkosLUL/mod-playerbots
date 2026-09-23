@@ -1,6 +1,7 @@
 #include "ToCHelpers_Jormungars.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "SpellMgr.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -10,15 +11,13 @@ namespace TrialOfTheCrusaderHelpers
 
 Unit* GetWormCastingSweep(PlayerbotAI* botAI)
 {
+    uint32 const sweep = sSpellMgr->GetSpellIdForDifficulty(SPELL_SWEEP, botAI->GetBot());
     for (uint32 const entry : { static_cast<uint32>(ToCNpcs::NPC_ACIDMAW),
                                 static_cast<uint32>(ToCNpcs::NPC_DREADSCALE) })
     {
         Unit* worm = GetFirstAliveUnitByEntry(botAI, entry);
-        if (worm && (worm->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_SWEEP_0)) ||
-                     worm->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_SWEEP_1))))
-        {
+        if (worm && worm->FindCurrentSpellBySpellId(sweep))
             return worm;
-        }
     }
 
     return nullptr;

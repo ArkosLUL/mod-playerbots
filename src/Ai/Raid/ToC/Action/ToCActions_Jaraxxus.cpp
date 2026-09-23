@@ -89,8 +89,7 @@ bool JaraxxusHealIncinerateTargetAction::Execute(Event /*event*/)
     for (ObjectGuid const& guid : members)
     {
         Unit* member = botAI->GetUnit(guid);
-        if (member && member->IsAlive() &&
-            member->HasAura(static_cast<uint32>(ToCSpells::SPELL_INCINERATE_FLESH)))
+        if (member && member->IsAlive() && HasIncinerateFlesh(member))
         {
             target = member;
             break;

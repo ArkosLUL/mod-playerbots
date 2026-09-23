@@ -74,22 +74,6 @@ void CollectAliveFactionChampions(PlayerbotAI* botAI, std::vector<Unit*>& champi
 }
 }
 
-bool FactionChampionsEncounterActive(PlayerbotAI* botAI)
-{
-    // Existence check only: early-return on the first champion without collecting the full list, since
-    // this runs on the AoE-suppression multiplier's hot path (every action, every bot, every tick) for
-    // all four ToC encounters, not just this one.
-    auto const& npcs = botAI->GetAiObjectContext()->GetValue<GuidVector>("possible targets no los")->Get();
-    for (auto const& npcGuid : npcs)
-    {
-        Unit* unit = botAI->GetUnit(npcGuid);
-        if (unit && unit->IsAlive() && IsFactionChampion(unit->GetEntry()))
-            return true;
-    }
-
-    return false;
-}
-
 Unit* GetPriorityFactionChampion(PlayerbotAI* botAI)
 {
     std::vector<Unit*> champions;

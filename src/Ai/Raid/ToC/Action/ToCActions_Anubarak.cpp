@@ -155,8 +155,8 @@ bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 
 bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)
 {
-    // Target the nearest flying (still selectable, not yet grounded) Frost Sphere. Destroying it
-    // drops a Permafrost patch the spike-chase target can be kited through.
+    // Destroying a flying Frost Sphere drops a Permafrost patch the spike-chase target can be kited
+    // through.
     std::list<Creature*> spheres;
     bot->GetCreatureListWithEntryInGrid(spheres, static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE), 100.0f);
 
@@ -164,7 +164,7 @@ bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)
     float nearestDist = 100.0f;
     for (Creature* sphere : spheres)
     {
-        if (!sphere->IsAlive() || sphere->HasAura(static_cast<uint32>(ToCSpells::SPELL_PERMAFROST)))
+        if (!IsFrostSphereFlying(sphere))
             continue;
 
         float const dist = bot->GetExactDist2d(sphere);
