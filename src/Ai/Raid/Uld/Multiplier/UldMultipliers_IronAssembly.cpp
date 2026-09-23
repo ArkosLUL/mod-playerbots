@@ -145,3 +145,17 @@ float IronAssemblyHoldDpsCooldownsMultiplier::GetValue(Action* action)
     // and this would never release, which is why it is gated on the option rather than the phase.
     return IsSteelbreakerEmpowered(botAI) ? 1.0f : 0.0f;
 }
+
+float IronAssemblyTauntGuardMultiplier::GetValue(Action* action)
+{
+    // Taunts first: this runs on every popped action and the lookups below reach the council sweep.
+    if (!action || !IsTauntAction(bot, action))
+        return 1.0f;
+
+    if (!IronAssemblyFormationActive(botAI) || !IsSteelbreakerEmpowered(botAI))
+        return 1.0f;
+
+    // No current target check, unlike Thorim's guard: righteous defense goes on the ally, and nothing
+    // else in this phase is worth a taunt.
+    return IronAssemblyHeldByOtherTank(bot, GetIronAssemblyMember(botAI, NPC_STEELBREAKER)) ? 0.0f : 1.0f;
+}

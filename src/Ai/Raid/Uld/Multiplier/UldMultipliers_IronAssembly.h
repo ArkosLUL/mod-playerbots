@@ -71,4 +71,14 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Whoever carries Overwhelming Power keeps the empowered Steelbreaker until Meltdown, and the tank node
+// already follows that. The class taunt nodes didn't: traced, a bot tank back from a soulstone took
+// him off a human carrying it, died to him 9s later and left nobody to inherit.
+class IronAssemblyTauntGuardMultiplier : public Multiplier
+{
+public:
+    IronAssemblyTauntGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly taunt guard") {}
+    float GetValue(Action* action) override;
+};
+
 #endif

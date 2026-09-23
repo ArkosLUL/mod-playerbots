@@ -41,15 +41,20 @@ callers test both (`UldEncounter_IronAssembly.h`). Two corrections to the writte
 **Overwhelming Power goes to `GetVictim()`**, never a random player: 8s into phase 3 and every 36s
 after (25-man; 61s in 10), lasting **35s**, and its `EffectTriggerSpell_2` is Meltdown 61889 —
 29,250 nature in 15 yd, plus an **INSTAKILL** on the carrier. So the raid loses whoever is tanking
-every 36s and pays ~1.17M for it. **Only the carrier dies to Meltdown** — traced blasts caught 5–16
-others for 3,600–26,800 after resists and every one lived, at 39–100% — and running from it costs far
+every 36s and pays ~1.17M for it. **Only the carrier dies to Meltdown**, bar one traced melee —
+blasts caught 5–16 others for 3,600–26,800 after resists and all lived at 39–100%; the exception took
+23,361 at 80.6%, 79s into the phase — and running from it costs far
 more, because the carrier is the tank: a run-out towed Steelbreaker 180 yd, cut melee uptime to a 16%
 median and left the raid doing **0.4% of a 12.05M bar in a 30s phase**. So **the carrier holds him
 to the end and the off-tank inherits on threat**, already second on the table. Taunting early saves
 nobody — the buff kills its target either way and the next cast lands a second later on whoever
 inherited — so all it buys is a boss that moves. Both ranked tanks are assigned the empowered
 Steelbreaker, so the tank node **taunts only when the current victim is not a group tank**: the tick
-after a carrier dies, and the path that recovers him when a dps rips threat at the transition.
+after a carrier dies, and the path that recovers him when a dps rips threat at the transition. The
+class nodes (`hand of reckoning`, `righteous defense`) bypass that node, so **`iron assembly taunt
+guard` zeroes any `IsTauntAction` while another grouped tank holds him** — no current-target gate,
+since Righteous Defense targets the ally. Unguarded, a soulstoned bot tank taunted him off a human
+carrier, died 9s later and left nobody to inherit.
 
 `creature_immunities`: **Brundir (`0x24CB375F`) is vulnerable to STUN and INTERRUPT but immune to
 SILENCE** — kicks and stuns land, `silencing shot` and `spell lock` never do. Steelbreaker and
@@ -98,7 +103,9 @@ Overload. Derived from the stack and the hazards alone, never the caller — eve
 reading the caller's position would scatter the raid instead of moving it. **The heading latches**
 until it stops clearing: a rune holds still, but Overload walks with Brundir, and re-picking every
 tick would flip the winner mid-cast. With no heading clear the raid holds formation and each bot
-escapes alone.
+escapes alone. **Known-open:** on the exact stack point a rune lands 0 yd from every caster, and one
+killed four casters in one pull and a healer in another at 2:47 — at 50–65% they started moving
+0.2–2.2s late (cause unverified) and died walking out.
 
 **The spread ring centres on Steelbreaker's tank spot, at 22 yd.** Meltdown lands on whoever is
 tanking him, so a ring built on the stack point runs its near arc 6.6 yd from the carrier: 5 of 16
@@ -107,8 +114,14 @@ Boss-centred, every slot is 22 and they sit 8.6 yd apart rather than 7.0, which 
 wants anyway. navprobe on the bot filter: 21, 22 and 23 settle on the floor at all 16 headings from
 every bearing the tank spot can rotate to, while **24 drops the 135° slot into a hole at Z −438**
 (read `settledZ` — the trailing `16/16 on mesh` prints for 24 too), and the ring reaches 38 yd from
-the anchor. It alone does not ride the stack displacement: Brundir and Molgeim are dead by this
-phase, so a rune outliving Molgeim goes to the per-bot escape, which is all melee have ever had.
+the anchor. It alone does not ride the stack displacement, Brundir and Molgeim being dead, but
+**Molgeim's last rune outlives him** on the stack point, 11.4 yd off the tank spot and so inside the
+ring: 4 of 4 traced phase-3 pulls, alive 2.9–20.6s into it. Left to the per-bot escape, escape and
+raid spot traded the ranged every 1.5s (89 flips against 13 in the kill) and Steelbreaker stood at
+79–84% at +20s against the kill's 77%. So **the slots squeeze evenly into the arc the rune leaves
+clear at 21** (`spread-rune`): rotating only the covered ones to the nearest clear bearing lands a
+side's worth on one point, which is what Static Disruption's 6 yd blast wants. Melee still have
+only the escape. navprobe: 64/64 headings at 22 round the designed spot settle on the floor.
 
 **Two radii, not one.** DBC says 13, but the searcher applying the aura adds object size at both
 ends and traces measured applications to **15.4 yd**: bots run inside **16**, stand at **21**. One
@@ -118,6 +131,19 @@ raid-spot candidate is ≥21 from every rune and 21 > 16, so **arriving at the r
 re-fires the escape**. Without it the two actions cancelled every tick; nobody travelled, nobody
 parked, and a permanently-moving bot holds no interrupt duty, so Lightning Whirl took 15 of 29
 killing blows.
+
+**The invariant covers paths too.** A straight walk to a clear spot can still cut a rune's trigger
+radius, and the escape turns the bot back at its edge — 10–12 of 14 ranged paths did at the phase-3
+transition. So both formation movers, raid spot and tank spot, step through
+`TryGetIronAssemblyRouteStep`: a line or goal inside **18.5** of a rune goes round it via points on
+its 21 yd circle at fixed 45° bearings, the short way, each chord staying 19.4 out. 18.5 sits halfway
+because a line that only clears 16 grazes it and walks are not straight; goals share it, or one
+between the radii never clears and the detour circles forever. A walk whose nearest point is the bot
+itself only moves away and never counts as blocked — counting it spirals a bot inside 18.5 inward. A
+covered goal, or a detour point inside a second rune, holds. **The tank holds at his escape spot**
+while a rune covers his: the ring stays on his spot, leaving its near arc ~12 yd from him inside
+Meltdown, safe only because a rune lasts 30s and the first Meltdown lands 43s into the phase.
+navprobe: 8/8 on the 21 yd circle round the stack point.
 
 **Escapes carry a clearance per hazard and break ties toward the bot's station** — its raid spot,
 its tank spot, or whatever the raid is killing. The sweep rings outward from the bot and takes the
@@ -157,8 +183,8 @@ Deliberate non-behaviours: **tanks hold through Overload** (20,000 nature is sur
 lethal in cloth, and under the normal order Brundir dies last, so his channel invincibility never
 applies); **ranged spread only in hard mode**, since Static Disruption needs Steelbreaker's phase 2;
 **bots never set the skull**, so a human's mark wins; **melee stand in Meltdown**, being on the boss,
-and every traced blast left them alive; and **the melee tank spots stay 11 yd off the stack**, which
-keeps healers covering the tanks and the stack at once.
+and every traced blast but one left them alive; and **the melee tank spots stay 11 yd off the
+stack**, which keeps healers covering the tanks and the stack at once.
 
 **The 11 yd is forced, and that is why `MELEE_BOSS_RADIUS = 16` and `SPREAD_RING_RADIUS = 18` must not
 be widened.** For a melee spot `D` yd from the stack, the nearest spread slot is `|18 − D|` away and
@@ -216,8 +242,8 @@ Molgeim, 2 Brundir; **one row per transition — more means the state is not sha
 the raid is killing, and whether a human's skull beat the order), `tank` (the boss a bot tank owns,
 or the branch that left it none — bot tanks only, so no row for a human one), `interrupt` (the duty
 a bot holds for Brundir's current cast), `spot` (the formation branch — a `-rune` or `-overload`
-suffix names the hazard that shifted the stack, and a bare `spread` is the boss-centred ring, which
-never shifts), `slot` (its index on the spread ring, assigned
+suffix names the hazard that shifted the stack, a bare `spread` is the boss-centred ring and
+`spread-rune` that ring squeezed off a rune), `slot` (its index on the spread ring, assigned
 **once** per bot), `soak` (whether it reached Rune of Power, and what stopped it). Overload,
 Lightning Tendrils and Meltdown have no world object, so they also write `haz` circles with the
 spell radius and the clearance bots keep — equal for Meltdown, which nobody dodges. Rune of Death

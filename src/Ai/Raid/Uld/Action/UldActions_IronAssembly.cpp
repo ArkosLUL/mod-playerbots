@@ -175,15 +175,14 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
     // early taunt saves nobody and only moves the boss. The off-tank is already second on threat and
     // takes over on the tick after the carrier dies - which is the same path that recovers a boss a
     // dps has ripped at a phase transition.
+    // The class taunt nodes get the same rule from IronAssemblyTauntGuardMultiplier; this cast goes
+    // straight to CastSpell and never passes it.
     Unit* const victim = boss->GetVictim();
-    Player* const holder = victim ? victim->ToPlayer() : nullptr;
-    bool const heldByTank =
-        holder && holder->GetGroup() == bot->GetGroup() && PlayerbotAI::IsTank(holder);
     bool const shared = IsSteelbreakerEmpowered(botAI) && boss->GetEntry() == NPC_STEELBREAKER;
 
     // Stand, do not drag. The tank walks to its spot and the boss follows it there, which never
     // routes a boss through the ranged stack the way a dragged pull does.
-    if (victim != bot && !(shared && heldByTank) && CastClassTaunt(botAI, boss))
+    if (victim != bot && !(shared && IronAssemblyHeldByOtherTank(bot, boss)) && CastClassTaunt(botAI, boss))
         return true;
 
     // Same boss the assignment above returned, rather than ranking the tanks a second time.
@@ -202,7 +201,15 @@ bool IronAssemblyTankAssignmentAction::Execute(Event /*event*/)
         return false;
     }
 
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+    // A rune on the spot has him hold where the escape parked him, and the boss follows him there
+    // instead of being dragged in and out with him. The ranged ring stays on this spot, so its near
+    // arc ends up ~12 yd from him, inside Meltdown's 15. Fine because a rune lasts 30s and the first
+    // Meltdown lands 43s into the phase.
+    Position step;
+    if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
+        return false;
+
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
 
@@ -360,6 +367,10 @@ bool IronAssemblyRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+    Position step;
+    if (!TryGetIronAssemblyRouteStep(botAI, bot, spot, step))
+        return false;
+
+    return MoveTo(bot->GetMapId(), step.GetPositionX(), step.GetPositionY(), step.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }

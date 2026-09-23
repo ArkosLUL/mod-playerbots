@@ -980,6 +980,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new IronAssemblyChargeGuardMultiplier(botAI));
     multipliers.push_back(new IronAssemblyDisableTankFaceMultiplier(botAI));
     multipliers.push_back(new IronAssemblyHoldDpsCooldownsMultiplier(botAI));
+    multipliers.push_back(new IronAssemblyTauntGuardMultiplier(botAI));
 
     // Thorim keeps a bailing melee out of the Runic Barrier damage shield, picks every non-tank
     // target in code so the generic pickers have to be shut out, and stops the generic movers

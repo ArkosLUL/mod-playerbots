@@ -36,7 +36,8 @@ class Unit;
 //   ironassembly.interrupt  the duty a bot holds for Brundir's current cast
 //   ironassembly.spot       the formation branch that put a bot where it stands - a `-rune` or
 //                           `-overload` suffix names the hazard that covered the stack point and
-//                           pushed the whole formation onto the shift ring
+//                           pushed the whole formation onto the shift ring. On the phase 3 ring,
+//                           spread-rune means the slots are squeezed off a rune
 //   ironassembly.slot       its index on the hard-mode spread ring
 //   ironassembly.soak       whether it walked into Rune of Power, and what stopped it
 //
@@ -109,6 +110,15 @@ constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_RADIUS = 13.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_DANGER_RADIUS = 16.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE = 21.0f;
 constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_SEARCH_RADIUS = 40.0f;
+
+// A formation walk whose straight line comes inside ROUTE goes round the rune instead, through points
+// on its CLEARANCE circle at these bearings. Fixed, not measured from the bot, so the next point
+// holds still while it walks there. The chord between neighbours stays 21 * cos(22.5) = 19.4 yd out.
+// ROUTE sits halfway to CLEARANCE because a line that only just clears DANGER grazes it, and a real
+// walk isn't a straight line. Goals get the same radius, or a goal between the two would never
+// clear and the detour would circle forever.
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS = 18.5f;
+constexpr float ULDUAR_IRON_ASSEMBLY_RUNE_DETOUR_STEP = 0.7854f;  // pi/4
 
 // Where the raid stands when a hazard covers the stack point - a Rune of Death, or Brundir's Overload
 // when he is parked anywhere near the raid. Both are the common path rather than an edge case:
@@ -190,6 +200,11 @@ constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS = 16;
 // the floor at all 16 headings from every bearing the tank spot can shift to, while 24 drops the
 // 135 degree slot into a hole at Z -438. Slots sit 8.6 yd apart here, up from 7.0.
 constexpr float ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS = 22.0f;
+
+// Molgeim's last rune outlives him on the stack point, 11.4 yd from Steelbreaker's spot, so it sits
+// inside this ring and blocks about 140 degrees of it at CLEARANCE. Traced in 4 of 4 phase 3 pulls,
+// up to 20.6s into it. The slots get squeezed into the clear arc, found by sampling this many bearings.
+constexpr uint8 ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES = 64;
 
 // Overload, Lightning Tendrils and Meltdown have no world object behind them, so a trace can only
 // know their geometry if the encounter writes it. RaidObs::NoteHazard emits on every call, so this
@@ -299,6 +314,12 @@ void GatherIronAssemblyRunesOfDeath(Player* bot, std::vector<Position>& runes);
 bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Position> const& runes,
                                         float radius);
 
+// Where a formation mover walks next on its way to goal: goal itself, or a point round a Rune of
+// Death its straight line would cross. False means hold where it stands, because goal or the detour
+// point is covered. Walking into a rune's trigger radius, or through it, hands the bot to the escape,
+// which walks it straight back out.
+bool TryGetIronAssemblyRouteStep(PlayerbotAI* botAI, Player* bot, Position const& goal, Position& step);
+
 // The council member currently standing in Molgeim's Rune of Power, if any. Molgeim casts it on
 // DoSelectLowestHpFriendly, so it lands on a boss rather than a player - which is why the tank has
 // to walk his boss out of it while everyone else walks in.
@@ -332,6 +353,9 @@ bool IronAssemblyChainLightningCasting(Unit* brundir);
 bool IronAssemblyShieldOfRunesUp(Unit* molgeim);
 bool IronAssemblyHasFusionPunch(Unit* unit);
 bool IronAssemblyHasOverwhelmingPower(Unit* unit);
+
+// Another grouped tank, human or bot, has boss on him.
+bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss);
 
 // Drop this instance's state once the council is back at full health, never on "nobody in combat":
 // Brundir spends 16s of every Lightning Tendrils out of combat by design, and the core carries the

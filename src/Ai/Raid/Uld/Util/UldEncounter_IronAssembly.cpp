@@ -23,6 +23,7 @@
 #include "Unit.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <mutex>
@@ -856,6 +857,77 @@ static char const* IronAssemblySpotLabel(IronAssemblyStackShift shift, char cons
     }
 }
 
+// Squeezes every slot bearing, in order, into the arc the runes leave clear at CLEARANCE, so spacing
+// stays even and every bot gets the same layout from the same runes. Rotating just the covered slots
+// to the nearest clear bearing lands all of one side's on a single point, right where Static
+// Disruption's 6 yd blast wants them. False, bearing untouched, when the ring is all clear or all
+// covered.
+static bool SqueezeIronAssemblyRingOffRunes(Position const& centre, float radius,
+                                            std::vector<Position> const& runes, float& bearing)
+{
+    if (runes.empty())
+        return false;
+
+    constexpr uint8 samples = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_SAMPLES;
+    float const sampleStep = 2.0f * static_cast<float>(M_PI) / static_cast<float>(samples);
+
+    std::array<bool, samples> clear{};
+    uint8 clearCount = 0;
+    for (uint8 i = 0; i < samples; ++i)
+    {
+        float const sampleBearing = sampleStep * static_cast<float>(i);
+        Position const point(centre.GetPositionX() + std::cos(sampleBearing) * radius,
+                             centre.GetPositionY() + std::sin(sampleBearing) * radius, centre.GetPositionZ());
+
+        clear[i] = IsIronAssemblyPositionClearOfRunes(point, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE);
+        if (clear[i])
+            ++clearCount;
+    }
+
+    if (clearCount == 0 || clearCount == samples)
+        return false;
+
+    // Longest covered run. Walked from just past a clear sample, so a run wrapping through 0 counts whole.
+    uint8 origin = 0;
+    while (!clear[origin])
+        ++origin;
+
+    uint8 coveredStart = 0;
+    uint8 coveredLength = 0;
+    uint8 runStart = 0;
+    uint8 runLength = 0;
+    for (uint8 k = 1; k <= samples; ++k)
+    {
+        uint8 const i = static_cast<uint8>((origin + k) % samples);
+        if (clear[i])
+        {
+            runLength = 0;
+            continue;
+        }
+
+        if (runLength == 0)
+            runStart = i;
+
+        if (++runLength > coveredLength)
+        {
+            coveredStart = runStart;
+            coveredLength = runLength;
+        }
+    }
+
+    // Cut the circle in the middle of the covered run and stretch what's left over the clear arc, so a
+    // slot just past the cut lands on the arc's near end and the slot opposite barely moves. A second
+    // rune can leave covered samples inside the arc; a slot squeezed onto one is the raid position
+    // action's to hold.
+    float const cut = sampleStep * (static_cast<float>(coveredStart) + (coveredLength - 1) * 0.5f);
+    float const arcStart = sampleStep * static_cast<float>(coveredStart + coveredLength);
+    float const arcSpan = sampleStep * static_cast<float>(samples - coveredLength - 1);
+
+    float const fromCut = Position::NormalizeOrientation(bearing - cut);
+    bearing = arcStart + arcSpan * fromCut / (2.0f * static_cast<float>(M_PI));
+    return true;
+}
+
 static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position& position, char const*& how)
 {
     bool brundirLast = false;
@@ -891,25 +963,28 @@ static bool DeriveIronAssemblyRaidSpot(PlayerbotAI* botAI, Player* bot, Position
         return true;
     }
 
-    float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(assignment->second) /
-                          static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS);
+    float bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(assignment->second) /
+                    static_cast<float>(ULDUAR_IRON_ASSEMBLY_SPREAD_SLOTS);
 
     // Centred on Steelbreaker's spot rather than the stack, because Meltdown goes off on whoever is
-    // tanking him and a ring built round the stack runs its near arc 6.6 yd from that. It does not
-    // ride the stack displacement any more: both bosses that displacement dodges are dead by this
-    // phase, and a rune outliving Molgeim is left to the per-bot escape, which is the only thing
-    // melee have ever had.
+    // tanking him and a ring built round the stack runs its near arc 6.6 yd from that. It doesn't ride
+    // the stack displacement: both bosses that displacement dodges are dead by this phase. A rune
+    // outliving Molgeim squeezes the slots instead. Left to the per-bot escape, the escape and this
+    // spot traded each bot every 1.5s for as long as the rune lived.
     Position centre = stack;
     float ringRadius = ULDUAR_IRON_ASSEMBLY_SPREAD_RING_RADIUS;
     Position steelbreakerSpot;
     bool const onBoss = TryGetIronAssemblyBossTankSpot(bot, targets.steelbreaker, steelbreakerSpot);
+    bool squeezed = false;
     if (onBoss)
     {
         centre = steelbreakerSpot;
         ringRadius = ULDUAR_IRON_ASSEMBLY_EMPOWERED_SPREAD_RING_RADIUS;
+        squeezed = SqueezeIronAssemblyRingOffRunes(centre, ringRadius, GetIronAssemblyScan(botAI).RunesOfDeath(),
+                                                   bearing);
     }
 
-    how = onBoss ? "spread"
+    how = onBoss ? (squeezed ? "spread-rune" : "spread")
                  : IronAssemblySpotLabel(shift, "spread", "spread-rune", "spread-overload");
     position = Position(centre.GetPositionX() + std::cos(bearing) * ringRadius,
                         centre.GetPositionY() + std::sin(bearing) * ringRadius,
@@ -980,6 +1055,92 @@ bool IsIronAssemblyPositionClearOfRunes(Position const& spot, std::vector<Positi
         if (rune.GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) < radius)
             return false;
 
+    return true;
+}
+
+// The next detour point round the first rune on the straight line from the bot to goal, the short
+// way. False when the line stays out of ROUTE.
+static bool TryGetIronAssemblyRuneDetour(Player* bot, Position const& goal, std::vector<Position> const& runes,
+                                         Position& waypoint)
+{
+    float const fromX = bot->GetPositionX();
+    float const fromY = bot->GetPositionY();
+    float const dx = goal.GetPositionX() - fromX;
+    float const dy = goal.GetPositionY() - fromY;
+    float const lengthSq = dx * dx + dy * dy;
+
+    Position const* blocking = nullptr;
+    float blockingAlong = 0.0f;
+    for (Position const& rune : runes)
+    {
+        float along = 0.0f;
+        if (lengthSq > 0.0f)
+            along = std::clamp(
+                ((rune.GetPositionX() - fromX) * dx + (rune.GetPositionY() - fromY) * dy) / lengthSq, 0.0f, 1.0f);
+
+        // Nearest point is the bot itself, so the walk only moves away. Counting that as blocked
+        // keeps a bot already inside ROUTE detouring forever, flipping sides round its goal's
+        // bearing and spiralling in.
+        if (along <= 0.0f)
+            continue;
+
+        if (rune.GetExactDist2d(fromX + along * dx, fromY + along * dy) >=
+            ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS)
+            continue;
+
+        if (!blocking || along < blockingAlong)
+        {
+            blocking = &rune;
+            blockingAlong = along;
+        }
+    }
+
+    if (!blocking)
+        return false;
+
+    float const runeX = blocking->GetPositionX();
+    float const runeY = blocking->GetPositionY();
+    float const botBearing = std::atan2(fromY - runeY, fromX - runeX);
+    float const goalBearing = std::atan2(goal.GetPositionY() - runeY, goal.GetPositionX() - runeX);
+
+    // Short way round. Walking it moves the bot's bearing toward the goal's, so it never flips mid detour.
+    float const step = ULDUAR_IRON_ASSEMBLY_RUNE_DETOUR_STEP;
+    float const turn = Position::NormalizeOrientation(goalBearing - botBearing);
+    float const direction = turn <= static_cast<float>(M_PI) ? 1.0f : -1.0f;
+
+    // At least a quarter step ahead, or a bot that just reached a point picks the one it's standing on.
+    float const ahead = botBearing + direction * step * 0.25f;
+    float const next = direction > 0.0f ? (std::floor(ahead / step) + 1.0f) * step
+                                        : (std::ceil(ahead / step) - 1.0f) * step;
+
+    // A rune dropped off centre puts part of this circle past the hall's floor. The check pulls the
+    // point back along the bot's own line, which stays outside DANGER. Static, since nothing collides
+    // a walking bot with a gameobject.
+    waypoint = ValidateStaticFloorPoint(
+        bot, Position(runeX + std::cos(next) * ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE,
+                      runeY + std::sin(next) * ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_CLEARANCE, bot->GetPositionZ()));
+    return true;
+}
+
+bool TryGetIronAssemblyRouteStep(PlayerbotAI* botAI, Player* bot, Position const& goal, Position& step)
+{
+    std::vector<Position> const runes = GetIronAssemblyScan(botAI).RunesOfDeath();
+    if (!IsIronAssemblyPositionClearOfRunes(goal, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS))
+        return false;
+
+    Position waypoint;
+    if (!TryGetIronAssemblyRuneDetour(bot, goal, runes, waypoint))
+    {
+        step = goal;
+        return true;
+    }
+
+    // Only the first rune on the line is steered round, so with two down the point round one can sit
+    // in the other. Holding outside both beats walking into it.
+    if (!IsIronAssemblyPositionClearOfRunes(waypoint, runes, ULDUAR_IRON_ASSEMBLY_RUNE_OF_DEATH_ROUTE_RADIUS))
+        return false;
+
+    step = waypoint;
     return true;
 }
 
@@ -1208,6 +1369,13 @@ bool IronAssemblyHasOverwhelmingPower(Unit* unit)
 {
     return IronAssemblyHasEitherAura(unit, SPELL_OVERWHELMING_POWER_10_MAN,
                                      SPELL_OVERWHELMING_POWER_25_MAN);
+}
+
+bool IronAssemblyHeldByOtherTank(Player* bot, Unit* boss)
+{
+    Unit* const victim = boss ? boss->GetVictim() : nullptr;
+    Player* const holder = victim ? victim->ToPlayer() : nullptr;
+    return holder && holder != bot && holder->GetGroup() == bot->GetGroup() && PlayerbotAI::IsTank(holder);
 }
 
 bool IronAssemblyEncounterStateIsStale(PlayerbotAI* botAI)
