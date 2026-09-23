@@ -248,6 +248,12 @@ public:
     // Combat while most of the roster was alive. Never set means nobody pulled: a raid lying dead after
     // a wipe while one human is still in combat.
     bool sawRaidAlive = false;
+    // Scripts without boss state only. ToC raises IsEncounterInProgress before the pull, so only a fall
+    // after the roster fought while it was up ends one.
+    bool encounterInProgress = false;
+    bool combatWhileInProgress = false;
+    // Encounter credit that landed while IsEncounterInProgress still answered true.
+    bool credited = false;
 
     std::vector<ObjectGuid> roster;
     std::unordered_set<uint64> seenUnits;
@@ -301,6 +307,7 @@ public:
 
     bool RosterMostlyDead();
     bool AnyRaidMemberInCombat();
+    bool EncounterFellAfterCombat(bool inCombat);
     void UpgradeBossName(Creature* boss);
     void UpgradeBossName(std::string const& slug);
 };
@@ -313,6 +320,8 @@ extern std::unordered_map<uint32, PreRollRing> g_preRoll;
 // Boss ids whose state the instance script tried to change, waiting for the next map update to read
 // back what the core actually settled on.
 extern std::unordered_map<uint32, std::vector<uint32>> g_pendingBossState;
+// Instances that got a DBC encounter credit since their last map update.
+extern std::unordered_set<uint32> g_pendingCredit;
 extern std::atomic<uint32> g_registryGeneration;
 
 ObsSession* FindSession(uint32 instanceId);
@@ -386,6 +395,7 @@ Unit* FindEngagedBoss(Map* map);
 void OpenSession(Map* map, Unit* source, char const* trigger);
 void CloseSession(uint32 instanceId, char const* outcome);
 void ProcessPendingBossState(Map* map, uint32 instanceId);
+void ProcessPendingCredit(Map* map, uint32 instanceId);
 
 // --- config and retention (RaidObsConfig.cpp) ---
 

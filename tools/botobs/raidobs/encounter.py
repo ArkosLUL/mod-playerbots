@@ -39,6 +39,24 @@ BOSS_ALIASES = {
     "general-vezax": "vezax",
     "yogg-saron-": "yogg-saron",
     "sara": "yogg-saron",
+    "gormok-the-impaler": "northrend-beasts",
+    "acidmaw": "northrend-beasts",
+    "dreadscale": "northrend-beasts",
+    "icehowl": "northrend-beasts",
+    "fire-bomb": "northrend-beasts",
+    "fjola-lightbane": "val-kyr-twins",
+    "eydis-darkbane": "val-kyr-twins",
+    # Both factions' champions, since the raid fights whichever side it isn't on.
+    **{slug: "faction-champions" for slug in (
+        "vivienne-blackwhisper", "thrakgar", "liandra-suncaller", "caiphus-the-stern", "ruj-kah",
+        "ginselle-blightslinger", "harkzog", "birana-stormhoof", "narrhok-steelbreaker", "maz-dinah",
+        "broln-stouthorn", "malithas-brightblade", "gorgrim-shadowcleave", "erin-misthoof",
+        "kavina-grovesong", "tyrius-duskblade", "shaabad", "velanaa", "anthar-forgemender",
+        "alyssia-moonstalker", "noozle-whizzlestick", "melador-valestrider", "saamul",
+        "baelnor-lightbearer", "irieth-shadowstep", "brienna-nightfell", "serissa-grimdabbler",
+        "shocuul",
+    )},
+    # The Lich King is boss-flagged in ToC too, but `the-lich-king` is ICC's encounter. Never alias it.
 }
 
 
@@ -177,23 +195,50 @@ ULD_PREFIXES = {
     "algalon": "algalon",
 }
 
+# Every per-encounter ToC trigger name leads with one of these, so a new ToC encounter prefix needs a
+# row here. Raid-wide triggers lead with none.
+# `anubarak` has no apostrophe on purpose: Azjol-Nerub's `anub'arak impale` must not match it.
+TOC_PREFIXES = {
+    "gormok": "northrend-beasts", "northrend worms": "northrend-beasts",
+    "icehowl": "northrend-beasts", "jaraxxus": "lord-jaraxxus",
+    "faction champions": "faction-champions", "twin valkyr": "val-kyr-twins",
+    "anubarak": "anub-arak",
+}
+
 
 def node_encounter(node: str) -> str | None:
-    for prefix, boss in ULD_PREFIXES.items():
-        if node.startswith(prefix):
-            return boss
+    for table in (ULD_PREFIXES, TOC_PREFIXES):
+        for prefix, boss in table.items():
+            if node.startswith(prefix):
+                return boss
     return None
+
+
+# Note-key prefixes that name their encounters outright. `toc` is raid-wide, so it names all five.
+NOTE_PREFIXES = {
+    "nb": frozenset({"northrend-beasts"}),
+    "jaraxxus": frozenset({"lord-jaraxxus"}),
+    "fc": frozenset({"faction-champions"}),
+    "tv": frozenset({"val-kyr-twins"}),
+    "anub": frozenset({"anub-arak"}),
+    "toc": frozenset(TOC_PREFIXES.values()),
+}
 
 
 def prefix_matches_boss(prefix: str, boss: str) -> bool:
     """Whether a key prefix names the boss a trace fought.
 
-    Prefixes are written three ways and all are regular: `thorim`/`mimiron`/`algalon` spell the slug
-    out with the punctuation dropped, `fl` is the slug's initials, and `yogg` is its first word.
-    Deriving all three beats a fourth hand-mirrored prefix table - there are already two of those and
-    they drift. Without the first-word form no `yogg.*` key matches its boss, because `yoggsaron`
-    and `ys` are all the other two forms derive.
+    NOTE_PREFIXES goes first and a hit there decides on its own. `jaraxxus`, `tv` and `toc` can't be
+    derived from any slug, and a derived `anub` would also claim Naxx's `anub-rekhan`.
+
+    Everything else is derived, three ways: `thorim`/`mimiron`/`algalon` spell the slug out with the
+    punctuation dropped, `fl` is the slug's initials, and `yogg` is its first word. Without the
+    first-word form no `yogg.*` key matches its boss, because `yoggsaron` and `ys` are all the other
+    two forms derive.
     """
+    owners = NOTE_PREFIXES.get(prefix)
+    if owners is not None:
+        return boss in owners
     words = [word for word in re.split(r"[^a-z0-9]+", boss.lower()) if word]
     flat = "".join(words)
     initials = "".join(word[0] for word in words)

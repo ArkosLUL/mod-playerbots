@@ -59,6 +59,10 @@ void OnMapDestroyed(Map* map);
 // rejects some of them, so this only queues the boss id; the state that actually stuck is read on the
 // next map update. That delay is also what lets the engage hook name the trace first.
 void OnBossState(uint32 bossId, Map* map);
+// A DBC encounter credit landed. Only queues: the credit fires inside Unit::Kill or Spell::cast, often
+// mid bot action, and a close drains every roster engine. Scripts without boss state close as a kill
+// once the encounter is down.
+void OnEncounterCredit(Map* map);
 void OnCreatureEngage(Unit* creature, Unit* victim);
 
 // Opens a trace for a pull no instance script reports: gauntlets, trash, a mid-phase re-engage.

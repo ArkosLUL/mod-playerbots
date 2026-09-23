@@ -296,6 +296,63 @@ void ProcessPendingBossState(Map* map, uint32 instanceId)
     }
 }
 
+namespace
+{
+// Must match the test ToC's IsEncounterInProgress runs first: asked with nobody alive, it resets its
+// encounter to NOT_STARTED and InstanceCleanup then charges the wipe no heroic attempt.
+bool AnyAliveNonGmPlayer(Map* map)
+{
+    Map::PlayerList const& players = map->GetPlayers();
+    for (Map::PlayerList::const_iterator it = players.begin(); it != players.end(); ++it)
+        if (Player* player = it->GetSource())
+            if (player->IsAlive() && !player->IsGameMaster())
+                return true;
+
+    return false;
+}
+}  // namespace
+
+// A boss-state script's DONE already closed its trace, so only scripts without boss state act on it.
+// A kill's DONE lands in the same call stack as its credit, so the encounter is normally down by now.
+// Still up means part of it is alive (heroic Icehowl dying before the worms): latch, the fall decides.
+void ProcessPendingCredit(Map* map, uint32 instanceId)
+{
+    {
+        std::lock_guard<std::mutex> guard(g_registryMutex);
+        if (!g_pendingCredit.erase(instanceId))
+            return;
+    }
+
+    InstanceMap* instance = map->ToInstanceMap();
+    InstanceScript* script = instance ? instance->GetInstanceScript() : nullptr;
+    if (!script || script->GetEncounterCount())
+        return;
+
+    if (AnyAliveNonGmPlayer(map) && script->IsEncounterInProgress())
+    {
+        if (ObsSession* session = FindSession(instanceId))
+            session->credited = true;
+        return;
+    }
+
+    CloseSession(instanceId, "kill");
+}
+
+bool ObsSession::EncounterFellAfterCombat(bool inCombat)
+{
+    InstanceMap* instance = map ? map->ToInstanceMap() : nullptr;
+    InstanceScript* script = instance ? instance->GetInstanceScript() : nullptr;
+    if (!script || script->GetEncounterCount())
+        return false;
+
+    bool const inProgress = AnyAliveNonGmPlayer(map) && script->IsEncounterInProgress();
+    bool const fell = encounterInProgress && !inProgress && combatWhileInProgress;
+
+    encounterInProgress = inProgress;
+    combatWhileInProgress = inProgress && (combatWhileInProgress || inCombat);
+    return fell;
+}
+
 bool ObsSession::AnyRaidMemberInCombat()
 {
     for (ObjectGuid guid : roster)
@@ -317,6 +374,7 @@ void OnMapUpdate(Map* map, uint32 diff)
     uint32 const now = getMSTime();
 
     ProcessPendingBossState(map, instanceId);
+    ProcessPendingCredit(map, instanceId);
 
     ObsSession* session = FindSession(instanceId);
     if (!session)
@@ -393,7 +451,8 @@ void OnMapUpdate(Map* map, uint32 diff)
         s.Flush();
     }
 
-    if (s.AnyRaidMemberInCombat())
+    bool const inCombat = s.AnyRaidMemberInCombat();
+    if (inCombat)
     {
         s.lastCombatMs = now;
 
@@ -407,8 +466,18 @@ void OnMapUpdate(Map* map, uint32 diff)
             s.sawRaidAlive = s.sawRaidAlive || !mostlyDead;
         }
     }
-    else if (g_cfg.idleCloseMs && getMSTimeDiff(s.lastCombatMs, now) > g_cfg.idleCloseMs)
-        CloseSession(instanceId, "idle");
+
+    // A latched credit is a kill only if the raid is still up when the encounter ends. CloseSession's
+    // roster rule turns `reset` into `wipe` when most of the raid died.
+    if (s.EncounterFellAfterCombat(inCombat))
+    {
+        CloseSession(instanceId, s.credited && !s.RosterMostlyDead() ? "kill" : "reset");
+        return;
+    }
+
+    // Credited but never fell: VoA's override stays true all through Wintergrasp war time.
+    if (!inCombat && g_cfg.idleCloseMs && getMSTimeDiff(s.lastCombatMs, now) > g_cfg.idleCloseMs)
+        CloseSession(instanceId, s.credited ? "kill" : "idle");
 }
 
 void OnMapDestroyed(Map* map)
@@ -422,6 +491,7 @@ void OnMapDestroyed(Map* map)
     std::lock_guard<std::mutex> guard(g_registryMutex);
     g_preRoll.erase(instanceId);
     g_pendingBossState.erase(instanceId);
+    g_pendingCredit.erase(instanceId);
 }
 
 void OnBossState(uint32 bossId, Map* map)
@@ -433,6 +503,15 @@ void OnBossState(uint32 bossId, Map* map)
     std::vector<uint32>& pending = g_pendingBossState[map->GetInstanceId()];
     if (std::find(pending.begin(), pending.end(), bossId) == pending.end())
         pending.push_back(bossId);
+}
+
+void OnEncounterCredit(Map* map)
+{
+    if (!g_cfg.enabled || !MapIsTracked(map) || !FindSession(map->GetInstanceId()))
+        return;
+
+    std::lock_guard<std::mutex> guard(g_registryMutex);
+    g_pendingCredit.insert(map->GetInstanceId());
 }
 
 // The first boss to actually swing at the raid, for a trace that opened before it could see one.

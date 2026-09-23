@@ -10,7 +10,8 @@ is docs/engine/pitfalls.md.
     pblint.py [path ...]         default: the whole src tree
     pblint.py --warnings         also print the advisory findings
     pblint.py --only CHECK       run one check by name
-    pblint.py --spell-difficulty also sweep raid spell ids against the world DB (needs the DB)
+    pblint.py --spell-difficulty also sweep raid spell ids against the world DB plus the client
+                                 SpellDifficulty CSV in mod-spell-tweaks (needs the DB)
 
 Exit status is 1 if any error-level finding is reported; warnings alone exit 0.
 
@@ -25,6 +26,8 @@ at runtime is invisible - see KNOWN_DYNAMIC.
 from __future__ import annotations
 
 import argparse
+import bisect
+import csv
 import os
 import pathlib
 import re
@@ -32,6 +35,7 @@ import shlex
 import subprocess
 import sys
 from collections import defaultdict
+from typing import NamedTuple
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SRC = REPO / "src"
@@ -350,13 +354,42 @@ def check_shared_base_cast(sources) -> list[Finding]:
     return out
 
 
-def spell_difficulty_table() -> dict[int, list[int]]:
-    """spelldifficulty_dbc from the world DB, as base id -> the ids each difficulty really uses.
+class SpellDifficulty(NamedTuple):
+    rows: dict[int, tuple[int, ...]]  # row id -> its distinct spell ids, in difficulty order
+    row_of: dict[int, int]            # every member spell id -> its row id
 
-    The world DB, not the client DBC: SpellDifficulty.dbc can be empty for a spell the DB does remap.
-    Mimiron's Plasma Blast is exactly that - 62997 -> 64529 is in the table and absent from
-    mod-spell-tweaks' reference CSV (582 rows against the DB's 604), so a DBC-only sweep reads it as
-    "no remap" and the 25-man defensive stays dead."""
+
+def merge_spell_difficulty(dbc_rows, db_rows) -> SpellDifficulty:
+    """The table GetSpellIdForDifficulty really reads, from rows of [row id, 4 difficulty ids].
+
+    Same steps as the core: the DB overlays the DBC by row id, the DB winning (DBCDatabaseLoader),
+    then a row is skipped unless its first two ids are set, and every id of what is left maps to its
+    row (DBCStores.cpp). So the lookup resolves from any member, not only the 10-man base."""
+    merged = {row[0]: tuple(row[1:]) for row in dbc_rows}
+    merged.update({row[0]: tuple(row[1:]) for row in db_rows})
+
+    rows: dict[int, tuple[int, ...]] = {}
+    row_of: dict[int, int] = {}
+    for row_id in sorted(merged):
+        ids = merged[row_id]
+        if len(ids) < 2 or ids[0] <= 0 or ids[1] <= 0:
+            continue
+        kept = tuple(dict.fromkeys(spell for spell in ids if spell > 0))
+        if len(kept) < 2:
+            continue
+        rows[row_id] = kept
+        # ascending row id, last write wins, same order the core fills its lookup map in
+        for spell in kept:
+            row_of[spell] = row_id
+    return SpellDifficulty(rows, row_of)
+
+
+def _cell(value: str) -> int:
+    value = value.strip()
+    return int(value) if value.lstrip("-").isdigit() else 0
+
+
+def _world_db_rows() -> list[list[int]]:
     command = os.environ.get(
         "PB_MYSQL",
         "docker exec ac-database mysql -uroot -ppassword -N -B acore_world",
@@ -370,85 +403,184 @@ def spell_difficulty_table() -> dict[int, list[int]]:
         raise RuntimeError(f"could not reach the world DB ({err}); set PB_MYSQL") from err
     if out.returncode != 0:
         raise RuntimeError(f"world DB query failed: {out.stderr.strip() or out.stdout.strip()}")
+    rows = [[_cell(c) for c in line.split("\t")] for line in out.stdout.splitlines() if line.strip()]
+    if not rows:
+        raise RuntimeError("world DB returned no spelldifficulty_dbc rows; set PB_MYSQL")
+    return rows
 
-    table: dict[int, list[int]] = {}
-    for row in out.stdout.splitlines():
-        parts = [p for p in row.split("\t") if p != ""]
-        if len(parts) < 2:
-            continue
-        base, variants = int(parts[0]), [int(p) for p in parts[1:]]
-        table[base] = [v for v in variants if v]
-    return table
+
+def _client_csv_rows() -> list[list[int]]:
+    path = pathlib.Path(os.environ.get("PB_SPELL_DIFFICULTY_CSV") or REPO.parents[1] / "modules" /
+                        "mod-spell-tweaks" / "data" / "dbc-reference" /
+                        "spelldifficulty.reference.csv")
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows = [[_cell(c) for c in record] for record in csv.reader(handle)
+                    if record and record[0].strip().isdigit()]
+    except OSError as err:
+        raise RuntimeError(f"could not read the client spell difficulty CSV ({err}); "
+                           f"set PB_SPELL_DIFFICULTY_CSV") from err
+    if not rows:
+        raise RuntimeError(f"{path} holds no rows; set PB_SPELL_DIFFICULTY_CSV")
+    return rows
+
+
+def spell_difficulty_table() -> SpellDifficulty:
+    """World DB spelldifficulty_dbc merged over the client SpellDifficulty.dbc, as the core loads it.
+
+    Neither source is enough alone: they share no row. The DB's 604 are keyed by base spell id and
+    hold Mimiron's Plasma Blast 62997 -> 64529 and Valithria's Emerald Vigor 70873 -> 71941; the
+    client's 581 (mod-spell-tweaks' reference CSV) keep their DBC ids and hold every ToC combat remap
+    and the rest of ICC's. Either one alone reads the other's remaps as "none", so a missing source is
+    an error, never a one-source sweep."""
+    return merge_spell_difficulty(_client_csv_rows(), _world_db_rows())
 
 
 # Creature entries, gameobjects, items and map ids share the numeric range with spell ids, and a few
-# collide with a real spelldifficulty_dbc row - NPC_ICEHOWL is 34797, which is also a remapped spell.
-NOT_A_SPELL = re.compile(r"(?i)(npc|entry|creature|gameobject|go_|item|map|area|zone|faction|quest)")
+# collide with a real spell difficulty row: NPC_ICEHOWL is 34797, which is also a remapped spell.
+NOT_A_SPELL = re.compile(
+    r"(?i)(npc|entr(?:y|ies)|creature|gameobject|go_|item|map|area|zone|faction|quest)")
+
+SPELL_DIFFICULTY_OK = "pblint: spell-difficulty-ok"
+
+# 4-6 digits standing alone, so the integer part of a float coordinate is not an id.
+RE_ID_LITERAL = re.compile(r"(?<![\w.])(\d{4,6})(?![\w.])")
+RE_NAMED_ID = re.compile(r"\b([A-Za-z_]\w{3,})\s*=\s*(\d{4,6})(?![\w.])")
+RE_REMAP_CALL = re.compile(r"\bGetSpellIdForDifficulty\s*\(")
+RE_REMAP_TOKEN = re.compile(r"[A-Za-z_]\w*|(?<![\w.])\d{4,6}(?![\w.])")
+RE_BRACE_INIT = re.compile(r"\b([A-Za-z_]\w*)\s*(\[[^\]\n]*\]\s*)?(=\s*)?\{")
+RE_WORD_BEFORE = re.compile(r"(\w+|[>*&])\s+$")
+NOT_A_DECLARED_NAME = {"namespace", "struct", "class", "enum", "union", "else", "do", "try",
+                       "return", "const", "override", "final", "noexcept", "mutable"}
+NOT_A_DECLARATION = {"namespace", "struct", "class", "enum", "union", "public", "protected",
+                     "private", "virtual", "return", "new", "throw"}
 
 
-def difficulty_is_discussed(src: Source, number: int) -> bool:
-    """Whether the author has already written about the remap next to the constant. Naxx's spell ids
-    carry "25-man remaps these through spelldifficulty_dbc" and then match on name or dispel type
-    instead - a deliberate answer the id-pair test cannot see. Read from the raw text, since the
-    scanned copy has its comments stripped."""
-    lines = src.raw.splitlines()
-    window = lines[max(0, number - 4):number]
-    return any("difficult" in line.lower() or "25-man" in line.lower() for line in window)
+def brace_initializers(text: str) -> list[tuple[int, int, str]]:
+    """(open, close, name) of every `name = {...}`, `name[] = {...}` and `Type name{...}`, so a
+    literal in a list takes the list's name. Class, enum and namespace bodies are not lists."""
+    spans = []
+    for match in RE_BRACE_INIT.finditer(text):
+        name = match.group(1)
+        if name in NOT_A_DECLARED_NAME:
+            continue
+        if not (match.group(2) or match.group(3)):
+            before = RE_WORD_BEFORE.search(text, max(0, match.start() - 64), match.start())
+            if not before or before.group(1) in NOT_A_DECLARATION:
+                continue
+        start = match.end() - 1
+        depth = 0
+        for end in range(start, len(text)):
+            if text[end] == "{":
+                depth += 1
+            elif text[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    spans.append((start, end, name))
+                    break
+    return spans
 
 
-def check_spell_difficulty(sources, table) -> list[Finding]:
-    """A raid handling only one side of a 10/25 spell pair. The rule is built on the wrong id half the
-    time it matters, and a clean lookup on one id proves nothing about the other: 28 of Ulduar's 139
-    constants remap, and three checks were reading only the 10-man number."""
+def remap_arguments(text: str) -> set[str]:
+    """Every identifier and id literal in the first argument of each GetSpellIdForDifficulty call,
+    read up to the top-level comma, so `ToCSpells::SPELL_X` and `static_cast<uint32>(SPELL_X)`
+    count as much as a bare `SPELL_X`."""
+    tokens: set[str] = set()
+    for match in RE_REMAP_CALL.finditer(text):
+        depth = 0
+        end = match.end()
+        while end < len(text):
+            char = text[end]
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif char == "," and depth == 0:
+                break
+            end += 1
+        tokens.update(RE_REMAP_TOKEN.findall(text, match.end(), end))
+    return tokens
+
+
+def check_spell_difficulty(sources, table: SpellDifficulty) -> list[Finding]:
+    """A raid handling only some difficulties of a remapped spell. The rule is built on the wrong id
+    half the time it matters, and a clean lookup on one id proves nothing about the others.
+
+    Works per row, within one raid directory: a row is reported once, at its first referenced
+    member, when some of its ids appear nowhere and no referenced member is handled. Handled means
+    the constant or literal sits in the first argument of a GetSpellIdForDifficulty call, the
+    constant is declared and never used, its name (or its brace list's name) says it is not a
+    spell, or a comment on its line or the one above carries `pblint: spell-difficulty-ok`."""
     out = []
     by_raid: dict[str, list[Source]] = defaultdict(list)
-    by_rel: dict[str, Source] = {src.rel: src for src in sources}
     for src in sources:
         match = re.match(r"src/Ai/Raid/([^/]+)/", src.rel)
         if match:
             by_raid[match.group(1)].append(src)
 
     for raid, files in sorted(by_raid.items()):
-        seen: dict[int, tuple[str, int]] = {}
-        named: dict[int, str] = {}
+        # literal -> every (file, line, enclosing brace list name) it appears at
+        occurrences: dict[int, list[tuple[Source, int, str | None]]] = defaultdict(list)
+        declared: dict[int, list[str]] = defaultdict(list)
         remapped: set[str] = set()
         used: set[str] = set()
 
         for src in files:
             text = "\n".join(src.lines)
-            # Both halves of the honest pattern: the constant's name, and whether anything hands it
-            # to the core's own remapper. A constant passed through GetSpellIdForDifficulty is correct
-            # on every difficulty and must not be reported.
-            for match in re.finditer(r"\b([A-Za-z_]\w{3,})\s*=\s*(\d{4,6})\b", text):
-                named.setdefault(int(match.group(2)), match.group(1))
-            for match in re.finditer(r"GetSpellIdForDifficulty\(\s*([A-Za-z_]\w*)", text):
-                remapped.add(match.group(1))
+            line_starts = [0] + [i + 1 for i, char in enumerate(text) if char == "\n"]
+            spans = brace_initializers(text)
+            for match in RE_NAMED_ID.finditer(text):
+                if match.group(1) not in declared[int(match.group(2))]:
+                    declared[int(match.group(2))].append(match.group(1))
+            remapped |= remap_arguments(text)
             for match in re.finditer(r"\b([A-Za-z_]\w{3,})\b(?!\s*=\s*\d)", text):
                 used.add(match.group(1))
-            for number, line in enumerate(src.lines, 1):
-                for literal in re.findall(r"\b(\d{4,6})\b", line):
-                    seen.setdefault(int(literal), (src.rel, number))
+            for match in RE_ID_LITERAL.finditer(text):
+                pos = match.start()
+                holders = [s for s in spans if s[0] < pos < s[1]]
+                holder = max(holders)[2] if holders else None
+                number = bisect.bisect_right(line_starts, pos)
+                occurrences[int(match.group(1))].append((src, number, holder))
 
-        for spell, (rel, number) in sorted(seen.items()):
-            variants = table.get(spell)
-            if not variants or len(set(variants)) < 2:
-                continue
-            missing = [v for v in set(variants) if v != spell and v not in seen]
-            if not missing:
+        def marked(src: Source, number: int) -> bool:
+            raw = src.raw.splitlines()
+            return any(1 <= n <= len(raw) and SPELL_DIFFICULTY_OK in raw[n - 1]
+                       and SPELL_DIFFICULTY_OK not in src.lines[n - 1]
+                       for n in (number - 1, number))
+
+        def handled(spell: int) -> bool:
+            names = declared.get(spell, [])
+            if str(spell) in remapped or any(name in remapped for name in names):
+                return True
+            if names and not any(name in used for name in names):
+                return True
+            holders = [holder for _, _, holder in occurrences[spell] if holder]
+            if any(NOT_A_SPELL.search(name) for name in names + holders):
+                return True
+            return any(marked(src, number) for src, number, _ in occurrences[spell])
+
+        referenced: dict[int, list[int]] = defaultdict(list)
+        for spell in occurrences:
+            if spell in table.row_of:
+                referenced[table.row_of[spell]].append(spell)
+
+        for row_id, members in sorted(referenced.items()):
+            ids = table.rows[row_id]
+            missing = [spell for spell in ids if spell not in occurrences]
+            if not missing or any(handled(spell) for spell in members):
                 continue
 
-            name = named.get(spell)
-            if name and (name in remapped or name not in used or NOT_A_SPELL.search(name)):
-                continue
-            if difficulty_is_discussed(by_rel[rel], number):
-                continue
-
-            names = ", ".join(str(v) for v in sorted(missing))
-            label = f"{name} ({spell})" if name else str(spell)
-            out.append(Finding("spell-difficulty", rel, number,
-                               f"{label} remaps by difficulty to {names}, which {raid} never "
-                               f"references and nothing passes it through "
-                               f"GetSpellIdForDifficulty - the rule may run on one difficulty only",
+            first = min(members, key=lambda s: (occurrences[s][0][0].rel, occurrences[s][0][1]))
+            src, number, holder = occurrences[first][0]
+            name = (declared.get(first) or [holder])[0]
+            label = f"{name} ({first})" if name else str(first)
+            out.append(Finding("spell-difficulty", src.rel, number,
+                               f"{label} is in spell difficulty row {row_id} "
+                               f"({'/'.join(str(s) for s in ids)}); {raid} never references "
+                               f"{', '.join(str(s) for s in missing)} and passes no member through "
+                               f"GetSpellIdForDifficulty, so the rule may run on one difficulty only",
                                error=False))
     return out
 
@@ -474,8 +606,9 @@ def main() -> int:
     parser.add_argument("--warnings", action="store_true", help="also print advisory findings")
     parser.add_argument("--only", metavar="CHECK", help=f"one of: {', '.join(sorted(CHECKS))}")
     parser.add_argument("--spell-difficulty", action="store_true",
-                        help="also sweep raid spell constants against the world DB's "
-                             "spelldifficulty_dbc (needs the DB; override the client with PB_MYSQL)")
+                        help="also sweep raid spell ids against spelldifficulty_dbc merged over "
+                             "the client SpellDifficulty CSV (needs the DB; override the mysql "
+                             "command with PB_MYSQL, the CSV path with PB_SPELL_DIFFICULTY_CSV)")
     args = parser.parse_args()
 
     if args.only and args.only not in CHECKS:

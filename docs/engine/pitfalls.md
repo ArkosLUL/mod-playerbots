@@ -506,17 +506,25 @@ Related traps:
   world object, never off an Elder still being alive.
 - **Spell ids differ by difficulty and the mapping is not uniform.** Heigan's 25-man Decrepit Fever is
   **55011**, not 29998, so a raw `HasAura(29998)` dispelled nothing in 25-man; Eruption, Spell
-  Disruption and Plague Cloud have no difficulty rows at all. Check
-  `spelldifficulty_dbc` per spell and use `NaxxSpellIds::HasAnyAura(unit, {…})`. The table is in the
-  **world DB** and the client `SpellDifficulty.dbc` can be empty for the same spell (Mimiron's Plasma
-  Blast, 62997 → 64529), so a DBC-only check reads as "no remap". It binds boss casts, not just player
-  auras: `FindCurrentSpellBySpellId` or `m_spellInfo->Id ==` on the 10-man id silently never matches.
-  Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice in each.
-  `pblint.py --spell-difficulty` is that sweep, and it reads the **world DB**: the client CSV in
-  mod-spell-tweaks holds 582 rows against the DB's 604 and is missing Plasma Blast entirely, so a
-  DBC-only check calls it "no remap". 28 of Ulduar's 144 spell constants remap; all 28 are handled
-  today, the three that were not having been fixed. A constant handed to
-  `sSpellMgr->GetSpellIdForDifficulty` is correct on every difficulty and the sweep skips it.
+  Disruption and Plague Cloud have no difficulty rows at all. Check each spell in both sources below;
+  match every id (`NaxxSpellIds::HasAnyAura(unit, {…})`) or remap one through
+  `sSpellMgr->GetSpellIdForDifficulty`, right on every difficulty. It binds boss casts, not just
+  player auras: `FindCurrentSpellBySpellId` or `m_spellInfo->Id ==` on the 10-man id silently never
+  matches. Mimiron's Plasma Blast defensive was dead for two pulls that way, tank dying to it twice
+  in each.
+  - **Two sources sharing no row.** The core loads the client `SpellDifficulty.dbc` (mirrored in
+    mod-spell-tweaks' `spelldifficulty.reference.csv`) and overlays the world DB's
+    `spelldifficulty_dbc` on it by row id, so either alone reads a remap as "none": Plasma Blast
+    62997 → 64529 and Valithria's Emerald Vigor 70873 → 71941 are DB-only, every ToC combat remap
+    DBC-only.
+  - **Any member id resolves its row**, not only the 10-man base: Touch of Light 67297 is a 10H id,
+    which `GetSpellIdForDifficulty` still remaps and a base-keyed lookup misses.
+  - **`pblint.py --spell-difficulty --warnings`** reads both sources (exit 2 if one is missing). Per
+    raid directory it warns once per row, at the first referenced member, when some id of the row
+    appears nowhere and no referenced member is handled: in the first argument of a
+    `GetSpellIdForDifficulty` call, declared and never used, named as a non-spell (`npc`, `entry`, …;
+    a brace list's name counts), or marked `// pblint: spell-difficulty-ok` on its line or the one
+    above. Ulduar has 53 of its 155 spell constants in a row and none reported.
 - **`TricksOfTheTradeTargetValue::TankNeedsRedirect` never takes its opener branch, and the fallback
   is wrong for the class that casts it.** The opener branch keys on `"combat start time"`, which
   `PlayerbotAI::ChangeEngineOnCombat` sets **only** under the `wait for attack` strategy — so it is 0

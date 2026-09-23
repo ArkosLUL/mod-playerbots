@@ -80,8 +80,8 @@ EXPLAIN = {
 def walked(trace: Trace, prefix: str | None = None) -> tuple[list[dict], int, str]:
     """The nodes this pull actually walked, the count folded away as gated, and the boss.
 
-    An Ulduar node belonging to another encounter was gated off, not silent. Folding these is what
-    keeps a Hodir pull from reporting ~150 phantom NEVERs.
+    A node belonging to another encounter of this raid was gated off, not silent. Folding these is
+    what keeps a Hodir pull from reporting ~150 phantom NEVERs.
     """
     boss = encounter_of(trace)
     gated = 0
@@ -151,7 +151,8 @@ def show_coverage(trace: Trace, prefix: str | None = None, by_bot: bool = False)
                 print(f"           {trace.name(guid)}")
 
     if gated:
-        print(f"\n  SKIPPED {gated} node(s) belonging to another Ulduar encounter (gate shut this pull)")
+        print(f"\n  SKIPPED {gated} node(s) belonging to another encounter of this raid "
+              "(gate shut this pull)")
 
     summary = ", ".join(f"{counts[tag]} {tag.lower()}" for tag in ORDER if counts[tag])
     print(f"\n{summary or 'nothing walked'}")

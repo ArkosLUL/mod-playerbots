@@ -30,6 +30,7 @@ std::mutex g_registryMutex;
 std::unordered_map<uint32, std::unique_ptr<ObsSession>> g_sessions;
 std::unordered_map<uint32, PreRollRing> g_preRoll;
 std::unordered_map<uint32, std::vector<uint32>> g_pendingBossState;
+std::unordered_set<uint32> g_pendingCredit;
 std::atomic<uint32> g_registryGeneration{0};
 
 // --- small formatting helpers -------------------------------------------------
