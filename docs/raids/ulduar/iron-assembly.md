@@ -63,13 +63,13 @@ node**. Lightning Whirl reaches 100 yd with no positional answer, so it takes th
 interrupter; Chain Lightning takes the second, and is deliberately allowed through when cooldowns are
 thin.
 
-**One encounter state per instance, shared behind a mutex — never `thread_local`**
-(the rule and its signature are in
+**One encounter state per instance, in a `RaidInstanceState` — never `thread_local`**
+([../README.md](../README.md#per-instance-state); the signature is in
 [../../engine/raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md)). Spread slots, the
 shift heading and the alive mask must agree across the raid, and per-thread copies handed one pull
 six independent states: two bots held slot 0 at once, 11 bots took 71 slot assignments in 4.5s, 10
 of 16 slots were ever used, and each ranged bot chased 4–6 destinations for 285–334 yd in a 50s
-Steelbreaker phase. Every raid holds its state this way now.
+Steelbreaker phase.
 
 Formation anchors on `(1587.18, 121.02, 427.27)`. navprobe: 8/8 headings clean at 20 and 30 yd, but
 the 45° and 135° diagonals settle to Z −27.7 and −438 at 40, and three of eight leave the mesh at 50

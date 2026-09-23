@@ -15,6 +15,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "Timer.h"
 #include "UldEncounterGate.h"
@@ -26,7 +27,6 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -104,22 +104,12 @@ struct FlameLeviathanState
     uint32 scanMs = 0;
 };
 
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
-// pool reassigns it - which silently resets the vent claim and made fl.pursued flap 199 times in a
-// pull that switched target twelve times. References into an unordered_map survive rehashing, so the
-// lock only has to cover the lookup.
-std::mutex flStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, FlameLeviathanState> flStates;
+RaidInstanceState<FlameLeviathanState> flStates;
 
 // Long enough that the scan is cheap, short enough that a 31s Pursued cycle is never missed.
 constexpr uint32 ULDUAR_FL_SCAN_INTERVAL_MS = 200;
 
-FlameLeviathanState& FlameLeviathanStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(flStatesMutex);
-    return flStates[bot->GetInstanceId()];
-}
+FlameLeviathanState& FlameLeviathanStateFor(Player* bot) { return flStates.For(bot->GetInstanceId()); }
 
 // Arms a reticle from the tick it is first seen stunned, for the fuse and the strike's flight.
 void TickHodirsFury(FlameLeviathanState& state, PlayerbotAI* botAI, Player* bot)

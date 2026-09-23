@@ -18,13 +18,13 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "UldEncounterGate.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
 #include <cmath>
 #include <functional>
-#include <mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -39,17 +39,11 @@ const Position ULDUAR_IGNIS_WATER_POOL_EAST = Position(646.771f, 277.796f, 360.8
 // Construct each assist tank has committed to, so one Ignis activates nearer to him mid-walk cannot
 // steal the kite. Cleared once that construct turns Brittle or dies. Keyed by instance first: the
 // same tank GUID comes back on a re-pull and in a second raid running the fight concurrently.
-//
-// Locked for the same reason as the arc state below: two raids on Ignis at once reach this from two
-// map threads. Only the outer lookup needs it, since an instance's own map is only ever touched by
-// the thread updating that instance, and references into an unordered_map survive a rehash.
-static std::mutex ignisTankDrivenConstructGuidMutex;
-static std::unordered_map<uint32, std::unordered_map<ObjectGuid, ObjectGuid>> ignisTankDrivenConstructGuid;
+static RaidInstanceState<std::unordered_map<ObjectGuid, ObjectGuid>> ignisTankDrivenConstructGuid;
 
 static std::unordered_map<ObjectGuid, ObjectGuid>& IgnisDrivenConstructsFor(Player* tank)
 {
-    std::lock_guard<std::mutex> guard(ignisTankDrivenConstructGuidMutex);
-    return ignisTankDrivenConstructGuid[tank->GetInstanceId()];
+    return ignisTankDrivenConstructGuid.For(tank->GetInstanceId());
 }
 
 // The test FindNearestCreature puts each candidate through: the searcher's phase filter from the
@@ -332,19 +326,9 @@ struct IgnisTankArcState
     bool scorchUp = false;
 };
 
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh rotation whenever the
-// pool reassigns it. scorchUp is a rising edge, so six copies means six first sightings of the same
-// Scorch and the slot walks the arc six times instead of once. References into an unordered_map survive
-// rehashing, so the lock only has to cover the lookup.
-static std::mutex _ignisTankArcStatesMutex;
-static std::unordered_map<uint32 /*instanceId*/, IgnisTankArcState> _ignisTankArcStates;
+static RaidInstanceState<IgnisTankArcState> _ignisTankArcStates;
 
-static IgnisTankArcState& IgnisTankArcStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(_ignisTankArcStatesMutex);
-    return _ignisTankArcStates[bot->GetInstanceId()];
-}
+static IgnisTankArcState& IgnisTankArcStateFor(Player* bot) { return _ignisTankArcStates.For(bot->GetInstanceId()); }
 
 Position GetIgnisMainTankPosition(PlayerbotAI* botAI, Player* bot, Unit* boss)
 {

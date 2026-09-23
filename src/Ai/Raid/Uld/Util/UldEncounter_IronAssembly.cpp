@@ -14,6 +14,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "EncounterHelpers.h"
 #include "RtiTargetValue.h"
 #include "Spell.h"
@@ -26,7 +27,6 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
-#include <mutex>
 #include <set>
 #include <unordered_map>
 #include <unordered_set>
@@ -65,20 +65,11 @@ struct IronAssemblyEncounterState
 
 // Keyed by instance, because trigger, action and multiplier each hold their own helper instance and
 // the state they must agree on has to live in one place.
-//
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
-// pool reassigns it: two bots claim the same spread slot from different copies, and the shift heading
-// stops being a latch at all. It shows up in a trace as six identical ironassembly.alive rows per
-// transition, one per thread that ever ticked the pull. References into an unordered_map survive
-// rehashing, so the lock only has to cover the lookup.
-std::mutex ironAssemblyStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, IronAssemblyEncounterState> ironAssemblyStates;
+RaidInstanceState<IronAssemblyEncounterState> ironAssemblyStates;
 
 IronAssemblyEncounterState& IronAssemblyStateFor(Player* bot)
 {
-    std::lock_guard<std::mutex> guard(ironAssemblyStatesMutex);
-    return ironAssemblyStates[bot->GetInstanceId()];
+    return ironAssemblyStates.For(bot->GetInstanceId());
 }
 
 // True when atMs already holds this tick's answer; otherwise stamps it and the caller refills.
@@ -1401,10 +1392,8 @@ bool IronAssemblyBotHasEncounterState(Player* bot)
     if (!bot)
         return false;
 
-    std::lock_guard<std::mutex> guard(ironAssemblyStatesMutex);
-
-    auto const state = ironAssemblyStates.find(bot->GetInstanceId());
-    return state != ironAssemblyStates.end() && state->second.spreadSlots.count(bot->GetGUID()) > 0;
+    IronAssemblyEncounterState const* state = ironAssemblyStates.Find(bot->GetInstanceId());
+    return state && state->spreadSlots.count(bot->GetGUID()) > 0;
 }
 
 void ResetIronAssemblyEncounterState(Player* bot, bool clearInstance)
@@ -1412,17 +1401,15 @@ void ResetIronAssemblyEncounterState(Player* bot, bool clearInstance)
     if (!bot)
         return;
 
-    std::lock_guard<std::mutex> guard(ironAssemblyStatesMutex);
-
     if (clearInstance)
     {
-        ironAssemblyStates.erase(bot->GetInstanceId());
+        ironAssemblyStates.Reset(bot->GetInstanceId());
         return;
     }
 
-    auto const state = ironAssemblyStates.find(bot->GetInstanceId());
-    if (state == ironAssemblyStates.end())
+    IronAssemblyEncounterState* state = ironAssemblyStates.Find(bot->GetInstanceId());
+    if (!state)
         return;
 
-    state->second.spreadSlots.erase(bot->GetGUID());
+    state->spreadSlots.erase(bot->GetGUID());
 }
