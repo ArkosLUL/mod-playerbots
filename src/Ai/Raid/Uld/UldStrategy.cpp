@@ -8,6 +8,7 @@
 
 #include "BossResistanceMultipliers.h"
 #include "Playerbots.h"
+#include "UldDefinitions.h"
 #include "UldEncounter_Mimiron.h"
 #include "UldMultipliers.h"
 
@@ -20,6 +21,12 @@ void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions,
 {
     for (ObjectGuid const& guid : GetMimironKeptFireBots(botAI, botAI->GetBot()))
         exclusions.insert(guid);
+}
+
+void RaidUlduarStrategy::OnTick()
+{
+    for (EncounterDefinition const* encounter : UldEncounterDefinitions())
+        encounter->OnTick(botAI);
 }
 
 void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -676,64 +683,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // General Vezax
     //
-    // The engine stops at the first action that returns true, so this order is a survival ranking,
-    // and no two nodes share a number - a tie falls to vector insertion order, which is not a
-    // decision anyone made.
-    //
-    // The dodge leads: Shadow Crash is 11310 plus a knockback, and it is the only hazard here with a
-    // deadline, about 2.7-3.6s of missile flight. The interrupt comes next, because losing a kick
-    // costs the whole raid 13875-16125 fire at once. Then the two halves of Mark of the Faceless,
-    // which is the only mechanic whose failure heals the boss - 5000 a tick off everyone nearby, at
-    // 20x back into him - but drains over 10s rather than landing at once, so both sit under the
-    // dodge. Breaking out of someone else's mark outranks carrying your own: the bot that holds it is
-    // the one person its leech skips, so it is never the one taking damage.
-    //
-    // The RAID band is the reward half, and soaking a field is worth nothing to a bot that is already
-    // dying. Position is last on purpose, and yields as soon as it is parked, so the class interrupts
-    // at ACTION_INTERRUPT (40) still get a tick.
-    triggers.push_back(new TriggerNode(
-        "vezax reset encounter state",
-        { NextAction("vezax reset encounter state action", ACTION_EMERGENCY + 10) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax shadow crash dodge",
-        { NextAction("vezax shadow crash dodge action", ACTION_EMERGENCY + 9) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax searing flames interrupt",
-        { NextAction("vezax searing flames interrupt action", ACTION_EMERGENCY + 8) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax mark of the faceless break",
-        { NextAction("vezax mark of the faceless break action", ACTION_EMERGENCY + 7) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax mark of the faceless",
-        { NextAction("vezax mark of the faceless action", ACTION_EMERGENCY + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax surge of darkness",
-        { NextAction("vezax surge of darkness action", ACTION_EMERGENCY + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax saronite animus",
-        { NextAction("vezax saronite animus action", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax drop vapor target",
-        { NextAction("vezax drop vapor target action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax shadow crash soak",
-        { NextAction("vezax shadow crash soak action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax shadow resistance",
-        { NextAction("vezax shadow resistance action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "vezax raid position",
-        { NextAction("vezax raid position action", ACTION_RAID) }));
+    UldVezaxDefinition().AddTriggerNodes(triggers);
 
     //
     // Yogg-Saron
@@ -1026,12 +976,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
 
-    // Vezax owns where the ranged half stands, so the generic movers have to stand down or the
-    // formation is re-derived and abandoned on alternate ticks.
-    multipliers.push_back(new VezaxControlMovementMultiplier(botAI));
-    multipliers.push_back(new VezaxSuppressLifeTapMultiplier(botAI));
-    multipliers.push_back(new VezaxTargetGuardMultiplier(botAI));
-    multipliers.push_back(new VezaxHoldCastOutsideFieldMultiplier(botAI));
+    UldVezaxDefinition().AddMultipliers(botAI, multipliers);
 
     multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
     multipliers.push_back(new HodirGuardMultiplier(botAI));

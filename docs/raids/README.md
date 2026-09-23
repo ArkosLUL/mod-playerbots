@@ -23,6 +23,22 @@ new `.cpp` files are globbed automatically.
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Vezax so far, the rest per
+[../plans/raid-encounter/raid-encounter.PLAN.md](../plans/raid-encounter/raid-encounter.PLAN.md))
+replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
+
+- **rows**: trigger class, action class, priority, `EncounterRow::Mover`. Each name is typed once, as
+  the class's `Name` constant, which pblint does not read yet;
+- its [encounter rules](#encounter-rules) and hand-written multipliers;
+- a **tick**, run by `Strategy::OnTick` once per engine tick before the triggers. Housekeeping (trace
+  notes, latch writes, wipe resets) goes there, never into a predicate a cheaper check may skip.
+
+The raid lists its definitions once (`UldDefinitions.h`); its contexts and strategy build from the
+list. All of it sits behind the boss's **encounter gate**: `BossStateGate` opens while the boss is
+`IN_PROGRESS`, closes once `DONE`, otherwise closes only while another encounter is `IN_PROGRESS`, so
+between pulls everything is open and predicates still check the boss. Gate on the fight, not the
+unit: a drake Sartharion calls in never starts its own encounter.
+
 Nothing enforces that the four agree, so run `tools/pblint/pblint.py` over what a commit touches: it
 cross-checks all four, and every trigger and action name besides. It only proves the name resolves —
 `postmortem.py --coverage` says whether the node then did anything. (The `"rs"` bug recorded here is
@@ -77,21 +93,39 @@ geometry (a range leash), not threat. The same test bounds a taunt: allowlist th
 **owns**, never the whole target ladder — taunting a rung borrowed for damage off another tank means
 owning its positioning too.
 
-## Movement-suppression multiplier
+## Encounter rules
 
-Eight encounters independently arrived at the same idiom: while a positioning action is active, zero
-`ReachTargetAction`, `CastReachTargetSpellAction`, `CombatFormationMoveAction` and `FollowAction` so
-the generic mover cannot drag the bot back.
+Eight encounters independently arrived at **movement suppression** (zero the generic movers while a
+positioning action is active, so they cannot drag the bot back), and bosses that own target selection
+at **targeting suppression**. A definition declares both as rules: each is a `Multiplier` (traces
+credit a veto by its name), and its checks run action, gate, role, then the boss's predicate, a pure
+`bool(PlayerbotAI*)`.
+
+| Kind | Blocks | Passes |
+|---|---|---|
+| `OwnMovement` | every `MovementAction` | the boss's `Mover` rows (or a named subset) and its `keep` families, default `Attack` + `Reach` |
+| `OwnTargeting` | named picker families, default `DpsAssist` + `TankAssist` | everything else |
+| `Block` | named families and/or action names | everything else |
+| `Exclusive` | every `MovementAction`, attacks included | only what it names |
+
+Families come from `ClassifyAction`, the only `dynamic_cast` site; `RaidEncounterRules.h` lists them
+and `tools/nativetest/raid_encounter_rules_test.cpp` covers the kinds. Two gaps in `OwnMovement`'s
+defaults: `ReachHeal` is blocked, so add it to `keep` where a healer must walk to its target (Vezax),
+and the spell movers (`Charge`, `Blink`, `Disengage`) are not `MovementAction`s, so they need a
+`Block`. A hand-written multiplier declares the families it looks at and sees only those, while the
+gate is open.
+
+### Movement: the only mover left
 
 **The failure mode this creates**: once `CombatFormationMoveAction` is disabled, the boss-specific
 action is the *only* thing that can position those bots. If it silently fails — an off-navmesh
 `MoveTo`, a `MoveInside` that never returns false — they stand still for the whole fight. Void Reaver
 is the case study.
 
-## Targeting-suppression multiplier
+### Targeting: the whole fight
 
-Same idiom one layer up: a boss that owns target selection must zero `DpsAssistAction` and
-`TankAssistAction` **for the whole fight**, not only inside the phase that motivated it.
+A boss that owns target selection must zero `DpsAssist` and `TankAssist` **for the whole fight**, not
+only inside the phase that motivated it.
 
 **The failure mode**: a `choose target` action conventionally returns `false` once the bot already
 holds its pick, which `DoNextAction` treats as FAILED (see

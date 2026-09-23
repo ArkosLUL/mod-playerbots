@@ -199,10 +199,13 @@ struct VezaxEncounterState
 Unit* GetVezax(PlayerbotAI* botAI);
 bool VezaxEncounterActive(PlayerbotAI* botAI);
 
-// Gate for the formation and the movement multiplier. Presence alone is not enough on this boss:
+// Gate for the formation and the movement rule. Presence alone is not enough on this boss:
 // he is visible from outside his hall, so a presence gate sends bots walking into walls before the
 // pull and takes their generic movers away while they do it.
 bool VezaxFormationActive(PlayerbotAI* botAI);
+
+// The encounter's per-tick housekeeping: traces the formation gate's answer as `vezax.formation`.
+void TickVezax(PlayerbotAI* botAI);
 
 // One sweep per action execution - GetDynamicObjectPositions is a grid search, and repeating it per
 // hazard test across a 25-man raid is the per-tick cost the raid-mechanics notes warn about. Callers

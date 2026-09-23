@@ -9,6 +9,7 @@
 
 #include "BossAuraTriggers.h"
 #include "NamedObjectContext.h"
+#include "UldDefinitions.h"
 #include "UldEncounterGate.h"
 #include "UldTriggers.h"
 
@@ -104,17 +105,6 @@ public:
         creators["mimiron rocket strike trigger"] = &RaidUlduarTriggerContext::mimiron_rocket_strike_trigger;
         creators["mimiron phase 4 focus trigger"] = &RaidUlduarTriggerContext::mimiron_phase_4_focus_trigger;
         creators["sara shadow resistance trigger"] = &RaidUlduarTriggerContext::sara_shadow_resistance_trigger;
-        creators["vezax reset encounter state"] = &RaidUlduarTriggerContext::vezax_reset_encounter_state;
-        creators["vezax mark of the faceless"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless;
-        creators["vezax mark of the faceless break"] = &RaidUlduarTriggerContext::vezax_mark_of_the_faceless_break;
-        creators["vezax shadow crash dodge"] = &RaidUlduarTriggerContext::vezax_shadow_crash_dodge;
-        creators["vezax searing flames interrupt"] = &RaidUlduarTriggerContext::vezax_searing_flames_interrupt;
-        creators["vezax surge of darkness"] = &RaidUlduarTriggerContext::vezax_surge_of_darkness;
-        creators["vezax saronite animus"] = &RaidUlduarTriggerContext::vezax_saronite_animus;
-        creators["vezax shadow crash soak"] = &RaidUlduarTriggerContext::vezax_shadow_crash_soak;
-        creators["vezax drop vapor target"] = &RaidUlduarTriggerContext::vezax_drop_vapor_target;
-        creators["vezax raid position"] = &RaidUlduarTriggerContext::vezax_raid_position;
-        creators["vezax shadow resistance"] = &RaidUlduarTriggerContext::vezax_shadow_resistance;
         creators["yogg-saron shadow resistance trigger"] = &RaidUlduarTriggerContext::yogg_saron_shadow_resistance_trigger;
         creators["yogg-saron phase 1 spacing trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_spacing_trigger;
         creators["yogg-saron phase 1 station trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_station_trigger;
@@ -202,8 +192,8 @@ public:
         creators["xt002 pummeller taunt trigger"] = &RaidUlduarTriggerContext::xt002_pummeller_taunt_trigger;
         creators["xt002 redirect threat trigger"] = &RaidUlduarTriggerContext::xt002_redirect_threat_trigger;
 
-        // Applied over the whole table rather than in 165 trigger classes: every name here carries its
-        // encounter, so one pass can gate them all. UldEncounterGate.h has what it closes and why.
+        // Applied over the whole table rather than in every trigger class: every name here carries its
+        // encounter, so one pass can gate them all. RaidEncounterRules::GateOpen has what it closes.
         for (auto& entry : creators)
         {
             uint32 bossId = 0;
@@ -214,6 +204,10 @@ public:
             entry.second = [inner, bossId](PlayerbotAI* ai) -> Trigger*
             { return new UldGatedTrigger(ai, inner(ai), bossId); };
         }
+
+        // After the wrap above, which would gate these a second time.
+        for (EncounterDefinition const* encounter : UldEncounterDefinitions())
+            encounter->RegisterTriggers(creators);
     }
 
 private:
@@ -304,17 +298,6 @@ private:
     static Trigger* mimiron_rocket_strike_trigger(PlayerbotAI* ai) { return new MimironRocketStrikeTrigger(ai); }
     static Trigger* mimiron_phase_4_focus_trigger(PlayerbotAI* ai) { return new MimironPhase4FocusTrigger(ai); }
     static Trigger* sara_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "sara"); }
-    static Trigger* vezax_reset_encounter_state(PlayerbotAI* ai) { return new VezaxResetEncounterStateTrigger(ai); }
-    static Trigger* vezax_mark_of_the_faceless(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessTrigger(ai); }
-    static Trigger* vezax_mark_of_the_faceless_break(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessBreakTrigger(ai); }
-    static Trigger* vezax_shadow_crash_dodge(PlayerbotAI* ai) { return new VezaxShadowCrashDodgeTrigger(ai); }
-    static Trigger* vezax_searing_flames_interrupt(PlayerbotAI* ai) { return new VezaxSearingFlamesInterruptTrigger(ai); }
-    static Trigger* vezax_surge_of_darkness(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessTrigger(ai); }
-    static Trigger* vezax_saronite_animus(PlayerbotAI* ai) { return new VezaxSaroniteAnimusTrigger(ai); }
-    static Trigger* vezax_shadow_crash_soak(PlayerbotAI* ai) { return new VezaxShadowCrashSoakTrigger(ai); }
-    static Trigger* vezax_drop_vapor_target(PlayerbotAI* ai) { return new VezaxDropVaporTargetTrigger(ai); }
-    static Trigger* vezax_raid_position(PlayerbotAI* ai) { return new VezaxRaidPositionTrigger(ai); }
-    static Trigger* vezax_shadow_resistance(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "general vezax"); }
     static Trigger* yogg_saron_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "yogg-saron"); }
     static Trigger* yogg_saron_phase_1_spacing_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1SpacingTrigger(ai); }
     static Trigger* yogg_saron_phase_1_station_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1StationTrigger(ai); }

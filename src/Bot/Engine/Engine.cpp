@@ -208,6 +208,9 @@ bool Engine::DoNextAction(Unit* /*unit*/, uint32 /*depth*/, bool minimal)
     // for every queued action of every bot.
     bool const debugMove = botAI->HasStrategy("debug move", BOT_STATE_NON_COMBAT);
 
+    for (auto const& entry : strategies)
+        entry.second->OnTick();
+
     // Update triggers and push default actions
     ProcessTriggers(minimal);
     PushDefaultActions();

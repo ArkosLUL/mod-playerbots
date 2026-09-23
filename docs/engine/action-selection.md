@@ -157,7 +157,8 @@ passed `isUseful()`, so a multiplier that looks up a boss first pays that lookup
 spell that falls through — one Ulduar chain pass reached roughly 150 line-of-sight raycasts before
 anything returned a verdict, and every verdict was 1.0. Where everything a multiplier suppresses is
 either a `MovementAction` or a `CastSpellAction` — disjoint families — one `dynamic_cast` each way up
-front replaces the whole chain for the common case.
+front replaces the whole chain for the common case. Encounter rules enforce this order (see
+[../raids/README.md](../raids/README.md#encounter-rules)); a hand-written multiplier still has to.
 
 ## Casting
 

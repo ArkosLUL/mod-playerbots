@@ -1,0 +1,23 @@
+/*
+ * This file is part of the mod-playerbots module for AzerothCore. See AUTHORS file for Copyright
+ * information; released under GNU GPL v2 license, redistribute/modify under version 2 of the License,
+ * or (at your option) any later version.
+ */
+
+#ifndef PLAYERBOTS_ULDDEFINITIONS_H
+#define PLAYERBOTS_ULDDEFINITIONS_H
+
+#include <vector>
+
+#include "RaidEncounter.h"
+
+EncounterDefinition const& UldVezaxDefinition();
+
+// Every Ulduar boss with a definition. The contexts and the strategy's tick walk this.
+inline std::vector<EncounterDefinition const*> const& UldEncounterDefinitions()
+{
+    static std::vector<EncounterDefinition const*> const definitions = {&UldVezaxDefinition()};
+    return definitions;
+}
+
+#endif

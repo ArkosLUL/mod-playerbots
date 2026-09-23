@@ -14,14 +14,18 @@
 class VezaxResetEncounterStateTrigger : public Trigger
 {
 public:
-    VezaxResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax reset encounter state", 5) {}
+    static constexpr char const* Name = "vezax reset encounter state";
+
+    VezaxResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 5) {}
     bool IsActive() override;
 };
 
 class VezaxMarkOfTheFacelessTrigger : public Trigger
 {
 public:
-    VezaxMarkOfTheFacelessTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax mark of the faceless") {}
+    static constexpr char const* Name = "vezax mark of the faceless";
+
+    VezaxMarkOfTheFacelessTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -30,8 +34,10 @@ public:
 class VezaxMarkOfTheFacelessBreakTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "vezax mark of the faceless break";
+
     VezaxMarkOfTheFacelessBreakTrigger(PlayerbotAI* ai)
-        : Trigger(ai, "vezax mark of the faceless break")
+        : Trigger(ai, Name)
     {
     }
     bool IsActive() override;
@@ -44,15 +50,19 @@ public:
 class VezaxShadowCrashDodgeTrigger : public Trigger
 {
 public:
-    VezaxShadowCrashDodgeTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax shadow crash dodge") {}
+    static constexpr char const* Name = "vezax shadow crash dodge";
+
+    VezaxShadowCrashDodgeTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class VezaxSearingFlamesInterruptTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "vezax searing flames interrupt";
+
     VezaxSearingFlamesInterruptTrigger(PlayerbotAI* ai)
-        : Trigger(ai, "vezax searing flames interrupt")
+        : Trigger(ai, Name)
     {
     }
     bool IsActive() override;
@@ -61,7 +71,9 @@ public:
 class VezaxSurgeOfDarknessTrigger : public Trigger
 {
 public:
-    VezaxSurgeOfDarknessTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax surge of darkness") {}
+    static constexpr char const* Name = "vezax surge of darkness";
+
+    VezaxSurgeOfDarknessTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -69,7 +81,9 @@ public:
 class VezaxSaroniteAnimusTrigger : public Trigger
 {
 public:
-    VezaxSaroniteAnimusTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax saronite animus") {}
+    static constexpr char const* Name = "vezax saronite animus";
+
+    VezaxSaroniteAnimusTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -78,9 +92,11 @@ public:
 class VezaxShadowCrashSoakTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "vezax shadow crash soak";
+
     // Two seconds, not every tick: this is the one Vezax trigger that has to sweep the grid, and the
     // field lands on a 10s cadence and lasts 20s, so reacting a little late costs almost nothing.
-    VezaxShadowCrashSoakTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax shadow crash soak", 2) {}
+    VezaxShadowCrashSoakTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
@@ -89,14 +105,18 @@ public:
 class VezaxDropVaporTargetTrigger : public Trigger
 {
 public:
-    VezaxDropVaporTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax drop vapor target") {}
+    static constexpr char const* Name = "vezax drop vapor target";
+
+    VezaxDropVaporTargetTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class VezaxRaidPositionTrigger : public Trigger
 {
 public:
-    VezaxRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "vezax raid position", 2) {}
+    static constexpr char const* Name = "vezax raid position";
+
+    VezaxRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 

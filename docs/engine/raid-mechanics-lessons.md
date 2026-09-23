@@ -188,7 +188,8 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
 - **`Multiplier::GetValue` runs on every popped action that passed `isUseful()`**
   (`Engine.cpp:216-234`), dozens per bot per tick, so anything it derives is derived that many
   times. The chain breaks on the first `relevance <= 0` and the outer loop on the first successful
-  `Execute` — which is why a multiplier must test the **action** before it resolves a boss.
+  `Execute` — which is why a multiplier must test the **action** before it resolves a boss. Encounter
+  rules do it by construction.
 - **Role lookups are not free.** `IsMainTank` → `GetMainTankGuid` walks every group member;
   `IsTank`/`IsDps`/`IsRanged`/`IsHeal` cost a `GET_PLAYERBOT_AI` hash lookup plus a bitmask test
   (`Engine::HasStrategyType`, `Engine.h:88`). Precompute them for a 25-man loop or a sort comparator,
@@ -211,8 +212,8 @@ Cheap per bot, ruinous per raid — and invisible in single-bot testing.
   before any action runs, and no trigger changes the world; an action returning `false` still can —
   drop a target, command a pet, turn the bot, push Yogg-Saron's Brain to 30% and strip Shadow Barrier —
   so a ms stamp can hand a later multiplier or action a stale read. An exact cache keys on
-  `UldTriggerPassId`: non-zero only inside `UldGatedTrigger::Check`, new each pass, because `Reset` is
-  not guaranteed to close the gate pass. Yogg-Saron's 200 yd reads use it.
+  `EncounterTriggerPassId`: non-zero only inside `EncounterGatedTrigger::Check`, new each pass,
+  because `Reset` is not guaranteed to close the gate pass. Yogg-Saron's 200 yd reads use it.
 - **Grid sweeps walk every `SIZE_OF_GRID_CELL` (66.67 yd) cell inside the radius**, and twenty-five
   bots re-answer the same instance-wide question every tick — EoE peaked near 250 identical sweeps a
   tick. One instance-keyed creature cache collapses that to one. **Cache guids, not pointers**, so a

@@ -14,7 +14,9 @@
 class VezaxResetEncounterStateAction : public Action
 {
 public:
-    VezaxResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, "vezax reset encounter state action") {}
+    static constexpr char const* Name = "vezax reset encounter state action";
+
+    VezaxResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -24,7 +26,9 @@ public:
 class VezaxMarkOfTheFacelessAction : public MovementAction
 {
 public:
-    VezaxMarkOfTheFacelessAction(PlayerbotAI* ai) : MovementAction(ai, "vezax mark of the faceless action") {}
+    static constexpr char const* Name = "vezax mark of the faceless action";
+
+    VezaxMarkOfTheFacelessAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -33,8 +37,10 @@ public:
 class VezaxMarkOfTheFacelessBreakAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "vezax mark of the faceless break action";
+
     VezaxMarkOfTheFacelessBreakAction(PlayerbotAI* ai)
-        : MovementAction(ai, "vezax mark of the faceless break action")
+        : MovementAction(ai, Name)
     {
     }
 
@@ -46,7 +52,9 @@ public:
 class VezaxShadowCrashDodgeAction : public MovementAction
 {
 public:
-    VezaxShadowCrashDodgeAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash dodge action") {}
+    static constexpr char const* Name = "vezax shadow crash dodge action";
+
+    VezaxShadowCrashDodgeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -54,8 +62,10 @@ public:
 class VezaxSearingFlamesInterruptAction : public Action
 {
 public:
+    static constexpr char const* Name = "vezax searing flames interrupt action";
+
     VezaxSearingFlamesInterruptAction(PlayerbotAI* ai)
-        : Action(ai, "vezax searing flames interrupt action")
+        : Action(ai, Name)
     {
     }
 
@@ -65,7 +75,9 @@ public:
 class VezaxSurgeOfDarknessAction : public Action
 {
 public:
-    VezaxSurgeOfDarknessAction(PlayerbotAI* ai) : Action(ai, "vezax surge of darkness action") {}
+    static constexpr char const* Name = "vezax surge of darkness action";
+
+    VezaxSurgeOfDarknessAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -74,7 +86,9 @@ public:
 class VezaxSaroniteAnimusAction : public AttackAction
 {
 public:
-    VezaxSaroniteAnimusAction(PlayerbotAI* ai) : AttackAction(ai, "vezax saronite animus action") {}
+    static constexpr char const* Name = "vezax saronite animus action";
+
+    VezaxSaroniteAnimusAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -83,7 +97,9 @@ public:
 class VezaxShadowCrashSoakAction : public MovementAction
 {
 public:
-    VezaxShadowCrashSoakAction(PlayerbotAI* ai) : MovementAction(ai, "vezax shadow crash soak action") {}
+    static constexpr char const* Name = "vezax shadow crash soak action";
+
+    VezaxShadowCrashSoakAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -92,7 +108,9 @@ public:
 class VezaxDropVaporTargetAction : public AttackAction
 {
 public:
-    VezaxDropVaporTargetAction(PlayerbotAI* ai) : AttackAction(ai, "vezax drop vapor target action") {}
+    static constexpr char const* Name = "vezax drop vapor target action";
+
+    VezaxDropVaporTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -100,7 +118,9 @@ public:
 class VezaxRaidPositionAction : public MovementAction
 {
 public:
-    VezaxRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, "vezax raid position action") {}
+    static constexpr char const* Name = "vezax raid position action";
+
+    VezaxRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 

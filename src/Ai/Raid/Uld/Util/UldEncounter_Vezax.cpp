@@ -166,39 +166,64 @@ bool VezaxEncounterActive(PlayerbotAI* botAI)
     return vezax && vezax->IsInCombat();
 }
 
-bool VezaxFormationActive(PlayerbotAI* botAI)
+namespace
 {
-    if (!botAI)
-        return false;
+enum class VezaxFormation
+{
+    Outside,
+    NoBoss,
+    Idle,
+    On
+};
 
-    Player* bot = botAI->GetBot();
+VezaxFormation ReadVezaxFormation(PlayerbotAI* botAI)
+{
+    Player* bot = botAI ? botAI->GetBot() : nullptr;
     if (!bot)
-        return false;
+        return VezaxFormation::Outside;
 
     bool const inRoom =
         bot->GetExactDist2d(&ULDUAR_VEZAX_ANCHOR) <= ULDUAR_VEZAX_ARENA_RADIUS &&
         std::fabs(bot->GetPositionZ() - ULDUAR_VEZAX_ANCHOR.GetPositionZ()) <=
             ULDUAR_VEZAX_ARENA_HEIGHT;
-
-    Unit* vezax = inRoom ? GetVezax(botAI) : nullptr;
-    bool const active = vezax && vezax->IsInCombat();
-
-    // Probed here rather than at the call sites: the trigger and the movement multiplier both route
-    // through this, and a bot standing still with no slot is the symptom this answer explains. The
-    // reason carries as much as the answer does - "outside" before the raid walks in is the design
-    // working, while "noboss" means the instance lookup came back empty and every gate below it is
-    // shut with nothing else in the trace to say so.
-    char const* reason = "on";
     if (!inRoom)
-        reason = "outside";
-    else if (!vezax)
-        reason = "noboss";
-    else if (!active)
-        reason = "idle";
+        return VezaxFormation::Outside;
 
-    RaidObs::NoteDerived(bot, "vezax.formation", reason);
+    Unit* vezax = GetVezax(botAI);
+    if (!vezax)
+        return VezaxFormation::NoBoss;
 
-    return active;
+    return vezax->IsInCombat() ? VezaxFormation::On : VezaxFormation::Idle;
+}
+}  // namespace
+
+bool VezaxFormationActive(PlayerbotAI* botAI) { return ReadVezaxFormation(botAI) == VezaxFormation::On; }
+
+void TickVezax(PlayerbotAI* botAI)
+{
+    if (!RaidObs::Active())
+        return;
+
+    // A bot standing still with no slot is what this explains. "outside" before the raid walks in is
+    // the design working, "noboss" means the instance lookup came back empty and every gate on the
+    // formation is shut with nothing else in the trace to say so.
+    char const* reason = "on";
+    switch (ReadVezaxFormation(botAI))
+    {
+        case VezaxFormation::Outside:
+            reason = "outside";
+            break;
+        case VezaxFormation::NoBoss:
+            reason = "noboss";
+            break;
+        case VezaxFormation::Idle:
+            reason = "idle";
+            break;
+        case VezaxFormation::On:
+            break;
+    }
+
+    RaidObs::NoteDerived(botAI->GetBot(), "vezax.formation", reason);
 }
 
 void GatherVezaxHazards(Player* bot, std::vector<VezaxHazard>& hazards, float searchRadius)

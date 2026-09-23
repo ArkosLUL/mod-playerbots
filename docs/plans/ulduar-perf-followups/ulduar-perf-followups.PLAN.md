@@ -19,31 +19,11 @@ Shipped already, for orientation: the per-bot `getMSTime()`-stamped scan (`Razor
 
 ## Open items
 
-### 1. Multipliers resolve the boss before they look at the action
+### 1-2. Multipliers resolve the boss first, and have no encounter gate
 
-The single most repeated finding — raised independently against XT-002, Algalon, Mimiron, Hodir,
-Auriaya, Ignis and Razorscale. Verified still unfixed:
-
-- `AuriayaMovementGuardMultiplier::GetValue` calls `IsAuriayaEngaged` first
-  (`UldMultipliers_Auriaya.cpp`)
-- `AlgalonTargetGuardMultiplier` calls `AlgalonEncounterActive` first
-
-One Auriaya chain pass costs about **5 sight-range sweeps + 3 LOS sweeps ≈ 150 raycasts** before
-anything returns a verdict, and every verdict is 1.0. Fix: test the action family first, then resolve.
-Mimiron's guards landed this way in `256854ebf` and are the worked example.
-
-**Do not** move `IsMimironEngaged` behind the action test — it starves `TickMimironObs` housekeeping
-that rides on the same call.
-
-### 2. 51 Ulduar multipliers have no encounter gate
-
-Only triggers are wrapped in `UldGatedTrigger`; `UldStrategy.cpp` registers multipliers bare, so they
-run for the whole instance — on trash, between pulls, and after the boss is dead. Between pulls
-nothing is `IN_PROGRESS`, so all **165** triggers are open too and each runs its own boss lookup for
-every bot.
-
-**Do not** simply gate multipliers on `UldEncounterGateOpen`: a boss in sight during another
-encounter then stops being guarded, which is a behaviour change, not a saving.
+Owned by [../raid-encounter/raid-encounter.PLAN.md](../raid-encounter/raid-encounter.PLAN.md): each
+boss's multipliers move to encounter rules, which test the action first and sit behind the encounter
+gate. Its per-boss notes carry the traps these two items recorded.
 
 ### 3. `BossFireResistanceTrigger` looks up the boss before the cheap tests
 

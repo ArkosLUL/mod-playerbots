@@ -224,36 +224,38 @@ whole fight**, 110 taps and ~220,000 health each, both dead by 3:10 having dealt
 comparable caster did. Even gated at 60% mana they still spent 61-65% of their casts on it.
 
 **The raid is kept off Saronite Vapors by two pieces**, because a suppressor alone leaves whatever a
-bot already holds. `VezaxTargetGuardMultiplier` zeroes `DpsAssistAction`, `TankAssistAction` and
-`CastDebuffSpellOnAttackerAction` — the debuff one matters, it is what lands DoTs on whatever a caster
-drifted onto — and the drop-vapor-target node re-attacks the boss for a bot already on one.
+bot already holds. The target guard rule zeroes the `DpsAssist`, `TankAssist` and `DebuffOnAttacker`
+families (the debuff one matters, it is what lands DoTs on whatever a caster drifted onto), and the
+drop-vapor-target node re-attacks the boss for a bot already on one.
 
 Each writes a `veto` row naming the action it zeroed, so a trace says outright whether it fired —
 which is how 2026-09-17 caught the guard running raid-wide. `VezaxEncounterActive` asked only whether
 he was alive, `InstanceScript::GetCreature` answers from anywhere on the map, and all 116 `dps assist`
-ticks of a Razorscale pull were vetoed: the bots followed the master and dealt nothing. **Nothing else
-scopes a multiplier** — `UldEncounterGate` wraps triggers, not these — so every one here keys on
-`IsInCombat` on the boss.
+ticks of a Razorscale pull were vetoed: the bots followed the master and dealt nothing. The encounter
+gate closes them during other pulls and after the kill, but it is open between pulls, so every one here
+still keys on `IsInCombat` on the boss.
 
 **Positioning is gated on the room, not just on presence.** Vezax is visible from outside his hall, and
 a presence gate had bots prepositioning through walls while their generic movers were already zeroed.
 `VezaxFormationActive` wants the bot inside a 45 yd bubble around the anchor plus a 10 yd height band.
 The hall runs 70 yd north and west, so the bubble stops short of the entrance on purpose: outside it
-the multiplier is inert, generic movement carries a bot in, and the gate opens on arrival. Widening it
+the movement rule is inert, generic movement carries a bot in, and the gate opens on arrival. Widening it
 is what puts a bot back on a path through a wall. Resistance stays presence-gated, the state reset
 fires once he is dead or out of combat, and everything else is combat-gated.
 
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
 `PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement
-multiplier asks once per action per pass. It has neither a liveness filter nor a range of its own, so
-a dead boss is rejected explicitly and presence alone gates nothing.
+rule asks once per candidate that reaches its predicate. It has neither a liveness filter nor a range
+of its own, so a dead boss is rejected explicitly and presence alone gates nothing.
 
 ## The trace
 
 `vezax.slot` is the stored assignment; `vezax.formation`, `vezax.block`
 (`L`/`R`/`tank`/`unslotted`), `vezax.dodge` (`strafe`/`search`/`none`), `vezax.mark`
 (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`) and `vezax.interrupter` are derived, each
-probed inside the helper that derives it so two call sites cannot disagree.
+probed inside the helper that derives it so two call sites cannot disagree. `vezax.formation`
+(`outside`/`noboss`/`idle`/`on`) is the exception: the encounter's tick writes it, since the
+formation gate is a rule predicate and runs only when the cheaper checks pass.
 
 **The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world
 object until it lands and the ~3s a bot can act in would otherwise be invisible. Take the destination

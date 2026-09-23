@@ -11,6 +11,7 @@
 #include "BossAuraActions.h"
 #include "NamedObjectContext.h"
 #include "UldActions.h"
+#include "UldDefinitions.h"
 
 class RaidUlduarActionContext : public NamedObjectContext<Action>
 {
@@ -104,17 +105,6 @@ public:
         creators["mimiron rocket strike action"] = &RaidUlduarActionContext::mimiron_rocket_strike_action;
         creators["mimiron phase 4 focus action"] = &RaidUlduarActionContext::mimiron_phase_4_focus_action;
         creators["sara shadow resistance action"] = &RaidUlduarActionContext::sara_shadow_resistance_action;
-        creators["vezax reset encounter state action"] = &RaidUlduarActionContext::vezax_reset_encounter_state_action;
-        creators["vezax mark of the faceless action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_action;
-        creators["vezax mark of the faceless break action"] = &RaidUlduarActionContext::vezax_mark_of_the_faceless_break_action;
-        creators["vezax shadow crash dodge action"] = &RaidUlduarActionContext::vezax_shadow_crash_dodge_action;
-        creators["vezax searing flames interrupt action"] = &RaidUlduarActionContext::vezax_searing_flames_interrupt_action;
-        creators["vezax surge of darkness action"] = &RaidUlduarActionContext::vezax_surge_of_darkness_action;
-        creators["vezax saronite animus action"] = &RaidUlduarActionContext::vezax_saronite_animus_action;
-        creators["vezax shadow crash soak action"] = &RaidUlduarActionContext::vezax_shadow_crash_soak_action;
-        creators["vezax drop vapor target action"] = &RaidUlduarActionContext::vezax_drop_vapor_target_action;
-        creators["vezax raid position action"] = &RaidUlduarActionContext::vezax_raid_position_action;
-        creators["vezax shadow resistance action"] = &RaidUlduarActionContext::vezax_shadow_resistance_action;
         creators["yogg-saron shadow resistance action"] = &RaidUlduarActionContext::yogg_saron_shadow_resistance_action;
         creators["yogg-saron phase 1 spacing action"] = &RaidUlduarActionContext::yogg_saron_phase_1_spacing_action;
         creators["yogg-saron phase 1 station action"] = &RaidUlduarActionContext::yogg_saron_phase_1_station_action;
@@ -201,6 +191,9 @@ public:
         creators["xt002 set dps priority action"] = &RaidUlduarActionContext::xt002_set_dps_priority_action;
         creators["xt002 pummeller taunt action"] = &RaidUlduarActionContext::xt002_pummeller_taunt_action;
         creators["xt002 redirect threat action"] = &RaidUlduarActionContext::xt002_redirect_threat_action;
+
+        for (EncounterDefinition const* encounter : UldEncounterDefinitions())
+            encounter->RegisterActions(creators);
     }
 
 private:
@@ -291,17 +284,6 @@ private:
     static Action* mimiron_rocket_strike_action(PlayerbotAI* ai) { return new MimironRocketStrikeAction(ai); }
     static Action* mimiron_phase_4_focus_action(PlayerbotAI* ai) { return new MimironPhase4FocusAction(ai); }
     static Action* sara_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "sara"); }
-    static Action* vezax_reset_encounter_state_action(PlayerbotAI* ai) { return new VezaxResetEncounterStateAction(ai); }
-    static Action* vezax_mark_of_the_faceless_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessAction(ai); }
-    static Action* vezax_mark_of_the_faceless_break_action(PlayerbotAI* ai) { return new VezaxMarkOfTheFacelessBreakAction(ai); }
-    static Action* vezax_shadow_crash_dodge_action(PlayerbotAI* ai) { return new VezaxShadowCrashDodgeAction(ai); }
-    static Action* vezax_searing_flames_interrupt_action(PlayerbotAI* ai) { return new VezaxSearingFlamesInterruptAction(ai); }
-    static Action* vezax_surge_of_darkness_action(PlayerbotAI* ai) { return new VezaxSurgeOfDarknessAction(ai); }
-    static Action* vezax_saronite_animus_action(PlayerbotAI* ai) { return new VezaxSaroniteAnimusAction(ai); }
-    static Action* vezax_shadow_crash_soak_action(PlayerbotAI* ai) { return new VezaxShadowCrashSoakAction(ai); }
-    static Action* vezax_drop_vapor_target_action(PlayerbotAI* ai) { return new VezaxDropVaporTargetAction(ai); }
-    static Action* vezax_raid_position_action(PlayerbotAI* ai) { return new VezaxRaidPositionAction(ai); }
-    static Action* vezax_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "general vezax"); }
     static Action* yogg_saron_shadow_resistance_action(PlayerbotAI* ai) { return new BossShadowResistanceAction(ai, "yogg-saron"); }
     static Action* yogg_saron_phase_1_spacing_action(PlayerbotAI* ai) { return new YoggSaronPhase1SpacingAction(ai); }
     static Action* yogg_saron_phase_1_station_action(PlayerbotAI* ai) { return new YoggSaronPhase1StationAction(ai); }

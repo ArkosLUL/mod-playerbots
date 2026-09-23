@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include "Trigger.h"
+#include "RaidEncounter.h"
 
 class PlayerbotAI;
 
@@ -33,60 +33,26 @@ enum UlduarEncounterId
     ULD_BOSS_ALGALON = 13
 };
 
-// RaidUlduarStrategy registers all 165 Ulduar trigger nodes for every encounter - nothing keys the
-// registration to the boss in the room - so a Kologarn pull still evaluates Mimiron, Vezax and Flame
-// Leviathan every tick. Usually the action declines, but on 2026-08-31 twenty bots spent a second
-// trying to board a leftover siege vehicle mid-Kologarn, because the Flame Leviathan trigger asks
-// only whether the master is in one.
-//
-// Closed while a different encounter is IN_PROGRESS, and while this one is DONE. Deliberately not a
-// boss-presence or room check: with nothing engaged every trigger stays live, so the pre-pull
-// sequences that have no boss to point at yet - Mimiron's console walk, boarding a vehicle before
-// Flame Leviathan is pulled - keep working.
-bool UldEncounterGateOpen(PlayerbotAI* botAI, uint32 bossId);
+// Bosses without a definition yet are gated by the prefix their trigger names carry, through the same
+// boss-state gate a definition uses.
 
-// Reads the encounter off the trigger's own name, which carries its boss as a prefix throughout.
 // False for a name belonging to no single encounter, which is then left ungated.
 bool UldEncounterOfTrigger(std::string const& triggerName, uint32& bossId);
 
-// Stricter than the gate: this encounter and no other is what the instance script says is running.
-// The gate leaves everything open between pulls, which is far too loose to name a trace by.
-bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId);
-
-// The encounter's name, for a trace that could not name itself. Null for an id with no entry.
+// The name a pull is traced under. Null for an id with no entry.
 char const* UldEncounterName(uint32 bossId);
 
-// Non-zero only while this bot's gated trigger is inside Check, and different for every trigger pass.
-// Engine::ProcessTriggers checks every trigger before any action runs and no Ulduar or class trigger
-// changes the world, so a read cached under one id is exact for the rest of that pass. Actions,
-// multipliers and isUseful always get 0: an action returning false can still drop a target or damage
-// the Brain past 30%, so nothing may be cached past the checks. Reset is not guaranteed to run, which
-// is why this is tied to Check rather than to the gate pass.
-uint32 UldTriggerPassId(PlayerbotAI* botAI);
+inline bool UldEncounterGateOpen(PlayerbotAI* botAI, uint32 bossId) { return BossStateGateOpen(botAI, bossId); }
+inline bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId) { return BossStateGateLive(botAI, bossId); }
+inline uint32 UldTriggerPassId(PlayerbotAI* botAI) { return EncounterTriggerPassId(botAI); }
 
-// Wraps rather than subclasses. All 165 derive from Trigger directly, so one decorator applied where
-// the context builds them beats editing every class, and leaves their IsActive bodies alone.
-class UldGatedTrigger : public Trigger
+class UldGatedTrigger : public EncounterGatedTrigger
 {
 public:
-    UldGatedTrigger(PlayerbotAI* botAI, Trigger* inner, uint32 bossId);
-    ~UldGatedTrigger() override;
-
-    Event Check() override;
-    bool IsActive() override;
-    bool IsBuffTrigger() override;
-    bool IsDebuffTrigger() override;
-    std::vector<NextAction> getHandlers() override;
-    void Reset() override;
-    Unit* GetTarget() override;
-    Value<Unit*>* GetTargetValue() override;
-    std::string const GetTargetName() override;
-    void ExternalEvent(std::string const param, Player* owner = nullptr) override;
-    void ExternalEvent(WorldPacket& packet, Player* owner = nullptr) override;
-
-private:
-    Trigger* inner;
-    uint32 bossId;
+    UldGatedTrigger(PlayerbotAI* botAI, Trigger* inner, uint32 bossId)
+        : EncounterGatedTrigger(botAI, inner, BossStateGate, bossId, UldEncounterName(bossId))
+    {
+    }
 };
 
 #endif
