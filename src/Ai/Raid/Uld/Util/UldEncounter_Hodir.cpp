@@ -14,6 +14,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "SpellAuras.h"
 #include "SpellMgr.h"
@@ -25,7 +26,6 @@
 #include <algorithm>
 #include <cmath>
 #include <list>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -102,12 +102,6 @@ float GetHodirShelterRelease(Creature* shelter)
 
 // Both per-bot latches, keyed by instance on the way in so the inner maps are only ever touched by the
 // one thread ticking that map.
-//
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same bot a fresh latch whenever the pool
-// reassigns its map. Both picks below then stop holding and go back to drifting, which is the 739 anchor
-// changes the Starlight comment further down was written to kill. References into an unordered_map
-// survive rehashing, so the lock only has to cover the outer lookup.
 struct HodirStarlightLatch
 {
     Position zone;
@@ -159,14 +153,9 @@ struct HodirBotLatches
     HodirHoldLatch hold;
 };
 
-static std::mutex hodirLatchesMutex;
-static std::unordered_map<uint32 /*instanceId*/, HodirBotLatches> hodirLatches;
+static RaidInstanceState<HodirBotLatches> hodirLatches;
 
-static HodirBotLatches& HodirLatchesFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(hodirLatchesMutex);
-    return hodirLatches[bot->GetInstanceId()];
-}
+static HodirBotLatches& HodirLatchesFor(Player* bot) { return hodirLatches.For(bot->GetInstanceId()); }
 
 Creature* GetHodirShelter(PlayerbotAI* botAI, Player* bot)
 {
