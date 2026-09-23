@@ -25,7 +25,8 @@ sources, naming contract and checks: [toc-rework.PLAN.md](toc-rework.PLAN.md).
      - any engage-name variants of Jaraxxus and Anub'arak. The Pursuing Spike (34660) engages under
        the name "Anub'arak".
      - Derive champion slugs from `creature_template.name` for the entries in
-       `src/Ai/Raid/ToC/ToCHelpers.h` (both factions), exactly as `ResolveBossName` slugifies.
+       `src/Ai/Raid/ToC/Util/ToCHelpers_FactionChampions.h` (both factions), exactly as
+       `ResolveBossName` slugifies.
    - Coverage gating: a `TOC_PREFIXES` mirror of the trigger-name prefixes, and `node_encounter`
      reading it next to `ULD_PREFIXES`.
    - Note-key prefixes: `nb.`, `jaraxxus.`, `fc.`, `tv.`, `anub.`, plus `toc.` as raid-wide on every

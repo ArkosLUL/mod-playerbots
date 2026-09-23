@@ -11,7 +11,7 @@ The merge stage alone edits this table.
 
 | Wave | Lane | State | Merge | Decisions for review | Carried over / gaps |
 |---|---|---|---|---|---|
-| 1 | w0a-restructure | pending | | | |
+| 1 | w0a-restructure | merged | `8b45f7b43` | Per-stem context classes merged into the root via `Absorb` (duplicate key logs, first wins); node lists in Trigger stems, multipliers in Multiplier stems, old insertion order kept; `ToCHelpers_<Stem>` utils, `ToCRaid*.h` umbrellas; drag helper on `ToCMainTankHoldAction`; `ToCBurstWindow` hook unused until w0c; boss docs corrected against the core script | Needs a CMake re-run. Stale `RaidBossHelpers` mentions in other raid docs (w6); champion entries now in `Util/ToCHelpers_FactionChampions.h` (w0b); Sweep 67644/67645 missing, dodge dead in 25N/10H (w0c); future-work comment in `AnubarakFocusBurrowerAction` (w5); every behaviour bug in "Why" still live |
 | 2 | w0b-tooling | pending | | | |
 | 2 | w0c-foundation | pending | | | |
 | 3 | w1a-beasts | pending | | | |

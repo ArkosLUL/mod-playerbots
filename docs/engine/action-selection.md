@@ -27,7 +27,8 @@ Hierarchy, verified — **`AttackAction : MovementAction`**, not siblings
   lockout
 
 Only `AttackAction` exposes `Attack`, only `MovementAction` exposes `MoveTo`/`FleePosition`; picking
-the wrong base silently limits the action.
+the wrong base silently limits the action. They are `protected`, so a movement step several actions
+share must be a member of an intermediate base class, not a free helper.
 
 **A blanket `MovementAction` veto therefore also kills targeting and vehicle boarding** — EoE's disk
 riders boarded and then sat still for a phase. Name the boss's own actions as exemptions. The two
@@ -94,6 +95,15 @@ The module has **no `CMakeLists.txt`** — AzerothCore globs `modules/*/src` rec
 subdirectory to the include path, so new files need only a cmake re-configure. Splitting a large
 file is free if you keep an umbrella header (`UldActions.h`) that includes the parts: contexts and
 registration maps then need no edits.
+
+A context splits the same way: the root `NamedObjectContext` copies each part's `creators`, as
+`SharedNamedObjectContextList::Add` does, so the registration sites still name only the root. Log a
+key two parts both register when copying; pblint cannot see that collision.
+
+- pblint assigns a `creators["..."]` key to the last one-line `class X : public NamedObjectContext<…>`
+  above it in the same file, so a part keeps its constructor inline on that declaration in its header.
+- Headers collide case-insensitively on Windows and macOS (raid `ToC*.h` vs dungeon `TOC*.h`): name a
+  new one so no other header matches ignoring case, or include it by path.
 
 ## Trigger semantics
 
