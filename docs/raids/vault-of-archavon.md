@@ -119,7 +119,8 @@ the group and only re-sets when the icon differs.
 so no custom "stand out of fire" action was needed.
 
 `IsBotInFrontalCone(bot, source, coneAngle, range)` was promoted out of
-`TrialOfTheCrusaderHelpers` into the shared `RaidBossHelpers` for this.
+`TrialOfTheCrusaderHelpers` into the shared `EncounterHelpers` (`src/Util/EncounterHelpers.{h,cpp}`)
+for this.
 
 ## Toravon (entry 38433)
 
