@@ -1,6 +1,7 @@
 #include "ToCHelpers_Jaraxxus.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "SpellMgr.h"
 #include "Unit.h"
 
 using namespace EncounterHelpers;
@@ -13,10 +14,15 @@ bool JaraxxusHasNetherPower(Unit* jaraxxus)
     if (!jaraxxus)
         return false;
 
-    return jaraxxus->HasAura(static_cast<uint32>(ToCSpells::SPELL_NETHER_POWER_10N)) ||
-           jaraxxus->HasAura(static_cast<uint32>(ToCSpells::SPELL_NETHER_POWER_10H)) ||
-           jaraxxus->HasAura(static_cast<uint32>(ToCSpells::SPELL_NETHER_POWER_25N)) ||
-           jaraxxus->HasAura(static_cast<uint32>(ToCSpells::SPELL_NETHER_POWER_25H));
+    return jaraxxus->HasAura(SPELL_NETHER_POWER_10N) ||
+           jaraxxus->HasAura(SPELL_NETHER_POWER_10H) ||
+           jaraxxus->HasAura(SPELL_NETHER_POWER_25N) ||
+           jaraxxus->HasAura(SPELL_NETHER_POWER_25H);
+}
+
+bool HasIncinerateFlesh(Unit* unit)
+{
+    return unit && unit->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_INCINERATE_FLESH, unit));
 }
 
 Unit* GetPriorityJaraxxusAdd(PlayerbotAI* botAI)

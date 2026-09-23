@@ -4,6 +4,7 @@
 #include "ToCHelpers_Jaraxxus.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
+#include "SpellMgr.h"
 #include "Strategy.h"
 
 using namespace TrialOfTheCrusaderHelpers;
@@ -51,11 +52,8 @@ bool JaraxxusIncinerateFleshOnRaidTrigger::IsActive()
     for (ObjectGuid const& guid : members)
     {
         Unit* member = botAI->GetUnit(guid);
-        if (member && member->IsAlive() &&
-            member->HasAura(static_cast<uint32>(ToCSpells::SPELL_INCINERATE_FLESH)))
-        {
+        if (member && member->IsAlive() && HasIncinerateFlesh(member))
             return true;
-        }
     }
 
     return false;
@@ -85,7 +83,8 @@ bool JaraxxusFelFireballInterruptibleTrigger::IsActive()
         return false;
 
     Unit* jaraxxus = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_JARAXXUS));
-    return jaraxxus && jaraxxus->FindCurrentSpellBySpellId(static_cast<uint32>(ToCSpells::SPELL_FEL_FIREBALL));
+    return jaraxxus &&
+           jaraxxus->FindCurrentSpellBySpellId(sSpellMgr->GetSpellIdForDifficulty(SPELL_FEL_FIREBALL, jaraxxus));
 }
 
 void AddToCJaraxxusTriggerNodes(std::vector<TriggerNode*>& triggers)

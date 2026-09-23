@@ -50,8 +50,7 @@ bool WormsAfflictedByBurningTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    return bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_BURNING_BITE)) ||
-           bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_BURNING_SPRAY));
+    return bot->HasAura(SPELL_BURNING_BITE) || bot->HasAura(SPELL_BURNING_SPRAY);
 }
 
 bool WormsSlimePoolNearbyTrigger::IsActive()

@@ -40,10 +40,10 @@ bool TwinValkyrTouchedRequiresEssenceTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    if (bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_LIGHT_TOUCH)) && !HasLightEssence(bot))
+    if (HasLightTouch(bot) && !HasLightEssence(bot))
         return true;
 
-    return bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_DARK_TOUCH)) && !HasDarkEssence(bot);
+    return HasDarkTouch(bot) && !HasDarkEssence(bot);
 }
 
 bool TwinValkyrNeedsInitialEssenceTrigger::IsActive()

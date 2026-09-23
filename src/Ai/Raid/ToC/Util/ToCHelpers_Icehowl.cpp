@@ -31,10 +31,10 @@ bool HasMassiveCrashAura(Player* bot)
     if (!bot)
         return false;
 
-    return bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_MASSIVE_CRASH_10N)) ||
-           bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_MASSIVE_CRASH_25N)) ||
-           bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_MASSIVE_CRASH_10H)) ||
-           bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_MASSIVE_CRASH_25H));
+    return bot->HasAura(SPELL_MASSIVE_CRASH_10N) ||
+           bot->HasAura(SPELL_MASSIVE_CRASH_25N) ||
+           bot->HasAura(SPELL_MASSIVE_CRASH_10H) ||
+           bot->HasAura(SPELL_MASSIVE_CRASH_25H);
 }
 
 }

@@ -6,6 +6,12 @@ One continuous fight in three stages. Raid-wide facts and the code layout: [READ
   Fire Bombs leave ground hazards, spread.
 - **Acidmaw & Dreadscale**: submerge/emerge form swap, avoid slime pools and churning ground, focus
   the mobile worm, spread for sprays.
+  - **Bite and spray carry no aura.** Burning Bite and Paralytic Bite trigger the debuff
+    (`EffectTriggerSpell`); each Burning/Paralytic Spray id links it in `spell_linked_spell`. The
+    debuffs are Burning Bile 66869 (24 s, no difficulty row) and Paralytic Toxin 66823 (remaps,
+    README table). Burning Bile pulses 66870 every 2 s: damage within 10 yd, and a
+    `spell_linked_spell` row strips Paralytic Toxin from everyone it hits, so Bile carriers cleanse
+    Toxin carriers by standing next to them.
 - **Icehowl**: on the jump-to-centre charge, dodge the Trample, never intercept it: any living
   player within 12 yd of Icehowl during or at the end of the charge gives him Frothing Rage
   (`boss_northrend_beasts.cpp` `DoTrampleIfValid`). A clean miss hits the wall for Staggered Daze
@@ -13,8 +19,8 @@ One continuous fight in three stages. Raid-wide facts and the code layout: [READ
 
 ## Known gaps
 
-- `GetWormCastingSweep` checks only Sweep 66794 (10N) and 67646 (25H), not 67644 (25N) or 67645
-  (10H), so the sweep dodge never fires in 25N/10H.
+- `northrend worms afflicted by burning` keys on Burning Bite/Spray auras, so it has never fired,
+  and its keep-moving remedy is not the mechanic above.
 
 ## What a trace answers
 

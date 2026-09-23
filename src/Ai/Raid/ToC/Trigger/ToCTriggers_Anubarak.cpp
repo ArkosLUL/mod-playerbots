@@ -43,7 +43,7 @@ bool AnubarakScarabOnRaidTrigger::IsActive()
 
 bool AnubarakPursuedBySpikeTrigger::IsActive()
 {
-    return bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_MARK));
+    return bot->HasAura(SPELL_MARK);
 }
 
 bool AnubarakRangedShouldSeedPermafrostTrigger::IsActive()
@@ -53,15 +53,14 @@ bool AnubarakRangedShouldSeedPermafrostTrigger::IsActive()
     if (!botAI->IsRanged(bot) || botAI->IsHeal(bot))
         return false;
 
-    if (bot->HasAura(static_cast<uint32>(ToCSpells::SPELL_MARK)) || !AnubarakSubmerged(botAI))
+    if (bot->HasAura(SPELL_MARK) || !AnubarakSubmerged(botAI))
         return false;
 
-    // A flying sphere is an alive Frost Sphere that has not yet grounded into a Permafrost patch
     std::list<Creature*> spheres;
     bot->GetCreatureListWithEntryInGrid(spheres, static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE), 100.0f);
     for (Creature* sphere : spheres)
     {
-        if (sphere->IsAlive() && !sphere->HasAura(static_cast<uint32>(ToCSpells::SPELL_PERMAFROST)))
+        if (IsFrostSphereFlying(sphere))
             return true;
     }
 

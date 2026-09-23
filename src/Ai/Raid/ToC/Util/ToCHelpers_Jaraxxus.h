@@ -10,6 +10,9 @@ namespace TrialOfTheCrusaderHelpers
 // True if Jaraxxus currently has any difficulty variant of the Nether Power buff
 bool JaraxxusHasNetherPower(Unit* jaraxxus);
 
+// Incinerate Flesh heal absorb on the unit, under the map difficulty's id
+bool HasIncinerateFlesh(Unit* unit);
+
 // The add that should be killed first: Mistress of Pain if up, otherwise Fel Infernal
 Unit* GetPriorityJaraxxusAdd(PlayerbotAI* botAI);
 

@@ -51,10 +51,6 @@ bool IsFactionChampion(uint32 entry);
 // True if the entry is a Faction Champion healer spec (Resto Druid/Shaman, Holy Paladin, Disc Priest)
 bool IsFactionChampionHealer(uint32 entry);
 
-// True while at least one Faction Champion is alive (the encounter is in progress). Used to gate the
-// shared ToC strategy's Faction Champions behaviour so it stays idle during the other three bosses.
-bool FactionChampionsEncounterActive(PlayerbotAI* botAI);
-
 // The champion to focus down: the lowest-current-health alive healer, or (once every healer is dead)
 // the lowest-current-health champion of any spec. Returns nullptr when no champion is alive.
 Unit* GetPriorityFactionChampion(PlayerbotAI* botAI);

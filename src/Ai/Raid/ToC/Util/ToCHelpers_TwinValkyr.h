@@ -16,6 +16,10 @@ bool HasLightEssence(Unit* unit);
 bool HasDarkEssence(Unit* unit);
 bool HasAnyEssence(Unit* unit);
 
+// Heroic Touch of Light / Touch of Darkness on the unit, under the map difficulty's id
+bool HasLightTouch(Unit* unit);
+bool HasDarkTouch(Unit* unit);
+
 // True while the matching-coloured Vortex is being cast. Detected via the casting twin's current
 // spell (Light Vortex from Fjola, Dark Vortex from Eydis), mirroring the Jaraxxus fel-fireball idiom.
 bool TwinValkyrLightVortexActive(PlayerbotAI* botAI);

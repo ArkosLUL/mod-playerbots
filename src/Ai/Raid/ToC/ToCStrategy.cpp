@@ -25,4 +25,5 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     AddToCAnubarakMultipliers(botAI, multipliers);
     AddToCFactionChampionsMultipliers(botAI, multipliers);
     AddToCTwinValkyrMultipliers(botAI, multipliers);
+    multipliers.push_back(new ToCBurstWindowMultiplier(botAI));
 }
