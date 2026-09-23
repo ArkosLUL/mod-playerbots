@@ -97,6 +97,13 @@ float MimironFormationGuardMultiplier::GetValue(Action* action)
     if (!action || action->getName() != "combat formation move")
         return 1.0f;
 
+    // The barrage node owns every bot's position for the cast. It hands the tick back while a bot
+    // holds at the band edge, and melee have no slot in phase 4, so the unstacker would walk them
+    // back into the band.
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    if (barrage.IsActive())
+        return 0.0f;
+
     Position slot;
     if (!GetMimironSpreadSlot(botAI, bot, slot))
         return 1.0f;
@@ -120,10 +127,11 @@ float MimironAvoidAoeGuardMultiplier::GetValue(Action* action)
 
 namespace
 {
-// Phase 1: the MK II is up and neither later construct is.
+// Phase 1: the MK II is up and neither later construct is. Phase 4 excluded by the vehicle seat,
+// since a part self-repairing drops off the target list and leaves the MK II looking alone.
 bool MimironPhase1Active(PlayerbotAI* botAI)
 {
-    return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+    return !IsMimironPhase4(botAI->GetBot()) && GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
            !GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
            !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 }

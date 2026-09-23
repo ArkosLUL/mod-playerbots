@@ -919,6 +919,11 @@ struct MimironFightState
     uint32 shiftFocusEntry = 0;
     float shiftX = 0.0f;
     float shiftY = 0.0f;
+
+    // Where the phase 4 tank holds the MK II under Firefighter. Zero picked means the fixed spot.
+    Position tankSpot;
+    uint32 tankSpotPickedMs = 0;
+    uint32 tankSpotScanMs = 0;
 };
 
 RaidInstanceState<MimironFightState> mimironFightStates;
@@ -1189,8 +1194,9 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     std::vector<Unit*> allowed;
     for (Unit* part : parts)
     {
-        // Ranged DPS own the Aerial Command Unit. IsRangedDps rather than IsRanged so a healer is never
-        // steered onto it, nor into the hold below, where it would stop healing.
+        // Ranged DPS own the Aerial Command Unit; melee only get it once the pair is waiting on it
+        // (below). IsRangedDps rather than IsRanged so a healer is never steered onto it, nor into
+        // the hold, where it would stop healing.
         if (part->GetEntry() == NPC_AERIAL_COMMAND_UNIT && (melee || !PlayerbotAI::IsRangedDps(bot)))
             continue;
 
@@ -1209,9 +1215,9 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
     if (levelled)
         return highest(allowed);
 
-    // Paced to whichever part is furthest from death, not to a fixed percentage. Only ranged dps
-    // reach the Aerial Command Unit and about half of what they aim at it lands on the other two,
-    // so it is always the last to arrive; holding the ground pair at an absolute floor let them run
+    // Paced to whichever part is furthest from death, not to a fixed percentage. Ranged dps do
+    // most of the Aerial Command Unit's damage, and most of their AoE into the stack lands on the
+    // other two, so it is always the last to arrive; holding the ground pair at an absolute floor let them run
     // 10 points ahead of it and the rendezvous missed Self Repair's 15 s cast by 1.7 s.
     float leader = 0.0f;
     for (Unit* part : parts)
@@ -1225,10 +1231,42 @@ Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee)
         if (part->GetHealthPct() > floorPct)
             aboveFloor.push_back(part);
 
-    // Nothing left this bot may touch that is not already at the floor. Hold: all three sit on one
-    // point server-side, so cleave splashes every part, and the margin is what keeps incidental
-    // damage from pushing one under while the others are still high.
-    return aboveFloor.empty() ? nullptr : highest(aboveFloor);
+    if (!aboveFloor.empty())
+        return highest(aboveFloor);
+
+    // Both ground mechs at the floor, so the Aerial Command Unit is the leader and melee and pets
+    // hit it rather than stand idle: every hit on it closes the gap. Capped at two converge steps
+    // of drift, since all three sit on one point and cleave still splashes the pair, which must not
+    // reach 15000 before the unit does. Past the cap, hold.
+    if (melee)
+    {
+        Unit* aerialCommandUnit = nullptr;
+        float pairLow = 100.0f;
+        for (Unit* part : parts)
+        {
+            if (part->GetEntry() == NPC_AERIAL_COMMAND_UNIT)
+                aerialCommandUnit = part;
+            else
+                pairLow = std::min(pairLow, part->GetHealthPct());
+        }
+
+        if (aerialCommandUnit && aerialCommandUnit->GetHealthPct() > floorPct &&
+            pairLow >= leader - 2.0f * ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT)
+            return aerialCommandUnit;
+    }
+
+    return nullptr;
+}
+
+Unit* GetMimironPhase4TankFocus(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || !IsMimironPhase4(bot))
+        return nullptr;
+
+    if (Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII))
+        return leviathanMkII;
+
+    return GetMimironPhase4Focus(botAI, bot, true);
 }
 
 Spell* GetMimironPlasmaBlastCast(Unit* cannon)
@@ -2097,6 +2135,94 @@ float GetMimironWedgeCentreline(PlayerbotAI* botAI, Player* bot)
     return state.wedgeBearing;
 }
 
+// Where the phase 4 tank holds the MK II under Firefighter: the fixed spot until fire gathers on it,
+// then the ring point with the least fire round it. Raid-wide and folded on the observability
+// interval, like the stack anchor, since the tank's trigger, its action and the formation guard all
+// ask and have to get the same spot.
+Position GetMimironPhase4TankSpot(PlayerbotAI* botAI, Player* bot)
+{
+    MimironFightState& state = MimironFightStateFor(bot);
+    Position const live = state.tankSpotPickedMs ? state.tankSpot : ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
+
+    if (state.tankSpotScanMs &&
+        GetMSTimeDiffToNow(state.tankSpotScanMs) < ULDUAR_MIMIRON_OBS_SCAN_INTERVAL_MS)
+        return live;
+
+    state.tankSpotScanMs = getMSTime();
+
+    if (state.tankSpotPickedMs &&
+        GetMSTimeDiffToNow(state.tankSpotPickedMs) < ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS)
+        return live;
+
+    // Never mid-barrage: VX-001 rides the chassis and the cone radiates from wherever it stands.
+    if (Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001))
+    {
+        if (GetMimironSpinningUpSeconds(vx001) >= 0.0f ||
+            vx001->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_1) ||
+            vx001->HasAura(SPELL_P3WX2_LASER_BARRAGE_AURA_2))
+            return live;
+    }
+
+    MimironFirefighterHazards const hazards = GetMimironFirefighterHazards(botAI);
+    auto const fireNear = [&hazards](Position const& spot)
+    {
+        uint32 count = 0;
+        for (Position const& flame : hazards.flames)
+            if (spot.GetExactDist2d(flame.GetPositionX(), flame.GetPositionY()) <=
+                ULDUAR_MIMIRON_PHASE4_TANK_CLEAR_RADIUS)
+                ++count;
+
+        return count;
+    };
+
+    uint32 const liveFire = fireNear(live);
+    if (liveFire <= ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT)
+        return live;
+
+    // Ties go to the shorter drag.
+    Position best = live;
+    uint32 bestFire = liveFire;
+    auto const consider = [&](Position const& candidate)
+    {
+        uint32 const fire = fireNear(candidate);
+        if (fire < bestFire ||
+            (fire == bestFire && live.GetExactDist2d(candidate) < live.GetExactDist2d(best)))
+        {
+            best = candidate;
+            bestFire = fire;
+        }
+    };
+
+    consider(ULDUAR_MIMIRON_PHASE4_TANK_SPOT);
+    for (float ring : ULDUAR_MIMIRON_PHASE4_TANK_RINGS)
+    {
+        for (uint32 i = 0; i < ULDUAR_MIMIRON_PHASE4_TANK_BEARINGS; ++i)
+        {
+            float const bearing = 2.0f * static_cast<float>(M_PI) * static_cast<float>(i) /
+                                  static_cast<float>(ULDUAR_MIMIRON_PHASE4_TANK_BEARINGS);
+            consider(Position(ULDUAR_MIMIRON_ROOM_CENTER.GetPositionX() + ring * std::cos(bearing),
+                              ULDUAR_MIMIRON_ROOM_CENTER.GetPositionY() + ring * std::sin(bearing),
+                              ULDUAR_MIMIRON_ROOM_CENTER.GetPositionZ()));
+        }
+    }
+
+    if (bestFire + ULDUAR_MIMIRON_PHASE4_TANK_FIRE_MARGIN > liveFire)
+        return live;
+
+    state.tankSpot = best;
+    state.tankSpotPickedMs = getMSTime();
+
+    if (RaidObs::Active())
+    {
+        char line[48];
+        snprintf(line, sizeof(line), "%.0f,%.0f %u>%u", best.GetPositionX(), best.GetPositionY(),
+                 liveFire, bestFire);
+        RaidObs::NoteDerived(bot, "mimiron.tankspot", line);
+    }
+
+    return best;
+}
+
 // `branch` names which shape answered, and is what a trace records: the coordinate on its own cannot
 // tell a wedge slot from a ring slot that happens to land near it, and which shape a bot was given is
 // the thing that goes wrong.
@@ -2125,17 +2251,29 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
     if (!focus)
         return false;
 
-    // The main tank holds the chassis spot once all three mechs are up. Walking it anywhere else in
-    // phase 4 drags VX-001 with it, and VX-001 is what the Laser Barrage cone radiates from.
+    // The main tank holds the chassis on one spot in phase 4, since it carries VX-001 and the Laser
+    // Barrage cone radiates from wherever it stands. By the vehicle seat, not by all three being
+    // attackable: a part going NON_ATTACKABLE for Self Repair would read as phase 1 and hand out
+    // the phase 1 spot 53 yd west.
     bool const phase4 = staging ? focus->GetEntry() == NPC_VX001 && focus->GetVehicleBase() != nullptr
-                                : GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
-                                      GetFirstAliveUnitByEntry(botAI, NPC_VX001) &&
-                                      GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
+                                : IsMimironPhase4(bot);
 
     if (PlayerbotAI::IsMainTank(bot) && phase4)
     {
+        // Only while the MK II is his. The chassis walks after whoever it is hitting, so a spot would
+        // keep him away from it; with none, reach melee and his taunt take him back.
+        if (!staging)
+        {
+            Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+            if (leviathanMkII && leviathanMkII->GetVictim() && leviathanMkII->GetVictim() != bot)
+                return false;
+        }
+
+        // Under Firefighter the spot moves off the fire, so the melee on the chassis stand clear.
+        // During the handover it stays fixed: that is where the chassis arrives.
         branch = "p4tank";
-        out = ULDUAR_MIMIRON_PHASE4_TANK_SPOT;
+        out = staging || !IsMimironHardModeActive(botAI) ? ULDUAR_MIMIRON_PHASE4_TANK_SPOT
+                                                         : GetMimironPhase4TankSpot(botAI, bot);
         return true;
     }
 

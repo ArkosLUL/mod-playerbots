@@ -547,7 +547,10 @@ marker on the ring is not.
 
 `mimiron approach target` stands down for the window as well: the barrage dodge owns melee
 positioning then, that node's destinations are never cone-screened, and the two traded one bot
-**78** times in a phase 4.
+**78** times in a phase 4. So does the unstacker, `combat formation move`, for everyone: the dodge
+hands the tick back while a bot holds at the band edge, and melee have no phase 4 slot for
+`MimironFormationGuardMultiplier` to stop it at. On 2026-09-23 it walked five holding melee back into
+one phase 4 band, one onto VX-001's centre, all dead in 6 s.
 
 **Radius is the one free parameter, so it dodges the fire — the walk as well as the endpoint.** On
 2026-09-11 a fixed-radius orbit parked four bots on 7-10 nodes at (2752-2755, 2553-2558), and two
@@ -1063,7 +1066,8 @@ unit (537k) or Water Spray (497k).
 (4) alive, melee take a Junk Bot ahead of the Assault Bot, and hold the one they are on when the count
 falls back under it. It costs them nothing: the nearest is **3.4 yd** away with **4** inside a cleave,
 while the Assault Bot stands 7.7 yd off the pile, which is why melee AoE was not reaching it. Ranged
-and healers keep the Assault Bot, the only Magnetic Core source; a grounded unit still outranks both.
+and healers keep the Assault Bot, the only Magnetic Core source; a grounded unit outranks both for
+melee and ranged DPS (see the core section).
 
 2026-09-22 evening: two pulls, neither past phase 2. 6827 wiped at 3:00.710 with 13 phase 2 deaths in
 29.9 s, Rapid Burst **74%** of its intake at 26.3k/s against the usual 13k/s and melee/ranged cross
@@ -1074,6 +1078,15 @@ the second barrage window, which took **214k** of fire against 22k in the first.
 26.0k/s healed, bots at 20-50% finished by Rapid Burst and Heat Wave, and a barrage that killed
 nobody. 8079 wiped at 3:46.275 with 11 of its 14 phase 2 deaths to Flames in 3:08-3:12, inside its
 only barrage (473k fire, 83% of the phase's).
+
+2026-09-23 evening, on a build without that day's Heroism and barrage fixes: all three hard-mode pulls
+reached phase 4 and died to the berserk with **7.5M, 5.9M and 2.35M** left. Phases 1-3 took 98/101/81,
+96/89/82 and 186/156/163 s against 60, 61 and 103 in a normal kill the same night, and phase 4 took
+the parts down at 37-60k/s against its 110k. Phase 3 lost two landings in three to ranged on the adds
+(see the core section), and one pull its first core: spray, fire and Bomb Bot dodges kept the carrier
+off a corpse 25 yd away until it despawned, and the first landing came 30 s late (open). Phase 4 lost
+the MK II off the tank and melee to the hold (see the tank and rendezvous sections), and five melee to
+one barrage.
 
 **Open, not fixed: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the whole
 30 s handover, melee and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**,
@@ -1199,12 +1212,14 @@ back once it arrives. The trace tells the bank apart from the old wait: `hold`, 
 `walk-corpse-second`, and at the use itself `chain` or `hold-expiring`. Those two are noted there
 because a note before the walk alternated with `walk-acu` every tick, 17 times for one release.
 
-Melee and pets switch to it for the window — `IsAllowedTarget` used to refuse melee the Aerial Command
-Unit outside phase 4 unconditionally, and the pet node only ever looked for adds, so both sat it out.
-Ranged keep the add order and arrive on their own once the leftovers are dead, since nothing replaces
-them. Tanks never reach this: `MimironSetDpsPriorityTrigger` stands down for them, so the Assault Bot
-keeps its tank throughout, which is deliberate — it is the one add nobody can ignore, and a tank
-contributes little of the burn.
+Melee, pets and ranged DPS switch to it for the window; healers never do, and a Bomb Bot in casting
+range still comes first. `IsAllowedTarget` used to refuse melee the Aerial Command Unit outside phase 4
+unconditionally, and the pet node only ever looked for adds, so both sat it out. Ranged kept the add
+order until 2026-09-23 evening: 71-87% of their aim on the Assault Bot and 67-99% on Junk Bots through
+the first two landings, which took **17-23 points** each against **35-44** for the third, once no add
+was left. Tanks never reach this: `MimironSetDpsPriorityTrigger` stands down for them, and nothing
+sends the tank to the Assault Bot either. It was on him 4-16% of those pulls, for little (21-44k into
+each role a phase).
 
 **Outside the window melee wait.** With no add up the list fell back to the generic picker, which
 handed melee the airborne unit, and the hold kept a disallowed target too, since both indexes equal
@@ -1221,7 +1236,9 @@ sidestep pushed it 30 yd out, tank and unit converged **16.8 yd** off the room c
 45 s, leaving 7 to 12 of 25 past casting range for both 20 s windows. `p3tank` pins the main tank to the
 room centre, the same way `p1tank` does for the MK II and for the same reason. His own `reach melee`
 still dragged it: chasing the airborne unit put him 13.7 yd off the spot, so
-`MimironTankAnchorGuardMultiplier` vetoes it while the unit is airborne, in both modes.
+`MimironTankAnchorGuardMultiplier` vetoes it while the unit is airborne, in both modes. That pins the
+tank, not the unit: on 2026-09-23 evening it was on him 18-38% of phase 3 and on ranged 22-45%, since
+a melee tank builds little threat on it in the air.
 
 ## Emergency Fire Bots are kept, dodged, and killed before phase 4
 
@@ -1374,8 +1391,8 @@ stationary and taking +50 % for 20 s, and nothing new spawns during it.
 
 In phase 4 pets go where the melee go, and hold when the melee hold. A hunter's pet is about a fifth of
 that hunter's damage, and leaking that into the rendezvous is exactly what the floor exists to prevent.
-Note this is **not** a reachability workaround: the Aerial Command Unit is at ground level in phase 4
-(see below), and pets are kept on the chassis parts to hold the ranged/melee split.
+That includes the Aerial Command Unit while the pair waits on it, and it is reachable: it is at ground
+level in phase 4 (see below).
 
 **`MOVEMENTFLAG_HOVER` cannot be used to mean "phase 3".** Nothing in the vehicle entry path clears it
 and the phase 3 defeat branch does not either, so it survives into phase 4 whenever the ACU happened to
@@ -1406,8 +1423,8 @@ move without re-applying hover height. The visual stack is a client-side model a
 consequences: everything splashes every part, which is what the floor below is for; and the Aerial
 Command Unit is genuinely reachable by melee in phase 4.
 
-Melee are kept off it anyway, by choice: ranged DPS own the ACU — `IsRangedDps`, not `IsRanged`, so a
-healer is never steered onto it or into the hold.
+Ranged DPS own the ACU — `IsRangedDps`, not `IsRanged`, so a healer is never steered onto it or into
+the hold — and melee get it only while the pair waits on it (below).
 
 **The ACU still arrives last, and a fixed floor cannot absorb that.** On 2026-09-12 ranged aimed
 **94%** of their damage at it and it lost **25.6k hp/s** against the ground pair's 46.0k and 44.3k.
@@ -1421,11 +1438,16 @@ on the mode.)
 
 The floor is therefore **`max(10 %, leader − ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT)`**, 4 % or two bands,
 `leader` being whichever part is furthest from death: the pair parks just under the ACU instead of 10
-points under it, and the three walk down together. Everyone holds once nothing they may touch is above
-it: melee, pets, and both tanks. Tanks holding is only safe because nothing else is generating threat
-by then, so threat is static and no mech changes hands; it is the first thing to revisit if one ever
-does. The two humans were **29%** of that slide through the floor, 71% of their damage into the ground
-pair, which no bot change reaches: in phase 4 a player belongs on the ACU.
+points under it, and the three walk down together. The two humans were **29%** of that slide through
+the floor, 71% of their damage into the ground pair, which no bot change reaches: in phase 4 a player
+belongs on the ACU.
+
+**Melee at the floor hit the ACU instead of holding.** It is the leader then, so every hit closes the
+gap. Held, melee were targetless 24-81% of one 2026-09-23 pull's phase 4 and for all the last 30 s of
+another, while ranged AoE spread over the stack took the ACU down at 8-14k/s against 26k/s in a normal
+kill. Melee and pets take it while the lower ground part is within twice the converge (8 points) of
+it, and hold past that, since cleave splashes the pair. The main tank never holds (see the tank
+section).
 
 **Every restriction lifts the moment a part starts self-repairing.** `IsMimironPhase4` is keyed on
 VX-001 riding the chassis, not on all three being attackable, precisely so it stays true through that
@@ -1533,6 +1555,30 @@ conditions as `reach melee`. One of those pulls also went in with a single tank 
 `melee` — and after he died the MK II chased a warlock through the camp, melee targetless 48-77% of the
 rest of the phase.
 
+**Phase 4 lost the MK II off the tank for three reasons.** On 2026-09-23 evening it was on him 54, 11
+and 46% of phase 4, 90 s on a human DK in one pull, the chassis sat a median 9-24 yd off centre, and
+Shock Blast killed three ranged it walked into. `p4tank` was handed out whatever the MK II's victim,
+and arc spread walked him back past 5 yd; his focus flipped to VX-001 whenever it led, which never
+takes a victim, so `lose aggro` could not see the MK II; and at the floor he `AttackStop`ped with the
+node claiming every tick, blocking the taunt while healing and splash kept building threat.
+`GetMimironPhase4TankFocus` is now the MK II whenever it is attackable and never a hold (his 1-2k/s
+barely moves the floor), and `p4tank` goes out only while the MK II is his or nobody's, so without it
+`reach melee` and his taunt take him back.
+
+**The spot burned, so under Firefighter it moves.** The centre is where `p3tank` stood for three
+minutes, and chains grow toward whoever is nearest: in one pull he alternated arc spread and the
+flame dodge every ~2.5 s, 22-30 yd from the chassis. `GetMimironPhase4TankSpot` keeps the fixed spot
+until more than `_PHASE4_TANK_FIRE_LIMIT` (1) node lies within `_CLEAR_RADIUS` (14 yd: the 9 yd
+melee ring plus a node's 5), then drags to the least-burning of the centre and 8/16/24 yd rings × 12
+bearings, only when it is `_FIRE_MARGIN` (2) cleaner, ties to the shorter drag. It then holds
+`_HOLD_MS` (20 s), and never moves while a barrage spins up or fires, since the chassis carries the
+apex. Staging and normal mode keep the fixed spot.
+
+**Self Repair used to hand out the phase 1 spot.** A part going `NON_ATTACKABLE` fails a
+three-attackable test, so the tank read phase 1 and got `p1tank`, 53 yd west, mid-rendezvous, and
+`MimironPhase1Active` turned the phase 1 guards back on. Both key on `IsMimironPhase4`, the vehicle
+seat.
+
 ## Napalm Shell wants one bot per shell
 
 65026 is a **5 yd** blast — 9,424 on impact plus 5,999 a tick for 8 ticks, about **57k** against 22-30k
@@ -1619,7 +1665,8 @@ attackable.
 
 **One exception.** `ULDUAR_MIMIRON_PHASE4_TANK_SPOT` is still handed out while staging. It is not
 somewhere to wait — it holds VX-001's chassis still, and every phase-4 bearing, radius and offset is
-calculated against a stationary cone apex. It is 1.4 yd off the room centre because all three
+calculated against a stationary cone apex. Once phase 4 starts under Firefighter it moves off the fire
+(see the tank section). It is 1.4 yd off the room centre because all three
 handovers converge there: VX-001 is summoned at it, `ACUSummonPos` is (2744.650, 2569.460, 380.0), a
 defeated ACU is walked back to (2744.65, 2569.46, 381.34), and the chassis ends there after charging
 to (2755.77, 2574.95) at 10 s. `GetMimironStagingFocus` survives only to tell a phase-4 handover from
@@ -1717,6 +1764,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) or `hold-expiring` (the held one was about to) |
 | `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
+| `tankspot` | A Firefighter phase 4 tank spot move, `x,y <old>><new>` nodes within 14 yd. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |

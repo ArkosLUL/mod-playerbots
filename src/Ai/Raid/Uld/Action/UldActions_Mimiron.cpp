@@ -821,22 +821,11 @@ bool MimironPhase4FocusAction::Execute(Event /*event*/)
 
     if (botAI->IsMainTank(bot))
     {
-        // Direct targeting, no raid icon. All three reassemble and only stay down if they reach Self
-        // Repair together, so the tank follows whichever is furthest from the floor by percent - the
-        // Aerial Command Unit's pool is two thirds the others', and ordering on raw health starved it.
-        Unit* const focus = GetMimironPhase4Focus(botAI, bot, true);
-
-        // Nothing left above the floor that the tank may touch, so it stops swinging with its melee.
-        // Safe only because nothing else is generating threat by then: with the DPS held, threat is
-        // static and the mech does not change hands. A tank left swinging is a slow steady push toward
-        // 15000 on the one part nobody wants pushed.
-        if (!focus)
-        {
-            bot->AttackStop();
-            return true;
-        }
-
-        if (AI_VALUE(Unit*, "current target") != focus)
+        // Direct targeting, no raid icon. Always the MK II and never a hold: healing and splash keep
+        // building threat on it while the raid waits at the floor, and a tank that stops swinging
+        // loses it to a DPS. His 1-2k a second barely moves the floor.
+        Unit* const focus = GetMimironPhase4TankFocus(botAI, bot);
+        if (focus && AI_VALUE(Unit*, "current target") != focus)
             return Attack(focus);
 
         return false;
@@ -905,9 +894,9 @@ bool MimironPetControlAction::Execute(Event /*event*/)
     {
         // Pets go where the melee go, and hold when the melee hold. A hunter's pet is about a fifth of
         // that hunter's damage, and leaking that into the rendezvous is what the floor exists to stop.
-        // Asking for a melee answer also keeps them off the Aerial Command Unit, which is reachable
-        // here - seat offsets are zero and the chassis writes its passengers to its own position - so
-        // this is holding the ranged and melee split, not working around a hitbox.
+        // The melee answer is the Aerial Command Unit only while the pair waits on it, and it is
+        // reachable here: seat offsets are zero and the chassis writes its passengers to its own
+        // position.
         if (Unit* focus = GetMimironPhase4Focus(botAI, bot, true))
             CommandPetAttack(botAI, focus);
         else
@@ -1211,12 +1200,11 @@ std::vector<std::pair<uint32, Unit*>> MimironSetDpsPriorityAction::BuildPriority
         priority.emplace_back(NPC_EMERGENCY_FIRE_BOT,
                               SelectByEntry(currentTarget, NPC_EMERGENCY_FIRE_BOT, fireBots));
 
-    // A grounded Aerial Command Unit outranks the adds for melee. Nothing new spawns for the whole
-    // window, so the only competition is whatever survived it, and +50% damage on the boss beats any
-    // of it. Ranged keep the add order and arrive here on their own once the leftovers are dead.
-    // Tanks never reach this - "mimiron set dps priority" stands down for them - so the Assault Bot
-    // keeps its tank throughout, which is deliberate: it is the one add nobody can ignore.
-    if (aerialCommandUnit && botAI->IsMelee(bot) && IsMimironAcuGrounded(botAI))
+    // A grounded Aerial Command Unit outranks the adds for melee and ranged DPS. Nothing new spawns
+    // for the window and it takes +50%, so any add still up can wait 20 s. Healers never get here,
+    // and a Bomb Bot in casting range still comes first.
+    if (aerialCommandUnit && (botAI->IsMelee(bot) || PlayerbotAI::IsRangedDps(bot)) &&
+        IsMimironAcuGrounded(botAI))
         priority.emplace_back(NPC_AERIAL_COMMAND_UNIT, aerialCommandUnit);
 
     // An Assault Bot is up most of the phase, so below it the Junk Bots were never reached and piled
@@ -1312,9 +1300,10 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
                 return true;
 
             // In phase 3 it hovers out of reach until a Magnetic Core grounds it. In phase 4 it is
-            // reachable, and melee are kept off it by choice so the ranged half of the raid can bring
-            // it down level with the other two. Not tested through MOVEMENTFLAG_HOVER: that survives
-            // the phase 3 defeat and the vehicle boarding, so it says nothing about which phase it is.
+            // reachable, and melee stay off it unless the phase 4 focus hands it to them, which it
+            // does while the pair waits at the floor for it. Not tested through MOVEMENTFLAG_HOVER:
+            // that survives the phase 3 defeat and the vehicle boarding, so it says nothing about
+            // which phase it is.
             //
             // The bar lifts once a part is already self-repairing. The rendezvous is over by then and
             // melee would otherwise have nothing to hit through the 15 s that decides the kill.
@@ -1322,7 +1311,8 @@ bool MimironSetDpsPriorityAction::IsAllowedTarget(Unit* unit) const
                 return IsMimironAcuGrounded(botAI);
 
             return GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) == nullptr ||
-                   GetFirstAliveUnitByEntry(botAI, NPC_VX001) == nullptr;
+                   GetFirstAliveUnitByEntry(botAI, NPC_VX001) == nullptr ||
+                   GetMimironPhase4Focus(botAI, bot, true) == unit;
         }
 
         // The kept ones are putting the fire out. Refused here too, so the hold cannot keep a bot

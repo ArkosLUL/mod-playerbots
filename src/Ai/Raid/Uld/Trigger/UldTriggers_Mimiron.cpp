@@ -231,16 +231,9 @@ bool MimironPhase4FocusTrigger::IsActive()
 
     if (botAI->IsMainTank(bot))
     {
-        Unit* const focus = GetMimironPhase4Focus(botAI, bot, true);
-        Unit* const current = AI_VALUE(Unit*, "current target");
-
-        // A null focus means everything the tank may touch is already at the floor, so it has to stop
-        // swinging - fire once while it is still attacking so the action can. No raid target icon any
-        // more: nothing ever read it back, and a stale skull only ever misled the human raid leader.
-        if (!focus)
-            return current != nullptr || bot->HasUnitState(UNIT_STATE_MELEE_ATTACKING);
-
-        return current != focus;
+        // Only to switch. Claiming the tick while already on it would starve the taunt.
+        Unit* const focus = GetMimironPhase4TankFocus(botAI, bot);
+        return focus && AI_VALUE(Unit*, "current target") != focus;
     }
 
     // Non-tanks only come here to be spread for Hand Pulse; their target belongs to

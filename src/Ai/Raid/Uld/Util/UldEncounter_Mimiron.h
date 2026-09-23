@@ -290,12 +290,28 @@ constexpr float ULDUAR_MIMIRON_PHASE4_HOLD_PCT = 10.0f;
 constexpr float ULDUAR_MIMIRON_PHASE4_FOCUS_BAND_PCT = 2.0f;
 
 // How far below the part furthest from death the others may be pushed before they wait. The
-// Aerial Command Unit is the one that cannot be helped along: melee never reach it, and all three
-// sit on one point so about half of what ranged aim at it lands on the other two instead. A fixed
-// floor does not know that - the ground pair reached 10 % with the unit still at 20 % and was
-// driven under long before it caught up, which cost a whole second phase 4. Two focus bands, so
-// the hold releases when the unit catches up rather than on every tick of splash.
+// Aerial Command Unit is the one that lags: it is mostly the ranged's, and all three sit on one
+// point so most of their AoE lands on the other two instead. A fixed floor does not know that -
+// the ground pair reached 10 % with the unit still at 20 % and was driven under long before it
+// caught up, which cost a whole second phase 4. Two focus bands, so the hold releases when the
+// unit catches up rather than on every tick of splash. Melee waiting at the floor hit the unit
+// until the pair has drifted twice this far under it.
 constexpr float ULDUAR_MIMIRON_PHASE4_CONVERGE_PCT = 4.0f;
+
+// Phase 4 tank spot under Firefighter: candidates on these rings round the room centre, and the
+// centre itself. 24 yd plus the melee ring round the chassis stays inside ULDUAR_MIMIRON_ROOM_RADIUS.
+constexpr float ULDUAR_MIMIRON_PHASE4_TANK_RINGS[] = {8.0f, 16.0f, 24.0f};
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_BEARINGS = 12;
+
+// Fire nodes this close to a candidate count against it: the melee ring round the chassis is ~9 yd
+// out and a node burns 5 yd.
+constexpr float ULDUAR_MIMIRON_PHASE4_TANK_CLEAR_RADIUS = 14.0f;
+
+// Drag once the live spot carries more than the limit, only somewhere cleaner by the margin, then
+// sit for the hold. Every drag walks the chassis, the melee on it and the barrage apex.
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT = 1;
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_MARGIN = 2;
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS = 20000;
 
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
@@ -562,10 +578,15 @@ bool IsMimironPhase3(PlayerbotAI* botAI);
 Player* GetMimironFrostResistancePaladin(PlayerbotAI* botAI, Player* bot);
 
 // What this bot should be hitting in phase 4. nullptr means hold - everything it is allowed to touch is
-// already at ULDUAR_MIMIRON_PHASE4_HOLD_PCT, and pushing a part under early costs the whole rendezvous.
+// already at the floor, and pushing a part under early costs the whole rendezvous. A melee answer is the
+// Aerial Command Unit while both ground parts wait on it.
 // `melee` is a parameter rather than derived from the bot so the pet node can ask for a melee answer on
 // behalf of a hunter.
 Unit* GetMimironPhase4Focus(PlayerbotAI* botAI, Player* bot, bool melee);
+
+// The main tank's phase 4 target: the MK II, the one part that swings and walks after its victim, so
+// "lose aggro" can see it. The shared focus only while the MK II is self-repairing. Never a hold.
+Unit* GetMimironPhase4TankFocus(PlayerbotAI* botAI, Player* bot);
 
 // Who fetches the Magnetic Core. Group order so every bot computes the same answer, but melee first:
 // they are already standing on the Assault Bot when it dies, whereas the plain first-bot-in-group pick
