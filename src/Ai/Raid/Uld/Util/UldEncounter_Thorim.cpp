@@ -16,6 +16,7 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidInstanceState.h"
 #include "RaidObs.h"
 #include "RtiTargetValue.h"
 #include "Timer.h"
@@ -28,7 +29,6 @@
 #include <cmath>
 #include <limits>
 #include <list>
-#include <mutex>
 #include <string>
 #include <vector>
 
@@ -86,22 +86,9 @@ namespace
 
 // Keyed by instance: trigger, action and multiplier each hold their own helper instance, so the state
 // they must agree on is defined here and nowhere else.
-//
-// Not thread_local. A map is updated by one thread at a time but is never pinned to one, and
-// MapUpdate.Threads is 6 here, so per-thread copies hand the same instance a fresh state whenever the
-// pool reassigns it: the melee slot gets re-picked out of whatever that copy holds, and the latched ring
-// bearing is struck again off a boss that has drifted. That is the ring flipping between three points
-// several times a second. In a trace it reads as exactly six thorim.slot rows per bot, one per thread
-// that ever ticked the pull. References into an unordered_map survive rehashing, so the lock only has to
-// cover the lookup.
-std::mutex thorimStatesMutex;
-std::unordered_map<uint32 /*instanceId*/, ThorimEncounterState> thorimStates;
+RaidInstanceState<ThorimEncounterState> thorimStates;
 
-ThorimEncounterState& ThorimStateFor(Player* bot)
-{
-    std::lock_guard<std::mutex> guard(thorimStatesMutex);
-    return thorimStates[bot->GetInstanceId()];
-}
+ThorimEncounterState& ThorimStateFor(Player* bot) { return thorimStates.For(bot->GetInstanceId()); }
 
 struct GauntletWaypoint
 {
@@ -146,13 +133,7 @@ std::array<Position const*, ULDUAR_THORIM_BALCONY_WAYPOINTS> const balconyWaypoi
 
 ThorimEncounterState* FindState(Player const* bot)
 {
-    if (!bot)
-        return nullptr;
-
-    std::lock_guard<std::mutex> guard(thorimStatesMutex);
-
-    auto const itr = thorimStates.find(bot->GetInstanceId());
-    return itr == thorimStates.end() ? nullptr : &itr->second;
+    return bot ? thorimStates.Find(bot->GetInstanceId()) : nullptr;
 }
 
 // Both halves of the gate, in one place so the two cannot drift apart. Everything guarded by it
@@ -2723,16 +2704,9 @@ bool ThorimEncounterStateIsStale(PlayerbotAI* botAI)
 
 bool ThorimBotHasEncounterState(Player* bot)
 {
-    if (!bot)
+    ThorimEncounterState const* state = FindState(bot);
+    if (!state)
         return false;
-
-    std::lock_guard<std::mutex> guard(thorimStatesMutex);
-
-    auto const itr = thorimStates.find(bot->GetInstanceId());
-    if (itr == thorimStates.end())
-        return false;
-
-    ThorimEncounterState const* state = &itr->second;
 
     // Everything the reset below drops. Leave one out and a bot holding only that never trips the
     // trigger, which is how balconyStep got to ride into the next pull unnoticed.
@@ -2751,21 +2725,15 @@ void ResetThorimEncounterState(Player* bot, bool clearInstance)
     if (!bot)
         return;
 
-    // Held across the whole reset, not just the lookup: clearInstance drops the entry other threads
-    // hold pointers into, and nothing below reaches back through FindState to re-lock.
-    std::lock_guard<std::mutex> guard(thorimStatesMutex);
-
     if (clearInstance)
     {
-        thorimStates.erase(bot->GetInstanceId());
+        thorimStates.Reset(bot->GetInstanceId());
         return;
     }
 
-    auto const itr = thorimStates.find(bot->GetInstanceId());
-    if (itr == thorimStates.end())
+    ThorimEncounterState* state = FindState(bot);
+    if (!state)
         return;
-
-    ThorimEncounterState* state = &itr->second;
 
     // Two halves, and they run on different schedules. This one is this bot's own latches and it has
     // to run for every member: they are what decide where a bot thinks it already walked to.
