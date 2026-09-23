@@ -1,0 +1,187 @@
+# Trial of the Crusader rework
+
+In flight. Brings the ToC raid strategy (`src/Ai/Raid/ToC/`, map 649, strategy key
+`trialofthecrusader`) to Ulduar parity on 10N/25N/10H/25H and wires it into RaidObs. Work runs as
+waves of parallel lanes, one brief per lane in this directory. `w6-closeout` deletes this directory
+once its durable content lives in `docs/raids/trial-of-the-crusader/`.
+
+## Status
+
+The merge stage alone edits this table.
+
+| Wave | Lane | State | Merge | Decisions for review | Carried over / gaps |
+|---|---|---|---|---|---|
+| 1 | w0a-restructure | pending | | | |
+| 2 | w0b-tooling | pending | | | |
+| 2 | w0c-foundation | pending | | | |
+| 3 | w1a-beasts | pending | | | |
+| 3 | w2-jaraxxus | pending | | | |
+| 3 | w3a-fc-offence | pending | | | |
+| 3 | w4-twins | pending | | | |
+| 3 | w5-anubarak | pending | | | |
+| 4 | w1b-jormungars | pending | | | |
+| 4 | w3b-fc-defence | pending | | | |
+| 5 | w6-closeout | pending | | | |
+
+States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
+`skipped` (merge refused because the main tree had the file dirty; branch kept).
+
+## Why
+
+The ToC code predates `docs/engine/pitfalls.md`, `raid-mechanics-lessons.md` and RaidObs, and
+repeats their traps: `FleePosition` dodges, raid-icon marks never cleared and the kill target
+re-picked every tick, blanket `MovementAction` vetoes (which also veto `AttackAction`), duplicates of
+`EncounterHelpers`, no encounter gating on its nine multipliers, a `dynamic_cast` lust gate, no
+probes. Live bugs: single-difficulty spell ids (Twin Val'kyr essence 65686/65684, Touch, Leeching
+Swarm 66118, Impale, …) leave nodes dead in 25N/10H/25H; Faction Champions reset threat every 2 s,
+so the base "tank held the boss" burst gate never opens.
+
+Verified constraints:
+
+- **No boss state.** `instance_trial_of_the_crusader.cpp` never calls `SetBossState`. It keeps a
+  private `EncounterStatus` and exposes `GetData(TYPE_INSTANCE_PROGRESS = 1)`: 0-1 Beasts, 2-3
+  Jaraxxus (2 = Fizzlebang intro), 4 Faction Champions, 6 Twins, 8 Lich King transition, 9
+  Anub'arak, 10 done. It never moves back on a wipe. `GetGuidData` exposes Gormok (4), Dreadscale
+  (6), Acidmaw (7), the twins by NPC entry, Anub'arak (13). `IsEncounterInProgress()` goes true
+  before the pull (Beasts walk-in, champions released, twins 3.25 s early, Anub'arak from the Lich
+  King scene); only Jaraxxus sets it on engage.
+- **Trace naming.** The engage hook names every ToC trace first, from the engaging creature
+  (Beasts → `gormok-the-impaler`, champions → whichever of 24 swings first, twins → either name), so
+  `NamePull` never acts. No ToC trace ever closes as `kill` or `reset`.
+- **Spell difficulty.** ToC remaps live only in the client DBC, mirrored in
+  `G:/DevStuff/GitHub/azerothcore-wotlk-pb/modules/mod-spell-tweaks/data/dbc-reference/spelldifficulty.reference.csv`.
+  `acore_world.spelldifficulty_dbc` has none of them; the core merges both sources.
+- **Heroic attempts** are private to the script and invisible to the module. Touch of Jaraxxus is
+  commented out in this core.
+
+## Decisions
+
+| Topic | Decision |
+|---|---|
+| Design questions | Never pause. The core script decides mechanics (ids, timers, radii, targeting); the Warcraft Tavern guide decides tactics (kill order, positioning, assignments). On a conflict the script wins and the boss doc says why. What neither settles is decided conservatively. Log every such choice under the brief's "Decisions for review" with its source. |
+| Scope | Every mechanic on 10N/25N/10H/25H, heroic-only included. No bot cheats: a cheat-only mechanic is a documented gap. |
+| Code outside ToC | Only where a brief says so, and listed in the lane report. `src/Ai/Raid/Uld/` is never touched. |
+| Oversized lane | Keep what hurts the raid most; move the rest into a new brief `docs/plans/toc-rework/<lane>-rest.PLAN.md` and report it as carried over. |
+| Findings | Confirmed bugs and minors are fixed; cleanups only when small. One re-review round, then the boss doc's "Known gaps". |
+| Build and test | The user builds and pulls. Agents never build. |
+
+## Naming contract
+
+C++ emits and the Python readers accept exactly these. `w0b-tooling` makes Python accept them;
+`w0c-foundation` makes C++ emit them.
+
+| Encounter | Trigger-name prefixes | Stage | Trace slug | Note-key prefix |
+|---|---|---|---|---|
+| Northrend Beasts | `gormok`, `northrend worms`, `icehowl` | 0-1 | `northrend-beasts` | `nb.` |
+| Lord Jaraxxus | `jaraxxus` | 2-3 | `lord-jaraxxus` | `jaraxxus.` |
+| Faction Champions | `faction champions` | 4 | `faction-champions` | `fc.` |
+| Twin Val'kyr | `twin valkyr` | 6 | `val-kyr-twins` | `tv.` |
+| Anub'arak | `anubarak` | 9 | `anub-arak` | `anub.` |
+| raid-wide | none | any | none | `toc.` |
+
+## Lane rules
+
+These bind every agent in every lane; a lane brief adds scope and facts.
+
+**Authority.** The user asked for this effort to run without waiting for them: "with all the docs,
+git commit, merge or any other tasks that require approval are not waiting for me", and approved
+this plan with per-lane branches, worktrees and `--no-ff` merges. For this effort only, that
+replaces `CLAUDE.local.md`'s "no branch". Allowed: `git worktree add/remove`, commits on
+`toc/<lane>`, `git merge --no-ff` (merge stage only), `git branch -d`. Never: push, amend, rebase,
+`reset --hard`, force, stash, `clean`, a checkout that discards changes.
+
+**Worktree.**
+
+- Main tree: `G:/DevStuff/GitHub/azerothcore-wotlk-pb/modules/mod-playerbots` on `Custom`. Lane
+  worktree: `G:/DevStuff/GitHub/azerothcore-wotlk-pb/build-toc-wt/<lane>` on `toc/<lane>`.
+- Create it from the main tree: `git worktree add -b toc/<lane> <wt> Custom`. If the branch exists,
+  `git worktree add <wt> toc/<lane>`. If the worktree exists, reuse it and continue from its state.
+- The path is gitignored by the core's `/build*/`, stays out of `modules/` (the core CMake would
+  build it as a second module), and sits two levels under the core root, so
+  `tools/botobs/raidobs/paths.py` still finds the traces.
+- Every edit of a lane happens inside its worktree. Only the merge stage writes to the main tree.
+
+**Files a lane may touch.** Its own stems under `src/Ai/Raid/ToC/` and its seam files (the code
+layout section of `docs/raids/trial-of-the-crusader/README.md` names them once wave 1 lands), its
+boss doc, its own brief, `tools/botobs/bosses/<slug>.py`, `tools/botobs/tests/test_<slug>.py`.
+Anything else only where the brief says so, listed in the report. Never this file (merge stage)
+or `src/Ai/Raid/Uld/`. `docs/raids/trial-of-the-crusader/README.md` belongs to the merge stage,
+except in a lane whose brief hands it over.
+
+**Sources.**
+
+- Mechanics: `G:/DevStuff/GitHub/azerothcore-wotlk-pb/src/server/scripts/Northrend/CrusadersColiseum/TrialOfTheCrusader/`.
+  Follow a call to its guards before relying on its effect.
+- Spell ids per difficulty: the CSV above plus the world DB
+  (`docker exec ac-database mysql -uroot -ppassword -N -B -e "SELECT … FROM acore_world.spelldifficulty_dbc …"`).
+  Spell fields: `spell.reference.csv` next to the CSV.
+- Coordinates: navprobe, per `docs/engine/pitfalls.md`. Never invent or reject a coordinate from a
+  model of the room.
+- Tactics: Warcraft Tavern, 25-man only; scale to 10-man by the script's 10-man values. Read it word
+  for word (WebFetch only summarises past a 39k-character menu):
+
+  ```
+  curl -sL -A "Mozilla/5.0" "<url>" -o guide.html
+  python -c "import re,html;s=open('guide.html',encoding='utf-8',errors='ignore').read();s=re.sub(r'(?s)<(script|style|nav|header|footer)[^>]*>.*?</\1>','',s);print(re.sub(r'\s+',' ',html.unescape(re.sub(r'<[^>]+>',' ',s))))"
+  ```
+
+  Base `https://www.warcrafttavern.com/wotlk/guides/`: overview `toc-25-raid-guide/`, Beasts
+  `beasts-of-northrend-master-strategy-guide-toc-25/`, Jaraxxus
+  `lord-jaraxxus-master-strategy-guide-toc-25/`, Champions
+  `faction-champions-master-strategy-guide-toc-25/`, Twins `twin-valkyrs-strategy-guide-toc-25/`,
+  Anub'arak `anubarak-master-strategy-guide-toc-25/`. Wowhead blocks automated reads; do not work
+  around it.
+
+**Required reading before designing.** `docs/engine/pitfalls.md`, `raid-mechanics-lessons.md`,
+`action-selection.md`; `docs/raids/README.md`; `docs/systems/observability.md` ("Adding a probe");
+`docs/systems/consumables-and-burst.md`. Ulduar references by concern: interrupt duty
+`docs/raids/ulduar/vezax.md`; one mover and ranked candidates `xt002.md`; latched stands `hodir.md`;
+containers, probes and per-instance state `mimiron.md`; taunts and tank swaps `thorim.md`; spread
+rings `iron-assembly.md`; the gate `src/Ai/Raid/Uld/UldEncounterGate.{h,cpp}`.
+
+**Per-instance state.** Use `src/Ai/Raid/RaidInstanceState.h` (`RaidInstanceState<State>`, from a
+parallel effort, plan `docs/plans/raid-instance-state/`) when it exists on the lane's branch. Until
+then use a mutex-guarded map keyed by instance id, never `thread_local`, and list each one in the
+report for `w6-closeout` to migrate. `src/Script/Playerbots.cpp` has uncommitted edits from that
+effort in the main tree, so a lane touching it will fail to merge: stay out of it.
+
+**Checks**, from the worktree root:
+
+- `PB_REPO=<wt> PB_MAX_FANOUT=60 ~/.claude/scripts/pb-syntax-check.sh <changed .cpp and .h>` (a
+  `.h` expands to the `.cpp` files including it by name).
+- `python tools/pblint/pblint.py src/Ai/Raid/ToC src/Bot/PlayerbotAI.cpp src/Ai/Raid/RaidStrategyContext.h`,
+  plus `--spell-difficulty` once `w0b-tooling` has merged. Stay scoped: the whole tree carries known
+  errors.
+- `python -m unittest discover -s tools/botobs/tests`.
+- In a lane with several implementers only the integrate agent runs checks.
+
+**Commit.** One commit per lane on `toc/<lane>`, staged by explicit path, never `-A`. Subject ≤72
+characters; body at most three lines, only a why the diff can't show; voice per
+`use-conversational-language`; no AI attribution or `Co-Authored-By`. Code comments follow the
+no-nonsense-comments rule: no process narration, no references to lanes, waves or plans.
+
+**Docs.** Durable facts go to `docs/raids/trial-of-the-crusader/<boss>.md` per `docs/README.md`
+(ids, timers, decisions with rationale, traps, known gaps; no change lists). A generic engine lesson
+goes into the lane report for the merge stage. Fold docs with `compact-docs-writer` (standing
+approval). Each boss doc ends with "What a trace answers": probe keys and reader usage, as in
+`docs/raids/ulduar/mimiron.md`.
+
+## Waves
+
+| Wave | Lanes, in parallel |
+|---|---|
+| 1 | `w0a-restructure` (runs chained into wave 2) |
+| 2 | `w0b-tooling`, `w0c-foundation` |
+| 3 | `w1a-beasts`, `w2-jaraxxus`, `w3a-fc-offence`, `w4-twins`, `w5-anubarak` |
+| 4 | `w1b-jormungars`, `w3b-fc-defence`, plus `refine-<boss>` for any boss with fresh traces |
+| 5 | `w6-closeout` |
+
+A lane runs: investigate → 1-3 parallel implementers on disjoint files (up to 5 in `w0a`) →
+integrate and check → three reviewers (mechanics, conformance, observability and conventions) →
+skeptic verify → fix → one re-review → close and commit. A merge stage then lands every finished
+lane on `Custom`, runs the checks on the merged tree, updates the status table and the README boss
+table, and removes merged worktrees and branches.
+
+A `refine-<boss>` lane reads the 649 traces, first checking `hdr.bin` against HEAD so it only reads
+pulls from a build that has the change, then runs `postmortem.py`, `batch.py` and the boss reader
+and fixes what the traces show.
