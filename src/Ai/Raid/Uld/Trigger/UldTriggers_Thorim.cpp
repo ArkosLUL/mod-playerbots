@@ -35,7 +35,7 @@ bool ThorimDpsPriorityTrigger::IsActive()
         return currentTarget && !ThorimDpsTargetAllowed(botAI, currentTarget);
 
     // Same for a tank in phase 1: "tank assist" keeps it on whatever is swinging at the raid,
-    // ThorimDisableAutomaticTargetingMultiplier leaves that action alone there, and two live pickers
+    // the thorim disable automatic targeting rules leave that action alone there, and two live pickers
     // on one bot is the oscillation this node exists to end. Phase 2 mutes tank assist instead, so
     // the tank steers off this like everybody else - without it an off-tank waiting to swap has no
     // picker at all and sits on whatever add it held when the boss dropped.

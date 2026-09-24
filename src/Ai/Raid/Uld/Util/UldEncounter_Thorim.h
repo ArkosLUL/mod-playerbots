@@ -625,7 +625,9 @@ uint8 ThorimAdvanceBalconyStep(Player* bot);
 
 // Runic Barrier is recast every 20s for its own 20s duration, so "stop attacking while it is up"
 // would mean never attacking. Non-tank melee back out on a health band instead and keep their
-// target, so ranged and instant abilities carry on from outside the shield's reach.
+// target, so ranged and instant abilities carry on from outside the shield's reach. The encounter's
+// tick moves the band; the read only reports it.
+void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot);
 bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot);
 
 //

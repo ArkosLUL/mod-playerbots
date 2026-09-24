@@ -1586,43 +1586,60 @@ uint8 ThorimAdvanceBalconyStep(Player* bot)
     return step;
 }
 
-bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)
+namespace
+{
+// Only a non-tank melee bot near the fight, with the Colossus shielded, has a bail to track.
+Unit* ThorimBarrierBailColossus(PlayerbotAI* botAI, Player* bot)
 {
     if (!botAI || !bot || bot->GetMapId() != ULDUAR_MAP_ID)
-        return false;
+        return nullptr;
 
-    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot))
-        return false;
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || !NearThorimEncounter(bot))
+        return nullptr;
 
-    if (!NearThorimEncounter(bot))
-        return false;
+    return GetThorimRunicColossus(botAI);
+}
+
+bool ThorimColossusShielded(Unit* colossus)
+{
+    return colossus && colossus->IsAlive() && colossus->HasAura(SPELL_THORIM_RUNIC_BARRIER);
+}
+}  // namespace
+
+void ThorimTickBarrierBail(PlayerbotAI* botAI, Player* bot)
+{
+    if (!botAI || !bot || bot->GetMapId() != ULDUAR_MAP_ID)
+        return;
+
+    if (!PlayerbotAI::IsMelee(bot) || PlayerbotAI::IsTank(bot) || !NearThorimEncounter(bot))
+        return;
 
     ThorimEncounterState& state = ThorimStateFor(bot);
-
-    Unit* colossus = GetThorimRunicColossus(botAI);
-    if (!colossus || !colossus->IsAlive() || !colossus->HasAura(SPELL_THORIM_RUNIC_BARRIER))
+    if (!ThorimColossusShielded(GetThorimRunicColossus(botAI)))
     {
         state.barrierBailing.erase(bot->GetGUID());
-        return false;
+        return;
     }
 
-    bool const bailing = state.barrierBailing.count(bot->GetGUID()) > 0;
-    if (bailing)
+    if (state.barrierBailing.count(bot->GetGUID()))
     {
         if (bot->GetHealthPct() >= ULDUAR_THORIM_BARRIER_RESUME_HEALTH_PCT)
-        {
             state.barrierBailing.erase(bot->GetGUID());
-            return false;
-        }
 
-        return true;
+        return;
     }
 
-    if (bot->GetHealthPct() > ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT)
+    if (bot->GetHealthPct() <= ULDUAR_THORIM_BARRIER_BAIL_HEALTH_PCT)
+        state.barrierBailing.insert(bot->GetGUID());
+}
+
+bool ThorimBarrierBailLatched(PlayerbotAI* botAI, Player* bot)
+{
+    if (!ThorimColossusShielded(ThorimBarrierBailColossus(botAI, bot)))
         return false;
 
-    state.barrierBailing.insert(bot->GetGUID());
-    return true;
+    ThorimEncounterState const* state = FindState(bot);
+    return state && state->barrierBailing.count(bot->GetGUID());
 }
 
 bool ThorimSplitActive(PlayerbotAI* botAI)

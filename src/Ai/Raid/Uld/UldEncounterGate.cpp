@@ -19,7 +19,6 @@ namespace
     // the encounter.
     constexpr EncounterPrefix ENCOUNTER_PREFIXES[] = {
         {"mimiron", ULD_BOSS_MIMIRON},
-        {"thorim", ULD_BOSS_THORIM},
         {"yogg-saron", ULD_BOSS_YOGGSARON},
         {"sara", ULD_BOSS_YOGGSARON},
     };

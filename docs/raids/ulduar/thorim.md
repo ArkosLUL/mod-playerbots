@@ -48,7 +48,7 @@ pull time while the human is still in the arena.
 Arena adds all land 19-24 yd from the centre and the nearest box edge is 42 yd out, so the leash is
 **30 yd from `ULDUAR_THORIM_NEAR_ARENA_CENTER`**, 15.8 yd short of the corridor mouth at the lever gate.
 Melee get a tighter **24 yd**, which is the furthest an add ever lands, so it costs no uptime. Two
-guards back it. `ThorimArenaLeashMultiplier` holds the generic movers while a bot is outside its leash
+guards back it. The `thorim arena leash` rule holds the generic movers while a bot is outside its leash
 — and, alone among the Ulduar guards, does **not** exempt `AttackAction` or `ReachTargetAction`,
 because corridor mobs sit ~92 yd out, inside the 100 yd sight cap, and the chase is exactly what walks
 a bot out of the box. `ThorimArenaTargetGuardMultiplier` drops a target outside the box, or the leash
@@ -72,7 +72,7 @@ who is still standing renumbers everyone behind the corpse and shuffles the form
 points are computed and then validated with `GetMapWaterOrGroundLevel` and
 `CheckCollisionAndGetValidCoords`, because raw ring geometry is the shape that lands off the navmesh
 and `MoveTo` fails silently there. Slot 0 sits on the bearing from the lever gate to the centre, so the
-formation opens away from the corridor. `ThorimArenaAnchorGuardMultiplier` holds the generic movers
+formation opens away from the corridor. The `thorim arena anchor guard` rule holds the generic movers
 once a bot is settled, exempting the chase — an add at 24 yd is up to 38 yd from an outer slot, and a
 ranged bot that cannot step into range is silent.
 
@@ -173,7 +173,7 @@ rule, not a fallback. Arrival uses a 3 yd / 5 yd deadband, because a tight one a
 recomputed from a moving boss leaves the bot sliding in place — and a moving bot casts nothing.
 
 Every melee DPS carries the `behind` strategy from `AiFactory`, so `SetBehindTargetAction` would walk all
-three stacks into one arc behind the boss the moment the ring node yields. `ThorimMovementGuardMultiplier`
+three stacks into one arc behind the boss the moment the ring node yields. The `thorim movement guard` rule
 holds the generic movers, scoped to a **settled** ring holder and exempting `AttackAction`,
 `ReachTargetAction` and `AvoidAoeAction` — a permanent movement freeze is the Void Reaver failure.
 
@@ -268,8 +268,8 @@ why re-taunt cadence is still open.
 **The class taunts fight the encounter for the boss.** `TankPaladinStrategy.cpp:114-121` wires
 `"lose aggro"` to `hand of reckoning` at `ACTION_HIGH + 7`, falling back to `righteous defense`; it
 fires every ~2 s at `rel 27.0`, so a bot paladin rips the boss off a human tank — **34 and 45 victim
-changes a phase** against 16 Dark Commands. `ThorimTauntGuardMultiplier` silences them, modelled on
-`IsHodirTauntAction` + `HodirGuardMultiplier` and gated on the bot's **current target** being Thorim,
+changes a phase** against 16 Dark Commands. The `thorim taunt guard` rule silences them, a `Block` on
+the `Taunt` family gated on the bot's **current target** being Thorim,
 so taunting an add off a healer still works. **`righteous defense` must be in any name-match list** —
 it is half the taunts in the trace.
 
@@ -434,7 +434,7 @@ excursions peaked at 42-54 yd; runaways hit 90-164.
 
 The runaways came from the **phase 1 boss latch**. The opening trash dies ~0:25 and the first Dark Rune
 wave lands ~0:50; in that gap the encounter picker has nothing,
-`ThorimDisableAutomaticTargetingMultiplier` returns 1.0 rather than strand the bot, and the only hostile
+the `thorim disable automatic targeting` rules let it through rather than strand the bot, and the only hostile
 in range is Thorim on his balcony. **18 of 25 bots held him** — one for 113 snapshot rows — and the
 acquire→clear→re-acquire loop re-pointed their pets, which took the only walkable route: the 300 yd
 corridor (Feral Spirit 164 yd from its owner, Worm 128). The fix whitelists the opening trash as the

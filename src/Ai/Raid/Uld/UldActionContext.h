@@ -18,14 +18,6 @@ class RaidUlduarActionContext : public NamedObjectContext<Action>
 public:
     RaidUlduarActionContext()
     {
-        creators["thorim frost resistance action"] = &RaidUlduarActionContext::thorim_frost_resistance_action;
-        creators["thorim nature resistance action"] = &RaidUlduarActionContext::thorim_nature_resistance_action;
-        creators["thorim dps priority action"] = &RaidUlduarActionContext::thorim_dps_priority_action;
-        creators["thorim arena positioning action"] = &RaidUlduarActionContext::thorim_arena_positioning_action;
-        creators["thorim gauntlet positioning action"] = &RaidUlduarActionContext::thorim_gauntlet_positioning_action;
-        creators["thorim balcony advance action"] = &RaidUlduarActionContext::thorim_balcony_advance_action;
-        creators["thorim phase 2 positioning action"] = &RaidUlduarActionContext::thorim_phase2_positioning_action;
-        creators["thorim fall from floor action"] = &RaidUlduarActionContext::thorim_fall_from_floor_action;
         creators["mimiron reset encounter state action"] = &RaidUlduarActionContext::mimiron_reset_encounter_state_action;
         creators["mimiron fire resistance action"] = &RaidUlduarActionContext::mimiron_fire_resistance_action;
         creators["mimiron frost resistance action"] = &RaidUlduarActionContext::mimiron_frost_resistance_action;
@@ -78,15 +70,6 @@ public:
         creators["mimiron bomb bot action"] = &RaidUlduarActionContext::mimiron_bomb_bot_action;
         creators["mimiron pet control action"] = &RaidUlduarActionContext::mimiron_pet_control_action;
         creators["mimiron slow bomb bot action"] = &RaidUlduarActionContext::mimiron_slow_bomb_bot_action;
-        creators["thorim unbalancing strike swap action"] = &RaidUlduarActionContext::thorim_unbalancing_strike_swap_action;
-        creators["thorim tank pickup action"] = &RaidUlduarActionContext::thorim_tank_pickup_action;
-        creators["thorim sif blizzard action"] = &RaidUlduarActionContext::thorim_sif_blizzard_action;
-        creators["thorim runic smash action"] = &RaidUlduarActionContext::thorim_runic_smash_action;
-        creators["thorim runic barrier bail action"] = &RaidUlduarActionContext::thorim_runic_barrier_bail_action;
-        creators["thorim reset encounter state action"] = &RaidUlduarActionContext::thorim_reset_encounter_state_action;
-        creators["thorim charged orb action"] = &RaidUlduarActionContext::thorim_charged_orb_action;
-        creators["thorim pet leash action"] = &RaidUlduarActionContext::thorim_pet_leash_action;
-        creators["thorim arena leash action"] = &RaidUlduarActionContext::thorim_arena_leash_action;
         creators["mimiron approach target action"] =
             &RaidUlduarActionContext::mimiron_approach_target_action;
         creators["mimiron dodge flames action"] = &RaidUlduarActionContext::mimiron_dodge_flames_action;
@@ -98,14 +81,6 @@ public:
     }
 
 private:
-    static Action* thorim_frost_resistance_action(PlayerbotAI* ai) { return new BossFrostResistanceAction(ai, "thorim"); }
-    static Action* thorim_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "thorim"); }
-    static Action* thorim_dps_priority_action(PlayerbotAI* ai) { return new ThorimDpsPriorityAction(ai); }
-    static Action* thorim_arena_positioning_action(PlayerbotAI* ai) { return new ThorimArenaPositioningAction(ai); }
-    static Action* thorim_gauntlet_positioning_action(PlayerbotAI* ai) { return new ThorimGauntletPositioningAction(ai); }
-    static Action* thorim_balcony_advance_action(PlayerbotAI* ai) { return new ThorimBalconyAdvanceAction(ai); }
-    static Action* thorim_phase2_positioning_action(PlayerbotAI* ai) { return new ThorimPhase2PositioningAction(ai); }
-    static Action* thorim_fall_from_floor_action(PlayerbotAI* ai) { return new ThorimFallFromFloorAction(ai); }
     static Action* mimiron_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "mimiron"); }
     static Action* mimiron_frost_resistance_action(PlayerbotAI* ai) { return new MimironFrostResistanceAction(ai); }
     static Action* mimiron_shock_blast_action(PlayerbotAI* ai) { return new MimironShockBlastAction(ai); }
@@ -162,15 +137,6 @@ private:
     static Action* mimiron_bomb_bot_action(PlayerbotAI* ai) { return new MimironBombBotAction(ai); }
     static Action* mimiron_pet_control_action(PlayerbotAI* ai) { return new MimironPetControlAction(ai); }
     static Action* mimiron_slow_bomb_bot_action(PlayerbotAI* ai) { return new MimironSlowBombBotAction(ai); }
-    static Action* thorim_unbalancing_strike_swap_action(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapAction(ai); }
-    static Action* thorim_tank_pickup_action(PlayerbotAI* ai) { return new ThorimTankPickupAction(ai); }
-    static Action* thorim_sif_blizzard_action(PlayerbotAI* ai) { return new ThorimSifBlizzardAction(ai); }
-    static Action* thorim_runic_smash_action(PlayerbotAI* ai) { return new ThorimRunicSmashAction(ai); }
-    static Action* thorim_runic_barrier_bail_action(PlayerbotAI* ai) { return new ThorimRunicBarrierBailAction(ai); }
-    static Action* thorim_reset_encounter_state_action(PlayerbotAI* ai) { return new ThorimResetEncounterStateAction(ai); }
-    static Action* thorim_charged_orb_action(PlayerbotAI* ai) { return new ThorimChargedOrbAction(ai); }
-    static Action* thorim_pet_leash_action(PlayerbotAI* ai) { return new ThorimPetLeashAction(ai); }
-    static Action* thorim_arena_leash_action(PlayerbotAI* ai) { return new ThorimArenaLeashAction(ai); }
     static Action* mimiron_approach_target_action(PlayerbotAI* ai)
     {
         return new MimironApproachTargetAction(ai);

@@ -18,14 +18,6 @@ class RaidUlduarTriggerContext : public NamedObjectContext<Trigger>
 public:
     RaidUlduarTriggerContext()
     {
-        creators["thorim frost resistance trigger"] = &RaidUlduarTriggerContext::thorim_frost_resistance_trigger;
-        creators["thorim nature resistance trigger"] = &RaidUlduarTriggerContext::thorim_nature_resistance_trigger;
-        creators["thorim dps priority trigger"] = &RaidUlduarTriggerContext::thorim_dps_priority_trigger;
-        creators["thorim arena positioning trigger"] = &RaidUlduarTriggerContext::thorim_arena_positioning_trigger;
-        creators["thorim gauntlet positioning trigger"] = &RaidUlduarTriggerContext::thorim_gauntlet_positioning_trigger;
-        creators["thorim balcony advance trigger"] = &RaidUlduarTriggerContext::thorim_balcony_advance_trigger;
-        creators["thorim fall from floor trigger"] = &RaidUlduarTriggerContext::thorim_fall_from_floor_trigger;
-        creators["thorim phase 2 positioning trigger"] = &RaidUlduarTriggerContext::thorim_phase2_positioning_trigger;
         creators["mimiron reset encounter state trigger"] = &RaidUlduarTriggerContext::mimiron_reset_encounter_state_trigger;
         creators["mimiron fire resistance trigger"] = &RaidUlduarTriggerContext::mimiron_fire_resistance_trigger;
         creators["mimiron frost resistance trigger"] = &RaidUlduarTriggerContext::mimiron_frost_resistance_trigger;
@@ -78,15 +70,6 @@ public:
         creators["mimiron bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_bomb_bot_trigger;
         creators["mimiron pet control trigger"] = &RaidUlduarTriggerContext::mimiron_pet_control_trigger;
         creators["mimiron slow bomb bot trigger"] = &RaidUlduarTriggerContext::mimiron_slow_bomb_bot_trigger;
-        creators["thorim unbalancing strike swap trigger"] = &RaidUlduarTriggerContext::thorim_unbalancing_strike_swap_trigger;
-        creators["thorim tank pickup trigger"] = &RaidUlduarTriggerContext::thorim_tank_pickup_trigger;
-        creators["thorim sif blizzard trigger"] = &RaidUlduarTriggerContext::thorim_sif_blizzard_trigger;
-        creators["thorim runic smash trigger"] = &RaidUlduarTriggerContext::thorim_runic_smash_trigger;
-        creators["thorim runic barrier bail trigger"] = &RaidUlduarTriggerContext::thorim_runic_barrier_bail_trigger;
-        creators["thorim reset encounter state trigger"] = &RaidUlduarTriggerContext::thorim_reset_encounter_state_trigger;
-        creators["thorim charged orb trigger"] = &RaidUlduarTriggerContext::thorim_charged_orb_trigger;
-        creators["thorim pet leash trigger"] = &RaidUlduarTriggerContext::thorim_pet_leash_trigger;
-        creators["thorim arena leash trigger"] = &RaidUlduarTriggerContext::thorim_arena_leash_trigger;
         creators["mimiron approach target trigger"] =
             &RaidUlduarTriggerContext::mimiron_approach_target_trigger;
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
@@ -112,14 +95,6 @@ public:
     }
 
 private:
-    static Trigger* thorim_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "thorim"); }
-    static Trigger* thorim_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "thorim"); }
-    static Trigger* thorim_dps_priority_trigger(PlayerbotAI* ai) { return new ThorimDpsPriorityTrigger(ai); }
-    static Trigger* thorim_arena_positioning_trigger(PlayerbotAI* ai) { return new ThorimArenaPositioningTrigger(ai); }
-    static Trigger* thorim_gauntlet_positioning_trigger(PlayerbotAI* ai) { return new ThorimGauntletPositioningTrigger(ai); }
-    static Trigger* thorim_balcony_advance_trigger(PlayerbotAI* ai) { return new ThorimBalconyAdvanceTrigger(ai); }
-    static Trigger* thorim_fall_from_floor_trigger(PlayerbotAI* ai) { return new ThorimFallFromFloorTrigger(ai); }
-    static Trigger* thorim_phase2_positioning_trigger(PlayerbotAI* ai) { return new ThorimPhase2PositioningTrigger(ai); }
     static Trigger* mimiron_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "mimiron"); }
     static Trigger* mimiron_frost_resistance_trigger(PlayerbotAI* ai) { return new MimironFrostResistanceTrigger(ai); }
     static Trigger* mimiron_shock_blast_trigger(PlayerbotAI* ai) { return new MimironShockBlastTrigger(ai); }
@@ -176,15 +151,6 @@ private:
     static Trigger* mimiron_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironBombBotTrigger(ai); }
     static Trigger* mimiron_pet_control_trigger(PlayerbotAI* ai) { return new MimironPetControlTrigger(ai); }
     static Trigger* mimiron_slow_bomb_bot_trigger(PlayerbotAI* ai) { return new MimironSlowBombBotTrigger(ai); }
-    static Trigger* thorim_unbalancing_strike_swap_trigger(PlayerbotAI* ai) { return new ThorimUnbalancingStrikeSwapTrigger(ai); }
-    static Trigger* thorim_tank_pickup_trigger(PlayerbotAI* ai) { return new ThorimTankPickupTrigger(ai); }
-    static Trigger* thorim_sif_blizzard_trigger(PlayerbotAI* ai) { return new ThorimSifBlizzardTrigger(ai); }
-    static Trigger* thorim_runic_smash_trigger(PlayerbotAI* ai) { return new ThorimRunicSmashTrigger(ai); }
-    static Trigger* thorim_runic_barrier_bail_trigger(PlayerbotAI* ai) { return new ThorimRunicBarrierBailTrigger(ai); }
-    static Trigger* thorim_reset_encounter_state_trigger(PlayerbotAI* ai) { return new ThorimResetEncounterStateTrigger(ai); }
-    static Trigger* thorim_charged_orb_trigger(PlayerbotAI* ai) { return new ThorimChargedOrbTrigger(ai); }
-    static Trigger* thorim_pet_leash_trigger(PlayerbotAI* ai) { return new ThorimPetLeashTrigger(ai); }
-    static Trigger* thorim_arena_leash_trigger(PlayerbotAI* ai) { return new ThorimArenaLeashTrigger(ai); }
     static Trigger* mimiron_approach_target_trigger(PlayerbotAI* ai)
     {
         return new MimironApproachTargetTrigger(ai);

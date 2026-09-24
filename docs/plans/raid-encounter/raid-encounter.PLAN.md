@@ -131,7 +131,6 @@ and the predicates become plain reads:
 | `TickMimironObs`, including the wipe reset | `IsMimironEngaged` (`Uld/Util/UldEncounter_Mimiron.cpp:1009`) |
 | `TickYoggSaronObs`; handover latch writes | `YoggSaronPhase` (`UldEncounter_YoggSaron.cpp:218`); `YoggSaronHandoverState` (`:787`) |
 | `vezax.formation` note | `VezaxFormationActive` (`UldEncounter_Vezax.cpp:169`) |
-| `barrierBailing` latch writes | `ThorimBarrierBailLatched` (`UldEncounter_Thorim.cpp:1589`) |
 | tsunami hazard notes | `SartharionEncounterActive` (`OS/Util/OSEncounter.cpp:117`) |
 | `neglect threat` = true | Loatheb, Razuvious, Four Horsemen, Gothik multipliers (`Naxx/NaxxMultipliers.cpp:119,283,534,551`) |
 
@@ -152,7 +151,6 @@ each change it makes; any other difference gets a rule switch or stays hand-writ
 
 - **Gating.** A boss's guards stop once it is `DONE` and while another encounter is in progress.
   Naxx, EoE and OS triggers become gated for the first time.
-- **Thorim arena leash** passes attacks (`melee`, the `ThorimTakeBossAction` family).
 - **Malygos:** in phase 1, bots other than the boss tank keep `melee` (`tank assist` stays blocked by
   its own rule); phase 4 passes `MalygosTargetAction`.
 - **Vezax** `vezax mark of the faceless break action` passes the movement guard.
@@ -167,8 +165,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
 
 - **Mimiron:** the formation guard blocks `CombatFormationMove` only, so `tank face` survives.
   `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
-- **Thorim:** the arena target, balcony wrong-target branch and runic barrier guards stay hand-written.
-  `ThorimBalconyGuardMultiplier` builds a trigger per call.
 - **Yogg-Saron:** the displacement guard names `killing spree`.
 - **Naxx:** hand-written: Heigan's dance window, the Sapphiron and Kel'Thuzad healer windows, Gothik's
   unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
@@ -186,7 +182,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 is up to Thorim, in the order it lists.
+**Status:** commits 1-2 landed; commit 3 is up to Yogg-Saron, in the order it lists.
 
 Close each per `CLAUDE.local.md`.
 

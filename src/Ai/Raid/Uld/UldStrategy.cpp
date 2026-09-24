@@ -6,7 +6,6 @@
 
 #include "UldStrategy.h"
 
-#include "BossResistanceMultipliers.h"
 #include "Playerbots.h"
 #include "UldDefinitions.h"
 #include "UldEncounter_Mimiron.h"
@@ -79,82 +78,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Thorim
     //
-    triggers.push_back(new TriggerNode(
-        "thorim nature resistance trigger",
-        { NextAction("thorim nature resistance action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim frost resistance trigger",
-        { NextAction("thorim frost resistance action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim unbalancing strike swap trigger",
-        { NextAction("thorim unbalancing strike swap action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim tank pickup trigger",
-        { NextAction("thorim tank pickup action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim dps priority trigger",
-        { NextAction("thorim dps priority action", ACTION_RAID) }));
-
-    // Recalls a pet, not the bot, so it competes with nothing and sits at the base rank.
-    triggers.push_back(new TriggerNode(
-        "thorim pet leash trigger",
-        { NextAction("thorim pet leash action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim gauntlet positioning trigger",
-        { NextAction("thorim gauntlet positioning action", ACTION_RAID) }));
-
-    // Above the corridor walk, because on the balcony that one has no waypoint to offer and the
-    // hallway is where the two Paralytic Field bunnies are.
-    triggers.push_back(new TriggerNode(
-        "thorim balcony advance trigger",
-        { NextAction("thorim balcony advance action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim arena positioning trigger",
-        { NextAction("thorim arena positioning action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim fall from floor trigger",
-        { NextAction("thorim fall from floor action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim phase 2 positioning trigger",
-        { NextAction("thorim phase 2 positioning action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim sif blizzard trigger",
-        { NextAction("thorim sif blizzard action", ACTION_RAID + 3) }));
-
-    // Charge Orb: it only ever fires while Thorim is still on the balcony. 3k a second for 15s across a
-    // 32 yd circle is phase 1's largest avoidable damage source, so it has to beat the ring and the add
-    // chase both. Lightning Charge has no node of its own - the cone answer is baked into the phase 2
-    // spot, and a second mover for the same point only fought the first one at the movement gate.
-    triggers.push_back(new TriggerNode(
-        "thorim charged orb trigger",
-        { NextAction("thorim charged orb action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim runic smash trigger",
-        { NextAction("thorim runic smash action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim runic barrier bail trigger",
-        { NextAction("thorim runic barrier bail action", ACTION_RAID + 2) }));
-
-    // Top of the Thorim ladder. An arena squad member outside the box is not a positioning problem:
-    // one 5 second scan finding nobody in there summons the Lightning Orb and kills the raid.
-    triggers.push_back(new TriggerNode(
-        "thorim arena leash trigger",
-        { NextAction("thorim arena leash action", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "thorim reset encounter state trigger",
-        { NextAction("thorim reset encounter state action", ACTION_RAID) }));
+    UldThorimDefinition().AddTriggerNodes(triggers);
 
     //
     // Mimiron. Laser Barrage outranks everything else here: its cone one-shots. Ranked below it by
@@ -454,17 +378,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     UldIronAssemblyDefinition().AddMultipliers(botAI, multipliers);
 
-    // Thorim keeps a bailing melee out of the Runic Barrier damage shield, picks every non-tank
-    // target in code so the generic pickers have to be shut out, and stops the generic movers
-    // collapsing the three phase 2 melee stacks back into one Chain Lightning arc
-    multipliers.push_back(new ThorimRunicBarrierMultiplier(botAI));
-    multipliers.push_back(new ThorimDisableAutomaticTargetingMultiplier(botAI));
-    multipliers.push_back(new ThorimMovementGuardMultiplier(botAI));
-    multipliers.push_back(new ThorimArenaLeashMultiplier(botAI));
-    multipliers.push_back(new ThorimArenaTargetGuardMultiplier(botAI));
-    multipliers.push_back(new ThorimArenaAnchorGuardMultiplier(botAI));
-    multipliers.push_back(new ThorimBalconyGuardMultiplier(botAI));
-    multipliers.push_back(new ThorimTauntGuardMultiplier(botAI));
+    UldThorimDefinition().AddMultipliers(botAI, multipliers);
 
     // Hold the class-generic threat redirects on the bosses where the main tank is the wrong sink
     multipliers.push_back(new UldThreatRedirectMultiplier(botAI));
@@ -486,10 +400,6 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     UldAuriayaDefinition().AddMultipliers(botAI, multipliers);
     UldHodirDefinition().AddMultipliers(botAI, multipliers);
-
-    // Hold the one designated hunter in Aspect of the Wild on the nature bosses, so every other
-    // hunter keeps Dragonhawk and can still drop to Aspect of the Viper for mana.
-    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "thorim"));
 
     multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDisplacementGuardMultiplier(botAI));
