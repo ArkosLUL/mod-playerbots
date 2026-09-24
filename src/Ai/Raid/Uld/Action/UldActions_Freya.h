@@ -16,7 +16,9 @@
 class FreyaMoveAwayNatureBombAction : public MovementAction
 {
 public:
-    FreyaMoveAwayNatureBombAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya move away nature bomb") {}
+    static constexpr char const* Name = "freya move away nature bomb";
+
+    FreyaMoveAwayNatureBombAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -36,7 +38,9 @@ private:
 class FreyaTankNatureBombAction : public MovementAction
 {
 public:
-    FreyaTankNatureBombAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya tank nature bomb") {}
+    static constexpr char const* Name = "freya tank nature bomb";
+
+    FreyaTankNatureBombAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -51,7 +55,9 @@ private:
 class FreyaSetDpsPriorityAction : public AttackAction
 {
 public:
-    FreyaSetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya set dps priority") {}
+    static constexpr char const* Name = "freya set dps priority";
+
+    FreyaSetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -71,7 +77,9 @@ private:
 class FreyaTankAddsAction : public AttackAction
 {
 public:
-    FreyaTankAddsAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya tank adds") {}
+    static constexpr char const* Name = "freya tank adds";
+
+    FreyaTankAddsAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -87,7 +95,9 @@ private:
 class FreyaMoveToHealingSporeAction : public MovementAction
 {
 public:
-    FreyaMoveToHealingSporeAction(PlayerbotAI* ai) : MovementAction(ai, "freya move to healing spore action") {}
+    static constexpr char const* Name = "freya move to healing spore action";
+
+    FreyaMoveToHealingSporeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -99,7 +109,9 @@ public:
 class FreyaRedirectThreatAction : public Action
 {
 public:
-    FreyaRedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, "freya redirect threat") {}
+    static constexpr char const* Name = "freya redirect threat";
+
+    FreyaRedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -113,7 +125,9 @@ private:
 class FreyaLasherAboutToBlowAction : public MovementAction
 {
 public:
-    FreyaLasherAboutToBlowAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya lasher about to blow") {}
+    static constexpr char const* Name = "freya lasher about to blow";
+
+    FreyaLasherAboutToBlowAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -130,7 +144,9 @@ private:
 class FreyaRangedCampAction : public MovementAction
 {
 public:
-    FreyaRangedCampAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya ranged camp") {}
+    static constexpr char const* Name = "freya ranged camp";
+
+    FreyaRangedCampAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -140,7 +156,9 @@ public:
 class FreyaFrostNovaLashersAction : public Action
 {
 public:
-    FreyaFrostNovaLashersAction(PlayerbotAI* botAI) : Action(botAI, "freya frost nova lashers") {}
+    static constexpr char const* Name = "freya frost nova lashers";
+
+    FreyaFrostNovaLashersAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -150,7 +168,9 @@ public:
 class FreyaTrapLashersAction : public Action
 {
 public:
-    FreyaTrapLashersAction(PlayerbotAI* botAI) : Action(botAI, "freya trap lashers") {}
+    static constexpr char const* Name = "freya trap lashers";
+
+    FreyaTrapLashersAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -161,7 +181,9 @@ public:
 class FreyaSummonArmyAction : public Action
 {
 public:
-    FreyaSummonArmyAction(PlayerbotAI* botAI) : Action(botAI, "freya summon army") {}
+    static constexpr char const* Name = "freya summon army";
+
+    FreyaSummonArmyAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -172,7 +194,9 @@ public:
 class FreyaGroundTremorHoldCastAction : public Action
 {
 public:
-    FreyaGroundTremorHoldCastAction(PlayerbotAI* botAI) : Action(botAI, "freya ground tremor hold cast") {}
+    static constexpr char const* Name = "freya ground tremor hold cast";
+
+    FreyaGroundTremorHoldCastAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -181,7 +205,9 @@ public:
 class FreyaBreakIronRootsAction : public AttackAction
 {
 public:
-    FreyaBreakIronRootsAction(PlayerbotAI* botAI) : AttackAction(botAI, "freya break iron roots") {}
+    static constexpr char const* Name = "freya break iron roots";
+
+    FreyaBreakIronRootsAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -190,7 +216,9 @@ public:
 class FreyaDodgeUnstableSunBeamAction : public MovementAction
 {
 public:
-    FreyaDodgeUnstableSunBeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya dodge unstable sun beam") {}
+    static constexpr char const* Name = "freya dodge unstable sun beam";
+
+    FreyaDodgeUnstableSunBeamAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -208,7 +236,9 @@ private:
 class FreyaNaturesFuryBailAction : public MovementAction
 {
 public:
-    FreyaNaturesFuryBailAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya nature fury bail") {}
+    static constexpr char const* Name = "freya nature fury bail";
+
+    FreyaNaturesFuryBailAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -223,7 +253,9 @@ private:
 class FreyaStepOutOfSunbeamAction : public MovementAction
 {
 public:
-    FreyaStepOutOfSunbeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya step out of sunbeam") {}
+    static constexpr char const* Name = "freya step out of sunbeam";
+
+    FreyaStepOutOfSunbeamAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -237,7 +269,9 @@ private:
 class FreyaTankHoldFreyaAction : public MovementAction
 {
 public:
-    FreyaTankHoldFreyaAction(PlayerbotAI* botAI) : MovementAction(botAI, "freya tank hold freya") {}
+    static constexpr char const* Name = "freya tank hold freya";
+
+    FreyaTankHoldFreyaAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 

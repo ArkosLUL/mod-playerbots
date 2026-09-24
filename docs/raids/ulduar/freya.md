@@ -56,7 +56,7 @@ standing idle. The band covers only the last tenth of the wave, about 6s of raid
 
 **Targeting is direct — Freya writes no raid icons.** `FreyaSetDpsPriorityAction` sets each DPS bot's
 target itself, in the SWP M'uru shape (`SWPActions_Muru.cpp:178-380`), and
-`FreyaDisableAutomaticTargetingMultiplier` stands the generic pickers down so they cannot reclaim it.
+the `freya disable automatic targeting` rules stand the generic pickers down so they cannot reclaim it.
 The trio target changes several times per wave as health converges, which a group icon cannot carry
 without one bot spamming `SetTargetIcon` for everyone else to read back a tick later. A human's own
 marks are not honoured here.
@@ -395,7 +395,7 @@ went nowhere on **57-67%** of them; `Nightwarrior` held one coordinate for 3.0s,
 through four move orders. Both latches also break on `IsMovementPreventedByCasting()`, or a pinned bot
 sits out the full hold. See [pitfalls](../../engine/pitfalls.md) for the general rule.
 
-`FreyaAvoidAoeHoldMultiplier` zeroes the generic `avoid aoe`, which sits at `ACTION_EMERGENCY` (90),
+The `freya avoid aoe hold` rule zeroes the generic `avoid aoe`, which sits at `ACTION_EMERGENCY` (90),
 outranks every Freya node, and replaces a 15 yd escape with a flat `AiPlayerbot.FleeDistance` (5 yd) hop
 on a bearing of its own — it took the tick back from Nightwarrior's dodge 1.9s before it died. Freya
 answers all three of its hazards with nodes that read every hazard at once, so the generic one has

@@ -11,7 +11,9 @@
 class FreyaNearNatureBombTrigger : public Trigger
 {
 public:
-    FreyaNearNatureBombTrigger(PlayerbotAI* ai) : Trigger(ai, "freya near nature bomb") {}
+    static constexpr char const* Name = "freya near nature bomb";
+
+    FreyaNearNatureBombTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -20,7 +22,9 @@ public:
 class FreyaTankNatureBombTrigger : public Trigger
 {
 public:
-    FreyaTankNatureBombTrigger(PlayerbotAI* ai) : Trigger(ai, "freya tank nature bomb") {}
+    static constexpr char const* Name = "freya tank nature bomb";
+
+    FreyaTankNatureBombTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -28,7 +32,9 @@ public:
 class FreyaSetDpsPriorityTrigger : public Trigger
 {
 public:
-    FreyaSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "freya set dps priority") {}
+    static constexpr char const* Name = "freya set dps priority";
+
+    FreyaSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -36,7 +42,9 @@ public:
 class FreyaTankAddsTrigger : public Trigger
 {
 public:
-    FreyaTankAddsTrigger(PlayerbotAI* ai) : Trigger(ai, "freya tank adds") {}
+    static constexpr char const* Name = "freya tank adds";
+
+    FreyaTankAddsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -44,14 +52,18 @@ public:
 class FreyaRedirectThreatTrigger : public Trigger
 {
 public:
-    FreyaRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "freya redirect threat") {}
+    static constexpr char const* Name = "freya redirect threat";
+
+    FreyaRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class FreyaMoveToHealingSporeTrigger : public Trigger
 {
 public:
-    FreyaMoveToHealingSporeTrigger(PlayerbotAI* ai) : Trigger(ai, "freya move to healing spore trigger") {}
+    static constexpr char const* Name = "freya move to healing spore trigger";
+
+    FreyaMoveToHealingSporeTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -59,7 +71,9 @@ public:
 class FreyaBreakIronRootsTrigger : public Trigger
 {
 public:
-    FreyaBreakIronRootsTrigger(PlayerbotAI* ai) : Trigger(ai, "freya break iron roots") {}
+    static constexpr char const* Name = "freya break iron roots";
+
+    FreyaBreakIronRootsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -68,7 +82,9 @@ public:
 class FreyaLasherAboutToBlowTrigger : public Trigger
 {
 public:
-    FreyaLasherAboutToBlowTrigger(PlayerbotAI* ai) : Trigger(ai, "freya lasher about to blow") {}
+    static constexpr char const* Name = "freya lasher about to blow";
+
+    FreyaLasherAboutToBlowTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -78,7 +94,9 @@ public:
 class FreyaRangedCampTrigger : public Trigger
 {
 public:
-    FreyaRangedCampTrigger(PlayerbotAI* ai) : Trigger(ai, "freya ranged camp") {}
+    static constexpr char const* Name = "freya ranged camp";
+
+    FreyaRangedCampTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -88,7 +106,9 @@ public:
 class FreyaFrostNovaLashersTrigger : public Trigger
 {
 public:
-    FreyaFrostNovaLashersTrigger(PlayerbotAI* ai) : Trigger(ai, "freya frost nova lashers") {}
+    static constexpr char const* Name = "freya frost nova lashers";
+
+    FreyaFrostNovaLashersTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -97,7 +117,9 @@ public:
 class FreyaTrapLashersTrigger : public Trigger
 {
 public:
-    FreyaTrapLashersTrigger(PlayerbotAI* ai) : Trigger(ai, "freya trap lashers") {}
+    static constexpr char const* Name = "freya trap lashers";
+
+    FreyaTrapLashersTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -109,7 +131,9 @@ public:
 class FreyaSummonArmyTrigger : public Trigger
 {
 public:
-    FreyaSummonArmyTrigger(PlayerbotAI* ai) : Trigger(ai, "freya summon army") {}
+    static constexpr char const* Name = "freya summon army";
+
+    FreyaSummonArmyTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -118,7 +142,9 @@ public:
 class FreyaGroundTremorHoldCastTrigger : public Trigger
 {
 public:
-    FreyaGroundTremorHoldCastTrigger(PlayerbotAI* ai) : Trigger(ai, "freya ground tremor hold cast") {}
+    static constexpr char const* Name = "freya ground tremor hold cast";
+
+    FreyaGroundTremorHoldCastTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -126,7 +152,9 @@ public:
 class FreyaDodgeUnstableSunBeamTrigger : public Trigger
 {
 public:
-    FreyaDodgeUnstableSunBeamTrigger(PlayerbotAI* ai) : Trigger(ai, "freya dodge unstable sun beam") {}
+    static constexpr char const* Name = "freya dodge unstable sun beam";
+
+    FreyaDodgeUnstableSunBeamTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -136,7 +164,9 @@ public:
 class FreyaNaturesFuryBailTrigger : public Trigger
 {
 public:
-    FreyaNaturesFuryBailTrigger(PlayerbotAI* ai) : Trigger(ai, "freya nature fury bail") {}
+    static constexpr char const* Name = "freya nature fury bail";
+
+    FreyaNaturesFuryBailTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -146,7 +176,9 @@ public:
 class FreyaStepOutOfSunbeamTrigger : public Trigger
 {
 public:
-    FreyaStepOutOfSunbeamTrigger(PlayerbotAI* ai) : Trigger(ai, "freya step out of sunbeam") {}
+    static constexpr char const* Name = "freya step out of sunbeam";
+
+    FreyaStepOutOfSunbeamTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -154,7 +186,9 @@ public:
 class FreyaTankHoldFreyaTrigger : public Trigger
 {
 public:
-    FreyaTankHoldFreyaTrigger(PlayerbotAI* ai) : Trigger(ai, "freya tank hold freya") {}
+    static constexpr char const* Name = "freya tank hold freya";
+
+    FreyaTankHoldFreyaTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

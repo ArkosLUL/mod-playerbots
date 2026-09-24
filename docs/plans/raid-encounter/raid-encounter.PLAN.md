@@ -197,7 +197,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 in progress, Auriaya, Kologarn, Razorscale and XT-002 done, next Freya.
+**Status:** commits 1-2 landed; commit 3 is up to Algalon, in the order it lists.
 
 Close each per `CLAUDE.local.md`.
 

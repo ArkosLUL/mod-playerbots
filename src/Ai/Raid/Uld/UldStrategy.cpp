@@ -239,100 +239,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Freya
     //
-    // Survival first, then the pacify counter, then targeting. A bot that is dead, blown up or
-    // silenced contributes nothing to the trio wave it is being steered at.
-    triggers.push_back(new TriggerNode(
-        "freya near nature bomb",
-        { NextAction("freya move away nature bomb", ACTION_RAID + 4) }));
-
-    // The main tank answers a bomb by moving Freya, not itself. Bombs land at players' feet and the
-    // melee stack is on the boss, so a volley buries her melee ring and the rest of the melee lose it.
-    triggers.push_back(new TriggerNode(
-        "freya tank nature bomb",
-        { NextAction("freya tank nature bomb", ACTION_RAID + 4) }));
-
-    // The two 8 yd circles, and the whole reason the raid has to be able to come apart: Nature's Fury
-    // fires five of them around one bot, Sunbeam drops one wherever its target is standing when the cast
-    // ends. Both sit with the other escapes, above the spore node - which would otherwise walk the
-    // carrier straight back into the ball it just left.
-    triggers.push_back(new TriggerNode(
-        "freya nature fury bail",
-        { NextAction("freya nature fury bail", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya step out of sunbeam",
-        { NextAction("freya step out of sunbeam", ACTION_RAID + 4) }));
-
-    // Detonating Lasher wave. Order is the doctrine: nothing here can be tanked, kited or outrun, so
-    // the raid answers the wave with crowd control and a camp it can AoE. Leave the blast of anything
-    // about to go off first - a bot that is dead does no crowd control - then root what has already
-    // closed, then snare what has not, then the ghouls, which are the one thing on the encounter that
-    // takes a lasher off a bot at all - and gather last, only when nothing urgent is asking.
-    triggers.push_back(new TriggerNode(
-        "freya lasher about to blow",
-        { NextAction("freya lasher about to blow", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya frost nova lashers",
-        { NextAction("freya frost nova lashers", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya trap lashers",
-        { NextAction("freya trap lashers", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya summon army",
-        { NextAction("freya summon army", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya ranged camp",
-        { NextAction("freya ranged camp", ACTION_RAID) }));
-
-    // Conservator's Grip is raid-wide and cannot be outranged, so a spore outranks attacking: a
-    // pacified bot cannot swing at anything anyway.
-    triggers.push_back(new TriggerNode(
-        "freya move to healing spore trigger",
-        { NextAction("freya move to healing spore action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya tank adds",
-        { NextAction("freya tank adds", ACTION_RAID + 1) }));
-
-    // Freya walks after whoever holds her, so every escape the tank takes moves her and nothing used to
-    // move her back. Under the bomb escape, which has to be able to leave the leash.
-    triggers.push_back(new TriggerNode(
-        "freya tank hold freya",
-        { NextAction("freya tank hold freya", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya redirect threat",
-        { NextAction("freya redirect threat", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya set dps priority",
-        { NextAction("freya set dps priority", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya nature resistance trigger",
-        { NextAction("freya nature resistance action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya fire resistance trigger",
-        { NextAction("freya fire resistance action", ACTION_RAID) }));
-
-    // Hard mode (config-gated): break out of Iron Roots and dodge the Unstable Sun Beam. Breaking the
-    // root outranks the dodge - a rooted bot can't move, so it has to free itself before it can step out.
-    triggers.push_back(new TriggerNode(
-        "freya break iron roots",
-        { NextAction("freya break iron roots", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya dodge unstable sun beam",
-        { NextAction("freya dodge unstable sun beam", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "freya ground tremor hold cast",
-        { NextAction("freya ground tremor hold cast", ACTION_EMERGENCY + 2) }));
+    UldFreyaDefinition().AddTriggerNodes(triggers);
 
     //
     // Thorim
@@ -803,14 +710,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     UldKologarnDefinition().AddMultipliers(botAI, multipliers);
 
-    // Freya splits the DPS across the trio wave in code, so the generic pickers stand down, and the
-    // floor stops a stray hit killing one member well ahead of the other two
-    multipliers.push_back(new FreyaDisableAutomaticTargetingMultiplier(botAI));
-    multipliers.push_back(new FreyaTrioSyncMultiplier(botAI));
-    multipliers.push_back(new FreyaLasherFinishAoeMultiplier(botAI));
-    multipliers.push_back(new FreyaLasherTrapReserveMultiplier(botAI));
-    multipliers.push_back(new FreyaGroundTremorCastGateMultiplier(botAI));
-    multipliers.push_back(new FreyaAvoidAoeHoldMultiplier(botAI));
+    UldFreyaDefinition().AddMultipliers(botAI, multipliers);
 
     // Flame Leviathan is fought entirely from vehicles: let its drive action own the MotionMaster
     multipliers.push_back(new FlameLeviathanVehicleMovementMultiplier(botAI));
@@ -823,7 +723,6 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     // Hold the one designated hunter in Aspect of the Wild on the nature bosses, so every other
     // hunter keeps Dragonhawk and can still drop to Aspect of the Viper for mana.
-    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "freya"));
     multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "thorim"));
 
     multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));

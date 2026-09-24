@@ -137,6 +137,8 @@ namespace
                 return PlayerbotAI::IsMelee(bot);
             case Role::NonTank:
                 return !PlayerbotAI::IsTank(bot);
+            case Role::Dps:
+                return PlayerbotAI::IsDps(bot);
             default:
                 return false;
         }

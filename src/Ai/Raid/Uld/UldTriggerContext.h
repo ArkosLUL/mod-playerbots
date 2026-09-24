@@ -45,25 +45,6 @@ public:
         creators["hodir set dps priority"] = &RaidUlduarTriggerContext::hodir_set_dps_priority;
         creators["hodir frozen blows swap"] = &RaidUlduarTriggerContext::hodir_frozen_blows_swap;
         creators["hodir redirect threat"] = &RaidUlduarTriggerContext::hodir_redirect_threat;
-        creators["freya near nature bomb"] = &RaidUlduarTriggerContext::freya_near_nature_bomb;
-        creators["freya tank nature bomb"] = &RaidUlduarTriggerContext::freya_tank_nature_bomb;
-        creators["freya fire resistance trigger"] = &RaidUlduarTriggerContext::freya_fire_resistance_trigger;
-        creators["freya nature resistance trigger"] = &RaidUlduarTriggerContext::freya_nature_resistance_trigger;
-        creators["freya set dps priority"] = &RaidUlduarTriggerContext::freya_set_dps_priority;
-        creators["freya tank adds"] = &RaidUlduarTriggerContext::freya_tank_adds;
-        creators["freya redirect threat"] = &RaidUlduarTriggerContext::freya_redirect_threat;
-        creators["freya move to healing spore trigger"] = &RaidUlduarTriggerContext::freya_move_to_healing_spore_trigger;
-        creators["freya break iron roots"] = &RaidUlduarTriggerContext::freya_break_iron_roots;
-        creators["freya dodge unstable sun beam"] = &RaidUlduarTriggerContext::freya_dodge_unstable_sun_beam;
-        creators["freya lasher about to blow"] = &RaidUlduarTriggerContext::freya_lasher_about_to_blow;
-        creators["freya ranged camp"] = &RaidUlduarTriggerContext::freya_ranged_camp;
-        creators["freya summon army"] = &RaidUlduarTriggerContext::freya_summon_army;
-        creators["freya frost nova lashers"] = &RaidUlduarTriggerContext::freya_frost_nova_lashers;
-        creators["freya trap lashers"] = &RaidUlduarTriggerContext::freya_trap_lashers;
-        creators["freya ground tremor hold cast"] = &RaidUlduarTriggerContext::freya_ground_tremor_hold_cast;
-        creators["freya nature fury bail"] = &RaidUlduarTriggerContext::freya_nature_fury_bail;
-        creators["freya step out of sunbeam"] = &RaidUlduarTriggerContext::freya_step_out_of_sunbeam;
-        creators["freya tank hold freya"] = &RaidUlduarTriggerContext::freya_tank_hold_freya;
         creators["thorim frost resistance trigger"] = &RaidUlduarTriggerContext::thorim_frost_resistance_trigger;
         creators["thorim nature resistance trigger"] = &RaidUlduarTriggerContext::thorim_nature_resistance_trigger;
         creators["thorim dps priority trigger"] = &RaidUlduarTriggerContext::thorim_dps_priority_trigger;
@@ -205,25 +186,6 @@ private:
     static Trigger* hodir_set_dps_priority(PlayerbotAI* ai) { return new HodirSetDpsPriorityTrigger(ai); }
     static Trigger* hodir_frozen_blows_swap(PlayerbotAI* ai) { return new HodirFrozenBlowsSwapTrigger(ai); }
     static Trigger* hodir_redirect_threat(PlayerbotAI* ai) { return new HodirRedirectThreatTrigger(ai); }
-    static Trigger* freya_near_nature_bomb(PlayerbotAI* ai) { return new FreyaNearNatureBombTrigger(ai); }
-    static Trigger* freya_tank_nature_bomb(PlayerbotAI* ai) { return new FreyaTankNatureBombTrigger(ai); }
-    static Trigger* freya_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "freya"); }
-    static Trigger* freya_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "freya"); }
-    static Trigger* freya_set_dps_priority(PlayerbotAI* ai) { return new FreyaSetDpsPriorityTrigger(ai); }
-    static Trigger* freya_tank_adds(PlayerbotAI* ai) { return new FreyaTankAddsTrigger(ai); }
-    static Trigger* freya_redirect_threat(PlayerbotAI* ai) { return new FreyaRedirectThreatTrigger(ai); }
-    static Trigger* freya_move_to_healing_spore_trigger(PlayerbotAI* ai) { return new FreyaMoveToHealingSporeTrigger(ai); }
-    static Trigger* freya_break_iron_roots(PlayerbotAI* ai) { return new FreyaBreakIronRootsTrigger(ai); }
-    static Trigger* freya_dodge_unstable_sun_beam(PlayerbotAI* ai) { return new FreyaDodgeUnstableSunBeamTrigger(ai); }
-    static Trigger* freya_lasher_about_to_blow(PlayerbotAI* ai) { return new FreyaLasherAboutToBlowTrigger(ai); }
-    static Trigger* freya_ranged_camp(PlayerbotAI* ai) { return new FreyaRangedCampTrigger(ai); }
-    static Trigger* freya_summon_army(PlayerbotAI* ai) { return new FreyaSummonArmyTrigger(ai); }
-    static Trigger* freya_frost_nova_lashers(PlayerbotAI* ai) { return new FreyaFrostNovaLashersTrigger(ai); }
-    static Trigger* freya_trap_lashers(PlayerbotAI* ai) { return new FreyaTrapLashersTrigger(ai); }
-    static Trigger* freya_ground_tremor_hold_cast(PlayerbotAI* ai) { return new FreyaGroundTremorHoldCastTrigger(ai); }
-    static Trigger* freya_nature_fury_bail(PlayerbotAI* ai) { return new FreyaNaturesFuryBailTrigger(ai); }
-    static Trigger* freya_step_out_of_sunbeam(PlayerbotAI* ai) { return new FreyaStepOutOfSunbeamTrigger(ai); }
-    static Trigger* freya_tank_hold_freya(PlayerbotAI* ai) { return new FreyaTankHoldFreyaTrigger(ai); }
     static Trigger* thorim_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_dps_priority_trigger(PlayerbotAI* ai) { return new ThorimDpsPriorityTrigger(ai); }

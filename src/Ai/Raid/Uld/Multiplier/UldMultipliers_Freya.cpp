@@ -39,27 +39,6 @@
 using namespace EncounterHelpers;
 
 // Freya
-float FreyaDisableAutomaticTargetingMultiplier::GetValue(Action* action)
-{
-    bool const isDpsAssist = botAI->GetState() == BOT_STATE_COMBAT && dynamic_cast<DpsAssistAction*>(action);
-    bool const isTankAssist = botAI->GetState() == BOT_STATE_COMBAT && dynamic_cast<TankAssistAction*>(action);
-
-    if (!isDpsAssist && !isTankAssist)
-        return 1.0f;
-
-    Unit* freya = GetFreyaScan(botAI).Boss();
-    if (!freya || !freya->IsAlive())
-        return 1.0f;
-
-    if (isDpsAssist)
-        return PlayerbotAI::IsDps(bot) ? 0.0f : 1.0f;
-
-    // Every tank, for the whole encounter. Gating this on "the add ladder has something" is what let
-    // generic assist through on a pure Detonating Lasher wave, where the off-tank collected the wave and
-    // walked it into the raid stack.
-    return botAI->IsTank(bot) ? 0.0f : 1.0f;
-}
-
 float FreyaTrioSyncMultiplier::GetValue(Action* action)
 {
     if (botAI->IsTank(bot) || !PlayerbotAI::IsDps(bot))
@@ -128,18 +107,6 @@ float FreyaLasherTrapReserveMultiplier::GetValue(Action* action)
     GatherFreyaWaveState(botAI, state);
 
     return state.detonatingLashers.empty() ? 1.0f : 0.0f;
-}
-
-float FreyaAvoidAoeHoldMultiplier::GetValue(Action* action)
-{
-    if (!dynamic_cast<AvoidAoeAction*>(action))
-        return 1.0f;
-
-    Unit* freya = GetFreyaScan(botAI).Boss();
-    if (!freya || !freya->IsAlive())
-        return 1.0f;
-
-    return 0.0f;
 }
 
 float FreyaGroundTremorCastGateMultiplier::GetValue(Action* action)

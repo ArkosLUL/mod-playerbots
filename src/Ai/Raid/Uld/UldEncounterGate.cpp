@@ -21,7 +21,6 @@ namespace
         {"flame leviathan", ULD_BOSS_LEVIATHAN},
         {"ignis", ULD_BOSS_IGNIS},
         {"iron assembly", ULD_BOSS_ASSEMBLY},
-        {"freya", ULD_BOSS_FREYA},
         {"hodir", ULD_BOSS_HODIR},
         {"mimiron", ULD_BOSS_MIMIRON},
         {"thorim", ULD_BOSS_THORIM},

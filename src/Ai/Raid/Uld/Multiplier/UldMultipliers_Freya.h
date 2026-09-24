@@ -10,20 +10,6 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Freya picks every DPS bot's target in code so the trio wave can be split three ways. Without this
-// the generic picker reclaims those targets on alternating ticks and the split never holds. The main
-// tank is also fenced off generic tank assist, which would otherwise walk it off Freya onto a
-// loose Storm Lasher.
-class FreyaDisableAutomaticTargetingMultiplier : public Multiplier
-{
-public:
-    FreyaDisableAutomaticTargetingMultiplier(PlayerbotAI* ai)
-        : Multiplier(ai, "freya disable automatic targeting")
-    {
-    }
-    float GetValue(Action* action) override;
-};
-
 // Backstop for the trio sync: the target split normally steers bots off a member that is too far
 // ahead, so this only catches damage the targeting cannot steer - a swing mid-animation, a DoT
 // already ticking.
@@ -51,17 +37,6 @@ class FreyaLasherTrapReserveMultiplier : public Multiplier
 {
 public:
     FreyaLasherTrapReserveMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya lasher trap reserve") {}
-    float GetValue(Action* action) override;
-};
-
-// Freya: this fight answers every hazard it has with a node that reads all of them at once - Nature
-// Bomb, the Unstable Sun Beam, and the lashers about to detonate. The generic avoid-aoe sits at
-// ACTION_EMERGENCY, outranks all three, and replaces their answer with a flat AiPlayerbot.FleeDistance
-// hop in a bearing of its own picking, which is not enough to clear any of them.
-class FreyaAvoidAoeHoldMultiplier : public Multiplier
-{
-public:
-    FreyaAvoidAoeHoldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "freya avoid aoe hold") {}
     float GetValue(Action* action) override;
 };
 
