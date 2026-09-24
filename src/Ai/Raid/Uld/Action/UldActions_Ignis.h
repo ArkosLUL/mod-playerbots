@@ -16,7 +16,9 @@
 class IgnisScorchedGroundAction : public MovementAction
 {
 public:
-    IgnisScorchedGroundAction(PlayerbotAI* botAI) : MovementAction(botAI, "ignis scorched ground action") {}
+    static constexpr char const* Name = "ignis scorched ground action";
+
+    IgnisScorchedGroundAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -27,7 +29,9 @@ public:
 class IgnisMainTankPositionAction : public MovementAction
 {
 public:
-    IgnisMainTankPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "ignis main tank position action") {}
+    static constexpr char const* Name = "ignis main tank position action";
+
+    IgnisMainTankPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -40,7 +44,9 @@ private:
 class IgnisConstructTankAction : public AttackAction
 {
 public:
-    IgnisConstructTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "ignis construct tank action") {}
+    static constexpr char const* Name = "ignis construct tank action";
+
+    IgnisConstructTankAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -50,8 +56,10 @@ public:
 class IgnisAttackBrittleConstructAction : public AttackAction
 {
 public:
+    static constexpr char const* Name = "ignis attack brittle construct action";
+
     IgnisAttackBrittleConstructAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, "ignis attack brittle construct action")
+        : AttackAction(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -61,7 +69,9 @@ public:
 class IgnisAttackBossAction : public AttackAction
 {
 public:
-    IgnisAttackBossAction(PlayerbotAI* botAI) : AttackAction(botAI, "ignis attack boss action") {}
+    static constexpr char const* Name = "ignis attack boss action";
+
+    IgnisAttackBossAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -69,8 +79,10 @@ public:
 class IgnisMoltenConstructAvoidAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "ignis molten construct avoid action";
+
     IgnisMoltenConstructAvoidAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "ignis molten construct avoid action")
+        : MovementAction(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -82,7 +94,9 @@ public:
 class IgnisFlameJetsHoldCastAction : public Action
 {
 public:
-    IgnisFlameJetsHoldCastAction(PlayerbotAI* botAI) : Action(botAI, "ignis flame jets hold cast action") {}
+    static constexpr char const* Name = "ignis flame jets hold cast action";
+
+    IgnisFlameJetsHoldCastAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -90,7 +104,9 @@ public:
 class IgnisSlagPotHealAction : public Action
 {
 public:
-    IgnisSlagPotHealAction(PlayerbotAI* botAI) : Action(botAI, "ignis slag pot heal action") {}
+    static constexpr char const* Name = "ignis slag pot heal action";
+
+    IgnisSlagPotHealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

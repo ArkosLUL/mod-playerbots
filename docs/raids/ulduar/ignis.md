@@ -55,8 +55,8 @@ lets the Strength stacks climb; with one, tank 1 never finds a construct anyway,
 
 Nothing here sets, clears or reads a raid target icon. `ignis attack brittle construct action` and
 `ignis attack boss action` resolve the unit and `Attack()` it, and
-`IgnisDisableDefaultTargetingMultiplier` zeroes `DpsAssistAction`, `TankAssistAction` and
-`AttackRtiTargetAction` for the whole encounter — not just the Brittle window, or a settled `Attack`
+the `ignis disable default targeting` rule zeroes `DpsAssist`, `TankAssist` and `AttackRti` for
+the whole encounter — not just the Brittle window, or a settled `Attack`
 returning false drains the queue to `dps assist`, which re-picks every tick.
 
 The Brittle pick is the **lowest GUID** raid-wide, so every bot converges with nothing shared to
@@ -82,7 +82,7 @@ construct's victim.
 Hazard radii are sized against the spells, not the visuals: the Scorched Ground dodge is 15 yd
 (62548 burns in 13), the Molten avoid 15 yd (sized against Shatter's 13, not the ~7 yd pulse).
 
-`IgnisTankMovementMultiplier` takes the generic movers off the main tank and the two construct tanks
+The `ignis tank movement` rule takes the generic movers off the main tank and the two construct tanks
 and nobody else — the three roles whose spot the encounter owns. Non-tanks keep everything, which is
 what spreads the ranged half without an anchor of their own.
 

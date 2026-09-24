@@ -22,7 +22,6 @@ public:
         creators["flame leviathan vehicle near"] = &RaidUlduarTriggerContext::flame_leviathan_vehicle_near;
         creators["flame leviathan flame vents"] = &RaidUlduarTriggerContext::flame_leviathan_flame_vents;
         creators["flame leviathan drive urgent"] = &RaidUlduarTriggerContext::flame_leviathan_drive_urgent;
-        creators["ignis fire resistance trigger"] = &RaidUlduarTriggerContext::ignis_fire_resistance_trigger;
         creators["iron assembly reset encounter state trigger"] = &RaidUlduarTriggerContext::iron_assembly_reset_encounter_state_trigger;
         creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
         creators["iron assembly overload trigger"] = &RaidUlduarTriggerContext::iron_assembly_overload_trigger;
@@ -94,14 +93,6 @@ public:
         creators["yogg-saron diminish power judgement trigger"] = &RaidUlduarTriggerContext::yogg_saron_diminish_power_judgement_trigger;
         creators["yogg-saron illusion healer station trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_healer_station_trigger;
         creators["yogg-saron brain spot trigger"] = &RaidUlduarTriggerContext::yogg_saron_brain_spot_trigger;
-        creators["ignis scorched ground trigger"] = &RaidUlduarTriggerContext::ignis_scorched_ground_trigger;
-        creators["ignis main tank position trigger"] = &RaidUlduarTriggerContext::ignis_main_tank_position_trigger;
-        creators["ignis construct tank trigger"] = &RaidUlduarTriggerContext::ignis_construct_tank_trigger;
-        creators["ignis attack brittle construct trigger"] = &RaidUlduarTriggerContext::ignis_attack_brittle_construct_trigger;
-        creators["ignis attack boss trigger"] = &RaidUlduarTriggerContext::ignis_attack_boss_trigger;
-        creators["ignis flame jets trigger"] = &RaidUlduarTriggerContext::ignis_flame_jets_trigger;
-        creators["ignis molten construct avoid trigger"] = &RaidUlduarTriggerContext::ignis_molten_construct_avoid_trigger;
-        creators["ignis slag pot heal trigger"] = &RaidUlduarTriggerContext::ignis_slag_pot_heal_trigger;
         creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron magnetic core trigger"] = &RaidUlduarTriggerContext::mimiron_magnetic_core_trigger;
         creators["mimiron plasma blast defensive trigger"] =
@@ -151,7 +142,6 @@ private:
     static Trigger* flame_leviathan_vehicle_near(PlayerbotAI* ai) { return new FlameLeviathanVehicleNearTrigger(ai); }
     static Trigger* flame_leviathan_flame_vents(PlayerbotAI* ai) { return new FlameLeviathanFlameVentsTrigger(ai); }
     static Trigger* flame_leviathan_drive_urgent(PlayerbotAI* ai) { return new FlameLeviathanDriveUrgentTrigger(ai); }
-    static Trigger* ignis_fire_resistance_trigger(PlayerbotAI* ai) { return new BossFireResistanceTrigger(ai, "ignis the furnace master"); }
     static Trigger* iron_assembly_reset_encounter_state_trigger(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateTrigger(ai); }
     static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
     static Trigger* iron_assembly_overload_trigger(PlayerbotAI* ai) { return new IronAssemblyOverloadTrigger(ai); }
@@ -223,14 +213,6 @@ private:
     static Trigger* yogg_saron_diminish_power_judgement_trigger(PlayerbotAI* ai) { return new YoggSaronDiminishPowerJudgementTrigger(ai); }
     static Trigger* yogg_saron_illusion_healer_station_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionHealerStationTrigger(ai); }
     static Trigger* yogg_saron_brain_spot_trigger(PlayerbotAI* ai) { return new YoggSaronBrainSpotTrigger(ai); }
-    static Trigger* ignis_scorched_ground_trigger(PlayerbotAI* ai) { return new IgnisScorchedGroundTrigger(ai); }
-    static Trigger* ignis_main_tank_position_trigger(PlayerbotAI* ai) { return new IgnisMainTankPositionTrigger(ai); }
-    static Trigger* ignis_construct_tank_trigger(PlayerbotAI* ai) { return new IgnisConstructTankTrigger(ai); }
-    static Trigger* ignis_attack_brittle_construct_trigger(PlayerbotAI* ai) { return new IgnisAttackBrittleConstructTrigger(ai); }
-    static Trigger* ignis_attack_boss_trigger(PlayerbotAI* ai) { return new IgnisAttackBossTrigger(ai); }
-    static Trigger* ignis_flame_jets_trigger(PlayerbotAI* ai) { return new IgnisFlameJetsTrigger(ai); }
-    static Trigger* ignis_molten_construct_avoid_trigger(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidTrigger(ai); }
-    static Trigger* ignis_slag_pot_heal_trigger(PlayerbotAI* ai) { return new IgnisSlagPotHealTrigger(ai); }
     static Trigger* yogg_saron_anti_fear_trigger(PlayerbotAI* ai) { return new YoggSaronAntiFearTrigger(ai); }
     static Trigger* mimiron_magnetic_core_trigger(PlayerbotAI* ai) { return new MimironMagneticCoreTrigger(ai); }
     static Trigger* mimiron_plasma_blast_defensive_trigger(PlayerbotAI* ai)

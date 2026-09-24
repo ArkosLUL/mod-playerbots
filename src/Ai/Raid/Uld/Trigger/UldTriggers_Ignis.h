@@ -11,56 +11,72 @@
 class IgnisScorchedGroundTrigger : public Trigger
 {
 public:
-    IgnisScorchedGroundTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis scorched ground trigger") {}
+    static constexpr char const* Name = "ignis scorched ground trigger";
+
+    IgnisScorchedGroundTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisMainTankPositionTrigger : public Trigger
 {
 public:
-    IgnisMainTankPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis main tank position trigger") {}
+    static constexpr char const* Name = "ignis main tank position trigger";
+
+    IgnisMainTankPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisConstructTankTrigger : public Trigger
 {
 public:
-    IgnisConstructTankTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis construct tank trigger") {}
+    static constexpr char const* Name = "ignis construct tank trigger";
+
+    IgnisConstructTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisAttackBrittleConstructTrigger : public Trigger
 {
 public:
-    IgnisAttackBrittleConstructTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis attack brittle construct trigger") {}
+    static constexpr char const* Name = "ignis attack brittle construct trigger";
+
+    IgnisAttackBrittleConstructTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisAttackBossTrigger : public Trigger
 {
 public:
-    IgnisAttackBossTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis attack boss trigger") {}
+    static constexpr char const* Name = "ignis attack boss trigger";
+
+    IgnisAttackBossTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisMoltenConstructAvoidTrigger : public Trigger
 {
 public:
-    IgnisMoltenConstructAvoidTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis molten construct avoid trigger") {}
+    static constexpr char const* Name = "ignis molten construct avoid trigger";
+
+    IgnisMoltenConstructAvoidTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisFlameJetsTrigger : public Trigger
 {
 public:
-    IgnisFlameJetsTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis flame jets trigger") {}
+    static constexpr char const* Name = "ignis flame jets trigger";
+
+    IgnisFlameJetsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IgnisSlagPotHealTrigger : public Trigger
 {
 public:
-    IgnisSlagPotHealTrigger(PlayerbotAI* ai) : Trigger(ai, "ignis slag pot heal trigger") {}
+    static constexpr char const* Name = "ignis slag pot heal trigger";
+
+    IgnisSlagPotHealTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

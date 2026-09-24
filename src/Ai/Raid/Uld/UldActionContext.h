@@ -22,7 +22,6 @@ public:
         creators["flame leviathan enter vehicle"] = &RaidUlduarActionContext::flame_leviathan_enter_vehicle;
         creators["flame leviathan drive"] = &RaidUlduarActionContext::flame_leviathan_drive;
         creators["flame leviathan interrupt vents"] = &RaidUlduarActionContext::flame_leviathan_interrupt_vents;
-        creators["ignis fire resistance action"] = &RaidUlduarActionContext::ignis_fire_resistance_action;
         creators["iron assembly reset encounter state action"] = &RaidUlduarActionContext::iron_assembly_reset_encounter_state_action;
         creators["iron assembly lightning tendrils action"] = &RaidUlduarActionContext::iron_assembly_lightning_tendrils_action;
         creators["iron assembly overload action"] = &RaidUlduarActionContext::iron_assembly_overload_action;
@@ -94,14 +93,6 @@ public:
         creators["yogg-saron diminish power judgement action"] = &RaidUlduarActionContext::yogg_saron_diminish_power_judgement_action;
         creators["yogg-saron illusion healer station action"] = &RaidUlduarActionContext::yogg_saron_illusion_healer_station_action;
         creators["yogg-saron brain spot action"] = &RaidUlduarActionContext::yogg_saron_brain_spot_action;
-        creators["ignis scorched ground action"] = &RaidUlduarActionContext::ignis_scorched_ground_action;
-        creators["ignis main tank position action"] = &RaidUlduarActionContext::ignis_main_tank_position_action;
-        creators["ignis construct tank action"] = &RaidUlduarActionContext::ignis_construct_tank_action;
-        creators["ignis attack brittle construct action"] = &RaidUlduarActionContext::ignis_attack_brittle_construct_action;
-        creators["ignis attack boss action"] = &RaidUlduarActionContext::ignis_attack_boss_action;
-        creators["ignis flame jets hold cast action"] = &RaidUlduarActionContext::ignis_flame_jets_hold_cast_action;
-        creators["ignis molten construct avoid action"] = &RaidUlduarActionContext::ignis_molten_construct_avoid_action;
-        creators["ignis slag pot heal action"] = &RaidUlduarActionContext::ignis_slag_pot_heal_action;
         creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron magnetic core action"] = &RaidUlduarActionContext::mimiron_magnetic_core_action;
         creators["mimiron plasma blast defensive action"] =
@@ -137,7 +128,6 @@ private:
     static Action* flame_leviathan_enter_vehicle(PlayerbotAI* ai) { return new FlameLeviathanEnterVehicleAction(ai); }
     static Action* flame_leviathan_drive(PlayerbotAI* ai) { return new FlameLeviathanDriveAction(ai); }
     static Action* flame_leviathan_interrupt_vents(PlayerbotAI* ai) { return new FlameLeviathanInterruptVentsAction(ai); }
-    static Action* ignis_fire_resistance_action(PlayerbotAI* ai) { return new BossFireResistanceAction(ai, "ignis the furnace master"); }
     static Action* iron_assembly_reset_encounter_state_action(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateAction(ai); }
     static Action* iron_assembly_lightning_tendrils_action(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsAction(ai); }
     static Action* iron_assembly_overload_action(PlayerbotAI* ai) { return new IronAssemblyOverloadAction(ai); }
@@ -209,14 +199,6 @@ private:
     static Action* yogg_saron_diminish_power_judgement_action(PlayerbotAI* ai) { return new YoggSaronDiminishPowerJudgementAction(ai); }
     static Action* yogg_saron_illusion_healer_station_action(PlayerbotAI* ai) { return new YoggSaronIllusionHealerStationAction(ai); }
     static Action* yogg_saron_brain_spot_action(PlayerbotAI* ai) { return new YoggSaronBrainSpotAction(ai); }
-    static Action* ignis_scorched_ground_action(PlayerbotAI* ai) { return new IgnisScorchedGroundAction(ai); }
-    static Action* ignis_main_tank_position_action(PlayerbotAI* ai) { return new IgnisMainTankPositionAction(ai); }
-    static Action* ignis_construct_tank_action(PlayerbotAI* ai) { return new IgnisConstructTankAction(ai); }
-    static Action* ignis_attack_brittle_construct_action(PlayerbotAI* ai) { return new IgnisAttackBrittleConstructAction(ai); }
-    static Action* ignis_attack_boss_action(PlayerbotAI* ai) { return new IgnisAttackBossAction(ai); }
-    static Action* ignis_flame_jets_hold_cast_action(PlayerbotAI* ai) { return new IgnisFlameJetsHoldCastAction(ai); }
-    static Action* ignis_molten_construct_avoid_action(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidAction(ai); }
-    static Action* ignis_slag_pot_heal_action(PlayerbotAI* ai) { return new IgnisSlagPotHealAction(ai); }
     static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_magnetic_core_action(PlayerbotAI* ai) { return new MimironMagneticCoreAction(ai); }
     static Action* mimiron_plasma_blast_defensive_action(PlayerbotAI* ai)

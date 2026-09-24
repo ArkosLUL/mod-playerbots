@@ -65,47 +65,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Ignis
     //
-    triggers.push_back(new TriggerNode(
-        "ignis fire resistance trigger",
-        { NextAction("ignis fire resistance action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis scorched ground trigger",
-        { NextAction("ignis scorched ground action", ACTION_RAID + 2) }));
-
-    // Where the main tank stands is where every fire patch lands, so his spot outranks everything
-    // else the raid does. The construct tanks share the band because no bot is ever both.
-    //
-    // An Iron Construct only dies to the Molten -> Brittle -> Shatter chain, and every one left alive
-    // is another stack of Strength of the Creator on the boss, so the kite outranks the raid's damage.
-    // Standing next to a Molten construct and sitting in a Slag Pot both kill a bot outright.
-    triggers.push_back(new TriggerNode(
-        "ignis main tank position trigger",
-        { NextAction("ignis main tank position action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis construct tank trigger",
-        { NextAction("ignis construct tank action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis attack brittle construct trigger",
-        { NextAction("ignis attack brittle construct action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis attack boss trigger",
-        { NextAction("ignis attack boss action", ACTION_RAID + 0.5f) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis molten construct avoid trigger",
-        { NextAction("ignis molten construct avoid action", ACTION_EMERGENCY) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis slag pot heal trigger",
-        { NextAction("ignis slag pot heal action", ACTION_EMERGENCY + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "ignis flame jets trigger",
-        { NextAction("ignis flame jets hold cast action", ACTION_EMERGENCY + 2) }));
+    UldIgnisDefinition().AddTriggerNodes(triggers);
 
     //
     // XT-002 Deconstructor
@@ -647,11 +607,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     UldRazorscaleDefinition().AddMultipliers(botAI, multipliers);
 
-    // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
-    multipliers.push_back(new IgnisMultiplier(botAI));
-    multipliers.push_back(new IgnisTankMovementMultiplier(botAI));
-    multipliers.push_back(new IgnisDisableDefaultTargetingMultiplier(botAI));
-    multipliers.push_back(new IgnisFlameJetsHoldCastMultiplier(botAI));
+    UldIgnisDefinition().AddMultipliers(botAI, multipliers);
 
     UldKologarnDefinition().AddMultipliers(botAI, multipliers);
 

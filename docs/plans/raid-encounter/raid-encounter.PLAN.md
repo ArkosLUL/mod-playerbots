@@ -171,8 +171,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
   role hold) → one rule each. Flash Freeze is an `OwnMovement` with `keep` = `Attack`, movers
   narrowed to the freeze set (the shed only in a landed shelter), plus a `Block` on `Charge`, `Blink`,
   `Disengage`.
-- **Ignis:** Slag Pot is `Exclusive` with no exceptions; the construct tank and main tank also get a
-  `Block` on their own `IgnisScorchedGroundAction`; its targeting rule adds `AttackRti`.
 - **Mimiron:** the formation guard blocks `CombatFormationMove` only, so `tank face` survives.
   `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
 - **Thorim:** the arena target, balcony wrong-target branch and runic barrier guards stay hand-written.
@@ -194,7 +192,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 is up to Ignis, in the order it lists.
+**Status:** commits 1-2 landed; commit 3 is up to Iron Assembly, in the order it lists.
 
 Close each per `CLAUDE.local.md`.
 
