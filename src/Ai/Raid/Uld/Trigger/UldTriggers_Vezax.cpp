@@ -117,19 +117,53 @@ bool VezaxSurgeOfDarknessTrigger::IsActive()
 
 bool VezaxSaroniteAnimusTrigger::IsActive()
 {
-    if (!IsVezaxHardModeActive(botAI))
-        return false;
+    Unit* animus = nullptr;
+    if (IsVezaxHardModeActive(botAI) && VezaxEncounterActive(botAI))
+        animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
 
-    if (!VezaxEncounterActive(botAI))
-        return false;
-
-    Unit* animus = GetFirstAliveUnitByEntry(botAI, NPC_VEZAX_SARONITE_ANIMUS);
     if (!animus)
+    {
+        tankHold.Reset();
         return false;
+    }
+
+    // Ahead of the target test: the dwell only counts if it's asked every tick.
+    bool const tankHeld = TankHasHeldBoss(bot, animus, tankHold, ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS);
 
     // Vezax is invulnerable behind the Saronite Barrier until the Animus dies, so everyone
     // switches to it. Only fire when the bot is not already on it.
-    return AI_VALUE(Unit*, "current target") != animus;
+    if (AI_VALUE(Unit*, "current target") == animus)
+        return false;
+
+    // Tanks build the threat, and a hunter's or rogue's first hits go to the tank through the redirect.
+    // On Vezax those hits would use the redirect up, so they can't wait with the rest.
+    if (botAI->IsTank(bot) || VezaxAnimusRedirectSpell(bot))
+        return true;
+
+    // No summon time means the hook never saw it, so nobody gets held on a guess.
+    uint32 ageMs = 0;
+    return tankHeld || !TryGetVezaxAnimusAge(botAI, ageMs) || ageMs >= ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS;
+}
+
+bool VezaxAnimusRedirectTrigger::IsActive()
+{
+    char const* redirect = VezaxAnimusRedirectSpell(bot);
+    if (!redirect || !IsVezaxHardModeActive(botAI) || !VezaxEncounterActive(botAI))
+        return false;
+
+    uint32 ageMs = 0;
+    if (!TryGetVezaxAnimusAge(botAI, ageMs) || ageMs >= ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS)
+        return false;
+
+    Player* mainTank = GetGroupMainTank(bot);
+    if (!mainTank || mainTank == bot)
+        return false;
+
+    // CanCastSpell passes an out of range cast as castable, so Tricks' reach has to be checked here.
+    if (bot->getClass() == CLASS_ROGUE && bot->GetExactDist(mainTank) > ULDUAR_VEZAX_TRICKS_RANGE)
+        return false;
+
+    return botAI->CanCastSpell(redirect, mainTank);
 }
 
 bool VezaxShadowCrashSoakTrigger::IsActive()

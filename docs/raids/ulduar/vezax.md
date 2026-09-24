@@ -13,7 +13,7 @@ where they disagree, and they do disagree.**
 | Surge of Darkness | 62662 | 63s from pull, repeats 63s. Self-cast: +100% physical damage, −55% move speed, 10s — the slow is **on Vezax**, not the raid. Delays the Searing Flames group 10s |
 | Mark of the Faceless | 63276 → 63278 | 20s from pull, repeats 40s. **10 ticks at 1/s**; each casts 63278 at the marked bot, leeching 5,000 from everyone else in range and healing him ~10× that. See below — it is the fight |
 | Saronite Vapors (NPC 33488) | summon 63081 | Every 30s at a **random point 45 yd out** (`TARGET_DEST_CASTER_RADIUS`, radius index 11). `NullCreatureAI` + `MoveRandom(4.0f)`, no addon auras: **the living cloud is harmless, never chases, and cannot be pulled**. Its puddle (63323 → 63322, 8 yd, `100 · 2^stacks` every 2s for half back as mana) drops **only from `JustDied`**, never from the script's own despawn |
-| Saronite Animus | NPC 33524 | Hard mode. At vapor #6 (3:00) with none killed, every vapor charges the anchor and merges; it spawns 8s later |
+| Saronite Animus | NPC 33524 | Hard mode. At vapor #6 (3:00) with none killed, every vapor charges the anchor and merges; it spawns 8s later. **Taunt-immune**: immunity set -287 blocks `ATTACK_ME` and `MOD_TAUNT` |
 | Saronite Barrier | 63364 | −99% damage taken on Vezax until the Animus dies |
 | Profound Darkness | 63420 | Animus self-cast every 2s. 749 damage plus **+10% shadow damage taken per stack, 180s**. **Radius index 28 = 50,000 yd — room-wide and unavoidable** |
 | Berserk | 26662 | 10 min, and instantly if the boss leaves `x ∈ [1720,1940]`, `y ∈ [20,210]` |
@@ -218,9 +218,9 @@ only hazard here with a deadline. The interrupt is `+8`: losing a kick costs the
 fire at once. Then the two halves of Mark of the Faceless — **break at `+7`, carry at `+6`** — in that
 order, because the bot holding the mark is the one person its leech skips and so is never the one
 taking damage. Surge of darkness closes the EMERGENCY band at `+5`. The RAID band is the reward half
-and numbers separately: animus `+5`, hold-target `+4`, field soak `+2`, resistance `+1`,
-position last. Hold-target sits under the animus on purpose — in hard mode both fire on a bot
-that is off the animus, and the animus is the correct answer.
+and numbers separately: animus redirect `+6`, animus `+5`, hold-target `+4`, field soak `+2`,
+resistance `+1`, position last. Hold-target sits under the animus on purpose — in hard mode both
+fire on a bot that is off the animus, and the animus is the correct answer.
 
 **Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40),
 below `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every
@@ -299,7 +299,9 @@ are only handed out in combat, so nothing live is cleared.
 heal-back aside (it shows only as boss health rate): `--boss`, `--mark` (leech, escape branch, nearest
 ally, boss health per window), `--crash` (target, dodgers per block, his casts in flight), `--field`
 (both halves' uptime, casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap
-returns), `--vapors`, `--band`. Its banner names declared probes the pull never wrote. No probe was
+returns), `--vapors`, `--animus` (victim changes and share by role, redirects from 45s before the
+spawn, switch delay by role, lust, deaths after it), `--band`. Its banner names declared probes
+the pull never wrote. No probe was
 added for it: fields are `snap.hz`, crashes `haz`, the mark an aura, the leech `dmg`, vapor targeting
 `snap.u[7]`, what hit a vapor the `cast` rows aimed at its guid; the vapors themselves are never
 sampled. The camp is read from `vezax.slot` as well as `vezax.block`, which is
@@ -320,7 +322,20 @@ Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** sp
 invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark —
 each bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420): radius index 28 is
 **50,000 yd**, so the stacking shadow-damage debuff is room-wide and the only answer is killing the
-Animus faster. There is **no** taunt or assist-tank wiring for the Animus.
+Animus faster.
+
+**Only threat holds the Animus**, and it spawns on the main tank's anchor. On 2026-09-24 the whole
+raid switched in the same 0.2s: it spent 14% of its life on a tank, the first at +58.6s, and lust,
+which waits for a tank to hold it 3s, went 62s late.
+
+- **Tanks, hunters and rogues switch at once; the rest wait** until a tank has been its victim 2s
+  (`TankHasHeldBoss`), capped at 6s after the summon so a dead tank never parks the raid on the
+  Barrier. The redirecting classes can't wait on Vezax: their hits there would spend the redirect.
+- **Redirects are saved, then aimed.** `vezax save redirects for the animus` blocks Misdirection and
+  Tricks from the fifth summon, 38s+ before the spawn against a 30s cooldown, and
+  `vezax animus redirect` casts both on the main tank in its first 6s. The generic ones follow the
+  caster's current target: that day Tricks went to a dps 0.6s before the spawn, and that dps had
+  it 1s in.
 
 **Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first
 vapor death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
@@ -353,4 +368,7 @@ protection paladin hit 0% at 1:12 on 2026-09-24, lost threat, and a warlock pull
 camp at 1:26. The bear in the next pull held him 83.5% of the time. Nothing here treats it.
 
 **Melee do not dodge Shadow Crash.** `DodgesShadowCrash` requires `IsRanged`, and the table above says
-why that is not the same as being safe. One melee took a crash hit in the last traced pull.
+why that is not the same as being safe. Beside Vezax it cost one hit a pull; chasing an untanked
+Animus into the camp at 13 and 30 Profound Darkness stacks, one crash killed 6 melee and another 5.
+Holding it at the anchor is the answer; add a melee dodge only if `--animus` shows it held and
+`--crash` still shows melee hits after the spawn.

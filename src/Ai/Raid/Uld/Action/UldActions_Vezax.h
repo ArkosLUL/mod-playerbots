@@ -93,6 +93,17 @@ public:
     bool Execute(Event event) override;
 };
 
+// Misdirection or Tricks of the Trade on the main tank.
+class VezaxAnimusRedirectAction : public Action
+{
+public:
+    static constexpr char const* Name = "vezax animus redirect action";
+
+    VezaxAnimusRedirectAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 // Walk into the nearest Shadow Crash field and hold it.
 class VezaxShadowCrashSoakAction : public MovementAction
 {

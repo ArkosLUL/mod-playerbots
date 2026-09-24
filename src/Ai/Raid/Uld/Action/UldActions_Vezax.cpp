@@ -151,6 +151,16 @@ bool VezaxSaroniteAnimusAction::Execute(Event /*event*/)
     return Attack(animus);
 }
 
+bool VezaxAnimusRedirectAction::Execute(Event /*event*/)
+{
+    char const* redirect = VezaxAnimusRedirectSpell(bot);
+    Player* mainTank = GetGroupMainTank(bot);
+    if (!redirect || !mainTank)
+        return false;
+
+    return botAI->CastSpell(redirect, mainTank);
+}
+
 bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
 {
     std::vector<VezaxHazard> hazards;

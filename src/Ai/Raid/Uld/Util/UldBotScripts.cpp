@@ -70,6 +70,12 @@ public:
         if (!caster || !spellInfo || caster->GetMapId() != ULDUAR_MAP_ID)
             return;
 
+        if (spellInfo->Id == SPELL_VEZAX_SUMMON_SARONITE_VAPORS && caster->GetEntry() == NPC_VEZAX)
+        {
+            VezaxNoteVaporSummon(caster);
+            return;
+        }
+
         if (spellInfo->Id != SPELL_VEZAX_SHADOW_CRASH_CAST)
             return;
 

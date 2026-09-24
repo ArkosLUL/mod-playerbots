@@ -45,6 +45,8 @@ enum UlduarVezaxIds
     // when the six merge.
     SPELL_VEZAX_SARONITE_VAPORS_AURA = 63323,
     SPELL_VEZAX_SUMMON_SARONITE_ANIMUS = 63145,
+    // His own cast, every 30s. The sixth one with no vapor dead is the merge.
+    SPELL_VEZAX_SUMMON_SARONITE_VAPORS = 63081,
 
     // General Vezax
     NPC_VEZAX = 33271,
@@ -63,6 +65,16 @@ constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
 // How long past distance over speed a stored impact stays live. Traced landings came 92-203 ms after
 // that figure, so this covers them with room for a slow tick.
 constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
+
+// The Animus can't be taunted (immunity set -287 blocks ATTACK_ME and MOD_TAUNT), so a tank only keeps
+// it on threat. Everyone but tanks and redirectors waits until a tank has been its victim this long,
+// and never past the cap, so a dead tank doesn't park the raid on an invulnerable Vezax.
+constexpr uint32 ULDUAR_VEZAX_ANIMUS_TANK_LEAD_MS = 2000;
+constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
+// From this summon on the Animus is at least 38s out, past the 30s cooldown on Misdirection and
+// Tricks, so saving them from here has both ready when it lands.
+constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
+constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
 
 // The Shadow Crash field (63277) is 8 yd, plus a yard of slack since a bot that stops exactly on the
 // boundary is still inside it.
@@ -206,6 +218,8 @@ struct VezaxEncounterState
 
     bool vaporKilled = false;
     bool animusSummoned = false;
+    uint32 animusSummonMs = 0;
+    uint8 vaporSummons = 0;
 };
 
 // From the instance script rather than a target sweep. "find target" walks only the bot's own threat
@@ -271,6 +285,14 @@ void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs);
 bool VezaxHardModePending(PlayerbotAI* botAI);
 void VezaxNoteVaporKilled(Unit* vapor);
 void VezaxNoteAnimusSummoned(Unit* vapor);
+void VezaxNoteVaporSummon(Unit* vezax);
+
+// Hard mode still pending and the fifth vapor summon is out: the Animus is next.
+bool VezaxAnimusDue(PlayerbotAI* botAI);
+// Milliseconds since the Animus summon, or false when there hasn't been one this pull.
+bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs);
+// Misdirection for a hunter, Tricks of the Trade for a rogue, nullptr for anyone else.
+char const* VezaxAnimusRedirectSpell(Player* bot);
 
 // Somewhere clear of that impact and still inside the band this bot's role is allowed to stand in.
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);

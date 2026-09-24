@@ -35,8 +35,9 @@ void DefineVezax(EncounterBuilder& e)
     // person its leech skips, so it's never the one taking damage.
     //
     // The RAID band is the reward half, and soaking a field is worth nothing to a bot that is already
-    // dying. Position is last on purpose, and yields as soon as it's parked, so the class interrupts
-    // at ACTION_INTERRUPT (40) still get a tick.
+    // dying. The Animus redirect goes right above the switch to it, so it's out before the first hit.
+    // Position is last on purpose, and yields as soon as it's parked, so the class interrupts at
+    // ACTION_INTERRUPT (40) still get a tick.
     e.Node<VezaxResetEncounterStateTrigger, VezaxResetEncounterStateAction>(ACTION_EMERGENCY + 10);
     e.Node<VezaxShadowCrashDodgeTrigger, VezaxShadowCrashDodgeAction>(ACTION_EMERGENCY + 9, EncounterRow::Mover);
     e.Node<VezaxSearingFlamesInterruptTrigger, VezaxSearingFlamesInterruptAction>(ACTION_EMERGENCY + 8);
@@ -44,6 +45,7 @@ void DefineVezax(EncounterBuilder& e)
                                                                                  EncounterRow::Mover);
     e.Node<VezaxMarkOfTheFacelessTrigger, VezaxMarkOfTheFacelessAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<VezaxSurgeOfDarknessTrigger, VezaxSurgeOfDarknessAction>(ACTION_EMERGENCY + 5);
+    e.Node<VezaxAnimusRedirectTrigger, VezaxAnimusRedirectAction>(ACTION_RAID + 6);
     e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 5);
     e.Node<VezaxHoldTargetTrigger, VezaxHoldTargetAction>(ACTION_RAID + 4);
     e.Node<VezaxShadowCrashSoakTrigger, VezaxShadowCrashSoakAction>(ACTION_RAID + 2, EncounterRow::Mover);
@@ -79,6 +81,11 @@ void DefineVezax(EncounterBuilder& e)
     // stars pick random enemies in range, which the target guard never sees, and a vapor can spawn under
     // one already falling, so a range check wouldn't do.
     e.Block("vezax hard mode hold", Role::Any, VezaxHardModePending, 0, {"heroism", "bloodlust", "starfall"});
+
+    // Kept off cooldown for the Animus, which only a tank's threat holds. Left alone, the generic
+    // triggers spend them on Vezax, where the tank has had minutes to build threat, or on a dps.
+    e.Block("vezax save redirects for the animus", Role::Any, VezaxAnimusDue, 0,
+            {"misdirection on main tank", "tricks of the trade", "tricks of the trade on main tank"});
 
     e.Multiplier<VezaxHoldCastOutsideFieldMultiplier>(Family::Melee | Family::Spell);
 

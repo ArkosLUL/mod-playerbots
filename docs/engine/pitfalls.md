@@ -665,8 +665,10 @@ in one session.
 ## A targeting mark never clears inside a pull
 
 `prioritized targets` is written by `AttackMyTargetAction` (`src/Ai/Base/Actions/AttackAction.cpp:47`)
-and `AttackRtiTargetAction` (`src/Ai/Base/Actions/ChooseTargetActions.cpp:168`), and cleared **only**
-by `PlayerbotAI::Reset` — that is, on leaving combat. Inside one pull the mark never lets go, and a
+and `AttackRtiTargetAction` (`src/Ai/Base/Actions/ChooseTargetActions.cpp:168`). It is cleared by
+`PlayerbotAI::Reset` (far teleport, the `reset` command, chat shortcuts, group changes), `follow`, a
+summon that revives, and death — **never by leaving combat**, which `DropTargetAction` handles
+without touching it. A living bot never lets go of the mark inside one pull, and a
 wrong mark is unrecoverable: `FindTargetStrategy::IsHighPriority`
 (`src/Ai/Base/Value/TargetValue.cpp:124`) returns true for the skull icon *and* for anything in
 `prioritized targets`, which trips `foundHighPriority` and short-circuits every smart strategy.
@@ -678,6 +680,13 @@ This is a base-engine trap, not a boss-specific one. **Any encounter with an unt
 it**: the bot is held on a dead or wrong target for the rest of the fight. An encounter that retargets
 mid-pull must clear the mark itself — Thorim sets both the group icon and its own `prioritized
 targets` back to empty once per pull (`UldEncounter_Thorim.cpp:740`).
+
+**It outlives the pull as well.** `AttackersValue::Calculate` adds `prioritized targets` and the
+skull with only a line-of-sight check, and protection paladins, bears and protection warriors run
+`tank assist` out of combat too, which fires on any `attacker count`. A tank still carrying the
+order walks onto the idle boss and pulls it: on 2026-09-24 a paladin back up by Soulstone after a
+`wipe` pulled Vezax although summoned back twice. A Soulstone skips the reviving summon, which is why
+the just-died block in `PlayerbotAI::DoNextAction` now clears it.
 
 ## Role and index traps
 

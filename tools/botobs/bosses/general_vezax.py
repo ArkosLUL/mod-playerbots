@@ -8,6 +8,7 @@
     general_vezax.py <file> --field    field uptime, casts inside one, the soak and the cast hold
     general_vezax.py <file> --mana     mana over the pull, Life Tap and what it returned
     general_vezax.py <file> --vapors   who targeted or hit a vapor, and whether the Animus came
+    general_vezax.py <file> --animus   who held the Animus, the redirects, when lust went, who died
     general_vezax.py <file> --band     each camp member's distance from the boss, not the anchor
 
 What the generic views get wrong here, and what this reads instead:
@@ -41,6 +42,7 @@ from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
 from raidobs.geometry import anchor, dist2, first_seen, frames, guids_of_entry, radius  # noqa: E402
 from raidobs.probes import emitted_keys, silent_keys  # noqa: E402
+from raidobs.space import threat_share  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes, roster_guids  # noqa: E402
 
 NPC_VEZAX = 33271
@@ -60,12 +62,18 @@ CRASH_SPELLS = (SPELL_SHADOW_CRASH, SPELL_SHADOW_CRASH_IMPACT, SPELL_FIELD)
 SPELL_FIELD_COST = 65269
 SPELL_LIFE_TAP = 57946
 SPELL_LIFE_TAP_GLYPH = 63321
+SPELL_MISDIRECTION = 34477
+SPELL_TRICKS = 57934
+REDIRECT_SPELLS = (SPELL_MISDIRECTION, SPELL_TRICKS)
+# Heroism, Bloodlust
+LUST_SPELLS = (32182, 2825)
 
 DODGE = "vezax shadow crash dodge action"
 SOAK = "vezax shadow crash soak action"
 HOLD = "vezax hold cast outside field multiplier"
 GUARD = "vezax target guard multiplier"
 LIFE_TAP_VETO = "vezax suppress life tap multiplier"
+ANIMUS_SWITCH = "vezax saronite animus action"
 
 # Read from the source so a retune shows up here without a second edit.
 CAMP_RADIUS = radius("ULDUAR_VEZAX_CAMP_RADIUS")
@@ -91,6 +99,9 @@ EARLY_MS = 4000
 NEAREST_FROM_MS = 2000
 # one snapshot gap longer than this is a hole in the trace, not time spent anywhere
 MAX_STEP_MS = 2000
+# Past the 30 s redirect cooldown, so one spent before the spawn still shows
+REDIRECT_LOOKBACK_MS = 45000
+ANIMUS_VICTIMS_SHOWN = 12
 
 
 def pull_end(trace: Trace) -> int:
@@ -741,6 +752,100 @@ def show_vapors(trace: Trace) -> None:
               + (": a vapor died, or the sixth summon never came" if len(summons) >= 6 else ""))
 
 
+def animus_guid(trace: Trace) -> int | None:
+    guids = sorted(guids_of_entry(trace, NPC_SARONITE_ANIMUS))
+    return guids[0] if guids else None
+
+
+def animus_victims(trace: Trace, samples: Samples | None = None) -> list[tuple[int, int]]:
+    """`(t, victim)` at each change of the Animus's victim, off `snap.u[7]`. It can't be taunted, so
+    this is the whole story of who held it."""
+    animus = animus_guid(trace)
+    found = (samples or Samples(trace)).rows.get(animus) if animus else None
+    if not found:
+        return []
+    out: list[tuple[int, int]] = []
+    for when, row in zip(*found):
+        victim = row[7] if len(row) > 7 else 0
+        if row[5] > 0 and (not out or out[-1][1] != victim):
+            out.append((when, victim))
+    return out
+
+
+def animus_redirects(trace: Trace, spawn: int) -> list[dict]:
+    """Misdirection and Tricks cast from the lookback before the spawn on. A negative `rel` is one
+    spent before it came, which is the cooldown it didn't have."""
+    return [{"t": rec["t"], "rel": rec["t"] - spawn, "caster": rec.get("s"), "spell": rec.get("sp"),
+             "target": rec.get("tgt")}
+            for rec in trace.of("cast")
+            if rec.get("sp") in REDIRECT_SPELLS and not rec.get("tr")
+            and rec["t"] >= spawn - REDIRECT_LOOKBACK_MS]
+
+
+def animus_switches(trace: Trace, spawn: int) -> dict[int, int]:
+    """Per bot, ms from the spawn to its first switch onto the Animus."""
+    out: dict[int, int] = {}
+    for rec in trace.of("act"):
+        if rec.get("a") == ANIMUS_SWITCH and rec.get("vd") == "OK" and rec["t"] >= spawn:
+            out.setdefault(rec["g"], rec["t"] - spawn)
+    return out
+
+
+def show_animus(trace: Trace) -> None:
+    print("SARONITE ANIMUS")
+    animus = animus_guid(trace)
+    spawn = first_seen(trace, [animus]) if animus else None
+    if spawn is None:
+        print("  never spawned")
+        return
+
+    samples = Samples(trace)
+    rows = samples.rows[animus][1]
+    print(f"  spawned {clock(spawn)}, {rows[-1][5]:.1f}% at the end")
+
+    victims = animus_victims(trace, samples)
+    tank = next(((when, guid) for when, guid in victims if trace.role(guid) == "tank"), None)
+    print("  first on a tank: " + (f"{clock(tank[0])} (+{(tank[0] - spawn) / 1000:.1f} s), {trace.name(tank[1])}"
+                                   if tank else "never"))
+    held, _ = threat_share(trace, {animus}, lambda when: when >= spawn)
+    total = sum(held.values())
+    if total:
+        print("  time on target: " + "  ".join(f"{role} {span * 100.0 / total:.1f}%"
+                                              for role, span in held.most_common()))
+    shown = victims[:ANIMUS_VICTIMS_SHOWN]
+    print("  victims: " + ", ".join(f"{clock(when)} {trace.name(guid)}" for when, guid in shown)
+          + (f" and {len(victims) - len(shown)} more" if len(victims) > len(shown) else ""))
+
+    redirects = animus_redirects(trace, spawn)
+    print("  redirects:" + ("" if redirects else " none"))
+    for row in redirects:
+        print(f"    {clock(row['t'])} {row['rel'] / 1000:+6.1f} s  {trace.name(row['caster'])[:14]:14}"
+              f" {trace.spell(row['spell'])[:26]:26} on {trace.name(row['target'])} ({trace.role(row['target'])})")
+
+    by_role: dict[str, list[int]] = collections.defaultdict(list)
+    for guid, delay in animus_switches(trace, spawn).items():
+        by_role[trace.role(guid)].append(delay)
+    if by_role:
+        print("  switched on after the spawn: " + "  ".join(
+            f"{role} {min(delays) / 1000:.1f}-{max(delays) / 1000:.1f} s ({len(delays)})"
+            for role, delays in sorted(by_role.items())))
+
+    lust = [rec for rec in trace.of("cast") if rec.get("sp") in LUST_SPELLS and not rec.get("tr")]
+    for rec in lust:
+        print(f"  {trace.spell(rec['sp'])} by {trace.name(rec.get('s'))} at {clock(rec['t'])}"
+              f" ({(rec['t'] - spawn) / 1000:+.1f} s)")
+    if not lust:
+        print("  no lust cast")
+
+    deaths = [death for death in combat_deaths(trace) if death["t"] >= spawn]
+    if deaths:
+        print(f"  {len(deaths)} death(s) after the spawn:")
+        for death in deaths:
+            blow = death.get("blow") or [0, 0]
+            print(f"    {clock(death['t'])} {trace.name(death.get('g'))[:14]:14} {trace.role(death.get('g')):6}"
+                  f" {trace.name(death.get('killer'))} {blow[1] if len(blow) > 1 else ''}")
+
+
 def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float], list[dict]]:
     samples = samples or Samples(trace)
     boss = boss_guid(trace)
@@ -808,6 +913,7 @@ SECTIONS = (
     ("field", "field uptime, in-field casts, soak, cast hold", show_field),
     ("mana", "mana, Life Tap and what it returned", show_mana),
     ("vapors", "vapor targeting, hits and the Animus", show_vapors),
+    ("animus", "who held the Animus, redirects, lust, deaths", show_animus),
     ("band", "each camp member's distance from the boss", show_band),
 )
 

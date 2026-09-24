@@ -1504,6 +1504,9 @@ void PlayerbotAI::DoNextAction(bool min)
         aiObjectContext->GetValue<Unit*>("enemy player target")->Set(nullptr);
         aiObjectContext->GetValue<ObjectGuid>("pull target")->Set(ObjectGuid::Empty);
         aiObjectContext->GetValue<ObjectGuid>("pull strategy target")->Set(ObjectGuid::Empty);
+        // "attackers" lists these even out of combat, so a bot back up by Soulstone would walk off after
+        // its last kill order on its own.
+        aiObjectContext->GetValue<GuidVector>("prioritized targets")->Reset();
         aiObjectContext->GetValue<LootObject>("loot target")->Set(LootObject());
 
         ChangeEngine(BOT_STATE_DEAD);

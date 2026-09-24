@@ -572,8 +572,53 @@ void VezaxNoteVaporKilled(Unit* vapor)
 
 void VezaxNoteAnimusSummoned(Unit* vapor)
 {
-    if (vapor)
-        vezaxEncounterStates.For(vapor->GetInstanceId()).animusSummoned = true;
+    if (!vapor)
+        return;
+
+    VezaxEncounterState& state = vezaxEncounterStates.For(vapor->GetInstanceId());
+    state.animusSummoned = true;
+    state.animusSummonMs = getMSTime();
+}
+
+void VezaxNoteVaporSummon(Unit* vezax)
+{
+    if (vezax)
+        ++vezaxEncounterStates.For(vezax->GetInstanceId()).vaporSummons;
+}
+
+bool VezaxAnimusDue(PlayerbotAI* botAI)
+{
+    if (!VezaxHardModePending(botAI))
+        return false;
+
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    return state && state->vaporSummons >= ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON;
+}
+
+bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs)
+{
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    if (!state || !state->animusSummoned)
+        return false;
+
+    ageMs = getMSTimeDiff(state->animusSummonMs, getMSTime());
+    return true;
+}
+
+char const* VezaxAnimusRedirectSpell(Player* bot)
+{
+    if (!bot)
+        return nullptr;
+
+    switch (bot->getClass())
+    {
+        case CLASS_HUNTER:
+            return "misdirection";
+        case CLASS_ROGUE:
+            return "tricks of the trade";
+        default:
+            return nullptr;
+    }
 }
 
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)

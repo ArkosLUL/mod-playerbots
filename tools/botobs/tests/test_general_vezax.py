@@ -29,19 +29,22 @@ AGONY = 5001  # ranged, block L
 TREE = 5002   # heal, block R
 BULWARK = 5003
 FEL = 5004    # ranged, slotted in block R, never inside the gate
+ANIMUS = 4294969200
 
 
 def snap(when: int, agony_target: int, field: bool) -> dict:
-    return {
-        "t": when, "e": "snap",
-        "u": [
-            [BOSS, 0.0, 0.0, 0.0, 0.0, 90.0, 0.0, BULWARK, 0, 0, 0, 0],
-            [AGONY, 30.0, 0.0, 0.0, 0.0, 100.0, 80.0 - when / 1000.0, agony_target, 0, 0, 0, 0],
-            [TREE, 0.0, 30.0, 0.0, 0.0, 100.0, 90.0, 0, 0, 0, 0, 0],
-            [BULWARK, 1.0, 0.0, 0.0, 0.0, 100.0, 0.0, BOSS, 0, 0, 0, 0],
-        ],
-        "hz": [[gv.SPELL_FIELD, 30.0, 2.0, 0.0, 8.0, 1]] if field else [],
-    }
+    units = [
+        [BOSS, 0.0, 0.0, 0.0, 0.0, 90.0, 0.0, BULWARK, 0, 0, 0, 0],
+        [AGONY, 30.0, 0.0, 0.0, 0.0, 100.0, 80.0 - when / 1000.0, agony_target, 0, 0, 0, 0],
+        [TREE, 0.0, 30.0, 0.0, 0.0, 100.0, 90.0, 0, 0, 0, 0, 0],
+        [BULWARK, 1.0, 0.0, 0.0, 0.0, 100.0, 0.0, BOSS, 0, 0, 0, 0],
+    ]
+    # The Animus from 12 s: on Agony for two samples, then on Bulwark.
+    if when >= 12000:
+        units.append([ANIMUS, 1.0, 1.0, 0.0, 0.0, 100.0 - (when - 12000) / 1000.0, 0.0,
+                      AGONY if when < 14000 else BULWARK, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units,
+            "hz": [[gv.SPELL_FIELD, 30.0, 2.0, 0.0, 8.0, 1]] if field else []}
 
 
 def vezax_pull() -> list[dict]:
@@ -55,6 +58,7 @@ def vezax_pull() -> list[dict]:
         {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
         {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
         {"t": 1, "e": "unit", "g": VAPOR, "en": gv.NPC_SARONITE_VAPORS, "n": "Saronite Vapors"},
+        {"t": 1, "e": "unit", "g": ANIMUS, "en": gv.NPC_SARONITE_ANIMUS, "n": "Saronite Animus"},
         {"t": 10, "e": "note", "g": AGONY, "k": "vezax.block", "txt": "L"},
         {"t": 10, "e": "note", "g": TREE, "k": "vezax.block", "txt": "R"},
         {"t": 10, "e": "note", "g": BULWARK, "k": "vezax.block", "txt": "tank"},
@@ -102,6 +106,14 @@ def vezax_pull() -> list[dict]:
         {"t": 10, "e": "note", "g": AGONY, "k": "vezax.hardmode", "txt": "pending"},
         {"t": 9600, "e": "note", "g": AGONY, "k": "vezax.hardmode", "txt": "lost"},
         {"t": 9700, "e": "note", "g": TREE, "k": "vezax.hardmode", "txt": "lost"},
+
+        # Tricks goes out half a second before the Animus, at a dps. Bulwark switches onto it at once,
+        # Agony a second and a half later, and Heroism waits until 14.5 s.
+        {"t": 11500, "e": "cast", "s": FEL, "sp": gv.SPELL_TRICKS, "tgt": AGONY, "ct": 0},
+        {"t": 12200, "e": "act", "g": BULWARK, "a": gv.ANIMUS_SWITCH, "rel": 65.0, "vd": "OK"},
+        {"t": 13500, "e": "act", "g": AGONY, "a": gv.ANIMUS_SWITCH, "rel": 65.0, "vd": "OK"},
+        {"t": 13600, "e": "act", "g": AGONY, "a": gv.ANIMUS_SWITCH, "rel": 65.0, "vd": "OK"},
+        {"t": 14500, "e": "cast", "s": BULWARK, "sp": 32182, "tgt": 0, "ct": 0},
         {"t": 15000, "e": "end", "out": "wipe"},
     ]
     # Agony holds the vapor on the first half of the samples only.
@@ -145,6 +157,17 @@ class SyntheticPull(unittest.TestCase):
 
     def test_hard_mode_reads_the_first_bot_to_see_each_value(self):
         self.assertEqual(gv.hard_mode_changes(self.trace), {"pending": 10, "lost": 9600})
+
+    def test_the_animus_victims_are_its_changes_not_its_samples(self):
+        self.assertEqual(gv.animus_victims(self.trace), [(12000, AGONY), (14000, BULWARK)])
+
+    def test_a_redirect_before_the_spawn_reads_negative(self):
+        self.assertEqual(gv.animus_redirects(self.trace, 12000),
+                         [{"t": 11500, "rel": -500, "caster": FEL, "spell": gv.SPELL_TRICKS,
+                           "target": AGONY}])
+
+    def test_each_bot_switches_once(self):
+        self.assertEqual(gv.animus_switches(self.trace, 12000), {BULWARK: 200, AGONY: 1500})
 
     def test_in_field_share_skips_triggered_casts(self):
         agony = next(row for row in gv.field_rows(self.trace) if row["guid"] == AGONY)

@@ -1,6 +1,7 @@
 #ifndef PLAYERBOTS_ULDTRIGGERS_VEZAX_H
 #define PLAYERBOTS_ULDTRIGGERS_VEZAX_H
 
+#include "BurstCooldowns.h"
 #include "EventMap.h"
 #include "GenericTriggers.h"
 #include "UldEncounter_Vezax.h"
@@ -77,13 +78,28 @@ public:
     bool IsActive() override;
 };
 
-// Hard mode: Saronite Animus alive, bot not already attacking it.
+// Hard mode: Saronite Animus alive, bot not already attacking it. Tanks, hunters and rogues go at once,
+// everyone else once a tank has held it or the cap runs out.
 class VezaxSaroniteAnimusTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "vezax saronite animus";
 
     VezaxSaroniteAnimusTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+
+private:
+    // Per bot, and polled every tick while it waits, or the dwell restarts.
+    BurstHoldState tankHold;
+};
+
+// Hunter or rogue, Animus just summoned: redirect onto the main tank before the first hit.
+class VezaxAnimusRedirectTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "vezax animus redirect";
+
+    VezaxAnimusRedirectTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
