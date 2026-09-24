@@ -22,18 +22,6 @@ public:
         creators["flame leviathan vehicle near"] = &RaidUlduarTriggerContext::flame_leviathan_vehicle_near;
         creators["flame leviathan flame vents"] = &RaidUlduarTriggerContext::flame_leviathan_flame_vents;
         creators["flame leviathan drive urgent"] = &RaidUlduarTriggerContext::flame_leviathan_drive_urgent;
-        creators["iron assembly reset encounter state trigger"] = &RaidUlduarTriggerContext::iron_assembly_reset_encounter_state_trigger;
-        creators["iron assembly lightning tendrils trigger"] = &RaidUlduarTriggerContext::iron_assembly_lightning_tendrils_trigger;
-        creators["iron assembly overload trigger"] = &RaidUlduarTriggerContext::iron_assembly_overload_trigger;
-        creators["iron assembly rune of death trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_death_trigger;
-        creators["iron assembly interrupt trigger"] = &RaidUlduarTriggerContext::iron_assembly_interrupt_trigger;
-        creators["iron assembly tank assignment trigger"] = &RaidUlduarTriggerContext::iron_assembly_tank_assignment_trigger;
-        creators["iron assembly shield of runes trigger"] = &RaidUlduarTriggerContext::iron_assembly_shield_of_runes_trigger;
-        creators["iron assembly fusion punch dispel trigger"] = &RaidUlduarTriggerContext::iron_assembly_fusion_punch_dispel_trigger;
-        creators["iron assembly redirect threat trigger"] = &RaidUlduarTriggerContext::iron_assembly_redirect_threat_trigger;
-        creators["iron assembly rune of power soak trigger"] = &RaidUlduarTriggerContext::iron_assembly_rune_of_power_soak_trigger;
-        creators["iron assembly set dps priority trigger"] = &RaidUlduarTriggerContext::iron_assembly_set_dps_priority_trigger;
-        creators["iron assembly raid position trigger"] = &RaidUlduarTriggerContext::iron_assembly_raid_position_trigger;
         creators["hodir biting cold"] = &RaidUlduarTriggerContext::hodir_biting_cold;
         creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
         creators["hodir frost resistance trigger"] = &RaidUlduarTriggerContext::hodir_frost_resistance_trigger;
@@ -142,18 +130,6 @@ private:
     static Trigger* flame_leviathan_vehicle_near(PlayerbotAI* ai) { return new FlameLeviathanVehicleNearTrigger(ai); }
     static Trigger* flame_leviathan_flame_vents(PlayerbotAI* ai) { return new FlameLeviathanFlameVentsTrigger(ai); }
     static Trigger* flame_leviathan_drive_urgent(PlayerbotAI* ai) { return new FlameLeviathanDriveUrgentTrigger(ai); }
-    static Trigger* iron_assembly_reset_encounter_state_trigger(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateTrigger(ai); }
-    static Trigger* iron_assembly_lightning_tendrils_trigger(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsTrigger(ai); }
-    static Trigger* iron_assembly_overload_trigger(PlayerbotAI* ai) { return new IronAssemblyOverloadTrigger(ai); }
-    static Trigger* iron_assembly_rune_of_death_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfDeathTrigger(ai); }
-    static Trigger* iron_assembly_interrupt_trigger(PlayerbotAI* ai) { return new IronAssemblyInterruptTrigger(ai); }
-    static Trigger* iron_assembly_tank_assignment_trigger(PlayerbotAI* ai) { return new IronAssemblyTankAssignmentTrigger(ai); }
-    static Trigger* iron_assembly_shield_of_runes_trigger(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesTrigger(ai); }
-    static Trigger* iron_assembly_fusion_punch_dispel_trigger(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelTrigger(ai); }
-    static Trigger* iron_assembly_redirect_threat_trigger(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatTrigger(ai); }
-    static Trigger* iron_assembly_rune_of_power_soak_trigger(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakTrigger(ai); }
-    static Trigger* iron_assembly_set_dps_priority_trigger(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityTrigger(ai); }
-    static Trigger* iron_assembly_raid_position_trigger(PlayerbotAI* ai) { return new IronAssemblyRaidPositionTrigger(ai); }
     static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
     static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new HodirFrostResistanceTrigger(ai); }

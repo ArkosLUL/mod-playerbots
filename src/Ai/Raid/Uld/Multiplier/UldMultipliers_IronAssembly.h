@@ -10,56 +10,6 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// The Iron Assembly picks every non-tank's target in code, because killing one council member
-// restores the other two to full - damage the generic picker sprays across three health bars is
-// simply thrown away. Suppressed for every role and for the whole fight, not only while the boss
-// node has something to say: the terminal fallback is always a living council member, so nothing is
-// ever left nodeless. It matches on action type alone and never asks for a role, which is what keeps
-// healers out of it - IsRanged() returns true for them.
-class IronAssemblyDisableAutomaticTargetingMultiplier : public Multiplier
-{
-public:
-    IronAssemblyDisableAutomaticTargetingMultiplier(PlayerbotAI* ai)
-        : Multiplier(ai, "iron assembly disable automatic targeting")
-    {
-    }
-    float GetValue(Action* action) override;
-};
-
-// Scoped to the hazard window rather than the whole fight. A permanent guard would leave the raid
-// parked wherever its last dodge ended, because the encounter's own position node yields once it
-// arrives and nothing else would be left to walk anyone back - the Void Reaver failure.
-class IronAssemblyMovementGuardMultiplier : public Multiplier
-{
-public:
-    IronAssemblyMovementGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly movement guard") {}
-    float GetValue(Action* action) override;
-};
-
-// A gap-closer travels in a straight line, consults nothing about the ground, and is a CastSpellAction
-// rather than a MovementAction - so the movement guard above cannot see it and the server's own spell
-// effect drops the bot back on the boss. Traced: the only three melee that cast one during an Overload
-// were the only three that took Overload damage, one of them more than the tank, while the five with
-// no gap-closer took none.
-class IronAssemblyChargeGuardMultiplier : public Multiplier
-{
-public:
-    IronAssemblyChargeGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly charge guard") {}
-    float GetValue(Action* action) override;
-};
-
-// The tank spot decides where a tank stands here, and tank face is a second mover with an opinion of
-// its own at the same movement priority. Left alone the two alternate every second between the
-// designed spot and a point 6.8 yd nearer the raid - 45 to 57 flips and 385 to 515 yd of wandering
-// destination in one Steelbreaker phase - which also drags the Meltdown blast in over the ranged.
-// Facing is untouched: set facing is a separate node.
-class IronAssemblyDisableTankFaceMultiplier : public Multiplier
-{
-public:
-    IronAssemblyDisableTankFaceMultiplier(PlayerbotAI* ai) : Multiplier(ai, "iron assembly disable tank face") {}
-    float GetValue(Action* action) override;
-};
-
 // Hard mode only, where the kill order saves Steelbreaker for last. Everything before him is spent on
 // one shared health pool, so burst held back loses the raid nothing, and the phase it is held for is
 // the one that kills them: Supercharge and then Electrical Charge compound on the survivor, and both

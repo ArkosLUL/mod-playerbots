@@ -12,8 +12,10 @@
 class IronAssemblyResetEncounterStateAction : public Action
 {
 public:
+    static constexpr char const* Name = "iron assembly reset encounter state action";
+
     IronAssemblyResetEncounterStateAction(PlayerbotAI* botAI)
-        : Action(botAI, "iron assembly reset encounter state action")
+        : Action(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -22,8 +24,10 @@ public:
 class IronAssemblyLightningTendrilsAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "iron assembly lightning tendrils action";
+
     IronAssemblyLightningTendrilsAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "iron assembly lightning tendrils action")
+        : MovementAction(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -32,21 +36,27 @@ public:
 class IronAssemblyOverloadAction : public MovementAction
 {
 public:
-    IronAssemblyOverloadAction(PlayerbotAI* botAI) : MovementAction(botAI, "iron assembly overload action") {}
+    static constexpr char const* Name = "iron assembly overload action";
+
+    IronAssemblyOverloadAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class IronAssemblyRuneOfDeathAction : public MovementAction
 {
 public:
-    IronAssemblyRuneOfDeathAction(PlayerbotAI* botAI) : MovementAction(botAI, "iron assembly rune of death action") {}
+    static constexpr char const* Name = "iron assembly rune of death action";
+
+    IronAssemblyRuneOfDeathAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class IronAssemblyInterruptAction : public Action
 {
 public:
-    IronAssemblyInterruptAction(PlayerbotAI* botAI) : Action(botAI, "iron assembly interrupt action") {}
+    static constexpr char const* Name = "iron assembly interrupt action";
+
+    IronAssemblyInterruptAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -55,7 +65,9 @@ public:
 class IronAssemblyTankAssignmentAction : public AttackAction
 {
 public:
-    IronAssemblyTankAssignmentAction(PlayerbotAI* botAI) : AttackAction(botAI, "iron assembly tank assignment action")
+    static constexpr char const* Name = "iron assembly tank assignment action";
+
+    IronAssemblyTankAssignmentAction(PlayerbotAI* botAI) : AttackAction(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -67,15 +79,19 @@ private:
 class IronAssemblyShieldOfRunesAction : public Action
 {
 public:
-    IronAssemblyShieldOfRunesAction(PlayerbotAI* botAI) : Action(botAI, "iron assembly shield of runes action") {}
+    static constexpr char const* Name = "iron assembly shield of runes action";
+
+    IronAssemblyShieldOfRunesAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class IronAssemblyFusionPunchDispelAction : public Action
 {
 public:
+    static constexpr char const* Name = "iron assembly fusion punch dispel action";
+
     IronAssemblyFusionPunchDispelAction(PlayerbotAI* botAI)
-        : Action(botAI, "iron assembly fusion punch dispel action")
+        : Action(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -86,7 +102,9 @@ public:
 class IronAssemblyRedirectThreatAction : public Action
 {
 public:
-    IronAssemblyRedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, "iron assembly redirect threat action") {}
+    static constexpr char const* Name = "iron assembly redirect threat action";
+
+    IronAssemblyRedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -97,8 +115,10 @@ private:
 class IronAssemblyRuneOfPowerSoakAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "iron assembly rune of power soak action";
+
     IronAssemblyRuneOfPowerSoakAction(PlayerbotAI* botAI)
-        : MovementAction(botAI, "iron assembly rune of power soak action")
+        : MovementAction(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -107,7 +127,9 @@ public:
 class IronAssemblySetDpsPriorityAction : public AttackAction
 {
 public:
-    IronAssemblySetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "iron assembly set dps priority action")
+    static constexpr char const* Name = "iron assembly set dps priority action";
+
+    IronAssemblySetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, Name)
     {
     }
     bool Execute(Event event) override;
@@ -116,7 +138,9 @@ public:
 class IronAssemblyRaidPositionAction : public MovementAction
 {
 public:
-    IronAssemblyRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "iron assembly raid position action") {}
+    static constexpr char const* Name = "iron assembly raid position action";
+
+    IronAssemblyRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:

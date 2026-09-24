@@ -192,7 +192,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 is up to Iron Assembly, in the order it lists.
+**Status:** commits 1-2 landed; commit 3 is up to Flame Leviathan, in the order it lists.
 
 Close each per `CLAUDE.local.md`.
 

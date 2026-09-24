@@ -22,18 +22,6 @@ public:
         creators["flame leviathan enter vehicle"] = &RaidUlduarActionContext::flame_leviathan_enter_vehicle;
         creators["flame leviathan drive"] = &RaidUlduarActionContext::flame_leviathan_drive;
         creators["flame leviathan interrupt vents"] = &RaidUlduarActionContext::flame_leviathan_interrupt_vents;
-        creators["iron assembly reset encounter state action"] = &RaidUlduarActionContext::iron_assembly_reset_encounter_state_action;
-        creators["iron assembly lightning tendrils action"] = &RaidUlduarActionContext::iron_assembly_lightning_tendrils_action;
-        creators["iron assembly overload action"] = &RaidUlduarActionContext::iron_assembly_overload_action;
-        creators["iron assembly rune of death action"] = &RaidUlduarActionContext::iron_assembly_rune_of_death_action;
-        creators["iron assembly interrupt action"] = &RaidUlduarActionContext::iron_assembly_interrupt_action;
-        creators["iron assembly tank assignment action"] = &RaidUlduarActionContext::iron_assembly_tank_assignment_action;
-        creators["iron assembly shield of runes action"] = &RaidUlduarActionContext::iron_assembly_shield_of_runes_action;
-        creators["iron assembly fusion punch dispel action"] = &RaidUlduarActionContext::iron_assembly_fusion_punch_dispel_action;
-        creators["iron assembly redirect threat action"] = &RaidUlduarActionContext::iron_assembly_redirect_threat_action;
-        creators["iron assembly rune of power soak action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_soak_action;
-        creators["iron assembly set dps priority action"] = &RaidUlduarActionContext::iron_assembly_set_dps_priority_action;
-        creators["iron assembly raid position action"] = &RaidUlduarActionContext::iron_assembly_raid_position_action;
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold shed"] = &RaidUlduarActionContext::hodir_biting_cold_shed;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
@@ -128,18 +116,6 @@ private:
     static Action* flame_leviathan_enter_vehicle(PlayerbotAI* ai) { return new FlameLeviathanEnterVehicleAction(ai); }
     static Action* flame_leviathan_drive(PlayerbotAI* ai) { return new FlameLeviathanDriveAction(ai); }
     static Action* flame_leviathan_interrupt_vents(PlayerbotAI* ai) { return new FlameLeviathanInterruptVentsAction(ai); }
-    static Action* iron_assembly_reset_encounter_state_action(PlayerbotAI* ai) { return new IronAssemblyResetEncounterStateAction(ai); }
-    static Action* iron_assembly_lightning_tendrils_action(PlayerbotAI* ai) { return new IronAssemblyLightningTendrilsAction(ai); }
-    static Action* iron_assembly_overload_action(PlayerbotAI* ai) { return new IronAssemblyOverloadAction(ai); }
-    static Action* iron_assembly_rune_of_death_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfDeathAction(ai); }
-    static Action* iron_assembly_interrupt_action(PlayerbotAI* ai) { return new IronAssemblyInterruptAction(ai); }
-    static Action* iron_assembly_tank_assignment_action(PlayerbotAI* ai) { return new IronAssemblyTankAssignmentAction(ai); }
-    static Action* iron_assembly_shield_of_runes_action(PlayerbotAI* ai) { return new IronAssemblyShieldOfRunesAction(ai); }
-    static Action* iron_assembly_fusion_punch_dispel_action(PlayerbotAI* ai) { return new IronAssemblyFusionPunchDispelAction(ai); }
-    static Action* iron_assembly_redirect_threat_action(PlayerbotAI* ai) { return new IronAssemblyRedirectThreatAction(ai); }
-    static Action* iron_assembly_rune_of_power_soak_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakAction(ai); }
-    static Action* iron_assembly_set_dps_priority_action(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityAction(ai); }
-    static Action* iron_assembly_raid_position_action(PlayerbotAI* ai) { return new IronAssemblyRaidPositionAction(ai); }
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_shed(PlayerbotAI* ai) { return new HodirBitingColdShedAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new HodirFrostResistanceAction(ai); }

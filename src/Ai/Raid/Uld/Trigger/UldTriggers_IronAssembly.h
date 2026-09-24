@@ -16,8 +16,10 @@
 class IronAssemblyResetEncounterStateTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "iron assembly reset encounter state trigger";
+
     IronAssemblyResetEncounterStateTrigger(PlayerbotAI* ai)
-        : Trigger(ai, "iron assembly reset encounter state trigger")
+        : Trigger(ai, Name)
     {
     }
     bool IsActive() override;
@@ -26,14 +28,18 @@ public:
 class IronAssemblyLightningTendrilsTrigger : public Trigger
 {
 public:
-    IronAssemblyLightningTendrilsTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly lightning tendrils trigger") {}
+    static constexpr char const* Name = "iron assembly lightning tendrils trigger";
+
+    IronAssemblyLightningTendrilsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IronAssemblyOverloadTrigger : public Trigger
 {
 public:
-    IronAssemblyOverloadTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly overload trigger") {}
+    static constexpr char const* Name = "iron assembly overload trigger";
+
+    IronAssemblyOverloadTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -42,7 +48,9 @@ public:
 class IronAssemblyRuneOfDeathTrigger : public Trigger
 {
 public:
-    IronAssemblyRuneOfDeathTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly rune of death trigger", 200) {}
+    static constexpr char const* Name = "iron assembly rune of death trigger";
+
+    IronAssemblyRuneOfDeathTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 200) {}
     bool IsActive() override;
 };
 
@@ -51,7 +59,9 @@ public:
 class IronAssemblyInterruptTrigger : public Trigger
 {
 public:
-    IronAssemblyInterruptTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly interrupt trigger") {}
+    static constexpr char const* Name = "iron assembly interrupt trigger";
+
+    IronAssemblyInterruptTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -59,7 +69,9 @@ public:
 class IronAssemblyTankAssignmentTrigger : public Trigger
 {
 public:
-    IronAssemblyTankAssignmentTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly tank assignment trigger") {}
+    static constexpr char const* Name = "iron assembly tank assignment trigger";
+
+    IronAssemblyTankAssignmentTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -68,21 +80,27 @@ public:
 class IronAssemblyShieldOfRunesTrigger : public Trigger
 {
 public:
-    IronAssemblyShieldOfRunesTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly shield of runes trigger") {}
+    static constexpr char const* Name = "iron assembly shield of runes trigger";
+
+    IronAssemblyShieldOfRunesTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IronAssemblyFusionPunchDispelTrigger : public Trigger
 {
 public:
-    IronAssemblyFusionPunchDispelTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly fusion punch dispel trigger") {}
+    static constexpr char const* Name = "iron assembly fusion punch dispel trigger";
+
+    IronAssemblyFusionPunchDispelTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IronAssemblyRedirectThreatTrigger : public Trigger
 {
 public:
-    IronAssemblyRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly redirect threat trigger") {}
+    static constexpr char const* Name = "iron assembly redirect threat trigger";
+
+    IronAssemblyRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -91,21 +109,27 @@ public:
 class IronAssemblyRuneOfPowerSoakTrigger : public Trigger
 {
 public:
-    IronAssemblyRuneOfPowerSoakTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly rune of power soak trigger") {}
+    static constexpr char const* Name = "iron assembly rune of power soak trigger";
+
+    IronAssemblyRuneOfPowerSoakTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IronAssemblySetDpsPriorityTrigger : public Trigger
 {
 public:
-    IronAssemblySetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly set dps priority trigger") {}
+    static constexpr char const* Name = "iron assembly set dps priority trigger";
+
+    IronAssemblySetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class IronAssemblyRaidPositionTrigger : public Trigger
 {
 public:
-    IronAssemblyRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "iron assembly raid position trigger") {}
+    static constexpr char const* Name = "iron assembly raid position trigger";
+
+    IronAssemblyRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

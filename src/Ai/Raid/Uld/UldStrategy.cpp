@@ -75,62 +75,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Iron Assembly
     //
-    // The engine stops at the first action that returns true, so this order is a survival ranking.
-    // The three hazards lead, being 20,000 nature, 5000 a second, and 5500 a second respectively.
-    //
-    // The interrupt has to sit above the RAID band, because every class interrupt lives at
-    // ACTION_INTERRUPT (40): Lightning Whirl reaches 100 yd and has no positional answer at all, so
-    // nothing else in the fight can substitute for stopping the cast.
-    //
-    // Below that, tanking outranks damage and damage outranks standing still. Position is last on
-    // purpose and yields as soon as it is parked, which is what leaves a bot free to take the kick.
-    triggers.push_back(new TriggerNode(
-        "iron assembly reset encounter state trigger",
-        { NextAction("iron assembly reset encounter state action", ACTION_EMERGENCY + 10) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly overload trigger",
-        { NextAction("iron assembly overload action", ACTION_EMERGENCY + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly lightning tendrils trigger",
-        { NextAction("iron assembly lightning tendrils action", ACTION_EMERGENCY + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly rune of death trigger",
-        { NextAction("iron assembly rune of death action", ACTION_EMERGENCY + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly interrupt trigger",
-        { NextAction("iron assembly interrupt action", ACTION_EMERGENCY + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly tank assignment trigger",
-        { NextAction("iron assembly tank assignment action", ACTION_RAID + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly shield of runes trigger",
-        { NextAction("iron assembly shield of runes action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly fusion punch dispel trigger",
-        { NextAction("iron assembly fusion punch dispel action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly redirect threat trigger",
-        { NextAction("iron assembly redirect threat action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly rune of power soak trigger",
-        { NextAction("iron assembly rune of power soak action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly set dps priority trigger",
-        { NextAction("iron assembly set dps priority action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "iron assembly raid position trigger",
-        { NextAction("iron assembly raid position action", ACTION_RAID) }));
+    UldIronAssemblyDefinition().AddTriggerNodes(triggers);
 
     //
     // Kologarn
@@ -577,15 +522,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new MimironStormCooldownHoldMultiplier(botAI));
     multipliers.push_back(new MimironVx001FacingGuardMultiplier(botAI));
 
-    // The Iron Assembly owns every target in the fight, its hazard dodges must not be undone by a
-    // generic mover walking the bot back into the blast or by a gap-closer teleporting it there, and
-    // in hard mode the burst is saved for the member that reaches phase 3
-    multipliers.push_back(new IronAssemblyDisableAutomaticTargetingMultiplier(botAI));
-    multipliers.push_back(new IronAssemblyMovementGuardMultiplier(botAI));
-    multipliers.push_back(new IronAssemblyChargeGuardMultiplier(botAI));
-    multipliers.push_back(new IronAssemblyDisableTankFaceMultiplier(botAI));
-    multipliers.push_back(new IronAssemblyHoldDpsCooldownsMultiplier(botAI));
-    multipliers.push_back(new IronAssemblyTauntGuardMultiplier(botAI));
+    UldIronAssemblyDefinition().AddMultipliers(botAI, multipliers);
 
     // Thorim keeps a bailing melee out of the Runic Barrier damage shield, picks every non-tank
     // target in code so the generic pickers have to be shut out, and stops the generic movers
