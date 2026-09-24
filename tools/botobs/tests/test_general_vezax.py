@@ -28,6 +28,7 @@ VAPOR = 4294969154
 AGONY = 5001  # ranged, block L
 TREE = 5002   # heal, block R
 BULWARK = 5003
+FEL = 5004    # ranged, slotted in block R, never inside the gate
 
 
 def snap(when: int, agony_target: int, field: bool) -> dict:
@@ -49,7 +50,8 @@ def vezax_pull() -> list[dict]:
          "boss": "general-vezax", "roster": [
              {"g": AGONY, "n": "Agony", "r": "ranged", "c": "warlock", "h": 0},
              {"g": TREE, "n": "Tree", "r": "heal", "c": "druid", "h": 0},
-             {"g": BULWARK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0}]},
+             {"g": BULWARK, "n": "Bulwark", "r": "tank", "c": "warrior", "h": 0},
+             {"g": FEL, "n": "Fel", "r": "ranged", "c": "warlock", "h": 0}]},
         {"t": 0, "e": "pull", "boss": "general-vezax", "src": "bossstate"},
         {"t": 1, "e": "unit", "g": BOSS, "en": gv.NPC_VEZAX, "n": "General Vezax", "b": 1},
         {"t": 1, "e": "unit", "g": VAPOR, "en": gv.NPC_SARONITE_VAPORS, "n": "Saronite Vapors"},
@@ -58,6 +60,10 @@ def vezax_pull() -> list[dict]:
         {"t": 10, "e": "note", "g": BULWARK, "k": "vezax.block", "txt": "tank"},
         {"t": 10, "e": "note", "g": AGONY, "k": "vezax.formation", "txt": "on"},
         {"t": 10, "e": "note", "g": TREE, "k": "vezax.formation", "txt": "on"},
+        # Fel holds slot 12 and never gets a block row. The wipe reset erases it, written as "0".
+        {"t": 10, "e": "note", "g": FEL, "k": "vezax.slot", "txt": "12"},
+        {"t": 10, "e": "note", "g": FEL, "k": "vezax.formation", "txt": "outside"},
+        {"t": 14900, "e": "note", "g": FEL, "k": "vezax.slot", "txt": "0"},
 
         # Tree carries the mark 1 s to 11 s. The 12.5 s tick is the late one that trails the aura.
         {"t": 1000, "e": "aura", "d": TREE, "s": BOSS, "sp": gv.SPELL_MARK_OF_THE_FACELESS, "r": 0},
@@ -145,6 +151,15 @@ class SyntheticPull(unittest.TestCase):
         agony = next(row for row in rows if row["guid"] == AGONY)
         self.assertAlmostEqual(agony["median"], 30.0)
         self.assertEqual(agony["inside"], 0.0)
+
+    def test_a_slotted_bot_that_never_got_inside_the_gate_still_counts(self):
+        self.assertEqual(gv.blocks(self.trace)[FEL], "R")
+        _, rows = gv.band_rows(self.trace)
+        fel = next(row for row in rows if row["guid"] == FEL)
+        self.assertIsNone(fel["median"])
+        self.assertEqual(fel["on"], 0.0)
+        agony = next(row for row in rows if row["guid"] == AGONY)
+        self.assertAlmostEqual(agony["on"], 1.0, places=2)
 
     def test_a_kicked_searing_flames_is_not_counted_as_one_that_landed(self):
         starts, landed, hits = gv.searing_flames(self.trace, BOSS)

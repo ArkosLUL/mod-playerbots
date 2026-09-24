@@ -135,10 +135,10 @@ constexpr uint8 ULDUAR_VEZAX_TOTAL_SLOTS = 2 * ULDUAR_VEZAX_GROUP_SLOTS;
 constexpr float ULDUAR_VEZAX_SLOT_TOLERANCE = 1.2f;
 constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 
-// The hall runs 70 yd north and west of the anchor, so this stops well short of any wall. It is not
-// meant to reach the entrance: outside it the movement multiplier is inert, so generic movement
-// carries a bot in and the gate opens on arrival. Widening it is what would put a bot on a path
-// through a wall, which is why it stays where it is.
+// Measured from him, and it has to hold everything the camp and reach spell put a caster on: reach
+// spell stops at 38 and the widest strafed slot sits at 41.4. That's what lets generic movement carry
+// a bot in so the gate opens on arrival. Widening it is what would put a bot on a path through a
+// wall, which is why it stays where it is.
 constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
 constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
 

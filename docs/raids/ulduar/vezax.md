@@ -178,9 +178,14 @@ the formation intact.
 out-of-field time, within 20 for 49% and within 25 for 57% (`--field`). Past 25 it outgrows the local
 hazard sweep, and a wider cap lets one group cross to the other's field. The move runs at
 `MOVEMENT_FORCED`: at `MOVEMENT_COMBAT` a quarter of soak moves were swallowed by the dodge's own
-destination, still latched in `IsWaitingForLastMove` long after the dodge stopped wanting it. Safe only
-because the dodge outranks the soak in the ladder, so the soak runs only on a tick the dodge declined,
-and it already refuses any field under a pending missile.
+destination, still latched in `IsWaitingForLastMove` long after the dodge stopped wanting it.
+
+**The ladder does not keep that walk off the dodge.** Forced does not outrank forced, so a soak walk
+in flight held **15 dodge moves** in one pull, two of those bots hit, and a mark move for 1.7s in
+the next. The dodge and the mark therefore drop any walk not heading within 3 yd of their own spot
+before moving, keeping their own so `IsDuplicateMove` still stops the re-issue. The mark does so
+only while no crash is landing on it, or it would take over the dodge's walk on the ticks the dodge
+declines as a duplicate. The soak still refuses any field under a pending missile.
 
 **Everyone with a mana bar soaks, healers included**, on the same test that hands out camp slots. The
 −75% healing done is real — a field is 0.25x per cast and 0.83x per point of mana — but nothing else
@@ -242,11 +247,18 @@ still keys on `IsInCombat` on the boss.
 
 **Positioning is gated on the room, not just on presence.** Vezax is visible from outside his hall, and
 a presence gate had bots prepositioning through walls while their generic movers were already zeroed.
-`VezaxFormationActive` wants the bot inside a 45 yd bubble around the anchor plus a 10 yd height band.
-The hall runs 70 yd north and west, so the bubble stops short of the entrance on purpose: outside it
-the movement rule is inert, generic movement carries a bot in, and the gate opens on arrival. Widening it
-is what puts a bot back on a path through a wall. Resistance stays presence-gated, the state reset
-fires once he is dead or out of combat, and everything else is combat-gated.
+`VezaxFormationActive` wants the bot within 45 yd of **him**, plus a 10 yd height band. Outside it
+the movement rule is inert, generic movement carries a bot in, and the gate opens on arrival, which
+holds only while the gate contains reach spell's 38 yd stop and the widest strafed slot (41.4), both
+measured from him. Widening it is what puts a bot back on a path through a wall; navprobe reads hall
+floor at 45 yd all round both spots he has settled on. Resistance stays presence-gated, the state
+reset fires once he is dead or out of combat, and everything else is combat-gated.
+
+**Measured from the anchor, the gate broke the camp and the dodge with it.** On 2026-09-24 he
+settled 12.5 yd north of it, which put rows 3-4 and every reach-spell stop outside. 6 of 14
+casters and healers never got inside, and the three holding slots left at 0:20, when the soak
+walked them into a field 45.8 yd out. From then on 13 bots stood on one point, and a crash on any
+of them hit up to 14.
 
 `GetVezax` reads the instance object map (`ULD_DATA_VEZAX`) rather than sweeping for the entry:
 `PossibleTargetsValue` recalculates a 100 yd `ignoreLos` search on **every** call, and the movement
@@ -279,7 +291,8 @@ ally, boss health per window), `--crash` (target, dodgers per block), `--field` 
 casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap returns), `--vapors`,
 `--band`. Its banner names declared probes the pull never wrote. No probe was added for it: fields are
 `snap.hz`, crashes `haz`, the mark an aura, the leech `dmg`, vapor targeting `snap.u[7]`; the vapors
-themselves are never sampled.
+themselves are never sampled. The camp is read from `vezax.slot` as well as `vezax.block`, which is
+only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was open.
 
 **Of the generic views, `--vetoes` covers the four multipliers and `--idle` counts the cast hold as
 idle by design.** `--from`, `--band`, `--moves` and `--where` measure from a fixed point, but the camp
@@ -310,6 +323,10 @@ shortfall falls on the one mana source that works. Cause not yet found.
 **A fire mage has no mana plan here.** Same field uptime as the arcane one and 2.8× the cost per cast,
 so it hits 0% mana at 1:06 and wands for the rest — and it still casts Mana Shield, which spends the
 one resource that cannot be replaced. Class-side, not Vezax-side.
+
+**A mana-using main tank runs dry.** Aura of Despair blocks Divine Plea like every other return: a
+protection paladin hit 0% at 1:12 on 2026-09-24, lost threat, and a warlock pulled Vezax into the
+camp at 1:26. The bear in the next pull held him 83.5% of the time. Nothing here treats it.
 
 **Melee do not dodge Shadow Crash.** `DodgesShadowCrash` requires `IsRanged`, and the table above says
 why that is not the same as being safe. One melee took a crash hit in the last traced pull.

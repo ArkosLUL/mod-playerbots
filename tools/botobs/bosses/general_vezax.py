@@ -78,6 +78,10 @@ ANCHOR = anchor("ULDUAR_VEZAX_ANCHOR")
 BAND_FLOOR = 15.0 + 8.0 + 1.5
 BAND_CEILING = 28.5 + 8.0 + 1.5
 
+# ULDUAR_VEZAX_GROUP_SLOTS, a product of two uint8 constants the float parser cannot read: slots
+# [0,10) are group L and [10,20) group R.
+GROUP_SLOTS = 10
+
 MARK_WINDOW_MS = 10000
 # the last leech tick lands ~1.6 s after the aura drops
 LEECH_SLACK_MS = 2000
@@ -99,9 +103,28 @@ def boss_guid(trace: Trace) -> int | None:
     return guids[0] if guids else None
 
 
+def slots(trace: Trace) -> dict[int, int]:
+    """First `vezax.slot` per bot, the assignment it held for the pull. First rather than latest: an
+    erase is written as "0", which is also a real slot."""
+    out: dict[int, int] = {}
+    for rec in notes(trace, "vezax.slot"):
+        try:
+            out.setdefault(rec["g"], int(rec.get("txt", "")))
+        except ValueError:
+            continue
+    return out
+
+
 def blocks(trace: Trace) -> dict[int, str]:
-    """Latest `vezax.block` per bot. It re-emits every pull, unlike `vezax.slot`."""
-    return {rec["g"]: str(rec.get("txt", "")) for rec in notes(trace, "vezax.block")}
+    """Latest `vezax.block` per bot, else the group its slot sits in.
+
+    The block is only written while the formation gate is open, so a slotted bot that never got inside
+    has nothing but its slot. `vezax.slot` goes silent on some older traces, which is why it is the
+    fallback and not the source.
+    """
+    out = {guid: ("R" if slot >= GROUP_SLOTS else "L") for guid, slot in slots(trace).items()}
+    out.update({rec["g"]: str(rec.get("txt", "")) for rec in notes(trace, "vezax.block")})
+    return out
 
 
 def camp(trace: Trace) -> set[int]:
@@ -693,14 +716,16 @@ def band_rows(trace: Trace, samples: Samples | None = None) -> tuple[list[float]
             row, him = samples.row(guid, when), samples.row(boss, when)
             if row and him and row[5] > 0:
                 radii.append(dist2(row[1:3], him[1:3]))
-        if radii:
-            out.append({
-                "guid": guid,
-                "block": block.get(guid, "-"),
-                "median": statistics.median(radii),
-                "inside": sum(1 for r in radii if r < BAND_FLOOR) / len(radii),
-                "past": sum(1 for r in radii if r > BAND_CEILING) / len(radii),
-            })
+        # Kept even with no radii: a slotted bot that never got inside the gate is the finding.
+        on = sum(max(0, min(stop, end) - max(start, 0)) for start, stop in formation.get(guid, []))
+        out.append({
+            "guid": guid,
+            "block": block.get(guid, "-"),
+            "on": on / end if end > 0 else 0.0,
+            "median": statistics.median(radii) if radii else None,
+            "inside": sum(1 for r in radii if r < BAND_FLOOR) / len(radii) if radii else None,
+            "past": sum(1 for r in radii if r > BAND_CEILING) / len(radii) if radii else None,
+        })
     return drift, out
 
 
@@ -714,15 +739,22 @@ def show_band(trace: Trace) -> None:
     print(f"  boss from ULDUAR_VEZAX_ANCHOR: median {statistics.median(drift):.1f} yd, max {max(drift):.1f}")
     print("  so postmortem --from/--band measure the camp against a point he has walked away from")
     if not rows:
-        print("  no camp member ever had the formation on")
+        print("  no camp member in the trace")
         return
 
-    print(f"\n  {'bot':14} {'role':6} {'blk':4} {'median':>7} {'<' + format(BAND_FLOOR, '.1f'):>7}"
+    print(f"\n  {'bot':14} {'role':6} {'blk':4} {'on':>5} {'median':>7} {'<' + format(BAND_FLOOR, '.1f'):>7}"
           f" {'>' + format(BAND_CEILING, '.0f'):>7}")
     for row in rows:
+        figures = (f"{'-':>7} {'-':>7} {'-':>7}" if row["median"] is None else
+                   f"{row['median']:7.1f} {row['inside'] * 100:6.1f}% {row['past'] * 100:6.1f}%")
         print(f"  {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {row['block']:4}"
-              f" {row['median']:7.1f} {row['inside'] * 100:6.1f}% {row['past'] * 100:6.1f}%")
-    print(f"\n  radius from the boss where he stood, formation on only; slots sit at {CAMP_RADIUS:.1f}")
+              f" {row['on'] * 100:4.0f}% {figures}")
+    never = sum(1 for row in rows if row["median"] is None)
+    if never:
+        print(f"\n  {never} of {len(rows)} never inside the formation gate:"
+              " no slot, no dodge, no movement guard")
+    print(f"\n  on is the share of the pull the formation gate was open; radius from the boss where he"
+          f" stood, gate open only; slots sit at {CAMP_RADIUS:.1f}")
 
 
 SECTIONS = (

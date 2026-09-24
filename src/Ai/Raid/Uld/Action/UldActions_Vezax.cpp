@@ -31,6 +31,21 @@
 
 using namespace EncounterHelpers;
 
+namespace
+{
+// Forced doesn't outrank forced, so a soak walk in flight holds a dodge or a mark move until it lands.
+// Our own walk is kept: it's what lets IsDuplicateMove stop the re-issue on the next tick.
+void ReleaseOtherWalk(PlayerbotAI* botAI, Position const& spot)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (last.lastMoveShort.GetExactDist(spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ()) >
+        ULDUAR_VEZAX_MARK_SPOT_TOLERANCE)
+    {
+        last.clear();
+    }
+}
+}  // namespace
+
 bool VezaxResetEncounterStateAction::Execute(Event /*event*/)
 {
     // One bot drops the whole instance entry; everyone else only lets go of its own slot, so a bot
@@ -44,6 +59,16 @@ bool VezaxMarkOfTheFacelessAction::Execute(Event /*event*/)
     Position spot;
     if (!TryGetVezaxMarkSpot(bot, spot))
         return false;
+
+    // Not while a crash is landing on the bot: the dodge's walk is the one in flight then, and its
+    // action declines as a duplicate, so without this the mark would take it over.
+    Position impact;
+    if (!TryGetVezaxShadowCrashImpact(botAI, impact) ||
+        bot->GetExactDist2d(impact.GetPositionX(), impact.GetPositionY()) >
+            ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS)
+    {
+        ReleaseOtherWalk(botAI, spot);
+    }
 
     // FORCED, not COMBAT: IsWaitingForLastMove only yields to a strictly higher priority, so at
     // COMBAT any dodge move still in flight swallows this one - and the debuff is ten seconds long.
@@ -83,6 +108,7 @@ bool VezaxShadowCrashDodgeAction::Execute(Event /*event*/)
         return false;
     }
 
+    ReleaseOtherWalk(botAI, spot);
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
@@ -154,9 +180,9 @@ bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
     }
 
     // FORCED, not COMBAT: the dodge's own destination stays latched in IsWaitingForLastMove for
-    // seconds after it has stopped wanting it, and that swallowed a quarter of these moves. Safe to
-    // outrank it, because the dodge sits far above this in the ladder - the soak only ever runs on a
-    // tick the dodge declined, and it has already refused any field under a pending missile.
+    // seconds after it has stopped wanting it, and that swallowed a quarter of these moves. The dodge
+    // and the mark drop this walk before they move, and the soak already refuses any field under a
+    // pending missile.
     return MoveTo(bot->GetMapId(), field.position.GetPositionX(), field.position.GetPositionY(),
                   field.position.GetPositionZ(), false, false, false, true,
                   MovementPriority::MOVEMENT_FORCED, true);

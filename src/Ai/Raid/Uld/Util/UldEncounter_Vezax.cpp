@@ -182,16 +182,17 @@ VezaxFormation ReadVezaxFormation(PlayerbotAI* botAI)
     if (!bot)
         return VezaxFormation::Outside;
 
-    bool const inRoom =
-        bot->GetExactDist2d(&ULDUAR_VEZAX_ANCHOR) <= ULDUAR_VEZAX_ARENA_RADIUS &&
-        std::fabs(bot->GetPositionZ() - ULDUAR_VEZAX_ANCHOR.GetPositionZ()) <=
-            ULDUAR_VEZAX_ARENA_HEIGHT;
-    if (!inRoom)
-        return VezaxFormation::Outside;
-
     Unit* vezax = GetVezax(botAI);
     if (!vezax)
         return VezaxFormation::NoBoss;
+
+    // Off him, not his spawn: every slot and reach spell's stop are measured from him, and this has to
+    // hold all of them wherever he settles.
+    bool const inRoom =
+        bot->GetExactDist2d(vezax) <= ULDUAR_VEZAX_ARENA_RADIUS &&
+        std::fabs(bot->GetPositionZ() - vezax->GetPositionZ()) <= ULDUAR_VEZAX_ARENA_HEIGHT;
+    if (!inRoom)
+        return VezaxFormation::Outside;
 
     return vezax->IsInCombat() ? VezaxFormation::On : VezaxFormation::Idle;
 }
