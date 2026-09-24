@@ -151,6 +151,12 @@ bool VezaxAnimusRedirectTrigger::IsActive()
     if (!redirect || !IsVezaxHardModeActive(botAI) || !VezaxEncounterActive(botAI))
         return false;
 
+    // Not before the bot is on the Animus: the window opens on its next hit, and a last swing at Vezax
+    // would open it there.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || target->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS)
+        return false;
+
     uint32 ageMs = 0;
     if (!TryGetVezaxAnimusAge(botAI, ageMs) || ageMs >= ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS)
         return false;
@@ -164,6 +170,16 @@ bool VezaxAnimusRedirectTrigger::IsActive()
         return false;
 
     return botAI->CanCastSpell(redirect, mainTank);
+}
+
+bool VezaxAnimusBringBackTrigger::IsActive()
+{
+    if (botAI->IsTank(bot) || !IsVezaxAnimusOnBot(bot))
+        return false;
+
+    Player* mainTank = GetGroupMainTank(bot);
+    return mainTank && mainTank != bot &&
+           bot->GetExactDist2d(mainTank) > ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS;
 }
 
 bool VezaxShadowCrashSoakTrigger::IsActive()
@@ -209,5 +225,10 @@ bool VezaxHoldTargetTrigger::IsActive()
 
 bool VezaxRaidPositionTrigger::IsActive()
 {
+    // Whoever the Animus is hitting stays with the main tank until he has it back, or the slot would
+    // walk it straight back out of his reach.
+    if (!botAI->IsTank(bot) && IsVezaxAnimusOnBot(bot))
+        return false;
+
     return VezaxFormationActive(botAI);
 }

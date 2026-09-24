@@ -35,7 +35,8 @@ void DefineVezax(EncounterBuilder& e)
     // person its leech skips, so it's never the one taking damage.
     //
     // The RAID band is the reward half, and soaking a field is worth nothing to a bot that is already
-    // dying. The Animus redirect goes right above the switch to it, so it's out before the first hit.
+    // dying. The Animus redirect needs the bot on it already, so it never competes with the switch.
+    // Bringing the Animus back to the tank sits above the soak, or its victim would lead it into the camp.
     // Position is last on purpose, and yields as soon as it's parked, so the class interrupts at
     // ACTION_INTERRUPT (40) still get a tick.
     e.Node<VezaxResetEncounterStateTrigger, VezaxResetEncounterStateAction>(ACTION_EMERGENCY + 10);
@@ -48,6 +49,7 @@ void DefineVezax(EncounterBuilder& e)
     e.Node<VezaxAnimusRedirectTrigger, VezaxAnimusRedirectAction>(ACTION_RAID + 6);
     e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 5);
     e.Node<VezaxHoldTargetTrigger, VezaxHoldTargetAction>(ACTION_RAID + 4);
+    e.Node<VezaxAnimusBringBackTrigger, VezaxAnimusBringBackAction>(ACTION_RAID + 3, EncounterRow::Mover);
     e.Node<VezaxShadowCrashSoakTrigger, VezaxShadowCrashSoakAction>(ACTION_RAID + 2, EncounterRow::Mover);
     e.Node(
         "vezax shadow resistance",
@@ -88,6 +90,10 @@ void DefineVezax(EncounterBuilder& e)
             {"misdirection on main tank", "tricks of the trade", "tricks of the trade on main tank"});
 
     e.Multiplier<VezaxHoldCastOutsideFieldMultiplier>(Family::Melee | Family::Spell);
+
+    // Nothing generic holds a dps bot under the tank's threat, since no bot ever gets the "threat"
+    // strategy, and the Animus can't be taunted back once one passes him.
+    e.Multiplier<VezaxAnimusThreatMultiplier>(Family::Melee | Family::Spell);
 
     e.Tick(TickVezax);
 }

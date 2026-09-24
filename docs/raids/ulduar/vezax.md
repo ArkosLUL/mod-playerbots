@@ -218,9 +218,10 @@ only hazard here with a deadline. The interrupt is `+8`: losing a kick costs the
 fire at once. Then the two halves of Mark of the Faceless — **break at `+7`, carry at `+6`** — in that
 order, because the bot holding the mark is the one person its leech skips and so is never the one
 taking damage. Surge of darkness closes the EMERGENCY band at `+5`. The RAID band is the reward half
-and numbers separately: animus redirect `+6`, animus `+5`, hold-target `+4`, field soak `+2`,
-resistance `+1`, position last. Hold-target sits under the animus on purpose — in hard mode both
-fire on a bot that is off the animus, and the animus is the correct answer.
+and numbers separately: animus redirect `+6`, animus `+5`, hold-target `+4`, animus bring-back `+3`,
+field soak `+2`, resistance `+1`, position last. Hold-target sits under the animus on purpose — in
+hard mode both fire on a bot that is off the animus, and the animus is the correct answer.
+Bring-back sits above the soak, or the Animus's victim leads it into the camp.
 
 **Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40),
 below `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every
@@ -324,26 +325,42 @@ each bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420
 **50,000 yd**, so the stacking shadow-damage debuff is room-wide and the only answer is killing the
 Animus faster.
 
-**Only threat holds the Animus**, and it spawns on the main tank's anchor. On 2026-09-24 the whole
-raid switched in the same 0.2s: it spent 14% of its life on a tank, the first at +58.6s, and lust,
-which waits for a tank to hold it 3s, went 62s late.
+**Only threat holds the Animus**, and it spawns on the main tank's anchor. From outside its melee
+range a new victim needs 130% of the current one's threat, 110% inside
+(`ThreatManager.cpp:657-663`). Two pulls on 2026-09-24:
+
+- **Whole raid at once:** 14% of its life on a tank, the first at +58.6s.
+- **Tanks first:** a tank at +1.0s and 27.9% share, but a moonkin 33 yd out took it at +14.5s and
+  kept it 51s. Nothing held her under the tank's threat, her Starfall at Vezax hit the Animus for
+  10s before her switch, and Eclipse and Heroism ran from +0.
+
+What holds it now:
 
 - **Tanks, hunters and rogues switch at once; the rest wait** until a tank has been its victim 2s
   (`TankHasHeldBoss`), capped at 6s after the summon so a dead tank never parks the raid on the
   Barrier. The redirecting classes can't wait on Vezax: their hits there would spend the redirect.
 - **Redirects are saved, then aimed.** `vezax save redirects for the animus` blocks Misdirection and
   Tricks from the fifth summon, 38s+ before the spawn against a 30s cooldown, and
-  `vezax animus redirect` casts both on the main tank in its first 6s. The generic ones follow the
-  caster's current target: that day Tricks went to a dps 0.6s before the spawn, and that dps had
-  it 1s in.
+  `vezax animus redirect` casts both on the main tank in its first 6s, once the caster is on the
+  Animus, because the window opens on the next hit: a Tricks cast on Vezax lost 2.7 of its 6s
+  there. The generic ones follow the caster's current target: that day Tricks went to a dps 0.6s
+  before the spawn, and that dps had it 1s in.
+- **Dps hold at 90% of the main tank's threat** (`vezax animus threat multiplier`): damage from
+  non-tank, non-healer bots on the Animus, read off its threat list. It leaves room for a cast in
+  flight and lets him retake it at 110%.
+- **Its victim brings it back** (`vezax animus bring back`): the main tank stays on the anchor,
+  since chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the
+  position node stands down for that bot. In the second pull the position node walked him back 5
+  times from the chase.
 
 **Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first
 vapor death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
 `VezaxVaporListenerScript` because the script keeps its own flag private.
 
 - **Lust.** On 2026-09-24 Heroism at 0:03 went on getting into position, 0.48 %/s during it against
-  0.49 after, and he was at 11.1% at the sixth summon with the Animus 8s off. The burst gate still
-  wants a tank holding the Animus 3s before it goes.
+  0.49 after, and he was at 11.1% at the sixth summon with the Animus 8s off. At the Animus it races
+  the switch: this hold lifts on the summon cast, and the burst gate wants a tank on the caster's
+  own target for 3s. Still on Vezax it went at +0; already on an untanked Animus it waited 62s.
 - **Starfall.** Its stars pick two random enemies in line of sight within 30 yd, which no target
   guard sees, and killed a vapor that day. Held for the whole window, not only with one in range:
   a star hit a vapor 0.13s after it spawned.
@@ -365,10 +382,12 @@ one resource that cannot be replaced. Class-side, not Vezax-side.
 
 **A mana-using main tank runs dry.** Aura of Despair blocks Divine Plea like every other return: a
 protection paladin hit 0% at 1:12 on 2026-09-24, lost threat, and a warlock pulled Vezax into the
-camp at 1:26. The bear in the next pull held him 83.5% of the time. Nothing here treats it.
+camp at 1:26. The bear in the next pull held him 83.5% of the time. As off-tank it adds nothing to
+the Animus either: 0.6% mana from 2:30 and a first hit at +19s. Nothing here treats it.
 
 **Melee do not dodge Shadow Crash.** `DodgesShadowCrash` requires `IsRanged`, and the table above says
 why that is not the same as being safe. Beside Vezax it cost one hit a pull; chasing an untanked
-Animus into the camp at 13 and 30 Profound Darkness stacks, one crash killed 6 melee and another 5.
+Animus into the camp, one crash killed 6 melee and another 5 at 13 and 30 Profound Darkness stacks,
+then 4 and 2 the next pull.
 Holding it at the anchor is the answer; add a melee dodge only if `--animus` shows it held and
 `--crash` still shows melee hits after the spawn.

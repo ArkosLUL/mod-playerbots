@@ -41,4 +41,14 @@ public:
     float GetValue(Action* action) override;
 };
 
+// The Animus is taunt-immune, so only the main tank's threat keeps it. A dps bot on it holds its
+// damage once it gets close to his, which also lets him win it back from whoever pulled it.
+class VezaxAnimusThreatMultiplier : public Multiplier
+{
+public:
+    VezaxAnimusThreatMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "vezax animus threat multiplier") {}
+
+    float GetValue(Action* action) override;
+};
+
 #endif

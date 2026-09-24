@@ -621,6 +621,18 @@ char const* VezaxAnimusRedirectSpell(Player* bot)
     }
 }
 
+bool IsVezaxAnimusOnBot(Player* bot)
+{
+    if (!bot)
+        return false;
+
+    for (Unit* attacker : bot->getAttackers())
+        if (attacker->GetEntry() == NPC_VEZAX_SARONITE_ANIMUS && attacker->GetVictim() == bot)
+            return true;
+
+    return false;
+}
+
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 {
     if (!bot)

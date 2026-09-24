@@ -93,13 +93,24 @@ private:
     BurstHoldState tankHold;
 };
 
-// Hunter or rogue, Animus just summoned: redirect onto the main tank before the first hit.
+// Hunter or rogue already on the Animus, in its first 6s: redirect onto the main tank.
 class VezaxAnimusRedirectTrigger : public Trigger
 {
 public:
     static constexpr char const* Name = "vezax animus redirect";
 
     VezaxAnimusRedirectTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// The Animus is hitting a non-tank. The main tank can't go to it without dragging Vezax off the anchor,
+// so its victim brings it to him.
+class VezaxAnimusBringBackTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "vezax animus bring back";
+
+    VezaxAnimusBringBackTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

@@ -24,6 +24,7 @@
 #include "SharedDefines.h"
 #include "Spell.h"
 #include "SpellMgr.h"
+#include "ThreatManager.h"
 #include "Timer.h"
 #include "UldActions.h"
 #include "UldEncounter_Vezax.h"
@@ -36,6 +37,16 @@
 #include <string>
 
 using namespace EncounterHelpers;
+
+namespace
+{
+bool IsVezaxDamageAction(Action* action)
+{
+    return dynamic_cast<MeleeAction*>(action) ||
+           (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastBuffSpellAction*>(action) &&
+            !dynamic_cast<CastHealingSpellAction*>(action));
+}
+}  // namespace
 
 float VezaxSuppressLifeTapMultiplier::GetValue(Action* action)
 {
@@ -60,11 +71,7 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
     // Nothing exempts the class interrupts, and nothing needs to. Searing Flames is the only
     // interruptible cast Vezax has, and its own node sits above this one and casts through
     // botAI->CastSpell rather than a CastSpellAction, so a multiplier never sees it.
-    bool const isDamage =
-        dynamic_cast<MeleeAction*>(action) ||
-        (dynamic_cast<CastSpellAction*>(action) && !dynamic_cast<CastBuffSpellAction*>(action) &&
-         !dynamic_cast<CastHealingSpellAction*>(action));
-    if (!isDamage)
+    if (!IsVezaxDamageAction(action))
         return 1.0f;
 
     if (!VezaxEncounterActive(botAI))
@@ -74,4 +81,24 @@ float VezaxHoldCastOutsideFieldMultiplier::GetValue(Action* action)
     // by 11-15% of uptime, and a bot inside a field without it would hold its casts for something it
     // cannot influence.
     return bot->HasAura(SPELL_VEZAX_SHADOW_CRASH_FIELD) ? 1.0f : 0.0f;
+}
+
+float VezaxAnimusThreatMultiplier::GetValue(Action* action)
+{
+    if (!action || botAI->IsTank(bot) || botAI->IsHeal(bot) || !IsVezaxDamageAction(action))
+        return 1.0f;
+
+    Unit* animus = AI_VALUE(Unit*, "current target");
+    if (!animus || animus->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS || !animus->IsAlive())
+        return 1.0f;
+
+    Player* mainTank = GetGroupMainTank(bot);
+    if (!mainTank || mainTank == bot)
+        return 1.0f;
+
+    // Off the threat list, not the "threat" value: that one is a uint8 percentage, and a bot far enough
+    // past the tank to be holding the Animus wraps around to a small number.
+    ThreatManager& threat = animus->GetThreatMgr();
+    float const own = threat.GetThreat(bot);
+    return own > 0.0f && own >= ULDUAR_VEZAX_ANIMUS_THREAT_SHARE * threat.GetThreat(mainTank) ? 0.0f : 1.0f;
 }

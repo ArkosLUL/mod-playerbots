@@ -75,6 +75,12 @@ constexpr uint32 ULDUAR_VEZAX_ANIMUS_HOLD_CAP_MS = 6000;
 // Tricks, so saving them from here has both ready when it lands.
 constexpr uint8 ULDUAR_VEZAX_REDIRECT_SAVE_SUMMON = 5;
 constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
+// The Animus changes target at 110% of its victim's threat from melee range and 130% from further out.
+// Holding dps at 90% of the main tank leaves room for a cast already in flight, and lets him take it
+// back at 110% from whoever pulled it.
+constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
+// Close enough that the Animus, following its victim, ends up in the main tank's melee range.
+constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
 
 // The Shadow Crash field (63277) is 8 yd, plus a yard of slack since a bot that stops exactly on the
 // boundary is still inside it.
@@ -293,6 +299,8 @@ bool VezaxAnimusDue(PlayerbotAI* botAI);
 bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs);
 // Misdirection for a hunter, Tricks of the Trade for a rogue, nullptr for anyone else.
 char const* VezaxAnimusRedirectSpell(Player* bot);
+// The Animus is attacking this bot. Reads the bot's own attacker set, cheap enough for every tick.
+bool IsVezaxAnimusOnBot(Player* bot);
 
 // Somewhere clear of that impact and still inside the band this bot's role is allowed to stand in.
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);

@@ -161,6 +161,17 @@ bool VezaxAnimusRedirectAction::Execute(Event /*event*/)
     return botAI->CastSpell(redirect, mainTank);
 }
 
+bool VezaxAnimusBringBackAction::Execute(Event /*event*/)
+{
+    Player* mainTank = GetGroupMainTank(bot);
+    if (!mainTank)
+        return false;
+
+    // FORCED: a dodge destination stays latched for seconds after the dodge and swallows a COMBAT move.
+    return MoveTo(bot->GetMapId(), mainTank->GetPositionX(), mainTank->GetPositionY(), mainTank->GetPositionZ(),
+                  false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
+}
+
 bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
 {
     std::vector<VezaxHazard> hazards;

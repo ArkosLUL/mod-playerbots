@@ -104,6 +104,17 @@ public:
     bool Execute(Event event) override;
 };
 
+// Walk to the main tank, with the Animus following.
+class VezaxAnimusBringBackAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "vezax animus bring back action";
+
+    VezaxAnimusBringBackAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 // Walk into the nearest Shadow Crash field and hold it.
 class VezaxShadowCrashSoakAction : public MovementAction
 {

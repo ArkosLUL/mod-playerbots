@@ -545,6 +545,11 @@ Related traps:
   swung yet, and Tricks goes to the top DPS instead of the tank. Measured on Mimiron: the buff landed
   on the hardest-hitting melee at 13.5-15.5 s and that bot pulled the boss 2-3 s later, in all three
   pulls. **Still open** — encounters work around it by suppressing the smart-target node.
+- **No bot has a threat brake.** `ThreatStrategy` stops damage at 80% of the top tank's threat, but
+  `AiFactory` only ever removes `threat` and no config adds it, so dps hit at full rate however
+  close they get. An encounter that needs one writes its own multiplier (Vezax's Animus) and reads
+  `GetThreatMgr().GetThreat()` directly: `ThreatValue` is a `uint8` percentage that overflows past
+  255%, so the bot furthest past the tank can read low.
 
 ## Before the pull, and out of combat
 
