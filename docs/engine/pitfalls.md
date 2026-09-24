@@ -561,7 +561,7 @@ Related traps:
 - **Eating and drinking blind the bot.** `DrinkAction`/`EatAction` (`NonCombatActions.cpp:65`, `:125`)
   set `SetNextCheckDelay` to 12-18 s scaled by what is missing, so nothing runs, dodges included,
   until it expires. Wherever a hazard outlives combat, such as a phase handover, veto `drink`/`food`
-  near it (`MimironDrinkGuardMultiplier`).
+  near it (Mimiron's `mimiron drink guard` rule).
 - **An encounter gate that requires `boss->IsInCombat()` leaves the strategy inert through the whole
   approach and the instant of the pull.** Generic tank and DPS behaviour therefore picks targets
   first, and the boss-specific rules inherit whatever state that left behind.

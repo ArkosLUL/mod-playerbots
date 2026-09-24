@@ -15,7 +15,9 @@
 class MimironResetEncounterStateAction : public Action
 {
 public:
-    MimironResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, "mimiron reset encounter state action") {}
+    static constexpr char const* Name = "mimiron reset encounter state action";
+
+    MimironResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -82,7 +84,9 @@ private:
 class MimironShockBlastAction : public MimironFleeAction
 {
 public:
-    MimironShockBlastAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron shock blast action") {}
+    static constexpr char const* Name = "mimiron shock blast action";
+
+    MimironShockBlastAction(PlayerbotAI* ai) : MimironFleeAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -94,7 +98,9 @@ private:
 class MimironPhase1PositioningAction : public MovementAction
 {
 public:
-    MimironPhase1PositioningAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron phase 1 positioning action") {}
+    static constexpr char const* Name = "mimiron phase 1 positioning action";
+
+    MimironPhase1PositioningAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -103,8 +109,10 @@ public:
 class MimironP3Wx2LaserBarrageAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "mimiron p3wx2 laser barrage action";
+
     MimironP3Wx2LaserBarrageAction(PlayerbotAI* ai)
-        : MovementAction(ai, "mimiron p3wx2 laser barrage action") {}
+        : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -117,7 +125,9 @@ private:
 class MimironArcSpreadAction : public MovementAction
 {
 public:
-    MimironArcSpreadAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron arc spread action") {}
+    static constexpr char const* Name = "mimiron arc spread action";
+
+    MimironArcSpreadAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -126,7 +136,9 @@ public:
 class MimironAerialCommandUnitAction : public Action
 {
 public:
-    MimironAerialCommandUnitAction(PlayerbotAI* ai) : Action(ai, "mimiron aerial command unit action") {}
+    static constexpr char const* Name = "mimiron aerial command unit action";
+
+    MimironAerialCommandUnitAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -134,7 +146,9 @@ public:
 class MimironRocketStrikeAction : public MimironFleeAction
 {
 public:
-    MimironRocketStrikeAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron rocket strike action") {}
+    static constexpr char const* Name = "mimiron rocket strike action";
+
+    MimironRocketStrikeAction(PlayerbotAI* ai) : MimironFleeAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -143,7 +157,9 @@ public:
 class MimironPhase4FocusAction : public AttackAction
 {
 public:
-    MimironPhase4FocusAction(PlayerbotAI* ai) : AttackAction(ai, "mimiron phase 4 focus action") {}
+    static constexpr char const* Name = "mimiron phase 4 focus action";
+
+    MimironPhase4FocusAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -153,7 +169,9 @@ public:
 class MimironMagneticCoreAction : public MovementAction
 {
 public:
-    MimironMagneticCoreAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron magnetic core action") {}
+    static constexpr char const* Name = "mimiron magnetic core action";
+
+    MimironMagneticCoreAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -168,12 +186,14 @@ private:
 };
 
 // Raise Frost Resistance Aura for phase 3. Cast directly rather than through ChangeStrategy: nothing
-// removes an added "rfrost", so the pick would outlive the phase. MimironPaladinAuraMultiplier holds
+// removes an added "rfrost", so the pick would outlive the phase. The mimiron paladin aura rule holds
 // the slot open while it runs.
 class MimironFrostResistanceAction : public Action
 {
 public:
-    MimironFrostResistanceAction(PlayerbotAI* ai) : Action(ai, "mimiron frost resistance action") {}
+    static constexpr char const* Name = "mimiron frost resistance action";
+
+    MimironFrostResistanceAction(PlayerbotAI* ai) : Action(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -187,8 +207,10 @@ public:
 class MimironPlasmaBlastDefensiveAction : public Action
 {
 public:
+    static constexpr char const* Name = "mimiron plasma blast defensive action";
+
     MimironPlasmaBlastDefensiveAction(PlayerbotAI* ai)
-        : Action(ai, "mimiron plasma blast defensive action") {}
+        : Action(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -209,8 +231,10 @@ private:
 class MimironRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
+    static constexpr char const* Name = "mimiron redirect threat action";
+
     MimironRedirectThreatAction(PlayerbotAI* ai)
-        : RaidRedirectThreatAction(ai, "mimiron redirect threat action") {}
+        : RaidRedirectThreatAction(ai, Name) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -223,8 +247,10 @@ protected:
 class MimironSetDpsPriorityAction : public AttackAction
 {
 public:
+    static constexpr char const* Name = "mimiron set dps priority action";
+
     MimironSetDpsPriorityAction(PlayerbotAI* botAI)
-        : AttackAction(botAI, "mimiron set dps priority action") {}
+        : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 
@@ -252,8 +278,10 @@ private:
 class MimironProximityMineAction : public MimironFleeAction
 {
 public:
+    static constexpr char const* Name = "mimiron proximity mine action";
+
     MimironProximityMineAction(PlayerbotAI* ai)
-        : MimironFleeAction(ai, "mimiron proximity mine action") {}
+        : MimironFleeAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -262,8 +290,10 @@ public:
 class MimironBombBotAction : public MoveAwayFromCreatureAction
 {
 public:
+    static constexpr char const* Name = "mimiron bomb bot action";
+
     MimironBombBotAction(PlayerbotAI* ai)
-        : MoveAwayFromCreatureAction(ai, "mimiron bomb bot action", NPC_BOMB_BOT,
+        : MoveAwayFromCreatureAction(ai, Name, NPC_BOMB_BOT,
                                      ULDUAR_MIMIRON_BOMB_BOT_RADIUS) {}
 };
 
@@ -272,7 +302,9 @@ public:
 class MimironPetControlAction : public Action
 {
 public:
-    MimironPetControlAction(PlayerbotAI* ai) : Action(ai, "mimiron pet control action") {}
+    static constexpr char const* Name = "mimiron pet control action";
+
+    MimironPetControlAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -286,7 +318,9 @@ public:
 class MimironApproachTargetAction : public MovementAction
 {
 public:
-    MimironApproachTargetAction(PlayerbotAI* ai) : MovementAction(ai, "mimiron approach target action") {}
+    static constexpr char const* Name = "mimiron approach target action";
+
+    MimironApproachTargetAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -294,7 +328,9 @@ public:
 class MimironDodgeFlamesAction : public MimironFleeAction
 {
 public:
-    MimironDodgeFlamesAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron dodge flames action") {}
+    static constexpr char const* Name = "mimiron dodge flames action";
+
+    MimironDodgeFlamesAction(PlayerbotAI* ai) : MimironFleeAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -306,7 +342,9 @@ public:
 class MimironFrostBombAction : public MimironFleeAction
 {
 public:
-    MimironFrostBombAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron frost bomb action") {}
+    static constexpr char const* Name = "mimiron frost bomb action";
+
+    MimironFrostBombAction(PlayerbotAI* ai) : MimironFleeAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -317,7 +355,9 @@ public:
 class MimironFireBotAction : public MimironFleeAction
 {
 public:
-    MimironFireBotAction(PlayerbotAI* ai) : MimironFleeAction(ai, "mimiron fire bot action") {}
+    static constexpr char const* Name = "mimiron fire bot action";
+
+    MimironFireBotAction(PlayerbotAI* ai) : MimironFleeAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -329,7 +369,9 @@ public:
 class MimironSlowBombBotAction : public Action
 {
 public:
-    MimironSlowBombBotAction(PlayerbotAI* ai) : Action(ai, "mimiron slow bomb bot action") {}
+    static constexpr char const* Name = "mimiron slow bomb bot action";
+
+    MimironSlowBombBotAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

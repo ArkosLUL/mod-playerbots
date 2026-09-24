@@ -45,7 +45,7 @@ bool RazorscaleMoversBlocked(PlayerbotAI* botAI)
 bool RazorscaleHoldMovers(PlayerbotAI* botAI)
 {
     // Patches are her own summons and despawn with the encounter, so outside it there's nothing to hold.
-    if (botAI->GetBot()->GetMapId() != ULDUAR_MAP_ID || !UldEncounterIsLive(botAI, ULD_BOSS_RAZORSCALE))
+    if (botAI->GetBot()->GetMapId() != ULDUAR_MAP_ID || !BossStateGateLive(botAI, ULD_BOSS_RAZORSCALE))
         return false;
 
     // Walks the npc list and, for the destination test, the grid, and every generic mover in the queue

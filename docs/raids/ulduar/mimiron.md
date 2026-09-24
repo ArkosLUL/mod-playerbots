@@ -143,8 +143,8 @@ it, since `FindNearestCreature` adds both bounding radii to the 30, so the next 
 spell`, heal reach or `set behind` walked the bot back toward its target, re-armed the flee, and it
 ping-ponged on the edge for the whole fuse: **114-150** `frost bomb <-> reach melee` a pull on
 2026-09-11, plus 67 `set behind`, 61 `reach spell`, 19 heal reach. Three died on the edge, a healer
-taking 45k at 24.8 yd when the Rapid Burst cone refused her last flees. `MimironChargeGuardMultiplier`
-only vetoes `reach melee`, and only while the trigger is active. `MimironFrostBombGuardMultiplier` now
+taking 45k at 24.8 yd when the Rapid Burst cone refused her last flees. `mimiron charge guard`
+only vetoes `reach melee`, and only while the trigger is active. `mimiron frost bomb guard` now
 zeroes all four and `follow` inside `FROST_BOMB_CLEARANCE + _HOLD_MARGIN` (38 yd) of a live bomb; a
 healer may be out of range of a far tank for the 10 s.
 
@@ -187,7 +187,7 @@ the Mimiron flame dodge's FAILEDs had an accepted flee by that same bot in the p
 own last hop, or `avoid aoe`'s.
 
 The flames dodge is now on the shared Mimiron fan instead of `FleePosition`, and
-`MimironAvoidAoeGuardMultiplier` vetoes `avoid aoe` outright while hard mode is on and a construct is
+`mimiron avoid aoe guard` vetoes `avoid aoe` outright while hard mode is on and a construct is
 in combat. Hard mode alone is a config read that holds all over Ulduar: on it the veto also landed
 15 times in Thorim's gauntlet (`603_1_thorim_1789146024`). `AvoidAoeAction`'s own two bugs are left
 alone: it runs in every encounter in the game and deserves its own change.
@@ -271,7 +271,7 @@ of the 2→3 handover, and Flames was the pull's largest single damage source at
 of everything taken — ahead of Heat Wave. The A-B-A that used to be `flame dodge <-> reach spell` is
 now `follow <-> dodge flames`, 276 and 205 across the two handovers.
 
-Two answers, because the hazard has two shapes. `MimironFireHoldGuardMultiplier` zeroes the five
+Two answers, because the hazard has two shapes. `mimiron fire hold guard` zeroes the five
 names the Frost Bomb guard already lists — `reach melee`, `reach spell`, `reach party member to
 heal`, `set behind`, `follow` — for `ULDUAR_MIMIRON_FLAMES_HOLD_MS` (2500) after this bot's last
 accepted dodge. A **hold**, not a veto: fire covers a third of the floor for all of phase 3, so
@@ -524,7 +524,7 @@ strictly above the move in flight.
 
 **That floor was costing melee the whole window.** At 14 yd a melee bot is outside its own
 `reach melee` test — `IsWithinCombatRange(target, MeleeDistance 0.75)`, so **10.25 yd** — and
-`MimironChargeGuardMultiplier` vetoes that node for as long as the barrage is live, so it simply
+`mimiron charge guard` vetoes that node for as long as the barrage is live, so it simply
 stands there: on 2026-09-19 all eight melee sat at exactly 14.0 yd for 13 s logging `reach melee
 IMPOSSIBLE` and `melee FAILED` every pass. Melee damage in a window the band caught ran 1,220-3,643
 against 4,009-5,697 in the 14.5 s before it — **0.2-0.5M a phase 2**, 4-7 s of phase at the 66-94k
@@ -549,7 +549,7 @@ marker on the ring is not.
 positioning then, that node's destinations are never cone-screened, and the two traded one bot
 **78** times in a phase 4. So does the unstacker, `combat formation move`, for everyone: the dodge
 hands the tick back while a bot holds at the band edge, and melee have no phase 4 slot for
-`MimironFormationGuardMultiplier` to stop it at. On 2026-09-23 it walked five holding melee back into
+`mimiron formation guard` to stop it at. On 2026-09-23 it walked five holding melee back into
 one phase 4 band, one onto VX-001's centre, all dead in 6 s.
 
 **Radius is the one free parameter, so it dodges the fire — the walk as well as the endpoint.** On
@@ -725,7 +725,7 @@ barrage arc, so "behind" moved every 3.2 s: a top-three melee mover, 52-199 move
 re-aim. The 5 yd slot tolerance is ~32° there, and 77° off stays past the 90° where wedge plus cone
 ends. Mid-barrage the slot is in the swept band, so the arc spread waits and the barrage dodge owns
 the melee. A melee substitute stays 5.0-10.0 yd from VX-001 and off the wedge's line, and skips the
-Napalm spacing test. `MimironVx001FacingGuardMultiplier` zeroes `set behind` and `tank face` there.
+Napalm spacing test. `mimiron vx001 facing guard` zeroes `set behind` and `tank face` there.
 
 **The ring centres on the mech, not the room.** Bots cast out to `AiPlayerbot.SpellDistance` — 28.5
 here, with no `AC_` override — so a ring pinned to the room centre puts the far half of the raid out
@@ -857,7 +857,7 @@ mana gap came from a longer phase 1 and, in 8867, a handover that took 615k (488
 raid for 6 s; both paladins grant it), Divine Hymn and Power Infusion share "medium group heal
 setting", 6 members at 65% or less within 38.5 yd, and the walk-in Rapid Burst meets that at once. In
 all seven hard-mode pulls since 2026-09-19 they went out 2.7-20 s into phase 2 at 67-85% raid health
-and sat out the storm on 2-8 min cooldowns. `MimironStormCooldownHoldMultiplier` zeroes the three in
+and sat out the storm on 2-8 min cooldowns. `mimiron storm cooldown hold` zeroes the three in
 phase 2 (`IsMimironPhase2`, both modes, like Heat Wave) until `"aoe heal" "low"` reaches
 `ULDUAR_MIMIRON_STORM_COOLDOWN_LOW_COUNT` (6 at 45% or less), a count that peaked at 3-4 before
 barrage 1 and 11-17 after it. Holding the cast holds its `cancel divine sacrifice` continuer too.
@@ -981,7 +981,7 @@ their output**; phase 1 ran 15 s longer.
 
 Two halves fix it. `ULDUAR_MIMIRON_DISPERSE_DISTANCE` is **5.5**, in the gap between Napalm Shell's
 5 yd splash and the wedge's 6.0: still unstacks anyone genuinely inside Napalm range, never fires on
-two bots both on their slots. And `MimironFormationGuardMultiplier` zeroes `combat formation move`
+two bots both on their slots. And `mimiron formation guard` zeroes `combat formation move`
 while the bot is within `ULDUAR_MIMIRON_SPREAD_TOLERANCE` of its slot — the same window the arc spread
 declines to act in, so inside it nothing moves the bot and outside it the formation owns the
 correction. Match **by name**: `TankFaceAction` derives from `CombatFormationMoveAction` and does real
@@ -1109,7 +1109,7 @@ distance came out non-positive) and while a leg was in flight (the `MOVEMENT_FOR
 second `MOVEMENT_FORCED` move, every bearing fails, and the `MoveAway` fallback issues at
 `MOVEMENT_COMBAT` and is refused too). Once clear, only melee keep holding — they own the gap-closers
 and have nothing to do at 18 yd anyway — while ranged and healers go back to work rather than lose
-4 s in every 30. `MimironChargeGuardMultiplier` is the backstop: it zeroes every
+4 s in every 30. `mimiron charge guard` is the backstop: it zeroes every
 `CastReachTargetSpellAction` (Charge, Intercept, both Feral Charges — the class has no other
 subclasses) inside the five windows a hit actually kills through. Proximity Mines and Bomb Bots are
 deliberately **not** among them; the mine node was demoted below the whole ladder because eating one
@@ -1331,12 +1331,12 @@ a single tick with the victim standing still. Three separate failures put them i
   `FleeFan` takes a flag that drops the ground-fire screen, and only this branch passes it, because
   a node is 3.1k a second against the whole pool.
 - **`reach melee` walked them back in.** Both had one 3.5 s before the spray landed, so
-  `MimironFireHoldGuardMultiplier` zeroes its movers while the bot stands in a line, the same way it
+  `mimiron fire hold guard` zeroes its movers while the bot stands in a line, the same way it
   does after a fire dodge.
 
 **Keeping them out of Mimiron's own picker is not enough.** In that pull the bot tank killed *both*
 kept bots on its own (32,731 and 17,824, 34% of its phase 3): `MimironSetDpsPriorityTrigger` stands
-down for tanks and `MimironTargetGuardMultiplier` only zeroes `DpsAssistAction` for non-tanks, so
+down for tanks and `mimiron target guard` only zeroes `DpsAssistAction` for non-tanks, so
 nothing told the generic tank picker. Ulduar had no `AppendTargetExclusions` while Kara, MC and SWP
 do; `RaidUlduarStrategy` now excludes the kept set there, which covers the tank picker, `dps target`,
 `dps aoe target` and the attacker values at once. Deliberate targeting is no longer what kills them:
@@ -1373,7 +1373,7 @@ the bot holding `rfire` from the shared `BossFireResistanceTrigger`, dead or ali
 alive paladin that node would pick; then a tank, a non-healer, a healer. A lone paladin keeps fire,
 which resists 22-31% of the Flames. The tank is the right carrier: 24 of 26 hits landed within its
 40 yd, and 91% of the living raid stood inside it. `MimironFrostResistanceAction` casts it directly,
-and `MimironPaladinAuraMultiplier` holds the slot against every other aura and the shared fire node,
+and `mimiron paladin aura` holds the slot against every other aura and the shared fire node,
 lifting with phase 3 so Devotion comes back.
 
 ## Pets need telling twice, in two different phases
@@ -1535,7 +1535,7 @@ lifts it and he can run back and taunt.
 13.5-15.5 s in all three pulls, and that exact bot pulled the boss 2-3 s later — Justice @16.2,
 Obliteration @17.4, Justice @17.8. The generic target value is broken for every raid and is still
 open ([../../engine/pitfalls.md](../../engine/pitfalls.md)); Mimiron works around it by suppressing
-the smart-target node in phase 1, through `MimironGenericRedirectGuardMultiplier`.
+the smart-target node in phase 1, through `mimiron generic redirect guard`.
 
 `MimironRedirectThreatAction` owns the redirect instead, subclassing `RaidRedirectThreatAction` the
 way Hodir and Freya do: the main tank in phase 1, `nullptr` after, because phases 2-4 split two mechs
@@ -1597,7 +1597,7 @@ Victims a cast: 1.38 and 2.20 against the old room-wide spread, 1.2-1.8 in the f
 and healers dead by 43 s, Napalm 61% and 47% of damage taken, phase-1 wipes at 92.4 and 123.9 s), and
 **3.67 and 7.25** on 2026-09-11. Two causes, and the first fix missed the first:
 
-- **The camp was one point.** `MimironFormationGuardMultiplier` returns **0** for `combat formation
+- **The camp was one point.** `mimiron formation guard` returns **0** for `combat formation
   move` while a bot is inside its slot tolerance — right for per-bot slots, fatal for a shared one,
   where the unstacker switched itself off on arrival (pairs under 5 yd: 38-65% before the hold, 97%
   and 86% after). Widening the camp's tolerance to 10 switched it off for the whole camp instead:
@@ -1682,7 +1682,7 @@ and the ACU outright.
 `BOT_STATE_COMBAT` and `BOT_STATE_NON_COMBAT` (`PlayerbotAI.cpp:1793-1794`), and healers went from
 35-65% to 71-100% mana across one handover. But `DrinkAction`/`EatAction` push the next AI check back
 12-18 s, so a sitting bot dodges nothing and, standing still, is the nearest player to a chain head:
-two burned to death drinking in one 2026-09-11 handover. `MimironDrinkGuardMultiplier` vetoes
+two burned to death drinking in one 2026-09-11 handover. `mimiron drink guard` vetoes
 `drink`/`food` within 15 yd of a flame node.
 
 ## The ring slot is what kills the Rocket Strike dodge
@@ -1748,7 +1748,7 @@ the whole ten second fuse. The fan screens both too, so a Shock Blast or barrage
 lands in the fire it will have to leave again. Both come from one `GetMimironFirefighterHazards`
 pass, because the fan tests eleven bearings and rescanning a 50-node field per bearing is not free.
 That read, `GetMimironMarkers` and the Rapid Burst carrier are also answered once per trigger pass
-under `UldTriggerPassId`, since the flames, formation, approach and fire bot triggers all ask;
+under `EncounterTriggerPassId`, since the flames, formation, approach and fire bot triggers all ask;
 actions and multipliers read live.
 
 ## What a trace answers

@@ -326,7 +326,7 @@ MimironMarkers ReadMimironMarkers(PlayerbotAI* botAI)
 
 // The fire field, the markers and the Rapid Burst carrier, answered once per trigger pass: the flames
 // dodge, the formation, the approach and the fire bot triggers all ask, and each ask walks 50 to 60
-// fire nodes or the whole group. Valid only under the id UldTriggerPassId hands out, so an action or
+// fire nodes or the whole group. Valid only under the id EncounterTriggerPassId hands out, so an action or
 // a multiplier, which may run after something changed the world, always reads live.
 struct MimironPassReads
 {
@@ -352,7 +352,7 @@ thread_local MimironPassReads mimironPassReads;
 // Null outside a trigger pass, meaning read live.
 MimironPassReads* MimironPassReadsFor(PlayerbotAI* botAI)
 {
-    uint32 const passId = UldTriggerPassId(botAI);
+    uint32 const passId = EncounterTriggerPassId(botAI);
     if (!passId)
         return nullptr;
 
@@ -942,8 +942,7 @@ MimironFightState& MimironFightStateFor(Player* bot) { return mimironFightStates
 
 // Everything the trace needs once per instance per tick rather than once per bot: the phase, the
 // Magnetic Core window, who holds the core, and the Laser Barrage cone.
-void TickMimironObs(PlayerbotAI* botAI, Player* bot, Unit* leviathanMkII, Unit* vx001,
-                    Unit* aerialCommandUnit)
+void TickMimironObs(PlayerbotAI* botAI, Player* bot)
 {
     if (!bot || bot->GetMapId() != ULDUAR_MAP_ID)
         return;
@@ -953,6 +952,10 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot, Unit* leviathanMkII, Unit* 
         return;
 
     state.scanMs = getMSTime();
+
+    Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
+    Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
+    Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 
     // Off the constructs, never off the calling bot's combat state: one bot dropping combat is not a
     // wipe, and a latch left set would leave the re-pull with nothing to emit.
@@ -1011,6 +1014,8 @@ void TickMimironObs(PlayerbotAI* botAI, Player* bot, Unit* leviathanMkII, Unit* 
 }
 }  // namespace
 
+void MimironTick(PlayerbotAI* botAI) { TickMimironObs(botAI, botAI->GetBot()); }
+
 bool IsMimironEngaged(PlayerbotAI* botAI)
 {
     // Any construct, because each phase hands over to the next: the outgoing one goes passive and
@@ -1019,11 +1024,6 @@ bool IsMimironEngaged(PlayerbotAI* botAI)
     Unit* leviathanMkII = GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII);
     Unit* vx001 = GetFirstAliveUnitByEntry(botAI, NPC_VX001);
     Unit* aerialCommandUnit = GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
-
-    // Ahead of the combat test, because the housekeeping it drives includes the wipe reset. Every
-    // non-tank reaches here every tick through MimironTargetGuardMultiplier, and the pass throttles
-    // itself, so this is the one place a raid-wide fold is guaranteed to run.
-    TickMimironObs(botAI, botAI->GetBot(), leviathanMkII, vx001, aerialCommandUnit);
 
     for (Unit* construct : {leviathanMkII, vx001, aerialCommandUnit})
         if (construct && construct->IsInCombat())
@@ -1058,6 +1058,12 @@ bool IsMimironPhase4(Player* bot)
                 return seated->GetEntry() == NPC_VX001;
 
     return false;
+}
+
+bool MimironPhase1Active(PlayerbotAI* botAI)
+{
+    return !IsMimironPhase4(botAI->GetBot()) && GetFirstAliveUnitByEntry(botAI, NPC_LEVIATHAN_MKII) &&
+           !GetFirstAliveUnitByEntry(botAI, NPC_VX001) && !GetFirstAliveUnitByEntry(botAI, NPC_AERIAL_COMMAND_UNIT);
 }
 
 bool IsMimironPhase2(PlayerbotAI* botAI)

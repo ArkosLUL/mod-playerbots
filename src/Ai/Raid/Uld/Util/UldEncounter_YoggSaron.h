@@ -500,7 +500,7 @@ extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 uint32 YoggSaronPhase(PlayerbotAI* botAI);
 
 // FindNearestCreature(entry, 200, alive) for Sara, Yogg, the Brain and the Sanity Wells, which nearly
-// every Yogg trigger asks again. Answered once per trigger pass (see UldTriggerPassId), live anywhere
+// every Yogg trigger asks again. Answered once per trigger pass (see EncounterTriggerPassId), live anywhere
 // else and for any other entry.
 Creature* YoggSaronNearestCreature(PlayerbotAI* botAI, uint32 entry);
 

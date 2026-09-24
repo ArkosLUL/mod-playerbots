@@ -545,6 +545,10 @@ Unit* GetMimironStagingFocus(Player* bot);
 // out of the fight.
 bool IsNearMimironRoom(Player* bot);
 
+// The encounter's tick: the trace's phase, core and barrage rows, and the fight state reset after a
+// wipe. Throttled per instance, so every bot may call it every tick.
+void MimironTick(PlayerbotAI* botAI);
+
 // Any of the three constructs actually fighting. Presence says nothing here: Leviathan MK II is a DB
 // spawn that sits in the room unselectable until the button is pushed, and GetFirstAliveUnitByEntry
 // does not filter selectability.
@@ -554,6 +558,10 @@ bool IsMimironEngaged(PlayerbotAI* botAI);
 // attackable: a part pushed under 15000 sets UNIT_FLAG_NON_ATTACKABLE and drops out of the target list,
 // and the phase is at its most time-critical after that, not over.
 bool IsMimironPhase4(Player* bot);
+
+// Phase 1: the MK II is up and neither later construct is. Phase 4 excluded by the vehicle seat,
+// since a part self-repairing drops off the target list and leaves the MK II looking alone.
+bool MimironPhase1Active(PlayerbotAI* botAI);
 
 // Phase 2: VX-001 on the floor on its own. Riding the chassis is phase 4.
 bool IsMimironPhase2(PlayerbotAI* botAI);

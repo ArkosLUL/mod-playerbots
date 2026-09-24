@@ -19,12 +19,6 @@ Shipped already, for orientation: the per-bot `getMSTime()`-stamped scan (`Razor
 
 ## Open items
 
-### 1-2. Multipliers resolve the boss first, and have no encounter gate
-
-Owned by [../raid-encounter/raid-encounter.PLAN.md](../raid-encounter/raid-encounter.PLAN.md): each
-boss's multipliers move to encounter rules, which test the action first and sit behind the encounter
-gate. Its per-boss notes carry the traps these two items recorded.
-
 ### 3. `BossFireResistanceTrigger` looks up the boss before the cheap tests
 
 `src/Ai/Base/Trigger/BossAuraTriggers.cpp:41` runs `FindBossByName` — a sight-range sweep plus a
@@ -40,7 +34,7 @@ Ulduar. One scan serves all of them.
 ### 5. `UlduarBurstWindowMultiplier::EvaluateWindow` falls back to Razorscale everywhere
 
 It ends on `"find target" razorscale` in **every** non-Razorscale Ulduar fight. The
-`UldEncounterIsLive(ULD_BOSS_RAZORSCALE)` gate was proposed and never added.
+`BossStateGateLive(ULD_BOSS_RAZORSCALE)` gate was proposed and never added.
 
 **Do not** split `EvaluateWindow` itself. Its 105-line per-boss switch exists so the
 `IsBurstCooldownAction` early-out runs once per action rather than once per boss, and it resolves nine
@@ -77,8 +71,14 @@ latch matches: a behaviour change, not a saving.
 ### 10. The Yogg-Saron lunatic gaze trigger sweeps 200 yd for every bot in Ulduar
 
 `YoggSaronLunaticGazeTrigger` runs `FindNearestCreature(NPC_YOGG_SARON, 200)` every tick for every bot
-while its gate is open, which is the whole instance between pulls. Gating it on `UldEncounterIsLive`
+while its gate is open, which is the whole instance between pulls. Gating it on `BossStateGateLive`
 answers differently if Yogg outlives `IN_PROGRESS` at a wipe.
+
+### 11. Two rule predicates build trigger objects per call
+
+`MimironLethalWindowActive` (`Uld/Definition/UldDefinition_Mimiron.cpp`) constructs five triggers and
+`ThorimBalconyWalk` (`UldDefinition_Thorim.cpp`) one, on every action the rule cares about. Read the
+helpers those triggers wrap instead, keeping each trigger's full condition.
 
 ## Method, so it is not re-derived a seventh time
 

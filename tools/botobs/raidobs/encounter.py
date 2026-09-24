@@ -185,8 +185,8 @@ def encounter_of(trace: Trace) -> str:
 
 # Ulduar keys every trigger to the boss in the room, and a shut gate returns the same empty Event as a
 # condition that was false - so without this every other encounter's nodes read as NEVER on every pull.
-# Mirrors ENCOUNTER_PREFIXES in src/Ai/Raid/Uld/UldEncounterGate.cpp; change both together. `sara` is
-# Yogg-Saron's phase-one form and the one name that does not lead with its encounter.
+# Every Ulduar trigger name leads with its encounter, so a new prefix in a definition needs a row here.
+# `sara` is Yogg-Saron's phase-one form and the one name that does not lead with its encounter.
 ULD_PREFIXES = {
     "flame leviathan": "flame-leviathan", "ignis": "ignis", "razorscale": "razorscale",
     "xt002": "xt-002", "iron assembly": "iron-assembly", "kologarn": "kologarn",

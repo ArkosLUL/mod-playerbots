@@ -117,7 +117,7 @@ YoggSaronEncounterState& YoggSaronStateFor(Player* bot) { return yoggSaronStates
 void TickYoggSaronObs(PlayerbotAI* botAI);
 
 // Sweeps every Yogg trigger repeats in one pass, answered once per pass. Valid only under the id
-// UldTriggerPassId hands out, so it can't outlive the trigger checks. thread_local is fine for a cache
+// EncounterTriggerPassId hands out, so it can't outlive the trigger checks. thread_local is fine for a cache
 // of live world state: a whole pass runs on one thread. Never turn this into a latch.
 constexpr uint32 YOGG_SARON_CACHED_CREATURES[] = {NPC_SARA_PHASE_1,         NPC_YOGG_SARON,         NPC_BRAIN,
                                                   NPC_SANITY_WELL,          NPC_GUARDIAN_OF_YS,     NPC_CRUSHER_TENTACLE,
@@ -148,7 +148,7 @@ thread_local YoggSaronPassReads yoggSaronPassReads;
 // Null outside a trigger pass, meaning read live.
 YoggSaronPassReads* YoggSaronPassReadsFor(PlayerbotAI* botAI)
 {
-    uint32 const passId = UldTriggerPassId(botAI);
+    uint32 const passId = EncounterTriggerPassId(botAI);
     if (!passId)
         return nullptr;
 
@@ -222,7 +222,7 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
     // FACTION_FRIENDLY through phase 1, CombatManager::CanBeginCombat refuses a combat reference while
     // either side is friendly, and InitFight's SetInCombatWithZone therefore never touches her. The
     // boss state is IN_PROGRESS from inside InitFight itself.
-    if (!UldEncounterIsLive(botAI, ULD_BOSS_YOGGSARON))
+    if (!BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
         return 0;
 
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
@@ -787,7 +787,7 @@ namespace
 // off every bot elsewhere in Ulduar.
 bool YoggSaronHandoverOpen(PlayerbotAI* botAI)
 {
-    if (!UldEncounterIsLive(botAI, ULD_BOSS_YOGGSARON))
+    if (!BossStateGateLive(botAI, ULD_BOSS_YOGGSARON))
         return false;
 
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);

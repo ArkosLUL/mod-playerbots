@@ -45,7 +45,7 @@ only map-named files beyond those its name selects.
 
 A shut encounter gate reads like a false condition, so `--coverage` folds a node owned by another
 encounter of the raid into that gated line rather than list it NEVER. The owner is the trigger-name
-prefix the node leads with: `ULD_PREFIXES` mirrors `UldEncounterGate.cpp`, and `TOC_PREFIXES` holds
+prefix the node leads with: `ULD_PREFIXES` holds the Ulduar ones, and `TOC_PREFIXES` holds
 `gormok`, `northrend worms`, `icehowl`, `jaraxxus`, `faction champions`, `twin valkyr`, `anubarak`.
 Every per-encounter ToC trigger name leads with one, so a new ToC encounter prefix needs a row.
 
@@ -224,9 +224,9 @@ Three callers reach it, because the boss cannot always say: `OnCreatureEngage`, 
 swing at a player; `MarkPull` on an already-open session; and `NamePull(map, name)`, which takes the
 name outright. Yogg-Saron is why the last two exist — phase one is fought against Sara, the Voice and
 the Guardians, none flagged a boss, so nothing engages and the only boss the file named was General
-Vezax, swept in from the next room. `UldGatedTrigger` calls `NamePull` when a trigger fires while its
-own encounter is `IN_PROGRESS`; the gate's own test leaves every trigger open between pulls, far too
-loose to name by.
+Vezax, swept in from the next room. `EncounterGatedTrigger` calls `NamePull` when a trigger fires
+while its own encounter is `IN_PROGRESS`; the gate's own test leaves every trigger open between
+pulls, far too loose to name by.
 
 While a raid sits on a tracked map with no session, snapshots go to a `PreRollSeconds` ring that is
 flushed into the file when a pull starts — so the trace opens *before* the engage, and pre-pull

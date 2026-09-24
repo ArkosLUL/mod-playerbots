@@ -7,11 +7,7 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERGATE_H
 #define PLAYERBOTS_ULDENCOUNTERGATE_H
 
-#include <string>
-
 #include "RaidEncounter.h"
-
-class PlayerbotAI;
 
 // Boss ids ported from ulduar.h in AC, which lives in AC's /scripts directory and so cannot be
 // included from here. These are the indices InstanceScript::GetBossState is keyed by.
@@ -31,28 +27,6 @@ enum UlduarEncounterId
     ULD_BOSS_VEZAX = 11,
     ULD_BOSS_YOGGSARON = 12,
     ULD_BOSS_ALGALON = 13
-};
-
-// Bosses without a definition yet are gated by the prefix their trigger names carry, through the same
-// boss-state gate a definition uses.
-
-// False for a name belonging to no single encounter, which is then left ungated.
-bool UldEncounterOfTrigger(std::string const& triggerName, uint32& bossId);
-
-// The name a pull is traced under. Null for an id with no entry.
-char const* UldEncounterName(uint32 bossId);
-
-inline bool UldEncounterGateOpen(PlayerbotAI* botAI, uint32 bossId) { return BossStateGateOpen(botAI, bossId); }
-inline bool UldEncounterIsLive(PlayerbotAI* botAI, uint32 bossId) { return BossStateGateLive(botAI, bossId); }
-inline uint32 UldTriggerPassId(PlayerbotAI* botAI) { return EncounterTriggerPassId(botAI); }
-
-class UldGatedTrigger : public EncounterGatedTrigger
-{
-public:
-    UldGatedTrigger(PlayerbotAI* botAI, Trigger* inner, uint32 bossId)
-        : EncounterGatedTrigger(botAI, inner, BossStateGate, bossId, UldEncounterName(bossId))
-    {
-    }
 };
 
 #endif

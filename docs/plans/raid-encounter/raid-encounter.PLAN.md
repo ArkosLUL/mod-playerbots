@@ -104,7 +104,7 @@ Rarer actions (`killing spree`, `sprint`, a lone `death grip`) and own actions g
 
 `RaidEncounter` holds the generic gated trigger and the gate for rules and hand-written multipliers.
 Each raid supplies an **encounter gate**: `BossStateGate` (Uld, Naxx, OS, EoE) now, `StageGate` (ToC)
-in the last phase. Boss-state rule, unchanged from `UldEncounterGateOpen`: open while this encounter
+in the last phase. Boss-state rule: open while this encounter
 is `IN_PROGRESS`; closed once `DONE`; otherwise closed only while another encounter is
 `IN_PROGRESS`; open outside an instance. Live means `IN_PROGRESS`.
 
@@ -113,11 +113,10 @@ Gate on the **fight**, not the unit. A drake Sartharion calls in never starts it
 does start its own, which closes Sartharion's gate: an OS node that serves a solo drake (not every OS
 node checks `SartharionEncounterActive`) goes in that drake's definition or stays raid-wide.
 
-The generic gated trigger keeps everything `UldGatedTrigger` does: it copies the inner trigger's
-name and check interval (a default of 1 would promote throttled triggers), keeps the per-pass id
-Yogg-Saron's and Mimiron's caches key on (`UldTriggerPassId`, generalised), and calls
-`RaidObs::NamePull` when it fires while live. The `thread_local GatePass` is a cache, so it may stay
-`thread_local`.
+The generic gated trigger copies the inner trigger's name and check interval (a default of 1 would
+promote throttled triggers), hands out the per-pass id Yogg-Saron's and Mimiron's caches key on
+(`EncounterTriggerPassId`), and calls `RaidObs::NamePull` when it fires while live. The
+`thread_local GatePass` is a cache, so it may stay `thread_local`.
 
 ### Tick hook
 
@@ -128,8 +127,6 @@ and the predicates become plain reads:
 
 | Today | Where |
 |---|---|
-| `TickMimironObs`, including the wipe reset | `IsMimironEngaged` (`Uld/Util/UldEncounter_Mimiron.cpp:1009`) |
-| `vezax.formation` note | `VezaxFormationActive` (`UldEncounter_Vezax.cpp:169`) |
 | tsunami hazard notes | `SartharionEncounterActive` (`OS/Util/OSEncounter.cpp:117`) |
 | `neglect threat` = true | Loatheb, Razuvious, Four Horsemen, Gothik multipliers (`Naxx/NaxxMultipliers.cpp:119,283,534,551`) |
 
@@ -162,8 +159,6 @@ each change it makes; any other difference gets a rule switch or stays hand-writ
 
 Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
 
-- **Mimiron:** the formation guard blocks `CombatFormationMove` only, so `tank face` survives.
-  `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
 - **Naxx:** hand-written: Heigan's dance window, the Sapphiron and Kel'Thuzad healer windows, Gothik's
   unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
   tank-assist ×2. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on Thane;
@@ -180,22 +175,31 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 is up to Mimiron, in the order it lists.
+**Status:** commits 1-3 landed; continue at commit 4 (EoE).
 
 Close each per `CLAUDE.local.md`.
 
-1. **Module and Vezax pilot.** Landed. `UldEncounterGate.{h,cpp}` kept only the prefix table,
-   `UldEncounterName` and thin forwards (`UldGatedTrigger` subclasses `EncounterGatedTrigger`;
-   `UldEncounterGateOpen`, `UldEncounterIsLive` and `UldTriggerPassId` forward to the generic ones).
-   Moving a boss: write its definition, add it to `UldEncounterDefinitions()`, call its
-   `AddTriggerNodes`/`AddMultipliers` at its old spot in `UldStrategy.cpp` (keeps node and veto order),
-   delete its creators from both contexts and its prefix entry. Syntax-check with a raised
-   `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU.
+Moving a boss: give its classes `Name` constants, write its definition, list it in the raid's
+definitions, call its `AddTriggerNodes`/`AddMultipliers` at its old spot in the strategy (keeps node
+and veto order), and delete its creators and whatever hand gating the definition replaces.
+Syntax-check with a raised `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU. What
+Ulduar taught:
+
+- A multiplier becomes rules only where they are exactly equivalent; otherwise it stays hand-written,
+  keeps its name and declares its families. `Family::AnyAction` is for one whose zero can land on
+  an item, a plain `Action` or a threat type (burst lists, AoE holds, wrong-target guards).
+  `Multiplier<M>(families, args...)` passes constructor arguments (the nature aspect hold).
+- A role no `Role` bit expresses goes in the predicate. `Role::NonTank` and `Role::Dps`
+  (`IsDps`, the bot's dps strategy) were added for Auriaya and Freya.
+- A branchy multiplier splits into several rules under one name; check that no early `return 1`
+  in the original shields an action a later rule would zero (Hodir's Flash Freeze).
+- Housekeeping found in a read moves to the tick behind the same per-instance throttle, with any
+  lookup after the throttle check (Flame Leviathan, Mimiron, Algalon, Yogg-Saron, Thorim).
+
+1. **Module and Vezax pilot.** Landed.
 2. **pblint learns rows.** Landed.
-3. **The other 13 Ulduar bosses, one commit each**, least churned first: Auriaya, Kologarn,
-   Razorscale, XT-002, Freya, Algalon, Ignis, Iron Assembly, Flame Leviathan, Hodir, Thorim,
-   Yogg-Saron, Mimiron. The last one removes the prefix table, `UldGatedTrigger`, the `Uld*`
-   forwards and items 1-2 of the perf plan.
+3. **The other 13 Ulduar bosses.** Landed; the prefix table, `UldGatedTrigger` and the `Uld*`
+   forwards are gone. The Taunt family replaced Hodir's and Thorim's lists, adding Death Grip.
 4. **EoE**, then **OS**.
 5. **Naxx**, one commit per boss group.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
