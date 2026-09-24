@@ -129,7 +129,6 @@ and the predicates become plain reads:
 | Today | Where |
 |---|---|
 | `TickMimironObs`, including the wipe reset | `IsMimironEngaged` (`Uld/Util/UldEncounter_Mimiron.cpp:1009`) |
-| `TickFlameLeviathan`, including the wipe reset | `FlameLeviathanEngaged` (`UldEncounter_FlameLeviathan.cpp:311`) |
 | `TickYoggSaronObs`; handover latch writes | `YoggSaronPhase` (`UldEncounter_YoggSaron.cpp:218`); `YoggSaronHandoverState` (`:787`) |
 | `vezax.formation` note | `VezaxFormationActive` (`UldEncounter_Vezax.cpp:169`) |
 | `barrierBailing` latch writes | `ThorimBarrierBailLatched` (`UldEncounter_Thorim.cpp:1589`) |
@@ -166,7 +165,6 @@ each change it makes; any other difference gets a rule switch or stays hand-writ
 
 Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
 
-- **Flame Leviathan:** riders get `Exclusive` passing the drive and board rows plus `LeaveVehicleAction`.
 - **Hodir:** `HodirGuardMultiplier` has five branches (taunt, pickers, Flash Freeze, icicle path,
   role hold) → one rule each. Flash Freeze is an `OwnMovement` with `keep` = `Attack`, movers
   narrowed to the freeze set (the shed only in a landed shelter), plus a `Block` on `Charge`, `Blink`,
@@ -192,7 +190,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 is up to Flame Leviathan, in the order it lists.
+**Status:** commits 1-2 landed; commit 3 is up to Hodir, in the order it lists.
 
 Close each per `CLAUDE.local.md`.
 

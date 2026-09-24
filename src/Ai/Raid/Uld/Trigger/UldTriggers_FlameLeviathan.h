@@ -11,14 +11,18 @@
 class FlameLeviathanOnVehicleTrigger : public Trigger
 {
 public:
-    FlameLeviathanOnVehicleTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan on vehicle") {}
+    static constexpr char const* Name = "flame leviathan on vehicle";
+
+    FlameLeviathanOnVehicleTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class FlameLeviathanVehicleNearTrigger : public Trigger
 {
 public:
-    FlameLeviathanVehicleNearTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan vehicle near") {}
+    static constexpr char const* Name = "flame leviathan vehicle near";
+
+    FlameLeviathanVehicleNearTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -27,7 +31,9 @@ public:
 class FlameLeviathanFlameVentsTrigger : public Trigger
 {
 public:
-    FlameLeviathanFlameVentsTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan flame vents") {}
+    static constexpr char const* Name = "flame leviathan flame vents";
+
+    FlameLeviathanFlameVentsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -36,7 +42,9 @@ public:
 class FlameLeviathanDriveUrgentTrigger : public Trigger
 {
 public:
-    FlameLeviathanDriveUrgentTrigger(PlayerbotAI* ai) : Trigger(ai, "flame leviathan drive urgent") {}
+    static constexpr char const* Name = "flame leviathan drive urgent";
+
+    FlameLeviathanDriveUrgentTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

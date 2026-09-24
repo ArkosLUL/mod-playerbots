@@ -23,7 +23,9 @@
 class FlameLeviathanVehicleAction : public Action
 {
 public:
-    FlameLeviathanVehicleAction(PlayerbotAI* botAI) : Action(botAI, "flame leviathan vehicle") {}
+    static constexpr char const* Name = "flame leviathan vehicle";
+
+    FlameLeviathanVehicleAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 
 protected:
@@ -58,7 +60,9 @@ protected:
 class FlameLeviathanEnterVehicleAction : public MovementAction
 {
 public:
-    FlameLeviathanEnterVehicleAction(PlayerbotAI* botAI) : MovementAction(botAI, "flame leviathan enter vehicle") {}
+    static constexpr char const* Name = "flame leviathan enter vehicle";
+
+    FlameLeviathanEnterVehicleAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 protected:
@@ -72,7 +76,9 @@ protected:
 class FlameLeviathanInterruptVentsAction : public Action
 {
 public:
-    FlameLeviathanInterruptVentsAction(PlayerbotAI* botAI) : Action(botAI, "flame leviathan interrupt vents") {}
+    static constexpr char const* Name = "flame leviathan interrupt vents";
+
+    FlameLeviathanInterruptVentsAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -82,7 +88,9 @@ public:
 class FlameLeviathanDriveAction : public MovementAction
 {
 public:
-    FlameLeviathanDriveAction(PlayerbotAI* botAI) : MovementAction(botAI, "flame leviathan drive") {}
+    static constexpr char const* Name = "flame leviathan drive";
+
+    FlameLeviathanDriveAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 protected:

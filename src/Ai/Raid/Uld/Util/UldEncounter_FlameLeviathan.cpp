@@ -224,13 +224,15 @@ void ElectVentReserve(FlameLeviathanState& state, Player* bot, Unit* boss)
 
 // Everything that has to be true once per instance per tick rather than once per bot: open the
 // trace, expire a vent claim, notice a Pursued switch, and record which vehicles are frozen.
-void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
+void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot)
 {
     FlameLeviathanState& state = FlameLeviathanStateFor(bot);
     if (state.scanMs && GetMSTimeDiffToNow(state.scanMs) < ULDUAR_FL_SCAN_INTERVAL_MS)
         return;
 
     state.scanMs = getMSTime();
+
+    Unit* boss = FlameLeviathanBoss(botAI);
 
     // Off the boss, never off the calling bot: one bot dropping combat is not the pull ending, and
     // without this reset a wipe would leave the latch set and the re-pull would open no trace.
@@ -308,6 +310,13 @@ void TickFlameLeviathan(PlayerbotAI* botAI, Player* bot, Unit* boss)
 }
 }  // namespace
 
+void FlameLeviathanTick(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot && bot->GetMapId() == ULDUAR_MAP_ID)
+        TickFlameLeviathan(botAI, bot);
+}
+
 bool FlameLeviathanEngaged(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
@@ -315,10 +324,6 @@ bool FlameLeviathanEngaged(PlayerbotAI* botAI)
         return false;
 
     Unit* boss = FlameLeviathanBoss(botAI);
-
-    // Ahead of the combat test, because the housekeeping it drives includes the wipe reset.
-    TickFlameLeviathan(botAI, bot, boss);
-
     if (!boss || boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
         return false;
 

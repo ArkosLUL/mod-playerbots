@@ -18,10 +18,6 @@ class RaidUlduarActionContext : public NamedObjectContext<Action>
 public:
     RaidUlduarActionContext()
     {
-        creators["flame leviathan vehicle"] = &RaidUlduarActionContext::flame_leviathan_vehicle;
-        creators["flame leviathan enter vehicle"] = &RaidUlduarActionContext::flame_leviathan_enter_vehicle;
-        creators["flame leviathan drive"] = &RaidUlduarActionContext::flame_leviathan_drive;
-        creators["flame leviathan interrupt vents"] = &RaidUlduarActionContext::flame_leviathan_interrupt_vents;
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold shed"] = &RaidUlduarActionContext::hodir_biting_cold_shed;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
@@ -112,10 +108,6 @@ public:
     }
 
 private:
-    static Action* flame_leviathan_vehicle(PlayerbotAI* ai) { return new FlameLeviathanVehicleAction(ai); }
-    static Action* flame_leviathan_enter_vehicle(PlayerbotAI* ai) { return new FlameLeviathanEnterVehicleAction(ai); }
-    static Action* flame_leviathan_drive(PlayerbotAI* ai) { return new FlameLeviathanDriveAction(ai); }
-    static Action* flame_leviathan_interrupt_vents(PlayerbotAI* ai) { return new FlameLeviathanInterruptVentsAction(ai); }
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_shed(PlayerbotAI* ai) { return new HodirBitingColdShedAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new HodirFrostResistanceAction(ai); }

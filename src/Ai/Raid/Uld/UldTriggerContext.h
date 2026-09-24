@@ -18,10 +18,6 @@ class RaidUlduarTriggerContext : public NamedObjectContext<Trigger>
 public:
     RaidUlduarTriggerContext()
     {
-        creators["flame leviathan on vehicle"] = &RaidUlduarTriggerContext::flame_leviathan_on_vehicle;
-        creators["flame leviathan vehicle near"] = &RaidUlduarTriggerContext::flame_leviathan_vehicle_near;
-        creators["flame leviathan flame vents"] = &RaidUlduarTriggerContext::flame_leviathan_flame_vents;
-        creators["flame leviathan drive urgent"] = &RaidUlduarTriggerContext::flame_leviathan_drive_urgent;
         creators["hodir biting cold"] = &RaidUlduarTriggerContext::hodir_biting_cold;
         creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
         creators["hodir frost resistance trigger"] = &RaidUlduarTriggerContext::hodir_frost_resistance_trigger;
@@ -126,10 +122,6 @@ public:
     }
 
 private:
-    static Trigger* flame_leviathan_on_vehicle(PlayerbotAI* ai) { return new FlameLeviathanOnVehicleTrigger(ai); }
-    static Trigger* flame_leviathan_vehicle_near(PlayerbotAI* ai) { return new FlameLeviathanVehicleNearTrigger(ai); }
-    static Trigger* flame_leviathan_flame_vents(PlayerbotAI* ai) { return new FlameLeviathanFlameVentsTrigger(ai); }
-    static Trigger* flame_leviathan_drive_urgent(PlayerbotAI* ai) { return new FlameLeviathanDriveUrgentTrigger(ai); }
     static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
     static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
     static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new HodirFrostResistanceTrigger(ai); }

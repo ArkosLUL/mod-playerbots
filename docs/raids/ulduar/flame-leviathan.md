@@ -144,8 +144,9 @@ despite the name**, and never ignites anything.
   spans it turned to face him mid-escape. A Pursued demolisher runs 14 yd/s on Increased Speed.
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
   `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
-  opener fires and five wipes left no trace at all. `FlameLeviathanEngaged` calls `MarkPull` to cover
-  it, latched per instance and released when he leaves combat so a re-pull opens a fresh one.
+  opener fires and five wipes left no trace at all. The encounter's tick (`FlameLeviathanTick`) calls
+  `MarkPull` to cover it, latched per instance and released when he leaves combat so a re-pull opens a
+  fresh one.
 - **Resolve him through the instance script** (`FlameLeviathanBoss`). The entry scan stops at
   `SightDistance` (100 yd), posts sit 98–188 yd from him, and `TickFlameLeviathan` resets the shared
   state on "no boss": `fl.pursued` flapped 26 times in one 2026-09-16 pull, each with a bot 117–147 yd out.
@@ -213,14 +214,14 @@ out-of-range station frames.
 clamps the demolisher against that range: a barrel that will not cast drops the Blue Pyrite stack the
 raid does its boss damage with.
 
-`FlameLeviathanVehicleMovementMultiplier` zeroes every other `MovementAction` while a bot is on an FL
-vehicle, exempting only the drive action, boarding and `LeaveVehicleAction` — and it stays **inert
-until he is engaged**, or the raid could never drive into the arena. The Void Reaver risk applies:
+The `flame leviathan vehicle movement` rule (`Exclusive`) zeroes every other `MovementAction` while a
+bot is on an FL vehicle, exempting only the drive action, boarding and `leave vehicle` — and it stays
+**inert until he is engaged**, or the raid could never drive into the arena. The Void Reaver risk applies:
 once it is live, a silently failing drive action means vehicles stand still all fight.
 
 **"Engaged" is his combat, not the rider's.** Threat here belongs to the vehicle creature, so a bot
 that drives far enough out drops combat mid-pull — which switched off the drive action and the
-multiplier together and handed the wheel to `follow`. `FlameLeviathanEngaged` reads the boss's combat
+rule together and handed the wheel to `follow`. `FlameLeviathanEngaged` reads the boss's combat
 first, falling back to the rider's so the approach still counts.
 
 ## The kite is a wall loop, not a corner run

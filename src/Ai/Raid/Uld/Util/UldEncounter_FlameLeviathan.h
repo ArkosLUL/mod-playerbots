@@ -340,6 +340,10 @@ constexpr float ULDUAR_FL_KITE_DETOUR_STEP = 25.0f;
 // through the target scan, which stops at SightDistance while a posted engine sits up to 190 yd out.
 Unit* FlameLeviathanBoss(PlayerbotAI* botAI);
 
+// The encounter's tick: opens the trace, which nothing else does for this fight, and resets the
+// per-instance state after a wipe. Throttled per instance, so every bot may call it every tick.
+void FlameLeviathanTick(PlayerbotAI* botAI);
+
 // Everything else stays inert until this is true, so the raid can still drive into the arena and
 // pull normally instead of being dragged at the boss the moment it seats.
 bool FlameLeviathanEngaged(PlayerbotAI* botAI);
