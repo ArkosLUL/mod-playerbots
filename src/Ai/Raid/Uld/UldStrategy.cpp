@@ -305,36 +305,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Auriaya
     //
-    // Sonic Screech is deliberately soaked, not dodged: it shares its damage across everyone in the
-    // cone, so there is no dodge node here and the anchors exist to put the raid in the arc. Position
-    // sits at the bottom because the engine stops at the first action that succeeds - killing a sentry
-    // beats standing on a spot, and the anchor tolerances make the drift cheap.
-    triggers.push_back(new TriggerNode(
-        "auriaya fall from floor trigger",
-        { NextAction("auriaya fall from floor action", ACTION_RAID + 4) }));
-
-    // A loose Sanctum Sentry is the worst state the fight has: it buffs Auriaya while it lives and
-    // pounces anything 8-25 yd away, which holding it in melee prevents outright. It outranks the pool
-    // dodge, which is one step and can wait a tick.
-    triggers.push_back(new TriggerNode(
-        "auriaya sentry taunt trigger",
-        { NextAction("auriaya sentry taunt action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "auriaya seeping essence trigger",
-        { NextAction("auriaya seeping essence action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "auriaya anti fear trigger",
-        { NextAction("auriaya anti fear action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "auriaya set dps priority trigger",
-        { NextAction("auriaya set dps priority action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "auriaya raid position trigger",
-        { NextAction("auriaya raid position action", ACTION_RAID) }));
+    UldAuriayaDefinition().AddTriggerNodes(triggers);
 
     //
     // Hodir
@@ -978,7 +949,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 
     UldVezaxDefinition().AddMultipliers(botAI, multipliers);
 
-    multipliers.push_back(new AuriayaMovementGuardMultiplier(botAI));
+    UldAuriayaDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new HodirGuardMultiplier(botAI));
     multipliers.push_back(new HodirPaladinAuraMultiplier(botAI));
 
@@ -988,13 +959,13 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "freya"));
     multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "thorim"));
 
-    // Keep Tremor Totem in the earth slot for as long as these two can fear
-    multipliers.push_back(new AuriayaAntiFearTotemGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDpsTargetGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronDisplacementGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronMovementGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronPhase1AoeHoldMultiplier(botAI));
     multipliers.push_back(new YoggSaronStackFoodGuardMultiplier(botAI));
     multipliers.push_back(new YoggSaronPhase1WalkGuardMultiplier(botAI));
+
+    // Keep Tremor Totem in the earth slot for as long as Yogg-Saron can fear
     multipliers.push_back(new YoggSaronAntiFearTotemGuardMultiplier(botAI));
 }

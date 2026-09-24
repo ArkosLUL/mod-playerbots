@@ -11,12 +11,13 @@
 
 #include "RaidEncounter.h"
 
+EncounterDefinition const& UldAuriayaDefinition();
 EncounterDefinition const& UldVezaxDefinition();
 
 // Every Ulduar boss with a definition. The contexts and the strategy's tick walk this.
 inline std::vector<EncounterDefinition const*> const& UldEncounterDefinitions()
 {
-    static std::vector<EncounterDefinition const*> const definitions = {&UldVezaxDefinition()};
+    static std::vector<EncounterDefinition const*> const definitions = {&UldAuriayaDefinition(), &UldVezaxDefinition()};
     return definitions;
 }
 

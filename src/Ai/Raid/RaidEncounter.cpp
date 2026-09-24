@@ -135,6 +135,8 @@ namespace
                 return PlayerbotAI::IsRanged(bot);
             case Role::Melee:
                 return PlayerbotAI::IsMelee(bot);
+            case Role::NonTank:
+                return !PlayerbotAI::IsTank(bot);
             default:
                 return false;
         }

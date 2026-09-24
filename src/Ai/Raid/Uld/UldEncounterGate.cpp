@@ -24,7 +24,6 @@ namespace
         {"xt002", ULD_BOSS_XT002},
         {"iron assembly", ULD_BOSS_ASSEMBLY},
         {"kologarn", ULD_BOSS_KOLOGARN},
-        {"auriaya", ULD_BOSS_AURIAYA},
         {"freya", ULD_BOSS_FREYA},
         {"hodir", ULD_BOSS_HODIR},
         {"mimiron", ULD_BOSS_MIMIRON},

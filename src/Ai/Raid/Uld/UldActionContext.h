@@ -56,7 +56,6 @@ public:
         creators["kologarn nature resistance action"] = &RaidUlduarActionContext::kologarn_nature_resistance_action;
         creators["kologarn rubble slowdown action"] = &RaidUlduarActionContext::kologarn_rubble_slowdown_action;
         creators["kologarn eyebeam action"] = &RaidUlduarActionContext::kologarn_eyebeam_action;
-        creators["auriaya fall from floor action"] = &RaidUlduarActionContext::auriaya_fall_from_floor_action;
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold shed"] = &RaidUlduarActionContext::hodir_biting_cold_shed;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
@@ -155,11 +154,6 @@ public:
         creators["ignis flame jets hold cast action"] = &RaidUlduarActionContext::ignis_flame_jets_hold_cast_action;
         creators["ignis molten construct avoid action"] = &RaidUlduarActionContext::ignis_molten_construct_avoid_action;
         creators["ignis slag pot heal action"] = &RaidUlduarActionContext::ignis_slag_pot_heal_action;
-        creators["auriaya seeping essence action"] = &RaidUlduarActionContext::auriaya_seeping_essence_action;
-        creators["auriaya sentry taunt action"] = &RaidUlduarActionContext::auriaya_sentry_taunt_action;
-        creators["auriaya raid position action"] = &RaidUlduarActionContext::auriaya_raid_position_action;
-        creators["auriaya set dps priority action"] = &RaidUlduarActionContext::auriaya_set_dps_priority_action;
-        creators["auriaya anti fear action"] = &RaidUlduarActionContext::auriaya_anti_fear_action;
         creators["yogg-saron anti fear action"] = &RaidUlduarActionContext::yogg_saron_anti_fear_action;
         creators["mimiron magnetic core action"] = &RaidUlduarActionContext::mimiron_magnetic_core_action;
         creators["mimiron plasma blast defensive action"] =
@@ -235,7 +229,6 @@ private:
     static Action* kologarn_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "kologarn"); }
     static Action* kologarn_rubble_slowdown_action(PlayerbotAI* ai) { return new KologarnRubbleSlowdownAction(ai); }
     static Action* kologarn_eyebeam_action(PlayerbotAI* ai) { return new KologarnEyebeamAction(ai); }
-    static Action* auriaya_fall_from_floor_action(PlayerbotAI* ai) { return new AuriayaFallFromFloorAction(ai); }
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_shed(PlayerbotAI* ai) { return new HodirBitingColdShedAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new HodirFrostResistanceAction(ai); }
@@ -334,11 +327,6 @@ private:
     static Action* ignis_flame_jets_hold_cast_action(PlayerbotAI* ai) { return new IgnisFlameJetsHoldCastAction(ai); }
     static Action* ignis_molten_construct_avoid_action(PlayerbotAI* ai) { return new IgnisMoltenConstructAvoidAction(ai); }
     static Action* ignis_slag_pot_heal_action(PlayerbotAI* ai) { return new IgnisSlagPotHealAction(ai); }
-    static Action* auriaya_seeping_essence_action(PlayerbotAI* ai) { return new AuriayaSeepingEssenceAction(ai); }
-    static Action* auriaya_sentry_taunt_action(PlayerbotAI* ai) { return new AuriayaSentryTauntAction(ai); }
-    static Action* auriaya_raid_position_action(PlayerbotAI* ai) { return new AuriayaRaidPositionAction(ai); }
-    static Action* auriaya_set_dps_priority_action(PlayerbotAI* ai) { return new AuriayaSetDpsPriorityAction(ai); }
-    static Action* auriaya_anti_fear_action(PlayerbotAI* ai) { return new AuriayaAntiFearAction(ai); }
     static Action* yogg_saron_anti_fear_action(PlayerbotAI* ai) { return new YoggSaronAntiFearAction(ai); }
     static Action* mimiron_magnetic_core_action(PlayerbotAI* ai) { return new MimironMagneticCoreAction(ai); }
     static Action* mimiron_plasma_blast_defensive_action(PlayerbotAI* ai)

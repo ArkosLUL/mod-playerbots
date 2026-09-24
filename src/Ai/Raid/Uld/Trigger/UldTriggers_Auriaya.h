@@ -13,42 +13,54 @@
 class AuriayaFallFromFloorTrigger : public Trigger
 {
 public:
-    AuriayaFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya fall from floor trigger") {}
+    static constexpr char const* Name = "auriaya fall from floor trigger";
+
+    AuriayaFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AuriayaSeepingEssenceTrigger : public Trigger
 {
 public:
-    AuriayaSeepingEssenceTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya seeping essence trigger") {}
+    static constexpr char const* Name = "auriaya seeping essence trigger";
+
+    AuriayaSeepingEssenceTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AuriayaSentryTauntTrigger : public Trigger
 {
 public:
-    AuriayaSentryTauntTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya sentry taunt trigger") {}
+    static constexpr char const* Name = "auriaya sentry taunt trigger";
+
+    AuriayaSentryTauntTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AuriayaRaidPositionTrigger : public Trigger
 {
 public:
-    AuriayaRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya raid position trigger") {}
+    static constexpr char const* Name = "auriaya raid position trigger";
+
+    AuriayaRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AuriayaSetDpsPriorityTrigger : public Trigger
 {
 public:
-    AuriayaSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "auriaya set dps priority trigger") {}
+    static constexpr char const* Name = "auriaya set dps priority trigger";
+
+    AuriayaSetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AuriayaAntiFearTrigger : public RaidAntiFearTrigger
 {
 public:
-    AuriayaAntiFearTrigger(PlayerbotAI* ai) : RaidAntiFearTrigger(ai, "auriaya anti fear trigger") {}
+    static constexpr char const* Name = "auriaya anti fear trigger";
+
+    AuriayaAntiFearTrigger(PlayerbotAI* ai) : RaidAntiFearTrigger(ai, Name) {}
 
 protected:
     bool FearWindowActive() override { return AuriayaFearWindowActive(botAI); }

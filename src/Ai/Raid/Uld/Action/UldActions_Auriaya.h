@@ -15,7 +15,9 @@
 class AuriayaFallFromFloorAction : public Action
 {
 public:
-    AuriayaFallFromFloorAction(PlayerbotAI* botAI) : Action(botAI, "auriaya fall from floor action") {}
+    static constexpr char const* Name = "auriaya fall from floor action";
+
+    AuriayaFallFromFloorAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -26,7 +28,9 @@ public:
 class AuriayaSeepingEssenceAction : public MovementAction
 {
 public:
-    AuriayaSeepingEssenceAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya seeping essence action") {}
+    static constexpr char const* Name = "auriaya seeping essence action";
+
+    AuriayaSeepingEssenceAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -34,7 +38,9 @@ public:
 class AuriayaSentryTauntAction : public Action
 {
 public:
-    AuriayaSentryTauntAction(PlayerbotAI* botAI) : Action(botAI, "auriaya sentry taunt action") {}
+    static constexpr char const* Name = "auriaya sentry taunt action";
+
+    AuriayaSentryTauntAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -42,7 +48,9 @@ public:
 class AuriayaRaidPositionAction : public MovementAction
 {
 public:
-    AuriayaRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "auriaya raid position action") {}
+    static constexpr char const* Name = "auriaya raid position action";
+
+    AuriayaRaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -50,7 +58,9 @@ public:
 class AuriayaSetDpsPriorityAction : public AttackAction
 {
 public:
-    AuriayaSetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "auriaya set dps priority action") {}
+    static constexpr char const* Name = "auriaya set dps priority action";
+
+    AuriayaSetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -61,7 +71,9 @@ private:
 class AuriayaAntiFearAction : public RaidAntiFearAction
 {
 public:
-    AuriayaAntiFearAction(PlayerbotAI* botAI) : RaidAntiFearAction(botAI, "auriaya anti fear action") {}
+    static constexpr char const* Name = "auriaya anti fear action";
+
+    AuriayaAntiFearAction(PlayerbotAI* botAI) : RaidAntiFearAction(botAI, Name) {}
 
 protected:
     bool FearWindowActive() override { return AuriayaFearWindowActive(botAI); }

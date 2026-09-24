@@ -8,7 +8,7 @@ with `Action/UldActions.h` and `Trigger/UldTriggers.h` kept as **thin umbrella h
 the parts — so `UldActionContext.h`, `UldTriggerContext.h` and every registration map needed no edits
 when the monolith was split.
 
-A boss moved to an [encounter definition](../README.md#file-layout-and-wiring) (Vezax so far) lives
+A boss moved to an [encounter definition](../README.md#file-layout-and-wiring) lives
 in `Definition/UldDefinition_<Boss>.cpp`, listed in `Definition/UldDefinitions.h`, and
 `UldStrategy.cpp` adds its nodes and multipliers at its old spot, keeping node and veto order. The rest
 are wired by hand, and `UldTriggerContext.h` gates their triggers by the boss prefix in

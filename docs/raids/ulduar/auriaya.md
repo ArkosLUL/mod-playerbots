@@ -33,9 +33,9 @@ the way XT-002 is:
 - **Melee and assist tank 0** → unanchored. Melee sit behind her and do not soak; at either raid size
   the remaining soakers already make each share small.
 
-`AuriayaMovementGuardMultiplier` zeroes generic movers for the anchored roles only, or the anchor
-oscillates. It spares `AttackAction` and `ReachTargetAction` — both are `MovementAction`s, and a
-blanket veto would kill targeting and strand healers out of heal range.
+Its `OwnMovement` rule zeroes generic movers for the anchored roles only, or the anchor oscillates.
+It keeps `Attack`, `Reach` and `ReachHeal`: a blanket veto would kill targeting and strand healers
+out of heal range.
 
 **The pools are permanent**: summon 64457 has `DurationIndex 21` (−1), no SmartAI touches 34098, and
 the Defender's 30s respawn never despawns them, so up to 9 accumulate per pull. Hence stations: three

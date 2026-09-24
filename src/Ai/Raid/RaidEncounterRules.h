@@ -74,6 +74,7 @@ constexpr RoleMask MainTank = 1 << 1;
 constexpr RoleMask Heal = 1 << 2;
 constexpr RoleMask Ranged = 1 << 3;
 constexpr RoleMask Melee = 1 << 4;
+constexpr RoleMask NonTank = 1 << 5;  // healers and dps alike: every bot but a tank
 }  // namespace Role
 
 // A rule zeroes an action it cares about while the gate is open, the bot has one of its roles and the

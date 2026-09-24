@@ -169,8 +169,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
 
 - **Algalon:** `AlgalonTargetGuardMultiplier` stays hand-written (wrong-target veto with no picker
   escape).
-- **Auriaya:** the movement guard splits into `OwnTargeting` (non-tanks) and `OwnMovement` (main tank,
-  ranged).
 - **Flame Leviathan:** riders get `Exclusive` passing the drive and board rows plus `LeaveVehicleAction`.
 - **Hodir:** `HodirGuardMultiplier` has five branches (taunt, pickers, Flash Freeze, icicle path,
   role hold) → one rule each. Flash Freeze is an `OwnMovement` with `keep` = `Attack`, movers
@@ -203,7 +201,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; continue at commit 3.
+**Status:** commits 1-2 landed; commit 3 in progress, Auriaya done, next Kologarn.
 
 Close each per `CLAUDE.local.md`.
 
@@ -215,8 +213,10 @@ Close each per `CLAUDE.local.md`.
    delete its creators from both contexts and its prefix entry. Syntax-check with a raised
    `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU.
 2. **pblint learns rows.** Landed.
-3. **The other 13 Ulduar bosses, one commit each.** The last one removes the prefix table,
-   `UldGatedTrigger`, the `Uld*` forwards and items 1-2 of the perf plan.
+3. **The other 13 Ulduar bosses, one commit each**, least churned first: Auriaya, Kologarn,
+   Razorscale, XT-002, Freya, Algalon, Ignis, Iron Assembly, Flame Leviathan, Hodir, Thorim,
+   Yogg-Saron, Mimiron. The last one removes the prefix table, `UldGatedTrigger`, the `Uld*`
+   forwards and items 1-2 of the perf plan.
 4. **EoE**, then **OS**.
 5. **Naxx**, one commit per boss group.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
