@@ -56,6 +56,16 @@ RE_ADD_STRATEGY_LIST = re.compile(r'"([^"]+)"')
 # `: Action(botAI, "name")` / `: Trigger(botAI, "name", 200)` in a member-init list.
 RE_SELF_NAME = re.compile(r':\s*(?:public\s+)?(\w+)\s*\(\s*(?:bot)?AI\s*,\s*"([^"]*)"')
 
+# Encounter definitions (Raid/RaidEncounter.h). A class there spells its name once, as a `Name`
+# constant, and a row registers both creators and the node from it, so none of the literals above
+# ever appear.
+RE_NAME_CONST = re.compile(r'\bstatic\s+constexpr\s+(?:char\s+const|const\s+char)\s*\*\s*Name\s*=\s*"([^"]*)"')
+RE_CLASS_OPEN = re.compile(r"^\s*(?:class|struct)\s+(\w+)\b(?!\s*;)(?:[^:]*:\s*(?:public\s+)?(\w+))?")
+RE_ROW_TEMPLATE = re.compile(r"\bNode\s*<\s*(\w+)\s*,\s*(\w+)\s*>\s*\(")
+RE_ROW_EXPLICIT = re.compile(r"\.Node\s*\(")
+RE_RULE_CALL = re.compile(r"\.(?:OwnMovement|Block|Exclusive)\s*\(")
+RE_STRING = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
+
 
 def strip_comments(text: str) -> list[str]:
     """Blank out comments while keeping line numbers, so a finding still points at the right line."""
@@ -133,6 +143,111 @@ def creators_by_kind(sources: list[Source]) -> dict[str, dict[str, tuple[str, in
     return found
 
 
+def call_arguments(text: str, open_paren: int) -> list[str]:
+    """The top-level arguments of the call whose `(` sits at open_paren, so a lambda's own commas and
+    strings stay inside the argument that holds them."""
+    args: list[str] = []
+    depth, start, i = 0, open_paren + 1, open_paren
+    while i < len(text):
+        string = RE_STRING.match(text, i)
+        if string:
+            i = string.end()
+            continue
+        char = text[i]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+            if depth == 0:
+                args.append(text[start:i].strip())
+                return args
+        elif char == "," and depth == 1:
+            args.append(text[start:i].strip())
+            start = i + 1
+        i += 1
+    return args
+
+
+def literal(arg: str) -> str | None:
+    match = RE_STRING.fullmatch(arg)
+    return match.group(1) if match else None
+
+
+class Row(NamedTuple):
+    trigger: str
+    action: str
+    rel: str
+    line: int
+
+
+class Registry(NamedTuple):
+    creators: dict[str, dict[str, tuple[str, int]]]
+    rows: list[Row]
+    rule_names: list[tuple[str, str, int]]  # an action name a rule lists, where it is listed
+    name_constants: dict[str, tuple[str, str, int]]  # class -> its Name, where it is declared
+
+    def row_triggers(self) -> set[str]:
+        return {row.trigger for row in self.rows}
+
+    def row_actions(self) -> set[str]:
+        return {row.action for row in self.rows}
+
+
+def name_constants(sources: list[Source]) -> dict[str, tuple[str, str, int]]:
+    """class -> (Name, file, line), including a Name a class only inherits: `T::Name` compiles for a
+    subclass that declares none of its own, and means the base's."""
+    own: dict[str, tuple[str, str, int]] = {}
+    base_of: dict[str, str] = {}
+    for src in sources:
+        current = None
+        for number, line in enumerate(src.lines, 1):
+            opened = RE_CLASS_OPEN.match(line)
+            if opened:
+                current = opened.group(1)
+                if opened.group(2):
+                    base_of.setdefault(current, opened.group(2))
+            match = RE_NAME_CONST.search(line)
+            if match and current:
+                own.setdefault(current, (match.group(1), src.rel, number))
+
+    found = dict(own)
+    for cls in base_of:
+        seen, walk = set(), cls
+        while walk not in own and walk in base_of and walk not in seen:
+            seen.add(walk)
+            walk = base_of[walk]
+        if walk in own:
+            found.setdefault(cls, own[walk])
+    return found
+
+
+def registry(sources: list[Source]) -> Registry:
+    names = name_constants(sources)
+    rows: list[Row] = []
+    rule_names: list[tuple[str, str, int]] = []
+    for src in sources:
+        text = "\n".join(src.lines)
+
+        def line_of(pos: int) -> int:
+            return text.count("\n", 0, pos) + 1
+
+        for match in RE_ROW_TEMPLATE.finditer(text):
+            trigger, action = names.get(match.group(1)), names.get(match.group(2))
+            if trigger and action:
+                rows.append(Row(trigger[0], action[0], src.rel, line_of(match.start())))
+        for match in RE_ROW_EXPLICIT.finditer(text):
+            args = call_arguments(text, match.end() - 1)
+            if len(args) >= 3 and literal(args[0]) is not None and literal(args[2]) is not None:
+                rows.append(Row(literal(args[0]), literal(args[2]), src.rel, line_of(match.start())))
+        for match in RE_RULE_CALL.finditer(text):
+            # The first argument is the rule's own name; only a brace list holds action names.
+            for arg in call_arguments(text, match.end() - 1)[1:]:
+                if arg.startswith("{") or arg.startswith("std::vector"):
+                    for string in RE_STRING.finditer(arg):
+                        rule_names.append((string.group(1), src.rel, line_of(match.start())))
+    return Registry(creators_by_kind(sources), rows, rule_names, names)
+
+
 def base_name(name: str) -> str:
     """What create() actually looks up. It splits at "::" and passes the tail to Qualified::Qualify,
     so `say::taunt` resolves the creator `say` (NamedObjectContext.h:54)."""
@@ -157,37 +272,64 @@ def references(sources: list[Source]) -> tuple[list, list]:
 # --- checks -------------------------------------------------------------------
 
 
-def check_unresolved(sources, creators) -> list[Finding]:
-    """A node naming something no context can build. The engine skips it silently and forever."""
+def check_unresolved(sources, reg: Registry) -> list[Finding]:
+    """A node naming something no context can build. The engine skips it silently and forever. A rule
+    listing an action nothing registers is the same failure: it blocks or passes nothing, and says
+    nothing."""
     out = []
+    creators = reg.creators
     actions, triggers = references(sources)
+    known = set(creators.get("Action", {})) | set(creators.get("ActionNode", {})) | reg.row_actions()
     for name, rel, number in actions:
-        known = set(creators.get("Action", {})) | set(creators.get("ActionNode", {}))
         if name and name not in known and not KNOWN_DYNAMIC.search(name):
             out.append(Finding("unresolved-action", rel, number,
                                f'NextAction("{name}") has no creators[] entry in any action context'))
+    known_triggers = set(creators.get("Trigger", {})) | reg.row_triggers()
     for name, rel, number in triggers:
-        if name and name not in creators.get("Trigger", {}) and not KNOWN_DYNAMIC.search(name):
+        if name and name not in known_triggers and not KNOWN_DYNAMIC.search(name):
             out.append(Finding("unresolved-trigger", rel, number,
                                f'TriggerNode("{name}") has no creators[] entry in any trigger context'))
+    for name, rel, number in reg.rule_names:
+        if name not in known:
+            out.append(Finding("unresolved-rule-action", rel, number,
+                               f'a rule lists "{name}", which no action context or row registers'))
     return out
 
 
-def check_orphan_creators(sources, creators) -> list[Finding]:
+def check_orphan_creators(sources, reg: Registry) -> list[Finding]:
     """Registered and never referenced: a behaviour somebody wrote that nothing can run."""
     out = []
     actions, triggers = references(sources)
-    used_actions = {name for name, _, _ in actions}
-    used_triggers = {name for name, _, _ in triggers}
+    used_actions = {name for name, _, _ in actions} | reg.row_actions()
+    used_triggers = {name for name, _, _ in triggers} | reg.row_triggers()
     for kind, used in (("Action", used_actions), ("Trigger", used_triggers)):
-        for name, (rel, number) in creators.get(kind, {}).items():
+        for name, (rel, number) in reg.creators.get(kind, {}).items():
             if name not in used:
                 out.append(Finding(f"orphan-{kind.lower()}", rel, number,
                                    f'creators["{name}"] is never named by any node', error=False))
     return out
 
 
-def check_ctor_name(sources, creators) -> list[Finding]:
+def check_definition_rows(sources, reg: Registry) -> list[Finding]:
+    """A creators[] entry left behind for a name a definition row now registers. The row's creator is
+    the gated one; which of the two a bot builds depends on registration order, so a missed delete
+    during a migration can quietly ungate a trigger."""
+    out = []
+    rows = {}
+    for row in reg.rows:
+        rows.setdefault(row.trigger, row)
+        rows.setdefault(row.action, row)
+    for kind in ("Action", "Trigger"):
+        for name, (rel, number) in reg.creators.get(kind, {}).items():
+            row = rows.get(name)
+            if row:
+                out.append(Finding("row-duplicate", rel, number,
+                                   f'creators["{name}"] duplicates the definition row at '
+                                   f"{row.rel}:{row.line}; delete this entry"))
+    return out
+
+
+def check_ctor_name(sources, reg: Registry) -> list[Finding]:
     """A leaf class whose own name string is registered nowhere. Both halves have to match for a node
     to run, so a name that appears only in the constructor is a behaviour nothing can build.
 
@@ -195,8 +337,19 @@ def check_ctor_name(sources, creators) -> list[Finding]:
     subclasses to register under spell names. A class anybody derives from is therefore skipped -
     without that the check reports 28 findings of which 4 are real."""
     out = []
-    registered = set(creators.get("Action", {})) | set(creators.get("Trigger", {}))
+    creators = reg.creators
+    registered = (set(creators.get("Action", {})) | set(creators.get("Trigger", {})) | reg.row_actions()
+                  | reg.row_triggers())
     bases = {b for src in sources for line in src.lines for b in RE_BASE.findall(line)}
+
+    # The Name form: a class nothing derives from, whose constant no row or creator uses.
+    reported: set[tuple[str, int]] = set()
+    for cls, (name, rel, number) in reg.name_constants.items():
+        if cls in bases or name in registered or (rel, number) in reported:
+            continue
+        reported.add((rel, number))
+        out.append(Finding("unregistered-class", rel, number,
+                           f'{cls} names itself "{name}" and nothing registers that name', error=False))
 
     for src in sources:
         current = None
@@ -220,7 +373,7 @@ def check_ctor_name(sources, creators) -> list[Finding]:
     return out
 
 
-def check_strategy_activation(sources, creators) -> list[Finding]:
+def check_strategy_activation(sources, reg: Registry) -> list[Finding]:
     """Registration is not activation. A strategy with a creator that no addStrategies* call ever
     names can never run - DpsAoeStrategy is the standing example."""
     out = []
@@ -236,7 +389,7 @@ def check_strategy_activation(sources, creators) -> list[Finding]:
         for block in re.findall(r"addStrateg\w*\s*\((.*?)\)", "\n".join(src.lines), re.S):
             added.update(RE_ADD_STRATEGY_LIST.findall(block))
 
-    for name, (rel, number) in creators.get("Strategy", {}).items():
+    for name, (rel, number) in reg.creators.get("Strategy", {}).items():
         if name and name not in added:
             out.append(Finding("strategy-never-added", rel, number,
                                f'strategy "{name}" has a creator but no addStrategies* call adds it',
@@ -244,7 +397,7 @@ def check_strategy_activation(sources, creators) -> list[Finding]:
     return out
 
 
-def check_raid_sites(sources, creators) -> list[Finding]:
+def check_raid_sites(sources, reg: Registry) -> list[Finding]:
     """The four raid registration sites are pure name lists, so a merge that drops one side
     unregisters a raid strategy with nothing failing to compile."""
     out = []
@@ -255,7 +408,7 @@ def check_raid_sites(sources, creators) -> list[Finding]:
         return out
 
     # Every strategy context, not just the raid one: the five-man keys live in DungeonStrategyContext.
-    keys = set(creators.get("Strategy", {}))
+    keys = set(reg.creators.get("Strategy", {}))
     listed = set()
     block = re.search(r"allInstanceStrategies\s*=\s*\{(.*?)\}", ai, re.S)
     if block:
@@ -281,7 +434,7 @@ def check_trigger_interval(sources) -> list[Finding]:
     """Trigger's checkInterval is normalised as `< 100 ? value * 1000 : value`, so 2..99 silently
     means seconds. A positioning trigger throttled to 5 s is not a positioning trigger."""
     out = []
-    pattern = re.compile(r':\s*Trigger\s*\(\s*(?:bot)?AI\s*,\s*"[^"]*"\s*,\s*(\d+)\s*\)')
+    pattern = re.compile(r':\s*Trigger\s*\(\s*(?:bot)?AI\s*,\s*(?:"[^"]*"|Name)\s*,\s*(\d+)\s*\)')
     for src in sources:
         for number, line in enumerate(src.lines, 1):
             match = pattern.search(line)
@@ -588,6 +741,7 @@ def check_spell_difficulty(sources, table: SpellDifficulty) -> list[Finding]:
 CHECKS = {
     "unresolved": (check_unresolved, True),
     "orphan-creators": (check_orphan_creators, True),
+    "definition-rows": (check_definition_rows, True),
     "ctor-name": (check_ctor_name, True),
     "strategy-activation": (check_strategy_activation, True),
     "raid-sites": (check_raid_sites, True),
@@ -619,13 +773,13 @@ def main() -> int:
     # resolves against creators registered in Ai/Base. Narrowing happens when findings are reported.
     world = collect([SRC])
     scope = {src.rel for src in collect(args.paths)} if args.paths else None
-    creators = creators_by_kind(world)
+    reg = registry(world)
 
     findings: list[Finding] = []
     for name, (func, needs_creators) in CHECKS.items():
         if args.only and name != args.only:
             continue
-        findings += func(world, creators) if needs_creators else func(world)
+        findings += func(world, reg) if needs_creators else func(world)
 
     if args.spell_difficulty and not args.only:
         try:

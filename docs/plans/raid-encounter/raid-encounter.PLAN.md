@@ -147,12 +147,6 @@ gate truth table; each rule kind's block and pass sets; mover narrowing and `kee
 and, with call counters, that an action no rule cares about never reaches the gate, role or
 predicate.
 
-### pblint
-
-`tools/pblint/pblint.py` learns rows: `Node<T, A>` registers `T::Name` and `A::Name`, and the
-`unresolved`, `orphan-creators`, `ctor-name` and `trigger-interval` checks read the `Name` constant
-form. Migrated raids stay fully covered.
-
 ## Allowed behaviour changes
 
 Shared behaviour from the start. A boss's commit may change only what is listed here and must name
@@ -209,7 +203,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commit 1 landed; continue at commit 2 (toc-rework's `w0b-tooling` merged on 2026-09-23).
+**Status:** commits 1-2 landed; continue at commit 3.
 
 Close each per `CLAUDE.local.md`.
 
@@ -220,7 +214,7 @@ Close each per `CLAUDE.local.md`.
    `AddTriggerNodes`/`AddMultipliers` at its old spot in `UldStrategy.cpp` (keeps node and veto order),
    delete its creators from both contexts and its prefix entry. Syntax-check with a raised
    `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU.
-2. **pblint learns rows.** Until then pblint loses coverage of migrated classes; nothing fails.
+2. **pblint learns rows.** Landed.
 3. **The other 13 Ulduar bosses, one commit each.** The last one removes the prefix table,
    `UldGatedTrigger`, the `Uld*` forwards and items 1-2 of the perf plan.
 4. **EoE**, then **OS**.

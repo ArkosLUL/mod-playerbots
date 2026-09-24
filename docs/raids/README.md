@@ -28,7 +28,7 @@ space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplie
 replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 
 - **rows**: trigger class, action class, priority, `EncounterRow::Mover`. Each name is typed once, as
-  the class's `Name` constant, which pblint does not read yet;
+  the class's `Name` constant;
 - its [encounter rules](#encounter-rules) and hand-written multipliers;
 - a **tick**, run by `Strategy::OnTick` once per engine tick before the triggers. Housekeeping (trace
   notes, latch writes, wipe resets) goes there, never into a predicate a cheaper check may skip.
@@ -40,9 +40,9 @@ between pulls everything is open and predicates still check the boss. Gate on th
 unit: a drake Sartharion calls in never starts its own encounter.
 
 Nothing enforces that the four agree, so run `tools/pblint/pblint.py` over what a commit touches: it
-cross-checks all four, and every trigger and action name besides. It only proves the name resolves —
-`postmortem.py --coverage` says whether the node then did anything. (The `"rs"` bug recorded here is
-fixed — it is in `GetInstanceStrategies()` and at `case 724:`.)
+cross-checks all four, and every trigger and action name besides, definition rows included. It only
+proves the name resolves — `postmortem.py --coverage` says whether the node then did anything.
+(The `"rs"` bug recorded here is fixed — it is in `GetInstanceStrategies()` and at `case 724:`.)
 
 ## Priority conventions
 

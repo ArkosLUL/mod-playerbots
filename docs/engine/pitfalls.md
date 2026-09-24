@@ -64,6 +64,12 @@ Everything is wired by string. Nothing here is a compile error.
 on a name no context can build. It checks both directions, and needs to: the Yogg-Saron typo below sat
 in a string array no node scan could see, visible only as a creator nothing referenced.
 
+It reads [encounter definition](../raids/README.md#file-layout-and-wiring) rows through their `Name`
+constants. Also errors: a rule listing an unregistered action, and a `creators[]` entry duplicating a
+row, where registration order decides whether the bot gets the gated trigger. The constructor checks
+(`ctor-name`, `trigger-interval`) only match a parameter spelled `AI` or `botAI`, missing the `ai`
+that about half of Ulduar's and Naxx's constructors take.
+
 Casualties found so far: `blade fury` (should be `blade flurry`), `conflagrate`, `chaos bolt`,
 `cure party member` (a base class — subclasses register under spell names).
 
