@@ -16,6 +16,8 @@
 #include "RaidInstanceState.h"
 #include "Spell.h"
 #include "SpellAuras.h"
+#include "Timer.h"
+#include "UldHardMode.h"
 #include "UldScripts.h"
 #include "Unit.h"
 
@@ -225,6 +227,19 @@ void TickVezax(PlayerbotAI* botAI)
     }
 
     RaidObs::NoteDerived(botAI->GetBot(), "vezax.formation", reason);
+
+    // Both flags come from spell hooks on the vapors, which nothing else in the trace would show firing.
+    char const* hardMode = "off";
+    if (IsVezaxHardModeActive(botAI))
+    {
+        VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+        hardMode = !state                 ? "pending"
+                   : state->vaporKilled    ? "lost"
+                   : state->animusSummoned ? "animus"
+                                           : "pending";
+    }
+
+    RaidObs::NoteDerived(botAI->GetBot(), "vezax.hardmode", hardMode);
 }
 
 void GatherVezaxHazards(Player* bot, std::vector<VezaxHazard>& hazards, float searchRadius)
@@ -514,28 +529,51 @@ bool TryGetVezaxMarkBreakSpot(Player* bot, Unit* marked, Position& spot)
 
 bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact)
 {
-    Unit* boss = GetVezax(botAI);
-    if (!boss)
+    if (!GetVezax(botAI))
         return false;
 
-    Spell* spell = boss->GetCurrentSpell(CURRENT_GENERIC_SPELL);
-    if (!spell || !spell->m_spellInfo || spell->m_spellInfo->Id != SPELL_VEZAX_SHADOW_CRASH_CAST)
-        return false;
-
-    // TARGET_DEST_TARGET_ENEMY, so the destination was resolved when the missile went out and does
-    // not follow whoever it was aimed at. The unit fallback only matters if that ever changes.
-    if (WorldLocation const* dst = spell->m_targets.GetDstPos())
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    if (!state || !state->crashWindowMs ||
+        getMSTimeDiff(state->crashCastMs, getMSTime()) >= state->crashWindowMs)
     {
-        impact.Relocate(dst->GetPositionX(), dst->GetPositionY(), dst->GetPositionZ());
-        return true;
+        return false;
     }
 
-    Unit* target = spell->m_targets.GetUnitTarget();
-    if (!target)
+    impact = state->crashImpact;
+    return true;
+}
+
+void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs)
+{
+    if (!vezax)
+        return;
+
+    VezaxEncounterState& state = vezaxEncounterStates.For(vezax->GetInstanceId());
+    state.crashImpact = impact;
+    state.crashCastMs = getMSTime();
+    state.crashWindowMs = flightMs + ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS;
+}
+
+bool VezaxHardModePending(PlayerbotAI* botAI)
+{
+    if (!IsVezaxHardModeActive(botAI) || !VezaxEncounterActive(botAI))
         return false;
 
-    impact = target->GetPosition();
-    return true;
+    // No state yet just means nothing has happened in this pull.
+    VezaxEncounterState const* state = vezaxEncounterStates.Find(botAI->GetBot()->GetInstanceId());
+    return !state || (!state->vaporKilled && !state->animusSummoned);
+}
+
+void VezaxNoteVaporKilled(Unit* vapor)
+{
+    if (vapor)
+        vezaxEncounterStates.For(vapor->GetInstanceId()).vaporKilled = true;
+}
+
+void VezaxNoteAnimusSummoned(Unit* vapor)
+{
+    if (vapor)
+        vezaxEncounterStates.For(vapor->GetInstanceId()).animusSummoned = true;
 }
 
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)

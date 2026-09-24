@@ -75,6 +75,11 @@ void DefineVezax(EncounterBuilder& e)
     e.OwnTargeting("vezax target guard multiplier", Role::Any, VezaxEncounterActive,
                    Family::DpsAssist | Family::TankAssist | Family::DebuffOnAttacker);
 
+    // Hard mode only, until the Animus is summoned or a vapor dies. Lust waits for the Animus. Starfall's
+    // stars pick random enemies in range, which the target guard never sees, and a vapor can spawn under
+    // one already falling, so a range check wouldn't do.
+    e.Block("vezax hard mode hold", Role::Any, VezaxHardModePending, 0, {"heroism", "bloodlust", "starfall"});
+
     e.Multiplier<VezaxHoldCastOutsideFieldMultiplier>(Family::Melee | Family::Spell);
 
     e.Tick(TickVezax);

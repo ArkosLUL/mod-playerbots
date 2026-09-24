@@ -4,10 +4,10 @@
     general_vezax.py <file>            every section
     general_vezax.py <file> --boss     what he cast, Searing Flames, interrupters
     general_vezax.py <file> --mark     every Mark of the Faceless window: leech, escape, boss health
-    general_vezax.py <file> --crash    every Shadow Crash: who it hit, which blocks dodged
+    general_vezax.py <file> --crash    every Shadow Crash: who it hit, which blocks dodged, his cast in flight
     general_vezax.py <file> --field    field uptime, casts inside one, the soak and the cast hold
     general_vezax.py <file> --mana     mana over the pull, Life Tap and what it returned
-    general_vezax.py <file> --vapors   who targeted a vapor, and whether the Animus came
+    general_vezax.py <file> --vapors   who targeted or hit a vapor, and whether the Animus came
     general_vezax.py <file> --band     each camp member's distance from the boss, not the anchor
 
 What the generic views get wrong here, and what this reads instead:
@@ -17,7 +17,8 @@ What the generic views get wrong here, and what this reads instead:
   either is off by a median 8 to 16 yd against the real one, wider than the band. Everything here
   measures from where he stands at each sample.
 - **Saronite Vapors are never sampled**, so nothing says where one was. Targeting is read off the
-  bot's own target column against the vapor guids the unit rows name.
+  bot's own target column against the vapor guids the unit rows name, and what hit one off the cast
+  rows aimed at those guids: a Starfall star never passes through the bot's target.
 - **Heals on a creature are never recorded** (`ObsSession::Tracks` wants a player), so the mark's
   heal-back only shows as his health rate inside a window against outside one.
 - **`vezax.mark` is a per-bot change-only latch**: a bot that takes the same branch twice writes one
@@ -54,6 +55,7 @@ SPELL_SEARING_FLAMES = 62661
 SPELL_SURGE_OF_DARKNESS = 62662
 SPELL_SUMMON_VAPORS = 63081
 SPELL_FIELD = 63277
+CRASH_SPELLS = (SPELL_SHADOW_CRASH, SPELL_SHADOW_CRASH_IMPACT, SPELL_FIELD)
 # The half of the field carrying the -70% mana cost, linked off 63277 and not always behind it.
 SPELL_FIELD_COST = 65269
 SPELL_LIFE_TAP = 57946
@@ -419,11 +421,16 @@ def show_mark(trace: Trace) -> None:
 
 
 def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
+    """Every Shadow Crash. `masked` is what else he cast while the missile flew: on a build that read
+    the impact off his current spell, that cast took the slot and the crash landed unseen."""
     samples = samples or Samples(trace)
     roster = roster_guids(trace)
     block = blocks(trace)
+    boss = boss_guid(trace)
     dodges = [rec for rec in trace.of("move") if rec.get("by") == DODGE]
     hits = [rec for rec in trace.of("dmg") if rec.get("sp") == SPELL_SHADOW_CRASH_IMPACT]
+    his = sorted((rec["t"], rec.get("sp")) for rec in trace.of("cast")
+                 if rec.get("s") == boss and not rec.get("tr") and rec.get("sp") not in CRASH_SPELLS)
 
     out = []
     for cast, impact, x, y in pending_impacts(trace):
@@ -448,6 +455,7 @@ def crashes(trace: Trace, samples: Samples | None = None) -> list[dict]:
             "block": block.get(target, "-"),
             "dodged": dodged,
             "hits": [rec for rec in hits if impact - 500 <= rec["t"] <= impact + 1500],
+            "masked": [spell for when, spell in his if cast < when < impact],
         })
     return out
 
@@ -477,17 +485,23 @@ def show_crash(trace: Trace) -> None:
         return
 
     size = {name: sum(1 for block in blocks(trace).values() if block == name) for name in ("L", "R")}
-    print(f"  {'impact':>9} {'target':14} {'blk':4} {'L dodged':>9} {'R dodged':>9} {'hits':>5}")
+    print(f"  {'impact':>9} {'target':14} {'blk':4} {'L dodged':>9} {'R dodged':>9} {'his cast in flight':22}"
+          f" {'hits':>5}")
     for row in rows:
         victims = ", ".join(trace.name(rec.get("d")) for rec in row["hits"])
+        masked = ", ".join(trace.spell(spell).rsplit(" ", 1)[0] for spell in row["masked"]) or "-"
         print(f"  {clock(row['impact']):>9} {trace.name(row['target'])[:14]:14} {row['block']:4}"
               f" {len(row['dodged']['L']):4} of {size['L']:<2} {len(row['dodged']['R']):4} of {size['R']:<2}"
-              f" {len(row['hits']):5}  {victims}")
+              f" {masked[:22]:22} {len(row['hits']):5}  {victims}")
 
     both = sum(1 for row in rows if row["dodged"]["L"] and row["dodged"]["R"])
     mean = statistics.mean(len(row["dodged"]["L"]) + len(row["dodged"]["R"]) for row in rows)
     print(f"\n  {both} of {len(rows)} crashes moved both blocks, {mean:.1f} of {size['L'] + size['R']}"
           " camp members dodging on average")
+    masked = [row for row in rows if row["masked"]]
+    print(f"  {len(masked)} of {len(rows)} crashes had another cast of his in flight:"
+          f" {sum(len(row['hits']) for row in masked)} hit(s), against"
+          f" {sum(len(row['hits']) for row in rows if not row['masked'])} for the rest")
     issued, left = evictions(trace, samples)
     if issued:
         print(f"  {left} of {issued} dodges issued from inside a field were aimed outside every field")
@@ -663,6 +677,24 @@ def vapor_share(trace: Trace, samples: Samples | None = None) -> dict[int, float
     return out
 
 
+def vapor_hits(trace: Trace) -> dict[tuple[int, int], list[int]]:
+    """When each (caster, spell) landed on a vapor, from the cast rows aimed at one."""
+    vapors = guids_of_entry(trace, NPC_SARONITE_VAPORS)
+    out: dict[tuple[int, int], list[int]] = collections.defaultdict(list)
+    for rec in trace.of("cast"):
+        if rec.get("tgt") in vapors:
+            out[(rec.get("s"), rec.get("sp"))].append(rec["t"])
+    return dict(out)
+
+
+def hard_mode_changes(trace: Trace) -> dict[str, int]:
+    """The first time any bot's `vezax.hardmode` read each value."""
+    out: dict[str, int] = {}
+    for rec in notes(trace, "vezax.hardmode"):
+        out.setdefault(str(rec.get("txt", "")), rec["t"])
+    return out
+
+
 def show_vapors(trace: Trace) -> None:
     print("SARONITE VAPORS")
     boss = boss_guid(trace)
@@ -687,6 +719,18 @@ def show_vapors(trace: Trace) -> None:
     guard = collections.Counter(rec.get("a") for rec in trace.of("veto") if rec.get("m") == GUARD)
     if guard:
         print("  target guard vetoes: " + ", ".join(f"{action} {n}" for action, n in guard.most_common()))
+
+    hits = vapor_hits(trace)
+    if hits:
+        print("  cast at a vapor:")
+        for (caster, spell), times in sorted(hits.items(), key=lambda item: item[1][0]):
+            print(f"    {trace.name(caster)[:14]:14} {trace.spell(spell)[:24]:24} x{len(times):<3}"
+                  f" {clock(times[0])} to {clock(times[-1])}")
+
+    changes = hard_mode_changes(trace)
+    if changes:
+        print("  vezax.hardmode: " + ", ".join(f"{value} at {clock(when)}" for value, when
+                                             in sorted(changes.items(), key=lambda item: item[1])))
 
     animus = guids_of_entry(trace, NPC_SARONITE_ANIMUS)
     if animus:
@@ -760,10 +804,10 @@ def show_band(trace: Trace) -> None:
 SECTIONS = (
     ("boss", "what he cast, Searing Flames, interrupters", show_boss),
     ("mark", "Mark of the Faceless windows", show_mark),
-    ("crash", "Shadow Crash impacts and who dodged", show_crash),
+    ("crash", "Shadow Crash impacts, who dodged, his cast in flight", show_crash),
     ("field", "field uptime, in-field casts, soak, cast hold", show_field),
     ("mana", "mana, Life Tap and what it returned", show_mana),
-    ("vapors", "vapor targeting and the Animus", show_vapors),
+    ("vapors", "vapor targeting, hits and the Animus", show_vapors),
     ("band", "each camp member's distance from the boss", show_band),
 )
 

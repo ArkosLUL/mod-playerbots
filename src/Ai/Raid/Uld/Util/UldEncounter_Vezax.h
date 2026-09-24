@@ -41,6 +41,10 @@ enum UlduarVezaxIds
     SPELL_VEZAX_SEARING_FLAMES = 62661,
     SPELL_VEZAX_SURGE_OF_DARKNESS = 62662,
     SPELL_VEZAX_SARONITE_BARRIER = 63364,
+    // Both cast by a vapor on itself: the first only from JustDied, which ends hard mode, the second
+    // when the six merge.
+    SPELL_VEZAX_SARONITE_VAPORS_AURA = 63323,
+    SPELL_VEZAX_SUMMON_SARONITE_ANIMUS = 63145,
 
     // General Vezax
     NPC_VEZAX = 33271,
@@ -56,6 +60,9 @@ enum UlduarVezaxIds
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS = 10.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_CLEARANCE = 12.0f;
 constexpr float ULDUAR_VEZAX_SHADOW_CRASH_DODGE_SEARCH_RADIUS = 25.0f;
+// How long past distance over speed a stored impact stays live. Traced landings came 92-203 ms after
+// that figure, so this covers them with room for a slow tick.
+constexpr uint32 ULDUAR_VEZAX_SHADOW_CRASH_LAND_SLACK_MS = 500;
 
 // The Shadow Crash field (63277) is 8 yd, plus a yard of slack since a bot that stops exactly on the
 // boundary is still inside it.
@@ -190,6 +197,15 @@ struct VezaxHazard
 struct VezaxEncounterState
 {
     RaidObs::ObsGuidMap<uint8> slotAssignments{"vezax.slot"};
+
+    // The crash in flight, from its cast. One is enough: they come every 10s and the longest traced
+    // flight is 4.8s.
+    Position crashImpact;
+    uint32 crashCastMs = 0;
+    uint32 crashWindowMs = 0;
+
+    bool vaporKilled = false;
+    bool animusSummoned = false;
 };
 
 // From the instance script rather than a target sweep. "find target" walks only the bot's own threat
@@ -244,10 +260,17 @@ Unit* GetVezaxMarkedAlly(Player* bot);
 // whole ten ticks - the camp is far enough out that no mark on the ball ever reaches it.
 bool TryGetVezaxMarkBreakSpot(Player* bot, Unit* marked, Position& spot);
 
-// Where the missile now in flight will land, or false when none is. Instant cast plus Speed 10 means
-// the boss is never in UNIT_STATE_CASTING for it - the delayed spell is what stays current, and its
-// destination was frozen when it went out, which is what makes the thing dodgeable at all.
+// Where the missile now in flight will land, or false when none is. Read from what the cast hook
+// stored, not his current spell: his next cast takes that slot while the missile is still flying,
+// and the crash then lands with nobody seeing it.
 bool TryGetVezaxShadowCrashImpact(PlayerbotAI* botAI, Position& impact);
+void VezaxNoteShadowCrash(Unit* vezax, Position const& impact, uint32 flightMs);
+
+// Hard mode is still on the table: the switch is on, he's in combat, no vapor has died and the
+// Animus isn't up yet.
+bool VezaxHardModePending(PlayerbotAI* botAI);
+void VezaxNoteVaporKilled(Unit* vapor);
+void VezaxNoteAnimusSummoned(Unit* vapor);
 
 // Somewhere clear of that impact and still inside the band this bot's role is allowed to stand in.
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);

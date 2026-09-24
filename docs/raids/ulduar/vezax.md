@@ -13,7 +13,7 @@ where they disagree, and they do disagree.**
 | Surge of Darkness | 62662 | 63s from pull, repeats 63s. Self-cast: +100% physical damage, −55% move speed, 10s — the slow is **on Vezax**, not the raid. Delays the Searing Flames group 10s |
 | Mark of the Faceless | 63276 → 63278 | 20s from pull, repeats 40s. **10 ticks at 1/s**; each casts 63278 at the marked bot, leeching 5,000 from everyone else in range and healing him ~10× that. See below — it is the fight |
 | Saronite Vapors (NPC 33488) | summon 63081 | Every 30s at a **random point 45 yd out** (`TARGET_DEST_CASTER_RADIUS`, radius index 11). `NullCreatureAI` + `MoveRandom(4.0f)`, no addon auras: **the living cloud is harmless, never chases, and cannot be pulled**. Its puddle (63323 → 63322, 8 yd, `100 · 2^stacks` every 2s for half back as mana) drops **only from `JustDied`**, never from the script's own despawn |
-| Saronite Animus | NPC 33524 | Hard mode. At vapor #6 with none killed, every vapor charges the anchor and merges |
+| Saronite Animus | NPC 33524 | Hard mode. At vapor #6 (3:00) with none killed, every vapor charges the anchor and merges; it spawns 8s later |
 | Saronite Barrier | 63364 | −99% damage taken on Vezax until the Animus dies |
 | Profound Darkness | 63420 | Animus self-cast every 2s. 749 damage plus **+10% shadow damage taken per stack, 180s**. **Radius index 28 = 50,000 yd — room-wide and unavoidable** |
 | Berserk | 26662 | 10 min, and instantly if the boss leaves `x ∈ [1720,1940]`, `y ∈ [20,210]` |
@@ -161,10 +161,18 @@ clears, walks straight back with the missile still inbound, and never casts.
 **Key the dodge off the cast, never the field.** The event picks a random target **beyond 12.5 yd**
 and falls back to any target. 62660 is instant with `Speed` 10 and `TARGET_DEST_TARGET_ENEMY`: the
 destination freezes at cast time and the missile takes 2.7-3.6s to arrive, and that flight is the
-entire reaction window. The delayed spell stays in `CURRENT_GENERIC_SPELL` for all of it, so the boss
-is **never** in `UNIT_STATE_CASTING` for this one and a trigger must not gate on that. The impact
-carries `KNOCK_BACK_DEST`, so standing still does not hold a formation together either. An earlier
-node keyed off the *field* (63277) and so moved only once the damage had already landed.
+entire reaction window. The boss is **never** in `UNIT_STATE_CASTING` for this one, so a trigger must
+not gate on that. The impact carries `KNOCK_BACK_DEST`, so standing still does not hold a formation
+together either. An earlier node keyed off the *field* (63277) and so moved only once the damage had
+already landed.
+
+**Store the impact at the cast; his current spell loses it.** The missile sits in
+`CURRENT_GENERIC_SPELL` only until his next generic cast replaces it, and `InterruptSpell` spares a
+delayed spell, so it still lands. Searing Flames, Mark and Summon Vapors all do it: on 2026-09-24
+**7 of 17 crashes had one in flight and hit 30 bots, the other 10 none**. Searing Flames 0.1s after
+the crash left most of the camp never dodging; a later one let the slot and soak guards, blind too,
+walk dodgers back under it. `VezaxHazardListenerScript` stores the impact for distance over `Speed`
+plus 500 ms, since landings trail that figure by 92-203 ms.
 
 **The dodge is what costs the field, not the camp's shape.** A field is alive for 93% of a pull and
 the median out-of-field cast is made 4-7 yd from one's edge, so availability is never the problem —
@@ -267,12 +275,14 @@ of its own, so a dead boss is rejected explicitly and presence alone gates nothi
 
 ## The trace
 
-`vezax.slot` is the stored assignment; `vezax.formation`, `vezax.block`
+`vezax.slot` is the stored assignment; `vezax.block`
 (`L`/`R`/`tank`/`unslotted`), `vezax.dodge` (`strafe`/`search`/`none`), `vezax.mark`
 (`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`) and `vezax.interrupter`
 are derived, each probed inside the helper that derives it so two call sites cannot disagree.
-`vezax.formation` (`outside`/`noboss`/`idle`/`on`) is the exception: the encounter's tick writes
-it, since the formation gate is a rule predicate and runs only when the cheaper checks pass.
+`vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode` (`off`/`pending`/`lost`/
+`animus`) are the exception: the encounter's tick writes them, since the formation gate is a rule
+predicate that runs only when the cheaper checks pass, and the hard-mode flags come from spell
+hooks nothing else traces.
 
 **The in-flight missile is a `haz` circle** from `VezaxHazardListenerScript`, since it has no world
 object until it lands and the ~3s a bot can act in would otherwise be invisible. Take the destination
@@ -287,11 +297,12 @@ are only handed out in combat, so nothing live is cleared.
 
 **`tools/botobs/bosses/general_vezax.py` reads all of it** and reproduces this doc's per-pull figures, the
 heal-back aside (it shows only as boss health rate): `--boss`, `--mark` (leech, escape branch, nearest
-ally, boss health per window), `--crash` (target, dodgers per block), `--field` (both halves' uptime,
-casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap returns), `--vapors`,
-`--band`. Its banner names declared probes the pull never wrote. No probe was added for it: fields are
-`snap.hz`, crashes `haz`, the mark an aura, the leech `dmg`, vapor targeting `snap.u[7]`; the vapors
-themselves are never sampled. The camp is read from `vezax.slot` as well as `vezax.block`, which is
+ally, boss health per window), `--crash` (target, dodgers per block, his casts in flight), `--field`
+(both halves' uptime, casts inside 65269, soak reach and moves, cast-hold vetoes), `--mana` (Life Tap
+returns), `--vapors`, `--band`. Its banner names declared probes the pull never wrote. No probe was
+added for it: fields are `snap.hz`, crashes `haz`, the mark an aura, the leech `dmg`, vapor targeting
+`snap.u[7]`, what hit a vapor the `cast` rows aimed at its guid; the vapors themselves are never
+sampled. The camp is read from `vezax.slot` as well as `vezax.block`, which is
 only written inside the gate, and `--band`'s `on` column is the share of the pull the gate was open.
 
 **Of the generic views, `--vetoes` covers the four multipliers and `--idle` counts the cast hold as
@@ -302,17 +313,30 @@ last cycle helped: `batch.py --boss general-vezax --split-at 867fd6529`, once pu
 
 ## Hard mode — the reference implementation
 
+Everything here is armed only by `AiPlayerbot.UlduarVezaxHardMode`. With it off the Animus switch
+never fires, and a raid that keeps the vapors alive anyway is held on an invulnerable Vezax.
+
 Hard mode = leave Saronite Vapors alive until the **Saronite Animus (33524)** spawns; Vezax gains an
 invulnerable Saronite Barrier until it dies. Everyone switches target and kills it (no RTI mark —
 each bot `Attack()`s directly). Nobody moves out of its Profound Darkness (63420): radius index 28 is
 **50,000 yd**, so the stacking shadow-damage debuff is room-wide and the only answer is killing the
-Animus faster. There is **no** Bloodlust gate and **no** taunt or assist-tank wiring for the Animus —
-this doc claimed both before 2026-09-13 and neither was ever in the code.
+Animus faster. There is **no** taunt or assist-tank wiring for the Animus.
 
-The guard against killing a vapor is the target guard and hold-target node above, nothing wider: there
-is no AoE suppression and no explicit pet control. **A stray cleave or an off-passive pet can still
-kill one**, and that silently ends hard mode; if hard mode starts failing, `--vapors` reads
-`vezax.target = vapor` first, then whether an Animus ever spawned after the sixth summon.
+**Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first
+vapor death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
+`VezaxVaporListenerScript` because the script keeps its own flag private.
+
+- **Lust.** On 2026-09-24 Heroism at 0:03 went on getting into position, 0.48 %/s during it against
+  0.49 after, and he was at 11.1% at the sixth summon with the Animus 8s off. The burst gate still
+  wants a tank holding the Animus 3s before it goes.
+- **Starfall.** Its stars pick two random enemies in line of sight within 30 yd, which no target
+  guard sees, and killed a vapor that day. Held for the whole window, not only with one in range:
+  a star hit a vapor 0.13s after it spawned.
+
+The rest of the vapor guard is the target guard and hold-target node above: no AoE suppression and
+no explicit pet control. **A stray cleave or an off-passive pet can still kill one**, and that
+silently ends hard mode; `--vapors` reads `vezax.target = vapor`, every cast that landed on a vapor,
+and when `vezax.hardmode` went `lost`.
 
 ## Known gaps
 

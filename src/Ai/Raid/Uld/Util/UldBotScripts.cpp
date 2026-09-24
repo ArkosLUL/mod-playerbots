@@ -19,9 +19,8 @@
 namespace
 {
 
-// A Shadow Crash lands where the missile was aimed, with no warning a bot can act on, and a bot part
-// way through a cast cannot move - so without this it finishes the cast standing in the impact.
-// Nothing is stored; the hook fires once, at the instant the missile goes out.
+// A bot part way through a cast can't move, so without this it finishes the cast standing in the
+// impact. Runs once, at the instant the missile goes out.
 void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float radius,
                                bool (*needsToLeave)(Player*))
 {
@@ -87,6 +86,13 @@ public:
             else
                 return;
 
+            // Straight from distance over Speed rather than Spell::GetDelayMoment, which the core
+            // fills in during the same cast this hook runs inside. Both are milliseconds.
+            float const speed = spellInfo->Speed;
+            uint32 const flightMs =
+                speed > 0.0f ? static_cast<uint32>(caster->GetExactDist(&impact) / speed * 1000.0f) : 0;
+
+            VezaxNoteShadowCrash(caster, impact, flightMs);
             InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,
                                       &DodgesShadowCrash);
 
@@ -95,19 +101,32 @@ public:
             // invisible in the trace. This hook already fires exactly once per cast, server-side,
             // which is why the record is written here and not in the per-bot helper.
             if (RaidObs::Active())
-            {
-                // Straight from distance over Speed rather than Spell::GetDelayMoment, which the core
-                // fills in during the same cast this hook runs inside. Both are milliseconds.
-                float const speed = spellInfo->Speed;
-                uint32 const flightMs =
-                    speed > 0.0f
-                        ? static_cast<uint32>(caster->GetExactDist(&impact) / speed * 1000.0f)
-                        : 0;
-
                 RaidObs::NoteHazardCircle(caster->GetMap(), SPELL_VEZAX_SHADOW_CRASH_DMG, impact,
                                           ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS, flightMs);
-            }
         }
+    }
+};
+
+// The boss script keeps its hard mode flag private, and a vapor's death and the Animus summon are
+// both casts by the vapor on itself, the first from JustDied. Prepare rather than cast, same as the
+// Guardian death listener below.
+class VezaxVaporListenerScript : public AllSpellScript
+{
+public:
+    VezaxVaporListenerScript() : AllSpellScript("VezaxVaporListenerScript", {ALLSPELLHOOK_ON_PREPARE}) {}
+
+    void OnSpellPrepare(Spell* /*spell*/, Unit* caster, SpellInfo const* spellInfo) override
+    {
+        if (!caster || !spellInfo || caster->GetMapId() != ULDUAR_MAP_ID)
+            return;
+
+        if (caster->GetEntry() != NPC_VEZAX_SARONITE_VAPORS)
+            return;
+
+        if (spellInfo->Id == SPELL_VEZAX_SARONITE_VAPORS_AURA)
+            VezaxNoteVaporKilled(caster);
+        else if (spellInfo->Id == SPELL_VEZAX_SUMMON_SARONITE_ANIMUS)
+            VezaxNoteAnimusSummoned(caster);
     }
 };
 
@@ -161,6 +180,7 @@ public:
 void AddSC_UlduarBotScripts()
 {
     new VezaxHazardListenerScript();
+    new VezaxVaporListenerScript();
     new YoggSaronBrainLinkListenerScript();
     new YoggSaronGuardianDeathListenerScript();
 }

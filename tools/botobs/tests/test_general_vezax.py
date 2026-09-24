@@ -96,6 +96,12 @@ def vezax_pull() -> list[dict]:
         {"t": 13000, "e": "cast", "s": AGONY, "sp": 47809, "tgt": BOSS, "ct": 0},
         {"t": 8500, "e": "cast", "s": AGONY, "sp": 47809, "tgt": BOSS, "ct": 0, "tr": 1},
         {"t": 9000, "e": "cast", "s": AGONY, "sp": gv.SPELL_LIFE_TAP, "tgt": AGONY, "ct": 0},
+
+        # A Starfall star lands on the vapor, and hard mode goes from pending to lost.
+        {"t": 9500, "e": "cast", "s": TREE, "sp": 53190, "tgt": VAPOR, "ct": 0, "tr": 1},
+        {"t": 10, "e": "note", "g": AGONY, "k": "vezax.hardmode", "txt": "pending"},
+        {"t": 9600, "e": "note", "g": AGONY, "k": "vezax.hardmode", "txt": "lost"},
+        {"t": 9700, "e": "note", "g": TREE, "k": "vezax.hardmode", "txt": "lost"},
         {"t": 15000, "e": "end", "out": "wipe"},
     ]
     # Agony holds the vapor on the first half of the samples only.
@@ -129,6 +135,16 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(rows[0]["target"], AGONY)
         self.assertEqual(rows[0]["block"], "L")
         self.assertEqual(rows[0]["dodged"], {"L": {AGONY}, "R": {TREE}})
+
+    def test_a_crash_names_what_else_he_cast_while_it_flew(self):
+        # The 6 s Searing Flames goes out inside the 5 s to 8 s flight; the 2 s and 10 s ones don't.
+        self.assertEqual(gv.crashes(self.trace)[0]["masked"], [gv.SPELL_SEARING_FLAMES])
+
+    def test_a_star_on_a_vapor_is_counted_though_nobody_targeted_it(self):
+        self.assertEqual(gv.vapor_hits(self.trace), {(TREE, 53190): [9500]})
+
+    def test_hard_mode_reads_the_first_bot_to_see_each_value(self):
+        self.assertEqual(gv.hard_mode_changes(self.trace), {"pending": 10, "lost": 9600})
 
     def test_in_field_share_skips_triggered_casts(self):
         agony = next(row for row in gv.field_rows(self.trace) if row["guid"] == AGONY)
