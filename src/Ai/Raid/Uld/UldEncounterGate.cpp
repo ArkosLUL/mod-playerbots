@@ -26,7 +26,6 @@ namespace
         {"thorim", ULD_BOSS_THORIM},
         {"yogg-saron", ULD_BOSS_YOGGSARON},
         {"sara", ULD_BOSS_YOGGSARON},
-        {"algalon", ULD_BOSS_ALGALON},
     };
 }
 

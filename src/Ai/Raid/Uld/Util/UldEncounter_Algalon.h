@@ -154,8 +154,8 @@ struct AlgalonEncounterState
 Unit* GetAlgalon(PlayerbotAI* botAI);
 bool AlgalonEncounterActive(PlayerbotAI* botAI);
 
-// Folds the per-instance clocks forward. Cheap and idempotent - it does its two sweeps at most once
-// every ULDUAR_ALGALON_STATE_TICK_MS per instance, not once per bot.
+// Folds the per-instance clocks forward; the encounter's tick calls it. Cheap and idempotent - it does
+// its two sweeps at most once every ULDUAR_ALGALON_STATE_TICK_MS per instance, not once per bot.
 void AlgalonTickEncounterState(PlayerbotAI* botAI);
 
 bool AlgalonBigBangCasting(PlayerbotAI* botAI);

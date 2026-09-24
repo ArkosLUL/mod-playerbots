@@ -14,84 +14,108 @@
 class AlgalonResetEncounterStateTrigger : public Trigger
 {
 public:
-    AlgalonResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon reset encounter state", 5) {}
+    static constexpr char const* Name = "algalon reset encounter state";
+
+    AlgalonResetEncounterStateTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 5) {}
     bool IsActive() override;
 };
 
 class AlgalonBigBangHideTrigger : public Trigger
 {
 public:
-    AlgalonBigBangHideTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon big bang hide") {}
+    static constexpr char const* Name = "algalon big bang hide";
+
+    AlgalonBigBangHideTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AlgalonBigBangSoakTrigger : public Trigger
 {
 public:
-    AlgalonBigBangSoakTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon big bang soak") {}
+    static constexpr char const* Name = "algalon big bang soak";
+
+    AlgalonBigBangSoakTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AlgalonCosmicSmashTrigger : public Trigger
 {
 public:
-    AlgalonCosmicSmashTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon cosmic smash") {}
+    static constexpr char const* Name = "algalon cosmic smash";
+
+    AlgalonCosmicSmashTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AlgalonLeaveBlackHoleTrigger : public Trigger
 {
 public:
-    AlgalonLeaveBlackHoleTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon leave black hole", 2) {}
+    static constexpr char const* Name = "algalon leave black hole";
+
+    AlgalonLeaveBlackHoleTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonPhasePunchSwapTrigger : public Trigger
 {
 public:
-    AlgalonPhasePunchSwapTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon phase punch swap", 2) {}
+    static constexpr char const* Name = "algalon phase punch swap";
+
+    AlgalonPhasePunchSwapTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonConstellationTauntTrigger : public Trigger
 {
 public:
-    AlgalonConstellationTauntTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon constellation taunt", 2) {}
+    static constexpr char const* Name = "algalon constellation taunt";
+
+    AlgalonConstellationTauntTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonConstellationKiteTrigger : public Trigger
 {
 public:
-    AlgalonConstellationKiteTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon constellation kite", 2) {}
+    static constexpr char const* Name = "algalon constellation kite";
+
+    AlgalonConstellationKiteTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonCollapsingStarFocusTrigger : public Trigger
 {
 public:
-    AlgalonCollapsingStarFocusTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon collapsing star focus", 2) {}
+    static constexpr char const* Name = "algalon collapsing star focus";
+
+    AlgalonCollapsingStarFocusTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonDarkMatterTankTrigger : public Trigger
 {
 public:
-    AlgalonDarkMatterTankTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon dark matter tank", 2) {}
+    static constexpr char const* Name = "algalon dark matter tank";
+
+    AlgalonDarkMatterTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonDarkMatterMarkTrigger : public Trigger
 {
 public:
-    AlgalonDarkMatterMarkTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon dark matter mark", 2) {}
+    static constexpr char const* Name = "algalon dark matter mark";
+
+    AlgalonDarkMatterMarkTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 
 class AlgalonRaidPositionTrigger : public Trigger
 {
 public:
-    AlgalonRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "algalon raid position", 2) {}
+    static constexpr char const* Name = "algalon raid position";
+
+    AlgalonRaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2) {}
     bool IsActive() override;
 };
 

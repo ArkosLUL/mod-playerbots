@@ -62,7 +62,7 @@ about 143 s in, for 64-84 k of unavoidable raid damage at once. The kills are de
 focus the **lowest-health** star (health percent *is* the remaining-lifetime clock, so lowest-first
 spaces the deaths for free), require the raid's weakest member above 80 % and 8 s since the last
 explosion, and override that gate when a star drops under 15 % — a death nobody chose is a death that
-lands on top of the next one. `AlgalonCollapsingStarAoeMultiplier` vetoes `DpsAoeAction` while two or
+lands on top of the next one. The `algalon collapsing star aoe` rule vetoes `DpsAoe` while two or
 more stars are alive so splash cannot undo the pacing. Phase 2 has no stars, which leaves Dark Matter
 cleave untouched.
 

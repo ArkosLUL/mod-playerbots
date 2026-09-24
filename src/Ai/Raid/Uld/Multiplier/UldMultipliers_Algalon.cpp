@@ -61,16 +61,6 @@ float AlgalonSoakCooldownReserveMultiplier::GetValue(Action* action)
     return AlgalonBigBangCasting(botAI) ? 1.0f : 0.0f;
 }
 
-float AlgalonCollapsingStarAoeMultiplier::GetValue(Action* action)
-{
-    if (!dynamic_cast<DpsAoeAction*>(action) || !AlgalonEncounterActive(botAI))
-        return 1.0f;
-
-    // One star alive is the state the pacing is trying to reach, so splash is harmless there. Phase 2
-    // has no stars at all, which leaves Dark Matter cleave untouched.
-    return AlgalonAliveStarCount(botAI) >= 2 ? 0.0f : 1.0f;
-}
-
 float AlgalonTargetGuardMultiplier::GetValue(Action* action)
 {
     if (!action || !AlgalonEncounterActive(botAI))
@@ -104,29 +94,4 @@ float AlgalonTargetGuardMultiplier::GetValue(Action* action)
     }
 
     return 1.0f;
-}
-
-float AlgalonControlMovementMultiplier::GetValue(Action* action)
-{
-    if (!action || !AlgalonEncounterActive(botAI))
-        return 1.0f;
-
-    // Only the roles the formation actually places. Melee and the off-tank hold the boss, so both
-    // keep every generic mover.
-    if (!AlgalonTakesRingSlot(bot) && !botAI->IsMainTank(bot))
-        return 1.0f;
-
-    if (!dynamic_cast<MovementAction*>(action))
-        return 1.0f;
-
-    // AttackAction derives from MovementAction, so a blanket zero would also kill targeting;
-    // ReachTargetAction is what walks a healer into range of someone the rings cannot reach.
-    if (dynamic_cast<AttackAction*>(action) || dynamic_cast<ReachTargetAction*>(action))
-        return 1.0f;
-
-    static std::set<std::string> const encounterMovers = {
-        "algalon raid position action", "algalon big bang hide action", "algalon cosmic smash action",
-        "algalon leave black hole action", "algalon constellation kite action"};
-
-    return encounterMovers.count(action->getName()) ? 1.0f : 0.0f;
 }

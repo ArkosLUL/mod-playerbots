@@ -592,67 +592,12 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Algalon the Observer
     //
-    // Big Bang outranks everything because missing it is 76312 or a boss reset, Cosmic Smash comes
-    // next on its hard 4s fuse, and stepping out of a hole beats both once neither is happening.
-    // Position is last and yields as soon as it is parked.
-    triggers.push_back(new TriggerNode(
-        "algalon reset encounter state",
-        { NextAction("algalon reset encounter state action", ACTION_EMERGENCY + 10) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon big bang hide",
-        { NextAction("algalon big bang hide action", ACTION_EMERGENCY + 8) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon big bang soak",
-        { NextAction("algalon big bang soak action", ACTION_EMERGENCY + 8) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon cosmic smash",
-        { NextAction("algalon cosmic smash action", ACTION_EMERGENCY + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon leave black hole",
-        { NextAction("algalon leave black hole action", ACTION_EMERGENCY + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon phase punch swap",
-        { NextAction("algalon phase punch swap action", ACTION_RAID + 7) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon constellation taunt",
-        { NextAction("algalon constellation taunt action", ACTION_RAID + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon dark matter tank",
-        { NextAction("algalon dark matter tank action", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon constellation kite",
-        { NextAction("algalon constellation kite action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon collapsing star focus",
-        { NextAction("algalon collapsing star focus action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon dark matter mark",
-        { NextAction("algalon dark matter mark action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "algalon raid position",
-        { NextAction("algalon raid position action", ACTION_RAID) }));
+    UldAlgalonDefinition().AddTriggerNodes(triggers);
 }
 
 void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
-    // Algalon: hold the soaker's escape cooldown for Big Bang, keep the raid off the Living
-    // Constellations and off area attacks while the stars are being killed one at a time, and keep
-    // the generic movers away from the formation
-    multipliers.push_back(new AlgalonSoakCooldownReserveMultiplier(botAI));
-    multipliers.push_back(new AlgalonCollapsingStarAoeMultiplier(botAI));
-    multipliers.push_back(new AlgalonTargetGuardMultiplier(botAI));
-    multipliers.push_back(new AlgalonControlMovementMultiplier(botAI));
+    UldAlgalonDefinition().AddMultipliers(botAI, multipliers);
 
     UldXT002Definition().AddMultipliers(botAI, multipliers);
 

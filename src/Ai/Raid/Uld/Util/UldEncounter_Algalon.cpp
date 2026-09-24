@@ -157,14 +157,7 @@ bool SlotIsHealerSlot(uint8 slotIndex) { return slotIndex < ULDUAR_ALGALON_HEALE
 
 Unit* GetAlgalon(PlayerbotAI* botAI) { return FirstNpc(botAI, PB_NPC_ALGALON); }
 
-bool AlgalonEncounterActive(PlayerbotAI* botAI)
-{
-    if (!GetAlgalon(botAI))
-        return false;
-
-    AlgalonTickEncounterState(botAI);
-    return true;
-}
+bool AlgalonEncounterActive(PlayerbotAI* botAI) { return GetAlgalon(botAI) != nullptr; }
 
 void AlgalonTickEncounterState(PlayerbotAI* botAI)
 {

@@ -94,18 +94,6 @@ public:
         creators["yogg-saron diminish power judgement trigger"] = &RaidUlduarTriggerContext::yogg_saron_diminish_power_judgement_trigger;
         creators["yogg-saron illusion healer station trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_healer_station_trigger;
         creators["yogg-saron brain spot trigger"] = &RaidUlduarTriggerContext::yogg_saron_brain_spot_trigger;
-        creators["algalon reset encounter state"] = &RaidUlduarTriggerContext::algalon_reset_encounter_state;
-        creators["algalon big bang hide"] = &RaidUlduarTriggerContext::algalon_big_bang_hide;
-        creators["algalon big bang soak"] = &RaidUlduarTriggerContext::algalon_big_bang_soak;
-        creators["algalon cosmic smash"] = &RaidUlduarTriggerContext::algalon_cosmic_smash;
-        creators["algalon leave black hole"] = &RaidUlduarTriggerContext::algalon_leave_black_hole;
-        creators["algalon phase punch swap"] = &RaidUlduarTriggerContext::algalon_phase_punch_swap;
-        creators["algalon constellation taunt"] = &RaidUlduarTriggerContext::algalon_constellation_taunt;
-        creators["algalon constellation kite"] = &RaidUlduarTriggerContext::algalon_constellation_kite;
-        creators["algalon collapsing star focus"] = &RaidUlduarTriggerContext::algalon_collapsing_star_focus;
-        creators["algalon dark matter tank"] = &RaidUlduarTriggerContext::algalon_dark_matter_tank;
-        creators["algalon dark matter mark"] = &RaidUlduarTriggerContext::algalon_dark_matter_mark;
-        creators["algalon raid position"] = &RaidUlduarTriggerContext::algalon_raid_position;
         creators["ignis scorched ground trigger"] = &RaidUlduarTriggerContext::ignis_scorched_ground_trigger;
         creators["ignis main tank position trigger"] = &RaidUlduarTriggerContext::ignis_main_tank_position_trigger;
         creators["ignis construct tank trigger"] = &RaidUlduarTriggerContext::ignis_construct_tank_trigger;
@@ -235,18 +223,6 @@ private:
     static Trigger* yogg_saron_diminish_power_judgement_trigger(PlayerbotAI* ai) { return new YoggSaronDiminishPowerJudgementTrigger(ai); }
     static Trigger* yogg_saron_illusion_healer_station_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionHealerStationTrigger(ai); }
     static Trigger* yogg_saron_brain_spot_trigger(PlayerbotAI* ai) { return new YoggSaronBrainSpotTrigger(ai); }
-    static Trigger* algalon_reset_encounter_state(PlayerbotAI* ai) { return new AlgalonResetEncounterStateTrigger(ai); }
-    static Trigger* algalon_big_bang_hide(PlayerbotAI* ai) { return new AlgalonBigBangHideTrigger(ai); }
-    static Trigger* algalon_big_bang_soak(PlayerbotAI* ai) { return new AlgalonBigBangSoakTrigger(ai); }
-    static Trigger* algalon_cosmic_smash(PlayerbotAI* ai) { return new AlgalonCosmicSmashTrigger(ai); }
-    static Trigger* algalon_leave_black_hole(PlayerbotAI* ai) { return new AlgalonLeaveBlackHoleTrigger(ai); }
-    static Trigger* algalon_phase_punch_swap(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapTrigger(ai); }
-    static Trigger* algalon_constellation_taunt(PlayerbotAI* ai) { return new AlgalonConstellationTauntTrigger(ai); }
-    static Trigger* algalon_constellation_kite(PlayerbotAI* ai) { return new AlgalonConstellationKiteTrigger(ai); }
-    static Trigger* algalon_collapsing_star_focus(PlayerbotAI* ai) { return new AlgalonCollapsingStarFocusTrigger(ai); }
-    static Trigger* algalon_dark_matter_tank(PlayerbotAI* ai) { return new AlgalonDarkMatterTankTrigger(ai); }
-    static Trigger* algalon_dark_matter_mark(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkTrigger(ai); }
-    static Trigger* algalon_raid_position(PlayerbotAI* ai) { return new AlgalonRaidPositionTrigger(ai); }
     static Trigger* ignis_scorched_ground_trigger(PlayerbotAI* ai) { return new IgnisScorchedGroundTrigger(ai); }
     static Trigger* ignis_main_tank_position_trigger(PlayerbotAI* ai) { return new IgnisMainTankPositionTrigger(ai); }
     static Trigger* ignis_construct_tank_trigger(PlayerbotAI* ai) { return new IgnisConstructTankTrigger(ai); }

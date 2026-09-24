@@ -94,18 +94,6 @@ public:
         creators["yogg-saron diminish power judgement action"] = &RaidUlduarActionContext::yogg_saron_diminish_power_judgement_action;
         creators["yogg-saron illusion healer station action"] = &RaidUlduarActionContext::yogg_saron_illusion_healer_station_action;
         creators["yogg-saron brain spot action"] = &RaidUlduarActionContext::yogg_saron_brain_spot_action;
-        creators["algalon reset encounter state action"] = &RaidUlduarActionContext::algalon_reset_encounter_state_action;
-        creators["algalon big bang hide action"] = &RaidUlduarActionContext::algalon_big_bang_hide_action;
-        creators["algalon big bang soak action"] = &RaidUlduarActionContext::algalon_big_bang_soak_action;
-        creators["algalon cosmic smash action"] = &RaidUlduarActionContext::algalon_cosmic_smash_action;
-        creators["algalon leave black hole action"] = &RaidUlduarActionContext::algalon_leave_black_hole_action;
-        creators["algalon phase punch swap action"] = &RaidUlduarActionContext::algalon_phase_punch_swap_action;
-        creators["algalon constellation taunt action"] = &RaidUlduarActionContext::algalon_constellation_taunt_action;
-        creators["algalon constellation kite action"] = &RaidUlduarActionContext::algalon_constellation_kite_action;
-        creators["algalon collapsing star focus action"] = &RaidUlduarActionContext::algalon_collapsing_star_focus_action;
-        creators["algalon dark matter tank action"] = &RaidUlduarActionContext::algalon_dark_matter_tank_action;
-        creators["algalon dark matter mark action"] = &RaidUlduarActionContext::algalon_dark_matter_mark_action;
-        creators["algalon raid position action"] = &RaidUlduarActionContext::algalon_raid_position_action;
         creators["ignis scorched ground action"] = &RaidUlduarActionContext::ignis_scorched_ground_action;
         creators["ignis main tank position action"] = &RaidUlduarActionContext::ignis_main_tank_position_action;
         creators["ignis construct tank action"] = &RaidUlduarActionContext::ignis_construct_tank_action;
@@ -221,18 +209,6 @@ private:
     static Action* yogg_saron_diminish_power_judgement_action(PlayerbotAI* ai) { return new YoggSaronDiminishPowerJudgementAction(ai); }
     static Action* yogg_saron_illusion_healer_station_action(PlayerbotAI* ai) { return new YoggSaronIllusionHealerStationAction(ai); }
     static Action* yogg_saron_brain_spot_action(PlayerbotAI* ai) { return new YoggSaronBrainSpotAction(ai); }
-    static Action* algalon_reset_encounter_state_action(PlayerbotAI* ai) { return new AlgalonResetEncounterStateAction(ai); }
-    static Action* algalon_big_bang_hide_action(PlayerbotAI* ai) { return new AlgalonBigBangHideAction(ai); }
-    static Action* algalon_big_bang_soak_action(PlayerbotAI* ai) { return new AlgalonBigBangSoakAction(ai); }
-    static Action* algalon_cosmic_smash_action(PlayerbotAI* ai) { return new AlgalonCosmicSmashAction(ai); }
-    static Action* algalon_leave_black_hole_action(PlayerbotAI* ai) { return new AlgalonLeaveBlackHoleAction(ai); }
-    static Action* algalon_phase_punch_swap_action(PlayerbotAI* ai) { return new AlgalonPhasePunchSwapAction(ai); }
-    static Action* algalon_constellation_taunt_action(PlayerbotAI* ai) { return new AlgalonConstellationTauntAction(ai); }
-    static Action* algalon_constellation_kite_action(PlayerbotAI* ai) { return new AlgalonConstellationKiteAction(ai); }
-    static Action* algalon_collapsing_star_focus_action(PlayerbotAI* ai) { return new AlgalonCollapsingStarFocusAction(ai); }
-    static Action* algalon_dark_matter_tank_action(PlayerbotAI* ai) { return new AlgalonDarkMatterTankAction(ai); }
-    static Action* algalon_dark_matter_mark_action(PlayerbotAI* ai) { return new AlgalonDarkMatterMarkAction(ai); }
-    static Action* algalon_raid_position_action(PlayerbotAI* ai) { return new AlgalonRaidPositionAction(ai); }
     static Action* ignis_scorched_ground_action(PlayerbotAI* ai) { return new IgnisScorchedGroundAction(ai); }
     static Action* ignis_main_tank_position_action(PlayerbotAI* ai) { return new IgnisMainTankPositionAction(ai); }
     static Action* ignis_construct_tank_action(PlayerbotAI* ai) { return new IgnisConstructTankAction(ai); }
