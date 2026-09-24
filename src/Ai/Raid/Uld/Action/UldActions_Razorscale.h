@@ -17,7 +17,9 @@
 class RazorscaleAvoidDevouringFlameAction : public MovementAction
 {
 public:
-    RazorscaleAvoidDevouringFlameAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale avoid devouring flames") {}
+    static constexpr char const* Name = "razorscale avoid devouring flames";
+
+    RazorscaleAvoidDevouringFlameAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -40,7 +42,9 @@ private:
 class RazorscaleAvoidSentinelAction : public MovementAction
 {
 public:
-    RazorscaleAvoidSentinelAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale avoid sentinel") {}
+    static constexpr char const* Name = "razorscale avoid sentinel";
+
+    RazorscaleAvoidSentinelAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -48,7 +52,9 @@ public:
 class RazorscaleIgnoreBossAction : public AttackAction
 {
 public:
-    RazorscaleIgnoreBossAction(PlayerbotAI* botAI) : AttackAction(botAI, "razorscale ignore flying alone") {}
+    static constexpr char const* Name = "razorscale ignore flying alone";
+
+    RazorscaleIgnoreBossAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -56,7 +62,9 @@ public:
 class RazorscaleAvoidWhirlwindAction : public MovementAction
 {
 public:
-    RazorscaleAvoidWhirlwindAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale avoid whirlwind") {}
+    static constexpr char const* Name = "razorscale avoid whirlwind";
+
+    RazorscaleAvoidWhirlwindAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -64,7 +72,9 @@ public:
 class RazorscaleGroundedAction : public AttackAction
 {
 public:
-    RazorscaleGroundedAction(PlayerbotAI* botAI) : AttackAction(botAI, "razorscale grounded") {}
+    static constexpr char const* Name = "razorscale grounded";
+
+    RazorscaleGroundedAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -72,7 +82,9 @@ public:
 class RazorscaleHarpoonAction : public MovementAction
 {
 public:
-    RazorscaleHarpoonAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale harpoon action") {}
+    static constexpr char const* Name = "razorscale harpoon action";
+
+    RazorscaleHarpoonAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -80,7 +92,9 @@ public:
 class RazorscaleFuseArmorAction : public MovementAction
 {
 public:
-    RazorscaleFuseArmorAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale fuse armor action") {}
+    static constexpr char const* Name = "razorscale fuse armor action";
+
+    RazorscaleFuseArmorAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -90,7 +104,9 @@ public:
 class RazorscaleKillTargetAction : public Action
 {
 public:
-    RazorscaleKillTargetAction(PlayerbotAI* botAI) : Action(botAI, "razorscale kill target action") {}
+    static constexpr char const* Name = "razorscale kill target action";
+
+    RazorscaleKillTargetAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -100,7 +116,9 @@ public:
 class RazorscalePetControlAction : public Action
 {
 public:
-    RazorscalePetControlAction(PlayerbotAI* botAI) : Action(botAI, "razorscale pet control action") {}
+    static constexpr char const* Name = "razorscale pet control action";
+
+    RazorscalePetControlAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -108,7 +126,9 @@ public:
 class RazorscaleFlameBreathAction : public MovementAction
 {
 public:
-    RazorscaleFlameBreathAction(PlayerbotAI* botAI) : MovementAction(botAI, "razorscale flame breath action") {}
+    static constexpr char const* Name = "razorscale flame breath action";
+
+    RazorscaleFlameBreathAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };

@@ -18,11 +18,11 @@ damage radius index is 8 = 5.0 yd**. Bots clear `DEVOURING_FLAME_CLEAR_RADIUS` (
 actually leaves the patch instead of stopping on its edge, and `DevouringFlameBlocks()` rejects any
 destination covered by another one — she drops these every 6–12 s and they stack up.
 
-Clearing is only half of it. **The hold lives in the multiplier, not the action** —
+Clearing is only half of it. **The hold lives in a rule, not the action** —
 `razorscale avoid devouring flames` is useful only while a patch is live
-(`return !Scan().flame.IsEmpty();`), and standing clear is `RazorscaleMultiplier`'s job: it zeroes the
-generic movers and `avoid aoe` while the spot a melee bot would walk back to is on fire. Both release
-the moment the tank drags her clear, so nobody stands out the patch's full life. A permanent veto here
+(`return !Scan().flame.IsEmpty();`), and standing clear is the `razorscale` `Block` rule's job: it
+zeroes the generic movers and `avoid aoe` while the spot a melee bot would walk back to is on fire.
+Both release the moment the tank drags her clear, so nobody stands out the patch's full life. A permanent veto here
 is the freeze bug.
 
 **The per-tick lookups go through one scan.** `RazorscaleScan` is a per-bot snapshot stamped with

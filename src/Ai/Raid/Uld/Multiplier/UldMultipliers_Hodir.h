@@ -14,7 +14,7 @@
 // movement. Both halves are load-bearing: without the targeting half DpsTargetValue is never null,
 // so the generic node retakes the target every other tick and bots drift off the ice block that is
 // about to get an ally killed; without the movement half the anchor oscillates, the failure
-// RazorscaleMultiplier exists to prevent.
+// Razorscale's movement rule exists to prevent.
 class HodirGuardMultiplier : public Multiplier
 {
 public:

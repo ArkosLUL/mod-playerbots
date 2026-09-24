@@ -60,52 +60,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Razorscale
     //
-    // Above the sentinel and whirlwind spacing moves: those step 8yd on a bearing that knows nothing
-    // about the fire, and a Devouring Flame patch is the one thing here that kills a bot outright.
-    triggers.push_back(new TriggerNode(
-        "razorscale avoid devouring flames",
-        { NextAction("razorscale avoid devouring flames", ACTION_RAID + 4) }));
-
-    // Never consumes the tick - the pet order is a side effect, so this sits on top harmlessly.
-    triggers.push_back(new TriggerNode(
-        "razorscale pet control trigger",
-        { NextAction("razorscale pet control action", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale avoid sentinel",
-        { NextAction("razorscale avoid sentinel", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale flying alone",
-    { NextAction("razorscale ignore flying alone", ACTION_MOVE + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale avoid whirlwind",
-        { NextAction("razorscale avoid whirlwind", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale grounded",
-        { NextAction("razorscale grounded", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale harpoon trigger",
-        { NextAction("razorscale harpoon action", ACTION_MOVE) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale fuse armor trigger",
-        { NextAction("razorscale fuse armor action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale kill target trigger",
-        { NextAction("razorscale kill target action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale flame breath trigger",
-        { NextAction("razorscale flame breath action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "razorscale fire resistance trigger",
-        { NextAction("razorscale fire resistance action", ACTION_RAID) }));
+    UldRazorscaleDefinition().AddTriggerNodes(triggers);
 
     //
     // Ignis
@@ -878,8 +833,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     // Hold the burst cooldowns on the bosses whose DPS check is not the pull
     multipliers.push_back(new UlduarBurstWindowMultiplier(botAI));
 
-    // Keep the generic movers off a bot that is clearing a Razorscale Devouring Flame patch
-    multipliers.push_back(new RazorscaleMultiplier(botAI));
+    UldRazorscaleDefinition().AddMultipliers(botAI, multipliers);
 
     // Let the Ignis construct tank stand in the fire, and stop a Slag Pot victim fighting the ride
     multipliers.push_back(new IgnisMultiplier(botAI));

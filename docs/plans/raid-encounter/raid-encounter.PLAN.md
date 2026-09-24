@@ -178,7 +178,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
   `Block` on their own `IgnisScorchedGroundAction`; its targeting rule adds `AttackRti`.
 - **Mimiron:** the formation guard blocks `CombatFormationMove` only, so `tank face` survives.
   `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
-- **Razorscale:** `MoversBlocked`'s per-ms cache stays in its predicate.
 - **Thorim:** the arena target, balcony wrong-target branch and runic barrier guards stay hand-written.
   `ThorimBalconyGuardMultiplier` builds a trigger per call.
 - **XT-002:** `XT002TargetGuardMultiplier` stays hand-written; it was proven equivalent as one unit
@@ -200,7 +199,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 in progress, Auriaya and Kologarn done, next Razorscale.
+**Status:** commits 1-2 landed; commit 3 in progress, Auriaya, Kologarn and Razorscale done, next XT-002.
 
 Close each per `CLAUDE.local.md`.
 

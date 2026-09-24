@@ -11,70 +11,90 @@
 class RazorscaleFlyingAloneTrigger : public Trigger
 {
 public:
-    RazorscaleFlyingAloneTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale flying alone") {}
+    static constexpr char const* Name = "razorscale flying alone";
+
+    RazorscaleFlyingAloneTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleDevouringFlamesTrigger : public Trigger
 {
 public:
-    RazorscaleDevouringFlamesTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale avoid devouring flames") {}
+    static constexpr char const* Name = "razorscale avoid devouring flames";
+
+    RazorscaleDevouringFlamesTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleAvoidSentinelTrigger : public Trigger
 {
 public:
-    RazorscaleAvoidSentinelTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale avoid sentinel") {}
+    static constexpr char const* Name = "razorscale avoid sentinel";
+
+    RazorscaleAvoidSentinelTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleAvoidWhirlwindTrigger : public Trigger
 {
 public:
-    RazorscaleAvoidWhirlwindTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale avoid whirlwind") {}
+    static constexpr char const* Name = "razorscale avoid whirlwind";
+
+    RazorscaleAvoidWhirlwindTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleGroundedTrigger : public Trigger
 {
 public:
-    RazorscaleGroundedTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale grounded") {}
+    static constexpr char const* Name = "razorscale grounded";
+
+    RazorscaleGroundedTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleHarpoonAvailableTrigger : public Trigger
 {
 public:
-    RazorscaleHarpoonAvailableTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale harpoon trigger") {}
+    static constexpr char const* Name = "razorscale harpoon trigger";
+
+    RazorscaleHarpoonAvailableTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleFuseArmorTrigger : public Trigger
 {
 public:
-    RazorscaleFuseArmorTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale fuse armor trigger") {}
+    static constexpr char const* Name = "razorscale fuse armor trigger";
+
+    RazorscaleFuseArmorTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleKillTargetTrigger : public Trigger
 {
 public:
-    RazorscaleKillTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale kill target trigger") {}
+    static constexpr char const* Name = "razorscale kill target trigger";
+
+    RazorscaleKillTargetTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscalePetControlTrigger : public Trigger
 {
 public:
-    RazorscalePetControlTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale pet control trigger") {}
+    static constexpr char const* Name = "razorscale pet control trigger";
+
+    RazorscalePetControlTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class RazorscaleFlameBreathTrigger : public Trigger
 {
 public:
-    RazorscaleFlameBreathTrigger(PlayerbotAI* ai) : Trigger(ai, "razorscale flame breath trigger") {}
+    static constexpr char const* Name = "razorscale flame breath trigger";
+
+    RazorscaleFlameBreathTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

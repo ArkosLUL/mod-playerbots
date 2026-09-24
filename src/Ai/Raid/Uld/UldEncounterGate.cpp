@@ -20,7 +20,6 @@ namespace
     constexpr EncounterPrefix ENCOUNTER_PREFIXES[] = {
         {"flame leviathan", ULD_BOSS_LEVIATHAN},
         {"ignis", ULD_BOSS_IGNIS},
-        {"razorscale", ULD_BOSS_RAZORSCALE},
         {"xt002", ULD_BOSS_XT002},
         {"iron assembly", ULD_BOSS_ASSEMBLY},
         {"freya", ULD_BOSS_FREYA},

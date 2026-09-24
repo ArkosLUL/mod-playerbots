@@ -120,8 +120,8 @@ bool RazorscaleAvoidDevouringFlameAction::Execute(Event /*event*/)
 
 bool RazorscaleAvoidDevouringFlameAction::isUseful()
 {
-    // Standing clear is not this action's problem: RazorscaleMultiplier is what keeps the reach and
-    // formation nodes from walking the bot back onto a patch, and it costs no tick to do it.
+    // Standing clear is not this action's problem: the razorscale rule in her definition keeps the
+    // reach and formation nodes from walking the bot back onto a patch, and it costs no tick to do it.
     return !Scan().flame.IsEmpty();
 }
 
