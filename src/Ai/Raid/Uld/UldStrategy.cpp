@@ -257,50 +257,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Kologarn
     //
-    // Targets are picked per role in code, with no raid icons: Skull means "everyone DPS this" and
-    // Moon is the CC channel, so borrowing them for a per-role split leaks into the generic engine.
-    triggers.push_back(new TriggerNode(
-        "kologarn body tank trigger",
-        { NextAction("kologarn body tank action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "kologarn off tank trigger",
-        { NextAction("kologarn off tank action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "kologarn dps target trigger",
-        { NextAction("kologarn dps target action", ACTION_RAID) }));
-
-    // Rubble outrun players, so the off-tank holds them clear of the raid instead of kiting.
-    triggers.push_back(new TriggerNode(
-        "kologarn rubble tank trigger",
-        { NextAction("kologarn rubble tank action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "kologarn rubble slowdown trigger",
-        { NextAction("kologarn rubble slowdown action", ACTION_RAID) }));
-
-    // Overhead Smash stacks Crunch Armor on whoever holds the body; the pair trade it at 2 stacks.
-    triggers.push_back(new TriggerNode(
-        "kologarn smash swap trigger",
-        { NextAction("kologarn smash swap action", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "kologarn nature resistance trigger",
-        { NextAction("kologarn nature resistance action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "kologarn fall from floor trigger",
-        { NextAction("kologarn fall from floor action", ACTION_RAID + 1) }));
-
-    // An uncovered body means Petrifying Breath on the whole raid, so this outranks the dodges.
-    triggers.push_back(new TriggerNode(
-        "kologarn body uncovered trigger",
-        { NextAction("kologarn body uncovered action", ACTION_EMERGENCY + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "kologarn eyebeam trigger",
-        { NextAction("kologarn eyebeam action", ACTION_EMERGENCY) }));
+    UldKologarnDefinition().AddTriggerNodes(triggers);
 
     //
     // Auriaya
@@ -930,10 +887,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new IgnisDisableDefaultTargetingMultiplier(botAI));
     multipliers.push_back(new IgnisFlameJetsHoldCastMultiplier(botAI));
 
-    // Kologarn picks every target per role in code, so the generic pickers have to be shut out, and
-    // a Stone Grip victim is a passenger who cannot walk
-    multipliers.push_back(new KologarnDisableAutomaticTargetingMultiplier(botAI));
-    multipliers.push_back(new KologarnMultiplier(botAI));
+    UldKologarnDefinition().AddMultipliers(botAI, multipliers);
 
     // Freya splits the DPS across the trio wave in code, so the generic pickers stand down, and the
     // floor stops a stray hit killing one member well ahead of the other two
@@ -953,9 +907,8 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new HodirGuardMultiplier(botAI));
     multipliers.push_back(new HodirPaladinAuraMultiplier(botAI));
 
-    // Hold the one designated hunter in Aspect of the Wild on the three nature bosses, so every other
+    // Hold the one designated hunter in Aspect of the Wild on the nature bosses, so every other
     // hunter keeps Dragonhawk and can still drop to Aspect of the Viper for mana.
-    multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "kologarn"));
     multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "freya"));
     multipliers.push_back(new BossNatureAspectHoldMultiplier(botAI, "thorim"));
 

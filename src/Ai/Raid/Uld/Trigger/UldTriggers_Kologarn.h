@@ -15,63 +15,81 @@
 class KologarnBodyTankTrigger : public Trigger
 {
 public:
-    KologarnBodyTankTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn body tank trigger") {}
+    static constexpr char const* Name = "kologarn body tank trigger";
+
+    KologarnBodyTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnOffTankTrigger : public Trigger
 {
 public:
-    KologarnOffTankTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn off tank trigger") {}
+    static constexpr char const* Name = "kologarn off tank trigger";
+
+    KologarnOffTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnRubbleTankTrigger : public Trigger
 {
 public:
-    KologarnRubbleTankTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn rubble tank trigger") {}
+    static constexpr char const* Name = "kologarn rubble tank trigger";
+
+    KologarnRubbleTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnDpsTargetTrigger : public Trigger
 {
 public:
-    KologarnDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn dps target trigger") {}
+    static constexpr char const* Name = "kologarn dps target trigger";
+
+    KologarnDpsTargetTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnSmashSwapTrigger : public Trigger
 {
 public:
-    KologarnSmashSwapTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn smash swap trigger") {}
+    static constexpr char const* Name = "kologarn smash swap trigger";
+
+    KologarnSmashSwapTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnBodyUncoveredTrigger : public Trigger
 {
 public:
-    KologarnBodyUncoveredTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn body uncovered trigger") {}
+    static constexpr char const* Name = "kologarn body uncovered trigger";
+
+    KologarnBodyUncoveredTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnFallFromFloorTrigger : public Trigger
 {
 public:
-    KologarnFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn fall from floor trigger") {}
+    static constexpr char const* Name = "kologarn fall from floor trigger";
+
+    KologarnFallFromFloorTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnRubbleSlowdownTrigger : public Trigger
 {
 public:
-    KologarnRubbleSlowdownTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn rubble slowdown trigger") {}
+    static constexpr char const* Name = "kologarn rubble slowdown trigger";
+
+    KologarnRubbleSlowdownTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class KologarnEyebeamTrigger : public Trigger
 {
 public:
-    KologarnEyebeamTrigger(PlayerbotAI* ai) : Trigger(ai, "kologarn eyebeam trigger") {}
+    static constexpr char const* Name = "kologarn eyebeam trigger";
+
+    KologarnEyebeamTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

@@ -2,12 +2,11 @@
 
 **No raid target icons.** Skull means "everyone DPS this" and Moon is the CC channel, so a per-role
 split built on them leaks into the generic engine. Targets are picked in code per role, the SWP
-Eredar Twins model — which *requires* `KologarnDisableAutomaticTargetingMultiplier`, because
+Eredar Twins model — which *requires* the `kologarn disable automatic targeting` rule, because
 `DpsTargetValue::Calculate` falls back to a smart-target strategy when no icon is set and is
 therefore **never null**: `NotDpsTargetActiveTrigger` stays true and `dps assist` retakes the target
-on alternating ticks. It zeroes `DpsAssistAction`, `TankAssistAction` and
-`CastDebuffSpellOnAttackerAction` — the last is what stops DoTs landing on whatever the bot drifted
-onto.
+on alternating ticks. It zeroes the `DpsAssist`, `TankAssist` and `DebuffOnAttacker` families — the
+last is what stops DoTs landing on whatever the bot drifted onto.
 
 | Role | Target |
 |---|---|
@@ -66,7 +65,7 @@ of -X runway. Bystanders `FleePosition` off it. None of it needs the raid cheat.
 melee, into melee range whenever the body is uncovered. The swap handover is already covered by the
 swap action's `Attack`; the case that wipes is the MT dying while the off-tank sits 18 yd out.
 
-**Stone Grip** victims are stunned passengers, so `KologarnMultiplier` zeroes their movement — orders
+**Stone Grip** victims are stunned passengers, so an `Exclusive` rule zeroes their movement — orders
 only fight the ride. Freeing them needs no code: DPS already focus the arm.
 
 Healers need nothing boss-specific: `PartyMemberToHeal` does not filter vehicle passengers, so

@@ -46,16 +46,6 @@ public:
         creators["iron assembly rune of power soak action"] = &RaidUlduarActionContext::iron_assembly_rune_of_power_soak_action;
         creators["iron assembly set dps priority action"] = &RaidUlduarActionContext::iron_assembly_set_dps_priority_action;
         creators["iron assembly raid position action"] = &RaidUlduarActionContext::iron_assembly_raid_position_action;
-        creators["kologarn body tank action"] = &RaidUlduarActionContext::kologarn_body_tank_action;
-        creators["kologarn off tank action"] = &RaidUlduarActionContext::kologarn_off_tank_action;
-        creators["kologarn rubble tank action"] = &RaidUlduarActionContext::kologarn_rubble_tank_action;
-        creators["kologarn dps target action"] = &RaidUlduarActionContext::kologarn_dps_target_action;
-        creators["kologarn smash swap action"] = &RaidUlduarActionContext::kologarn_smash_swap_action;
-        creators["kologarn body uncovered action"] = &RaidUlduarActionContext::kologarn_body_uncovered_action;
-        creators["kologarn fall from floor action"] = &RaidUlduarActionContext::kologarn_fall_from_floor_action;
-        creators["kologarn nature resistance action"] = &RaidUlduarActionContext::kologarn_nature_resistance_action;
-        creators["kologarn rubble slowdown action"] = &RaidUlduarActionContext::kologarn_rubble_slowdown_action;
-        creators["kologarn eyebeam action"] = &RaidUlduarActionContext::kologarn_eyebeam_action;
         creators["hodir move snowpacked icicle"] = &RaidUlduarActionContext::hodir_move_snowpacked_icicle;
         creators["hodir biting cold shed"] = &RaidUlduarActionContext::hodir_biting_cold_shed;
         creators["hodir frost resistance action"] = &RaidUlduarActionContext::hodir_frost_resistance_action;
@@ -219,16 +209,6 @@ private:
     static Action* iron_assembly_rune_of_power_soak_action(PlayerbotAI* ai) { return new IronAssemblyRuneOfPowerSoakAction(ai); }
     static Action* iron_assembly_set_dps_priority_action(PlayerbotAI* ai) { return new IronAssemblySetDpsPriorityAction(ai); }
     static Action* iron_assembly_raid_position_action(PlayerbotAI* ai) { return new IronAssemblyRaidPositionAction(ai); }
-    static Action* kologarn_body_tank_action(PlayerbotAI* ai) { return new KologarnBodyTankAction(ai); }
-    static Action* kologarn_off_tank_action(PlayerbotAI* ai) { return new KologarnOffTankAction(ai); }
-    static Action* kologarn_rubble_tank_action(PlayerbotAI* ai) { return new KologarnRubbleTankAction(ai); }
-    static Action* kologarn_dps_target_action(PlayerbotAI* ai) { return new KologarnDpsTargetAction(ai); }
-    static Action* kologarn_smash_swap_action(PlayerbotAI* ai) { return new KologarnSmashSwapAction(ai); }
-    static Action* kologarn_body_uncovered_action(PlayerbotAI* ai) { return new KologarnBodyUncoveredAction(ai); }
-    static Action* kologarn_fall_from_floor_action(PlayerbotAI* ai) { return new KologarnFallFromFloorAction(ai); }
-    static Action* kologarn_nature_resistance_action(PlayerbotAI* ai) { return new BossNatureResistanceAction(ai, "kologarn"); }
-    static Action* kologarn_rubble_slowdown_action(PlayerbotAI* ai) { return new KologarnRubbleSlowdownAction(ai); }
-    static Action* kologarn_eyebeam_action(PlayerbotAI* ai) { return new KologarnEyebeamAction(ai); }
     static Action* hodir_move_snowpacked_icicle(PlayerbotAI* ai) { return new HodirMoveSnowpackedIcicleAction(ai); }
     static Action* hodir_biting_cold_shed(PlayerbotAI* ai) { return new HodirBitingColdShedAction(ai); }
     static Action* hodir_frost_resistance_action(PlayerbotAI* ai) { return new HodirFrostResistanceAction(ai); }

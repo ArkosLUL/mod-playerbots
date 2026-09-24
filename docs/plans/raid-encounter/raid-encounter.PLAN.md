@@ -176,7 +176,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
   `Disengage`.
 - **Ignis:** Slag Pot is `Exclusive` with no exceptions; the construct tank and main tank also get a
   `Block` on their own `IgnisScorchedGroundAction`; its targeting rule adds `AttackRti`.
-- **Kologarn:** Stone Grip is `Exclusive` with no exceptions; its own attack rows stay blocked.
 - **Mimiron:** the formation guard blocks `CombatFormationMove` only, so `tank face` survives.
   `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
 - **Razorscale:** `MoversBlocked`'s per-ms cache stays in its predicate.
@@ -201,7 +200,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 in progress, Auriaya done, next Kologarn.
+**Status:** commits 1-2 landed; commit 3 in progress, Auriaya and Kologarn done, next Razorscale.
 
 Close each per `CLAUDE.local.md`.
 

@@ -164,11 +164,11 @@ public:
                    std::vector<std::string> names = {});
 
     // For what no rule kind fits. The multiplier only sees actions in these families, and only while
-    // the gate is open.
-    template <class M>
-    void Multiplier(FamilyMask families)
+    // the gate is open. Any args follow the PlayerbotAI into its constructor.
+    template <class M, class... Args>
+    void Multiplier(FamilyMask families, Args... args)
     {
-        HandWritten(families, [](PlayerbotAI* ai) -> ::Multiplier* { return new M(ai); });
+        HandWritten(families, [args...](PlayerbotAI* ai) -> ::Multiplier* { return new M(ai, args...); });
     }
 
     void Tick(EncounterDefinition::TickFn tick);

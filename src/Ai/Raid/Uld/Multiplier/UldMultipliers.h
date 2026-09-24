@@ -13,7 +13,6 @@
 #include "UldMultipliers_IronAssembly.h"
 #include "UldMultipliers_Ignis.h"
 #include "UldMultipliers_XT002.h"
-#include "UldMultipliers_Kologarn.h"
 #include "UldMultipliers_Auriaya.h"
 #include "UldMultipliers_Hodir.h"
 #include "UldMultipliers_Freya.h"

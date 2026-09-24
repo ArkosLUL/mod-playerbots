@@ -13,7 +13,9 @@
 class KologarnBodyTankAction : public AttackAction
 {
 public:
-    KologarnBodyTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn body tank action") {}
+    static constexpr char const* Name = "kologarn body tank action";
+
+    KologarnBodyTankAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -21,7 +23,9 @@ public:
 class KologarnOffTankAction : public AttackAction
 {
 public:
-    KologarnOffTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn off tank action") {}
+    static constexpr char const* Name = "kologarn off tank action";
+
+    KologarnOffTankAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -29,7 +33,9 @@ public:
 class KologarnRubbleTankAction : public AttackAction
 {
 public:
-    KologarnRubbleTankAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn rubble tank action") {}
+    static constexpr char const* Name = "kologarn rubble tank action";
+
+    KologarnRubbleTankAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -37,7 +43,9 @@ public:
 class KologarnDpsTargetAction : public AttackAction
 {
 public:
-    KologarnDpsTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn dps target action") {}
+    static constexpr char const* Name = "kologarn dps target action";
+
+    KologarnDpsTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -45,7 +53,9 @@ public:
 class KologarnSmashSwapAction : public AttackAction
 {
 public:
-    KologarnSmashSwapAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn smash swap action") {}
+    static constexpr char const* Name = "kologarn smash swap action";
+
+    KologarnSmashSwapAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -53,7 +63,9 @@ public:
 class KologarnBodyUncoveredAction : public AttackAction
 {
 public:
-    KologarnBodyUncoveredAction(PlayerbotAI* botAI) : AttackAction(botAI, "kologarn body uncovered action") {}
+    static constexpr char const* Name = "kologarn body uncovered action";
+
+    KologarnBodyUncoveredAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -61,7 +73,9 @@ public:
 class KologarnFallFromFloorAction : public Action
 {
 public:
-    KologarnFallFromFloorAction(PlayerbotAI* botAI) : Action(botAI, "kologarn fall from floor action") {}
+    static constexpr char const* Name = "kologarn fall from floor action";
+
+    KologarnFallFromFloorAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
@@ -69,14 +83,18 @@ public:
 class KologarnRubbleSlowdownAction : public Action
 {
 public:
-    KologarnRubbleSlowdownAction(PlayerbotAI* botAI) : Action(botAI, "kologarn rubble slowdown action") {}
+    static constexpr char const* Name = "kologarn rubble slowdown action";
+
+    KologarnRubbleSlowdownAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class KologarnEyebeamAction : public MovementAction
 {
 public:
-    KologarnEyebeamAction(PlayerbotAI* botAI) : MovementAction(botAI, "kologarn eyebeam action") {}
+    static constexpr char const* Name = "kologarn eyebeam action";
+
+    KologarnEyebeamAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 };
