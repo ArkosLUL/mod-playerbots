@@ -305,9 +305,9 @@ bool YoggSaronSetDpsPriorityTrigger::IsActive()
     if (botAI->IsTank(bot))
         return false;
 
-    // Fight-wide rather than per phase, and it has to stay in step with
-    // YoggSaronDpsTargetGuardMultiplier: that zeroes the stock assist over exactly this window, so a
-    // narrower gate here would leave a non-tank with no target source at all.
+    // Fight-wide rather than per phase, and it has to stay in step with the dps target guard rule in
+    // the definition: that zeroes the stock assist over exactly this window, so a narrower gate here
+    // would leave a non-tank with no target source at all.
     return IsYoggSaronFight();
 }
 

@@ -11,42 +11,6 @@
 #include "Multiplier.h"
 #include "RaidAntiFear.h"
 
-// Companion to yogg-saron set dps priority action: that node owns every non-tank's target from phase 2
-// on, so the generic picker has to stand down rather than pull bots back onto whatever is nearest.
-class YoggSaronDpsTargetGuardMultiplier : public Multiplier
-{
-public:
-    YoggSaronDpsTargetGuardMultiplier(PlayerbotAI* botAI)
-        : Multiplier(botAI, "yogg-saron dps target guard multiplier")
-    {
-    }
-
-    float GetValue(Action* action) override;
-
-private:
-    float TankAssistGuard();
-};
-
-// Everything that moves a bot somewhere nobody picked. In phase 1 the room is six fixed cloud orbits
-// and two places between them that nothing reaches, so any jump is a jump onto a ring: over one pull
-// 13 of 20 casts left the bot with more orbits in summon range than it started with. Blink landed on
-// the fourth orbit, Disengage on the third, and the gap-closers fired straight out of the cloud-free
-// circle around Sara through the first two.
-//
-// Blink and Disengage stay off all fight - both fire on "something is too close" rather than to close
-// a gap, so neither is aimed at anything. The gap-closers come back in phases 2 and 3, where there is
-// no orbit to land on.
-class YoggSaronDisplacementGuardMultiplier : public Multiplier
-{
-public:
-    YoggSaronDisplacementGuardMultiplier(PlayerbotAI* botAI)
-        : Multiplier(botAI, "yogg-saron displacement guard multiplier")
-    {
-    }
-
-    float GetValue(Action* action) override;
-};
-
 // Yogg's body knocks players away once a second forever inside 13.3 yd, and the walk out of that ring
 // at the phase 1 to 2 handover is a forced move against reach melee's combat one. Neither wins
 // outright: the two traded a melee bot back and forth every ~300 ms for the whole walk, and 77 times
@@ -82,20 +46,6 @@ class YoggSaronPhase1AoeHoldMultiplier : public Multiplier
 public:
     YoggSaronPhase1AoeHoldMultiplier(PlayerbotAI* botAI)
         : Multiplier(botAI, "yogg-saron phase 1 aoe hold multiplier")
-    {
-    }
-
-    float GetValue(Action* action) override;
-};
-
-// Food and drink sit a bot down with no AI at all for up to 18 s. With no Guardian alive the raid drops
-// combat and eats wherever it stands: four melee sat down in the ring 8 s before it lit, and two were
-// still eating when it threw them. The back line on the 21.5 yd station keeps eating.
-class YoggSaronStackFoodGuardMultiplier : public Multiplier
-{
-public:
-    YoggSaronStackFoodGuardMultiplier(PlayerbotAI* botAI)
-        : Multiplier(botAI, "yogg-saron stack food guard multiplier")
     {
     }
 

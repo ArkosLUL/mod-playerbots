@@ -744,7 +744,11 @@ struct YoggSaronHandover
     uint32 msToRing = 0;
 };
 
+// A read of the window the encounter's tick latches.
 YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI);
+
+// The encounter's tick: latches the phase 1 to 2 handover window, then writes the throttled trace notes.
+void YoggSaronTick(PlayerbotAI* botAI);
 
 // The body's knockback ring, which has no world object behind it and so cannot be swept for.
 bool YoggSaronInBodyKnockback(Player* player);

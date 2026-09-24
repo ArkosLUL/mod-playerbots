@@ -114,7 +114,7 @@ RaidInstanceState<YoggSaronEncounterState> yoggSaronStates;
 
 YoggSaronEncounterState& YoggSaronStateFor(Player* bot) { return yoggSaronStates.For(bot->GetInstanceId()); }
 
-void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase);
+void TickYoggSaronObs(PlayerbotAI* botAI);
 
 // Sweeps every Yogg trigger repeats in one pass, answered once per pass. Valid only under the id
 // UldTriggerPassId hands out, so it can't outlive the trigger checks. thread_local is fine for a cache
@@ -223,10 +223,7 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
     // either side is friendly, and InitFight's SetInCombatWithZone therefore never touches her. The
     // boss state is IN_PROGRESS from inside InitFight itself.
     if (!UldEncounterIsLive(botAI, ULD_BOSS_YOGGSARON))
-    {
-        TickYoggSaronObs(botAI, 0);
         return 0;
-    }
 
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
 
@@ -242,8 +239,6 @@ uint32 YoggSaronPhase(PlayerbotAI* botAI)
     // Sara last: only phase 1 needs her, so phases 2 and 3 skip her sweep.
     else if (YoggSaronNearestCreature(botAI, NPC_SARA_PHASE_1))
         phase = 1;
-
-    TickYoggSaronObs(botAI, phase);
 
     return phase;
 }
@@ -784,56 +779,68 @@ bool YoggSaronPortalWalkPending(PlayerbotAI* botAI)
            intent == YOGG_SARON_PORTAL_LATE;
 }
 
-YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
+namespace
 {
-    Player* bot = botAI->GetBot();
+// Yogg without the barrier is phase 3 as well, where ACTION_YOGG_SARON_START_P3 strips it again. The
+// Brain separates them: it is summoned in the same tick the barrier first lands, so it is up for
+// everything after this window and absent for the whole of it. The live check keeps the two sweeps
+// off every bot elsewhere in Ulduar.
+bool YoggSaronHandoverOpen(PlayerbotAI* botAI)
+{
+    if (!UldEncounterIsLive(botAI, ULD_BOSS_YOGGSARON))
+        return false;
 
     Creature* yogg = YoggSaronNearestCreature(botAI, NPC_YOGG_SARON);
+    return yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) &&
+           !YoggSaronNearestCreature(botAI, NPC_BRAIN);
+}
 
-    // Yogg without the barrier is phase 3 as well, where ACTION_YOGG_SARON_START_P3 strips it again.
-    // The Brain separates them: it is summoned in the same tick the barrier first lands, so it is up
-    // for everything after this window and absent for the whole of it.
-    bool const open = yogg && yogg->IsAlive() && !yogg->HasAura(SPELL_SHADOW_BARRIER) &&
-                      !YoggSaronNearestCreature(botAI, NPC_BRAIN);
-
-    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
-
-    YoggSaronHandover answer;
-    bool holding = false;
+void YoggSaronTickHandover(PlayerbotAI* botAI)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
     uint32 const now = getMSTime();
-    if (open)
+
+    if (YoggSaronHandoverOpen(botAI))
     {
         state.handoverRingMs = 0;
         if (!state.handoverStartMs)
             state.handoverStartMs = now;
 
+        return;
+    }
+
+    // The window and the ring are the same tick, so the moment the window closes is the moment to
+    // start the hold from.
+    if (state.handoverStartMs)
+    {
+        state.handoverRingMs = now;
+        state.handoverStartMs = 0;
+    }
+
+    if (state.handoverRingMs && getMSTimeDiff(state.handoverRingMs, now) >= ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS)
+        state.handoverRingMs = 0;
+}
+}  // namespace
+
+YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+
+    YoggSaronHandover answer;
+    uint32 const now = getMSTime();
+    if (state.handoverStartMs)
+    {
         uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
         answer.active = true;
         answer.msToRing = elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
     }
-    else
-    {
-        // The window and the ring are the same tick, so the moment the window closes is the moment
-        // to start the hold from.
-        if (state.handoverStartMs)
-        {
-            state.handoverRingMs = now;
-            state.handoverStartMs = 0;
-        }
 
-        holding =
-            state.handoverRingMs && getMSTimeDiff(state.handoverRingMs, now) < ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS;
-        if (!holding)
-            state.handoverRingMs = 0;
-    }
+    bool const holding = !answer.active && state.handoverRingMs &&
+                         getMSTimeDiff(state.handoverRingMs, now) < ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS;
 
     if (!answer.active && !holding)
-    {
-        if (RaidObs::Active())
-            RaidObs::NoteDerived(bot, "yogg.handover", "clear");
-
         return answer;
-    }
 
     // Only melee and the tank are ever inside the ring when it lights up; the back line is already
     // parked at 21.5 yd, which is 8.2 yd clear of it.
@@ -853,9 +860,6 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 
         answer.clearing = answer.msToRing <= lead;
     }
-
-    if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.handover", answer.clearing ? "clearing" : "holding");
 
     return answer;
 }
@@ -1949,7 +1953,7 @@ void NoteYoggSaronHazards(Player* bot, uint32 phase)
     }
 }
 
-void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
+void TickYoggSaronObs(PlayerbotAI* botAI)
 {
     if (!RaidObs::Active())
         return;
@@ -1957,12 +1961,23 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
     Player* bot = botAI->GetBot();
     YoggSaronEncounterState& state = YoggSaronStateFor(bot);
 
+    // The handover tick has just run, so a ring stamp still set means the hold is on.
+    YoggSaronHandover const handover = YoggSaronHandoverState(botAI);
+    char const* handoverNote = "clear";
+    if (handover.clearing)
+        handoverNote = "clearing";
+    else if (handover.active || state.handoverRingMs)
+        handoverNote = "holding";
+
+    RaidObs::NoteDerived(bot, "yogg.handover", handoverNote);
+
     uint32 const now = getMSTime();
     uint32& last = state.obsScanMs[bot->GetGUID()];
     if (last && getMSTimeDiff(last, now) < ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS)
         return;
 
     last = now;
+    uint32 const phase = YoggSaronPhase(botAI);
     state.phase = phase;
 
     bool noteHazards = false;
@@ -2056,3 +2071,9 @@ void TickYoggSaronObs(PlayerbotAI* botAI, uint32 phase)
                                                                      : "far");
 }
 }  // namespace
+
+void YoggSaronTick(PlayerbotAI* botAI)
+{
+    YoggSaronTickHandover(botAI);
+    TickYoggSaronObs(botAI);
+}

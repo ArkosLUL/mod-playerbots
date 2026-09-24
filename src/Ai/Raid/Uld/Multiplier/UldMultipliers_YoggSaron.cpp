@@ -39,66 +39,6 @@
 
 using namespace EncounterHelpers;
 
-float YoggSaronDpsTargetGuardMultiplier::GetValue(Action* action)
-{
-    // Cheap tests first: the read below is two 200 yd grid sweeps, and this runs for every action the
-    // engine weighs.
-    //
-    // "attack rti target" is deliberately left alone: bots no longer set marks here, but a mark a
-    // player sets should still win. The resolver excludes tanks, so TankAssistAction only stands down
-    // where guardian control gives a tank its target instead.
-    if (dynamic_cast<TankAssistAction*>(action))
-        return TankAssistGuard();
-
-    if (!dynamic_cast<DpsAssistAction*>(action) || botAI->IsTank(bot))
-        return 1.0f;
-
-    // The resolver owns every non-tank's target for the whole encounter now that phase 1 has a kill
-    // order of its own. This is literally the test YoggSaronSetDpsPriorityTrigger fires on: zeroing
-    // the assist over a wider window than the resolver covers leaves a bot with no target source.
-    return YoggSaronEncounterActive(botAI) ? 0.0f : 1.0f;
-}
-
-float YoggSaronDpsTargetGuardMultiplier::TankAssistGuard()
-{
-    // Its picker ranks by "not attacking me", then nearest by GetDistance, which takes off Yogg's 30 yd
-    // combat reach, so Yogg always reads as nearest. It held one bot tank on him for all of phase 3 with
-    // no Guardian ever targeted. Guardian control hands out a Guardian while one can still be held; 70 yd
-    // covers the whole spawn ring, 38-48 yd round Yogg, from the melee spot 18.5 yd behind him.
-    constexpr float guardianSearchRadius = 70.0f;
-
-    if (!botAI->IsTank(bot) || !YoggSaronHoldableGuardianWithin(bot, guardianSearchRadius))
-        return 1.0f;
-
-    return YoggSaronInPhase3(botAI) ? 0.0f : 1.0f;
-}
-
-float YoggSaronDisplacementGuardMultiplier::GetValue(Action* action)
-{
-    if (!action)
-        return 1.0f;
-
-    // Cheap gate first: the phase read below is a pair of 200 yd grid sweeps, and this runs for every
-    // action the engine weighs. CastReachTargetSpellAction is the whole gap-closer family - Charge,
-    // Intercept and both Feral Charges, with no other subclasses - and catching all of it matters,
-    // because the Fury chain is charge then intercept then reach melee, so a partial veto only moves
-    // the problem down the list. Blink and Disengage are plain CastSpellActions and need naming.
-    bool const teleport =
-        dynamic_cast<CastBlinkBackAction*>(action) || dynamic_cast<CastDisengageAction*>(action);
-    bool const gapCloser =
-        dynamic_cast<CastReachTargetSpellAction*>(action) || dynamic_cast<CastKillingSpreeAction*>(action);
-
-    if (!teleport && !gapCloser)
-        return 1.0f;
-
-    uint32 const phase = YoggSaronPhase(botAI);
-    if (!phase)
-        return 1.0f;
-
-    // reach melee survives either way, so melee still walk in on foot.
-    return phase == 1 || teleport ? 0.0f : 1.0f;
-}
-
 float YoggSaronMovementGuardMultiplier::FleeGuard()
 {
     // Ranged and healers only. The station owns their feet in phase 1 and stepping off it is what
@@ -226,22 +166,6 @@ float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
         return 1.0f;
 
     return YoggSaronPhase1AoeHold(botAI) ? 0.0f : 1.0f;
-}
-
-float YoggSaronStackFoodGuardMultiplier::GetValue(Action* action)
-{
-    if (!action)
-        return 1.0f;
-
-    std::string const name = action->getName();
-    if (name != "food" && name != "drink")
-        return 1.0f;
-
-    if (bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) >=
-        ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
-        return 1.0f;
-
-    return YoggSaronEncounterActive(botAI) ? 0.0f : 1.0f;
 }
 
 float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)

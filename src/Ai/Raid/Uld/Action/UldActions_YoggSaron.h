@@ -21,7 +21,9 @@
 class YoggSaronGuardianPositioningAction : public MovementAction
 {
 public:
-    YoggSaronGuardianPositioningAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron guardian positioning action") {}
+    static constexpr char const* Name = "yogg-saron guardian positioning action";
+
+    YoggSaronGuardianPositioningAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -29,7 +31,9 @@ public:
 class YoggSaronSanityAction : public MovementAction
 {
 public:
-    YoggSaronSanityAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron sanity action") {}
+    static constexpr char const* Name = "yogg-saron sanity action";
+
+    YoggSaronSanityAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -37,7 +41,9 @@ public:
 class YoggSaronMaladyOfTheMindAction : public MoveAwayFromPlayerWithDebuffAction
 {
 public:
-    YoggSaronMaladyOfTheMindAction(PlayerbotAI* ai) : MoveAwayFromPlayerWithDebuffAction(ai, "yogg-saron malady of the mind action", SPELL_MALADY_OF_THE_MIND, 15.0f) {}
+    static constexpr char const* Name = "yogg-saron malady of the mind action";
+
+    YoggSaronMaladyOfTheMindAction(PlayerbotAI* ai) : MoveAwayFromPlayerWithDebuffAction(ai, Name, SPELL_MALADY_OF_THE_MIND, 15.0f) {}
 };
 
 // Latch and sweep shared by the two spacing nodes. Each phase puts everything it has to clear into one
@@ -103,7 +109,9 @@ private:
 class YoggSaronPhase1SpacingAction : public YoggSaronSpacingAction
 {
 public:
-    YoggSaronPhase1SpacingAction(PlayerbotAI* ai) : YoggSaronSpacingAction(ai, "yogg-saron phase 1 spacing action") {}
+    static constexpr char const* Name = "yogg-saron phase 1 spacing action";
+
+    YoggSaronPhase1SpacingAction(PlayerbotAI* ai) : YoggSaronSpacingAction(ai, Name) {}
 
 protected:
     bool Collect(HazardSet& set) override;
@@ -121,7 +129,9 @@ private:
 class YoggSaronPhase1StationAction : public MovementAction
 {
 public:
-    YoggSaronPhase1StationAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron phase 1 station action") {}
+    static constexpr char const* Name = "yogg-saron phase 1 station action";
+
+    YoggSaronPhase1StationAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -129,7 +139,9 @@ public:
 class YoggSaronPhase2SpacingAction : public YoggSaronSpacingAction
 {
 public:
-    YoggSaronPhase2SpacingAction(PlayerbotAI* ai) : YoggSaronSpacingAction(ai, "yogg-saron phase 2 spacing action") {}
+    static constexpr char const* Name = "yogg-saron phase 2 spacing action";
+
+    YoggSaronPhase2SpacingAction(PlayerbotAI* ai) : YoggSaronSpacingAction(ai, Name) {}
 
 protected:
     bool Collect(HazardSet& set) override;
@@ -152,8 +164,10 @@ private:
 class YoggSaronIllusionFacingAction : public YoggSaronSpacingAction
 {
 public:
+    static constexpr char const* Name = "yogg-saron illusion facing action";
+
     YoggSaronIllusionFacingAction(PlayerbotAI* ai)
-        : YoggSaronSpacingAction(ai, "yogg-saron illusion facing action")
+        : YoggSaronSpacingAction(ai, Name)
     {
     }
 
@@ -175,7 +189,9 @@ private:
 class YoggSaronBodyDetourAction : public MovementAction
 {
 public:
-    YoggSaronBodyDetourAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron body detour action") {}
+    static constexpr char const* Name = "yogg-saron body detour action";
+
+    YoggSaronBodyDetourAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -186,7 +202,9 @@ public:
 class YoggSaronPetGuardAction : public Action
 {
 public:
-    YoggSaronPetGuardAction(PlayerbotAI* ai) : Action(ai, "yogg-saron pet guard action") {}
+    static constexpr char const* Name = "yogg-saron pet guard action";
+
+    YoggSaronPetGuardAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 
@@ -203,7 +221,9 @@ private:
 class YoggSaronSetDpsPriorityAction : public AttackAction
 {
 public:
-    YoggSaronSetDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, "yogg-saron set dps priority action") {}
+    static constexpr char const* Name = "yogg-saron set dps priority action";
+
+    YoggSaronSetDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
 
@@ -235,7 +255,9 @@ private:
 class YoggSaronDarkVolleyInterruptAction : public Action
 {
 public:
-    YoggSaronDarkVolleyInterruptAction(PlayerbotAI* ai) : Action(ai, "yogg-saron dark volley interrupt action") {}
+    static constexpr char const* Name = "yogg-saron dark volley interrupt action";
+
+    YoggSaronDarkVolleyInterruptAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 
@@ -249,7 +271,9 @@ private:
 class YoggSaronDiminishPowerJudgementAction : public Action
 {
 public:
-    YoggSaronDiminishPowerJudgementAction(PlayerbotAI* ai) : Action(ai, "yogg-saron diminish power judgement action") {}
+    static constexpr char const* Name = "yogg-saron diminish power judgement action";
+
+    YoggSaronDiminishPowerJudgementAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -259,7 +283,9 @@ public:
 class YoggSaronPhase3ControlAction : public Action
 {
 public:
-    YoggSaronPhase3ControlAction(PlayerbotAI* ai) : Action(ai, "yogg-saron phase 3 control action") {}
+    static constexpr char const* Name = "yogg-saron phase 3 control action";
+
+    YoggSaronPhase3ControlAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -267,7 +293,9 @@ public:
 class YoggSaronBrainLinkAction : public MovementAction
 {
 public:
-    YoggSaronBrainLinkAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron brain link action") {}
+    static constexpr char const* Name = "yogg-saron brain link action";
+
+    YoggSaronBrainLinkAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -275,7 +303,9 @@ public:
 class YoggSaronMoveToEnterPortalAction : public MovementAction
 {
 public:
-    YoggSaronMoveToEnterPortalAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron move to enter portal action") {}
+    static constexpr char const* Name = "yogg-saron move to enter portal action";
+
+    YoggSaronMoveToEnterPortalAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -283,7 +313,9 @@ public:
 class YoggSaronFallFromFloorAction : public MovementAction
 {
 public:
-    YoggSaronFallFromFloorAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron fall from floor action") {}
+    static constexpr char const* Name = "yogg-saron fall from floor action";
+
+    YoggSaronFallFromFloorAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -293,7 +325,9 @@ public:
 class YoggSaronStopFollowingAction : public Action
 {
 public:
-    YoggSaronStopFollowingAction(PlayerbotAI* ai) : Action(ai, "yogg-saron stop following action") {}
+    static constexpr char const* Name = "yogg-saron stop following action";
+
+    YoggSaronStopFollowingAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -301,7 +335,9 @@ public:
 class YoggSaronUsePortalAction : public Action
 {
 public:
-    YoggSaronUsePortalAction(PlayerbotAI* ai) : Action(ai, "yogg-saron use portal action") {}
+    static constexpr char const* Name = "yogg-saron use portal action";
+
+    YoggSaronUsePortalAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -309,7 +345,9 @@ public:
 class YoggSaronIllusionRoomAction : public MovementAction
 {
 public:
-    YoggSaronIllusionRoomAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron illusion room action") {}
+    static constexpr char const* Name = "yogg-saron illusion room action";
+
+    YoggSaronIllusionRoomAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 
@@ -322,8 +360,10 @@ private:
 class YoggSaronIllusionHealerStationAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "yogg-saron illusion healer station action";
+
     YoggSaronIllusionHealerStationAction(PlayerbotAI* ai)
-        : MovementAction(ai, "yogg-saron illusion healer station action") {}
+        : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -331,7 +371,9 @@ public:
 class YoggSaronBrainSpotAction : public MovementAction
 {
 public:
-    YoggSaronBrainSpotAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron brain spot action") {}
+    static constexpr char const* Name = "yogg-saron brain spot action";
+
+    YoggSaronBrainSpotAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -339,7 +381,9 @@ public:
 class YoggSaronMoveToExitPortalAction : public MovementAction
 {
 public:
-    YoggSaronMoveToExitPortalAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron move to exit portal action") {}
+    static constexpr char const* Name = "yogg-saron move to exit portal action";
+
+    YoggSaronMoveToExitPortalAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -349,7 +393,9 @@ public:
 class YoggSaronLaughingSkullAction : public MovementAction
 {
 public:
-    YoggSaronLaughingSkullAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron laughing skull action") {}
+    static constexpr char const* Name = "yogg-saron laughing skull action";
+
+    YoggSaronLaughingSkullAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -357,7 +403,9 @@ public:
 class YoggSaronLunaticGazeAction : public MovementAction
 {
 public:
-    YoggSaronLunaticGazeAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron lunatic gaze action") {}
+    static constexpr char const* Name = "yogg-saron lunatic gaze action";
+
+    YoggSaronLunaticGazeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -365,7 +413,9 @@ public:
 class YoggSaronPhase3PositioningAction : public MovementAction
 {
 public:
-    YoggSaronPhase3PositioningAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron phase 3 positioning action") {}
+    static constexpr char const* Name = "yogg-saron phase 3 positioning action";
+
+    YoggSaronPhase3PositioningAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -377,7 +427,9 @@ public:
 class YoggSaronGuardianControlAction : public AttackAction
 {
 public:
-    YoggSaronGuardianControlAction(PlayerbotAI* ai) : AttackAction(ai, "yogg-saron guardian control action") {}
+    static constexpr char const* Name = "yogg-saron guardian control action";
+
+    YoggSaronGuardianControlAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
 
@@ -393,7 +445,9 @@ private:
 class YoggSaronSanityConservationAction : public MovementAction
 {
 public:
-    YoggSaronSanityConservationAction(PlayerbotAI* ai) : MovementAction(ai, "yogg-saron sanity conservation action") {}
+    static constexpr char const* Name = "yogg-saron sanity conservation action";
+
+    YoggSaronSanityConservationAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -405,7 +459,9 @@ public:
 class YoggSaronSqueezeRescueAction : public Action
 {
 public:
-    YoggSaronSqueezeRescueAction(PlayerbotAI* ai) : Action(ai, "yogg-saron squeeze rescue action") {}
+    static constexpr char const* Name = "yogg-saron squeeze rescue action";
+
+    YoggSaronSqueezeRescueAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -414,7 +470,9 @@ public:
 class YoggSaronSqueezeEscapeAction : public Action
 {
 public:
-    YoggSaronSqueezeEscapeAction(PlayerbotAI* ai) : Action(ai, "yogg-saron squeeze escape action") {}
+    static constexpr char const* Name = "yogg-saron squeeze escape action";
+
+    YoggSaronSqueezeEscapeAction(PlayerbotAI* ai) : Action(ai, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -422,7 +480,9 @@ public:
 class YoggSaronAntiFearAction : public RaidAntiFearAction
 {
 public:
-    YoggSaronAntiFearAction(PlayerbotAI* ai) : RaidAntiFearAction(ai, "yogg-saron anti fear action") {}
+    static constexpr char const* Name = "yogg-saron anti fear action";
+
+    YoggSaronAntiFearAction(PlayerbotAI* ai) : RaidAntiFearAction(ai, Name) {}
 
 protected:
     bool FearWindowActive() override { return YoggSaronFearWindowActive(botAI); }

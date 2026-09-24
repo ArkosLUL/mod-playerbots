@@ -161,7 +161,7 @@ picked, and in a room made of six fixed rings that means onto one: of 20 phase 1
 **13 left the bot with more orbits inside the 8.5 yd reach than it started with**. Blink took bots
 from the 21.5 yd station to 39.2-40.0, onto the fourth orbit; Disengage to 31.1-33.7, onto the third;
 Charge, Intercept and Feral Charge fired straight out of the 2.89 yd cloud-free circle through the
-first two. `YoggSaronDisplacementGuardMultiplier` zeroes all of them in phase 1, and Blink and
+first two. The `yogg-saron displacement guard multiplier` rules zero all of them in phase 1, and Blink and
 Disengage for the whole encounter — those two fire on "something is too close" rather than to close a
 gap, so neither is aimed at anything, while the gap-closers come back in P2 and P3 where there is no
 orbit to land on. Catch the whole `CastReachTargetSpellAction` family: the Fury chain is charge →
@@ -663,7 +663,8 @@ them. Bots ate on the stack in phase 1 lulls too. `yogg-saron stack food guard m
 meal inside 15 yd.
 
 **Yogg without Shadow Barrier is the whole window**, and `SetVisible(false)` does not hide him from a
-grid search, so `YoggSaronHandoverState` reads it from the first tick. P3 strips the barrier again and
+grid search, so the encounter's tick latches it from the first tick and `YoggSaronHandoverState` reads
+that. P3 strips the barrier again and
 the Brain separates the two: it is summoned in the tick the barrier first lands, so it is up for
 everything after the window and absent for all of it. The walk is **led, not immediate** — leftover
 Guardians stop counting for Sara the moment she dies (`DamageTaken` returns early on `_secondPhase`)
@@ -1223,7 +1224,7 @@ So in phase 3 `yogg-saron guardian control`, in order:
    included) is thinnest on, in melee reach before merely near the spot, leaving its current one only
    past `ULDUAR_YOGG_SARON_TANK_THREAT_SWITCH_LEAD` (1.5).
 
-`YoggSaronDpsTargetGuardMultiplier` zeroes `TankAssistAction` for tanks in phase 3 while a guardian
+A `yogg-saron dps target guard multiplier` rule zeroes `TankAssist` for tanks in phase 3 while a guardian
 that can still be held lives within 70 yd, or the picker hands Yogg straight back. Probed as
 `yogg.tankhold` (`taunt` / `defense` / `leash` / `attack`).
 

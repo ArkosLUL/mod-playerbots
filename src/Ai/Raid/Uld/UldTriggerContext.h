@@ -28,38 +28,6 @@ public:
         creators["mimiron aerial command unit trigger"] = &RaidUlduarTriggerContext::mimiron_aerial_command_unit_trigger;
         creators["mimiron rocket strike trigger"] = &RaidUlduarTriggerContext::mimiron_rocket_strike_trigger;
         creators["mimiron phase 4 focus trigger"] = &RaidUlduarTriggerContext::mimiron_phase_4_focus_trigger;
-        creators["sara shadow resistance trigger"] = &RaidUlduarTriggerContext::sara_shadow_resistance_trigger;
-        creators["yogg-saron shadow resistance trigger"] = &RaidUlduarTriggerContext::yogg_saron_shadow_resistance_trigger;
-        creators["yogg-saron phase 1 spacing trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_spacing_trigger;
-        creators["yogg-saron phase 1 station trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_1_station_trigger;
-        creators["yogg-saron dark volley trigger"] = &RaidUlduarTriggerContext::yogg_saron_dark_volley_trigger;
-        creators["yogg-saron guardian positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_positioning_trigger;
-        creators["yogg-saron sanity trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_trigger;
-        creators["yogg-saron malady of the mind trigger"] = &RaidUlduarTriggerContext::yogg_saron_malady_of_the_mind_trigger;
-        creators["yogg-saron phase 3 control trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_control_trigger;
-        creators["yogg-saron set dps priority trigger"] = &RaidUlduarTriggerContext::yogg_saron_set_dps_priority_trigger;
-        creators["yogg-saron phase 2 spacing trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_2_spacing_trigger;
-        creators["yogg-saron brain link trigger"] = &RaidUlduarTriggerContext::yogg_saron_brain_link_trigger;
-        creators["yogg-saron move to enter portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_enter_portal_trigger;
-        creators["yogg-saron use portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_use_portal_trigger;
-        creators["yogg-saron fall from floor trigger"] = &RaidUlduarTriggerContext::yogg_saron_fall_from_floor_trigger;
-        creators["yogg-saron stop following trigger"] = &RaidUlduarTriggerContext::yogg_saron_stop_following_trigger;
-        creators["yogg-saron illusion room trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_room_trigger;
-        creators["yogg-saron move to exit portal trigger"] = &RaidUlduarTriggerContext::yogg_saron_move_to_exit_portal_trigger;
-        creators["yogg-saron laughing skull trigger"] = &RaidUlduarTriggerContext::yogg_saron_laughing_skull_trigger;
-        creators["yogg-saron lunatic gaze trigger"] = &RaidUlduarTriggerContext::yogg_saron_lunatic_gaze_trigger;
-        creators["yogg-saron phase 3 positioning trigger"] = &RaidUlduarTriggerContext::yogg_saron_phase_3_positioning_trigger;
-        creators["yogg-saron guardian control trigger"] = &RaidUlduarTriggerContext::yogg_saron_guardian_control_trigger;
-        creators["yogg-saron sanity conservation trigger"] = &RaidUlduarTriggerContext::yogg_saron_sanity_conservation_trigger;
-        creators["yogg-saron squeeze escape trigger"] = &RaidUlduarTriggerContext::yogg_saron_squeeze_escape_trigger;
-        creators["yogg-saron squeeze rescue trigger"] = &RaidUlduarTriggerContext::yogg_saron_squeeze_rescue_trigger;
-        creators["yogg-saron illusion facing trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_facing_trigger;
-        creators["yogg-saron pet guard trigger"] = &RaidUlduarTriggerContext::yogg_saron_pet_guard_trigger;
-        creators["yogg-saron body detour trigger"] = &RaidUlduarTriggerContext::yogg_saron_body_detour_trigger;
-        creators["yogg-saron diminish power judgement trigger"] = &RaidUlduarTriggerContext::yogg_saron_diminish_power_judgement_trigger;
-        creators["yogg-saron illusion healer station trigger"] = &RaidUlduarTriggerContext::yogg_saron_illusion_healer_station_trigger;
-        creators["yogg-saron brain spot trigger"] = &RaidUlduarTriggerContext::yogg_saron_brain_spot_trigger;
-        creators["yogg-saron anti fear trigger"] = &RaidUlduarTriggerContext::yogg_saron_anti_fear_trigger;
         creators["mimiron magnetic core trigger"] = &RaidUlduarTriggerContext::mimiron_magnetic_core_trigger;
         creators["mimiron plasma blast defensive trigger"] =
             &RaidUlduarTriggerContext::mimiron_plasma_blast_defensive_trigger;
@@ -105,38 +73,6 @@ private:
     static Trigger* mimiron_aerial_command_unit_trigger(PlayerbotAI* ai) { return new MimironAerialCommandUnitTrigger(ai); }
     static Trigger* mimiron_rocket_strike_trigger(PlayerbotAI* ai) { return new MimironRocketStrikeTrigger(ai); }
     static Trigger* mimiron_phase_4_focus_trigger(PlayerbotAI* ai) { return new MimironPhase4FocusTrigger(ai); }
-    static Trigger* sara_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "sara"); }
-    static Trigger* yogg_saron_shadow_resistance_trigger(PlayerbotAI* ai) { return new BossShadowResistanceTrigger(ai, "yogg-saron"); }
-    static Trigger* yogg_saron_phase_1_spacing_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1SpacingTrigger(ai); }
-    static Trigger* yogg_saron_phase_1_station_trigger(PlayerbotAI* ai) { return new YoggSaronPhase1StationTrigger(ai); }
-    static Trigger* yogg_saron_dark_volley_trigger(PlayerbotAI* ai) { return new YoggSaronDarkVolleyTrigger(ai); }
-    static Trigger* yogg_saron_guardian_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianPositioningTrigger(ai); }
-    static Trigger* yogg_saron_sanity_trigger(PlayerbotAI* ai) { return new YoggSaronSanityTrigger(ai); }
-    static Trigger* yogg_saron_malady_of_the_mind_trigger(PlayerbotAI* ai) { return new YoggSaronMaladyOfTheMindTrigger(ai); }
-    static Trigger* yogg_saron_phase_3_control_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3ControlTrigger(ai); }
-    static Trigger* yogg_saron_set_dps_priority_trigger(PlayerbotAI* ai) { return new YoggSaronSetDpsPriorityTrigger(ai); }
-    static Trigger* yogg_saron_phase_2_spacing_trigger(PlayerbotAI* ai) { return new YoggSaronPhase2SpacingTrigger(ai); }
-    static Trigger* yogg_saron_brain_link_trigger(PlayerbotAI* ai) { return new YoggSaronBrainLinkTrigger(ai); }
-    static Trigger* yogg_saron_move_to_enter_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToEnterPortalTrigger(ai); }
-    static Trigger* yogg_saron_use_portal_trigger(PlayerbotAI* ai) { return new YoggSaronUsePortalTrigger(ai); }
-    static Trigger* yogg_saron_fall_from_floor_trigger(PlayerbotAI* ai) { return new YoggSaronFallFromFloorTrigger(ai); }
-    static Trigger* yogg_saron_stop_following_trigger(PlayerbotAI* ai) { return new YoggSaronStopFollowingTrigger(ai); }
-    static Trigger* yogg_saron_illusion_room_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionRoomTrigger(ai); }
-    static Trigger* yogg_saron_move_to_exit_portal_trigger(PlayerbotAI* ai) { return new YoggSaronMoveToExitPortalTrigger(ai); }
-    static Trigger* yogg_saron_laughing_skull_trigger(PlayerbotAI* ai) { return new YoggSaronLaughingSkullTrigger(ai); }
-    static Trigger* yogg_saron_lunatic_gaze_trigger(PlayerbotAI* ai) { return new YoggSaronLunaticGazeTrigger(ai); }
-    static Trigger* yogg_saron_phase_3_positioning_trigger(PlayerbotAI* ai) { return new YoggSaronPhase3PositioningTrigger(ai); }
-    static Trigger* yogg_saron_guardian_control_trigger(PlayerbotAI* ai) { return new YoggSaronGuardianControlTrigger(ai); }
-    static Trigger* yogg_saron_sanity_conservation_trigger(PlayerbotAI* ai) { return new YoggSaronSanityConservationTrigger(ai); }
-    static Trigger* yogg_saron_squeeze_escape_trigger(PlayerbotAI* ai) { return new YoggSaronSqueezeEscapeTrigger(ai); }
-    static Trigger* yogg_saron_squeeze_rescue_trigger(PlayerbotAI* ai) { return new YoggSaronSqueezeRescueTrigger(ai); }
-    static Trigger* yogg_saron_illusion_facing_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionFacingTrigger(ai); }
-    static Trigger* yogg_saron_pet_guard_trigger(PlayerbotAI* ai) { return new YoggSaronPetGuardTrigger(ai); }
-    static Trigger* yogg_saron_body_detour_trigger(PlayerbotAI* ai) { return new YoggSaronBodyDetourTrigger(ai); }
-    static Trigger* yogg_saron_diminish_power_judgement_trigger(PlayerbotAI* ai) { return new YoggSaronDiminishPowerJudgementTrigger(ai); }
-    static Trigger* yogg_saron_illusion_healer_station_trigger(PlayerbotAI* ai) { return new YoggSaronIllusionHealerStationTrigger(ai); }
-    static Trigger* yogg_saron_brain_spot_trigger(PlayerbotAI* ai) { return new YoggSaronBrainSpotTrigger(ai); }
-    static Trigger* yogg_saron_anti_fear_trigger(PlayerbotAI* ai) { return new YoggSaronAntiFearTrigger(ai); }
     static Trigger* mimiron_magnetic_core_trigger(PlayerbotAI* ai) { return new MimironMagneticCoreTrigger(ai); }
     static Trigger* mimiron_plasma_blast_defensive_trigger(PlayerbotAI* ai)
     {

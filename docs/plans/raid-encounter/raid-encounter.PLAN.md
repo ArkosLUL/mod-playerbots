@@ -129,7 +129,6 @@ and the predicates become plain reads:
 | Today | Where |
 |---|---|
 | `TickMimironObs`, including the wipe reset | `IsMimironEngaged` (`Uld/Util/UldEncounter_Mimiron.cpp:1009`) |
-| `TickYoggSaronObs`; handover latch writes | `YoggSaronPhase` (`UldEncounter_YoggSaron.cpp:218`); `YoggSaronHandoverState` (`:787`) |
 | `vezax.formation` note | `VezaxFormationActive` (`UldEncounter_Vezax.cpp:169`) |
 | tsunami hazard notes | `SartharionEncounterActive` (`OS/Util/OSEncounter.cpp:117`) |
 | `neglect threat` = true | Loatheb, Razuvious, Four Horsemen, Gothik multipliers (`Naxx/NaxxMultipliers.cpp:119,283,534,551`) |
@@ -165,7 +164,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
 
 - **Mimiron:** the formation guard blocks `CombatFormationMove` only, so `tank face` survives.
   `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
-- **Yogg-Saron:** the displacement guard names `killing spree`.
 - **Naxx:** hand-written: Heigan's dance window, the Sapphiron and Kel'Thuzad healer windows, Gothik's
   unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
   tank-assist ×2. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on Thane;
@@ -182,7 +180,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 is up to Yogg-Saron, in the order it lists.
+**Status:** commits 1-2 landed; commit 3 is up to Mimiron, in the order it lists.
 
 Close each per `CLAUDE.local.md`.
 

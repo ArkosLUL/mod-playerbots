@@ -14,13 +14,9 @@ namespace
         uint32 bossId;
     };
 
-    // Every Ulduar trigger name starts with its encounter. No prefix here is a prefix of another, so
-    // first match wins. `sara` is Yogg-Saron's phase-one form and the one name that does not lead with
-    // the encounter.
+    // Every Ulduar trigger name starts with its encounter.
     constexpr EncounterPrefix ENCOUNTER_PREFIXES[] = {
         {"mimiron", ULD_BOSS_MIMIRON},
-        {"yogg-saron", ULD_BOSS_YOGGSARON},
-        {"sara", ULD_BOSS_YOGGSARON},
     };
 }
 
@@ -40,8 +36,6 @@ bool UldEncounterOfTrigger(std::string const& triggerName, uint32& bossId)
 
 char const* UldEncounterName(uint32 bossId)
 {
-    // First entry wins, which is why `sara` sitting after `yogg-saron` matters: both name the same
-    // encounter and only one of them reads as a boss.
     for (EncounterPrefix const& entry : ENCOUNTER_PREFIXES)
         if (entry.bossId == bossId)
             return entry.prefix;
