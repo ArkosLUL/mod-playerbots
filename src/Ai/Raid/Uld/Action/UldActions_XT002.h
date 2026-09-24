@@ -56,7 +56,9 @@ protected:
 class XT002DebuffCarrierAction : public XT002MoveClearAction
 {
 public:
-    XT002DebuffCarrierAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, "xt002 debuff carrier action") {}
+    static constexpr char const* Name = "xt002 debuff carrier action";
+
+    XT002DebuffCarrierAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 
@@ -126,7 +128,9 @@ private:
 class XT002AvoidHazardAction : public XT002MoveClearAction
 {
 public:
-    XT002AvoidHazardAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, "xt002 avoid hazard action") {}
+    static constexpr char const* Name = "xt002 avoid hazard action";
+
+    XT002AvoidHazardAction(PlayerbotAI* botAI) : XT002MoveClearAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -134,7 +138,9 @@ public:
 class XT002PummellerTauntAction : public Action
 {
 public:
-    XT002PummellerTauntAction(PlayerbotAI* botAI) : Action(botAI, "xt002 pummeller taunt action") {}
+    static constexpr char const* Name = "xt002 pummeller taunt action";
+
+    XT002PummellerTauntAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -142,7 +148,9 @@ public:
 class XT002RedirectThreatAction : public Action
 {
 public:
-    XT002RedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, "xt002 redirect threat action") {}
+    static constexpr char const* Name = "xt002 redirect threat action";
+
+    XT002RedirectThreatAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -159,7 +167,9 @@ private:
 class XT002RaidPositionAction : public MovementAction
 {
 public:
-    XT002RaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, "xt002 raid position action") {}
+    static constexpr char const* Name = "xt002 raid position action";
+
+    XT002RaidPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -177,7 +187,9 @@ public:
 class XT002SetDpsPriorityAction : public AttackAction
 {
 public:
-    XT002SetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, "xt002 set dps priority action") {}
+    static constexpr char const* Name = "xt002 set dps priority action";
+
+    XT002SetDpsPriorityAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 

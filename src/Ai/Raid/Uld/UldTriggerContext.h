@@ -158,12 +158,6 @@ public:
         creators["mimiron dodge flames trigger"] = &RaidUlduarTriggerContext::mimiron_dodge_flames_trigger;
         creators["mimiron frost bomb trigger"] = &RaidUlduarTriggerContext::mimiron_frost_bomb_trigger;
         creators["mimiron fire bot trigger"] = &RaidUlduarTriggerContext::mimiron_fire_bot_trigger;
-        creators["xt002 debuff carrier trigger"] = &RaidUlduarTriggerContext::xt002_debuff_carrier_trigger;
-        creators["xt002 avoid hazard trigger"] = &RaidUlduarTriggerContext::xt002_avoid_hazard_trigger;
-        creators["xt002 raid position trigger"] = &RaidUlduarTriggerContext::xt002_raid_position_trigger;
-        creators["xt002 set dps priority trigger"] = &RaidUlduarTriggerContext::xt002_set_dps_priority_trigger;
-        creators["xt002 pummeller taunt trigger"] = &RaidUlduarTriggerContext::xt002_pummeller_taunt_trigger;
-        creators["xt002 redirect threat trigger"] = &RaidUlduarTriggerContext::xt002_redirect_threat_trigger;
 
         // Applied over the whole table rather than in every trigger class: every name here carries its
         // encounter, so one pass can gate them all. RaidEncounterRules::GateOpen has what it closes.
@@ -330,12 +324,6 @@ private:
     static Trigger* mimiron_dodge_flames_trigger(PlayerbotAI* ai) { return new MimironDodgeFlamesTrigger(ai); }
     static Trigger* mimiron_frost_bomb_trigger(PlayerbotAI* ai) { return new MimironFrostBombTrigger(ai); }
     static Trigger* mimiron_fire_bot_trigger(PlayerbotAI* ai) { return new MimironFireBotTrigger(ai); }
-    static Trigger* xt002_debuff_carrier_trigger(PlayerbotAI* ai) { return new XT002DebuffCarrierTrigger(ai); }
-    static Trigger* xt002_avoid_hazard_trigger(PlayerbotAI* ai) { return new XT002AvoidHazardTrigger(ai); }
-    static Trigger* xt002_raid_position_trigger(PlayerbotAI* ai) { return new XT002RaidPositionTrigger(ai); }
-    static Trigger* xt002_set_dps_priority_trigger(PlayerbotAI* ai) { return new XT002SetDpsPriorityTrigger(ai); }
-    static Trigger* xt002_pummeller_taunt_trigger(PlayerbotAI* ai) { return new XT002PummellerTauntTrigger(ai); }
-    static Trigger* xt002_redirect_threat_trigger(PlayerbotAI* ai) { return new XT002RedirectThreatTrigger(ai); }
 };
 
 #endif

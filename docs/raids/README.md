@@ -113,7 +113,7 @@ and `tools/nativetest/raid_encounter_rules_test.cpp` covers the kinds. Two gaps 
 defaults: `ReachHeal` is blocked, so add it to `keep` where a healer must walk to its target (Vezax),
 and the spell movers (`Charge`, `Blink`, `Disengage`) are not `MovementAction`s, so they need a
 `Block`. A hand-written multiplier declares the families it looks at and sees only those, while the
-gate is open.
+gate is open; `AnyAction` covers one that can zero an item or a plain `Action` (XT-002's).
 
 ### Movement: the only mover left
 

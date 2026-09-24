@@ -110,44 +110,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // XT-002 Deconstructor
     //
-    // Stepping out of a Boombot blast or a Void Zone outranks everything else: both one-shot a bot that
-    // stands in them. The debuff carrier sits above that because a carrier walking through the raid is
-    // a mechanic nobody else can answer - the raid holds still and the carrier leaves on its own.
-    //
-    // Both are single nodes covering two mechanics apiece, and that is load-bearing. Two nodes on equal
-    // relevance cannot share a bot: the engine ends the tick at the first action returning true and
-    // leaves the loser queued, so the pair trade the tick and the bot walks the line between their
-    // destinations. Nothing below shares a relevance with anything else here either.
-    triggers.push_back(new TriggerNode(
-        "xt002 avoid hazard trigger",
-        { NextAction("xt002 avoid hazard action", ACTION_EMERGENCY) }));
-
-    triggers.push_back(new TriggerNode(
-        "xt002 debuff carrier trigger",
-        { NextAction("xt002 debuff carrier action", ACTION_EMERGENCY + 1) }));
-
-    // One action owns every bot's target, tanks included, so nothing is marked - a raid icon is
-    // group-global and would overwrite whatever the player and the other bots are using. The Pummeller
-    // taunt sits above it so add control keeps running through the Heart window.
-    //
-    // Positioning is deliberately the lowest node here. The engine ends a tick at the first action
-    // that succeeds, so during an add wave the priority action starves it - which is the behaviour we
-    // want, since killing a Scrapbot beats standing on a spot and the anchor has yards of tolerance.
-    triggers.push_back(new TriggerNode(
-        "xt002 pummeller taunt trigger",
-        { NextAction("xt002 pummeller taunt action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "xt002 set dps priority trigger",
-        { NextAction("xt002 set dps priority action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "xt002 redirect threat trigger",
-        { NextAction("xt002 redirect threat action", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "xt002 raid position trigger",
-        { NextAction("xt002 raid position action", ACTION_RAID) }));
+    UldXT002Definition().AddTriggerNodes(triggers);
 
     //
     // Iron Assembly
@@ -784,10 +747,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new AlgalonTargetGuardMultiplier(botAI));
     multipliers.push_back(new AlgalonControlMovementMultiplier(botAI));
 
-    // XT-002: hold the burst cooldowns for the mode's real damage window, and in normal mode stop
-    // damage on the exposed Heart before it dies and flips the raid into hard mode
-    multipliers.push_back(new XT002BurstWindowMultiplier(botAI));
-    multipliers.push_back(new XT002TargetGuardMultiplier(botAI));
+    UldXT002Definition().AddMultipliers(botAI, multipliers);
 
     // Mimiron picks every non-tank target in code, so the generic picker has to be shut out
     multipliers.push_back(new MimironTargetGuardMultiplier(botAI));

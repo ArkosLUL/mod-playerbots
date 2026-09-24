@@ -180,8 +180,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
   `MimironChargeGuardMultiplier` builds five triggers per call; read helpers instead.
 - **Thorim:** the arena target, balcony wrong-target branch and runic barrier guards stay hand-written.
   `ThorimBalconyGuardMultiplier` builds a trigger per call.
-- **XT-002:** `XT002TargetGuardMultiplier` stays hand-written; it was proven equivalent as one unit
-  (18.5 M-input harness) and a split would need that proof redone.
 - **Yogg-Saron:** the displacement guard names `killing spree`.
 - **Naxx:** hand-written: Heigan's dance window, the Sapphiron and Kel'Thuzad healer windows, Gothik's
   unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
@@ -199,7 +197,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-2 landed; commit 3 in progress, Auriaya, Kologarn and Razorscale done, next XT-002.
+**Status:** commits 1-2 landed; commit 3 in progress, Auriaya, Kologarn, Razorscale and XT-002 done, next Freya.
 
 Close each per `CLAUDE.local.md`.
 

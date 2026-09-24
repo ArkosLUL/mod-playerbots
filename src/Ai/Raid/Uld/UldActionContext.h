@@ -158,12 +158,6 @@ public:
         creators["mimiron dodge flames action"] = &RaidUlduarActionContext::mimiron_dodge_flames_action;
         creators["mimiron frost bomb action"] = &RaidUlduarActionContext::mimiron_frost_bomb_action;
         creators["mimiron fire bot action"] = &RaidUlduarActionContext::mimiron_fire_bot_action;
-        creators["xt002 debuff carrier action"] = &RaidUlduarActionContext::xt002_debuff_carrier_action;
-        creators["xt002 avoid hazard action"] = &RaidUlduarActionContext::xt002_avoid_hazard_action;
-        creators["xt002 raid position action"] = &RaidUlduarActionContext::xt002_raid_position_action;
-        creators["xt002 set dps priority action"] = &RaidUlduarActionContext::xt002_set_dps_priority_action;
-        creators["xt002 pummeller taunt action"] = &RaidUlduarActionContext::xt002_pummeller_taunt_action;
-        creators["xt002 redirect threat action"] = &RaidUlduarActionContext::xt002_redirect_threat_action;
 
         for (EncounterDefinition const* encounter : UldEncounterDefinitions())
             encounter->RegisterActions(creators);
@@ -316,12 +310,6 @@ private:
     static Action* mimiron_dodge_flames_action(PlayerbotAI* ai) { return new MimironDodgeFlamesAction(ai); }
     static Action* mimiron_frost_bomb_action(PlayerbotAI* ai) { return new MimironFrostBombAction(ai); }
     static Action* mimiron_fire_bot_action(PlayerbotAI* ai) { return new MimironFireBotAction(ai); }
-    static Action* xt002_debuff_carrier_action(PlayerbotAI* ai) { return new XT002DebuffCarrierAction(ai); }
-    static Action* xt002_avoid_hazard_action(PlayerbotAI* ai) { return new XT002AvoidHazardAction(ai); }
-    static Action* xt002_raid_position_action(PlayerbotAI* ai) { return new XT002RaidPositionAction(ai); }
-    static Action* xt002_set_dps_priority_action(PlayerbotAI* ai) { return new XT002SetDpsPriorityAction(ai); }
-    static Action* xt002_pummeller_taunt_action(PlayerbotAI* ai) { return new XT002PummellerTauntAction(ai); }
-    static Action* xt002_redirect_threat_action(PlayerbotAI* ai) { return new XT002RedirectThreatAction(ai); }
 };
 
 #endif

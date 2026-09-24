@@ -18,7 +18,9 @@
 class XT002DebuffCarrierTrigger : public Trigger
 {
 public:
-    XT002DebuffCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 debuff carrier trigger") {}
+    static constexpr char const* Name = "xt002 debuff carrier trigger";
+
+    XT002DebuffCarrierTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -28,7 +30,9 @@ public:
 class XT002AvoidHazardTrigger : public Trigger
 {
 public:
-    XT002AvoidHazardTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 avoid hazard trigger") {}
+    static constexpr char const* Name = "xt002 avoid hazard trigger";
+
+    XT002AvoidHazardTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -42,7 +46,9 @@ public:
 class XT002RaidPositionTrigger : public Trigger
 {
 public:
-    XT002RaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 raid position trigger") {}
+    static constexpr char const* Name = "xt002 raid position trigger";
+
+    XT002RaidPositionTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
@@ -53,21 +59,27 @@ public:
 class XT002SetDpsPriorityTrigger : public Trigger
 {
 public:
-    XT002SetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 set dps priority trigger") {}
+    static constexpr char const* Name = "xt002 set dps priority trigger";
+
+    XT002SetDpsPriorityTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class XT002PummellerTauntTrigger : public Trigger
 {
 public:
-    XT002PummellerTauntTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 pummeller taunt trigger") {}
+    static constexpr char const* Name = "xt002 pummeller taunt trigger";
+
+    XT002PummellerTauntTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class XT002RedirectThreatTrigger : public Trigger
 {
 public:
-    XT002RedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "xt002 redirect threat trigger") {}
+    static constexpr char const* Name = "xt002 redirect threat trigger";
+
+    XT002RedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

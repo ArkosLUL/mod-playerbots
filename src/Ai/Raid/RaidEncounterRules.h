@@ -62,6 +62,10 @@ constexpr FamilyMask PetAttack = 1ull << 28;
 constexpr FamilyMask Taunt = 1ull << 29;
 
 constexpr FamilyMask Spell = 1ull << 30;  // any CastSpellAction
+
+// Every action, items and plain Actions included, for a hand-written multiplier whose zero can land on
+// anything. No rule should name it.
+constexpr FamilyMask AnyAction = 1ull << 31;
 }  // namespace Family
 
 using RoleMask = uint8_t;

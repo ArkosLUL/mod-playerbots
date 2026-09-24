@@ -351,7 +351,7 @@ Rules::FamilyMask ClassifyAction(Action* action)
     if (!action)
         return 0;
 
-    Rules::FamilyMask mask = 0;
+    Rules::FamilyMask mask = Family::AnyAction;
 
     if (dynamic_cast<MovementAction*>(action))
     {
