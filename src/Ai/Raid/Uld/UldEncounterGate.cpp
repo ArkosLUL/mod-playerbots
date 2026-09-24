@@ -18,7 +18,6 @@ namespace
     // first match wins. `sara` is Yogg-Saron's phase-one form and the one name that does not lead with
     // the encounter.
     constexpr EncounterPrefix ENCOUNTER_PREFIXES[] = {
-        {"hodir", ULD_BOSS_HODIR},
         {"mimiron", ULD_BOSS_MIMIRON},
         {"thorim", ULD_BOSS_THORIM},
         {"yogg-saron", ULD_BOSS_YOGGSARON},

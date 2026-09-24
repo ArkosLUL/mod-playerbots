@@ -20,17 +20,21 @@
 class HodirMoveSnowpackedIcicleAction : public MovementAction
 {
 public:
-    HodirMoveSnowpackedIcicleAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir move snowpacked icicle") {}
+    static constexpr char const* Name = "hodir move snowpacked icicle";
+
+    HodirMoveSnowpackedIcicleAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 // Raise Frost Resistance Aura. Cast directly rather than through ChangeStrategy: the shared boss
 // resistance node adds "rfrost" and nothing anywhere removes it, so the pick outlives the encounter
-// and is wrong on the next pull. HodirPaladinAuraMultiplier holds the slot open while this runs.
+// and is wrong on the next pull. The hodir paladin aura rule holds the slot open while this runs.
 class HodirFrostResistanceAction : public Action
 {
 public:
-    HodirFrostResistanceAction(PlayerbotAI* botAI) : Action(botAI, "hodir frost resistance action") {}
+    static constexpr char const* Name = "hodir frost resistance action";
+
+    HodirFrostResistanceAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -38,7 +42,9 @@ public:
 class HodirIcicleDodgeAction : public MovementAction
 {
 public:
-    HodirIcicleDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, "hodir icicle dodge action") {}
+    static constexpr char const* Name = "hodir icicle dodge action";
+
+    HodirIcicleDodgeAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -53,7 +59,9 @@ private:
 class HodirBitingColdShedAction : public MovementAction
 {
 public:
-    HodirBitingColdShedAction(PlayerbotAI* ai) : MovementAction(ai, "hodir biting cold shed") {}
+    static constexpr char const* Name = "hodir biting cold shed";
+
+    HodirBitingColdShedAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -69,7 +77,9 @@ private:
 class HodirRaidPositionAction : public MovementAction
 {
 public:
-    HodirRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, "hodir raid position action") {}
+    static constexpr char const* Name = "hodir raid position action";
+
+    HodirRaidPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -77,7 +87,9 @@ public:
 class HodirSetDpsPriorityAction : public AttackAction
 {
 public:
-    HodirSetDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, "hodir set dps priority action") {}
+    static constexpr char const* Name = "hodir set dps priority action";
+
+    HodirSetDpsPriorityAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
     bool Execute(Event event) override;
 
 private:
@@ -88,7 +100,9 @@ private:
 class HodirFrozenBlowsSwapAction : public AttackAction
 {
 public:
-    HodirFrozenBlowsSwapAction(PlayerbotAI* ai) : AttackAction(ai, "hodir frozen blows swap action") {}
+    static constexpr char const* Name = "hodir frozen blows swap action";
+
+    HodirFrozenBlowsSwapAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -98,7 +112,9 @@ public:
 class HodirRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    HodirRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, "hodir redirect threat action") {}
+    static constexpr char const* Name = "hodir redirect threat action";
+
+    HodirRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -111,7 +127,9 @@ protected:
 class HodirSpreadStormCloudAction : public MovementAction
 {
 public:
-    HodirSpreadStormCloudAction(PlayerbotAI* ai) : MovementAction(ai, "hodir spread storm cloud") {}
+    static constexpr char const* Name = "hodir spread storm cloud";
+
+    HodirSpreadStormCloudAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -119,7 +137,9 @@ public:
 class HodirCollectStormPowerAction : public MovementAction
 {
 public:
-    HodirCollectStormPowerAction(PlayerbotAI* ai) : MovementAction(ai, "hodir collect storm power") {}
+    static constexpr char const* Name = "hodir collect storm power";
+
+    HodirCollectStormPowerAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     bool Execute(Event event) override;
 };
 

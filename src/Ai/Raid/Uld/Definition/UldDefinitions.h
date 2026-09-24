@@ -20,6 +20,7 @@ EncounterDefinition const& UldAlgalonDefinition();
 EncounterDefinition const& UldIgnisDefinition();
 EncounterDefinition const& UldIronAssemblyDefinition();
 EncounterDefinition const& UldFlameLeviathanDefinition();
+EncounterDefinition const& UldHodirDefinition();
 EncounterDefinition const& UldVezaxDefinition();
 
 // Every Ulduar boss with a definition. The contexts and the strategy's tick walk this.
@@ -35,6 +36,7 @@ inline std::vector<EncounterDefinition const*> const& UldEncounterDefinitions()
         &UldIgnisDefinition(),
         &UldIronAssemblyDefinition(),
         &UldFlameLeviathanDefinition(),
+        &UldHodirDefinition(),
         &UldVezaxDefinition(),
     };
     return definitions;

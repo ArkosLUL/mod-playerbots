@@ -18,16 +18,6 @@ class RaidUlduarTriggerContext : public NamedObjectContext<Trigger>
 public:
     RaidUlduarTriggerContext()
     {
-        creators["hodir biting cold"] = &RaidUlduarTriggerContext::hodir_biting_cold;
-        creators["hodir near snowpacked icicle"] = &RaidUlduarTriggerContext::hodir_near_snowpacked_icicle;
-        creators["hodir frost resistance trigger"] = &RaidUlduarTriggerContext::hodir_frost_resistance_trigger;
-        creators["hodir spread storm cloud"] = &RaidUlduarTriggerContext::hodir_spread_storm_cloud;
-        creators["hodir collect storm power"] = &RaidUlduarTriggerContext::hodir_collect_storm_power;
-        creators["hodir icicle dodge"] = &RaidUlduarTriggerContext::hodir_icicle_dodge;
-        creators["hodir raid position"] = &RaidUlduarTriggerContext::hodir_raid_position;
-        creators["hodir set dps priority"] = &RaidUlduarTriggerContext::hodir_set_dps_priority;
-        creators["hodir frozen blows swap"] = &RaidUlduarTriggerContext::hodir_frozen_blows_swap;
-        creators["hodir redirect threat"] = &RaidUlduarTriggerContext::hodir_redirect_threat;
         creators["thorim frost resistance trigger"] = &RaidUlduarTriggerContext::thorim_frost_resistance_trigger;
         creators["thorim nature resistance trigger"] = &RaidUlduarTriggerContext::thorim_nature_resistance_trigger;
         creators["thorim dps priority trigger"] = &RaidUlduarTriggerContext::thorim_dps_priority_trigger;
@@ -122,16 +112,6 @@ public:
     }
 
 private:
-    static Trigger* hodir_biting_cold(PlayerbotAI* ai) { return new HodirBitingColdTrigger(ai); }
-    static Trigger* hodir_near_snowpacked_icicle(PlayerbotAI* ai) { return new HodirNearSnowpackedIcicleTrigger(ai); }
-    static Trigger* hodir_frost_resistance_trigger(PlayerbotAI* ai) { return new HodirFrostResistanceTrigger(ai); }
-    static Trigger* hodir_spread_storm_cloud(PlayerbotAI* ai) { return new HodirSpreadStormCloudTrigger(ai); }
-    static Trigger* hodir_collect_storm_power(PlayerbotAI* ai) { return new HodirCollectStormPowerTrigger(ai); }
-    static Trigger* hodir_icicle_dodge(PlayerbotAI* ai) { return new HodirIcicleDodgeTrigger(ai); }
-    static Trigger* hodir_raid_position(PlayerbotAI* ai) { return new HodirRaidPositionTrigger(ai); }
-    static Trigger* hodir_set_dps_priority(PlayerbotAI* ai) { return new HodirSetDpsPriorityTrigger(ai); }
-    static Trigger* hodir_frozen_blows_swap(PlayerbotAI* ai) { return new HodirFrozenBlowsSwapTrigger(ai); }
-    static Trigger* hodir_redirect_threat(PlayerbotAI* ai) { return new HodirRedirectThreatTrigger(ai); }
     static Trigger* thorim_frost_resistance_trigger(PlayerbotAI* ai) { return new BossFrostResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_nature_resistance_trigger(PlayerbotAI* ai) { return new BossNatureResistanceTrigger(ai, "thorim"); }
     static Trigger* thorim_dps_priority_trigger(PlayerbotAI* ai) { return new ThorimDpsPriorityTrigger(ai); }

@@ -69,56 +69,7 @@ void RaidUlduarStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     //
     // Hodir
     //
-    // The engine stops at the first action that succeeds, so this order is a survival ranking, not a
-    // preference. Sheltering is the only node whose failure is an outright death - Flash Freeze
-    // encases everyone without the Safe Area aura, and a second one instakills whoever is still
-    // trapped. Dodging is next because an icicle lands every 2s for 14000. Targeting sits above the
-    // Biting Cold shed, which moves for seconds at a time and would otherwise starve it; that costs
-    // nothing, because the targeting action returns false whenever the current target is already
-    // right. Position is last on purpose: killing the block that is about to get an ally killed beats
-    // standing on a dot.
-    triggers.push_back(new TriggerNode(
-        "hodir near snowpacked icicle",
-        { NextAction("hodir move snowpacked icicle", ACTION_RAID + 6) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir icicle dodge",
-        { NextAction("hodir icicle dodge action", ACTION_RAID + 5) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir frozen blows swap",
-        { NextAction("hodir frozen blows swap action", ACTION_RAID + 4) }));
-
-    // Shares the swap's relevance because the two can never contend: the swap only fires for the two
-    // tanks and the redirect only for hunters and rogues. It has to outrank targeting, or a bot
-    // switches to a block before spending charges the tank is waiting on.
-    triggers.push_back(new TriggerNode(
-        "hodir redirect threat",
-        { NextAction("hodir redirect threat action", ACTION_RAID + 4) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir set dps priority",
-        { NextAction("hodir set dps priority action", ACTION_RAID + 3) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir spread storm cloud",
-        { NextAction("hodir spread storm cloud", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir collect storm power",
-        { NextAction("hodir collect storm power", ACTION_RAID + 2) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir biting cold",
-        { NextAction("hodir biting cold shed", ACTION_RAID + 1) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir frost resistance trigger",
-        { NextAction("hodir frost resistance action", ACTION_RAID) }));
-
-    triggers.push_back(new TriggerNode(
-        "hodir raid position",
-        { NextAction("hodir raid position action", ACTION_RAID) }));
+    UldHodirDefinition().AddTriggerNodes(triggers);
 
     //
     // Freya
@@ -534,8 +485,7 @@ void RaidUlduarStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     UldVezaxDefinition().AddMultipliers(botAI, multipliers);
 
     UldAuriayaDefinition().AddMultipliers(botAI, multipliers);
-    multipliers.push_back(new HodirGuardMultiplier(botAI));
-    multipliers.push_back(new HodirPaladinAuraMultiplier(botAI));
+    UldHodirDefinition().AddMultipliers(botAI, multipliers);
 
     // Hold the one designated hunter in Aspect of the Wild on the nature bosses, so every other
     // hunter keeps Dragonhawk and can still drop to Aspect of the Viper for mana.

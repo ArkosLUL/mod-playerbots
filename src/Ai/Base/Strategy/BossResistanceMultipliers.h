@@ -16,7 +16,7 @@ class PlayerbotAI;
 
 // Holds the one designated hunter in Aspect of the Wild while a nature-damage boss is up. Without it
 // the hunter's own "bdps" node re-casts Dragonhawk on the next GCD and the two trade the aspect slot
-// for the whole fight - the same failure HodirPaladinAuraMultiplier exists to prevent for the paladin
+// for the whole fight - the same failure Hodir's paladin aura hold exists to prevent for the paladin
 // resistance aura. Only the chosen hunter is held; every other hunter keeps Dragonhawk and stays free
 // to swap to Aspect of the Viper for mana.
 class BossNatureAspectHoldMultiplier : public Multiplier

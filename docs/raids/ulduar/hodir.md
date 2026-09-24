@@ -178,7 +178,7 @@ spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses
   `MoveInside` → `MoveNear` lands the bot at *exactly* the tolerance, so testing one number at both
   ends stood the trigger down the tick it arrived and handed the next tick to the position anchor —
   measured walking bots 18-22 yd back out with the freeze 2s away.
-- **Every other mover stands down for the whole cast, every role.** `HodirGuardMultiplier` zeroes
+- **Every other mover stands down for the whole cast, every role.** The hodir guard rules zero
   gap-closers (`CastReachTargetSpellAction` — Charge, Intercept, both Feral Charges), `disengage` and
   `blink` (spell actions that throw the bot: a Disengage 6 yd from Hodir threw a hunter 12 yd out of its
   shelter 2.5 s before the landing), and every `MovementAction` bar the shelter run, the icicle dodge
@@ -200,7 +200,7 @@ spawn, 0.0 yd apart across all seven, which is why the run stages on it and uses
   on 09-18), buying nothing and flipping the tank 8 times in 7 s between a shelter and his spot, which
   dragged Hodir 8 yd off the centre.
 - **Stage on the drift; do not wait for the target.** Keying the run on 33174 existing wasted the
-  first 3.9s of every cast, because `HodirGuardMultiplier` zeroes every mover from cast start: the
+  first 3.9s of every cast, because the hodir guard rules zero every mover from cast start: the
   raid moved **20.9%** of that half against a **51.7%** whole-fight baseline, then had 6.2s to cover
   up to 35 yd. After: **26.0%**, and that reads as arriving rather than falling short — the p50 walk
   is now 9.4 yd against a 9 yd park radius, so most bots have nothing left to walk. Parking at
@@ -311,7 +311,7 @@ and Starlight branches take the farther of two fixed ends and cannot collapse.
 
 **Inside a landed shelter the shed keeps running through the freeze cast**, shuttling
 `_SHELTER_SHED_RADIUS` 3 across it, inside the 6 yd park so the run never fires on it;
-`HodirGuardMultiplier` lets it through only there (`IsHodirInLandedShelter`). Standing out the 9 s cast
+The hodir guard rules let it through only there (`IsHodirInLandedShelter`). Standing out the 9 s cast
 adds two stacks, and four of five freezes on 2026-09-19 had a bot gain two.
 
 `isMoving()` is the raw `MOVEMENTFLAG_MASK_MOVING` and does include the flags a jump raises, but
@@ -547,7 +547,7 @@ Each cause below is separate, and all of them are still easy to reintroduce.
   once no block is left, so every bot reads the same numbers for as long as the wave lasts.
 - **Nothing walks a bot back into a pool the dodge just left** (`IsHodirWalkThroughLiveIcicle`). The
   position anchor tests the walk against each live icicle's clear; `reach melee`, `reach spell` and
-  `set behind` (`HodirGuardMultiplier`, toward any current target, not tanks or healers) and the Storm
+  `set behind` (hodir guard rule, toward any current target, not tanks or healers) and the Storm
   Power collect test it against the dodge's own trigger radius, 4.5 / 7.5, and wait out the ≤3.3s.
   Before, the move right after a dodge ended inside a live pool 45-120 times a pull for `reach melee`,
   34-38 `set behind`, 9-57 the collect and 14-26 `reach spell`, against 0-3 for the anchor; dodge ↔
