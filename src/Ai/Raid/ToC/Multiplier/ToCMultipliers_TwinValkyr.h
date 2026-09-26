@@ -6,7 +6,7 @@
 #include "Multiplier.h"
 #include "ToCMultipliers_Shared.h"
 
-// Keep the twin tanks anchored on Fjola/Eydis instead of drifting with the combat formation
+// Keeps a twin's tank on her instead of drifting with the combat formation
 class TwinValkyrControlTankMovementMultiplier : public Multiplier
 {
 public:
@@ -15,13 +15,31 @@ public:
     float GetValue(Action* action) override;
 };
 
-// While a non-tank bot must swap essence (vortex/touch colour mismatch), suppress every other movement
-// so nothing competes with the run to the portal
-class TwinValkyrPrioritizeEssenceSwapMultiplier : public Multiplier
+// No taunting the twin another living tank holds
+class TwinValkyrTauntGuardMultiplier : public Multiplier
 {
 public:
-    TwinValkyrPrioritizeEssenceSwapMultiplier(
-        PlayerbotAI* botAI) : Multiplier(botAI, "twin valkyr prioritize essence swap multiplier") {}
+    TwinValkyrTauntGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "twin valkyr taunt guard multiplier") {}
+    float GetValue(Action* action) override;
+};
+
+// Holds kicks while a shield makes the twin immune to them, and silences and stuns, which never land
+// on the twins
+class TwinValkyrInterruptHoldMultiplier : public Multiplier
+{
+public:
+    TwinValkyrInterruptHoldMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "twin valkyr interrupt hold multiplier") {}
+    float GetValue(Action* action) override;
+};
+
+// The class redirects pick one tank for the whole raid. Here each twin has her own, and the
+// encounter's redirect node casts them.
+class TwinValkyrRedirectGuardMultiplier : public Multiplier
+{
+public:
+    TwinValkyrRedirectGuardMultiplier(
+        PlayerbotAI* botAI) : Multiplier(botAI, "twin valkyr redirect guard multiplier") {}
     float GetValue(Action* action) override;
 };
 

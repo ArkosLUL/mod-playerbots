@@ -1,95 +1,134 @@
 #include "ToCTriggers_TwinValkyr.h"
 #include "ToCData.h"
+#include "ToCEncounterGate.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
-#include "EncounterHelpers.h"
 #include "Strategy.h"
+#include "Unit.h"
 
 using namespace TrialOfTheCrusaderHelpers;
-using namespace EncounterHelpers;
 
-bool TwinValkyrEngagedByMainTankTrigger::IsActive()
+namespace
 {
-    return botAI->IsMainTank(bot) &&
-           GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_FJOLA_LIGHTBANE));
+bool WantsEssenceFor(PlayerbotAI* botAI, Player* bot, TwinEssenceReason reason)
+{
+    TwinEssenceWant const want = GetWantedEssence(botAI);
+    return want.reason == reason && want.colour != EssenceOf(bot);
 }
 
-bool TwinValkyrDarkbaneNeedsAssistTankTrigger::IsActive()
+// Both twins stay non-attackable until the script releases them at the pull.
+bool IsAttackableTwin(Unit* twin)
 {
-    return botAI->IsAssistTankOfIndex(bot, 0, false) &&
-           GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE));
+    return twin && !twin->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE);
 }
+}  // namespace
 
-bool TwinValkyrVortexRequiresEssenceTrigger::IsActive()
+bool TwinValkyrPactInterruptDutyTrigger::IsActive()
 {
-    // Tanks stay anchored on their twin; only non-tanks run to a portal to swap. A bot that already
-    // matches the active vortex colour is fine, so only fire on a genuine mismatch.
-    if (botAI->IsTank(bot))
-        return false;
-
-    if (TwinValkyrLightVortexActive(botAI) && !HasLightEssence(bot))
-        return true;
-
-    return TwinValkyrDarkVortexActive(botAI) && !HasDarkEssence(bot);
+    Unit* twin = GetTwinCastingPact(botAI);
+    return twin && IsTwinPactInterrupter(botAI, twin);
 }
 
 bool TwinValkyrTouchedRequiresEssenceTrigger::IsActive()
 {
-    // Touch (heroic) only lands on essence-carrying non-tanks (the boss excludes current tanks). The
-    // remedy is to switch to the touch's colour: Light Touch absorbed by Light Essence, and vice versa.
-    if (botAI->IsTank(bot))
-        return false;
-
-    if (HasLightTouch(bot) && !HasLightEssence(bot))
-        return true;
-
-    return HasDarkTouch(bot) && !HasDarkEssence(bot);
+    return WantsEssenceFor(botAI, bot, TwinEssenceReason::Touch);
 }
 
-bool TwinValkyrNeedsInitialEssenceTrigger::IsActive()
+bool TwinValkyrVortexRequiresEssenceTrigger::IsActive()
 {
-    // Everyone (tanks included) grabs an essence at the pull so they have an absorb for the first
-    // vortex/ball/touch. Tanks keep this fixed colour for the whole fight (they are excluded from the
-    // vortex/touch swap triggers); non-tanks swap from here as those mechanics fire. Low priority.
-    return TwinValkyrEncounterActive(botAI) && !HasAnyEssence(bot);
+    return WantsEssenceFor(botAI, bot, TwinEssenceReason::Vortex);
 }
 
-bool TwinValkyrPactInterruptibleTrigger::IsActive()
+bool TwinValkyrOrbIncomingTrigger::IsActive()
 {
-    // Pure healers keep the raid up; tanks stay anchored on their twin (the tank on the casting twin
-    // already interrupts via its always-on class behaviour). Free DPS retarget the casting twin so their
-    // interrupt breaks the heal-to-full channel.
-    if (botAI->IsTank(bot) || botAI->IsHeal(bot))
+    return !TwinValkyrMustSwapEssence(botAI, true) && TwinOrbThreatens(botAI, TWIN_ORB_DODGE_CLEARANCE);
+}
+
+bool TwinValkyrShieldRequiresEssenceTrigger::IsActive()
+{
+    return WantsEssenceFor(botAI, bot, TwinEssenceReason::Shield);
+}
+
+bool TwinValkyrNeedsBaseEssenceTrigger::IsActive()
+{
+    return WantsEssenceFor(botAI, bot, TwinEssenceReason::Base);
+}
+
+bool TwinValkyrEngagedByMainTankTrigger::IsActive()
+{
+    Unit* fjola = GetFjola(botAI);
+    return IsAttackableTwin(fjola) && IsTwinTank(bot, fjola);
+}
+
+bool TwinValkyrDarkbaneNeedsAssistTankTrigger::IsActive()
+{
+    Unit* eydis = GetEydis(botAI);
+    if (!IsAttackableTwin(eydis) || !IsTwinTank(bot, eydis))
         return false;
 
-    return GetTwinCastingPact(botAI) != nullptr;
+    // a lone tank holds both twins from the main tank node
+    Unit* fjola = GetFjola(botAI);
+    return !fjola || !IsTwinTank(bot, fjola);
+}
+
+bool TwinValkyrRedirectThreatTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_HUNTER && bot->getClass() != CLASS_ROGUE)
+        return false;
+
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
+        return false;
+
+    Unit* twin = GetTwinDpsTarget(botAI);
+    if (!twin)
+        return false;
+
+    Player* tank = GetTwinTank(bot, twin);
+    return tank && tank != bot && tank->IsAlive();
+}
+
+bool TwinValkyrDpsTargetTrigger::IsActive()
+{
+    if (PlayerbotAI::IsTank(bot) || PlayerbotAI::IsTank(bot, true) || PlayerbotAI::IsHeal(bot))
+        return false;
+
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::TwinValkyr))
+        return false;
+
+    Unit* twin = GetTwinDpsTarget(botAI);
+    return twin && (AI_VALUE(Unit*, "rti target") != twin || AI_VALUE(Unit*, "current target") != twin);
 }
 
 void AddToCTwinValkyrTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
-    // Twin Val'kyr. The twins share health, so the main tank skull-marks Fjola and non-tank DPS focus
-    // her via the default "dps assist" (killing one kills both). The colour-matching Essence system is
-    // the survival core: bots grab an essence at the pull and swap to match the active Vortex / heroic
-    // Touch. Powering Up (orb collection) is intentionally out of scope; the enrage is met via the
-    // shared-health focus-fire, not the DPS buff.
-    triggers.push_back(new TriggerNode("twin valkyr engaged by main tank", {
-        NextAction("twin valkyr main tank hold light twin", ACTION_RAID + 1) }));
+    triggers.push_back(new TriggerNode("twin valkyr pact interrupt duty", {
+        NextAction("twin valkyr interrupt pact", ACTION_EMERGENCY + 7) }));
 
-    triggers.push_back(new TriggerNode("twin valkyr darkbane needs assist tank", {
-        NextAction("twin valkyr assist tank hold dark twin", ACTION_RAID + 2) }));
-
-    // Touch outranks Vortex: a touched bot is taking a personal heavy DoT that only the colour swap stops
+    // Touch over Vortex: in this core a Touch ticks on the whole raid until the touched bot swaps
     triggers.push_back(new TriggerNode("twin valkyr touched requires essence", {
         NextAction("twin valkyr swap essence for touch", ACTION_EMERGENCY + 6) }));
 
     triggers.push_back(new TriggerNode("twin valkyr vortex requires essence", {
         NextAction("twin valkyr swap essence for vortex", ACTION_EMERGENCY + 5) }));
 
-    triggers.push_back(new TriggerNode("twin valkyr needs initial essence", {
-        NextAction("twin valkyr acquire initial essence", ACTION_RAID) }));
+    triggers.push_back(new TriggerNode("twin valkyr orb incoming", {
+        NextAction("twin valkyr dodge orb", ACTION_EMERGENCY + 4) }));
 
-    // Break the twins' heal-to-full Twin's Pact channel. Below the essence swaps (+5/+6) so a bot that
-    // must swap essence to survive still swaps first.
-    triggers.push_back(new TriggerNode("twin valkyr pact interruptible", {
-        NextAction("twin valkyr interrupt pact", ACTION_EMERGENCY + 2) }));
+    triggers.push_back(new TriggerNode("twin valkyr shield requires essence", {
+        NextAction("twin valkyr swap essence for shield", ACTION_RAID + 5) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr needs base essence", {
+        NextAction("twin valkyr take base essence", ACTION_RAID + 4) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr engaged by main tank", {
+        NextAction("twin valkyr main tank hold light twin", ACTION_RAID + 3) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr darkbane needs assist tank", {
+        NextAction("twin valkyr assist tank hold dark twin", ACTION_RAID + 2) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr redirect threat", {
+        NextAction("twin valkyr redirect threat", ACTION_RAID + 1) }));
+
+    triggers.push_back(new TriggerNode("twin valkyr dps target", {
+        NextAction("twin valkyr focus twin", ACTION_RAID) }));
 }
