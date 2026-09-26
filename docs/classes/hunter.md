@@ -59,6 +59,16 @@ carries the strategy only loses it to a DB update.
   for the rest of the fight, and both Kill Command and Bestial Wrath went dead with the pet since
   both resolve `"pet target"`. `no pet` → `call pet` and `hunters pet dead` → `revive pet` now sit
   under every shot priority, so they only spend a GCD the rotation had nothing else for.
+- **`maintenance` replaced the pet with a random tame.** `InitPet` stood down only on `CurrentPet`,
+  but a pet whose corpse despawned, or that fell out of range, sits in `UnslottedPets`; it then tamed
+  a random creature and `SavePetToDB(PET_SAVE_AS_CURRENT)` deleted the old one for good. It now keeps
+  an unslotted pet too: the bot revives or calls it, as `pet dead` is true whenever no pet is out but
+  a `character_pet` row exists.
+- **Pets above 20 talent points got none.** Premade links
+  (`AiPlayerbot.PremadeHunterPetLink.<spec>.<points>`) stop at 20 (`parsedHunterPetLinkOrder[3][21]`).
+  mod-spell-tweaks here raises Beast Mastery (53270) from +4 to +6 pet points, a 22-point cap at 80,
+  where `InitPetTalents` learned nothing. It now applies the 20-point link and spends the rest on
+  random picks, which only reach the last row once 20 are spent.
 - **Kill Command checked an aura that never lands** — `IsActive` tested the KC aura on the *hunter*
   while the action resolves `"pet target"` and `CastBuffSpellAction::isUseful` then checks the aura on
   the *pet*, where Kill Command never puts one. It worked only because the cooldown paced it. Now a

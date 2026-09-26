@@ -1460,50 +1460,11 @@ void PlayerbotFactory::InitPetTalents()
         sPlayerbotAIConfig.parsedHunterPetLinkOrder[pet_family->petTalentType][20];
     uint32 maxTalentPoints = pet->GetMaxTalentPointsForLevel(pet->GetLevel());
 
-    if (order.empty())
-    {
-        int row = 0;
-        for (auto i = spells.begin(); i != spells.end(); ++i, ++row)
-        {
-            std::vector<TalentEntry const*>& spells_row = i->second;
-            if (spells_row.empty())
-            {
-                LOG_INFO("playerbots", "{}: No spells for talent row {}", bot->GetName().c_str(), i->first);
-                continue;
-            }
-            int attemptCount = 0;
-            // keep learning for the last row
-            while (!spells_row.empty() &&
-                   ((((int)maxTalentPoints - (int)pet->GetFreeTalentPoints()) < 3 * (row + 1)) || (row == 5)) &&
-                   attemptCount++ < 10 && pet->GetFreeTalentPoints())
-            {
-                int index = urand(0, spells_row.size() - 1);
-                TalentEntry const* talentInfo = spells_row[index];
-                int maxRank = 0;
-                for (uint32 rank = 0; rank < std::min((uint32)MAX_TALENT_RANK, (uint32)pet->GetFreeTalentPoints()); ++rank)
-                {
-                    uint32 spellId = talentInfo->RankID[rank];
-                    if (!spellId)
-                        continue;
-
-                    maxRank = rank;
-                }
-                // LOG_INFO("playerbots", "{} learn pet talent {}({})", bot->GetName().c_str(), talentInfo->TalentID,
-                // maxRank);
-                if (talentInfo->DependsOn)
-                {
-                    bot->LearnPetTalent(pet->GetGUID(), talentInfo->DependsOn,
-                                        std::min(talentInfo->DependsOnRank, bot->GetFreeTalentPoints() - 1));
-                }
-                bot->LearnPetTalent(pet->GetGUID(), talentInfo->TalentID, maxRank);
-                spells_row.erase(spells_row.begin() + index);
-            }
-        }
-    }
-    else
+    if (!order.empty())
     {
         uint32 spec = pet_family->petTalentType;
-        uint32 startPoints = pet->GetMaxTalentPointsForLevel(pet->GetLevel());
+        // premade links stop at 20 points, a tweaked Beast Mastery can push the cap higher
+        uint32 startPoints = std::min<uint32>(maxTalentPoints, 20);
         while (startPoints > 1 && startPoints < 20 &&
                sPlayerbotAIConfig.parsedHunterPetLinkOrder[spec][startPoints].size() == 0)
         {
@@ -1556,6 +1517,47 @@ void PlayerbotFactory::InitPetTalents()
             }
         }
     }
+
+    if (pet->GetFreeTalentPoints())
+    {
+        int row = 0;
+        for (auto i = spells.begin(); i != spells.end(); ++i, ++row)
+        {
+            std::vector<TalentEntry const*>& spells_row = i->second;
+            if (spells_row.empty())
+            {
+                LOG_INFO("playerbots", "{}: No spells for talent row {}", bot->GetName().c_str(), i->first);
+                continue;
+            }
+            int attemptCount = 0;
+            // keep learning for the last row
+            while (!spells_row.empty() &&
+                   ((((int)maxTalentPoints - (int)pet->GetFreeTalentPoints()) < 3 * (row + 1)) || (row == 5)) &&
+                   attemptCount++ < 10 && pet->GetFreeTalentPoints())
+            {
+                int index = urand(0, spells_row.size() - 1);
+                TalentEntry const* talentInfo = spells_row[index];
+                int maxRank = 0;
+                for (uint32 rank = 0; rank < std::min((uint32)MAX_TALENT_RANK, (uint32)pet->GetFreeTalentPoints()); ++rank)
+                {
+                    uint32 spellId = talentInfo->RankID[rank];
+                    if (!spellId)
+                        continue;
+
+                    maxRank = rank;
+                }
+                // LOG_INFO("playerbots", "{} learn pet talent {}({})", bot->GetName().c_str(), talentInfo->TalentID,
+                // maxRank);
+                if (talentInfo->DependsOn)
+                {
+                    bot->LearnPetTalent(pet->GetGUID(), talentInfo->DependsOn,
+                                        std::min(talentInfo->DependsOnRank, bot->GetFreeTalentPoints() - 1));
+                }
+                bot->LearnPetTalent(pet->GetGUID(), talentInfo->TalentID, maxRank);
+                spells_row.erase(spells_row.begin() + index);
+            }
+        }
+    }
     bot->SendTalentsInfoData(true);
 }
 
@@ -1563,7 +1565,9 @@ void PlayerbotFactory::InitPet()
 {
     Pet* pet = bot->GetPet();
 
-    if (!pet && bot->GetPetStable() && bot->GetPetStable()->CurrentPet)
+    // a dead or out-of-range pet goes unslotted but is still theirs, the bot revives or calls it
+    if (!pet && bot->GetPetStable() &&
+        (bot->GetPetStable()->CurrentPet || bot->GetPetStable()->GetUnslottedHunterPet()))
         return;
 
     if (!pet)
@@ -1620,21 +1624,6 @@ void PlayerbotFactory::InitPet()
                 continue;
             if (co->Name.size() > 21)
                 continue;
-            if (bot->GetPetStable() && bot->GetPetStable()->CurrentPet)
-            {
-                auto petGuid = bot->GetPetStable()->CurrentPet.value(); // To correct the build warnin in VS
-                // bot->GetPetStable()->CurrentPet.value();
-                // bot->GetPetStable()->CurrentPet.reset();
-                bot->RemovePet(nullptr, PET_SAVE_AS_CURRENT);
-                bot->RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT);
-            }
-            if (bot->GetPetStable() && bot->GetPetStable()->GetUnslottedHunterPet())
-            {
-                bot->GetPetStable()->UnslottedPets.clear();
-                bot->RemovePet(nullptr, PET_SAVE_AS_CURRENT);
-                bot->RemovePet(nullptr, PET_SAVE_NOT_IN_SLOT);
-            }
-            // }
             pet = bot->CreateTamedPetFrom(co->Entry, 0);
             if (!pet)
             {
