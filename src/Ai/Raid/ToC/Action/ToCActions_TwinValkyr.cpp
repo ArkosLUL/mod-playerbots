@@ -1,9 +1,12 @@
 #include "ToCActions_TwinValkyr.h"
 #include "ToCData.h"
-#include "ToCHelpers_Shared.h"
 #include "ToCHelpers_TwinValkyr.h"
 #include "Playerbots.h"
+#include "Creature.h"
 #include "EncounterHelpers.h"
+#include "LastMovementValue.h"
+#include "RtiTargetValue.h"
+#include "Timer.h"
 #include "Unit.h"
 #include "WorldSession.h"
 #include "WorldPacket.h"
@@ -11,98 +14,31 @@
 using namespace TrialOfTheCrusaderHelpers;
 using namespace EncounterHelpers;
 
-bool TwinValkyrMainTankHoldLightTwinAction::Execute(Event /*event*/)
+namespace
 {
-    Unit* fjola = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_FJOLA_LIGHTBANE));
-    if (!fjola)
-        return false;
+// MoveTo refuses the point it last issued for 5 s, moving or not, so a walk stopped short never
+// restarts unless its booking goes once the bot has stood still this long.
+constexpr uint32 STALLED_WALK_MS = 500;
+constexpr float SAME_WALK_DESTINATION = 1.0f;
+// a spot kept from an earlier wave is no answer to this one
+constexpr uint32 DODGE_SPOT_LATCH_MS = 1000;
 
-    // Skull on Fjola is the shared focus mark: non-tank DPS follow it via the default "dps assist", and
-    // because the twins share health, burning Fjola kills both. No separate DPS focus action is needed.
-    MarkTargetWithSkull(bot, fjola);
-    SetRtiTarget(botAI, "skull", fjola);
-
-    if (AI_VALUE(Unit*, "current target") != fjola)
-        return Attack(fjola);
-
-    // Anchor the boss near the arena centre so melee stack there and ranged have room
-    return DragBossToAnchor(fjola, ARENA_CENTER);
-}
-
-bool TwinValkyrAssistTankHoldDarkTwinAction::Execute(Event /*event*/)
+// Drops a stalled booking, and with releaseElsewhere a booking for any other destination too, since
+// forced doesn't outrank forced. A walk still headed for destination is kept so the duplicate check
+// stops a re-issue every tick.
+void ReleaseWalk(PlayerbotAI* botAI, Player* bot, Position const& destination, bool releaseElsewhere)
 {
-    Unit* eydis = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_EYDIS_DARKBANE));
-    if (!eydis)
-        return false;
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (!last.msTime)
+        return;
 
-    MarkTargetWithCross(bot, eydis);
-    // Point this off-tank's own RTI at Eydis so its tank-assist target resolves to her rather than
-    // pulling back to the skull-marked Fjola every tick (same idiom as the Jaraxxus/Anub'arak adds).
-    SetRtiTarget(botAI, "cross", eydis);
-
-    if (AI_VALUE(Unit*, "current target") != eydis)
-        return Attack(eydis);
-
-    return false;
+    bool const stalled = !bot->isMoving() && getMSTimeDiff(last.msTime, getMSTime()) > STALLED_WALK_MS;
+    bool const elsewhere = last.lastMoveShort.GetExactDist2d(destination.GetPositionX(),
+                                                             destination.GetPositionY()) > SAME_WALK_DESTINATION;
+    if (stalled || (releaseElsewhere && elsewhere))
+        last.clear();
 }
-
-bool TwinValkyrEssenceActionBase::AcquireEssence(bool wantLight)
-{
-    uint32 const portalEntry = wantLight ? static_cast<uint32>(ToCNpcs::NPC_LIGHT_ESSENCE)
-                                          : static_cast<uint32>(ToCNpcs::NPC_DARK_ESSENCE);
-
-    // Portals sit at the arena corners; scan the whole arena so the bot can find one from anywhere
-    Unit* portal = GetNearestCreatureByEntry(bot, portalEntry, 200.0f);
-    if (!portal)
-        return false;
-
-    // Use 3D distance: the core's HandleGossipHelloOpcode -> GetNPCIfCanInteractWith gates on the 3D
-    // IsWithinDistInMap, so a 2D check could report "in range" for an elevated portal and the gossip
-    // would silently no-op.
-    if (bot->GetDistance(portal) > INTERACTION_DISTANCE)
-    {
-        return MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, portal->GetPositionX(), portal->GetPositionY(),
-                      portal->GetPositionZ(), false, false, false, false,
-                      MovementPriority::MOVEMENT_COMBAT, true, false);
-    }
-
-    // In range: trigger the portal's gossip-hello hook directly. The essence effect lives in the
-    // creature's C++ OnGossipHello override, so HandleGossipHelloOpcode fires it (and casts the essence
-    // aura) regardless of whether the NPC has DB gossip-menu items.
-    bot->CastStop();
-    bot->SetFacingToObject(portal);
-
-    WorldPacket packet;
-    packet << portal->GetGUID();
-    bot->GetSession()->HandleGossipHelloOpcode(packet);
-
-    // The gossip hook applies the essence synchronously (triggered CastSpell), so confirm the aura
-    // actually landed. Report failure if it did not (portal not interactable / out of range) so the
-    // trigger re-fires next tick instead of the action falsely claiming success.
-    return wantLight ? HasLightEssence(bot) : HasDarkEssence(bot);
-}
-
-bool TwinValkyrSwapEssenceForVortexAction::Execute(Event /*event*/)
-{
-    // Whichever vortex is up dictates the colour the bot must match
-    return AcquireEssence(TwinValkyrLightVortexActive(botAI));
-}
-
-bool TwinValkyrSwapEssenceForTouchAction::Execute(Event /*event*/)
-{
-    // Light Touch is mitigated by Light Essence; Dark Touch by Dark Essence
-    return AcquireEssence(HasLightTouch(bot));
-}
-
-bool TwinValkyrAcquireInitialEssenceAction::Execute(Event /*event*/)
-{
-    // Tanks lock the essence matching their assigned twin so its colour-typed melee (Light/Dark Twin
-    // Spike) is mitigated for the whole fight: the main tank holds Fjola (Light) and any other tank
-    // holds Eydis (Dark). Non-tanks default to Light at the pull; the vortex/touch swap logic converges
-    // from there.
-    bool const wantLight = !(botAI->IsTank(bot) && !botAI->IsMainTank(bot));
-    return AcquireEssence(wantLight);
-}
+}  // namespace
 
 bool TwinValkyrInterruptPactAction::Execute(Event /*event*/)
 {
@@ -110,9 +46,169 @@ bool TwinValkyrInterruptPactAction::Execute(Event /*event*/)
     if (!twin)
         return false;
 
-    // Pull a free damage dealer onto the casting twin so its always-on class interrupt (Counterspell /
-    // Pummel / Kick / Mind Freeze ...) lands on the Twin's Pact channel. The damage-reflect shield the
-    // twins carry during specials does not reflect interrupts, so the kick lands normally.
+    char const* interrupt = TwinReadyInterrupt(bot, twin);
+    return interrupt && botAI->CastSpell(interrupt, twin);
+}
+
+bool TwinValkyrEssenceActionBase::Execute(Event /*event*/)
+{
+    TwinEssenceWant const want = GetWantedEssence(botAI);
+    if (want.reason != reason || want.colour == TwinColour::None)
+        return false;
+
+    return AcquireEssence(want.colour);
+}
+
+bool TwinValkyrEssenceActionBase::AcquireEssence(TwinColour colour)
+{
+    Creature* portal = GetEssencePortal(bot, colour);
+    if (!portal)
+        return false;
+
+    // 3D on purpose: GetNPCIfCanInteractWith gates on IsWithinDistInMap, so a 2D check can call an
+    // elevated portal in range and the gossip silently does nothing
+    if (bot->GetDistance(portal) > INTERACTION_DISTANCE)
+    {
+        // a cast pins the feet; the base colour can wait for it to end, the others can't
+        if (reason != TwinEssenceReason::Base && bot->IsMovementPreventedByCasting())
+            bot->InterruptNonMeleeSpells(true);
+
+        bool const urgent = reason == TwinEssenceReason::Touch || reason == TwinEssenceReason::Vortex;
+        ReleaseWalk(botAI, bot, portal->GetPosition(), urgent);
+
+        if (MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, portal->GetPositionX(), portal->GetPositionY(),
+                   portal->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_FORCED, true, false))
+        {
+            return true;
+        }
+
+        // Hold the tick while the walk is refused as a duplicate: lower nodes like a feral charge
+        // would leap the bot back onto the twin, and the forced lock doesn't stop spell movers
+        return bot->isMoving();
+    }
+
+    // The essence comes from the portal's C++ OnGossipHello, so the hello opcode fires it with or
+    // without DB gossip items.
+    bot->CastStop();
+    bot->SetFacingToObject(portal);
+
+    WorldPacket packet;
+    packet << portal->GetGUID();
+    bot->GetSession()->HandleGossipHelloOpcode(packet);
+
+    if (EssenceOf(bot) != colour)
+        return false;
+
+    // Gossip reach ends well short of the portal the walk is booked to. Stop here so the bot heads
+    // straight back instead of finishing the walk under a forced lock.
+    if (bot->isMoving())
+    {
+        bot->StopMoving();
+        AI_VALUE(LastMovement&, "last movement").clear();
+    }
+
+    return true;
+}
+
+bool TwinValkyrDodgeOrbAction::Execute(Event /*event*/)
+{
+    // only clip a cast when the orb is about to go off on this bot, a far one isn't worth it
+    if (bot->IsMovementPreventedByCasting() && TwinOrbThreatens(botAI, TWIN_ORB_TRIGGER_RADIUS + 0.5f))
+        bot->InterruptNonMeleeSpells(true);
+
+    uint32 const now = getMSTime();
+    bool const kept = dodgeSpotMs && getMSTimeDiff(dodgeSpotMs, now) < DODGE_SPOT_LATCH_MS &&
+                      TwinOrbSpotClear(botAI, dodgeSpot, TWIN_ORB_DODGE_CLEARANCE);
+    if (!kept && !FindTwinOrbDodgeSpot(botAI, dodgeSpot))
+    {
+        dodgeSpotMs = 0;
+        return false;
+    }
+
+    dodgeSpotMs = now;
+
+    if (bot->GetExactDist2d(dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY()) <= CONTACT_DISTANCE)
+        return false;
+
+    ReleaseWalk(botAI, bot, dodgeSpot, true);
+
+    if (MoveTo(bot->GetMapId(), dodgeSpot.GetPositionX(), dodgeSpot.GetPositionY(), dodgeSpot.GetPositionZ(),
+               false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false))
+        return true;
+
+    // the walk in flight is refused as a duplicate; hold the tick until it lands
+    return bot->isMoving();
+}
+
+bool TwinValkyrTankHoldAction::HoldTwin(Unit* twin)
+{
+    char const* icon = TwinRtiIcon(twin);
+    if (icon)
+        SetRtiTarget(botAI, icon, twin);
+
+    if (AI_VALUE(Unit*, "current target") != twin)
+        return Attack(twin);
+
+    // Taunt back an assigned twin that's on someone else. Taunts diminish on the twins, so the 5th
+    // without a 15 s gap is immune.
+    for (Unit* assigned : {GetFjola(botAI), GetEydis(botAI)})
+    {
+        if (assigned && assigned->GetVictim() != bot && IsTwinTank(bot, assigned) &&
+            CastClassTaunt(botAI, assigned))
+        {
+            return true;
+        }
+    }
+
+    return DragBossToAnchor(twin, ARENA_CENTER);
+}
+
+bool TwinValkyrMainTankHoldLightTwinAction::Execute(Event /*event*/)
+{
+    Unit* fjola = GetFjola(botAI);
+    if (!fjola)
+        return false;
+
+    MarkTargetWithSkull(bot, fjola);
+    return HoldTwin(fjola);
+}
+
+bool TwinValkyrAssistTankHoldDarkTwinAction::Execute(Event /*event*/)
+{
+    Unit* eydis = GetEydis(botAI);
+    if (!eydis)
+        return false;
+
+    MarkTargetWithCross(bot, eydis);
+    return HoldTwin(eydis);
+}
+
+Player* TwinValkyrRedirectThreatAction::GetRedirectTank()
+{
+    Unit* twin = GetTwinDpsTarget(botAI);
+    if (!twin)
+        return nullptr;
+
+    Player* tank = GetTwinTank(bot, twin);
+    return tank && tank->IsAlive() ? tank : nullptr;
+}
+
+Unit* TwinValkyrRedirectThreatAction::GetThreatDumpTarget() { return GetTwinDpsTarget(botAI); }
+
+bool TwinValkyrFocusTwinAction::Execute(Event /*event*/)
+{
+    Unit* twin = GetTwinDpsTarget(botAI);
+    char const* icon = twin ? TwinRtiIcon(twin) : nullptr;
+    if (!icon)
+        return false;
+
+    // rti target is recalculated from the icon, so the icon has to sit on this twin
+    int32 const iconIndex = RtiTargetValue::GetRtiIndex(icon);
+    if (iconIndex >= 0)
+        MarkTargetWithIcon(bot, twin, static_cast<uint8>(iconIndex));
+
+    SetRtiTarget(botAI, icon, twin);
+
     if (AI_VALUE(Unit*, "current target") != twin)
         return Attack(twin);
 
