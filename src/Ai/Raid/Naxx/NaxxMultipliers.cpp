@@ -30,24 +30,6 @@
 #include "WarriorActions.h"
 #include "WipeAction.h"
 
-float GrobbulusMultiplier::GetValue(Action* action)
-{
-    Unit* boss = AI_VALUE2(Unit*, "find target", "grobbulus");
-    if (!boss)
-    {
-        return 1.0f;
-    }
-    if (dynamic_cast<AvoidAoeAction*>(action))
-    {
-        return botAI->IsMainTank(bot) ? 0.0f : 1.0f;
-    }
-    if (dynamic_cast<CombatFormationMoveAction*>(action))
-    {
-        return 0.0f;
-    }
-    return 1.0f;
-}
-
 float HeiganDanceMultiplier::GetValue(Action* action)
 {
     if (!helper.UpdateBossAI())
@@ -593,13 +575,9 @@ float GluthGenericMultiplier::GetValue(Action* action)
             // Fallback to name for custom spell data.
             aura = botAI->GetAura("mortal wound", bot, false, true);
         }
-        if (aura && aura->GetStackAmount() >= 5)
+        if (aura && aura->GetStackAmount() >= 5 && (ClassifyAction(action) & RaidEncounterRules::Family::Taunt))
         {
-            if (dynamic_cast<CastTauntAction*>(action) || dynamic_cast<CastDarkCommandAction*>(action) ||
-                dynamic_cast<CastHandOfReckoningAction*>(action) || dynamic_cast<CastGrowlAction*>(action))
-            {
-                return 0.0f;
-            }
+            return 0.0f;
         }
     }
     if (dynamic_cast<PetAttackAction*>(action))

@@ -28,8 +28,10 @@
 class GrobbulusGoBehindAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "grobbulus go behind the boss";
+
     GrobbulusGoBehindAction(PlayerbotAI* ai, float distance = 24.0f, float delta_angle = M_PI / 8)
-        : MovementAction(ai, "grobbulus go behind")
+        : MovementAction(ai, Name)
     {
         this->distance = distance;
         this->delta_angle = delta_angle;
@@ -43,8 +45,10 @@ protected:
 class GrobbulusRotateAction : public RotateAroundTheCenterPointAction
 {
 public:
+    static constexpr char const* Name = "rotate grobbulus";
+
     GrobbulusRotateAction(PlayerbotAI* botAI)
-        : RotateAroundTheCenterPointAction(botAI, "rotate grobbulus", 3281.23f, -3310.38f, 35.0f, 8, true, M_PI)
+        : RotateAroundTheCenterPointAction(botAI, Name, 3281.23f, -3310.38f, 35.0f, 8, true, M_PI)
     {
     }
     virtual bool isUseful() override
@@ -55,17 +59,22 @@ public:
     uint32 GetCurrWaypoint() override;
 };
 
+// MoveInsideAction names itself "move inside", so Name only registers.
 class GrobblulusMoveCenterAction : public MoveInsideAction
 {
 public:
+    static constexpr char const* Name = "grobbulus move center";
+
     GrobblulusMoveCenterAction(PlayerbotAI* ai) : MoveInsideAction(ai, 3281.23f, -3310.38f, 5.0f) {}
 };
 
 class GrobbulusMoveAwayAction : public MovementAction
 {
 public:
+    static constexpr char const* Name = "grobbulus move away";
+
     GrobbulusMoveAwayAction(PlayerbotAI* ai, float distance = 18.0f)
-        : MovementAction(ai, "grobbulus move away"), distance(distance)
+        : MovementAction(ai, Name), distance(distance)
     {
     }
     bool Execute(Event event) override;
@@ -137,7 +146,9 @@ public:
 class ThaddiusPrepullSplitAction : public MovementAction
 {
 public:
-    ThaddiusPrepullSplitAction(PlayerbotAI* ai) : MovementAction(ai, "thaddius prepull split"), helper(ai) {}
+    static constexpr char const* Name = "thaddius prepull split";
+
+    ThaddiusPrepullSplitAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 
@@ -148,7 +159,9 @@ private:
 class ThaddiusAttackNearestPetAction : public AttackAction
 {
 public:
-    ThaddiusAttackNearestPetAction(PlayerbotAI* ai) : AttackAction(ai, "thaddius attack nearest pet"), helper(ai) {}
+    static constexpr char const* Name = "thaddius attack nearest pet";
+
+    ThaddiusAttackNearestPetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 
@@ -175,9 +188,9 @@ private:
 class ThaddiusRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    ThaddiusRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, "thaddius redirect threat"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "thaddius redirect threat";
+
+    ThaddiusRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -190,7 +203,9 @@ private:
 class ThaddiusMoveToPlatformAction : public MovementAction
 {
 public:
-    ThaddiusMoveToPlatformAction(PlayerbotAI* ai) : MovementAction(ai, "thaddius move to platform") {}
+    static constexpr char const* Name = "thaddius move to platform";
+
+    ThaddiusMoveToPlatformAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 };
@@ -198,7 +213,9 @@ public:
 class ThaddiusMovePolarityAction : public MovementAction
 {
 public:
-    ThaddiusMovePolarityAction(PlayerbotAI* ai) : MovementAction(ai, "thaddius move polarity") {}
+    static constexpr char const* Name = "thaddius move polarity";
+
+    ThaddiusMovePolarityAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
     virtual bool Execute(Event event);
     virtual bool isUseful();
 };
@@ -416,7 +433,9 @@ private:
 class GluthChooseTargetAction : public AttackAction
 {
 public:
-    GluthChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "gluth choose target"), helper(ai) {}
+    static constexpr char const* Name = "gluth choose target";
+
+    GluthChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -426,8 +445,10 @@ private:
 class GluthPositionAction : public RotateAroundTheCenterPointAction
 {
 public:
+    static constexpr char const* Name = "gluth position";
+
     GluthPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, "gluth position", 3293.61f, -3149.01f, 12.0f, 12), helper(ai)
+        : RotateAroundTheCenterPointAction(ai, Name, 3293.61f, -3149.01f, 12.0f, 12), helper(ai)
     {
     }
     bool Execute(Event event) override;
@@ -439,7 +460,9 @@ private:
 class GluthSlowdownAction : public Action
 {
 public:
-    GluthSlowdownAction(PlayerbotAI* ai) : Action(ai, "gluth slowdown"), helper(ai) {}
+    static constexpr char const* Name = "gluth slowdown";
+
+    GluthSlowdownAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -449,7 +472,9 @@ private:
 class GluthTranquilizingShotAction : public Action
 {
 public:
-    GluthTranquilizingShotAction(PlayerbotAI* ai) : Action(ai, "gluth tranquilizing shot"), helper(ai) {}
+    static constexpr char const* Name = "gluth tranquilizing shot";
+
+    GluthTranquilizingShotAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -459,7 +484,9 @@ private:
 class GluthRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    GluthRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, "gluth redirect threat"), helper(ai) {}
+    static constexpr char const* Name = "gluth redirect threat";
+
+    GluthRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
 
 protected:
     Player* GetRedirectTank() override;

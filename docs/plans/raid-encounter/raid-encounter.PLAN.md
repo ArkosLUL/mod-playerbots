@@ -169,8 +169,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-4 and Naxx's Arachnid, Plague and Military wings landed; continue with the
-Construct wing.
+**Status:** commits 1-4 and every Naxx wing but Frostwyrm Lair landed; continue with Frostwyrm Lair.
 
 Close each per `CLAUDE.local.md`.
 
@@ -205,7 +204,7 @@ Ulduar, EoE and OS taught:
 3. **The other 13 Ulduar bosses.** Landed; the prefix table, `UldGatedTrigger` and the `Uld*`
    forwards are gone. The Taunt family replaced Hodir's and Thorim's lists, adding Death Grip.
 4. **EoE** and **OS**. Landed.
-5. **Naxx**, one commit per wing: Arachnid, Plague and Military landed; then Construct, Frostwyrm.
+5. **Naxx**, one commit per wing: Arachnid, Plague, Military and Construct landed; then Frostwyrm.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
    `ToCEncounterGate`, trigger wrapper and multiplier gating that `w0c-foundation` builds. Until then
    do not touch `src/Ai/Raid/ToC/` or `docs/plans/toc-rework/`.

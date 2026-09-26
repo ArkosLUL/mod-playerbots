@@ -11,15 +11,6 @@
 #include "NaxxBossHelper.h"
 #include "GenericSpellActions.h"
 
-class GrobbulusMultiplier : public Multiplier
-{
-public:
-    GrobbulusMultiplier(PlayerbotAI* ai) : Multiplier(ai, "grobbulus") {}
-
-public:
-    float GetValue(Action* action) override;
-};
-
 class HeiganDanceMultiplier : public Multiplier
 {
 public:

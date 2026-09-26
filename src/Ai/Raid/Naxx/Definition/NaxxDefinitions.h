@@ -41,6 +41,9 @@ EncounterDefinition const& NaxxLoathebDefinition();
 EncounterDefinition const& NaxxRazuviousDefinition();
 EncounterDefinition const& NaxxGothikDefinition();
 EncounterDefinition const& NaxxFourHorsemenDefinition();
+EncounterDefinition const& NaxxGrobbulusDefinition();
+EncounterDefinition const& NaxxGluthDefinition();
+EncounterDefinition const& NaxxThaddiusDefinition();
 
 // Every Naxxramas boss with a definition. The contexts walk this.
 inline std::vector<EncounterDefinition const*> const& NaxxEncounterDefinitions()
@@ -55,6 +58,9 @@ inline std::vector<EncounterDefinition const*> const& NaxxEncounterDefinitions()
         &NaxxRazuviousDefinition(),
         &NaxxGothikDefinition(),
         &NaxxFourHorsemenDefinition(),
+        &NaxxGrobbulusDefinition(),
+        &NaxxGluthDefinition(),
+        &NaxxThaddiusDefinition(),
     };
     return definitions;
 }

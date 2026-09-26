@@ -17,17 +17,6 @@ class RaidNaxxActionContext : public NamedObjectContext<Action>
 public:
     RaidNaxxActionContext()
     {
-        creators["grobbulus go behind the boss"] = &RaidNaxxActionContext::go_behind_the_boss;
-        creators["rotate grobbulus"] = &RaidNaxxActionContext::rotate_grobbulus;
-        creators["grobbulus move center"] = &RaidNaxxActionContext::grobbulus_move_center;
-        creators["grobbulus move away"] = &RaidNaxxActionContext::grobbulus_move_away;
-
-        creators["thaddius prepull split"] = &RaidNaxxActionContext::thaddius_prepull_split;
-        creators["thaddius attack nearest pet"] = &RaidNaxxActionContext::thaddius_attack_nearest_pet;
-        creators["thaddius move to platform"] = &RaidNaxxActionContext::thaddius_move_to_platform;
-        creators["thaddius move polarity"] = &RaidNaxxActionContext::thaddius_move_polarity;
-        creators["thaddius redirect threat"] = &RaidNaxxActionContext::thaddius_redirect_threat;
-
         creators["sapphiron ground position"] = &RaidNaxxActionContext::sapphiron_ground_position;
         creators["sapphiron flight position"] = &RaidNaxxActionContext::sapphiron_flight_position;
 
@@ -38,12 +27,6 @@ public:
             &RaidNaxxActionContext::kelthuzad_misdirect_boss_to_main_tank;
         creators["kel'thuzad cyclone chained"] = &RaidNaxxActionContext::kelthuzad_cyclone_chained;
 
-        creators["gluth choose target"] = &RaidNaxxActionContext::gluth_choose_target;
-        creators["gluth position"] = &RaidNaxxActionContext::gluth_position;
-        creators["gluth slowdown"] = &RaidNaxxActionContext::gluth_slowdown;
-        creators["gluth tranquilizing shot"] = &RaidNaxxActionContext::gluth_tranquilizing_shot;
-        creators["gluth redirect threat"] = &RaidNaxxActionContext::gluth_redirect_threat;
-
         // creators["patchwerk ranged position"] = &RaidNaxxActionContext::patchwerk_ranged_position;
 
         for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
@@ -51,15 +34,6 @@ public:
     }
 
 private:
-    static Action* go_behind_the_boss(PlayerbotAI* ai) { return new GrobbulusGoBehindAction(ai); }
-    static Action* rotate_grobbulus(PlayerbotAI* ai) { return new GrobbulusRotateAction(ai); }
-    static Action* grobbulus_move_center(PlayerbotAI* ai) { return new GrobblulusMoveCenterAction(ai); }
-    static Action* grobbulus_move_away(PlayerbotAI* ai) { return new GrobbulusMoveAwayAction(ai); }
-    static Action* thaddius_prepull_split(PlayerbotAI* ai) { return new ThaddiusPrepullSplitAction(ai); }
-    static Action* thaddius_attack_nearest_pet(PlayerbotAI* ai) { return new ThaddiusAttackNearestPetAction(ai); }
-    static Action* thaddius_move_to_platform(PlayerbotAI* ai) { return new ThaddiusMoveToPlatformAction(ai); }
-    static Action* thaddius_move_polarity(PlayerbotAI* ai) { return new ThaddiusMovePolarityAction(ai); }
-    static Action* thaddius_redirect_threat(PlayerbotAI* ai) { return new ThaddiusRedirectThreatAction(ai); }
     static Action* sapphiron_ground_position(PlayerbotAI* ai) { return new SapphironGroundPositionAction(ai); }
     static Action* sapphiron_flight_position(PlayerbotAI* ai) { return new SapphironFlightPositionAction(ai); }
     static Action* kelthuzad_choose_target(PlayerbotAI* ai) { return new KelthuzadChooseTargetAction(ai); }
@@ -70,11 +44,6 @@ private:
         return new KelthuzadMisdirectBossToMainTankAction(ai);
     }
     static Action* kelthuzad_cyclone_chained(PlayerbotAI* ai) { return new KelthuzadCycloneChainedAction(ai); }
-    static Action* gluth_choose_target(PlayerbotAI* ai) { return new GluthChooseTargetAction(ai); }
-    static Action* gluth_position(PlayerbotAI* ai) { return new GluthPositionAction(ai); }
-    static Action* gluth_slowdown(PlayerbotAI* ai) { return new GluthSlowdownAction(ai); }
-    static Action* gluth_tranquilizing_shot(PlayerbotAI* ai) { return new GluthTranquilizingShotAction(ai); }
-    static Action* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatAction(ai); }
     // static Action* patchwerk_ranged_position(PlayerbotAI* ai) { return new PatchwerkRangedPositionAction(ai); }
 };
 

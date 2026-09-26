@@ -17,6 +17,8 @@
 // worth its cooldown.
 static constexpr float NAXX_PULL_HEALTH_PCT = 95.0f;
 
+// HasAuraTrigger looks the aura up by the trigger's own name, so the subclasses keep this one and their
+// Name is only what they're registered under.
 class MutatingInjectionTrigger : public HasAuraTrigger
 {
 public:
@@ -26,6 +28,8 @@ public:
 class MutatingInjectionMeleeTrigger : public MutatingInjectionTrigger
 {
 public:
+    static constexpr char const* Name = "mutating injection melee";
+
     MutatingInjectionMeleeTrigger(PlayerbotAI* ai) : MutatingInjectionTrigger(ai) {}
     bool IsActive() override;
 };
@@ -33,6 +37,8 @@ public:
 class MutatingInjectionRangedTrigger : public MutatingInjectionTrigger
 {
 public:
+    static constexpr char const* Name = "mutating injection ranged";
+
     MutatingInjectionRangedTrigger(PlayerbotAI* ai) : MutatingInjectionTrigger(ai) {}
     bool IsActive() override;
 };
@@ -47,9 +53,12 @@ protected:
     bool prev_check;
 };
 
+// Same as MutatingInjectionTrigger: the base reads its own name as the aura, so Name only registers.
 class MutatingInjectionRemovedTrigger : public HasNoAuraTrigger
 {
 public:
+    static constexpr char const* Name = "mutating injection removed";
+
     MutatingInjectionRemovedTrigger(PlayerbotAI* ai) : HasNoAuraTrigger(ai, "mutating injection") {}
     virtual bool IsActive();
 };
@@ -57,7 +66,9 @@ public:
 class GrobbulusCloudTrigger : public Trigger
 {
 public:
-    GrobbulusCloudTrigger(PlayerbotAI* ai) : Trigger(ai, "grobbulus cloud event"), last_cloud_ms(0) {}
+    static constexpr char const* Name = "grobbulus cloud";
+
+    GrobbulusCloudTrigger(PlayerbotAI* ai) : Trigger(ai, Name), last_cloud_ms(0) {}
     bool IsActive() override;
 
 private:
@@ -272,8 +283,10 @@ private:
 class ThaddiusPrepullSplitTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "thaddius prepull split";
+
     // Resolving the adds out of combat costs a grid search, so do not run it every tick.
-    ThaddiusPrepullSplitTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius prepull split", 2), helper(ai) {}
+    ThaddiusPrepullSplitTrigger(PlayerbotAI* ai) : Trigger(ai, Name, 2), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -283,8 +296,13 @@ private:
 class ThaddiusPhasePetTrigger : public Trigger
 {
 public:
-    ThaddiusPhasePetTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius phase pet"), helper(ai) {}
+    static constexpr char const* Name = "thaddius phase pet";
+
+    ThaddiusPhasePetTrigger(PlayerbotAI* ai) : ThaddiusPhasePetTrigger(ai, Name) {}
     bool IsActive() override;
+
+protected:
+    ThaddiusPhasePetTrigger(PlayerbotAI* ai, char const* name) : Trigger(ai, name), helper(ai) {}
 
 private:
     ThaddiusBossHelper helper;
@@ -293,7 +311,9 @@ private:
 class ThaddiusPhasePetLoseAggroTrigger : public ThaddiusPhasePetTrigger
 {
 public:
-    ThaddiusPhasePetLoseAggroTrigger(PlayerbotAI* ai) : ThaddiusPhasePetTrigger(ai) {}
+    static constexpr char const* Name = "thaddius phase pet lose aggro";
+
+    ThaddiusPhasePetLoseAggroTrigger(PlayerbotAI* ai) : ThaddiusPhasePetTrigger(ai, Name) {}
     virtual bool IsActive()
     {
         Unit* target = AI_VALUE(Unit*, "current target");
@@ -304,7 +324,9 @@ public:
 class ThaddiusPhaseTransitionTrigger : public Trigger
 {
 public:
-    ThaddiusPhaseTransitionTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius phase transition"), helper(ai) {}
+    static constexpr char const* Name = "thaddius phase transition";
+
+    ThaddiusPhaseTransitionTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -314,7 +336,9 @@ private:
 class ThaddiusPhaseThaddiusTrigger : public Trigger
 {
 public:
-    ThaddiusPhaseThaddiusTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius phase thaddius"), helper(ai) {}
+    static constexpr char const* Name = "thaddius phase thaddius";
+
+    ThaddiusPhaseThaddiusTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -324,7 +348,9 @@ private:
 class ThaddiusRedirectThreatTrigger : public Trigger
 {
 public:
-    ThaddiusRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "thaddius redirect threat"), helper(ai) {}
+    static constexpr char const* Name = "thaddius redirect threat";
+
+    ThaddiusRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -390,7 +416,9 @@ private:
 class GluthTrigger : public Trigger
 {
 public:
-    GluthTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth trigger"), helper(ai) {}
+    static constexpr char const* Name = "gluth";
+
+    GluthTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -400,8 +428,9 @@ private:
 class GluthLowHealthZombieAoeTrigger : public Trigger
 {
 public:
-    GluthLowHealthZombieAoeTrigger(PlayerbotAI* ai)
-        : Trigger(ai, "gluth low health zombie aoe"), helper(ai) {}
+    static constexpr char const* Name = "gluth low health zombie aoe";
+
+    GluthLowHealthZombieAoeTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -411,9 +440,9 @@ private:
 class GluthMainTankMortalWoundTrigger : public Trigger
 {
 public:
-    GluthMainTankMortalWoundTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth main tank mortal wound trigger"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "gluth main tank mortal wound";
+
+    GluthMainTankMortalWoundTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -423,7 +452,9 @@ private:
 class GluthFrenzyTrigger : public Trigger
 {
 public:
-    GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth frenzy"), helper(ai) {}
+    static constexpr char const* Name = "gluth frenzy";
+
+    GluthFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -433,7 +464,9 @@ private:
 class GluthRedirectThreatTrigger : public Trigger
 {
 public:
-    GluthRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "gluth redirect threat"), helper(ai) {}
+    static constexpr char const* Name = "gluth redirect threat";
+
+    GluthRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
