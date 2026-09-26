@@ -5,12 +5,12 @@
 
 #include "Multiplier.h"
 
-// Make sure clearing Icehowl's charge lane overrides formation/avoidance/chase movement
-class IcehowlSuppressMovementDuringChargeMultiplier : public Multiplier
+// From the gaze to the end of the charge only attacks and the dodge move anyone. Anything else can walk
+// a bot into the line, like melee chasing him to where the jump back lands.
+class IcehowlChargeGuardMultiplier : public Multiplier
 {
 public:
-    IcehowlSuppressMovementDuringChargeMultiplier(
-        PlayerbotAI* botAI) : Multiplier(botAI, "icehowl suppress movement during charge multiplier") {}
+    IcehowlChargeGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icehowl charge guard") {}
     float GetValue(Action* action) override;
 };
 

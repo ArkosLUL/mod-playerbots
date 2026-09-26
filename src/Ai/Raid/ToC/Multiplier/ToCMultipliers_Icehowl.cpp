@@ -1,40 +1,51 @@
 #include "ToCMultipliers_Icehowl.h"
-#include "ToCActions_Icehowl.h"
-#include "ToCData.h"
-#include "ToCEncounterGate.h"
-#include "ToCHelpers_Icehowl.h"
+
+#include <string>
+
+#include "AttackAction.h"
+#include "GenericSpellActions.h"
 #include "MovementActions.h"
 #include "Playerbots.h"
-#include "EncounterHelpers.h"
 #include "ReachTargetActions.h"
+#include "ToCActions_Icehowl.h"
+#include "ToCEncounterGate.h"
+#include "ToCHelpers_Icehowl.h"
 
 using namespace TrialOfTheCrusaderHelpers;
-using namespace EncounterHelpers;
 
-float IcehowlSuppressMovementDuringChargeMultiplier::GetValue(Action* action)
+namespace
 {
-    bool const competingMove =
-        dynamic_cast<CastReachTargetSpellAction*>(action) ||
-        (dynamic_cast<MovementAction*>(action) && !dynamic_cast<IcehowlClearChargePathAction*>(action));
-    if (!competingMove)
+bool CompetesWithChargeDodge(Action* action)
+{
+    if (dynamic_cast<MovementAction*>(action))
+        return !dynamic_cast<AttackAction*>(action) && !dynamic_cast<IcehowlClearChargePathAction*>(action);
+
+    if (!dynamic_cast<CastSpellAction*>(action))
+        return false;
+
+    if (dynamic_cast<CastReachTargetSpellAction*>(action))
+        return true;
+
+    // Both throw the bot a fixed distance that can land it in the line. By name, so no class headers.
+    std::string const name = action->getName();
+    return name == "blink" || name == "disengage";
+}
+}  // namespace
+
+float IcehowlChargeGuardMultiplier::GetValue(Action* action)
+{
+    if (!CompetesWithChargeDodge(action))
         return 1.0f;
 
     if (!ToCEncounterIsLive(botAI, ToCEncounter::NorthrendBeasts))
         return 1.0f;
 
-    Unit* icehowl = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ICEHOWL));
-    if (!icehowl)
-        return 1.0f;
-
-    bool const chargePhase = HasMassiveCrashAura(bot) || (icehowl->IsInCombat() && !icehowl->GetVictim());
-    if (!chargePhase)
-        return 1.0f;
-
-    constexpr float corridorHalfWidth = 14.0f;
-    return IsBotInChargeCorridor(bot, icehowl, corridorHalfWidth) ? 0.0f : 1.0f;
+    Position start;
+    Position end;
+    return IcehowlChargeLatched(botAI, start, end) ? 0.0f : 1.0f;
 }
 
 void AddToCIcehowlMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)
 {
-    multipliers.push_back(new IcehowlSuppressMovementDuringChargeMultiplier(botAI));
+    multipliers.push_back(new IcehowlChargeGuardMultiplier(botAI));
 }

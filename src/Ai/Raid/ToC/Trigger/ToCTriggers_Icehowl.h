@@ -6,11 +6,11 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
-class IcehowlEngagedByMainTankTrigger : public Trigger
+class IcehowlTankDutyTrigger : public Trigger
 {
 public:
-    IcehowlEngagedByMainTankTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "icehowl engaged by main tank") {}
+    IcehowlTankDutyTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "icehowl tank duty") {}
     bool IsActive() override;
 };
 
@@ -22,24 +22,38 @@ public:
     bool IsActive() override;
 };
 
+class IcehowlFrothingRageTrigger : public Trigger
+{
+public:
+    IcehowlFrothingRageTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "icehowl frothing rage") {}
+    bool IsActive() override;
+};
+
 class ToCIcehowlTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
     ToCIcehowlTriggerContext() : NamedObjectContext<Trigger>()
     {
-        creators["icehowl engaged by main tank"] =
-            &ToCIcehowlTriggerContext::icehowl_engaged_by_main_tank;
+        creators["icehowl tank duty"] =
+            &ToCIcehowlTriggerContext::icehowl_tank_duty;
         creators["icehowl charge incoming"] =
             &ToCIcehowlTriggerContext::icehowl_charge_incoming;
+        creators["icehowl frothing rage"] =
+            &ToCIcehowlTriggerContext::icehowl_frothing_rage;
     }
 
 private:
-    static Trigger* icehowl_engaged_by_main_tank(PlayerbotAI* botAI) {
-        return new IcehowlEngagedByMainTankTrigger(botAI);
+    static Trigger* icehowl_tank_duty(PlayerbotAI* botAI) {
+        return new IcehowlTankDutyTrigger(botAI);
     }
 
     static Trigger* icehowl_charge_incoming(PlayerbotAI* botAI) {
         return new IcehowlChargeIncomingTrigger(botAI);
+    }
+
+    static Trigger* icehowl_frothing_rage(PlayerbotAI* botAI) {
+        return new IcehowlFrothingRageTrigger(botAI);
     }
 };
 

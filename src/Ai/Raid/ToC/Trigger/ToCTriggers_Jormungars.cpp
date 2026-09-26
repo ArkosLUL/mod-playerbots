@@ -2,6 +2,7 @@
 #include "ToCData.h"
 #include "ToCHelpers_Shared.h"
 #include "ToCHelpers_Jormungars.h"
+#include "ToCHelpers_NorthrendBeasts.h"
 #include "Playerbots.h"
 #include "EncounterHelpers.h"
 #include "Strategy.h"
@@ -9,24 +10,15 @@
 using namespace TrialOfTheCrusaderHelpers;
 using namespace EncounterHelpers;
 
+// Not IsMainTank: on heroic the main tank can be holding Gormok or Icehowl while the worms are up.
 bool WormsMobileEngagedByMainTankTrigger::IsActive()
 {
-    if (!botAI->IsMainTank(bot))
-        return false;
-
-    Unit* acidmaw = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ACIDMAW));
-    Unit* dreadscale = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_DREADSCALE));
-    return IsWormMobile(acidmaw) || IsWormMobile(dreadscale);
+    return GetBeastsTankDuty(botAI) == BeastsTankDuty::WormMobile;
 }
 
 bool WormsStationaryNeedsAssistTankTrigger::IsActive()
 {
-    if (!botAI->IsAssistTankOfIndex(bot, 0, false))
-        return false;
-
-    Unit* acidmaw = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ACIDMAW));
-    Unit* dreadscale = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_DREADSCALE));
-    return (acidmaw && !IsWormMobile(acidmaw)) || (dreadscale && !IsWormMobile(dreadscale));
+    return GetBeastsTankDuty(botAI) == BeastsTankDuty::WormStationary;
 }
 
 bool WormsRangedShouldSpreadTrigger::IsActive()
