@@ -15,6 +15,15 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Class taunts on a beast only for its duty holder. Beasts obey taunt diminishing returns, and a
+// generic taunt from the other tank undoes the deal.
+class NorthrendBeastsTauntGuardMultiplier : public Multiplier
+{
+public:
+    NorthrendBeastsTauntGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "northrend beasts taunt guard") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCNorthrendBeastsMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 ToCBurstWindow ToCNorthrendBeastsBurstWindow(PlayerbotAI* botAI);
