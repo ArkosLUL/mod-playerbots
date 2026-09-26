@@ -10,14 +10,14 @@ has **no triggers**, and installs one `HoldBurstUntilTankEngagedMultiplier`. It 
 combat list at `AiFactory.cpp:289`, so every non-battleground bot has it, and `strategy -burst`
 switches it off per bot.
 
-**`IsBurstCooldownAction(name)` (`src/Ai/Base/Combat/BurstCooldowns.cpp:22-52`) is the single
+**`IsBurstCooldownAction(name)` (`src/Ai/Base/Combat/BurstCooldowns.cpp:22-46`) is the single
 registry.** A new cooldown only ever needs adding there — the per-boss multipliers all early-out on
 the same predicate, so they pick it up for free.
 
 Identification is by **action name, not `dynamic_cast`**. `CastSpellAction` passes the spell name to
 `Action(botAI, spell)`, so `getName()` is a reliable identifier, and racials and trinkets follow the
 same convention. `dynamic_cast` does not scale to ~25 cooldowns across 10 classes without including
-every class header — the two pre-existing per-boss lust gates use it and are the reason to stop.
+every class header.
 
 | Source | Names |
 |---|---|
@@ -54,12 +54,18 @@ Shadowfiend still waits out its dwell there.
 | Non-boss target, grouped, `BurstOnBossOnly` on | `0.0f` — save it for the boss |
 | Non-boss target, solo or config off | `1.0f` — solo bots still burst tough elites |
 | Boss target, bot is the main tank or ungrouped | `1.0f` — never gated on itself |
+| Boss target on a vehicle, `BossTakesNoVictim` or `BossHasNoStableVictim` | `1.0f` — no tank can hold it (below) |
 | Boss target otherwise | `1.0f` once a tank has held the boss for the dwell, else `0.0f` |
 
 "Tank has hold" means the boss's victim has been **any tank in the bot's group** — not only the main
 tank — **continuously** for the dwell; `TankHasHeldBoss` zeroes the timer whenever it is not, so a
 tank swap or tank death re-arms the gate. The boss predicate is `IsDungeonBoss() || isWorldBoss()`,
 the de-facto is-boss check used everywhere (also `ShamanTriggers.cpp:488`).
+
+**Bosses no tank can hold skip the dwell**, in the multiplier and `OffensivePotionTrigger` alike: one
+on a vehicle (the XT-002 Heart, no threat table), `BossTakesNoVictim` (VX-001, whose script never sets
+a victim) and `BossHasNoStableVictim` (the 28 Faction Champions, whose script re-seeds threat every
+~9 s). The last two key on entry in `BurstCooldowns.cpp`, since the reason lives in the script.
 
 **Any tank counts, deliberately.** A raid that hands a boss-flagged add to its off-tank has
 established threat exactly as well as one that gave it to the main tank. Main-tank-only held every
@@ -76,8 +82,7 @@ tank holds a boss somewhere else.
 the next pull.
 
 Because every bot's gate opens on the same tick, bursts stack with no cross-bot coordination.
-Multipliers multiply, so the per-boss lust gates that already existed (Maulgar, Gruul, Anub'arak) AND
-with this one correctly.
+Multipliers multiply, so per-boss lust gates AND with this one.
 
 ### Dwell constants and casting order
 
@@ -114,8 +119,8 @@ a bug. The caster/physical split reuses the same predicate `InitConsumables` use
 oil vs sharpening stone, so the two stay consistent.
 
 Adding `"offensive potion"` to `burstCooldownNames` is what buys the tank-hold dwell **and** every
-per-boss window for free. The `OffensivePotionTrigger` only expresses "want to" (DPS, in combat,
-boss target); the multiplier decides "not yet".
+per-boss window for free. The `OffensivePotionTrigger` expresses "want to" (DPS, in combat,
+boss target) behind its own `POTION_HOLD_MS` dwell (above); the multiplier decides "not yet".
 
 **Expansion gating.** The ladder originally gated only on `RequiredLevel`, so a level-68-70 bot drank
 WotLK potions. `RandomItemMgr::IsAllowedForLevelExpansion(itemId, level)` is the shared rule,

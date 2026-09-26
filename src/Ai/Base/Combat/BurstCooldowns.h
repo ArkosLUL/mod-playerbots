@@ -54,4 +54,9 @@ bool TankHasHeldBoss(Player* bot, Unit* boss, BurstHoldState& state, uint32 dwel
 // reason lives in the boss script, not in anything readable off the unit.
 bool BossTakesNoVictim(Unit const* boss);
 
+// True for bosses whose script re-seeds threat on a timer, so a tank holds one only by chance and a
+// caller waiting for the dwell mostly waits for the whole fight. Keyed on entry, the timer is in the
+// script and nothing on the unit shows it.
+bool BossHasNoStableVictim(Unit const* boss);
+
 #endif

@@ -135,6 +135,13 @@ bool OffensivePotionTrigger::IsActive()
         return false;
     }
 
+    // No tank ever holds these for the dwell, so waiting would keep the potion for the whole fight
+    if (target->GetVehicle() || BossTakesNoVictim(target) || BossHasNoStableVictim(target))
+    {
+        holdState.Reset();
+        return true;
+    }
+
     // Hold the pop until a tank has firmly held the boss, so a DPS doesn't pull threat. The 'burst'
     // strategy also gates this action, but enforcing it here keeps the potion safe when that strategy
     // isn't loaded.

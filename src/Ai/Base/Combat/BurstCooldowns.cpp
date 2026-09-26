@@ -50,6 +50,14 @@ namespace
     // nor the threat manager's pick is ever set: it faces whoever Rapid Burst rolled and swings at
     // nobody.
     std::unordered_set<uint32> const noVictimBosses = {33651};
+
+    // Trial of the Crusader's Faction Champions, both rosters. Their script resets every player's
+    // threat on the pull, 2 s later, then every ~9 s, weighted by distance, health and armour.
+    std::unordered_set<uint32> const unstableVictimBosses = {
+        // Horde
+        34441, 34444, 34445, 34447, 34448, 34449, 34450, 34451, 34453, 34454, 34455, 34456, 34458, 34459,
+        // Alliance
+        34460, 34461, 34463, 34465, 34466, 34467, 34468, 34469, 34470, 34471, 34472, 34473, 34474, 34475};
 }  // namespace
 
 bool IsBurstCooldownAction(std::string const& actionName)
@@ -60,6 +68,11 @@ bool IsBurstCooldownAction(std::string const& actionName)
 bool BossTakesNoVictim(Unit const* boss)
 {
     return boss && noVictimBosses.find(boss->GetEntry()) != noVictimBosses.end();
+}
+
+bool BossHasNoStableVictim(Unit const* boss)
+{
+    return boss && unstableVictimBosses.find(boss->GetEntry()) != unstableVictimBosses.end();
 }
 
 bool IsManaReturnCooldown(Player* bot, std::string const& actionName)
