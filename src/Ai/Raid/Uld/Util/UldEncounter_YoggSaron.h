@@ -779,14 +779,16 @@ float YoggSaronTankThreatLead(Player* tank, Unit* guardian);
 // A Constrictor with somebody squeezed in its seat.
 bool YoggSaronConstrictorHolding(Unit* unit);
 
-// Any live Influence Tentacle within `radius`, disguise included. A tentacle is re-stamped as a Suit
+// Any live Influence Tentacle within `radius` of `centre`, the bot's own position by default, disguise
+// included. A tentacle is re-stamped as a Suit
 // of Armor, a Deathsworn Zealot or a Consort the instant it spawns and only reverts to entry 33943
 // when something damages it, so a sweep for 33943 alone reports a room full of them as empty. One
 // grid visit for the whole list.
-Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius);
+Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const* centre = nullptr);
 
 // Whether the Brain is safe to hit: every Influence Tentacle in this room dead. Scoped to the room
-// rather than swept at 200 yd, which is one yard short of reaching the next room's tentacles.
+// rather than swept at 200 yd, which is one yard short of reaching the next room's tentacles, and
+// measured from that room's middle so a bot in its doorway does not read the far half as empty.
 bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI);
 
 // Nothing on the platform to kill: no Guardian, Crusher, Constrictor or Corruptor alive. Phase 2 had

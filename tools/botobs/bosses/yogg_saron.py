@@ -9,10 +9,12 @@
     yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
-    yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure
+    yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure, and
+                                    where Induce Madness caught whoever it charmed
     yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
                                     targets and taunts, beacon heals, Lunatic Gaze
-    yogg_saron.py <file> --crush    Crush, the body's knockback and who walked into it, Death Rays
+    yogg_saron.py <file> --crush    Crush and who took it, the body's knockback and who walked into
+                                    it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima and where they went
 
 The fight has three rooms, five mechanics that kill and nothing in the world to sweep for two of
@@ -213,6 +215,14 @@ BRAIN_LINK_RANGE = 20.0
 
 # The boss platform floor is z 325-330 and every illusion room is z 236-244, so this separates them.
 BRAIN_LEVEL_Z = 300.0
+
+# The brain level's floor runs 236 to 244. Anything well above it is in the air, where the Brain's own
+# model hangs at 265 and a gap-closer aimed at it leaves the bot with nothing to walk on.
+BRAIN_FLOOR_Z = 244.0
+
+# Induce Madness strips the Sanity and teleports in the same effect, and Insane lands a few seconds
+# behind it, so an ascent this close in front of a charm is that teleport rather than a portal click.
+MADNESS_CHARM_MS = 10000
 
 # The module's ULDUAR_YOGG_SARON_*_MIDDLE: the centroid of each room's Influence Tentacle summon group,
 # where the healer is meant to stand while tentacles live.
@@ -1091,15 +1101,7 @@ def show_brain(trace: Trace) -> None:
     if madness:
         print(f"  Induce Madness   : {len(madness)} rows")
 
-    # Induce Madness leaves no damage row: it strips all 100 Sanity from whoever is still below the
-    # platform when its 60 s cast ends, and Insane kills them when the charm falls off a minute later.
-    # So the Insane aura is the record of who failed to get out, and the only one there is.
-    caught = sorted({rec.get("d", 0) for rec in trace.of("aura")
-                     if rec.get("sp") == SPELL_INSANE and not rec.get("r")},
-                    key=lambda guid: trace.name(guid))
-    if caught:
-        names = ", ".join(f"{trace.name(guid)}({trace.role(guid)})" for guid in caught)
-        print(f"  caught by it     : {len(caught)} went Insane - {names}")
+    show_madness_caught(trace)
 
     spread = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.spread"))
     if spread:
@@ -1125,6 +1127,37 @@ def target_split(targets: list[int]) -> tuple[int, float]:
     most-held one. The group must not be empty."""
     counts = collections.Counter(targets)
     return len(counts), max(counts.values()) / len(targets)
+
+
+def show_madness_caught(trace: Trace) -> None:
+    """Who Induce Madness charmed, and where each of them was when it landed. It leaves no damage row:
+    it strips all 100 Sanity from whoever is still below the platform when its 60 s cast ends and
+    teleports them up in the same effect, so the Insane aura and the spot that teleport started from
+    are the whole record. The Flee portals are game objects, which no trace carries, so the distance is
+    measured against the spots this pull's own clean exits went up from."""
+    charmed: dict[int, int] = {}
+    for rec in trace.of("aura"):
+        if rec.get("sp") == SPELL_INSANE and not rec.get("r"):
+            charmed.setdefault(rec.get("d", 0), rec["t"])
+    if not charmed:
+        return
+
+    rows = snapshot_rows(trace, roster_guids(trace))
+    surfaced = sorted((when, guid, x, y, z) for guid, track in rows.items()
+                      for when, x, y, z in surfacings(track, BRAIN_LEVEL_Z))
+    clean, caught = madness_teleports(surfaced, charmed, MADNESS_CHARM_MS)
+    ways_out = [(row[2], row[3]) for row in clean]
+
+    names = ", ".join(f"{trace.name(guid)}({trace.role(guid)})"
+                      for guid in sorted(charmed, key=lambda guid: trace.name(guid)))
+    print(f"  caught by it     : {len(charmed)} went Insane - {names}")
+    for when, guid, x, y, z in caught:
+        gap = min((math.dist((x, y), spot) for spot in ways_out), default=0.0)
+        height = f"{z - BRAIN_FLOOR_Z:.1f} yd in the air" if z > BRAIN_FLOOR_Z else "on the floor"
+        print(f"    {clock(when):>10} {trace.name(guid):14} {trace.role(guid):6}"
+              f" at ({x:7.1f},{y:6.1f},{z:6.1f}) {height:18}"
+              f" {gap:5.1f} yd from the nearest way out, held still"
+              f" {held_still(rows[guid], when, 1.0):5.1f} s")
 
 
 def show_brain_waves(trace: Trace) -> None:
@@ -1667,6 +1700,45 @@ def snapshot_rows(trace: Trace, guids: set) -> dict[int, list[list]]:
     return rows
 
 
+def surfacings(rows: list[list], level_z: float) -> list[tuple[int, float, float, float]]:
+    """(t, x, y, z) of the last sample below `level_z` before each crossing up past it. A bot leaves the
+    brain level either by clicking a Flee portal or by Induce Madness teleporting it out, and where it
+    was standing is what tells the two apart."""
+    out: list[tuple[int, float, float, float]] = []
+    below: list | None = None
+    for row in rows:
+        if row[4] < level_z:
+            below = row
+        elif below is not None:
+            out.append((below[0], below[2], below[3], below[4]))
+            below = None
+    return out
+
+
+def madness_teleports(surfaced: list[tuple], charmed_at: dict[int, int], window_ms: int):
+    """Ascents split into the ones that clicked a portal and the ones Induce Madness teleported, which
+    are the ones a charm follows inside `window_ms`. Each tuple is (t, guid, x, y, z)."""
+    clean, caught = [], []
+    for row in surfaced:
+        charm = charmed_at.get(row[1])
+        late = charm is not None and 0 <= charm - row[0] <= window_ms
+        (caught if late else clean).append(row)
+    return clean, caught
+
+
+def held_still(rows: list[list], when: int, radius: float) -> float:
+    """Seconds the bot had been standing within `radius` of where it was at `when`."""
+    spot = None
+    start = when
+    for row in reversed([row for row in rows if row[0] <= when]):
+        if spot is None:
+            spot = (row[2], row[3])
+        if math.dist((row[2], row[3]), spot) > radius:
+            break
+        start = row[0]
+    return (when - start) / 1000.0
+
+
 def row_before(rows: list[list], when: int) -> list | None:
     stamps = [row[0] for row in rows]
     index = bisect.bisect_right(stamps, when)
@@ -1722,6 +1794,20 @@ def show_crush_hits(trace: Trace) -> None:
 
     parts = ", ".join(f"{kind} ({who}) {count}" for (kind, who), count in sorted(split.items()))
     print(f"  Crush hits by who the tentacle was swinging at: {parts}")
+
+    # Crush only fires on the tentacle's melee swing, so whoever takes most of it is whoever stands in
+    # the reach. Nothing in the fight wants a tank in there: an unoccupied Crusher cannot Crush at all.
+    taken: collections.Counter = collections.Counter()
+    damage: collections.Counter = collections.Counter()
+    for hit in hits:
+        taken[hit.get("d")] += 1
+        damage[hit.get("d")] += hit.get("a", 0)
+    total = sum(damage.values()) or 1
+    on_tanks = sum(value for guid, value in damage.items() if trace.role(guid) == "tank")
+    print(f"  Crush damage by victim: {sum(damage.values()):,} over {len(hits)} hits,"
+          f" {on_tanks * 100.0 / total:.0f}% of it on tanks")
+    for guid, count in taken.most_common(6):
+        print(f"    {trace.name(guid):14} {trace.role(guid):6} {count:3d} hits {damage[guid]:9,d}")
     for when, guid, role, gap, on_victim, walked, swung in kills:
         how = f"walked in by {walked.get('by', '?')}" if walked else "nothing walked it in"
         hit_first = f", hit it first with {', '.join(sorted(set(swung)))}" if swung else ""
@@ -2339,9 +2425,9 @@ SECTIONS = (
     ("portals", "portal waves and assignments", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
-    ("brain", "brain room, the Brain, skulls", show_brain),
+    ("brain", "brain room, the Brain, skulls, who Induce Madness charmed", show_brain),
     ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
-    ("crush", "Crush, knockback and Death Rays", show_crush),
+    ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima", show_sanity),
 )
 

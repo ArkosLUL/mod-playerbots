@@ -1186,8 +1186,11 @@ bool YoggSaronMoveToExitPortalAction::Execute(Event /*event*/)
         MoveTo(bot->GetMapId(), portal->GetPositionX(), portal->GetPositionY(), portal->GetPositionZ(), false, false,
                false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 
-        if (bot->GetDistance2d(portal) > 2.0f)
-            return false;
+        // Claim the tick while still walking. Everything queued under this node is a walk somewhere
+        // else and only has to win one tick to turn the bot round, which is how two bots in one pull
+        // ended up back at the Brain from a few yards short of a portal and were charmed there.
+        if (bot->GetDistance2d(portal) > INTERACTION_DISTANCE)
+            return true;
 
         portal->Use(bot);
 

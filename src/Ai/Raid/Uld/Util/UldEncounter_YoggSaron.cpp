@@ -136,8 +136,19 @@ struct YoggSaronPassReads
     std::array<bool, std::size(YOGG_SARON_CACHED_DOORS)> doorRead{};
     std::array<ObjectGuid, std::size(YOGG_SARON_CACHED_DOORS)> door{};
 
-    // YoggSaronInfluenceTentaclesCleared asks at one of two radii depending on the room.
-    std::vector<std::pair<float, bool>> tentaclesCleared;
+    // YoggSaronInfluenceTentaclesCleared asks about a room's own middle from inside an illusion room
+    // and about the bot from the brain room, so the centre is part of the key.
+    struct ClearRead
+    {
+        float x;
+        float y;
+        float radius;
+        bool cleared;
+    };
+    std::vector<ClearRead> tentaclesCleared;
+
+    bool leaveBrainLevelRead = false;
+    bool leaveBrainLevel = false;
 
     bool skullsInArcRead = false;
     std::vector<ObjectGuid> skullsInArc;
@@ -390,7 +401,10 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
     return state;
 }
 
-bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI)
+namespace
+{
+
+bool YoggSaronLeaveBrainLevelNow(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
 
@@ -434,6 +448,27 @@ bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI)
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "yogg.exit", branch);
+
+    return leave;
+}
+
+}  // namespace
+
+bool YoggSaronShouldLeaveBrainLevel(PlayerbotAI* botAI)
+{
+    // The exit node and the brain spot node both ask this in the same pass now, and the answer costs a
+    // game object search.
+    YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
+    if (reads && reads->leaveBrainLevelRead)
+        return reads->leaveBrainLevel;
+
+    bool const leave = YoggSaronLeaveBrainLevelNow(botAI);
+
+    if (reads)
+    {
+        reads->leaveBrainLevelRead = true;
+        reads->leaveBrainLevel = leave;
+    }
 
     return leave;
 }
@@ -1537,6 +1572,8 @@ namespace
 struct IllusionMobInRangeCheck
 {
     Acore::AnyUnitInObjectRangeCheck inRange;
+    Position centre;
+    float radius;
 
     bool operator()(Unit* unit)
     {
@@ -1545,7 +1582,7 @@ struct IllusionMobInRangeCheck
 
         return std::find(ULDUAR_YOGG_SARON_ILLUSION_MOBS.begin(), ULDUAR_YOGG_SARON_ILLUSION_MOBS.end(),
                          unit->GetEntry()) != ULDUAR_YOGG_SARON_ILLUSION_MOBS.end() &&
-               inRange(unit);
+               centre.GetExactDist2d(unit) <= radius && inRange(unit);
     }
 };
 
@@ -1590,14 +1627,20 @@ bool YoggSaronCrusherCanSwing(PlayerbotAI* botAI, Creature* crusher)
 
 }  // namespace
 
-Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius)
+Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const* centre)
 {
     Player* bot = botAI->GetBot();
+    Position const around = centre ? *centre : bot->GetPosition();
+
+    // One sweep, anchored on the bot because that is what carries the map and the phase, graded by the
+    // distance from `around`. The sweep has to reach the far side of the circle from wherever the bot
+    // is standing, and the membership test is what keeps the next room out.
+    float const sweep = bot->GetExactDist2d(around.GetPositionX(), around.GetPositionY()) + radius;
 
     std::vector<Unit*> found;
-    IllusionMobInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, radius)};
+    IllusionMobInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, sweep), around, radius};
     Acore::UnitListSearcher<IllusionMobInRangeCheck> searcher(bot, found, check);
-    Cell::VisitObjects(bot, searcher, radius);
+    Cell::VisitObjects(bot, searcher, sweep);
 
     return found.empty() ? nullptr : found.front();
 }
@@ -1634,20 +1677,30 @@ bool YoggSaronInfluenceTentaclesCleared(PlayerbotAI* botAI)
     // own. Getting that wrong is not a wasted tick - damaging the Brain while one lives is
     // Unit::Kill(who, who) on whoever dealt it. From the brain room itself the reach has to cover
     // whichever room the bot came out of.
+    //
+    // Inside an illusion room the circle sits on that room's middle rather than on the bot. The Chamber
+    // is 96 yd deep and a bot in its doorway reads only the near half: one pull's brain room healer
+    // called the room clear with the far tentacles alive, its station walk stood down at the door, and
+    // four melee died 90 yd past it with no heals.
     Player* bot = botAI->GetBot();
-    float const radius = YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_BRAIN
-                             ? ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS + ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS
-                             : ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
+    bool const brainRoom = YoggSaronRoomOf(bot) == YOGG_SARON_ROOM_BRAIN;
+    float const radius = brainRoom ? ULDUAR_YOGG_SARON_BRAIN_ROOM_RADIUS + ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS
+                                   : ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
+
+    Position middle;
+    Position const around = !brainRoom && YoggSaronRoomMiddle(bot, middle) ? middle : bot->GetPosition();
 
     YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
     if (reads)
-        for (std::pair<float, bool> const& answer : reads->tentaclesCleared)
-            if (answer.first == radius)
-                return answer.second;
+        for (YoggSaronPassReads::ClearRead const& answer : reads->tentaclesCleared)
+            if (answer.radius == radius && answer.x == around.GetPositionX() &&
+                answer.y == around.GetPositionY())
+                return answer.cleared;
 
-    bool const cleared = !YoggSaronLiveIllusionMob(botAI, radius);
+    bool const cleared = !YoggSaronLiveIllusionMob(botAI, radius, &around);
     if (reads)
-        reads->tentaclesCleared.emplace_back(radius, cleared);
+        reads->tentaclesCleared.push_back(
+            {around.GetPositionX(), around.GetPositionY(), radius, cleared});
 
     return cleared;
 }

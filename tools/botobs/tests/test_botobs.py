@@ -1059,6 +1059,35 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.first_off_tank(rows, {5105, 256463})[0], 200)
         self.assertIsNone(yogg_saron.first_off_tank(rows[:2], {5105}))
 
+    def test_a_surfacing_is_read_off_the_last_sample_below_the_level(self):
+        def row(t, z):
+            return [t, 5124, 1978.3, -25.4, z, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+
+        rows = [row(0, 239.7), row(1000, 265.0), row(2000, 328.5), row(3000, 328.5), row(4000, 240.0),
+                row(5000, 328.5)]
+        self.assertEqual(yogg_saron.surfacings(rows, yogg_saron.BRAIN_LEVEL_Z),
+                         [(1000, 1978.3, -25.4, 265.0), (4000, 1978.3, -25.4, 240.0)])
+        self.assertEqual(yogg_saron.surfacings([row(0, 239.7)], yogg_saron.BRAIN_LEVEL_Z), [])
+
+    def test_the_teleport_out_is_the_ascent_a_charm_follows(self):
+        # 1790410693: Ecoterrorist went up at 4:10.458 and was Insane at 4:12.048, while the eight that
+        # clicked a portal went up at 4:07 and were never charmed.
+        surfaced = [(247990, 5135, 1947.5, -23.8, 242.1), (250458, 5124, 1978.3, -25.4, 265.0)]
+        clean, caught = yogg_saron.madness_teleports(surfaced, {5124: 252048}, yogg_saron.MADNESS_CHARM_MS)
+        self.assertEqual([row[1] for row in clean], [5135])
+        self.assertEqual([row[1] for row in caught], [5124])
+        # A charm from an earlier wave says nothing about a later exit.
+        clean, caught = yogg_saron.madness_teleports(surfaced, {5124: 100000}, yogg_saron.MADNESS_CHARM_MS)
+        self.assertEqual(caught, [])
+
+    def test_held_still_measures_back_from_the_spot_it_ended_on(self):
+        def row(t, x):
+            return [t, 5124, x, 0.0, 265.0, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+
+        rows = [row(0, 0.0), row(1000, 10.0), row(2000, 20.0), row(3000, 20.2), row(4000, 20.1)]
+        self.assertAlmostEqual(yogg_saron.held_still(rows, 4000, 1.0), 2.0)
+        self.assertAlmostEqual(yogg_saron.held_still(rows, 1000, 1.0), 0.0)
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

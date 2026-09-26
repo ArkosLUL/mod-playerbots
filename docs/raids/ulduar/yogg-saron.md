@@ -164,7 +164,11 @@ Charge, Intercept and Feral Charge fired straight out of the 2.89 yd cloud-free 
 first two. The `yogg-saron displacement guard multiplier` rules zero all of them in phase 1, and Blink and
 Disengage for the whole encounter — those two fire on "something is too close" rather than to close a
 gap, so neither is aimed at anything, while the gap-closers come back in P2 and P3 where there is no
-orbit to land on. Catch the whole `CastReachTargetSpellAction` family: the Fury chain is charge →
+orbit to land on - except onto the Brain, which hangs 25 yd over its room's floor with nothing
+underneath it and whose 30 yd combat reach hides the gap from `GetDistance`: one feral druid charged it
+from 50 yd, stood in the air for 23 s with every room node reading `yogg.room = none`, and was charmed
+where it hung. A third rule zeroes the family whenever the current target is the Brain.
+ Catch the whole `CastReachTargetSpellAction` family: the Fury chain is charge →
 intercept → `reach melee`, so a partial veto only moves the problem down the list, and `reach melee`
 surviving is what walks melee in on foot. Blink and Disengage are plain `CastSpellAction`s and have to
 be named.
@@ -232,6 +236,9 @@ and `reach party member to heal` is exempt outright:
   zeroed if either lands inside the clear radius or its line crosses the ring. Guardians are tanked
   18.5 yd from the middle and are yards across: one phase 3 aimed 67 of 631 inside and was thrown 52
   times. Guardians have no frontal attack, so it costs parries only.
+- **A melee bot's reach onto a live Crusher**, unless its stun holds. Melee may not target one at all
+  (below), so this covers only what the resolver does not hand out - a raid mark, a fallback, a tank's
+  stock picker - and being in the reach is the whole of what makes the tentacle Crush.
 
 **A third window was tried below the platform and cost a whole room.** Zeroing reach while a
 Laughing Skull was in arc left five bots in the Chamber holding a tentacle at 87% for **fifty
@@ -511,6 +518,17 @@ Barrier, so a window with only a Crusher up gives them no allowed target. That i
 lone Crusher means the tank is its only other candidate, so every melee bot on it is collateral on the
 tank's own Crush line. The `dps target` fallback handed it to them anyway (~150 bot-seconds in one
 pull), so a fallback Crusher now takes the same test.
+
+**A tank is melee, and nothing was saying so.** `IsAllowedTarget` rejects 33966 on `IsMelee`, which a
+protection paladin is, but the resolver never owned a tank's target outside phase 3:
+`YoggSaronSetDpsPriorityTrigger` stood down for every tank and the definition only took the stock
+picker away while a Guardian could be held. `FindTankTargetSmartStrategy` ranks by "not attacking me"
+then nearest by `GetDistance`, which takes off the Crusher's 8 yd combat reach, and `reach melee` walks
+the rest: one bot tank held a Crusher for **55%** of a phase 2 at a median 8.7 yd and took **53 of that
+pull's 59 Crushes, 807,919 damage**, dying to one, while the human tank at 19.6 yd took three. The
+resolver owns a tank's target in phase 2 too now, which drops it to the Guardian, Constrictor and
+Corruptor tiers, and the movement guard covers the targets it does not hand out. The Crusher loses the
+tank's swings breaking Diminish Power, which is what the Judgement node below is for.
 
 **Shattered Illusion is the one exception.** `64173` stuns every platform tentacle (its `conditions`
 rows) from the moment a brain room clears until Induce Madness lands, and
@@ -913,7 +931,13 @@ out; the Chamber middle, 39-43 yd from its tentacles, is unmeasured.
 **Scope the tentacle read to the room.** The Stormwind and Chamber middles are 200.8 yd apart, so the
 old 200 yd sweep was one yard from reading the next room's tentacles — and reading it wrong is not a
 wasted tick, it is `Unit::Kill(who, who)`. The Brain's own test is `_tentacleCount < _tentacleTotal`,
-a per-wave counter, so per-room is the right scope.
+a per-wave counter, so per-room is the right scope. **Centre that circle on the room, not on the bot:**
+the Chamber is 96 yd deep, so from its doorway a 60 yd read covers half of it. One pull's brain healer
+called the room clear with the far tentacles alive, its station node stood down 50 yd short of the
+middle, and it stood at the door for 24 s while four melee died 90 yd further in to Grim Reprisal.
+`YoggSaronInfluenceTentaclesCleared` measures from `YoggSaronRoomMiddle` inside an illusion room and
+from the bot only in the brain chamber, where the question is which room it came out of. It is the one
+read behind the healer station, `yogg.roomstate` and the approach gate alike.
 
 **Read the disguises too, or a full room reports empty.** Every spawn in all three summon groups
 satisfies one of the three branches above, so **no tentacle is ever entry 33943 when the raid
@@ -1005,6 +1029,16 @@ sets: melee go to `ULDUAR_YOGG_SARON_BRAIN_MELEE_SPOT` (1969.0, -25.4, 237.474),
 30.1 yd 3D, settled z and `PATHFIND_NORMAL` under `--nav 0x09` from all three entrances; everyone else
 goes to the brain room middle, 11.5 yd from it.
 
+**The way out outranks that walk, and had to be told so.** Both are `MOVEMENT_FORCED`, and
+`YoggSaronMoveToExitPortalAction` returned false until it stood within 2 yd of a portal, so the engine
+fell through to the brain spot node in the same tick and it took the bot back the moment the exit walk
+stopped holding: one bot crossed 7 of the 21 yd it needed while the two walks alternated every ~100 ms,
+another turned round 7.4 yd from a portal, and Induce Madness charmed both. So the brain spot trigger
+stands down while `YoggSaronShouldLeaveBrainLevel` holds - cached per trigger pass, since it costs a
+game object search and two nodes now ask it - the exit node claims its tick while it is still walking,
+and it uses the portal from `INTERACTION_DISTANCE` rather than 2 yd. Losing the rotation for the 3-6 s
+of the walk out is the trade, against a charm that is always a death.
+
 **No Sanity Well reaches the brain level.** All five stand on the platform and nothing restores Sanity
 underground, so `yogg-saron sanity` could only ever walk a bot at something it would never get to. It
 stands down below the floor.
@@ -1055,12 +1089,16 @@ target and cast nothing, which is that same failure from outside. And **launches
 effect movement near the body (height missed most) and matched to the last walk whose line crossed
 the ring rather than to the last walk issued, which is usually the dodge out; per phase, bot and node.
 Under `--crush`, **Crush hits** split into the tentacle's victim and the cone, each kill with the walk
-that put it inside the reach and any melee hit first; **the reach**, ranged and healer samples and
+that put it inside the reach and any melee hit first, and what every raider took of it with the tanks'
+share; **the reach**, ranged and healer samples and
 walks inside it; and **Diminish Power**, uptime off the aura and how many Judgements landed
 mid-channel and dropped it. Under `--brain`, one row per wave: room clear time, one-target snapshots
 and the most-held share, melee walking, the healer's distance from the middle and mates past 40 yd,
 `set behind` moves, door to first Brain hit, healer to the Brain, exit seconds left and spare, and
-Brain lost. Under `--phase2`, the windows with nothing on the platform to kill, with Sanity, idle walks
+Brain lost; plus one row per bot Induce Madness charmed - where it stood as the cast landed, how far
+that was off the floor and from the nearest spot somebody left the level from, and how long it had been
+standing still there.
+ Under `--phase2`, the windows with nothing on the platform to kill, with Sanity, idle walks
 and well arrivals. Under `--tentacles`, per wave: tentacle stock when the door opened and when the
 stun lifted, what the stun took, when the platform was clear and when the team surfaced; live vs
 stunned removal; the tentacles alive at phase 3; who sat on a stunned Crusher, and any Crush within

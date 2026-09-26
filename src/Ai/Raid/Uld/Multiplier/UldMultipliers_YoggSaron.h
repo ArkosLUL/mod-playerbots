@@ -36,6 +36,7 @@ private:
     float FleeGuard();
     float SetBehindGuard();
     bool MeleeReachIsWrong(Action* action);
+    bool CrusherReachIsWrong();
 };
 
 // Phase 1 AoE, held while it would finish a Guardian nobody is on. With the raid on one focus, the

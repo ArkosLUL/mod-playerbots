@@ -32,6 +32,28 @@ bool YoggSaronGuardianToHold(PlayerbotAI* botAI)
     return YoggSaronHoldableGuardianWithin(botAI->GetBot(), guardianSearchRadius) && YoggSaronInPhase3(botAI);
 }
 
+// The window the dps resolver owns a tank's target in, which has to match
+// YoggSaronSetDpsPriorityTrigger or a tank is left with no target source at all. Phase 2 is in it
+// because the generic picker walks a tank into a Crusher's reach and Crush is a 100% proc on the
+// tentacle's swing: 53 of one pull's 59 Crushes landed on the bot tank standing in one.
+bool YoggSaronTankTargetOwned(PlayerbotAI* botAI)
+{
+    return YoggSaronInPhase2(botAI) || YoggSaronGuardianToHold(botAI);
+}
+
+// The Brain's own position is 25 yd above its room's floor, so a leap at it leaves the bot hanging in
+// the air with nothing to walk on: one druid charged it, hung there for 23 s and was charmed by
+// Induce Madness. GetDistance hides the gap behind the Brain's combat reach, so 50 yd read as in
+// range. The Influence Tentacles stand on the floor, so charges stay available for those.
+bool YoggSaronBrainIsTarget(PlayerbotAI* botAI)
+{
+    if (!YoggSaronOnBrainLevel(botAI->GetBot()))
+        return false;
+
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target->GetEntry() == NPC_BRAIN;
+}
+
 // Food and drink sit a bot down with no AI at all for up to 18 s. With no Guardian alive the raid drops
 // combat and eats wherever it stands: four melee sat down in the ring 8 s before it lit, and two were
 // still eating when it threw them. The back line on the 21.5 yd station keeps eating.
@@ -112,7 +134,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // alone on purpose: a mark a player sets should still win.
     e.OwnTargeting("yogg-saron dps target guard multiplier", Role::NonTank, YoggSaronEncounterActive,
                    Family::DpsAssist);
-    e.OwnTargeting("yogg-saron dps target guard multiplier", Role::Tank, YoggSaronGuardianToHold, Family::TankAssist);
+    e.OwnTargeting("yogg-saron dps target guard multiplier", Role::Tank, YoggSaronTankTargetOwned,
+                   Family::TankAssist);
 
     // Everything that moves a bot somewhere nobody picked. In phase 1 the room is six fixed cloud orbits,
     // so any jump is a jump onto a ring: over one pull 13 of 20 casts left the bot with more orbits in
@@ -123,6 +146,7 @@ void DefineYoggSaron(EncounterBuilder& e)
             Family::Blink | Family::Disengage);
     e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronInPhase1, Family::Charge,
             {"killing spree"});
+    e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronBrainIsTarget, Family::Charge);
 
     e.Multiplier<YoggSaronMovementGuardMultiplier>(Family::Flee | Family::SetBehind | Family::Reach |
                                                    Family::ReachHeal);

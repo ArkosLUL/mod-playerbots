@@ -301,8 +301,12 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
 
 bool YoggSaronSetDpsPriorityTrigger::IsActive()
 {
-    // Tanks keep the generic picker: the resolver would pull them off whatever they are holding.
-    if (botAI->IsTank(bot))
+    // Outside phase 2 a tank keeps the generic picker: the resolver would pull it off whatever it is
+    // holding, and in phase 3 guardian control owns it. In phase 2 that picker ranks by "not attacking
+    // me" then nearest by GetDistance, which takes off a Crusher's 8 yd combat reach, so it walks the
+    // tank into the one thing melee are barred from: one bot tank took 53 of a pull's 59 Crushes there,
+    // 807,919 damage, and died to one.
+    if (botAI->IsTank(bot) && !IsPhase2())
         return false;
 
     // Fight-wide rather than per phase, and it has to stay in step with the dps target guard rule in
@@ -499,6 +503,12 @@ bool YoggSaronBrainSpotTrigger::IsActive()
     // Square goes on in the illusion room the tick its door is seen open, and the exit portal hands it
     // back to skull, so it marks exactly the stretch from the open door to the way out.
     if (AI_VALUE(std::string, "rti") != "square")
+        return false;
+
+    // The way out wins from the moment Induce Madness is close enough to walk for. Both walks are
+    // forced and the exit node cannot hold every tick of a 20 yd walk, so this one took the gaps and
+    // turned bots round yards short of a portal: two of one pull's four charms came from that.
+    if (YoggSaronShouldLeaveBrainLevel(botAI))
         return false;
 
     Position const spot = YoggSaronBrainSpot(bot);

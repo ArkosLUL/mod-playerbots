@@ -66,6 +66,21 @@ bool YoggSaronMovementGuardMultiplier::MeleeReachIsWrong(Action* action)
     return target && !YoggSaronGuardianOnTheStack(target) && YoggSaronBotTankAlive(botAI);
 }
 
+bool YoggSaronMovementGuardMultiplier::CrusherReachIsWrong()
+{
+    // Crush is a 100% proc on the tentacle's melee swing and an unoccupied Crusher cannot cast it at
+    // all, so walking into one is the whole cost. The dps resolver bars a Crusher for melee, but it does
+    // not own every target: a raid mark, a fallback or the generic tank picker can still hand one over,
+    // and one bot tank took 53 of a pull's 59 Crushes that way. Stunned it neither swings nor channels.
+    if (!PlayerbotAI::IsMelee(bot))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+
+    return target && target->IsAlive() && target->GetEntry() == NPC_CRUSHER_TENTACLE &&
+           !YoggSaronCrusherStunHolds(botAI, target);
+}
+
 float YoggSaronMovementGuardMultiplier::SetBehindGuard()
 {
     // Arithmetic first. Below the platform there is no body, and the phase read is two 200 yd sweeps.
@@ -130,6 +145,9 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
         return 1.0f;
 
     if (MeleeReachIsWrong(action))
+        return 0.0f;
+
+    if (CrusherReachIsWrong())
         return 0.0f;
 
     float const fromMiddle =
