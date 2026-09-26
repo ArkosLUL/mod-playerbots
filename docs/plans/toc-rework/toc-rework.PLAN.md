@@ -21,6 +21,9 @@ The merge stage alone edits this table.
 | 3 | w5-anubarak | merged | `e222c6590` | Every node waits for the pull; no landing node (no traces); burrowers held on Permafrost every difficulty, DPS only while on it; boss held between the two nearest patches; kiter 8.5 yd past the patch, non-kiters dodge spike and lane; one Shadow Strike interrupter per cast; P3 MT defensive chain, Penetrating Cold heals, lust latched in P3; pre-submerge drag measured on the boss; `AnubarakSubmerged` fixed | `w5-anubarak-rest.PLAN.md`: kiter HoP, P3 raid-health economy, Freezing Slash model, burrower pacing, landing node, scarabs, Spider Frenzy spacing, P2 positioning. w6: raid-wide rti reset after a kill, drop unused `ANUBARAK_PIT_CENTER`, hoist the direct-heal list into Shared (Jaraxxus list still names greater healing wave). Gaps: AoE pops spheres, 10H one side tank stacks burrowers, spike dodge ignores Permafrost, one-group memo, marks outlive the kill |
 | 4 | w1b-jormungars | pending | | | |
 | 4 | w3b-fc-defence | pending | | | |
+| 4 | w1a-beasts-rest | pending | | | |
+| refine | w2-jaraxxus-rest | pending | | | Needs 649 traces from a build carrying w2 |
+| refine | w5-anubarak-rest | pending | | | Needs 649 traces from a build carrying w5 |
 | 5 | w6-closeout | pending | | | |
 
 States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
