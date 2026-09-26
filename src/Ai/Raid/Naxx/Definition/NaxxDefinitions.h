@@ -35,6 +35,9 @@ enum NaxxEncounterId
 EncounterDefinition const& NaxxAnubrekhanDefinition();
 EncounterDefinition const& NaxxFaerlinaDefinition();
 EncounterDefinition const& NaxxMaexxnaDefinition();
+EncounterDefinition const& NaxxNothDefinition();
+EncounterDefinition const& NaxxHeiganDefinition();
+EncounterDefinition const& NaxxLoathebDefinition();
 
 // Every Naxxramas boss with a definition. The contexts walk this.
 inline std::vector<EncounterDefinition const*> const& NaxxEncounterDefinitions()
@@ -43,6 +46,9 @@ inline std::vector<EncounterDefinition const*> const& NaxxEncounterDefinitions()
         &NaxxAnubrekhanDefinition(),
         &NaxxFaerlinaDefinition(),
         &NaxxMaexxnaDefinition(),
+        &NaxxNothDefinition(),
+        &NaxxHeiganDefinition(),
+        &NaxxLoathebDefinition(),
     };
     return definitions;
 }

@@ -91,7 +91,7 @@ protected:
 class HeiganDanceAction : public MovementAction
 {
 public:
-    HeiganDanceAction(PlayerbotAI* ai) : MovementAction(ai, "heigan dance"), helper(ai) {}
+    HeiganDanceAction(PlayerbotAI* ai, std::string const name) : MovementAction(ai, name), helper(ai) {}
 
 protected:
     bool MoveToSafeZone(float tolerance);
@@ -103,14 +103,18 @@ protected:
 class HeiganDanceMeleeAction : public HeiganDanceAction
 {
 public:
-    HeiganDanceMeleeAction(PlayerbotAI* ai) : HeiganDanceAction(ai) {}
+    static constexpr char const* Name = "heigan dance melee";
+
+    HeiganDanceMeleeAction(PlayerbotAI* ai) : HeiganDanceAction(ai, Name) {}
     virtual bool Execute(Event event);
 };
 
 class HeiganDispelDecrepitFeverAction : public Action
 {
 public:
-    HeiganDispelDecrepitFeverAction(PlayerbotAI* ai) : Action(ai, "heigan dispel decrepit fever"), helper(ai) {}
+    static constexpr char const* Name = "heigan dispel decrepit fever";
+
+    HeiganDispelDecrepitFeverAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 
@@ -124,7 +128,9 @@ private:
 class HeiganDanceRangedAction : public HeiganDanceAction
 {
 public:
-    HeiganDanceRangedAction(PlayerbotAI* ai) : HeiganDanceAction(ai) {}
+    static constexpr char const* Name = "heigan dance ranged";
+
+    HeiganDanceRangedAction(PlayerbotAI* ai) : HeiganDanceAction(ai, Name) {}
     virtual bool Execute(Event event);
 };
 
@@ -467,7 +473,9 @@ private:
 class LoathebPositionAction : public MovementAction
 {
 public:
-    LoathebPositionAction(PlayerbotAI* ai) : MovementAction(ai, "loatheb position"), helper(ai) {}
+    static constexpr char const* Name = "loatheb position";
+
+    LoathebPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     virtual bool Execute(Event event);
 
 private:
@@ -477,7 +485,9 @@ private:
 class LoathebChooseTargetAction : public AttackAction
 {
 public:
-    LoathebChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "loatheb choose target"), helper(ai) {}
+    static constexpr char const* Name = "loatheb choose target";
+
+    LoathebChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     virtual bool Execute(Event event);
 
 private:
@@ -487,7 +497,9 @@ private:
 class NothChooseTargetAction : public AttackAction
 {
 public:
-    NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "noth choose target"), helper(ai) {}
+    static constexpr char const* Name = "noth choose target";
+
+    NothChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -497,7 +509,9 @@ private:
 class NothPositionAction : public MovementAction
 {
 public:
-    NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, "noth position"), helper(ai) {}
+    static constexpr char const* Name = "noth position";
+
+    NothPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -520,7 +534,9 @@ private:
 class NothDispelCurseAction : public Action
 {
 public:
-    NothDispelCurseAction(PlayerbotAI* ai) : Action(ai, "noth dispel curse"), helper(ai) {}
+    static constexpr char const* Name = "noth dispel curse";
+
+    NothDispelCurseAction(PlayerbotAI* ai) : Action(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
     bool isUseful() override;
 

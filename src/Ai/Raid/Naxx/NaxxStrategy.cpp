@@ -27,19 +27,7 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("rotate grobbulus", ACTION_RAID + 1) }
     ));
 
-    // Heigan the Unclean
-    triggers.push_back(new TriggerNode("heigan melee",
-        { NextAction("heigan dance melee", ACTION_RAID + 1) }
-    ));
-
-    triggers.push_back(new TriggerNode("heigan ranged",
-        { NextAction("heigan dance ranged", ACTION_RAID + 1) }
-    ));
-
-    // Priority: dispel Decrepit Fever ASAP (tank first) during Phase 1.
-    triggers.push_back(new TriggerNode("heigan decrepit fever",
-        { NextAction("heigan dispel decrepit fever", ACTION_RAID + 5) }
-    ));
+    NaxxHeiganDefinition().AddTriggerNodes(triggers);
 
     // Kel'Thuzad
     triggers.push_back(
@@ -179,41 +167,15 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         })
     );
 
-    // Loatheb
-    triggers.push_back(
-        new TriggerNode("loatheb",
-        {
-            NextAction("loatheb position", ACTION_RAID + 1),
-            NextAction("loatheb choose target", ACTION_RAID + 1)
-        })
-    );
-
-    // Noth the Plaguebringer
-    triggers.push_back(
-        new TriggerNode("noth",
-        {
-            NextAction("noth position", ACTION_RAID + 2),
-            NextAction("noth choose target", ACTION_RAID + 1)
-        })
-    );
-
-    // 25-man only, and only for the few seconds after EVENT_BLINK empties the threat table.
-    triggers.push_back(new TriggerNode("noth blink",
-        { NextAction("taunt spell", ACTION_RAID + 4) }
-    ));
-
-    // Above the positioning nodes: 25-man curses 10 players at once against a ~10s window, so a
-    // dispel that loses a GCD to a repositioning move is a dispel that does not happen.
-    triggers.push_back(new TriggerNode("noth curse",
-        { NextAction("noth dispel curse", ACTION_RAID + 5) }
-    ));
+    NaxxLoathebDefinition().AddTriggerNodes(triggers);
+    NaxxNothDefinition().AddTriggerNodes(triggers);
 }
 
 void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new GrobbulusMultiplier(botAI));
-    multipliers.push_back(new HeiganDanceMultiplier(botAI));
-    multipliers.push_back(new LoathebGenericMultiplier(botAI));
+    NaxxHeiganDefinition().AddMultipliers(botAI, multipliers);
+    NaxxLoathebDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new ThaddiusPrepullMultiplier(botAI));
     multipliers.push_back(new ThaddiusGenericMultiplier(botAI));
     multipliers.push_back(new SapphironGenericMultiplier(botAI));
@@ -225,5 +187,5 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new GothikGenericMultiplier(botAI));
     multipliers.push_back(new NaxxThreatRedirectMultiplier(botAI));
     multipliers.push_back(new NaxxBurstWindowMultiplier(botAI));
-    multipliers.push_back(new NothGenericMultiplier(botAI));
+    NaxxNothDefinition().AddMultipliers(botAI, multipliers);
 }

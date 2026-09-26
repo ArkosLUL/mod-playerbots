@@ -22,9 +22,6 @@ public:
         creators["grobbulus move center"] = &RaidNaxxActionContext::grobbulus_move_center;
         creators["grobbulus move away"] = &RaidNaxxActionContext::grobbulus_move_away;
 
-        creators["heigan dance melee"] = &RaidNaxxActionContext::heigan_dance_melee;
-        creators["heigan dance ranged"] = &RaidNaxxActionContext::heigan_dance_ranged;
-        creators["heigan dispel decrepit fever"] = &RaidNaxxActionContext::heigan_dispel_decrepit_fever;
 
         creators["thaddius prepull split"] = &RaidNaxxActionContext::thaddius_prepull_split;
         creators["thaddius attack nearest pet"] = &RaidNaxxActionContext::thaddius_attack_nearest_pet;
@@ -63,12 +60,7 @@ public:
 
         // creators["patchwerk ranged position"] = &RaidNaxxActionContext::patchwerk_ranged_position;
 
-        creators["loatheb position"] = &RaidNaxxActionContext::loatheb_position;
-        creators["loatheb choose target"] = &RaidNaxxActionContext::loatheb_choose_target;
 
-        creators["noth position"] = &RaidNaxxActionContext::noth_position;
-        creators["noth choose target"] = &RaidNaxxActionContext::noth_choose_target;
-        creators["noth dispel curse"] = &RaidNaxxActionContext::noth_dispel_curse;
 
         for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
             encounter->RegisterActions(creators);
@@ -79,9 +71,6 @@ private:
     static Action* rotate_grobbulus(PlayerbotAI* ai) { return new GrobbulusRotateAction(ai); }
     static Action* grobbulus_move_center(PlayerbotAI* ai) { return new GrobblulusMoveCenterAction(ai); }
     static Action* grobbulus_move_away(PlayerbotAI* ai) { return new GrobbulusMoveAwayAction(ai); }
-    static Action* heigan_dance_melee(PlayerbotAI* ai) { return new HeiganDanceMeleeAction(ai); }
-    static Action* heigan_dance_ranged(PlayerbotAI* ai) { return new HeiganDanceRangedAction(ai); }
-    static Action* heigan_dispel_decrepit_fever(PlayerbotAI* ai) { return new HeiganDispelDecrepitFeverAction(ai); }
     static Action* thaddius_prepull_split(PlayerbotAI* ai) { return new ThaddiusPrepullSplitAction(ai); }
     static Action* thaddius_attack_nearest_pet(PlayerbotAI* ai) { return new ThaddiusAttackNearestPetAction(ai); }
     static Action* thaddius_move_to_platform(PlayerbotAI* ai) { return new ThaddiusMoveToPlatformAction(ai); }
@@ -119,11 +108,6 @@ private:
     static Action* gluth_tranquilizing_shot(PlayerbotAI* ai) { return new GluthTranquilizingShotAction(ai); }
     static Action* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatAction(ai); }
     // static Action* patchwerk_ranged_position(PlayerbotAI* ai) { return new PatchwerkRangedPositionAction(ai); }
-    static Action* loatheb_position(PlayerbotAI* ai) { return new LoathebPositionAction(ai); }
-    static Action* loatheb_choose_target(PlayerbotAI* ai) { return new LoathebChooseTargetAction(ai); }
-    static Action* noth_position(PlayerbotAI* ai) { return new NothPositionAction(ai); }
-    static Action* noth_choose_target(PlayerbotAI* ai) { return new NothChooseTargetAction(ai); }
-    static Action* noth_dispel_curse(PlayerbotAI* ai) { return new NothDispelCurseAction(ai); }
 };
 
 #endif

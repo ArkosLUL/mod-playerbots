@@ -21,9 +21,6 @@ public:
         creators["mutating injection removed"] = &RaidNaxxTriggerContext::mutating_injection_removed;
         creators["grobbulus cloud"] = &RaidNaxxTriggerContext::grobbulus_cloud;
 
-        creators["heigan melee"] = &RaidNaxxTriggerContext::heigan_melee;
-        creators["heigan ranged"] = &RaidNaxxTriggerContext::heigan_ranged;
-        creators["heigan decrepit fever"] = &RaidNaxxTriggerContext::heigan_decrepit_fever;
 
         creators["thaddius prepull split"] = &RaidNaxxTriggerContext::thaddius_prepull_split;
         creators["thaddius phase pet"] = &RaidNaxxTriggerContext::thaddius_phase_pet;
@@ -62,11 +59,7 @@ public:
         creators["gluth frenzy"] = &RaidNaxxTriggerContext::gluth_frenzy;
         creators["gluth redirect threat"] = &RaidNaxxTriggerContext::gluth_redirect_threat;
 
-        creators["loatheb"] = &RaidNaxxTriggerContext::loatheb;
 
-        creators["noth"] = &RaidNaxxTriggerContext::noth;
-        creators["noth curse"] = &RaidNaxxTriggerContext::noth_curse;
-        creators["noth blink"] = &RaidNaxxTriggerContext::noth_blink;
 
         for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
             encounter->RegisterTriggers(creators);
@@ -77,9 +70,6 @@ private:
     static Trigger* mutating_injection_ranged(PlayerbotAI* ai) { return new MutatingInjectionRangedTrigger(ai); }
     static Trigger* mutating_injection_removed(PlayerbotAI* ai) { return new MutatingInjectionRemovedTrigger(ai); }
     static Trigger* grobbulus_cloud(PlayerbotAI* ai) { return new GrobbulusCloudTrigger(ai); }
-    static Trigger* heigan_melee(PlayerbotAI* ai) { return new HeiganMeleeTrigger(ai); }
-    static Trigger* heigan_ranged(PlayerbotAI* ai) { return new HeiganRangedTrigger(ai); }
-    static Trigger* heigan_decrepit_fever(PlayerbotAI* ai) { return new HeiganDecrepitFeverTrigger(ai); }
 
     static Trigger* thaddius_prepull_split(PlayerbotAI* ai) { return new ThaddiusPrepullSplitTrigger(ai); }
     static Trigger* thaddius_phase_pet(PlayerbotAI* ai) { return new ThaddiusPhasePetTrigger(ai); }
@@ -112,10 +102,6 @@ private:
     static Trigger* gluth_low_health_zombie_aoe(PlayerbotAI* ai) { return new GluthLowHealthZombieAoeTrigger(ai); }
     static Trigger* gluth_frenzy(PlayerbotAI* ai) { return new GluthFrenzyTrigger(ai); }
     static Trigger* gluth_redirect_threat(PlayerbotAI* ai) { return new GluthRedirectThreatTrigger(ai); }
-    static Trigger* loatheb(PlayerbotAI* ai) { return new LoathebTrigger(ai); }
-    static Trigger* noth(PlayerbotAI* ai) { return new NothTrigger(ai); }
-    static Trigger* noth_curse(PlayerbotAI* ai) { return new NothCurseTrigger(ai); }
-    static Trigger* noth_blink(PlayerbotAI* ai) { return new NothBlinkTrigger(ai); }
 };
 
 #endif

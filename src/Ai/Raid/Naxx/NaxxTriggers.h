@@ -68,7 +68,9 @@ private:
 class HeiganMeleeTrigger : public Trigger
 {
 public:
-    HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan melee"), helper(ai) {}
+    static constexpr char const* Name = "heigan melee";
+
+    HeiganMeleeTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     virtual bool IsActive();
 
 private:
@@ -78,7 +80,9 @@ private:
 class HeiganRangedTrigger : public Trigger
 {
 public:
-    HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan ranged"), helper(ai) {}
+    static constexpr char const* Name = "heigan ranged";
+
+    HeiganRangedTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -88,7 +92,9 @@ private:
 class HeiganDecrepitFeverTrigger : public Trigger
 {
 public:
-    HeiganDecrepitFeverTrigger(PlayerbotAI* ai) : Trigger(ai, "heigan decrepit fever"), helper(ai) {}
+    static constexpr char const* Name = "heigan decrepit fever";
+
+    HeiganDecrepitFeverTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -423,7 +429,9 @@ private:
 class LoathebTrigger : public Trigger
 {
 public:
-    LoathebTrigger(PlayerbotAI* ai) : Trigger(ai, "loatheb"), helper(ai) {}
+    static constexpr char const* Name = "loatheb";
+
+    LoathebTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -433,7 +441,9 @@ private:
 class NothTrigger : public Trigger
 {
 public:
-    NothTrigger(PlayerbotAI* ai) : Trigger(ai, "noth"), helper(ai) {}
+    static constexpr char const* Name = "noth";
+
+    NothTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -443,7 +453,9 @@ private:
 class NothCurseTrigger : public Trigger
 {
 public:
-    NothCurseTrigger(PlayerbotAI* ai) : Trigger(ai, "noth curse"), helper(ai) {}
+    static constexpr char const* Name = "noth curse";
+
+    NothCurseTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -453,7 +465,9 @@ private:
 class NothBlinkTrigger : public Trigger
 {
 public:
-    NothBlinkTrigger(PlayerbotAI* ai) : Trigger(ai, "noth blink"), helper(ai) {}
+    static constexpr char const* Name = "noth blink";
+
+    NothBlinkTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
