@@ -472,7 +472,8 @@ void EncounterDefinition::RegisterTriggers(std::unordered_map<std::string, Trigg
 void EncounterDefinition::RegisterActions(std::unordered_map<std::string, ActionCreator>& creators) const
 {
     for (Row const& row : rows)
-        creators[row.action] = row.makeAction;
+        if (row.makeAction)
+            creators[row.action] = row.makeAction;
 }
 
 void EncounterDefinition::AddTriggerNodes(std::vector<TriggerNode*>& triggers) const

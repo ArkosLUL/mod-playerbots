@@ -17,6 +17,10 @@ namespace OsHelpers
 
 constexpr uint32 OS_MAP_ID = 615;
 
+// DATA_SARTHARION, the boss index GetBossState takes, from obsidian_sanctum.h, which lives in the
+// core's scripts directory and so cannot be included from here.
+constexpr uint32 OS_BOSS_SARTHARION = 0;
+
 // Difficulty variants come from creature_template.difficulty_entry_1; every entry that has one is
 // paired here because the grid searches below match on entry, not on name.
 namespace NpcId

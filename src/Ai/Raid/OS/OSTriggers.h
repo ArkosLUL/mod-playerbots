@@ -25,7 +25,9 @@ public:
 class SartharionMeleePositioningTrigger : public Trigger
 {
 public:
-    SartharionMeleePositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, "sartharion melee positioning") {}
+    static constexpr char const* Name = "sartharion melee positioning";
+
+    SartharionMeleePositioningTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -34,70 +36,90 @@ public:
 class OsTsunamiCorridorTrigger : public Trigger
 {
 public:
-    OsTsunamiCorridorTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os tsunami corridor") {}
+    static constexpr char const* Name = "os tsunami corridor";
+
+    OsTsunamiCorridorTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsTwilightFissureTrigger : public Trigger
 {
 public:
-    OsTwilightFissureTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os twilight fissure") {}
+    static constexpr char const* Name = "os twilight fissure";
+
+    OsTwilightFissureTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsMainTankHoldTrigger : public Trigger
 {
 public:
-    OsMainTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os main tank hold") {}
+    static constexpr char const* Name = "os main tank hold";
+
+    OsMainTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsDrakeLandingTrigger : public Trigger
 {
 public:
-    OsDrakeLandingTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os drake landing") {}
+    static constexpr char const* Name = "os drake landing";
+
+    OsDrakeLandingTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsOffTankHoldTrigger : public Trigger
 {
 public:
-    OsOffTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os offtank hold") {}
+    static constexpr char const* Name = "os offtank hold";
+
+    OsOffTankHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsRedirectThreatTrigger : public Trigger
 {
 public:
-    OsRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os redirect threat") {}
+    static constexpr char const* Name = "os redirect threat";
+
+    OsRedirectThreatTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsMainTankCooldownTrigger : public Trigger
 {
 public:
-    OsMainTankCooldownTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os main tank cooldown") {}
+    static constexpr char const* Name = "os main tank cooldown";
+
+    OsMainTankCooldownTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsTranquilizeTrigger : public Trigger
 {
 public:
-    OsTranquilizeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os tranquilize") {}
+    static constexpr char const* Name = "os tranquilize";
+
+    OsTranquilizeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsRaidHoldTrigger : public Trigger
 {
 public:
-    OsRaidHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os raid hold") {}
+    static constexpr char const* Name = "os raid hold";
+
+    OsRaidHoldTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsSartharionFlankTrigger : public Trigger
 {
 public:
-    OsSartharionFlankTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os sartharion flank") {}
+    static constexpr char const* Name = "os sartharion flank";
+
+    OsSartharionFlankTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -106,7 +128,9 @@ public:
 class OsDrakeRearTrigger : public Trigger
 {
 public:
-    OsDrakeRearTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os drake rear") {}
+    static constexpr char const* Name = "os drake rear";
+
+    OsDrakeRearTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -116,21 +140,27 @@ public:
 class OsTankShapeshiftTrigger : public Trigger
 {
 public:
-    OsTankShapeshiftTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os tank shapeshift") {}
+    static constexpr char const* Name = "os tank shapeshift";
+
+    OsTankShapeshiftTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class OsOffPlatformTrigger : public Trigger
 {
 public:
-    OsOffPlatformTrigger(PlayerbotAI* botAI) : Trigger(botAI, "os off platform") {}
+    static constexpr char const* Name = "os off platform";
+
+    OsOffPlatformTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class TwilightPortalEnterTrigger : public Trigger
 {
 public:
-    TwilightPortalEnterTrigger(PlayerbotAI* botAI) : Trigger(botAI, "twilight portal enter") {}
+    static constexpr char const* Name = "twilight portal enter";
+
+    TwilightPortalEnterTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

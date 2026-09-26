@@ -137,6 +137,17 @@ class RowTest(unittest.TestCase):
         findings = self.run_check(pblint.check_definition_rows, files)
         self.assertEqual([(f.check, f.rel) for f in findings], [("row-duplicate", "src/Raid/X/XTriggers.h")])
 
+    def test_a_shared_action_row_leaves_the_creator_to_its_context(self):
+        files = self.tree('e.Node<XDodgeTrigger>("heroism", ACTION_RAID);')
+        self.assertEqual(self.run_check(pblint.check_definition_rows, files), [])
+        self.assertEqual(self.run_check(pblint.check_unresolved, files), [])
+        self.assertEqual(self.run_check(pblint.check_orphan_creators, files), [])
+
+    def test_a_shared_action_row_naming_nothing_is_an_error(self):
+        findings = self.run_check(pblint.check_unresolved, self.tree('e.Node<XDodgeTrigger>("rear flnk", 1.0f);'))
+        self.assertEqual([f.check for f in findings], ["unresolved-action"])
+        self.assertIn('"rear flnk"', findings[0].message)
+
     def test_a_row_name_is_never_an_orphan(self):
         findings = self.run_check(pblint.check_orphan_creators,
                                   self.tree("e.Node<XDodgeTrigger, XDodgeAction>(ACTION_RAID);"))

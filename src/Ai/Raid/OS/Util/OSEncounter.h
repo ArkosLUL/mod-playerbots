@@ -24,6 +24,19 @@ namespace OsHelpers
 // (phase 16) will not find him - that is intended, in-realm behaviour must not depend on the boss.
 Unit* GetSartharion(Player* bot);
 bool SartharionEncounterActive(Player* bot);
+
+// What the Sartharion rules and guards ask about every queued action. It costs grid sweeps, so it is
+// resolved once per bot per tick. Empty in the Twilight Realm, where he cannot be resolved.
+struct SartharionSnapshot
+{
+    Unit* boss = nullptr;
+    bool encounterActive = false;
+    bool dodgeLive = false;  // a tsunami or a fissure is up
+};
+SartharionSnapshot const& SartharionSnapshotFor(PlayerbotAI* botAI);
+
+// Draws each tsunami lane on the trace once. Only the mechanic tracker bot does the sweep.
+void TickSartharionObs(Player* bot);
 bool SartharionDamageImmune(Player* bot);
 uint32 EncounterElapsedMs(Player* bot);
 
@@ -42,10 +55,10 @@ bool OnThePlatform(Player* bot);
 
 // The three emergency dodges, each answering "does this bot have to move for this mechanic right now".
 //
-// Both the trigger that fires the dodge and OsMechanicPriorityMultiplier, which zeroes every other
-// mover while the mechanic is live, read these. They have to agree exactly: a multiplier claiming a
+// Both the trigger that fires the dodge and the "os mechanic priority" rules, which zero every other
+// mover while the mechanic is live, read these. They have to agree exactly: a rule claiming a
 // mechanic its trigger will not fire on leaves the bot with every mover suppressed and nothing to
-// replace them, which is the freeze the multiplier's own scoping comments warn about.
+// replace them.
 bool NeedsPlatformReturn(PlayerbotAI* botAI, Player* bot);
 bool NeedsTsunamiDodge(Player* bot);
 bool NeedsFissureDodge(Player* bot);
@@ -67,8 +80,7 @@ Player* RedirectTankFor(PlayerbotAI* botAI, Player* bot);
 // this nothing pulls back the drake he walks away from at a handover - and by the time it peels it is
 // 35.5yd behind him at the far spot, outside the taunt range this searches with.
 Unit* OffTankTauntTarget(Player* bot);
-// The bot's own single-target taunt, or nullptr for a class that has none. The four names the
-// multiplier already lists one by one, from the other side.
+// The bot's own single-target taunt, or nullptr for a class that has none.
 char const* TauntSpellFor(Player* bot);
 
 // The first two healers by GUID.

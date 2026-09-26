@@ -62,6 +62,7 @@ RE_SELF_NAME = re.compile(r':\s*(?:public\s+)?(\w+)\s*\(\s*(?:bot)?AI\s*,\s*"([^
 RE_NAME_CONST = re.compile(r'\bstatic\s+constexpr\s+(?:char\s+const|const\s+char)\s*\*\s*Name\s*=\s*"([^"]*)"')
 RE_CLASS_OPEN = re.compile(r"^\s*(?:class|struct)\s+(\w+)\b(?!\s*;)(?:[^:]*:\s*(?:public\s+)?(\w+))?")
 RE_ROW_TEMPLATE = re.compile(r"\bNode\s*<\s*(\w+)\s*,\s*(\w+)\s*>\s*\(")
+RE_ROW_SHARED = re.compile(r"\bNode\s*<\s*(\w+)\s*>\s*\(")
 RE_ROW_EXPLICIT = re.compile(r"\.Node\s*\(")
 RE_RULE_CALL = re.compile(r"\.(?:OwnMovement|Block|Exclusive)\s*\(")
 RE_STRING = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
@@ -178,6 +179,7 @@ class Row(NamedTuple):
     action: str
     rel: str
     line: int
+    shared: bool = False  # the action comes from a shared context; the row registers only the trigger
 
 
 class Registry(NamedTuple):
@@ -190,7 +192,7 @@ class Registry(NamedTuple):
         return {row.trigger for row in self.rows}
 
     def row_actions(self) -> set[str]:
-        return {row.action for row in self.rows}
+        return {row.action for row in self.rows if not row.shared}
 
 
 def name_constants(sources: list[Source]) -> dict[str, tuple[str, str, int]]:
@@ -235,6 +237,11 @@ def registry(sources: list[Source]) -> Registry:
             trigger, action = names.get(match.group(1)), names.get(match.group(2))
             if trigger and action:
                 rows.append(Row(trigger[0], action[0], src.rel, line_of(match.start())))
+        for match in RE_ROW_SHARED.finditer(text):
+            trigger = names.get(match.group(1))
+            args = call_arguments(text, match.end() - 1)
+            if trigger and args and literal(args[0]) is not None:
+                rows.append(Row(trigger[0], literal(args[0]), src.rel, line_of(match.start()), shared=True))
         for match in RE_ROW_EXPLICIT.finditer(text):
             args = call_arguments(text, match.end() - 1)
             if len(args) >= 3 and literal(args[0]) is not None and literal(args[2]) is not None:
@@ -289,6 +296,10 @@ def check_unresolved(sources, reg: Registry) -> list[Finding]:
         if name and name not in known_triggers and not KNOWN_DYNAMIC.search(name):
             out.append(Finding("unresolved-trigger", rel, number,
                                f'TriggerNode("{name}") has no creators[] entry in any trigger context'))
+    for row in reg.rows:
+        if row.shared and row.action not in known and not KNOWN_DYNAMIC.search(row.action):
+            out.append(Finding("unresolved-action", row.rel, row.line,
+                               f'a row runs "{row.action}", which no action context registers'))
     for name, rel, number in reg.rule_names:
         if name not in known:
             out.append(Finding("unresolved-rule-action", rel, number,
@@ -300,7 +311,7 @@ def check_orphan_creators(sources, reg: Registry) -> list[Finding]:
     """Registered and never referenced: a behaviour somebody wrote that nothing can run."""
     out = []
     actions, triggers = references(sources)
-    used_actions = {name for name, _, _ in actions} | reg.row_actions()
+    used_actions = {name for name, _, _ in actions} | {row.action for row in reg.rows}
     used_triggers = {name for name, _, _ in triggers} | reg.row_triggers()
     for kind, used in (("Action", used_actions), ("Trigger", used_triggers)):
         for name, (rel, number) in reg.creators.get(kind, {}).items():
@@ -318,7 +329,8 @@ def check_definition_rows(sources, reg: Registry) -> list[Finding]:
     rows = {}
     for row in reg.rows:
         rows.setdefault(row.trigger, row)
-        rows.setdefault(row.action, row)
+        if not row.shared:
+            rows.setdefault(row.action, row)
     for kind in ("Action", "Trigger"):
         for name, (rel, number) in reg.creators.get(kind, {}).items():
             row = rows.get(name)

@@ -10,6 +10,7 @@
 #include "Define.h"
 
 #include <string>
+#include <vector>
 
 class Player;
 class PlayerbotAI;
@@ -23,5 +24,6 @@ char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteK
 // True for the cast names in that table, so an encounter can hold the class nodes off them until the
 // window it wants them spent in.
 bool IsHeldTankDefensive(std::string const& actionName);
+std::vector<std::string> HeldTankDefensiveNames();
 
 #endif

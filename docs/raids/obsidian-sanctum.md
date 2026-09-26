@@ -10,6 +10,10 @@ The strategy targets the 3-drake kill and degrades to 0/1/2-drake without specia
 `wotlk-os` is registered on **both** engines (`PlayerbotAI.cpp:1777-1778`), so the holds run out of
 combat too — which is why the off-tank is already parked before the pull.
 
+Everything sits in `Definition/OSDefinition_Sartharion.cpp`, behind his encounter gate, except the
+realm kill order (`sartharion dps`) and `twilight portal exit`: a drake pulled alone starts its own
+encounter, which closes his gate, and still opens a Twilight portal.
+
 ## Geometry
 
 Sartharion home `(3246.57, 551.263, 58.62)`. The raid enters from the **south**, teleporting in at
@@ -185,8 +189,8 @@ override).
 `CorridorGroupFor` returns **three** groups, not two:
 
 - healers and ranged → `Raid`, always. Walking to Sartharion is a 41yd trip that ends in his Flame
-  Breath, cast every 6s — so they never do it, and the multiplier zeroes every generic mover whose
-  target is the boss.
+  Breath, cast every 6s — so they never do it, and the `sartharion` guard zeroes every generic
+  mover whose target is the boss.
 - main tank → `Tank`, all fight.
 - melee whose victim is Sartharion → `Melee`, their own profile.
 - everyone else, the off-tank included → `Raid`. He is locked off the boss all fight, so he never
@@ -288,9 +292,9 @@ The give-up path logs one `LOG_WARN` per pull with the tank's position, which is
 "the boss never followed" from "`MoveTo` silently refused the off-mesh corner".
 
 Two tanks trading aggro spin the boss through the raid, so the off-tank is locked off him for the
-**whole** encounter, not merely off the taunts: `SartharionMultiplier` zeroes `TankAssistAction`,
-`AggressiveTargetAction`, `AttackAnythingAction` and every taunt whenever an assist tank's target is
-the boss. Name those classes one by one — a cast to the shared `AttackAction` base also catches
+**whole** encounter, not merely off the taunts: `SartharionOffTankBossMultiplier` zeroes the
+TankAssist, AggressiveTarget, AttackAnything and Taunt families whenever an assist tank's target is
+the boss. Never the `Attack` family — the shared `AttackAction` base also catches
 `OsOffTankHoldAction`, whose `GetTarget()` reports the bot's *current* target, and would strand the
 off-tank on the boss with nothing left able to switch it away.
 
@@ -314,9 +318,9 @@ also restore `SetSelection` when the victim is right but the selection has drift
 
 `os redirect threat` owns Tricks and Misdirection end to end: main tank inside the 10s pull window,
 off-tank while any drake, Lava Blaze or whelp lives, main tank again after. The generic class nodes
-only ever know the main tank, so `CastTricksOfTheTradeOnMainTankAction` and
-`CastMisdirectionOnMainTankAction` are zeroed all fight — cast on those concrete classes, never the
-shared `BuffOnMainTankAction` base, which also carries Beacon, Earth Shield, Thorns and Lifebloom.
+only ever know the main tank, so `tricks of the trade on main tank` and `misdirection on main tank`
+are zeroed all fight, by name — never through the shared `BuffOnMainTankAction` base, which also
+carries Beacon, Earth Shield, Thorns and Lifebloom.
 
 ## Twilight Realm
 
@@ -449,7 +453,7 @@ tsunami and re-path once the wave passes.
 
 **A hold action that returns `false` on arrival hands the tick to the next action**, and
 `ReachTargetAction` / `CombatFormationMoveAction` then nudge the bot out of its tolerance so the hold
-drags it back — that is the tank oscillation. The multiplier therefore also zeroes:
+drags it back — that is the tank oscillation. The `sartharion` guard therefore also zeroes:
 
 - all generic movers for the main tank **while he is in melee range of the boss**. Gated on melee
   range, not on the encounter, so the pull still closes the gap.
@@ -503,11 +507,10 @@ which left the walk to the portal perpetually preempted. All four `MoveToClamped
 `lessDelay = true`, subtracting the react delay from the stamped lock.
 
 **Three `FORCED` dodges cannot preempt each other** (`FORCED > FORCED` is false), so precedence moves
-to the multiplier layer. `OsMechanicPriorityMultiplier` ranks **off-platform > tsunami > fissure** —
-off the platform is unrecoverable, a tsunami is lethal, a Void Blast is survivable. Each mechanic
-whitelists its own action, passes non-movers through, and zeroes every other `MovementAction` while it
-is live and nothing above it is. It is kept out of `SartharionMultiplier`, which is already ~140 lines
-of generic-mover suppression and a different concern.
+to the `os mechanic priority` rules, one `Exclusive` per mechanic, ranked **off-platform > tsunami >
+fissure** — off the platform is unrecoverable, a tsunami is lethal, a Void Blast is survivable. Each
+passes its own action and zeroes every other `MovementAction` while its mechanic is live and nothing
+above it is.
 
 **`IsDuplicateMove` never fires here**, so do not lean on it. It needs the request within **0.01 yd**
 of the last one, and every OS destination carries a Z that moves: passing `bot->GetPositionZ()` on a
@@ -542,8 +545,9 @@ Each pull writes `<LogsDir>/botobs/615_<inst>_sartharion_<epoch>.ndjson`; `postm
 `wave` and `corridor` are derived per bot against that bot's own X, so bots legitimately disagree -
 two of one group on different holds at the same `t` is the half-and-half split that wipes the raid.
 
-**Waves reach the trace only as `haz` rows**, written once each by `NoteTsunamiHazards`. Nothing else
-records them: a wave never enters combat so the watch list skips it, its damage is an aura on the
+**Waves reach the trace only as `haz` rows**, written once each by `NoteTsunamiHazards` from the
+definition's tick. Nothing else records them: a wave never enters combat so the watch list skips
+it, its damage is an aura on the
 creature rather than a dynamic object so there is no swept-hazard row, and the 40-slot snapshot sweep
 is spent on Onyx Sanctum trash and 52 cosmetic Twilight Eggs before it reaches one.
 

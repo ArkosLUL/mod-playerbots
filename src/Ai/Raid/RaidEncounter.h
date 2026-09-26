@@ -147,6 +147,14 @@ public:
              [](PlayerbotAI* ai) -> Action* { return new A(ai); }, priority, flag);
     }
 
+    // For an action a shared context already registers, such as "rear flank": the row registers only
+    // its trigger.
+    template <class T>
+    void Node(char const* sharedAction, float priority, EncounterRow flag = EncounterRow::Plain)
+    {
+        Node(T::Name, [](PlayerbotAI* ai) -> Trigger* { return new T(ai); }, sharedAction, nullptr, priority, flag);
+    }
+
     // For a class built under several names, which takes them from the row.
     void Node(std::string trigger, EncounterDefinition::TriggerCreator makeTrigger, std::string action,
               EncounterDefinition::ActionCreator makeAction, float priority,

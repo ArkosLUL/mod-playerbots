@@ -85,3 +85,12 @@ bool IsHeldTankDefensive(std::string const& actionName)
     }
     return false;
 }
+
+std::vector<std::string> HeldTankDefensiveNames()
+{
+    std::vector<std::string> names;
+    for (TankDefensive const& entry : TANK_DEFENSIVES)
+        names.push_back(entry.castName);
+
+    return names;
+}

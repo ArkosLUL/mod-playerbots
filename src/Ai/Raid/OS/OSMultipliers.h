@@ -9,61 +9,50 @@
 
 #include "Multiplier.h"
 
-class Unit;
+// The parts of the "sartharion" guard that depend on the action's target, which no rule sees. Each is
+// wrapped to the families it looks at, so GetValue only tests role and target.
 
-class SartharionMultiplier : public Multiplier
+// Taunts and tank assist, for the main tank: nothing but Sartharion.
+class SartharionMainTankTargetMultiplier : public Multiplier
 {
 public:
-    SartharionMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
-
+    SartharionMainTankTargetMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
     float GetValue(Action* action) override;
-
-private:
-    // Everything here needs a grid sweep, and a multiplier runs once per queued action, so the whole
-    // encounter picture is resolved once per tick and reused.
-    struct TickState
-    {
-        Unit* boss = nullptr;
-        bool encounterActive = false;
-        bool dodgeLive = false;
-    };
-
-    TickState const& Snapshot();
-
-    uint32 cachedAtMs = 0;
-    TickState cached;
 };
 
-// Settles which of the three emergency dodges owns the tick. All three issue at MOVEMENT_FORCED so
-// they can preempt a hold's movement lock, but that ladder cannot rank them against each other -
-// IsWaitingForLastMove compares with a strict >, so FORCED never beats FORCED. Precedence is encoded
-// here instead, the way FelmystPrioritizeDemonicVaporKiteMultiplier does it: each mechanic whitelists
-// its own action and zeroes every other mover while it is live.
-//
-// Off the platform beats a tsunami beats a fissure. Standing off the platform is the only one of the
-// three that does not fix itself - the bot is in lava and no hold will walk it back - a tsunami is
-// lethal on contact, and a Void Blast is survivable.
-class OsMechanicPriorityMultiplier : public Multiplier
+// Sartharion belongs to the main tank alone: two tanks trading aggro spin him through the raid. So the
+// off-tank is locked off him for the whole fight, not merely off the taunts. Only the concrete target
+// pickers count, never AttackAction itself - OsOffTankHoldAction is one and GetTarget() reports the
+// bot's current target, so the base would zero the one action that can switch the off-tank away and
+// strand it on the boss.
+class SartharionOffTankBossMultiplier : public Multiplier
 {
 public:
-    OsMechanicPriorityMultiplier(PlayerbotAI* ai) : Multiplier(ai, "os mechanic priority") {}
+    SartharionOffTankBossMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
     float GetValue(Action* action) override;
+};
 
-private:
-    enum class Mechanic : uint8
-    {
-        None,
-        Fissure,
-        Tsunami,
-        OffPlatform
-    };
+// The generic melee arc is wrong against both: Sartharion's rear is Tail Lash, and a drake's rear is
+// free ground the 90-120 degree band stops short of. "os sartharion flank" and "os drake rear" replace
+// it. It has to be zeroed rather than left to lose on priority - the two release the tick once the bot
+// is in position, and this would then walk it back out. Lava Blazes and whelps keep it.
+class SartharionRearFlankMultiplier : public Multiplier
+{
+public:
+    SartharionRearFlankMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
+    float GetValue(Action* action) override;
+};
 
-    // Sweeps for tsunamis and fissures, so it is cached for the rest of the tick rather than re-run
-    // once per action the way GetValue is called.
-    Mechanic Live();
-
-    uint32 cachedAtMs = 0;
-    Mechanic cached = Mechanic::None;
+// Sartharion is the one target ranged, healers and the off-tank never walk to. He parks 36.8yd from the
+// raid's home hold and 50.5yd from its left one, both outside their 28.5yd spell range, and closing that
+// gap means walking in behind him into a 30yd Tail Lash. The off-tank is on the list for a different
+// reason: he is locked off the boss for the whole fight, and the pull leaves the boss in his "current
+// target" before this strategy is live, which is enough for a reach mover to carry him into melee.
+class SartharionBossReachMultiplier : public Multiplier
+{
+public:
+    SartharionBossReachMultiplier(PlayerbotAI* ai) : Multiplier(ai, "sartharion") {}
+    float GetValue(Action* action) override;
 };
 
 // Holds every offensive throughput cooldown until the raid commits, which is Tenebron at half health.

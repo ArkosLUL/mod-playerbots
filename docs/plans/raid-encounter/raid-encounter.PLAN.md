@@ -128,7 +128,6 @@ and the predicates become plain reads:
 
 | Today | Where |
 |---|---|
-| tsunami hazard notes | `SartharionEncounterActive` (`OS/Util/OSEncounter.cpp:117`) |
 | `neglect threat` = true | Loatheb, Razuvious, Four Horsemen, Gothik multipliers (`Naxx/NaxxMultipliers.cpp:119,283,534,551`) |
 
 A tick tests cheap instance state before any sweep: between pulls every non-`DONE` encounter is open.
@@ -162,9 +161,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
   unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
   tank-assist ×2. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on Thane;
   keep it. `NaxxBossHelper` copies per node are untouched.
-- **OS:** `SartharionMultiplier`'s role and dodge parts become rules, its wrong-target taunt, tank
-  assist and rear-flank parts stay hand-written; `OsMechanicPriorityMultiplier` becomes one
-  `Exclusive` per live mechanic. The file-local `IsGenericMover` family goes.
 
 ## Out of scope
 
@@ -173,7 +169,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-3 and EoE landed; continue with OS.
+**Status:** commits 1-4 landed; continue at commit 5 (Naxx).
 
 Close each per `CLAUDE.local.md`.
 
@@ -181,7 +177,7 @@ Moving a boss: give its classes `Name` constants, write its definition, list it 
 definitions, call its `AddTriggerNodes`/`AddMultipliers` at its old spot in the strategy (keeps node
 and veto order), and delete its creators and whatever hand gating the definition replaces.
 Syntax-check with a raised `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU. What
-Ulduar and EoE taught:
+Ulduar, EoE and OS taught:
 
 - A multiplier becomes rules only where they are exactly equivalent; otherwise it stays hand-written,
   keeps its name and declares its families. `Family::AnyAction` is for one whose zero can land on
@@ -194,16 +190,20 @@ Ulduar and EoE taught:
 - Housekeeping found in a read moves to the tick behind the same per-instance throttle, with any
   lookup after the throttle check (Flame Leviathan, Mimiron, Algalon, Yogg-Saron, Thorim).
 - An old multiplier's cache becomes a per-bot, per-tick `thread_local` cache in the predicate
-  (Razorscale, Malygos' `Holder`).
+  (Razorscale, Malygos' `Holder`), or in the boss's `Util` when hand-written guards share it
+  (`SartharionSnapshotFor`).
 - An old name list matches `getName()`, not the registered name: `taunt on snare target` is named
   `taunt`, so every list caught it and the Taunt family missed it until EoE.
-- A node with several actions becomes back-to-back rows on its trigger, which share one node.
+- A node with several actions becomes back-to-back rows on its trigger, which share one node. A
+  node on a generic action is `Node<T>("rear flank", …)`: Naxx has nine.
+- A node that also serves another encounter stays in the strategy, after the definition's nodes
+  (OS's `sartharion dps` and `twilight portal exit` serve solo drakes). Check equal-priority order.
 
 1. **Module and Vezax pilot.** Landed.
 2. **pblint learns rows.** Landed.
 3. **The other 13 Ulduar bosses.** Landed; the prefix table, `UldGatedTrigger` and the `Uld*`
    forwards are gone. The Taunt family replaced Hodir's and Thorim's lists, adding Death Grip.
-4. **EoE** landed; **OS** next.
+4. **EoE** and **OS**. Landed.
 5. **Naxx**, one commit per boss group.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
    `ToCEncounterGate`, trigger wrapper and multiplier gating that `w0c-foundation` builds. Until then

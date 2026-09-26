@@ -120,15 +120,48 @@ bool SartharionEncounterActive(Player* bot)
     if (!boss || !boss->IsInCombat())
         return false;
 
-    EncounterState& state = StateFor(boss);
-
-    // Here because this is the one predicate every trigger runs every tick and it already holds the
-    // state the dedupe set lives in. One bot per instance does the sweep - it costs a grid search, and
-    // ClassifyTsunamiWave already spends ten of those per bot per tick.
-    if (RaidObs::Active() && IsMechanicTrackerBot(bot, OS_MAP_ID))
-        NoteTsunamiHazards(bot, state.tsunamiTraced);
-
+    // Refreshes the pull's state, which is rebuilt once nothing has asked for it in STALE_STATE_MS.
+    StateFor(boss);
     return true;
+}
+
+SartharionSnapshot const& SartharionSnapshotFor(PlayerbotAI* botAI)
+{
+    thread_local PlayerbotAI* cachedFor = nullptr;
+    thread_local uint32 cachedAtMs = 0;
+    thread_local SartharionSnapshot cached;
+
+    uint32 const now = getMSTime();
+    if (cachedFor == botAI && cachedAtMs == now && cachedAtMs)
+        return cached;
+
+    cachedFor = botAI;
+    cachedAtMs = now;
+    cached = SartharionSnapshot();
+
+    Player* bot = botAI->GetBot();
+    cached.encounterActive = SartharionEncounterActive(bot);
+    if (!cached.encounterActive)
+        return cached;
+
+    cached.boss = GetSartharion(bot);
+    // requireSelectable off, same as the trigger: the fissure carries that flag for its whole life.
+    cached.dodgeLive = ClassifyTsunamiWave(bot) != TsunamiWave::None ||
+                       FindUnitByEntries(bot, { NpcId::TwilightFissure, NpcId::TwilightFissureH },
+                                         FISSURE_CLEAR_RADIUS, false) != nullptr;
+    return cached;
+}
+
+void TickSartharionObs(Player* bot)
+{
+    // One bot per instance does the sweep: it costs a grid search, and ClassifyTsunamiWave already
+    // spends ten of those per bot per tick.
+    if (!RaidObs::Active() || !IsMechanicTrackerBot(bot, OS_MAP_ID))
+        return;
+
+    Unit* boss = GetSartharion(bot);
+    if (boss && boss->IsInCombat())
+        NoteTsunamiHazards(bot, StateFor(boss).tsunamiTraced);
 }
 
 bool SartharionDamageImmune(Player* bot)

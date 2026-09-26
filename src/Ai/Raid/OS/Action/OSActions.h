@@ -26,7 +26,7 @@
 // silently refused for as long as the hold's lock lasts - up to MaxWaitForMove, which is longer than
 // the 3.6s a Flame Tsunami gives. The three emergency dodges issue at MOVEMENT_FORCED for that
 // reason; everything else stays at MOVEMENT_COMBAT. Precedence between the three FORCED dodges cannot
-// come from this ladder (FORCED > FORCED is false) and is settled by OsMechanicPriorityMultiplier.
+// come from this ladder (FORCED > FORCED is false) and is settled by the "os mechanic priority" rules.
 class OsPositioningAction : public MovementAction
 {
 public:
@@ -48,16 +48,18 @@ protected:
 class OsTsunamiCorridorAction : public OsPositioningAction
 {
 public:
-    OsTsunamiCorridorAction(PlayerbotAI* botAI, std::string const name = "os tsunami corridor")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os tsunami corridor";
+
+    OsTsunamiCorridorAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class OsAvoidTwilightFissureAction : public OsPositioningAction
 {
 public:
-    OsAvoidTwilightFissureAction(PlayerbotAI* botAI, std::string const name = "os avoid twilight fissure")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os avoid twilight fissure";
+
+    OsAvoidTwilightFissureAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -75,8 +77,9 @@ protected:
 class OsMainTankHoldAction : public OsHoldAction
 {
 public:
-    OsMainTankHoldAction(PlayerbotAI* botAI, std::string const name = "os main tank hold")
-        : OsHoldAction(botAI, name) {}
+    static constexpr char const* Name = "os main tank hold";
+
+    OsMainTankHoldAction(PlayerbotAI* botAI) : OsHoldAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -86,8 +89,9 @@ public:
 class OsSartharionFlankAction : public OsPositioningAction
 {
 public:
-    OsSartharionFlankAction(PlayerbotAI* botAI, std::string const name = "os sartharion flank")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os sartharion flank";
+
+    OsSartharionFlankAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -96,8 +100,9 @@ public:
 class OsDrakeRearAction : public OsPositioningAction
 {
 public:
-    OsDrakeRearAction(PlayerbotAI* botAI, std::string const name = "os drake rear")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os drake rear";
+
+    OsDrakeRearAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -106,8 +111,9 @@ public:
 class OsTankShapeshiftAction : public Action
 {
 public:
-    OsTankShapeshiftAction(PlayerbotAI* botAI, std::string const name = "os tank shapeshift")
-        : Action(botAI, name) {}
+    static constexpr char const* Name = "os tank shapeshift";
+
+    OsTankShapeshiftAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -116,39 +122,45 @@ public:
 class OsReturnToPlatformAction : public OsPositioningAction
 {
 public:
-    OsReturnToPlatformAction(PlayerbotAI* botAI, std::string const name = "os return to platform")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os return to platform";
+
+    OsReturnToPlatformAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class OsDrakeLandingPositionAction : public OsPositioningAction
 {
 public:
-    OsDrakeLandingPositionAction(PlayerbotAI* botAI, std::string const name = "os drake landing position")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os drake landing position";
+
+    OsDrakeLandingPositionAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class OsOffTankHoldAction : public OsHoldAction
 {
 public:
-    OsOffTankHoldAction(PlayerbotAI* botAI, std::string const name = "os offtank hold")
-        : OsHoldAction(botAI, name) {}
+    static constexpr char const* Name = "os offtank hold";
+
+    OsOffTankHoldAction(PlayerbotAI* botAI) : OsHoldAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class OsRaidHoldAction : public OsPositioningAction
 {
 public:
-    OsRaidHoldAction(PlayerbotAI* botAI, std::string const name = "os raid hold")
-        : OsPositioningAction(botAI, name) {}
+    static constexpr char const* Name = "os raid hold";
+
+    OsRaidHoldAction(PlayerbotAI* botAI) : OsPositioningAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class OsRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    OsRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, "os redirect threat") {}
+    static constexpr char const* Name = "os redirect threat";
+
+    OsRedirectThreatAction(PlayerbotAI* botAI) : RaidRedirectThreatAction(botAI, Name) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -158,16 +170,18 @@ protected:
 class OsMainTankCooldownAction : public Action
 {
 public:
-    OsMainTankCooldownAction(PlayerbotAI* botAI, std::string const name = "os main tank cooldown")
-        : Action(botAI, name) {}
+    static constexpr char const* Name = "os main tank cooldown";
+
+    OsMainTankCooldownAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
 class OsTranquilizeEnrageAction : public Action
 {
 public:
-    OsTranquilizeEnrageAction(PlayerbotAI* botAI, std::string const name = "os tranquilize enrage")
-        : Action(botAI, name) {}
+    static constexpr char const* Name = "os tranquilize enrage";
+
+    OsTranquilizeEnrageAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -182,8 +196,9 @@ public:
 class EnterTwilightPortalAction : public MovementAction
 {
 public:
-    EnterTwilightPortalAction(PlayerbotAI* botAI, std::string const name = "enter twilight portal")
-        : MovementAction(botAI, name) {}
+    static constexpr char const* Name = "enter twilight portal";
+
+    EnterTwilightPortalAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
     bool Execute(Event event) override;
 };
 
