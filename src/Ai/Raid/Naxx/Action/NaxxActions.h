@@ -77,7 +77,9 @@ private:
 class FaerlinaSacrificeWorshipperAction : public AttackAction
 {
 public:
-    FaerlinaSacrificeWorshipperAction(PlayerbotAI* ai) : AttackAction(ai, "faerlina sacrifice worshipper") {}
+    static constexpr char const* Name = "faerlina sacrifice worshipper";
+
+    FaerlinaSacrificeWorshipperAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -353,7 +355,9 @@ private:
 class AnubrekhanChooseTargetAction : public AttackAction
 {
 public:
-    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "anub'rekhan choose target"), helper(ai) {}
+    static constexpr char const* Name = "anub'rekhan choose target";
+
+    AnubrekhanChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -365,8 +369,10 @@ private:
 class AnubrekhanPositionAction : public RotateAroundTheCenterPointAction
 {
 public:
+    static constexpr char const* Name = "anub'rekhan position";
+
     AnubrekhanPositionAction(PlayerbotAI* ai)
-        : RotateAroundTheCenterPointAction(ai, "anub'rekhan position", AnubrekhanBossHelper::RoomCenterX,
+        : RotateAroundTheCenterPointAction(ai, Name, AnubrekhanBossHelper::RoomCenterX,
                                            AnubrekhanBossHelper::RoomCenterY, AnubrekhanBossHelper::KiteRadius, 32),
           helper(ai)
     {
@@ -387,10 +393,9 @@ private:
 class AnubrekhanRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    AnubrekhanRedirectThreatAction(PlayerbotAI* ai)
-        : RaidRedirectThreatAction(ai, "anub'rekhan redirect threat"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "anub'rekhan redirect threat";
+
+    AnubrekhanRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -539,7 +544,9 @@ private:
 class MaexxnaAttackWebWrapAction : public AttackAction
 {
 public:
-    MaexxnaAttackWebWrapAction(PlayerbotAI* ai) : AttackAction(ai, "maexxna attack web wrap") {}
+    static constexpr char const* Name = "maexxna attack web wrap";
+
+    MaexxnaAttackWebWrapAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -548,7 +555,9 @@ public:
 class MaexxnaTankSpiderlingsAction : public AttackAction
 {
 public:
-    MaexxnaTankSpiderlingsAction(PlayerbotAI* ai) : AttackAction(ai, "maexxna tank spiderlings") {}
+    static constexpr char const* Name = "maexxna tank spiderlings";
+
+    MaexxnaTankSpiderlingsAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

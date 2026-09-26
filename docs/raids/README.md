@@ -23,7 +23,8 @@ new `.cpp` files are globbed automatically.
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE and OS so far, Naxx and ToC
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE, OS and part of Naxx so far,
+the rest and ToC
 per [../plans/raid-encounter/raid-encounter.PLAN.md](../plans/raid-encounter/raid-encounter.PLAN.md))
 replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 
@@ -32,7 +33,9 @@ replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Bos
   action a shared context registers (`Node<T>("rear flank", …)`) registers only its trigger;
 - its [encounter rules](#encounter-rules) and hand-written multipliers;
 - a **tick**, run by `Strategy::OnTick` once per engine tick before the triggers. Housekeeping (trace
-  notes, latch writes, wipe resets) goes there, never into a predicate a cheaper check may skip.
+  notes, latch writes, wipe resets) goes there, never into a predicate a cheaper check may skip. Not
+  `neglect threat`: `ThreatMultiplier` clears it on every read, once per action, so a multiplier
+  seeing every action (`AnyAction`) sets it.
 
 The raid lists its definitions once (`<Raid>Definitions.h`); its contexts and strategy build from
 the list. All of it sits behind the boss's **encounter gate**: `BossStateGate` opens while the boss
@@ -115,7 +118,9 @@ and `tools/nativetest/raid_encounter_rules_test.cpp` covers the kinds. Two gaps 
 defaults: `ReachHeal` is blocked, so add it to `keep` where a healer must walk to its target (Vezax),
 and the spell movers (`Charge`, `Blink`, `Disengage`) are not `MovementAction`s, so they need a
 `Block`. A hand-written multiplier declares the families it looks at and sees only those, while the
-gate is open; `AnyAction` covers one that can zero an item or a plain `Action` (XT-002's).
+gate is open; `AnyAction` covers one that can zero an item or a plain `Action` (XT-002's). A
+predicate keeps no state, so a guard caching its boss across ticks (Naxx's helpers) stays
+hand-written.
 
 ### Movement: the only mover left
 

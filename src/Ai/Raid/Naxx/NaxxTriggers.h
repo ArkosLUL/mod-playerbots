@@ -149,52 +149,66 @@ private:
 class AnubrekhanTrigger : public Trigger
 {
 public:
-    AnubrekhanTrigger(PlayerbotAI* ai) : Trigger(ai, "anub'rekhan") {}
+    static constexpr char const* Name = "anub'rekhan";
+
+    AnubrekhanTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class AnubrekhanLocustSwarmTrigger : public Trigger
 {
 public:
-    AnubrekhanLocustSwarmTrigger(PlayerbotAI* ai) : Trigger(ai, "anub'rekhan locust swarm"), helper(ai) {}
+    static constexpr char const* Name = "anub'rekhan locust swarm";
+
+    AnubrekhanLocustSwarmTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
     AnubrekhanBossHelper helper;
 };
 
- class FaerlinaTrigger : public Trigger
- {
- public:
-     FaerlinaTrigger(PlayerbotAI* ai) : Trigger(ai, "faerlina") {}
-     bool IsActive() override;
- };
+class FaerlinaTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "faerlina";
+
+    FaerlinaTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
 
 class FaerlinaFrenzyTrigger : public Trigger
 {
 public:
-    FaerlinaFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, "faerlina frenzy") {}
+    static constexpr char const* Name = "faerlina frenzy";
+
+    FaerlinaFrenzyTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class MaexxnaTrigger : public Trigger
 {
 public:
-    MaexxnaTrigger(PlayerbotAI* ai) : Trigger(ai, "maexxna") {}
+    static constexpr char const* Name = "maexxna";
+
+    MaexxnaTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class MaexxnaWebWrapTrigger : public Trigger
 {
 public:
-    MaexxnaWebWrapTrigger(PlayerbotAI* ai) : Trigger(ai, "maexxna web wrap") {}
+    static constexpr char const* Name = "maexxna web wrap";
+
+    MaexxnaWebWrapTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 
 class MaexxnaSpiderlingsTrigger : public Trigger
 {
 public:
-    MaexxnaSpiderlingsTrigger(PlayerbotAI* ai) : Trigger(ai, "maexxna spiderlings") {}
+    static constexpr char const* Name = "maexxna spiderlings";
+
+    MaexxnaSpiderlingsTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

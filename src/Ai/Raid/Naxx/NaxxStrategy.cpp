@@ -5,6 +5,7 @@
  */
 
 #include "NaxxStrategy.h"
+#include "NaxxDefinitions.h"
 #include "NaxxMultipliers.h"
 
 void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
@@ -59,49 +60,9 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("kel'thuzad cyclone chained", ACTION_EMERGENCY + 5) }
     ));
 
-    // Anub'Rekhan
-    triggers.push_back(new TriggerNode("anub'rekhan",
-        {
-            NextAction("anub'rekhan redirect threat", ACTION_RAID + 3),
-            NextAction("anub'rekhan position", ACTION_RAID + 2),
-            NextAction("anub'rekhan choose target", ACTION_RAID + 1)
-        }
-    ));
-
-    // The swarm is the one window where losing the formation wipes the raid, so holding it outranks
-    // everything else the engine might want to do.
-    triggers.push_back(new TriggerNode("anub'rekhan locust swarm",
-        { NextAction("anub'rekhan position", ACTION_EMERGENCY + 5) }
-    ));
-
-     // Grand Widow Faerlina
-     triggers.push_back(new TriggerNode("faerlina",
-        { NextAction("avoid aoe", ACTION_RAID + 1) }
-    ));
-
-    triggers.push_back(new TriggerNode("faerlina frenzy",
-        {
-            NextAction("tranquilizing shot", ACTION_RAID + 4),
-            NextAction("faerlina sacrifice worshipper", ACTION_RAID + 3)
-        }
-    ));
-
-    // Maexxna
-    triggers.push_back(new TriggerNode("maexxna web wrap",
-        { NextAction("maexxna attack web wrap", ACTION_RAID + 5) }
-    ));
-
-    triggers.push_back(new TriggerNode("maexxna spiderlings",
-        { NextAction("maexxna tank spiderlings", ACTION_RAID + 2) }
-    ));
-
-    triggers.push_back(
-        new TriggerNode("maexxna",
-        {
-            NextAction("rear flank", ACTION_RAID + 1),
-            NextAction("avoid aoe", ACTION_RAID + 1)
-        })
-    );
+    NaxxAnubrekhanDefinition().AddTriggerNodes(triggers);
+    NaxxFaerlinaDefinition().AddTriggerNodes(triggers);
+    NaxxMaexxnaDefinition().AddTriggerNodes(triggers);
 
     // Gothik the Harvester. The whole raid fights on the living side, so getting back across outranks
     // whatever the bot was shooting at.
@@ -258,7 +219,7 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new SapphironGenericMultiplier(botAI));
     multipliers.push_back(new InstructorRazuviousGenericMultiplier(botAI));
     multipliers.push_back(new KelthuzadGenericMultiplier(botAI));
-    multipliers.push_back(new AnubrekhanGenericMultiplier(botAI));
+    NaxxAnubrekhanDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new FourhorsemanGenericMultiplier(botAI));
     multipliers.push_back(new GluthGenericMultiplier(botAI));
     multipliers.push_back(new GothikGenericMultiplier(botAI));

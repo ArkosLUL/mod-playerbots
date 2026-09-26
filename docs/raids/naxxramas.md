@@ -1,6 +1,8 @@
 # Naxxramas (map 533)
 
 Cross-raid conventions are in [README.md](README.md). Strategy key `naxx`, auto-applied by map id.
+Bosses declared in `Definition/NaxxDefinition_<Boss>.cpp` run behind their encounter gate;
+`NaxxThreatRedirectMultiplier` and `NaxxBurstWindowMultiplier` span bosses, so they stay raid-wide.
 
 Four bosses were fully commented out at some point (Noth, Heigan, Gothik, Patchwerk) and Noth,
 Heigan and Gothik have since been rebuilt rather than un-commented — in each case because the

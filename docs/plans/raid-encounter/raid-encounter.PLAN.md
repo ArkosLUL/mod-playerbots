@@ -124,11 +124,7 @@ promote throttled triggers), hands out the per-pass id Yogg-Saron's and Mimiron'
 New `virtual void OnTick() {}` on `Strategy`, called by `Engine::DoNextAction` once per tick for each
 strategy, inside the `RaidObs::BotContext` and before `ProcessTriggers`. A raid strategy forwards it
 to every definition whose gate is open. Housekeeping moves there with the condition it has today,
-and the predicates become plain reads:
-
-| Today | Where |
-|---|---|
-| `neglect threat` = true | Loatheb, Razuvious, Four Horsemen, Gothik multipliers (`Naxx/NaxxMultipliers.cpp:119,283,534,551`) |
+and the predicates become plain reads.
 
 A tick tests cheap instance state before any sweep: between pulls every non-`DONE` encounter is open.
 
@@ -157,10 +153,14 @@ each change it makes; any other difference gets a rule switch or stays hand-writ
 
 Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
 
-- **Naxx:** hand-written: Heigan's dance window, the Sapphiron and Kel'Thuzad healer windows, Gothik's
-  unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
-  tank-assist ×2. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on Thane;
-  keep it. `NaxxBossHelper` copies per node are untouched.
+- **Naxx:** only Grobbulus' guard becomes rules. The rest stay hand-written with the families they
+  can zero: each reads a `NaxxBossHelper` that keeps its boss (some also clocks) across ticks, which
+  a predicate can't, or sets `neglect threat` (`AnyAction`). The Taunt family replaces Razuvious'
+  and Gluth's four types. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on
+  Thane; keep it. `NaxxBossHelper` copies per node are untouched. A class whose own name differs
+  from its registered one is renamed to it, except the Mutating Injection triggers (`HasAuraTrigger`
+  reads the aura by that name) and `grobbulus move center` (`MoveInsideAction` names itself), whose
+  `Name` only registers.
 
 ## Out of scope
 
@@ -169,7 +169,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-4 landed; continue at commit 5 (Naxx).
+**Status:** commits 1-4 and Naxx's Arachnid wing landed; continue with the Plague wing.
 
 Close each per `CLAUDE.local.md`.
 
@@ -204,7 +204,7 @@ Ulduar, EoE and OS taught:
 3. **The other 13 Ulduar bosses.** Landed; the prefix table, `UldGatedTrigger` and the `Uld*`
    forwards are gone. The Taunt family replaced Hodir's and Thorim's lists, adding Death Grip.
 4. **EoE** and **OS**. Landed.
-5. **Naxx**, one commit per boss group.
+5. **Naxx**, one commit per wing: Arachnid landed; then Plague, Military, Construct, Frostwyrm.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
    `ToCEncounterGate`, trigger wrapper and multiplier gating that `w0c-foundation` builds. Until then
    do not touch `src/Ai/Raid/ToC/` or `docs/plans/toc-rework/`.

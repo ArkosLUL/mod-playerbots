@@ -10,6 +10,7 @@
 #include "Action.h"
 #include "NamedObjectContext.h"
 #include "NaxxActions.h"
+#include "NaxxDefinitions.h"
 
 class RaidNaxxActionContext : public NamedObjectContext<Action>
 {
@@ -48,14 +49,8 @@ public:
             &RaidNaxxActionContext::kelthuzad_misdirect_boss_to_main_tank;
         creators["kel'thuzad cyclone chained"] = &RaidNaxxActionContext::kelthuzad_cyclone_chained;
 
-        creators["anub'rekhan choose target"] = &RaidNaxxActionContext::anubrekhan_choose_target;
-        creators["anub'rekhan position"] = &RaidNaxxActionContext::anubrekhan_position;
-        creators["anub'rekhan redirect threat"] = &RaidNaxxActionContext::anubrekhan_redirect_threat;
 
-        creators["faerlina sacrifice worshipper"] = &RaidNaxxActionContext::faerlina_sacrifice_worshipper;
 
-        creators["maexxna attack web wrap"] = &RaidNaxxActionContext::maexxna_attack_web_wrap;
-        creators["maexxna tank spiderlings"] = &RaidNaxxActionContext::maexxna_tank_spiderlings;
 
         creators["gothik choose target"] = &RaidNaxxActionContext::gothik_choose_target;
         creators["gothik stay on living side"] = &RaidNaxxActionContext::gothik_stay_on_living_side;
@@ -74,6 +69,9 @@ public:
         creators["noth position"] = &RaidNaxxActionContext::noth_position;
         creators["noth choose target"] = &RaidNaxxActionContext::noth_choose_target;
         creators["noth dispel curse"] = &RaidNaxxActionContext::noth_dispel_curse;
+
+        for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
+            encounter->RegisterActions(creators);
     }
 
 private:
@@ -113,12 +111,6 @@ private:
         return new KelthuzadMisdirectBossToMainTankAction(ai);
     }
     static Action* kelthuzad_cyclone_chained(PlayerbotAI* ai) { return new KelthuzadCycloneChainedAction(ai); }
-    static Action* anubrekhan_choose_target(PlayerbotAI* ai) { return new AnubrekhanChooseTargetAction(ai); }
-    static Action* anubrekhan_position(PlayerbotAI* ai) { return new AnubrekhanPositionAction(ai); }
-    static Action* anubrekhan_redirect_threat(PlayerbotAI* ai) { return new AnubrekhanRedirectThreatAction(ai); }
-    static Action* faerlina_sacrifice_worshipper(PlayerbotAI* ai) { return new FaerlinaSacrificeWorshipperAction(ai); }
-    static Action* maexxna_attack_web_wrap(PlayerbotAI* ai) { return new MaexxnaAttackWebWrapAction(ai); }
-    static Action* maexxna_tank_spiderlings(PlayerbotAI* ai) { return new MaexxnaTankSpiderlingsAction(ai); }
     static Action* gothik_choose_target(PlayerbotAI* ai) { return new GothikChooseTargetAction(ai); }
     static Action* gothik_stay_on_living_side(PlayerbotAI* ai) { return new GothikStayOnLivingSideAction(ai); }
     static Action* gluth_choose_target(PlayerbotAI* ai) { return new GluthChooseTargetAction(ai); }

@@ -8,6 +8,7 @@
 #define PLAYERBOTS_NAXXTRIGGERCONTEXT_H
 
 #include "NamedObjectContext.h"
+#include "NaxxDefinitions.h"
 #include "NaxxTriggers.h"
 
 class RaidNaxxTriggerContext : public NamedObjectContext<Trigger>
@@ -45,15 +46,8 @@ public:
         creators["kel'thuzad shadow fissure"] = &RaidNaxxTriggerContext::kelthuzad_shadow_fissure;
         creators["kel'thuzad chains"] = &RaidNaxxTriggerContext::kelthuzad_chains;
 
-        creators["anub'rekhan"] = &RaidNaxxTriggerContext::anubrekhan;
-        creators["anub'rekhan locust swarm"] = &RaidNaxxTriggerContext::anubrekhan_locust_swarm;
 
-        creators["faerlina"] = &RaidNaxxTriggerContext::faerlina;
-        creators["faerlina frenzy"] = &RaidNaxxTriggerContext::faerlina_frenzy;
 
-        creators["maexxna"] = &RaidNaxxTriggerContext::maexxna;
-        creators["maexxna web wrap"] = &RaidNaxxTriggerContext::maexxna_web_wrap;
-        creators["maexxna spiderlings"] = &RaidNaxxTriggerContext::maexxna_spiderlings;
 
         creators["gothik"] = &RaidNaxxTriggerContext::gothik;
         creators["gothik wrong side"] = &RaidNaxxTriggerContext::gothik_wrong_side;
@@ -73,6 +67,9 @@ public:
         creators["noth"] = &RaidNaxxTriggerContext::noth;
         creators["noth curse"] = &RaidNaxxTriggerContext::noth_curse;
         creators["noth blink"] = &RaidNaxxTriggerContext::noth_blink;
+
+        for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
+            encounter->RegisterTriggers(creators);
     }
 
 private:
@@ -105,13 +102,6 @@ private:
     static Trigger* kelthuzad(PlayerbotAI* ai) { return new KelthuzadTrigger(ai); }
     static Trigger* kelthuzad_shadow_fissure(PlayerbotAI* ai) { return new KelthuzadShadowFissureTrigger(ai); }
     static Trigger* kelthuzad_chains(PlayerbotAI* ai) { return new KelthuzadChainsTrigger(ai); }
-    static Trigger* anubrekhan(PlayerbotAI* ai) { return new AnubrekhanTrigger(ai); }
-    static Trigger* anubrekhan_locust_swarm(PlayerbotAI* ai) { return new AnubrekhanLocustSwarmTrigger(ai); }
-    static Trigger* faerlina(PlayerbotAI* ai) { return new FaerlinaTrigger(ai); }
-    static Trigger* faerlina_frenzy(PlayerbotAI* ai) { return new FaerlinaFrenzyTrigger(ai); }
-    static Trigger* maexxna(PlayerbotAI* ai) { return new MaexxnaTrigger(ai); }
-    static Trigger* maexxna_web_wrap(PlayerbotAI* ai) { return new MaexxnaWebWrapTrigger(ai); }
-    static Trigger* maexxna_spiderlings(PlayerbotAI* ai) { return new MaexxnaSpiderlingsTrigger(ai); }
     static Trigger* gothik(PlayerbotAI* ai) { return new GothikTrigger(ai); }
     static Trigger* gothik_wrong_side(PlayerbotAI* ai) { return new GothikWrongSideTrigger(ai); }
     // static Trigger* patchwerk_tank(PlayerbotAI* ai) { return new PatchwerkTankTrigger(ai); }
