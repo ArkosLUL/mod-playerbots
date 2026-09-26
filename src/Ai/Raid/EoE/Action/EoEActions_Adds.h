@@ -14,13 +14,13 @@
 #include "PlayerbotAI.h"
 #include "VehicleActions.h"
 
-#include <string>
-
 // P2: strip the Nexus Lords' self-cast Haste (57060), without touching the mage's own target.
 class MalygosSpellstealAction : public Action
 {
 public:
-    MalygosSpellstealAction(PlayerbotAI* botAI, std::string const name = "malygos spellsteal") : Action(botAI, name) {}
+    static constexpr char const* Name = "malygos spellsteal";
+
+    MalygosSpellstealAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -32,10 +32,9 @@ private:
 class MalygosSeekBubbleAction : public MovementAction
 {
 public:
-    MalygosSeekBubbleAction(PlayerbotAI* botAI, std::string const name = "malygos seek bubble")
-        : MovementAction(botAI, name)
-    {
-    }
+    static constexpr char const* Name = "malygos seek bubble";
+
+    MalygosSeekBubbleAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 
@@ -47,7 +46,9 @@ private:
 class MalygosBoardDiskAction : public EnterVehicleAction
 {
 public:
-    MalygosBoardDiskAction(PlayerbotAI* botAI) : EnterVehicleAction(botAI, "malygos board disk") {}
+    static constexpr char const* Name = "malygos board disk";
+
+    MalygosBoardDiskAction(PlayerbotAI* botAI) : EnterVehicleAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -56,7 +57,9 @@ public:
 class MalygosRideDiskAction : public AttackAction
 {
 public:
-    MalygosRideDiskAction(PlayerbotAI* botAI) : AttackAction(botAI, "malygos ride disk") {}
+    static constexpr char const* Name = "malygos ride disk";
+
+    MalygosRideDiskAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isPossible() override;
@@ -68,10 +71,9 @@ private:
 class AvoidSurgeOfPowerAction : public MovementAction
 {
 public:
-    AvoidSurgeOfPowerAction(PlayerbotAI* botAI, std::string const name = "malygos avoid surge of power")
-        : MovementAction(botAI, name)
-    {
-    }
+    static constexpr char const* Name = "malygos avoid surge of power";
+
+    AvoidSurgeOfPowerAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };

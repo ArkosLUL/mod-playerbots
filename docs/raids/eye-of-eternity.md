@@ -4,7 +4,8 @@ Strategy key `wotlk-eoe`. Cross-raid conventions are in [README.md](README.md).
 
 ## Layout
 
-`src/Ai/Raid/EoE/`, on the `Action/` + `Trigger/` + `Util/` shape SWP and Uld use:
+`src/Ai/Raid/EoE/`, on the `Action/` + `Trigger/` + `Util/` shape SWP and Uld use, plus Uld's
+`Definition/`:
 
 | path | holds |
 |---|---|
@@ -17,6 +18,8 @@ Strategy key `wotlk-eoe`. Cross-raid conventions are in [README.md](README.md).
 | `Action/EoEActions_Adds.{h,cpp}` | P2 spellsteal, bubbles, disks, surge dodge |
 | `Action/EoEActions_Drakes.{h,cpp}` | P3 flight, rotation, Flame Shield |
 | `Trigger/EoETriggers.{h,cpp}` | trigger classes only |
+| `Definition/EoEDefinition_Malygos.cpp` | every node and the `malygos` rules, by phase |
+| `EoEMultipliers.{h,cpp}` | the P2 Scion tank-assist check, the one part no rule fits |
 
 Includes stay flat (`#include "EoEData.h"`, never a relative path): the core globs `src/**` and puts
 every source subdirectory on the include path, so a new directory needs no build file.
@@ -44,9 +47,8 @@ Verified against `boss_malygos.cpp`:
   the aura to the **trigger**, pulling the caster in, so there is no player-side aura for Divine
   Shield's purge-on-immunity to remove. Breaking it needs a core-side change. (For the record the
   rogue tool would have been Cloak of Shadows, not Shadowstep.)
-- **P1 suppresses no heal or buff cast — do not re-audit the multipliers for one.**
-  `MalygosMultiplier::GetValue` returns `1.0f` for every `CastSpellAction` in P1 except
-  `CastBlinkBackAction`, `CastDisengageAction` and, for non-tanks, `CastReachTargetSpellAction`. The
+- **P1 suppresses no heal or buff cast — do not re-audit the rules for one.** The P1 rules block
+  no `CastSpellAction` but the Blink, Disengage and Taunt families and, for non-tanks, Charge. The
   "Disc priests never shield on Malygos" report was a **generic priest bug** that merely reproduced
   most visibly here — see [../classes/priest.md](../classes/priest.md).
 
@@ -57,7 +59,7 @@ P3 = on a Wyrmrest Skytalon (30161). **P4 = transition** — in combat, Malygos 
 mounted.
 
 P4 exists because of a real failure: during P2→P3 the boss is untargetable and the bot is not yet on
-its drake, so the phase resolved to 0, `MalygosMultiplier` lifted every override, and **the default
+its drake, so the phase resolved to 0, every override lifted, and **the default
 raid strategy resumed mid-transition on a collapsing platform**. P4 holds the raid at centre and
 keeps the EoE overrides on.
 
@@ -205,8 +207,8 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
     hold the stack instead. The same reach keeps `EnemyTooCloseForSpellTrigger` (threshold ~23.5 yd)
     permanently active for anyone standing close, and every class wires that trigger to an escape at
     34–50 relevance — above `malygos position` at `ACTION_MOVE`. Bots stepped out, were dragged back
-    next tick and never finished a cast, so the P1 multiplier zeroes `FleeAction`, `RunAwayAction`,
-    `CastBlinkBackAction` and `CastDisengageAction` for anyone in the encounter.
+    next tick and never finished a cast, so a P1 rule zeroes the Flee, RunAway, Blink and Disengage
+    families for everyone.
   - `POWER_SPARK_GRIP_OFFSET` **+4.5 yd**, held only by a DK on spark duty — see the Power Spark
     bullet above.
 
@@ -218,11 +220,11 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   the raid. Whoever Malygos is actually hitting behaves as the tank, assigned or not, and a bot
   corrects only past `MALYGOS_P1_POSITION_TOLERANCE` (5 yd).
 
-  **Nobody but the boss's current victim walks anywhere in P1.** The multiplier zeroes every
-  `MovementAction` and `CastReachTargetSpellAction` for everyone else, naming
-  `MalygosPositionAction`, `MalygosTargetAction`, `KillPowerSparkAction` and
-  `ReachPartyMemberToHealAction` as the exemptions. Two separate symptoms, one cause: ranged were
-  chasing Power Sparks back inside Malygos' minimum range (the DK grips sparks to them instead), and
+  **Nobody but the boss's current victim walks anywhere in P1.** For everyone else an `OwnMovement`
+  rule zeroes every `MovementAction` but `malygos position`, `malygos target`,
+  `malygos kill power spark` and the `ReachHeal` family, and a `Block` takes Charge. Two separate
+  symptoms, one cause: ranged were chasing Power Sparks back inside Malygos' minimum range (the DK
+  grips sparks to them instead), and
   melee were walking out to get behind him (`set behind`, `ACTION_MOVE + 7`) or to spread
   (`combat formation move`) and being dragged back to the stack next tick — the shuffling that shows
   up in game. The hold spots need no help: they are inside his 20 yd combat reach for melee and
@@ -237,10 +239,9 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   `lose aggro` → `taunt` / `hand of reckoning` / `dark command` / `growl` was mostly quiet already:
   `HasAggroValue` counts "another tank player holds him" as having aggro for anyone but the explicitly
   flagged main tank. `high aoe` → `challenging shout` / `challenging roar` was **ungated**, and
-  Challenging Shout is a radius taunt with the off-tank only 12.5 yd out. The multiplier now zeroes all
-  six by name for anyone who is not `IsMainTank`, but **only while a tank player is Malygos' victim** —
-  with nobody on him the taunt is the rescue and has to survive. Names rather than `dynamic_cast`,
-  which would drag four class action headers into the multiplier. Zeroing an action still pushes its
+  Challenging Shout is a radius taunt with the off-tank only 12.5 yd out. A rule now zeroes the Taunt
+  family for anyone who is not `IsMainTank`, but **only while a tank player is Malygos' victim** —
+  with nobody on him the taunt is the rescue and has to survive. Zeroing an action still pushes its
   alternatives at 0.003 relevance, so the warrior's `heroic throw` fallback survives — damage, not a
   taunt, and beaten by everything at that relevance.
 
@@ -271,9 +272,9 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   assignment is **latched by GUID** (the `SapphironFlightPositionAction` idiom) and spread by group
   slot index, or bots hop between bubbles as they shrink — unless that slot's bubble is more than
   half `BUBBLE_SEARCH_RADIUS` away, where survival beats spreading and the bot takes the nearest.
-  Once the bot holds 56438 the action returns false so the rotation runs, and the phase-2
-  multiplier zeroes reach/chase/follow for non-vehicle
-  bots so nobody walks back out; `MalygosTargetAction` only accepts a Nexus Lord / Scion inside
+  Once the bot holds 56438 the action returns false so the rotation runs, and a P2 rule zeroes
+  reach/chase/follow for ranged and healers on foot so nobody walks back out; `MalygosTargetAction`
+  only accepts a Nexus Lord / Scion inside
   `spellDistance` by **`IsWithinCombatRange`**, the same 3d combat-reach test `Spell::CheckRange`
   runs — the Scions hover 20–30 yd up, and the old flat 2d distance claimed a reach that was not
   there. A held add is kept **by GUID** while it is alive, still of the right kind and still in
@@ -328,7 +329,8 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   Skytalon, harmless because it stands down the moment the drake is parked. Before the boss is in
   reach there is nothing to anchor on, so the flight fans out behind the raid leader instead:
   `DRAKE_FORMUP_RADIUS` out, spread over three quarters of a circle with a 90° frontal cone left
-  clear.
+  clear. The encounter gate closes once Malygos is `DONE`, so after the kill a drake stays where it
+  is instead of trailing the raid leader.
   Two earlier bugs died here: `MoveFollow` on the raid leader left every drake permanently in
   motion (a moving vehicle can neither finish a cast nor hold a facing — the flight circled the boss
   without ever firing), and `DrakeDpsAction`'s range-close called `MoveForwards`, whose endpoint
@@ -560,14 +562,14 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
 the P3 movement suppression leaves them free. `EoEFlyDrakeAction` *is* a `MovementAction` and is the
 one thing the suppression names as an exemption — it is the only owner of the vehicle's position.
 
-**Nothing but the EoE actions may move a disk rider.** The P2 multiplier zeroes every
-`MovementAction` and `CastReachTargetSpellAction` for a bot in a vehicle. A rider's chase actions
+**Nothing but the EoE actions may move a disk rider.** A P2 `Exclusive` rule zeroes every
+`MovementAction` for a bot in a vehicle, and a `Block` its Charge family. A rider's chase actions
 steer the *disk* — which dove ~25 yd the moment it parked next to a Scion, then climbed back up,
 over and over. `ReachCombatTo` passing its endpoint through `UpdateAllowedPositionZ` was blamed for
 this, but that does not hold: on map 616 that call answers 0.0 for a non-flying unit (a 266 yd drop,
 not 25) and is inert for a flying one. **Open gap**, though the lockout fixes it either way.
 **`AttackAction` derives from `MovementAction`**, so the
-exemption list has to name `MalygosRideDiskAction` and `MalygosTargetAction` explicitly or the disk
+rule has to name `MalygosRideDiskAction` and `MalygosTargetAction` explicitly or the disk
 riders board and then sit there doing nothing. `LeaveVehicleAction` is exempt as a manual override.
 
 ## Cost
@@ -575,7 +577,7 @@ riders board and then sit there doing nothing. `LeaveVehicleAction` is exempt as
 This strategy is cheap per bot and expensive per raid: twenty-five bots on one small platform were
 all asking the same questions every tick. Two things dominated — grid searches, which walk every
 cell (`SIZE_OF_GRID_CELL`, 66.67 yd a side) inside their radius, and the role lookups behind the
-multiplier, where `IsMainTank` walks every group member and each check scans that member's strategy
+P1 rules, where `IsMainTank` walks every group member and each check scans that member's strategy
 list.
 
 - **One creature cache for the whole instance.** `GetEoECreatures` / `GetNearestEoECreature` /
@@ -613,11 +615,9 @@ list.
   the threat list doing `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` per entry, i.e. string allocation
   per unit per bot per tick. It also only answers for units the bot already threatens, so a bot with
   no threat yet got nothing back at all.
-- **`MalygosMultiplier` snapshots the bot's roles** for 500 ms instead of re-deriving them per
-  action. It runs once per queued action per bot per tick, so `IsMainTank` alone was tens of thousands
-  of strategy-list scans a tick across a raid. The phase deliberately stays out of the snapshot —
-  `GetMalygosPhase` has its own window, and stacking a second one on top would leave the multiplier
-  applying the previous phase's rules for up to a second after the actions had moved on.
+- **The P1 rules read who holds Malygos once per bot per tick** (`Holder`, a per-thread cache of
+  live state). They are asked for every queued movement action, so uncached `IsMainTank` alone was
+  tens of thousands of strategy-list scans a tick across a raid.
 - **The P3 healer roster is cached per instance for 2 s.** `GetDrakeHealerGuids` walks the group and
   sorts two vectors for an answer that only moves when the roster or the difficulty does, and both
   drake actions read it every tick. `GetDrakeFlightAndHealerRank` stays uncached — it reads live
@@ -627,9 +627,6 @@ list.
   carry is a staleness window — `EOE_LATCH_STALE_MS`
   (5 min), far longer than any pull — because instance ids get recycled and a latch with no window
   eventually hands a fresh pull the previous tenant's state.
-- **The multiplier splits on action family before testing anything.** Everything it suppresses is
-  either a `MovementAction` or a `CastSpellAction`, and the two are disjoint, so one `dynamic_cast`
-  each way up front means a plain rotation cast pays two instead of walking a list of thirteen.
 - **Triggers that gate a multi-tick reaction do not check every tick.** `power spark`,
   `malygos bubble` and `surge of power` run at 200 ms, `malygos free disk` at 300 ms (`Trigger`'s
   `checkInterval`). Each of them starts a walk, a boarding or a peel that the MotionMaster carries on

@@ -11,16 +11,13 @@
 #include "AttackAction.h"
 #include "PlayerbotAI.h"
 
-#include <string>
-
 // P1: the DK half of the Power Spark answer - Death Grip, then Chains of Ice on what it pulled.
 class PullPowerSparkAction : public Action
 {
 public:
-    PullPowerSparkAction(PlayerbotAI* botAI, std::string const name = "malygos pull power spark")
-        : Action(botAI, name)
-    {
-    }
+    static constexpr char const* Name = "malygos pull power spark";
+
+    PullPowerSparkAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -29,10 +26,9 @@ public:
 class KillPowerSparkAction : public AttackAction
 {
 public:
-    KillPowerSparkAction(PlayerbotAI* botAI, std::string const name = "malygos kill power spark")
-        : AttackAction(botAI, name)
-    {
-    }
+    static constexpr char const* Name = "malygos kill power spark";
+
+    KillPowerSparkAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

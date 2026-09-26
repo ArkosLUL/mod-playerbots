@@ -15,15 +15,19 @@
 class MalygosTrigger : public Trigger
 {
 public:
-    MalygosTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos") {}
+    static constexpr char const* Name = "malygos";
+
+    MalygosTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class PowerSparkTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "malygos power spark";
+
     // Sparks walk in from the edge; checking every tick buys nothing.
-    PowerSparkTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos power spark", 200) {}
+    PowerSparkTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 200) {}
     bool IsActive() override;
 };
 
@@ -32,23 +36,29 @@ public:
 class MalygosBubbleTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "malygos bubble";
+
     // The seek is a walk across the platform, so 200ms of latency is invisible.
-    MalygosBubbleTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos bubble", 200) {}
+    MalygosBubbleTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 200) {}
     bool IsActive() override;
 };
 
 class MalygosFreeDiskTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "malygos free disk";
+
     // A disk sits on the ground until someone takes it; there is nothing to race.
-    MalygosFreeDiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos free disk", 300) {}
+    MalygosFreeDiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 300) {}
     bool IsActive() override;
 };
 
 class MalygosOnDiskTrigger : public Trigger
 {
 public:
-    MalygosOnDiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos on disk") {}
+    static constexpr char const* Name = "malygos on disk";
+
+    MalygosOnDiskTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
@@ -56,9 +66,11 @@ public:
 class SurgeOfPowerTrigger : public Trigger
 {
 public:
+    static constexpr char const* Name = "malygos surge of power";
+
     // The peel is a MoveAway the MotionMaster carries on with, and the sweep behind this comes
     // back empty almost every time.
-    SurgeOfPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos surge of power", 200) {}
+    SurgeOfPowerTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name, 200) {}
     bool IsActive() override;
 };
 
@@ -67,14 +79,18 @@ public:
 class MalygosDrakeFlightTrigger : public Trigger
 {
 public:
-    MalygosDrakeFlightTrigger(PlayerbotAI* botAI) : Trigger(botAI, "malygos drake flight") {}
+    static constexpr char const* Name = "malygos drake flight";
+
+    MalygosDrakeFlightTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 
 class DrakeSurgeTrigger : public Trigger
 {
 public:
-    DrakeSurgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, "eoe drake surge") {}
+    static constexpr char const* Name = "eoe drake surge";
+
+    DrakeSurgeTrigger(PlayerbotAI* botAI) : Trigger(botAI, Name) {}
     bool IsActive() override;
 };
 

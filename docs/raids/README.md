@@ -23,18 +23,19 @@ new `.cpp` files are globbed automatically.
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar so far, EoE, OS, Naxx and ToC
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar and EoE so far, OS, Naxx and ToC
 per [../plans/raid-encounter/raid-encounter.PLAN.md](../plans/raid-encounter/raid-encounter.PLAN.md))
 replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 
 - **rows**: trigger class, action class, priority, `EncounterRow::Mover`. Each name is typed once, as
-  the class's `Name` constant;
+  the class's `Name` constant. Back-to-back rows on one trigger share its node;
 - its [encounter rules](#encounter-rules) and hand-written multipliers;
 - a **tick**, run by `Strategy::OnTick` once per engine tick before the triggers. Housekeeping (trace
   notes, latch writes, wipe resets) goes there, never into a predicate a cheaper check may skip.
 
-The raid lists its definitions once (`UldDefinitions.h`); its contexts and strategy build from the
-list. All of it sits behind the boss's **encounter gate**: `BossStateGate` opens while the boss is
+The raid lists its definitions once (`UldDefinitions.h`, `EoEDefinitions.h`); its contexts and
+strategy build from the list. All of it sits behind the boss's **encounter gate**: `BossStateGate`
+opens while the boss is
 `IN_PROGRESS`, closes once `DONE`, otherwise closes only while another encounter is `IN_PROGRESS`, so
 between pulls everything is open and predicates still check the boss. Gate on the fight, not the
 unit: a drake Sartharion calls in never starts its own encounter.

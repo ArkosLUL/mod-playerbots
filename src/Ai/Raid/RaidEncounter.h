@@ -138,7 +138,8 @@ public:
     using RoleMask = RaidEncounterRules::RoleMask;
     using Predicate = EncounterDefinition::Predicate;
 
-    // Both classes carry their own name as a static `Name`, used by their constructors.
+    // Both classes carry their own name as a static `Name`, used by their constructors. Rows naming the
+    // same trigger back to back share one node.
     template <class T, class A>
     void Node(float priority, EncounterRow flag = EncounterRow::Plain)
     {

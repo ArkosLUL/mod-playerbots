@@ -8,41 +8,13 @@
 #define PLAYERBOTS_EOEACTIONCONTEXT_H
 
 #include "Action.h"
-#include "EoEActions.h"
+#include "EoEDefinitions.h"
 #include "NamedObjectContext.h"
 
 class RaidEoEActionContext : public NamedObjectContext<Action>
 {
 public:
-    RaidEoEActionContext()
-    {
-        creators["malygos position"] = &RaidEoEActionContext::position;
-        creators["malygos target"] = &RaidEoEActionContext::target;
-        creators["malygos pull power spark"] = &RaidEoEActionContext::pull_power_spark;
-        creators["malygos kill power spark"] = &RaidEoEActionContext::kill_power_spark;
-        creators["malygos spellsteal"] = &RaidEoEActionContext::malygos_spellsteal;
-        creators["malygos seek bubble"] = &RaidEoEActionContext::malygos_seek_bubble;
-        creators["malygos board disk"] = &RaidEoEActionContext::malygos_board_disk;
-        creators["malygos ride disk"] = &RaidEoEActionContext::malygos_ride_disk;
-        creators["malygos avoid surge of power"] = &RaidEoEActionContext::avoid_surge_of_power;
-        creators["eoe fly drake"] = &RaidEoEActionContext::eoe_fly_drake;
-        creators["eoe drake attack"] = &RaidEoEActionContext::eoe_drake_attack;
-        creators["eoe drake surge shield"] = &RaidEoEActionContext::drake_surge_shield;
-    }
-
-private:
-    static Action* position(PlayerbotAI* ai) { return new MalygosPositionAction(ai); }
-    static Action* target(PlayerbotAI* ai) { return new MalygosTargetAction(ai); }
-    static Action* pull_power_spark(PlayerbotAI* ai) { return new PullPowerSparkAction(ai); }
-    static Action* kill_power_spark(PlayerbotAI* ai) { return new KillPowerSparkAction(ai); }
-    static Action* malygos_spellsteal(PlayerbotAI* ai) { return new MalygosSpellstealAction(ai); }
-    static Action* malygos_seek_bubble(PlayerbotAI* ai) { return new MalygosSeekBubbleAction(ai); }
-    static Action* malygos_board_disk(PlayerbotAI* ai) { return new MalygosBoardDiskAction(ai); }
-    static Action* malygos_ride_disk(PlayerbotAI* ai) { return new MalygosRideDiskAction(ai); }
-    static Action* avoid_surge_of_power(PlayerbotAI* ai) { return new AvoidSurgeOfPowerAction(ai); }
-    static Action* eoe_fly_drake(PlayerbotAI* ai) { return new EoEFlyDrakeAction(ai); }
-    static Action* eoe_drake_attack(PlayerbotAI* ai) { return new EoEDrakeAttackAction(ai); }
-    static Action* drake_surge_shield(PlayerbotAI* ai) { return new DrakeSurgeShieldAction(ai); }
+    RaidEoEActionContext() { EoEMalygosDefinition().RegisterActions(creators); }
 };
 
 #endif

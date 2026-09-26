@@ -9,27 +9,14 @@
 
 #include "Multiplier.h"
 
-class MalygosMultiplier : public Multiplier
+// P2: Scions hover 20 yd up, where only a disk rider reaches them, so a tank that picks one ends up
+// standing under it.
+class MalygosScionTankAssistMultiplier : public Multiplier
 {
 public:
-    MalygosMultiplier(PlayerbotAI* ai) : Multiplier(ai, "malygos") {}
+    MalygosScionTankAssistMultiplier(PlayerbotAI* ai) : Multiplier(ai, "malygos") {}
 
     float GetValue(Action* action) override;
-
-private:
-    void RefreshSnapshot();
-
-    // GetValue runs once per queued action per bot per tick, and the role lookups behind it walk
-    // the whole group. The phase deliberately stays out: GetMalygosPhase has its own window, and a
-    // second one on top would enforce the previous phase's rules after the actions moved on.
-    uint32 snapshotAtMs = 0;
-    bool isMainTank = false;
-    bool isDps = false;
-    bool isRanged = false;
-    bool isHeal = false;
-    bool isBossTank = false;
-    bool isBossVictim = false;
-    bool bossVictimIsTank = false;
 };
 
 #endif

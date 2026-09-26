@@ -422,7 +422,8 @@ Rules::FamilyMask ClassifyAction(Action* action)
             mask |= Family::Disengage;
         else if (dynamic_cast<CastDebuffSpellOnAttackerAction*>(action))
             mask |= Family::DebuffOnAttacker;
-        else if (dynamic_cast<CastTauntAction*>(action) || dynamic_cast<CastChallengingShoutAction*>(action) ||
+        else if (dynamic_cast<CastTauntAction*>(action) || dynamic_cast<CastTauntOnSnareTargetAction*>(action) ||
+                 dynamic_cast<CastChallengingShoutAction*>(action) ||
                  dynamic_cast<CastGrowlAction*>(action) || dynamic_cast<CastChallengingRoarAction*>(action) ||
                  dynamic_cast<CastHandOfReckoningAction*>(action) ||
                  dynamic_cast<CastRighteousDefenseAction*>(action) || dynamic_cast<CastDarkCommandAction*>(action) ||
@@ -476,8 +477,17 @@ void EncounterDefinition::RegisterActions(std::unordered_map<std::string, Action
 
 void EncounterDefinition::AddTriggerNodes(std::vector<TriggerNode*>& triggers) const
 {
-    for (Row const& row : rows)
-        triggers.push_back(new TriggerNode(row.trigger, {NextAction(row.action, row.priority)}));
+    // One node per run of rows: ProcessTriggers checks a quiet trigger again for every node naming it.
+    for (std::size_t first = 0; first < rows.size();)
+    {
+        std::vector<NextAction> actions;
+        std::size_t next = first;
+        for (; next < rows.size() && rows[next].trigger == rows[first].trigger; ++next)
+            actions.push_back(NextAction(rows[next].action, rows[next].priority));
+
+        triggers.push_back(new TriggerNode(rows[first].trigger, std::move(actions)));
+        first = next;
+    }
 }
 
 void EncounterDefinition::AddMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers) const

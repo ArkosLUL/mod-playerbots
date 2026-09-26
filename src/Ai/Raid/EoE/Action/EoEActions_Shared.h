@@ -11,15 +11,13 @@
 #include "MovementActions.h"
 #include "PlayerbotAI.h"
 
-#include <string>
-
 // Owns where a bot stands in P1, P2 and the transition hold.
 class MalygosPositionAction : public MovementAction
 {
 public:
-    MalygosPositionAction(PlayerbotAI* botAI, std::string const name = "malygos position") : MovementAction(botAI, name)
-    {
-    }
+    static constexpr char const* Name = "malygos position";
+
+    MalygosPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };
@@ -27,7 +25,9 @@ public:
 class MalygosTargetAction : public AttackAction
 {
 public:
-    MalygosTargetAction(PlayerbotAI* botAI, std::string const name = "malygos target") : AttackAction(botAI, name) {}
+    static constexpr char const* Name = "malygos target";
+
+    MalygosTargetAction(PlayerbotAI* botAI) : AttackAction(botAI, Name) {}
 
     bool Execute(Event event) override;
 };

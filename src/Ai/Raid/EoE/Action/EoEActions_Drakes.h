@@ -18,7 +18,9 @@
 class EoEFlyDrakeAction : public MovementAction
 {
 public:
-    EoEFlyDrakeAction(PlayerbotAI* ai) : MovementAction(ai, "eoe fly drake") {}
+    static constexpr char const* Name = "eoe fly drake";
+
+    EoEFlyDrakeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
 
     bool Execute(Event event) override;
     bool isPossible() override;
@@ -39,7 +41,9 @@ private:
 class EoEDrakeAttackAction : public Action
 {
 public:
-    EoEDrakeAttackAction(PlayerbotAI* botAI) : Action(botAI, "eoe drake attack") {}
+    static constexpr char const* Name = "eoe drake attack";
+
+    EoEDrakeAttackAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isPossible() override;
@@ -53,7 +57,9 @@ protected:
 class DrakeSurgeShieldAction : public Action
 {
 public:
-    DrakeSurgeShieldAction(PlayerbotAI* botAI) : Action(botAI, "eoe drake surge shield") {}
+    static constexpr char const* Name = "eoe drake surge shield";
+
+    DrakeSurgeShieldAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isPossible() override;

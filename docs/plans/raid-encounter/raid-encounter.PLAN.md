@@ -95,7 +95,8 @@ cached per `Action*`:
 - pickers: `DpsAssist`, `TankAssist`, `DpsAoe`, `AggressiveTarget`, `AttackAnything`,
   `AttackLeastHp`, `AttackRti`, `DebuffOnAttacker`, `DropTarget`, `PetAttack`;
 - `Taunt`: the eight taunt spell actions (taunt, challenging shout, growl, challenging roar, hand of
-  reckoning, righteous defense, dark command, death grip), regardless of role;
+  reckoning, righteous defense, dark command, death grip) and `taunt on snare target`, regardless of
+  role;
 - `Spell` (`CastSpellAction`), for hand-written multipliers.
 
 Rarer actions (`killing spree`, `sprint`, a lone `death grip`) and own actions go by name.
@@ -147,8 +148,6 @@ each change it makes; any other difference gets a rule switch or stays hand-writ
 
 - **Gating.** A boss's guards stop once it is `DONE` and while another encounter is in progress.
   Naxx, EoE and OS triggers become gated for the first time.
-- **Malygos:** in phase 1, bots other than the boss tank keep `melee` (`tank assist` stays blocked by
-  its own rule); phase 4 passes `MalygosTargetAction`.
 - **Vezax** `vezax mark of the faceless break action` passes the movement guard.
 - **Taunt family** replaces five lists: Hodir and Thorim (7 names), EoE (6, no righteous defense),
   Naxx and OS (4 types).
@@ -163,7 +162,6 @@ Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
   unattackable boss, Thaddius' ×2.0 pet boost, Gluth's taunt and Zombie Chow rules, Kel'Thuzad's
   tank-assist ×2. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on Thane;
   keep it. `NaxxBossHelper` copies per node are untouched.
-- **EoE:** `MalygosMultiplier` becomes rules keyed on phase; tank assist on a Scion stays hand-written.
 - **OS:** `SartharionMultiplier`'s role and dodge parts become rules, its wrong-target taunt, tank
   assist and rear-flank parts stay hand-written; `OsMechanicPriorityMultiplier` becomes one
   `Exclusive` per live mechanic. The file-local `IsGenericMover` family goes.
@@ -175,7 +173,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-3 landed; continue at commit 4 (EoE).
+**Status:** commits 1-3 and EoE landed; continue with OS.
 
 Close each per `CLAUDE.local.md`.
 
@@ -183,7 +181,7 @@ Moving a boss: give its classes `Name` constants, write its definition, list it 
 definitions, call its `AddTriggerNodes`/`AddMultipliers` at its old spot in the strategy (keeps node
 and veto order), and delete its creators and whatever hand gating the definition replaces.
 Syntax-check with a raised `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU. What
-Ulduar taught:
+Ulduar and EoE taught:
 
 - A multiplier becomes rules only where they are exactly equivalent; otherwise it stays hand-written,
   keeps its name and declares its families. `Family::AnyAction` is for one whose zero can land on
@@ -195,12 +193,17 @@ Ulduar taught:
   in the original shields an action a later rule would zero (Hodir's Flash Freeze).
 - Housekeeping found in a read moves to the tick behind the same per-instance throttle, with any
   lookup after the throttle check (Flame Leviathan, Mimiron, Algalon, Yogg-Saron, Thorim).
+- An old multiplier's cache becomes a per-bot, per-tick `thread_local` cache in the predicate
+  (Razorscale, Malygos' `Holder`).
+- An old name list matches `getName()`, not the registered name: `taunt on snare target` is named
+  `taunt`, so every list caught it and the Taunt family missed it until EoE.
+- A node with several actions becomes back-to-back rows on its trigger, which share one node.
 
 1. **Module and Vezax pilot.** Landed.
 2. **pblint learns rows.** Landed.
 3. **The other 13 Ulduar bosses.** Landed; the prefix table, `UldGatedTrigger` and the `Uld*`
    forwards are gone. The Taunt family replaced Hodir's and Thorim's lists, adding Death Grip.
-4. **EoE**, then **OS**.
+4. **EoE** landed; **OS** next.
 5. **Naxx**, one commit per boss group.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
    `ToCEncounterGate`, trigger wrapper and multiplier gating that `w0c-foundation` builds. Until then

@@ -58,7 +58,7 @@ constexpr FamilyMask DebuffOnAttacker = 1ull << 26;
 constexpr FamilyMask DropTarget = 1ull << 27;
 constexpr FamilyMask PetAttack = 1ull << 28;
 
-// The eight single and area taunts, whatever the bot's role.
+// The eight single and area taunts, whatever the bot's role. Warriors cast Taunt from two actions.
 constexpr FamilyMask Taunt = 1ull << 29;
 
 constexpr FamilyMask Spell = 1ull << 30;  // any CastSpellAction
