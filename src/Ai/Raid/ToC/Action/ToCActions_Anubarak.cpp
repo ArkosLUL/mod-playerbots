@@ -1,185 +1,345 @@
 #include "ToCActions_Anubarak.h"
-#include "ToCData.h"
-#include "ToCHelpers_Shared.h"
-#include "ToCHelpers_Anubarak.h"
-#include "Playerbots.h"
-#include "EncounterHelpers.h"
-#include "Unit.h"
-#include "Creature.h"
 
-#include <cmath>
+#include <algorithm>
+#include <string>
+#include <vector>
+
+#include "Creature.h"
+#include "EncounterHelpers.h"
+#include "Group.h"
+#include "LastMovementValue.h"
+#include "Player.h"
+#include "Playerbots.h"
+#include "RaidObs.h"
+#include "RaidTankDefensive.h"
+#include "RtiTargetValue.h"
+#include "Spell.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "Timer.h"
+#include "ToCData.h"
+#include "ToCHelpers_Anubarak.h"
 
 using namespace TrialOfTheCrusaderHelpers;
 using namespace EncounterHelpers;
 
-bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
+namespace
 {
-    Unit* anubarak = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_ANUBARAK));
-    if (!anubarak)
-        return false;
 
-    MarkTargetWithSkull(bot, anubarak);
-    SetRtiTarget(botAI, "skull", anubarak);
+constexpr float ANUBARAK_DODGE_ARRIVE = 2.0f;
+// A dodge that hasn't run for this long was out of danger in between, so its old spot is stale
+constexpr uint32 ANUBARAK_DODGE_LATCH_GAP_MS = 1000;
+constexpr uint32 ANUBARAK_STALL_MS = 500;
+constexpr float ANUBARAK_RANGED_REACH_MARGIN = 2.0f;
+// Short legs keep him in tow
+constexpr float ANUBARAK_DRAG_STEP = 5.0f;
 
-    if (AI_VALUE(Unit*, "current target") != anubarak)
-        return Attack(anubarak);
+char const* const PENETRATING_COLD_HEALS[] = {
+    "greater heal", "flash heal", "penance",
+    "healing touch", "nourish", "regrowth",
+    "holy light", "flash of light", "holy shock",
+    "lesser healing wave", "healing wave", "riptide",
+};
 
-    // Anchor the boss near the centre of the nerubian pit so ranged have room to seed Permafrost
-    // and the spike-chase target has space to kite
-    return DragBossToAnchor(anubarak, ANUBARAK_PIT_CENTER);
+char const* const CLASS_TAUNTS[] = {"taunt", "hand of reckoning", "dark command", "growl"};
+
+// MoveTo refuses a repeat of its last point for up to 5 s even once the bot has stopped (a potion's
+// StopMoving, a knockback), so drop the booking when the bot stands still past the issue.
+void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ANUBARAK_STALL_MS)
+        last.clear();
 }
 
-bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
+// A point move issued mid channel never starts its spline, though MoveTo still reports it issued
+void BreakChannelPinningTheFeet(Player* bot)
 {
-    Unit* burrower = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER));
-    if (!burrower)
-        return false;
+    if (bot->IsMovementPreventedByCasting())
+        bot->InterruptNonMeleeSpells(true);
+}
 
-    MarkTargetWithCross(bot, burrower);
-    // Point this bot's own RTI at the burrower so its tank-assist target resolves to the add rather
-    // than pulling it back to the skull-marked boss every tick (same idiom as the Jaraxxus adds).
-    SetRtiTarget(botAI, "cross", burrower);
+// True when the bot can cast spell on target from where it stands. Otherwise stop is how close to
+// walk first, edge to edge as MoveTo(target, distance) measures it.
+bool InSpellReach(PlayerbotAI* botAI, Player* bot, Unit* target, char const* spell, float& stop)
+{
+    uint32 const spellId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spell)->Get();
+    SpellInfo const* info = sSpellMgr->GetSpellInfo(spellId);
 
-    if (AI_VALUE(Unit*, "current target") != burrower)
-        return Attack(burrower);
+    // Self range covers War Stomp and Shockwave, which only reach what stands next to the bot
+    if (!info || !info->RangeEntry || info->RangeEntry->ID == 1 || (info->RangeEntry->Flags & SPELL_RANGE_MELEE))
+    {
+        stop = CONTACT_DISTANCE;
+        return bot->IsWithinMeleeRange(target);
+    }
+
+    float const range = bot->GetSpellMaxRangeForTarget(target, info);
+    stop = std::max(range - ANUBARAK_RANGED_REACH_MARGIN, CONTACT_DISTANCE);
+    return bot->IsWithinCombatRange(target, range) && bot->IsWithinLOSInMap(target);
+}
+
+// CastSpell selects the target, and faces it for a spell that needs facing, before the cast can fail.
+// Gated so a taunt on cooldown doesn't do that every tick to a tank holding something else.
+bool TryClassTaunt(PlayerbotAI* botAI, Player* bot, Unit* target)
+{
+    for (char const* taunt : CLASS_TAUNTS)
+    {
+        float stop = 0.0f;
+        if (botAI->CanCastSpell(taunt, target) && InSpellReach(botAI, bot, target, taunt, stop))
+            return CastClassTaunt(botAI, target);
+    }
 
     return false;
 }
 
-bool AnubarakFocusBurrowerAction::Execute(Event /*event*/)
+// Only a cross this node could have left: on a burrower off Permafrost, or on something dead or gone
+void ClearStaleBurrowerCross(PlayerbotAI* botAI, Player* bot)
 {
-    Unit* burrower = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER));
-    if (!burrower)
-        return false;
+    Group* group = bot->GetGroup();
+    if (!group)
+        return;
 
-    // Note: a burrower submerges and resets at 80% HP unless it is damaged while standing on a
-    // Permafrost patch. Bots focus it normally; forcing it onto Permafrost is a future refinement.
-    MarkTargetWithCross(bot, burrower);
-    SetRtiTarget(botAI, "cross", burrower);
+    ObjectGuid const guid = group->GetTargetIcon(RtiTargetValue::crossIndex);
+    if (guid.IsEmpty())
+        return;
 
-    if (AI_VALUE(Unit*, "current target") != burrower)
-        return Attack(burrower);
-
-    return false;
+    Unit* marked = botAI->GetUnit(guid);
+    bool const stale = !marked || !marked->IsAlive() ||
+                       (marked->GetEntry() == static_cast<uint32>(ToCNpcs::NPC_NERUBIAN_BURROWER) &&
+                        !UnitOnPermafrost(marked));
+    if (stale)
+        ClearTargetIcon(bot, RtiTargetValue::crossIndex);
 }
 
-bool AnubarakFocusScarabAction::Execute(Event /*event*/)
-{
-    Unit* scarab = GetFirstAliveUnitByEntry(botAI, static_cast<uint32>(ToCNpcs::NPC_SWARM_SCARAB));
-    if (!scarab)
-        return false;
-
-    if (AI_VALUE(Unit*, "current target") != scarab)
-        return Attack(scarab);
-
-    return false;
 }
 
 bool AnubarakKiteSpikeToPermafrostAction::Execute(Event /*event*/)
 {
-    // Stop casting so the kite is never rooted in place by a channel
-    bot->CastStop();
+    Creature* spike = GetPursuingSpike(bot);
+    ObjectGuid const spikeGuid = spike ? spike->GetGUID() : ObjectGuid::Empty;
+    bool const keep = hasLatched && latchedSpike == spikeGuid;
 
-    // Locate the chasing spike up front: it is needed both to pick a safe Permafrost patch and for
-    // the flee fallback below.
-    constexpr float searchRadius = 60.0f;
-    Unit* spike = GetNearestCreatureByEntry(bot, static_cast<uint32>(ToCNpcs::NPC_PURSUING_SPIKE), searchRadius);
-
-    // Preferred: run through the nearest grounded Permafrost patch, which despawns the chasing
-    // spike. Only do so when the patch is not on the spike's side of the bot, otherwise heading for
-    // it would run the bot straight into the spike (an Impale) instead of away from it.
-    if (Unit* permafrost = GetNearestPermafrost(bot, searchRadius))
+    AnubarakKiteStand next;
+    if (!GetAnubarakKiteStand(bot, keep ? &latched : nullptr, next))
     {
-        bool safe = true;
-        if (spike)
-        {
-            float const toPx = permafrost->GetPositionX() - bot->GetPositionX();
-            float const toPy = permafrost->GetPositionY() - bot->GetPositionY();
-            float const toSx = spike->GetPositionX() - bot->GetPositionX();
-            float const toSy = spike->GetPositionY() - bot->GetPositionY();
-            float const toPLen = std::sqrt(toPx * toPx + toPy * toPy);
-            float const toSLen = std::sqrt(toSx * toSx + toSy * toSy);
-
-            // Unsafe when the patch lies within ~60 deg of the spike's direction and the spike is
-            // closer than the patch (i.e. the spike sits between the bot and the patch).
-            if (toPLen > 0.1f && toSLen > 0.1f)
-            {
-                float const cosAngle = (toPx * toSx + toPy * toSy) / (toPLen * toSLen);
-                if (cosAngle > 0.5f && toSLen < toPLen)
-                    safe = false;
-            }
-        }
-
-        if (safe)
-        {
-            return MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, permafrost->GetPositionX(), permafrost->GetPositionY(),
-                          permafrost->GetPositionZ(), false, false, false, false,
-                          MovementPriority::MOVEMENT_COMBAT, true, false);
-        }
+        hasLatched = false;
+        return false;
     }
 
-    // Fallback when no Permafrost has been seeded yet (or the only patch is past the spike): keep
-    // kiting away from the spike. Bias the escape back toward the pit centre so the bot does not run
-    // itself into a wall.
-    if (!spike)
+    latched = next;
+    latchedSpike = spikeGuid;
+    hasLatched = true;
+
+    // Yields the tick on the stand: generic movers are vetoed for the marked bot, so it can cast here
+    if (next.branch == AnubarakKiteBranch::Hold)
         return false;
 
-    Position const& center = ANUBARAK_PIT_CENTER;
-    // Direction away from the spike
-    float fleeX = bot->GetPositionX() - spike->GetPositionX();
-    float fleeY = bot->GetPositionY() - spike->GetPositionY();
-    float const fleeLen = std::sqrt(fleeX * fleeX + fleeY * fleeY);
-    if (fleeLen < 0.1f)
-        return false;
+    BreakChannelPinningTheFeet(bot);
+    ReleaseStalledWalk(botAI, bot);
 
-    fleeX /= fleeLen;
-    fleeY /= fleeLen;
+    // MoveTo refuses a point no higher than a FORCED leg still in flight, so a re-aimed stand, or the
+    // first leg after this bot's own dodge, would wait out the stale one. Nothing outranks the kite.
+    LastMovement& last = AI_VALUE(LastMovement&, "last movement");
+    MovementPriority const held = last.priority;
+    bool const lowered = held == MovementPriority::MOVEMENT_FORCED &&
+                         last.lastMoveShort.GetExactDist(next.stand.GetPositionX(), next.stand.GetPositionY(),
+                                                         next.stand.GetPositionZ()) > 0.01f;
+    if (lowered)
+        last.priority = MovementPriority::MOVEMENT_COMBAT;
 
-    // Blend in a pull toward the centre so the kite circles the pit instead of leaving it
-    float toCenterX = center.GetPositionX() - bot->GetPositionX();
-    float toCenterY = center.GetPositionY() - bot->GetPositionY();
-    float const toCenterLen = std::sqrt(toCenterX * toCenterX + toCenterY * toCenterY);
-    if (toCenterLen > 0.1f)
+    if (MoveTo(bot->GetMapId(), next.stand.GetPositionX(), next.stand.GetPositionY(), next.stand.GetPositionZ(),
+               false, false, false, false, MovementPriority::MOVEMENT_FORCED, true))
+        return true;
+
+    if (lowered)
+        last.priority = held;
+
+    return false;
+}
+
+bool AnubarakAvoidSpikeAction::Execute(Event /*event*/)
+{
+    uint32 const now = getMSTime();
+    if (hasSpot && (getMSTimeDiff(spotMs, now) > ANUBARAK_DODGE_LATCH_GAP_MS ||
+                    bot->GetExactDist2d(spot.GetPositionX(), spot.GetPositionY()) <= ANUBARAK_DODGE_ARRIVE))
     {
-        fleeX += (toCenterX / toCenterLen) * 0.5f;
-        fleeY += (toCenterY / toCenterLen) * 0.5f;
+        hasSpot = false;
     }
 
-    constexpr float kiteDistance = 15.0f;
-    const float destX = bot->GetPositionX() + fleeX * kiteDistance;
-    const float destY = bot->GetPositionY() + fleeY * kiteDistance;
+    if (!hasSpot)
+    {
+        Position found;
+        if (!GetAnubarakSpikeDodgeSpot(bot, found))
+            return false;
 
-    return MoveTo(TRIAL_OF_THE_CRUSADER_MAP_ID, destX, destY, center.GetPositionZ(), false, false,
-                  false, false, MovementPriority::MOVEMENT_COMBAT, true, false);
+        spot = found;
+        hasSpot = true;
+    }
+
+    spotMs = now;
+    BreakChannelPinningTheFeet(bot);
+    ReleaseStalledWalk(botAI, bot);
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool AnubarakInterruptShadowStrikeAction::Execute(Event /*event*/)
+{
+    Creature* caster = GetAnubarakShadowStrikeDuty(bot);
+    if (!caster)
+        return false;
+
+    char const* interrupt = AnubarakReadyInterrupt(bot, caster);
+    if (!interrupt)
+        return false;
+
+    float stop = 0.0f;
+    if (!InSpellReach(botAI, bot, caster, interrupt, stop))
+        return MoveTo(caster, stop, MovementPriority::MOVEMENT_COMBAT);
+
+    return botAI->CastSpell(interrupt, caster);
+}
+
+bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
+{
+    char const* defensive = NextTankDefensive(botAI, bot, "anub.defensive");
+    return defensive && botAI->CastSpell(defensive, bot);
 }
 
 bool AnubarakDestroyFrostSphereAction::Execute(Event /*event*/)
 {
-    // Destroying a flying Frost Sphere drops a Permafrost patch the spike-chase target can be kited
-    // through.
-    std::list<Creature*> spheres;
-    bot->GetCreatureListWithEntryInGrid(spheres, static_cast<uint32>(ToCNpcs::NPC_FROST_SPHERE), 100.0f);
+    Creature* sphere = GetAnubarakSphereToShoot(bot);
+    return sphere && Attack(sphere);
+}
 
-    Unit* nearest = nullptr;
-    float nearestDist = 100.0f;
-    for (Creature* sphere : spheres)
+bool AnubarakFocusBurrowerAction::Execute(Event /*event*/)
+{
+    Creature* burrower = GetAnubarakFocusBurrower(bot);
+    if (!burrower)
     {
-        if (!IsFrostSphereFlying(sphere))
-            continue;
-
-        float const dist = bot->GetExactDist2d(sphere);
-        if (!nearest || dist < nearestDist)
-        {
-            nearest = sphere;
-            nearestDist = dist;
-        }
+        SetRtiTarget(botAI, "skull");
+        ClearStaleBurrowerCross(botAI, bot);
+        return false;
     }
 
-    if (!nearest)
+    MarkTargetWithCross(bot, burrower);
+    SetRtiTarget(botAI, ANUBARAK_BURROWER_RTI, burrower);
+    return Attack(burrower);
+}
+
+bool AnubarakAssistTankHoldBurrowerAction::Execute(Event /*event*/)
+{
+    AnubarakBurrowerPick const pick = GetAnubarakBurrowerPick(botAI);
+    Creature* target = pick.held ? pick.held : pick.loose;
+    if (!target)
+    {
+        // TankTargetValue reads rti first, so a leftover side mark has this tank chase that icon next fight
+        if (IsAnubarakSideRti(AI_VALUE(std::string, "rti")))
+            SetRtiTarget(botAI, "skull");
+
+        return false;
+    }
+
+    // Taunts even with one already held: a wave brings more burrowers than there are side tanks
+    if (pick.loose && TryClassTaunt(botAI, bot, pick.loose))
+        return true;
+
+    // Own rti name with no group icon behind it, so DPS never follow this pick
+    SetRtiTarget(botAI, ANUBARAK_SIDE_RTI[pick.side], target);
+    if (Attack(target))
+        return true;
+
+    // Walking off with one that isn't on this bot yet only leaves it on whoever it's hitting
+    if (target != pick.held)
         return false;
 
-    if (AI_VALUE(Unit*, "current target") != nearest)
-        return Attack(nearest);
+    // The spike dodge would walk the tank straight back out
+    Position const& hold = pick.hold;
+    if (bot->GetExactDist2d(hold.GetPositionX(), hold.GetPositionY()) <= ANUBARAK_TANK_PATCH_ARRIVE ||
+        AnubarakSpikeLaneCrosses(bot, hold))
+        return false;
+
+    return MoveTo(bot->GetMapId(), hold.GetPositionX(), hold.GetPositionY(), hold.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_COMBAT, true);
+}
+
+bool AnubarakTankPickUpScarabAction::Execute(Event /*event*/)
+{
+    Creature* scarab = GetAnubarakScarabToPickUp(bot);
+    if (!scarab)
+        return false;
+
+    bool const taunted = TryClassTaunt(botAI, bot, scarab);
+    return Attack(scarab) || taunted;
+}
+
+bool AnubarakMainTankHoldBossAction::Execute(Event /*event*/)
+{
+    Creature* boss = GetAnubarak(bot);
+    if (!boss || boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return false;
+
+    MarkTargetWithSkull(bot, boss);
+    SetRtiTarget(botAI, "skull", boss);
+
+    // He never drops threat, so a taunt is only owed when a non-tank ended up with him
+    Unit* victim = boss->GetVictim();
+    Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+    bool const onNonTank = victim && victim != bot && !IsAnubarakTankPlayer(victimPlayer);
+    if (onNonTank && TryClassTaunt(botAI, bot, boss))
+    {
+        RaidObs::NoteDerived(bot, "anub.pickup", "taunt");
+        return true;
+    }
+
+    if (Attack(boss))
+    {
+        RaidObs::NoteDerived(bot, "anub.pickup", "attack");
+        return true;
+    }
+
+    Position spot;
+    bool const submerging = GetAnubarakSubmergeSpot(bot, spot);
+    RaidObs::NoteDerived(bot, "anub.pickup", submerging ? "submerge" : "hold");
+    return DragBossOnto(boss, submerging ? spot : GetAnubarakBossAnchor(bot));
+}
+
+bool AnubarakMainTankHoldBossAction::DragBossOnto(Unit* boss, Position const& point)
+{
+    if (boss->GetVictim() != bot)
+        return false;
+
+    float const bossDist = boss->GetExactDist2d(point.GetPositionX(), point.GetPositionY());
+    if (bossDist <= ANUBARAK_DRAG_ARRIVE)
+        return false;
+
+    // He follows at the bot's current gap, so the bot aims that far past the point
+    float const gap = bot->GetExactDist2d(boss);
+    float const goalX = point.GetPositionX() + (point.GetPositionX() - boss->GetPositionX()) / bossDist * gap;
+    float const goalY = point.GetPositionY() + (point.GetPositionY() - boss->GetPositionY()) / bossDist * gap;
+    float const toGoal = bot->GetExactDist2d(goalX, goalY);
+    // Bot already there, he's still catching up
+    if (toGoal < ANUBARAK_DRAG_ARRIVE)
+        return false;
+
+    float const step = std::min(ANUBARAK_DRAG_STEP, toGoal);
+    float const moveX = bot->GetPositionX() + (goalX - bot->GetPositionX()) / toGoal * step;
+    float const moveY = bot->GetPositionY() + (goalY - bot->GetPositionY()) / toGoal * step;
+    return MoveTo(bot->GetMapId(), moveX, moveY, point.GetPositionZ(), false, false, false, false,
+                  MovementPriority::MOVEMENT_COMBAT, true, true);
+}
+
+bool AnubarakHealPenetratingColdAction::Execute(Event /*event*/)
+{
+    Player* target = GetAnubarakPenetratingColdHealTarget(botAI);
+    if (!target)
+        return false;
+
+    for (char const* heal : PENETRATING_COLD_HEALS)
+    {
+        if (botAI->CanCastSpell(heal, target))
+            return botAI->CastSpell(heal, target);
+    }
 
     return false;
 }

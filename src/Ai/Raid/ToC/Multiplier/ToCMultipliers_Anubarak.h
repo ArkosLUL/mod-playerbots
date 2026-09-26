@@ -15,13 +15,21 @@ public:
     float GetValue(Action* action) override;
 };
 
-// While this bot is the spike-chase target, suppress every other movement so nothing competes with
-// the kite to Permafrost
+// The spike's target moves only through the kite. Attack actions stay so it keeps a target.
 class AnubarakProtectSpikeKiteMultiplier : public Multiplier
 {
 public:
     AnubarakProtectSpikeKiteMultiplier(
         PlayerbotAI* botAI) : Multiplier(botAI, "anubarak protect spike kite multiplier") {}
+    float GetValue(Action* action) override;
+};
+
+// The boss hold, burrower holds and sphere duty pick these bots' targets, generic assist would drag
+// them onto whatever the raid is hitting
+class AnubarakTankTargetGuardMultiplier : public Multiplier
+{
+public:
+    AnubarakTankTargetGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "anubarak tank target guard") {}
     float GetValue(Action* action) override;
 };
 
