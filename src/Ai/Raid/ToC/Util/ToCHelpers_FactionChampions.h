@@ -45,19 +45,46 @@ enum class ToCFactionChampions : uint32
     NPC_HORDE_WARRIOR                = 34453,
 };
 
-// True if the entry is any Faction Champion (either faction roster)
+// The mage's only interrupt, one rank
+constexpr uint32 SPELL_COUNTERSPELL = 2139;
+
+// True if the entry is any Faction Champion (either faction roster). Pets are not champions.
 bool IsFactionChampion(uint32 entry);
 
 // True if the entry is a Faction Champion healer spec (Resto Druid/Shaman, Holy Paladin, Disc Priest)
 bool IsFactionChampionHealer(uint32 entry);
 
-// The champion to focus down: the lowest-current-health alive healer, or (once every healer is dead)
-// the lowest-current-health champion of any spec. Returns nullptr when no champion is alive.
-Unit* GetPriorityFactionChampion(PlayerbotAI* botAI);
+// The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
+// immune to all damage, or to go back to the one it left over immunity. Null unless the encounter is live.
+Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
 
-// A second alive healer to crowd-control, distinct from killTarget. Returns the highest-health
-// off-target healer (so it stays locked longest) or nullptr when fewer than two healers are up.
-Unit* GetCcFactionChampionHealer(PlayerbotAI* botAI, Unit* killTarget);
+// Every non-healer burns the kill target, tanks too: threat is assigned by the script, so nobody
+// holds a champion anyway.
+bool FactionChampionsFocusBot(PlayerbotAI* botAI);
+
+// Live, and a champion that fears is still up: warlock, disc or shadow priest, warrior.
+bool FactionChampionsFearWindowActive(PlayerbotAI* botAI);
+
+// This bot's CC target and its raid icon (RtiTargetValue index). Null when it has none.
+Unit* FactionChampionsCcTarget(PlayerbotAI* botAI, uint8& iconIndex);
+
+// Skull off the kill target, a CC icon on a champion no assignment gives it to, or once the pull is
+// over an icon this encounter placed still up. Apply does exactly what Pending tests.
+bool FactionChampionsMarksPending(PlayerbotAI* botAI);
+void FactionChampionsApplyMarks(PlayerbotAI* botAI);
+
+// Assigned: "rti cc" or the group icon doesn't match the assignment yet. Released while live: a
+// saved "rti cc" is still waiting to be put back. Apply does exactly what Pending tests.
+bool FactionChampionsCcIconPending(PlayerbotAI* botAI);
+void FactionChampionsApplyCcIcon(PlayerbotAI* botAI);
+
+// Not live and a saved "rti cc" still waiting. Its node carries no encounter prefix, so it still runs
+// after the kill closes the gate, for a CC bot that was dead then.
+bool FactionChampionsRtiCcRestorePending(PlayerbotAI* botAI);
+void FactionChampionsRestoreRtiCc(PlayerbotAI* botAI);
+
+// This bot is the mage on duty and the kill target is casting a heal Counterspell would stop.
+bool FactionChampionsCounterspellDuty(PlayerbotAI* botAI);
 
 }
 
