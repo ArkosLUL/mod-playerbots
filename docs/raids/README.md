@@ -23,8 +23,7 @@ new `.cpp` files are globbed automatically.
 Naming: strategy keys are bare lowercase (`"blacktemple"`); triggers and actions are lowercase,
 space-separated and boss-prefixed; multipliers are `{BossName}{Purpose}Multiplier`.
 
-**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE, OS and part of Naxx so far,
-the rest and ToC
+**Encounter definitions** (`Raid/RaidEncounter.{h,cpp}`; Ulduar, EoE, OS and Naxx so far, ToC
 per [../plans/raid-encounter/raid-encounter.PLAN.md](../plans/raid-encounter/raid-encounter.PLAN.md))
 replace that wiring. One file per boss, `<Raid>/Definition/<Raid>Definition_<Boss>.cpp`, declares:
 

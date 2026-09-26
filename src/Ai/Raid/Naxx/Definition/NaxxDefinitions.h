@@ -44,8 +44,10 @@ EncounterDefinition const& NaxxFourHorsemenDefinition();
 EncounterDefinition const& NaxxGrobbulusDefinition();
 EncounterDefinition const& NaxxGluthDefinition();
 EncounterDefinition const& NaxxThaddiusDefinition();
+EncounterDefinition const& NaxxSapphironDefinition();
+EncounterDefinition const& NaxxKelthuzadDefinition();
 
-// Every Naxxramas boss with a definition. The contexts walk this.
+// Every Naxxramas boss but Patchwerk, who has no nodes. The contexts walk this.
 inline std::vector<EncounterDefinition const*> const& NaxxEncounterDefinitions()
 {
     static std::vector<EncounterDefinition const*> const definitions = {
@@ -61,6 +63,8 @@ inline std::vector<EncounterDefinition const*> const& NaxxEncounterDefinitions()
         &NaxxGrobbulusDefinition(),
         &NaxxGluthDefinition(),
         &NaxxThaddiusDefinition(),
+        &NaxxSapphironDefinition(),
+        &NaxxKelthuzadDefinition(),
     };
     return definitions;
 }

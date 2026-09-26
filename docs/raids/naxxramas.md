@@ -1,8 +1,9 @@
 # Naxxramas (map 533)
 
 Cross-raid conventions are in [README.md](README.md). Strategy key `naxx`, auto-applied by map id.
-Bosses declared in `Definition/NaxxDefinition_<Boss>.cpp` run behind their encounter gate;
-`NaxxThreatRedirectMultiplier` and `NaxxBurstWindowMultiplier` span bosses, so they stay raid-wide.
+Every boss but Patchwerk (no nodes) is declared in `Definition/NaxxDefinition_<Boss>.cpp`, behind
+its encounter gate; `NaxxThreatRedirectMultiplier` and `NaxxBurstWindowMultiplier` span bosses, so
+they stay raid-wide.
 
 Four bosses were fully commented out at some point (Noth, Heigan, Gothik, Patchwerk) and Noth,
 Heigan and Gothik have since been rebuilt rather than un-commented — in each case because the
@@ -125,6 +126,9 @@ Swaps are **mark-stack-driven**, not timer-driven: capture a baseline on arrival
 delta ≥ 3, and re-baseline when `stacks < baseline` (the aura expired while away). Mid-cross
 applications fold into the next arrival baseline. Front tanks hold at their corner and taunt on a
 30 yd **boss-proximity** gate rather than a spot gate, because Thane and Baron chase.
+
+`FourhorsemanGenericMultiplier` keys on `find target "sir zeliek"`, which resolves only with the bot
+on his threat list, so a bot parked on Thane keeps generic targeting and threat checks.
 
 ## Gluth
 

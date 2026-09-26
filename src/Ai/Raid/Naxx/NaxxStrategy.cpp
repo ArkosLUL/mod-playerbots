@@ -12,30 +12,10 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
 {
     NaxxGrobbulusDefinition().AddTriggerNodes(triggers);
     NaxxHeiganDefinition().AddTriggerNodes(triggers);
-
-    // Kel'Thuzad
-    triggers.push_back(
-        new TriggerNode("kel'thuzad",
-        {
-            NextAction("kel'thuzad misdirect boss to main tank", ACTION_RAID + 3),
-            NextAction("kel'thuzad position", ACTION_RAID + 2),
-            NextAction("kel'thuzad choose target", ACTION_RAID + 1)
-        })
-    );
-
-    // Emergency priority so the flee beats every P2 positioning action by construction.
-    triggers.push_back(new TriggerNode("kel'thuzad shadow fissure",
-        { NextAction("kel'thuzad flee shadow fissure", ACTION_EMERGENCY + 6) }
-    ));
-
-    triggers.push_back(new TriggerNode("kel'thuzad chains",
-        { NextAction("kel'thuzad cyclone chained", ACTION_EMERGENCY + 5) }
-    ));
-
+    NaxxKelthuzadDefinition().AddTriggerNodes(triggers);
     NaxxAnubrekhanDefinition().AddTriggerNodes(triggers);
     NaxxFaerlinaDefinition().AddTriggerNodes(triggers);
     NaxxMaexxnaDefinition().AddTriggerNodes(triggers);
-
     NaxxGothikDefinition().AddTriggerNodes(triggers);
 
     // Patchwerk
@@ -52,21 +32,10 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // ));
 
     NaxxThaddiusDefinition().AddTriggerNodes(triggers);
-
     NaxxRazuviousDefinition().AddTriggerNodes(triggers);
     NaxxFourHorsemenDefinition().AddTriggerNodes(triggers);
-
-    // sapphiron
-    triggers.push_back(new TriggerNode("sapphiron ground",
-        { NextAction("sapphiron ground position", ACTION_RAID + 1) }
-    ));
-
-    triggers.push_back(new TriggerNode("sapphiron flight",
-        { NextAction("sapphiron flight position", ACTION_RAID + 1) }
-    ));
-
+    NaxxSapphironDefinition().AddTriggerNodes(triggers);
     NaxxGluthDefinition().AddTriggerNodes(triggers);
-
     NaxxLoathebDefinition().AddTriggerNodes(triggers);
     NaxxNothDefinition().AddTriggerNodes(triggers);
 }
@@ -77,9 +46,9 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     NaxxHeiganDefinition().AddMultipliers(botAI, multipliers);
     NaxxLoathebDefinition().AddMultipliers(botAI, multipliers);
     NaxxThaddiusDefinition().AddMultipliers(botAI, multipliers);
-    multipliers.push_back(new SapphironGenericMultiplier(botAI));
+    NaxxSapphironDefinition().AddMultipliers(botAI, multipliers);
     NaxxRazuviousDefinition().AddMultipliers(botAI, multipliers);
-    multipliers.push_back(new KelthuzadGenericMultiplier(botAI));
+    NaxxKelthuzadDefinition().AddMultipliers(botAI, multipliers);
     NaxxAnubrekhanDefinition().AddMultipliers(botAI, multipliers);
     NaxxFourHorsemenDefinition().AddMultipliers(botAI, multipliers);
     NaxxGluthDefinition().AddMultipliers(botAI, multipliers);

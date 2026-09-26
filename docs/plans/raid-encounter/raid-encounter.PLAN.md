@@ -149,19 +149,6 @@ each change it makes; any other difference gets a rule switch or stays hand-writ
 - Dead list entries go: `auriaya fall from floor action` (a plain `Action`) and `iron assembly tank
   assignment action` (an attack, already exempt).
 
-## Per-boss notes
-
-Only what the multiplier code won't make obvious. Paths under `src/Ai/Raid/`.
-
-- **Naxx:** only Grobbulus' guard becomes rules. The rest stay hand-written with the families they
-  can zero: each reads a `NaxxBossHelper` that keeps its boss (some also clocks) across ticks, which
-  a predicate can't, or sets `neglect threat` (`AnyAction`). The Taunt family replaces Razuvious'
-  and Gluth's four types. The Four Horsemen guard's `find target "sir zeliek"` misses bots parked on
-  Thane; keep it. `NaxxBossHelper` copies per node are untouched. A class whose own name differs
-  from its registered one is renamed to it, except the Mutating Injection triggers (`HasAuraTrigger`
-  reads the aura by that name) and `grobbulus move center` (`MoveInsideAction` names itself), whose
-  `Name` only registers.
-
 ## Out of scope
 
 Deepening the Mimiron and Thorim modules, Naxx's per-node helper copies, the threat-redirect trio,
@@ -169,7 +156,7 @@ fixing the Four Horsemen lookup.
 
 ## Commits
 
-**Status:** commits 1-4 and every Naxx wing but Frostwyrm Lair landed; continue with Frostwyrm Lair.
+**Status:** commits 1-5 landed; commit 6 (ToC) waits for the toc-rework `w6-closeout` lane.
 
 Close each per `CLAUDE.local.md`.
 
@@ -177,12 +164,14 @@ Moving a boss: give its classes `Name` constants, write its definition, list it 
 definitions, call its `AddTriggerNodes`/`AddMultipliers` at its old spot in the strategy (keeps node
 and veto order), and delete its creators and whatever hand gating the definition replaces.
 Syntax-check with a raised `PB_MAX_FANOUT`: the contexts reach every `BuildShared*` TU. What
-Ulduar, EoE and OS taught:
+Ulduar, EoE, OS and Naxx taught:
 
 - A multiplier becomes rules only where they are exactly equivalent; otherwise it stays hand-written,
   keeps its name and declares its families. `Family::AnyAction` is for one whose zero can land on
   an item, a plain `Action` or a threat type (burst lists, AoE holds, wrong-target guards).
-  `Multiplier<M>(families, args...)` passes constructor arguments (the nature aspect hold).
+  `Multiplier<M>(families, args...)` passes constructor arguments (the nature aspect hold). A guard
+  whose boss helper keeps state across ticks, or that sets `neglect threat`, is never equivalent
+  (Naxx: all but Grobbulus).
 - A role no `Role` bit expresses goes in the predicate. `Role::NonTank` and `Role::Dps`
   (`IsDps`, the bot's dps strategy) were added for Auriaya and Freya.
 - A branchy multiplier splits into several rules under one name; check that no early `return 1`
@@ -194,6 +183,8 @@ Ulduar, EoE and OS taught:
   (`SartharionSnapshotFor`).
 - An old name list matches `getName()`, not the registered name: `taunt on snare target` is named
   `taunt`, so every list caught it and the Taunt family missed it until EoE.
+- A class named otherwise than its registration takes the registered name, unless its base reads
+  the name (`HasAuraTrigger`'s aura, `MoveInsideAction`): then `Name` only registers.
 - A node with several actions becomes back-to-back rows on its trigger, which share one node. A
   node on a generic action is `Node<T>("rear flank", …)`: Naxx has nine.
 - A node that also serves another encounter stays in the strategy, after the definition's nodes
@@ -204,7 +195,7 @@ Ulduar, EoE and OS taught:
 3. **The other 13 Ulduar bosses.** Landed; the prefix table, `UldGatedTrigger` and the `Uld*`
    forwards are gone. The Taunt family replaced Hodir's and Thorim's lists, adding Death Grip.
 4. **EoE** and **OS**. Landed.
-5. **Naxx**, one commit per wing: Arachnid, Plague, Military and Construct landed; then Frostwyrm.
+5. **Naxx**, one commit per wing. Landed.
 6. **ToC**, after the toc-rework `w6-closeout` lane merges: `StageGate` and definitions replace the
    `ToCEncounterGate`, trigger wrapper and multiplier gating that `w0c-foundation` builds. Until then
    do not touch `src/Ai/Raid/ToC/` or `docs/plans/toc-rework/`.

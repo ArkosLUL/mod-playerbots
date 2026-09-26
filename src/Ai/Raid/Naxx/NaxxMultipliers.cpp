@@ -9,7 +9,6 @@
 #include "ChooseTargetActions.h"
 #include "DKActions.h"
 #include "DruidActions.h"
-#include "DruidBearActions.h"
 #include "FollowActions.h"
 #include "GenericSpellActions.h"
 #include "HunterActions.h"
@@ -17,7 +16,6 @@
 #include "MovementActions.h"
 #include "NaxxActions.h"
 #include "NaxxSpellIds.h"
-#include "PaladinActions.h"
 #include "PetsAction.h"
 #include "PriestActions.h"
 #include "RaidEncounter.h"
@@ -27,7 +25,6 @@
 #include "ShamanActions.h"
 #include "Spell.h"
 #include "UseMeetingStoneAction.h"
-#include "WarriorActions.h"
 #include "WipeAction.h"
 
 float HeiganDanceMultiplier::GetValue(Action* action)

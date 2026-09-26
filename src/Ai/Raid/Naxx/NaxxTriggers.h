@@ -139,7 +139,9 @@ private:
 class KelthuzadTrigger : public Trigger
 {
 public:
-    KelthuzadTrigger(PlayerbotAI* ai) : Trigger(ai, "kel'thuzad trigger"), helper(ai) {}
+    static constexpr char const* Name = "kel'thuzad";
+
+    KelthuzadTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -149,7 +151,9 @@ private:
 class KelthuzadShadowFissureTrigger : public Trigger
 {
 public:
-    KelthuzadShadowFissureTrigger(PlayerbotAI* ai) : Trigger(ai, "kel'thuzad shadow fissure"), helper(ai) {}
+    static constexpr char const* Name = "kel'thuzad shadow fissure";
+
+    KelthuzadShadowFissureTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -160,7 +164,9 @@ private:
 class KelthuzadChainsTrigger : public Trigger
 {
 public:
-    KelthuzadChainsTrigger(PlayerbotAI* ai) : Trigger(ai, "kel'thuzad chains"), helper(ai) {}
+    static constexpr char const* Name = "kel'thuzad chains";
+
+    KelthuzadChainsTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -396,7 +402,9 @@ private:
 class SapphironGroundTrigger : public Trigger
 {
 public:
-    SapphironGroundTrigger(PlayerbotAI* ai) : Trigger(ai, "sapphiron ground"), helper(ai) {}
+    static constexpr char const* Name = "sapphiron ground";
+
+    SapphironGroundTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -406,7 +414,9 @@ private:
 class SapphironFlightTrigger : public Trigger
 {
 public:
-    SapphironFlightTrigger(PlayerbotAI* ai) : Trigger(ai, "sapphiron flight"), helper(ai) {}
+    static constexpr char const* Name = "sapphiron flight";
+
+    SapphironFlightTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:

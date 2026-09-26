@@ -289,7 +289,9 @@ private:
 class SapphironGroundPositionAction : public MovementAction
 {
 public:
-    SapphironGroundPositionAction(PlayerbotAI* ai) : MovementAction(ai, "sapphiron ground position"), helper(ai) {}
+    static constexpr char const* Name = "sapphiron ground position";
+
+    SapphironGroundPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 protected:
@@ -299,7 +301,9 @@ protected:
 class SapphironFlightPositionAction : public MovementAction
 {
 public:
-    SapphironFlightPositionAction(PlayerbotAI* ai) : MovementAction(ai, "sapphiron flight position"), helper(ai) {}
+    static constexpr char const* Name = "sapphiron flight position";
+
+    SapphironFlightPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 protected:
@@ -321,7 +325,9 @@ protected:
 class KelthuzadChooseTargetAction : public AttackAction
 {
 public:
-    KelthuzadChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "kel'thuzad choose target"), helper(ai) {}
+    static constexpr char const* Name = "kel'thuzad choose target";
+
+    KelthuzadChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     virtual bool Execute(Event event);
 
 private:
@@ -331,7 +337,9 @@ private:
 class KelthuzadPositionAction : public MovementAction
 {
 public:
-    KelthuzadPositionAction(PlayerbotAI* ai) : MovementAction(ai, "kel'thuzad position"), helper(ai) {}
+    static constexpr char const* Name = "kel'thuzad position";
+
+    KelthuzadPositionAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     virtual bool Execute(Event event);
 
 private:
@@ -341,10 +349,9 @@ private:
 class KelthuzadFleeShadowFissureAction : public MovementAction
 {
 public:
-    KelthuzadFleeShadowFissureAction(PlayerbotAI* ai)
-        : MovementAction(ai, "kel'thuzad flee shadow fissure"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "kel'thuzad flee shadow fissure";
+
+    KelthuzadFleeShadowFissureAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -354,10 +361,9 @@ private:
 class KelthuzadMisdirectBossToMainTankAction : public AttackAction
 {
 public:
-    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* ai)
-        : AttackAction(ai, "kel'thuzad misdirect boss to main tank"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "kel'thuzad misdirect boss to main tank";
+
+    KelthuzadMisdirectBossToMainTankAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -367,10 +373,9 @@ private:
 class KelthuzadCycloneChainedAction : public MovementAction
 {
 public:
-    KelthuzadCycloneChainedAction(PlayerbotAI* ai)
-        : MovementAction(ai, "kel'thuzad cyclone chained"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "kel'thuzad cyclone chained";
+
+    KelthuzadCycloneChainedAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
