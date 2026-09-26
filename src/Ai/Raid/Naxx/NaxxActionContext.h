@@ -22,19 +22,11 @@ public:
         creators["grobbulus move center"] = &RaidNaxxActionContext::grobbulus_move_center;
         creators["grobbulus move away"] = &RaidNaxxActionContext::grobbulus_move_away;
 
-
         creators["thaddius prepull split"] = &RaidNaxxActionContext::thaddius_prepull_split;
         creators["thaddius attack nearest pet"] = &RaidNaxxActionContext::thaddius_attack_nearest_pet;
         creators["thaddius move to platform"] = &RaidNaxxActionContext::thaddius_move_to_platform;
         creators["thaddius move polarity"] = &RaidNaxxActionContext::thaddius_move_polarity;
         creators["thaddius redirect threat"] = &RaidNaxxActionContext::thaddius_redirect_threat;
-
-        creators["razuvious use obedience crystal"] = &RaidNaxxActionContext::razuvious_use_obedience_crystal;
-        creators["razuvious target"] = &RaidNaxxActionContext::razuvious_target;
-
-        creators["horseman attract alternatively"] = &RaidNaxxActionContext::horseman_attract_alternatively;
-        creators["horseman attack in order"] = &RaidNaxxActionContext::horseman_attack_in_order;
-        creators["four horsemen redirect threat"] = &RaidNaxxActionContext::four_horsemen_redirect_threat;
 
         creators["sapphiron ground position"] = &RaidNaxxActionContext::sapphiron_ground_position;
         creators["sapphiron flight position"] = &RaidNaxxActionContext::sapphiron_flight_position;
@@ -46,12 +38,6 @@ public:
             &RaidNaxxActionContext::kelthuzad_misdirect_boss_to_main_tank;
         creators["kel'thuzad cyclone chained"] = &RaidNaxxActionContext::kelthuzad_cyclone_chained;
 
-
-
-
-        creators["gothik choose target"] = &RaidNaxxActionContext::gothik_choose_target;
-        creators["gothik stay on living side"] = &RaidNaxxActionContext::gothik_stay_on_living_side;
-
         creators["gluth choose target"] = &RaidNaxxActionContext::gluth_choose_target;
         creators["gluth position"] = &RaidNaxxActionContext::gluth_position;
         creators["gluth slowdown"] = &RaidNaxxActionContext::gluth_slowdown;
@@ -59,8 +45,6 @@ public:
         creators["gluth redirect threat"] = &RaidNaxxActionContext::gluth_redirect_threat;
 
         // creators["patchwerk ranged position"] = &RaidNaxxActionContext::patchwerk_ranged_position;
-
-
 
         for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
             encounter->RegisterActions(creators);
@@ -76,20 +60,6 @@ private:
     static Action* thaddius_move_to_platform(PlayerbotAI* ai) { return new ThaddiusMoveToPlatformAction(ai); }
     static Action* thaddius_move_polarity(PlayerbotAI* ai) { return new ThaddiusMovePolarityAction(ai); }
     static Action* thaddius_redirect_threat(PlayerbotAI* ai) { return new ThaddiusRedirectThreatAction(ai); }
-    static Action* razuvious_target(PlayerbotAI* ai) { return new RazuviousTargetAction(ai); }
-    static Action* razuvious_use_obedience_crystal(PlayerbotAI* ai)
-    {
-        return new RazuviousUseObedienceCrystalAction(ai);
-    }
-    static Action* horseman_attract_alternatively(PlayerbotAI* ai)
-    {
-        return new HorsemanAttractAlternativelyAction(ai);
-    }
-    static Action* horseman_attack_in_order(PlayerbotAI* ai) { return new HorsemanAttactInOrderAction(ai); }
-    static Action* four_horsemen_redirect_threat(PlayerbotAI* ai)
-    {
-        return new FourhorsemanRedirectThreatAction(ai);
-    }
     static Action* sapphiron_ground_position(PlayerbotAI* ai) { return new SapphironGroundPositionAction(ai); }
     static Action* sapphiron_flight_position(PlayerbotAI* ai) { return new SapphironFlightPositionAction(ai); }
     static Action* kelthuzad_choose_target(PlayerbotAI* ai) { return new KelthuzadChooseTargetAction(ai); }
@@ -100,8 +70,6 @@ private:
         return new KelthuzadMisdirectBossToMainTankAction(ai);
     }
     static Action* kelthuzad_cyclone_chained(PlayerbotAI* ai) { return new KelthuzadCycloneChainedAction(ai); }
-    static Action* gothik_choose_target(PlayerbotAI* ai) { return new GothikChooseTargetAction(ai); }
-    static Action* gothik_stay_on_living_side(PlayerbotAI* ai) { return new GothikStayOnLivingSideAction(ai); }
     static Action* gluth_choose_target(PlayerbotAI* ai) { return new GluthChooseTargetAction(ai); }
     static Action* gluth_position(PlayerbotAI* ai) { return new GluthPositionAction(ai); }
     static Action* gluth_slowdown(PlayerbotAI* ai) { return new GluthSlowdownAction(ai); }

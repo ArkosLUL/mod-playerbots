@@ -206,10 +206,9 @@ public:
 class RazuviousUseObedienceCrystalAction : public MovementAction
 {
 public:
-    RazuviousUseObedienceCrystalAction(PlayerbotAI* ai)
-        : MovementAction(ai, "razuvious use obedience crystal"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "razuvious use obedience crystal";
+
+    RazuviousUseObedienceCrystalAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -219,7 +218,9 @@ private:
 class RazuviousTargetAction : public AttackAction
 {
 public:
-    RazuviousTargetAction(PlayerbotAI* ai) : AttackAction(ai, "razuvious target"), helper(ai) {}
+    static constexpr char const* Name = "razuvious target";
+
+    RazuviousTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 private:
@@ -229,9 +230,9 @@ private:
 class HorsemanAttractAlternativelyAction : public AttackAction
 {
 public:
-    HorsemanAttractAlternativelyAction(PlayerbotAI* ai) : AttackAction(ai, "horseman attract alternatively"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "horseman attract alternatively";
+
+    HorsemanAttractAlternativelyAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 protected:
@@ -241,7 +242,9 @@ protected:
 class HorsemanAttactInOrderAction : public AttackAction
 {
 public:
-    HorsemanAttactInOrderAction(PlayerbotAI* ai) : AttackAction(ai, "horseman attact in order"), helper(ai) {}
+    static constexpr char const* Name = "horseman attack in order";
+
+    HorsemanAttactInOrderAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
     bool Execute(Event event) override;
 
 protected:
@@ -251,10 +254,9 @@ protected:
 class FourhorsemanRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    FourhorsemanRedirectThreatAction(PlayerbotAI* ai)
-        : RaidRedirectThreatAction(ai, "four horsemen redirect threat"), helper(ai)
-    {
-    }
+    static constexpr char const* Name = "four horsemen redirect threat";
+
+    FourhorsemanRedirectThreatAction(PlayerbotAI* ai) : RaidRedirectThreatAction(ai, Name), helper(ai) {}
 
 protected:
     Player* GetRedirectTank() override;
@@ -583,7 +585,9 @@ public:
 class GothikChooseTargetAction : public AttackAction
 {
 public:
-    GothikChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, "gothik choose target"), helper(ai) {}
+    static constexpr char const* Name = "gothik choose target";
+
+    GothikChooseTargetAction(PlayerbotAI* ai) : AttackAction(ai, Name), helper(ai) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;
@@ -595,7 +599,9 @@ private:
 class GothikStayOnLivingSideAction : public MovementAction
 {
 public:
-    GothikStayOnLivingSideAction(PlayerbotAI* ai) : MovementAction(ai, "gothik stay on living side"), helper(ai) {}
+    static constexpr char const* Name = "gothik stay on living side";
+
+    GothikStayOnLivingSideAction(PlayerbotAI* ai) : MovementAction(ai, Name), helper(ai) {}
 
     bool Execute(Event event) override;
     bool isUseful() override;

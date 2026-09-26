@@ -20,6 +20,7 @@
 #include "PaladinActions.h"
 #include "PetsAction.h"
 #include "PriestActions.h"
+#include "RaidEncounter.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "ScriptedCreature.h"
@@ -283,8 +284,7 @@ float InstructorRazuviousGenericMultiplier::GetValue(Action* action)
     context->GetValue<bool>("neglect threat")->Set(true);
     if (botAI->GetState() == BOT_STATE_COMBAT &&
         (dynamic_cast<DpsAssistAction*>(action) || dynamic_cast<TankAssistAction*>(action) ||
-         dynamic_cast<CastTauntAction*>(action) || dynamic_cast<CastDarkCommandAction*>(action) ||
-         dynamic_cast<CastHandOfReckoningAction*>(action) || dynamic_cast<CastGrowlAction*>(action)))
+         (ClassifyAction(action) & RaidEncounterRules::Family::Taunt)))
     {
         return 0.0f;
     }
@@ -562,7 +562,8 @@ float GothikGenericMultiplier::GetValue(Action* action)
         {
             return 1.0f;
         }
-        if (action->getName() == "gothik choose target" || action->getName() == "gothik stay on living side")
+        std::string const name = action->getName();
+        if (name == GothikChooseTargetAction::Name || name == GothikStayOnLivingSideAction::Name)
         {
             return 1.0f;
         }

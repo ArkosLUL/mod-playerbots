@@ -52,15 +52,7 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     NaxxFaerlinaDefinition().AddTriggerNodes(triggers);
     NaxxMaexxnaDefinition().AddTriggerNodes(triggers);
 
-    // Gothik the Harvester. The whole raid fights on the living side, so getting back across outranks
-    // whatever the bot was shooting at.
-    triggers.push_back(new TriggerNode("gothik wrong side",
-        { NextAction("gothik stay on living side", ACTION_RAID + 4) }
-    ));
-
-    triggers.push_back(new TriggerNode("gothik",
-        { NextAction("gothik choose target", ACTION_RAID + 1) }
-    ));
+    NaxxGothikDefinition().AddTriggerNodes(triggers);
 
     // Patchwerk
     // triggers.push_back(new TriggerNode("patchwerk tank",
@@ -104,28 +96,8 @@ void RaidNaxxStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
         { NextAction("thaddius redirect threat", ACTION_RAID + 3) }
     ));
 
-    // Instructor Razuvious
-    triggers.push_back(new TriggerNode("razuvious tank",
-        { NextAction("razuvious use obedience crystal", ACTION_RAID + 1) }
-    ));
-
-    triggers.push_back(new TriggerNode("razuvious nontank",
-        { NextAction("razuvious target", ACTION_RAID + 1) }
-    ));
-
-    // four horseman
-    triggers.push_back(new TriggerNode("horseman attractors",
-        { NextAction("horseman attract alternatively", ACTION_RAID + 1) }
-    ));
-
-    triggers.push_back(new TriggerNode("horseman except attractors",
-        { NextAction("horseman attack in order", ACTION_RAID + 1) }
-    ));
-
-    // Only live for the pull window, so it can outrank the attractor rotation while it lasts.
-    triggers.push_back(new TriggerNode("four horsemen redirect threat",
-        { NextAction("four horsemen redirect threat", ACTION_RAID + 4) }
-    ));
+    NaxxRazuviousDefinition().AddTriggerNodes(triggers);
+    NaxxFourHorsemenDefinition().AddTriggerNodes(triggers);
 
     // sapphiron
     triggers.push_back(new TriggerNode("sapphiron ground",
@@ -179,12 +151,12 @@ void RaidNaxxStrategy::InitMultipliers(std::vector<Multiplier*>& multipliers)
     multipliers.push_back(new ThaddiusPrepullMultiplier(botAI));
     multipliers.push_back(new ThaddiusGenericMultiplier(botAI));
     multipliers.push_back(new SapphironGenericMultiplier(botAI));
-    multipliers.push_back(new InstructorRazuviousGenericMultiplier(botAI));
+    NaxxRazuviousDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new KelthuzadGenericMultiplier(botAI));
     NaxxAnubrekhanDefinition().AddMultipliers(botAI, multipliers);
-    multipliers.push_back(new FourhorsemanGenericMultiplier(botAI));
+    NaxxFourHorsemenDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new GluthGenericMultiplier(botAI));
-    multipliers.push_back(new GothikGenericMultiplier(botAI));
+    NaxxGothikDefinition().AddMultipliers(botAI, multipliers);
     multipliers.push_back(new NaxxThreatRedirectMultiplier(botAI));
     multipliers.push_back(new NaxxBurstWindowMultiplier(botAI));
     NaxxNothDefinition().AddMultipliers(botAI, multipliers);

@@ -21,7 +21,6 @@ public:
         creators["mutating injection removed"] = &RaidNaxxTriggerContext::mutating_injection_removed;
         creators["grobbulus cloud"] = &RaidNaxxTriggerContext::grobbulus_cloud;
 
-
         creators["thaddius prepull split"] = &RaidNaxxTriggerContext::thaddius_prepull_split;
         creators["thaddius phase pet"] = &RaidNaxxTriggerContext::thaddius_phase_pet;
         creators["thaddius phase pet lose aggro"] = &RaidNaxxTriggerContext::thaddius_phase_pet_lose_aggro;
@@ -29,25 +28,12 @@ public:
         creators["thaddius phase thaddius"] = &RaidNaxxTriggerContext::thaddius_phase_thaddius;
         creators["thaddius redirect threat"] = &RaidNaxxTriggerContext::thaddius_redirect_threat;
 
-        creators["razuvious tank"] = &RaidNaxxTriggerContext::razuvious_tank;
-        creators["razuvious nontank"] = &RaidNaxxTriggerContext::razuvious_nontank;
-
-        creators["horseman attractors"] = &RaidNaxxTriggerContext::horseman_attractors;
-        creators["horseman except attractors"] = &RaidNaxxTriggerContext::horseman_except_attractors;
-        creators["four horsemen redirect threat"] = &RaidNaxxTriggerContext::four_horsemen_redirect_threat;
-
         creators["sapphiron ground"] = &RaidNaxxTriggerContext::sapphiron_ground;
         creators["sapphiron flight"] = &RaidNaxxTriggerContext::sapphiron_flight;
 
         creators["kel'thuzad"] = &RaidNaxxTriggerContext::kelthuzad;
         creators["kel'thuzad shadow fissure"] = &RaidNaxxTriggerContext::kelthuzad_shadow_fissure;
         creators["kel'thuzad chains"] = &RaidNaxxTriggerContext::kelthuzad_chains;
-
-
-
-
-        creators["gothik"] = &RaidNaxxTriggerContext::gothik;
-        creators["gothik wrong side"] = &RaidNaxxTriggerContext::gothik_wrong_side;
 
         // creators["patchwerk tank"] = &RaidNaxxTriggerContext::patchwerk_tank;
         // creators["patchwerk non-tank"] = &RaidNaxxTriggerContext::patchwerk_non_tank;
@@ -58,8 +44,6 @@ public:
         creators["gluth low health zombie aoe"] = &RaidNaxxTriggerContext::gluth_low_health_zombie_aoe;
         creators["gluth frenzy"] = &RaidNaxxTriggerContext::gluth_frenzy;
         creators["gluth redirect threat"] = &RaidNaxxTriggerContext::gluth_redirect_threat;
-
-
 
         for (EncounterDefinition const* encounter : NaxxEncounterDefinitions())
             encounter->RegisterTriggers(creators);
@@ -77,23 +61,12 @@ private:
     static Trigger* thaddius_phase_transition(PlayerbotAI* ai) { return new ThaddiusPhaseTransitionTrigger(ai); }
     static Trigger* thaddius_phase_thaddius(PlayerbotAI* ai) { return new ThaddiusPhaseThaddiusTrigger(ai); }
     static Trigger* thaddius_redirect_threat(PlayerbotAI* ai) { return new ThaddiusRedirectThreatTrigger(ai); }
-    static Trigger* razuvious_tank(PlayerbotAI* ai) { return new RazuviousTankTrigger(ai); }
-    static Trigger* razuvious_nontank(PlayerbotAI* ai) { return new RazuviousNontankTrigger(ai); }
-
-    static Trigger* horseman_attractors(PlayerbotAI* ai) { return new HorsemanAttractorsTrigger(ai); }
-    static Trigger* horseman_except_attractors(PlayerbotAI* ai) { return new HorsemanExceptAttractorsTrigger(ai); }
-    static Trigger* four_horsemen_redirect_threat(PlayerbotAI* ai)
-    {
-        return new FourhorsemanRedirectThreatTrigger(ai);
-    }
 
     static Trigger* sapphiron_ground(PlayerbotAI* ai) { return new SapphironGroundTrigger(ai); }
     static Trigger* sapphiron_flight(PlayerbotAI* ai) { return new SapphironFlightTrigger(ai); }
     static Trigger* kelthuzad(PlayerbotAI* ai) { return new KelthuzadTrigger(ai); }
     static Trigger* kelthuzad_shadow_fissure(PlayerbotAI* ai) { return new KelthuzadShadowFissureTrigger(ai); }
     static Trigger* kelthuzad_chains(PlayerbotAI* ai) { return new KelthuzadChainsTrigger(ai); }
-    static Trigger* gothik(PlayerbotAI* ai) { return new GothikTrigger(ai); }
-    static Trigger* gothik_wrong_side(PlayerbotAI* ai) { return new GothikWrongSideTrigger(ai); }
     // static Trigger* patchwerk_tank(PlayerbotAI* ai) { return new PatchwerkTankTrigger(ai); }
     // static Trigger* patchwerk_non_tank(PlayerbotAI* ai) { return new PatchwerkNonTankTrigger(ai); }
     // static Trigger* patchwerk_ranged(PlayerbotAI* ai) { return new PatchwerkRangedTrigger(ai); }

@@ -104,7 +104,9 @@ private:
 class RazuviousTankTrigger : public Trigger
 {
 public:
-    RazuviousTankTrigger(PlayerbotAI* ai) : Trigger(ai, "instructor razuvious tank"), helper(ai) {}
+    static constexpr char const* Name = "razuvious tank";
+
+    RazuviousTankTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -114,7 +116,9 @@ private:
 class RazuviousNontankTrigger : public Trigger
 {
 public:
-    RazuviousNontankTrigger(PlayerbotAI* ai) : Trigger(ai, "instructor razuvious non-tank"), helper(ai) {}
+    static constexpr char const* Name = "razuvious nontank";
+
+    RazuviousNontankTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -221,7 +225,9 @@ public:
 class GothikTrigger : public Trigger
 {
 public:
-    GothikTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik"), helper(ai) {}
+    static constexpr char const* Name = "gothik";
+
+    GothikTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -233,7 +239,9 @@ private:
 class GothikWrongSideTrigger : public Trigger
 {
 public:
-    GothikWrongSideTrigger(PlayerbotAI* ai) : Trigger(ai, "gothik wrong side"), helper(ai) {}
+    static constexpr char const* Name = "gothik wrong side";
+
+    GothikWrongSideTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -326,7 +334,9 @@ private:
 class FourhorsemanRedirectThreatTrigger : public Trigger
 {
 public:
-    FourhorsemanRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, "four horsemen redirect threat"), helper(ai) {}
+    static constexpr char const* Name = "four horsemen redirect threat";
+
+    FourhorsemanRedirectThreatTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -336,7 +346,9 @@ private:
 class HorsemanAttractorsTrigger : public Trigger
 {
 public:
-    HorsemanAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, "fourhorsemen attractors"), helper(ai) {}
+    static constexpr char const* Name = "horseman attractors";
+
+    HorsemanAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
@@ -346,7 +358,9 @@ private:
 class HorsemanExceptAttractorsTrigger : public Trigger
 {
 public:
-    HorsemanExceptAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, "fourhorsemen except attractors"), helper(ai) {}
+    static constexpr char const* Name = "horseman except attractors";
+
+    HorsemanExceptAttractorsTrigger(PlayerbotAI* ai) : Trigger(ai, Name), helper(ai) {}
     bool IsActive() override;
 
 private:
