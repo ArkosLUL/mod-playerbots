@@ -48,6 +48,16 @@ essence system and Anub'arak spike-kiting.
   reads the unused object-data registry. A guid resolves map-wide, so an "encounter running" test
   also needs the unit in combat ([pitfalls.md](../../engine/pitfalls.md)).
 
+## Arena floor
+
+Every encounter before Anub'arak stands on gameobject 195527 (Argent Coliseum Floor, display 9059
+`Coliseum_Intact_Floor.wmo`, destroyed for Anub'arak). The static mesh and vmaps have nothing there:
+navprobe finds no poly or height at `ARENA_CENTER`, and rings out to 55 yd hit only the stands, Z
+417-458. **navprobe cannot verify an arena point**, so anchor only on the script's own points. Live,
+the object's collision gives Z, so `FindNearestPositionClearOfHazards` and `MoveTo` work: a move
+takes `PathGenerator`'s player shortcut (`PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH`, a straight line),
+and `CheckCollisionAndGetValidCoords` clips a point at the wall with the static LOS ray.
+
 ## Spell ids by difficulty
 
 ToC's remaps live only in the client DBC
@@ -63,6 +73,7 @@ the script names the 10N one. Read one through `sSpellMgr->GetSpellIdForDifficul
 | Sweep | 66794 | 67644 | 67645 | 67646 | worm cast, 1.5 s, 15 yd knockback |
 | Paralytic Toxin | 66823 | 67618 | 67619 | 67620 | player debuff |
 | Massive Crash | 66683 | 67660 | 67661 | 67662 | |
+| Frothing Rage | 66759 | 67657 | 67658 | 67659 | on Icehowl |
 | Fel Fireball | 66532 | 66963 | 66964 | 66965 | 2.5 s cast |
 | Incinerate Flesh | 66237 | 67049 | 67050 | 67051 | heal absorb |
 | Nether Power | 66228 | 67106 | 67107 | 67108 | on Jaraxxus |
@@ -90,15 +101,16 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 | `gormok tank swap needed` | Impale stacks |
 | `northrend worms sweep frontal` | Sweep cast |
 | `northrend worms afflicted by burning` | Burning Bite/Spray auras, which never exist ([northrend-beasts.md](northrend-beasts.md)) |
-| `icehowl charge incoming`, `IcehowlSuppressMovementDuringChargeMultiplier` | Massive Crash |
+| `icehowl frothing rage` | Frothing Rage |
 | `jaraxxus incinerate flesh on raid` | Incinerate Flesh |
 | `jaraxxus fel fireball interruptible` | Fel Fireball cast |
 | `jaraxxus nether power active` | Nether Power |
-| `twin valkyr needs initial essence`, `… vortex requires essence`, `… touched requires essence`, `TwinValkyrPrioritizeEssenceSwapMultiplier` | essences, Vortex casts, Touch |
-| `twin valkyr pact interruptible` | Twin's Pact cast |
-| `anubarak pursued by spike` (its Permafrost target) | Permafrost patch test (sphere without Frost Sphere) |
-| `anubarak ranged should seed permafrost`, `anubarak destroy frost sphere` | flying-sphere test (Frost Sphere, selectable) |
-| Anub'arak lust hold | Leeching Swarm, backed by his health below 30% |
+| `jaraxxus legion flame nearby` | Legion Flame |
+| `twin valkyr needs base essence`, `… vortex requires essence`, `… touched requires essence`, `… shield requires essence` | essences, Vortex casts, Touch, shields |
+| `twin valkyr pact interrupt duty` | Twin's Pact cast |
+| `anubarak burrower should be focused` | Permafrost on the burrower |
+| `anubarak penetrating cold on raid` | Penetrating Cold |
+| Anub'arak burst row | Leeching Swarm, lust only in phase 3, latched per instance |
 
 ## Code layout
 
@@ -156,9 +168,10 @@ instance per ms. Off map 649 the gate is open and nothing is live.
   remap check reads that bare identifier.
 - Shared bases (`Action/ToCActions_Shared.h`): `ToCMainTankHoldAction::DragBossToAnchor` backs the
   tank 5 yd at a time toward an anchor while it tanks the boss and stands more than 12 yd from it;
-  the boss follows, so it settles up to melee reach past that.
+  the boss follows, so it settles up to melee reach past that, possibly on a hazard. Where the spot
+  matters, measure arrival on the boss (Anub'arak's pre-submerge drag).
 - `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
-  `AiPlayerbot.FleeDistance` (5 yd), kept only for its two callers (slime pools, Legion Flame). A
+  `AiPlayerbot.FleeDistance` (5 yd), kept only for its one caller (slime pools). A
   new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
   [pitfalls.md](../../engine/pitfalls.md).
 - `IsBotInFrontalCone` and `CastClassTaunt` live in `src/Util/EncounterHelpers.{h,cpp}`; ToC keeps no

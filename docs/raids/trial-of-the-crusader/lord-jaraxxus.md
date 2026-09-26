@@ -125,11 +125,8 @@ an assist tank), so their order is arbitrary.
 
 ## Traps
 
-- **The arena floor is a gameobject** (195527, display 9059 `Coliseum_Intact_Floor.wmo`): no static
-  navmesh or vmap height anywhere on it, so navprobe reads every floor point off-mesh and paths as a
-  0x11 straight line. Live, its dynamic collision gives height, so `FindNearestPositionClearOfHazards`
-  and `MoveTo` work there, but no floor point can be verified offline: nothing here fixes a
-  coordinate other than `ARENA_CENTER`.
+- **The arena floor is a gameobject** ([README.md](README.md#arena-floor)): no floor point can be
+  verified offline, so nothing here fixes a coordinate other than `ARENA_CENTER`.
 
 ## Known gaps
 

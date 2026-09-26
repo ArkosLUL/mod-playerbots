@@ -138,9 +138,11 @@ What lands on a raid add is not what PvP experience predicts.
   carry it, so they hold their full duration through raid AoE; Freezing Trap does, so it never survives
   one. Read the flag, not the reputation.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
-  `DRTYPE_ALL` group — stun, taunt, cyclone, charge — or one carrying `CREATURE_FLAG_EXTRA_ALL_DIMINISH`.
+  `DRTYPE_ALL` group — stun, cyclone, charge — or one carrying `CREATURE_FLAG_EXTRA_ALL_DIMINISH`.
   Root, fear and disorient are `DRTYPE_PLAYER`, so on an add with `flags_extra = 0` they land at full
-  duration every time. The 10s PvP duration cap is gated the same way.
+  duration every time. The 10s PvP duration cap is gated the same way. Taunt diminishes only on a
+  creature flagged `OBEYS_TAUNT_DIMINISHING_RETURNS` (0x80000), which turns immune at the fifth, so a
+  plan built on repeated taunt-backs fails there (Twin Val'kyr).
 - **An add that calls `DoResetThreatList` on a timer can be neither tanked, taunted nor redirected.**
   Read its `UpdateAI` before designing any of the three. Freya's Detonating Lasher re-rolls a uniformly
   random player every 10s, which leaves geometry plus a snare as the only handling.
@@ -276,6 +278,15 @@ scripted raid encounters.
   `SPELL_EFFECT_INTERRUPT_CAST`, which silences the raid's school for 10s — the damage number says
   nothing about the mechanic that matters. Read `EffectRadiusIndex` on every effect too; index 28 is
   50000 yd, i.e. raid-wide and undodgeable.
+- **`SpellInfoCorrections.cpp` can rewrite a DBC value.** Fire Bomb 66320's radius is 5 yd in the
+  DBC and 2 yd in play, so read it before sizing a hazard.
+- **A script's own periodic damage can skip every mitigation.** `spell_valkyr_touch_aura` hits every
+  player on the map (`ExcludeTargetAuraSpell` 0) with damage computed before absorbs.
+- **`EventMap::ExecuteEvent` always erases the event**, so one not re-scheduled with `Repeat` runs
+  once, whatever its comment says.
+- **A boss whose script re-seeds threat on a timer never satisfies `TankHasHeldBoss`.** Exempt its
+  entries through `BossHasNoStableVictim`
+  ([consumables-and-burst.md](../systems/consumables-and-burst.md)).
 - **A script may keep no boss state.** Without `SetBossNumber` (`GetEncounterCount()` 0: ToC, VoA)
   boss state and its hooks say nothing; read the script's own progress `GetData` and
   `IsEncounterInProgress`. That override can write: ToC's resets its encounter to `NOT_STARTED` when

@@ -170,7 +170,12 @@ front replaces the whole chain for the common case. Encounter rules enforce this
 
 - `PlayerbotAI::CanCastSpell` builds its probe with `TRIGGERED_IGNORE_POWER_AND_REAGENT_COST` and
   whitelists `SPELL_FAILED_OUT_OF_RANGE`, so `isPossible()` never checks mana, rage or runes.
-  **Resource and pacing gating must live in a trigger, not in the action.**
+  **Resource and pacing gating must live in a trigger, not in the action**, and a readiness election
+  (who interrupts this cast) tests the cost itself. A known pet spell (Spell Lock) answers true
+  before any cooldown or range check, and `CastSpell` casts it as the bot, so test the bot's own
+  cooldown and range.
+- `CastSpell` selects and faces the target before it fails, so a taunt or other cooldown cast not
+  gated on `CanCastSpell` plus the DBC range re-faces the bot every tick.
 - There is no cast-while-moving model and no spell queue: any cast-time spell is refused outright
   while moving (see [pitfalls.md](pitfalls.md)), and casts are never clipped — the AI yields while
   `SPELL_STATE_PREPARING`. Deliberate clipping needs an explicit `cancel channel` node.
@@ -206,6 +211,10 @@ front replaces the whole chain for the common case. Encounter rules enforce this
   the whole raid. Every action bound to it competes for that one target, so anything that lowers
   damage taken without raising health % (a shield, an absorb) leaves the same unit winning the scan
   until the effect expires.
+- **A heal absorb makes every cast-time heal a no-op.** `PlayerbotAI::UpdateAI` cancels a preparing
+  single-target heal on a full-health target and refunds the GCD, and under an absorb health reads
+  full: the node recasts every tick and nothing lands. Heal such a target with instants, HoTs and
+  channels.
 - A group scan measures with `botAI->GetRange("heal")` — **30 yd** — not
   `sPlayerbotAIConfig.spellDistance`, and not `healDistance` 38.5. Null-check `bot->GetGroup()` and
   LOS-test while you are in there.

@@ -51,15 +51,11 @@ key on their duty.
 - **`northrend beasts control tank movement multiplier`** zeroes `CombatFormationMoveAction` for a
   tank whose victim is an engaged beast.
 
-## The arena floor is a gameobject
+## Arena bounds
 
-The floor is GO 195527 (Argent Coliseum Floor, destroyed for Anub'arak), so the static mesh has
-nothing there: navprobe at `ARENA_CENTER` finds no poly within {3,50,3} and no height, and rings out to
-55 yd find only the stands at Z 417-458. **navprobe cannot verify an arena point.** A bot's `MoveTo`
-there takes `PathGenerator`'s player shortcut (`PATHFIND_NORMAL|PATHFIND_NOT_USING_PATH`, a straight
-line), and `CheckCollisionAndGetValidCoords` clips a point at the wall with the static LOS ray. The
-script bounds the floor instead: Icehowl lands 50 yd from the centre (46 toward the main gate, north,
-+y), and the gate front sits 38.8 yd north.
+navprobe cannot verify an arena point ([README.md](README.md#arena-floor)), so the script bounds the
+floor: Icehowl lands 50 yd from the centre (46 toward the main gate, north, +y), and the gate front
+sits 38.8 yd north.
 
 ## Gormok the Impaler
 

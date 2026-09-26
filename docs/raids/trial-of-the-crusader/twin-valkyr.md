@@ -101,11 +101,8 @@ so each attempt restarts every timer. The kill strips the same auras.
 
 ## Floor
 
-The arena floor is a gameobject (195527). navprobe reads it off mesh with no `.map` or vmap height;
-the polys it finds on a 47 yd ring are the stands, 23-54 yd up. A bot there moves by straight
-shortcut (`PathGenerator` gives an off-mesh player `NORMAL | NOT_USING_PATH`), its Z from the live
-object, so no point on the floor can be verified offline; anchor only on the script's own points,
-`ARENA_CENTER` and the portals.
+No point on the arena floor can be verified offline ([README.md](README.md#arena-floor)); anchor
+only on the script's own points, `ARENA_CENTER` and the portals.
 
 ## Strategy
 

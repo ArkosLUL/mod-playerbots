@@ -129,6 +129,9 @@ structurally zero. What a trace does carry is the last health the snapshot sampl
 stopped appearing, and whatever it cast on the way out: Yogg's Guardians are counted through their
 Shadow Nova for exactly this reason.
 
+**A change-only key keeps a stale value across windows**, a dead bot's duty for one. Write an
+explicit `none` when the window opens, or have the reader cut spans at death.
+
 Churn is only legible inside the phase you care about. Mimiron's phase-1 flip-flop counts 57 A-B-A
 within phase 1 and disappears into ~700 across the whole pull, so `postmortem.py --probes --during
 mimiron.phase=1` is what reproduces it and a whole-pull number is what hid it.
@@ -179,6 +182,10 @@ reacting to a boss event, not for an action that has to travel now. Gate the int
 mechanic: clipping a cast every time a *survivable* hazard lands costs more than the hazard does.
 Kara, Gruul, Magtheridon and Naxxramas already do this.
 
+A bot mid-cast also runs **no triggers**: `UpdateAIInternal` yields while its spell prepares. So a
+mechanic that punishes an ongoing cast (Mistress' Kiss) can only be answered from another bot's
+tick, by `RequestSpellInterrupt` on the caster.
+
 ## Movement that silently no-ops
 
 - **`MoveTo` does not validate the destination against the navmesh.** With `exact_waypoint = false,
@@ -225,6 +232,11 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   a thousand rays in one invocation is the difference between usable and not. The eye is `--collision`
   above both endpoints, matching `IsWithinLOSInMap`. **GameObject collision needs a live server**, and
   a map with no vmap tree reads every ray as clear - `coverage` warns.
+
+  **A gameobject floor is invisible to navprobe.** The static mesh and vmaps have nothing under it,
+  so every point reads off mesh with no height: there the offline check is impossible, not failed.
+  Live, a bot's `MoveTo` onto it takes the straight-line `0x11` shortcut, clipped only by the static
+  LOS ray, and its Z comes from the object's dynamic collision. ToC's arena (GO 195527) is the case.
 
 - **A floor check clips a derived point back to a gameobject's edge.**
   `EncounterHelpers::ValidateFloorPoint` runs `Map::CheckCollisionAndGetValidCoords` **from the bot**,
@@ -343,7 +355,9 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   `UseItemAction::Execute` calls `StopMoving()` on a moving bot (`UseItemAction.cpp:188-193`) and a mana
   gem runs at relevance 90, and Disengage throws a hunter back. Hodir lost a mage 6.5 yd short of its
   dodge and a hunter out of its shelter that way. Clear `last movement` once the bot has stood still a
-  beat past the issue (`ReleaseStalledWalk`, 500 ms).
+  beat past the issue (`ReleaseStalledWalk`, 500 ms). `MOVEMENT_FORCED` does not lift this: forced
+  does not outrank forced. The flip side: `Duplicate` on a bot still moving means it is already
+  walking there, not that the move was refused.
 
 - **Every `MoveTo` calls `mm->Clear()`.** So a high-priority node that re-derives its destination each
   tick cancels whatever walk a lower node had in flight, even when its own answer moved the bot a yard.
@@ -365,7 +379,12 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
   dodge: the bot's own spot is inside what it flees. A bot that only has to keep moving already stands
   clear, so at a wall the pulled-back probe *is* its own spot, it wins the ring, and `MoveTo` refuses it
   as `there`/`dup`. Hodir's Biting Cold shed stood two casters still for ~12 s this way until their
-  stacks killed them. Pass an `accept` that rejects spots under the travel the mechanic needs.
+  stacks killed them. Pass an `accept` that rejects spots under the travel the mechanic needs. With an
+  **empty hazard list** it returns `Position()`, so a caller that must always move passes at least one
+  circle (its own feet).
+
+- **Spell movers are not `MovementAction`s.** Blink and Disengage are `CastSpellAction`s, so a
+  movement veto that doesn't name them lets `EnemyTooCloseForSpell` fire them straight through it.
 
 - **A warning band is a permanent dodge once the field carries enough marks.** Padding a hazard's reach
   buys reaction time per mark and costs coverage per volley: Thorim's Hammer drops 8 marks at once
@@ -446,13 +465,21 @@ Kara, Gruul, Magtheridon and Naxxramas already do this.
 - **`AvoidAoeAction` only sees three things**: a dynobject aura, a damaging trap GameObject, or a
   `UNIT_FLAG_NOT_SELECTABLE` trigger NPC. Mechanics outside those — Anub'rekhan's Impale and Locust
   Swarm, the Four Horsemen's Void Zone NPC 16697 (SmartAI, casts on update) — are invisible to it.
-  **The answer is pre-emptive spread, not reactive avoidance.**
+  **The answer is pre-emptive spread, not reactive avoidance.** Where it does see a unit, it fires at
+  `GetDistance <= 3`, which subtracts both combat reaches (about 5.5 yd centre to centre), and moves
+  by `FleePosition`: an encounter with its own mover for that hazard vetoes it, or the two fight.
 - **Non-selectable stalkers never enter attack-target lists at all** (Freya's beam stalkers
   33170/33050, Mimiron's flame nodes), so they cannot be found through `"possible targets"`. Scan the
   `"nearest npcs"` GuidVector instead. Watch the inverse too: Freya's root creatures 33088/33168
   *are* selectable, so a bot will happily kill its own root.
 - `AttackersValue::IsPossibleTarget` drops `UNIT_FLAG_NOT_SELECTABLE` units
-  (`Value/AttackersValue.cpp:156`), so a phased-out boss leaves `"attackers"` entirely.
+  (`Value/AttackersValue.cpp:156`), so a phased-out boss leaves `"attackers"` entirely, and
+  `GetFirstAliveUnitByEntry`, which reads `"possible targets"`, loses a submerged boss or a spike
+  the same way. Resolve those through the instance guid slot or a grid search.
+- **A `NullCreatureAI` unit stays out of combat, so out of `"attackers"`, until something hits it.**
+  `dps assist` swaps a bot off it every tick unless the encounter vetoes `DpsAssist` for that bot.
+- **No mage counterspells what it is attacking.** Mages have no current-target counterspell node,
+  and every `... on enemy healer` value (`EnemyHealerTargetValue`) skips the bot's own current target.
 - **Out of line of sight is an invalid target.** `AttackersValue::IsValidTarget` is `IsPossibleTarget`
   plus `IsWithinLOSInMap`, so a slot behind a wall fires `invalid target` → `drop target`, and
   `DropTargetAction` calls `ChangeEngine(BOT_STATE_NON_COMBAT)`: the bot stops fighting and `follow`
@@ -509,6 +536,8 @@ Related traps:
 - **A debuff can sit below the cast.** It may be an `EffectTriggerSpell` or a `spell_linked_spell`
   row, so keying on the cast id's aura leaves the node dead: ToC's Burning Bite/Spray carry no aura,
   the debuff is Burning Bile 66869.
+- **`Unit::IsImmunedToDamage(mask)` wants one aura covering the whole mask.** Ice Block is a
+  physical aura plus a magic one, so a mask test reads it as not immune: test each school.
 - **A cast call's `true` is not a cast.** `PlayerbotAI::CastVehicleSpell` returns true when `CheckCast`
   refused, so anything stamped on that answer records a cast that never happened. Flame Leviathan's
   `CastVehicleSelfSpell` stamped Steam Rush's 15 s cooldown on a refusal from the Ram GCD, and a
@@ -663,6 +692,10 @@ exists. **The proof technique generalises**: the first `combat formation move` f
 686 ms into the pull, and a value armed before the pull began cannot have been set by that pull. Any
 encounter that writes a shared value owes the next one a reset.
 
+`rti` and `rti cc` outlive the session too: `AiObjectContext::Save` persists them to the bot's DB
+store. An encounter that writes one restores it, through an ungated node where the encounter gate
+can close before cleanup.
+
 **A shared staleness flag cleared by the first actor starves every other actor.** Thorim's
 `ThorimEncounterStateIsStale` returned one instance-wide `engagedSeen` and the reset set it false, so
 **the first bot to reset closed the gate for the other 24** — exactly one bot per wipe cycle was
@@ -705,6 +738,8 @@ the just-died block in `PlayerbotAI::DoNextAction` now clears it.
   silently deletes a role when its holder dies. Passing `true` shifts indices past dead members and
   gives free auto-promotion (`PlayerbotAI.h:437-439`).
 - `botAI->GetMeleeIndex()` counts tanks too.
+- **`IsMechanicTrackerBot` elects the first alive bot of any role**, so a marker gated behind a role
+  predicate goes silent whenever a healer is first in the group.
 - **`IsRanged()` includes healers.** With the default `bySpec = false` it is just
   `ContainsStrategy(STRATEGY_TYPE_RANGED)` (`PlayerbotAI.cpp:1905`), so a holy priest answers it. Any
   fixed ranged position gated on `IsRanged` therefore drags healers off heal range; use `IsRangedDps`
