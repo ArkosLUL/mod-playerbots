@@ -57,7 +57,7 @@ function brief(item, stage) {
     `Rules: the "Rules for WI agents" section of ${args.runbook}. Follow it exactly.`,
     `Owned paths: ${item.ownedPaths.join(', ')}.`,
     `Verification: ${item.verify.join(' ; ')}`,
-    'Never build, restart or reconfigure the server; the DB is SELECT-only.',
+    'Never build, restart or reconfigure the server, nor start or stop a Docker container; the DB is SELECT-only.',
     'No git writes: leave every change uncommitted.',
   ].filter(Boolean).join('\n')
 }

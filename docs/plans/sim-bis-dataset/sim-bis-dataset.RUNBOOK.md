@@ -34,7 +34,8 @@ re-affirms them.
 - mod-reforging gets no git writes: its patch stays uncommitted.
 - Never push, amend, rebase, reset, clean, stash or force.
 
-**Server:** the DB stays SELECT-only. No rebuild, restart or config change: the user rebuilds.
+**Server:** the DB stays SELECT-only. No rebuild, restart, config change or Docker container start/stop:
+the user rebuilds.
 
 **Docs:** drafted with `/compact-docs-writer` and applied without a second ask.
 
@@ -44,7 +45,8 @@ re-affirms them.
    `int-check.sh`. Record the wave base SHA.
 2. **Set up each WI.** `git -C [int] worktree add -b bis-<id> <wt> bis-integration`. `BIS-reforge-lock`
    gets none: it edits [reforge] directly, once `git -C [reforge] status --porcelain` is empty.
-3. **Run.** Write the args to [loop]`/wave<X>-args.json`, then `Workflow({script, args})` with this
+3. **Run**, only on the user's explicit go for this wave (auto mode shows no prompt). Write the args to
+   [loop]`/wave<X>-args.json`, then `Workflow({script, args})` with this
    directory's `sim-bis-dataset.workflow.js` inline: the tool reads a `scriptPath` only in the session's
    working directories. Record the runId in the PLAN and wait for the notification. Save the results to
    [loop]`/wave<X>-results.json`.
@@ -73,7 +75,8 @@ re-affirms them.
   Never touch [pb], [int] or another WI's worktree.
 - Edit only your owned paths. A change needed anywhere else goes in `contractChangeRequests`.
 - No git writes. Leave everything uncommitted.
-- Never build, restart or reconfigure the server. The DB is SELECT-only.
+- Never build, restart or reconfigure the server, nor start or stop a Docker container. The DB is
+  SELECT-only.
 
 **Checks**
 - Run exactly your WI's verify commands, from your worktree with `PB_REPO` pointing at it.
