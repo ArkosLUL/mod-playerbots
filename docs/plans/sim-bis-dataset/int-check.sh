@@ -13,12 +13,17 @@ mkdir -p "$LOGS"
 cd "$INT" || exit 1
 failed=0
 
-changed_cxx=$(git diff --name-only --diff-filter=AM "$BASE" HEAD -- 'src/*.cpp' 'src/*.h' | tr '\n' ' ')
+changed_cpp=$(git diff --name-only --diff-filter=AM "$BASE" HEAD -- 'src/*.cpp' | tr '\n' ' ')
+changed_h=$(git diff --name-only --diff-filter=AM "$BASE" HEAD -- 'src/*.h' | tr '\n' ' ')
 changed_src=$(git diff --name-only --diff-filter=AM "$BASE" HEAD -- 'src/' | tr '\n' ' ')
 
-echo "== syntax ($(echo $changed_cxx | wc -w) paths)"
-if [ -n "$changed_cxx" ]; then
-	PB_REPO=$INT PB_MAX_FANOUT=60 $CHECK $changed_cxx >"$LOGS/syntax.log" 2>&1
+echo "== syntax ($(echo $changed_cpp | wc -w) .cpp, $(echo $changed_h | wc -w) .h)"
+: >"$LOGS/syntax.log"
+# The fan-out cap keeps the first N TUs alphabetically and can cut the changed .cpp themselves,
+# so those run uncapped and only the headers' includers are capped.
+[ -n "$changed_cpp" ] && PB_REPO=$INT PB_MAX_FANOUT=999 $CHECK $changed_cpp >>"$LOGS/syntax.log" 2>&1
+[ -n "$changed_h" ] && PB_REPO=$INT PB_MAX_FANOUT=60 $CHECK $changed_h >>"$LOGS/syntax.log" 2>&1
+if [ -s "$LOGS/syntax.log" ]; then
 	# Always fails here from the case-insensitive bind mount, never in the real build.
 	real=$(grep '^FAIL' "$LOGS/syntax.log" | grep -v 'BuildSharedStrategyContexts.cpp')
 	grep -cE '^PASS' "$LOGS/syntax.log" | sed 's/^/pass: /'
