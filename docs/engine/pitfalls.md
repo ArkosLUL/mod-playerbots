@@ -873,6 +873,6 @@ skip the query whenever a name is missing:
     SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (...)
 
-`BisDatasetMgr::Load` (`src/Mgr/Item/BisDatasetMgr.cpp`) does this before ever touching
+`BisDatasetMgr` (`src/Mgr/Item/BisDatasetMgr.cpp`) does this before every load and version poll of
 `bistooltip_dataset`/`_subject`/`_block` — tables mod-bis-tooltip owns and playerbots only reads,
 absent on any server that hasn't loaded that module or run its import yet.

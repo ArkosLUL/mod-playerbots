@@ -115,12 +115,12 @@ decay arithmetic would be comparing unrelated ladders.
 Phase numbering: Vanilla `PR, P1..P6` (0-6); TBC `PR, T4, T5, T6, ZA, SWP` (0-5); WotLK
 `PR, T7, T8, T9, T10, RS` (0-5).
 
-Two specs get no signal at all and that is intended: Rogue Subtlety has no list in any expansion, and
+Two specs get no list signal and that is intended: Rogue Subtlety has no list in any expansion, and
 Vanilla/TBC have no Discipline priest list. `ResolveSpecKey` also refuses whenever the talent tab and
 the role the bot actually plays disagree — a wrong list is worse than none, because it bypasses the
 spec gates in the wrong direction.
 
-`LoadAll` runs once at startup: regenerated list data needs a restart or `.playerbots rndbot reload`
-(reruns `PlayerbotAIConfig::Initialize`, which reloads it). The sim dataset instead polls its
-version every `PollSeconds` and needs neither — force it with `.playerbots bis reload`, check it
-with `.playerbots bis status`.
+`LoadAll` runs at startup and on `.playerbots rndbot reload` (which reruns
+`PlayerbotAIConfig::Initialize`), so regenerated list data needs one or the other. The sim dataset
+reloads on its own version poll (`BisDataset.PollSeconds`) or on `.playerbots bis reload`;
+`.playerbots bis status` shows what is loaded.

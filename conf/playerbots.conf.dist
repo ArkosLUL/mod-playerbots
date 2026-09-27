@@ -506,12 +506,12 @@ AiPlayerbot.Bis.PhaseDecay = 1.0
 AiPlayerbot.BisDataset.Enable = 1
 
 # Apply the dataset's enchants, its gems on the exact rank-1 item, and its gem choice as the
-# preferred pool for other items. 0 keeps only the rank signal.
+# preferred pool for every other socket. 0 leaves gems and enchants to the normal picker.
 # Default: 1 (enabled)
 AiPlayerbot.BisDataset.Enhancements = 1
 
-# Apply the sim's reforge on exact rank-1 items. No-op without mod-reforging or with
-# Reforging.Enable = 0.
+# Apply the sim's reforge on exact rank-1 items, and remove the reforge from an exact item the sim
+# left unreforged. No-op without mod-reforging or with Reforging.Enable = 0.
 # Default: 1 (enabled)
 AiPlayerbot.BisDataset.Reforges = 1
 

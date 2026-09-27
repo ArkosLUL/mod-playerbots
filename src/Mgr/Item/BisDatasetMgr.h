@@ -83,9 +83,9 @@ struct BisDatasetSnapshot
     std::unordered_set<uint32> items;
 };
 
-// Loads the BisTooltipAC tables (bistooltip_dataset/subject/block in the world DB). Reload runs
-// before DBCs and ObjectMgr load, so it only decodes and indexes; Audit is the part that checks spells
-// and gems.
+// Loads the BisTooltipAC tables (bistooltip_dataset/subject/block in the world DB). The startup
+// Reload runs before DBCs and ObjectMgr load, so Reload only decodes and indexes; Audit is the part
+// that checks spells and gems.
 class BisDatasetMgr
 {
 public:

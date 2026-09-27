@@ -5709,8 +5709,8 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         return enchant->requiredLevel <= bot->GetLevel();
     };
 
-    // Skips the cache blacklist and the engineering cloak rule on purpose: the sim only picks what
-    // the server can hand out, DK runeforges included, which the cache never holds.
+    // Skips the cache blacklist, its enchant flags check and the engineering cloak rule on purpose:
+    // the sim only picks what the server can hand out.
     auto datasetEnchantIfUsable = [&](uint32 enchantSpell, Item* item) -> uint32
     {
         SpellInfo const* spellInfo = enchantSpell ? sSpellMgr->GetSpellInfo(enchantSpell) : nullptr;

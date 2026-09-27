@@ -49,7 +49,7 @@ enum BisSpecTab : uint8
 {
     BIS_TAB_DRUID_BEAR = 10,
     BIS_TAB_DK_BLOOD_TANK = 11,
-    BIS_TAB_WARRIOR_FURY_PROT = 12,  // Vanilla only - a fury-specced tank
+    BIS_TAB_WARRIOR_FURY_PROT = 12,  // fury-specced tank: Vanilla lists, or the sim dataset's Fury-Prot spec
     BIS_TAB_NONE = 0xFF
 };
 
