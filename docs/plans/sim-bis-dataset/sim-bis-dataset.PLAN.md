@@ -118,6 +118,7 @@ Owned: `src/Mgr/Item/BisWire.h` (new), `tools/nativetest/bis_wire_test.cpp` (new
   table spot checks; plus one real payload with its checksum from
   `C:\Users\boss2\AppData\Local\Temp\claude\g--DevStuff-GitHub-wowsimwotlk\cd047fef-67b5-43a9-9c78-eca3e8ae7548\scratchpad\phase6\bis_dataset_stage2.sql`.
 - Verify: nativetest, pblint.
+- `BisWire::TAB_*` duplicate `BisSpecTab` (no `Define.h` in the header): change both together.
 
 ### BIS-reforge-lock (wave A)
 Owned: [reforge]`/src/*` (the callers of `reforgingDataMap` and `GetReforgingData`). No worktree.
