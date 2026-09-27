@@ -18,6 +18,7 @@
 #include "UseItemAction.h"
 #include "WarlockActions.h"
 #include "WarlockTriggers.h"
+#include "WarlockValues.h"
 
 class WarlockStrategyFactoryInternal : public NamedObjectContext<Strategy>
 {
@@ -378,6 +379,18 @@ private:
     static Action* curse_of_weakness(PlayerbotAI* ai) { return new CastCurseOfWeaknessAction(ai); }
 };
 
+class WarlockValueContextInternal : public NamedObjectContext<UntypedValue>
+{
+public:
+    WarlockValueContextInternal()
+    {
+        creators["seed of corruption target"] = &WarlockValueContextInternal::seed_of_corruption_target;
+    }
+
+private:
+    static UntypedValue* seed_of_corruption_target(PlayerbotAI* botAI) { return new SeedOfCorruptionTargetValue(botAI); }
+};
+
 SharedNamedObjectContextList<Strategy> WarlockAiObjectContext::sharedStrategyContexts;
 SharedNamedObjectContextList<Action> WarlockAiObjectContext::sharedActionContexts;
 SharedNamedObjectContextList<Trigger> WarlockAiObjectContext::sharedTriggerContexts;
@@ -422,4 +435,5 @@ void WarlockAiObjectContext::BuildSharedTriggerContexts(SharedNamedObjectContext
 void WarlockAiObjectContext::BuildSharedValueContexts(SharedNamedObjectContextList<UntypedValue>& valueContexts)
 {
     AiObjectContext::BuildSharedValueContexts(valueContexts);
+    valueContexts.Add(new WarlockValueContextInternal());
 }

@@ -130,6 +130,11 @@ bool CastShadowflameAction::isUseful()
     return facingTarget && targetClose;
 }
 
+Value<Unit*>* CastSeedOfCorruptionOnAttackerAction::GetTargetValue()
+{
+    return context->GetValue<Unit*>("seed of corruption target");
+}
+
 // Checks if the bot knows Seed of Corruption, and prevents the use of Rain of Fire if it does
 bool CastRainOfFireAction::isUseful()
 {

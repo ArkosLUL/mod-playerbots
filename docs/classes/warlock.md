@@ -57,6 +57,27 @@ worth keeping in mind:
   actually-missing DoT.
 - `m_pctMods` staleness has the same cause and is fixed by the same recast — no separate trigger.
 
+**Verified on the 2026-09-27 Ulduar traces.** The trigger fires once per pull, 0-6 s after the crit-taken
+debuffs the opener missed reach the boss (Shadow Mastery, Improved Scorch, Heart of the Crusader,
+Totem of Wrath, Master Poisoner), then stays quiet; Everlasting Affliction carries that snapshot for
+the rest of the uptime, 114 s on one Thorim pull. Tick crit rate cannot show the gain: 5 points needs
+far more ticks than a pull yields.
+
+## Seed of Corruption stays off bosses
+
+The bot's own Seed landing removes its own Corruption on that target; another warlock's Seed does
+not. The `aoe` ladder's `seed of corruption on attacker` (22.0) used `attacker without aura`, which
+picks the boss, and `seed of corruption` (21.5) the current target, also the boss. Across the
+2026-09-27 Ulduar run: 38 Corruption drops, 219 s of lost boss uptime, 70-86 s per Freya pull, and
+on XT-002 a loop of Corruption cast into Seeds still in flight.
+
+Both Seed actions now go through `seed of corruption target`: never a boss, preferring an add
+without own Corruption, falling back to Corrupted trash, else no Seed. Never a boss even when it
+lacks Corruption, or after an expiry Seed (22.0) outranks the Corruption recast (19.5) and blocks it
+until the Seed pops. Consequence: no Seed on Iron Assembly, all three being bosses. A Seed cast at a
+target in the last 3 s (`last spell cast`, whole seconds) counts as already there for every
+Corruption action and both Seed actions.
+
 ## Framework notes specific to warlock
 
 - **Every warlock DoT action overrides `isUseful()` to call `CastAuraSpellAction::isUseful()`**, which
@@ -66,7 +87,7 @@ worth keeping in mind:
 - `AttackerWithoutAuraTargetValue` filters on **aura presence only**, so `DebuffOnAttackerTrigger`
   cannot see remaining duration even with `beforeDuration` set — the value returns `nullptr` for a
   target that still has the about-to-expire DoT. Multi-target duration-aware refresh needs a new
-  value class.
+  value class. It also returns the **highest-health** match, so on a boss fight, the boss.
 - `ValueContext` exposes no aura-duration value at all; direct access is `PlayerbotAI::GetAura(...)`.
 - `"metamorphosis"` is the **only** warlock entry in `burstCooldownNames`, so `BurstWindowStrategy`
   paces it and nothing else.
@@ -91,9 +112,9 @@ too hurt to tap at all. The emergency node exists for when that happens anyway.
 
 ## Affliction
 
-Code order: corruption on attacker 19.5, UA on attacker 19.0, corruption 18.0, UA 17.5, haunt 16.5,
-shadow trance → shadow bolt 16.0, target critical health → drain soul 15.5; life tap glyph 29.5, life
-tap 5.1, flee 39.0. Defaults: corruption 5.5, UA 5.4, haunt 5.3, shadow bolt 5.2, shoot 5.0. Curse of
+Code order: corruption on attacker 19.5, UA on attacker 19.0, corruption 18.0, haunt 17.75, UA 17.5,
+corruption snapshot → corruption resnapshot 16.5, shadow trance → shadow bolt 16.0, drain soul
+execute → drain soul 15.5; life tap glyph 29.5, life tap 5.1, flee 39.0. Defaults: corruption 5.5, UA 5.4, haunt 5.3, shadow bolt 5.2, shoot 5.0. Curse of
 Agony comes from the separate `curse of agony` strategy (18.5 on-attacker / 17.0 single).
 
 | # | Finding |
@@ -165,5 +186,6 @@ wants. Destruction's Corruption-below-Incinerate ordering (the `// won't be used
 comments already say so). The shared AoE ladder — immolation aura 26.0, shadowfury 23.0, shadowflame
 22.5, seed of corruption 22.0/21.5, rain of fire 21.0 — matches the guides' "large pulls: Shadowflame
 then Seed", and `CastRainOfFireAction` correctly suppresses itself when the bot knows Seed of
-Corruption. Corruption and Seed of Corruption are mutually exclusive on the same target, which is
-correct for WotLK.
+Corruption. One caster's Corruption and Seed of Corruption are mutually exclusive on the same
+target, which is correct for WotLK; see the Seed section for how the bot avoids trading one for the
+other.

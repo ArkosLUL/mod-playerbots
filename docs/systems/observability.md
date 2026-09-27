@@ -524,7 +524,9 @@ are left bare on purpose.
   wants a player (`RaidObsSession.cpp:349`), so a boss debuff has no `aura` row — Hodir's doc once read
   that silence as Singed never landing, when 115-173 procs a pull had. A proc debuff still shows as a
   triggered `cast` (`tr:1`) with `tgt` the creature: count those and model the stacks, as
-  `bosses/hodir.py --singed` does.
+  `bosses/hodir.py --singed` does. The mod-chronicle log does carry creature auras. Its
+  `SPELL_AURA_APPLIED` fires on every aura client update, so a refresh with no cast behind it
+  (Everlasting Affliction rolling Corruption) reads as a repeat `APPLIED` with no `REMOVED` between.
 - **A friendly creature is not swept either**, so Yogg-Saron's one-use portals (34072) leave no row
   anywhere but `yogg.wave`. Where a mechanic's unit is not hostile, the probe is the only record.
 - **`cfg.cheats` is the conf string, not a record of cheats exercised.** `EnvFieldsJson` copies

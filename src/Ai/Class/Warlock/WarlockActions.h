@@ -11,6 +11,7 @@
 #include "GenericSpellActions.h"
 #include "InventoryAction.h"
 #include "UseItemAction.h"
+#include "WarlockValues.h"
 
 class PlayerbotAI;
 class Unit;
@@ -259,8 +260,8 @@ public:
     CastCorruptionAction(PlayerbotAI* botAI) : CastDebuffSpellAction(botAI, "corruption", true) {}
     bool isUseful() override
     {
-        // Bypass TTL check and prevent casting if Seed of Corruption is present
-        return CastAuraSpellAction::isUseful() && !botAI->HasAura("seed of corruption", GetTarget(), false, true);
+        // Bypass TTL check and prevent casting if our Seed of Corruption is on or flying at the target
+        return CastAuraSpellAction::isUseful() && !SeedOfCorruptionPending(botAI, GetTarget());
     }
 };
 
@@ -270,8 +271,8 @@ public:
     CastCorruptionOnAttackerAction(PlayerbotAI* botAI) : CastDebuffSpellOnAttackerAction(botAI, "corruption", true) {}
     bool isUseful() override
     {
-        // Bypass TTL check and prevent casting if Seed of Corruption is present
-        return CastAuraSpellAction::isUseful() && !botAI->HasAura("seed of corruption", GetTarget(), false, true);
+        // Bypass TTL check and prevent casting if our Seed of Corruption is on or flying at the target
+        return CastAuraSpellAction::isUseful() && !SeedOfCorruptionPending(botAI, GetTarget());
     }
 };
 
@@ -284,7 +285,7 @@ public:
     std::string const getName() override { return "corruption resnapshot"; }
     bool isUseful() override
     {
-        return CastSpellAction::isUseful() && !botAI->HasAura("seed of corruption", GetTarget(), false, true);
+        return CastSpellAction::isUseful() && !SeedOfCorruptionPending(botAI, GetTarget());
     }
 };
 
@@ -482,7 +483,8 @@ public:
     bool isUseful() override
     {
         // Bypass TTL check
-        return CastAuraSpellAction::isUseful();
+        return CastAuraSpellAction::isUseful() && IsSeedOfCorruptionTarget(botAI, GetTarget()) &&
+               !SeedOfCorruptionPending(botAI, GetTarget());
     }
     ActionThreatType getThreatType() override { return ActionThreatType::Aoe; }
 };
@@ -494,10 +496,11 @@ public:
         : CastDebuffSpellOnAttackerAction(botAI, "seed of corruption", true, 0)
     {
     }
+    Value<Unit*>* GetTargetValue() override;
     bool isUseful() override
     {
         // Bypass TTL check
-        return CastAuraSpellAction::isUseful();
+        return CastAuraSpellAction::isUseful() && !SeedOfCorruptionPending(botAI, GetTarget());
     }
     ActionThreatType getThreatType() override { return ActionThreatType::Aoe; }
 };
