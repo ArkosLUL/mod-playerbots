@@ -119,13 +119,11 @@ private:
     bool enable_quality_blend_;
     bool enable_cap_priority_ = false;
     bool enable_bis_bonus_ = false;
-    // Resolved on first use and fixed for this calculator's lifetime, like progression_tier_: the
-    // spec key costs a talent walk and QueryItemUsageForEquip scores several items per evaluation.
-    bool bis_key_resolved_ = false;
-    bool bis_key_valid_ = false;
-    uint8 bis_cls_ = 0;
-    uint8 bis_tab_ = 0;
-    BisProgress bis_progress_ = {BIS_EXP_WOTLK, 0};
+    // Resolved on first use and fixed for this calculator's lifetime, like progression_tier_: it costs a
+    // talent walk plus the dataset lock, and QueryItemUsageForEquip scores several items per evaluation.
+    // Also pins the dataset snapshot, so a reload can't free the subject under us.
+    bool bis_source_resolved_ = false;
+    BisSource bis_source_;
     uint32 replaced_item_set_ = 0;
 
     float weight_;
