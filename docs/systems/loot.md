@@ -90,7 +90,9 @@ stat heuristics above can only guess at. Proc-only trinkets are the motivating c
 votes PASS.
 
 The signal is **additive only** — the lists hold six candidates per slot per phase, so an absent item
-is never penalised. It reaches a roll two ways:
+is never penalised. A bot resolving to the sim BiS dataset instead
+([itemization.md](itemization.md#sim-bis-dataset)) gets this whole signal from its own dataset
+subject in place of the lists, never mixed per item. It reaches a roll two ways:
 
 - **Gate bypass** (`AiPlayerbot.Bis.GateBypass`) — `IsBisForBot` short-circuits
   `IsFallbackNeedReasonableForSpec` (`:612`), `IsPrimaryForSpec` (`:984`) and `AdjustUsageForCrossArmor`
@@ -118,5 +120,7 @@ Vanilla/TBC have no Discipline priest list. `ResolveSpecKey` also refuses whenev
 the role the bot actually plays disagree — a wrong list is worse than none, because it bypasses the
 spec gates in the wrong direction.
 
-`LoadAll` runs once at startup with **no reload path**, so regenerated data needs a worldserver
-restart.
+`LoadAll` runs once at startup: regenerated list data needs a restart or `.playerbots rndbot reload`
+(reruns `PlayerbotAIConfig::Initialize`, which reloads it). The sim dataset instead polls its
+version every `PollSeconds` and needs neither — force it with `.playerbots bis reload`, check it
+with `.playerbots bis status`.
