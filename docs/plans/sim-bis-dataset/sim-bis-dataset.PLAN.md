@@ -66,9 +66,9 @@ The procedure, paths, standing authorizations and agent rules are in
 
 ## Current wave
 
-- Wave: A, running.
-- Base SHA: `20b96ed06`.
-- Workflow runId: `wf_e11f9a7c-984`.
+- Wave: B, not started.
+- Base SHA: set at wave start.
+- Workflow runId: none.
 
 ## Status
 
@@ -127,9 +127,10 @@ Owned: [reforge]`/src/*` (the callers of `reforgingDataMap` and `GetReforgingDat
 - `GetReforgingData` returns `std::optional<ReforgingData>` by value (a pointer into the map outlives
   the lock); its callers switch to `auto` + bool test + `->`, which also compiles against the old
   pointer API.
+- The mutex is non-recursive: `_ApplyItemMods` (via `OnPlayerApplyItemModsBefore`) and `SendItemPacket`
+  re-enter `GetReforgingData`, so a lock covers only the map access, never those calls or a DB call.
 - Verify: `PB_REPO=G:/DevStuff/GitHub/azerothcore-wotlk-pb/modules/mod-reforging
   ~/.claude/scripts/pb-syntax-check.sh <changed src/*.cpp>`.
-- The orchestrator records the patch in memory `module-local-perf-patches.md` after the wave.
 
 ### BIS-dataset (wave B)
 Owned: `src/Mgr/Item/BisDatasetMgr.{h,cpp}` (new), `src/Mgr/Item/BisListMgr.{h,cpp}`,
@@ -247,9 +248,14 @@ Stage **reforge** (exact items, `Reforges` on, mod-reforging present and enabled
   mod-reforging state, since its map is shared across threads.
 - World thread: find the bot and item; require still equipped, same entry, `GetEnabled()`, and for a
   reforge `IsReforgeableStat(from) && IsReforgeableStat(to)` (`Reforge()` checks neither). Read
-  `GetReforgingData` with `auto` (compiles against the baked pointer API and the patched `optional`);
-  already `{from, to}` → done; different → `RemoveReforge`, then `Reforge`; remove request →
-  `RemoveReforge` if reforged. Failures log at debug.
+  `GetReforgingData` only as `auto data = ...; if (data)` or `!data`, then `->` or `*`: `nullptr`
+  compares, `has_value()`, `value()` and `value_or` each break against the baked pointer API or the
+  patched `optional`. Already `{from, to}` → done. Reforged otherwise → `RemoveReforge` only; a reforge
+  request lands on the next trigger, because `RemoveReforge`'s async DELETE and `Reforge`'s INSERT share
+  the `character_reforging` key and race once `CharacterDatabase.WorkerThreads > 1`. Unreforged →
+  `Reforge` for a reforge request. Failures log at debug.
+- The queue drains in `OnWorldUpdate`, after `sMapMgr->Update` has waited out every map thread: that,
+  not the lock, makes touching the bot safe.
 - Call site in the slot loop: exact item with `r` → request it; exact item without `r` → request
   removal; non-exact → nothing. The first pass scores unpinned sockets on pre-reforge stats; the next
   trigger converges.
@@ -269,6 +275,8 @@ WI sections' durable facts:
   reload|status`).
 - Known gaps: healers have no dataset blocks; acbis labels a raider "Blood dps" without the main-tank
   flag, so a tanking DK falls back to the lists.
+- Keep `Reforging.Enable` fixed at runtime: mod-reforging's reload walks only `sWorldSessionMgr`
+  sessions, which hold no bots, so a toggle leaves reforged bots' stats drifted until they relog.
 - After the whole-effort cross-review lands, the orchestrator deletes `docs/plans/sim-bis-dataset/` in
   a final commit on `bis-integration` and lands it.
 
