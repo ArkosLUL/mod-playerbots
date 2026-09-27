@@ -10,6 +10,10 @@
 #include "AiObjectContext.h"
 #include "ArenaTeam.h"
 #include "ArenaTeamMgr.h"
+#include "BisDatasetMgr.h"
+#include "BisListMgr.h"
+#include "BisReforge.h"
+#include "BisWire.h"
 #include "DBCStores.h"
 #include "DBCStructure.h"
 #include "GuildMgr.h"
@@ -152,6 +156,102 @@ uint32 GetRuneforgeEnchantId(Player* bot, uint8 slot, Item* item)
         return GetEnchantIdOfSpell(SPELL_RUNE_OF_THE_FALLEN_CRUSADER);
 
     return 0;
+}
+
+// exact: the equipped item is the sim's rank 1, so its gems and reforge apply too
+struct BisSlotPlan
+{
+    BisWire::Slot const* sim = nullptr;
+    bool exact = false;
+};
+
+struct BisGearPlan
+{
+    // keeps the snapshot alive that block and every sim pointer point into
+    BisSource source;
+    BisWire::Block const* block = nullptr;
+    std::array<BisSlotPlan, EQUIPMENT_SLOT_END> slots{};
+};
+
+// Empty plan (no block) unless the bot resolves to the sim dataset.
+BisGearPlan PlanBisGear(Player* bot)
+{
+    BisGearPlan plan;
+    if (!sPlayerbotAIConfig.bisDatasetEnable ||
+        (!sPlayerbotAIConfig.bisDatasetEnhancements && !sPlayerbotAIConfig.bisDatasetReforges))
+        return plan;
+
+    // skips the talent walk in ResolveSource while nothing is loaded
+    if (!sBisDatasetMgr.Get())
+        return plan;
+
+    plan.source = sBisListMgr->ResolveSource(bot, BisListMgr::ProgressForBot(bot));
+    if (plan.source.kind != BisSource::Kind::Dataset || !plan.source.subject)
+        return plan;
+
+    plan.block = plan.source.subject->BlockFor(plan.source.progress.phase);
+    if (!plan.block)
+        return plan;
+
+    auto entryAt = [bot](uint8 slot) -> uint32
+    {
+        Item* item = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        return item ? item->GetEntry() : 0;
+    };
+    auto isRankOne = [](BisWire::Slot const* sim, uint32 entry)
+    { return sim && entry && !sim->items.empty() && sim->items.front() == entry; };
+
+    // Weapons match per hand, so Titan's Grip is two independent matches and a 2H sim leaves the
+    // off hand alone. Trinkets carry nothing to apply.
+    for (BisWire::Slot const& sim : plan.block->slots)
+    {
+        uint8 const slot = BisWire::EQUIP_SLOT[sim.simSlot];
+        if (slot == EQUIPMENT_SLOT_FINGER1 || slot == EQUIPMENT_SLOT_FINGER2 || slot == EQUIPMENT_SLOT_TRINKET1 ||
+            slot == EQUIPMENT_SLOT_TRINKET2)
+            continue;
+
+        plan.slots[slot] = {&sim, isRankOne(&sim, entryAt(slot))};
+    }
+
+    // Rings can sit in either finger: same finger first, then crossed. A ring that matches neither
+    // still takes whichever sim ring is left, for its enchant.
+    uint8 const fingers[2] = {EQUIPMENT_SLOT_FINGER1, EQUIPMENT_SLOT_FINGER2};
+    // sim slots 10 and 11 are the two fingers
+    BisWire::Slot const* sims[2] = {plan.block->Find(10), plan.block->Find(11)};
+    uint32 const entries[2] = {entryAt(fingers[0]), entryAt(fingers[1])};
+    bool simTaken[2] = {false, false};
+    bool matched[2] = {false, false};
+
+    for (uint8 pass = 0; pass < 2; ++pass)
+    {
+        for (uint8 i = 0; i < 2; ++i)
+        {
+            uint8 const j = pass ? 1 - i : i;
+            if (matched[i] || simTaken[j] || !isRankOne(sims[j], entries[i]))
+                continue;
+
+            plan.slots[fingers[i]] = {sims[j], true};
+            matched[i] = simTaken[j] = true;
+        }
+    }
+
+    for (uint8 i = 0; i < 2; ++i)
+    {
+        if (matched[i] || !entries[i])
+            continue;
+
+        for (uint8 j : {i, uint8(1 - i)})
+        {
+            if (!sims[j] || simTaken[j])
+                continue;
+
+            plan.slots[fingers[i]] = {sims[j], false};
+            simTaken[j] = true;
+            break;
+        }
+    }
+
+    return plan;
 }
 
 // Some creature_template rows are Blizzard developer leftovers or placeholders that carry the tameable
@@ -5357,28 +5457,27 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
     // group/quest lookups behind this must not happen inside the loops.
     uint8 const progressionTier = sProgressionMgr.GetBotProgressionTier(bot);
 
-    std::vector<uint32> availableGems;
-    for (uint32 const& enchantGem : enchantGemIdCache)
+    auto gemEnchantIfUsable = [&](uint32 gemItemId) -> uint32
     {
-        ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
+        ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(gemItemId);
         if (!gemTemplate)
-            continue;
+            return 0;
 
         GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
         if (!gemProperties)
-            continue;
+            return 0;
 
-        if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantGem >= 39900)
-            continue;
+        if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && gemItemId >= 39900)
+            return 0;
 
         if (!sProgressionMgr.IsGemAllowed(gemTemplate, progressionTier))
-            continue;
+            return 0;
 
         uint32 requiredLevel = gemTemplate->ItemLevel;
 
         if (requiredLevel > bot->GetLevel())
         {
-            continue;
+            return 0;
         }
 
         // Jeweler's gems carry their profession requirement on the item, not on the enchant, so the
@@ -5386,34 +5485,59 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         if (gemTemplate->RequiredSkill)
         {
             if (!sPlayerbotAIConfig.professionGearEnhancements)
-                continue;
+                return 0;
 
             if (!bot->HasSkill(gemTemplate->RequiredSkill) ||
                 bot->GetSkillValue(gemTemplate->RequiredSkill) < gemTemplate->RequiredSkillRank)
             {
-                continue;
+                return 0;
             }
         }
 
         uint32 enchant_id = gemProperties->spellitemenchantement;
         if (!enchant_id)
-            continue;
+            return 0;
 
         SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchant_id);
         if (!enchant || (enchant->slot != PERM_ENCHANTMENT_SLOT && enchant->slot != TEMP_ENCHANTMENT_SLOT))
         {
-            continue;
+            return 0;
         }
         if (enchant->requiredSkill && bot->GetSkillValue(enchant->requiredSkill) < enchant->requiredSkillValue)
         {
-            continue;
+            return 0;
         }
 
         if (enchant->requiredLevel > bot->GetLevel())
         {
-            continue;
+            return 0;
         }
-        availableGems.push_back(enchantGem);
+        return enchant_id;
+    };
+
+    std::vector<uint32> availableGems;
+    for (uint32 const& enchantGem : enchantGemIdCache)
+    {
+        if (gemEnchantIfUsable(enchantGem))
+            availableGems.push_back(enchantGem);
+    }
+    BisGearPlan const plan = PlanBisGear(bot);
+    bool const enhance = plan.block && sPlayerbotAIConfig.bisDatasetEnhancements;
+
+    // Every gem the sim chose for this bot, tried before the full pool. Not limited to the gem cache,
+    // gemBudgetOk still enforces unique-equipped.
+    std::vector<uint32> paletteGems;
+    if (enhance)
+    {
+        std::unordered_set<uint32> seen;
+        for (BisWire::Slot const& sim : plan.block->slots)
+        {
+            for (uint32 gem : sim.gems)
+            {
+                if (seen.insert(gem).second && gemEnchantIfUsable(gem))
+                    paletteGems.push_back(gem);
+            }
+        }
     }
     StatsWeightCalculator calculator(bot);
     // Gems and enchants are the cheap way to reach the defense cap, and each one is applied to the
@@ -5429,6 +5553,10 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         int32 curEnchantId = -1;
         uint32 curGemItem = 0;
         float curScore = 0.0f;
+        // the sim's gem for this socket on an exact rank-1 item, 0 for none
+        uint32 pinnedGem = 0;
+        // holds pinnedGem; only meta steering may still replace it
+        bool pinned = false;
     };
     std::vector<SocketToGem> coloredSockets;
     std::vector<SocketToGem> metaSockets;
@@ -5473,41 +5601,53 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         return gemProperties ? static_cast<uint8>(gemProperties->color) : uint8(0);
     };
 
+    auto gemBudgetOk = [&](uint32 gemItemId, std::map<uint32, uint32> const& usedById,
+                           std::map<uint32, uint32> const& usedByCategory) -> bool
+    {
+        ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(gemItemId);
+        if (!gemTemplate)
+            return false;
+
+        if (gemTemplate->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
+        {
+            auto used = usedById.find(gemItemId);
+            if (used != usedById.end() && used->second)
+                return false;
+        }
+
+        if (gemTemplate->ItemLimitCategory)
+        {
+            ItemLimitCategoryEntry const* limitEntry =
+                sItemLimitCategoryStore.LookupEntry(gemTemplate->ItemLimitCategory);
+            // A category with no DBC row is unequippable as far as the core is concerned.
+            if (!limitEntry)
+                return false;
+
+            auto used = usedByCategory.find(gemTemplate->ItemLimitCategory);
+            if (used != usedByCategory.end() && used->second >= limitEntry->maxCount)
+                return false;
+        }
+        return true;
+    };
+
     // Pick the highest class/spec-weighted gem for a socket. restrictColor (0 = any) forces the gem to
     // carry one of the given color bits; matching the socket color keeps the +20% socket-bonus nudge.
-    auto pickBestGem = [&](uint8 socketColor, uint8 restrictColor, std::map<uint32, uint32> const& usedById,
-                           std::map<uint32, uint32> const& usedByCategory, int32& outEnchantId, uint32& outGemItem,
-                           float& outScore) -> bool
+    auto pickBestGem = [&](std::vector<uint32> const& pool, uint8 socketColor, uint8 restrictColor,
+                           std::map<uint32, uint32> const& usedById, std::map<uint32, uint32> const& usedByCategory,
+                           int32& outEnchantId, uint32& outGemItem, float& outScore) -> bool
     {
         bool isMetaSocket = (socketColor & SOCKET_COLOR_META) != 0;
         outEnchantId = -1;
         outGemItem = 0;
         outScore = -1.0f;
-        for (uint32 const& enchantGem : availableGems)
+        for (uint32 const& enchantGem : pool)
         {
             ItemTemplate const* gemTemplate = sObjectMgr->GetItemTemplate(enchantGem);
             if (!gemTemplate)
                 continue;
 
-            if (gemTemplate->HasFlag(ITEM_FLAG_UNIQUE_EQUIPPABLE))
-            {
-                auto used = usedById.find(enchantGem);
-                if (used != usedById.end() && used->second)
-                    continue;
-            }
-
-            if (gemTemplate->ItemLimitCategory)
-            {
-                ItemLimitCategoryEntry const* limitEntry =
-                    sItemLimitCategoryStore.LookupEntry(gemTemplate->ItemLimitCategory);
-                // A category with no DBC row is unequippable as far as the core is concerned.
-                if (!limitEntry)
-                    continue;
-
-                auto used = usedByCategory.find(gemTemplate->ItemLimitCategory);
-                if (used != usedByCategory.end() && used->second >= limitEntry->maxCount)
-                    continue;
-            }
+            if (!gemBudgetOk(enchantGem, usedById, usedByCategory))
+                continue;
 
             GemPropertiesEntry const* gemProperties = sGemPropertiesStore.LookupEntry(gemTemplate->GemProperties);
             if (!gemProperties)
@@ -5538,6 +5678,54 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         return outEnchantId != -1;
     };
 
+    auto pickGem = [&](uint8 socketColor, uint8 restrictColor, std::map<uint32, uint32> const& usedById,
+                       std::map<uint32, uint32> const& usedByCategory, int32& outEnchantId, uint32& outGemItem,
+                       float& outScore) -> bool
+    {
+        return pickBestGem(paletteGems, socketColor, restrictColor, usedById, usedByCategory, outEnchantId,
+                           outGemItem, outScore) ||
+               pickBestGem(availableGems, socketColor, restrictColor, usedById, usedByCategory, outEnchantId,
+                           outGemItem, outScore);
+    };
+
+    auto spellGatesPass = [&](SpellInfo const* spellInfo, Item* item) -> bool
+    {
+        return item->IsFitToSpellRequirements(spellInfo) && spellInfo->BaseLevel <= bot->GetLevel() &&
+               sProgressionMgr.IsEnchantSpellAllowed(spellInfo->Id, progressionTier);
+    };
+
+    auto enchantGatesPass = [&](SpellItemEnchantmentEntry const* enchant) -> bool
+    {
+        if (enchant->requiredSkill && (!bot->HasSkill(enchant->requiredSkill) ||
+                                       bot->GetSkillValue(enchant->requiredSkill) < enchant->requiredSkillValue))
+        {
+            return false;
+        }
+        return enchant->requiredLevel <= bot->GetLevel();
+    };
+
+    // Skips the cache blacklist and the engineering cloak rule on purpose: the sim only picks what
+    // the server can hand out, DK runeforges included, which the cache never holds.
+    auto datasetEnchantIfUsable = [&](uint32 enchantSpell, Item* item) -> uint32
+    {
+        SpellInfo const* spellInfo = enchantSpell ? sSpellMgr->GetSpellInfo(enchantSpell) : nullptr;
+        uint32 const enchantId = GetEnchantIdOfSpell(enchantSpell);
+        if (!spellInfo || !enchantId || !spellGatesPass(spellInfo, item))
+            return 0;
+
+        SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
+        return enchant && enchantGatesPass(enchant) ? enchantId : 0;
+    };
+
+    // same weighting pickBestGem uses
+    auto socketScore = [&](uint8 socketColor, uint32 gemItemId, uint32 enchantId) -> float
+    {
+        float score = calculator.CalculateEnchant(enchantId);
+        if (socketColor & gemColorOf(gemItemId))
+            score *= 1.2f;
+        return score;
+    };
+
     for (uint8 slot = 0; slot < EQUIPMENT_SLOT_END; ++slot)
     {
         if (slot == EQUIPMENT_SLOT_TABARD || slot == EQUIPMENT_SLOT_BODY)
@@ -5550,26 +5738,23 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
 
         if (item->GetTemplate() && item->GetTemplate()->Quality < ITEM_QUALITY_UNCOMMON)
             continue;
+        BisSlotPlan const& simPlan = plan.slots[slot];
         int32 bestEnchantId = -1;
         float bestScore = 0;
-        uint32 runeforgeEnchantId = GetRuneforgeEnchantId(bot, slot, item);
-        if (runeforgeEnchantId)
+        uint32 fixedEnchantId = enhance && simPlan.sim ? datasetEnchantIfUsable(simPlan.sim->enchantSpell, item) : 0;
+        if (!fixedEnchantId)
+            fixedEnchantId = GetRuneforgeEnchantId(bot, slot, item);
+
+        if (fixedEnchantId)
         {
-            bestEnchantId = static_cast<int32>(runeforgeEnchantId);
+            bestEnchantId = static_cast<int32>(fixedEnchantId);
         }
         else
         {
             for (uint32 const& enchantSpell : enchantSpellIdCache)
             {
                 SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(enchantSpell);
-                if (!spellInfo)
-                    continue;
-
-                if (!item->IsFitToSpellRequirements(spellInfo))
-                    continue;
-
-                uint32 requiredLevel = spellInfo->BaseLevel;
-                if (requiredLevel > bot->GetLevel())
+                if (!spellInfo || !spellGatesPass(spellInfo, item))
                     continue;
 
                 // disable next expansion enchantments
@@ -5577,9 +5762,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                     continue;
 
                 if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantSpell >= 44483)
-                    continue;
-
-                if (!sProgressionMgr.IsEnchantSpellAllowed(enchantSpell, progressionTier))
                     continue;
 
                 for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)
@@ -5596,13 +5778,7 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                         (enchant->slot != PERM_ENCHANTMENT_SLOT && enchant->slot != TEMP_ENCHANTMENT_SLOT))
                         continue;
 
-                    if (enchant->requiredSkill &&
-                        (!bot->HasSkill(enchant->requiredSkill) ||
-                         (bot->GetSkillValue(enchant->requiredSkill) < enchant->requiredSkillValue)))
-                    {
-                        continue;
-                    }
-                    if (enchant->requiredLevel > bot->GetLevel())
+                    if (!enchantGatesPass(enchant))
                         continue;
 
                     // Tailoring's exclusive embroideries are meant to own the cloak slot, but the
@@ -5632,11 +5808,18 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             item->SetEnchantment(PERM_ENCHANTMENT_SLOT, bestEnchantId, 0, 0, bot->GetGUID());
             bot->ApplyEnchantment(item, PERM_ENCHANTMENT_SLOT, true);
         }
+
+        // rank 1 without a reforge in the export asks for 0 -> 0, which strips the item's reforge
+        if (plan.block && sPlayerbotAIConfig.bisDatasetReforges && simPlan.exact)
+            RequestBisReforge(bot, item, simPlan.sim->reforgeFrom, simPlan.sim->reforgeTo);
+
         ApplyPrismaticSocket(item);
 
         if (!item->HasSocket())
             continue;
 
+        // template sockets in order, then the prismatic one
+        std::vector<SocketToGem> itemSockets;
         for (uint32 enchant_slot = SOCK_ENCHANTMENT_SLOT; enchant_slot < SOCK_ENCHANTMENT_SLOT + 3; ++enchant_slot)
         {
             uint8 socketColor = item->GetTemplate()->Socket[enchant_slot - SOCK_ENCHANTMENT_SLOT].Color;
@@ -5647,11 +5830,9 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             entry.item = item;
             entry.enchantSlot = enchant_slot;
             entry.socketColor = socketColor;
-            if (socketColor & SOCKET_COLOR_META)
-                metaSockets.push_back(entry);
-            else
-                coloredSockets.push_back(entry);
+            itemSockets.push_back(entry);
         }
+        size_t const templateSockets = itemSockets.size();
 
         // A socket added by an enchant lives in the first template socket that has no color, and the
         // core rejects meta gems there, so it always counts as a colored socket. socketColor 0 means
@@ -5668,8 +5849,44 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                 entry.item = item;
                 entry.enchantSlot = SOCK_ENCHANTMENT_SLOT + firstPrismatic;
                 entry.socketColor = 0;
-                coloredSockets.push_back(entry);
+                itemSockets.push_back(entry);
             }
+        }
+
+        // The export drops empty sockets, so its gem list only lines up with the sockets when the
+        // counts say how. The sim may also have had a prismatic socket this bot can't add.
+        if (enhance && simPlan.exact)
+        {
+            std::vector<uint32> const& gems = simPlan.sim->gems;
+            bool const hasPrismatic = itemSockets.size() > templateSockets;
+            size_t pins = 0;
+            if (gems.size() == itemSockets.size())
+                pins = gems.size();
+            else if (!hasPrismatic && gems.size() == templateSockets + 1)
+                pins = templateSockets;
+            else if (hasPrismatic && gems.size() == templateSockets)
+                pins = templateSockets;
+
+            for (size_t i = 0; i < pins; ++i)
+            {
+                bool const metaSocket = (itemSockets[i].socketColor & SOCKET_COLOR_META) != 0;
+                if (metaSocket != (gemColorOf(gems[i]) == SOCKET_COLOR_META))
+                {
+                    pins = 0;
+                    break;
+                }
+            }
+
+            for (size_t i = 0; i < pins; ++i)
+                itemSockets[i].pinnedGem = gems[i];
+        }
+
+        for (SocketToGem const& entry : itemSockets)
+        {
+            if (entry.socketColor & SOCKET_COLOR_META)
+                metaSockets.push_back(entry);
+            else
+                coloredSockets.push_back(entry);
         }
     }
 
@@ -5688,14 +5905,8 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
     // so colored gems have to go in first.
     std::vector<std::pair<SocketToGem, int32>> metaToApply;
     uint32 metaCondition = 0;
-    for (SocketToGem const& ms : metaSockets)
+    auto queueMeta = [&](SocketToGem const& ms, int32 enchId, uint32 gemItem)
     {
-        int32 enchId;
-        uint32 gemItem;
-        float score;
-        if (!pickBestGem(ms.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
-            continue;
-
         metaToApply.emplace_back(ms, enchId);
         // Counted now even though the apply is deferred, so the colored pass below sees it.
         trackGem(gemsUsedById, gemsUsedByCategory, gemItem, true);
@@ -5704,17 +5915,10 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             if (metaEnchant->EnchantmentCondition && !metaCondition)
                 metaCondition = metaEnchant->EnchantmentCondition;
         }
-    }
+    };
 
-    // Fill colored sockets with the best-stat gem for the class/spec.
-    for (SocketToGem& s : coloredSockets)
+    auto socketGem = [&](SocketToGem& s, int32 enchId, uint32 gemItem, float score)
     {
-        int32 enchId;
-        uint32 gemItem;
-        float score;
-        if (!pickBestGem(s.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
-            continue;
-
         bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), false);
         s.item->SetEnchantment(EnchantmentSlot(s.enchantSlot), static_cast<uint32>(enchId), 0, 0, bot->GetGUID());
         bot->ApplyEnchantment(s.item, EnchantmentSlot(s.enchantSlot), true);
@@ -5723,6 +5927,62 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
         s.curGemItem = gemItem;
         s.curScore = score;
         trackGem(gemsUsedById, gemsUsedByCategory, gemItem, true);
+    };
+
+    // Pins go first so they get the unique/limit budget. One this bot can't use leaves its socket to
+    // the normal picks below.
+    auto pinnedEnchantIfUsable = [&](SocketToGem const& s) -> int32
+    {
+        if (!s.pinnedGem || !gemBudgetOk(s.pinnedGem, gemsUsedById, gemsUsedByCategory))
+            return 0;
+        return static_cast<int32>(gemEnchantIfUsable(s.pinnedGem));
+    };
+
+    for (SocketToGem& ms : metaSockets)
+    {
+        if (int32 const enchId = pinnedEnchantIfUsable(ms))
+        {
+            ms.pinned = true;
+            queueMeta(ms, enchId, ms.pinnedGem);
+        }
+    }
+
+    for (SocketToGem& s : coloredSockets)
+    {
+        if (int32 const enchId = pinnedEnchantIfUsable(s))
+        {
+            s.pinned = true;
+            socketGem(s, enchId, s.pinnedGem, socketScore(s.socketColor, s.pinnedGem, static_cast<uint32>(enchId)));
+        }
+    }
+
+    for (SocketToGem const& ms : metaSockets)
+    {
+        if (ms.pinned)
+            continue;
+
+        int32 enchId;
+        uint32 gemItem;
+        float score;
+        if (!pickGem(ms.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
+            continue;
+
+        queueMeta(ms, enchId, gemItem);
+    }
+
+    // Fill colored sockets with the best-stat gem for the class/spec.
+    for (SocketToGem& s : coloredSockets)
+    {
+        if (s.pinned)
+            continue;
+
+        int32 enchId;
+        uint32 gemItem;
+        float score;
+        if (!pickGem(s.socketColor, 0, gemsUsedById, gemsUsedByCategory, enchId, gemItem, score))
+            continue;
+
+        socketGem(s, enchId, gemItem, score);
     }
 
     // Steer the cheapest colored sockets toward the meta gem's activation requirement, giving up as
@@ -5765,33 +6025,41 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             int32 bestEnchId = -1;
             uint32 bestGemItem = 0;
             float bestNewScore = 0.0f;
-            for (size_t si = 0; si < coloredSockets.size(); ++si)
+            // A pinned gem only gives way when no unpinned socket can supply the color.
+            for (uint8 pass = 0; pass < 2 && bestIdx < 0; ++pass)
             {
-                SocketToGem& s = coloredSockets[si];
-                // colors this socket doesn't already supply (swapping to a color it already has is pointless)
-                uint8 needForSocket = deficientMask & ~gemColorOf(s.curGemItem);
-                if (!needForSocket)
-                    continue;
-
-                // The gem being replaced frees up its own unique/limit-category budget.
-                std::map<uint32, uint32> usedById = gemsUsedById;
-                std::map<uint32, uint32> usedByCategory = gemsUsedByCategory;
-                trackGem(usedById, usedByCategory, s.curGemItem, false);
-
-                int32 enchId;
-                uint32 gemItem;
-                float score;
-                if (!pickBestGem(s.socketColor, needForSocket, usedById, usedByCategory, enchId, gemItem, score))
-                    continue;
-
-                float cost = s.curScore - score;  // stat weight given up by this swap
-                if (cost < bestCost)
+                bool const pinnedPass = pass == 1;
+                for (size_t si = 0; si < coloredSockets.size(); ++si)
                 {
-                    bestCost = cost;
-                    bestIdx = static_cast<int>(si);
-                    bestEnchId = enchId;
-                    bestGemItem = gemItem;
-                    bestNewScore = score;
+                    SocketToGem& s = coloredSockets[si];
+                    if (s.pinned != pinnedPass)
+                        continue;
+
+                    // colors this socket doesn't already supply (swapping to a color it already has is pointless)
+                    uint8 needForSocket = deficientMask & ~gemColorOf(s.curGemItem);
+                    if (!needForSocket)
+                        continue;
+
+                    // The gem being replaced frees up its own unique/limit-category budget.
+                    std::map<uint32, uint32> usedById = gemsUsedById;
+                    std::map<uint32, uint32> usedByCategory = gemsUsedByCategory;
+                    trackGem(usedById, usedByCategory, s.curGemItem, false);
+
+                    int32 enchId;
+                    uint32 gemItem;
+                    float score;
+                    if (!pickGem(s.socketColor, needForSocket, usedById, usedByCategory, enchId, gemItem, score))
+                        continue;
+
+                    float cost = s.curScore - score;  // stat weight given up by this swap
+                    if (cost < bestCost)
+                    {
+                        bestCost = cost;
+                        bestIdx = static_cast<int>(si);
+                        bestEnchId = enchId;
+                        bestGemItem = gemItem;
+                        bestNewScore = score;
+                    }
                 }
             }
             if (bestIdx < 0)
@@ -5807,6 +6075,7 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             s.curEnchantId = bestEnchId;
             s.curGemItem = bestGemItem;
             s.curScore = bestNewScore;
+            s.pinned = false;
         }
     }
 
@@ -5875,10 +6144,17 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
                 float bestScore = current;
                 size_t bestI = 0;
                 size_t bestJ = 0;
+                // pinned gems stay put, but still count toward their item's bonus
                 for (size_t i = 0; i < coloredSockets.size(); ++i)
                 {
+                    if (coloredSockets[i].pinned)
+                        continue;
+
                     for (size_t j = i + 1; j < coloredSockets.size(); ++j)
                     {
+                        if (coloredSockets[j].pinned)
+                            continue;
+
                         std::swap(owner[i], owner[j]);
                         float score = totalBonus();
                         std::swap(owner[i], owner[j]);

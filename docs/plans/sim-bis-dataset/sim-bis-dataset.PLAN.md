@@ -221,9 +221,10 @@ split into `spellGatesPass` / `enchantGatesPass`.
 
 Stage **dataset**:
 - Plan helper near `GetEnchantIdOfSpell` (~`:124`): resolve `BisSource` once; when Dataset and
-  `Enhancements`, take the effective-phase block and build per AC slot `{sim slot, exact}`. Weapons
-  strictly per hand (Titan's Grip = two independent matches; a 2H with no sim 15 leaves the off-hand
-  to today's picker). Rings: same-index exact pass, then cross pass; a non-exact ring takes the unused
+  `Enhancements` or `Reforges` (enchants, pins and palette need `Enhancements`), take the
+  effective-phase block and build per AC slot `{sim slot, exact}`. Weapons strictly per hand
+  (Titan's Grip = two independent matches; a 2H with no sim 15 leaves the off-hand to today's
+  picker). Rings: same-index exact pass, then cross pass; a non-exact ring takes the unused
   sim slot for its enchant. Trinkets carry no enhancements. `paletteGems` = the block's `g` ids passing
   `gemEnchantIfUsable` (not restricted to the gem cache; `gemBudgetOk` enforces unique-equipped).
 - Enchant per slot, first that applies: (1) the dataset spell, exact or not, when it has
@@ -256,8 +257,8 @@ Stage **reforge** (exact items, `Reforges` on, mod-reforging present and enabled
   means remove) via `PlayerbotWorldThreadProcessor::instance().QueueOperation`. It never reads
   mod-reforging state, since its map is shared across threads.
 - World thread: find the bot and item; require still equipped, same entry, `GetEnabled()`, and for a
-  reforge `IsReforgeableStat(from) && IsReforgeableStat(to)` (`Reforge()` checks neither). Read
-  `GetReforgingData` only as `auto data = ...; if (data)` or `!data`, then `->` or `*`: `nullptr`
+  reforge `IsReforgeableStat(from) && IsReforgeableStat(to)` (`Reforge()` checks neither; failing either
+  keeps any old reforge). Read `GetReforgingData` only as `auto data = ...; if (data)` or `!data`, then `->` or `*`: `nullptr`
   compares, `has_value()`, `value()` and `value_or` each break against the baked pointer API or the
   patched `optional`. Already `{from, to}` → done. Reforged otherwise → `RemoveReforge` only; a reforge
   request lands on the next trigger, because `RemoveReforge`'s async DELETE and `Reforge`'s INSERT share
