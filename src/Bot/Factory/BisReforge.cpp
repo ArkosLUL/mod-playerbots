@@ -20,10 +20,31 @@
 #include "ObjectAccessor.h"
 #include "PlayerbotOperation.h"
 #include "PlayerbotWorldThreadProcessor.h"
+#include "Timer.h"
 #include <memory>
 
 namespace
 {
+// Two writes to one item's reforge close together are two async statements on the same
+// character_reforging row, and several DB worker threads can run them out of order.
+constexpr uint32 REFORGE_WRITE_GAP_MS = 10 * IN_MILLISECONDS;
+
+// item guid counter -> getMSTime() of our last write to its reforge, world thread only
+std::unordered_map<uint32, uint32> lastReforgeWrites;
+
+bool ReforgeWriteAllowed(uint32 itemGuidLow, uint32 now)
+{
+    auto const last = lastReforgeWrites.find(itemGuidLow);
+    return last == lastReforgeWrites.end() || getMSTimeDiff(last->second, now) >= REFORGE_WRITE_GAP_MS;
+}
+
+void RecordReforgeWrite(uint32 itemGuidLow, uint32 now)
+{
+    std::erase_if(lastReforgeWrites,
+                  [now](auto const& write) { return getMSTimeDiff(write.second, now) >= REFORGE_WRITE_GAP_MS; });
+    lastReforgeWrites[itemGuidLow] = now;
+}
+
 // mod-reforging keeps its data in a map every player's item updates read, so all of this stays
 // on the world thread, map threads only queue it
 class BisReforgeOperation : public PlayerbotOperation
@@ -61,31 +82,39 @@ public:
         // only bool tests and -> on data: the pointer and std::optional versions of mod-reforging
         // both support those and nothing else in common
         auto data = reforging->GetReforgingData(item);
+        if (data && data->stat_decrease == m_from && data->stat_increase == m_to)
+            return true;
+
+        if (!data && !m_from)
+            return true;
+
+        // two ApplyEnchantAndGemsNew runs can queue requests for one item into the same batch
+        uint32 const now = getMSTime();
+        if (!ReforgeWriteAllowed(m_itemGuid.GetCounter(), now))
+        {
+            LOG_DEBUG("playerbots", "BisReforgeOperation: item {} (bot {}) had its reforge changed moments ago, skipped",
+                      m_entry, bot->GetName());
+            return false;
+        }
+
+        // a different reforge is only removed here, a later request sets the new one
         if (data)
         {
-            if (data->stat_decrease == m_from && data->stat_increase == m_to)
-                return true;
-
-            // don't reforge right after: the async DELETE here and Reforge's INSERT hit the same
-            // character_reforging row and can land out of order. The next request reforges it.
             if (!reforging->RemoveReforge(bot, item))
             {
                 LOG_DEBUG("playerbots", "BisReforgeOperation: could not remove the reforge on item {} (bot {})",
                           m_entry, bot->GetName());
                 return false;
             }
-            return true;
         }
-
-        if (!m_from)
-            return true;
-
-        if (!reforging->Reforge(bot, m_itemGuid, m_from, m_to))
+        else if (!reforging->Reforge(bot, m_itemGuid, m_from, m_to))
         {
             LOG_DEBUG("playerbots", "BisReforgeOperation: reforge {} -> {} refused on item {} (bot {})", m_from, m_to,
                       m_entry, bot->GetName());
             return false;
         }
+
+        RecordReforgeWrite(m_itemGuid.GetCounter(), now);
         return true;
     }
 

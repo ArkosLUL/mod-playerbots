@@ -5690,6 +5690,11 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
 
     auto spellGatesPass = [&](SpellInfo const* spellInfo, Item* item) -> bool
     {
+        // disable next expansion enchantments
+        if (sPlayerbotAIConfig.limitEnchantExpansion &&
+            ((bot->GetLevel() <= 60 && spellInfo->Id >= 27899) || (bot->GetLevel() <= 70 && spellInfo->Id >= 44483)))
+            return false;
+
         return item->IsFitToSpellRequirements(spellInfo) && spellInfo->BaseLevel <= bot->GetLevel() &&
                sProgressionMgr.IsEnchantSpellAllowed(spellInfo->Id, progressionTier);
     };
@@ -5755,13 +5760,6 @@ void PlayerbotFactory::ApplyEnchantAndGemsNew(bool /*destroyOld*/)
             {
                 SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(enchantSpell);
                 if (!spellInfo || !spellGatesPass(spellInfo, item))
-                    continue;
-
-                // disable next expansion enchantments
-                if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 60 && enchantSpell >= 27899)
-                    continue;
-
-                if (sPlayerbotAIConfig.limitEnchantExpansion && bot->GetLevel() <= 70 && enchantSpell >= 44483)
                     continue;
 
                 for (uint8 j = 0; j < MAX_SPELL_EFFECTS; ++j)
