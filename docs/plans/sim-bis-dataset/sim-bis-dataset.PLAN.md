@@ -81,7 +81,7 @@ The orchestrator alone edits this table.
 | B | BIS-dataset | merged | `99aa77093` | |
 | C | BIS-ranks | merged | `d038ec245` | |
 | C | BIS-enhance | merged | `45b8d6566` | |
-| D | BIS-docs | pending | | |
+| D | BIS-docs | merged | `13c2270ec` | |
 
 States: `pending`, `merged`, `applied` (BIS-reforge-lock: reviewed and left uncommitted), `red`,
 `blocked` (worktree kept, reason in Notes).
