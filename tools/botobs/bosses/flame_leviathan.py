@@ -19,6 +19,10 @@ backs off on (`FlameLeviathanInBatteringRamBlast`), with the pursued vehicle rea
 With nobody Pursued he still rams his threat victim, which the module tracks as `fl.ramtarget`; the
 per-blast list names which of the two each cast was aimed at.
 
+A demolisher cannot outrun him, and the gunner's **Increased Speed (62471)** is the only lever it has.
+Every vehicle spell is instant, so no `cast` row carries it and the module notes `fl.speed` instead,
+which `--hulls` prints per Pursued span.
+
 **Hodir's Fury** follows a random target at 12 yd/s and commits only once that target has stopped:
 `FollowMovementGenerator` informs on a finished spline with the target within 0.5 yd. It then stuns
 itself, summons the strike NPC 33212 overhead 5 s later, and 62297 lands ~1.1 s after that - a 10 yd
@@ -123,6 +127,9 @@ VENT_TICKS_FULL = 11            # what a channel that runs its whole 10 s emits
 VENT_GAP_MS = 4000              # ticks are ~1 s apart, so a longer gap is a new channel
 
 INFERNO_SPELL = 62910           # the ground fire, a dynamic object rather than a creature
+
+SPEED_NOTE = "fl.speed"         # the gunner's Increased Speed landed on its demolisher
+SPEED_CARRY_MS = 10000          # one from just before the span is still carrying the escape
 
 GRAB_CRATE = 62482
 CRATE_CREDIT_SPELL = 62496      # cast once per Grab Crate hit, repeats on the same crate included
@@ -681,9 +688,16 @@ def show_pursued(fl: Fight) -> None:
     for rec in trace.of("act"):
         if rec.get("a") == VENT_ACTION and rec.get("vd") == "OK":
             shocks[rec["g"]].append(rec["t"])
+    # The gunner casts Increased Speed, not the driver, so this is keyed by hull rather than by bot.
+    crews = fl.crews()
+    speeds = collections.defaultdict(list)
+    for rec in trace.of("note"):
+        if rec.get("k") == SPEED_NOTE and rec["g"] in crews:
+            speeds[crews[rec["g"]]].append(rec["t"])
 
     print("\n  Pursued spans (hull health, first accepted kite move, when a Steam Rush was first ready and")
-    print("  when one went out, Electroshocks by its driver, gap from the hull's edge to his at +0/+2/+4 s):")
+    print("  when one went out, when the gunner's Increased Speed landed, Electroshocks by its driver,")
+    print("  gap from the hull's edge to his at +0/+2/+4 s):")
     close_losses = []
     for hull, start, stop in fl.pursued:
         track = [(f.t, f.hulls[hull], f.boss) for f in fl.frames if start <= f.t <= stop and hull in f.hulls]
@@ -698,6 +712,7 @@ def show_pursued(fl: Fight) -> None:
             ready = rush_ready([(t, ride[5]) for t, ride in whole],
                                rush_times([(t, ride[0], ride[1]) for t, ride in whole if t < start]), start, stop)
         fired = sum(1 for t in shocks.get(driver, []) if start <= t <= stop)
+        speed = next((t for t in speeds.get(hull, []) if start - SPEED_CARRY_MS <= t <= stop), None)
         gaps = []
         for offset in (0, 2000, 4000):
             frame = fl.frame_after(start + offset)
@@ -711,7 +726,8 @@ def show_pursued(fl: Fight) -> None:
         take = lambda when: f"+{(when - start) / 1000:.1f}s" if when is not None else "none"  # noqa: E731
         print(f"     {VEHICLE_NAME[entry]:10s} {hull & 0xffffffff:6d} {clock(start):>9s} {(stop - start) / 1000:5.1f}s"
               f"  hp {hp_in:5.1f}->{hp_out:5.1f}  kite {take(accepted):>7s}  ready {take(ready):>7s}"
-              f"  rush {take(rush):>7s}  shocks {fired}  gap {' '.join(gaps)}  {trace.name(driver) if driver else '-'}")
+              f"  rush {take(rush):>7s}  speed {take(speed):>7s}  shocks {fired}"
+              f"  gap {' '.join(gaps)}  {trace.name(driver) if driver else '-'}")
     if close_losses:
         close_losses.sort()
         print(f"     started within 40 yd of his edge: {len(close_losses)} spans, hull health lost median "

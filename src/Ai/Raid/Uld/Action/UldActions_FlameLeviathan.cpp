@@ -358,14 +358,23 @@ bool FlameLeviathanVehicleAction::DemolisherTurretAction(Unit* target)
 {
     Unit* demolisher = FlameLeviathanRiddenVehicle(bot);
 
-    if (FlameLeviathanIsPursued(bot) && demolisher && !demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
+    // He chases his threat victim exactly like a Pursued one, so that crew needs the speed as well.
+    if ((FlameLeviathanIsPursued(bot) || FlameLeviathanIsRamTarget(bot)) && demolisher &&
+        !demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
     {
         if (CastVehicleSelfSpell(botAI, vehicleBase_, SPELL_FL_INCREASED_SPEED, ULDUAR_FL_INCREASED_SPEED_COST, 1000))
         {
             // CastVehicleSpell reports success even when CheckCast rejected, so the aura is the
             // only honest confirmation. Instants resolve inline, so it is already there or it failed.
             if (demolisher->HasAura(SPELL_FL_INCREASED_SPEED))
+            {
+                // Nothing else records it: every vehicle spell is instant, so no cast row carries the
+                // one lever a kiting demolisher has.
+                if (RaidObs::Active())
+                    RaidObs::Note(bot, "fl.speed", "demolisher");
+
                 return true;
+            }
         }
     }
 
@@ -646,8 +655,9 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
 
     // The reserve is the only engine in Electroshock range while the other four are posted or
     // kiting, so a dodge that walks it out of range costs a whole 10 s channel rather than a shot.
-    // Inside the vent window it steps out of a Hammer mark's real circle only, to somewhere it can
-    // still fire from. The Inferno gets the full band and the nearest way out like any other hull.
+    // Inside the vent window it steps out of a Hammer mark's real circle only, and every dodge it
+    // takes prefers an exit it can still fire from: an Inferno dodge cost the 2:00 and 2:20 channels
+    // on 2026-09-27. The Inferno still gets the full warning band.
     bool const ventDuty = FlameLeviathanIsVentReserve(bot) && FlameLeviathanVentWindowOpen(bot, boss);
 
     Unit* hazard = nullptr;
@@ -660,8 +670,7 @@ bool FlameLeviathanDriveAction::Execute(Event /*event*/)
 
     // A hazard already cleared reports false rather than owning the tick, so fall through to the
     // station instead of failing the whole action and handing the tick to the on-foot rotation.
-    bool const hammer = hazard && hazard->GetEntry() == NPC_FL_THORIM_HAMMER_TARGET;
-    if (hazard && ClearHazard(hazard, ventDuty && hammer ? boss : nullptr))
+    if (hazard && ClearHazard(hazard, ventDuty ? boss : nullptr))
     {
         branch(HazardBranch(hazard));
         return true;
@@ -948,7 +957,14 @@ bool FlameLeviathanDriveAction::HoldStation(Unit* boss, char const*& branch)
 
     bool const ventReserve = FlameLeviathanIsVentReserve(bot);
     if (ventReserve)
+    {
         how = "vent";
+        // Gathering Speed takes him from 5.0 to 10.0 yd/s against a flat 7.0 hull, so his rear arc
+        // with no lead is a tail chase: on 2026-09-27 the reserve was inside Electroshock's reach for
+        // 32% of the pull and four channels ran all eleven ticks with five engines alive.
+        stationLead = FlameLeviathanStationLead(boss);
+        centreSide = true;
+    }
 
     if (RaidObs::Active())
         RaidObs::NoteDerived(bot, "fl.station", how);
@@ -1011,7 +1027,15 @@ bool FlameLeviathanDriveAction::RushToVents(Unit* boss)
     // Electroshock shares Steam Rush's 2 s GCD, so dash 2-5 s ahead of a channel, or at once into one
     // already running.
     uint32 const toVent = FlameLeviathanMsToNextVent(bot, boss);
-    if (toVent && (toVent < ULDUAR_FL_STEAM_RUSH_GCD_MS || toVent > ULDUAR_FL_VENT_RUSH_LEAD_MS))
+    if (toVent && toVent < ULDUAR_FL_STEAM_RUSH_GCD_MS)
+        return false;
+
+    // Beyond Electroshock's reach the dash is also the only thing that closes on him, so waiting for
+    // the window starts every channel further out than the last: the hull matches his pull speed and
+    // loses to each Gathering Speed stack after it.
+    bool const closing = vehicleBase_->GetExactDist2d(boss) - boss->GetCombatReach() >
+                         ULDUAR_FL_ELECTROSHOCK_CONE_RADIUS;
+    if (toVent > ULDUAR_FL_VENT_RUSH_LEAD_MS && !closing)
         return false;
 
     // A FORCED dodge leg goes out over the charge and cancels it, so the 40 energy buys nothing:
@@ -1152,8 +1176,16 @@ bool FlameLeviathanDriveAction::Kite(Unit* boss, char const*& branch)
 
     // The kite outranks the hazard dodge, so it has to steer round the Inferno trail itself: every
     // Inferno hit at one 2026-09-17 pull landed on a hull kiting straight through it.
+    //
+    // Not once he can fire, though. Battering Ram stacks +50% damage taken per blast (62376 effect 3,
+    // to 20 stacks), so a chain is exponential: 8 blasts in 22 s on 2026-09-27 ran 27k up to 149k and
+    // took the hull, on legs the detour had slowed. The trail cost the whole fleet 0.7% of its health
+    // that pull, so forward progress is worth more than the fire.
+    bool const ramming = vehicleBase_->HasAura(SPELL_FL_BATTERING_RAM) ||
+                         boss->IsWithinCombatRange(vehicleBase_, ULDUAR_FL_BATTERING_RAM_CAST_RANGE);
+
     Position goal = ring[kiteIdx_];
-    if (FlameLeviathanActiveTowerMask(botAI) & FL_TOWER_FLAMES)
+    if (!ramming && (FlameLeviathanActiveTowerMask(botAI) & FL_TOWER_FLAMES))
         if (std::optional<Position> detour = DetourAroundFire(boss, goal, false))
         {
             goal = *detour;

@@ -135,13 +135,20 @@ despite the name**, and never ignites anything.
   from. The aura beats `GetVictim()` — but with nobody holding it (the Pursued hull died, up to 31 s)
   he rams his threat victim: 16 of one 2026-09-17 pull's 46 blasts, mostly on hulls holding station.
   `fl.ramtarget` names that victim's hull: it kites like a Pursued one and the rest back off it.
+  Its effect 3 is `MOD_DAMAGE_PERCENT_TAKEN` **+50% per blast, 20 stacks**, on the target and on
+  everything in the 20 yd splash (radius index 9), so a chain is exponential and only the first blast
+  is cheap: 8 in 22 s on 2026-09-27 ran 27k up to 149k and took the hull.
 - **A Pursued siege engine outruns him if it starts at once.** Steam Rush (every 15 s, ~35 yd) makes
   ~9.3 yd/s against his 5.1–7.5. Escapes failed in the first seconds instead: the kite ran at
   `MOVEMENT_COMBAT`, the station walk in flight had the same priority, and `IsWaitingForLastMove`
   yields only to a strictly higher one, so the hull kept driving at him for 3–7 s. The kite now goes
   `MOVEMENT_FORCED`, and `ResetKite` drops the last-move priority when Pursued ends so the next dodge
   does not wait out a kite leg. A Pursued engine is out of the vent-interrupter election: in 4 of 12
-  spans it turned to face him mid-escape. A Pursued demolisher runs 14 yd/s on Increased Speed.
+  spans it turned to face him mid-escape. A Pursued demolisher runs 14 yd/s on Increased Speed, cast
+  by its gunner and noted `fl.speed` because no instant leaves a `cast` row; the crew of his threat
+  victim gets it too. Neither hull detours round the Inferno trail while he is in range to fire: on
+  2026-09-27 62% of all Ram hull damage landed on `kite:detour` legs, against 0.7% of fleet health
+  lost to the trail all pull.
 - **Nothing else opens a RaidObs trace.** He never sets `IN_PROGRESS` (only `SPECIAL` /
   `NOT_STARTED` / `DONE`) and the unit he engages is a vehicle, not a roster player, so neither obs
   opener fires and five wipes left no trace at all. The encounter's tick (`FlameLeviathanTick`) calls
@@ -628,6 +635,34 @@ channel was cut at 1 tick.
 | Hammer hits in the circle / Ram frames in the sphere | 0 of 301 / 0 | hold |
 | hull damage: Missile Barrage / Inferno / Vents / Hammer / Lash | 28 / 22 / 21 / 14 / 8% | Inferno and Vents under 5% |
 
+## Baseline to beat - 2026-09-27, four towers up
+
+`603_40_flame-leviathan_1790530866`, built 2026-09-26 07:24 UTC. **A kill at 4:58.9**, and the first
+trace worth comparing against: `mhp` 268,914,656 with no health step in 1725 snapshots, so the
+`mod-dungeon-scale` rescale fix holds and none of his health came off for free. His loss rate tracked
+the fleet's pyrite: 32%/min at 1:00 on 33 stacks, 12%/min at 3:30 on 3.
+
+The vent reserve is the whole Vents story. Its station was his rear arc with no lead, and `Gathering
+Speed` takes him past a hull's flat 7.0 yd/s, so it tail-chased him all fight: median 52 yd from his
+centre, **inside Electroshock's reach for 32% of the pull**, and 0-17% through the 30-150 s trough
+that holds all four lost channels. Nothing could have taken over either, the nearest of five living
+engines being 44.5-61.4 yd out on each. Every Electroshock that went out worked.
+
+| | measured | target |
+|---|---|---|
+| reserve frames inside Electroshock reach | 32% | over 70% |
+| Vents channels run full / interrupts that landed | 4 of 10 / 6 of 6 | 0 / hold |
+| Ram hull damage on `kite:detour` legs / blasts in one chain | 62.2% / 8 | under 20% / under 4 |
+| `fl.speed` in a Pursued demolisher span | unrecorded | present within 2 s |
+| hull damage: Vents / Missile Barrage / Hammer / Ram / Lash | 41 / 31 / 16 / 9 / 2% | Vents under 20% |
+| Inferno hull damage / hull frames in a patch's reach | 0.0% / 0 of 17488 | under 5% / hold |
+| demolisher mean stacks / frames past 70 yd | 3.8-6.2 / 5-39% | above 6 / under 15% |
+| pyrite stacks lost: dry / late / fail | 5 / 3 / 1 | dry 0-1 |
+| crate grabs above the ceiling | 45 of 80 | under 10 |
+| held-add frames with neither gun bearing | 24.6% | hold under 30% |
+| drive COMBAT moves refused `wait`: siege / demolisher / chopper | 11 / 5 / 6% | under 10% |
+| hulls lost / bot deaths on foot | 1 of 15 / 2 | 0 / 0 |
+
 ## Known gaps
 
 - **Boarding depends on the raid leader.** `FlameLeviathanVehicleNearTrigger` returns false unless
@@ -664,8 +699,10 @@ channel was cut at 1 tick.
 - **The crate grab ceiling is not holding and nobody knows why.** 30 of 46 grabs on 2026-09-17 and 47
   of 91 on 2026-09-19 went out above `ULDUAR_FL_CRATE_GRAB_CEILING` (75), wasting part of the +25. Reading the
   bar 1.5 s earlier gives the same figures, so it is not the energize landing inside the sample, and
-  `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. Find the path before moving
-  the constant.
+  `FlameLeviathanRiddenVehicle` does resolve a gunner to its demolisher. 2026-09-27 was 45 of 80 and
+  adds the shape: 80 casts on 50 crates, 30 of them repeats inside the despawn, and the pull's first
+  three casts are three gunners on one crate 200 ms apart. So the first grab may well be under the
+  ceiling and the repeats are what overflow. Find the path before moving the constant.
 - **The turn works; its edges are unchecked.** Held-add frames with no gun bearing fell from 71.7% to
   28.7% on 2026-09-19. Two adds on opposite sides could still leave a post facing neither — watch
   `fl.corner` for a facing that never settles. A claim that lapses hands the add to the fleet, which is
@@ -674,10 +711,11 @@ channel was cut at 1 tick.
   `--hulls` names at once (none of 301).
 - **The dodge latch, the leg test and the station detour are unverified in the field.** A latched goal
   must drop as the trail slides, which is why both tests re-run every tick. A station detour may circle
-  a trail end instead of waiting for it to pass. The reserve now dodges the Inferno on the full band
-  inside the vent window, which can walk it out of Electroshock range and cost a channel, though not
-  the hull. Centre-side demolishers may meet more Inferno, adds and the Pursued hull's Ram sphere
-  mid-arena, where he passes a p10 31 yd from the centre: watch their `hazard:inferno` share, Lash and
+  a trail end instead of waiting for it to pass. The reserve keeps the full Inferno band but now
+  prefers an exit it can still fire from, after dodges cost the 2:00 and 2:20 channels on 2026-09-27;
+  boxed in it takes the compromise exit and loses the channel anyway. Centre-side demolishers may meet
+  more Inferno, adds and the Pursued hull's Ram sphere mid-arena, where he passes a p10 31 yd from the
+  centre: watch their `hazard:inferno` share, Lash and
   `--ram`.
 - **A siege engine Pursued on its corner post starts boxed in.** Every kite exit crosses his front: on
   2026-09-19 the gap went 62 → 2 yd in 9 s with the rush locked. If a working rush does not clear it,
@@ -687,9 +725,22 @@ channel was cut at 1 tick.
 - **`FlameLeviathanEngaged` falls back to the rider's combat** while he is attackable but not yet
   fighting (after the Colossi die), so bots on leftover trash there run the boss drive and the
   movement veto. Unverified.
-- **A siege engine Pursued late is caught on speed.** At his ~8 yd/s by 2:50 one kept a 20–36 yd gap
-  and took a blast every 2 s; Steam Rush every 15 s buys ~5 s.
+- **Caught on speed late, demolishers included.** At his ~8 yd/s by 2:50 a Pursued siege engine kept a
+  20–36 yd gap and took a blast every 2 s; Steam Rush every 15 s buys ~5 s. On 2026-09-27 a Pursued
+  demolisher's gap closed 43.6 -> 24.5 yd over 25 s and the hull died to the chain. `fl.speed` now says
+  whether Increased Speed's 7 yd/s was there or missing.
 - **No seat-shortfall fallback.** With zero slack, a bot that loses a boarding race is left on foot.
 - **`PlayerbotAI::CastVehicleSpell(uint32, float, float, float)` is declared and never defined**
   (`PlayerbotAI.h:558`), so there is no ground-targeting and tar cannot be ignited deliberately.
+- **A crewless bot walks into the arena and dies.** Both bot deaths on 2026-09-27 were the crew of the
+  one hull lost, a median 22.2 s after losing it, still running the last drive goal while Missile
+  Barrage (every 4 s) and Flame Vents (500 yd) hit a player-sized pool. Seats have zero slack, so
+  there is nothing to re-board and nothing walks them out.
+- **Crate income does not cover the barrels thrown.** 2026-09-27 delivered ~250 energy/min across the
+  fleet against 63 barrels/min, so demolishers were `dry` for 20-42% of the pull and 5 of 9 stack
+  losses were `dry`. Whether the answer is `ULDUAR_FL_PYRITE_BURST_STACKS`, the refresh rate or
+  `ULDUAR_FL_CRATE_DETOUR_RADIUS` is untested.
+- **The reserve now dashes outside the vent window** whenever it is beyond Electroshock's reach, at
+  40 energy a time against a Ram's 40 and the shock's 20. Watch `--vents` for a channel it reaches and
+  does not fire, and `--ram` for the station splash as it sits nearer his front.
 
