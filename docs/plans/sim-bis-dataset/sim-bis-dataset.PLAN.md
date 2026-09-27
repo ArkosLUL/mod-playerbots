@@ -66,9 +66,9 @@ The procedure, paths, standing authorizations and agent rules are in
 
 ## Current wave
 
-- Wave: A, not started.
-- Base SHA: set at wave start.
-- Workflow runId: none.
+- Wave: A, running.
+- Base SHA: `20b96ed06`.
+- Workflow runId: `wf_e11f9a7c-984`.
 
 ## Status
 
