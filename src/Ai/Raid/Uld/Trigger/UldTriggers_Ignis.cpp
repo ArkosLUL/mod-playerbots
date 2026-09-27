@@ -115,8 +115,10 @@ bool IgnisAttackBossTrigger::IsActive()
         return false;
 
     // Everyone else lands here, main tank included - the generic target pickers are switched off for
-    // the whole encounter, so without this node nobody would be on the boss at all.
-    if (GetIgnisConstructTankIndex(botAI, bot) >= 0)
+    // the whole encounter, so without this node nobody would be on the boss at all. A construct tank
+    // drops out only while it is holding one: Ignis activates a construct every 30 s, and a tank with
+    // none in hand has nothing else in this encounter to do.
+    if (GetIgnisHeldConstruct(botAI, bot))
         return false;
 
     // Checked before the Brittle trigger since it settles most ticks on its own, and that trigger
@@ -135,7 +137,9 @@ bool IgnisMoltenConstructAvoidTrigger::IsActive()
     if (!boss)
         return false;
 
-    if (GetIgnisConstructTankIndex(botAI, bot) >= 0)
+    // Only the tank actually holding a construct stays in the pulse - eating it is his job. One
+    // between constructs clears it like anyone else.
+    if (GetIgnisHeldConstruct(botAI, bot))
         return false;
 
     // Ignis' own tank stays put too. He is melee-range of a boss that follows him, so running out of

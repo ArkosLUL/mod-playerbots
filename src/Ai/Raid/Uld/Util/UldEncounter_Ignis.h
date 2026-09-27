@@ -54,6 +54,14 @@ enum UlduarIgnisIds
 // triggers (boss_ignis.cpp polls FindNearestCreature(NPC_WATER_TRIGGER, 18.0f) once a second).
 constexpr float ULDUAR_IGNIS_WATER_BRITTLE_RADIUS = 18.0f;
 
+// How far short of the water trigger the construct tank stops. The trigger sits at the bottom of a
+// channel whose bed runs 10-15 yd under the room floor and whose surface is ~1.8 yd under it, so
+// aiming at the trigger walks the tank into the water; the room side is back up at floor level from
+// 12 yd out. The construct follows into melee contact, ~5 yd back, which still leaves it inside the
+// 18 yd the core polls - that test is 3D and counts both bounding radii, so it reaches about 3 yd
+// further than the bare number.
+constexpr float ULDUAR_IGNIS_WATER_STANDOFF = 12.0f;
+
 // Everyone but the construct tank clears Scorch's burning patch by this much; the tank parks the
 // tighter distance instead, so the construct walking into melee range ends up on it stacking Heat.
 // 62548 triggers its damage in a 13 yd radius, so anything under that is not actually a dodge.
@@ -143,6 +151,10 @@ Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* botAI, WorldObject const* from
 // the one already picked up has had its threat wiped by Molten and would peel straight into the raid.
 Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank);
 
+// The construct this tank has already claimed, or null - it never picks a new one. The encounter rules
+// ask per popped action, so this stays a hash lookup and never walks the grid.
+Unit* GetIgnisHeldConstruct(PlayerbotAI* botAI, Player* tank);
+
 // Scorched Ground the construct tank can actually use, i.e. one that is lit. Patches that land
 // within ULDUAR_IGNIS_SCORCHED_GROUND_INERT_WATER_RADIUS of the water are skipped by the core and
 // stack no Heat, so parking on one would stall the Heat -> Molten chain for good.
@@ -162,6 +174,10 @@ int8 GetIgnisConstructTankIndex(PlayerbotAI* botAI, Player* bot);
 // nearest-pool is a coin flip that always lands the same way and would stack both Molten pulses and
 // both Shatters in one spot.
 Position const& GetIgnisAssignedWaterPool(int8 tankIndex);
+
+// Where the tank walks a Molten construct: ULDUAR_IGNIS_WATER_STANDOFF short of the pool, on the
+// bearing he is coming from. He has no reason to go in - the Brittle poll measures the construct.
+Position GetIgnisWaterApproach(Player* tank, Position const& pool);
 
 // Where the main tank stands: an arc slot around the room-centre anchor, advanced one step on each
 // Scorch. Ignis is rooted for those 3 s, so the move costs nothing and does not disturb the patch.

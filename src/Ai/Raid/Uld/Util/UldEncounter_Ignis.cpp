@@ -175,26 +175,43 @@ Unit* GetIgnisNearestMoltenConstruct(PlayerbotAI* /*botAI*/, WorldObject const* 
     return GetNearestIgnisConstructMatching(from, &IsIgnisConstructMolten);
 }
 
+Unit* GetIgnisHeldConstruct(PlayerbotAI* botAI, Player* tank)
+{
+    if (!tank)
+        return nullptr;
+
+    uint32 const instanceId = tank->GetInstanceId();
+    if (!instanceId)
+        return nullptr;
+
+    // Find rather than For: a read must not create the instance entry.
+    auto* driven = ignisTankDrivenConstructGuid.Find(instanceId);
+    if (!driven)
+        return nullptr;
+
+    auto const held = driven->find(tank->GetGUID());
+    if (held == driven->end())
+        return nullptr;
+
+    Unit* construct = botAI->GetUnit(held->second);
+
+    // Molten wiped this construct's threat table, so handing it to a closer new one would release it
+    // into the raid. Only Brittle (job done) or death lets the tank move on.
+    return IsIgnisConstructActivated(construct) && !IsIgnisConstructBrittle(construct) ? construct : nullptr;
+}
+
 Unit* GetIgnisDrivenConstruct(PlayerbotAI* botAI, Player* tank)
 {
     if (!tank)
         return nullptr;
 
+    if (Unit* held = GetIgnisHeldConstruct(botAI, tank))
+        return held;
+
     auto& driven = IgnisDrivenConstructsFor(tank);
 
     ObjectGuid const tankGuid = tank->GetGUID();
-    auto const held = driven.find(tankGuid);
-    if (held != driven.end())
-    {
-        Unit* construct = botAI->GetUnit(held->second);
-
-        // Molten wiped this construct's threat table, so handing it to a closer new one would release
-        // it into the raid. Only Brittle (job done) or death lets the tank move on.
-        if (IsIgnisConstructActivated(construct) && !IsIgnisConstructBrittle(construct))
-            return construct;
-
-        driven.erase(held);
-    }
+    driven.erase(tankGuid);
 
     Unit* construct = GetNearestIgnisConstructMatching(tank, [&driven, &tankGuid](Unit const* candidate)
     {
@@ -316,6 +333,23 @@ int8 GetIgnisConstructTankIndex(PlayerbotAI* botAI, Player* bot)
 Position const& GetIgnisAssignedWaterPool(int8 tankIndex)
 {
     return tankIndex == 1 ? ULDUAR_IGNIS_WATER_POOL_EAST : ULDUAR_IGNIS_WATER_POOL_WEST;
+}
+
+Position GetIgnisWaterApproach(Player* tank, Position const& pool)
+{
+    float const distance = tank->GetExactDist2d(&pool);
+    if (distance <= ULDUAR_IGNIS_WATER_STANDOFF)
+        return tank->GetPosition();
+
+    float const ratio = ULDUAR_IGNIS_WATER_STANDOFF / distance;
+    float const x = pool.GetPositionX() + (tank->GetPositionX() - pool.GetPositionX()) * ratio;
+    float const y = pool.GetPositionY() + (tank->GetPositionY() - pool.GetPositionY()) * ratio;
+
+    float z = tank->GetMapWaterOrGroundLevel(x, y, pool.GetPositionZ());
+    if (z <= INVALID_HEIGHT)
+        z = pool.GetPositionZ();
+
+    return Position(x, y, z);
 }
 
 // Which of the three arc slots the main tank holds, and whether Scorch was already up last time we

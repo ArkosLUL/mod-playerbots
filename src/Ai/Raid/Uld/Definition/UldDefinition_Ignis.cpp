@@ -24,11 +24,13 @@ namespace
 {
 bool InUlduar(PlayerbotAI* botAI) { return botAI->GetBot()->GetMapId() == ULDUAR_MAP_ID; }
 
-// The three tanks whose spot the encounter owns.
+// The tanks whose spot the encounter owns right now. A construct tank counts only while it is holding
+// one: between constructs it has no spot of its own, and these rules are what would otherwise leave it
+// standing still with every generic mover taken off it.
 bool IgnisPlacedTank(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return botAI->IsMainTank(bot) || GetIgnisConstructTankIndex(botAI, bot) >= 0;
+    return botAI->IsMainTank(bot) || GetIgnisHeldConstruct(botAI, bot);
 }
 
 // GetIgnis walks the grid, so it goes last.
@@ -74,7 +76,10 @@ void DefineIgnis(EncounterBuilder& e)
     // The construct tanks are parked on a Scorched Ground patch on purpose - that's what stacks Heat on
     // the construct - so the dodge would undo the kite every tick. The main tank's arc rotation already
     // steps him clear of every patch he drops, and a dodge on top of it would drag Ignis across the room.
-    e.Block("ignis", Role::Any, IgnisParkedTank, 0, {IgnisScorchedGroundAction::Name});
+    //
+    // Both dodges, not just this encounter's: the generic one runs at ACTION_EMERGENCY, above the band
+    // the kite sits in, so leaving it on outranks the walk on nearly every tick spent in the fire.
+    e.Block("ignis", Role::Any, IgnisParkedTank, Family::AvoidAoe, {IgnisScorchedGroundAction::Name});
 
     // Only the three tanks the encounter places. Everyone else keeps every generic mover, which is
     // also what keeps the ranged half spread and in range without an anchor of their own. Scoped on

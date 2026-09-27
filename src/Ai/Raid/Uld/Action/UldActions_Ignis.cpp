@@ -102,7 +102,17 @@ bool IgnisConstructTankAction::Execute(Event event)
     // Molten resets the construct's threat table, so aggro is re-checked before every leg of the walk
     // or the construct stops following halfway to the water.
     if (construct->GetVictim() != bot)
-        return botAI->DoSpecificAction("taunt spell", event, true);
+    {
+        if (botAI->DoSpecificAction("taunt spell", event, true))
+            return true;
+
+        // Every taunt in the game is 30 yd, and a construct that has fixated on someone else clears
+        // that in seconds, so the tank walks it down rather than standing still. The next tick's taunt
+        // is what ends the chase - nothing else in this encounter brings the construct back.
+        return MoveTo(bot->GetMapId(), construct->GetPositionX(), construct->GetPositionY(),
+                      construct->GetPositionZ(), false, false, false, true,
+                      MovementPriority::MOVEMENT_FORCED, true, false);
+    }
 
     if (IsIgnisConstructMolten(construct))
     {
@@ -116,7 +126,9 @@ bool IgnisConstructTankAction::Execute(Event event)
         if (construct->GetExactDist2d(&pool) <= ULDUAR_IGNIS_WATER_BRITTLE_RADIUS)
             return false;
 
-        return MoveTo(bot->GetMapId(), pool.GetPositionX(), pool.GetPositionY(), pool.GetPositionZ(), false, false,
+        Position const spot = GetIgnisWaterApproach(bot, pool);
+
+        return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
                       false, true, MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
