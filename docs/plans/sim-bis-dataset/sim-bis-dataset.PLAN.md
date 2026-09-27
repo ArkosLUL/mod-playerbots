@@ -78,7 +78,7 @@ The orchestrator alone edits this table.
 |---|---|---|---|---|
 | A | BIS-codec | merged | `c6714748d` | |
 | A | BIS-reforge-lock | applied | | uncommitted in [reforge] by design |
-| B | BIS-dataset | pending | | |
+| B | BIS-dataset | merged | `99aa77093` | |
 | C | BIS-ranks | pending | | |
 | C | BIS-enhance | pending | | |
 | D | BIS-docs | pending | | |
@@ -97,9 +97,11 @@ States: `pending`, `merged`, `applied` (BIS-reforge-lock: reviewed and left unco
 
 ## Work items
 
-Common verify for C++ WIs, from the worktree: `PB_REPO=<wt> PB_MAX_FANOUT=60
-~/.claude/scripts/pb-syntax-check.sh <changed .cpp and .h>`, `python tools/pblint/pblint.py <changed
-paths>`, `PB_SANITIZE=address,undefined sh tools/nativetest/run.sh`.
+Common verify for C++ WIs, from the worktree: `PB_REPO=<wt> ~/.claude/scripts/pb-syntax-check.sh
+<changed .cpp>`, then `PB_REPO=<wt> PB_MAX_FANOUT=60 ~/.claude/scripts/pb-syntax-check.sh <changed .h>`
+(the cap keeps the first 60 TUs alphabetically, so one shared run can cut the changed `.cpp`),
+`python tools/pblint/pblint.py <changed paths>`, `PB_SANITIZE=address,undefined sh
+tools/nativetest/run.sh`.
 
 ### BIS-codec (wave A)
 Owned: `src/Mgr/Item/BisWire.h` (new), `tools/nativetest/bis_wire_test.cpp` (new),
@@ -172,9 +174,6 @@ Stage **loader**:
   An empty `bistooltip_dataset` means no dataset, not a failure. Indexes skip subjects with no phase
   1..5 block or an unmapped spec name (warning). A failed reload records the version it read, so the
   poll retries only a new one; "changed while loading" keeps the starting version, so it retries.
-- The fan-out cap keeps the first 60 TUs alphabetically: `PlayerbotAIConfig.h` and `BisListMgr.h`
-  resolve 81, cutting `src/Mgr`, `src/PlayerbotAIConfig.cpp` and `src/Script`. Syntax-check those
-  `.cpp` in a separate run.
 
 Stage **source** (`BisListMgr`):
 ```cpp
