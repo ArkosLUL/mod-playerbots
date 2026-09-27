@@ -3,10 +3,11 @@
 
     hodir.py <file>            every section
     hodir.py <file> --pace     health at each 30 s, boss dps per 15 s, 0-3:00 against the cache pace
-    hodir.py <file> --hold     hodir.tankhold windows: his path, boss dps, time off the point; fire gaps
+    hodir.py <file> --hold     hodir.tankhold windows: his path, boss dps, time off the point; fire gaps,
+                               when lust went out
     hodir.py <file> --singed   65280 on the boss by caster kind, and the stack count that implies
     hodir.py <file> --buffs    Starlight, Toasty Fire, Storm Power, Biting Cold by role and by stack,
-                               time stood still at the shed's arm point
+                               time stood still at the shed's arm point, caster time by Starlight rule
     hodir.py <file> --churn    walking undone, A-B-A flips, moves by action, stalls, shed legs that
                                went nowhere, dodge walk-backs
     hodir.py <file> --blocks   helper ice blocks per Flash Freeze, by the helper inside them
@@ -56,6 +57,8 @@ SPELL_STORM_POWER = (63711, 65134)
 SPELL_BITING_COLD = 62039
 SPELL_BITING_COLD_DAMAGE = 62188
 SPELL_ICE_SHARDS = 62457
+SPELL_BLOODLUST = 2825
+SPELL_HEROISM = 32182
 
 DODGE = "hodir icicle dodge action"
 SHELTER = "hodir move snowpacked icicle"
@@ -86,6 +89,8 @@ BUFF_WALK = 15.0
 # What a bot with neither Starlight nor a fire walks; the short one is for a bot that already holds one.
 BUFF_WALK_UNBUFFED = 30.0
 BAND = (15.0, 35.0)
+# A Starlight stand may come closer than the band's inner edge.
+STARLIGHT_BAND = (10.0, 35.0)
 # Melee this close to him are the pack a fire at his feet is meant to cover.
 MELEE_NEAR_YD = 10.0
 # Inside this one a melee bot is actually swinging, so it is the uptime number the pack share needs
@@ -238,17 +243,25 @@ def in_band(point: tuple[float, float], boss: tuple[float, float], band: tuple[f
 
 
 def usable_within(bot: tuple[float, float], boss: tuple[float, float],
-                  zones: list[tuple[float, float]], radius: float, walk: float = BUFF_WALK) -> float | None:
-    """The walk to the nearest stand among `zones` that is in the caster band and no further than
-    `walk`, or None when there is none - what the encounter would have offered this bot."""
+                  zones: list[tuple[float, float]], radius: float, walk: float = BUFF_WALK,
+                  band: tuple[float, float] = BAND) -> float | None:
+    """The walk to the nearest stand among `zones` that is inside `band` and no further than `walk`,
+    or None when there is none - what the encounter would have offered this bot."""
     best = None
     for zone in zones:
         stand = stand_point(bot, zone, radius)
         gap = math.hypot(stand[0] - bot[0], stand[1] - bot[1])
-        if gap > walk or not in_band(stand, boss):
+        if gap > walk or not in_band(stand, boss, band):
             continue
         best = gap if best is None else min(best, gap)
     return best
+
+
+def starlight_rule(value: str) -> str:
+    """The rule a hodir.starlight note names, without its zone. A held stand standing down keeps its
+    `held`, so it reads apart from a sweep that found nothing."""
+    words = value.split(" ")
+    return " ".join(words[:2]) if words[0] == "held" else words[0]
 
 
 def reach_shares(walks: list[float | None], budgets: tuple[float, ...]) -> tuple[float, tuple[float, ...]]:
@@ -736,6 +749,11 @@ def show_hold(trace: Trace) -> None:
 
     firsts = fire_starts(trace)
     print(f"\n  first fire after the pull {clock(min(firsts)) if firsts else '-'}")
+    roster = roster_guids(trace)
+    lust = sorted((rec["t"], rec["sp"]) for rec in trace.of("cast")
+                  if rec.get("sp") in (SPELL_BLOODLUST, SPELL_HEROISM) and rec.get("s") in roster and rec["t"] >= 0)
+    print(f"  lust {'Heroism' if lust[0][1] == SPELL_HEROISM else 'Bloodlust'} {clock(lust[0][0])}"
+          if lust else "  lust none")
     for cast in freeze_casts(trace, boss):
         lands = cast + FREEZE_LANDS_MS
         after = [when for when in firsts if when > lands]
@@ -834,10 +852,10 @@ def show_buffs(trace: Trace) -> None:
                 if not row or len(row) < 6 or row[5] <= 0:
                     continue
                 spot, aim = (row[1], row[2]), (him[1], him[2])
-                for name, here, radius in (("Starlight", stars, STARLIGHT_STAND_RADIUS),
-                                           ("fire", fires, FIRE_STAND_RADIUS)):
+                for name, here, radius, band in (("Starlight", stars, STARLIGHT_STAND_RADIUS, STARLIGHT_BAND),
+                                                 ("fire", fires, FIRE_STAND_RADIUS, BAND)):
                     walks[(trace.role(guid), name)].append(
-                        usable_within(spot, aim, here, radius, walk=math.inf))
+                        usable_within(spot, aim, here, radius, walk=math.inf, band=band))
         budgets = (BUFF_WALK, BUFF_WALK_UNBUFFED)
         for (role, name), got in sorted(walks.items()):
             there, within = reach_shares(got, budgets)
@@ -845,10 +863,24 @@ def show_buffs(trace: Trace) -> None:
                 f"inside {budget:.0f} yd {share:.1f}%" for budget, share in zip(budgets, within)))
 
     rules = collections.Counter()
+    marks: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
     for rec in notes(trace, "hodir.starlight"):
-        words = str(rec.get("txt", "")).split(" ")
-        rules[" ".join(words[:2]) if words[0] == "held" else words[0]] += 1
+        rule = starlight_rule(str(rec.get("txt", "")))
+        rules[rule] += 1
+        marks[rec["g"]].append((rec["t"], rule))
     print("  hodir.starlight " + ", ".join(f"{rule} {count}" for rule, count in rules.most_common()))
+
+    # Time rather than notes: a held stand can sit on one note for most of a zone's minute.
+    held: collections.Counter = collections.Counter()
+    lit: collections.Counter = collections.Counter()
+    for guid in casters:
+        for low, high, rule in latch_windows(sorted(marks.get(guid, [])), 0, min(end, dead.get(guid, end))):
+            held[rule] += high - low
+            lit[rule] += covered(spans["starlight"].get(guid, []), low, high)
+    whole = sum(held.values())
+    if whole:
+        print("  caster time by Starlight rule: " + ", ".join(
+            f"{rule} {ms / whole * 100:.0f}% (starlit {lit[rule] / ms * 100:.0f}%)" for rule, ms in held.most_common()))
 
     stands = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "hodir.stand"))
     if stands:

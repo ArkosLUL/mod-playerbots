@@ -156,7 +156,7 @@ bool HodirRaidPositionTrigger::IsActive()
     // makes the anchor a spring - every dodge displaces further than any tolerance, so every dodge
     // buys a return trip and the two actions trade the bot for the rest of the icicle's life.
 
-    // Standing in his melee with Frozen Blows up is one swing from dead.
+    // In among the melee, where an icicle or a Freeze on either catches both.
     Unit* hodir = GetHodir(botAI);
     if (hodir && bot->GetExactDist2d(hodir) < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP)
         return true;

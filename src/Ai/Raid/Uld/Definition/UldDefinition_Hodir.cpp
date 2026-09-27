@@ -147,6 +147,11 @@ void DefineHodir(EncounterBuilder& e)
     e.Block("hodir paladin aura multiplier", Role::Any, HodirResistancePaladin, 0,
             {"devotion aura", "retribution aura", "concentration aura", "crusader aura", "sanctity aura",
              "shadow resistance aura", "fire resistance aura"});
+
+    // Cast at the pull, lust spent a third of its 40 s on a 94k opener with no fire up and ran out
+    // 12 s before the first freeze landed. From the first fire it covers that fire's whole window,
+    // with Singed at cap for most of it.
+    e.Block("hodir lust hold", Role::Any, IsHodirLustHeld, 0, {"heroism", "bloodlust"});
 }
 }  // namespace
 

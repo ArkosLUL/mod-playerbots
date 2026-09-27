@@ -104,11 +104,12 @@ is no Sated/Exhaustion check anywhere, and no Drums or Time Warp — lust is sha
 | Assembly of Iron | always | exactly one member alive | They resurrect each other; also covers the hard mode, since Steelbreaker-last means the survivor is empowered |
 | Freya | same as `allowLust` | no `SPELL_ATTUNED_TO_NATURE` 62519, **or** HP ≤ 25% | 150 stacks of +8% healing received, so damage lands only in the final phase; the adds that strip it are not boss-flagged |
 | Thorim | arena floor (`Z <= 429.6`) | same | Largely redundant, but cheap insurance against a stray lust while he is immune |
-| Hodir, Vezax, Algalon, Ignis, Auriaya, Kologarn, Flame Leviathan | — | — | No change; the pull is the right window |
+| Hodir | — | first Toasty Fire, or 30 s in | A definition rule (`hodir lust hold`), not this multiplier. Cast at the pull it ran on a no-fire opener and out before the freeze; see [hodir.md](hodir.md) |
+| Vezax, Algalon, Ignis, Auriaya, Kologarn, Flame Leviathan | — | — | No change; the pull is the right window |
 
-**Freya is the only boss with a fallback release** — `FREYA_LUST_FALLBACK_PCT = 25.0f` keeps lust
-from being held forever if the aura read ever misses. Every other window is on the mandatory path to
-the kill.
+**Freya and Hodir are the only bosses with a fallback release** — `FREYA_LUST_FALLBACK_PCT = 25.0f`
+keeps lust from being held forever if the aura read ever misses, and Hodir's 30 s covers a pull with no
+fire. Every other window is on the mandatory path to the kill.
 
 **Never call `RazorscaleBossHelper::UpdateBossAI()` from a multiplier** — it side-effects into
 `AssignRolesBasedOnHealth()`, which reassigns the raid's main tank. Read Z straight off the target

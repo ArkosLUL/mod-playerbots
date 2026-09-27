@@ -881,6 +881,18 @@ class HodirReader(unittest.TestCase):
         boss = (0.0, 0.0)
         self.assertIsNone(hodir.usable_within((0.0, 30.0), boss, [(50.0, 0.0)], 8.0, walk=15.0))
 
+    def test_a_starlight_stand_may_come_inside_the_caster_band(self):
+        boss = (0.0, 0.0)
+        # The stand 1.5 short of a zone 10.5 yd out, toward the bot, is 12 from him.
+        self.assertIsNone(hodir.usable_within((20.0, 0.0), boss, [(10.5, 0.0)], 1.5))
+        self.assertAlmostEqual(
+            hodir.usable_within((20.0, 0.0), boss, [(10.5, 0.0)], 1.5, band=hodir.STARLIGHT_BAND), 8.0)
+
+    def test_starlight_rule_drops_the_zone_and_keeps_held(self):
+        self.assertEqual(hodir.starlight_rule("stand 2004,-240,433"), "stand")
+        self.assertEqual(hodir.starlight_rule("held noreach"), "held noreach")
+        self.assertEqual(hodir.starlight_rule("far"), "far")
+
     def test_singed_reaches_the_cap_and_the_hole_is_only_counted_with_a_fire_up(self):
         curve = hodir.singed_curve([1000, 2000, 3000], cap=3, duration=4000)
         self.assertEqual(hodir.ramp_ms(curve, 500, cap=3), 2500)

@@ -66,6 +66,21 @@ bool IsHodirFlashFreezeIncoming(PlayerbotAI* botAI)
            boss->FindCurrentSpellBySpellId(SPELL_FLASH_FREEZE) != nullptr;
 }
 
+bool IsHodirLustHeld(PlayerbotAI* botAI)
+{
+    Unit* boss = GetHodir(botAI);
+    if (!boss || !boss->IsInCombat())
+        return false;
+
+    // Gone after 3:00, or never cast: nothing to time the hold by, so don't hold.
+    Aura const* timer = boss->GetAura(SPELL_HODIR_SHATTER_CHEST_TIMER);
+    if (!timer ||
+        timer->GetMaxDuration() - timer->GetDuration() >= static_cast<int32>(ULDUAR_HODIR_LUST_FALLBACK_MS))
+        return false;
+
+    return !botAI->GetBot()->FindNearestCreature(NPC_TOASTY_FIRE, ULDUAR_HODIR_ROOM_SEARCH_RADIUS, true);
+}
+
 bool HodirFrozenBlowsActive(PlayerbotAI* botAI, Player* bot)
 {
     Unit* boss = GetHodir(botAI);
@@ -106,6 +121,7 @@ struct HodirStarlightLatch
 {
     Position zone;
     Position stand;
+    uint32 rejectedSince = 0;  // when the stand started failing the band, 0 while it passes
 };
 
 // The fire a bot stands in, latched the same way and for the same reason: what makes a stand usable is
@@ -428,13 +444,14 @@ static float HodirBuffWalk(Player* bot)
 // two heals rather than two lives. Any number may share a zone; what each gets is a bearing of its
 // own, taken from where it stands, so they spread around it instead of piling on a point.
 //
-// Usable means the resulting spot still reaches Hodir, is still out of his reach, and is within
-// the walk this bot will make for a buff; the nearest zone wins among those.
+// Usable means the resulting spot still reaches Hodir, is out of his melee range, and is within the
+// walk this bot will make for a buff; the nearest zone wins among those.
 //
 // The pick is latched per bot and held until the zone expires, because the boss moves under it. A
-// stand that stops qualifying is held rather than dropped: erasing it re-sweeps, and a fresh sweep
-// while Hodir is a yard past the band hands the bot a different zone that rejects on the next tick
-// and back - 1201 anchor moves a median 320ms apart, ten of them per distinct point.
+// stand that stops qualifying is held for ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS, then dropped. Dropped
+// at once, a fresh sweep while Hodir is a yard past the band hands the bot a different zone that
+// rejects on the next tick and back: 1201 anchor moves a median 320ms apart. Never dropped, casters sat
+// on a zone they couldn't use for a third of the pull.
 static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& out)
 {
     std::unordered_map<ObjectGuid, HodirStarlightLatch>& latched = HodirLatchesFor(bot).starlight;
@@ -468,12 +485,12 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
     // which zone is worth starting for, and a bot already on its way is past that question.
     auto standRejects = [&](Position const& stand) -> char const*
     {
-        // Both ends of the caster band. A zone the bot cannot shoot the boss from is not a throughput
-        // lever, whatever haste it carries.
+        // Starlight's own inner edge and the caster band's outer one. A zone the bot cannot shoot the
+        // boss from is not a throughput lever, whatever haste it carries.
         if (hodir)
         {
             float const gap = stand.GetExactDist2d(hodir);
-            if (gap < ULDUAR_HODIR_RANGED_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
+            if (gap < ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP || gap > ULDUAR_HODIR_CASTER_MAX_BOSS_GAP)
                 return "noreach";
         }
 
@@ -495,28 +512,38 @@ static bool FindHodirStarlightStand(PlayerbotAI* botAI, Player* bot, Position& o
 
         if (stillUp)
         {
-            // Held through a reject rather than dropped, for the reason above the function.
+            // Held through a short reject, dropped after a long one, for the reason above the function.
             if (char const* reject = standRejects(held->second.stand))
             {
-                // "held" so a latched stand standing down reads differently from a sweep that found
-                // nothing: the first is a bot with a zone waiting for the boss to move back, the
-                // second is a bot with no zone at all, and only the second wants more zones.
-                if (RaidObs::Active())
-                    RaidObs::NoteDerived(bot, "hodir.starlight", std::string("held ") + reject);
+                uint32 const now = getMSTime();
+                if (!held->second.rejectedSince)
+                    held->second.rejectedSince = now;
 
-                return false;
+                if (getMSTimeDiff(held->second.rejectedSince, now) < ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS)
+                {
+                    // "held" so a latched stand standing down reads differently from a sweep that found
+                    // nothing: the first is a bot with a zone waiting for the boss to move back, the
+                    // second is a bot with no zone at all, and only the second wants more zones.
+                    if (RaidObs::Active())
+                        RaidObs::NoteDerived(bot, "hodir.starlight", std::string("held ") + reject);
+
+                    return false;
+                }
             }
+            else
+            {
+                held->second.rejectedSince = 0;
+                out = held->second.stand;
 
-            out = held->second.stand;
+                if (RaidObs::Active())
+                    RaidObs::NoteDerived(bot, "hodir.starlight",
+                                         "stand " + RaidObs::DescribeDerived(held->second.zone));
 
-            if (RaidObs::Active())
-                RaidObs::NoteDerived(bot, "hodir.starlight",
-                                     "stand " + RaidObs::DescribeDerived(held->second.zone));
-
-            return true;
+                return true;
+            }
         }
 
-        // The zone expired, so the next sweep is the one that counts.
+        // The zone expired, or its stand stayed out of the band too long, so the next sweep counts.
         latched.erase(held);
     }
 
@@ -589,8 +616,8 @@ static bool FindHodirFireStand(PlayerbotAI* botAI, Player* bot, Position& out)
 
     Unit* hodir = GetHodir(botAI);
 
-    // Both ends of the caster band, same rule the Starlight stand answers to: a spot the bot cannot
-    // shoot him from is worth nothing, and one inside his reach is a Frozen Blows swing from dead.
+    // Both ends of the caster band: a spot the bot cannot shoot him from is worth nothing, and one
+    // closer in puts it among the melee.
     auto standRejects = [&](Position const& stand)
     {
         if (!hodir)

@@ -37,11 +37,20 @@ measured to the target's bounding radius and Hodir is a giant, so the book 30 un
 dealt **7,693 dps each from 30-35 yd against 7,844 from 20-25**, casts aimed at him started out to
 40.1 (p99 36.2), and 35-40 is where it falls off (4,854).
 
+**15 keeps casters off the melee, not off his swings**, which land only on his victim; nothing else
+in his kit cares how close a raider stands. Melee stand within ~6.5 yd of him, so an icicle (4 yd) or
+Freeze (10 yd) on one catches the other, and inside his melee range, **7.8 yd** (combat reach 5 +
+1.5 + 4/3), a raider pulls aggro at 110% of the victim's threat rather than 130%. So **a Starlight
+stand may come to 10** (`_STARLIGHT_MIN_BOSS_GAP`): the druids cast next to him, 46% of zone samples
+on 2026-09-27 sat inside 15 yd of him, and a stand within 15 yd walk rose from 32.6% of caster
+samples at 15 to 48.3% at 10. Fire stands, the position rules and the crowd shed keep 15.
+
 **Ranged and healers have no home spot.** Nothing in his kit asks them to stand anywhere in
 particular, so `DeriveHodirAnchor` offers a **buff stand or nothing**: Starlight first, since +50%
 haste beats what a fire gives, else the nearest point of a live fire, capped at `_FIRE_STAND_RADIUS` 8
 of its centre — park 8 / release 10 inside the aura's 11, and a bot already inside keeps the spot it
-is on. Either only when the stand sits in the caster band and inside the walk the bot will make.
+is on. Either only when the stand sits in its band (Starlight's starts at 10) and inside the walk the
+bot will make.
 The fire *he* is held on needs no special case: with him on it, nothing within 8 yd of it is 15 from
 him. `hodir.stand` reads `starlight` / `fire` / `none`.
 
@@ -501,6 +510,20 @@ Fireball and Melt Ice casts (`boss_hodir.cpp:1078-1125`). With the first mage fr
 came 13.8-15.0 s into the wave. The opener has the same shape: mage blocks down at 8.8 / 9.7 s, first
 fire at 18.4 s, 73k dps until then.
 
+Traced 2026-09-27 on the shed-floor build, 25-man: **kill at 2:57.25 with 0 deaths, the cache made at
+219.0k** against 216.5k. Shed legs onto the bot's own spot 0 of 572 (8 of 504 on the old binary);
+dps with a fire 248k, without one **174k** (145k on 09-23); fire back 15.6 / 19.7 / 15.4 s; ranged /
+healers in Starlight only **9.5 / 11.6%**, which the 10 yd Starlight edge and the latch drop answer.
+
+**Still open: mage-block breakers spend about half their cast time off their block** (50-54% over
+four pulls, instants counted as 1 s). The blocks are attackers, so the `X on attacker` DoTs (relevance
+19-19.5, over the single-target ones at 5-18) spread over all eight blocks and Hodir, and AoE fires on
+the count: in one wave Fel Immolated seven other blocks and Agony Corrupted five without touching
+their own, and Power channelled Blizzard through a whole 9 s block. Every slow mage block lost one or
+two breakers this way; that wave's fire came 19.7 s after the freeze against 14.3-15.6. Fix shape:
+`Family::DebuffOnAttacker` in Hodir's `OwnTargeting`, as Kologarn and Vezax pass it (single-target
+DoTs stay), plus a multiplier zeroing `ActionThreatType::Aoe` spells.
+
 **Two high-churn probes are not defects, and re-tuning them is wasted work.** `hodir.shuttle` reverses
 `crowd ↔ held` 3,357 times at a 959 ms median, which is exactly the designed chain — `_SHUTTLE_HALF_LEG`
 3.0 gives 6 yd legs, ~0.86 s at run speed. `hodir.stormcloud` did the same 192 times at 780 ms, which
@@ -511,13 +534,14 @@ symptom of how much walking the fight demands rather than of a latch that flaps.
 under one edit at a time, and the three-latch pull is the one that cannot say which latch did what.
 `tools/botobs/bosses/hodir.py <file>` prints every figure here (`--pace`, `--hold`, `--singed`,
 `--buffs`, `--churn`, `--blocks`): time off the hold point, fire inside the leash against fire held,
-the melee pack inside the held fire and what share of it was on him at all, the melee gap to him
-against the 8 yd it takes to swing, the Singed ramp and the time at none with a fire burning, how
-**boss dps with a fire burning against with none**, whether a legal buff stand existed at all against
-whether it was inside each walk budget, Biting Cold by stack, time stood still at the shed's arm point
-out of a fire, the bot-seconds a block wave spent on ice after the last mage was free, post-freeze
-shelter moves, stalled walks, shed legs sent onto the bot's own spot (refused, so the stall count
-cannot see them), and **the roles each mover walked** — the one line that names a gate that stopped gating.
+when lust went out, the melee pack inside the held fire and what share of it was on him at all, the
+melee gap to him against the 8 yd it takes to swing, the Singed ramp and the time at none with a fire
+burning, how **boss dps with a fire burning against with none**, whether a legal buff stand existed at
+all against whether it was inside each walk budget, caster time by Starlight rule (`held noreach`
+included), Biting Cold by stack, time stood still at the shed's arm point out of a fire, the
+bot-seconds a block wave spent on ice after the last mage was free, post-freeze shelter moves, stalled
+walks, shed legs sent onto the bot's own spot (refused, so the stall count cannot see them), and
+**the roles each mover walked** — the one line that names a gate that stopped gating.
 Traces older than `hodir.hold` fall back to `hodir.centre`.
 
 Each cause below is separate, and all of them are still easy to reintroduce.
@@ -564,7 +588,7 @@ Each cause below is separate, and all of them are still easy to reintroduce.
   instead; sweep only once it stops being clear. `_DODGE_ARRIVE` is 0.8 for the same reason: at 1.5 a
   bot counted as arrived a fifth of the way into a 2 yd leg, still inside the radius that re-arms the
   trigger.
-- **Both stands are latched per bot, and a reject must not drop the latch.** Zones and fires are
+- **Both stands are latched per bot, and a reject must not drop the latch at once.** Zones and fires are
   ranked by walk from where the bot stands and the stand bearing is taken from there, so the answer
   moves whenever the bot or the boss does: stateless that was **739 anchor changes** across 23 bots at
   a median 3,896 ms, an 11 yd jump each, and Starlight windows lasting 1.6 s against zones that live a
@@ -574,7 +598,12 @@ Each cause below is separate, and all of them are still easy to reintroduce.
   caster band, which rejects next tick and back. Hold the zone or fire until it is gone, re-validate
   the stored point against the band every tick, and on a reject offer nothing that tick rather than
   dropping the latch. The walk gate is deliberately *not* re-checked: it decides which zone is worth
-  starting for, and a bot already on its way is past that question.
+  starting for, and a bot already on its way is past that question. **Never dropping fails too**: on
+  2026-09-27 casters sat `held noreach` on a zone left too close to him for **33%** of their time
+  (starlit 4%), in runs of 20-43 s, with another usable zone within 30 yd on half of it. A Starlight
+  latch drops after **3 s** of continuous reject (`_STARLIGHT_REJECT_DROP_MS`): 84-96% of held time
+  over three pulls came in runs of 10 s+ and 0-1% under 3 s, so a band-edge wobble still holds. The
+  fire latch still holds until the fire dies.
 - **Put the zone in the note, not just the rule.** `hodir.starlight` carried only
   `stand`/`noreach`/`fire`/`none` and `NoteDerived` emits on change, so a re-latch onto a *different*
   zone still read `stand` and wrote nothing: the flap above hid behind 131 notes that looked exactly
@@ -605,7 +634,14 @@ and fire coverage at +0.78, so cast uptime is the metric to move and the fire is
 
 **The opening is worth 42 seconds.** Hodir lost 4.7% in the first 30 s while the raid freed helper
 blocks, and Heroism went out at 0:04.5 and expired at 0:44.5 — against the 0:30-1:00 rate the opening
-forgoes 5.38M damage, 42 s of fight at the pull's own average. Unexamined.
+forgoes 5.38M damage, 42 s of fight at the pull's own average. The first fire sets it, ~9 s after the
+first mage block breaks (above).
+
+**Lust waits for the first Toasty Fire** (`hodir lust hold`, `IsHodirLustHeld`), or 30 s into the pull
+(`_LUST_FALLBACK_MS`; first fires come 17-26 s in). Cast at the pull (0:04.8 on 2026-09-27) it spent
+12.5 s on a 94k opener with no fire and no Singed and ran out 12 s before the freeze landed; from the
+first fire it covers that fire's window to the landing. The pull clock is the age of 65272
+(`SPELL_SHATTER_CHEST_TIMER`) on him, and without it nothing is held.
 
 **Berserk at 8 min is still unhandled** anywhere in the module.
 

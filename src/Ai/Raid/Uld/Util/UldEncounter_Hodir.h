@@ -67,6 +67,7 @@ enum UlduarHodirIds
     SPELL_HODIR_FROZEN_BLOWS = 62478,  // base id, difficulty-mapped at runtime
     SPELL_HODIR_STORM_CLOUD = 65123,   // base id, difficulty-mapped at runtime
     SPELL_HODIR_STORM_POWER = 63711,   // what the carrier hands out; also difficulty-mapped
+    SPELL_HODIR_SHATTER_CHEST_TIMER = 65272,  // on himself from the pull for 180 s, so its age is the pull clock
 };
 
 // Hodir.
@@ -193,6 +194,11 @@ static_assert(ULDUAR_HODIR_STARLIGHT_STAND_RADIUS + ULDUAR_HODIR_STARLIGHT_STAND
                   ULDUAR_HODIR_STARLIGHT_RADIUS,
               "a bot at the edge of its tolerance has to still be inside Starlight");
 
+// How long a latched Starlight stand may sit outside the band before the bot gives the zone up. A yard
+// of wobble at the band edge clears inside this, Hodir moving between the centre and a fire doesn't.
+// Over three pulls 84-96% of the time held out of the band came in runs of 10 s or more, 0-1% under 3.
+constexpr uint32 ULDUAR_HODIR_STARLIGHT_REJECT_DROP_MS = 3000;
+
 // Where the two ends of the shed shuttle sit when the bot is standing in Starlight. Both ends and the
 // straight line between them stay inside the zone, so the aura survives the shuttle that would
 // otherwise walk the bot out of it. A yard inside the 3 yd edge at both ends, because an end sitting
@@ -227,12 +233,21 @@ constexpr float ULDUAR_HODIR_BUFF_WALK_UNBUFFED = 30.0f;
 static_assert(ULDUAR_HODIR_BUFF_WALK_UNBUFFED <= ULDUAR_HODIR_STARLIGHT_SEARCH_RADIUS,
               "walking further than the zone sweep looks would find nothing to walk to");
 
-// Ranged and healers hold at least this far from Hodir. His combat reach plus a raider's is roughly
-// 13 yd, and Frozen Blows turns one of his swings into 20000-30000, so a caster inside this is one
-// swing from dead whether or not it has aggro.
+// Ranged and healers hold at least this far from Hodir. Not for his swings, which only ever land on
+// his victim, and nothing else he casts cares how close a raider stands. It keeps them off the melee,
+// who stand within ~6.5 yd of him, so an icicle or a Freeze on one doesn't catch the other, and out of
+// his melee range, where a raider pulls aggro at 110% of the tank's threat rather than 130%.
 constexpr float ULDUAR_HODIR_RANGED_MIN_BOSS_GAP = 15.0f;
 static_assert(ULDUAR_HODIR_RANGED_MIN_BOSS_GAP < ULDUAR_HODIR_CASTER_MAX_BOSS_GAP,
               "the caster band has to have room between its ends");
+
+// A Starlight stand may come this close, since +50% haste is worth standing near the melee for. The
+// stand itself stays out of his melee range: combat reach 5, a raider's 1.5 and 4/3 make 7.8. The
+// druids cast where they stand, next to him, so 46% of zone samples sat inside 15 yd of him, and a
+// stand within walking reach went from 33% of caster samples at 15 to 48% here.
+constexpr float ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP = 10.0f;
+static_assert(ULDUAR_HODIR_STARLIGHT_MIN_BOSS_GAP <= ULDUAR_HODIR_RANGED_MIN_BOSS_GAP,
+              "Starlight is the one stand allowed inside the caster gap, never one kept further out");
 
 // How far past the hold point a tank stands. Hodir stops a median 5.0 yd from whoever holds him
 // (p10 3.9, p90 7.0) and 3.6-4.2 yd back along the way he was dragged, so this lands him on the point.
@@ -335,6 +350,10 @@ constexpr uint32 ULDUAR_HODIR_HELPER_BLOCK_MIN_FREE = 2;
 // the pool - and two arrive about 2.4s apart. Below this, taunting into an open window is a death.
 constexpr float ULDUAR_HODIR_TAUNT_HEALTH_FLOOR = 50.0f;
 
+// Lust waits for the first Toasty Fire, but no longer than this into the pull. First fires have come
+// 17-26 s in, and a pull with none by 30 s shouldn't sit on a 10 minute cooldown.
+constexpr uint32 ULDUAR_HODIR_LUST_FALLBACK_MS = 30000;
+
 constexpr float ULDUAR_HODIR_ROOM_SEARCH_RADIUS = 100.0f;
 
 extern const Position ULDUAR_HODIR_CENTRE;
@@ -351,6 +370,10 @@ bool IsHodirEngaged(PlayerbotAI* botAI);
 // 9.03 s, so this is the whole window and nothing but it: it opens 3.8 s before the drift lands and
 // leaves the shelter behind, and closes exactly when the freeze resolves.
 bool IsHodirFlashFreezeIncoming(PlayerbotAI* botAI);
+
+// True while Heroism and Bloodlust wait: he's engaged, no Toasty Fire is up yet, and the pull is under
+// ULDUAR_HODIR_LUST_FALLBACK_MS old.
+bool IsHodirLustHeld(PlayerbotAI* botAI);
 
 // True while Hodir carries Frozen Blows. Shared so the swap trigger and the taunt guard cannot
 // disagree about whether the window is open. The server's spelldifficulty_dbc maps 62478 -> 63512
