@@ -67,9 +67,9 @@ struct Block
 
 struct SpecKey
 {
-    uint8_t tab;
+    uint8_t tab = 0;
     // 1 for a second build on the same tab: Fire FFB, Destruction fire
-    uint8_t variant;
+    uint8_t variant = 0;
 };
 
 namespace Detail

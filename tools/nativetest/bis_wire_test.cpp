@@ -6,8 +6,10 @@
 
 #include "BisWire.h"
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <vector>
 
