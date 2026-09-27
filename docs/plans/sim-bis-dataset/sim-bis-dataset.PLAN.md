@@ -66,9 +66,9 @@ The procedure, paths, standing authorizations and agent rules are in
 
 ## Current wave
 
-- Wave: C, running.
-- Base SHA: `ea0c9c109`.
-- Workflow runId: `wf_17046990-632`.
+- Wave: D, not started.
+- Base SHA: set at wave start.
+- Workflow runId: none.
 
 ## Status
 
@@ -231,11 +231,11 @@ Stage **dataset**:
   sim slot for its enchant. Trinkets carry no enhancements. `paletteGems` = the block's `g` ids passing
   `gemEnchantIfUsable` (not restricted to the gem cache; `gemBudgetOk` enforces unique-equipped).
 - Enchant per slot, first that applies: (1) the dataset spell, exact or not, when it has
-  `SPELL_EFFECT_ENCHANT_ITEM`, passes `IsFitToSpellRequirements`, `BaseLevel`,
-  `IsEnchantSpellAllowed(tier)` and the enchant's `requiredSkill`/`requiredLevel`; deliberately not the
-  cache blacklist, enchant-flags check or engineering-cloak rule (the sim chose from the server's
-  obtainable catalog, and it carries DK runeforges the cache path never sees); (2)
-  `GetRuneforgeEnchantId`; (3) today's scan.
+  `SPELL_EFFECT_ENCHANT_ITEM`, passes `spellGatesPass` (`LimitEnchantExpansion`,
+  `IsFitToSpellRequirements`, `BaseLevel`, `IsEnchantSpellAllowed(tier)`) and the enchant's
+  `requiredSkill`/`requiredLevel`; deliberately not the cache blacklist, enchant-flags check or
+  engineering-cloak rule (the sim chose from the server's obtainable catalog, and it carries DK
+  runeforges the cache path never sees); (2) `GetRuneforgeEnchantId`; (3) today's scan.
 - Pinned gems (exact items): `pinnedGem`/`pinned` on `SocketToGem`. After `ApplyPrismaticSocket`, with
   T = colored template sockets (meta included), P = prismatic present, n = dataset gems:
 
@@ -255,18 +255,21 @@ Stage **dataset**:
 
 Stage **reforge** (exact items, `Reforges` on, mod-reforging present and enabled):
 - `BisReforge.{h,cpp}`: `#if __has_include("item_reforge.h")` (include `<string> <vector>
-  <unordered_map>`, `Item.h`, `Player.h` first; the header only includes `Define.h`).
+  <unordered_map>`, `Item.h`, `Player.h` first; the header uses them without including them).
 - The map thread only queues: `BisReforgeOperation{botGuid, itemGuid, entry, from, to}` (from = to = 0
   means remove) via `PlayerbotWorldThreadProcessor::instance().QueueOperation`. It never reads
   mod-reforging state, since its map is shared across threads.
 - World thread: find the bot and item; require still equipped, same entry, `GetEnabled()`, and for a
-  reforge `IsReforgeableStat(from) && IsReforgeableStat(to)` (`Reforge()` checks neither; failing either
-  keeps any old reforge). Read `GetReforgingData` only as `auto data = ...; if (data)` or `!data`, then `->` or `*`: `nullptr`
-  compares, `has_value()`, `value()` and `value_or` each break against the baked pointer API or the
-  patched `optional`. Already `{from, to}` → done. Reforged otherwise → `RemoveReforge` only; a reforge
-  request lands on the next trigger, because `RemoveReforge`'s async DELETE and `Reforge`'s INSERT share
-  the `character_reforging` key and race once `CharacterDatabase.WorkerThreads > 1`. Unreforged →
-  `Reforge` for a reforge request. Failures log at debug.
+  reforge `IsReforgeableStat(from) && IsReforgeableStat(to)` (`Reforge()` checks neither; failing
+  either keeps any old reforge). Read `GetReforgingData` only as `auto data = ...; if (data)` or
+  `!data`, then `->` or `*`: `nullptr` compares, `has_value()`, `value()` and `value_or` each break
+  against the baked pointer API or the patched `optional`. Already `{from, to}` → done. Reforged
+  otherwise → `RemoveReforge` only; a later request reforges. Unreforged → `Reforge` for a reforge
+  request. Failures log at debug.
+- At most one write per item per 10 s (world-thread map, item guid → last write): `RemoveReforge`'s
+  async DELETE and `Reforge`'s INSERT share the `character_reforging` key (`item_guid`) and race once
+  `CharacterDatabase.WorkerThreads > 1`, and the queue drains ≥50 ms apart, ≤100 ops each, so two
+  `ApplyEnchantAndGemsNew` runs' requests can share a batch.
 - The queue drains in `OnWorldUpdate`, after `sMapMgr->Update` has waited out every map thread: that,
   not the lock, makes touching the bot safe.
 - Call site in the slot loop: exact item with `r` → request it; exact item without `r` → request
