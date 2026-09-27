@@ -862,3 +862,17 @@ isolates.
   frame — Flame Leviathan 92.6% -> 24.0% with four +40% towers up, in 4 of 10 traces. The module
   clone restores the percentage since 2026-09-20; the signature in a trace is a one-frame drop with no
   damage row whose ratio equals the creature's aura multiplier.
+
+## A missing table or column kills the worldserver, not just the query
+
+`MySQLConnection` aborts the whole process on a query naming a table or column that doesn't exist —
+not an empty result, not a catchable error. Any code reading a table it doesn't own itself (another
+module's, or one an import pipeline creates later) must check `information_schema.COLUMNS` first and
+skip the query whenever a name is missing:
+
+    SELECT TABLE_NAME, COLUMN_NAME FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (...)
+
+`BisDatasetMgr::Load` (`src/Mgr/Item/BisDatasetMgr.cpp`) does this before ever touching
+`bistooltip_dataset`/`_subject`/`_block` — tables mod-bis-tooltip owns and playerbots only reads,
+absent on any server that hasn't loaded that module or run its import yet.

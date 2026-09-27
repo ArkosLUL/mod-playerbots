@@ -422,8 +422,82 @@ tiers; split it per expansion only with evidence that Vanilla bots cling to old 
 Lookups never cross expansions — see
 [loot.md](loot.md#expansion-matching) for the `{expansion, phase}` ceiling and the tier table.
 
-The lists carry gems and enchants per slot (the `enhs` sub-table), and the import **drops them**.
-Bots still choose both by score in `ApplyEnchantAndGemsNew`.
+The lists carry gems and enchants per slot (the `enhs` sub-table), and the import still **drops
+them** — a bot resolving to the lists alone still chooses both by score in
+`ApplyEnchantAndGemsNew`. A bot resolving to the sim dataset instead gets them from its own block;
+see below.
+
+## Sim BiS dataset
+
+`PlanBisGear` (`PlayerbotFactory.cpp`) resolves each bot's `BisSource` once per pass
+(`BisListMgr::ResolveSource`): its own roster subject, else a spec subject — both require class and
+talent tab to match the bot's own, so a roster bot's guid match is not enough by itself: a respec off
+the subject's tab drops it to the spec subject or the lists, never a stale-role roster block. No
+match at all leaves no dataset signal, falling back to the ranked lists above. **Never mixed per
+item.** `AiPlayerbot.BisDataset.Enable` gates the whole path, and a
+placeholder export (one payload shared across ≥2 classes' subjects) is rejected wholesale at load,
+so `Enable = 1` ships safe with no real data.
+
+The subject is read at its own **effective phase** — its latest phase at or below the bot's
+progression cap that actually has a block, not the bot's raw cap — and
+`StatsWeightCalculator::BisRankMultiplier` decays from that same phase. Decaying from the bot's
+phase instead would flatten every item on a subject lagging the bot's own progression to 0.
+
+**Exact vs palette.** The equipped item being the block's rank-1 pick for its slot ("exact") is
+what unlocks the sim's own enchant, gems and reforge on that item. A different item in the slot
+still gets the slot's sim enchant when it fits (`IsFitToSpellRequirements` etc.), but its gems come
+from **palette** instead — the block's own gem ids across every slot, filtered through the same
+eligibility check as the ordinary gem cache, tried before the full pool rather than replacing it.
+Weapons match strictly per hand (Titan's Grip is two independent matches; a 2H with no sim
+off-hand slot leaves it to the ordinary picker). Rings try the same finger first, then cross;
+finger fallback picks the sim's ring whose slot no exact match has claimed. Trinkets get no
+enhancements at all.
+
+**Pin alignment**, after `ApplyPrismaticSocket`, comparing the sim's gem count `n` against the
+item's colored template sockets `T` and whether it carries a prismatic `P`:
+
+| Case | Mapping |
+|---|---|
+| `n == T+P` | positional; gem `T` goes to the prismatic socket |
+| `n == T+1`, `P == 0` | the sim had a prismatic this item lacks: drop the trailing gem |
+| `n == T`, `P == 1` | pin the template sockets; the prismatic goes to the picker |
+| otherwise, or a meta/non-meta color mismatch | pin nothing — dropped empty sockets make the rest ambiguous |
+
+Pins are budgeted **before** the picker runs, so they get first claim on the unique-equipped and
+`ItemLimitCategory` budget; a pin failing `gemEnchantIfUsable` or the budget falls through to
+palette → full pool exactly like an unpinned socket. Later passes skip pinned sockets outright;
+only meta-activation steering may still touch one, and only after every unpinned socket has been
+tried and failed.
+
+**Enchant validity, not the cache path.** The dataset enchant skips the enchant cache's blacklist,
+its enchant-flags check and the engineering-cloak rule on purpose — the sim already chose from what
+the server can actually hand out, DK runeforges included, which the cache never carries. It still
+has to pass `spellGatesPass` (`LimitEnchantExpansion`, `IsFitToSpellRequirements`, `BaseLevel`,
+`IsEnchantSpellAllowed`) and the enchant's own `requiredSkill`/`requiredLevel`. Precedence per slot:
+the dataset enchant, then `GetRuneforgeEnchantId` (frost DK runeforges), then today's cache scan.
+
+**Reforges** run only on an exact rank-1 item with `AiPlayerbot.BisDataset.Reforges` on. Bot AI
+runs on map threads, but mod-reforging's `reforgingDataMap` is shared with the world thread, so a
+map-thread call never touches it directly — it only queues `{bot, item, entry, from, to}`
+(`src/Bot/Factory/BisReforge.cpp`; `from == to == 0` requests removal), and the world thread drains
+the queue after `sMapMgr->Update` and calls into mod-reforging itself. **This depends on
+mod-reforging's local, uncommitted lock patch** (`modules/mod-reforging`): without the
+`shared_mutex` it adds around `reforgingDataMap`, that queue drain races every player's own
+`OnPlayerApplyItemModsBefore` read on the same unordered_map. At most one write per item per 10s
+(world-thread side), since `RemoveReforge`'s DELETE and `Reforge`'s INSERT share the
+`character_reforging` row and can race once `CharacterDatabase.WorkerThreads > 1`.
+
+**Keep `Reforging.Enable` fixed at runtime.** mod-reforging's own reload
+(`ItemReforge::HandleReload`) walks only `sWorldSessionMgr`'s sessions, which hold no bots —
+toggling it leaves already-reforged bots' stats drifted from their DB row until they relog.
+
+**Deliberate `BestGemScore` exception, the second one** (the tank cap-priority flag above is the
+first): the palette narrows *placement* — which gem a socket gets — never *valuation*.
+`BestGemScore` never sees it, so socket scoring stays independent of which subject a bot resolved
+to.
+
+**Known gaps:** healers have no dataset blocks in this export. acbis labels a raider "Blood dps"
+without a main-tank flag, so a tanking DK falls back to the ranked lists.
 
 ## Config
 
@@ -445,6 +519,13 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | `AiPlayerbot.FulfillMetaGemRequirements` | 1 | Steer colour gems to activate the meta |
 | `AiPlayerbot.LimitProgressionTier` | 1 | IP tier gating; inert when IP is absent |
 | `AiPlayerbot.ProgressionTierCap` | 18 | Fallback tier for ungrouped bots with no own tier |
+| `AiPlayerbot.BisDataset.Enable` | 1 | Read `bistooltip_*` and prefer it per bot; no-op without the tables or with a placeholder export |
+| `AiPlayerbot.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 keeps only the rank/gate signal |
+| `AiPlayerbot.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
+| `AiPlayerbot.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
 
-Debug: `<bot> calc [item]` prints a raw score (`TellCalculateItemAction`, registered as `calc`).
-`.ip set <n>` sets a test character's IP tier.
+Debug: `<bot> calc [item]` prints a raw score (`TellCalculateItemAction`, registered as `calc`) plus
+a BiS line naming the source (lists or dataset), subject, effective phase and rank. `.ip set <n>`
+sets a test character's IP tier. `.playerbots bis reload` (admin) forces a dataset reload; `.playerbots
+bis status` (gamemaster) reports what's loaded, plus dataset enchants without
+`SPELL_EFFECT_ENCHANT_ITEM` and gems without `GemProperties`.
