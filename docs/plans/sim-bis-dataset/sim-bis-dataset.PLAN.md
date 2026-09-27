@@ -208,6 +208,9 @@ Owned: `src/Mgr/Item/StatsWeightCalculator.{h,cpp}`, `src/Ai/Base/Actions/TellLo
 - `calc` (`TellLosAction.cpp` ~152-182): print by kind; the Dataset line names version, subject (roster
   name or spec), effective phase and cap, rank, listed phase, and the any-phase rank.
 - Verify: common.
+- As built: the held `BisSource` pins the snapshot for the calculator's lifetime. `calc`'s any-phase
+  rank reruns the source at `progress.phase` `BIS_PHASE_MAX` (Dataset) or `BIS_MAX_PHASE[expansion]`
+  (Lists); its Lists and no-key output is unchanged.
 
 ### BIS-enhance (wave C)
 Owned: `src/Bot/Factory/PlayerbotFactory.{h,cpp}`, `src/Bot/Factory/BisReforge.{h,cpp}` (new; the

@@ -5,6 +5,7 @@
  */
 
 #include "TellLosAction.h"
+#include "BisDatasetMgr.h"
 #include "BisListMgr.h"
 #include "ChatHelper.h"
 #include "Event.h"
@@ -158,27 +159,45 @@ bool TellCalculateItemAction::Execute(Event event)
     std::ostringstream out;
     out << "Calculated score of " << chat->FormatItem(proto) << " : " << score;
 
-    uint8 bisCls = 0;
-    uint8 bisTab = 0;
-    if (!BisListMgr::ResolveSpecKey(bot, bisCls, bisTab))
+    BisProgress const cap = BisListMgr::ProgressForBot(bot);
+    BisSource const source = sBisListMgr->ResolveSource(bot, cap);
+    if (source.kind == BisSource::Kind::None)
     {
         out << " | BiS: no spec key (role mismatch or pvp spec)";
     }
     else
     {
-        BisProgress const progress = BisListMgr::ProgressForBot(bot);
         uint8 listedPhase = 0;
-        uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, progress, &listedPhase);
+        uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, source, &listedPhase);
 
-        BisProgress const anyPhase = {progress.expansion, BIS_MAX_PHASE[progress.expansion]};
-        uint8 const anyPhaseRank = sBisListMgr->GetBisRankFor(proto->ItemId, bisCls, bisTab, anyPhase);
+        BisSource anyPhase = source;
+        if (source.kind == BisSource::Kind::Dataset)
+        {
+            anyPhase.progress.phase = BIS_PHASE_MAX;
 
-        out << " | BiS: class " << uint32(bisCls) << " tab " << uint32(bisTab)
-            << ", expansion " << uint32(progress.expansion)
-            << ", phase cap " << uint32(progress.phase) << ", rank " << uint32(rank);
+            BisDatasetSubject const& subject = *source.subject;
+            out << " | BiS: dataset " << source.dataset->version << ", ";
+            if (subject.kind == BisDatasetSubject::KIND_ROSTER)
+                out << "roster " << subject.name << " (" << subject.specName << ")";
+            else
+                out << "spec " << subject.specName;
+            if (subject.variant)
+                out << " variant " << uint32(subject.variant);
+            out << ", phase " << uint32(source.progress.phase) << " (cap " << uint32(cap.phase) << ")";
+        }
+        else
+        {
+            anyPhase.progress.phase = BIS_MAX_PHASE[source.progress.expansion];
+
+            out << " | BiS: class " << uint32(source.cls) << " tab " << uint32(source.tab)
+                << ", expansion " << uint32(source.progress.expansion)
+                << ", phase cap " << uint32(source.progress.phase);
+        }
+
+        out << ", rank " << uint32(rank);
         if (rank)
             out << " listed at phase " << uint32(listedPhase);
-        out << " (any phase " << uint32(anyPhaseRank) << ")";
+        out << " (any phase " << uint32(sBisListMgr->GetBisRankFor(proto->ItemId, anyPhase)) << ")";
     }
 
     botAI->TellMasterNoFacing(out.str());

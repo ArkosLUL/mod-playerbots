@@ -235,21 +235,19 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
     if (sPlayerbotAIConfig.bisScoreBonus <= 0.0f)
         return 1.0f;
 
-    if (!bis_key_resolved_)
+    if (!bis_source_resolved_)
     {
-        bis_key_resolved_ = true;
-        bis_key_valid_ = BisListMgr::ResolveSpecKey(player_, bis_cls_, bis_tab_);
-        if (bis_key_valid_)
-            bis_progress_ = BisListMgr::ProgressForBot(player_);
+        bis_source_resolved_ = true;
+        bis_source_ = sBisListMgr->ResolveSource(player_, BisListMgr::ProgressForBot(player_));
     }
 
-    if (!bis_key_valid_)
+    if (bis_source_.kind == BisSource::Kind::None)
         return 1.0f;
 
     // Phase-limited, unlike the spec gates: a pre-raid BiS piece should stop pulling once the bot has
     // progressed past it. Only this bot's own expansion is consulted.
     uint8 entryPhase = 0;
-    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_cls_, bis_tab_, bis_progress_, &entryPhase);
+    uint8 const rank = sBisListMgr->GetBisRankFor(proto->ItemId, bis_source_, &entryPhase);
 
     // Ranks 4-6 are filler alternates, and against EquipUpgradeThreshold (1.1) a ~2.5% nudge is
     // invisible anyway. They still get the spec-gate pass, just no score change.
@@ -258,11 +256,12 @@ float StatsWeightCalculator::BisRankMultiplier(ItemTemplate const* proto)
 
     // Without this a leftover pre-raid rank-1 piece is worth exactly as much as the current tier's
     // rank-1, so the two bonuses cancel and the equipped lower-ilvl piece keeps the slot on the
-    // upgrade threshold alone.
+    // upgrade threshold alone. Measured from the source's phase, not the bot's: a dataset subject with
+    // no block at the bot's own phase would decay every item it ranks.
     float phaseScale = 1.0f;
-    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < bis_progress_.phase)
+    if (sPlayerbotAIConfig.bisPhaseDecay > 0.0f && entryPhase < bis_source_.progress.phase)
     {
-        uint8 const behind = bis_progress_.phase - entryPhase;
+        uint8 const behind = bis_source_.progress.phase - entryPhase;
         phaseScale = std::max(0.0f, 1.0f - sPlayerbotAIConfig.bisPhaseDecay * behind);
     }
 
