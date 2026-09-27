@@ -167,6 +167,14 @@ Stage **loader**:
   | `AiPlayerbot.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 keeps only the rank/gate signal |
   | `AiPlayerbot.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
   | `AiPlayerbot.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
+- As built: `BisDatasetMgr.h` includes `BisListMgr.h` (tabs, `BIS_PHASE_MAX`), so `BisListMgr.h`
+  forward-declares `BisDatasetSnapshot`/`BisDatasetSubject`. Singleton `sBisDatasetMgr` is a reference.
+  An empty `bistooltip_dataset` means no dataset, not a failure. Indexes skip subjects with no phase
+  1..5 block or an unmapped spec name (warning). A failed reload records the version it read, so the
+  poll retries only a new one; "changed while loading" keeps the starting version, so it retries.
+- The fan-out cap keeps the first 60 TUs alphabetically: `PlayerbotAIConfig.h` and `BisListMgr.h`
+  resolve 81, cutting `src/Mgr`, `src/PlayerbotAIConfig.cpp` and `src/Script`. Syntax-check those
+  `.cpp` in a separate run.
 
 Stage **source** (`BisListMgr`):
 ```cpp
@@ -189,6 +197,8 @@ uint8 GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase = nullp
   `IsBisListed` and `ItemUsageValue.cpp` stay untouched.
 - Verify: common; syntax check includes the `.cpp` files including `BisListMgr.h` and
   `PlayerbotAIConfig.h` (fan-out 60).
+- As built: `GetBisRank` reads the snapshot once and passes it to a private static `ResolveSource`
+  overload.
 
 ### BIS-ranks (wave C)
 Owned: `src/Mgr/Item/StatsWeightCalculator.{h,cpp}`, `src/Ai/Base/Actions/TellLosAction.cpp`.

@@ -8,6 +8,7 @@
 #include "AiFactory.h"
 #include "BattleGroundTactics.h"
 #include "BattlefieldScript.h"
+#include "BisDatasetMgr.h"
 #include "Channel.h"
 #include "Config.h"
 #include "DatabaseEnv.h"
@@ -405,6 +406,7 @@ public:
         PlayerbotHolder::ProcessPendingLogins();
         PlayerbotWorldThreadProcessor::instance().Update(diff);
         sRandomPlayerbotMgr.UpdateAI(diff);  // World thread only
+        sBisDatasetMgr.Update(diff);
     }
 
     // queued holders keep DB results alive, free them before the DB library shuts down
