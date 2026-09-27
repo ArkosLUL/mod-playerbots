@@ -76,8 +76,8 @@ The orchestrator alone edits this table.
 
 | Wave | WI | State | Merge | Notes |
 |---|---|---|---|---|
-| A | BIS-codec | pending | | |
-| A | BIS-reforge-lock | pending | | uncommitted in [reforge] by design |
+| A | BIS-codec | merged | `c6714748d` | |
+| A | BIS-reforge-lock | applied | | uncommitted in [reforge] by design |
 | B | BIS-dataset | pending | | |
 | C | BIS-ranks | pending | | |
 | C | BIS-enhance | pending | | |
