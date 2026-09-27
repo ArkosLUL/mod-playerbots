@@ -80,7 +80,7 @@ The orchestrator alone edits this table.
 | A | BIS-reforge-lock | applied | | uncommitted in [reforge] by design |
 | B | BIS-dataset | merged | `99aa77093` | |
 | C | BIS-ranks | merged | `d038ec245` | |
-| C | BIS-enhance | pending | | |
+| C | BIS-enhance | merged | `45b8d6566` | |
 | D | BIS-docs | pending | | |
 
 States: `pending`, `merged`, `applied` (BIS-reforge-lock: reviewed and left uncommitted), `red`,
