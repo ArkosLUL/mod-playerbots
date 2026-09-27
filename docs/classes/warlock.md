@@ -57,11 +57,11 @@ worth keeping in mind:
   actually-missing DoT.
 - `m_pctMods` staleness has the same cause and is fixed by the same recast — no separate trigger.
 
-**Verified on the 2026-09-27 Ulduar traces.** The trigger fires once per pull, 0-6 s after the crit-taken
-debuffs the opener missed reach the boss (Shadow Mastery, Improved Scorch, Heart of the Crusader,
-Totem of Wrath, Master Poisoner), then stays quiet; Everlasting Affliction carries that snapshot for
-the rest of the uptime, 114 s on one Thorim pull. Tick crit rate cannot show the gain: 5 points needs
-far more ticks than a pull yields.
+**Verified on the 2026-09-27 Ulduar traces.** The trigger fires once per pull, 0-6 s after the
+crit-taken debuffs the opener missed reach the boss (Shadow Mastery, Improved Scorch, Heart of the
+Crusader, Totem of Wrath, Master Poisoner), then stays quiet; Everlasting Affliction carries that
+snapshot for the rest of the uptime, 114 s on one Thorim pull. Tick crit rate cannot show the gain:
+5 points needs far more ticks than a pull yields.
 
 ## Seed of Corruption stays off bosses
 
@@ -114,8 +114,8 @@ too hurt to tap at all. The emergency node exists for when that happens anyway.
 
 Code order: corruption on attacker 19.5, UA on attacker 19.0, corruption 18.0, haunt 17.75, UA 17.5,
 corruption snapshot → corruption resnapshot 16.5, shadow trance → shadow bolt 16.0, drain soul
-execute → drain soul 15.5; life tap glyph 29.5, life tap 5.1, flee 39.0. Defaults: corruption 5.5, UA 5.4, haunt 5.3, shadow bolt 5.2, shoot 5.0. Curse of
-Agony comes from the separate `curse of agony` strategy (18.5 on-attacker / 17.0 single).
+execute → drain soul 15.5; life tap glyph 29.5, life tap 5.1, flee 39.0. Defaults: corruption 5.5,
+UA 5.4, haunt 5.3, shadow bolt 5.2, shoot 5.0. Curse of Agony comes from the separate `curse of agony` strategy (18.5 on-attacker / 17.0 single).
 
 | # | Finding |
 |---|---|
