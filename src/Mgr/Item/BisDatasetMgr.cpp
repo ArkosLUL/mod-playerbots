@@ -366,6 +366,10 @@ bool BisDatasetMgr::Load(std::unique_ptr<BisDatasetSnapshot>& out, Observed& see
 
     for (BisDatasetSubject& subject : subjects)
     {
+        // no tab, no bot ever resolves to it: skip, don't let it pad the reject set
+        if (subject.tab == BIS_TAB_NONE)
+            continue;
+
         for (uint8 phase = 1; phase <= BIS_PHASE_MAX; ++phase)
         {
             BisWire::Block const* block = subject.BlockFor(phase);
@@ -421,7 +425,7 @@ bool BisDatasetMgr::Load(std::unique_ptr<BisDatasetSnapshot>& out, Observed& see
         BisDatasetSubject const* kept = it->second;
         if (kept->variant && !subject.variant)
             it->second = &subject;
-        else if (!kept->variant && !subject.variant)
+        else if (kept->variant || !subject.variant)
             warnings.push_back(Acore::StringFormat("spec subjects {} and {} are both class {} '{}', using {}",
                                                    kept->id, subject.id, subject.cls, subject.specName, kept->id));
     }
