@@ -434,6 +434,10 @@ public:
     bool bisGateBypass;            // A BiS-listed item skips the stat-based spec/role gates
     float bisScoreBonus;           // Rank-1 score multiplier bonus from the BiS list; 0 disables
     float bisPhaseDecay;           // Bonus lost per content phase the listing is behind the bot; 0 disables
+    bool bisDatasetEnable;         // Prefer the sim BiS dataset (bistooltip_* tables) over the lists per bot
+    bool bisDatasetEnhancements;   // Dataset enchants, pinned gems and gem palette; off keeps only the rank signal
+    bool bisDatasetReforges;       // Sim reforge on exact rank-1 items, needs mod-reforging
+    uint32 bisDatasetPollSeconds;  // World-thread dataset version check interval; 0 = startup and command only
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
     bool syncQuestForPlayer;

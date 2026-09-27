@@ -6,16 +6,19 @@
 
 #include "BisListMgr.h"
 #include "AiFactory.h"
+#include "BisDatasetMgr.h"
 #include "DatabaseEnv.h"
 #include "Field.h"
 #include "ItemTemplate.h"
 #include "Log.h"
 #include "Player.h"
+#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "ProgressionMgr.h"
 #include "QueryResult.h"
 
 #include <algorithm>
+#include <utility>
 
 void BisListMgr::LoadAll()
 {
@@ -245,21 +248,77 @@ uint8 BisListMgr::GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress
     return best;
 }
 
+BisSource BisListMgr::ResolveSource(Player* bot, BisProgress max) const
+{
+    return ResolveSource(bot, max, sBisDatasetMgr.Get());
+}
+
+BisSource BisListMgr::ResolveSource(Player* bot, BisProgress max, std::shared_ptr<BisDatasetSnapshot const> dataset)
+{
+    BisSource src;
+    if (!bot || !ResolveSpecKey(bot, src.cls, src.tab))
+        return src;
+
+    src.kind = BisSource::Kind::Lists;
+    src.progress = max;
+
+    // the sim only covers WotLK content phases
+    if (!sPlayerbotAIConfig.bisDatasetEnable || !dataset || max.expansion != BIS_EXP_WOTLK)
+        return src;
+
+    auto const usable = [&](BisDatasetSubject const* subject)
+    {
+        return subject->cls == src.cls && subject->tab == src.tab && subject->PhaseAtOrBelow(max.phase) != 0;
+    };
+
+    BisDatasetSubject const* subject = nullptr;
+    auto const roster = dataset->rosterByGuid.find(bot->GetGUID().GetCounter());
+    if (roster != dataset->rosterByGuid.end() && usable(roster->second))
+        subject = roster->second;
+
+    if (!subject)
+    {
+        auto const spec = dataset->specByKey.find(BisDatasetSnapshot::SpecKey(src.cls, src.tab));
+        if (spec != dataset->specByKey.end() && usable(spec->second))
+            subject = spec->second;
+    }
+
+    if (!subject)
+        return src;
+
+    src.kind = BisSource::Kind::Dataset;
+    src.progress.phase = subject->PhaseAtOrBelow(max.phase);
+    src.subject = subject;
+    src.dataset = std::move(dataset);
+    return src;
+}
+
+uint8 BisListMgr::GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase) const
+{
+    switch (src.kind)
+    {
+        case BisSource::Kind::Lists:
+            return GetBisRankFor(itemId, src.cls, src.tab, src.progress, outPhase);
+        case BisSource::Kind::Dataset:
+            return src.subject->RankFor(itemId, src.progress.phase, outPhase);
+        default:
+            if (outPhase)
+                *outPhase = 0;
+            return 0;
+    }
+}
+
 uint8 BisListMgr::GetBisRank(Player* bot, ItemTemplate const* proto, BisProgress max) const
 {
-    if (!bot || !proto || _ranked.empty())
+    if (!bot || !proto)
         return 0;
 
     // Cheap reject before the talent walk in ResolveSpecKey: most items are on nobody's list.
-    if (_ranked.find(proto->ItemId) == _ranked.end())
+    std::shared_ptr<BisDatasetSnapshot const> dataset = sBisDatasetMgr.Get();
+    if (!_ranked.count(proto->ItemId) && (!dataset || !dataset->items.count(proto->ItemId)))
         return 0;
 
-    uint8 cls = 0;
-    uint8 tab = 0;
-    if (!ResolveSpecKey(bot, cls, tab))
-        return 0;
-
-    return GetBisRankFor(proto->ItemId, cls, tab, max);
+    return GetBisRankFor(proto->ItemId, ResolveSource(bot, max, std::move(dataset)));
 }
 
 std::map<uint8, uint32> BisListMgr::GetBisFor(uint16 autoGearScoreLimit, uint8 cls, uint8 tab, uint8 faction) const

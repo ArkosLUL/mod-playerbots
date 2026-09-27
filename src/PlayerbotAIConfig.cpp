@@ -5,6 +5,7 @@
  */
 
 #include "PlayerbotAIConfig.h"
+#include "BisDatasetMgr.h"
 #include "BisListMgr.h"
 #include "Config.h"
 #include "NewRpgInfo.h"
@@ -786,6 +787,10 @@ bool PlayerbotAIConfig::Initialize()
     bisGateBypass = sConfigMgr->GetOption<bool>("AiPlayerbot.Bis.GateBypass", true);
     bisScoreBonus = sConfigMgr->GetOption<float>("AiPlayerbot.Bis.ScoreBonus", 0.25f);
     bisPhaseDecay = sConfigMgr->GetOption<float>("AiPlayerbot.Bis.PhaseDecay", 1.0f);
+    bisDatasetEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Enable", true);
+    bisDatasetEnhancements = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Enhancements", true);
+    bisDatasetReforges = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Reforges", true);
+    bisDatasetPollSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.BisDataset.PollSeconds", 300);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);
     syncQuestWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestWithPlayer", true);
     syncQuestForPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestForPlayer", false);
@@ -845,6 +850,8 @@ bool PlayerbotAIConfig::Initialize()
     sRandomItemMgr.Init();
     sRandomItemMgr.InitAfterAhBot();
     sBisListMgr->LoadAll();
+    std::string bisDatasetError;
+    sBisDatasetMgr.Reload(bisDatasetError);
     PlayerbotTextMgr::instance().LoadBotTexts();
     PlayerbotTextMgr::instance().LoadBotTextChance();
     PlayerbotFactory::Init();

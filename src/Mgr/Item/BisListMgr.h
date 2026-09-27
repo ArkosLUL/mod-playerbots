@@ -9,11 +9,14 @@
 
 #include "Define.h"
 #include <map>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 class Player;
 struct ItemTemplate;
+struct BisDatasetSnapshot;
+struct BisDatasetSubject;
 
 // Phase numbering restarts per expansion, so a phase is only meaningful next to one of these.
 enum BisExpansion : uint8
@@ -59,6 +62,27 @@ struct BisProgress
     uint8 phase;
 };
 
+// Where one bot's BiS ranks come from. Never mixed per item: a bot with a dataset subject gets no
+// signal from the lists, even for items the sim didn't rank.
+struct BisSource
+{
+    enum class Kind : uint8
+    {
+        None,     // no spec key, so no BiS signal at all
+        Lists,    // playerbots_bis_ranked
+        Dataset,  // the sim BiS dataset's subject
+    };
+
+    Kind kind = Kind::None;
+    uint8 cls = 0;
+    uint8 tab = BIS_TAB_NONE;
+    // Dataset: the subject's latest block phase at or below the bot's, not the bot's own
+    BisProgress progress = {};
+    // holds the snapshot subject points into, so a reload can't free it mid-use
+    std::shared_ptr<BisDatasetSnapshot const> dataset;
+    BisDatasetSubject const* subject = nullptr;
+};
+
 class BisListMgr
 {
 public:
@@ -88,7 +112,8 @@ public:
     // tier falls back to ProgressionTierCap, which clamps here to WotLK RS, i.e. every phase counts.
     static BisProgress ProgressForBot(Player* bot);
 
-    // Best (lowest) rank at or below max, 0 when the item is not listed for this bot's spec.
+    // Best (lowest) rank at or below max from the bot's ResolveSource, 0 when that source doesn't
+    // list the item.
     uint8 GetBisRank(Player* bot, ItemTemplate const* proto, BisProgress max) const;
 
     // Same lookup against an already-resolved spec key, for callers that score many items for one bot
@@ -96,6 +121,13 @@ public:
     // phase that still lists the item at the returned rank, so callers can tell current BiS from stale;
     // it is only meaningful when the return is non-zero.
     uint8 GetBisRankFor(uint32 itemId, uint8 cls, uint8 tab, BisProgress max, uint8* outPhase = nullptr) const;
+
+    // The bot's roster subject in the sim dataset, else its spec's, else the lists. A subject only
+    // counts when its class and tab match the bot's spec key and it has a block at or below max.
+    BisSource ResolveSource(Player* bot, BisProgress max) const;
+
+    // GetBisRankFor against a resolved source; outPhase as above.
+    uint8 GetBisRankFor(uint32 itemId, BisSource const& src, uint8* outPhase = nullptr) const;
 
     // Listed at or below the bot's own progression phase. The spec gates use this, and they have to
     // agree with the score nudge about what counts as this bot's BiS - answering "any phase" here lets
@@ -107,6 +139,8 @@ public:
 
 private:
     BisListMgr() = default;
+
+    static BisSource ResolveSource(Player* bot, BisProgress max, std::shared_ptr<BisDatasetSnapshot const> dataset);
 
     void LoadGear();
     void LoadRanked();

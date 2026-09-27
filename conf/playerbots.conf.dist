@@ -494,6 +494,32 @@ AiPlayerbot.Bis.ScoreBonus = 0.25
 # Default: 1.0 (only the bot's current phase counts; 0.5 halves per phase, 0 disables the decay)
 AiPlayerbot.Bis.PhaseDecay = 1.0
 
+# Sim BiS dataset: the BisTooltipAC export (world tables bistooltip_dataset, bistooltip_subject and
+# bistooltip_block) as the BiS source. A bot uses its roster subject (by character guid) when the
+# class, talent tree and role match, else a matching class spec subject, else the ranked lists above.
+# A new import loads on .playerbots bis reload or at the version poll below; .playerbots bis status
+# shows the loaded dataset.
+#
+# Read the dataset and prefer it per bot. No-op without the tables, and an export that puts one
+# payload on every subject is refused as a placeholder.
+# Default: 1 (enabled)
+AiPlayerbot.BisDataset.Enable = 1
+
+# Apply the dataset's enchants, its gems on the exact rank-1 item, and its gem choice as the
+# preferred pool for other items. 0 keeps only the rank signal.
+# Default: 1 (enabled)
+AiPlayerbot.BisDataset.Enhancements = 1
+
+# Apply the sim's reforge on exact rank-1 items. No-op without mod-reforging or with
+# Reforging.Enable = 0.
+# Default: 1 (enabled)
+AiPlayerbot.BisDataset.Reforges = 1
+
+# Seconds between checks for a new dataset version, on the world thread. 0 loads at startup and on
+# .playerbots bis reload only.
+# Default: 300
+AiPlayerbot.BisDataset.PollSeconds = 300
+
 # Bind-on-Equip etiquette: GREED by default to keep it tradeable.
 # Set to 1 to allow NEED on BoE if it's a clear upgrade.
 # Default: 1 (enabled)

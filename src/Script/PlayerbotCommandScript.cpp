@@ -5,6 +5,7 @@
  */
 
 #include "BattleGroundTactics.h"
+#include "BisDatasetMgr.h"
 #include "Chat.h"
 #include "GuildTaskMgr.h"
 #include "PerfMonitor.h"
@@ -50,6 +51,11 @@ public:
             {"obs", HandleObsCommand, SEC_GAMEMASTER, Console::Yes},
         };
 
+        static ChatCommandTable playerbotsBisCommandTable = {
+            {"reload", HandleBisReloadCommand, SEC_ADMINISTRATOR, Console::Yes},
+            {"status", HandleBisStatusCommand, SEC_GAMEMASTER, Console::Yes},
+        };
+
         static ChatCommandTable playerbotsAccountCommandTable = {
             {"setKey", HandleSetSecurityKeyCommand, SEC_PLAYER, Console::No},
             {"link", HandleLinkAccountCommand, SEC_PLAYER, Console::No},
@@ -64,6 +70,7 @@ public:
             {"rndbot", HandleRandomPlayerbotCommand, SEC_GAMEMASTER, Console::Yes},
             {"debug", playerbotsDebugCommandTable},
             {"account", playerbotsAccountCommandTable},
+            {"bis", playerbotsBisCommandTable},
         };
 
         static ChatCommandTable commandTable = {
@@ -78,6 +85,32 @@ public:
     {
         for (std::string const& line : SplitLines(RaidObs::Status()))
             handler->SendSysMessage(line.c_str());
+
+        return true;
+    }
+
+    static bool HandleBisReloadCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        std::string error;
+        if (!sBisDatasetMgr.Reload(error))
+        {
+            handler->SendErrorMessage("Sim BiS dataset reload failed: " + error, false);
+            return false;
+        }
+
+        for (std::string const& line : sBisDatasetMgr.Describe())
+            handler->SendSysMessage(line);
+
+        return true;
+    }
+
+    static bool HandleBisStatusCommand(ChatHandler* handler, char const* /*args*/)
+    {
+        for (std::string const& line : sBisDatasetMgr.Describe())
+            handler->SendSysMessage(line);
+
+        for (std::string const& line : sBisDatasetMgr.Audit())
+            handler->SendSysMessage(line);
 
         return true;
     }
