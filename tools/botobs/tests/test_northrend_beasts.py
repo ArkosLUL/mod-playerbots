@@ -242,5 +242,204 @@ class EveryView(unittest.TestCase):
             self.assertIn(empty, text)
 
 
+DREADSCALE = 4294968020
+ACIDMAW = 4294968021
+POOL = 4294968030
+WARD = 5101    # tank, Dreadscale then the mobile Acidmaw, keeps Toxin 60 s
+BRACE = 5102   # tank on the stationary worm
+SOOTHE = 5103  # heal, Acidmaw's first target after the emerge, carries Bile, stands in the pool
+SHOT = 5104    # ranged, inside the Spew wedge, cured by a pulse
+EDGE = 5105    # melee, eats a pulse with no Toxin and a Sweep, dies at 105 s
+
+WORM_SPOTS = {WARD: (18.0, 0.0), BRACE: (-5.0, 28.0), SOOTHE: (-20.0, -20.0), SHOT: (40.0, 2.0), EDGE: (4.0, 0.0)}
+# 4.9 yd from Soothe, so she is inside from the pool's 10th second
+POOL_SPOT = (-20.0, -15.1)
+
+
+def worm_snap(when: int) -> dict:
+    units = []
+    for guid, (x, y) in WORM_SPOTS.items():
+        dead = guid == EDGE and when >= 105000
+        units.append([guid, x, y, 0.0, 0.0, 0.0 if dead else 100.0, 100.0, 0, 0, 0, 0, 0])
+    acidmaw_under = 40000 <= when < 48000
+    dreadscale_under = 40000 <= when < 50000
+    acidmaw_target = 0 if acidmaw_under else BRACE if when < 40000 else SOOTHE if when < 52000 else WARD
+    dreadscale_target = 0 if dreadscale_under else WARD if when < 40000 else BRACE
+    acidmaw_cast = nb.SPELL_EMERGE if 48000 <= when < 51000 else 0
+    dreadscale_cast = nb.SPELL_EMERGE if 50000 <= when < 53000 else 0
+    units.append([ACIDMAW, 10.0, 0.0, 0.0, 0.0, 100.0, 0.0, acidmaw_target, 0, 0, acidmaw_cast, 0])
+    units.append([DREADSCALE, -5.0, 20.0, 0.0, 0.0, 100.0, 0.0, dreadscale_target, 0, 0, dreadscale_cast, 0])
+    if 70000 <= when < 100000:
+        units.append([POOL, *POOL_SPOT, 0.0, 0.0, 100.0, 0.0, 0, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units}
+
+
+def worm_dmg(when: int, source: int, target: int, spell: int) -> dict:
+    return {"t": when, "e": "dmg", "s": source, "d": target, "sp": spell, "a": 3000}
+
+
+def worms_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789600000000, "map": 649, "inst": 8, "diff": 0,
+         "boss": "gormok-the-impaler", "roster": [
+             {"g": WARD, "n": "Ward", "r": "tank", "c": "warrior", "h": 0},
+             {"g": BRACE, "n": "Brace", "r": "tank", "c": "paladin", "h": 0},
+             {"g": SOOTHE, "n": "Soothe", "r": "heal", "c": "priest", "h": 0},
+             {"g": SHOT, "n": "Shot", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": EDGE, "n": "Edge", "r": "melee", "c": "rogue", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ACIDMAW, "en": nb.NPC_ACIDMAW, "n": "Acidmaw", "b": 1},
+        {"t": 1, "e": "unit", "g": DREADSCALE, "en": nb.NPC_DREADSCALE, "n": "Dreadscale", "b": 1},
+        {"t": 1, "e": "unit", "g": POOL, "en": nb.NPC_SLIME_POOL, "n": "Slime Pool"},
+
+        # No worm engaged for 5 s, then Dreadscale mobile, both under at 40 s. Acidmaw comes up mobile
+        # at 48 s and Dreadscale at 50 s, when nb.worm leaves 3.
+        note(0, WARD, "nb.worm", "0"),
+        note(5000, WARD, "nb.worm", "1"),
+        note(40000, WARD, "nb.worm", "3"),
+        note(50000, WARD, "nb.worm", "2"),
+
+        # Soothe's Bile cures Shot's Toxin at 26 s and lands on Edge, who carries nothing, at 28 s.
+        aura(10000, SOOTHE, nb.SPELL_BURNING_BILE),
+        aura(20000, SHOT, 66823),
+        note(20100, SHOT, "nb.cure", f"seek {SOOTHE}"),
+        note(20100, SOOTHE, "nb.cure", f"run {SHOT}"),
+        worm_dmg(26000, SOOTHE, SHOT, 66870),
+        worm_dmg(26000, SOOTHE, SOOTHE, 66870),
+        aura(26000, SHOT, 66823, removed=True),
+        note(26100, SHOT, "nb.cure", "none"),
+        note(26100, SOOTHE, "nb.cure", "none"),
+        worm_dmg(28000, SOOTHE, EDGE, 66870),
+        aura(34000, SOOTHE, nb.SPELL_BURNING_BILE, removed=True),
+
+        worm_dmg(30000, ACIDMAW, EDGE, 66794),
+        worm_dmg(30000, ACIDMAW, BRACE, 66794),
+        note(45000, WARD, "nb.wormmove", "approach 20"),
+
+        # Ward keeps Toxin its full 60 s; Edge dies with it on.
+        aura(55000, WARD, 66823),
+        note(70000, WARD, "nb.cure", "wait"),
+        aura(100000, EDGE, 66823),
+        {"t": 105000, "e": "death", "g": EDGE, "killer": DREADSCALE, "x": 4.0, "y": 0.0, "z": 0.0},
+        aura(105000, EDGE, 66823, removed=True),
+        aura(115000, WARD, 66823, removed=True),
+
+        # A 24 degree Spew from Acidmaw facing +x: Shot inside and ticked, Edge's tick past the 3.5 s.
+        note(59000, SHOT, "nb.wormmove", "move 12.5 spew"),
+        note(59500, SHOT, "nb.wormmove", "hold spew"),
+        {"t": 60000, "e": "haz", "sp": 66819, "shape": "wedge", "x": 10.0, "y": 0.0, "z": 0.0, "ttl": 3500,
+         "facing": 0.0, "arc": 12.0, "range": 55.0},
+        note(60500, SHOT, "nb.wormmove", "clear"),
+        worm_dmg(61000, ACIDMAW, SHOT, 66819),
+        worm_dmg(64000, ACIDMAW, EDGE, 66819),
+
+        note(71000, WARD, "nb.wormmove", "drag 14"),
+        worm_dmg(81000, POOL, SOOTHE, 66881),
+        worm_dmg(82000, POOL, SOOTHE, 66881),
+        note(90000, SHOT, "nb.wormmove", "none pool"),
+        {"t": 120000, "e": "end", "out": "wipe"},
+    ]
+    records += [worm_snap(when) for when in range(0, 121000, 1000)]
+    return records
+
+
+class WormPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_8_gormok-the-impaler_1789600000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in worms_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_worm_spans_carry_their_deaths(self):
+        spans = nb.worm_spans(self.trace)
+        self.assertEqual([(span["value"], span["start"], span["stop"]) for span in spans],
+                         [("0", 0, 5000), ("1", 5000, 40000), ("3", 40000, 50000), ("2", 50000, 120000)])
+        self.assertEqual([span["deaths"] for span in spans], [[], [], [], [EDGE]])
+
+    def test_emerges_are_the_engage_and_every_exit_from_under_ground(self):
+        self.assertEqual(nb.emerges(self.trace), [(5000, 40000), (50000, 120000)])
+
+    def test_emerge_times_the_pickup_and_names_the_non_tank_first(self):
+        rows = nb.worm_pickups(self.trace)
+        self.assertEqual([row["t"] for row in rows], [5000, 50000])
+        self.assertEqual(rows[0]["worms"], {ACIDMAW: {"tank_ms": 0, "tank": BRACE, "victims": []},
+                                            DREADSCALE: {"tank_ms": 0, "tank": WARD, "victims": []}})
+        # Acidmaw is timed from its own Emerge at 48 s, not from nb.worm leaving 3 at 50 s
+        self.assertEqual(rows[1]["worms"], {ACIDMAW: {"tank_ms": 4000, "tank": WARD, "victims": [SOOTHE]},
+                                            DREADSCALE: {"tank_ms": 0, "tank": BRACE, "victims": []}})
+
+    def test_wedge_names_the_non_tanks_inside_and_its_tick_victims(self):
+        rows = nb.spew_wedges(self.trace)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["worm"], "Acidmaw")
+        self.assertEqual(rows[0]["inside"], {SHOT})
+        self.assertEqual(rows[0]["hit"], {"ranged": collections.Counter({SHOT: 1})})
+
+    def test_a_growing_pool_counts_who_stood_inside_and_its_hits(self):
+        pools = nb.slime_pools(self.trace)
+        self.assertEqual([(pool["guid"], pool["first"], pool["last"]) for pool in pools], [(POOL, 70000, 99000)])
+        self.assertEqual(pools[0]["inside"], collections.Counter({SOOTHE: 20000}))
+        self.assertEqual(pools[0]["hits"], collections.Counter({SOOTHE: 2}))
+        self.assertEqual(nb.pool_radius(0), 2.0)
+        self.assertEqual(nb.pool_radius(45000), 11.0)
+
+    def test_sweep_victims_by_role(self):
+        self.assertEqual(nb.sweep_victims(self.trace), {"melee": collections.Counter({EDGE: 1}),
+                                                        "tank": collections.Counter({BRACE: 1})})
+
+    def test_wormmove_branches_drop_the_yards(self):
+        self.assertEqual(nb.wormmove_branches(self.trace), {
+            WARD: collections.Counter({"approach": 1, "drag": 1}),
+            SHOT: collections.Counter({"move spew": 1, "hold spew": 1, "clear": 1, "none pool": 1})})
+
+    def test_toxin_spans_end_cured_expired_or_died(self):
+        rows = nb.toxin_spans(self.trace)
+        self.assertEqual([(row["carrier"], row["start"], row["stop"], row["end"], row["stuck"]) for row in rows],
+                         [(SHOT, 20000, 26000, "cured", False), (WARD, 55000, 115000, "expired", True),
+                          (EDGE, 100000, 105000, "died", False)])
+
+    def test_heroic_toxin_stops_a_carrier_sooner(self):
+        self.assertEqual(nb.toxin_stuck_ms(0), 18000)
+        self.assertEqual(nb.toxin_stuck_ms(2), 13500)
+        self.assertEqual(nb.toxin_stuck_ms(3), 13500)
+
+    def test_bile_pulses_on_a_bot_with_no_toxin(self):
+        rows = nb.bile_spans(self.trace)
+        self.assertEqual([(row["carrier"], row["start"], row["stop"]) for row in rows], [(SOOTHE, 10000, 34000)])
+        self.assertEqual(rows[0]["clean"], collections.Counter({EDGE: 1}))
+
+    def test_cure_branches_drop_the_guid(self):
+        self.assertEqual(nb.cure_branches(self.trace), {
+            SHOT: collections.Counter({"seek": 1, "none": 1}),
+            SOOTHE: collections.Counter({"run": 1, "none": 1}),
+            WARD: collections.Counter({"wait": 1})})
+
+    def test_every_section_prints(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_banner(self.trace)
+            for _, _, section in nb.SECTIONS:
+                section(self.trace)
+        self.assertNotIn("not a Beasts pull", out.getvalue())
+
+    def test_worm_sections_read_empty_on_another_boss(self):
+        trace = Trace(FULL)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_worms(trace)
+            nb.show_cure(trace)
+        text = out.getvalue()
+        for empty in ("no nb.worm rows", "emerges, seconds until each worm targeted a tank: none",
+                      "Spew wedges: none", "slime pools: none sampled", "Sweep hits: nobody",
+                      "nb.wormmove: none", "no Paralytic Toxin carried", "no Burning Bile carried",
+                      "nb.cure: none"):
+            self.assertIn(empty, text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -27,9 +27,14 @@ and `SpellInfoCorrections.cpp`.
   of the reading bot, his guid cached while it resolves and re-searched at most once a second
   (he walks in for 10 s first). Engaged = alive and in combat. The mask of engaged beasts,
   1 Gormok, 2 a worm, 4 Icehowl, is `nb.stage`.
-- **Worm form** by display id (`IsWormMobile`); with neither mobile, Acidmaw counts as the mobile
-  one. A lone survivor is the mobile one whatever its form: the script sends it under at once and it
-  comes up mobile.
+- **Worm form** by native display id (`IsWormMobile`; Submerge's transform shows an invisible
+  model). Under ground (`IsWormSubmerged`, `NOT_SELECTABLE`) a worm reads the form it comes up in:
+  every emerge swaps the form, and a duty dealt by the display would send each holder to the wrong
+  worm for 8.5 s. While the other is still up, it reads the opposite of that one's display (the two
+  always differ), so the duties swap once both are under, not at each worm's own submerge. With
+  neither mobile, Acidmaw counts as the mobile one. A lone survivor is the mobile one whatever its
+  form, and reads mobile under ground once enraged: the script sends it under at once and it comes
+  up mobile.
 - **Duties**, in priority order `Gormok`, `Icehowl`, `WormMobile`, `GormokSwap`, `WormStationary`,
   each only while its beast is engaged (`GormokSwap` with Gormok).
 - **Roster**: living bot tanks on the instance, by strategy or spec, the group's flagged main tank
@@ -54,8 +59,8 @@ key on their duty.
 ## Arena bounds
 
 navprobe cannot verify an arena point ([README.md](README.md#arena-floor)), so the script bounds the
-floor: Icehowl lands 50 yd from the centre (46 toward the main gate, north, +y), and the gate front
-sits 38.8 yd north.
+floor: Icehowl lands 50 yd from the centre (46 toward the main gate, north, +y), the gate front
+sits 38.8 yd north, and the worms surface 10-35 yd out in any direction.
 
 ## Gormok the Impaler
 
@@ -117,15 +122,164 @@ Combat reach 6.5, so melee stand within 9.3 yd of his centre.
 
 ## Acidmaw & Dreadscale
 
-Submerge/emerge form swap, avoid slime pools and churning ground, focus the mobile worm, spread for
-sprays.
+Combat reach 6.5, so melee range is 9.3 yd; they run 9.45 yd/s, faster than a player. Dreadscale
+(34799) walks in mobile, Acidmaw (35144) comes up stationary by the gate. Timers restart at every
+emerge.
 
-**Bite and spray carry no aura.** Burning Bite and Paralytic Bite trigger the debuff
-(`EffectTriggerSpell`); each Burning/Paralytic Spray id links it in `spell_linked_spell`. The debuffs
-are Burning Bile 66869 (24 s, no difficulty row) and Paralytic Toxin 66823 (remaps, README table).
-Burning Bile pulses 66870 every 2 s: damage within 10 yd, and a `spell_linked_spell` row strips
-Paralytic Toxin from everyone it hits, so Bile carriers cleanse Toxin carriers by standing next to
-them.
+- **Mobile**: chases its victim, melee every 2 s.
+  - Bite on the victim, first at 20 s (Acidmaw) or 15 s (Dreadscale), then every 20 s.
+  - Spew, first at 15-30 s then every 15-30 s: a 1 s cast (66818 / 66821, no row), then a 2.5 s
+    aura ticking every 250 ms in a 55 yd cone along his facing, which follows his victim: **60° on
+    10N** (`spell_cone`), 24° on the other three (`TARGET_UNIT_CONE_ENEMY_24`). Ten ticks.
+  - Slime Pool, at 15 s then every 30 s: NPC 35176 at his feet for 30 s. Its aura 66882 ticks every
+    second and `SpellAuraEffects.cpp` casts each tick with a radius mod, so the pool **grows**:
+    `2 + 0.3 × tick` yd, 11 at the end, centre to centre. `avoid aoe` reads the DBC's 30, past
+    `MaxAoeAvoidRadius` 15, so it skips the pool.
+- **Stationary**: rooted, Spit on its victim every 1.5 s swing (1.1 s cast).
+  - Spray, first at 20 s (Acidmaw) or 15 s (Dreadscale), then every 20 s: a 1.1 s cast at a random
+    player within 100 yd, landing by 30 yd/s missile on everyone within 10 yd of that spot (centre to
+    centre).
+  - Sweep, first at 15-30 s then every 15-30 s: 1.5 s cast, a **15 yd circle round the worm**
+    (`TARGET_UNIT_SRC_AREA_ENEMY`, centre to centre) with a knockback, not the guide's "behind the
+    stationary worm": everyone in melee range eats it.
+
+| Spell | 10N | 25N | 10H | 25H |
+|---|---|---|---|---|
+| Paralytic / Burning Bite | 66824 / 66879, 7.9-9.1k | 67612 / 67624, 11.1-12.9k / 13-15k | 67613 / 67625, 13-15k / 11.1-12.9k | 67614 / 67626, 18.5-21.5k |
+| Acidic / Molten Spew tick | 66819 / 66820, 2.8-3.2k | 67609 / 67635, 3.7-4.3k | 67610 / 67636, 3.7-4.3k | 67611 / 67637, 4.6-5.4k |
+| Slime Pool, per second | 66881, 5.1-5.9k | 67638, 5.1-5.9k | 67639, 6.5-7.5k | 67640, 8.3-9.7k |
+| Acid / Fire Spit | 66880 / 66796, 5.1-5.9k | 67606 / 67632, 6.5-7.5k | 67607 / 67633, 6.9-8.1k | 67608 / 67634, 10.2-11.8k |
+| Paralytic / Burning Spray | 66901 / 66902, 6.9-8.1k | 67615 / 67627, 6.9-8.1k | 67616 / 67628, 8.3-9.7k | 67617 / 67629, 13-15k |
+| Sweep | 66794, 6.9-8.1k | 67644, 6.9-8.1k | 67645, 8.3-9.7k | 67646, 10.2-11.8k |
+| Burning Bile pulse, per 2 s | 66870, 3.2-3.8k | 67621, 3.2-3.8k | 67622, 5.6-6.5k | 67623, 8.3-9.7k |
+| Paralytic Toxin tick | 66823, 3k / 2 s | 67618, 3k / 2 s | 67619, 3k / 1.5 s | 67620, 5k / 1.5 s |
+
+**Submerge.** 45-50 s after each emerge one worm submerges and the other follows 1.5 s later, never
+once enraged. From the start of a 2 s cast (53421, a stun) the worm is `NOT_SELECTABLE|NON_ATTACKABLE`.
+2.5 s in it moves under ground to 10-35 yd from `ARENA_CENTER`, on the far side of the centre from
+where it went down, and `DoResetThreatList` zeroes its whole threat list. 6 s later it comes up in the
+other form, attackable at once, casting Emerge (66947) for 3 s before it acts. A stunned creature takes
+no heal assist threat (`ThreatManager::ForwardThreatForAssistingMe`), so it comes up on whoever
+threatens it first: DoTs, which keep ticking under ground (guide), or the first heals. So the forms
+alternate: Dreadscale mobile and Acidmaw stationary, swapped after every submerge. The Churning Ground
+trail (66969) is a visual only.
+
+**Toxin and Bile.** Bite and Spray carry no aura: Bite triggers the debuff (`EffectTriggerSpell`),
+each Spray id links it in `spell_linked_spell`. Acidmaw's give Paralytic Toxin, Dreadscale's Burning
+Bile, so the mobile Dreadscale keeps Bile on its tank, the mobile Acidmaw Toxin on its tank, and the
+stationary one sprays its debuff on a random player and everyone within 10 yd.
+
+- **Paralytic Toxin** (row above), 60 s, no dispel type: a snare that starts at 10% and deepens 10% a
+  tick (`SpellAuraEffects.cpp`) to a full stop after 18 s, 13.5 s on heroic. A re-application
+  recalculates the aura's amounts, so every Bite restarts the ramp.
+- **Burning Bile** 66869 (24 s, no row) casts its pulse every 2 s on every ally within 10 yd, the
+  carrier and pets included, exact distance (a player caster adds no reach against players). A
+  `spell_linked_spell` row strips Paralytic Toxin from each one it hits, so a Toxin carrier within
+  10 yd of a Bile carrier is cured on the next pulse.
+
+**First death.** The survivor gets Enrage 68335 (+50% damage done, permanent) at once and never
+submerges again: the 10 s in `instance_trial_of_the_crusader.cpp` only times the achievement. A
+stationary survivor submerges 1 s later and comes up mobile, one under ground comes up mobile, a
+mobile one stays so. A lone Acidmaw's Toxin on its tank has no Bile left to cure it.
+
+**Heroic** has no worm branch of its own beyond the ids: they attack on the 150 s timer with Gormok
+alive or not, and Berserk lands at 520 s. Health each before `mod-dungeon-scale`: 1.26M, 5.02M,
+1.67M, 6.69M (the trace's `unit` row has the real figure, [pitfalls.md](../../engine/pitfalls.md)).
+
+**What the bots do.**
+
+- **Kill target**: the mobile worm (skull), Dreadscale first and the other after every swap. Guide:
+  kill Dreadscale first, or Acidmaw if Dreadscale won't die before the submerge; script: every melee
+  on a stationary worm eats Sweep, and a 25-man bot raid rarely kills Dreadscale in its first
+  45-50 s. No DPS balance: the survivor enrages the moment the first worm dies, and the 10 s only
+  times the achievement.
+- **Holds** (`northrend worms mobile tank duty` → `northrend worms tank hold mobile worm`, `… stationary
+  tank duty` → `… tank hold stationary worm`, `ACTION_RAID + 1`) take the worm from `GetBeastOfDuty`.
+  The mobile hold points RTI skull at its worm always but marks it only while Gormok isn't engaged,
+  so a heroic overlap doesn't trade the skull with Gormok's hold. The stationary worm gets no mark:
+  nothing reads one, and marks never clear ([pitfalls.md](../../engine/pitfalls.md)).
+  - Under ground, the mobile holder closes to 20 yd and the stationary one into melee of the spot
+    (it's rooted), at `MOVEMENT_COMBAT`, re-issued only once the worm stands 3 yd off where it was at
+    the last issue (it moves once, 2.5 s in): the worm walks to its taunter
+    ([xt002.md](../ulduar/xt002.md)). Not while an Icehowl charge is latched: the charge guard spares
+    attack actions. `nb.wormmove` `approach`.
+  - Up, a holder the worm isn't hitting taunts, then attacks. There's no swap duty, and pass 1 gives
+    each tank the worm it already holds, so no holder taunts another's worm. The taunt waits for
+    cooldown and range: `CastSpell` turns the bot to its target even when the cast fails.
+  - Duties across a submerge stay with the deal, no per-worm latch: the threat wipe keeps the old
+    victim until someone gains threat, and a stunned worm takes no heal assist threat, so pass 1
+    keeps a tank on its worm unless a DoT took it.
+  - A lone living tank holds only the mobile worm: nothing ranks below `WormStationary`, and the
+    guide lets any ranged class tank the stationary one.
+  - **Drag**: the mobile holder, while its worm's victim and no Icehowl charge is latched, walks the
+    worm on once melee at it would stand in a pool 5 s on (the worm within that radius + 9.3) or in
+    Sweep (within 27.3 of the stationary worm). It takes the clear spot nearest a point 10 yd ahead,
+    searched within 30 yd, about 31 yd off every pool and 38 off the stationary worm (else off pools
+    only), latched until it arrives. Both clearances carry a 2 yd pad, so the worm, stopping 8.5 yd
+    behind its tank, settles past the trigger instead of firing it again. Walking on keeps the worm's
+    front pointing the same way (guide: drag him off the pool so melee can attack). `nb.wormmove`
+    `drag`.
+- **Redirect** (`northrend worms redirect threat`, `ACTION_RAID + 1`): rogues serve the `WormMobile`
+  holder, since Tricks moves the threat off whatever the rogue hits and melee hit the skull. Living
+  hunters alternate by index among hunters, even to `WormMobile`, odd to `WormStationary` (mobile
+  without one). It fires while that holder lives and the worm is under ground or hitting someone
+  else, or while a hunter holds Misdirection charges (35079), spent on its worm, not the rotation's
+  skull. Misdirection and Tricks go out from the submerge, the shots wait for the emerge.
+  `northrend worms redirect guard` zeroes the generic main-tank Misdirection and Tricks while a worm
+  is engaged. The threat wipe is the moment and the holders the targets
+  ([README.md](../README.md#threat-redirect--the-rubric): multi-tank assignment at a phase
+  transition).
+- **Reposition** (`northrend worms misplaced` → `northrend worms reposition`,
+  `ACTION_EMERGENCY + 6`): one mover per bot for every worm hazard and the cure walk, since two
+  movers clear each other's MotionMaster ([xt002.md](../ulduar/xt002.md),
+  [pitfalls.md](../../engine/pitfalls.md)). Holders sit it out unless they're runners; everyone does
+  while an Icehowl charge is latched. First match:
+  - **Run**: a runner past 8 yd of its stuck carrier. **Cure**: a Toxin carrier, neither stuck nor
+    carrying Bile, past 8 yd of the nearest Bile carrier. Both walk to 6 yd of the partner (the
+    pulse reaches 10 exact), clear of pools and, but for the `WormStationary` holder, Sweep. When
+    the ring search misses that disc (its rays fan 22.5° apart), they walk straight to 5 yd of the
+    partner if that spot is safe. Their spots clear only the real Spew cone, and a pair within 8 yd
+    triggers on it unpadded: the partner is often a mobile worm's tank, 8.5 yd ahead of it, and on
+    10N the 60° cone plus the 12° pad covers the whole 6 yd disc round it.
+  - A **stuck** carrier, a holder or snared 70% or more, takes the nearest free runner: a bot
+    Bile carrier (a human never answers) holding no duty, or a holder whose worm is under ground. A
+    runner already within 8 yd serves that carrier, then last pairs hold while both qualify, so two
+    runners don't trade carriers. Guide: free them while the worms are submerged; script: every Bite
+    restarts the snare, so a mobile Acidmaw's tank is never cured otherwise.
+  - Otherwise the first hazard the spot fails, centre to centre:
+
+    | Hazard | Who keeps clear | Trigger / clearance | Why |
+    |---|---|---|---|
+    | Pool | everyone | radius now + 1 / radius 5 s on + 2 | the full 11 yd would keep melee off the worm for 30 s |
+    | Bile | a bot without Toxin, of every other carrier; a carrier holding no beast and not sent as a runner, of everyone but Toxin carriers | 10.5 / 12 | the pulse's 10 yd exact; guide: spread from everyone, melee too |
+    | Sweep | all but the holder, of a stationary worm that is up; a melee whose target isn't a worm (Gormok in a heroic overlap) only during the cast, since `reach melee` would walk it back | 16 / 18 | its 15 yd circle |
+    | Spew | everyone, of the up mobile worm's cone, always | cone + 5° / + 12° | a 1 s cast leaves no time to clear 55 yd; guide: never stand in front of the mobile worm |
+    | Spread | ranged and healers, of every player but a cure partner, while a stationary worm is engaged and both live | 9 / 11 | the Spray's 10 yd splash; a spread tighter than that buys nothing; guide `/range 10` |
+
+  - Casters' spots also clear Gormok's stomp while he's engaged, so the two nodes don't alternate in
+    a heroic overlap.
+  - Every spot stays within 35 yd of `ARENA_CENTER` (no coordinates: navprobe can't see the floor)
+    and outside the mobile worm's cone + 12°, its width from `GetSpellCone` on the remapped tick,
+    else 24°. It prefers the role's reach: melee within 1 yd inside melee range of their target (6
+    yd behind a worm), ranged within spell range of it, healers within heal range of both holders.
+  - **Urgent**, inside a pool, without Toxin within 10 yd of a Bile carrier, inside a Sweep being
+    cast or a Spew cone during the spew: `MOVEMENT_FORCED`; any other move waits a pinning cast out.
+    A cure walk moves forced too, the rest at `MOVEMENT_COMBAT`
+    ([pitfalls.md](../../engine/pitfalls.md): frequency decides forced ties; interrupt per
+    mechanic). The walk is latched until it arrives, its spot turns unsafe or 5 s pass.
+    `nb.wormmove`, `nb.cure`.
+    - The urgent move breaks a pinning channel itself. A bot mid hard cast runs no triggers, so the
+      per-instance read, on any other bot's tick, calls `RequestSpellInterrupt` on it.
+    - When no cure spot is safe, the escape drops the partner reach, and a run's escape also clears
+      the other Bile carriers the walk ignores; the walk resumes once the bot is clear.
+  - **`northrend worms move guard`**, while that walk is in flight, zeroes every other mover but
+    attacks, `avoid aoe` and Beasts nodes, spell movers included: charge, Intercept, Feral Charge,
+    `blink`, `disengage`.
+  - **`northrend worms bile reach guard`** zeroes `reach melee` and the charges for a Bile carrier
+    that holds no beast and isn't a runner, so a melee walked off the stack stays off for the
+    Bile's 24 s (guide: spread even as melee). Without it the Bile rule and `reach melee` trade the
+    bot all Bile long ([pitfalls.md](../../engine/pitfalls.md), the Hodir case); leaving melee out
+    of the rule instead would put the pulse, up to 9.7k every 2 s, on the whole stack.
 
 ## Icehowl
 
@@ -199,10 +353,15 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 
 ## Known gaps
 
-- `northrend worms afflicted by burning` keys on Burning Bite/Spray auras, so it has never fired,
-  and its keep-moving remedy is not the mechanic above.
-- The worm holds pick their worm by form, not by `GetBeastOfDuty`, so with neither worm mobile, or a
-  lone survivor not yet up mobile, the `WormMobile` holder has nothing to hold.
+- No Hand of Freedom or defensive for a Toxin-snared tank, no raid cooldown when a Spray lands on
+  several players, and melee still stack, so a Spray on one splashes the rest.
+- DoTs aren't refreshed on both worms before a submerge (guide), and nothing chases the achievement
+  (both worms within 10 s).
+- A healer's reach to both worm holders is only a preference: with the worms on opposite sides its
+  spot falls back to safety alone.
+- A hunter that can't Steady Shot (moving, or too close) leaves held Misdirection charges to its
+  rotation, which can spend them on the skull and hand the `WormStationary` holder threat on the
+  mobile worm: the mobile holder re-taunts, at the cost of taunt diminishing returns.
 - Arctic Breath has no spread and Fire Bomb's 8 yd impact no dodge.
 - No Hand of Protection on a snobolled healer or caster, no external on Ferocious Butt (guide).
 - Heroic Frothing Rage can't be dispelled; only the holder's defensive answers it.
@@ -223,10 +382,16 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `charge` | 0 none, 1 crash, 2 gaze, 3 charge, 4 daze, 5 rage. Per instance |
 | `gaze` | The gaze target. Per instance |
 | `dodge` | The charge dodge's branch: `move <yd>` walk issued, its length; `tight` walk to a 13 yd spot; `hold` its own walk in flight; `clear` arrived, already there, or parked past 13; `stunned` can't move; `locked` another forced walk holds movement; `none` no spot within 30 yd |
+| `worm` | 0 no worm engaged, 1 Dreadscale mobile, 2 Acidmaw mobile, 3 a worm under ground, 4 lone Dreadscale, 5 lone Acidmaw. Per instance |
+| `cure` | A bot's pairing: `seek <Bile carrier>`, `run <Toxin carrier>` as its runner, `wait <runner>` or `wait` stuck with no runner, `none` |
+| `wormmove` | The reposition branch, as `dodge` with a reason (`cure`, `run`, `pool`, `bile`, `sweep`, `spew`, `spread`): `move <yd> <reason>`, `hold <reason>`, `clear`, `none <reason>`, `locked` (also a cast pinning a non-urgent move), `stunned`. Holders: `approach <yd>` under ground, `drag <yd>` |
 
 The lane is a `haz` row, 66734, shape `lane`: origin 35 yd behind the centre, `ex`/`ey` its end,
 `half` 12. Written at the gaze and again when the line freezes at the jump back; the last in a
-cycle is his path. It never reaches `snap.hz`, so no death block says STOOD IN for Trample.
+cycle is his path. It never reaches `snap.hz`, so no death block says STOOD IN for Trample. Nor do
+the worms' hazards: Spew is a `haz` row on the remapped tick, shape `wedge`, origin the worm,
+`facing` in radians, `arc` degrees either side, `range` 55, once per cast; a Slime Pool is a
+creature (35176) whose radius only the reader rebuilds.
 
 `tools/botobs/bosses/northrend_beasts.py <file>` reads the rest: stage spans with the deaths in each
 and when each beast first targeted someone (`--stage`); duties per tank, every change of Gormok's
@@ -234,7 +399,16 @@ victim with both holders' Impale stacks, peak stacks, `nb.swap` branches, `gormo
 verdicts and defensive picks (`--tanks`); per charge the gaze target, lane, outcome, who stood within
 12 yd of the lane's end at it (nearest snapshot), dodge branches per bot and Trample victims
 (`--charge`); Snobolled! 66406 spans per rider with role and seconds carried, and each DPS's picks by
-rider role (`--snobold`).
+rider role (`--snobold`); `worm` spans with their deaths, per emerge the seconds from each worm's
+own Emerge cast 66947 (the first engage: `worm` leaving 0) until it targeted a tank and the
+non-tanks it targeted first, per wedge the non-tanks inside at the nearest snapshot and the Spew
+tick victims by role over 3.5 s, per pool the bot-seconds inside its radius (`2 + 0.3 ×` whole
+seconds from its first snapshot) and its hits, Sweep victims by role and `wormmove` branches
+(`--worms`); Paralytic Toxin spans per carrier, ended `cured` (a Bile pulse on it within 250 ms of
+the removal), `died`, `expired` (59 s or more), `other` or `open`, with seconds carried and `stuck`
+past 18 s (13.5 heroic), Burning Bile spans with pulse hits on others carrying no Toxin, and `cure`
+branches (`--cure`).
 
-Still invisible: creature auras, so Staggered Daze, Frothing Rage and Rising Anger never get an aura
-row, and `charge` 4 and 5 are the only record of how a charge ended.
+Still invisible: creature auras, so Staggered Daze, Frothing Rage, Rising Anger and a lone worm's
+Enrage never get an aura row: `charge` 4 and 5 are the only record of how a charge ended, `worm` 4
+and 5 of the Enrage.

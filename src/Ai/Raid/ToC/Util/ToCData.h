@@ -58,10 +58,7 @@ enum class ToCNpcs : uint32
 // Northrend Beasts - Gormok the Impaler (boss_northrend_beasts.cpp GormokSpells)
 constexpr uint32 SPELL_IMPALE            = 66331; // stacking bleed on the current tank, drives the tank swap
 
-// Acidmaw & Dreadscale (boss_northrend_beasts.cpp JormungarSpells). No aura of their own on any
-// difficulty: they apply Burning Bile 66869 through a triggered or linked spell.
-constexpr uint32 SPELL_BURNING_BITE      = 66879;
-constexpr uint32 SPELL_BURNING_SPRAY     = 66902;
+// Acidmaw & Dreadscale (boss_northrend_beasts.cpp JormungarSpells)
 // 15 yd knockback circle around the worm (DBC radius index 18)
 constexpr uint32 SPELL_SWEEP             = 66794;
 

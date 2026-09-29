@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Score a Northrend Beasts pull from a RaidObs trace: the stages, the tank duties, the charge, snobolds.
+"""Score a Northrend Beasts pull from a RaidObs trace: the stages, the tank duties, the charge, snobolds,
+the worms and the Toxin cure.
 
     northrend_beasts.py <file>             every section
     northrend_beasts.py <file> --stage     which beasts were up when, deaths per stage, each beast's engage
     northrend_beasts.py <file> --tanks     tank duties, Gormok's victims with Impale stacks, swaps, defensives
     northrend_beasts.py <file> --charge    every Icehowl charge: gaze, lane, outcome, who stood at its end
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
+    northrend_beasts.py <file> --worms     worm forms, who each worm hit before a tank, Spew, pools, Sweep
+    northrend_beasts.py <file> --cure      Paralytic Toxin spans and how each ended, Bile pulses on the clean
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -21,11 +24,22 @@ What the generic views get wrong here, and what this reads instead:
   difficulty ids. A taunt that lands shows as a change in Gormok's target column, not as an action.
 - **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dodge` and `nb.defensive` are per-bot change-only
   notes**: a bot that stays on one answer writes one row, so counts here are changes, not ticks.
+- **The worms' threat wipe shows only in their target column.** Each resets its threat list under
+  ground and comes up on whoever threatens it first, so `--worms` times each worm from its own Emerge
+  cast (66947 in the snapshot's casting column) until a tank is the target again: `nb.worm` leaves 3
+  only at the later worm's emerge, up to 1.5 s after the first. `nb.cure` and `nb.wormmove` are
+  per-bot change-only notes too.
+- **Neither worm hazard reaches `snap.hz`.** The Spew cone is a `haz` `wedge` row, `arc` degrees either
+  side of `facing`; a Slime Pool is a creature (35176) that grows 0.3 yd a second from 2 to 11, so
+  `--worms` rebuilds its radius from its first snapshot.
+- **A cure has no record of its own.** The Bile pulse strips Toxin as it lands, so `--cure` calls a
+  removal cured when a pulse hit the carrier within 250 ms of it.
 """
 from __future__ import annotations
 
 import bisect
 import collections
+import math
 import pathlib
 import re
 import sys
@@ -406,11 +420,404 @@ def show_snobold(trace: Trace) -> None:
               + ", ".join(f"{role} {n}" for role, n in counts.most_common()))
 
 
+NPC_SLIME_POOL = 35176
+WORMS = (("Acidmaw", NPC_ACIDMAW), ("Dreadscale", NPC_DREADSCALE))
+
+# 10N, 25N, 10H, 25H
+SPELL_PARALYTIC_TOXIN = (66823, 67618, 67619, 67620)
+SPELL_BURNING_BILE = 66869
+SPELL_BILE_PULSE = (66870, 67621, 67622, 67623)
+SPELL_ACIDIC_SPEW_TICK = (66819, 67609, 67610, 67611)
+SPELL_MOLTEN_SPEW_TICK = (66820, 67635, 67636, 67637)
+SPELL_SLIME_POOL = (66881, 67638, 67639, 67640)
+SPELL_SWEEP = (66794, 67644, 67645, 67646)
+SPELL_EMERGE = 66947
+
+WORM_STATES = {"0": "none", "1": "dreadscale mobile", "2": "acidmaw mobile", "3": "under ground",
+               "4": "lone dreadscale", "5": "lone acidmaw"}
+WORM_UNDER = "3"
+
+# The script's numbers, not the bots': the pool aura casts each 1 s tick at 2 + 0.3 * tick yd, and
+# Toxin lasts 60 s with a snare that reaches a full stop at 18 s, 13.5 s on heroic.
+POOL_BASE_RADIUS = 2.0
+POOL_GROWTH = 0.3
+POOL_MAX_RADIUS = 11.0
+TOXIN_EXPIRED_MS = 59000
+TOXIN_STUCK_MS = 18000
+TOXIN_STUCK_HEROIC_MS = 13500
+# The pulse strips Toxin as it lands, so the removal and the damage row can come in either order.
+CURE_WINDOW_MS = 250
+# The row goes out at the 1 s cast and the last of the 2.5 s of ticks lands 3.5 s after it.
+SPEW_WINDOW_MS = 3500
+# one snapshot gap longer than this is a hole in the trace, not time spent anywhere
+MAX_STEP_MS = 2000
+
+NUMBER_WORD = re.compile(r"-?\d+(?:\.\d+)?")
+
+
+def worm_spans(trace: Trace) -> list[dict]:
+    """Each `nb.worm` value with its span and the combat deaths inside it."""
+    deaths = combat_deaths(trace)
+    return [{"value": value, "start": start, "stop": stop,
+             "deaths": [death.get("g") for death in deaths if start <= death["t"] < stop]}
+            for value, start, stop in latch_spans(trace, "nb.worm", pull_end(trace))]
+
+
+def emerges(trace: Trace) -> list[tuple[int, int]]:
+    """`(start, stop)` for the first engage and every time `nb.worm` left 3, each running to the next
+    submerge, the next 0 or the end."""
+    end = pull_end(trace)
+    spans = latch_spans(trace, "nb.worm", end)
+    out = []
+    for index, (value, start, _) in enumerate(spans):
+        if value in ("0", WORM_UNDER):
+            continue
+        previous = spans[index - 1][0] if index else None
+        if previous == WORM_UNDER or (not out and previous in (None, "0")):
+            stop = next((later for held, later, _ in spans[index + 1:] if held in ("0", WORM_UNDER)), end)
+            out.append((start, stop))
+    return out
+
+
+def own_emerges(snaps: list[dict], stamps: list[int], worms: set[int], since: int, stop: int) -> dict[int, int]:
+    """`{worm: ms}` of each worm's first sampled Emerge cast in `[since, stop)`."""
+    out: dict[int, int] = {}
+    for snap in snaps[bisect.bisect_left(stamps, since):]:
+        if snap["t"] >= stop:
+            break
+        for row in snap.get("u", []):
+            if row[0] in worms and len(row) > 10 and row[10] == SPELL_EMERGE:
+                out.setdefault(row[0], snap["t"])
+    return out
+
+
+def worm_pickups(trace: Trace) -> list[dict]:
+    """Per emerge, per worm sampled alive in it: ms from its own emerge until its target column named
+    a tank (None if it never did before the next submerge), that tank, and the non-tanks it targeted
+    first.
+
+    The threat wipe under ground only shows here: the worm comes up on whoever threatens it first.
+    `nb.worm` leaves 3 at the later worm's emerge, up to 1.5 s after the first, so each worm is timed
+    from its own Emerge cast in the snapshots, or from the `nb.worm` change when none was sampled."""
+    worms = {guid for _, entry in WORMS for guid in guids_of_entry(trace, entry)}
+    snaps = frames(trace)
+    stamps = [snap["t"] for snap in snaps]
+    under_since = {stop: start for value, start, stop in latch_spans(trace, "nb.worm", pull_end(trace))
+                   if value == WORM_UNDER}
+    out = []
+    for start, stop in emerges(trace):
+        since = under_since.get(start)
+        up = own_emerges(snaps, stamps, worms, since, stop) if since is not None else {}
+        held: dict[int, dict] = {}
+        for snap in snaps[bisect.bisect_left(stamps, min(up.values(), default=start)):]:
+            if snap["t"] >= stop:
+                break
+            for row in snap.get("u", []):
+                if row[0] not in worms or len(row) <= 7 or row[5] <= 0:
+                    continue
+                emerged = up.get(row[0], start)
+                if snap["t"] < emerged:
+                    continue
+                pickup = held.setdefault(row[0], {"tank_ms": None, "tank": None, "victims": []})
+                victim = row[7]
+                if pickup["tank"] is not None or not victim:
+                    continue
+                if trace.role(victim) == "tank":
+                    pickup["tank_ms"] = snap["t"] - emerged
+                    pickup["tank"] = victim
+                elif victim not in pickup["victims"]:
+                    pickup["victims"].append(victim)
+        out.append({"t": start, "worms": held})
+    return out
+
+
+def angle_off(origin, facing: float, point) -> float:
+    """Degrees between a facing in radians and the bearing from origin to point, 0 to 180."""
+    bearing = math.atan2(point[1] - origin[1], point[0] - origin[0])
+    return abs(math.degrees((bearing - facing + math.pi) % (2 * math.pi) - math.pi))
+
+
+def spew_wedges(trace: Trace) -> list[dict]:
+    """Per `wedge` row on a Spew tick: the living non-tanks inside it at the nearest snapshot, and that
+    worm's Spew tick victims by role over the next 3.5 s. `arc` is degrees either side of `facing`."""
+    roster = roster_guids(trace)
+    ticks = [rec for rec in trace.of("dmg")
+             if rec.get("sp") in SPELL_ACIDIC_SPEW_TICK + SPELL_MOLTEN_SPEW_TICK]
+    out = []
+    for rec in trace.of("haz"):
+        if rec.get("shape") != "wedge" or rec.get("sp") not in SPELL_ACIDIC_SPEW_TICK + SPELL_MOLTEN_SPEW_TICK:
+            continue
+        family = SPELL_ACIDIC_SPEW_TICK if rec["sp"] in SPELL_ACIDIC_SPEW_TICK else SPELL_MOLTEN_SPEW_TICK
+        origin = (rec.get("x", 0.0), rec.get("y", 0.0))
+        facing = float(rec.get("facing", 0.0))
+        arc = float(rec.get("arc", 0.0))
+        reach = float(rec.get("range", 0.0))
+
+        snap = nearest_frame(trace, rec["t"])
+        inside = set() if snap is None else {
+            row[0] for row in snap.get("u", [])
+            if row[0] in roster and row[5] > 0 and trace.role(row[0]) != "tank"
+            and dist2(row[1:3], origin) <= reach and angle_off(origin, facing, row[1:3]) <= arc}
+
+        hit: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+        for tick in ticks:
+            if tick["sp"] in family and rec["t"] <= tick["t"] <= rec["t"] + SPEW_WINDOW_MS:
+                hit[trace.role(tick.get("d", 0))][tick.get("d", 0)] += 1
+
+        out.append({
+            "t": rec["t"],
+            "worm": "Acidmaw" if family is SPELL_ACIDIC_SPEW_TICK else "Dreadscale",
+            "facing": facing,
+            "arc": arc,
+            "inside": inside,
+            "hit": dict(hit),
+        })
+    return out
+
+
+def pool_radius(age_ms: int) -> float:
+    return min(POOL_BASE_RADIUS + POOL_GROWTH * (age_ms // 1000), POOL_MAX_RADIUS)
+
+
+def slime_pools(trace: Trace) -> list[dict]:
+    """Per pool, from its first snapshot: its spot, the ms each living roster member stood inside its
+    radius at the time, and its damage rows by victim.
+
+    A pool is a creature, not a dynamic object, and grows, so neither `snap.hz` nor a fixed radius
+    says who stood in it."""
+    pools = guids_of_entry(trace, NPC_SLIME_POOL)
+    if not pools:
+        return []
+    roster = roster_guids(trace)
+    snaps = frames(trace)
+    found: dict[int, dict] = {}
+    for index, snap in enumerate(snaps):
+        rows = snap.get("u", [])
+        present = [row for row in rows if row[0] in pools]
+        if not present:
+            continue
+        step = min(snaps[index + 1]["t"] - snap["t"], MAX_STEP_MS) if index + 1 < len(snaps) else 0
+        members = [row for row in rows if row[0] in roster and row[5] > 0]
+        for pool in present:
+            entry = found.setdefault(pool[0], {"guid": pool[0], "first": snap["t"], "x": pool[1], "y": pool[2],
+                                               "inside": collections.Counter(), "hits": collections.Counter()})
+            entry["last"] = snap["t"]
+            reach = pool_radius(snap["t"] - entry["first"])
+            for member in members:
+                if dist2(member[1:3], pool[1:3]) <= reach:
+                    entry["inside"][member[0]] += step
+
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_SLIME_POOL and rec.get("s") in found:
+            found[rec["s"]]["hits"][rec.get("d", 0)] += 1
+    return sorted(found.values(), key=lambda entry: entry["first"])
+
+
+def sweep_victims(trace: Trace) -> dict[str, collections.Counter]:
+    """Sweep hits per victim, by role."""
+    out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_SWEEP:
+            out[trace.role(rec.get("d", 0))][rec.get("d", 0)] += 1
+    return dict(out)
+
+
+def drop_numbers(text: str) -> str:
+    return " ".join(word for word in text.split() if not NUMBER_WORD.fullmatch(word))
+
+
+def wormmove_branches(trace: Trace) -> dict[int, collections.Counter]:
+    """`nb.wormmove` per bot by branch, the yards dropped: `move pool`, `hold spew`, `drag`, ..."""
+    return branch_counts(trace, "nb.wormmove", drop_numbers)
+
+
+def named(trace: Trace, guid: int) -> str:
+    return f"{trace.name(guid)} ({trace.role(guid)})"
+
+
+def by_role(trace: Trace, table: dict[str, collections.Counter]) -> str:
+    return "; ".join(f"{role} " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in counts.most_common())
+                     for role, counts in sorted(table.items()))
+
+
+def show_worms(trace: Trace) -> None:
+    print("WORMS")
+    spans = worm_spans(trace)
+    if not spans:
+        print("  no nb.worm rows")
+    else:
+        print(f"  {'from':>9} {'to':>9} {'secs':>6}  {'state':18} deaths")
+        for span in spans:
+            dead = ", ".join(trace.name(guid) for guid in span["deaths"]) or "-"
+            state = WORM_STATES.get(span["value"], span["value"])
+            print(f"  {clock(span['start']):>9} {clock(span['stop']):>9}"
+                  f" {(span['stop'] - span['start']) / 1000:6.1f}  {state:18} {dead}")
+
+    pickups = worm_pickups(trace)
+    print("\n  emerges, seconds until each worm targeted a tank:" + ("" if pickups else " none"))
+    for row in pickups:
+        parts = []
+        for guid, pickup in sorted(row["worms"].items(), key=lambda item: trace.name(item[0])):
+            took = (f"{pickup['tank_ms'] / 1000:.1f} ({trace.name(pickup['tank'])})" if pickup["tank"]
+                    else "never")
+            before = ", ".join(named(trace, victim) for victim in pickup["victims"])
+            parts.append(f"{trace.name(guid).split()[0]} {took}" + (f" after {before}" if before else ""))
+        print(f"    {clock(row['t']):>9}  " + ("  ".join(parts) or "no worm sampled"))
+
+    wedges = spew_wedges(trace)
+    print("  Spew wedges:" + ("" if wedges else " none"))
+    for row in wedges:
+        inside = ", ".join(named(trace, guid) for guid in sorted(row["inside"], key=trace.name)) or "nobody"
+        print(f"    {clock(row['t']):>9}  {row['worm']:10} facing {row['facing']:.2f} arc {row['arc']:.0f}"
+              f"  non-tanks inside: {inside}  ticks: {by_role(trace, row['hit']) or 'none'}")
+
+    pools = slime_pools(trace)
+    print("  slime pools:" + ("" if pools else " none sampled"))
+    for pool in pools:
+        inside = ", ".join(f"{trace.name(guid)} {ms / 1000:.1f}s" for guid, ms in pool["inside"].most_common() if ms)
+        hits = ", ".join(f"{trace.name(guid)} {n}" for guid, n in pool["hits"].most_common())
+        print(f"    {clock(pool['first'])}-{clock(pool['last'])} ({pool['x']:.1f}, {pool['y']:.1f})"
+              f"  inside: {inside or 'nobody'}  hit: {hits or 'nobody'}")
+    sources = {pool["guid"] for pool in pools}
+    stray = collections.Counter(rec.get("d", 0) for rec in trace.of("dmg")
+                                if rec.get("sp") in SPELL_SLIME_POOL and rec.get("s") not in sources)
+    if stray:
+        print("    pool hits from no sampled pool: "
+              + ", ".join(f"{trace.name(guid)} {n}" for guid, n in stray.most_common()))
+
+    print(f"  Sweep hits: {by_role(trace, sweep_victims(trace)) or 'nobody'}")
+
+    branches = wormmove_branches(trace)
+    if not branches:
+        print("  nb.wormmove: none")
+        return
+    print("  nb.wormmove:")
+    for guid, counts in sorted(branches.items(), key=lambda item: trace.name(item[0])):
+        print(f"    {trace.name(guid)[:14]:14} {trace.role(guid):6} "
+              + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
+
+
+def toxin_stuck_ms(diff) -> int:
+    return TOXIN_STUCK_HEROIC_MS if diff in (2, 3) else TOXIN_STUCK_MS
+
+
+def carried(trace: Trace, spells) -> list[tuple[int, int, int, bool]]:
+    """`(carrier, start, stop, removed)` per aura span on any of these ids, by start. One still up at
+    the end runs to the end, `removed` False."""
+    end = pull_end(trace)
+    opened: dict[int, int] = {}
+    out = []
+    for rec in trace.of("aura"):
+        if rec.get("sp") not in spells:
+            continue
+        guid = rec.get("d", 0)
+        if rec.get("r"):
+            if guid in opened:
+                out.append((guid, opened.pop(guid), rec["t"], True))
+        elif guid not in opened:
+            opened[guid] = rec["t"]
+    out += [(guid, start, end, False) for guid, start in opened.items()]
+    return sorted(out, key=lambda row: (row[1], row[0]))
+
+
+def toxin_spans(trace: Trace) -> list[dict]:
+    """Every Paralytic Toxin span with how it ended: `died`, `cured` (a Bile pulse hit the carrier
+    within 250 ms of the removal), `expired` (59 s or more), `other`, or `open` at the end of the file.
+    `stuck` once carried past the snare's full stop."""
+    pulses: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_BILE_PULSE:
+            pulses[rec.get("d", 0)].append(rec["t"])
+    deaths: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in combat_deaths(trace):
+        deaths[rec.get("g", 0)].append(rec["t"])
+    stuck = toxin_stuck_ms(trace.header.get("diff"))
+
+    out = []
+    for guid, start, stop, removed in carried(trace, SPELL_PARALYTIC_TOXIN):
+        if any(start <= when <= stop + CURE_WINDOW_MS for when in deaths[guid]):
+            ended = "died"
+        elif removed and any(abs(when - stop) <= CURE_WINDOW_MS for when in pulses[guid]):
+            ended = "cured"
+        elif removed and stop - start >= TOXIN_EXPIRED_MS:
+            ended = "expired"
+        else:
+            ended = "other" if removed else "open"
+        out.append({"carrier": guid, "start": start, "stop": stop, "end": ended, "stuck": stop - start > stuck})
+    return out
+
+
+def bile_spans(trace: Trace) -> list[dict]:
+    """Every Burning Bile span, with its pulse hits on anyone but the carrier who carried no Toxin at
+    the time: damage with nothing to cure."""
+    toxins: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    for guid, start, stop, _ in carried(trace, SPELL_PARALYTIC_TOXIN):
+        toxins[guid].append((start, stop))
+    pulses = [rec for rec in trace.of("dmg") if rec.get("sp") in SPELL_BILE_PULSE]
+
+    out = []
+    for guid, start, stop, _ in carried(trace, (SPELL_BURNING_BILE,)):
+        clean: collections.Counter = collections.Counter()
+        for rec in pulses:
+            victim = rec.get("d", 0)
+            if rec.get("s") != guid or victim == guid or not start <= rec["t"] <= stop + CURE_WINDOW_MS:
+                continue
+            if any(low <= rec["t"] <= high + CURE_WINDOW_MS for low, high in toxins[victim]):
+                continue
+            clean[victim] += 1
+        out.append({"carrier": guid, "start": start, "stop": stop, "clean": clean})
+    return out
+
+
+def cure_branches(trace: Trace) -> dict[int, collections.Counter]:
+    """`nb.cure` per bot by branch, the guid dropped: `seek`, `run`, `wait`, `none`."""
+    return branch_counts(trace, "nb.cure", lambda text: text.split()[0] if text.split() else "")
+
+
+def show_cure(trace: Trace) -> None:
+    print("CURE")
+    toxins = toxin_spans(trace)
+    if not toxins:
+        print("  no Paralytic Toxin carried")
+    else:
+        print(f"  Paralytic Toxin:\n    {'carrier':14} {'role':6} {'from':>9} {'to':>9} {'secs':>6}  end")
+        for span in toxins:
+            print(f"    {trace.name(span['carrier'])[:14]:14} {trace.role(span['carrier']):6}"
+                  f" {clock(span['start']):>9} {clock(span['stop']):>9} {(span['stop'] - span['start']) / 1000:6.1f}"
+                  f"  {span['end']}" + ("  stuck" if span["stuck"] else ""))
+        tally = collections.Counter(span["end"] for span in toxins)
+        stuck = sum(1 for span in toxins if span["stuck"])
+        print("  ended: " + ", ".join(f"{end} {n}" for end, n in tally.most_common())
+              + f"; stuck past {toxin_stuck_ms(trace.header.get('diff')) / 1000:.1f} s: {stuck}")
+
+    biles = bile_spans(trace)
+    if not biles:
+        print("  no Burning Bile carried")
+    else:
+        print("  Burning Bile, pulse hits on bots with no Toxin:")
+        for span in biles:
+            clean = ", ".join(f"{named(trace, guid)} {n}" for guid, n in span["clean"].most_common()) or "none"
+            print(f"    {trace.name(span['carrier'])[:14]:14} {trace.role(span['carrier']):6}"
+                  f" {clock(span['start'])}-{clock(span['stop'])}  {clean}")
+
+    branches = cure_branches(trace)
+    if not branches:
+        print("  nb.cure: none")
+        return
+    print("  nb.cure:")
+    for guid, counts in sorted(branches.items(), key=lambda item: trace.name(item[0])):
+        print(f"    {trace.name(guid)[:14]:14} {trace.role(guid):6} "
+              + ", ".join(f"{name} {n}" for name, n in counts.most_common()))
+
+
 SECTIONS = (
     ("stage", "which beasts were up when, deaths per stage, each beast's engage", show_stage),
     ("tanks", "tank duties, Gormok's victims with Impale stacks, swaps, defensives", show_tanks),
     ("charge", "every Icehowl charge: gaze, lane, outcome, who stood at its end", show_charge),
     ("snobold", "snobold riders and the DPS picks", show_snobold),
+    ("worms", "worm form spans, emerge pickups, Spew wedges, slime pools, Sweep, reposition branches", show_worms),
+    ("cure", "Paralytic Toxin spans and how each ended, Burning Bile pulses on the clean, cure branches",
+     show_cure),
 )
 
 
