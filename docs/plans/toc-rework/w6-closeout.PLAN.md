@@ -22,7 +22,9 @@ Wave 5, last. Rules, sources, naming contract and checks: [toc-rework.PLAN.md](t
 2. **Docs.**
    - A final pass over `docs/raids/trial-of-the-crusader/`. Move generic lessons reported by earlier
      lanes into `docs/engine/`.
-   - Delete `docs/plans/toc-rework/`. Its durable content must already live in the raid docs.
+   - Delete `docs/plans/toc-rework/`. Its durable content must already live in the raid docs. While a
+     status row is still `pending`, keep `toc-rework.PLAN.md` and that lane's brief, and delete the
+     rest.
 3. **Recipe skill.** Add RaidObs integration (probes, reader, the naming contract pattern, gating a
    raid whose script has no boss state) to `C:\Users\boss2\.claude\skills\raid-boss-strategy-recipe\SKILL.md`,
    via `compact-skill-creator`.

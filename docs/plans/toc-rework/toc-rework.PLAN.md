@@ -24,6 +24,7 @@ The merge stage alone edits this table.
 | 4 | w1a-beasts-rest | merged | `3553b1003` | Arctic Breath spread by bearing (step half cone + 6°, width from `spell_cone` at runtime), healers first, radius bands per role, melee within 57° of his back, `icehowl breath spread guard` vetoes `set behind`; Fire Bomb impact modelled from `TempSummon` age plus flight, dodge at `MOVEMENT_FORCED`; `NorthrendBeastsWalkAction` hoisted into the seam header; no coordinates; full table in brief | Merge resolved reader/doc conflicts with w1b and renamed w1b's `angle_off` to `wedge_angle_off`. Open: Fire Bomb vs worm dodge precedence in the heroic Gormok + worms overlap. Gaps: no Fire Bomb spread, no raid cooldown on Breath, humans/tanks hold no bearing, no spread in a worms + Icehowl overlap, walled melee stack, pinned casters eat the impact, bomb dodge ignores worm hazards, Whirl drags the spread, GO-floor probe unverified live |
 | refine | w2-jaraxxus-rest | pending | | | Needs 649 traces from a build carrying w2 |
 | refine | w5-anubarak-rest | pending | | | Needs 649 traces from a build carrying w5 |
+| refine | w3b-fc-defence-rest | pending | | | Needs 649 traces from a build carrying w3b |
 | 5 | w6-closeout | pending | | | |
 
 States: `pending`, `merged`, `blocked` (branch and worktree kept, reason in the lane brief),
