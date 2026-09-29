@@ -14,6 +14,16 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Keeps the combat formation off a bot holding an Arctic Breath bearing. `set behind` walks melee in
+// his front half to ±108° off his facing, and each breath turns that facing to its target for 5 s, so
+// it would pull a bot off its bearing.
+class IcehowlBreathSpreadGuardMultiplier : public Multiplier
+{
+public:
+    IcehowlBreathSpreadGuardMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "icehowl breath spread guard") {}
+    float GetValue(Action* action) override;
+};
+
 void AddToCIcehowlMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers);
 
 #endif

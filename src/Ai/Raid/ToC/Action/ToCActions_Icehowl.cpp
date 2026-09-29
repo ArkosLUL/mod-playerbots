@@ -7,6 +7,7 @@
 
 #include "Creature.h"
 #include "EncounterHelpers.h"
+#include "LastMovementValue.h"
 #include "Playerbots.h"
 #include "RaidTankDefensive.h"
 #include "Timer.h"
@@ -231,4 +232,24 @@ bool IcehowlTankDefensiveAction::Execute(Event /*event*/)
 {
     char const* defensive = NextTankDefensive(botAI, bot, "nb.defensive");
     return defensive && botAI->CastSpell(defensive, bot);
+}
+
+bool IcehowlMoveToBreathStandAction::Execute(Event /*event*/)
+{
+    IcehowlBreathStand stand;
+    if (!GetIcehowlBreathStand(botAI, stand) ||
+        IsOnIcehowlBreathStand(stand, bot->GetPositionX(), bot->GetPositionY(), ICEHOWL_SPREAD_ARRIVE_DEG,
+                               ICEHOWL_SPREAD_ARRIVE))
+    {
+        DropWalk();
+        return false;
+    }
+
+    if (Position const* spot = WalkInFlight())
+        if (IsOnIcehowlBreathStand(stand, spot->GetPositionX(), spot->GetPositionY(), ICEHOWL_SPREAD_TRIGGER_DEG,
+                                   ICEHOWL_SPREAD_TRIGGER))
+            return true;
+
+    // A breath is healable, so a pinning cast finishes first
+    return WalkTo(stand.spot);
 }

@@ -5,7 +5,7 @@
 #include "AttackAction.h"
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
-#include "Position.h"
+#include "ToCActions_NorthrendBeasts.h"
 #include "ToCActions_Shared.h"
 
 class GormokTankHoldBossAction : public ToCMainTankHoldAction
@@ -40,41 +40,31 @@ public:
     bool Execute(Event event) override;
 };
 
-// Holds its spot while the walk there is in flight. Every MoveTo clears the MotionMaster, so a spot
-// re-derived each tick from a bot that's still walking never lands.
-class GormokWalkAction : public MovementAction
-{
-public:
-    GormokWalkAction(PlayerbotAI* botAI, std::string const name) : MovementAction(botAI, name) {};
-
-protected:
-    // The latched spot while the bot is still walking to it, else nullptr
-    Position const* WalkInFlight();
-    // False without booking anything while a cast pins the bot's feet
-    bool WalkTo(Position const& spot);
-    void DropWalk() { walking = false; }
-
-private:
-    bool BookedOnWalkSpot();
-
-    Position walkSpot;
-    uint32 walkIssuedMs = 0;
-    bool walking = false;
-};
-
-class GormokBringSnoboldToMeleeAction : public GormokWalkAction
+class GormokBringSnoboldToMeleeAction : public NorthrendBeastsWalkAction
 {
 public:
     GormokBringSnoboldToMeleeAction(PlayerbotAI* botAI, std::string const name = "gormok bring snobold to melee")
-        : GormokWalkAction(botAI, name) {};
+        : NorthrendBeastsWalkAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
-class GormokLeaveStompRangeAction : public GormokWalkAction
+class GormokLeaveStompRangeAction : public NorthrendBeastsWalkAction
 {
 public:
-    GormokLeaveStompRangeAction(
-        PlayerbotAI* botAI, std::string const name = "gormok leave stomp range") : GormokWalkAction(botAI, name) {};
+    GormokLeaveStompRangeAction(PlayerbotAI* botAI, std::string const name = "gormok leave stomp range")
+        : NorthrendBeastsWalkAction(botAI, name) {};
+    bool Execute(Event event) override;
+
+private:
+    // False when no spot cleared the young bombs and the walk took one clear of the stomp alone
+    bool spotClearsBombs = false;
+};
+
+class GormokDodgeFireBombAction : public NorthrendBeastsWalkAction
+{
+public:
+    GormokDodgeFireBombAction(PlayerbotAI* botAI, std::string const name = "gormok dodge fire bomb")
+        : NorthrendBeastsWalkAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -95,6 +85,8 @@ public:
             &ToCGormokActionContext::gormok_bring_snobold_to_melee;
         creators["gormok leave stomp range"] =
             &ToCGormokActionContext::gormok_leave_stomp_range;
+        creators["gormok dodge fire bomb"] =
+            &ToCGormokActionContext::gormok_dodge_fire_bomb;
     }
 
 private:
@@ -120,6 +112,10 @@ private:
 
     static Action* gormok_leave_stomp_range(PlayerbotAI* botAI) {
         return new GormokLeaveStompRangeAction(botAI);
+    }
+
+    static Action* gormok_dodge_fire_bomb(PlayerbotAI* botAI) {
+        return new GormokDodgeFireBombAction(botAI);
     }
 };
 
