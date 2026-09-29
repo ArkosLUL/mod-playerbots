@@ -7,10 +7,13 @@
 #ifndef PLAYERBOTS_STATSWEIGHTCALCULATOR_H
 #define PLAYERBOTS_STATSWEIGHTCALCULATOR_H
 
+#include <array>
+#include <string>
 #include <unordered_map>
 
 #include "BisListMgr.h"
 #include "Player.h"
+#include "SimWeights.h"
 #include "StatsCollector.h"
 
 #define ITEM_SUBCLASS_MASK_SINGLE_HAND                                                                        \
@@ -63,9 +66,9 @@ public:
 
     void SetOverflowPenalty(bool apply) { enable_overflow_penalty_ = apply; }
     void SetItemSetBonus(bool apply) { enable_item_set_bonus_ = apply; }
-    // Set id of the piece occupying the slot being contested. That piece counts as removed, so the
-    // incumbent and the challenger are measured against the same baseline. 0 = no slot context.
-    void SetReplacedItemSet(uint32 setId) { replaced_item_set_ = setId; }
+    // The item in the contested slot (null: no slot context), scored as removed: its set piece doesn't
+    // count, and hit, expertise, armor pen and defense clip to the room left without it, penalty or not.
+    void SetReplacedItem(Item const* item);
     void SetQualityBlend(bool apply) { enable_quality_blend_ = apply; }
     void SetPvpSpec(bool isPvp) { pvpSpec_ = isPvp; }
     // Only for scoring things a bot can swap freely (gems, enchants): lets an under-cap tank spend
@@ -78,12 +81,14 @@ public:
     // it was calibrated for. QueryItemUsageForEquip turns it on.
     void SetBisBonus(bool apply) { enable_bis_bonus_ = apply; }
 
+    // Where the weights come from, for calc: the sim row and item level, or why they're hand-written.
+    std::string DescribeWeights();
+
     private:
     void GenerateWeights(Player* player);
     void GenerateBasicWeights(Player* player);
     void GenerateAdditionalWeights(Player* player);
 
-    void CalculateRandomProperty(int32 randomPropertyId, uint32 itemId);
     void CalculateItemSetMod(Player* player, ItemTemplate const* proto);
     // statSumWeight is the item's plain weighted stat sum, before the type penalty and set
     // multiplier; socket value is scored as a fraction of it.
@@ -103,6 +108,10 @@ public:
 
     void ApplyOverflowPenalty(Player* player);
     void ApplyWeightFinetune(Player* player);
+
+    // Resolved on first use and then fixed for this calculator's lifetime, like progression_tier_.
+    void ResolveSimWeights();
+    bool SimWeightsActive();
 
 private:
     Player* player_;
@@ -125,6 +134,34 @@ private:
     bool bis_source_resolved_ = false;
     BisSource bis_source_;
     uint32 replaced_item_set_ = 0;
+    bool replaced_slot_ = false;
+    // what the replaced item supplies toward each cap, in rating points
+    float replaced_hit_ = 0.0f;
+    float replaced_expertise_ = 0.0f;
+    float replaced_armor_pen_ = 0.0f;
+    float replaced_defense_ = 0.0f;
+
+    // from the strategies at construction
+    bool is_tank_ = false;
+    bool is_heal_ = false;
+
+    enum class SimWeightsState : uint8
+    {
+        Unresolved,
+        Active,
+        Disabled,
+        Level,
+        Pvp,
+        Role,
+        NoData
+    };
+    SimWeightsState sim_state_ = SimWeightsState::Unresolved;
+    uint8 sim_tab_ = 0;
+    int sim_anchor_ = -1;
+    uint32 sim_measured_ = 0;
+    float sim_ilvl_ = 0.0f;
+    SimWeights::Blend sim_blend_;
+    std::array<float, SimWeights::STAT_COUNT> sim_weights_{};
 
     float weight_;
     float stats_weights_[STATS_TYPE_MAX];

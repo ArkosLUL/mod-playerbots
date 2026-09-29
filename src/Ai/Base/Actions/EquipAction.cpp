@@ -162,22 +162,22 @@ void EquipAction::EquipItem(Item* item)
             calculator.SetOverflowPenalty(false);
 
             // Calculate item scores once and store them. The candidate is scored once per hand,
-            // each time with the piece it would displace treated as removed, so a set bonus the
-            // incumbent carries does not count for both sides.
-            calculator.SetReplacedItemSet(mainHandItem ? mainHandItem->GetTemplate()->ItemSet : 0);
+            // each time with the piece it would displace treated as removed, so the incumbent's set
+            // bonus and capped ratings do not count for both sides.
+            calculator.SetReplacedItem(mainHandItem);
             float newItemScoreVsMH = calculator.CalculateItem(itemId, item->GetItemRandomPropertyId(),
                                                               EQUIPMENT_SLOT_MAINHAND);
             float mainHandScore = mainHandItem
                 ? calculator.CalculateItem(mainHandItem->GetTemplate()->ItemId,
                                            mainHandItem->GetItemRandomPropertyId(), EQUIPMENT_SLOT_MAINHAND) : 0.0f;
 
-            calculator.SetReplacedItemSet(offHandItem ? offHandItem->GetTemplate()->ItemSet : 0);
+            calculator.SetReplacedItem(offHandItem);
             float newItemScoreVsOH = calculator.CalculateItem(itemId, item->GetItemRandomPropertyId(),
                                                               EQUIPMENT_SLOT_OFFHAND);
             float offHandScore = offHandItem
                 ? calculator.CalculateItem(offHandItem->GetTemplate()->ItemId,
                                            offHandItem->GetItemRandomPropertyId(), EQUIPMENT_SLOT_OFFHAND) : 0.0f;
-            calculator.SetReplacedItemSet(0);
+            calculator.SetReplacedItem(nullptr);
 
             // Determine where this weapon can go
             bool canGoMain = (invType == INVTYPE_WEAPON ||
@@ -302,17 +302,17 @@ void EquipAction::EquipItem(Item* item)
                     int32 secondRandomProp = equippedItems[1]->GetItemRandomPropertyId();
 
                     // Score the candidate once per slot, each time with the piece it would displace
-                    // treated as removed, so a set bonus the incumbent carries counts for it only.
-                    calc.SetReplacedItemSet(equippedItems[0]->GetTemplate()->ItemSet);
+                    // treated as removed, so the incumbent's set bonus and capped ratings count for it only.
+                    calc.SetReplacedItem(equippedItems[0]);
                     float newItemScoreVsFirst = calc.CalculateItem(itemId, newItemRandomProp, dstSlot);
                     float firstItemScore = calc.CalculateItem(equippedItems[0]->GetTemplate()->ItemId, firstRandomProp,
                                                               dstSlot);
 
-                    calc.SetReplacedItemSet(equippedItems[1]->GetTemplate()->ItemSet);
+                    calc.SetReplacedItem(equippedItems[1]);
                     float newItemScoreVsSecond = calc.CalculateItem(itemId, newItemRandomProp, dstSlot + 1);
                     float secondItemScore = calc.CalculateItem(equippedItems[1]->GetTemplate()->ItemId, secondRandomProp,
                                                                dstSlot + 1);
-                    calc.SetReplacedItemSet(0);
+                    calc.SetReplacedItem(nullptr);
 
                     // Determine which slot (if any) should be replaced
                     bool betterThanFirst = newItemScoreVsFirst > firstItemScore;

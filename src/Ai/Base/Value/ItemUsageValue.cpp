@@ -1174,8 +1174,8 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
     if (newScore <= 0.0f)
         return usage;
     float bestOld = 0.0f;
-    // Candidate score measured in the same slot context as bestOld, so set bonuses do not count
-    // for the incumbent only.
+    // Candidate score measured in the same slot context as bestOld, so set bonuses and cap room do
+    // not count for the incumbent only.
     float bestOldNewScore = newScore;
 
     for (uint8 slot = EQUIPMENT_SLOT_START; slot < EQUIPMENT_SLOT_END; ++slot)
@@ -1197,7 +1197,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
         if (oldProto->Quality <= ITEM_QUALITY_NORMAL)
             continue;
 
-        weightCalc.SetReplacedItemSet(oldProto->ItemSet);
+        weightCalc.SetReplacedItem(oldItem);
         float oldScore = weightCalc.CalculateItem(
             oldProto->ItemId, oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID));
         float slotNewScore = weightCalc.CalculateItem(proto->ItemId, randomProperty);
@@ -1208,7 +1208,7 @@ static ItemUsage AdjustUsageForCrossArmor(Player* bot, ItemTemplate const* proto
             bestOldNewScore = slotNewScore;
         }
     }
-    weightCalc.SetReplacedItemSet(0);
+    weightCalc.SetReplacedItem(nullptr);
 
     if (bestOld <= 0.0f)
         return ITEM_USAGE_EQUIP;
@@ -1413,15 +1413,15 @@ ItemUsage ItemUsageValue::QueryItemUsageForEquip(ItemTemplate const* itemProto, 
         ItemTemplate const* oldItemProto = oldItem->GetTemplate();
 
         // Both scores have to be taken with the contested slot treated as empty, otherwise the
-        // incumbent's own set bonus counts for it and cancels out. The slot also drives the
+        // incumbent's own set bonus and capped ratings count for it. The slot also drives the
         // spec weapon-speed preference, which is a no-op without it.
         int32 const contestedSlot = static_cast<int32>((dest & 0xFF) + i);
-        calculator.SetReplacedItemSet(oldItemProto->ItemSet);
+        calculator.SetReplacedItem(oldItem);
         float slotItemScore = calculator.CalculateItem(itemProto->ItemId, randomPropertyId, contestedSlot);
         float oldScore = calculator.CalculateItem(oldItemProto->ItemId,
                                                   oldItem->GetInt32Value(ITEM_FIELD_RANDOM_PROPERTIES_ID),
                                                   contestedSlot);
-        calculator.SetReplacedItemSet(0);
+        calculator.SetReplacedItem(nullptr);
 
         if (oldItem)
         {

@@ -201,5 +201,6 @@ bool TellCalculateItemAction::Execute(Event event)
     }
 
     botAI->TellMasterNoFacing(out.str());
+    botAI->TellMasterNoFacing(calculator.DescribeWeights());
     return true;
 }

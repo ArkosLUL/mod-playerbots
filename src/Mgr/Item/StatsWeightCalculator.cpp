@@ -15,10 +15,13 @@
 #include "PlayerbotFactory.h"
 #include "ProgressionMgr.h"
 #include "RandomItemMgr.h"
+#include "RandomPlayerbotMgr.h"
 #include "SharedDefines.h"
+#include "SimWeightsMgr.h"
 #include "SpellAuraDefines.h"
 #include "SpellMgr.h"
 #include "StatsCollector.h"
+#include "StringFormat.h"
 #include "Unit.h"
 
 #include <algorithm>
@@ -120,6 +123,53 @@ uint32 EquippedSetPieces(Player* player, uint32 setId)
     }
     return 0;
 }
+
+void CollectRandomProperty(StatsCollector& collector, int32 randomPropertyId, uint32 itemId)
+{
+    if (randomPropertyId > 0)
+    {
+        ItemRandomPropertiesEntry const* item_rand = sItemRandomPropertiesStore.LookupEntry(randomPropertyId);
+        if (!item_rand)
+        {
+            return;
+        }
+
+        for (uint32 i = PROP_ENCHANTMENT_SLOT_0; i < MAX_ENCHANTMENT_SLOT; ++i)
+        {
+            uint32 enchantId = item_rand->Enchantment[i - PROP_ENCHANTMENT_SLOT_0];
+            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
+            if (enchant)
+                collector.CollectEnchantStats(enchant);
+        }
+    }
+    else
+    {
+        ItemRandomSuffixEntry const* item_rand = sItemRandomSuffixStore.LookupEntry(-randomPropertyId);
+        if (!item_rand)
+        {
+            return;
+        }
+
+        for (uint32 i = PROP_ENCHANTMENT_SLOT_0; i < MAX_ENCHANTMENT_SLOT; ++i)
+        {
+            uint32 enchantId = item_rand->Enchantment[i - PROP_ENCHANTMENT_SLOT_0];
+            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
+            uint32 enchant_amount = 0;
+
+            for (int k = 0; k < MAX_ITEM_ENCHANTMENT_EFFECTS; ++k)
+            {
+                if (item_rand->Enchantment[k] == enchantId)
+                {
+                    enchant_amount = uint32((item_rand->AllocationPct[k] * GenerateEnchSuffixFactor(itemId)) / 10000);
+                    break;
+                }
+            }
+
+            if (enchant)
+                collector.CollectEnchantStats(enchant, enchant_amount);
+        }
+    }
+}
 }
 
 template <size_t Size>
@@ -136,11 +186,13 @@ bool HasAnySpell(Player* player, uint32 const (&spellIds)[Size])
 
 StatsWeightCalculator::StatsWeightCalculator(Player* player) : player_(player)
 {
-    if (PlayerbotAI::IsHeal(player))
+    is_heal_ = PlayerbotAI::IsHeal(player);
+    is_tank_ = PlayerbotAI::IsTank(player);
+    if (is_heal_)
         type_ = CollectorType::SPELL_HEAL;
     else if (PlayerbotAI::IsCaster(player))
         type_ = CollectorType::SPELL_DMG;
-    else if (PlayerbotAI::IsTank(player))
+    else if (is_tank_)
         type_ = CollectorType::MELEE_TANK;
     else if (PlayerbotAI::IsMelee(player))
         type_ = CollectorType::MELEE_DMG;
@@ -187,9 +239,9 @@ float StatsWeightCalculator::CalculateItem(uint32 itemId, int32 randomPropertyId
     collector_->CollectItemStats(proto);
 
     if (randomPropertyIds != 0)
-        CalculateRandomProperty(randomPropertyIds, itemId);
+        CollectRandomProperty(*collector_, randomPropertyIds, itemId);
 
-    if (enable_overflow_penalty_)
+    if (enable_overflow_penalty_ || replaced_slot_)
         ApplyOverflowPenalty(player_);
 
     GenerateWeights(player_);
@@ -294,51 +346,39 @@ float StatsWeightCalculator::CalculateEnchant(uint32 enchantId)
     return weight_;
 }
 
-void StatsWeightCalculator::CalculateRandomProperty(int32 randomPropertyId, uint32 itemId)
+void StatsWeightCalculator::SetReplacedItem(Item const* item)
 {
-    if (randomPropertyId > 0)
+    replaced_item_set_ = 0;
+    replaced_slot_ = false;
+    replaced_hit_ = replaced_expertise_ = replaced_armor_pen_ = replaced_defense_ = 0.0f;
+
+    ItemTemplate const* proto = item ? item->GetTemplate() : nullptr;
+    if (!proto)
+        return;
+
+    replaced_item_set_ = proto->ItemSet;
+    replaced_slot_ = true;
+
+    // Gems and enchants count too, since they're all in the bot's current ratings. CollectItemStats
+    // already has the socket bonus, and the random property slots come from CollectRandomProperty.
+    StatsCollector collector(type_, cls, SpecPrimarySpellSchoolMask(cls, tab));
+    collector.CollectItemStats(proto);
+    if (int32 const randomPropertyId = item->GetItemRandomPropertyId())
+        CollectRandomProperty(collector, randomPropertyId, proto->ItemId);
+    for (uint32 slot = PERM_ENCHANTMENT_SLOT; slot < MAX_INSPECTED_ENCHANTMENT_SLOT; ++slot)
     {
-        ItemRandomPropertiesEntry const* item_rand = sItemRandomPropertiesStore.LookupEntry(randomPropertyId);
-        if (!item_rand)
-        {
-            return;
-        }
+        if (slot == BONUS_ENCHANTMENT_SLOT)
+            continue;
 
-        for (uint32 i = PROP_ENCHANTMENT_SLOT_0; i < MAX_ENCHANTMENT_SLOT; ++i)
-        {
-            uint32 enchantId = item_rand->Enchantment[i - PROP_ENCHANTMENT_SLOT_0];
-            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
-            if (enchant)
-                collector_->CollectEnchantStats(enchant);
-        }
+        uint32 const enchantId = item->GetEnchantmentId(EnchantmentSlot(slot));
+        if (SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId))
+            collector.CollectEnchantStats(enchant);
     }
-    else
-    {
-        ItemRandomSuffixEntry const* item_rand = sItemRandomSuffixStore.LookupEntry(-randomPropertyId);
-        if (!item_rand)
-        {
-            return;
-        }
 
-        for (uint32 i = PROP_ENCHANTMENT_SLOT_0; i < MAX_ENCHANTMENT_SLOT; ++i)
-        {
-            uint32 enchantId = item_rand->Enchantment[i - PROP_ENCHANTMENT_SLOT_0];
-            SpellItemEnchantmentEntry const* enchant = sSpellItemEnchantmentStore.LookupEntry(enchantId);
-            uint32 enchant_amount = 0;
-
-            for (int k = 0; k < MAX_ITEM_ENCHANTMENT_EFFECTS; ++k)
-            {
-                if (item_rand->Enchantment[k] == enchantId)
-                {
-                    enchant_amount = uint32((item_rand->AllocationPct[k] * GenerateEnchSuffixFactor(itemId)) / 10000);
-                    break;
-                }
-            }
-
-            if (enchant)
-                collector_->CollectEnchantStats(enchant, enchant_amount);
-        }
-    }
+    replaced_hit_ = collector.stats[STATS_TYPE_HIT];
+    replaced_expertise_ = collector.stats[STATS_TYPE_EXPERTISE];
+    replaced_armor_pen_ = collector.stats[STATS_TYPE_ARMOR_PENETRATION];
+    replaced_defense_ = collector.stats[STATS_TYPE_DEFENSE];
 }
 
 int32 StatsWeightCalculator::PickBestRandomPropertyId(uint32 itemId)
@@ -371,7 +411,7 @@ int32 StatsWeightCalculator::PickBestRandomPropertyId(uint32 itemId)
         int32 candidate = isSuffix ? -static_cast<int32>(enchId) : static_cast<int32>(enchId);
 
         collector_->Reset();
-        CalculateRandomProperty(candidate, itemId);
+        CollectRandomProperty(*collector_, candidate, itemId);
 
         float score = 0.0f;
         for (uint32 i = 0; i < STATS_TYPE_MAX; ++i)
@@ -392,11 +432,93 @@ void StatsWeightCalculator::GenerateWeights(Player* player)
 {
     GenerateBasicWeights(player);
     GenerateAdditionalWeights(player);
+    if (SimWeightsActive())
+        SimWeights::Merge(sim_weights_, sim_measured_, sim_anchor_, stats_weights_);
     ApplyWeightFinetune(player);
+}
+
+void StatsWeightCalculator::ResolveSimWeights()
+{
+    if (sim_state_ != SimWeightsState::Unresolved)
+        return;
+
+    uint8 simTab = 0;
+    std::shared_ptr<SimWeightsSnapshot const> snapshot;
+    SimWeights::Spec const* spec = nullptr;
+
+    // cheapest first: the snapshot takes a lock and IsSpecPvp can hit the DB
+    if (!sPlayerbotAIConfig.simWeightsEnable)
+        sim_state_ = SimWeightsState::Disabled;
+    // rating per point changes with level, and the sim only measured level 80
+    else if (lvl != 80)
+        sim_state_ = SimWeightsState::Level;
+    else if (!SimWeightsMgr::ResolveKey(cls, static_cast<uint8>(tab), is_tank_, is_heal_, simTab))
+        sim_state_ = SimWeightsState::Role;
+    else if (!(snapshot = sSimWeightsMgr.Get()) || !(spec = snapshot->Find(cls, simTab)))
+        sim_state_ = SimWeightsState::NoData;
+    else if (sRandomPlayerbotMgr.IsSpecPvp(player_->GetGUID().GetCounter(), cls))
+        sim_state_ = SimWeightsState::Pvp;
+    else
+    {
+        // By the bot's own gear, not the content phase: that one follows the group leader or IP's
+        // login default, and it's the gear that moves hit and armor pen.
+        sim_state_ = SimWeightsState::Active;
+        sim_ilvl_ = player_->GetAverageItemLevelForDF();
+        sim_anchor_ = spec->anchor;
+        sim_blend_ = SimWeights::Interpolate(spec->rows, sim_ilvl_, sim_weights_, sim_measured_);
+    }
+
+    sim_tab_ = simTab;
+}
+
+bool StatsWeightCalculator::SimWeightsActive()
+{
+    ResolveSimWeights();
+    return sim_state_ == SimWeightsState::Active && !pvpSpec_;
+}
+
+std::string StatsWeightCalculator::DescribeWeights()
+{
+    ResolveSimWeights();
+    if (pvpSpec_)
+        return "weights: hand-written (pvp spec)";
+
+    switch (sim_state_)
+    {
+        case SimWeightsState::Active:
+        {
+            std::string const blend = sim_blend_.lo == sim_blend_.hi
+                ? Acore::StringFormat("P{}", sim_blend_.lo)
+                : Acore::StringFormat("P{} -> P{} at {:.0f}%", sim_blend_.lo, sim_blend_.hi, sim_blend_.t * 100.0f);
+            return Acore::StringFormat("weights: sim {}/{}, ilvl {:.1f} ({})", cls, sim_tab_, sim_ilvl_, blend);
+        }
+        case SimWeightsState::Disabled:
+            return "weights: hand-written (AiPlayerbot.SimWeights.Enable = 0)";
+        case SimWeightsState::Level:
+            return Acore::StringFormat("weights: hand-written (level {}, sim rows are level 80)", lvl);
+        case SimWeightsState::Pvp:
+            return "weights: hand-written (pvp spec)";
+        case SimWeightsState::Role:
+            return "weights: hand-written (no sim row for this role or spec)";
+        case SimWeightsState::NoData:
+            return Acore::StringFormat("weights: hand-written (no sim weights loaded for {}/{})", cls, sim_tab_);
+        default:
+            return "weights: hand-written";
+    }
 }
 
 void StatsWeightCalculator::GenerateBasicWeights(Player* player)
 {
+    // The talent tab alone picks the wrong table for a Blood DK that isn't tanking, a Frost or Unholy
+    // DK that is, and a Holy or Discipline priest doing damage (Smite).
+    int branch = tab;
+    if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_BLOOD && !is_tank_)
+        branch = DEATH_KNIGHT_TAB_UNHOLY;
+    else if (cls == CLASS_DEATH_KNIGHT && tab != DEATH_KNIGHT_TAB_BLOOD && is_tank_)
+        branch = DEATH_KNIGHT_TAB_BLOOD;
+    else if (cls == CLASS_PRIEST && tab != PRIEST_TAB_SHADOW && !is_heal_)
+        branch = PRIEST_TAB_SHADOW;
+
     // Basic weights
     stats_weights_[STATS_TYPE_STAMINA] += 0.1f;
     stats_weights_[STATS_TYPE_ARMOR] += 0.001f;
@@ -404,7 +526,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
     stats_weights_[STATS_TYPE_MELEE_DPS] += 0.01f;
     stats_weights_[STATS_TYPE_RANGED_DPS] += 0.01f;
 
-    if (cls == CLASS_HUNTER && (tab == HUNTER_TAB_BEAST_MASTERY || tab == HUNTER_TAB_SURVIVAL))
+    if (cls == CLASS_HUNTER && (branch == HUNTER_TAB_BEAST_MASTERY || branch == HUNTER_TAB_SURVIVAL))
     {
         stats_weights_[STATS_TYPE_AGILITY] += 2.5f;
         stats_weights_[STATS_TYPE_ATTACK_POWER] += 1.0f;
@@ -415,7 +537,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 1.0f;
         stats_weights_[STATS_TYPE_RANGED_DPS] += 7.5f;
     }
-    else if (cls == CLASS_HUNTER && tab == HUNTER_TAB_MARKSMANSHIP)
+    else if (cls == CLASS_HUNTER && branch == HUNTER_TAB_MARKSMANSHIP)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 2.3f;
         stats_weights_[STATS_TYPE_ATTACK_POWER] += 1.0f;
@@ -426,7 +548,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_SPELL_POWER] -= 1.0f;
         stats_weights_[STATS_TYPE_RANGED_DPS] += 10.0f;
     }
-    else if (cls == CLASS_ROGUE && tab == ROGUE_TAB_COMBAT)
+    else if (cls == CLASS_ROGUE && branch == ROGUE_TAB_COMBAT)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 1.9f;
         stats_weights_[STATS_TYPE_STRENGTH] += 1.1f;
@@ -439,7 +561,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.0f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 7.0f;
     }
-    else if (cls == CLASS_DRUID && tab == DRUID_TAB_FERAL && !PlayerbotAI::IsTank(player))
+    else if (cls == CLASS_DRUID && branch == DRUID_TAB_FERAL && !is_tank_)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 2.2f;
         stats_weights_[STATS_TYPE_STRENGTH] += 2.4f;
@@ -451,7 +573,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.1f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 15.0f;
     }
-    else if (cls == CLASS_ROGUE && (tab == ROGUE_TAB_ASSASSINATION || tab == ROGUE_TAB_SUBTLETY))
+    else if (cls == CLASS_ROGUE && (branch == ROGUE_TAB_ASSASSINATION || branch == ROGUE_TAB_SUBTLETY))
     {
         stats_weights_[STATS_TYPE_AGILITY] += 1.5f;
         stats_weights_[STATS_TYPE_STRENGTH] += 1.1f;
@@ -464,7 +586,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.1f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 5.0f;
     }
-    else if (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_FURY)
+    else if (cls == CLASS_WARRIOR && branch == WARRIOR_TAB_FURY)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.8f;
         stats_weights_[STATS_TYPE_STRENGTH] += 2.5f;
@@ -479,7 +601,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.5f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 7.0f;
     }
-    else if (cls == CLASS_WARRIOR && tab == WARRIOR_TAB_ARMS)
+    else if (cls == CLASS_WARRIOR && branch == WARRIOR_TAB_ARMS)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.8f;
         stats_weights_[STATS_TYPE_STRENGTH] += 2.5f;
@@ -494,7 +616,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 1.4f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 7.0f;
     }
-    else if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_FROST)
+    else if (cls == CLASS_DEATH_KNIGHT && branch == DEATH_KNIGHT_TAB_FROST)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.5f;
         stats_weights_[STATS_TYPE_STRENGTH] += 2.5f;
@@ -507,7 +629,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.5f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 7.0f;
     }
-    else if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_UNHOLY)
+    else if (cls == CLASS_DEATH_KNIGHT && branch == DEATH_KNIGHT_TAB_UNHOLY)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.5f;
         stats_weights_[STATS_TYPE_STRENGTH] += 2.5f;
@@ -520,7 +642,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 1.5f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 5.0f;
     }
-    else if (cls == CLASS_PALADIN && tab == PALADIN_TAB_RETRIBUTION)
+    else if (cls == CLASS_PALADIN && branch == PALADIN_TAB_RETRIBUTION)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.5f;
         stats_weights_[STATS_TYPE_STRENGTH] += 2.5f;
@@ -532,7 +654,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 2.0f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 9.0f;
     }
-    else if ((cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ENHANCEMENT))
+    else if ((cls == CLASS_SHAMAN && branch == SHAMAN_TAB_ENHANCEMENT))
     {
         // Haste has to be worth over 2 AP or +40 AP gems beat Quick King's Amber, but past ~2.7 the
         // Thundering Skyflare proc outscores Relentless Earthsiege. Agility has to stay above crit or
@@ -551,9 +673,9 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_MELEE_DPS] += 8.5f;
     }
     else if (cls == CLASS_WARLOCK ||
-             (cls == CLASS_MAGE && tab != MAGE_TAB_FIRE) ||
-             (cls == CLASS_PRIEST && tab == PRIEST_TAB_SHADOW) ||
-             (cls == CLASS_DRUID && tab == DRUID_TAB_BALANCE))
+             (cls == CLASS_MAGE && branch != MAGE_TAB_FIRE) ||
+             (cls == CLASS_PRIEST && branch == PRIEST_TAB_SHADOW) ||
+             (cls == CLASS_DRUID && branch == DRUID_TAB_BALANCE))
     {
         stats_weights_[STATS_TYPE_INTELLECT] += 0.3f;
         stats_weights_[STATS_TYPE_SPIRIT] += 0.6f;
@@ -564,7 +686,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_ATTACK_POWER] -= 1.0f;
         stats_weights_[STATS_TYPE_RANGED_DPS] += 1.0f;
     }
-    else if (cls == CLASS_MAGE && tab == MAGE_TAB_FIRE)
+    else if (cls == CLASS_MAGE && branch == MAGE_TAB_FIRE)
     {
         stats_weights_[STATS_TYPE_INTELLECT] += 0.3f;
         stats_weights_[STATS_TYPE_SPIRIT] += 0.7f;
@@ -575,7 +697,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_ATTACK_POWER] -= 1.0f;
         stats_weights_[STATS_TYPE_RANGED_DPS] += 1.0f;
     }
-    else if (cls == CLASS_SHAMAN && tab == SHAMAN_TAB_ELEMENTAL)
+    else if (cls == CLASS_SHAMAN && branch == SHAMAN_TAB_ELEMENTAL)
     {
         stats_weights_[STATS_TYPE_INTELLECT] += 0.5f;
         stats_weights_[STATS_TYPE_SPELL_POWER] += 1.2f;
@@ -584,8 +706,8 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_HASTE] += 1.0f;
         stats_weights_[STATS_TYPE_MANA_REGENERATION] += 0.5f;
     }
-    else if ((cls == CLASS_PALADIN && tab == PALADIN_TAB_HOLY) ||
-             (cls == CLASS_SHAMAN && tab == SHAMAN_TAB_RESTORATION))
+    else if ((cls == CLASS_PALADIN && branch == PALADIN_TAB_HOLY) ||
+             (cls == CLASS_SHAMAN && branch == SHAMAN_TAB_RESTORATION))
     {
         stats_weights_[STATS_TYPE_INTELLECT] += 0.9f;
         stats_weights_[STATS_TYPE_SPIRIT] += 0.15f;
@@ -594,8 +716,8 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_CRIT] += 0.6f;
         stats_weights_[STATS_TYPE_HASTE] += 0.8f;
     }
-    else if ((cls == CLASS_PRIEST && tab != PRIEST_TAB_SHADOW) ||
-             (cls == CLASS_DRUID && tab == DRUID_TAB_RESTORATION))
+    else if ((cls == CLASS_PRIEST && branch != PRIEST_TAB_SHADOW) ||
+             (cls == CLASS_DRUID && branch == DRUID_TAB_RESTORATION))
     {
         stats_weights_[STATS_TYPE_INTELLECT] += 0.8f;
         stats_weights_[STATS_TYPE_SPIRIT] += 0.6f;
@@ -606,8 +728,8 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_ATTACK_POWER] -= 1.0f;
         stats_weights_[STATS_TYPE_RANGED_DPS] += 1.0f;
     }
-    else if ((cls == CLASS_WARRIOR && tab == WARRIOR_TAB_PROTECTION) ||
-             (cls == CLASS_PALADIN && tab == PALADIN_TAB_PROTECTION))
+    else if ((cls == CLASS_WARRIOR && branch == WARRIOR_TAB_PROTECTION) ||
+             (cls == CLASS_PALADIN && branch == PALADIN_TAB_PROTECTION))
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.2f;
         stats_weights_[STATS_TYPE_STRENGTH] += 1.3f;
@@ -625,7 +747,7 @@ void StatsWeightCalculator::GenerateBasicWeights(Player* player)
         stats_weights_[STATS_TYPE_EXPERTISE] += 3.0f;
         stats_weights_[STATS_TYPE_MELEE_DPS] += 2.0f;
     }
-    else if (cls == CLASS_DEATH_KNIGHT && tab == DEATH_KNIGHT_TAB_BLOOD)
+    else if (cls == CLASS_DEATH_KNIGHT && branch == DEATH_KNIGHT_TAB_BLOOD)
     {
         stats_weights_[STATS_TYPE_AGILITY] += 0.2f;
         stats_weights_[STATS_TYPE_STRENGTH] += 1.3f;
@@ -1047,31 +1169,24 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
                 hit_current += 3;
 
             hit_overflow = SPELL_HIT_OVERFLOW;
-            if (hit_overflow > hit_current)
-                validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_SPELL);
-            else
-                validPoints = 0;
+            validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_SPELL);
         }
         else if (hitOverflowType_ & CollectorType::MELEE)
         {
             hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
             hit_current += player->GetRatingBonusValue(CR_HIT_MELEE);
             hit_overflow = MELEE_HIT_OVERFLOW;
-            if (hit_overflow > hit_current)
-                validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_MELEE);
-            else
-                validPoints = 0;
+            validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_MELEE);
         }
         else
         {
             hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
             hit_current += player->GetRatingBonusValue(CR_HIT_RANGED);
             hit_overflow = RANGED_HIT_OVERFLOW;
-            if (hit_overflow > hit_current)
-                validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_RANGED);
-            else
-                validPoints = 0;
+            validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_RANGED);
         }
+        // add before flooring, or an over-capped bot gets the whole item's share back as room
+        validPoints = std::max(0.0f, validPoints + replaced_hit_);
         collector_->stats[STATS_TYPE_HIT] = std::min(collector_->stats[STATS_TYPE_HIT], validPoints);
     }
 
@@ -1079,15 +1194,13 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
         if (type_ & CollectorType::MELEE)
         {
             float expertise_current, expertise_overflow;
+            // already includes the rating part (Player::UpdateExpertise)
             expertise_current = player->GetUInt32Value(PLAYER_EXPERTISE);
-            expertise_current += player->GetRatingBonusValue(CR_EXPERTISE);
             expertise_overflow = EXPERTISE_OVERFLOW;
 
-            float validPoints;
-            if (expertise_overflow > expertise_current)
-                validPoints = (expertise_overflow - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE);
-            else
-                validPoints = 0;
+            float const validPoints = std::max(
+                0.0f, (expertise_overflow - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE) +
+                          replaced_expertise_);
 
             collector_->stats[STATS_TYPE_EXPERTISE] = std::min(collector_->stats[STATS_TYPE_EXPERTISE], validPoints);
         }
@@ -1100,11 +1213,9 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
             defense_current = player->GetRatingBonusValue(CR_DEFENSE_SKILL);
             defense_overflow = DEFENSE_OVERFLOW;
 
-            float validPoints;
-            if (defense_overflow > defense_current)
-                validPoints = (defense_overflow - defense_current) / player->GetRatingMultiplier(CR_DEFENSE_SKILL);
-            else
-                validPoints = 0;
+            float const validPoints = std::max(
+                0.0f, (defense_overflow - defense_current) / player->GetRatingMultiplier(CR_DEFENSE_SKILL) +
+                          replaced_defense_);
 
             collector_->stats[STATS_TYPE_DEFENSE] = std::min(collector_->stats[STATS_TYPE_DEFENSE], validPoints);
         }
@@ -1117,12 +1228,10 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
             armor_penetration_current = player->GetRatingBonusValue(CR_ARMOR_PENETRATION);
             armor_penetration_overflow = ARMOR_PENETRATION_OVERFLOW;
 
-            float validPoints;
-            if (armor_penetration_overflow > armor_penetration_current)
-                validPoints = (armor_penetration_overflow - armor_penetration_current) /
-                              player->GetRatingMultiplier(CR_ARMOR_PENETRATION);
-            else
-                validPoints = 0;
+            float const validPoints =
+                std::max(0.0f, (armor_penetration_overflow - armor_penetration_current) /
+                                       player->GetRatingMultiplier(CR_ARMOR_PENETRATION) +
+                                   replaced_armor_pen_);
 
             collector_->stats[STATS_TYPE_ARMOR_PENETRATION] =
                 std::min(collector_->stats[STATS_TYPE_ARMOR_PENETRATION], validPoints);
@@ -1132,6 +1241,8 @@ void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
 
 void StatsWeightCalculator::ApplyWeightFinetune(Player* player)
 {
+    // the sim rows already carry armor pen's rise with gear
+    if (!SimWeightsActive())
     {
         if (type_ & (CollectorType::MELEE | CollectorType::RANGED))
         {

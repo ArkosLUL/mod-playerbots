@@ -438,6 +438,7 @@ public:
     bool bisDatasetEnhancements;   // Dataset enchants, pinned gems and gem palette; off uses the normal picker
     bool bisDatasetReforges;       // Sim reforge on exact rank-1 items, needs mod-reforging
     uint32 bisDatasetPollSeconds;  // World-thread dataset version check interval; 0 = startup and command only
+    bool simWeightsEnable;         // Level-80 DPS stat weights from playerbots_sim_weights instead of the hand-written ones
     bool twoRoundsGearInit;
     bool syncQuestWithPlayer;
     bool syncQuestForPlayer;

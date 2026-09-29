@@ -17,6 +17,7 @@
 #include "RandomItemMgr.h"
 #include "RandomPlayerbotFactory.h"
 #include "RandomPlayerbotMgr.h"
+#include "SimWeightsMgr.h"
 #include "Talentspec.h"
 #include "TravelMgr.h"
 
@@ -791,6 +792,7 @@ bool PlayerbotAIConfig::Initialize()
     bisDatasetEnhancements = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Enhancements", true);
     bisDatasetReforges = sConfigMgr->GetOption<bool>("AiPlayerbot.BisDataset.Reforges", true);
     bisDatasetPollSeconds = sConfigMgr->GetOption<uint32>("AiPlayerbot.BisDataset.PollSeconds", 300);
+    simWeightsEnable = sConfigMgr->GetOption<bool>("AiPlayerbot.SimWeights.Enable", true);
     twoRoundsGearInit = sConfigMgr->GetOption<bool>("AiPlayerbot.TwoRoundsGearInit", false);
     syncQuestWithPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestWithPlayer", true);
     syncQuestForPlayer = sConfigMgr->GetOption<bool>("AiPlayerbot.SyncQuestForPlayer", false);
@@ -852,6 +854,7 @@ bool PlayerbotAIConfig::Initialize()
     sBisListMgr->LoadAll();
     std::string bisDatasetError;
     sBisDatasetMgr.Reload(bisDatasetError);
+    sSimWeightsMgr.LoadAll();
     PlayerbotTextMgr::instance().LoadBotTexts();
     PlayerbotTextMgr::instance().LoadBotTextChance();
     PlayerbotFactory::Init();

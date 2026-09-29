@@ -20,14 +20,14 @@ Two startup caches feed it, built in `PlayerbotFactory::Init()`:
 is worth and **must mirror `ApplyEnchantAndGemsNew`'s eligibility filters exactly** — level gates,
 expansion gates, progression gates, item-side skill gates. Otherwise item *scoring* values sockets by
 gems the bot cannot actually slot. There is one deliberate exception, documented at
-`StatsWeightCalculator.cpp:864`: the tank cap-priority flag stays **off** in `BestGemScore` (see
+`StatsWeightCalculator.cpp:985`: the tank cap-priority flag stays **off** in `BestGemScore` (see
 below).
 
 ## The scoring pipeline
 
 `StatsCollector::CollectItemStats` → `StatsWeightCalculator::CalculateItem` → `itemScore`.
 
-- `weight_` is multiplied by `CalcMixedGearScore(ilvl, quality)` (`StatsWeightCalculator.cpp:158-167`),
+- `weight_` is multiplied by `CalcMixedGearScore(ilvl, quality)` (`StatsWeightCalculator.cpp:264-274`),
   roughly `ilvl * 1.1^quality` — a few hundred. **Raw gem/enchant scores live in un-multiplied
   stat-sum space**, so adding the two directly is off by two orders of magnitude. Anything mixing
   them must use a ratio, not a sum.
@@ -45,7 +45,7 @@ below).
 ### Talent-driven stat weights
 
 `GenerateBasicWeights` is flat per spec; **stat-conversion talents belong in
-`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:666-716`), gated on `HasAura` — safe there
+`GenerateAdditionalWeights`** (`StatsWeightCalculator.cpp:787-837`), gated on `HasAura` — safe there
 because `Randomize` runs `InitTalentsTree` (`PlayerbotFactory.cpp:959`) before `InitEquipment` and
 `ApplyEnchantAndGemsNew`. Convention: **added weight = conversion ratio × the target stat's weight**.
 Careful Aim and Mental Dexterity each convert 100% of Intellect to attack power and each add 1.1
@@ -56,7 +56,7 @@ against an attack power weight of 1.0.
 collects that full weight and outscores anything below it — which is why holy paladins gemmed Runed
 (pure spell power) in every socket while Intellect sat at 0.9.
 
-**Holy paladin Intellect is 1.3** (0.9 + 0.4, `:709`). Holy Guidance rank 5 (`31841`) converts 20% of
+**Holy paladin Intellect is 1.3** (0.9 + 0.4, `:829`). Holy Guidance rank 5 (`31841`) converts 20% of
 total Intellect to healing power, and Divine Intellect and Blessing of Kings each add 10% on top, so
 a point on gear is worth 0.24 healing — plus roughly 0.2 for the spell crit it carries
 (`1.21 / 166.6 %` × `45.9` rating per % × crit weight `0.6`), value a flat weight cannot scale. Gated
@@ -72,9 +72,69 @@ Healing Wave / Lesser Healing Wave / Riptide), priest Spiritual Guidance (`15031
 restoration druid Improved Tree of Life (`48537`, 15% Spirit, form-gated). Each shares a weight
 branch with specs that lack the talent, so each needs its own branch, never a base bump.
 
+### Sim stat weights
+
+Level-80 DPS bots take their weights from wowsim, not `GenerateBasicWeights`: `SimWeightsMgr` loads
+`playerbots_sim_weights` (playerbots DB), one row set per spec and WotLK content phase, measured at
+that phase's sim BiS gear and relative to an anchor stat (Strength for warriors, DKs and
+retribution; Agility for rogues, hunters, feral and enhancement; spell power for casters).
+
+- **Scope** (`SimWeightsMgr::ResolveKey`): no rows for tanks and healers (`IsTank`/`IsHeal`, i.e.
+  the bot's strategies), Beast Mastery, or the protection/holy/restoration tabs. PvP specs and
+  bots below 80 (rating per point changes with level) stay hand-written too. A non-Shadow priest
+  that isn't healing reads the Smite rows (tab 13).
+- **By gear level, not content phase.** The calculator interpolates linearly between the two
+  phase rows around the bot's `GetAverageItemLevelForDF`, clamped to P1 and P5. `ProgressForBot`
+  doesn't fit: it follows the group leader or IP's login default (phase 1 for an ungrouped
+  level-80 bot here), while hit, expertise and armor pen move 1.5-2x from P1 to P5 with the bot's
+  own gear.
+- **Merge** (`SimWeights::Merge`, after `GenerateBasicWeights` and `GenerateAdditionalWeights`):
+  each measured stat becomes sim weight × the hand-written anchor weight, so scores keep their
+  scale. Unmeasured stats (stamina, armor, a caster's wand DPS) keep the hand value, and so does
+  a negative hand weight the sim puts below 0.05, since those repel off-role items. Talent bumps on
+  measured stats (Careful Aim, Mental Dexterity) are overwritten; the sim builds carry the talents.
+- `ApplyWeightFinetune`'s armor pen ×1.2 is skipped: the phase rows already carry that rise.
+- Resolved lazily, once per calculator, which copies what it needs: `Initialize` re-runs
+  `LoadAll` on `.playerbots rndbot reload` while map threads score, so the snapshot is swapped
+  under a mutex. A missing table (checked via `information_schema`, see
+  [pitfalls](../engine/pitfalls.md#a-missing-table-or-column-kills-the-worldserver-not-just-the-query))
+  or `SimWeights.Enable = 0` leaves everyone hand-written.
+
+**Branch routing** in `GenerateBasicWeights`, at every level: a Blood DK that isn't tanking takes
+the Unholy branch, a Frost or Unholy DK that is tanking takes the Blood branch, and a non-Shadow
+priest that isn't healing takes the caster branch. Blood DK bots always get "tank assist", so Blood
+DPS exists only when a user removes it.
+
+**Cap-aware slot comparisons.** Runtime slot comparisons score with `SetOverflowPenalty(false)`,
+so without more, a hit-capped bot would take hit gear over better items now that hit weighs ~2x.
+`SetReplacedItem(item)` clips hit, expertise, armor pen and defense for both incumbent and
+challenger to what the bot would still need with that item removed (template, random property,
+enchants, gems). An unslotted score (the first `CalculateItem` in `QueryItemUsageForEquip`, `calc`,
+gear generation) has no item to take out, so clipping it would count the bot's own hit against
+it; those stay unclipped. `PLAYER_EXPERTISE` already includes the rating part
+(`Player::UpdateExpertise`), so the expertise cap reads it alone.
+
+**Regenerating:** run wowsim's `tools/statweights` (its README), then
+`python apps/simweights/generate_weights.py --weights <weights.json>`, which writes a dated
+`data/sql/playerbots/updates/*_playerbots_sim_weights.sql` for the module's DB updater.
+
+**Known gaps:**
+- `MELEE_DPS` takes the sim's main-hand slope, and `StatsCollector` counts an off-hand weapon's DPS
+  under the same stat, so dual wielders overvalue off-hand weapon DPS (the off-hand slope is ~40%
+  of the main hand's).
+- `StatsCollector` gives feral weapons no feral attack power, so bear weapons (hand-written) score
+  far too low: the sim puts bear threat at ~51 per weapon DPS against the bots' 3. Cats read the
+  sim's weapon DPS slope instead.
+- `InitEquipment` clears the gear first and uses one calculator for the whole gear-up, so a
+  generated bot is weighted at P1 whatever tier it is geared from.
+- Haste still steps between some phases, from real haste breakpoints the ±300 rating step doesn't
+  average out: Elemental reads 0.64 then 0.99 (anchor units) from P3 to P4.
+- The sim builds use presetgen's talents, race and professions; a bot on another talent build
+  has slightly different true values.
+
 ## Set bonuses
 
-Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod` (`:664-706`). It was
+Set scoring lives only in `StatsWeightCalculator::CalculateItemSetMod` (`:897-920`). It was
 effectively dead until the delta model landed, for three separate reasons worth remembering:
 
 - `multiplier += 0.1f * itemCount` applied only while `itemCount < max_items`, so a **complete** set
@@ -85,8 +145,8 @@ effectively dead until the delta model landed, for three separate reasons worth 
 - Piece count was linear; the real 2/4/6 thresholds in `ItemSetEntry::items_to_triggerspell[]` were
   ignored.
 
-The fix is a delta model keyed on `SetReplacedItemSet(setId)` — the set of the piece occupying the
-contested slot, treated as removed so incumbent and challenger measure against the same baseline:
+The fix is a delta model keyed on `SetReplacedItem(item)` — the piece occupying the contested slot,
+treated as removed so incumbent and challenger measure against the same baseline:
 
 ```
 base   = EquippedSetPieces(player, proto->ItemSet) - (replaced_item_set_ == proto->ItemSet ? 1 : 0)
@@ -99,7 +159,7 @@ if (gained == 0 && NextSetThreshold(set, base))
 Consequences: T7 chest → T7.5 chest is neutral (same set, same vacated baseline); a non-set
 challenger must beat the set piece by the bonus weight **on top of** `EquipUpgradeThreshold`.
 
-Every runtime path that scores a slot must supply the replaced set id — `QueryItemUsageForEquip`
+Every runtime path that scores a slot must supply the replaced item — `QueryItemUsageForEquip`
 (the primary path; `LootUsageValue`, `ItemUpgradeValue` and `ItemUsageValue` all funnel through it),
 `AdjustUsageForCrossArmor`, and both `EquipAction` sites. `EquipAction` uses raw `>` comparisons with
 no threshold, so leaving it out would silently undo what `QueryItemUsageForEquip` just protected.
@@ -283,7 +343,7 @@ would never switch off and every socket would go into a dead stat permanently.
 re-rank whole gear pieces and churn equips as it crosses the cap. The cost is a slightly conservative
 socket estimate for under-cap tanks.
 
-**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:622`), raised from 0.5 so `3849 'Titanium
+**Block value is weighted 0.7** (`StatsWeightCalculator.cpp:743`), raised from 0.5 so `3849 'Titanium
 Plating'` (+81 block value, 56.7) takes a tank shield over `1071 '+18 Stamina'` (55.8) — a 0.9 margin,
 so the shield enchant is not stable across gear changes. Gemming cannot move: no gem in the DBC carries
 `ITEM_MOD_BLOCK_VALUE` or `ITEM_MOD_BLOCK_RATING`. Shield *selection* does move — `StatsCollector.cpp:54`
@@ -293,7 +353,9 @@ feeds `proto->Block` into the stat sum, and raid shields carry 0–259 of it (me
 
 Target: haste in yellow and blue sockets, Stark Ametrine (+20 AP +10 haste) as the red-socket bonus
 filler, Relentless Earthsiege meta with one Tear. Each weight in the branch
-(`StatsWeightCalculator.cpp:536-553`) holds a boundary, so **re-check gem picks before moving any**:
+(`StatsWeightCalculator.cpp:657-674`) holds a boundary, so **re-check gem picks before moving any**.
+At level 80 the [sim weights](#sim-stat-weights) replace them and cross two of these: crit beats
+Agility in P1-P3 (2.1 vs 1.8, so Chaotic Skyflare can take the meta) and haste passes 2.7 from P4.
 
 - **HASTE 2.5, above 2.0:** below 2 AP per point, Bright Cardinal Ruby (+40 AP) beats Quick King's
   Amber (+20 haste). Under the ×1.2 colour nudge 2.5 gives Quick in yellow/blue and Stark in red. At
@@ -532,9 +594,11 @@ Defaults below are the shipped values in `conf/playerbots.conf.dist`.
 | `AiPlayerbot.BisDataset.Enhancements` | 1 | Dataset enchants, pinned gems, palette; 0 leaves gems and enchants to the normal picker |
 | `AiPlayerbot.BisDataset.Reforges` | 1 | Sim reforge on exact rank-1 items; no-op without mod-reforging or `Reforging.Enable = 0` |
 | `AiPlayerbot.BisDataset.PollSeconds` | 300 | World-thread version check; 0 = startup and the command only |
+| `AiPlayerbot.SimWeights.Enable` | 1 | Level-80 DPS weights from `playerbots_sim_weights`; no-op without the table |
 
 Debug: `<bot> calc [item]` prints a raw score (`TellCalculateItemAction`, registered as `calc`) plus
-a BiS line naming the source (lists or dataset), subject, effective phase and rank. `.ip set <n>`
+a BiS line naming the source (lists or dataset), subject, effective phase and rank, and a weights
+line: `weights: sim <class>/<tab>, ilvl <x> (P<a> -> P<b> at <pct>%)` or `hand-written (<reason>)`. `.ip set <n>`
 sets a test character's IP tier. `.playerbots bis reload` (admin) forces a dataset reload; `.playerbots
 bis status` (gamemaster) reports what's loaded, plus dataset enchants without
 `SPELL_EFFECT_ENCHANT_ITEM` and gems without `GemProperties`.

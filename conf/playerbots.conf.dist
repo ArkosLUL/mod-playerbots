@@ -520,6 +520,13 @@ AiPlayerbot.BisDataset.Reforges = 1
 # Default: 300
 AiPlayerbot.BisDataset.PollSeconds = 300
 
+# Stat weights measured by wowsim (playerbots table playerbots_sim_weights) for level-80 DPS bots,
+# blended by the bot's average item level. Tanks, healers, Beast Mastery hunters, PvP specs and lower
+# levels keep the hand-written weights, and so does everyone when the table is missing. Loads at
+# startup and on .playerbots rndbot reload.
+# Default: 1 (enabled)
+AiPlayerbot.SimWeights.Enable = 1
+
 # Bind-on-Equip etiquette: GREED by default to keep it tradeable.
 # Set to 1 to allow NEED on BoE if it's a clear upgrade.
 # Default: 1 (enabled)
