@@ -49,6 +49,8 @@ Inherited nodes the relevance tables must not collide with: `CombatStrategy` —
   and **explicitly exempt from the boss-only hold** (`name == "shadowfiend"`), so rebinding it to a
   plain cooldown trigger is safe. Separately, `CastShadowfiendAction::GetTargetName()` returns
   `"current target"`, so a healer with no current target cannot cast it at all.
+- **No offensive dispel node**, so a priest never purges an enemy buff, and never casts Mass Dispel
+  on its own.
 - **Dead registrations** (registered, zero trigger nodes): `symbol of hope`, `binding heal`,
   `lightwell`, `holy nova`, `mass dispel`, `levitate`, `mind soothe`, `consume magic`, `elune's
   grace`, `power infusion on party`.

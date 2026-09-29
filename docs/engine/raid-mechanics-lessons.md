@@ -118,7 +118,13 @@ Every distance helper measures differently, and a large-model boss inflates all 
   back forever.
 - Pick the helper deliberately: `IsWithinCombatRange` adds **both** combat reaches,
   `WorldObject::IsWithinDist3d(Position const*, float)` adds **neither**, and `GetExactDist2d`
-  ignores altitude — the last claims reach that is not there against anything hovering.
+  ignores altitude — the last claims reach that is not there against anything hovering. A point-cast
+  (dest) spell's range follows `Spell::CheckRange`'s dest branch: `IsWithinDist3d` with the caster's
+  own size only, not `IsWithinDistInMap`, which adds the target's reach.
+- **A healer stand must keep every heal target in heal range, or yield.** `PartyMemberToHeal` picks
+  targets up to `healDistance` 38.5 and `reach party member to heal` walks past heal range + 1, so a
+  stand that doesn't cover them fights it and the healer stops healing. Test reach from the stand,
+  not the bot.
 - **`Unit::IsWithinMeleeRange(obj, dist)`: `dist` is extra slack**, not an absolute
   (`maxdist = dist + GetMeleeRange(obj)`).
 - A target that walks needs a **sticky margin** on the reach test, or a bot on the edge of range
@@ -137,6 +143,8 @@ What lands on a raid add is not what PvP experience predicts.
   carrying `AURA_INTERRUPT_FLAG_TAKE_DAMAGE` (`Unit.cpp:1032`). Frost Nova and Entangling Roots do not
   carry it, so they hold their full duration through raid AoE; Freezing Trap does, so it never survives
   one. Read the flag, not the reputation.
+- **A stunned creature takes no heal assist threat**: `ThreatManager::ForwardThreatForAssistingMe`
+  skips `UNIT_STATE_CONTROLLED` units.
 - **Diminishing returns skip creatures.** `ApplyDiminishingToDuration` diminishes a creature only for a
   `DRTYPE_ALL` group — stun, cyclone, charge — or one carrying `CREATURE_FLAG_EXTRA_ALL_DIMINISH`.
   Root, fear and disorient are `DRTYPE_PLAYER`, so on an add with `flags_extra = 0` they land at full
@@ -280,6 +288,14 @@ scripted raid encounters.
   50000 yd, i.e. raid-wide and undodgeable.
 - **`SpellInfoCorrections.cpp` can rewrite a DBC value.** Fire Bomb 66320's radius is 5 yd in the
   DBC and 2 yd in play, so read it before sizing a hazard.
+- **A hardcoded aura handler can scale a trigger spell's radius every tick**, beyond both the DBC and
+  the corrections: `SpellAuraEffects.cpp` casts Slime Pool 66881 and Grobbulus' Poison with a growing
+  `SPELLVALUE_RADIUS_MOD`.
+- **A re-applied non-stacking aura recalculates its amounts** (`Aura::SetStackAmount`), so a ramp
+  built in a periodic dummy restarts on every refresh.
+- **A spell's Speed delays even a triggered instant**, so an aura sent with a telegraphed cast can
+  land before the telegraphed hit (Fire Bomb's 66318 a second before its 66317). Read Speed and the
+  corrections before timing a hazard off its aura.
 - **A script's own periodic damage can skip every mitigation.** `spell_valkyr_touch_aura` hits every
   player on the map (`ExcludeTargetAuraSpell` 0) with damage computed before absorbs.
 - **`EventMap::ExecuteEvent` always erases the event**, so one not re-scheduled with `Repeat` runs

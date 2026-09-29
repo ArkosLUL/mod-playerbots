@@ -295,7 +295,8 @@ tick, by `RequestSpellInterrupt` on the caster.
   Obsidian Sanctum lost most of a Flame Tsunami's 3.6 s budget to a 2.9 s hold lock exactly this way.
   Emergency dodges want `MOVEMENT_FORCED` — and two of those in one encounter then deadlock each
   other, with no band above to escape into, so precedence between them has to be settled at the
-  multiplier layer instead.
+  multiplier layer instead. The same rule refuses a walk re-aiming its own `MOVEMENT_FORCED` walk:
+  lower the booking first.
 
   It also hides from the caller's own log. `MoveTo` collapses every `RaidObs::MoveOutcome` into one
   `bool`, so code that records *why* it gave up — a dodge fan noting which hazard vetoed each bearing
@@ -751,9 +752,18 @@ the just-died block in `PlayerbotAI::DoNextAction` now clears it.
 - `PartyMemberToProtect` keys on `attacker->GetVictim()`, so anyone dying to raid-wide AoE, a DoT or a
   ground effect is nobody's current victim and **can never be selected**. Pain Suppression, Blessing
   of Protection and Intervene cannot answer that damage pattern.
-- `PartyMemberToDispel::Calculate` returns **one** target per tick, so N decursers all chase the same
-  first target unless duty is split by index. `HasAuraToDispel` also skips auras with less than
+- `PartyMemberToDispel::Calculate` returns **one** target per tick, the first member holding any
+  aura of the type, DoTs included, so N decursers all chase the same member and nothing prefers CC
+  unless duty is split by index. `HasAuraToDispel` also skips auras with less than
   `dispelAuraDuration` (default 700 ms) remaining.
+- **A dispel takes a random aura.** `Spell::EffectDispel` draws weighted by stacks, so a dispel aimed
+  at CC may take a DoT. Class dispel nodes ignore dispel backlash (Unstable Affliction's silence and
+  damage).
+- **A school lockout locks that school's dispels.** `Player::ProhibitSpellSchool` (Counterspell,
+  Spell Lock, Earth Shock) covers them, so a dispel or purge election must test the chosen rank's
+  cooldown, or a kicked bot holds the duty through the lockout.
+- **Hex-style auras set `UNIT_FLAG_SILENCED` without `UNIT_STATE_LOST_CONTROL`**: a "can act"
+  readiness test needs both.
 - Class dispel nodes sit **below** `ACTION_RAID`: mage `remove curse on party` at 40, druid at 57
   against `ACTION_RAID` 60. Any raid positioning node outranks them.
 - **A raid positioning node outranks `reach melee` too** (`ACTION_HIGH + 1`, ~21), and `Engine` stops
@@ -793,6 +803,12 @@ starved the melee rotation for the whole ground phase.
 `IsBotInFrontalCone` forwards to `HasInArc`, which takes the **full** arc, not the half-angle — an
 `M_PI / 2` argument leaves everyone between 45° and 60° off-centre inside a cone they believe they
 cleared.
+
+**A cone's width comes from `spell_cone` only for the ids that table names.** A remapped difficulty
+id without a row falls back to its implicit target type (`TARGET_UNIT_CONE_ENEMY_24`), so call
+`GetSpellCone` on the remapped id. A targeted cone's bisector runs through its target, so a
+neighbour is hit only within half the width of the target's bearing at any distance: space bearings
+by half-width plus stand error, not full width or radius.
 
 **An aura's removal conditions are not all in the DBC.** `spell_linked_spell` can strip one on hit: a
 negative `spell_effect` at `type 1` (`SPELL_LINK_HIT`) becomes `RemoveAurasDueToSpell` in

@@ -158,3 +158,5 @@ until the charges are gone.
 - Duplicate `cleanse spirit` trigger nodes registered by both `RestoShamanStrategy` (52) and
   `ShamanCureStrategy` (23) — harmless, wasted trigger evaluation only.
 - Resto's default water totem is Mana Spring rather than Healing Stream.
+- Purge (`TargetAuraDispelTrigger`) fires on any dispellable positive magic aura on the current
+  target, so a long self-buff like Thorns draws a Purge every GCD.

@@ -10,7 +10,7 @@ are in [../README.md](../README.md). Mechanics source:
 |---|---|---|---|---|
 | Northrend Beasts | [northrend-beasts.md](northrend-beasts.md) | `Gormok`, `Jormungars`, `Icehowl`, `NorthrendBeasts` | `northrend-beasts` | `nb.` |
 | Lord Jaraxxus | [lord-jaraxxus.md](lord-jaraxxus.md) | `Jaraxxus` | `lord-jaraxxus` | `jaraxxus.` |
-| Faction Champions | [faction-champions.md](faction-champions.md) | `FactionChampions` | `faction-champions` | `fc.` |
+| Faction Champions | [faction-champions.md](faction-champions.md) | `FactionChampions`, `FactionChampionsDefence` | `faction-champions` | `fc.` |
 | Twin Val'kyr | [twin-valkyr.md](twin-valkyr.md) | `TwinValkyr` | `val-kyr-twins` | `tv.` |
 | Anub'arak | [anubarak.md](anubarak.md) | `Anubarak` | `anub-arak` | `anub.` |
 
@@ -74,6 +74,7 @@ the script names the 10N one. Read one through `sSpellMgr->GetSpellIdForDifficul
 | Paralytic Toxin | 66823 | 67618 | 67619 | 67620 | player debuff |
 | Massive Crash | 66683 | 67660 | 67661 | 67662 | |
 | Frothing Rage | 66759 | 67657 | 67658 | 67659 | on Icehowl |
+| Arctic Breath | 66689 | 67650 | 67651 | 67652 | `spell_cone` row on 10N only |
 | Fel Fireball | 66532 | 66963 | 66964 | 66965 | 2.5 s cast |
 | Incinerate Flesh | 66237 | 67049 | 67050 | 67051 | heal absorb |
 | Nether Power | 66228 | 67106 | 67107 | 67108 | on Jaraxxus |
@@ -99,9 +100,9 @@ Nodes keyed on these, each live on a difficulty only through the remap or all fo
 | Node | Keys on |
 |---|---|
 | `gormok tank swap needed` | Impale stacks |
-| `northrend worms sweep frontal` | Sweep cast |
-| `northrend worms afflicted by burning` | Burning Bite/Spray auras, which never exist ([northrend-beasts.md](northrend-beasts.md)) |
+| `northrend worms misplaced` | Paralytic Toxin, Burning Bile, Sweep cast, Spew cone |
 | `icehowl frothing rage` | Frothing Rage |
+| `icehowl breath spread` | the remapped Arctic Breath's cone width |
 | `jaraxxus incinerate flesh on raid` | Incinerate Flesh |
 | `jaraxxus fel fireball interruptible` | Fel Fireball cast |
 | `jaraxxus nether power active` | Nether Power |
@@ -171,8 +172,7 @@ instance per ms. Off map 649 the gate is open and nothing is live.
   the boss follows, so it settles up to melee reach past that, possibly on a hazard. Where the spot
   matters, measure arrival on the boss (Anub'arak's pre-submerge drag).
 - `AvoidCreatureClusterAction` is the legacy `FleePosition` dodge, capped at
-  `AiPlayerbot.FleeDistance` (5 yd), kept only for its one caller (slime pools). A
-  new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
+  `AiPlayerbot.FleeDistance` (5 yd), with no caller left. A new hazard uses `FindNearestPositionClearOfHazards` with a clearance past the trigger radius, per
   [pitfalls.md](../../engine/pitfalls.md).
 - `IsBotInFrontalCone` and `CastClassTaunt` live in `src/Util/EncounterHelpers.{h,cpp}`; ToC keeps no
   copies.

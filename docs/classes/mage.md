@@ -55,6 +55,7 @@ Mage strategy files use **bare floats, not `ACTION_*` constants**, unlike the ot
 | S3 | Mages carry **no mana potions** ([../systems/consumables-and-burst.md](../systems/consumables-and-burst.md)) from level 20. The gem already fires at 65% and Evocation at 15%, both at 90.0, so the potion was pure redundancy that cost the mage its Potion of Wild Magic. |
 | S3 | **Registered but unreferenced.** Triggers `fireball`, `pyroblast`, `frostfire bolt`, `arcane blast`, `presence of mind`, `ice barrier`, `counterspell`; actions `presence of mind`, `counterspell`, `conjure food`, `conjure water`. Wire `presence of mind` (A1) and `counterspell` (a raid-PvE interrupt node — only `counterspell on enemy healer` is used today, at 40.0); delete the rest via the two-site `creators[...]` + factory pattern. |
 | S4 | **Focus Magic is out-of-combat only.** If the focus target dies mid-fight the buff is gone for the rest of the encounter. Low impact. |
+| S5 | **Spellsteal fires on any dispellable positive magic aura** on the current target (`TargetAuraDispelTrigger`), so a long self-buff like Thorns keeps the mage stealing every GCD. Shaman Purge behaves the same. |
 
 ## Divergences to decide
 
