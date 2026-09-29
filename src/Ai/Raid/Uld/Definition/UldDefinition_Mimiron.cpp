@@ -130,8 +130,18 @@ bool MimironRaidDropping(PlayerbotAI* botAI)
 
 bool MimironMeleeSector(PlayerbotAI* botAI)
 {
-    return !PlayerbotAI::IsRanged(botAI->GetBot()) && IsMimironHardModeActive(botAI) && IsMimironPhase2(botAI);
+    Player* bot = botAI->GetBot();
+    if (PlayerbotAI::IsRanged(bot))
+        return false;
+
+    if (IsMimironHardModeActive(botAI) && (IsMimironPhase2(botAI) || IsMimironPhase4(bot)))
+        return true;
+
+    MimironP3Wx2LaserBarrageTrigger barrage(botAI);
+    return barrage.IsActive();
 }
+
+bool MimironPhase4MainTank(PlayerbotAI* botAI) { return IsMimironPhase4(botAI->GetBot()); }
 
 void DefineMimiron(EncounterBuilder& e)
 {
@@ -189,6 +199,10 @@ void DefineMimiron(EncounterBuilder& e)
     // pull. "attack rti target" is left alone on purpose: a mark a player sets should still win.
     e.OwnTargeting("mimiron target guard", Role::NonTank, IsMimironEngaged, Family::DpsAssist);
 
+    // Phase 4 focus row picks the main tank's target. VX-001 never takes a victim, so tank assist
+    // reads it as loose and pulls him off the MK II, twice a second, and his rotation never runs.
+    e.OwnTargeting("mimiron phase 4 tank target guard", Role::MainTank, MimironPhase4MainTank);
+
     // A gap-closer moves the bot in a straight line and reads nothing about the ground, so it mustn't
     // fire while the bot is dodging something that kills. "reach melee" is the same move without the
     // spell: a melee bot thrown 12 yd clear of the fire was walked back into it on the next tick. The
@@ -243,8 +257,10 @@ void DefineMimiron(EncounterBuilder& e)
     e.Block("mimiron storm cooldown hold", Role::Any, MimironRaidDropping, 0,
             {"divine sacrifice", "divine hymn", "power infusion"});
 
-    // Under Firefighter melee hold the sector opposite the ranged wedge. VX-001 only turns to face each
-    // Rapid Burst target, so "behind" moves every 3.2 s and walks the melee off their sector.
+    // Under Firefighter melee hold the sector opposite the ranged wedge in phases 2 and 4. VX-001 turns
+    // to face each Rapid Burst and Hand Pulse target, so "behind" moves every couple of seconds and
+    // walks the melee off their sector. Any mode during a barrage too: the dodge hands the tick back
+    // at the band edge, and set behind walked a melee straight back into the beams.
     e.Block("mimiron vx001 facing guard", Role::Any, MimironMeleeSector, Family::TankFace, {"set behind"});
 
     e.Tick(MimironTick);

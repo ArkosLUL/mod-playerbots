@@ -308,10 +308,11 @@ constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_BEARINGS = 12;
 constexpr float ULDUAR_MIMIRON_PHASE4_TANK_CLEAR_RADIUS = 14.0f;
 
 // Drag once the live spot carries more than the limit, only somewhere cleaner by the margin, then
-// sit for the hold. Every drag walks the chassis, the melee on it and the barrage apex.
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT = 1;
+// sit for the hold. Every drag walks the chassis, the melee on it, the barrage apex and the ranged
+// wedge, which is anchored on VX-001, so a few nodes at the edge of the circle aren't worth one.
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT = 3;
 constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_MARGIN = 2;
-constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS = 20000;
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS = 30000;
 
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.

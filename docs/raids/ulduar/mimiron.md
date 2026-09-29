@@ -547,10 +547,13 @@ marker on the ring is not.
 
 `mimiron approach target` stands down for the window as well: the barrage dodge owns melee
 positioning then, that node's destinations are never cone-screened, and the two traded one bot
-**78** times in a phase 4. So does the unstacker, `combat formation move`, for everyone: the dodge
-hands the tick back while a bot holds at the band edge, and melee have no phase 4 slot for
-`mimiron formation guard` to stop it at. On 2026-09-23 it walked five holding melee back into
-one phase 4 band, one onto VX-001's centre, all dead in 6 s.
+**78** times in a phase 4. So does the unstacker, `combat formation move`, for everyone, and
+`set behind` and `tank face` for melee (`mimiron vx001 facing guard`): the dodge hands the tick back
+while a bot holds at the band edge, and `mimiron formation guard` stops the unstacker only on a slot,
+which normal-mode phase 4 melee lack. On 2026-09-23 the unstacker walked five holding melee back into
+one phase 4 band, one onto VX-001's centre, all dead in 6 s; on 2026-09-29 `set behind` and `refuge
+ccw` traded one melee four times in 3 s until a 19k tick killed it, one of 105 melee `set behind`
+moves inside that pull's phase 4 windows.
 
 **Radius is the one free parameter, so it dodges the fire — the walk as well as the endpoint.** On
 2026-09-11 a fixed-radius orbit parked four bots on 7-10 nodes at (2752-2755, 2553-2558), and two
@@ -706,9 +709,15 @@ screen: the fan, the slot approaches, the target approach and the arc spread's s
 destination inside the live cone (`IsMimironSpotRapidBurstSafe`), so nothing walks into one, and a
 bot in it waits the 3 s out.
 
-**Hand Pulse (64348/64352, 64536/64537 on 25-man) is the same 60° cone**, every 1.75 s in phase 4,
-and is not covered. The one long phase 4 (2026-09-11 night) took 1.86M from it, 56-82k on most of the
-raid, with the ACU on a warlock 70% of the phase.
+**Hand Pulse (64348/64352, 64536/64537 on 25-man) is the same 60° cone**, an 850 ms cast every
+1.75 s in phase 4 at a uniformly random player within 80 yd (`SelectTargetFromPlayerList`), so only
+the layout helps. One 2026-09-11 night phase 4 took 1.86M from it, 56-82k on most of the raid, with the
+ACU on a warlock 70% of the phase. On 2026-09-29
+it took 2.64M and seven of fourteen phase 4 deaths, hitting **5.56** bots a cast against 6.0 for ±30°
+off VX-001: 30% of the living raid, ranged and healers in the 120° wedge, melee wherever `set behind`
+put them. Scored on those positions with a random target, melee opposite the wedge give **4.45**
+(−19%), ranged spread over 240° as well 3.31, everyone evenly round 2.96. Widening the wedge would put
+more of the raid in every barrage's ~240° band, so only the melee move: `p4melee` below.
 
 The ring survives the correction. Six fixed phase-2 spots used to stack the raid into three clumps,
 which is the worst shape against anything conical whatever its width; a ring of radius 22 with one
@@ -726,6 +735,9 @@ re-aim. The 5 yd slot tolerance is ~32° there, and 77° off stays past the 90°
 ends. Mid-barrage the slot is in the swept band, so the arc spread waits and the barrage dodge owns
 the melee. A melee substitute stays 5.0-10.0 yd from VX-001 and off the wedge's line, and skips the
 Napalm spacing test. `mimiron vx001 facing guard` zeroes `set behind` and `tank face` there.
+Hard-mode phase 4 hands out the same sector as `p4melee`, around VX-001 on the chassis, without the
+main tank, who holds the MK II; melee sent to the ACU (reach 5, so 7.83 yd) close the last yards
+inside the slot tolerance.
 
 **The ring centres on the mech, not the room.** Bots cast out to `AiPlayerbot.SpellDistance` — 28.5
 here, with no `AC_` override — so a ring pinned to the room centre puts the far half of the raid out
@@ -950,7 +962,7 @@ caught **20-30% of the living raid per tick under the wedge against 22-25% under
 the same number. The first reading of it — 1 victim per tick rising to 3 — was measuring a raid the
 Frost Bomb had already cut to 7-10 alive, and is the reason to normalise anything per-tick by the
 living count. `ULDUAR_MIMIRON_PHASE3_WEDGE_HALF_ANGLE` is the knob if the fire still fans out.
-Phase 2 melee get `p2melee` opposite it (Rapid Burst section).
+Phase 2 and 4 melee get `p2melee`/`p4melee` opposite it (Rapid Burst section).
 
 **The Laser Barrage is the one thing that outranks the fire convergence, so `hmwedge` gives way to
 it.** A 120° wedge overlapping the swept band cannot be walked out of once the beams ignite, and
@@ -1087,6 +1099,14 @@ the parts down at 37-60k/s against its 110k. Phase 3 lost two landings in three 
 off a corpse 25 yd away until it despawned, and the first landing came 30 s late (open). Phase 4 lost
 the MK II off the tank and melee to the hold (see the tank and rendezvous sections), and five melee to
 one barrage.
+
+2026-09-29, with those fixes and four healers (the human fifth absent): berserk with **~1.74M** left
+(MK II 7.8%, VX-001 6.7%, ACU 9.8%), the closest yet. Phases took 81.5, 85.7 and 144.7 s, Heroism
+came in phase 2, the landings took 30.6 and 45.3 points and the MK II sat on the tank 88% of phase 4.
+The parts fell ~0.45 %/s each for phase 4's first 50 s, a kill by ~9:00, then 14 bots died before
+10:00 (Hand Pulse 7, Plasma Ball 3, mines 2, the barrage 2) and the rate fell to ~0.1 %/s. Healing
+ran 15.9k/s against 18.3k/s taken; five healers on 09-23 did 21.1k/s. Open: the ACU has no tank, so
+it sat on ranged 82% of phase 4 for 407k and three of the killing blows.
 
 **Open, not fixed: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the whole
 30 s handover, melee and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**,
@@ -1565,14 +1585,22 @@ node claiming every tick, blocking the taunt while healing and splash kept build
 barely moves the floor), and `p4tank` goes out only while the MK II is his or nobody's, so without it
 `reach melee` and his taunt take him back.
 
+**`tank assist` then pulled him off it twice a second.** It reads VX-001, never a victim, as loose: on
+2026-09-29 his target flipped MK II ↔ VX-001 308 times in phase 4, seal procs landed on VX-001 and
+Holy Shield went out 3 times in 171 s. `mimiron phase 4 tank target guard` leaves his phase 4 target
+to `MimironPhase4FocusAction` alone.
+
 **The spot burned, so under Firefighter it moves.** The centre is where `p3tank` stood for three
 minutes, and chains grow toward whoever is nearest: in one pull he alternated arc spread and the
 flame dodge every ~2.5 s, 22-30 yd from the chassis. `GetMimironPhase4TankSpot` keeps the fixed spot
-until more than `_PHASE4_TANK_FIRE_LIMIT` (1) node lies within `_CLEAR_RADIUS` (14 yd: the 9 yd
+until more than `_PHASE4_TANK_FIRE_LIMIT` (3) nodes lie within `_CLEAR_RADIUS` (14 yd: the 9 yd
 melee ring plus a node's 5), then drags to the least-burning of the centre and 8/16/24 yd rings × 12
 bearings, only when it is `_FIRE_MARGIN` (2) cleaner, ties to the shorter drag. It then holds
-`_HOLD_MS` (20 s), and never moves while a barrage spins up or fires, since the chassis carries the
-apex. Staging and normal mode keep the fixed spot.
+`_HOLD_MS` (30 s), and never moves while a barrage spins up or fires, since the chassis carries the
+apex. Staging and normal mode keep the fixed spot. A drag also walks the ranged wedge, anchored on
+VX-001: at 1 node and 20 s one 2026-09-29 phase 4 re-picked six times after the first, three drags of
+25-36 yd between the same two spots, on 3-8 nodes, while its melee took 128k of fire against 137-235k
+on 09-23.
 
 **Self Repair used to hand out the phase 1 spot.** A part going `NON_ATTACKABLE` fails a
 three-attackable test, so the tank read phase 1 and got `p1tank`, 53 yd west, mid-rendezvous, and
@@ -1762,7 +1790,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `core` | The Magnetic Core window is open, which is not the same as the unit being on the floor. Per instance |
 | `carrier` | Who is fetching the core. Per instance |
 | `corestep` | Where that carrier stopped: `no-acu`, `no-corpse` (none with a core left), `walk-corpse`, `loot`, `bags-full`, `pending` (a core is still live), `hold` (waiting for the second), `walk-corpse-second`, `loot-second`, `walk-acu`, `blocked`, `use`, preceded at the use by `chain` (the rest of a bank) or `hold-expiring` (the held one was about to) |
-| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `ring`, `none` — with index/count and the point |
+| `slot` | Which formation shape answered — `p4tank`, `p3wedge`, `p3tank`, `p1tank`, `p1stack`, `hmwedge`, `p2melee`, `p4melee`, `ring`, `none` — with index/count and the point |
 | `stack` | A phase 1 stack anchor switch, `<from>:<nodes> -> <to>:<nodes>`. Per instance |
 | `tankspot` | A Firefighter phase 4 tank spot move, `x,y <old>><new>` nodes within 14 yd. Per instance |
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |

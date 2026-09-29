@@ -2334,17 +2334,19 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         return true;
     }
 
-    // Hard-mode phase 2 melee, tanks too: a sector opposite the ranged wedge. Rapid Burst is a 60
-    // degree cone on a random player, so melee in the wedge's line share every burst with the ranged
-    // behind them, and VX-001 never swings, so which side they hit it from doesn't matter. Measured
-    // from VX-001 itself, not the room-clamped anchor, on the same ring the barrage dodge orbits.
-    if (firefighter && focus->GetEntry() == NPC_VX001 && !focus->GetVehicleBase() &&
+    // Hard-mode melee in phases 2 and 4: a sector opposite the ranged wedge. Rapid Burst and Hand
+    // Pulse are both a 60 degree cone on a random player, so melee in the wedge's line share every
+    // cast with the ranged behind them, and VX-001 never swings, so which side they hit it from
+    // doesn't matter. Measured from VX-001 itself, not the room-clamped anchor, on the same ring the
+    // barrage dodge orbits. In phase 4 the main tank is out of the count, he holds the MK II.
+    if (firefighter && focus->GetEntry() == NPC_VX001 && (phase4 || !focus->GetVehicleBase()) &&
         !PlayerbotAI::IsRanged(bot))
     {
         for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
         {
             Player* member = ref->GetSource();
-            if (!member || !member->IsAlive() || PlayerbotAI::IsRanged(member))
+            if (!member || !member->IsAlive() || PlayerbotAI::IsRanged(member) ||
+                (phase4 && PlayerbotAI::IsMainTank(member)))
                 continue;
 
             if (member == bot)
@@ -2356,7 +2358,7 @@ bool DeriveMimironSpreadSlot(PlayerbotAI* botAI, Player* bot, Position& out, cha
         if (count == 0)
             return false;
 
-        branch = "p2melee";
+        branch = phase4 ? "p4melee" : "p2melee";
 
         float const half = ULDUAR_MIMIRON_PHASE2_MELEE_HALF_ANGLE;
         float const offset = -half + 2.0f * half * (static_cast<float>(index) + 0.5f) / static_cast<float>(count);
