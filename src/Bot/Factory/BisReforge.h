@@ -13,7 +13,9 @@ class Item;
 class Player;
 
 // Safe from map threads, the reforge runs later on the world thread. from and to are ItemModType
-// ids, both 0 asks to remove the item's reforge. No-op without mod-reforging.
+// ids, both 0 asks to remove the item's reforge. Overridden where it would leave the bot further
+// below its hit or expertise cap than the item's current reforge or none. No-op without
+// mod-reforging.
 void RequestBisReforge(Player* bot, Item* item, uint32 from, uint32 to);
 
 #endif

@@ -20,11 +20,32 @@
 #include "ObjectAccessor.h"
 #include "PlayerbotOperation.h"
 #include "PlayerbotWorldThreadProcessor.h"
+#include "ReforgeCaps.h"
+#include "StatsWeightCalculator.h"
 #include "Timer.h"
 #include <memory>
 
+static_assert(ReforgeCaps::MOD_HIT_MELEE == ITEM_MOD_HIT_MELEE_RATING);
+static_assert(ReforgeCaps::MOD_HIT_RANGED == ITEM_MOD_HIT_RANGED_RATING);
+static_assert(ReforgeCaps::MOD_HIT_SPELL == ITEM_MOD_HIT_SPELL_RATING);
+static_assert(ReforgeCaps::MOD_HIT == ITEM_MOD_HIT_RATING);
+static_assert(ReforgeCaps::MOD_EXPERTISE == ITEM_MOD_EXPERTISE_RATING);
+
 namespace
 {
+// Same caps the bot's gear scoring clips hit and expertise at
+ReforgeCaps::Rooms CapRooms(Player* bot)
+{
+    constexpr CombatRating ratings[ReforgeCaps::RATING_COUNT] = {CR_HIT_MELEE, CR_HIT_RANGED, CR_HIT_SPELL,
+                                                                 CR_EXPERTISE};
+    StatsWeightCalculator calculator(bot);
+    ReforgeCaps::Rooms rooms;
+    for (uint8 i = 0; i < ReforgeCaps::RATING_COUNT; ++i)
+        rooms[i] = calculator.CapRoom(bot, ratings[i]);
+
+    return rooms;
+}
+
 // Two writes to one item's reforge close together are two async statements on the same
 // character_reforging row, and several DB worker threads can run them out of order.
 constexpr uint32 REFORGE_WRITE_GAP_MS = 10 * IN_MILLISECONDS;
@@ -82,10 +103,32 @@ public:
         // only bool tests and -> on data: the pointer and std::optional versions of mod-reforging
         // both support those and nothing else in common
         auto data = reforging->GetReforgingData(item);
-        if (data && data->stat_decrease == m_from && data->stat_increase == m_to)
+        ReforgeCaps::Reforge current;
+        if (data)
+            current = {data->stat_decrease, data->stat_increase, static_cast<float>(data->stat_value)};
+
+        ReforgeCaps::Reforge sim{m_from, m_to, 0.0f};
+        if (m_from)
+        {
+            std::vector<_ItemStat> const stats = reforging->LoadItemStatInfo(item);
+            if (_ItemStat const* stat = reforging->FindItemStat(stats, m_from))
+                sim.amount = static_cast<float>(reforging->CalculateReforgePct(stat->ItemStatValue));
+        }
+
+        // sim reforges assume its whole set is on, with only part of it they can drop the bot
+        // below its hit or expertise cap
+        ReforgeCaps::Reforge const pick = ReforgeCaps::Pick(CapRooms(bot), sim, current);
+        if (pick.from != m_from || pick.to != m_to)
+            LOG_DEBUG("playerbots",
+                      "BisReforgeOperation: {} -> {} on item {} would leave {} short of hit or expertise, using {} -> {}",
+                      m_from, m_to, m_entry, bot->GetName(), pick.from, pick.to);
+
+        uint32 const from = pick.from;
+        uint32 const to = pick.to;
+        if (data && data->stat_decrease == from && data->stat_increase == to)
             return true;
 
-        if (!data && !m_from)
+        if (!data && !from)
             return true;
 
         // two ApplyEnchantAndGemsNew runs can queue requests for one item into the same batch
@@ -107,9 +150,9 @@ public:
                 return false;
             }
         }
-        else if (!reforging->Reforge(bot, m_itemGuid, m_from, m_to))
+        else if (!reforging->Reforge(bot, m_itemGuid, from, to))
         {
-            LOG_DEBUG("playerbots", "BisReforgeOperation: reforge {} -> {} refused on item {} (bot {})", m_from, m_to,
+            LOG_DEBUG("playerbots", "BisReforgeOperation: reforge {} -> {} refused on item {} (bot {})", from, to,
                       m_entry, bot->GetName());
             return false;
         }

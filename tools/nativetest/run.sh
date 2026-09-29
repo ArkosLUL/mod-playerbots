@@ -17,7 +17,7 @@ set -e
 for test in /module/tools/nativetest/*_test.cpp; do
     name=$(basename "$test" .cpp)
     c++ -std=gnu++20 -Wall -Wextra -Werror -g -O1 -pthread -fsanitize="$SANITIZE" \
-        -I /module/src/Ai/Raid -I /module/src/Mgr/Item "$test" -o "/tmp/$name"
+        -I /module/src/Ai/Raid -I /module/src/Mgr/Item -I /module/src/Bot/Factory "$test" -o "/tmp/$name"
     "/tmp/$name"
 done
 '

@@ -542,14 +542,21 @@ the server can actually hand out. It still has to pass `spellGatesPass` (`LimitE
 `GetRuneforgeEnchantId` (frost DK runeforges), then the cache scan.
 
 **Reforges** run only on an exact rank-1 item with `AiPlayerbot.BisDataset.Reforges` on, and an
-exact item the sim left unreforged loses any reforge it has. Every map thread reads mod-reforging's
-`reforgingDataMap` when it applies item mods, so a write from a bot's map thread would race the
-others: the map thread only queues `{bot, item, entry, from, to}` (`src/Bot/Factory/BisReforge.cpp`;
-`from == to == 0` requests removal), and the world thread applies it after `sMapMgr->Update` has
-waited out every map thread. Switching to a different reforge takes two `ApplyEnchantAndGemsNew`
-runs: the first only removes the old one. At most one write per item per 10s, since
-`RemoveReforge`'s DELETE and `Reforge`'s INSERT share the `character_reforging` row and can race
-once `CharacterDatabase.WorkerThreads > 1`.
+exact item the sim left unreforged loses any reforge it has, caps permitting (below). Every map
+thread reads mod-reforging's `reforgingDataMap` when it applies item mods, so a write from a bot's
+map thread would race the others: the map thread only queues `{bot, item, entry, from, to}`
+(`src/Bot/Factory/BisReforge.cpp`; `from == to == 0` requests removal), and the world thread
+applies it after `sMapMgr->Update` has waited out every map thread. Switching to a different
+reforge takes two `ApplyEnchantAndGemsNew` runs: the first only removes the old one. At most one
+write per item per 10s, since `RemoveReforge`'s DELETE and `Reforge`'s INSERT share the
+`character_reforging` row and can race once `CharacterDatabase.WorkerThreads > 1`.
+
+**Caps overrule the sim's reforge.** The sim reforges for its full set, so on a partly geared bot
+its `hit -> haste` can drop hit below the cap. The world thread takes whichever of the sim's
+reforge, the item's current one and none leaves the bot least rating short of its caps, ties in
+that order (`src/Bot/Factory/ReforgeCaps.h`): a bot capped either way follows the sim, one below
+cap keeps an old reforge into hit. The caps are `StatsWeightCalculator::CapRoom`, the ones its
+overflow penalty clips scores at: hit except for healers, expertise for melee only.
 
 **This depends on mod-reforging's local, uncommitted lock patch** (`modules/mod-reforging`). Once
 bots carry reforges, mod-reforging itself erases their entries on map threads whenever a bot
@@ -568,7 +575,8 @@ to.
 **Known gaps:** acbis's roster exports carry no healer blocks, so healers stay on the lists. acbis
 labels a raider "Blood tank" or "Feral tank" only when the raid's main-tank flag is set, so an
 unflagged tanking DK or bear misses its roster subject and falls to a tank spec subject or the
-lists.
+lists. Pinned gems follow the sim whatever the bot's caps; only unpinned sockets are scored
+against them.
 
 ## Config
 

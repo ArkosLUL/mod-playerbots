@@ -1151,57 +1151,76 @@ bool StatsWeightCalculator::NotBestArmorType(uint32 item_subclass_armor)
     return false;
 }
 
+CombatRating StatsWeightCalculator::HitCapRating() const
+{
+    if (hitOverflowType_ & CollectorType::SPELL)
+        return CR_HIT_SPELL;
+
+    if (hitOverflowType_ & CollectorType::MELEE)
+        return CR_HIT_MELEE;
+
+    return CR_HIT_RANGED;
+}
+
+float StatsWeightCalculator::HitRoom(Player* player) const
+{
+    CombatRating const rating = HitCapRating();
+    float hit_current, hit_overflow;
+    if (rating == CR_HIT_SPELL)
+    {
+        hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_SPELL_HIT_CHANCE);
+        hit_current +=
+            player->GetTotalAuraModifier(SPELL_AURA_MOD_INCREASES_SPELL_PCT_TO_HIT);  // suppression (18176)
+        hit_current += player->GetRatingBonusValue(CR_HIT_SPELL);
+
+        if (cls == CLASS_PRIEST && tab == PRIEST_TAB_SHADOW && player->HasAura(SPELL_SHADOW_FOCUS))
+            hit_current += 3;
+        if (cls == CLASS_MAGE && tab == MAGE_TAB_ARCANE && player->HasAura(SPELL_ARCANE_FOCUS))
+            hit_current += 3;
+
+        hit_overflow = SPELL_HIT_OVERFLOW;
+    }
+    else
+    {
+        hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
+        hit_current += player->GetRatingBonusValue(rating);
+        hit_overflow = rating == CR_HIT_MELEE ? MELEE_HIT_OVERFLOW : RANGED_HIT_OVERFLOW;
+    }
+
+    return (hit_overflow - hit_current) / player->GetRatingMultiplier(rating);
+}
+
+float StatsWeightCalculator::ExpertiseRoom(Player* player) const
+{
+    // already includes the rating part (Player::UpdateExpertise)
+    float const expertise_current = player->GetUInt32Value(PLAYER_EXPERTISE);
+    return (EXPERTISE_OVERFLOW - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE);
+}
+
+std::optional<float> StatsWeightCalculator::CapRoom(Player* player, CombatRating rating) const
+{
+    if (rating == CR_EXPERTISE)
+        return (type_ & CollectorType::MELEE) ? std::optional<float>(ExpertiseRoom(player)) : std::nullopt;
+
+    // healing can't miss, so no hit cap for healers here (the overflow penalty still clips it)
+    if (!is_heal_ && rating == HitCapRating())
+        return HitRoom(player);
+
+    return std::nullopt;
+}
+
 void StatsWeightCalculator::ApplyOverflowPenalty(Player* player)
 {
     {
-        float hit_current, hit_overflow;
-        float validPoints;
-        if (hitOverflowType_ & CollectorType::SPELL)
-        {
-            hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_SPELL_HIT_CHANCE);
-            hit_current +=
-                player->GetTotalAuraModifier(SPELL_AURA_MOD_INCREASES_SPELL_PCT_TO_HIT);  // suppression (18176)
-            hit_current += player->GetRatingBonusValue(CR_HIT_SPELL);
-
-            if (cls == CLASS_PRIEST && tab == PRIEST_TAB_SHADOW && player->HasAura(SPELL_SHADOW_FOCUS))
-                hit_current += 3;
-            if (cls == CLASS_MAGE && tab == MAGE_TAB_ARCANE && player->HasAura(SPELL_ARCANE_FOCUS))
-                hit_current += 3;
-
-            hit_overflow = SPELL_HIT_OVERFLOW;
-            validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_SPELL);
-        }
-        else if (hitOverflowType_ & CollectorType::MELEE)
-        {
-            hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
-            hit_current += player->GetRatingBonusValue(CR_HIT_MELEE);
-            hit_overflow = MELEE_HIT_OVERFLOW;
-            validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_MELEE);
-        }
-        else
-        {
-            hit_current = player->GetTotalAuraModifier(SPELL_AURA_MOD_HIT_CHANCE);
-            hit_current += player->GetRatingBonusValue(CR_HIT_RANGED);
-            hit_overflow = RANGED_HIT_OVERFLOW;
-            validPoints = (hit_overflow - hit_current) / player->GetRatingMultiplier(CR_HIT_RANGED);
-        }
         // add before flooring, or an over-capped bot gets the whole item's share back as room
-        validPoints = std::max(0.0f, validPoints + replaced_hit_);
+        float const validPoints = std::max(0.0f, HitRoom(player) + replaced_hit_);
         collector_->stats[STATS_TYPE_HIT] = std::min(collector_->stats[STATS_TYPE_HIT], validPoints);
     }
 
     {
         if (type_ & CollectorType::MELEE)
         {
-            float expertise_current, expertise_overflow;
-            // already includes the rating part (Player::UpdateExpertise)
-            expertise_current = player->GetUInt32Value(PLAYER_EXPERTISE);
-            expertise_overflow = EXPERTISE_OVERFLOW;
-
-            float const validPoints = std::max(
-                0.0f, (expertise_overflow - expertise_current) / player->GetRatingMultiplier(CR_EXPERTISE) +
-                          replaced_expertise_);
-
+            float const validPoints = std::max(0.0f, ExpertiseRoom(player) + replaced_expertise_);
             collector_->stats[STATS_TYPE_EXPERTISE] = std::min(collector_->stats[STATS_TYPE_EXPERTISE], validPoints);
         }
     }
