@@ -30,6 +30,14 @@ public:
     bool IsActive() override;
 };
 
+class IcehowlBreathSpreadTrigger : public Trigger
+{
+public:
+    IcehowlBreathSpreadTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "icehowl breath spread") {}
+    bool IsActive() override;
+};
+
 class ToCIcehowlTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -41,6 +49,8 @@ public:
             &ToCIcehowlTriggerContext::icehowl_charge_incoming;
         creators["icehowl frothing rage"] =
             &ToCIcehowlTriggerContext::icehowl_frothing_rage;
+        creators["icehowl breath spread"] =
+            &ToCIcehowlTriggerContext::icehowl_breath_spread;
     }
 
 private:
@@ -54,6 +64,10 @@ private:
 
     static Trigger* icehowl_frothing_rage(PlayerbotAI* botAI) {
         return new IcehowlFrothingRageTrigger(botAI);
+    }
+
+    static Trigger* icehowl_breath_spread(PlayerbotAI* botAI) {
+        return new IcehowlBreathSpreadTrigger(botAI);
     }
 };
 

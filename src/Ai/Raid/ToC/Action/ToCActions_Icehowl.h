@@ -6,6 +6,7 @@
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
 #include "RaidObs.h"
+#include "ToCActions_NorthrendBeasts.h"
 
 class IcehowlTankHoldBossAction : public AttackAction
 {
@@ -38,6 +39,14 @@ public:
     bool Execute(Event event) override;
 };
 
+class IcehowlMoveToBreathStandAction : public NorthrendBeastsWalkAction
+{
+public:
+    IcehowlMoveToBreathStandAction(PlayerbotAI* botAI, std::string const name = "icehowl move to breath stand")
+        : NorthrendBeastsWalkAction(botAI, name) {};
+    bool Execute(Event event) override;
+};
+
 class ToCIcehowlActionContext : public NamedObjectContext<Action>
 {
 public:
@@ -49,6 +58,8 @@ public:
             &ToCIcehowlActionContext::icehowl_clear_charge_path;
         creators["icehowl tank defensive"] =
             &ToCIcehowlActionContext::icehowl_tank_defensive;
+        creators["icehowl move to breath stand"] =
+            &ToCIcehowlActionContext::icehowl_move_to_breath_stand;
     }
 
 private:
@@ -62,6 +73,10 @@ private:
 
     static Action* icehowl_tank_defensive(PlayerbotAI* botAI) {
         return new IcehowlTankDefensiveAction(botAI);
+    }
+
+    static Action* icehowl_move_to_breath_stand(PlayerbotAI* botAI) {
+        return new IcehowlMoveToBreathStandAction(botAI);
     }
 };
 

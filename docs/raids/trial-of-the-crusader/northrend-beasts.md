@@ -78,11 +78,16 @@ Combat reach 6.5, so melee stand within 9.3 yd of his centre.
   death sends the snobold back to a free seat at full health, to be thrown again. When Gormok dies
   the seated snobolds despawn and the riding ones live on.
 - **Fire Bomb**: only a snobold still on Gormok throws, every 20-30 s, at a random alive player outside
-  his melee range. NPC 34854 (60 s) appears at the player; a 1 s cast and a 14 yd/s missile later,
-  66317 hits 8 yd around it (4.8-6.2k, no difficulty row). Then 66320 (67472 / 67473 / 67475) pulses
-  every second at **2 yd** — `SpellInfoCorrections` cuts the DBC's 5 — and on heroic adds a stacking
-  1k / 2k DoT per 2 s (20 s). The NPC is non-selectable with a periodic damage aura, so the generic
-  `avoid aoe` flees the pulse; the 8 yd impact lands before that aura and nothing flees it.
+  his melee range. NPC 34854 (`TEMPSUMMON_TIMED_DESPAWN` 60 s, so its age is `60000 - GetTimer()`)
+  appears at the player, and the snobold fires two 14 yd/s missiles at it: the triggered aura 66318
+  (`SpellInfoCorrections` gives it the speed) lands after the flight, the 1 s cast 66313 a second
+  later, when 66317 hits 8 yd round the NPC, centre to centre (4.8-6.2k, no difficulty row). Impact
+  is thus `1 s + distance / 14` after the spawn, measured from the snobold's seat: 1.7 s for a player
+  just outside his melee, 2.8 s at 25 yd. 66318 then pulses 66320 (67472 / 67473 / 67475) every
+  second, the first tick with the impact, at **2 yd** — `SpellInfoCorrections` cuts the DBC's 5 — and
+  on heroic adds a stacking 1k / 2k DoT per 2 s (20 s). The NPC (combat reach 1) is non-selectable
+  with that aura, so the generic `avoid aoe` sees it from the aura's landing, fires within 4.5 yd
+  (2 yd plus both reaches) and steps 3 yd: it flees the pulse, never the impact.
 
 **What the bots do.**
 
@@ -111,9 +116,26 @@ Combat reach 6.5, so melee stand within 9.3 yd of his centre.
   Beasts-prefixed node, so a heroic carrier still dodges the worms and Icehowl's charge.
 - **Stomp** (`gormok stomp range` → `gormok leave stomp range`): a ranged DPS or healer with no
   snobold inside 22 yd of his centre steps out to 24, near his victim: the lockout is 20 yd centre to
-  centre, and `spellDistance` 28.5 alone doesn't keep casters past it.
-- Both walks wait out a pinning cast rather than interrupt it (neither mechanic is lethal), and
-  re-issue one that Head Crack or a channel stopped short ([pitfalls.md](../../engine/pitfalls.md)).
+  centre, and `spellDistance` 28.5 alone doesn't keep casters past it. Its spot also clears young
+  bombs (below) by 11 yd where one can, so stomp and dodge don't trade a caster until the impact; a
+  bomb landing within 11 of that spot mid walk re-plans it.
+- **Fire Bomb** (`gormok fire bomb incoming` → `gormok dodge fire bomb`, `ACTION_EMERGENCY + 2`):
+  - **Model**, per instance: a grid scan every 200 ms while Gormok is engaged or a bomb is young:
+    short of the impact above plus 0.5 s, the distance taken on first sight from its summoner, else
+    Gormok, else a flat 5 s.
+  - **Who**: a living bot within 9 yd (2D) of a young bomb, unless an engaged beast is hitting it:
+    moving his victim drags the beast and its melee, and 5-6k on a tank is healable.
+  - **Where**: the nearest spot within 20 yd clear of young bombs by 11, landed bombs by 6 (past
+    `avoid aoe`'s 4.5, whose flee can step back into a young bomb's trigger) and, for a ranged DPS
+    or healer with no snobold, Gormok by the stomp's 24. Ties go near Gormok for melee DPS and
+    carriers, else near his victim. With no spot it drops Gormok's circle, then the landed bombs,
+    then takes young bombs alone at 9.5 (`tight`). 66317 is a creature's 8 yd area, centre to
+    centre, and a dodge lands past its own trigger ([pitfalls.md](../../engine/pitfalls.md)).
+  - **`MOVEMENT_FORCED`**, to beat a combat walk in flight (stomp, carrier, reach, `avoid aoe`)
+    inside the 1.7-3 s budget; its own walk in flight is left alone (`hold`) while its spot clears
+    every young bomb by 9.5. `icehowl charge guard` still zeroes it. `nb.bomb`.
+- All three walks wait out a pinning cast rather than interrupt it (none is lethal), and re-issue one
+  that Head Crack or a channel stopped short ([pitfalls.md](../../engine/pitfalls.md)).
 
 ## Acidmaw & Dreadscale
 
@@ -136,10 +158,14 @@ Combat reach 12, so melee range is 14.8 yd.
   says about max range; ranged already stand outside.
 - **Ferocious Butt** (66770 / 67654 / 67655 / 67656) on his victim every 15-30 s: 2.5-3 s stun and
   42k / 69k / 55k / 83k.
-- **Arctic Breath** (66689 / 67650 / 67651 / 67652), first at 14 s then every 20-30 s, at a random
-  target within 90 yd: a 100 yd cone, 5 s freeze and 3k / 4k / 4k / 6k per second. The cone is **60°
-  on 10N only** (`spell_cone` row 66689); the other three ids have no row, so
-  `TARGET_UNIT_CONE_ENEMY_24` makes it 24°.
+- **Arctic Breath** (66689 / 67650 / 67651 / 67652), first at 14 s then every 20-30 s, and 5-8 s after
+  a charge ends in rage, 20-23 s after a daze, at a random player within 90 yd off his threat list,
+  tank included. An instant 5 s channel: `Spell::_cast` faces him to the target, then picks the cone's
+  victims once, so nothing telegraphs it and only standing apart beforehand helps. The cone reaches
+  100 yd from his centre and is **60° wide on 10N only** (`spell_cone` row 66689; the other three ids
+  have no row, so `TARGET_UNIT_CONE_ENEMY_24` makes it 24°). Its bisector is the target's bearing, so
+  another player is hit only within half the width of it, 30° or 12°, at any distance. 5 s stun and
+  3k / 4k / 4k / 6k a second, 15k / 20k / 20k / 30k in all.
 
 **The charge**, 30 s after the pull, then 30-50 s after a rage or 45-65 s after a daze, whose
 `DelayEvents(15s)` also holds the next jump. He is `REACT_PASSIVE` while in combat only during this
@@ -185,6 +211,47 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
 - **`icehowl charge guard`**, gaze to the charge's end, every bot: zeroes every mover but attacks and
   the dodge, and gap closers, `blink` and `disengage` too. Melee chasing his start point meet the first
   contact test.
+- **Arctic Breath spread** (`icehowl breath spread` → `icehowl move to breath stand`,
+  `ACTION_RAID + 2`), by bearing round him, since the cone ignores distance (guide: a half circle
+  behind him, healers apart). Per instance, read once per ms:
+  - **On** while he is the only beast engaged, not passive, no charge is latched, and his victim is a
+    player in his melee range: a victim out of reach means he is walking after it (Whirl, a charge's
+    end), and a heroic overlap is the worm rules'. Off keeps the deal; Icehowl disengaged clears it.
+  - **Bearings** step by half the cone plus 6° (18°, 36° on 10N; the cone from the remapped id's
+    `spell_cone`, else 24°), the 6° covering 3° of stand error either side. They run outward from
+    straight behind him, `k` = 0, 1, -1, 2, …, never within a step plus the 30° re-latch turn of his
+    front (±126° at most, ±108° on 10N), so a breath on the tank misses them. Each is probed 34 yd
+    out (the ranged band's 25, his 8 yd re-latch drift, 1 spare) along the player collision path
+    (the floor is a GO, [README.md](README.md#arena-floor)) and kept with 22.5 yd of room, up to 11
+    (5 on 10N), a half circle; a walled one is replaced further round. They re-latch, `k` kept, when
+    he moves 8 yd, his victim's bearing turns 30° (Whirl throws the tank ~31 yd every 15-20 s and he
+    follows), or his drift cuts a kept bearing's room under 22.5.
+  - **Deal**, sticky while its bearing is kept: living non-tank bots of the group (humans can't be
+    moved, tanks hold him), rebuilt each second, dealt healers, ranged, then melee, each by guid. A
+    healer takes the bearing with fewest healers, then nearest 60° off his back (~27 yd from the tank
+    at 17 yd out, ~30 straight behind), then fewest bots; anyone else the fewest bots nearest his
+    back. About two share a bearing on 25-man, melee inside ranged: victims per breath step with
+    spacing ([pitfalls.md](../../engine/pitfalls.md)), and 20 bots spaced evenly, closer than the
+    half-width, would freeze three. Melee take only bearings within 57° of his back (90° less the
+    30° turn and 3° of stand error): past 90° he parries them and hastes his next swing, carrying
+    neither `NO_PARRY` flag. A melee with none kept gets no bearing, and `set behind` places it.
+  - **Stand**: his spot plus the bot's own distance clamped into its band, capped at the bearing's
+    room − 1, less his drift along it since the probe
+    ([raid-mechanics-lessons.md](../../engine/raid-mechanics-lessons.md): clamp, don't chase).
+    Judged in his frame, as the breath aims: fires 3° off the bearing (the margin's share) or 1 yd
+    outside the band, arrives at 1.5° and 0.5. Melee 8-13 (inside 14.8), healers 16.5-18.5 (heal
+    reach to the tank and the flank ranged), ranged 21.5-25; the healer and ranged floors clear
+    Whirl's 15 and a hunter's minimum (5 + 14.8) by more than that 1 yd (park tolerance, same doc).
+    `MOVEMENT_COMBAT` and no interrupt: 15-30k over 5 s is healable, and the first breath after a
+    charge is 5 s or more out.
+  - **Healer yield**: a healer holds off while its `party member to heal` is out of heal reach of
+    its stand, by `PartyMemberToHealOutOfSpellRangeTrigger`'s test. Heal picks go out to 38.5 yd and
+    `reach party member to heal` walks past heal range + 1, so a stand fighting it stops the
+    healing; measured from the bot, the reach walk's arrival would end the yield and walk it back.
+  - **`icehowl breath spread guard`** zeroes `CombatFormationMoveAction` for a bot holding a bearing
+    while the encounter is live: `set behind` moves melee in his front half to ±108° off his facing,
+    off a wrapped bearing, and he faces each breath target for 5 s.
+  - `nb.spread`, `nb.arc`.
 - **Hold** (`icehowl tank duty` → `icehowl tank hold boss`): RTI; skull only while he is the only
   beast engaged, so in a heroic overlap two holds don't trade it every tick; taunt only while his
   victim isn't a tank and he isn't passive; no drag, since every charge starts at the centre and
@@ -203,10 +270,25 @@ the hunters' generic `tranquilizing shot enrage` node covers normal only.
   and its keep-moving remedy is not the mechanic above.
 - The worm holds pick their worm by form, not by `GetBeastOfDuty`, so with neither worm mobile, or a
   lone survivor not yet up mobile, the `WormMobile` holder has nothing to hold.
-- Arctic Breath has no spread and Fire Bomb's 8 yd impact no dodge.
 - No Hand of Protection on a snobolled healer or caster, no external on Ferocious Butt (guide).
 - Heroic Frothing Rage can't be dispelled; only the holder's defensive answers it.
 - Melee eat every Whirl.
+- No spread against Fire Bomb in Gormok's stage (guide: stay spread); the impact dodge is the only
+  answer.
+- A caster pinned by its own cast waits it out and can eat the impact.
+- The bomb dodge ignores worm hazards in a heroic Gormok + worms overlap.
+- No raid cooldown on Arctic Breath (Divine Sacrifice, Aura Mastery with Frost Resistance Aura).
+- Humans and tanks hold no bearing, so a breath on one can catch the bots on that bearing, and with
+  about two to a bearing on 25-man a breath still freezes two.
+- No spread in a heroic worms + Icehowl overlap.
+- Melee with every bearing within 57° of his back walled hold none, and `set behind` stacks them
+  behind him, so a breath on one freezes them all.
+- With no wall tanking, Whirl moves him every 15-20 s and the whole spread walks after him.
+- Unverified live: if every bearing probe fails against the GO floor, `nb.arc` stays 0 and the
+  spread never runs.
+- The stomp and carrier walks (`MOVEMENT_COMBAT`) can't re-aim while their own walk is in flight
+  until the booking runs out or the stall clear fires; a dodge spot `MoveTo` refuses (no path) while
+  an earlier dodge walk is in flight notes `locked` until that booking expires.
 
 ## What a trace answers
 
@@ -223,18 +305,29 @@ Position, verdicts and movement come from the raid-agnostic streams. The Beasts 
 | `charge` | 0 none, 1 crash, 2 gaze, 3 charge, 4 daze, 5 rage. Per instance |
 | `gaze` | The gaze target. Per instance |
 | `dodge` | The charge dodge's branch: `move <yd>` walk issued, its length; `tight` walk to a 13 yd spot; `hold` its own walk in flight; `clear` arrived, already there, or parked past 13; `stunned` can't move; `locked` another forced walk holds movement; `none` no spot within 30 yd |
+| `spread` | A non-tank bot's bearing `k` from straight behind Icehowl (`0`, `1`, `-1`, …), or `none` while the layout is off or it holds none. Written when a trigger asks |
+| `arc` | Bearings the layout kept, 0 while it is off. Per instance |
+| `bomb` | The Fire Bomb dodge's branch: `move <yd>` walk issued, its length; `tight` walk issued to a 9.5 yd spot; `hold` its own walk in flight; `pinned` a cast pins its feet; `stunned` can't move; `none` no spot within 20 yd; `locked` `MoveTo` refused the walk (a walk at `MOVEMENT_FORCED` or higher holds movement, or no path to the spot); `clear` outside every young bomb's trigger, or a beast is hitting it |
 
 The lane is a `haz` row, 66734, shape `lane`: origin 35 yd behind the centre, `ex`/`ey` its end,
 `half` 12. Written at the gaze and again when the line freezes at the jump back; the last in a
 cycle is his path. It never reaches `snap.hz`, so no death block says STOOD IN for Trample.
+
+Each Fire Bomb is one `haz` row, 66317, shape `circle`, `rad` 8, at the bomb, written by the first bot
+to see it young; `ttl` is the modelled time left to the impact, not a measured one. It never reaches
+`snap.hz` either.
 
 `tools/botobs/bosses/northrend_beasts.py <file>` reads the rest: stage spans with the deaths in each
 and when each beast first targeted someone (`--stage`); duties per tank, every change of Gormok's
 victim with both holders' Impale stacks, peak stacks, `nb.swap` branches, `gormok tank swap taunt`
 verdicts and defensive picks (`--tanks`); per charge the gaze target, lane, outcome, who stood within
 12 yd of the lane's end at it (nearest snapshot), dodge branches per bot and Trample victims
-(`--charge`); Snobolled! 66406 spans per rider with role and seconds carried, and each DPS's picks by
-rider role (`--snobold`).
+(`--charge`); per Arctic Breath its target, who froze (applies within 1 s) with their `nb.spread`, who
+the cone held in the snapshot nearest the cast (30° or 12° off the target's bearing), `nb.arc`, and
+times frozen per bot (`--breath`); Snobolled! 66406 spans per rider with role and seconds carried,
+and each DPS's picks by rider role (`--snobold`); per bomb its target (the nearest member), the 66317
+hits up to 1.5 s past the modelled impact, each given to the nearest bomb whose window holds it, who
+stood within 8 yd at the impact, and `nb.bomb` branches per bot, `clear` included (`--bomb`).
 
 Still invisible: creature auras, so Staggered Daze, Frothing Rage and Rising Anger never get an aura
 row, and `charge` 4 and 5 are the only record of how a charge ended.

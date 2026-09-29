@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Score a Northrend Beasts pull from a RaidObs trace: the stages, the tank duties, the charge, snobolds.
+"""Score a Northrend Beasts pull from a RaidObs trace: the stages, the tank duties, the charge, Arctic
+Breath, snobolds, Fire Bomb.
 
     northrend_beasts.py <file>             every section
     northrend_beasts.py <file> --stage     which beasts were up when, deaths per stage, each beast's engage
     northrend_beasts.py <file> --tanks     tank duties, Gormok's victims with Impale stacks, swaps, defensives
     northrend_beasts.py <file> --charge    every Icehowl charge: gaze, lane, outcome, who stood at its end
+    northrend_beasts.py <file> --breath    every Arctic Breath: target, who froze, who the cone predicts, spread
     northrend_beasts.py <file> --snobold   who carried a snobold and for how long, and what the DPS picked
+    northrend_beasts.py <file> --bomb      every Fire Bomb: target, impact hits, who stood inside, dodges
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -19,13 +22,23 @@ What the generic views get wrong here, and what this reads instead:
   snapshot instead: the script tests contact on arrival, 12 yd round his end point.
 - **Impale sits on the tank**, so its stacks are in the `aura` rows' `st`, under any of the four
   difficulty ids. A taunt that lands shows as a change in Gormok's target column, not as an action.
-- **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dodge` and `nb.defensive` are per-bot change-only
-  notes**: a bot that stays on one answer writes one row, so counts here are changes, not ticks.
+- **Arctic Breath picks its victims once, at the cast**, inside half the cone's width of the target's
+  bearing from Icehowl: 30° on 10N (`hdr.diff` 0), 12° on the rest. `--breath` predicts that set from
+  the snapshot nearest the cast and prints it beside the `aura` applies; a mismatch is a bot that
+  moved between that snapshot and the cast.
+- **Fire Bomb's impact has no world object.** The NPC is at best a `snap.u` row and nothing marks when
+  66317 lands. Each bomb writes one `haz` `circle` row whose `ttl` is the modelled impact, not a
+  measured one, so `--bomb` takes 66317 hits up to 1.5 s past it.
+- **`nb.tank`, `nb.swap`, `nb.snobold`, `nb.dodge`, `nb.spread`, `nb.bomb` and `nb.defensive` are
+  per-bot change-only notes**: a bot that stays on one answer writes one row, so counts here are
+  changes, not ticks. `nb.bomb` writes `clear` whenever a bot is outside every young bomb's trigger,
+  so a dodge that repeats the last one's branch still shows. `nb.arc` is one value for the raid.
 """
 from __future__ import annotations
 
 import bisect
 import collections
+import math
 import pathlib
 import re
 import sys
@@ -35,7 +48,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.encounter import encounter_of  # noqa: E402
-from raidobs.geometry import dist2, frames, guids_of_entry, radius  # noqa: E402
+from raidobs.geometry import NEAREST, at, dist2, frames, guids_of_entry, radius  # noqa: E402
 from raidobs.probes import emitted_keys, holder_spans, latch_spans, silent_keys  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, notes, roster_guids  # noqa: E402
 
@@ -50,8 +63,10 @@ BEASTS = (("Gormok", NPC_GORMOK), ("Acidmaw", NPC_ACIDMAW), ("Dreadscale", NPC_D
 
 # 10N, 25N, 10H, 25H
 SPELL_IMPALE = (66331, 67477, 67478, 67479)
+ARCTIC_BREATH = (66689, 67650, 67651, 67652)
 SPELL_SNOBOLLED = 66406
 SPELL_TRAMPLE = 66734
+SPELL_FIRE_BOMB_IMPACT = 66317
 
 STAGE_BITS = ((1, "gormok"), (2, "worms"), (4, "icehowl"))
 
@@ -62,11 +77,21 @@ SWAP_TAUNT = "gormok tank swap taunt"
 
 # Read from the source so a retune shows up here without a second edit.
 TRAMPLE_RADIUS = radius("ICEHOWL_TRAMPLE_RADIUS")
+FIRE_BOMB_IMPACT_RADIUS = radius("FIRE_BOMB_IMPACT_RADIUS")
 
 # A snapshot further than this from the outcome says nothing about where the raid stood at it.
 NEAREST_TOLERANCE_MS = 1500
 # Trample lands on arrival, a moment after the outcome is read.
 TRAMPLE_SLACK_MS = 2000
+
+# Half of Arctic Breath's cone: `spell_cone` makes 66689 60° wide, the other three ids fall back to
+# TARGET_UNIT_CONE_ENEMY_24.
+BREATH_HALF_WIDTH_10N = 30.0
+BREATH_HALF_WIDTH = 12.0
+# The breath's stun lands with the cast, so an apply this long after it belongs to it.
+BREATH_VICTIM_MS = 1000
+# A bomb's `ttl` is a model of the impact, so its hits are read this far past it.
+BOMB_HIT_SLACK_MS = 1500
 
 
 def pull_end(trace: Trace) -> int:
@@ -270,15 +295,20 @@ def nearest_frame(trace: Trace, when: int) -> dict | None:
     return snaps[pick] if abs(stamps[pick] - when) <= NEAREST_TOLERANCE_MS else None
 
 
-def inside_lane_end(trace: Trace, when: int, end_point) -> set[int]:
-    """Living roster members within Trample's reach of the charge's end point, from the snapshot
-    nearest the outcome."""
+def living_within(trace: Trace, when: int, spot, reach: float) -> set[int]:
+    """Living roster members within `reach` of `spot` in the snapshot nearest `when`."""
     snap = nearest_frame(trace, when)
     if snap is None:
         return set()
     roster = roster_guids(trace)
     return {row[0] for row in snap.get("u", [])
-            if row[0] in roster and row[5] > 0 and dist2(row[1:3], end_point) <= TRAMPLE_RADIUS}
+            if row[0] in roster and row[5] > 0 and dist2(row[1:3], spot) <= reach}
+
+
+def inside_lane_end(trace: Trace, when: int, end_point) -> set[int]:
+    """Living roster members within Trample's reach of the charge's end point, from the snapshot
+    nearest the outcome."""
+    return living_within(trace, when, end_point, TRAMPLE_RADIUS)
 
 
 def charges(trace: Trace) -> list[dict]:
@@ -358,6 +388,104 @@ def show_charge(trace: Trace) -> None:
     print("\n  " + ", ".join(f"{outcome} {n}" for outcome, n in tally.most_common()))
 
 
+def breath_half_width(diff) -> float:
+    return BREATH_HALF_WIDTH_10N if diff == 0 else BREATH_HALF_WIDTH
+
+
+def bearing(origin, point) -> float:
+    return math.degrees(math.atan2(point[1] - origin[1], point[0] - origin[0]))
+
+
+def angle_off(a: float, b: float) -> float:
+    return abs((a - b + 180.0) % 360.0 - 180.0)
+
+
+def value_at(spans, when: int) -> str | None:
+    """The value a span list held at `when`, or None."""
+    for held, start, stop in spans or ():
+        if start <= when < stop:
+            return held
+    return None
+
+
+def breath_cone(trace: Trace, caster: int, target: int, when: int, half: float) -> set[int] | None:
+    """Living roster members inside the cone as the snapshot nearest the cast places them, the target
+    included. None when that snapshot misses him or the target."""
+    snap = nearest_frame(trace, when)
+    if snap is None:
+        return None
+    rows = {row[0]: row for row in snap.get("u", [])}
+    boss, aimed = rows.get(caster), rows.get(target)
+    if boss is None or aimed is None:
+        return None
+    front = bearing(boss[1:3], aimed[1:3])
+    roster = roster_guids(trace)
+    return {guid for guid, row in rows.items() if guid in roster and row[5] > 0
+            and (guid == target or angle_off(bearing(boss[1:3], row[1:3]), front) <= half)}
+
+
+def breaths(trace: Trace) -> list[dict]:
+    """One row per Arctic Breath cast by Icehowl: its target, who froze, who the cone predicts, each
+    victim's `nb.spread` and the raid's `nb.arc` at the cast."""
+    icehowls = guids_of_entry(trace, NPC_ICEHOWL)
+    roster = roster_guids(trace)
+    half = breath_half_width(trace.header.get("diff", 0))
+    applies = [rec for rec in trace.of("aura")
+               if rec.get("sp") in ARCTIC_BREATH and not rec.get("r") and rec.get("d") in roster]
+    spread = holder_spans(trace, "nb.spread")
+    arc = latch_spans(trace, "nb.arc")
+
+    out = []
+    for rec in trace.of("cast"):
+        if rec.get("sp") not in ARCTIC_BREATH or rec.get("s") not in icehowls:
+            continue
+        when = rec["t"]
+        target = rec.get("tgt", 0)
+        victims: list[int] = []
+        for hit in applies:
+            if when <= hit["t"] <= when + BREATH_VICTIM_MS and hit["d"] not in victims:
+                victims.append(hit["d"])
+        out.append({
+            "t": when,
+            "target": target,
+            "victims": victims,
+            "predicted": breath_cone(trace, rec["s"], target, when, half) if target else None,
+            "spread": {guid: value_at(spread.get(guid), when) for guid in victims},
+            "arc": value_at(arc, when),
+        })
+    return out
+
+
+def times_frozen(rows: list[dict]) -> collections.Counter:
+    return collections.Counter(guid for row in rows for guid in row["victims"])
+
+
+def show_breath(trace: Trace) -> None:
+    half = breath_half_width(trace.header.get("diff", 0))
+    print(f"ARCTIC BREATH  (cone half-width {half:.0f} deg)")
+    rows = breaths(trace)
+    if not rows:
+        print("  no Arctic Breath cast")
+        return
+
+    def names(guids) -> str:
+        return ", ".join(trace.name(guid) for guid in sorted(guids, key=trace.name)) or "nobody"
+
+    for row in rows:
+        print(f"  {clock(row['t'])}  on {trace.name(row['target'])} ({trace.role(row['target'])})"
+              f"  nb.arc {row['arc'] if row['arc'] is not None else '-'}")
+        frozen = ", ".join(f"{trace.name(guid)} [{row['spread'][guid] or '-'}]" for guid in row["victims"])
+        print(f"    frozen [nb.spread]: {frozen or 'nobody'}")
+        predicted = "? (no snapshot)" if row["predicted"] is None else names(row["predicted"])
+        print(f"    in the cone: {predicted}")
+
+    counts = [len(row["victims"]) for row in rows]
+    print(f"\n  {len(rows)} breath(s), {sum(counts) / len(counts):.1f} frozen a breath, max {max(counts)}")
+    tally = sorted(times_frozen(rows).items(), key=lambda item: (-item[1], trace.name(item[0])))
+    if tally:
+        print("  times frozen: " + ", ".join(f"{trace.name(guid)} {n}" for guid, n in tally))
+
+
 def rider_spans(trace: Trace) -> dict[int, list[tuple[int, int]]]:
     """Per rider, Snobolled! apply to remove. One still up at the end runs to the end."""
     end = pull_end(trace)
@@ -406,11 +534,104 @@ def show_snobold(trace: Trace) -> None:
               + ", ".join(f"{role} {n}" for role, n in counts.most_common()))
 
 
+def nearest_member(trace: Trace, when: int, spot) -> tuple[int | None, float | None]:
+    """The living roster member nearest `spot` in the snapshot nearest `when`, and how far off."""
+    snap = nearest_frame(trace, when)
+    if snap is None:
+        return None, None
+    roster = roster_guids(trace)
+    living = [(dist2(row[1:3], spot), row[0]) for row in snap.get("u", []) if row[0] in roster and row[5] > 0]
+    if not living:
+        return None, None
+    gap, guid = min(living)
+    return guid, gap
+
+
+def bombs(trace: Trace) -> list[dict]:
+    """One row per Fire Bomb circle: its target, the 66317 hits it took, who stood inside at the
+    modelled impact and each bot's `nb.bomb` branches up to it.
+
+    A hit whose window holds two bombs goes to the one nearest the victim, from the snapshot nearest
+    the hit, or to the one whose impact is nearest in time when no snapshot places the victim.
+    """
+    out = []
+    for rec in trace.of("haz"):
+        if rec.get("sp") != SPELL_FIRE_BOMB_IMPACT or rec.get("shape") != "circle":
+            continue
+        when = rec["t"]
+        ttl = int(rec.get("ttl", 0) or 0)
+        spot = (rec.get("x", 0.0), rec.get("y", 0.0))
+        target, gap = nearest_member(trace, when, spot)
+        out.append({
+            "t": when,
+            "ttl": ttl,
+            "spot": spot,
+            "target": target,
+            "gap": gap,
+            "hits": [],
+            "inside": living_within(trace, when + ttl, spot, FIRE_BOMB_IMPACT_RADIUS),
+            "dodges": {},
+        })
+
+    for hit in trace.of("dmg"):
+        if hit.get("sp") != SPELL_FIRE_BOMB_IMPACT:
+            continue
+        holding = [row for row in out if row["t"] <= hit["t"] <= row["t"] + row["ttl"] + BOMB_HIT_SLACK_MS]
+        if not holding:
+            continue
+        victim = hit.get("d", 0)
+        place = at(trace, victim, hit["t"], NEAREST, NEAREST_TOLERANCE_MS)
+        if place is None:
+            pick = min(holding, key=lambda row: abs(row["t"] + row["ttl"] - hit["t"]))
+        else:
+            pick = min(holding, key=lambda row: dist2(place, row["spot"]))
+        pick["hits"].append(victim)
+
+    dodges = notes(trace, "nb.bomb")
+    for row in out:
+        branches: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+        for rec in dodges:
+            if row["t"] <= rec["t"] <= row["t"] + row["ttl"]:
+                words = str(rec.get("txt", "")).split()
+                branches[rec.get("g", 0)][words[0] if words else ""] += 1
+        row["dodges"] = dict(branches)
+    return out
+
+
+def show_bomb(trace: Trace) -> None:
+    print(f"FIRE BOMB  (impact {FIRE_BOMB_IMPACT_RADIUS:.0f} yd)")
+    rows = bombs(trace)
+    if not rows:
+        print("  no Fire Bomb circle")
+        return
+
+    for row in rows:
+        target = "-" if row["target"] is None else (
+            f"{trace.name(row['target'])} ({trace.role(row['target'])}, {row['gap']:.1f} yd)")
+        print(f"  {clock(row['t'])}  at ({row['spot'][0]:.1f}, {row['spot'][1]:.1f})"
+              f"  impact +{row['ttl'] / 1000:.1f} s  on {target}")
+        hit = ", ".join(trace.name(guid) for guid in row["hits"]) or "nobody"
+        print(f"    66317 hit: {hit}")
+        inside = ", ".join(trace.name(guid) for guid in sorted(row["inside"], key=trace.name)) or "nobody"
+        print(f"    inside at the impact: {inside}")
+        for guid, counts in sorted(row["dodges"].items(), key=lambda item: trace.name(item[0])):
+            print(f"    nb.bomb {trace.name(guid)[:14]:14} " + ", ".join(
+                f"{name} {n}" for name, n in counts.most_common()))
+
+    hits = sum(len(row["hits"]) for row in rows)
+    print(f"\n  {len(rows)} bomb(s), {hits} hit(s), {hits / len(rows):.1f} a bomb")
+    stray = sum(1 for rec in trace.of("dmg") if rec.get("sp") == SPELL_FIRE_BOMB_IMPACT) - hits
+    if stray:
+        print(f"  {stray} 66317 hit(s) outside every bomb's window")
+
+
 SECTIONS = (
     ("stage", "which beasts were up when, deaths per stage, each beast's engage", show_stage),
     ("tanks", "tank duties, Gormok's victims with Impale stacks, swaps, defensives", show_tanks),
     ("charge", "every Icehowl charge: gaze, lane, outcome, who stood at its end", show_charge),
+    ("breath", "every Arctic Breath: target, who froze, who the cone predicts, spread", show_breath),
     ("snobold", "snobold riders and the DPS picks", show_snobold),
+    ("bomb", "every Fire Bomb: target, impact hits, who stood inside, dodges", show_bomb),
 )
 
 

@@ -37,6 +37,11 @@ bool GormokStompRangeTrigger::IsActive()
     return GetGormokStompThreat(botAI) != nullptr;
 }
 
+bool GormokFireBombIncomingTrigger::IsActive()
+{
+    return IsInFireBombImpact(botAI);
+}
+
 void AddToCGormokTriggerNodes(std::vector<TriggerNode*>& triggers)
 {
     triggers.push_back(new TriggerNode("gormok tank duty", {
@@ -56,4 +61,7 @@ void AddToCGormokTriggerNodes(std::vector<TriggerNode*>& triggers)
 
     triggers.push_back(new TriggerNode("gormok tank defensive", {
         NextAction("gormok tank defensive", ACTION_RAID + 6) }));
+
+    triggers.push_back(new TriggerNode("gormok fire bomb incoming", {
+        NextAction("gormok dodge fire bomb", ACTION_EMERGENCY + 2) }));
 }

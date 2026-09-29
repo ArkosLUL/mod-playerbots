@@ -228,7 +228,183 @@ class SyntheticPull(unittest.TestCase):
         self.assertNotIn("not a Beasts pull", out.getvalue())
 
 
+BOLT = 5006    # ranged, in the breath and bomb pull only
+
+# Gormok's stage: two bombs, one on Arrow (who dodges) with Mender 4 yd off, one on Bolt.
+BOMB_SPOTS = {HOLD: (0.0, 10.0), SWAP: (2.0, 10.0), MENDER: (24.0, -20.0), ARROW: (20.0, -20.0),
+              BLADE: (1.0, 8.0), BOLT: (-20.0, 20.0)}
+# Icehowl at the origin facing Hold, so his back is -90°: Arrow and Blade share that bearing, Bolt
+# sits one 18° step round, Mender three.
+BREATH_SPOTS = {HOLD: (0.0, 10.0), SWAP: (2.0, 10.0), MENDER: (13.753, -9.992), ARROW: (0.0, -22.0),
+                BLADE: (0.0, -10.0), BOLT: (6.798, -20.923)}
+BREATH_ID = 67650  # 25N
+
+
+def breath_bomb_position(guid: int, when: int) -> tuple[float, float]:
+    if when >= 15000:
+        return BREATH_SPOTS[guid]
+    if guid == ARROW and when >= 5500:
+        return 20.0, -32.0
+    return BOMB_SPOTS[guid]
+
+
+def breath_bomb_snap(when: int) -> dict:
+    units = [[guid, *breath_bomb_position(guid, when), 0.0, 0.0, 100.0, 100.0, 0, 0, 0, 0, 0]
+             for guid in BOMB_SPOTS]
+    if when >= 15000:
+        units.append([ICEHOWL, 0.0, 0.0, 0.0, 0.0, 100.0, 0.0, HOLD, 0, 0, 0, 0])
+    return {"t": when, "e": "snap", "u": units}
+
+
+def breath(when: int, target: int) -> dict:
+    return {"t": when, "e": "cast", "s": ICEHOWL, "sp": BREATH_ID, "tgt": target, "ct": 0}
+
+
+def frozen(when: int, target: int) -> dict:
+    return {"t": when, "e": "aura", "d": target, "s": ICEHOWL, "sp": BREATH_ID, "r": 0, "st": 1}
+
+
+def bomb(when: int, spot: tuple[float, float], ttl: int) -> dict:
+    return {"t": when, "e": "haz", "sp": nb.SPELL_FIRE_BOMB_IMPACT, "shape": "circle", "x": spot[0], "y": spot[1],
+            "z": 0.0, "ttl": ttl, "rad": 8.0}
+
+
+def bomb_hit(when: int, target: int) -> dict:
+    return {"t": when, "e": "dmg", "s": SNOBOLD, "d": target, "sp": nb.SPELL_FIRE_BOMB_IMPACT, "a": 5500}
+
+
+def breath_bomb_pull() -> list[dict]:
+    records = [
+        {"e": "hdr", "v": 12, "ts": 1789500000000, "map": 649, "inst": 8, "diff": 1,
+         "boss": "gormok-the-impaler", "roster": [
+             {"g": HOLD, "n": "Hold", "r": "tank", "c": "warrior", "h": 0},
+             {"g": SWAP, "n": "Swap", "r": "tank", "c": "paladin", "h": 0},
+             {"g": MENDER, "n": "Mender", "r": "heal", "c": "priest", "h": 0},
+             {"g": ARROW, "n": "Arrow", "r": "ranged", "c": "hunter", "h": 0},
+             {"g": BLADE, "n": "Blade", "r": "melee", "c": "rogue", "h": 0},
+             {"g": BOLT, "n": "Bolt", "r": "ranged", "c": "mage", "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "gormok-the-impaler", "src": "engage"},
+        {"t": 1, "e": "unit", "g": ICEHOWL, "en": nb.NPC_ICEHOWL, "n": "Icehowl", "b": 1},
+        {"t": 1, "e": "unit", "g": SNOBOLD, "en": 34800, "n": "Snobold Vassal"},
+
+        # Both bombs' windows hold both hits, so each hit goes by where its victim stood.
+        bomb(5000, BOMB_SPOTS[ARROW], 2000),
+        note(5100, ARROW, "nb.bomb", "move 12"),
+        note(5100, MENDER, "nb.bomb", "pinned"),
+        note(5300, ARROW, "nb.bomb", "hold"),
+        note(5900, ARROW, "nb.bomb", "clear"),
+        bomb(6000, BOMB_SPOTS[BOLT], 1800),
+        bomb_hit(7000, MENDER),
+        bomb_hit(7800, BOLT),
+
+        # Mender pinned again on a third bomb: the clear in between is what writes the second row.
+        note(8000, MENDER, "nb.bomb", "clear"),
+        bomb(10000, BOMB_SPOTS[MENDER], 1500),
+        note(10100, MENDER, "nb.bomb", "pinned"),
+        bomb_hit(11500, MENDER),
+
+        note(15000, MENDER, "nb.spread", "3"),
+        note(15000, ARROW, "nb.spread", "0"),
+        note(15000, BLADE, "nb.spread", "none"),
+        note(15000, BOLT, "nb.spread", "1"),
+        note(15000, MENDER, "nb.arc", "11"),
+        note(16000, BLADE, "nb.spread", "0"),
+
+        # On Mender, alone on her bearing.
+        breath(20000, MENDER),
+        frozen(20000, MENDER),
+        {"t": 25000, "e": "aura", "d": MENDER, "s": ICEHOWL, "sp": BREATH_ID, "r": 1, "st": 0},
+
+        # A charge drops the layout, and two bearings are walled on the way back.
+        note(30000, ARROW, "nb.arc", "0"),
+        note(40000, BOLT, "nb.arc", "9"),
+
+        # On Arrow, with Blade inside on the same bearing.
+        breath(45000, ARROW),
+        frozen(45000, ARROW),
+        frozen(45100, BLADE),
+        note(50000, ARROW, "nb.spread", "1"),
+        {"t": 60000, "e": "end", "out": "wipe"},
+    ]
+    records += [breath_bomb_snap(when) for when in range(0, 60500, 500)]
+    return records
+
+
+class BreathAndBombPull(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_8_gormok-the-impaler_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in breath_bomb_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_half_width_is_wider_on_10n_only(self):
+        self.assertEqual([nb.breath_half_width(diff) for diff in range(4)], [30.0, 12.0, 12.0, 12.0])
+
+    def test_one_row_per_breath_with_its_target_and_victims(self):
+        rows = nb.breaths(self.trace)
+        self.assertEqual([(row["t"], row["target"], row["victims"]) for row in rows],
+                         [(20000, MENDER, [MENDER]), (45000, ARROW, [ARROW, BLADE])])
+
+    def test_the_cone_predicts_only_the_co_bearing_neighbour(self):
+        self.assertEqual([row["predicted"] for row in nb.breaths(self.trace)], [{MENDER}, {ARROW, BLADE}])
+
+    def test_spread_and_arc_are_read_as_of_the_cast(self):
+        rows = nb.breaths(self.trace)
+        self.assertEqual([row["spread"] for row in rows], [{MENDER: "3"}, {ARROW: "0", BLADE: "0"}])
+        self.assertEqual([row["arc"] for row in rows], ["11", "9"])
+
+    def test_times_frozen_per_bot(self):
+        self.assertEqual(nb.times_frozen(nb.breaths(self.trace)),
+                         collections.Counter({MENDER: 1, ARROW: 1, BLADE: 1}))
+
+    def test_one_row_per_bomb_with_its_target(self):
+        rows = nb.bombs(self.trace)
+        self.assertEqual([(row["t"], row["ttl"], row["target"], row["gap"]) for row in rows],
+                         [(5000, 2000, ARROW, 0.0), (6000, 1800, BOLT, 0.0), (10000, 1500, MENDER, 0.0)])
+
+    def test_each_hit_goes_to_the_bomb_nearest_its_victim(self):
+        self.assertEqual([row["hits"] for row in nb.bombs(self.trace)], [[MENDER], [BOLT], [MENDER]])
+
+    def test_who_stood_inside_at_the_impact(self):
+        self.assertEqual([row["inside"] for row in nb.bombs(self.trace)], [{MENDER}, {BOLT}, {MENDER}])
+
+    def test_dodge_branches_up_to_the_impact(self):
+        rows = nb.bombs(self.trace)
+        self.assertEqual(rows[0]["dodges"], {ARROW: collections.Counter({"move": 1, "hold": 1, "clear": 1}),
+                                             MENDER: collections.Counter({"pinned": 1})})
+        self.assertEqual(rows[1]["dodges"], {})
+
+    def test_a_repeated_branch_shows_on_the_next_bomb(self):
+        self.assertEqual(nb.bombs(self.trace)[2]["dodges"], {MENDER: collections.Counter({"pinned": 1})})
+
+    def test_breath_and_bomb_print_their_summaries(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_breath(self.trace)
+            nb.show_bomb(self.trace)
+        text = out.getvalue()
+        self.assertIn("2 breath(s), 1.5 frozen a breath, max 2", text)
+        self.assertIn("3 bomb(s), 3 hit(s), 1.0 a bomb", text)
+        self.assertNotIn("outside every bomb's window", text)
+
+
 class EveryView(unittest.TestCase):
+    def test_breath_and_bomb_read_empty_on_another_boss(self):
+        trace = Trace(FULL)
+        self.assertEqual(nb.breaths(trace), [])
+        self.assertEqual(nb.bombs(trace), [])
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            nb.show_breath(trace)
+            nb.show_bomb(trace)
+        self.assertIn("no Arctic Breath cast", out.getvalue())
+        self.assertIn("no Fire Bomb circle", out.getvalue())
+
     def test_every_section_reads_empty_on_another_boss(self):
         trace = Trace(FULL)
         out = io.StringIO()

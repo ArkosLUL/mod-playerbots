@@ -45,7 +45,20 @@ float IcehowlChargeGuardMultiplier::GetValue(Action* action)
     return IcehowlChargeLatched(botAI, start, end) ? 0.0f : 1.0f;
 }
 
+// SetBehindTargetAction is a CombatFormationMoveAction too
+float IcehowlBreathSpreadGuardMultiplier::GetValue(Action* action)
+{
+    if (!dynamic_cast<CombatFormationMoveAction*>(action))
+        return 1.0f;
+
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::NorthrendBeasts))
+        return 1.0f;
+
+    return HasIcehowlBreathSlot(botAI) ? 0.0f : 1.0f;
+}
+
 void AddToCIcehowlMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers)
 {
     multipliers.push_back(new IcehowlChargeGuardMultiplier(botAI));
+    multipliers.push_back(new IcehowlBreathSpreadGuardMultiplier(botAI));
 }

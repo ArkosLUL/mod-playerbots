@@ -54,6 +54,14 @@ public:
     bool IsActive() override;
 };
 
+class GormokFireBombIncomingTrigger : public Trigger
+{
+public:
+    GormokFireBombIncomingTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "gormok fire bomb incoming") {}
+    bool IsActive() override;
+};
+
 class ToCGormokTriggerContext : public NamedObjectContext<Trigger>
 {
 public:
@@ -71,6 +79,8 @@ public:
             &ToCGormokTriggerContext::gormok_snobolled;
         creators["gormok stomp range"] =
             &ToCGormokTriggerContext::gormok_stomp_range;
+        creators["gormok fire bomb incoming"] =
+            &ToCGormokTriggerContext::gormok_fire_bomb_incoming;
     }
 
 private:
@@ -96,6 +106,10 @@ private:
 
     static Trigger* gormok_stomp_range(PlayerbotAI* botAI) {
         return new GormokStompRangeTrigger(botAI);
+    }
+
+    static Trigger* gormok_fire_bomb_incoming(PlayerbotAI* botAI) {
+        return new GormokFireBombIncomingTrigger(botAI);
     }
 };
 
