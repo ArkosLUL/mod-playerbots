@@ -9,6 +9,7 @@
 #include "ToCMultipliers_Jaraxxus.h"
 #include "ToCMultipliers_Anubarak.h"
 #include "ToCMultipliers_FactionChampions.h"
+#include "ToCMultipliers_FactionChampionsDefence.h"
 #include "ToCMultipliers_TwinValkyr.h"
 
 #endif

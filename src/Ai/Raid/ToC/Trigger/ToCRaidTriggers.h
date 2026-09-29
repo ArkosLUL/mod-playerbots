@@ -8,6 +8,7 @@
 #include "ToCTriggers_Jaraxxus.h"
 #include "ToCTriggers_Anubarak.h"
 #include "ToCTriggers_FactionChampions.h"
+#include "ToCTriggers_FactionChampionsDefence.h"
 #include "ToCTriggers_TwinValkyr.h"
 
 #endif

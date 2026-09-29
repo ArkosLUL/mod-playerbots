@@ -1,6 +1,8 @@
 #ifndef PLAYERBOTS_RAID_TOCHELPERS_FACTIONCHAMPIONS_H
 #define PLAYERBOTS_RAID_TOCHELPERS_FACTIONCHAMPIONS_H
 
+#include <functional>
+
 #include "PlayerbotAI.h"
 #include "ToCData.h"
 
@@ -57,6 +59,14 @@ bool IsFactionChampionHealer(uint32 entry);
 // The raid's one kill target, latched per instance. Switches only when it dies, leaves combat or turns
 // immune to all damage, or to go back to the one it left over immunity. Null unless the encounter is live.
 Unit* FactionChampionsKillTarget(PlayerbotAI* botAI);
+
+// The champion the kill latch left over immunity and goes back to once it can be hurt again. Null
+// unless the encounter is live.
+Unit* FactionChampionsSuspendedTarget(PlayerbotAI* botAI);
+
+// First alive, in-combat champion in kill order that accept takes, skipping the kill target, the
+// suspended one and every CC assignment. Null unless the encounter is live.
+Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> const& accept);
 
 // Every non-healer burns the kill target, tanks too: threat is assigned by the script, so nobody
 // holds a champion anyway.

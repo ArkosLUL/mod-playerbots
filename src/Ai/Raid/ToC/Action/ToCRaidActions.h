@@ -9,6 +9,7 @@
 #include "ToCActions_Jaraxxus.h"
 #include "ToCActions_Anubarak.h"
 #include "ToCActions_FactionChampions.h"
+#include "ToCActions_FactionChampionsDefence.h"
 #include "ToCActions_TwinValkyr.h"
 
 #endif
