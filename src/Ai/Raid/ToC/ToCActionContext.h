@@ -18,6 +18,7 @@ public:
         Absorb(ToCJaraxxusActionContext());
         Absorb(ToCAnubarakActionContext());
         Absorb(ToCFactionChampionsActionContext());
+        Absorb(ToCFactionChampionsDefenceActionContext());
         Absorb(ToCTwinValkyrActionContext());
     }
 

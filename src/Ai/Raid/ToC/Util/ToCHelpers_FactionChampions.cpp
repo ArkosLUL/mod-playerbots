@@ -569,6 +569,44 @@ Unit* FactionChampionsKillTarget(PlayerbotAI* botAI)
     return state && state->live ? AliveCreature(botAI->GetBot(), state->killTarget.Get()) : nullptr;
 }
 
+Unit* FactionChampionsSuspendedTarget(PlayerbotAI* botAI)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    return state && state->live ? AliveCreature(botAI->GetBot(), state->suspended) : nullptr;
+}
+
+Unit* FactionChampionsNextTarget(PlayerbotAI* botAI, std::function<bool(Unit*)> const& accept)
+{
+    if (!ToCEncounterIsLive(botAI, ToCEncounter::FactionChampions))
+        return nullptr;
+
+    FactionChampionsState* state = Refresh(botAI);
+    if (!state || !state->live)
+        return nullptr;
+
+    ObjectGuid const killTarget = state->killTarget.Get();
+    auto const& ccTargets = state->ccTargets.Raw();
+    for (Champion const& champion : state->champions)
+    {
+        if (!champion.inCombat || champion.guid == killTarget || champion.guid == state->suspended)
+            continue;
+
+        bool const ccAssigned = std::any_of(ccTargets.begin(), ccTargets.end(),
+                                            [&champion](auto const& held) { return held.second == champion.guid; });
+        if (ccAssigned)
+            continue;
+
+        Creature* creature = AliveCreature(botAI->GetBot(), champion.guid);
+        if (creature && (!accept || accept(creature)))
+            return creature;
+    }
+
+    return nullptr;
+}
+
 bool FactionChampionsFocusBot(PlayerbotAI* botAI) { return botAI && !PlayerbotAI::IsHeal(botAI->GetBot()); }
 
 bool FactionChampionsFearWindowActive(PlayerbotAI* botAI)

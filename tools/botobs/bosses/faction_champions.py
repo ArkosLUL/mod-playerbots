@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Score a Faction Champions pull from a RaidObs trace: kill target, CC, heal interrupts, burst, fears.
+"""Score a Faction Champions pull from a RaidObs trace: focus, CC, kicks, burst, fears, dispels, AoE.
 
     faction_champions.py <file>            every section
     faction_champions.py <file> --kill     each kill target hold: why, how long, health, who was on it
@@ -7,7 +7,11 @@
     faction_champions.py <file> --heals    champion cast-time heals, and the interrupts that followed
     faction_champions.py <file> --burst    lust, each bot's first burst cooldown, the burst vetoes
     faction_champions.py <file> --fear     fears on the raid, Fear Ward and Tremor Totem
-    faction_champions.py <file> --vetoes   the four Faction Champions multipliers, by action
+    faction_champions.py <file> --dispel   champion CC on the raid, the dispels on it, UA backlash
+    faction_champions.py <file> --purge    raid offensive dispels on champions, kill target or not
+    faction_champions.py <file> --hop      champion shields, fc.physical holds, Mass Dispel, the return
+    faction_champions.py <file> --aoe      raid victims per champion crowd-AoE cast
+    faction_champions.py <file> --vetoes   the eight Faction Champions multipliers, by action
 
 What the generic views get wrong here, and what this reads instead:
 
@@ -21,9 +25,21 @@ What the generic views get wrong here, and what this reads instead:
   creature, so a champion died when it left the snapshots while the fight went on.
 - **Heals and auras on a creature are never recorded.** A heal is its cast start and a kick is its
   own cast start, so both counts are upper bounds. Divine Shield, Ice Block or a Cyclone on a
-  champion shows only as an `immune` switch.
-- **`fc.kill` is one raid-wide latch and `fc.switch` an event**, so the `g` on either is whichever
-  bot's tick made the call. `fc.cc` is per bot, keyed on the bot, `0` on a release.
+  champion shows only as an `immune` switch, the shields and Hand of Protection also as the
+  champion's cast, and a purge or Mass Dispel only as its own cast: `--hop` reads a `back` to the
+  shielded champion before the shield's own end as the sign it came off early.
+- **`fc.kill` and `fc.physical` are raid-wide latches and `fc.switch` an event**, so the `g` on any
+  of them is whichever bot's tick made the call. `fc.cc` is per bot, keyed on the bot, `0` on a
+  release.
+- **Mass Dispel is cast at a point**, so its `cast` row names no target. `--hop` pairs it with a
+  shield by time, and `--dispel` counts it apart from the dispels aimed at a raider, splitting off
+  the casts inside a champion shield's duration, which are most likely the shield duty's.
+- **A removal's `dur` is what was left.** A CC removed with time left was dispelled, broken by
+  damage, or its holder died; the trace can't tell which.
+- **A crowd-AoE victim is a raid player.** `dmg` rows cover players only, while the champion's 3+
+  check counts pets too, so a cast can fire on fewer victims than it needed.
+- **Hellfire, Fan of Knives, Arcane Explosion and the Unstable Affliction backlash remap**, so every
+  id of their spelldifficulty row counts.
 """
 from __future__ import annotations
 
@@ -33,6 +49,7 @@ import functools
 import json
 import pathlib
 import re
+import statistics
 import sys
 
 # Run as a script from bosses/, so the raidobs package one level up is not on the path yet.
@@ -117,9 +134,88 @@ FC_MULTIPLIERS = (
     "faction champions target guard multiplier",
     "faction champions threat redirect veto multiplier",
     "faction champions anti fear totem guard multiplier",
+    "faction champions aoe guard multiplier",
+    "faction champions physical switch guard multiplier",
+    "faction champions dispel guard multiplier",
+    "faction champions purge guard multiplier",
 )
 COUNTERSPELL_ACTION = "faction champions counterspell kill target"
 ANTI_FEAR_ACTION = "faction champions anti fear"
+DISPEL_CC_ACTION = "faction champions dispel cc"
+PURGE_ACTION = "faction champions purge kill target"
+AVOID_AOE_ACTION = "faction champions avoid aoe"
+
+MAGIC, CURSE, POISON, DISEASE = "magic", "curse", "poison", "disease"
+
+# The CC the dispel duty answers and its dispel type, the two silences on healers only. None of them
+# remaps.
+COUNTED_CC = {
+    65801: ("Polymorph", MAGIC),
+    65809: ("Fear", MAGIC),
+    65543: ("Psychic Scream", MAGIC),
+    66008: ("Repentance", MAGIC),
+    66613: ("Hammer of Justice", MAGIC),
+    66007: ("Hammer of Justice", MAGIC),
+    66054: ("Hex", CURSE),
+    65877: ("Wyvern Sting", POISON),
+    65542: ("Silence", MAGIC),
+    66018: ("Strangulate", MAGIC),
+}
+HEALER_ONLY_CC = (65542, 66018)
+# a removal with more than this left came off early
+EARLY_MS = 500
+
+# Every rank a bot casts of each raid dispel, and the types it removes
+FRIENDLY_DISPELS = {
+    **dict.fromkeys((527, 988), frozenset((MAGIC,))),  # Dispel Magic
+    4987: frozenset((MAGIC, POISON, DISEASE)),  # Cleanse
+    **dict.fromkeys((475, 2782), frozenset((CURSE,))),  # Remove Curse, mage and druid
+    51886: frozenset((CURSE, POISON, DISEASE)),  # Cleanse Spirit
+    **dict.fromkeys((2893, 8946), frozenset((POISON,))),  # Abolish Poison, Cure Poison
+    526: frozenset((POISON, DISEASE)),  # Cure Toxins
+}
+SPELL_MASS_DISPEL = 32375
+# spelldifficulty row, 10N/25N/10H/25H
+UA_BACKLASH = (65813, 68157, 68158, 68159)
+
+OFFENSIVE_DISPELS = {
+    **dict.fromkeys((370, 8012), "Purge"),
+    **dict.fromkeys((527, 988), "Dispel Magic"),
+    30449: "Spellsteal",
+    19801: "Tranquilizing Shot",
+    # the felhunter's ranks 1-7
+    **dict.fromkeys((19505, 19731, 19734, 19736, 27276, 27277, 48011), "Devour Magic"),
+}
+
+PHYSICAL = "fc.physical"
+SPELL_HAND_OF_PROTECTION = 66009
+SPELL_DIVINE_SHIELD = 66010
+SPELL_ICE_BLOCK = 65802
+# spell -> (name, lasts ms)
+SHIELDS = {
+    SPELL_HAND_OF_PROTECTION: ("Hand of Protection", 10000),
+    SPELL_DIVINE_SHIELD: ("Divine Shield", 12000),
+    SPELL_ICE_BLOCK: ("Ice Block", 5000),
+}
+# the shields that suspend fc.kill. Hand of Protection leaves magic open, so the latch stays put
+SUSPENDING_SHIELDS = (SPELL_DIVINE_SHIELD, SPELL_ICE_BLOCK)
+# fc.kill returns on the first refresh the champion is attackable, so give the shield's end some room
+BACK_SLACK_MS = 2000
+
+# (name, cast ids, victim ids, victim record, window ms from the cast start). A victim is a `dmg` row,
+# or an aura apply for the two fears. Every spelldifficulty id of a row counts.
+CROWD_AOE = (
+    ("Bladestorm", (65947,), (65946,), "dmg", 9000),
+    ("Hellfire", (65816, 68145, 68146, 68147), (65817, 68142, 68143, 68144), "dmg", 16000),
+    ("Fan of Knives", (65955, 68097, 68098, 68099), (65955, 68097, 68098, 68099), "dmg", 1000),
+    ("Divine Storm", (66006,), (66006,), "dmg", 1000),
+    ("Arcane Explosion", (65800, 68000, 68001, 68002), (65800, 68000, 68001, 68002), "dmg", 1000),
+    ("Frost Nova", (65792,), (65792,), "dmg", 1000),
+    ("Psychic Scream", (65543,), (65543,), "aura", 1000),
+    ("Intimidating Shout", (65930,), (65930,), "aura", 1000),
+)
+# ticking once a second for the whole window, so hits per victim mean something
+CHANNELS = ("Bladestorm", "Hellfire")
 
 BURST_SOURCE = SRC_ROOT / "Ai" / "Base" / "Combat" / "BurstCooldowns.cpp"
 
@@ -481,8 +577,7 @@ def show_heals(trace: Trace) -> None:
     print("  " + ", ".join(f"{name} {started} ({stopped} followed)"
                            for name, (started, stopped) in sorted(per_spell.items())))
 
-    duty = sum(1 for rec in trace.of("act") if rec.get("a") == COUNTERSPELL_ACTION and rec.get("vd") == "OK")
-    print(f"  {COUNTERSPELL_ACTION}: {duty} OK row(s)")
+    print(f"  {COUNTERSPELL_ACTION}: {ok_rows(trace, COUNTERSPELL_ACTION)} OK row(s)")
     print("  a cast row is a start and nothing records a kick landing, so started bounds heals landed"
           " and followed bounds heals stopped")
 
@@ -564,8 +659,290 @@ def show_fear(trace: Trace) -> None:
     for spell, casts in wards.items():
         who = ", ".join(f"{trace.name(guid)} {count}" for guid, count in casts.most_common())
         print(f"  {WARDS[spell]} {spell}: {who or 'never cast'}")
-    duty = sum(1 for rec in trace.of("act") if rec.get("a") == ANTI_FEAR_ACTION and rec.get("vd") == "OK")
-    print(f"  {ANTI_FEAR_ACTION}: {duty} OK row(s)")
+    print(f"  {ANTI_FEAR_ACTION}: {ok_rows(trace, ANTI_FEAR_ACTION)} OK row(s)")
+
+
+def ok_rows(trace: Trace, action: str) -> int:
+    return sum(1 for rec in trace.of("act") if rec.get("a") == action and rec.get("vd") == "OK")
+
+
+def cc_auras(trace: Trace) -> list[dict]:
+    """Every counted CC on a roster member, in apply order: `member`, `spell`, `start`, `stop`, `left`
+    (ms left at the removal, None when unknown or still up at the end), and the first raid dispel cast
+    on the member inside it that can remove its type (`at`, `by`), else None."""
+    roster = roster_guids(trace)
+    end = pull_end(trace)
+    opened: dict[tuple[int, int], int] = {}
+    spans = []
+    for rec in trace.of("aura"):
+        spell, member = rec.get("sp"), rec.get("d", 0)
+        if spell not in COUNTED_CC or member not in roster:
+            continue
+        if spell in HEALER_ONLY_CC and trace.role(member) != "heal":
+            continue
+        if rec.get("r"):
+            if (member, spell) in opened:
+                spans.append((opened.pop((member, spell)), member, spell, rec["t"], rec.get("dur")))
+        elif (member, spell) not in opened:
+            opened[(member, spell)] = rec["t"]
+    spans += [(start, member, spell, end, None) for (member, spell), start in opened.items()]
+
+    dispels = [(rec["t"], rec.get("tgt"), rec.get("s"), FRIENDLY_DISPELS[rec["sp"]]) for rec in trace.of("cast")
+               if rec.get("sp") in FRIENDLY_DISPELS and rec.get("s") in roster and not rec.get("tr")]
+    out = []
+    for start, member, spell, stop, left in sorted(spans):
+        kind = COUNTED_CC[spell][1]
+        # an instant dispel and the removal it causes share a stamp
+        first = next(((when, who) for when, target, who, removes in dispels
+                      if target == member and start <= when <= stop and kind in removes), (None, None))
+        out.append({"member": member, "spell": spell, "start": start, "stop": stop, "left": left,
+                    "at": first[0], "by": first[1]})
+    return out
+
+
+def mass_dispels_under_cc(trace: Trace, auras: list[dict] | None = None) -> tuple[int, int]:
+    """Raid Mass Dispel casts started while a counted CC held anyone on the roster, and how many of
+    those started inside a champion shield's duration, where the shield duty is the likelier cause."""
+    auras = cc_auras(trace) if auras is None else auras
+    roster = roster_guids(trace)
+    shields = [(row["t"], row["t"] + SHIELDS[row["spell"]][1]) for row in shield_rows(trace)]
+    starts = [rec["t"] for rec in trace.of("cast")
+              if rec.get("sp") == SPELL_MASS_DISPEL and rec.get("s") in roster and not rec.get("tr")
+              and any(aura["start"] <= rec["t"] <= aura["stop"] for aura in auras)]
+    inside = sum(1 for when in starts if any(start <= when < stop for start, stop in shields))
+    return len(starts), inside
+
+
+def backlashes(trace: Trace) -> list[tuple[int, int]]:
+    """`(t, member)` per Unstable Affliction backlash landing on the roster."""
+    roster = roster_guids(trace)
+    return sorted((start, guid) for spell in UA_BACKLASH for guid, spans in aura_spans(trace, spell).items()
+                  if guid in roster for start, _ in spans)
+
+
+def show_dispel(trace: Trace) -> None:
+    print("DISPEL")
+    auras = cc_auras(trace)
+    if not auras:
+        print("  no counted CC on the raid")
+    else:
+        print(f"  {'counted CC on the raid':26} {'auras':>5} {'held':>7} {'removed early':>14} {'drew a dispel':>14}")
+        for spell in sorted({aura["spell"] for aura in auras}):
+            part = [aura for aura in auras if aura["spell"] == spell]
+            held = sum(aura["stop"] - aura["start"] for aura in part) / 1000
+            early = sum(1 for aura in part if aura["left"] is not None and aura["left"] > EARLY_MS)
+            drew = sum(1 for aura in part if aura["at"] is not None)
+            print(f"  {COUNTED_CC[spell][0] + ' ' + str(spell):26} {len(part):5} {held:6.1f}s {early:14} {drew:14}")
+
+        klass = classes(trace)
+        latency: dict[str, list[int]] = collections.defaultdict(list)
+        for aura in auras:
+            if aura["at"] is not None:
+                latency[klass.get(aura["by"], "?")].append(aura["at"] - aura["start"])
+        if latency:
+            print("  first dispel cast inside each, by class: " + ", ".join(
+                f"{name} {len(waits)} (median {statistics.median(waits) / 1000:.1f} s, max {max(waits) / 1000:.1f} s)"
+                for name, waits in sorted(latency.items(), key=lambda item: -len(item[1]))))
+        else:
+            print("  no dispel cast on a raider under counted CC")
+
+    under_cc, in_shield = mass_dispels_under_cc(trace, auras)
+    print(f"  Mass Dispel: {under_cc} cast(s) while counted CC held a raider, {in_shield} of them inside a"
+          " champion shield window, none counted above since a point cast names nobody")
+    hits = backlashes(trace)
+    who = collections.Counter(trace.name(guid) for _, guid in hits)
+    print(f"  Unstable Affliction backlash on the raid: {len(hits)}"
+          + (f" ({', '.join(f'{name} {count}' for name, count in who.most_common())})" if hits else ""))
+    print(f"  {DISPEL_CC_ACTION}: {ok_rows(trace, DISPEL_CC_ACTION)} OK row(s)")
+    print(f"  removed early is a removal with over {EARLY_MS} ms left: dispelled, broken by damage, or"
+          " its holder died")
+
+
+def purge_rows(trace: Trace) -> list[dict]:
+    """Every raid or pet offensive dispel cast on a champion: `t`, `by` (the pet's owner for a pet),
+    `spell`, and whether the target held `fc.kill` then."""
+    targets = champions(trace)
+    kill = kill_spans(trace)
+    out = []
+    for rec in trace.of("cast"):
+        target = rec.get("tgt")
+        if rec.get("tr") or rec.get("sp") not in OFFENSIVE_DISPELS or target not in targets:
+            continue
+        by = raid_caster(trace, rec.get("s"))
+        if by is None:
+            continue
+        out.append({"t": rec["t"], "by": by, "spell": rec["sp"], "kill": held_at(kill, rec["t"]) == target})
+    return out
+
+
+def show_purge(trace: Trace) -> None:
+    print("PURGE")
+    rows = purge_rows(trace)
+    if not rows:
+        print("  no offensive dispel cast on a champion")
+    else:
+        on_kill = sum(1 for row in rows if row["kill"])
+        print(f"  {len(rows)} offensive dispel(s) on champions, {on_kill} on the kill target")
+        klass = classes(trace)
+        counts = collections.Counter((row["spell"], klass.get(row["by"], "?"), row["kill"]) for row in rows)
+        print(f"    {'spell':26} {'class':8} {'kill':>5} {'other':>6}")
+        for spell, name in sorted({(spell, name) for spell, name, _ in counts}):
+            print(f"    {OFFENSIVE_DISPELS[spell] + ' ' + str(spell):26} {name:8}"
+                  f" {counts[(spell, name, True)]:5} {counts[(spell, name, False)]:6}")
+    print(f"  {PURGE_ACTION}: {ok_rows(trace, PURGE_ACTION)} OK row(s)")
+    print("  class is the caster's, the owner's for a pet")
+
+
+def shield_rows(trace: Trace) -> list[dict]:
+    """Every champion Hand of Protection, Divine Shield and Ice Block cast: `t`, `caster`, `spell`,
+    `target`, whether that held `fc.kill`, the raid Mass Dispels inside its duration (`mass` the
+    first, `masses` how many). For the two that suspend the latch, cast on the kill target: the first
+    `back` returning the latch to that champion by the shield's end plus slack (`back`), and whether it
+    came before the shield's own end (`early`)."""
+    targets = champions(trace)
+    kill = kill_spans(trace)
+    roster = roster_guids(trace)
+    mass = sorted(rec["t"] for rec in trace.of("cast")
+                  if rec.get("sp") == SPELL_MASS_DISPEL and rec.get("s") in roster and not rec.get("tr"))
+    backs = sorted(rec["t"] for rec in notes(trace, SWITCH) if str(rec.get("txt", "")) == "back")
+
+    def returned_to(guid: int, when: int) -> bool:
+        # fc.kill and fc.switch land in one refresh, in either order
+        return any(held == guid and abs(opened - when) <= SWITCH_SLACK_MS for held, opened, _ in kill)
+
+    out = []
+    for rec in trace.of("cast"):
+        caster = rec.get("s")
+        if rec.get("tr") or rec.get("sp") not in SHIELDS or caster not in targets:
+            continue
+        start = rec["t"]
+        lasts = SHIELDS[rec["sp"]][1]
+        target = rec.get("tgt") or caster
+        on_kill = held_at(kill, start) == target
+        back = None
+        if rec["sp"] in SUSPENDING_SHIELDS and on_kill:
+            back = next((when for when in backs
+                         if start <= when <= start + lasts + BACK_SLACK_MS and returned_to(target, when)), None)
+        inside = [when for when in mass if start <= when < start + lasts]
+        out.append({"t": start, "caster": caster, "spell": rec["sp"], "target": target, "kill": on_kill,
+                    "mass": inside[0] if inside else None, "masses": len(inside), "back": back,
+                    "early": back is not None and back < start + lasts})
+    return out
+
+
+def physical(role: str, klass: str) -> bool:
+    """Who the physical switch steers: tanks, melee and hunters."""
+    return role in ("tank", "melee") or klass == "hunter"
+
+
+def physical_holds(trace: Trace) -> list[dict]:
+    """Each span `fc.physical` held a champion, and the share of physical bots' samples on it."""
+    klass = classes(trace)
+    bots = {guid for guid in roster_guids(trace)
+            if guid not in trace.humans and physical(trace.role(guid), klass.get(guid, "?"))}
+    snaps = frames(trace)
+    out = []
+    for value, start, stop in latch_spans(trace, PHYSICAL, pull_end(trace)):
+        guid = as_guid(value)
+        if not guid:
+            continue
+        on = total = 0
+        for snap in snaps:
+            if not start <= snap["t"] < stop:
+                continue
+            for row in snap.get("u", []):
+                if row[0] in bots and len(row) > 7 and row[5] > 0:
+                    total += 1
+                    on += row[7] == guid
+        out.append({"guid": guid, "start": start, "stop": stop, "share": on / total if total else None})
+    return out
+
+
+def show_hop(trace: Trace) -> None:
+    print("HAND OF PROTECTION AND IMMUNITY SHIELDS")
+    rows = shield_rows(trace)
+    if rows:
+        print(f"  {'at':>9} {'shield':18} {'caster':20} {'on':20} {'kill':>4} {'Mass Dispel':>11} {'back':>12}")
+        for row in rows:
+            mass = "-" if row["mass"] is None else f"+{(row['mass'] - row['t']) / 1000:.1f}s x{row['masses']}"
+            back = ("n/a" if row["spell"] not in SUSPENDING_SHIELDS or not row["kill"]
+                    else "-" if row["back"] is None
+                    else f"+{(row['back'] - row['t']) / 1000:.1f}s" + (" early" if row["early"] else ""))
+            print(f"  {clock(row['t']):>9} {SHIELDS[row['spell']][0]:18} {trace.name(row['caster'])[:20]:20}"
+                  f" {trace.name(row['target'])[:20]:20} {'yes' if row['kill'] else '-':>4} {mass:>11} {back:>12}")
+    else:
+        print("  no champion cast Hand of Protection, Divine Shield or Ice Block")
+
+    holds = physical_holds(trace)
+    if holds:
+        print(f"\n  {'fc.physical at':>14} {'length':>7} {'target':20} {'spec':20} {'on it':>6}")
+        for hold in holds:
+            share = "-" if hold["share"] is None else f"{hold['share'] * 100:.0f}%"
+            print(f"  {clock(hold['start']):>14} {(hold['stop'] - hold['start']) / 1000:6.1f}s"
+                  f" {trace.name(hold['guid'])[:20]:20} {spec(trace, hold['guid'])[:20]:20} {share:>6}")
+    else:
+        print("  fc.physical never held a champion")
+    print("  Mass Dispel: the first raid cast inside the shield's duration, x how many started inside it")
+    print(f"  back: the first `back` to the shielded champion by {BACK_SLACK_MS / 1000:.0f} s past the shield's"
+          " end, only for the two that suspend fc.kill and only on the kill target; early means before the"
+          " shield's own end, so something took it off")
+    print("  on it: the share of physical bot samples (tank and melee roles, hunters) whose target was the hold")
+
+
+def aoe_casts(trace: Trace) -> list[dict]:
+    """Every champion crowd-AoE cast, in time order: `t`, `caster`, `name`, and `hits`, roster victim
+    to rows from that cast. A row goes to its caster's latest cast of that spell still inside the
+    window."""
+    targets = champions(trace)
+    roster = roster_guids(trace)
+    cast_of = {spell: index for index, (_, ids, *_) in enumerate(CROWD_AOE) for spell in ids}
+    victim_of = {(kind, spell): index for index, (_, _, ids, kind, _) in enumerate(CROWD_AOE) for spell in ids}
+
+    casts: dict[tuple[int, int], list[dict]] = collections.defaultdict(list)
+    out = []
+    for rec in trace.of("cast"):
+        index = cast_of.get(rec.get("sp"))
+        if index is None or rec.get("tr") or rec.get("s") not in targets:
+            continue
+        row = {"t": rec["t"], "caster": rec["s"], "name": CROWD_AOE[index][0], "hits": collections.Counter()}
+        casts[(rec["s"], index)].append(row)
+        out.append(row)
+    stamps = {key: [row["t"] for row in rows] for key, rows in casts.items()}
+
+    for rec in trace.of("dmg", "aura"):
+        index = victim_of.get((rec["e"], rec.get("sp")))
+        if index is None or rec.get("d") not in roster or rec.get("r"):
+            continue
+        key = (rec.get("s"), index)
+        found = bisect.bisect_right(stamps.get(key, []), rec["t"]) - 1
+        if found >= 0 and rec["t"] < casts[key][found]["t"] + CROWD_AOE[index][4]:
+            casts[key][found]["hits"][rec["d"]] += 1
+    return out
+
+
+def show_aoe(trace: Trace) -> None:
+    print("CROWD AOE")
+    rows = aoe_casts(trace)
+    if not rows:
+        print("  no champion cast a crowd AoE")
+    else:
+        print(f"  {'spell':18} {'casts':>5} {'victims per cast':>17}  {'hits per victim':>15}  victims x casts")
+        for name, *_ in CROWD_AOE:
+            part = [row for row in rows if row["name"] == name]
+            if not part:
+                continue
+            victims = [len(row["hits"]) for row in part]
+            spread = collections.Counter(victims)
+            per_cast = f"{statistics.mean(victims):.1f}, max {max(victims)}"
+            per_victim = "-"
+            hits = [count for row in part for count in row["hits"].values()]
+            if name in CHANNELS and hits:
+                per_victim = f"{statistics.mean(hits):.1f}, max {max(hits)}"
+            print(f"  {name:18} {len(part):5} {per_cast:>17}  {per_victim:>15}  "
+                  + ", ".join(f"{count} x{casts}" for count, casts in sorted(spread.items())))
+    print(f"  {AVOID_AOE_ACTION}: {ok_rows(trace, AVOID_AOE_ACTION)} OK row(s)")
+    print("  a victim is a raid player hit by that cast (a `dmg` row), or feared by it for the two fears;"
+          " hits per victim is for the two channels, which tick once a second")
 
 
 def fc_vetoes(trace: Trace) -> collections.Counter:
@@ -577,7 +954,7 @@ def show_vetoes(trace: Trace) -> None:
     print("FACTION CHAMPIONS VETOES")
     counts = fc_vetoes(trace)
     if not counts:
-        print("  none of the four multipliers vetoed anything")
+        print(f"  none of the {len(FC_MULTIPLIERS)} multipliers vetoed anything")
         return
     for multiplier in FC_MULTIPLIERS:
         rows = sorted(((count, action) for (name, action), count in counts.items() if name == multiplier),
@@ -595,7 +972,11 @@ SECTIONS = (
     ("heals", "champion cast-time heals and the interrupts that followed", show_heals),
     ("burst", "lust, first burst cooldown per bot, burst vetoes", show_burst),
     ("fear", "fears on the raid, Fear Ward and Tremor Totem", show_fear),
-    ("vetoes", "the four Faction Champions multipliers, by action", show_vetoes),
+    ("dispel", "champion CC on the raid, the dispels on it, Unstable Affliction backlash", show_dispel),
+    ("purge", "raid offensive dispels on champions, kill target or not, by spell and class", show_purge),
+    ("hop", "champion shields, fc.physical holds, Mass Dispel after a shield, the return", show_hop),
+    ("aoe", "raid victims per champion crowd-AoE cast, hits per victim for the channels", show_aoe),
+    ("vetoes", "the eight Faction Champions multipliers, by action", show_vetoes),
 )
 
 

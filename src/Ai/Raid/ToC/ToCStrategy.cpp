@@ -12,6 +12,7 @@ void RaidTrialOfTheCrusaderStrategy::InitTriggers(std::vector<TriggerNode*>& tri
     AddToCJaraxxusTriggerNodes(triggers);
     AddToCAnubarakTriggerNodes(triggers);
     AddToCFactionChampionsTriggerNodes(triggers);
+    AddToCFactionChampionsDefenceTriggerNodes(triggers);
     AddToCTwinValkyrTriggerNodes(triggers);
 }
 
@@ -24,6 +25,7 @@ void RaidTrialOfTheCrusaderStrategy::InitMultipliers(std::vector<Multiplier*>& m
     AddToCJaraxxusMultipliers(botAI, multipliers);
     AddToCAnubarakMultipliers(botAI, multipliers);
     AddToCFactionChampionsMultipliers(botAI, multipliers);
+    AddToCFactionChampionsDefenceMultipliers(botAI, multipliers);
     AddToCTwinValkyrMultipliers(botAI, multipliers);
     multipliers.push_back(new ToCBurstWindowMultiplier(botAI));
 }

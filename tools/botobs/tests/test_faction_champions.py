@@ -47,9 +47,12 @@ ROGUE_C = CREATURE | 14
 WARLOCK_C = CREATURE | 15
 MAGE_C = CREATURE | 16
 PET_C = CREATURE | 17
+WARRIOR_C = CREATURE | 18
 
 GUARD = "faction champions target guard multiplier"
 REDIRECT = "faction champions threat redirect veto multiplier"
+PHYSICAL_GUARD = "faction champions physical switch guard multiplier"
+AOE_GUARD = "faction champions aoe guard multiplier"
 
 # The latch: first on the paladin, off him while he's shielded, back, then the priest once he dies.
 KILL_ORDER = ((1000, 5000, PALADIN), (5000, 9000, DISC), (9000, 12250, PALADIN), (12250, 20000, DISC))
@@ -95,6 +98,15 @@ def cast(when: int, caster: int, spell: int, target: int, ct: int = 0, triggered
     return rec
 
 
+def dmg(when: int, source: int, victim: int, spell: int) -> dict:
+    return {"t": when, "e": "dmg", "s": source, "d": victim, "sp": spell, "a": 1000, "ok": 0, "sc": 1, "ab": 0,
+            "rs": 0, "hp": 90.0}
+
+
+def aura(when: int, victim: int, source: int, spell: int, removed: bool, left: int) -> dict:
+    return {"t": when, "e": "aura", "d": victim, "s": source, "sp": spell, "r": int(removed), "dur": left}
+
+
 def champions_pull() -> list[dict]:
     records = [
         {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
@@ -115,6 +127,7 @@ def champions_pull() -> list[dict]:
         {"t": 1, "e": "unit", "g": WARLOCK_C, "en": 34474, "n": "Serissa Grimdabbler", "b": 1},
         {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
         {"t": 1, "e": "unit", "g": PET_C, "en": 35465, "n": "Zhaagrym", "own": WARLOCK_C},
+        {"t": 1, "e": "unit", "g": WARRIOR_C, "en": 34475, "n": "Shocuul", "b": 1},
 
         # A cleared latch restated at the trace's open, then a restate of a held value: neither is a hold.
         note(-500, TANK, "fc.kill", 0),
@@ -173,11 +186,73 @@ def champions_pull() -> list[dict]:
         cast(5500, SHAMAN, fc.SPELL_TREMOR_TOTEM, 0),
         {"t": 500, "e": "act", "g": PRIEST, "a": fc.ANTI_FEAR_ACTION, "rel": 100.0, "vd": "OK"},
 
-        # Two of the four multipliers, and one from another boss that must not count.
+        # Dispels: Bulwark's Polymorph dispelled a second in (the removal shares the cast's stamp),
+        # Agony's left to expire, Frost's Fear from above with no `dur` on its removal. A dispel before
+        # the Polymorph, one on a raider under no CC and a Silence on a non-healer don't count. The
+        # backlash is the 25H id.
+        aura(2000, TANK, MAGE_C, 65801, False, 10000),
+        cast(1900, PRIEST, 988, TANK),
+        cast(2500, SHAMAN, 51886, MAGE),
+        cast(3000, PRIEST, 988, TANK),
+        aura(3000, TANK, MAGE_C, 65801, True, 9000),
+        aura(10000, LOCK, MAGE_C, 65801, False, 10000),
+        aura(20000, LOCK, MAGE_C, 65801, True, 0),
+        aura(14000, ROGUE, DISC, 65542, False, 5000),
+        aura(19000, ROGUE, DISC, 65542, True, 0),
+        aura(3000, PRIEST, WARLOCK_C, 68159, False, 5000),
+        aura(8000, PRIEST, WARLOCK_C, 68159, True, 0),
+        # A Hex on Bulwark: Dispel Magic can't take a curse, the Cleanse Spirit after it can.
+        aura(12000, TANK, DISC, 66054, False, 8000),
+        cast(13000, PRIEST, 988, TANK),
+        cast(14000, SHAMAN, 51886, TANK),
+        aura(20000, TANK, DISC, 66054, True, 0),
+        {"t": 3000, "e": "act", "g": PRIEST, "a": fc.DISPEL_CC_ACTION, "rel": 100.0, "vd": "OK"},
+        {"t": 3100, "e": "act", "g": PRIEST, "a": fc.DISPEL_CC_ACTION, "rel": 100.0, "vd": "FAILED"},
+
+        # Purges: on the kill target, a Spellsteal off it, the felhunter's Devour Magic for Agony.
+        cast(4000, SHAMAN, 8012, PALADIN),
+        cast(4000, SHAMAN, 8012, PALADIN, triggered=True),
+        cast(6500, MAGE, 30449, DRUID),
+        cast(10000, FELHUNTER, 48011, PALADIN),
+        {"t": 4000, "e": "act", "g": SHAMAN, "a": fc.PURGE_ACTION, "rel": 100.0, "vd": "OK"},
+
+        # Hand of Protection on the priest while she's the kill target, the physical switch to the
+        # rogue until 8.5 s, and one Mass Dispel after both shields.
+        cast(6000, PALADIN, 66009, DISC),
+        note(-500, TANK, "fc.physical", 0),
+        note(6000, ROGUE, "fc.physical", ROGUE_C),
+        note(8500, MAGE, "fc.physical", 0),
+        cast(7000, PRIEST, fc.SPELL_MASS_DISPEL, 0, 1500),
+
+        # Crowd AoE: a Fan of Knives on Bulwark and one on nobody, a Shout fearing two, a Bladestorm
+        # hitting two bots twice plus a tick past its window, a 25H Hellfire ticking Frost three times.
+        cast(5000, ROGUE_C, 68099, 0),
+        dmg(5000, ROGUE_C, TANK, 68099),
+        cast(8000, ROGUE_C, 68099, 0),
+        cast(9500, WARRIOR_C, 65930, TANK),
+        aura(9500, MAGE, WARRIOR_C, 65930, False, 8000),
+        aura(9500, LOCK, WARRIOR_C, 65930, False, 8000),
+        aura(11000, MAGE, WARRIOR_C, 65930, True, 6500),
+        aura(11000, LOCK, WARRIOR_C, 65930, True, 6500),
+        cast(11000, WARRIOR_C, 65947, 0),
+        dmg(12000, WARRIOR_C, TANK, 65946),
+        dmg(12000, WARRIOR_C, ROGUE, 65946),
+        dmg(13000, WARRIOR_C, TANK, 65946),
+        dmg(13000, WARRIOR_C, ROGUE, 65946),
+        dmg(20500, WARRIOR_C, TANK, 65946),
+        cast(15000, WARLOCK_C, 68147, 0),
+        dmg(16000, WARLOCK_C, MAGE, 68144),
+        dmg(17000, WARLOCK_C, MAGE, 68144),
+        dmg(18000, WARLOCK_C, MAGE, 68144),
+        {"t": 12000, "e": "act", "g": ROGUE, "a": fc.AVOID_AOE_ACTION, "rel": 100.0, "vd": "OK"},
+
+        # Four of the eight multipliers, and one from another boss that must not count.
         {"t": 2000, "e": "veto", "g": TANK, "m": GUARD, "a": "tank assist"},
         {"t": 2000, "e": "veto", "g": MAGE, "m": GUARD, "a": "dps assist"},
         {"t": 2100, "e": "veto", "g": ROGUE, "m": REDIRECT, "a": "tricks of the trade"},
         {"t": 2100, "e": "veto", "g": ROGUE, "m": "vezax target guard multiplier", "a": "dps assist"},
+        {"t": 6000, "e": "veto", "g": ROGUE, "m": PHYSICAL_GUARD, "a": "faction champions focus priority"},
+        {"t": 12000, "e": "veto", "g": ROGUE, "m": AOE_GUARD, "a": "reach melee"},
         {"t": 21000, "e": "end", "out": "wipe"},
     ]
     records += [snap(when) for when in range(0, 21000, 1000)]
@@ -188,6 +263,7 @@ DECLARED = {
     "fc.kill": (LATCH, "fixture"),
     "fc.switch": (EVENT, "fixture"),
     "fc.cc": (HOLDER, "fixture"),
+    "fc.physical": (LATCH, "fixture"),
     "fc.interrupter": (LATCH, "fixture"),
     "toc.progress": (LATCH, "fixture"),
     "nb.snobold": (LATCH, "fixture"),
@@ -209,7 +285,8 @@ class SyntheticPull(unittest.TestCase):
     def test_lineup_is_in_kill_order_and_leaves_the_pet_out(self):
         self.assertEqual(fc.lineup(self.trace), [
             (PALADIN, "Holy Paladin", True), (DISC, "Disc Priest", True), (DRUID, "Resto Druid", True),
-            (ROGUE_C, "Rogue", False), (WARLOCK_C, "Warlock", False), (MAGE_C, "Mage", False)])
+            (ROGUE_C, "Rogue", False), (WARRIOR_C, "Warrior", False), (WARLOCK_C, "Warlock", False),
+            (MAGE_C, "Mage", False)])
 
     def test_classes_are_named_for_the_roster_and_late_joiners(self):
         klass = fc.classes(self.trace)
@@ -268,9 +345,51 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual(wards, {fc.SPELL_FEAR_WARD: collections.Counter({PRIEST: 1}),
                                  fc.SPELL_TREMOR_TOTEM: collections.Counter({SHAMAN: 1})})
 
-    def test_vetoes_keep_the_four_multipliers_only(self):
+    def test_a_cc_aura_draws_the_first_dispel_inside_it(self):
+        self.assertEqual([(aura["member"], aura["spell"], aura["start"], aura["stop"], aura["left"], aura["at"],
+                           aura["by"]) for aura in fc.cc_auras(self.trace)], [
+            (TANK, 65801, 2000, 3000, 9000, 3000, PRIEST),
+            (MAGE, 65809, 6000, 8000, None, None, None),
+            (LOCK, 65801, 10000, 20000, 0, None, None),
+            (TANK, 66054, 12000, 20000, 0, 14000, SHAMAN)])
+
+    def test_mass_dispel_counts_apart_while_cc_holds_and_splits_off_shield_windows(self):
+        # the one cast at 7 s falls under both the Fear and the Divine Shield
+        self.assertEqual(fc.mass_dispels_under_cc(self.trace), (1, 1))
+
+    def test_backlash_reads_every_id_of_its_row(self):
+        self.assertEqual(fc.backlashes(self.trace), [(3000, PRIEST)])
+
+    def test_purges_on_champions_split_kill_target_and_credit_the_pet_owner(self):
+        self.assertEqual([(row["t"], row["by"], row["spell"], row["kill"]) for row in fc.purge_rows(self.trace)], [
+            (4000, SHAMAN, 8012, True), (6500, MAGE, 30449, False), (10000, LOCK, 48011, True)])
+
+    def test_a_shield_pairs_with_the_next_mass_dispel_and_back(self):
+        self.assertEqual([(row["t"], row["spell"], row["target"], row["kill"], row["mass"], row["masses"],
+                           row["back"], row["early"]) for row in fc.shield_rows(self.trace)], [
+            (4990, fc.SPELL_DIVINE_SHIELD, PALADIN, True, 7000, 1, 9000, True),
+            (6000, fc.SPELL_HAND_OF_PROTECTION, DISC, True, 7000, 1, None, False)])
+
+    def test_a_physical_hold_shares_over_tanks_melee_and_hunters(self):
+        # Bulwark stays on the rogue, Shiv follows the kill target
+        self.assertEqual(fc.physical_holds(self.trace), [
+            {"guid": ROGUE_C, "start": 6000, "stop": 8500, "share": 0.5}])
+        self.assertTrue(fc.physical("ranged", "hunter"))
+        self.assertFalse(fc.physical("heal", "paladin"))
+
+    def test_aoe_victims_go_to_the_cast_whose_window_holds_them(self):
+        rows = fc.aoe_casts(self.trace)
+        self.assertEqual([(row["t"], row["caster"], row["name"], dict(row["hits"])) for row in rows], [
+            (5000, ROGUE_C, "Fan of Knives", {TANK: 1}),
+            (8000, ROGUE_C, "Fan of Knives", {}),
+            (9500, WARRIOR_C, "Intimidating Shout", {MAGE: 1, LOCK: 1}),
+            (11000, WARRIOR_C, "Bladestorm", {TANK: 2, ROGUE: 2}),
+            (15000, WARLOCK_C, "Hellfire", {MAGE: 3})])
+
+    def test_vetoes_keep_the_eight_multipliers_only(self):
         self.assertEqual(fc.fc_vetoes(self.trace), collections.Counter({
-            (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1}))
+            (GUARD, "tank assist"): 1, (GUARD, "dps assist"): 1, (REDIRECT, "tricks of the trade"): 1,
+            (PHYSICAL_GUARD, "faction champions focus priority"): 1, (AOE_GUARD, "reach melee"): 1}))
 
     def test_every_section_renders(self):
         out = io.StringIO()
@@ -284,6 +403,85 @@ class SyntheticPull(unittest.TestCase):
         self.assertIn("probes absent from this trace: fc.interrupter", text)
         self.assertIn("fc.switch: first 1, dead 1, immune 1, back 1, reset 1", text)
         self.assertIn("first interrupter by class: rogue 1, warlock 1, mage 1", text)
+        self.assertIn("first dispel cast inside each, by class: priest 1 (median 1.0 s, max 1.0 s),"
+                      " shaman 1 (median 2.0 s, max 2.0 s)", text)
+        self.assertIn("Mass Dispel: 1 cast(s) while counted CC held a raider, 1 of them inside a champion"
+                      " shield window", text)
+        self.assertIn("Unstable Affliction backlash on the raid: 1 (Mercy 1)", text)
+        self.assertIn("3 offensive dispel(s) on champions, 2 on the kill target", text)
+        self.assertIn(f"{fc.PURGE_ACTION}: 1 OK row(s)", text)
+        self.assertRegex(text, r"Divine Shield .* yes +\+2\.0s x1 +\+4\.0s early")
+        self.assertRegex(text, r"Bladestorm +1 +2\.0, max 2 +2\.0, max 2 +2 x1")
+        self.assertIn(f"{fc.AVOID_AOE_ACTION}: 1 OK row(s)", text)
+
+
+RET_C = CREATURE | 19
+
+
+def shield_pull() -> list[dict]:
+    """Each shield lands 10 ms before the refresh that moves `fc.kill` off it."""
+    return [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 649, "inst": 1, "diff": 3, "boss": "velanaa",
+         "roster": [{"g": PRIEST, "n": "Mercy", "r": "heal", "c": 5, "h": 0}]},
+        {"t": 0, "e": "pull", "boss": "velanaa", "src": "engage"},
+        {"t": 1, "e": "unit", "g": PALADIN, "en": 34465, "n": "Velanaa", "b": 1},
+        {"t": 1, "e": "unit", "g": DISC, "en": 34466, "n": "Anthar Forgemender", "b": 1},
+        {"t": 1, "e": "unit", "g": MAGE_C, "en": 34468, "n": "Noozle Whizzlestick", "b": 1},
+        {"t": 1, "e": "unit", "g": RET_C, "en": 34471, "n": "Malithas Brightblade", "b": 1},
+        note(1000, PRIEST, "fc.switch", "first"),
+        note(1000, PRIEST, "fc.kill", MAGE_C),
+        # Ice Block on the kill target, and the paladin's early return lands inside it
+        cast(1490, MAGE_C, fc.SPELL_ICE_BLOCK, MAGE_C),
+        note(1500, PRIEST, "fc.switch", "immune"),
+        note(1500, PRIEST, "fc.kill", PALADIN),
+        # Divine Shield Mass Dispelled, back 4 s in
+        cast(1990, PALADIN, fc.SPELL_DIVINE_SHIELD, PALADIN),
+        note(2000, PRIEST, "fc.switch", "immune"),
+        note(2000, PRIEST, "fc.kill", DISC),
+        # off the kill target, so no back to read
+        cast(2990, RET_C, fc.SPELL_DIVINE_SHIELD, RET_C),
+        cast(3500, PRIEST, fc.SPELL_MASS_DISPEL, 0, 1500),
+        note(6000, PRIEST, "fc.switch", "back"),
+        note(6000, PRIEST, "fc.kill", PALADIN),
+        note(8000, PRIEST, "fc.switch", "dead"),
+        note(8000, PRIEST, "fc.kill", RET_C),
+        # Divine Shield run to its end, back 12.5 s in
+        cast(8990, RET_C, fc.SPELL_DIVINE_SHIELD, RET_C),
+        note(9000, PRIEST, "fc.switch", "immune"),
+        note(9000, PRIEST, "fc.kill", DISC),
+        note(21500, PRIEST, "fc.switch", "back"),
+        note(21500, PRIEST, "fc.kill", RET_C),
+        {"t": 22000, "e": "end", "out": "wipe"},
+    ]
+
+
+class ShieldReturns(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        path = pathlib.Path(cls.folder.name) / "649_1_velanaa_1789500000.ndjson"
+        path.write_text("\n".join(json.dumps(rec) for rec in shield_pull()) + "\n", encoding="utf-8")
+        cls.trace = Trace(path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_back_counts_only_when_the_latch_returns_to_the_shielded_kill_target(self):
+        self.assertEqual([(row["t"], row["target"], row["kill"], row["mass"], row["back"], row["early"])
+                          for row in fc.shield_rows(self.trace)], [
+            (1490, MAGE_C, True, 3500, None, False),
+            (1990, PALADIN, True, 3500, 6000, True),
+            (2990, RET_C, False, 3500, None, False),
+            (8990, RET_C, True, None, 21500, False)])
+
+    def test_the_back_column_marks_early_full_and_not_on_the_kill_target(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            fc.show_hop(self.trace)
+        lines = [line for line in out.getvalue().splitlines() if "Divine Shield" in line or "Ice Block" in line]
+        self.assertEqual([line.split()[-1] for line in lines], ["-", "early", "n/a", "+12.5s"])
+        self.assertIn("+4.0s early", lines[1])
 
 
 class KillEnding(unittest.TestCase):
@@ -329,6 +527,13 @@ class EveryView(unittest.TestCase):
         fears, wards = fc.fear_rows(trace)
         self.assertFalse(any(row["count"] for row in fears.values()))
         self.assertFalse(any(wards.values()))
+        self.assertEqual(fc.cc_auras(trace), [])
+        self.assertEqual(fc.mass_dispels_under_cc(trace), (0, 0))
+        self.assertEqual(fc.backlashes(trace), [])
+        self.assertEqual(fc.purge_rows(trace), [])
+        self.assertEqual(fc.shield_rows(trace), [])
+        self.assertEqual(fc.physical_holds(trace), [])
+        self.assertEqual(fc.aoe_casts(trace), [])
         self.assertEqual(fc.fc_vetoes(trace), collections.Counter())
 
 
