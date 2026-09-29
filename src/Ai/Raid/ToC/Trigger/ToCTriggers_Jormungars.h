@@ -6,51 +6,36 @@
 #include "NamedObjectContext.h"
 #include "Trigger.h"
 
-class WormsMobileEngagedByMainTankTrigger : public Trigger
+class NorthrendWormsMobileTankDutyTrigger : public Trigger
 {
 public:
-    WormsMobileEngagedByMainTankTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms mobile engaged by main tank") {}
+    NorthrendWormsMobileTankDutyTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms mobile tank duty") {}
     bool IsActive() override;
 };
 
-class WormsStationaryNeedsAssistTankTrigger : public Trigger
+class NorthrendWormsStationaryTankDutyTrigger : public Trigger
 {
 public:
-    WormsStationaryNeedsAssistTankTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms stationary needs assist tank") {}
+    NorthrendWormsStationaryTankDutyTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms stationary tank duty") {}
     bool IsActive() override;
 };
 
-class WormsRangedShouldSpreadTrigger : public Trigger
+class NorthrendWormsRedirectThreatTrigger : public Trigger
 {
 public:
-    WormsRangedShouldSpreadTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms ranged should spread") {}
+    NorthrendWormsRedirectThreatTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms redirect threat") {}
     bool IsActive() override;
 };
 
-class WormsAfflictedByBurningTrigger : public Trigger
+// Pools, Spew, Sweep, Bile, the spray spread and the Toxin cure walk, all through one mover
+class NorthrendWormsMisplacedTrigger : public Trigger
 {
 public:
-    WormsAfflictedByBurningTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms afflicted by burning") {}
-    bool IsActive() override;
-};
-
-class WormsSlimePoolNearbyTrigger : public Trigger
-{
-public:
-    WormsSlimePoolNearbyTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms slime pool nearby") {}
-    bool IsActive() override;
-};
-
-class WormsSweepFrontalTrigger : public Trigger
-{
-public:
-    WormsSweepFrontalTrigger(
-        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms sweep frontal") {}
+    NorthrendWormsMisplacedTrigger(
+        PlayerbotAI* botAI) : Trigger(botAI, "northrend worms misplaced") {}
     bool IsActive() override;
 };
 
@@ -59,43 +44,31 @@ class ToCJormungarsTriggerContext : public NamedObjectContext<Trigger>
 public:
     ToCJormungarsTriggerContext() : NamedObjectContext<Trigger>()
     {
-        creators["northrend worms mobile engaged by main tank"] =
-            &ToCJormungarsTriggerContext::worms_mobile_engaged_by_main_tank;
-        creators["northrend worms stationary needs assist tank"] =
-            &ToCJormungarsTriggerContext::worms_stationary_needs_assist_tank;
-        creators["northrend worms ranged should spread"] =
-            &ToCJormungarsTriggerContext::worms_ranged_should_spread;
-        creators["northrend worms afflicted by burning"] =
-            &ToCJormungarsTriggerContext::worms_afflicted_by_burning;
-        creators["northrend worms slime pool nearby"] =
-            &ToCJormungarsTriggerContext::worms_slime_pool_nearby;
-        creators["northrend worms sweep frontal"] =
-            &ToCJormungarsTriggerContext::worms_sweep_frontal;
+        creators["northrend worms mobile tank duty"] =
+            &ToCJormungarsTriggerContext::northrend_worms_mobile_tank_duty;
+        creators["northrend worms stationary tank duty"] =
+            &ToCJormungarsTriggerContext::northrend_worms_stationary_tank_duty;
+        creators["northrend worms redirect threat"] =
+            &ToCJormungarsTriggerContext::northrend_worms_redirect_threat;
+        creators["northrend worms misplaced"] =
+            &ToCJormungarsTriggerContext::northrend_worms_misplaced;
     }
 
 private:
-    static Trigger* worms_mobile_engaged_by_main_tank(PlayerbotAI* botAI) {
-        return new WormsMobileEngagedByMainTankTrigger(botAI);
+    static Trigger* northrend_worms_mobile_tank_duty(PlayerbotAI* botAI) {
+        return new NorthrendWormsMobileTankDutyTrigger(botAI);
     }
 
-    static Trigger* worms_stationary_needs_assist_tank(PlayerbotAI* botAI) {
-        return new WormsStationaryNeedsAssistTankTrigger(botAI);
+    static Trigger* northrend_worms_stationary_tank_duty(PlayerbotAI* botAI) {
+        return new NorthrendWormsStationaryTankDutyTrigger(botAI);
     }
 
-    static Trigger* worms_ranged_should_spread(PlayerbotAI* botAI) {
-        return new WormsRangedShouldSpreadTrigger(botAI);
+    static Trigger* northrend_worms_redirect_threat(PlayerbotAI* botAI) {
+        return new NorthrendWormsRedirectThreatTrigger(botAI);
     }
 
-    static Trigger* worms_afflicted_by_burning(PlayerbotAI* botAI) {
-        return new WormsAfflictedByBurningTrigger(botAI);
-    }
-
-    static Trigger* worms_slime_pool_nearby(PlayerbotAI* botAI) {
-        return new WormsSlimePoolNearbyTrigger(botAI);
-    }
-
-    static Trigger* worms_sweep_frontal(PlayerbotAI* botAI) {
-        return new WormsSweepFrontalTrigger(botAI);
+    static Trigger* northrend_worms_misplaced(PlayerbotAI* botAI) {
+        return new NorthrendWormsMisplacedTrigger(botAI);
     }
 };
 

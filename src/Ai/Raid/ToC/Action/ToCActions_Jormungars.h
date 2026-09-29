@@ -5,53 +5,78 @@
 #include "AttackAction.h"
 #include "MovementActions.h"
 #include "NamedObjectContext.h"
-#include "ToCActions_Shared.h"
+#include "Position.h"
+#include "RaidRedirectThreat.h"
+#include "ToCHelpers_NorthrendBeasts.h"
 
-class WormsMainTankHoldMobileWormAction : public AttackAction
+// Holds the worm of one duty through its submerges. Its walks are latched: every MoveTo clears the
+// MotionMaster, so a spot re-derived each tick from a bot that's still walking never lands.
+class NorthrendWormsTankHoldAction : public AttackAction
 {
 public:
-    WormsMainTankHoldMobileWormAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms main tank hold mobile worm") : AttackAction(botAI, name) {};
     bool Execute(Event event) override;
+
+protected:
+    NorthrendWormsTankHoldAction(PlayerbotAI* botAI, std::string const name,
+                                 TrialOfTheCrusaderHelpers::BeastsTankDuty holdDuty)
+        : AttackAction(botAI, name), duty(holdDuty) {};
+
+private:
+    enum class WalkKind : uint8
+    {
+        None,
+        Approach,
+        Drag
+    };
+
+    bool ApproachSubmerged(Unit* worm);
+    bool DragOffHazards(Unit* worm);
+    // The latched spot while the bot is still walking a walk of this kind, else nullptr
+    Position const* WalkInFlight(WalkKind kind);
+    // False without booking anything while a cast pins the bot's feet
+    bool WalkTo(WalkKind kind, Position const& spot);
+    bool BookedOnWalkSpot();
+
+    TrialOfTheCrusaderHelpers::BeastsTankDuty const duty;
+    Position walkSpot;
+    Position approachFrom;  // where the worm stood when the approach was issued
+    uint32 walkIssuedMs = 0;
+    WalkKind walking = WalkKind::None;
 };
 
-class WormsAssistTankHoldStationaryWormAction : public AttackAction
+class NorthrendWormsTankHoldMobileWormAction : public NorthrendWormsTankHoldAction
 {
 public:
-    WormsAssistTankHoldStationaryWormAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms assist tank hold stationary worm") : AttackAction(botAI, name) {};
-    bool Execute(Event event) override;
+    NorthrendWormsTankHoldMobileWormAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms tank hold mobile worm")
+        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormMobile) {};
 };
 
-class WormsSpreadAction : public MovementAction
+class NorthrendWormsTankHoldStationaryWormAction : public NorthrendWormsTankHoldAction
 {
 public:
-    WormsSpreadAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms spread") : MovementAction(botAI, name) {};
-    bool Execute(Event event) override;
+    NorthrendWormsTankHoldStationaryWormAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms tank hold stationary worm")
+        : NorthrendWormsTankHoldAction(botAI, name, TrialOfTheCrusaderHelpers::BeastsTankDuty::WormStationary) {};
 };
 
-class WormsKeepMovingAction : public MovementAction
+class NorthrendWormsRedirectThreatAction : public RaidRedirectThreatAction
 {
 public:
-    WormsKeepMovingAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms keep moving") : MovementAction(botAI, name) {};
-    bool Execute(Event event) override;
+    NorthrendWormsRedirectThreatAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms redirect threat")
+        : RaidRedirectThreatAction(botAI, name) {};
+
+protected:
+    Player* GetRedirectTank() override;
+    Unit* GetThreatDumpTarget() override;
 };
 
-class WormsAvoidSlimePoolAction : public AvoidCreatureClusterAction
+class NorthrendWormsRepositionAction : public MovementAction
 {
 public:
-    WormsAvoidSlimePoolAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms avoid slime pool") : AvoidCreatureClusterAction(botAI, name) {};
-    bool Execute(Event event) override;
-};
-
-class WormsAvoidSweepAction : public MovementAction
-{
-public:
-    WormsAvoidSweepAction(
-        PlayerbotAI* botAI, std::string const name = "northrend worms avoid sweep") : MovementAction(botAI, name) {};
+    NorthrendWormsRepositionAction(
+        PlayerbotAI* botAI, std::string const name = "northrend worms reposition") : MovementAction(botAI, name) {};
     bool Execute(Event event) override;
 };
 
@@ -60,43 +85,31 @@ class ToCJormungarsActionContext : public NamedObjectContext<Action>
 public:
     ToCJormungarsActionContext()
     {
-        creators["northrend worms main tank hold mobile worm"] =
-            &ToCJormungarsActionContext::worms_main_tank_hold_mobile_worm;
-        creators["northrend worms assist tank hold stationary worm"] =
-            &ToCJormungarsActionContext::worms_assist_tank_hold_stationary_worm;
-        creators["northrend worms spread"] =
-            &ToCJormungarsActionContext::worms_spread;
-        creators["northrend worms keep moving"] =
-            &ToCJormungarsActionContext::worms_keep_moving;
-        creators["northrend worms avoid slime pool"] =
-            &ToCJormungarsActionContext::worms_avoid_slime_pool;
-        creators["northrend worms avoid sweep"] =
-            &ToCJormungarsActionContext::worms_avoid_sweep;
+        creators["northrend worms tank hold mobile worm"] =
+            &ToCJormungarsActionContext::northrend_worms_tank_hold_mobile_worm;
+        creators["northrend worms tank hold stationary worm"] =
+            &ToCJormungarsActionContext::northrend_worms_tank_hold_stationary_worm;
+        creators["northrend worms redirect threat"] =
+            &ToCJormungarsActionContext::northrend_worms_redirect_threat;
+        creators["northrend worms reposition"] =
+            &ToCJormungarsActionContext::northrend_worms_reposition;
     }
 
 private:
-    static Action* worms_main_tank_hold_mobile_worm(PlayerbotAI* botAI) {
-        return new WormsMainTankHoldMobileWormAction(botAI);
+    static Action* northrend_worms_tank_hold_mobile_worm(PlayerbotAI* botAI) {
+        return new NorthrendWormsTankHoldMobileWormAction(botAI);
     }
 
-    static Action* worms_assist_tank_hold_stationary_worm(PlayerbotAI* botAI) {
-        return new WormsAssistTankHoldStationaryWormAction(botAI);
+    static Action* northrend_worms_tank_hold_stationary_worm(PlayerbotAI* botAI) {
+        return new NorthrendWormsTankHoldStationaryWormAction(botAI);
     }
 
-    static Action* worms_spread(PlayerbotAI* botAI) {
-        return new WormsSpreadAction(botAI);
+    static Action* northrend_worms_redirect_threat(PlayerbotAI* botAI) {
+        return new NorthrendWormsRedirectThreatAction(botAI);
     }
 
-    static Action* worms_keep_moving(PlayerbotAI* botAI) {
-        return new WormsKeepMovingAction(botAI);
-    }
-
-    static Action* worms_avoid_slime_pool(PlayerbotAI* botAI) {
-        return new WormsAvoidSlimePoolAction(botAI);
-    }
-
-    static Action* worms_avoid_sweep(PlayerbotAI* botAI) {
-        return new WormsAvoidSweepAction(botAI);
+    static Action* northrend_worms_reposition(PlayerbotAI* botAI) {
+        return new NorthrendWormsRepositionAction(botAI);
     }
 };
 
