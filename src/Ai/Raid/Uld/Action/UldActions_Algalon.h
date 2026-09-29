@@ -14,12 +14,21 @@
 //
 // Algalon the Observer
 //
-class AlgalonResetEncounterStateAction : public Action
+class AlgalonBigBangSoakAction : public Action
 {
 public:
-    static constexpr char const* Name = "algalon reset encounter state action";
+    static constexpr char const* Name = "algalon big bang soak action";
 
-    AlgalonResetEncounterStateAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonBigBangSoakAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonBigBangExternalAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon big bang external action";
+
+    AlgalonBigBangExternalAction(PlayerbotAI* ai) : Action(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -29,15 +38,6 @@ public:
     static constexpr char const* Name = "algalon big bang hide action";
 
     AlgalonBigBangHideAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
-    bool Execute(Event event) override;
-};
-
-class AlgalonBigBangSoakAction : public Action
-{
-public:
-    static constexpr char const* Name = "algalon big bang soak action";
-
-    AlgalonBigBangSoakAction(PlayerbotAI* ai) : Action(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -59,13 +59,28 @@ public:
     bool Execute(Event event) override;
 };
 
-class AlgalonPhasePunchSwapAction : public AttackAction
+// Taunts Algalon onto this tank, and walks to him if the taunt can't reach.
+class AlgalonTakeBossAction : public AttackAction
+{
+public:
+    AlgalonTakeBossAction(PlayerbotAI* ai, char const* name) : AttackAction(ai, name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonTankPickupAction : public AlgalonTakeBossAction
+{
+public:
+    static constexpr char const* Name = "algalon tank pickup action";
+
+    AlgalonTankPickupAction(PlayerbotAI* ai) : AlgalonTakeBossAction(ai, Name) {}
+};
+
+class AlgalonPhasePunchSwapAction : public AlgalonTakeBossAction
 {
 public:
     static constexpr char const* Name = "algalon phase punch swap action";
 
-    AlgalonPhasePunchSwapAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
-    bool Execute(Event event) override;
+    AlgalonPhasePunchSwapAction(PlayerbotAI* ai) : AlgalonTakeBossAction(ai, Name) {}
 };
 
 class AlgalonConstellationTauntAction : public AttackAction
@@ -74,6 +89,15 @@ public:
     static constexpr char const* Name = "algalon constellation taunt action";
 
     AlgalonConstellationTauntAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonDarkMatterTankAction : public AttackAction
+{
+public:
+    static constexpr char const* Name = "algalon dark matter tank action";
+
+    AlgalonDarkMatterTankAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
     bool Execute(Event event) override;
 };
 
@@ -89,30 +113,21 @@ private:
     bool _spotReached = false;
 };
 
-class AlgalonCollapsingStarFocusAction : public Action
+class AlgalonStarTeamAction : public AttackAction
 {
 public:
-    static constexpr char const* Name = "algalon collapsing star focus action";
+    static constexpr char const* Name = "algalon star team action";
 
-    AlgalonCollapsingStarFocusAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonStarTeamAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
     bool Execute(Event event) override;
 };
 
-class AlgalonDarkMatterTankAction : public AttackAction
+class AlgalonStarMarkAction : public Action
 {
 public:
-    static constexpr char const* Name = "algalon dark matter tank action";
+    static constexpr char const* Name = "algalon star mark action";
 
-    AlgalonDarkMatterTankAction(PlayerbotAI* ai) : AttackAction(ai, Name) {}
-    bool Execute(Event event) override;
-};
-
-class AlgalonDarkMatterMarkAction : public Action
-{
-public:
-    static constexpr char const* Name = "algalon dark matter mark action";
-
-    AlgalonDarkMatterMarkAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    AlgalonStarMarkAction(PlayerbotAI* ai) : Action(ai, Name) {}
     bool Execute(Event event) override;
 };
 

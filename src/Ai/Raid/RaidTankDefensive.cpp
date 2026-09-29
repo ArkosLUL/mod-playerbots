@@ -27,22 +27,23 @@ struct TankDefensive
     uint8 playerClass;
     char const* castName;
     uint32 auraId;
+    bool magicOnly;
 };
 
 std::array<TankDefensive, 9> const TANK_DEFENSIVES = { {
-    { CLASS_WARRIOR, "last stand", 12975 },                 // 180s
-    { CLASS_WARRIOR, "shield wall", 871 },                  // 300s
-    { CLASS_PALADIN, "divine protection", 498 },            // 180s
-    { CLASS_DRUID, "barkskin", 22812 },                     //  60s
-    { CLASS_DRUID, "frenzied regeneration", 22842 },        // 180s
-    { CLASS_DRUID, "survival instincts", 61336 },           // 180s
-    { CLASS_DEATH_KNIGHT, "anti magic shell", 48707 },      //  45s
-    { CLASS_DEATH_KNIGHT, "vampiric blood", 55233 },        //  60s
-    { CLASS_DEATH_KNIGHT, "icebound fortitude", 48792 },    // 120s
+    { CLASS_WARRIOR, "last stand", 12975, false },                 // 180s
+    { CLASS_WARRIOR, "shield wall", 871, false },                  // 300s
+    { CLASS_PALADIN, "divine protection", 498, false },            // 180s
+    { CLASS_DRUID, "barkskin", 22812, false },                     //  60s
+    { CLASS_DRUID, "frenzied regeneration", 22842, false },        // 180s
+    { CLASS_DRUID, "survival instincts", 61336, false },           // 180s
+    { CLASS_DEATH_KNIGHT, "anti magic shell", 48707, true },       //  45s
+    { CLASS_DEATH_KNIGHT, "vampiric blood", 55233, false },        //  60s
+    { CLASS_DEATH_KNIGHT, "icebound fortitude", 48792, false },    // 120s
 } };
 }  // namespace
 
-char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind)
+char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly)
 {
     if (!botAI || !bot)
         return nullptr;
@@ -51,7 +52,7 @@ char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteK
     bool covered = false;
     for (TankDefensive const& entry : TANK_DEFENSIVES)
     {
-        if (entry.playerClass != bot->getClass())
+        if (entry.playerClass != bot->getClass() || (physicalOnly && entry.magicOnly))
             continue;
 
         // One at a time: anything still running means the tank is already covered, and stacking the

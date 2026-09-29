@@ -7,91 +7,59 @@
 #include "UldMultipliers_Algalon.h"
 
 #include "AttackAction.h"
-#include "BurstCooldowns.h"
-#include "ChooseTargetActions.h"
-#include "EncounterHelpers.h"
-#include "FollowActions.h"
 #include "GenericSpellActions.h"
-#include "HunterActions.h"
-#include "MageActions.h"
-#include "MovementActions.h"
-#include "PaladinActions.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
-#include "PriestActions.h"
-#include "ReachTargetActions.h"
-#include "RogueActions.h"
-#include "SharedDefines.h"
-#include "Spell.h"
-#include "SpellMgr.h"
-#include "Timer.h"
-#include "UldActions.h"
+#include "RaidEncounter.h"
 #include "UldEncounter_Algalon.h"
-#include "UldHardMode.h"
-#include "UldScripts.h"
-#include "UldTriggers.h"
-#include "VehicleActions.h"
 
-#include <set>
-#include <string>
+namespace Family = RaidEncounterRules::Family;
 
-using namespace EncounterHelpers;
-
-// Algalon the Observer
-//
-// Big Bang is unavoidable raid-wide damage that immunity does not stop, so whoever is holding it off
-// this cast has to still have the cooldown when it lands. Spending it on the low-mana or
-// critical-health nodes thirty seconds earlier is what turns a survivable cast into a reset: with
-// nobody left standing, CheckTargets finds no targets and Algalon ascends and evades.
-float AlgalonSoakCooldownReserveMultiplier::GetValue(Action* action)
+float AlgalonTargetGuardMultiplier::GetValue(Action* action)
 {
     if (!action)
         return 1.0f;
 
-    if (!dynamic_cast<CastDispersionAction*>(action) && action->getName() != "guardian spirit")
+    auto cached = damagesCurrentTarget.find(action);
+    if (cached == damagesCurrentTarget.end())
+    {
+        bool damages = dynamic_cast<MeleeAction*>(action) || (ClassifyAction(action) & Family::PetAttack);
+        if (!damages)
+        {
+            CastSpellAction* spell = dynamic_cast<CastSpellAction*>(action);
+            damages = spell && !dynamic_cast<CastHealingSpellAction*>(action) &&
+                      spell->GetTargetName() == "current target";
+        }
+
+        cached = damagesCurrentTarget.emplace(action, damages).first;
+    }
+
+    if (!cached->second)
         return 1.0f;
 
-    if (!AlgalonEncounterActive(botAI))
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target)
         return 1.0f;
 
-    if (GetAlgalonBigBangSoaker(botAI) != bot)
-        return 1.0f;
-
-    // During the cast itself the soak action must be free to spend it.
-    return AlgalonBigBangCasting(botAI) ? 1.0f : 0.0f;
+    switch (target->GetEntry())
+    {
+        case PB_NPC_COLLAPSING_STAR:
+        case PB_NPC_LIVING_CONSTELLATION:
+        case PB_NPC_UNLEASHED_DARK_MATTER:
+            return AlgalonMayDamage(bot, target) ? 1.0f : 0.0f;
+        default:
+            return 1.0f;
+    }
 }
 
-float AlgalonTargetGuardMultiplier::GetValue(Action* action)
+float AlgalonStarAoeMultiplier::GetValue(Action* action)
 {
-    if (!action || !AlgalonEncounterActive(botAI))
+    if (!action || action->getThreatType() != Action::ActionThreatType::Aoe)
         return 1.0f;
 
-    static std::set<std::string> const encounterOwned = {
-        "algalon constellation taunt action", "algalon constellation kite action",
-        "algalon dark matter tank action",    "algalon collapsing star focus action",
-        "algalon dark matter mark action"};
-
-    if (encounterOwned.count(action->getName()))
+    // Healing AoE reports the same threat type and is never held.
+    if (dynamic_cast<CastHealingSpellAction*>(action))
         return 1.0f;
 
-    Unit* currentTarget = AI_VALUE(Unit*, "current target");
-
-    // A Living Constellation carries 20x base health and cannot be killed inside the six minute
-    // enrage; the kite is the only way one ever leaves. Whoever is holding it still hits it, since
-    // that threat is what keeps it following.
-    if (currentTarget && currentTarget->GetEntry() == PB_NPC_LIVING_CONSTELLATION &&
-        currentTarget->GetVictim() != bot)
-    {
-        return 0.0f;
-    }
-
-    // No hole standing with a Big Bang closing in. A skull mark on the star is only advice, and the
-    // raid has to actually stop hitting the boss for the star to die in time.
-    if (currentTarget && currentTarget == GetAlgalon(botAI) && AlgalonNeedsShelterUrgently(botAI) &&
-        !botAI->IsTank(bot))
-    {
-        return 0.0f;
-    }
-
-    return 1.0f;
+    return AlgalonAliveStarCount(botAI) >= 2 && AlgalonEngaged(botAI) ? 0.0f : 1.0f;
 }

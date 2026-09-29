@@ -8,6 +8,7 @@
 
 #include "Playerbots.h"
 #include "UldDefinitions.h"
+#include "UldEncounter_Algalon.h"
 #include "UldEncounter_Mimiron.h"
 #include "UldMultipliers.h"
 
@@ -20,6 +21,8 @@ void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions,
 {
     for (ObjectGuid const& guid : GetMimironKeptFireBots(botAI, botAI->GetBot()))
         exclusions.insert(guid);
+
+    AppendAlgalonTargetExclusions(botAI, exclusions);
 }
 
 void RaidUlduarStrategy::OnTick()

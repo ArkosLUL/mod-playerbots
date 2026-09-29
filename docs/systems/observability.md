@@ -389,6 +389,9 @@ decides who makes the row set and grid order is not a ranking: at Hodir it binds
 snapshots, and in grid order every slot went to Thorim arena trash parked 74+ yd out, so across three
 traces not one ice block, Toasty Fire or icicle was ever sampled — the units the sweep exists for.
 
+The sweep sees only its anchor's phase, so the anchor is the first roster player in the normal phase:
+one bot inside an Algalon hole would otherwise drop every hole, star and constellation from the rows.
+
 `haz` is the other channel and the two never meet — `snap.hz` is what a sweep found, `haz` what nothing
 can sweep for. Only `snap.hz` feeds the death block's containment test, so a `haz` mechanic reaches the
 timeline and never a `STOOD IN` line. A `lane` carries no geometry to test anyway: an origin, no heading

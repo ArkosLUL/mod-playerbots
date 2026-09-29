@@ -1,21 +1,15 @@
 #include "UldTriggers_Algalon.h"
 
-#include "GameObject.h"
+#include "EncounterHelpers.h"
 #include "Group.h"
-#include "Object.h"
+#include "Player.h"
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
+#include "RaidTankDefensive.h"
+#include "SharedDefines.h"
 #include "UldData.h"
 #include "UldEncounter_Algalon.h"
-#include "UldScripts.h"
-#include "EncounterHelpers.h"
-#include "ScriptedCreature.h"
-#include "SharedDefines.h"
-#include "SpellAuras.h"
-#include "Trigger.h"
-#include "Vehicle.h"
-#include <MovementActions.h>
-#include <FollowMasterStrategy.h>
+#include "Unit.h"
 #include <RtiTargetValue.h>
 
 using namespace EncounterHelpers;
@@ -24,158 +18,164 @@ using namespace EncounterHelpers;
 // Algalon the Observer
 //
 
-bool AlgalonResetEncounterStateTrigger::IsActive()
-{
-    if (bot->GetMapId() != ULDUAR_MAP_ID || AlgalonEncounterActive(botAI))
-        return false;
-
-    return AlgalonHasEncounterState(bot);
-}
-
-// Big Bang is 76312 on 10-man and 107249 on 25-man to everyone the spell can see, at any range.
-// Standing in a hole is not cover, it is a phase change - that is the whole mechanic.
-bool AlgalonBigBangHideTrigger::IsActive()
-{
-    if (!AlgalonEncounterActive(botAI) || !AlgalonBigBangCasting(botAI))
-        return false;
-
-    if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
-        return false;
-
-    // Somebody has to still be standing when CheckTargets runs, or the spell finds no targets and
-    // Algalon ascends and evades.
-    if (GetAlgalonBigBangSoaker(botAI) == bot)
-        return false;
-
-    return GetAlgalonShelter(bot) != nullptr;
-}
-
+// Whoever holds him stays out and eats the hit: he resets the moment nobody alive is left unphased.
+// Big Bang is physical, so a tank's armour and a physical defensive do the work. The button follows
+// what the bot can cast, not its slot: a promoted backup is still a priest.
 bool AlgalonBigBangSoakTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI) || !AlgalonBigBangCasting(botAI))
+    if (IsAlgalonPhased(bot) || !AlgalonBigBangLatched(bot) || !AlgalonStaysOut(bot))
         return false;
 
-    if (bot->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE))
+    int32 const remaining = AlgalonBigBangRemainingMs(botAI);
+    if (remaining < 0)
         return false;
 
-    return GetAlgalonBigBangSoaker(botAI) == bot;
+    if (AlgalonCanDisperse(bot))
+        return remaining <= ULDUAR_ALGALON_SOAK_DISPERSION_MS;
+
+    return remaining <= ULDUAR_ALGALON_SOAK_DEFENSIVE_MS &&
+           NextTankDefensive(botAI, bot, "algalon.defensive", true) != nullptr;
 }
 
-bool AlgalonCosmicSmashTrigger::IsActive()
+bool AlgalonBigBangExternalTrigger::IsActive()
 {
-    return AlgalonEncounterActive(botAI) && GetAlgalonCosmicSmashMarker(bot) != nullptr;
+    if (bot->getClass() != CLASS_PRIEST || IsAlgalonPhased(bot) || !AlgalonBigBangLatched(bot))
+        return false;
+
+    if (AlgalonBigBangRemainingMs(botAI) < ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS)
+        return false;
+
+    Player* soaker = GetAlgalonBigBangSoaker(botAI);
+    if (!soaker || soaker == bot || GetAlgalonBigBangBackup(botAI) == bot)
+        return false;
+
+    return (!soaker->HasAura(SPELL_ALGALON_PAIN_SUPPRESSION) && botAI->CanCastSpell("pain suppression", soaker)) ||
+           (!soaker->HasAura(SPELL_ALGALON_GUARDIAN_SPIRIT) && botAI->CanCastSpell("guardian spirit", soaker));
 }
 
-// Phase 1 holes land wherever a Collapsing Star happened to die, so bots end up standing in one
-// without ever having run to it. Outside a Big Bang that is 1531 a tick for nothing.
+bool AlgalonBigBangHideTrigger::IsActive() { return GetAlgalonHideRole(bot) == AlgalonHideRole::Run; }
+
+bool AlgalonCosmicSmashTrigger::IsActive() { return AlgalonEngaged(botAI) && AlgalonCosmicSmashThreatens(bot); }
+
+// A bot still inside the field when its 10s phase ends is phased again within a second, and while
+// phased it can't see the hole at all, only the cached position.
 bool AlgalonLeaveBlackHoleTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI) || AlgalonBigBangCasting(botAI))
+    if (!AlgalonEngaged(botAI))
         return false;
 
-    return GetAlgalonShelterUnderfoot(bot) != nullptr;
+    if (IsAlgalonPhased(bot))
+        return AlgalonHoleNear(bot, ULDUAR_ALGALON_HOLE_EXIT_RADIUS);
+
+    return !AlgalonBigBangCasting(botAI) && AlgalonHoleNear(bot, ULDUAR_ALGALON_SHELTER_RADIUS);
 }
 
-// Phase Punch stacks to five and then phases the tank out for ten seconds, with nobody on the boss.
-// Two tanks trade him well before that; a raid that brought one is not supported here, because a
-// damage dealer taking Quantum Strike dies in two swings.
+// At the end of the intro he swings at a random player, and a phased tank drops him the same way.
+bool AlgalonTankPickupTrigger::IsActive()
+{
+    if (IsAlgalonPhased(bot) || !IsAlgalonSwapTank(bot) || !AlgalonEngaged(botAI))
+        return false;
+
+    Unit* boss = GetAlgalon(botAI);
+    if (!boss || boss->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
+        return false;
+
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (holder && IsAlgalonSwapTank(holder) && !IsAlgalonPhased(holder))
+        return false;
+
+    // Mid cast the elected soaker is the one staying out, so it is the one to take him.
+    if (AlgalonBigBangLatched(bot))
+        return GetAlgalonBigBangSoaker(botAI) == bot && holder != bot;
+
+    return GetAlgalonPickupTank(botAI) == bot;
+}
+
 bool AlgalonPhasePunchSwapTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI))
+    if (IsAlgalonPhased(bot) || !IsAlgalonSwapTank(bot) || !AlgalonEngaged(botAI))
         return false;
 
-    Player* mainTank = GetGroupMainTank(bot);
-    Player* offTank = GetGroupAssistTank(bot, 0);
-    if (!mainTank || !offTank || mainTank == offTank)
+    Player* holder = GetAlgalonBossTank(botAI);
+    if (!holder || holder == bot || !IsAlgalonSwapTank(holder))
         return false;
 
-    if (bot != mainTank && bot != offTank)
+    // The holder is this cast's soaker. Taking him now leaves the soaker hiding and the wrong tank out.
+    if (AlgalonBigBangCasting(botAI))
         return false;
 
-    Player* activeTank = GetAlgalonBossTank(botAI);
-    if (!activeTank || activeTank == bot)
-        return false;
-
-    if (activeTank != mainTank && activeTank != offTank)
-        return false;
-
-    // The partner already rode to five and is phased out. Nothing is holding the boss, so taunt now
-    // and worry about our own stacks after. During a Big Bang the whole raid wears that aura, which
-    // is not the same thing at all.
-    if (activeTank->HasAura(SPELL_ALGALON_BLACK_HOLE_DAMAGE) && !AlgalonBigBangCasting(botAI))
+    if (IsAlgalonPhased(holder))
         return true;
 
-    Aura* ownStacks = bot->GetAura(SPELL_ALGALON_PHASE_PUNCH);
-    if (ownStacks && ownStacks->GetStackAmount() >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
+    uint8 const own = GetAlgalonPhasePunchStacks(bot);
+    uint8 const theirs = GetAlgalonPhasePunchStacks(holder);
+    if (own >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
         return false;
 
-    Aura* partnerStacks = activeTank->GetAura(SPELL_ALGALON_PHASE_PUNCH);
-    return partnerStacks && partnerStacks->GetStackAmount() >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS;
+    if (theirs >= ULDUAR_ALGALON_PHASE_PUNCH_SWAP_STACKS)
+        return true;
+
+    return theirs >= ULDUAR_ALGALON_EARLY_SWAP_STACKS && own <= ULDUAR_ALGALON_EARLY_SWAP_PARTNER_STACKS &&
+           AlgalonBigBangWithin(botAI, ULDUAR_ALGALON_EARLY_SWAP_SECONDS);
 }
 
-// A constellation picks its victim at activation and chases it. The one bot that must not be dragged
-// anywhere is whoever is holding Algalon, so the other tank pulls that one off and kites it instead.
 bool AlgalonConstellationTauntTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI))
+    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI))
         return false;
 
-    if (bot != GetGroupMainTank(bot) && bot != GetGroupAssistTank(bot, 0))
-        return false;
-
-    if (bot == GetAlgalonBossTank(botAI))
-        return false;
-
-    Unit* constellation = GetAlgalonConstellationOnBossTank(botAI);
+    Unit* constellation = GetAlgalonHandlerConstellation(bot);
     return constellation && constellation->GetVictim() != bot;
+}
+
+bool AlgalonDarkMatterTankTrigger::IsActive()
+{
+    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI))
+        return false;
+
+    return GetAlgalonLooseDarkMatter(bot) != nullptr;
 }
 
 bool AlgalonConstellationKiteTrigger::IsActive()
 {
-    return AlgalonEncounterActive(botAI) && GetAlgalonKiteTarget(bot) != nullptr;
+    if (IsAlgalonPhased(bot) || !AlgalonEngaged(botAI) || AlgalonBigBangCasting(botAI))
+        return false;
+
+    Unit* constellation = GetAlgalonHandlerConstellation(bot);
+    return constellation && constellation->GetVictim() == bot;
 }
 
-bool AlgalonCollapsingStarFocusTrigger::IsActive()
+bool AlgalonStarTeamTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
+    if (IsAlgalonPhased(bot) || !IsAlgalonStarTeam(bot) || !AlgalonEngaged(botAI))
         return false;
 
     Unit* star = GetAlgalonFocusStar(botAI);
-    if (!star || !AlgalonStarKillWindowOpen(botAI))
-        return false;
-
-    Group* group = bot->GetGroup();
-    return !group || group->GetTargetIcon(RtiTargetValue::skullIndex) != star->GetGUID();
+    return star && AI_VALUE(Unit*, "current target") != star;
 }
 
-// Unleashed Dark Matter runs at 1.43x player speed, so it cannot be kited - it gets picked up or it
-// eats whoever it picked. Collecting them on the boss keeps the tank in its swap position and puts
-// them where the melee already are.
-bool AlgalonDarkMatterTankTrigger::IsActive()
+// For the humans in the raid. Not skull: every bot's "attack rti target" reads skull.
+bool AlgalonStarMarkTrigger::IsActive()
 {
-    if (!AlgalonEncounterActive(botAI) || bot != GetAlgalonAddTank(botAI, bot))
+    if (!IsMechanicTrackerBot(bot, ULDUAR_MAP_ID) || !AlgalonEngaged(botAI))
         return false;
 
-    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
-    return darkMatter && darkMatter->GetVictim() != bot;
-}
-
-bool AlgalonDarkMatterMarkTrigger::IsActive()
-{
-    if (!AlgalonEncounterActive(botAI) || !IsMechanicTrackerBot(bot, ULDUAR_MAP_ID))
-        return false;
-
-    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
-    if (!darkMatter)
-        return false;
-
+    Unit* star = GetAlgalonFocusStar(botAI);
     Group* group = bot->GetGroup();
-    return !group || group->GetTargetIcon(RtiTargetValue::skullIndex) != darkMatter->GetGUID();
+    return star && group && group->GetTargetIcon(RtiTargetValue::starIndex) != star->GetGUID();
 }
 
+// Presence gated, not combat gated: the intro is the only free window to put the raid on its spots.
 bool AlgalonRaidPositionTrigger::IsActive()
 {
-    // Presence-gated, not combat-gated: the intro runs 26s on a first pull and that is the only free
-    // window the raid gets to put 25 bots on their spots.
-    return AlgalonEncounterActive(botAI);
+    if (!AlgalonPresent(botAI))
+        return false;
+
+    // A hider belongs to its hole from the moment it runs; the soaker and backup keep their spots.
+    if (AlgalonShouldRunForShelter(bot))
+        return false;
+
+    Unit* constellation = GetAlgalonHandlerConstellation(bot);
+    return !constellation || constellation->GetVictim() != bot;
 }

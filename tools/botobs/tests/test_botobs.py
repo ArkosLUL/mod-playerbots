@@ -58,6 +58,10 @@ class BossIdentity(unittest.TestCase):
     def test_both_spellings_of_xt_agree(self):
         self.assertEqual(canonical_boss("xt002"), canonical_boss("xt-002-deconstructor"))
 
+    def test_algalon_engages_under_his_full_name(self):
+        self.assertEqual(canonical_boss("algalon-the-observer"), "algalon")
+        self.assertEqual(boss_key(pathlib.Path("603_4_algalon-the-observer_1789500000.ndjson")), "algalon")
+
     def test_an_unmapped_slug_is_its_own_encounter(self):
         self.assertEqual(canonical_boss("thorim"), "thorim")
 

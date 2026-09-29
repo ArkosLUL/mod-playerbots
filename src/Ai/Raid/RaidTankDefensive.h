@@ -19,7 +19,8 @@ class PlayerbotAI;
 // or because one is already running. Ordered by cooldown length, which is what "weakest" means here.
 // `noteKind` names the trace row to record the pick under, or nullptr for no row: the act stream sees
 // one action name whichever button it ends up casting, and the order they go in is the whole point.
-char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind);
+// `physicalOnly` skips what only absorbs magic, for a hit Anti-Magic Shell would waste itself on.
+char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly = false);
 
 // True for the cast names in that table, so an encounter can hold the class nodes off them until the
 // window it wants them spent in.

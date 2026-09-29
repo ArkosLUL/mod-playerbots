@@ -10,21 +10,27 @@
 #include "Define.h"
 #include "Multiplier.h"
 
-// Algalon: holds the designated Big Bang soaker's escape cooldown for the cast it is meant to
-// survive. Every other priest keeps Dispersion and Guardian Spirit for their normal uses.
-class AlgalonSoakCooldownReserveMultiplier : public Multiplier
-{
-public:
-    AlgalonSoakCooldownReserveMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon soak cooldown reserve") {}
-    float GetValue(Action* action) override;
-};
+#include <unordered_map>
 
-// Algalon: keeps the raid off a Living Constellation, which nobody but its kiter should be touching,
-// and off Algalon himself in the one window where a Collapsing Star matters more than he does.
+// Algalon: the target exclusions keep the pickers off stars, constellations and Dark Matter that
+// aren't the bot's job. This catches damage already aimed at one, and nothing else: heals, movement
+// and the pickers that would switch the bot back all pass.
 class AlgalonTargetGuardMultiplier : public Multiplier
 {
 public:
     AlgalonTargetGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon target guard") {}
+    float GetValue(Action* action) override;
+
+private:
+    std::unordered_map<Action*, bool> damagesCurrentTarget;
+};
+
+// Algalon: stars die one at a time on purpose, each death 16-21k to the whole raid, and splash that
+// clips a second one undoes the pacing.
+class AlgalonStarAoeMultiplier : public Multiplier
+{
+public:
+    AlgalonStarAoeMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon star aoe") {}
     float GetValue(Action* action) override;
 };
 

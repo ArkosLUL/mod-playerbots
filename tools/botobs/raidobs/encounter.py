@@ -37,6 +37,7 @@ BOSS_ALIASES = {
     "xt002": "xt-002",
     "xt-002-deconstructor": "xt-002",
     "general-vezax": "vezax",
+    "algalon-the-observer": "algalon",
     "yogg-saron-": "yogg-saron",
     "sara": "yogg-saron",
     "gormok-the-impaler": "northrend-beasts",

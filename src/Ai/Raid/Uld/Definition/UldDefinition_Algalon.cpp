@@ -6,7 +6,9 @@
 
 #include "UldDefinitions.h"
 
+#include "Player.h"
 #include "PlayerbotAI.h"
+#include "RaidTankDefensive.h"
 #include "Strategy.h"
 #include "UldActions_Algalon.h"
 #include "UldEncounterGate.h"
@@ -19,61 +21,111 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-// One star alive is the state the pacing is trying to reach, so splash is harmless there. Phase 2 has
-// no stars at all, which leaves Dark Matter cleave untouched.
-bool AlgalonStarsPaced(PlayerbotAI* botAI)
+bool AlgalonCooldownsHeld(PlayerbotAI* botAI)
 {
-    return AlgalonEncounterActive(botAI) && AlgalonAliveStarCount(botAI) >= 2;
+    return AlgalonEngaged(botAI) &&
+           (AlgalonBigBangCasting(botAI) || AlgalonBigBangWithin(botAI, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS));
 }
 
-// Only the roles the formation places. Melee and the off-tank hold the boss, so both keep every
-// generic mover.
+// Either swap tank can end up holding him when the cast starts, so both keep their buttons.
+bool AlgalonTankDefensivesHeld(PlayerbotAI* botAI)
+{
+    return IsAlgalonSwapTank(botAI->GetBot()) && AlgalonCooldownsHeld(botAI);
+}
+
+// Phased bots are left out: inside the void they are safe, and phase-16 Dark Matter is on them.
+bool AlgalonHidingNow(PlayerbotAI* botAI) { return AlgalonShouldRunForShelter(botAI->GetBot()); }
+
+// A star isn't an attacker until something hits it, so "dps assist" would pull the team straight back
+// to Algalon between the star node's checks.
+bool AlgalonStarTeamFocused(PlayerbotAI* botAI)
+{
+    return IsAlgalonStarTeam(botAI->GetBot()) && GetAlgalonFocusStar(botAI) && AlgalonEngaged(botAI);
+}
+
+bool AlgalonSwapTankEngaged(PlayerbotAI* botAI)
+{
+    return IsAlgalonSwapTank(botAI->GetBot()) && AlgalonEngaged(botAI);
+}
+
+bool AlgalonHandlerKiting(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!AlgalonEngaged(botAI) || GetAlgalonHandler(botAI) != bot)
+        return false;
+
+    Unit* constellation = GetAlgalonHandlerConstellation(bot);
+    return constellation && constellation->GetVictim() == bot;
+}
+
+// Only the roles the formation places. Melee and the tank not holding him keep every generic mover.
 bool AlgalonFormationHolds(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
-    return AlgalonEncounterActive(botAI) && (AlgalonTakesRingSlot(bot) || botAI->IsMainTank(bot));
-}
+    if (!AlgalonPresent(botAI))
+        return false;
 
-void TickAlgalon(PlayerbotAI* botAI)
-{
-    if (GetAlgalon(botAI))
-        AlgalonTickEncounterState(botAI);
+    if (AlgalonTakesRingSlot(bot))
+        return true;
+
+    Player* holder = AlgalonEngaged(botAI) ? GetAlgalonBossTank(botAI) : nullptr;
+    return holder && IsAlgalonSwapTank(holder) ? holder == bot : botAI->IsMainTank(bot);
 }
 
 void DefineAlgalon(EncounterBuilder& e)
 {
-    // Big Bang outranks everything because missing it is 76312 or a boss reset, Cosmic Smash comes
-    // next on its hard 4s fuse, and stepping out of a hole beats both once neither is happening.
-    // Position is last and yields as soon as it is parked.
-    e.Node<AlgalonResetEncounterStateTrigger, AlgalonResetEncounterStateAction>(ACTION_EMERGENCY + 10);
-    e.Node<AlgalonBigBangHideTrigger, AlgalonBigBangHideAction>(ACTION_EMERGENCY + 8, EncounterRow::Mover);
-    e.Node<AlgalonBigBangSoakTrigger, AlgalonBigBangSoakAction>(ACTION_EMERGENCY + 8);
+    // A survival ranking. Missing Big Bang is 76-112k or a reset, Cosmic Smash lands ~4.8s after its
+    // marker, and a bot left inside a hole when its phase ends is phased again. Position is last and
+    // yields as soon as it is parked.
+    e.Node<AlgalonBigBangSoakTrigger, AlgalonBigBangSoakAction>(ACTION_EMERGENCY + 9);
+    e.Node<AlgalonBigBangExternalTrigger, AlgalonBigBangExternalAction>(ACTION_EMERGENCY + 8);
+    e.Node<AlgalonBigBangHideTrigger, AlgalonBigBangHideAction>(ACTION_EMERGENCY + 7, EncounterRow::Mover);
     e.Node<AlgalonCosmicSmashTrigger, AlgalonCosmicSmashAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<AlgalonLeaveBlackHoleTrigger, AlgalonLeaveBlackHoleAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
+    e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);
     e.Node<AlgalonPhasePunchSwapTrigger, AlgalonPhasePunchSwapAction>(ACTION_RAID + 7);
     e.Node<AlgalonConstellationTauntTrigger, AlgalonConstellationTauntAction>(ACTION_RAID + 6);
     e.Node<AlgalonDarkMatterTankTrigger, AlgalonDarkMatterTankAction>(ACTION_RAID + 5);
     e.Node<AlgalonConstellationKiteTrigger, AlgalonConstellationKiteAction>(ACTION_RAID + 4, EncounterRow::Mover);
-    e.Node<AlgalonCollapsingStarFocusTrigger, AlgalonCollapsingStarFocusAction>(ACTION_RAID + 3);
-    e.Node<AlgalonDarkMatterMarkTrigger, AlgalonDarkMatterMarkAction>(ACTION_RAID + 2);
+    e.Node<AlgalonStarTeamTrigger, AlgalonStarTeamAction>(ACTION_RAID + 3);
+    e.Node<AlgalonStarMarkTrigger, AlgalonStarMarkAction>(ACTION_RAID + 2);
     e.Node<AlgalonRaidPositionTrigger, AlgalonRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
 
-    e.Multiplier<AlgalonSoakCooldownReserveMultiplier>(Family::Spell);
+    // The soak and externals cast these directly, so they stay free for the one cast they're for.
+    e.Block("algalon hold tank defensives", Role::Tank, AlgalonTankDefensivesHeld, 0, HeldTankDefensiveNames());
+    e.Block("algalon hold big bang cooldowns", Role::Any, AlgalonCooldownsHeld, 0,
+            {"dispersion", "pain suppression", "guardian spirit on party"});
 
-    // Collapsing Stars die one at a time on purpose, each death 16-21k to the whole raid, so an area
-    // attack that clips a second one undoes the pacing.
-    e.Block("algalon collapsing star aoe", Role::Any, AlgalonStarsPaced, Family::DpsAoe);
+    // Every other mover would walk a hider back out of its hole, and MoveTo answers Duplicate from the
+    // run's second tick, so the run can't defend itself.
+    e.Exclusive("algalon big bang hide", Role::Any, AlgalonHidingNow, 0,
+                {AlgalonBigBangHideAction::Name, AlgalonLeaveBlackHoleAction::Name, AlgalonCosmicSmashAction::Name});
+    e.Block("algalon big bang spell movers", Role::Any, AlgalonHidingNow,
+            Family::Charge | Family::Blink | Family::Disengage);
 
-    // Zeroes whatever would land on the wrong target, so it has to see every action.
-    e.Multiplier<AlgalonTargetGuardMultiplier>(Family::AnyAction);
+    // The class "lose aggro" nodes taunt on cooldown whenever someone else holds him, 4 stacks or not.
+    // The swap, pickup, constellation and Dark Matter nodes taunt through CastClassTaunt instead.
+    e.Block("algalon taunt guard", Role::Tank, AlgalonSwapTankEngaged, Family::Taunt);
 
-    // The generic movers would walk the ranged half off their formation slots, and the slot node would
-    // then fire again next tick and pace them all fight. ReachHeal walks a healer into range of someone
-    // the rings can't reach.
-    e.OwnMovement("algalon control movement", Role::Any, AlgalonFormationHolds,
+    e.OwnTargeting("algalon star team", Role::Dps, AlgalonStarTeamFocused);
+
+    e.Multiplier<AlgalonStarAoeMultiplier>(Family::Spell);
+    e.Multiplier<AlgalonTargetGuardMultiplier>(Family::Melee | Family::Spell | Family::PetAttack);
+
+    // Attack would chase the constellation and Reach would walk back to Algalon while the handler leads
+    // one to a hole. Its own taunts are AttackActions too, and a swap it can't make phases the holder out.
+    e.OwnMovement("algalon kite movement", Role::Tank, AlgalonHandlerKiting, 0,
+                  {AlgalonConstellationKiteAction::Name, AlgalonBigBangHideAction::Name, AlgalonCosmicSmashAction::Name,
+                   AlgalonLeaveBlackHoleAction::Name, AlgalonTankPickupAction::Name, AlgalonPhasePunchSwapAction::Name,
+                   AlgalonConstellationTauntAction::Name, AlgalonDarkMatterTankAction::Name});
+
+    // The generic movers would walk the ranged half off their slots, and the slot node would then fire
+    // again next tick and pace them all fight. ReachHeal still walks a healer to someone the rings
+    // can't reach.
+    e.OwnMovement("algalon control movement", Role::Ranged | Role::Tank, AlgalonFormationHolds,
                   Family::Attack | Family::Reach | Family::ReachHeal);
 
-    e.Tick(TickAlgalon);
+    e.Tick(AlgalonTickEncounterState);
 }
 }  // namespace
 

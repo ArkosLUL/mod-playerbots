@@ -231,7 +231,9 @@ std::string BuildSnapshotPayload(Map* map, std::vector<ObjectGuid> const& roster
         if (!player || !player->IsInWorld() || player->GetMap() != map)
             continue;
 
-        if (!anchor)
+        // The sweep only sees the anchor's phase. One bot inside an Algalon hole would otherwise drop
+        // every hole, star and constellation out of the rows for as long as it stays phased.
+        if (!anchor || (!(anchor->GetPhaseMask() & PHASEMASK_NORMAL) && (player->GetPhaseMask() & PHASEMASK_NORMAL)))
             anchor = player;
 
         // A passenger reports its vehicle's coordinates, so without the vehicle itself a trace cannot

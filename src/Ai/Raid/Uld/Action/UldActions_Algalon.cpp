@@ -1,33 +1,22 @@
 #include "UldActions_Algalon.h"
-#include "UldActions_Shared.h"
-
-#include <CombatStrategy.h>
-#include <FollowMasterStrategy.h>
 
 #include <cmath>
 #include <vector>
 
 #include "AiObjectContext.h"
-#include "DBCEnums.h"
-#include "GameObject.h"
+#include "EncounterHelpers.h"
 #include "Group.h"
 #include "LastMovementValue.h"
-#include "ObjectGuid.h"
+#include "Player.h"
 #include "PlayerbotAI.h"
-#include "PlayerbotAIConfig.h"
 #include "Playerbots.h"
 #include "Position.h"
+#include "RaidObs.h"
+#include "RaidTankDefensive.h"
+#include "Timer.h"
 #include "UldData.h"
 #include "UldEncounter_Algalon.h"
-#include "UldScripts.h"
-#include "EncounterHelpers.h"
-#include "RtiValue.h"
-#include "ScriptedCreature.h"
-#include "ServerFacade.h"
 #include "Unit.h"
-#include "Vehicle.h"
-#include <RtiTargetValue.h>
-#include <TankAssistStrategy.h>
 
 using namespace EncounterHelpers;
 
@@ -35,185 +24,159 @@ using namespace EncounterHelpers;
 // Algalon the Observer
 //
 
-bool AlgalonResetEncounterStateAction::Execute(Event /*event*/)
+namespace
 {
-    // One bot drops the whole instance entry; everyone else only lets go of its own latches, so a bot
-    // that wandered out of the room cannot wipe state a raid that is still fighting depends on.
-    ResetAlgalonEncounterState(bot, IsMechanicTrackerBot(bot, ULDUAR_MAP_ID));
-    return true;
+// A walk accepted while a cast holds the feet books the movement slot and goes nowhere until the cast
+// ends. Only the runs that have to land in time call this.
+void BreakCastPinningTheFeet(PlayerbotAI* botAI, Player* bot)
+{
+    if (bot->IsMovementPreventedByCasting())
+        botAI->RequestSpellInterrupt();
+}
+
+// MoveTo refuses a point it already issued for MaxWaitForMove, moving or not, so a walk stopped short
+// (a mana gem's StopMoving, Disengage) is never issued again unless the booking is dropped.
+void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
+{
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (!bot->isMoving() && last.msTime && getMSTimeDiff(last.msTime, getMSTime()) > ULDUAR_ALGALON_STALL_MS)
+        last.clear();
+}
+
+bool InRoom(float x, float y) { return AlgalonSpotInRoom(x, y); }
+
+// Nearest ground clear of every marker and hole, near the bot's own slot when it has one.
+Position FindAlgalonClearSpot(Player* bot, float markerClearance)
+{
+    Position anchor;
+    Position const* prefer = GetAlgalonSlotAnchor(bot, anchor) ? &anchor : nullptr;
+    return FindNearestPositionClearOfHazards(bot, GetAlgalonDodgeHazards(bot, markerClearance),
+                                             ULDUAR_ALGALON_DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
+                                             prefer, &InRoom);
+}
+}  // namespace
+
+bool AlgalonBigBangSoakAction::Execute(Event /*event*/)
+{
+    // Dispersion's 90% survives it outright; the tank's own armour and a physical defensive do the rest.
+    if (AlgalonCanDisperse(bot))
+    {
+        if (bot->GetCurrentSpell(CURRENT_CHANNELED_SPELL))
+            bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
+
+        return botAI->CastSpell("dispersion", bot);
+    }
+
+    char const* defensive = NextTankDefensive(botAI, bot, "algalon.defensive", true);
+    return defensive && botAI->CastSpell(defensive, bot);
+}
+
+bool AlgalonBigBangExternalAction::Execute(Event /*event*/)
+{
+    Player* soaker = GetAlgalonBigBangSoaker(botAI);
+    if (!soaker)
+        return false;
+
+    if (!soaker->HasAura(SPELL_ALGALON_PAIN_SUPPRESSION) && botAI->CanCastSpell("pain suppression", soaker))
+        return botAI->CastSpell("pain suppression", soaker);
+
+    if (!soaker->HasAura(SPELL_ALGALON_GUARDIAN_SPIRIT) && botAI->CanCastSpell("guardian spirit", soaker))
+        return botAI->CastSpell("guardian spirit", soaker);
+
+    return false;
 }
 
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)
 {
-    Unit* shelter = GetAlgalonShelter(bot);
-    if (!shelter)
+    Position shelter;
+    if (!GetAlgalonShelter(bot, shelter))
         return false;
 
-    // Anywhere inside the field is enough, and stopping short of the centre saves a second of travel
-    // out of an eight second cast.
-    if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_RADIUS - 1.0f)
+    // Anywhere inside the field phases the bot on its next pulse.
+    if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f)
         return false;
 
-    return MoveTo(shelter->GetMapId(), shelter->GetPositionX(), shelter->GetPositionY(),
-                  shelter->GetPositionZ(), false, false, false, false, MovementPriority::MOVEMENT_FORCED,
-                  true, false);
-}
+    BreakCastPinningTheFeet(botAI, bot);
+    ReleaseStalledWalk(botAI, bot);
 
-bool AlgalonBigBangSoakAction::Execute(Event /*event*/)
-{
-    // Big Bang cannot be immuned - Divine Shield does not stop it - only mitigated. Dispersion's 90%
-    // reduction survives it outright; Guardian Spirit pays for it with its death save.
-    if (botAI->CanCastSpell("dispersion", bot))
-        return botAI->CastSpell("dispersion", bot);
+    if (MoveTo(bot->GetMapId(), shelter.GetPositionX(), shelter.GetPositionY(), shelter.GetPositionZ(), false,
+               false, false, false, MovementPriority::MOVEMENT_FORCED, true))
+    {
+        return true;
+    }
 
-    if (botAI->CanCastSpell("guardian spirit", bot))
-        return botAI->CastSpell("guardian spirit", bot);
-
-    // Nothing left in the raid's pocket. Standing still and taking it is deliberate: the spell needs
-    // to find at least one target or Algalon ascends and evades, and a corpse beats a reset.
-    return false;
+    // MoveTo answers Duplicate for the rest of the run. Returning false there hands the tick to a heal
+    // whose cast then pins the feet.
+    return bot->isMoving();
 }
 
 bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 {
-    Unit* marker = GetAlgalonCosmicSmashMarker(bot);
-    if (!marker)
-        return false;
+    // FleePosition clamps to AiPlayerbot.FleeDistance (5 yd), inside the doubled damage band.
+    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE);
+    if (clear == Position())
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE);
 
-    // FleePosition would clamp this to AiPlayerbot.FleeDistance (5 yd), which lands inside the
-    // double-damage band rather than clear of it.
-    std::vector<Position> const impact = {marker->GetPosition()};
-    Position const clear = FindNearestPositionClearOfHazards(bot, impact, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE,
-                                                            ULDUAR_ALGALON_COSMIC_SMASH_SEARCH_RADIUS);
     if (clear == Position())
         return false;
 
-    return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false,
-                  false, false, false, MovementPriority::MOVEMENT_FORCED, true, false);
+    BreakCastPinningTheFeet(botAI, bot);
+    ReleaseStalledWalk(botAI, bot);
+    return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_FORCED, true);
 }
 
 bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
 {
-    std::vector<Position> holes;
-    for (Unit* shelter : CollectAlgalonShelters(botAI))
-        if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS)
-            holes.push_back(shelter->GetPosition());
-
-    if (holes.empty())
-        return false;
-
-    Position const clear = FindNearestPositionClearOfHazards(
-        bot, holes, ULDUAR_ALGALON_SHELTER_RADIUS + ULDUAR_ALGALON_SLOT_TOLERANCE,
-        ULDUAR_ALGALON_SLOT_DISPLACE_RADIUS);
+    Position const clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS);
     if (clear == Position())
         return false;
 
-    return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false,
-                  false, false, false, MovementPriority::MOVEMENT_FORCED, true, false);
+    BreakCastPinningTheFeet(botAI, bot);
+    ReleaseStalledWalk(botAI, bot);
+    return MoveTo(bot->GetMapId(), clear.GetPositionX(), clear.GetPositionY(), clear.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_FORCED, true);
 }
 
-bool AlgalonPhasePunchSwapAction::Execute(Event /*event*/)
+bool AlgalonTakeBossAction::Execute(Event /*event*/)
 {
     Unit* boss = GetAlgalon(botAI);
     if (!boss)
         return false;
 
+    if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
+        return true;
+
+    // Taunt on cooldown or out of its 30 yd: walk in and hit him.
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
-
-    if (boss->GetVictim() != bot)
-        return CastClassTaunt(botAI, boss);
 
     return false;
 }
 
 bool AlgalonConstellationTauntAction::Execute(Event /*event*/)
 {
-    Unit* constellation = GetAlgalonConstellationOnBossTank(botAI);
+    Unit* constellation = GetAlgalonHandlerConstellation(bot);
     if (!constellation)
         return false;
 
     if (CastClassTaunt(botAI, constellation))
         return true;
 
-    // Between taunts, hold it with threat. Killing it is not the point - 20x base health against a
-    // six minute enrage is not a fight anyone wins - but the hits are what keep it following once the
-    // forced-attack window ends.
+    // Hits hold it until the taunt is back.
     if (AI_VALUE(Unit*, "current target") != constellation)
         return Attack(constellation);
 
     return false;
 }
 
-bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
-{
-    Unit* constellation = GetAlgalonKiteTarget(bot);
-    if (!constellation)
-    {
-        _spotReached = false;
-        return false;
-    }
-
-    Unit* hole = GetAlgalonKiteHole(bot, constellation);
-    if (!hole)
-    {
-        // No hole to spend, or the last one is being kept for Big Bang. Lead the constellation away
-        // from the raid instead so its Arcane Barrage keeps landing on one bot.
-        _spotReached = false;
-
-        Player* crowd = GetNearestPlayerInRadius(bot, ULDUAR_ALGALON_KITE_CROWD_RADIUS);
-        if (!crowd)
-            return false;
-
-        float const awayAngle = Position::NormalizeOrientation(crowd->GetAngle(bot));
-        float const x = bot->GetPositionX() + std::cos(awayAngle) * ULDUAR_ALGALON_KITE_LEAD_DISTANCE;
-        float const y = bot->GetPositionY() + std::sin(awayAngle) * ULDUAR_ALGALON_KITE_LEAD_DISTANCE;
-
-        return MoveTo(bot->GetMapId(), x, y, bot->GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_COMBAT);
-    }
-
-    // Park past the hole on the side away from the constellation, so the chase drags it through the
-    // phase field while the kiter stays outside. The spot converges as the constellation closes in,
-    // because the bearing it is approached from swings round to the kiter's own.
-    float const farAngle = Position::NormalizeOrientation(hole->GetAngle(constellation) + static_cast<float>(M_PI));
-    float const x = hole->GetPositionX() + std::cos(farAngle) * ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET;
-    float const y = hole->GetPositionY() + std::sin(farAngle) * ULDUAR_ALGALON_BLACK_HOLE_KITE_OFFSET;
-
-    float const distance = bot->GetExactDist2d(x, y);
-    if (_spotReached && distance > ULDUAR_ALGALON_SLOT_TOLERANCE * 2.0f)
-        _spotReached = false;
-
-    // Yield once parked. The constellation walks itself into the hole from here, and everything below
-    // this node - instants, heals, the class interrupts - gets its tick back.
-    if (_spotReached || distance <= ULDUAR_ALGALON_SLOT_TOLERANCE)
-    {
-        _spotReached = true;
-        return false;
-    }
-
-    return MoveTo(hole->GetMapId(), x, y, hole->GetPositionZ(), false, false, false, false,
-                  MovementPriority::MOVEMENT_FORCED, true, false);
-}
-
-bool AlgalonCollapsingStarFocusAction::Execute(Event /*event*/)
-{
-    Unit* star = GetAlgalonFocusStar(botAI);
-    if (!star)
-        return false;
-
-    MarkTargetWithSkull(bot, star);
-    SetRtiTarget(botAI, "skull", star);
-    return true;
-}
-
 bool AlgalonDarkMatterTankAction::Execute(Event /*event*/)
 {
-    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
+    Unit* darkMatter = GetAlgalonLooseDarkMatter(bot);
     if (!darkMatter)
         return false;
 
-    if (darkMatter->GetVictim() != bot && CastClassTaunt(botAI, darkMatter))
+    if (CastClassTaunt(botAI, darkMatter))
         return true;
 
     if (AI_VALUE(Unit*, "current target") != darkMatter)
@@ -222,15 +185,47 @@ bool AlgalonDarkMatterTankAction::Execute(Event /*event*/)
     return false;
 }
 
-bool AlgalonDarkMatterMarkAction::Execute(Event /*event*/)
+bool AlgalonConstellationKiteAction::Execute(Event /*event*/)
 {
-    Unit* darkMatter = GetFirstAliveUnitByEntry(botAI, PB_NPC_UNLEASHED_DARK_MATTER);
-    if (!darkMatter)
+    Unit* constellation = GetAlgalonHandlerConstellation(bot);
+    Position spot;
+    if (!constellation || !GetAlgalonKiteSpot(bot, constellation, spot))
+    {
+        _spotReached = false;
         return false;
+    }
 
-    MarkTargetWithSkull(bot, darkMatter);
-    SetRtiTarget(botAI, "skull", darkMatter);
-    return true;
+    float const distance = bot->GetExactDist2d(spot);
+    if (_spotReached && distance > ULDUAR_ALGALON_SLOT_TOLERANCE * 2.0f)
+        _spotReached = false;
+
+    // Once parked the constellation walks itself into the hole, and the tick goes back to everything else.
+    if (_spotReached || distance <= ULDUAR_ALGALON_SLOT_TOLERANCE)
+    {
+        _spotReached = true;
+        if (RaidObs::Active())
+            RaidObs::NoteDerived(bot, "algalon.kite", "parked");
+        return false;
+    }
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "algalon.kite", "hole");
+
+    ReleaseStalledWalk(botAI, bot);
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                  false, false, MovementPriority::MOVEMENT_FORCED, true);
+}
+
+bool AlgalonStarTeamAction::Execute(Event /*event*/)
+{
+    Unit* star = GetAlgalonFocusStar(botAI);
+    return star && Attack(star);
+}
+
+bool AlgalonStarMarkAction::Execute(Event /*event*/)
+{
+    Unit* star = GetAlgalonFocusStar(botAI);
+    return star && MarkTargetWithStar(bot, star);
 }
 
 bool AlgalonRaidPositionAction::Execute(Event /*event*/)
@@ -242,18 +237,10 @@ bool AlgalonRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    // A meteor is inbound on the slot. Standing aside costs a few seconds of formation; walking back
-    // under it costs 41437.
-    if (AlgalonCosmicSmashMarkerNear(botAI, slot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE))
-    {
-        _slotReached = false;
-        return false;
-    }
-
     float const distance = bot->GetExactDist2d(slot.GetPositionX(), slot.GetPositionY());
 
-    // Reach then hold, with a deadband. Re-issuing a move on every yard of drift restarts the spline,
-    // and a moving bot cannot start a cast - it slides on the spot and never casts.
+    // Reach then hold, with a deadband. Re-issuing on every yard of drift restarts the spline, and a
+    // moving bot can't start a cast.
     if (_slotReached && distance > ULDUAR_ALGALON_SLOT_TOLERANCE * 2.0f)
         _slotReached = false;
 
@@ -263,6 +250,6 @@ bool AlgalonRaidPositionAction::Execute(Event /*event*/)
         return false;
     }
 
-    return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(), false,
-                  false, false, true, MovementPriority::MOVEMENT_COMBAT, true);
+    return MoveTo(bot->GetMapId(), slot.GetPositionX(), slot.GetPositionY(), slot.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_COMBAT, true);
 }
