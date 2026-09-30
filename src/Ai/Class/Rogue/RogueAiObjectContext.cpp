@@ -175,6 +175,8 @@ public:
             &RogueAiObjectContextInternal::use_instant_poison;
         creators["use deadly poison on off hand"] =
             &RogueAiObjectContextInternal::use_deadly_poison;
+        creators["use deadly poison on main hand"] =
+            &RogueAiObjectContextInternal::use_deadly_poison_main_hand;
         creators["use instant poison on off hand"] =
             &RogueAiObjectContextInternal::use_instant_poison_off_hand;
         creators["fan of knives"] = &RogueAiObjectContextInternal::fan_of_knives;
@@ -242,6 +244,10 @@ private:
     static Action* use_deadly_poison(PlayerbotAI* botAI)
     {
         return new UseDeadlyPoisonAction(botAI);
+    }
+    static Action* use_deadly_poison_main_hand(PlayerbotAI* botAI)
+    {
+        return new UseDeadlyPoisonMainHandAction(botAI);
     }
     static Action* use_instant_poison_off_hand(PlayerbotAI* botAI)
     {

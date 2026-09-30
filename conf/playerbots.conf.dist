@@ -1471,7 +1471,8 @@ AiPlayerbot.PreferClassArmorType = 0
 
 # When enabled, bots apply a small weapon-speed preference during autogear, scaled by how much the
 # spec actually gains from it: up to +15% for specs with a mechanic that scales off weapon speed
-# (Deep Wounds, Windfury, Steady Shot, Combat Potency) and up to +5% where everything normalises.
+# (Deep Wounds, Windfury, Steady Shot, Combat Potency, Deadly Poison) and up to +5% where everything
+# normalises.
 # The preference ramps with speed rather than switching at a threshold, so it only separates
 # comparable weapons and never outranks item level.
 # Default: 0 (disabled)

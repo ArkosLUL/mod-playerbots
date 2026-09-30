@@ -5,6 +5,8 @@
  */
 
 #include "GenericRogueStrategy.h"
+#include "AiFactory.h"
+#include "Playerbots.h"
 
 class GenericRogueStrategyActionNodeFactory : public NamedObjectFactory<ActionNode>
 {
@@ -12,6 +14,7 @@ public:
     GenericRogueStrategyActionNodeFactory()
     {
         creators["use deadly poison on off hand"] = &use_deadly_poison_on_off_hand;
+        creators["use deadly poison on main hand"] = &use_deadly_poison_on_main_hand;
     }
 
 private:
@@ -20,6 +23,14 @@ private:
         return new ActionNode("use deadly poison on off hand",
                             /*P*/ {},
                             /*A*/ { NextAction("use instant poison on off hand") },
+                            /*C*/ {});
+    }
+
+    static ActionNode* use_deadly_poison_on_main_hand([[maybe_unused]] PlayerbotAI* botAI)
+    {
+        return new ActionNode("use deadly poison on main hand",
+                            /*P*/ {},
+                            /*A*/ { NextAction("use instant poison on main hand") },
                             /*C*/ {});
     }
 };
@@ -36,20 +47,44 @@ void GenericRogueStrategy::InitTriggers(std::vector<TriggerNode*>& triggers)
     // The right priority for poisons is probably above any attack but below any survival ability.
     // Everything about Rogues needs to be redone, but right now 26 is just below Cloak of Shadows
     // and Evasion and just above Slice and Dice.
-    triggers.push_back(
-        new TriggerNode(
-            "main hand weapon no enchant",
-            {
-                NextAction("use instant poison on main hand", 26.0f)
-            }
-        )
-    );
-    triggers.push_back(
-        new TriggerNode(
-            "off hand weapon no enchant",
-            {
-                NextAction("use deadly poison on off hand", 25.5f)
-            }
-        )
-    );
+    // Assassination runs Deadly on the main hand. At 5 stacks each extra Deadly proc casts the off-hand
+    // poison instead, so Instant goes there.
+    if (AiFactory::GetPlayerSpecTab(botAI->GetBot()) == ROGUE_TAB_ASSASSINATION)
+    {
+        triggers.push_back(
+            new TriggerNode(
+                "main hand weapon no enchant",
+                {
+                    NextAction("use deadly poison on main hand", 26.0f)
+                }
+            )
+        );
+        triggers.push_back(
+            new TriggerNode(
+                "off hand weapon no enchant",
+                {
+                    NextAction("use instant poison on off hand", 25.5f)
+                }
+            )
+        );
+    }
+    else
+    {
+        triggers.push_back(
+            new TriggerNode(
+                "main hand weapon no enchant",
+                {
+                    NextAction("use instant poison on main hand", 26.0f)
+                }
+            )
+        );
+        triggers.push_back(
+            new TriggerNode(
+                "off hand weapon no enchant",
+                {
+                    NextAction("use deadly poison on off hand", 25.5f)
+                }
+            )
+        );
+    }
 }

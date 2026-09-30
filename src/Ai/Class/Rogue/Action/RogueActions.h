@@ -169,6 +169,15 @@ public:
     bool isPossible() override { return true; }
 };
 
+class UseDeadlyPoisonMainHandAction : public UseItemAction
+{
+public:
+    UseDeadlyPoisonMainHandAction(PlayerbotAI* botAI) : UseItemAction(botAI, "Deadly Poison Main Hand") {}
+
+    bool Execute(Event event) override;
+    bool isPossible() override { return true; }
+};
+
 class UseInstantPoisonAction : public UseItemAction
 {
 public:

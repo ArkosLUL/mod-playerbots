@@ -11,8 +11,8 @@ that produces `reach melee`; `AiFactory.cpp` never hands rogues the `"close"` st
 upstream's parent and **every rogue stands still whenever Sprint is on cooldown**, in every raid, with
 nothing failing to compile. It is a local divergence to re-apply on each merge — see
 [../engine/pitfalls.md](../engine/pitfalls.md). `tricks of the trade` likewise sits at
-`ACTION_HIGH + 6.5f` rather than upstream's 26.0, to break an exact relevance tie with
-`use instant poison on main hand`.
+`ACTION_HIGH + 6.5f` rather than upstream's 26.0, to break an exact relevance tie with the
+main-hand poison (26.0).
 
 ## Design decisions
 
@@ -35,6 +35,16 @@ nothing failing to compile. It is a local divergence to re-apply on each merge �
   is refreshed before it drops via `beforeDuration = 2000`. Rogue passing 0 everywhere guaranteed
   downtime each cycle. **This is the opposite of the correct priest setting** — see
   [priest.md](priest.md).
+- **Poisons per spec.** Assassination: Deadly main hand (falls back to Instant below level 30),
+  Instant off hand. Combat and Subtlety: Instant main hand, Deadly off hand. Deadly procs on a flat
+  per-hit chance (30%, up to 50% with Improved Poisons), Instant at 8.53 PPM. Core
+  `spell_rog_deadly_poison` casts the **other** weapon's poison for every Deadly proc on a 5-stack
+  target, skipped when that poison is Deadly too, so Deadly on both hands wastes every proc past 5.
+  Triggers only fire on a weapon with no temp enchant: a bot keeps its old poison until it expires.
+  Branching is by `GetPlayerSpecTab` in both generic strategies' `InitTriggers`; keep them in step.
+- **Weapon speed** (`ApplyPreferredSpecWeapons`, daggers only for Assassination/Subtlety) follows the
+  poisons: Assassination fast main hand (strong), slow off hand (weak); Subtlety slow main, fast off
+  (weak); Combat slow main (weak), fast off hand for Combat Potency (strong).
 - **Reuse over new plumbing.** `MediumEnergyAvailableTrigger`, `ComboPointsNotFullTrigger`,
   `CastComboAction`, `RuptureTrigger`, `BoostTrigger` and the `burstCooldownNames` registry all
   already existed and were either unused or unreachable from rogue.

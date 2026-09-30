@@ -95,6 +95,22 @@ bool UseDeadlyPoisonAction::Execute(Event /*event*/)
     return false;
 }
 
+bool UseDeadlyPoisonMainHandAction::Execute(Event /*event*/)
+{
+    std::vector<Item*> const items =
+        AI_VALUE2(std::vector<Item*>, "inventory items", "Deadly Poison");
+    for (Item* const item : items)
+    {
+        if (item->GetTemplate()->Class != ITEM_CLASS_CONSUMABLE)
+            continue;
+
+        Item* const itemForSpell = bot->GetItemByPos(INVENTORY_SLOT_BAG_0, EQUIPMENT_SLOT_MAINHAND);
+        return UseItem(item, ObjectGuid::Empty, itemForSpell);
+    }
+
+    return false;
+}
+
 bool UseInstantPoisonAction::Execute(Event /*event*/)
 {
     std::vector<Item*> const items =

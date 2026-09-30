@@ -42,6 +42,16 @@ below).
 - The enchant tie-break in `ApplyEnchantAndGemsNew` is `score > bestScore` (strict). It used to be
   `>=`, which let the *last* zero-scoring candidate win a slot by iteration order.
 
+### Dual-wield weapon placement
+
+`EquipAction::EquipItem` scores whole setups, not hands: for new weapon N, main M and off hand O it
+tries N/O, N/M, M/N and O/N, scores each as `S(main, MAINHAND) + S(off, OFFHAND)` with the leaving
+weapon as `SetReplacedItem`, and takes the best gain over the current pair (none → no change). The
+slot matters because it drives the spec weapon-speed preference. A lone 2H (not Titan's Grip) is
+weighed against the main hand only, the off hand cancelling on both sides, because `ItemUsageValue`
+does the same; counting the off-hand loss only here would leave a 2H flagged as an upgrade that
+EquipAction keeps refusing. Weapons already worn are never re-sorted without a new one.
+
 ### Talent-driven stat weights
 
 `GenerateBasicWeights` is flat per spec; **stat-conversion talents belong in

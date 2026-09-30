@@ -1426,7 +1426,18 @@ float StatsWeightCalculator::ApplyPreferredSpecWeapons(ItemTemplate const* proto
                 if (slot == EQUIPMENT_SLOT_OFFHAND)
                     return PreferFast(delay, 1300, 1800, kSpeedWeightStrong);
             }
-            else  // Assassination / Subtlety: daggers, and daggers normalise to 1.7s.
+            else if (tab == ROGUE_TAB_ASSASSINATION)
+            {
+                // Deadly on the main hand is a flat chance per hit, and past 5 stacks each extra proc
+                // casts the off-hand Instant. Instant is PPM, so a slow off hand only helps yellow hits.
+                if (proto->SubClass != ITEM_SUBCLASS_WEAPON_DAGGER)
+                    break;
+                if (slot == EQUIPMENT_SLOT_MAINHAND)
+                    return PreferFast(delay, 1300, 1800, kSpeedWeightStrong);
+                if (slot == EQUIPMENT_SLOT_OFFHAND)
+                    return PreferSlow(delay, 1400, 1800, kSpeedWeightWeak);
+            }
+            else  // Subtlety: daggers, and daggers normalise to 1.7s.
             {
                 if (proto->SubClass != ITEM_SUBCLASS_WEAPON_DAGGER)
                     break;
