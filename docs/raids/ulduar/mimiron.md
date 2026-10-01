@@ -249,6 +249,11 @@ line. `GetMimironSlotApproaches` now plans for trigger and action alike:
   grows.
 - A walk through fire goes via one waypoint over its midpoint, 20°, 35°, 50° or 65° off the direct
   bearing, whose two legs both miss the fire. Only a candidate with no path hands over to the next.
+- Mines likewise: a leg passing within `ULDUAR_MIMIRON_MINE_LEG_CLEARANCE` (2.5 yd: the 1.9 yd poll
+  plus slop) of one detours, and the straight walk follows as the last candidate whenever fire leaves
+  it open, since a mine ranks last. On 2026-09-30 about half the phase 4 mine hits (14/32, 18/31,
+  21/39; 253-327k a phase) came on arc spread legs, and the kill's walks back after its first barrage
+  put three mines each on two ranged.
 - Phase 1 keeps holding: its camp leaves its own fire by switching anchors, and a stand-in between 6 yd
   rows is a Napalm pair.
 
@@ -371,6 +376,14 @@ at 131° — dead centre. Per-bearing, +45° gives 2678.51,2580.69 (poly 0.23, `
 is refused, `FleeShockToAnchor` aims at the bot's own spread slot, else `ULDUAR_MIMIRON_ROOM_CENTER`,
 through `MoveTowardClearOfMines` — screened like any other destination, noted `shock anchor`. The
 old fallback re-ran bearing 0, which is the bearing that had just failed.
+
+**Then it gave up standing in the blast.** 2026-09-30: `shock unsafe`/`anchor none` 38-79 a pull
+(0 on 09-29), and 4 of 23 casts left a bot still, each dead (6129 Totemist and Justice, 5144 Angry,
+4276 Obliteration). Fire refused most bearings; the rest landed exactly on 18 and failed the `>= 18`
+screen to float noise or a wall-shortened hop, as did the straight-away fallback; and a `p4melee` slot
+sits inside the circle by construction. The escape now aims `ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN` (2)
+past the screen, sweeps again as `shock fire` with fire allowed before the unfiltered fallback (a
+node is ~3.1k/s against 100k), and an anchor inside the circle gives way to the room centre.
 
 ## Laser Barrage is a 104° cone, not a beam
 
@@ -717,7 +730,8 @@ it took 2.64M and seven of fourteen phase 4 deaths, hitting **5.56** bots a cast
 off VX-001: 30% of the living raid, ranged and healers in the 120° wedge, melee wherever `set behind`
 put them. Scored on those positions with a random target, melee opposite the wedge give **4.45**
 (−19%), ranged spread over 240° as well 3.31, everyone evenly round 2.96. Widening the wedge would put
-more of the raid in every barrage's ~240° band, so only the melee move: `p4melee` below.
+more of the raid in every barrage's ~240° band, so only the melee move: `p4melee` below. After it,
+2026-09-30 measured **28-33%** a cast against 33%: about the ~28% this layout gives, so its floor.
 
 The ring survives the correction. Six fixed phase-2 spots used to stack the raid into three clumps,
 which is the worst shape against anything conical whatever its width; a ring of radius 22 with one
@@ -778,7 +792,15 @@ healing and died in 30 s; 7114 took 30.2 against 25.4 and lasted 120 s; 0476 bro
 against 30.5 and was the only one of the three to reach phase 3. Overheal in 6827 was **14%** against
 31-34% in the other two, so the healers had nothing spare: every heal landed on someone already hurt.
 
-**Heroism goes in phase 2, and two gates had to move for it.** `UlduarBurstWindowMultiplier` wanted
+**Heroism goes in phase 4, 15 s in.** In the first kill (2026-09-30) the human held it to 24 s into
+phase 4: the raid dealt 166k and 160k/s for the next 20 s against 75-128k before, while phase 2
+without it lost only a human healer (raid HP never under 70%, 83.5 s against 76-78 s with it). Berserk
+at 10:00 against a 10-minute cooldown is one window or the other. The window opens with all three
+parts selectable and VX-001 riding, after `ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS` (15 s): the opening
+Frost Bomb has the raid running first, and haste does nothing for a moving bot. Each bot's
+multiplier stamps when it first saw that, reset when it fails.
+
+**It used to go in phase 2, and two gates had to move for that.** `UlduarBurstWindowMultiplier` wanted
 all three mechs alive, which is phase 4. Behind it `HoldBurstUntilTankEngagedMultiplier` waits for a
 tank to hold the boss 3 s, and VX-001 never takes a victim: `boss_mimiron.cpp` overrides
 `AttackStart` to do nothing and never calls `UpdateVictim`, so its snapshot victim is empty **100%**
@@ -790,11 +812,9 @@ handover, where `possible targets no los`, which lags and drops unselectable uni
 and the permissive fall-through opened the gate. A direct `FindNearestCreature` closes that, but it
 also finds the MK II, which the core never kills: phase 1 ends with its damage zeroed,
 `UNIT_FLAG_NOT_SELECTABLE` set and the chassis parked at (2795, 2598) at 0.1% through phases 2 and 3.
-On 2026-09-23 that vetoed all 84 phase 2 lust evaluations. So the window keys on selectability:
-VX-001 selectable and off the chassis, neither other mech selectable. All three templates start
-unselectable and VX-001 clears it in `SetData(1, 2)`, so the handover stays shut. Two of the four
-pulls that did reach phase 4 had already spent it. Berserk at 10:00 against a 10-minute cooldown
-makes it one window or the other, and every pull sees phase 2.
+On 2026-09-23 that vetoed all 84 phase 2 lust evaluations. So the window keys on selectability,
+which phase 4 keeps: all three templates start unselectable and VX-001 clears it in `SetData(1, 2)`,
+so the handovers stay shut, and Self Repair sets it again.
 
 **A clean arena buys the opening of phase 2, not the phase.** Mimiron seeds every 30 s throughout, so
 the field rebuilds around wherever the raid is standing: attributing phase-2 flame damage to the most
@@ -1108,6 +1128,14 @@ The parts fell ~0.45 %/s each for phase 4's first 50 s, a kill by ~9:00, then 14
 ran 15.9k/s against 18.3k/s taken; five healers on 09-23 did 21.1k/s. Open: the ACU has no tank, so
 it sat on ranged 82% of phase 4 for 407k and three of the killing blows.
 
+2026-09-30, on those fixes with five healers: **first kill, 9:18** (6129; phase 3 105 s, phase 4
+147 s from 6:36, lust held by hand to 7:00), after wipes at 9:59 (4276: no death in phase 4's first
+55 s, then four healers 7:48-8:05 with mines on top) and 9:33 (5144: five dead by 7:13). Survival,
+not damage: both wipes died out before the berserk. `set behind` in phase 4 barrages went 92 → 0,
+Holy Shield 3 → 14-17 and Consecration 0 → 7-10 with the tank's target held. The kill still lost 12
+in phase 4 (mines 3, Shock Blast 2, Killing Spree 1, Frost Bomb 2) and 3 ranged after it to Rocket
+Strike; the fixes are in the Shock Blast, formation, barrage, Rocket Strike and tank spot sections.
+
 **Open, not fixed: the raid meets phase 2 as one clump.** All 25 sit inside a 60° arc for the whole
 30 s handover, melee and ranged 0-5° apart, and `EVENT_SPELL_RAPID_BURST` is scheduled at **0 ms**,
 so the first cast lands at P2 −0.2 s and the first two to four cones hit everybody: **567,766** and
@@ -1131,7 +1159,9 @@ second `MOVEMENT_FORCED` move, every bearing fails, and the `MoveAway` fallback 
 and have nothing to do at 18 yd anyway — while ranged and healers go back to work rather than lose
 4 s in every 30. `mimiron charge guard` is the backstop: it zeroes every
 `CastReachTargetSpellAction` (Charge, Intercept, both Feral Charges — the class has no other
-subclasses) inside the five windows a hit actually kills through. Proximity Mines and Bomb Bots are
+subclasses) inside the five windows a hit actually kills through, and Killing Spree by name: it
+teleports onto the target, onto VX-001 inside the barrage boundary, and killed the same rogue in every
+barrage it fired in, 4 of 4 pulls to 2026-09-30. Proximity Mines and Bomb Bots are
 deliberately **not** among them; the mine node was demoted below the whole ladder because eating one
 is healable, and letting it veto a charge would contradict its own ranking.
 
@@ -1602,6 +1632,13 @@ VX-001: at 1 node and 20 s one 2026-09-29 phase 4 re-picked six times after the 
 25-36 yd between the same two spots, on 3-8 nodes, while its melee took 128k of fire against 137-235k
 on 09-23.
 
+**Open: the tank's fire dodge drags the chassis to the edge.** Fire spreads toward the raid, so away
+from it is outward: 16 of the tank's 17 flames dodges in the 2026-09-30 kill and 15 of 20 in 5144
+ended over 30 yd off centre. The chassis sat past 30 yd 24-42% of phase 4 and ranged and healers past
+`ULDUAR_MIMIRON_ROOM_RADIUS` 29-34%; Shock Blast escapes stalled at 40 yd, and a healer's wedge slot
+65 yd out pathed a loop back past a Frost Bomb. Untried fix: leash the main tank's phase 4 dodges to
+~28 yd of the room centre, falling back to the unleashed fan.
+
 **Self Repair used to hand out the phase 1 spot.** A part going `NON_ATTACKABLE` fails a
 three-attackable test, so the tank read phase 1 and got `p1tank`, 53 yd west, mid-rendezvous, and
 `MimironPhase1Active` turned the phase 1 guards back on. Both key on `IsMimironPhase4`, the vehicle
@@ -1768,6 +1805,12 @@ Bomb's stand radius, even as the fire fallback, since both kill outright; `stepi
 screen, and no clean radius still takes the plain step. Fire stays the gap: two bots died in a node
 a step landed them in, their flames flee `locked` behind the leg.
 
+**Then `reach spell` walked them back on.** The dodge stops at the clearance, so in the 2026-09-30
+kill three ranged dodged a rocket cast as the MK II went into Self Repair and `reach spell`, out of
+range of the ACU, took all three back onto the marker. `mimiron rocket guard` holds the unit-chasing
+movers (reach, heal reach, `set behind`, `follow`, the approach) within the clearance plus
+`ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN` (4) of a live marker, as the Frost Bomb guard does.
+
 `IsMimironSpotSafe` covers Firefighter's ground fire on the same argument, behind the hard-mode check:
 without it the flames node at `ACTION_RAID + 4` pushes a bot out of a burning slot and the formation at
 `ACTION_RAID` pulls it straight back, and it paces on the edge until it burns down. It covers the
@@ -1796,7 +1839,7 @@ Position, verdicts and movement commands come from the raid-agnostic streams. Th
 | `plasma` | Which defensive answered the Plasma Blast window, or `covered`/`none` |
 | `barrage` | Which dodge rule fired — `clear`, `hold`, `stepin` (melee back onto the ring), `boundary` (out from under VX-001), or `ahead`/`inside`/`trailing`/`refuge` (off fire inside the safe sector) plus a direction — with the bearing clockwise of the centreline, bucketed to 15°. Not the radius: `snap.u` samples the position four times a second beside the hazard row's apex |
 | `wedge` | `reaim N`, the Firefighter wedge's new centreline in degrees, when a barrage moved it. Per instance |
-| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
+| `flee` | The bearing fan's outcome, `ok`/`fallback`/`unsafe`/`none`/`locked`, and how many bearings each filter refused (`back`, `mine`, `cone`, `fire`, `bomb`, `burst`, `shock`, `spray`, `move`). `what` names the hazard: `shock`, `shock fire` (the second sweep, fire allowed), `shock anchor` (the escape aiming at a slot once every bearing failed), `rocket`, `frostbomb`, `spray`, `siren`, and `flames+N` per ladder rung, so which rung won is readable. `locked` means the movement lock refused before a single bearing was tried; `unsafe`, that the fallback would have landed in a Shock Blast, a Frost Bomb, the barrage cone or a spray lane |
 | `campturn` | The phase 1 camp's sight turn toward the room, degrees, on change. Per instance |
 | `approach` | A formation leg that is not the plain walk to the slot: `substitute rN` (yd off the slot) or `detour ±N` (degrees off the direct bearing) |
 | `close` | A melee approach steered round the fire instead of straight at the target |

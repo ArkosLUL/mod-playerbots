@@ -407,12 +407,12 @@ bool IsMimironSpotStandable(Player* bot, Position const& dest, MimironMarkers co
                                     ULDUAR_MIMIRON_FIREBOT_SPRAY_STAND_HALF_WIDTH);
 }
 
-// The straight walk from `from` to `dest` against the fire. Nodes `from` already stands in are left
-// out, since walking out of those is the point.
-bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const& hazards,
-                          Position const& dest)
+// The straight walk from `from` to `dest` against a set of hazards of one radius. Hazards `from`
+// already stands in are left out, since walking out of those is the point.
+bool IsMimironLegClearOf(Position const& from, std::vector<Position> const& nodes, float radius,
+                         Position const& dest)
 {
-    if (hazards.flames.empty())
+    if (nodes.empty())
         return true;
 
     float const fromX = from.GetPositionX();
@@ -423,22 +423,34 @@ bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const&
     if (lengthSq <= 0.0f)
         return true;
 
-    for (Position const& node : hazards.flames)
+    for (Position const& node : nodes)
     {
         float const nx = node.GetPositionX() - fromX;
         float const ny = node.GetPositionY() - fromY;
-        if (std::sqrt(nx * nx + ny * ny) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+        if (std::sqrt(nx * nx + ny * ny) < radius)
             continue;
 
         // Closest point of the walk to this node.
         float const t = std::clamp((nx * dx + ny * dy) / lengthSq, 0.0f, 1.0f);
         float const ox = nx - t * dx;
         float const oy = ny - t * dy;
-        if (std::sqrt(ox * ox + oy * oy) < ULDUAR_MIMIRON_FLAMES_RADIUS)
+        if (std::sqrt(ox * ox + oy * oy) < radius)
             return false;
     }
 
     return true;
+}
+
+bool IsMimironLegFireSafe(Position const& from, MimironFirefighterHazards const& hazards,
+                          Position const& dest)
+{
+    return IsMimironLegClearOf(from, hazards.flames, ULDUAR_MIMIRON_FLAMES_RADIUS, dest);
+}
+
+// Pathing knows nothing about mines, and the slot screen only covers where the walk ends.
+bool IsMimironLegMineSafe(Position const& from, MimironMarkers const& markers, Position const& dest)
+{
+    return IsMimironLegClearOf(from, markers.mines, ULDUAR_MIMIRON_MINE_LEG_CLEARANCE, dest);
 }
 }  // namespace
 
@@ -685,13 +697,18 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
     }
 
     Position const from = bot->GetPosition();
-    if (IsMimironLegFireSafe(from, hazards, goal))
+    bool const directFireSafe = IsMimironLegFireSafe(from, hazards, goal);
+    if (directFireSafe && IsMimironLegMineSafe(from, markers, goal))
     {
         approaches.push_back({goal, how, 0.0f});
         return approaches;
     }
 
-    // Round the fire instead: one waypoint over the walk's midpoint, whose legs both miss it.
+    auto const legSafe = [&](Position const& start, Position const& end)
+    { return IsMimironLegFireSafe(start, hazards, end) && IsMimironLegMineSafe(start, markers, end); };
+
+    // Round the fire and the mines instead: one waypoint over the walk's midpoint, whose legs both
+    // miss them.
     float const distance = from.GetExactDist2d(goal.GetPositionX(), goal.GetPositionY());
     float const bearing = from.GetAngle(goal.GetPositionX(), goal.GetPositionY());
     for (float degrees : ULDUAR_MIMIRON_DETOUR_TURNS_DEG)
@@ -703,11 +720,15 @@ std::vector<MimironApproach> GetMimironSlotApproaches(PlayerbotAI* botAI, Player
             Position const waypoint(from.GetPositionX() + leg * std::cos(bearing + sign * turn),
                                     from.GetPositionY() + leg * std::sin(bearing + sign * turn),
                                     from.GetPositionZ());
-            if (standable(waypoint) && IsMimironLegFireSafe(from, hazards, waypoint) &&
-                IsMimironLegFireSafe(waypoint, hazards, goal))
+            if (standable(waypoint) && legSafe(from, waypoint) && legSafe(waypoint, goal))
                 approaches.push_back({waypoint, "detour", sign * turn});
         }
     }
+
+    // Mines rank last: a blast is a healable 9000, a bot stuck off its slot costs the formation. So
+    // the straight walk is still the last resort whenever the fire leaves it open.
+    if (directFireSafe)
+        approaches.push_back({goal, how, 0.0f});
 
     return approaches;
 }

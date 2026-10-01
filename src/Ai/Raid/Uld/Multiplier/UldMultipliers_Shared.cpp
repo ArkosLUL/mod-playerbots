@@ -169,17 +169,25 @@ UlduarBurstWindowMultiplier::BurstWindow UlduarBurstWindowMultiplier::EvaluateWi
         return {grounded, RazorscaleBossHelper::IsGroundPhaseFor(razorscale)};
     }
 
-    // Damage in P1-P3 counts, so only lust waits, and it waits for phase 2. That phase is a healing
-    // race the raid loses at about 30k/s taken, and 40 s of haste on the healers is the only lever
-    // there. Phase 4 is the bigger burn but the raid reached it in 4 of 17 hard-mode pulls, and
-    // berserk at 10:00 against a 10-minute cooldown means one window or the other, never both.
+    // Damage in every phase counts, so only lust waits, and it waits for phase 4, where the kill is
+    // decided. Berserk at 10:00 against a 10-minute cooldown means one window or the other, and phase 2
+    // holds without it on five healers. Not the moment phase 4 opens: the raid spends that running
+    // from the opening Frost Bomb, and haste does nothing for a bot on the move.
     // Selectable is what counts as fighting: a beaten mech isn't killed, the core parks it alive and
-    // unselectable (the MK II sits at 0.1% through P2 and P3), and VX-001 only turns selectable as
-    // P2 starts. Riding the chassis is P4.
+    // unselectable (the MK II sits at 0.1% through P2 and P3), and a part in Self Repair goes the same
+    // way. Riding the chassis is P4.
     auto const fighting = [](Unit const* mech) { return mech && !mech->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE); };
     if (leviathanMkII || vx001 || aerialCommandUnit)
-        return {true, fighting(vx001) && !fighting(leviathanMkII) && !fighting(aerialCommandUnit) &&
-                          !vx001->GetVehicleBase()};
+    {
+        bool const phase4 = fighting(leviathanMkII) && fighting(vx001) && fighting(aerialCommandUnit) &&
+                            vx001->GetVehicleBase();
+        if (!phase4)
+            mimironPhase4LiveMs = 0;
+        else if (!mimironPhase4LiveMs)
+            mimironPhase4LiveMs = getMSTime();
+
+        return {true, phase4 && GetMSTimeDiffToNow(mimironPhase4LiveMs) >= ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS};
+    }
 
     // The council members resurrect each other until one is left, so only the survivor is a real
     // kill. Covers the hard mode too, where that survivor is the empowered phase-3 Steelbreaker.

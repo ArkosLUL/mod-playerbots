@@ -163,6 +163,10 @@ constexpr float ULDUAR_MIMIRON_ROOM_RADIUS = 40.0f;
 // margin. Centre to centre: the flee used to be built out of GetDistance2d, which had already taken
 // off the MK II's combat reach of 8 and the bot's own 1.5, and so ran everyone out to 29.5 yd.
 constexpr float ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST = 18.0f;
+// The escape aims this far past SAFE_DIST, which the screen still tests. A bearing landed exactly on
+// the line fails it on float noise or a hop a wall shortened, and a fan that fails every bearing
+// leaves the bot standing in the blast.
+constexpr float ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN = 2.0f;
 
 // Phase 3 staging fan, ranged and healers only. Bomb Bots blast 5 yd, so no two bots may share one
 // and 6 keeps a detonation to a single victim.
@@ -314,6 +318,10 @@ constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_LIMIT = 3;
 constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_FIRE_MARGIN = 2;
 constexpr uint32 ULDUAR_MIMIRON_PHASE4_TANK_HOLD_MS = 30000;
 
+// Lust waits this long into phase 4: past the opening Frost Bomb's fuse, so the raid is back in place,
+// and the first barrage still falls inside the 40 s.
+constexpr uint32 ULDUAR_MIMIRON_PHASE4_LUST_DELAY_MS = 15000;
+
 // How far a grid scan looks for a mech that is not attackable yet. The MK II parks 58 yd off centre
 // between phases and a ranged bot can be another 40 out on top of that.
 constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
@@ -325,6 +333,9 @@ constexpr float ULDUAR_MIMIRON_STAGING_SEARCH_RANGE = 200.0f;
 constexpr float ULDUAR_MIMIRON_MINE_TRIGGER_RADIUS = 3.0f;
 constexpr float ULDUAR_MIMIRON_MINE_CLEARANCE = 3.5f;
 constexpr float ULDUAR_MIMIRON_MINE_MAX_STEP = 5.0f;
+// A formation walk passing closer than this to a mine sets it off: the 1.9 yd poll plus slop. Every
+// 500 ms at 7 yd/s, so a walk straight across one is inside it for a poll or two.
+constexpr float ULDUAR_MIMIRON_MINE_LEG_CLEARANCE = 2.5f;
 
 // Rocket Strike markers burn a 5 s fuse and blast 3 yd, and the rocket picks its target from players
 // beyond 15 yd - that is the ranged ring. Destinations near a live marker have to be refused for as
@@ -336,6 +347,10 @@ constexpr float ULDUAR_MIMIRON_ROCKET_CLEARANCE = 8.0f;
 // while the 8 above stays the stand-off radius. Run/stand hysteresis, like the bomb and the siren:
 // one marker used to move five to eleven bots off the ring for a blast that hit one of them.
 constexpr float ULDUAR_MIMIRON_ROCKET_RUN_RADIUS = 5.0f;
+
+// How far past the clearance reach and follow moves stay held while a marker lives. The dodge stops
+// at the clearance, so without a band past it "reach spell" walks the bot straight back on.
+constexpr float ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN = 4.0f;
 
 // Napalm Shell splashes 5 yd around its target. Bomb Bots blast 5 yd on melee contact (63801) and
 // match player run speed, so the extra yard here only buys time for ranged to kill them.
@@ -431,7 +446,8 @@ struct MimironApproach
 // left ranged a median 15 to 24 yd off their slots from phase 2 on. So:
 // - a slot that is not clear gives way, outside phase 1, to the nearest clear point within
 //   ULDUAR_MIMIRON_SLOT_SUBSTITUTE_RADIUS that keeps ULDUAR_MIMIRON_DISPERSE_DISTANCE off everyone;
-// - a walk through fire goes via one waypoint whose two legs both miss it.
+// - a walk through fire or past a mine goes via one waypoint whose two legs both miss them, and the
+//   straight walk follows as the last candidate when only mines are in its way.
 // Empty as well when the bot already stands on clear ground within the substitute radius. Every
 // candidate is screened against the Laser Barrage cone with its own travel time, like a flee
 // bearing: this is the largest mover in the fight and its legs outlive the sweep that kills.

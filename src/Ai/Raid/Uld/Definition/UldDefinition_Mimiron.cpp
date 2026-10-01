@@ -103,6 +103,18 @@ bool MimironNearFrostBomb(PlayerbotAI* botAI)
     return bomb && bot->GetExactDist2d(bomb) < hold;
 }
 
+// Room test first, so the grid scan only runs at Mimiron. Rocket Strike is cast in normal mode too.
+bool MimironNearRocket(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (!IsNearMimironRoom(bot))
+        return false;
+
+    float const hold = ULDUAR_MIMIRON_ROCKET_CLEARANCE + ULDUAR_MIMIRON_ROCKET_HOLD_MARGIN;
+    Creature* rocket = bot->FindNearestCreature(NPC_ROCKET_STRIKE_N, hold + 5.0f);
+    return rocket && bot->GetExactDist2d(rocket) < hold;
+}
+
 // Water Spray is instant, a 15 yd line, and 23000 to 26000 against a 22000 to 24000 pool, so nothing
 // may walk a bot back into one: two died to a spray 3.5 s after a "reach melee" leg put them in it.
 bool MimironFireHold(PlayerbotAI* botAI)
@@ -206,8 +218,11 @@ void DefineMimiron(EncounterBuilder& e)
     // A gap-closer moves the bot in a straight line and reads nothing about the ground, so it mustn't
     // fire while the bot is dodging something that kills. "reach melee" is the same move without the
     // spell: a melee bot thrown 12 yd clear of the fire was walked back into it on the next tick. The
-    // other reach actions stay, or ranged and healers are stranded when they're needed most.
-    e.Block("mimiron charge guard", Role::Any, MimironLethalWindowActive, Family::Charge, {"reach melee"});
+    // other reach actions stay, or ranged and healers are stranded when they're needed most. Killing
+    // Spree isn't a charge but teleports onto the target, and on VX-001 that's inside the barrage's
+    // boundary, where the beams hit at any bearing.
+    e.Block("mimiron charge guard", Role::Any, MimironLethalWindowActive, Family::Charge,
+            {"reach melee", "killing spree"});
 
     // The generic avoid aoe flees to the fire aura's own 3 yd radius, which in a field growing in 7 yd
     // steps lands on the next node, takes the movement lock and returns false, so the Mimiron dodge is
@@ -238,6 +253,10 @@ void DefineMimiron(EncounterBuilder& e)
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
     e.Block("mimiron fire hold guard", Role::Any, MimironFireHold, 0,
+            {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
+             MimironApproachTargetAction::Name});
+    // Same for a Rocket Strike marker: 5000000 in 3 yd, and the dodge lets go at the clearance.
+    e.Block("mimiron rocket guard", Role::Any, MimironNearRocket, 0,
             {"reach melee", "reach spell", "reach party member to heal", "set behind", "follow",
              MimironApproachTargetAction::Name});
 

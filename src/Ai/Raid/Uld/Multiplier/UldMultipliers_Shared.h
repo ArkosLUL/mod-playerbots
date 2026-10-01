@@ -46,6 +46,9 @@ private:
 
     uint32 cachedAtMs = 0;
     BurstWindow cachedValue;
+
+    // When this bot first saw all three Mimiron parts fighting in phase 4, 0 outside it.
+    uint32 mimironPhase4LiveMs = 0;
 };
 
 #endif

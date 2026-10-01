@@ -41,13 +41,13 @@ using namespace EncounterHelpers;
 
 bool MimironFleeAction::MoveAwayClearOfMines(Unit* from, float distance, MovementPriority priority,
                                              bool fallbackUnfiltered, bool interrupt, char const* what,
-                                             float clearRadius, bool sectorScreen)
+                                             float clearRadius, bool sectorScreen, bool allowFire)
 {
     if (!from)
         return false;
 
     return FleeFan(from->GetPosition(), from, distance, priority, fallbackUnfiltered, interrupt, what,
-                   clearRadius, false, sectorScreen);
+                   clearRadius, allowFire, sectorScreen);
 }
 
 bool MimironFleeAction::MoveAwayClearOfMines(Position const& from, float distance,
@@ -343,11 +343,12 @@ void MimironFleeAction::NoteFleeOutcome(char const* what, char const* outcome, f
 // MK II, and a bot standing where that points off the mesh has no bearing left - three melee died
 // on one such spot, retrying the same off-mesh heading for the whole 4 s cast. A named point the
 // bot can path to is the way out; the fan screens it like any other destination, so an anchor
-// that is itself inside the circle is refused rather than walked to.
+// that is itself inside the circle is refused rather than walked to. A melee slot sits on the
+// chassis, inside the circle by construction, so that bot heads for the room centre instead.
 bool MimironShockBlastAction::FleeShockToAnchor()
 {
     Position anchor;
-    if (!GetMimironSpreadSlot(botAI, bot, anchor))
+    if (!GetMimironSpreadSlot(botAI, bot, anchor) || !IsMimironSpotShockSafe(botAI, anchor))
         anchor = ULDUAR_MIMIRON_ROOM_CENTER;
 
     return MoveTowardClearOfMines(anchor, MovementPriority::MOVEMENT_FORCED, false, true,
@@ -364,11 +365,16 @@ bool MimironShockBlastAction::Execute(Event /*event*/)
     // what it needed was the node priority to win the tick. MOVEMENT_FORCED because the arc spread
     // issues at MOVEMENT_COMBAT and IsWaitingForLastMove refuses anything not strictly above the
     // move already in flight - a flee starting mid-walk would otherwise be dropped silently.
-    float const gap = ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST - bot->GetExactDist2d(leviathanMkII);
-    if (gap > 0.0f)
+    float const dist = bot->GetExactDist2d(leviathanMkII);
+    if (dist < ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST)
     {
-        if (!MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true,
-                                  "shock", ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST))
+        // Fire screened first, then a burning node over the blast: ~3100 a second against 100000.
+        float const escape = ULDUAR_MIMIRON_SHOCK_BLAST_SAFE_DIST + ULDUAR_MIMIRON_SHOCK_FLEE_MARGIN;
+        float const gap = escape - dist;
+        if (!MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, false, true,
+                                  "shock", escape) &&
+            !MoveAwayClearOfMines(leviathanMkII, gap, MovementPriority::MOVEMENT_FORCED, true, true,
+                                  "shock fire", escape, false, true))
             FleeShockToAnchor();
 
         if (botAI->IsMelee(bot))

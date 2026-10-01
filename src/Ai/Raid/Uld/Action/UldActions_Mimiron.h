@@ -43,11 +43,12 @@ protected:
     // headings and stays inside the circle it was running from.
     // sectorScreen keeps a hard-mode phase 2 bot off the other group's Rapid Burst line
     // (GetMimironOtherGroupSector) while any bearing on its own side is left.
+    // allowFire as on MoveTowardClearOfMines below.
     bool MoveAwayClearOfMines(Unit* from, float distance,
                               MovementPriority priority = MovementPriority::MOVEMENT_COMBAT,
                               bool fallbackUnfiltered = true, bool interrupt = false,
                               char const* what = "flee", float clearRadius = 0.0f,
-                              bool sectorScreen = false);
+                              bool sectorScreen = false, bool allowFire = false);
 
     // Same fan, run away from a point rather than a unit. The ground fire is a field of 50 to 60
     // nodes with no single unit to flee, so the flames dodge hands in its centroid.
