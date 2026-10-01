@@ -7,6 +7,7 @@
 #ifndef PLAYERBOTS_ULDENCOUNTERYOGGSARON_H
 #define PLAYERBOTS_ULDENCOUNTERYOGGSARON_H
 
+#include "ObjectGuid.h"
 #include "Position.h"
 #include "UldData.h"
 
@@ -160,6 +161,39 @@ constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
 // for a Guardian to look nearly dead is waiting too long: under focus fire one is below 20% for about
 // a second, which is 7 yd of travel against a 16 yd blast.
 constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
+
+// Shadow Nova against a melee bot, measured over 520 hits in four pulls: a per-pull median of
+// 16,961-17,636 against pools of 23,537 for the enhancement shaman up to 31,249 for a warrior. So one
+// nova is 56-106% of a bar, two in one tick killed eight melee from full health, and a Fervored one ran
+// to 45,340. The healers were already out-healing it 1.7 to 1 and still lost them, because an instant
+// that takes most of a bar is mitigated or not survived.
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 17400;
+
+// Two gates, because a button is only worth firing if it is still up when the nova lands. Over 48 novas
+// a Guardian first dropping under 20% detonated a median 4.8 s later and never later than 11.5; under
+// 10% it was a median 2.4 s with 46 of the 48 inside 6 s. So the 12 s buttons go at 20% and the 5 s ones
+// wait for 10%. Everything in the ladder is instant, so even the 0.8 s minimum is castable.
+constexpr float ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT = 20.0f;
+constexpr float ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT = 10.0f;
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS = 12000;
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS = 5000;
+
+// A cooldown goes out only when the nova would leave the bot inside about one melee swing of dead, so a
+// 45 s Anti-Magic Shell is still in hand for the window that needs it. Counting past two low Guardians
+// buys nothing: a pair already covers every death measured.
+constexpr float ULDUAR_YOGG_SARON_NOVA_SAFETY = 1.25f;
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN = 2;
+
+// Divine Sacrifice is the only raid-wide reduction that exists on this core, and one cast covers 25
+// raiders, so it waits until the nova threatens this many of them. Its own 10 s is the claim window. The
+// 20% comes from the Divine Guardian talent, which procs 70940 as a raid area aura with value -20 - the
+// spell id appears nowhere in the core source, so only the DBC says so. Measured: it reached all 25 on
+// every cast, and the damage the split put back on the paladin never took one below 62%.
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_RAID_COUNT = 3;
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_WINDOW_MS = 10000;
+
+// One healer external per victim, for the same reason as the Squeeze claim below.
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_CLAIM_MS = 3000;
 
 // The two places in the room a cloud cannot reach, both fixed by the orbits. Measured over four pulls
 // the six sit at 11.39-11.86 / 21.25-21.52 / 31.13-31.31 / 40.93-41.07 / 50.81-50.92 / 60.74-60.84 yd
@@ -661,6 +695,40 @@ std::vector<char const*> YoggSaronJudgementSpells(Player* bot);
 // design and count one only while Sara's Fervor is doubling it. Shared so the trigger and the action
 // cannot disagree about who is running.
 std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius);
+
+// What the next Shadow Nova is worth against `target`: the measured median per low Guardian within the
+// blast, at most two of them, doubled while Sara's Fervor is on it. 0 when nothing in reach is close to
+// detonating. Unlike GetYoggSaronNovaThreats this counts melee as well - that one answers who should
+// run, this one answers who is about to be hit whether they can move or not.
+uint32 YoggSaronNovaDamageOn(Unit* target);
+
+// Whether that leaves `target` inside about one melee swing of dead. False for a bot the nova only
+// bruises, so the shortest cooldown is not spent on the first of twelve novas.
+bool YoggSaronNovaWouldHurt(Unit* target);
+
+// How long a button has to last to still be up when the nova lands, or 0 when the bot does not need one.
+// Shared so the trigger and the action cannot pick different windows.
+uint32 YoggSaronNovaNeedMs(Unit* target);
+
+// How many melee and tanks on the stack the next nova would take that far down, which is what decides
+// whether the one raid-wide cooldown is worth spending.
+uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI);
+
+// The raider a healer external belongs on: whoever the nova leaves furthest past dead, which puts a
+// Sara's Fervor holder first and the smallest health pool next. Never the bot itself, and nullptr when
+// nobody needs one.
+Player* YoggSaronNovaVictim(PlayerbotAI* botAI);
+
+// One external per victim, and one raid-wide cooldown per nova. True for the bot that takes the claim
+// and false for everyone else until it lapses; the window claim stays true for its owner so it can
+// retry across ticks.
+bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI, Player* victim);
+bool ClaimYoggSaronNovaWindow(Player* bot);
+
+// The phase 1 Guardian no dps should touch: the higher-health half of a low pair standing close enough
+// for one nova to finish the other, which is how eight melee died in a single tick. The guid breaks an
+// exact tie, so one of a pair is always free to die and the two can never wait on each other.
+void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions);
 
 // Which of two phase 1 Guardians the raid should be on. One inside the leash beats one outside it
 // whatever their health, because a kill out there does nothing for Sara and its nova reaches the

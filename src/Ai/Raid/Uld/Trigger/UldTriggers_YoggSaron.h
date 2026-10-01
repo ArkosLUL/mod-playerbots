@@ -358,6 +358,44 @@ public:
     bool IsActive() override;
 };
 
+// Shadow Nova is a death explosion inside the melee pile, so melee cannot dodge it and every one of 25
+// phase 1 deaths over four pulls was this spell. These three nodes mitigate it instead, and they fire
+// on a Guardian about to die rather than on a bot already hurt.
+//
+// The bot's own button. Two gates by button length: a 12 s one goes when the Guardian passes 20%, a 5 s
+// one waits for 10%, because the measured gap from gate to detonation runs 4.8 s median at 20% and 2.4 s
+// at 10%.
+class YoggSaronNovaDefensiveTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron nova defensive trigger";
+
+    YoggSaronNovaDefensiveTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// A healer covers whoever the nova still kills after their own button, worst off first. One claim per
+// victim, so two healers do not spend two three-minute cooldowns on one bot.
+class YoggSaronNovaExternalTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron nova external trigger";
+
+    YoggSaronNovaExternalTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// Divine Sacrifice, held until the nova threatens enough of the stack to be worth one cast for the whole
+// raid. One per window.
+class YoggSaronNovaRaidCooldownTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron nova raid cooldown trigger";
+
+    YoggSaronNovaRaidCooldownTrigger(PlayerbotAI* ai) : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Covers both fears the fight has: Malady of the Mind in P2 and Deafening Roar in P3. Complements
 // the malady spread node, which handles the bot who is already feared.
 class YoggSaronAntiFearTrigger : public RaidAntiFearTrigger

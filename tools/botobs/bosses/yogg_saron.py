@@ -6,6 +6,8 @@
     yogg_saron.py <file> --clouds   cloud-orbit exposure per role, and who summoned each Guardian
     yogg_saron.py <file> --fervor   Sara's Fervor runs that came back into the nova, novas on holders,
                                     Guardians only runners summoned
+    yogg_saron.py <file> --novas    every Shadow Nova: the warning each health gate gave, who it
+                                    would have killed, and which cooldown covered them
     yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
@@ -147,6 +149,26 @@ FERVOR_NOVA_HEALTH_PCT = 50.0
 NOVA_TRIGGER_RADIUS = 17.0
 NOVA_REACH = 16.2
 FERVOR_AFTER_MS = 6000
+
+# The two gates the phase 1 ladder fires on, and what a nova is worth, mirroring
+# src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.h.
+NOVA_SOON_HEALTH_PCT = 20.0
+NOVA_NOW_HEALTH_PCT = 10.0
+NOVA_EXPECTED_DAMAGE = 17400
+
+# A trace carries the aura, not the cast name, so the ladder is read by id. Mirrors the table in
+# src/Ai/Raid/RaidTankDefensive.cpp.
+NOVA_DEFENSIVES = {
+    12975: "last stand", 871: "shield wall", 498: "divine protection", 22812: "barkskin",
+    22842: "frenzied regeneration", 61336: "survival instincts", 48707: "anti-magic shell",
+    55233: "vampiric blood", 48792: "icebound fortitude", 30823: "shamanistic rage",
+    31224: "cloak of shadows",
+}
+NOVA_EXTERNALS = {33206: "pain suppression", 47788: "guardian spirit", 6940: "hand of sacrifice"}
+
+# Divine Sacrifice is the cast; Divine Guardian is the raid-wide 20% its talent procs, and the one that
+# says the reduction actually reached the raid.
+NOVA_RAID_AURAS = {64205: "divine sacrifice", 70940: "divine guardian"}
 FERVOR_MS = 15000
 P1_SPACING = "yogg-saron phase 1 spacing action"
 # Real summons measured their approach out to 8.71 centre to centre, and a pass is read off every
@@ -2417,10 +2439,134 @@ def show_phase3(trace: Trace) -> None:
             print(f"    {trace.name(guid):14} {spot:5.1f} yd  away {share}")
 
 
+def nova_warning(series: list[tuple[int, float]], gate: float, when: int) -> float | None:
+    """Seconds from the first sample at or under `gate` to `when`, or None when it never got there.
+    Measured over 48 novas this ran a median 4.8 s at the 20% gate and 2.4 s at 10%, which is what sets
+    which button is worth starting."""
+    first = next((t for t, hp in series if 0 < hp <= gate and t <= when), None)
+    return None if first is None else (when - first) / 1000
+
+
+def nova_cover(spans: list[tuple[int, int, str]], when: int) -> list[str]:
+    """Which buffs from (start, end, name) spans were up at `when`."""
+    return sorted({name for start, end, name in spans if start <= when <= end})
+
+
+def defensive_spans(trace: Trace, until: int, wanted: dict[int, str]) -> dict[int, list[tuple]]:
+    """guid -> (start, end, name) for each of `wanted` a roster member carried before `until`. An aura
+    still up at the end of the window is closed there rather than dropped."""
+    roster = roster_guids(trace)
+    opened: dict[tuple[int, int], int] = {}
+    spans: dict[int, list[tuple]] = collections.defaultdict(list)
+    for rec in trace.of("aura"):
+        guid, spell = rec.get("d"), rec.get("sp")
+        if spell not in wanted or guid not in roster or rec["t"] > until:
+            continue
+        key = (guid, spell)
+        if not rec.get("r"):
+            opened.setdefault(key, rec["t"])
+        elif key in opened:
+            spans[guid].append((opened.pop(key), rec["t"], wanted[spell]))
+    for (guid, spell), start in opened.items():
+        spans[guid].append((start, until, wanted[spell]))
+    return spans
+
+
+def show_novas(trace: Trace) -> None:
+    print("SHADOW NOVA")
+    p1_end = phase1_end(phase_spans(trace))
+    if p1_end is None:
+        print("  no phase 1 in this trace")
+        return
+
+    roster = roster_guids(trace)
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+
+    series: dict[int, list[tuple[int, float]]] = collections.defaultdict(list)
+    for snap in trace.of("snap"):
+        if snap["t"] > p1_end:
+            break
+        for row in snap.get("u", []):
+            if row[0] in guardians:
+                series[row[0]].append((snap["t"], row[5]))
+
+    # One nova per Guardian: it is a death explosion, so a source cannot fire twice.
+    hits: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("dmg"):
+        if rec.get("sp") in SPELL_SHADOW_NOVAS and rec["t"] <= p1_end and rec.get("d") in roster:
+            hits[rec.get("s")].append(rec)
+    if not hits:
+        print("  no nova hit a raider in phase 1")
+        return
+
+    own = defensive_spans(trace, p1_end, NOVA_DEFENSIVES)
+    ext = defensive_spans(trace, p1_end, NOVA_EXTERNALS)
+    raid = defensive_spans(trace, p1_end, NOVA_RAID_AURAS)
+
+    died: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in death_records(trace):
+        died[rec.get("g")].append(rec["t"])
+
+    print(f"  novas on raiders in phase 1: {len(hits)}, {sum(len(rows) for rows in hits.values())} hits")
+    print(f"  a bot is counted at risk when the nova leaves it under {NOVA_EXPECTED_DAMAGE} hp")
+
+    at_risk = covered = 0
+    # Two novas in one tick each sit inside the same death's window, and a bot can die more than once a
+    # pull, so a death is keyed by who and when rather than by either alone.
+    lethal: set[tuple[int, int]] = set()
+    lethal_covered: set[tuple[int, int]] = set()
+    for source in sorted(hits, key=lambda guid: hits[guid][0]["t"]):
+        rows = hits[source]
+        when = rows[0]["t"]
+        gates = "  ".join(
+            f"{int(gate)}%:" + ("-" if warn is None else f"{warn:.1f}s")
+            for gate, warn in ((NOVA_SOON_HEALTH_PCT, nova_warning(series.get(source, []), NOVA_SOON_HEALTH_PCT, when)),
+                               (NOVA_NOW_HEALTH_PCT, nova_warning(series.get(source, []), NOVA_NOW_HEALTH_PCT, when))))
+        worst = max(rows, key=lambda rec: rec["a"])
+        pool = trace.maxhp.get(worst["d"]) or 0
+        share = f" ({worst['a'] / pool * 100:.0f}% of pool)" if pool else ""
+        print(f"    {clock(when):>9}  warning {gates}  {len(rows)} raiders, "
+              f"worst {worst['a']} on {trace.name(worst['d'])}{share}")
+
+        doomed = []
+        for rec in rows:
+            guid = rec.get("d")
+            mhp = trace.maxhp.get(guid) or 0
+            left = mhp * (rec.get("hp") or 100) / 100.0
+            if mhp and left - rec["a"] < 0:
+                doomed.append(rec)
+        if doomed:
+            at_risk += 1
+            shields = []
+            for rec in doomed:
+                guid = rec.get("d")
+                up = nova_cover(own.get(guid, []), when) + nova_cover(ext.get(guid, []), when)
+                shields.append(f"{trace.name(guid)}" + (f" [{', '.join(up)}]" if up else " [nothing]"))
+            if any("[" in row and "nothing" not in row for row in shields):
+                covered += 1
+            print(f"      at risk: {', '.join(shields)}")
+
+        raid_up = sorted({name for guid in roster for name in nova_cover(raid.get(guid, []), when)})
+        if raid_up:
+            print(f"      raid-wide: {', '.join(raid_up)}")
+
+        killed = {(rec.get("d"), t) for rec in rows for t in died[rec.get("d")]
+                  if 0 <= t - rec["t"] <= 1500}
+        if killed:
+            lethal.update(killed)
+            lethal_covered.update((guid, t) for guid, t in killed
+                                  if nova_cover(own.get(guid, []), when) or nova_cover(ext.get(guid, []), when))
+            print(f"      died: {', '.join(trace.name(guid) for guid, _ in sorted(killed, key=lambda k: k[1]))}")
+
+    print(f"  novas that would have killed somebody: {at_risk}, with a button up on at least one: {covered}")
+    print(f"  deaths to a nova: {len(lethal)}, of which had any button up: {len(lethal_covered)}")
+
+
 SECTIONS = (
     ("phases", "phase timeline and the pre-pull window", show_phases),
     ("clouds", "cloud-orbit exposure per role", show_clouds),
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
+    ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
     ("threat", "who the Guardians were on, and taunts", show_threat),
     ("portals", "portal waves and assignments", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),

@@ -5,6 +5,7 @@
  */
 
 #include "UldDefinitions.h"
+#include "RaidTankDefensive.h"
 
 #include "BossAuraActions.h"
 #include "BossAuraTriggers.h"
@@ -109,6 +110,18 @@ void DefineYoggSaron(EncounterBuilder& e)
     // Above the sanity conservation retreat: cutting somebody out of 7.5k a second beats walking
     // somebody else to a well.
     e.Node<YoggSaronSqueezeRescueTrigger, YoggSaronSqueezeRescueAction>(ACTION_RAID + 6);
+
+    // Shadow Nova is a death explosion in the middle of the melee pile, so melee cannot step out of it
+    // and all 25 phase 1 deaths over four pulls were this one spell. These three mitigate it instead,
+    // and they go above everything else because a nova lands in the next second or two and a bot that
+    // walks instead of pressing a button is a bot that dies walking.
+    //
+    // The raid cooldown is highest: one Divine Sacrifice covers 25 raiders, so it beats any single bot's
+    // own. The externals come last of the three because the bot's own button is cheaper than a healer's
+    // three-minute one, and the victim pick already skips anyone their own button saves.
+    e.Node<YoggSaronNovaRaidCooldownTrigger, YoggSaronNovaRaidCooldownAction>(ACTION_EMERGENCY + 7);
+    e.Node<YoggSaronNovaDefensiveTrigger, YoggSaronNovaDefensiveAction>(ACTION_EMERGENCY + 6);
+    e.Node<YoggSaronNovaExternalTrigger, YoggSaronNovaExternalAction>(ACTION_EMERGENCY + 5);
     // Level with the phase 2 dodge and above the dps resolver: where the bot stands has to be settled
     // before the reach node is asked to close on the target from there.
     e.Node<YoggSaronIllusionFacingTrigger, YoggSaronIllusionFacingAction>(ACTION_RAID + 3);
@@ -121,8 +134,10 @@ void DefineYoggSaron(EncounterBuilder& e)
     // An instant cast, so under every raid walk and dodge, and well over the paladin's own rotation,
     // which would only ever judge its current target.
     e.Node<YoggSaronDiminishPowerJudgementTrigger, YoggSaronDiminishPowerJudgementAction>(ACTION_RAID - 0.5f);
-    // Level with the room walk it replaces for the healer. Heal reach still outranks it, so a mate out of
-    // range from the middle gets a step toward it first.
+    // Level with the room walk it replaces for the healer, and above heal reach, which every healer spec
+    // wires at 38-40. Getting to the station is what puts the whole room in range, so it comes before a
+    // step toward one mate; the trigger stands down inside 10 yd of the station and heal reach owns the
+    // bot from there.
     e.Node<YoggSaronIllusionHealerStationTrigger, YoggSaronIllusionHealerStationAction>(ACTION_RAID);
     // Over reach melee and set behind, so a bot arriving in front of the Brain goes round to the spot
     // rather than being walked out of range and back. Under the exit walk.
@@ -155,6 +170,18 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Multiplier<YoggSaronPhase1AoeHoldMultiplier>(Family::AnyAction);
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"food", "drink"});
+
+    // Every one of those buttons otherwise fires on "I am already low", which in phase 1 means after the
+    // nova rather than before it: Totemist cast Shamanistic Rage nine times in one pull and still died
+    // four times. Melee only, so the tank keeps its own against the Guardians it is holding and the back
+    // line keeps its own against Dark Volley.
+    e.Block("yogg-saron nova defensive hold", Role::Melee, YoggSaronInPhase1, 0, HeldMagicDefensiveNames());
+
+    // The externals and the raid cooldown, held for the same reason. Every phase 1 death measured was a
+    // nova, so nothing else in the phase is worth spending a three-minute cooldown on.
+    e.Block("yogg-saron nova cooldown hold", Role::Any, YoggSaronInPhase1, 0,
+            {"pain suppression", "pain suppression on party", "guardian spirit on party",
+             "hand of sacrifice on party", "divine sacrifice"});
 
     e.Multiplier<YoggSaronPhase1WalkGuardMultiplier>(Family::AnyMovement);
     e.Multiplier<YoggSaronAntiFearTotemGuardMultiplier>(Family::Spell);

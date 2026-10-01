@@ -466,6 +466,53 @@ public:
     bool Execute(Event event) override;
 };
 
+// Mitigate the next Shadow Nova instead of running from it: melee have to stand in the blast to kill a
+// Guardian at all, and one nova is 56-106% of a melee bot's health bar.
+class YoggSaronNovaDefensiveAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron nova defensive action";
+
+    YoggSaronNovaDefensiveAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
+// A healer's external on the bot the nova still kills, after that bot's own button.
+class YoggSaronNovaExternalAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron nova external action";
+
+    YoggSaronNovaExternalAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+
+    // Shared with the trigger, so a healer with nothing in range never claims an emergency tick.
+    static char const* PickExternal(PlayerbotAI* botAI, Player* victim);
+
+private:
+    // Whichever of these the healer has, in the order they are worth spending. Guardian Spirit absorbs
+    // the whole hit when it would otherwise be lethal, which is the only answer to a Fervored one-shot.
+    // Hand of Protection is absent on purpose: it only blocks physical, so a shadow blast goes straight
+    // through it, and it sheds threat.
+    static constexpr char const* HEALER_EXTERNALS[] = {"pain suppression", "guardian spirit",
+                                                       "hand of sacrifice"};
+};
+
+// Divine Sacrifice, for the 20% the Divine Guardian talent hangs off it. The split it puts back on the
+// paladin is survivable here: the pool is 40% of his health times the raid size and it breaks under 20%
+// health, and across four pulls no caster went below 62%.
+class YoggSaronNovaRaidCooldownAction : public Action
+{
+public:
+    static constexpr char const* Name = "yogg-saron nova raid cooldown action";
+
+    YoggSaronNovaRaidCooldownAction(PlayerbotAI* ai) : Action(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 // Pop an immunity to shed Squeeze, which kills the Constrictor Tentacle holding the bot.
 class YoggSaronSqueezeEscapeAction : public Action
 {

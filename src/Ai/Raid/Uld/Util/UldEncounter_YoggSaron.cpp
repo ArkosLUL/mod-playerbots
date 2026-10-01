@@ -19,6 +19,7 @@
 
 #include "AiObjectContext.h"
 #include "RaidInstanceState.h"
+#include "RaidTankDefensive.h"
 #include "CellImpl.h"
 #include "ObjectAccessor.h"
 #include "ObjectGuid.h"
@@ -99,6 +100,15 @@ struct YoggSaronEncounterState
     // Which Squeeze victim each rescuer has called, so three paladins do not spend three cooldowns on
     // one tentacle. Keyed by victim rather than by window because grabs overlap.
     std::unordered_map<ObjectGuid, uint32> squeezeClaims;
+
+    // Which bot is covering which nova victim with an external, so two healers do not spend two
+    // three-minute cooldowns on one bot. Keyed per victim, like the Squeeze claim.
+    std::unordered_map<ObjectGuid, uint32> novaClaims;
+
+    // The one raid-wide cooldown per nova. Keyed by window rather than victim because the cast covers
+    // everybody, and it stays true for its owner so the same bot can retry across ticks.
+    ObjectGuid novaClaimedBy;
+    uint32 novaWindowMs = 0;
 
     // Phase 1's raid-wide kill target. See YoggSaronPhase1Focus.
     ObjectGuid phase1Focus;
@@ -1249,6 +1259,251 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
     }
 
     return threats;
+}
+
+namespace
+{
+// Living Guardians at or under `gate`, swept once. A raid-wide count that swept around every member
+// instead ran 25 grid searches a tick on every paladin.
+std::vector<Creature*> YoggSaronLowGuardians(Unit* from, float gate, float radius)
+{
+    std::list<Creature*> guardians;
+    from->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, radius);
+
+    std::vector<Creature*> low;
+    for (Creature* guardian : guardians)
+    {
+        if (guardian->IsAlive() && guardian->GetHealthPct() <= gate)
+            low.push_back(guardian);
+    }
+
+    return low;
+}
+
+uint32 YoggSaronNovaDamageFrom(std::vector<Creature*> const& low, Unit* target)
+{
+    uint32 count = 0;
+    for (Creature* guardian : low)
+    {
+        if (target->GetExactDist2d(guardian) <= ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS)
+            ++count;
+    }
+
+    if (!count)
+        return 0;
+
+    count = std::min<uint32>(count, ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN);
+    uint32 const expected = count * ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE;
+
+    // Fervor is +100% damage taken and DispelType 0, so it cannot be lifted. A holder caught in the
+    // stack is the one bot a single nova kills from full health.
+    return target->HasAura(SPELL_SARAS_FERVOR) ? expected * 2 : expected;
+}
+
+bool YoggSaronNovaLeavesNothing(uint32 expected, Unit* target)
+{
+    return expected && target->GetHealth() <= uint32(expected * ULDUAR_YOGG_SARON_NOVA_SAFETY);
+}
+
+// Read off the list already swept, so asking this for all 25 raiders costs no extra grid search.
+uint32 YoggSaronNovaNeedFrom(std::vector<Creature*> const& low, Unit* target)
+{
+    for (Creature* guardian : low)
+    {
+        if (guardian->GetHealthPct() <= ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT &&
+            target->GetExactDist2d(guardian) <= ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS)
+            return ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS;
+    }
+
+    return ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS;
+}
+
+// What the nova still does to this raider after whatever it can put up by itself. A human has no bot AI
+// and therefore nothing it will cast on cue, which is the honest answer for one.
+uint32 YoggSaronNovaAfterOwnButton(std::vector<Creature*> const& low, Player* member, uint32 expected)
+{
+    PlayerbotAI* memberAI = GET_PLAYERBOT_AI(member);
+    if (!memberAI)
+        return expected;
+
+    uint8 const cut = BestMagicDefensiveCut(memberAI, member, YoggSaronNovaNeedFrom(low, member));
+
+    return expected - expected * cut / 100;
+}
+
+// Ranged and healers hold the 21.5 yd station and are outside the blast by design, so a cooldown spent
+// on one is a cooldown the melee pile does not get.
+bool YoggSaronNovaCandidate(Player* member)
+{
+    return member && member->IsAlive() && !PlayerbotAI::IsRanged(member) && !PlayerbotAI::IsHeal(member);
+}
+}  // namespace
+
+uint32 YoggSaronNovaDamageOn(Unit* target)
+{
+    if (!target || !target->IsAlive())
+        return 0;
+
+    std::vector<Creature*> const low = YoggSaronLowGuardians(target, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
+                                                             ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS);
+
+    return YoggSaronNovaDamageFrom(low, target);
+}
+
+bool YoggSaronNovaWouldHurt(Unit* target)
+{
+    return YoggSaronNovaLeavesNothing(YoggSaronNovaDamageOn(target), target);
+}
+
+uint32 YoggSaronNovaNeedMs(Unit* target)
+{
+    if (!target || !target->IsAlive())
+        return 0;
+
+    std::vector<Creature*> const low = YoggSaronLowGuardians(target, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
+                                                             ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS);
+    if (!YoggSaronNovaLeavesNothing(YoggSaronNovaDamageFrom(low, target), target))
+        return 0;
+
+    // A Guardian already under the tighter gate detonates a median 2.4 s later, which a 5 s button
+    // covers; one that has only just passed 20% can take up to 11.5 s, so there only a 12 s button is
+    // worth starting.
+    return YoggSaronNovaNeedFrom(low, target);
+}
+
+uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return 0;
+
+    std::vector<Creature*> const low = YoggSaronLowGuardians(bot, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
+                                                             ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);
+    if (low.empty())
+        return 0;
+
+    uint32 count = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!YoggSaronNovaCandidate(member))
+            continue;
+
+        if (YoggSaronNovaLeavesNothing(YoggSaronNovaDamageFrom(low, member), member))
+            ++count;
+    }
+
+    return count;
+}
+
+Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Group* group = bot->GetGroup();
+    if (!group)
+        return nullptr;
+
+    std::vector<Creature*> const low = YoggSaronLowGuardians(bot, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
+                                                             ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);
+    if (low.empty())
+        return nullptr;
+
+    Player* victim = nullptr;
+    int64 worst = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!YoggSaronNovaCandidate(member) || member == bot)
+            continue;
+
+        if (bot->GetExactDist2d(member) > sPlayerbotAIConfig.spellDistance)
+            continue;
+
+        uint32 const expected = YoggSaronNovaDamageFrom(low, member);
+        if (!YoggSaronNovaLeavesNothing(expected, member))
+            continue;
+
+        // Whoever their own button still saves is not worth a three-minute external: a rogue who dodges
+        // the blast outright with a 90 s Cloak of Shadows has to come behind a warrior who has nothing.
+        uint32 const after = YoggSaronNovaAfterOwnButton(low, member, expected);
+        if (member->GetHealth() > after)
+            continue;
+
+        // How far past dead the nova leaves them even so. A Fervor holder is furthest out because its
+        // expected hit doubles, and among the rest the smallest health pool loses by the most.
+        int64 const margin = int64(member->GetHealth()) - int64(after);
+        if (!victim || margin < worst)
+        {
+            victim = member;
+            worst = margin;
+        }
+    }
+
+    return victim;
+}
+
+bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI, Player* victim)
+{
+    if (!victim)
+        return false;
+
+    YoggSaronEncounterState& state = YoggSaronStateFor(botAI->GetBot());
+
+    uint32 const now = getMSTime();
+    uint32& claimed = state.novaClaims[victim->GetGUID()];
+    if (claimed && getMSTimeDiff(claimed, now) < ULDUAR_YOGG_SARON_NOVA_CLAIM_MS)
+        return false;
+
+    claimed = now;
+
+    return true;
+}
+
+bool ClaimYoggSaronNovaWindow(Player* bot)
+{
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+
+    if (state.novaWindowMs &&
+        getMSTimeDiff(state.novaWindowMs, getMSTime()) < ULDUAR_YOGG_SARON_NOVA_WINDOW_MS)
+        return state.novaClaimedBy == bot->GetGUID();
+
+    state.novaWindowMs = getMSTime();
+    state.novaClaimedBy = bot->GetGUID();
+
+    return true;
+}
+
+void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions)
+{
+    if (!YoggSaronInPhase1(botAI))
+        return;
+
+    std::vector<Creature*> const low =
+        YoggSaronLowGuardians(botAI->GetBot(), ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT,
+                              ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);
+
+    for (Creature* guardian : low)
+    {
+        for (Creature* other : low)
+        {
+            if (other == guardian ||
+                other->GetExactDist2d(guardian) > ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS)
+                continue;
+
+            // Shield whichever is further from death. Equal health is a real case - one pull had two at
+            // 2.0% die a millisecond apart - so the guid settles it rather than leaving both excluded
+            // and the pair waiting on each other.
+            if (guardian->GetHealth() > other->GetHealth() ||
+                (guardian->GetHealth() == other->GetHealth() && other->GetGUID() < guardian->GetGUID()))
+            {
+                exclusions.insert(guardian->GetGUID());
+                break;
+            }
+        }
+    }
 }
 
 namespace

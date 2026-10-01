@@ -64,7 +64,7 @@ phase-3-control node. `IsDesignatedBotTank` falls back to the first living bot t
 
 | Spell | Shape | Answer |
 |---|---|---|
-| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death**, also hitting other Guardians (below) | ranged and healers stand off; melee and tanks must eat it |
+| Shadow Nova 62714 / 65209 | instant, uninterruptible, DBC 15 yd but **16.2 measured**, on Guardian **death**, also hitting other Guardians (below) | ranged and healers stand off; melee and tanks mitigate it (below) |
 | Dark Volley 63038 / 65330 | 1500 ms cast, 35 yd, `InterruptFlags` 0xF | interrupt it — distance is no answer |
 
 ~97% of raid damage across both wipes. Which of the two leads flips with how many Guardians are up:
@@ -81,17 +81,83 @@ and the raid dies of it: once every kill landed inside 15 yd, the 12 novas of on
 raiders each and were **65%** of all damage the raid took. Melee and tanks have no way out. Ranged and
 healers do, and stand off (below).
 
+**One nova is most of a melee bar, which is why they mitigate rather than dodge.** Pools run
+**23,537** (enhancement shaman) and 25,492-25,512 (rogues) up to **31,249** (warrior) against a median
+**17,400** over 520 hits in four pulls, so **56-106%** of a bar; two in one tick killed eight melee from
+full. Healers were already putting 20,000-23,000 HPS into nine melee and out-healing it **1.7 to 1**: an
+instant that takes most of a bar is mitigated or not survived. All **25** phase 1 deaths across those
+pulls were this spell, and not one had a cooldown up.
+
 **Sara's Fervor (63138) doubles it, and that is a one-shot.** The DBC gives +20% damage done and
 **+100% damage taken** for 15 s; the core implements none of it, so the spellbook and every
-server-side grep are silent. Measured over one pull: **13,877** median across 199 ordinary nova hits,
-**23,789-34,039** across the 4 that landed on a Fervor holder, against caster and healer pools of
-**25,000-30,000**. All four killed, one from full health.
+server-side grep are silent, and `DispelType 0` means nothing lifts it. Measured at **39,430** and
+**45,340** against that 23,537 pool, both from full health and both **0.4-1.1 s after it landed**, with
+the bot still walking out.
 
 So Fervor gets its own, wider health gate — `ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT` (50%) against
 20% for everyone else. Focus fire is what forces that: concentrating damage cuts the window a Guardian
 spends at or under 20% from a **median 3.5 s** to **0.9-1.0 s**, and one second is 7 yd of travel
 against a 16 yd blast from a start in melee contact. The 20% gate fired at 4 Fervored novas and saved
 nobody. The "chasing me" half of the ranged rule needs no timing and is untouched.
+
+### The nova cooldown ladder
+
+Per the 25 deaths, a flat cut of 20% saves 14, 30% saves 19, 40% saves 23 and 50% saves all of them.
+Cuts **multiply** — `Unit::GetTotalAuraMultiplier` is `AddPct` per aura, read from
+`SpellDamageBonusTaken` — and none of these spells shares a `spell_group`, so Pain Suppression over
+Shamanistic Rage is `0.6 × 0.7`, a 58% cut that covers every one of them.
+
+**Two gates, because a button only counts if it is still up when the nova lands.** Over 48 novas a
+Guardian first dropping under **20%** detonated a median 4.8 s later and never later than 11.5; under
+**10%** a median 2.4 s, with 46 of 48 inside 6 s. So `ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT` (20)
+starts a 12 s button and `…_NOVA_NOW_HEALTH_PCT` (10) a 5 s one. Everything here is instant, so even the
+0.8 s minimum is castable. A bot spends one only when the hit leaves it inside about a swing of dead:
+`…_NOVA_SAFETY` (1.25) against `…_NOVA_EXPECTED_DAMAGE` (17,400), doubled under Fervor, counting at most
+`…_NOVA_MAX_CHAIN` (2) low Guardians in reach. Only **2 of 12** novas a pull land on a melee already
+that low, which is what keeps a 45 s cooldown in hand for the window that needs it.
+
+Three tiers, in that relevance order, because one cast covering 25 raiders beats any single bot's own:
+
+- **`yogg-saron nova raid cooldown`** — Divine Sacrifice, once the nova threatens `…_NOVA_RAID_COUNT`
+  (3) of the stack. Claimed per window by `ClaimYoggSaronNovaWindow` (`…_NOVA_WINDOW_MS` 10 s, the
+  spell's own duration), and cast through the class node so `cancel divine sacrifice` stays its
+  continuer.
+- **`yogg-saron nova defensive`** — the bot's own, from `NextMagicDefensive`: shortest cooldown first
+  and never two at once, so Anti-Magic Shell (45 s) goes ahead of Barkskin and Shamanistic Rage (60 s),
+  then Cloak of Shadows (90 s), Icebound Fortitude (120 s), Divine Protection and Survival Instincts
+  (180 s). No claim — a personal button covers one bot, so two bots firing is not an overlap.
+- **`yogg-saron nova external`** — a healer's, in worth order `pain suppression`, `guardian spirit`,
+  `hand of sacrifice`, claimed per victim by `ClaimYoggSaronNovaExternal`. `YoggSaronNovaVictim` takes
+  whoever the nova leaves furthest past dead **after their own button** (`BestMagicDefensiveCut`), so a
+  rogue who dodges it outright comes behind a warrior who has nothing, and a Fervor holder is always
+  first because its expected hit doubles. Hand of Protection is out: physical only, and it sheds threat.
+
+Each claim is taken **after** the caster has something castable, or one that claimed on sight would
+beat the rest to the victim and then cast nothing.
+
+All of it is held off the class triggers for phase 1 — `yogg-saron nova defensive hold` over the melee
+row, `yogg-saron nova cooldown hold` over the externals and Divine Sacrifice. Every one otherwise fires
+on "I am already low", which here means after the nova: Totemist cast Shamanistic Rage nine times in one
+pull and died four times. Tanks and the back line keep theirs, for the Guardians one holds and the Dark
+Volley the other eats.
+
+Three engine facts the spells themselves do not show:
+
+- **Divine Guardian's raid-wide 20% works, and the split is survivable.** 70940 appears nowhere in the
+  core's `src` or `data/sql`; talent 53530 effect 1 is aura **231** (`PROC_TRIGGER_SPELL_WITH_VALUE`) at
+  **-20**, triggering it as an `APPLY_AREA_AURA_RAID` aura 87, and it reached all **25** raiders on every
+  cast measured. Divine Sacrifice's split pool is `40% × caster max health × raid member count`
+  (`spell_paladin.cpp:617-624`) and breaks under 20% health, so no caster went below **62%**. That damage
+  skips `SpellDamageBonusTaken`, so the paladin's own cuts do not reduce what the split hands back.
+- **Cloak of Shadows nearly removes a nova for a rogue.** AoE rolls to hit at `Spell::AddUnitTarget`, the
+  magic path reads aura 186 at `Unit.cpp:3568`, and a miss runs no effect at all. 31224 is -90 on school
+  mask 126 with no script, which clamps hit chance to the 1% floor, and 65209 has `AttributesEx2`
+  through `Ex7` all zero, so neither `ALWAYS_HIT` nor `NO_ATTACK_MISS` is set.
+- **Shadow resistance is already capped, and Aura Mastery cannot raise it.** Shadow Resistance Aura
+  48943, Shadow Protection 48169 and Prayer of Shadow Protection 48170 are all aura **143**
+  (`MOD_RESISTANCE_EXCLUSIVE`, highest wins), so the priest buff adds nothing to the 130 the raid
+  already has. Aura Mastery doubles through `CalculateSpellMod` → `CalcValue` at aura **creation**, and
+  `Player::AddSpellMod` never recalculates a live one, so it cannot double an aura that is already up.
 
 ## Ominous Clouds
 
@@ -282,7 +348,8 @@ would not otherwise survive it: ranged and healers when one is at or under
 them — and anyone holding Sara's Fervor, on the wider gate above. Running from every Guardian instead is
 what scattered the raid to the rim on 2026-09-14, where seven bots were picked off one at a time between
 1:26 and 1:30. `GetYoggSaronNovaThreats` is the single owner of that rule, so the trigger and the action
-cannot disagree about who is running.
+cannot disagree about who is running. `YoggSaronNovaSoon` is the opposite read, counting melee *in*:
+one answers who should run, the other who is about to be hit regardless.
 
 **A Fervor run has to end out of reach, not at the edge.** The dodge fires inside 17 yd and stops at
 20, and the station, the leash or `reach melee` then walked the bot straight back: over 9 traces **31
@@ -476,6 +543,15 @@ at 1:57.37, and two melee held in the middle went 100% → 62-75% → 15-36% →
   Guardian below 30% is not killable while a lower one stands within
   `ULDUAR_YOGG_SARON_P1_NOVA_CHAIN_RADIUS` (18, over the 16.2 measured on players): the focus moves to
   the lower one if it is killable, else waits (`chain`). The lowest is never held.
+
+  That only holds the focus, and **7 of 12** Guardian deaths a pull are `splash` — DoTs, pets, cleaves
+  and the humans. One pull then had two sit at or under 20% within 12.0 yd of each other for a
+  continuous **8.0 s**, die at 2.0% a millisecond apart, and kill **eight melee from full health**;
+  every other paired window across four pulls lasted 0.0-0.9 s. So `AppendYoggSaronTargetExclusions`
+  hands the higher-health half of such a pair to `RaidUlduarStrategy::AppendTargetExclusions` for
+  `TargetValueExclusionType::Dps` and `::Attacker` — every dps, dps-aoe and attacker picker at once,
+  pets included. `::Tank` is left out so the tank keeps holding it rather than letting it walk at the
+  back line, and the guid breaks an exact health tie so one of the pair is always free to die.
 
 `--phases` tags each phase 1 Guardian death `focus`, `split` or `splash` by how many bot non-tanks
 were on it a second before, and lists pairs under the gap: 9/0/4 and 3 pairs on the 17:25 pull,
@@ -1109,7 +1185,9 @@ non-tank swing, `yogg.tankhold`,
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
 outside, and each healer's distance to the melee spot and facing during gazes. Under `--fervor`: each
 Fervor run, whether it came back inside 16.2 yd while holding and what walked it back, novas on holders,
-and Guardians only runners summoned.
+and Guardians only runners summoned. Under `--novas`: every nova with the warning each gate gave,
+the raiders in reach and the worst hit as a share of their pool, who it would have killed and what was
+up on them, the raid-wide auras live at that instant, and the deaths.
 
 **Do not add a Sanity level probe** (`yogg.sanity` is a walk reason). 63050 is already in the aura stream — 467 and 819 rows across the two
 attempts, with 63752 low-sanity and 63120 Insane beside it — as are Grim Reprisal 64039 and Lunatic

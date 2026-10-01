@@ -1034,6 +1034,26 @@ class Ranking(unittest.TestCase):
 
 
 class YoggPhases(unittest.TestCase):
+    def test_nova_warning_is_measured_from_the_first_sample_past_the_gate(self):
+        series = [(0, 100.0), (1000, 45.0), (2000, 24.0), (3000, 18.0), (4000, 6.0)]
+        # 1790877348's last pair gave 11.2 s at the 20% gate and 5.6 s at 10%, which is why the long
+        # buttons go at 20% and the 5 s ones wait.
+        self.assertAlmostEqual(yogg_saron.nova_warning(series, 20.0, 5000), 2.0)
+        self.assertAlmostEqual(yogg_saron.nova_warning(series, 10.0, 5000), 1.0)
+        # A sample past the nova does not count, and a Guardian that never got there gives nothing.
+        self.assertIsNone(yogg_saron.nova_warning(series, 10.0, 3500))
+        self.assertIsNone(yogg_saron.nova_warning(series, 5.0, 5000))
+        # A dead Guardian reads 0, which is not "under the gate".
+        self.assertIsNone(yogg_saron.nova_warning([(0, 0.0)], 20.0, 1000))
+
+    def test_nova_cover_reports_every_buff_up_at_that_instant(self):
+        spans = [(0, 5000, "shamanistic rage"), (4000, 9000, "pain suppression"),
+                 (6000, 7000, "barkskin")]
+        self.assertEqual(yogg_saron.nova_cover(spans, 4500), ["pain suppression", "shamanistic rage"])
+        self.assertEqual(yogg_saron.nova_cover(spans, 9500), [])
+        # The edges count: a button applied on the same tick as the nova still absorbed it.
+        self.assertEqual(yogg_saron.nova_cover(spans, 5000), ["pain suppression", "shamanistic rage"])
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))

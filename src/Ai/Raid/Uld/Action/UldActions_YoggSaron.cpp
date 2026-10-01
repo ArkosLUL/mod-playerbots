@@ -1,4 +1,5 @@
 #include "UldActions_YoggSaron.h"
+#include "RaidTankDefensive.h"
 #include "UldActions_Shared.h"
 
 #include <CombatStrategy.h>
@@ -1564,4 +1565,69 @@ bool YoggSaronSqueezeEscapeAction::Execute(Event /*event*/)
         default:
             return false;
     }
+}
+
+bool YoggSaronNovaDefensiveAction::Execute(Event /*event*/)
+{
+    uint32 const needMs = YoggSaronNovaNeedMs(bot);
+    if (!needMs)
+        return false;
+
+    char const* defensive = NextMagicDefensive(botAI, bot, "yogg.novadef", needMs);
+
+    return defensive && botAI->CastSpell(defensive, bot);
+}
+
+char const* YoggSaronNovaExternalAction::PickExternal(PlayerbotAI* botAI, Player* victim)
+{
+    Player* bot = botAI->GetBot();
+
+    for (char const* external : HEALER_EXTERNALS)
+    {
+        if (!botAI->CanCastSpell(external, victim))
+            continue;
+
+        // CanCastSpell counts out of range as castable, so range is checked here or a healer on the far
+        // side of the room claims the victim and then casts nothing.
+        if (!bot->IsWithinDistInMap(victim, sPlayerbotAIConfig.spellDistance))
+            continue;
+
+        return external;
+    }
+
+    return nullptr;
+}
+
+bool YoggSaronNovaExternalAction::Execute(Event /*event*/)
+{
+    Player* victim = YoggSaronNovaVictim(botAI);
+    if (!victim)
+        return false;
+
+    char const* external = PickExternal(botAI, victim);
+    if (!external)
+        return false;
+
+    // Claimed only once there is something to cast. A healer that claimed on sight would beat everybody
+    // else to the victim and then spend nothing on it.
+    if (!ClaimYoggSaronNovaExternal(botAI, victim))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.novaext", external);
+
+    return botAI->CastSpell(external, victim);
+}
+
+bool YoggSaronNovaRaidCooldownAction::Execute(Event /*event*/)
+{
+    if (!ClaimYoggSaronNovaWindow(bot))
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.novaraid", "divine sacrifice");
+
+    // Through the class node rather than CastSpell, so the cancel action stays its continuer: the split
+    // keeps running for 10 s whether the nova has landed or not.
+    return botAI->DoSpecificAction("divine sacrifice");
 }

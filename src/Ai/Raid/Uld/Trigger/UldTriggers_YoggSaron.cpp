@@ -1,4 +1,6 @@
 #include "UldTriggers_YoggSaron.h"
+#include "UldActions_YoggSaron.h"
+#include "RaidTankDefensive.h"
 
 #include <algorithm>
 #include <cmath>
@@ -789,4 +791,50 @@ bool YoggSaronSqueezeEscapeTrigger::IsActive()
         return false;
 
     return bot->HasAura(sSpellMgr->GetSpellIdForDifficulty(SPELL_SQUEEZE, bot));
+}
+
+bool YoggSaronNovaDefensiveTrigger::IsActive()
+{
+    // Cheapest read first, as everywhere in this file: a plain distance, then a 17 yd sweep, and the
+    // phase last because it is three 200 yd grid sweeps on every bot on the map.
+    if (!YoggSaronInPhase1Room(bot))
+        return false;
+
+    uint32 const needMs = YoggSaronNovaNeedMs(bot);
+    if (!needMs || !NextMagicDefensive(botAI, bot, nullptr, needMs))
+        return false;
+
+    return YoggSaronInPhase1(botAI);
+}
+
+bool YoggSaronNovaExternalTrigger::IsActive()
+{
+    // Pain Suppression and Guardian Spirit are a healer's, Hand of Sacrifice any paladin's.
+    if (!PlayerbotAI::IsHeal(bot) && bot->getClass() != CLASS_PALADIN)
+        return false;
+
+    if (!YoggSaronInPhase1Room(bot))
+        return false;
+
+    Player* victim = YoggSaronNovaVictim(botAI);
+    if (!victim || !YoggSaronNovaExternalAction::PickExternal(botAI, victim))
+        return false;
+
+    return YoggSaronInPhase1(botAI);
+}
+
+bool YoggSaronNovaRaidCooldownTrigger::IsActive()
+{
+    if (bot->getClass() != CLASS_PALADIN || !YoggSaronInPhase1Room(bot))
+        return false;
+
+    // Cooldown before the raid sweep: Divine Sacrifice is down for 120 of every 130 seconds, so the
+    // count behind this almost never runs.
+    if (!botAI->CanCastSpell("divine sacrifice", bot))
+        return false;
+
+    if (YoggSaronNovaHurtCount(botAI) < ULDUAR_YOGG_SARON_NOVA_RAID_COUNT)
+        return false;
+
+    return YoggSaronInPhase1(botAI);
 }

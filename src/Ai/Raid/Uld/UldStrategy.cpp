@@ -10,19 +10,25 @@
 #include "UldDefinitions.h"
 #include "UldEncounter_Algalon.h"
 #include "UldEncounter_Mimiron.h"
+#include "UldEncounter_YoggSaron.h"
 #include "UldMultipliers.h"
 
 // The kept Emergency Fire Bots are the raid's fire suppression, and only Mimiron's own dps picker
 // knew it: that node stands down for tanks, and the target guard beside it only zeroes
 // DpsAssistAction, so the generic tank picker killed the protected ones in one Firefighter pull.
 // Excluding them here covers every picker at once - tank, dps, dps aoe and the attackers.
-void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions,
-                                               TargetValueExclusionType /*type*/)
+void RaidUlduarStrategy::AppendTargetExclusions(GuidSet& exclusions, TargetValueExclusionType type)
 {
     for (ObjectGuid const& guid : GetMimironKeptFireBots(botAI, botAI->GetBot()))
         exclusions.insert(guid);
 
     AppendAlgalonTargetExclusions(botAI, exclusions);
+
+    // Dps and pets only. The tank still has to hold the shielded Guardian or it walks at the back line,
+    // and the phase 1 focus rule already refuses it as a kill target - this is what stops the DoTs,
+    // cleaves and pets that rule never reached from finishing it in the same tick as its neighbour.
+    if (type == TargetValueExclusionType::Dps || type == TargetValueExclusionType::Attacker)
+        AppendYoggSaronTargetExclusions(botAI, exclusions);
 }
 
 void RaidUlduarStrategy::OnTick()
