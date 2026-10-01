@@ -172,6 +172,17 @@ bool VezaxAnimusBringBackAction::Execute(Event /*event*/)
                   false, false, false, true, MovementPriority::MOVEMENT_FORCED, true);
 }
 
+bool VezaxAnimusMeleeSpotAction::Execute(Event /*event*/)
+{
+    Position spot;
+    if (!TryGetVezaxAnimusMeleeSpot(bot, AI_VALUE(Unit*, "current target"), spot))
+        return false;
+
+    // FORCED for the same latched dodge destination as the bring-back.
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false,
+                  false, true, MovementPriority::MOVEMENT_FORCED, true);
+}
+
 bool VezaxShadowCrashSoakAction::Execute(Event /*event*/)
 {
     std::vector<VezaxHazard> hazards;
@@ -231,15 +242,11 @@ bool VezaxHoldTargetAction::Execute(Event /*event*/)
 bool VezaxRaidPositionAction::Execute(Event /*event*/)
 {
     Position slot;
+    // Melee hold the boss instead of taking a slot. Don't spread them here: set behind puts them all on
+    // two spots behind him, so any nudge apart fights it and they never stop walking.
     if (!TryGetVezaxSlot(bot, slot))
     {
-        // Melee hold the boss instead of taking a slot. All they need is not to be stacked on each
-        // other - a crash can still reach them, but walking them off it would take them off the
-        // boss, which is the one thing the camp's radii depend on.
         _slotReached = false;
-        if (Player* crowd = GetNearestPlayerInRadius(bot, ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS))
-            return FleePosition(crowd->GetPosition(), ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS);
-
         return false;
     }
 

@@ -68,14 +68,18 @@ of 8.0**, which `WorldObject::GetDistance` and `Unit::IsWithinCombatRange` both 
 Slot tolerance is 1.2, and 3.0 for the tank, whose slot is the anchor
 `(1852.78, 81.3856, 342.461)` itself — a tank standing on the spawn point is what keeps Vezax there
 for every other radius here. 20 slots against a 25-man's 18 healers and ranged, so it does not
-overflow; a bot that finds none falls through to the melee de-clump and walks onto the boss, which is
-what `vezax.block = unslotted` exists to catch.
+overflow; a bot that finds none holds no position, which is what `vezax.block = unslotted` exists to
+catch.
 
 **Nothing here is out of Shadow Crash range, melee included.** `SelectTarget` skips only what is inside
 `3` plus both combat reaches — `3 + 8 + 1.5` = **12.5 yd** — and a melee bot at boss combat reach sits
 right on that line: one traced pull crashed a rogue at 16.1 yd and caught three more melee with it.
-Melee and the tank are still left off the dodge, because holding the boss still is worth more than the
-hits.
+Everyone but the main tank dodges (`VezaxDodgesShadowCrash`); moving him drags the boss.
+
+**Melee are not spread.** `set behind` sends a melee bot in his front half to one of two points
+±108° off his facing, so a 4 yd nudge apart fought it: melee bots moved in 26-40% of samples on
+Vezax against 0-1% for a human melee, and two thirds of their `set behind` moves followed a nudge.
+What remains is his 750 ms turn to each crash target.
 
 All 20 slots, the tank spot, both arc spots and the southern spots are navprobe-verified on the bot
 filter (`--nav 0x09`), `distance to poly` ≤ 0.39. The WMO floor is flat at Z 342.378 out to ~24 yd
@@ -218,10 +222,11 @@ only hazard here with a deadline. The interrupt is `+8`: losing a kick costs the
 fire at once. Then the two halves of Mark of the Faceless — **break at `+7`, carry at `+6`** — in that
 order, because the bot holding the mark is the one person its leech skips and so is never the one
 taking damage. Surge of darkness closes the EMERGENCY band at `+5`. The RAID band is the reward half
-and numbers separately: animus redirect `+6`, animus `+5`, hold-target `+4`, animus bring-back `+3`,
-field soak `+2`, resistance `+1`, position last. Hold-target sits under the animus on purpose — in
-hard mode both fire on a bot that is off the animus, and the animus is the correct answer.
-Bring-back sits above the soak, or the Animus's victim leads it into the camp.
+and numbers separately: animus redirect `+7`, animus `+6`, hold-target `+5`, animus bring-back `+4`,
+animus melee spot `+3`, field soak `+2`, resistance `+1`, position last. Hold-target sits under the
+animus on purpose — in hard mode both fire on a bot that is off the animus, and the animus is the
+correct answer. Bring-back sits above the soak, or the Animus's victim leads it into the camp, and
+above the melee spot, since it already ends inside his crash limit.
 
 **Returning `false` once parked is load-bearing.** Class interrupts sit at `ACTION_INTERRUPT` (40),
 below `ACTION_RAID` (60), so a positioning action that returns `true` while moving starves every
@@ -278,7 +283,8 @@ of its own, so a dead boss is rejected explicitly and presence alone gates nothi
 
 `vezax.slot` is the stored assignment; `vezax.block`
 (`L`/`R`/`tank`/`unslotted`), `vezax.dodge` (`strafe`/`search`/`none`), `vezax.mark`
-(`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`) and `vezax.interrupter`
+(`side`/`south`/`break`/`none`), `vezax.target` (`vapor`/`none`/`other`), `vezax.meleespot`
+(`spot`/`none`) and `vezax.interrupter`
 are derived, each probed inside the helper that derives it so two call sites cannot disagree.
 `vezax.formation` (`outside`/`noboss`/`idle`/`on`) and `vezax.hardmode` (`off`/`pending`/`lost`/
 `animus`) are the exception: the encounter's tick writes them, since the formation gate is a rule
@@ -352,6 +358,15 @@ What holds it now:
   since chasing drags Vezax off it, so whoever the Animus is hitting walks to him, and the
   position node stands down for that bot. In the second pull the position node walked him back 5
   times from the chase.
+- **Melee stay inside his crash limit** (`vezax animus melee spot`), the 12.5 yd skip above, measured
+  3D (`boss_general_vezax.cpp:209-212`). On 2026-10-01 no crash in 34 before the spawn went to
+  melee or a tank, 6 of 16 after. The Animus (reach 8) takes
+  his spot by the tank, he steps 8-9 yd round it, and `set behind` walked melee to the Animus's far
+  side, 13-20 yd from him. At 24 Profound Darkness stacks a crash did 26-40k, at ~40 57-60k: one
+  pull lost 7 melee to two crashes; in the other a crash on the off-tank, 7.6 yd from the main tank,
+  threw her 36 yd, both bosses followed, and she died. Melee bots now take a lane on the Animus-Vezax
+  line within that limit minus 2, by guid rank, and the movement rule blocks `set behind` for
+  melee while the Barrier is up.
 
 **Lust and Starfall wait for the Animus** (`vezax hard mode hold`), until its summon or the first
 vapor death. Both are vapor self-casts, 63145 and 63323 (only from `JustDied`), caught by
@@ -385,9 +400,7 @@ protection paladin hit 0% at 1:12 on 2026-09-24, lost threat, and a warlock pull
 camp at 1:26. The bear in the next pull held him 83.5% of the time. As off-tank it adds nothing to
 the Animus either: 0.6% mana from 2:30 and a first hit at +19s. Nothing here treats it.
 
-**Melee do not dodge Shadow Crash.** `DodgesShadowCrash` requires `IsRanged`, and the table above says
-why that is not the same as being safe. Beside Vezax it cost one hit a pull; chasing an untanked
-Animus into the camp, one crash killed 6 melee and another 5 at 13 and 30 Profound Darkness stacks,
-then 4 and 2 the next pull.
-Holding it at the anchor is the answer; add a melee dodge only if `--animus` shows it held and
-`--crash` still shows melee hits after the spawn.
+**Backstab and Shred go unused on the Animus**, since the melee spot blocks `set behind`.
+
+**A human main tank steps out alone.** A crash aimed at a human melee past the limit still lands
+on whoever stands with him; bots dodge it, the main tank does not.

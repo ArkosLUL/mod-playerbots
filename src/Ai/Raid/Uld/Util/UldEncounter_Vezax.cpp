@@ -407,8 +407,7 @@ bool TryGetVezaxSlot(Player* bot, Position& position)
     if (assignmentItr == state->slotAssignments.end())
     {
         // The camp is full - 21 or more healers and ranged between them. From here the bot holds no
-        // position at all and falls through to the melee de-clump, which walks it onto the boss.
-        // Nothing else in the trace would show that.
+        // position at all, and nothing else in the trace would show that.
         RaidObs::NoteDerived(bot, "vezax.block", "unslotted");
         return false;
     }
@@ -632,6 +631,95 @@ bool IsVezaxAnimusOnBot(Player* bot)
 
     return false;
 }
+
+bool VezaxAnimusPhaseActive(PlayerbotAI* botAI)
+{
+    if (!IsVezaxHardModeActive(botAI))
+        return false;
+
+    Unit* vezax = GetVezax(botAI);
+    return vezax && vezax->HasAura(SPELL_VEZAX_SARONITE_BARRIER);
+}
+
+float VezaxMeleeHoldDistance(Player* bot, Unit* vezax)
+{
+    return ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE + vezax->GetCombatReach() + bot->GetCombatReach() -
+           ULDUAR_VEZAX_ANIMUS_MELEE_MARGIN;
+}
+
+namespace
+{
+// Guid rank among the melee bots. More bots than lanes double up, which costs nothing: inside the hold
+// distance nobody gets picked.
+uint8 VezaxAnimusMeleeLane(Player* bot)
+{
+    Group* group = bot->GetGroup();
+    if (!group)
+        return 0;
+
+    uint8 rank = 0;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || member->GetMapId() != bot->GetMapId())
+            continue;
+
+        if (!GET_PLAYERBOT_AI(member) || PlayerbotAI::IsRanged(member) || PlayerbotAI::IsMainTank(member))
+            continue;
+
+        if (member->GetGUID() < bot->GetGUID())
+            ++rank;
+    }
+
+    return rank % ULDUAR_VEZAX_ANIMUS_MELEE_LANES;
+}
+}  // namespace
+
+bool TryGetVezaxAnimusMeleeSpot(Player* bot, Unit* animus, Position& spot)
+{
+    PlayerbotAI* botAI = bot ? GET_PLAYERBOT_AI(bot) : nullptr;
+    Unit* vezax = botAI ? GetVezax(botAI) : nullptr;
+    if (!vezax || !animus)
+        return false;
+
+    float const ax = animus->GetPositionX();
+    float const ay = animus->GetPositionY();
+    float const vx = vezax->GetPositionX();
+    float const vy = vezax->GetPositionY();
+    float const apart = std::hypot(vx - ax, vy - ay);
+
+    // Sideways unit vector across the line between them. Stacked on one spot there is no line, and
+    // every lane collapses onto the midpoint.
+    float const acrossX = apart > 0.1f ? -(vy - ay) / apart : 0.0f;
+    float const acrossY = apart > 0.1f ? (vx - ax) / apart : 0.0f;
+
+    // Lanes 0, 1, 2, 3, 4 sit at 0, +1, -1, +2, -2 spreads off the midpoint.
+    uint8 const lane = VezaxAnimusMeleeLane(bot);
+    float const side = lane % 2 ? 1.0f : -1.0f;
+
+    float const holdVezax = VezaxMeleeHoldDistance(bot, vezax);
+    float const holdAnimus = bot->GetMeleeRange(animus) - 1.0f;
+
+    // A wide lane comes in toward the middle until it fits both reaches.
+    for (int steps = (lane + 1) / 2; steps >= 0; --steps)
+    {
+        float const offset = side * steps * ULDUAR_VEZAX_ANIMUS_MELEE_SPREAD;
+        float const x = (ax + vx) / 2.0f + acrossX * offset;
+        float const y = (ay + vy) / 2.0f + acrossY * offset;
+
+        if (std::hypot(x - vx, y - vy) > holdVezax || std::hypot(x - ax, y - ay) > holdAnimus)
+            continue;
+
+        RaidObs::NoteDerived(bot, "vezax.meleespot", "spot");
+        spot = Position(x, y, (animus->GetPositionZ() + vezax->GetPositionZ()) / 2.0f);
+        return true;
+    }
+
+    RaidObs::NoteDerived(bot, "vezax.meleespot", "none");
+    return false;
+}
+
+bool VezaxDodgesShadowCrash(Player* bot) { return bot && !PlayerbotAI::IsMainTank(bot); }
 
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot)
 {

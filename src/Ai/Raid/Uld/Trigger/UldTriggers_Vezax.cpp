@@ -71,9 +71,7 @@ bool VezaxMarkOfTheFacelessBreakTrigger::IsActive()
 
 bool VezaxShadowCrashDodgeTrigger::IsActive()
 {
-    // Melee and the tank hold the boss instead. Moving them would drag him, and nothing aimed at a
-    // ranged slot reaches the ball they stand in anyway.
-    if (!botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+    if (!VezaxDodgesShadowCrash(bot))
         return false;
 
     if (!VezaxFormationActive(botAI))
@@ -180,6 +178,20 @@ bool VezaxAnimusBringBackTrigger::IsActive()
     Player* mainTank = GetGroupMainTank(bot);
     return mainTank && mainTank != bot &&
            bot->GetExactDist2d(mainTank) > ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS;
+}
+
+bool VezaxAnimusMeleeSpotTrigger::IsActive()
+{
+    if (botAI->IsRanged(bot) || botAI->IsMainTank(bot))
+        return false;
+
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (!target || target->GetEntry() != NPC_VEZAX_SARONITE_ANIMUS || !VezaxAnimusPhaseActive(botAI))
+        return false;
+
+    // 3D, the same distance his target pick measures.
+    Unit* vezax = GetVezax(botAI);
+    return vezax && bot->GetExactDist(vezax) > VezaxMeleeHoldDistance(bot, vezax);
 }
 
 bool VezaxShadowCrashSoakTrigger::IsActive()

@@ -115,6 +115,17 @@ public:
     bool Execute(Event event) override;
 };
 
+// Back in between the Animus and Vezax, where his Shadow Crash can't pick the bot.
+class VezaxAnimusMeleeSpotAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "vezax animus melee spot action";
+
+    VezaxAnimusMeleeSpotAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 // Walk into the nearest Shadow Crash field and hold it.
 class VezaxShadowCrashSoakAction : public MovementAction
 {

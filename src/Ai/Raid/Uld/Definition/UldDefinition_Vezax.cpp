@@ -37,6 +37,8 @@ void DefineVezax(EncounterBuilder& e)
     // The RAID band is the reward half, and soaking a field is worth nothing to a bot that is already
     // dying. The Animus redirect needs the bot on it already, so it never competes with the switch.
     // Bringing the Animus back to the tank sits above the soak, or its victim would lead it into the camp.
+    // The melee spot sits under the bring-back, which already ends next to the tank and inside his crash
+    // limit, and under the switch, so the bot is on the Animus first.
     // Position is last on purpose, and yields as soon as it's parked, so the class interrupts at
     // ACTION_INTERRUPT (40) still get a tick.
     e.Node<VezaxResetEncounterStateTrigger, VezaxResetEncounterStateAction>(ACTION_EMERGENCY + 10);
@@ -46,10 +48,11 @@ void DefineVezax(EncounterBuilder& e)
                                                                                  EncounterRow::Mover);
     e.Node<VezaxMarkOfTheFacelessTrigger, VezaxMarkOfTheFacelessAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
     e.Node<VezaxSurgeOfDarknessTrigger, VezaxSurgeOfDarknessAction>(ACTION_EMERGENCY + 5);
-    e.Node<VezaxAnimusRedirectTrigger, VezaxAnimusRedirectAction>(ACTION_RAID + 6);
-    e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 5);
-    e.Node<VezaxHoldTargetTrigger, VezaxHoldTargetAction>(ACTION_RAID + 4);
-    e.Node<VezaxAnimusBringBackTrigger, VezaxAnimusBringBackAction>(ACTION_RAID + 3, EncounterRow::Mover);
+    e.Node<VezaxAnimusRedirectTrigger, VezaxAnimusRedirectAction>(ACTION_RAID + 7);
+    e.Node<VezaxSaroniteAnimusTrigger, VezaxSaroniteAnimusAction>(ACTION_RAID + 6);
+    e.Node<VezaxHoldTargetTrigger, VezaxHoldTargetAction>(ACTION_RAID + 5);
+    e.Node<VezaxAnimusBringBackTrigger, VezaxAnimusBringBackAction>(ACTION_RAID + 4, EncounterRow::Mover);
+    e.Node<VezaxAnimusMeleeSpotTrigger, VezaxAnimusMeleeSpotAction>(ACTION_RAID + 3, EncounterRow::Mover);
     e.Node<VezaxShadowCrashSoakTrigger, VezaxShadowCrashSoakAction>(ACTION_RAID + 2, EncounterRow::Mover);
     e.Node(
         "vezax shadow resistance",
@@ -61,11 +64,15 @@ void DefineVezax(EncounterBuilder& e)
 
     // The formation pins the ranged half and the healers to arc slots and the main tank to the anchor
     // every radius is measured from, so the generic movers stand down for them or the formation gets
-    // re-derived and abandoned on alternate ticks. Melee ride the boss and keep every generic mover,
-    // including the de-clump the position node falls through to. Reach keeps the tank in melee, and
-    // ReachHeal walks a healer into range of someone the formation can't reach.
+    // re-derived and abandoned on alternate ticks. Melee ride the boss and keep every generic mover
+    // until the Animus is up. Reach keeps the tank in melee, and ReachHeal walks a healer into range
+    // of someone the formation can't reach.
     e.OwnMovement("vezax control movement multiplier", Role::Ranged | Role::MainTank, VezaxFormationActive,
                   Family::Attack | Family::Reach | Family::ReachHeal);
+
+    // Set behind on the Animus walks melee round its back, away from the tank and Vezax beside him, and
+    // into his Shadow Crash picks. The melee spot row puts them in between the two instead.
+    e.OwnMovement("vezax animus melee movement multiplier", Role::Melee, VezaxAnimusPhaseActive);
 
     e.Multiplier<VezaxSuppressLifeTapMultiplier>(Family::Spell);
 

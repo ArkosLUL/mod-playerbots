@@ -44,10 +44,7 @@ public:
     bool IsActive() override;
 };
 
-// A Shadow Crash missile in flight with this bot standing where it will land. Melee and the tank are
-// left out because they hold the boss, not because they are safe: SelectTarget only skips what is
-// inside 3 yd plus both combat reaches, about 12.5 yd, and a melee bot sits right on that line - one
-// traced pull crashed a rogue at 16.1 yd and caught three more melee with it.
+// A Shadow Crash missile in flight with this bot standing where it will land.
 class VezaxShadowCrashDodgeTrigger : public Trigger
 {
 public:
@@ -111,6 +108,16 @@ public:
     static constexpr char const* Name = "vezax animus bring back";
 
     VezaxAnimusBringBackTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+// Melee bot on the Animus standing far enough from Vezax to be a Shadow Crash pick.
+class VezaxAnimusMeleeSpotTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "vezax animus melee spot";
+
+    VezaxAnimusMeleeSpotTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
     bool IsActive() override;
 };
 

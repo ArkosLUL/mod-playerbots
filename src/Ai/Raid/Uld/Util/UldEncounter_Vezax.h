@@ -81,6 +81,14 @@ constexpr float ULDUAR_VEZAX_TRICKS_RANGE = 20.0f;
 constexpr float ULDUAR_VEZAX_ANIMUS_THREAT_SHARE = 0.9f;
 // Close enough that the Animus, following its victim, ends up in the main tank's melee range.
 constexpr float ULDUAR_VEZAX_ANIMUS_BRING_BACK_RADIUS = 3.0f;
+// Shadow Crash skips anyone within this plus both combat reaches of him (SelectTarget -3, 3D), so
+// 12.5 yd for most players. Melee on the Animus's far side get picked, and one crash on the bunched
+// ball killed 4-6 of them. The margin covers the bosses shuffling.
+constexpr float ULDUAR_VEZAX_SHADOW_CRASH_MIN_RANGE = 3.0f;
+constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_MARGIN = 2.0f;
+// Sideways spacing between melee spots on the line between the two bosses, and how many spots.
+constexpr float ULDUAR_VEZAX_ANIMUS_MELEE_SPREAD = 2.0f;
+constexpr uint8 ULDUAR_VEZAX_ANIMUS_MELEE_LANES = 5;
 
 // The Shadow Crash field (63277) is 8 yd, plus a yard of slack since a bot that stops exactly on the
 // boundary is still inside it.
@@ -166,9 +174,6 @@ constexpr float ULDUAR_VEZAX_TANK_SLOT_TOLERANCE = 3.0f;
 // wall, which is why it stays where it is.
 constexpr float ULDUAR_VEZAX_ARENA_RADIUS = 45.0f;
 constexpr float ULDUAR_VEZAX_ARENA_HEIGHT = 10.0f;
-
-// Melee and the tank hold the boss rather than take slots, so all they get is a nudge apart.
-constexpr float ULDUAR_VEZAX_MELEE_DECLUMP_RADIUS = 4.0f;
 
 // Mark of the Faceless ticks ten times over 10s on a 40s cadence. Every tick the boss casts 63278 at
 // the marked bot and leeches 5000 from everyone else inside the radius, healing himself about 10x
@@ -301,7 +306,16 @@ bool TryGetVezaxAnimusAge(PlayerbotAI* botAI, uint32& ageMs);
 char const* VezaxAnimusRedirectSpell(Player* bot);
 // The Animus is attacking this bot. Reads the bot's own attacker set, cheap enough for every tick.
 bool IsVezaxAnimusOnBot(Player* bot);
+// The Animus is alive: he carries the Saronite Barrier from its summon until it dies.
+bool VezaxAnimusPhaseActive(PlayerbotAI* botAI);
+// How far from Vezax a melee bot can stand and still never be a Shadow Crash pick, margin included.
+float VezaxMeleeHoldDistance(Player* bot, Unit* vezax);
+// A spot in melee range of the Animus and inside the hold distance from Vezax, on the line between
+// them, one sideways lane per melee bot. False when they stand too far apart for one.
+bool TryGetVezaxAnimusMeleeSpot(Player* bot, Unit* animus, Position& spot);
 
+// Everyone but the main tank, who'd drag both bosses with him.
+bool VezaxDodgesShadowCrash(Player* bot);
 // Somewhere clear of that impact and still inside the band this bot's role is allowed to stand in.
 bool TryGetVezaxDodgeSpot(Player* bot, Position const& impact, Position& spot);
 

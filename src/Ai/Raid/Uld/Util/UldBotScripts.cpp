@@ -50,13 +50,6 @@ void InterruptVezaxCastersNear(Unit* reference, Position const& hazard, float ra
     }
 }
 
-// Everyone the dodge node will move. Melee and the tank are not on it: they hold the boss, and the
-// camp's radii are all measured from him.
-bool DodgesShadowCrash(Player* bot)
-{
-    return bot && PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsMainTank(bot);
-}
-
 }  // namespace
 
 class VezaxHazardListenerScript : public AllSpellScript
@@ -100,7 +93,7 @@ public:
 
             VezaxNoteShadowCrash(caster, impact, flightMs);
             InterruptVezaxCastersNear(caster, impact, ULDUAR_VEZAX_SHADOW_CRASH_IMPACT_RADIUS,
-                                      &DodgesShadowCrash);
+                                      &VezaxDodgesShadowCrash);
 
             // Nothing sweeps for this: the field's DynamicObject only exists once the missile has
             // landed, so the ~2s of flight - the only window a bot can act in - would otherwise be
