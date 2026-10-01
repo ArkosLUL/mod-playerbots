@@ -942,10 +942,22 @@ def show_portals(trace: Trace) -> None:
     show_rooms(trace, waves)
 
 
+def walked_for_a_portal(trace: Trace, guids: set[int], start: int, until: int) -> set[int]:
+    """Of `guids`, the ones whose walk-to-a-portal node ran at all in the window. The node is gated on
+    the bot's raid mark reading skull or diamond, and only a Flee portal click hands that mark back, so
+    a bot teleported out by Induce Madness or killed below the platform keeps its illusion room's mark
+    and the node never fires again. That bot never takes a step, which is a different failure from one
+    that walked to a spot somebody else had already used."""
+    return {rec.get("g", 0) for rec in trace.of("act")
+            if rec.get("a") == "yogg-saron move to enter portal action"
+            and rec.get("g") in guids and start <= rec["t"] <= until}
+
+
 def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
     """How many of the wave's portals were taken, against how many bots were told to take one.
     AddPortals spawns RAID_MODE(4, 10) of them per wave and each is one use, so the gap between
-    assigned and gone is bots that walked to a spot somebody else had already used."""
+    assigned and gone is bots that walked to a spot somebody else had already used - or, when the node
+    never ran at all, bots that never walked anywhere."""
     if not waves:
         return
 
@@ -961,12 +973,16 @@ def show_portal_drop(trace: Trace, waves: list[tuple[int, int]]) -> None:
 
         took = {rec.get("s") for rec in trace.of("cast")
                 if rec.get("sp") == SPELL_ILLUSION_ROOM and start <= rec["t"] <= start + PORTAL_DESPAWN_MS}
-        missed = [guid for guid in plan if guid not in took]
+        missed = {guid for guid in plan if guid not in took}
 
         print(f"  wave {ordinal}: {len(took)} of {len(PORTAL_SPOTS)} portals taken,"
               f" {len(plan)} bots assigned a spot, plan was {stale:.0f} s old")
         if missed:
-            print(f"    assigned and never went: {', '.join(sorted(trace.name(guid) for guid in missed))}")
+            walked = walked_for_a_portal(trace, missed, start, start + PORTAL_DESPAWN_MS)
+            for label, who in (("walked and never got one", missed & walked),
+                               ("never walked, the node never ran", missed - walked)):
+                if who:
+                    print(f"    assigned, {label}: {', '.join(sorted(trace.name(guid) for guid in who))}")
 
 
 def show_rooms(trace: Trace, waves: list[tuple[int, int]]) -> None:
@@ -1130,6 +1146,7 @@ def show_brain(trace: Trace) -> None:
         print(f"  tentacle picks   : {dict(spread)}")
 
     show_brain_waves(trace)
+    show_stalled_walks(trace)
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -1221,8 +1238,9 @@ def show_brain_waves(trace: Trace) -> None:
 
     ends = [start for start, _ in waves[1:]] + [trace.records[-1].get("t", 0)]
     print("\n  per wave: room clear time, one-target snapshots and the top target's median share, melee walking,"
-          f"\n  healer from the room middle and mates past {HEAL_RANGE:.0f} yd, set behind moves, door to the"
-          "\n  first Brain hit, healer to the Brain, exit seconds left and spare, Brain lost")
+          f"\n  healer from the room middle and mates past {HEAL_RANGE:.0f} yd, its closest approach and"
+          "\n  heals landed, set behind moves, door to the first Brain hit, healer to the Brain, exit"
+          "\n  seconds left and spare, Brain lost")
     for (start, ordinal), stop in zip(waves, ends):
         im_end = start + INDUCE_MADNESS_CAST_MS
         down = [row[0] for guid in team for row in rows.get(guid, [])
@@ -1276,6 +1294,13 @@ def show_brain_waves(trace: Trace) -> None:
 
         swings = sum(1 for rec in behind if (door or stop) <= rec["t"] <= min(im_end, stop))
 
+        # What the healer actually did with the room, which the distance alone does not say: one wave
+        # held it to 17 landed heals against 137 and 172 in the other two, because its station was
+        # 36-44 yd from its own room's tentacles and a heal reaches 38.5.
+        landed = sum(1 for rec in trace.of("heal")
+                     if rec.get("s") in healers and arrived <= rec["t"] <= min(im_end, stop))
+        closest = min(from_middle) if from_middle else None
+
         first_hit = None
         brain_rows = [row for row in rows.get(brain, []) if start <= row[0] <= stop] if brain else []
         for a, b in zip(brain_rows, brain_rows[1:]):
@@ -1308,10 +1333,58 @@ def show_brain_waves(trace: Trace) -> None:
         walking = f"{walked * 100 / total:3.0f}%" if total else "  -"
         healer = (f"{median_or_dash(from_middle, '4.1f')} yd / {far * 100 / pairs:3.0f}%"
                   if pairs else f"{median_or_dash(from_middle, '4.1f')} yd /   -")
+        healer += f" (closest {closest:4.1f}, {landed:3} heals)" if closest is not None else f" ({landed:3} heals)"
         hit = f"{(first_hit - door) / 1000:4.1f} s" if first_hit and door else "   -"
         print(f"    wave {ordinal} {room:9} {clear}  {one:3}/{held_snaps:<3} {top:>4}  {walking}  {healer}"
               f"  behind {swings:2}  hit {hit}  healer@Brain {median_or_dash(at_brain, '4.1f')} yd"
               f"  exit {median_or_dash(left, '4.1f')}/{median_or_dash(spare, '4.1f')} s  Brain -{lost:.1f}%")
+
+
+def walk_outcomes(walks: list[tuple[int, str]], steps: list[tuple[int, str]]) -> dict:
+    """Per bot and node, how its forced walks went: which branches `yogg.walk` reported, and the yards
+    still to go each time the stall release let go of a MoveTo booking.
+
+    A walk that reports `walking` and never `arrived` is one the bot was still being sent on when the
+    wave ended. `yogg.walkstep` is emitted on every release rather than on change, so its count is how
+    many times the spline died short of where it was aimed."""
+    out: dict = {}
+
+    def row_for(guid: int, node: str) -> dict:
+        return out.setdefault((guid, node), {"branches": collections.Counter(), "short": []})
+
+    for guid, text in walks:
+        node, _, branch = text.partition(" ")
+        row_for(guid, node)["branches"][branch] += 1
+    for guid, text in steps:
+        node, _, rest = text.partition(" ")
+        row_for(guid, node)["short"].append(float(rest.split()[0]))
+    return out
+
+
+def show_stalled_walks(trace: Trace) -> None:
+    """The forced walks below the platform that never got where they were sent. Down there a forced
+    spline dies after a yard or two and MoveTo refuses the same point again for MaxWaitForMove, so the
+    walk advances in 5 s hops: one healer covered 24 of its 56 yd in 54 s and healed almost nothing all
+    wave. The watchdog then gives up, and a bot standing still in an uncleared illusion room is a charm
+    waiting to land - there is no exit from a room whose door has not opened."""
+    walks = [(rec.get("g", 0), str(rec.get("txt", ""))) for rec in notes(trace, "yogg.walk")]
+    steps = [(rec.get("g", 0), str(rec.get("txt", ""))) for rec in notes(trace, "yogg.walkstep")]
+    # The exit walk is left out: it uses its portal at INTERACTION_DISTANCE, the same 5 yd that counts as
+    # arrived, so a bot that got out cleanly often never records one. `caught by it` above is the honest
+    # measure of that walk. These three are the ones that leave a bot standing where it stopped.
+    below = {"illusion", "healer", "brainspot"}
+
+    rows = {key: value for key, value in walk_outcomes(walks, steps).items()
+            if key[1] in below and ("arrived" not in value["branches"] or value["short"])}
+    if not rows:
+        return
+
+    print("\n  walks below the platform that stalled or never arrived:")
+    for (guid, node), value in sorted(rows.items(), key=lambda kv: (trace.name(kv[0][0]), kv[0][1])):
+        branches = ", ".join(f"{name} x{count}" for name, count in sorted(value["branches"].items()))
+        short = (f", released {len(value['short'])} times a median"
+                 f" {statistics.median(value['short']):.0f} yd short" if value["short"] else "")
+        print(f"    {trace.name(guid):14} {trace.role(guid):6} {node:10} {branches}{short}")
 
 
 def aura_windows(trace: Trace, spell: int) -> list[tuple[int, int, int]]:
@@ -2568,10 +2641,10 @@ SECTIONS = (
     ("fervor", "Sara's Fervor runs, novas on holders, Guardians runners summoned", show_fervor),
     ("novas", "every Shadow Nova: the warning it gave, who it would have killed, what covered them", show_novas),
     ("threat", "who the Guardians were on, and taunts", show_threat),
-    ("portals", "portal waves and assignments", show_portals),
+    ("portals", "portal waves, assignments, and who never walked for one", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
-    ("brain", "brain room, the Brain, skulls, who Induce Madness charmed", show_brain),
+    ("brain", "brain room, the Brain, skulls, Induce Madness, stalled walks", show_brain),
     ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima", show_sanity),

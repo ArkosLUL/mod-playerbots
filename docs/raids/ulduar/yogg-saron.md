@@ -839,7 +839,9 @@ re-anchor on every wave a bot actually sees, and roll the prediction forward by 
 passes unseen — otherwise it reads "any moment now" forever and parks the team on its spots for the
 rest of the fight. A bot walks once the next wave is inside `max(8 s, distance / runSpeed × 2)`, the
 same adaptive shape as the exit lead, and holds until the portal appears under it. `yogg.portal` is
-the state machine: `notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`.
+the state machine: `notteam` / `waiting` / `spreading` / `holding` / `late` / `clicking`. The
+out-of-phase-2 reset clears that clock but not `waveOrdinal`, so a fresh pull labelled its first wave
+**5**; harmless while `slotWave` carries with it, but read `yogg.wave` as a session counter.
 
 **Rebuild the plan when the portals spawn, and take one that is still there.** The wave a plan is
 for carries the same ordinal before and after the portals appear, so a latch keyed on that alone
@@ -916,6 +918,11 @@ Sanity and is teleported out; anyone above takes nothing. No Sanity means `63120
 `spell_yogg_saron_insane_aura::OnRemove` calls `Unit::Kill(owner, owner)` — **a mind control is always
 a death.** A bot ending a window ~120 yd from the nearest exit portal needs ~17 s to walk it.
 
+**An uncleared illusion room has no exit at all.** All three Flee portals are in the brain chamber
+behind a door the Brain opens only on that room's last tentacle kill, so a room the raid cannot clear
+inside the 60 s kills everyone in it: one Chamber wave charmed eight bots in a single tick. Clearing it
+faster is the only cure, so every walk below is on that clock.
+
 Every millisecond of lead is damage the Brain does not take, so the lead is **measured, not flat**:
 `max(5 s, distance / runSpeed × 2)`. A flat worst-case lead threw away a third of every window for a
 bot standing next to a portal. From the Brain the walk out takes 1.5-2.8 s for melee and 2.9-4.2 s for
@@ -966,10 +973,16 @@ an open courtyard — with **65%** of all brain-level samples carrying no target
 `DpsAssistAction` zeroed encounter-wide, so no fallback. One bot stood on the Stormwind landing
 coordinate motionless for 50 s, twice, with four Suits of Armor alive 28-82 yd further in.
 
-The fix is a walk to the room's middle, which is the centroid of that room's Influence Tentacle summon
-group (`creature_summon_groups`, summonerId 33890: group 1 Chamber, 2 Icecrown, 3 Stormwind) and
-navprobe-clean with `PATHFIND_NORMAL` from each landing spot. `YoggSaronRoomStateOf` owns the question
-and writes `yogg.roomstate`: `walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain`.
+The fix is a walk at the **nearest live tentacle**. The room's middle is the centroid of its Influence
+Tentacle summon group (`creature_summon_groups`, summonerId 33890: group 1 Chamber, 2 Icecrown,
+3 Stormwind), navprobe-clean with `PATHFIND_NORMAL` from every landing spot and therefore the one spot
+in the room with nothing standing on it — the ring is 27-29 yd out in Stormwind, 12-29 in Icecrown,
+36-44 in the Chamber. Walking there took two melee within 8.4 and 0.0 yd of the centre and back out
+again, 117 yd for a 79 yd trip, first swing 16 s after landing against a 24 s room, while `reach melee`
+held at `wait` for 5 s aimed at a tentacle the bot was walking away from: the middle walk is
+`MOVEMENT_FORCED` and reach is `MOVEMENT_COMBAT`. Icecrown, the tightest ring, never showed it — first
+swings 9.9-12.8 s, walked within a yard of direct. `YoggSaronRoomStateOf` owns when to stop and writes
+`yogg.roomstate`: `walkingin` / `fighting` / `doorshut` / `tobrain` / `atbrain`.
 
 **Nine of the sixteen entries in the old illusion target list could not be killed.** From
 `creature_template`: Alexstrasza, Malygos, Neltharion, Ysera, the Immolated Champion, Garona and King
@@ -995,14 +1008,34 @@ always keeps one no lower GUID is also on, so two that race onto a free one sett
 Reprisal (63305) reflects 60% of every hit at its attacker, so the split changes nobody's incoming
 damage. Probed as `yogg.spread`: `free`, `shared` or `kept`.
 
-**The healer holds the room middle and takes no tentacle.** A target is what `reach spell` walks it
-to: median 8-39 yd from the middle per wave, with 30% and 57% of healer-to-mate samples past 40 yd in
-two of them. The resolver gives a healer in an illusion room no target, dropping one without
-interrupting its heal. `WalkIntoRoom` skips it, since a targetless healer reads `walkingin` all wave
-and a forced walk every tick starves every heal under `ACTION_RAID`. `yogg-saron illusion healer
-station` (`ACTION_RAID`) walks it back past 10 yd while tentacles live, and heal reach still outranks it
-for a mate out of range. From within 12 yd of the Stormwind and Icecrown middles heals landed 33-40 yd
-out; the Chamber middle, 39-43 yd from its tentacles, is unmeasured.
+**The healer stations on its room's live tentacles, not on the room middle.** A target is what `reach
+spell` walks it to: median 8-39 yd from the middle per wave, with 30% and 57% of healer-to-mate samples
+past 40 yd in two of them. The resolver gives a healer in an illusion room no target, dropping one
+without interrupting its heal. `WalkIntoRoom` skips it, since a targetless healer reads `walkingin` all
+wave and a forced walk every tick starves every heal under `ACTION_RAID`. `yogg-saron illusion healer
+station` (`ACTION_RAID`) walks it back past 10 yd while tentacles live, **above** heal reach, which every
+healer spec wires at 38-40: reaching the station is what puts the whole room in range, so it comes before
+a step toward one mate. The station was the middle, which covered two of the rooms: from within 12 yd of
+the Stormwind and Icecrown middles heals landed 33-40 yd out. The Chamber's is 36-44 yd from its own
+tentacles against `healDistance` **38.5**, so it covered nothing — the healer landed **17 heals** there
+against 137 and 172 in the other two, never coming inside 31 yd of it. It is now the centroid of the live
+tentacles, where the melee on them are, carrying the middle's own z because the Chamber floor ramps
+239.7 to 244 and an averaged z stations it in the air; the middle is the fallback with nothing alive to
+centre on.
+
+**A forced walk below the platform dies after a yard or two, and `MoveTo` then refuses the same point
+for 5 s.** `IsDuplicateMove` rejects a destination within 0.01 yd of the last one for `MaxWaitForMove`,
+so a dead spline cannot be relaunched inside that window and the walk advances in ~2 yd hops: the healer
+station covered 24 of its 56 yd in 54 s, **0.45 yd/s** against a run of 7, and `healer arrived` never
+fired once in three waves. `ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS` then ended it for good, because its
+`fresh` escape wants a gap in the asking and these nodes ask every tick — which left six ranged
+motionless where they stopped for 21 s until Induce Madness charmed all six. Why the spline dies is
+**not established**: the identical call on the platform carries 47 yd per spline and arrives 49 times in
+50, and navprobe calls the Chamber route `PATHFIND_NORMAL`, 10 polys, 61.84 yd, complete. So it is fixed
+and measured rather than explained. `YoggSaronReleaseStalledWalk` drops the booking once the bot has
+stood still past 500 ms — the `ReleaseStalledWalk` shape Hodir and Algalon already carry, where
+`!isMoving()` is what keeps it off a walk that is still running — the give-up expires after
+`WALK_RETRY_MS`, and `yogg.walkstep` records the yards still to go on every release.
 
 **Scope the tentacle read to the room.** The Stormwind and Chamber middles are 200.8 yd apart, so the
 old 200 yd sweep was one yard from reading the next room's tentacles — and reading it wrong is not a
@@ -1144,7 +1177,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-six `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-seven `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -1152,11 +1185,15 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
-`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned` and `yogg.tankhold`,
+`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold` and `yogg.walkstep`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
 afterwards.
+
+`--portals` tells a bot that walked for a portal and lost the race from one whose node never ran at
+all, which is the only way the room-tag leak shows; `--brain` prints what the healer landed per room
+beside how close it came to its station, and every walk down there that stalled or gave up.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
@@ -1232,6 +1269,15 @@ turn it back into the gaze. One pull took 660,442 from it over 244 hits, its #2 
 **`rti` is a room tag, so never write one as a targeting hint.** `"cross"` is Stormwind's tag: a
 boss-room bot given it is teleported into Stormwind by `yogg-saron fall from floor` the moment it dips
 below z 300, and is disqualified from `move to enter portal`, which requires `"skull"`.
+
+**Clear that tag on the platform, because only the exit portal clears it.** `MoveToExitPortalAction`
+sets `"skull"` after `portal->Use` and nothing else did, while `RtiValue` is per-bot AI state no
+encounter reset touches — so a bot Induce Madness teleported out, or killed below, kept its room tag for
+the rest of the session and `move to enter portal` never fired for it again. One pull ended with twelve
+bots tagged that way; on the next, **nine of the ten** on the brain team never walked a step and 2 of 10
+portals were taken. The tick clears anything but `"skull"` or `"diamond"` whenever the bot reads `ARENA`:
+on the platform it cannot be in a room, whatever the tag says. The same leak kills `WalkIntoRoom`, which
+stands down on `"square"`.
 
 ## Phase 3: a positive phase test, and a station that is not a leash
 

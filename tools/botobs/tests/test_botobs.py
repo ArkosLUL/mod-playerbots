@@ -1124,6 +1124,39 @@ class YoggPhases(unittest.TestCase):
         self.assertAlmostEqual(yogg_saron.held_still(rows, 4000, 1.0), 2.0)
         self.assertAlmostEqual(yogg_saron.held_still(rows, 1000, 1.0), 0.0)
 
+    def test_a_walk_that_never_reported_arriving_is_told_apart_from_one_that_did(self):
+        walks = [(5124, "illusion walking"), (5124, "illusion gaveup"), (5131, "healer walking"),
+                 (5131, "healer arrived"), (5124, "brainspot walking")]
+        out = yogg_saron.walk_outcomes(walks, [])
+        self.assertEqual(out[(5124, "illusion")]["branches"], {"walking": 1, "gaveup": 1})
+        self.assertEqual(out[(5131, "healer")]["branches"], {"walking": 1, "arrived": 1})
+        self.assertEqual(out[(5124, "illusion")]["short"], [])
+
+    def test_every_stall_release_counts_because_the_probe_is_not_emit_on_change(self):
+        steps = [(5131, "healer 31 yd short"), (5131, "healer 29 yd short"), (5124, "illusion 2 yd short")]
+        out = yogg_saron.walk_outcomes([], steps)
+        self.assertEqual(out[(5131, "healer")]["short"], [31.0, 29.0])
+        self.assertEqual(out[(5124, "illusion")]["short"], [2.0])
+        # A node with releases but no yogg.walk rows still gets a row, so a walk nothing reported on is
+        # not silently dropped.
+        self.assertEqual(out[(5124, "illusion")]["branches"], {})
+
+    def test_a_bot_whose_portal_node_never_ran_is_not_counted_as_having_walked(self):
+        class FakeTrace:
+            def __init__(self, acts):
+                self.acts = acts
+
+            def of(self, *events):
+                return list(self.acts)
+
+        trace = FakeTrace([
+            {"t": 1000, "g": 5124, "a": "yogg-saron move to enter portal action"},
+            {"t": 1000, "g": 5131, "a": "yogg-saron use portal action"},
+            {"t": 90000, "g": 5135, "a": "yogg-saron move to enter portal action"},
+        ])
+        # 5131 only ran the click node and 5135 ran outside the window, so neither walked for this wave.
+        self.assertEqual(yogg_saron.walked_for_a_portal(trace, {5124, 5131, 5135}, 0, 30000), {5124})
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

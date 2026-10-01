@@ -482,11 +482,15 @@ bool YoggSaronIllusionHealerStationTrigger::IsActive()
     if (!PlayerbotAI::IsHeal(bot) || !botAI->CanMove())
         return false;
 
-    Position middle;
-    if (!YoggSaronRoomMiddle(bot, middle))
+    // The middle of the room's live tentacles, not the room's own middle, which is the centroid of the
+    // whole summon group and so the one spot with nothing on it. In the Chamber that ring sits 36-44 yd
+    // out against a 38.5 yd heal range, which put the healer's own room beyond it: 17 heals landed that
+    // wave against 137 and 172 in the other two rooms.
+    Position station;
+    if (!YoggSaronIllusionHealerStation(botAI, station))
         return false;
 
-    if (bot->GetExactDist2d(middle.GetPositionX(), middle.GetPositionY()) <=
+    if (bot->GetExactDist2d(station.GetPositionX(), station.GetPositionY()) <=
         ULDUAR_YOGG_SARON_ILLUSION_HEALER_STATION_RADIUS)
         return false;
 
@@ -494,7 +498,7 @@ bool YoggSaronIllusionHealerStationTrigger::IsActive()
     if (!IsYoggSaronFight() || YoggSaronInfluenceTentaclesCleared(botAI))
         return false;
 
-    return YoggSaronWalkMakingProgress(botAI, "healer", middle);
+    return YoggSaronWalkMakingProgress(botAI, "healer", station);
 }
 
 bool YoggSaronBrainSpotTrigger::IsActive()

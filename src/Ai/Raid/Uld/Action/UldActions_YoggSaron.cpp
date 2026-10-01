@@ -1099,17 +1099,25 @@ bool YoggSaronIllusionRoomAction::WalkIntoRoom()
     if (YoggSaronRoomStateOf(botAI) != YOGG_SARON_ROOM_STATE_WALKING_IN || PlayerbotAI::IsHeal(bot))
         return false;
 
-    // The room's middle is the centroid of its Influence Tentacle summon group, so walking there is
-    // what puts the tentacles in line of sight - which is all the dps resolver was ever waiting for.
+    // Walk at the nearest tentacle, because the middle is the one place in the room there is never one
+    // to fight. It is the centroid of the whole summon group, so they ring it: 27-29 yd out in
+    // Stormwind, where two melee walked to within 8.4 and 0.0 yd of it and then back out again, 117 yd
+    // of walking for a 79 yd trip and a first swing 16 s after landing. Getting a tentacle into line of
+    // sight is all the dps resolver ever wanted, and the nearest one is the shortest way to do it.
     Position middle;
     if (!YoggSaronRoomMiddle(bot, middle))
         return false;
 
-    if (!YoggSaronWalkMakingProgress(botAI, "illusion", middle))
+    std::vector<Unit*> const mobs = GetYoggSaronRoomIllusionMobs(botAI);
+    Position const destination = mobs.empty() ? middle : mobs.front()->GetPosition();
+
+    if (!YoggSaronWalkMakingProgress(botAI, "illusion", destination))
         return false;
 
-    return MoveTo(bot->GetMapId(), middle.GetPositionX(), middle.GetPositionY(), middle.GetPositionZ(), false, false,
-                  false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+    YoggSaronReleaseStalledWalk(botAI, "illusion", destination);
+
+    return MoveTo(bot->GetMapId(), destination.GetPositionX(), destination.GetPositionY(), destination.GetPositionZ(),
+                  false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronIllusionRoomAction::SetRtiMark(YoggSaronTrigger yoggSaronTrigger)
@@ -1149,17 +1157,21 @@ bool YoggSaronIllusionRoomAction::GoToBrainRoom(YoggSaronTrigger yoggSaronTrigge
 
 bool YoggSaronIllusionHealerStationAction::Execute(Event /*event*/)
 {
-    Position middle;
-    if (!YoggSaronRoomMiddle(bot, middle))
+    Position station;
+    if (!YoggSaronIllusionHealerStation(botAI, station))
         return false;
 
-    return MoveTo(bot->GetMapId(), middle.GetPositionX(), middle.GetPositionY(), middle.GetPositionZ(), false, false,
+    YoggSaronReleaseStalledWalk(botAI, "healer", station);
+
+    return MoveTo(bot->GetMapId(), station.GetPositionX(), station.GetPositionY(), station.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronBrainSpotAction::Execute(Event /*event*/)
 {
     Position const spot = YoggSaronBrainSpot(bot);
+
+    YoggSaronReleaseStalledWalk(botAI, "brainspot", spot);
 
     return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
                   true, MovementPriority::MOVEMENT_FORCED, true, false);

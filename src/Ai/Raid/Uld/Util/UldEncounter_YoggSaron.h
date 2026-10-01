@@ -476,6 +476,16 @@ constexpr float ULDUAR_YOGG_SARON_GAZE_SAFE_SEPARATION = 1.1345f;
 constexpr uint32 ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS = 6000;
 constexpr float ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS = 5.0f;
 
+// How long a given-up walk stays given up. Without it the give-up is permanent: the escape below it
+// needs a gap in the asking and these nodes ask every tick, so six bots in one pull gave up the walk
+// into the Chamber, stood still for 21 s and were charmed where they stopped. Standing still below the
+// platform is a death, so a destination worth retrying beats a bot that has stopped for good.
+constexpr uint32 ULDUAR_YOGG_SARON_WALK_RETRY_MS = 4000;
+
+// How long a bot must have stood still before its unfinished MoveTo booking is dropped. A spline that
+// is still running keeps isMoving() true, so this only ever fires on a walk that has already died.
+constexpr uint32 ULDUAR_YOGG_SARON_WALK_STALL_MS = 500;
+
 // How often the per-bot exposure probes resample. They answer "where was this bot standing when the
 // thing that killed it went off", so a second is fine and a tick is 25 bots of noise.
 constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
@@ -854,6 +864,18 @@ bool YoggSaronConstrictorHolding(Unit* unit);
 // grid visit for the whole list.
 Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const* centre = nullptr);
 
+// Every live illusion mob in the bot's own room, nearest to the bot first. Same sweep as
+// YoggSaronLiveIllusionMob, which answers "is this room clear" and so returns whichever one the grid
+// visit happened to hand back; this one is for walking somewhere, where which one matters.
+std::vector<Unit*> GetYoggSaronRoomIllusionMobs(PlayerbotAI* botAI);
+
+// Where the brain team's healer stands in an illusion room: the middle of its live tentacles, which is
+// where the melee on them are. The room's own middle is the centroid of the whole summon group, so the
+// tentacles ring it - 36-44 yd out in the Chamber against a 38.5 yd heal range, which put its own room
+// out of reach and held one wave to 17 landed heals against 137 and 172 in the other two rooms. Falls
+// back to the room middle with nothing alive to centre on. False outside an illusion room.
+bool YoggSaronIllusionHealerStation(PlayerbotAI* botAI, Position& station);
+
 // Whether the Brain is safe to hit: every Influence Tentacle in this room dead. Scoped to the room
 // rather than swept at 200 yd, which is one yard short of reaching the next room's tentacles, and
 // measured from that room's middle so a bot in its doorway does not read the far half as empty.
@@ -897,6 +919,14 @@ bool YoggSaronCrusherStunHolds(PlayerbotAI* botAI, Unit* crusher);
 // real path. Records are kept per node and destination, so testing several destinations in one tick
 // does not wipe what the others learned.
 bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position const& destination);
+
+// Drops an unfinished MoveTo booking once the bot has stood still past ULDUAR_YOGG_SARON_WALK_STALL_MS.
+// MoveTo refuses the point it already issued for MaxWaitForMove (5 s) whether the bot is still walking
+// or not, and below the platform a forced spline dies after a yard or two, so that 5 s floor is the
+// whole difference between a run and a crawl: one healer covered 24 of its 56 yd in 54 s at 0.45 yd/s
+// and healed almost nothing all wave. Why the spline dies there is not established - navprobe calls the
+// same route PATHFIND_NORMAL and complete - so this fixes the symptom and `yogg.walkstep` measures it.
+void YoggSaronReleaseStalledWalk(PlayerbotAI* botAI, char const* node, Position const& destination);
 
 // Window in which a counterable fear can land, for the shared anti-fear component. Yogg-Saron fears
 // in P2 (Malady of the Mind, which re-casts on removal) and again in P3 (Deafening Roar).

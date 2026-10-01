@@ -28,6 +28,7 @@
 #include "GridNotifiers.h"
 #include "GridNotifiersImpl.h"
 #include "GameObject.h"
+#include "LastMovementValue.h"
 #include "Group.h"
 #include "Player.h"
 #include "PlayerbotAI.h"
@@ -162,6 +163,11 @@ struct YoggSaronPassReads
 
     bool skullsInArcRead = false;
     std::vector<ObjectGuid> skullsInArc;
+
+    // The healer's station trigger and its action both ask, and the answer is a 60 yd grid sweep.
+    bool healerStationRead = false;
+    bool healerStationFound = false;
+    Position healerStation;
 };
 
 thread_local YoggSaronPassReads yoggSaronPassReads;
@@ -865,6 +871,27 @@ void YoggSaronTickHandover(PlayerbotAI* botAI)
     if (state.handoverRingMs && getMSTimeDiff(state.handoverRingMs, now) >= ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS)
         state.handoverRingMs = 0;
 }
+
+// The mark is this fight's state machine - skull on the platform, diamond walking to a portal, the
+// room's own mark below, square once its door opens - and only the exit portal hands it back to skull.
+// Nothing else did, so a bot that left the brain level any other way kept a room mark for the rest of
+// the session and its walk to a portal was dead for good: Induce Madness teleports its victims out
+// without a click, and a bot killed down there never comes back up at all. One pull ended with twelve
+// bots marked that way, and nine of the ten on the next pull's brain team never walked to a portal.
+// A bot standing on the platform is not in an illusion room, whatever its mark says.
+void YoggSaronTickRtiMark(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (YoggSaronRoomOf(bot) != YOGG_SARON_ROOM_ARENA)
+        return;
+
+    // Diamond is the walk-to-a-portal mark and it is set up here, so it is the one that belongs.
+    std::string const mark = botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Get();
+    if (mark == "skull" || mark == "diamond")
+        return;
+
+    botAI->GetAiObjectContext()->GetValue<std::string>("rti")->Set("skull");
+}
 }  // namespace
 
 YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
@@ -1081,6 +1108,7 @@ struct YoggSaronWalkLatch
     float bestDistance = 0.0f;
     uint32 lastProgressMs = 0;
     uint32 lastAskedMs = 0;
+    uint32 gaveUpMs = 0;
 };
 
 // Per bot, per node, never pruned while the instance lives. Most nodes walk to a handful of fixed
@@ -1124,7 +1152,24 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
     bool const arrived = distance <= ULDUAR_YOGG_SARON_WALK_ARRIVED_RADIUS;
     latch->lastAskedMs = now;
 
-    if (fresh || arrived || distance < latch->bestDistance)
+    // A give-up has to run out. The gap above is the only other way one clears, and the walks that
+    // matter most ask every tick, so the first give-up was the last word: six bots in one pull gave up
+    // the walk into the Chamber, stood still for 21 s and were charmed where they stopped. There is no
+    // way out of an illusion room that has not been cleared, so retrying a destination that may be
+    // unreachable beats a bot that has stopped for good.
+    if (latch->gaveUpMs && getMSTimeDiff(latch->gaveUpMs, now) >= ULDUAR_YOGG_SARON_WALK_RETRY_MS)
+    {
+        latch->gaveUpMs = 0;
+        latch->bestDistance = distance;
+        latch->lastProgressMs = now;
+    }
+
+    if (latch->gaveUpMs)
+    {
+        giveUp = true;
+        branch = "gaveup";
+    }
+    else if (fresh || arrived || distance < latch->bestDistance)
     {
         latch->bestDistance = distance;
         latch->lastProgressMs = now;
@@ -1132,6 +1177,7 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
     }
     else if (getMSTimeDiff(latch->lastProgressMs, now) >= ULDUAR_YOGG_SARON_WALK_GIVE_UP_MS)
     {
+        latch->gaveUpMs = now;
         giveUp = true;
         branch = "gaveup";
     }
@@ -1140,6 +1186,29 @@ bool YoggSaronWalkMakingProgress(PlayerbotAI* botAI, char const* node, Position 
         RaidObs::NoteDerived(bot, "yogg.walk", std::string(node) + " " + branch);
 
     return !giveUp;
+}
+
+void YoggSaronReleaseStalledWalk(PlayerbotAI* botAI, char const* node, Position const& destination)
+{
+    Player* bot = botAI->GetBot();
+
+    LastMovement& last = botAI->GetAiObjectContext()->GetValue<LastMovement&>("last movement")->Get();
+    if (bot->isMoving() || !last.msTime ||
+        getMSTimeDiff(last.msTime, getMSTime()) <= ULDUAR_YOGG_SARON_WALK_STALL_MS)
+    {
+        return;
+    }
+
+    // Always emitted, not emit-on-change: how often a walk has to be let go is the measure, and the
+    // yards still to go say whether the spline died on the spot or stopped near the end.
+    if (RaidObs::Active())
+    {
+        RaidObs::Note(bot, "yogg.walkstep",
+                      std::string(node) + " " + std::to_string(static_cast<int32>(bot->GetExactDist(destination))) +
+                          " yd short");
+    }
+
+    last.clear();
 }
 
 std::vector<Unit*> GetYoggSaronDarkVolleyCasters(PlayerbotAI* botAI)
@@ -1900,6 +1969,86 @@ Unit* YoggSaronLiveIllusionMob(PlayerbotAI* botAI, float radius, Position const*
     return found.empty() ? nullptr : found.front();
 }
 
+std::vector<Unit*> GetYoggSaronRoomIllusionMobs(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    Position middle;
+    if (!YoggSaronRoomMiddle(bot, middle))
+        return {};
+
+    float const radius = ULDUAR_YOGG_SARON_STORMWIND_KEEPER_RADIUS;
+    float const sweep = bot->GetExactDist2d(middle.GetPositionX(), middle.GetPositionY()) + radius;
+
+    std::vector<Unit*> found;
+    IllusionMobInRangeCheck check{Acore::AnyUnitInObjectRangeCheck(bot, sweep), middle, radius};
+    Acore::UnitListSearcher<IllusionMobInRangeCheck> searcher(bot, found, check);
+    Cell::VisitObjects(bot, searcher, sweep);
+
+    std::sort(found.begin(), found.end(),
+              [bot](Unit* left, Unit* right) { return bot->GetExactDist(left) < bot->GetExactDist(right); });
+
+    return found;
+}
+
+namespace
+{
+bool YoggSaronIllusionHealerStationNow(PlayerbotAI* botAI, Position& station)
+{
+    Player* bot = botAI->GetBot();
+
+    Position middle;
+    if (!YoggSaronRoomMiddle(bot, middle))
+        return false;
+
+    std::vector<Unit*> const mobs = GetYoggSaronRoomIllusionMobs(botAI);
+    if (mobs.empty())
+    {
+        station = middle;
+        return true;
+    }
+
+    float x = 0.0f;
+    float y = 0.0f;
+    for (Unit* mob : mobs)
+    {
+        x += mob->GetPositionX();
+        y += mob->GetPositionY();
+    }
+
+    x /= static_cast<float>(mobs.size());
+    y /= static_cast<float>(mobs.size());
+
+    // The room middle's own Z, not the tentacles' and not theirs averaged. The Chamber's floor ramps
+    // from 239.7 up to 244 across the room, so an averaged Z lands the station in the air on one side
+    // of it, and the middle is the one point in each room already known good.
+    station = Position(x, y, middle.GetPositionZ());
+
+    return true;
+}
+}  // namespace
+
+bool YoggSaronIllusionHealerStation(PlayerbotAI* botAI, Position& station)
+{
+    YoggSaronPassReads* reads = YoggSaronPassReadsFor(botAI);
+    if (reads && reads->healerStationRead)
+    {
+        station = reads->healerStation;
+        return reads->healerStationFound;
+    }
+
+    bool const found = YoggSaronIllusionHealerStationNow(botAI, station);
+
+    if (reads)
+    {
+        reads->healerStationRead = true;
+        reads->healerStationFound = found;
+        reads->healerStation = station;
+    }
+
+    return found;
+}
+
 Unit* YoggSaronPetFallbackTarget(PlayerbotAI* botAI, Creature* pet)
 {
     if (!pet)
@@ -2383,5 +2532,6 @@ void TickYoggSaronObs(PlayerbotAI* botAI)
 void YoggSaronTick(PlayerbotAI* botAI)
 {
     YoggSaronTickHandover(botAI);
+    YoggSaronTickRtiMark(botAI);
     TickYoggSaronObs(botAI);
 }
