@@ -27,6 +27,8 @@ public:
 
 private:
     Unit* GetHastedLord();
+
+    ObjectGuid _lordGuid;
 };
 
 class MalygosSeekBubbleAction : public MovementAction
@@ -37,10 +39,11 @@ public:
     MalygosSeekBubbleAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
 
 private:
     // Latched, or a bot walks in circles between two shrinking bubbles.
-    ObjectGuid assignedBubbleGuid;
+    ObjectGuid _assignedBubbleGuid;
 };
 
 class MalygosBoardDiskAction : public EnterVehicleAction
@@ -65,7 +68,7 @@ public:
     bool isPossible() override;
 
 private:
-    bool descending = false;
+    bool _descending = false;
 };
 
 class AvoidSurgeOfPowerAction : public MovementAction
@@ -76,6 +79,10 @@ public:
     AvoidSurgeOfPowerAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
+
+private:
+    ObjectGuid _surgeGuid;
 };
 
 #endif

@@ -12,20 +12,38 @@
 #include "PlayerbotAI.h"
 #include "Unit.h"
 
+#include <limits>
 #include <utility>
 #include <vector>
 
-// One instance-wide cache in place of a grid sweep per bot per tick. Guids are cached, not
-// pointers, so a creature that despawns inside the window cannot come back dangling.
+// One creature cache per instance, shared by every bot. Stores guids, so a despawn can't dangle.
 void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out);
-Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist = 1000.0f);
+Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist = std::numeric_limits<float>::max());
 bool AnyEoECreature(Player* bot, uint32 entry);
 
 // Finds Malygos even while he is flagged non-attackable (P2 flight / phase transitions).
 Unit* GetMalygos(Player* bot);
 
-// 0 = inactive/pre-pull, 1 = P1, 2 = P2 (adds up), 3 = drake phase, 4 = phase transition hold.
-uint8 GetMalygosPhase(Player* bot);
+enum class MalygosPhase : uint8
+{
+    None,        // off the map, or not pulled
+    P1,
+    P2,          // Nexus Lords and Scions up
+    P3,          // this bot is on a Skytalon
+    Transition,  // between phases, and the pull intro
+};
+
+MalygosPhase GetMalygosPhase(Player* bot);
+
+struct MalygosAggro
+{
+    bool mainTank = false;
+    bool victim = false;        // he is hitting this bot
+    bool victimIsTank = false;  // he is hitting a tank, this bot or another
+};
+
+// IsMainTank walks the group and P1 asks for this per queued action, so it's cached for the tick.
+MalygosAggro const& GetMalygosAggro(PlayerbotAI* botAI);
 
 struct MalygosP1Layout
 {
@@ -38,10 +56,10 @@ struct MalygosP1Layout
 // The P1 offsets rotated onto the landing bearing, latched per instance for the whole pull.
 MalygosP1Layout const& GetMalygosP1Layout(Player* bot);
 
-// A killed Power Spark never dies - the core zeroes the damage, flags the corpse unselectable and
-// leaves it lying there for 60 s while its ground buff ticks, still IsAlive() the whole time. So
-// everything that reasons about sparks comes through here or spends the next minute on a corpse.
+// A killed spark stays IsAlive() for 60 s as an unselectable corpse while its ground buff ticks.
+// Anything that looks for sparks has to go through these or it ends up on the corpse.
 void GetLivePowerSparks(Player* bot, std::vector<Unit*>& out);
+bool AnyLivePowerSpark(Player* bot);
 
 // Anchored on a point rather than on the bot: the grip spot is what the answer is wanted for, and
 // the spark nearest the DK is regularly not the spark nearest where he parks.

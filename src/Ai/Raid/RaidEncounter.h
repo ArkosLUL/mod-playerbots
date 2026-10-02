@@ -20,30 +20,22 @@
 class Action;
 class PlayerbotAI;
 
-// Open: the encounter's mechanics may run. Live: the encounter itself is in progress.
-//
-// A raid strategy registers every boss at once, so without a gate a Kologarn pull still runs Mimiron,
-// Vezax and Flame Leviathan every tick. 2026-08-31 had twenty bots spend a second trying to board a
-// leftover siege vehicle mid-Kologarn, because that trigger only asks whether the master is in one.
+// Open: the encounter's mechanics may run. Live: the encounter itself is in progress. A raid strategy
+// registers every boss at once, so without a gate every boss's mechanics run on every pull.
 struct EncounterGate
 {
     bool (*open)(PlayerbotAI* botAI, uint32 encounterId);
     bool (*live)(PlayerbotAI* botAI, uint32 encounterId);
 };
 
-// Keyed by the InstanceScript boss index. RaidEncounterRules::GateOpen has the rule.
-//
-// Gate on the fight, not the unit: a drake Sartharion calls in never starts its own encounter, so its
-// mechanics belong under Sartharion's id.
+// Keyed by the InstanceScript boss index, rule in RaidEncounterRules::GateOpen. Gate on the fight, not
+// the unit: an add a boss calls in (Sartharion's drakes) never starts an encounter of its own.
 bool BossStateGateOpen(PlayerbotAI* botAI, uint32 encounterId);
 bool BossStateGateLive(PlayerbotAI* botAI, uint32 encounterId);
 inline constexpr EncounterGate BossStateGate{&BossStateGateOpen, &BossStateGateLive};
 
-// Non-zero only while this bot's gated trigger is inside Check, and different for every trigger pass.
-// Engine::ProcessTriggers checks every trigger before any action runs and no raid trigger changes the
-// world, so a read cached under one id is exact for the rest of that pass. Actions, multipliers, ticks
-// and isUseful always get 0: an action returning false can still drop a target or damage a boss past
-// a threshold, so nothing may be cached past the checks.
+// Non-zero only inside a gated trigger's Check, unique per trigger pass. Triggers don't change the
+// world, so a read cached under one id holds for that pass; actions and multipliers always get 0.
 uint32 EncounterTriggerPassId(PlayerbotAI* botAI);
 
 // Wraps rather than subclasses, so the trigger classes and their IsActive bodies stay as they are.
@@ -67,10 +59,10 @@ public:
     void ExternalEvent(WorldPacket& packet, Player* owner = nullptr) override;
 
 private:
-    Trigger* inner;
-    EncounterGate gate;
-    uint32 encounterId;
-    char const* traceName;
+    Trigger* _inner;
+    EncounterGate _gate;
+    uint32 _encounterId;
+    char const* _traceName;
 };
 
 // The only place an Action is mapped to rule families.
@@ -121,12 +113,12 @@ private:
         EncounterRow flag;
     };
 
-    uint32 encounterId;
-    EncounterGate gate;
-    char const* traceName;
-    std::vector<Row> rows;
-    std::vector<MultiplierCreator> multipliers;  // in declaration order, which is veto order
-    TickFn tick = nullptr;
+    uint32 _encounterId;
+    EncounterGate _gate;
+    char const* _traceName;
+    std::vector<Row> _rows;
+    std::vector<MultiplierCreator> _multipliers;  // in declaration order, which is veto order
+    TickFn _tick = nullptr;
 };
 
 // What a definition function gets. Rules and multipliers keep the order they're declared in: the
@@ -143,8 +135,8 @@ public:
     template <class T, class A>
     void Node(float priority, EncounterRow flag = EncounterRow::Plain)
     {
-        Node(T::Name, [](PlayerbotAI* ai) -> Trigger* { return new T(ai); }, A::Name,
-             [](PlayerbotAI* ai) -> Action* { return new A(ai); }, priority, flag);
+        Node(T::Name, [](PlayerbotAI* botAI) -> Trigger* { return new T(botAI); }, A::Name,
+             [](PlayerbotAI* botAI) -> Action* { return new A(botAI); }, priority, flag);
     }
 
     // For an action a shared context already registers, such as "rear flank": the row registers only
@@ -152,7 +144,8 @@ public:
     template <class T>
     void Node(char const* sharedAction, float priority, EncounterRow flag = EncounterRow::Plain)
     {
-        Node(T::Name, [](PlayerbotAI* ai) -> Trigger* { return new T(ai); }, sharedAction, nullptr, priority, flag);
+        Node(T::Name, [](PlayerbotAI* botAI) -> Trigger* { return new T(botAI); }, sharedAction, nullptr, priority,
+             flag);
     }
 
     // For a class built under several names, which takes them from the row.
@@ -177,7 +170,7 @@ public:
     template <class M, class... Args>
     void Multiplier(FamilyMask families, Args... args)
     {
-        HandWritten(families, [args...](PlayerbotAI* ai) -> ::Multiplier* { return new M(ai, args...); });
+        HandWritten(families, [args...](PlayerbotAI* botAI) -> ::Multiplier* { return new M(botAI, args...); });
     }
 
     void Tick(EncounterDefinition::TickFn tick);
@@ -185,14 +178,14 @@ public:
 private:
     friend class EncounterDefinition;
 
-    explicit EncounterBuilder(EncounterDefinition& definition) : definition(definition) {}
+    explicit EncounterBuilder(EncounterDefinition& definition) : _definition(definition) {}
 
     void AddRule(char const* name, RoleMask roles, Predicate predicate, RaidEncounterRules::Rule rule,
                  bool moverRows);
     void HandWritten(FamilyMask families, EncounterDefinition::MultiplierCreator make);
 
-    EncounterDefinition& definition;
-    std::vector<std::shared_ptr<RaidEncounterRules::Rule>> moverRules;  // filled once define returns
+    EncounterDefinition& _definition;
+    std::vector<std::shared_ptr<RaidEncounterRules::Rule>> _moverRules;  // filled once define returns
 };
 
 #endif

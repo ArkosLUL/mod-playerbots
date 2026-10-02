@@ -34,12 +34,8 @@ namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-    // A pass is one bot's trigger checks: the first gate read opens it and the Reset sweep the engine
-    // runs right after the checks ends it. Nothing in Trigger's contract promises Reset runs, though (a
-    // strategy swapped mid-tick rebuilds the trigger list), so the ms stamp is what actually keeps a
-    // pass from answering the next tick's gates from a pull or a kill that has since landed.
-    //
-    // Per thread, not shared: a bot's whole tick runs on one map thread, start to finish.
+    // One bot's trigger checks: opened by the first gate read, closed by the Reset sweep after the
+    // checks. Reset isn't guaranteed (a strategy swap rebuilds the list), so the ms stamp also ends it.
     struct GatePass
     {
         PlayerbotAI* botAI = nullptr;
@@ -47,7 +43,7 @@ namespace
         uint32 id = 0;
     };
 
-    thread_local GatePass gatePass;
+    thread_local GatePass gatePass;  // a bot's whole tick runs on one map thread
 
     // Kept out of GatePass: ending a pass overwrites it, and an id that restarts would hand a new pass
     // the previous one's cached reads.
@@ -152,17 +148,17 @@ namespace
         template <class Compute>
         bool Get(Action* action, Compute&& compute)
         {
-            auto const found = cares.find(action);
-            if (found != cares.end())
+            auto const found = _cares.find(action);
+            if (found != _cares.end())
                 return found->second;
 
             bool const result = compute();
-            cares.emplace(action, result);
+            _cares.emplace(action, result);
             return result;
         }
 
     private:
-        std::unordered_map<Action*, bool> cares;
+        std::unordered_map<Action*, bool> _cares;
     };
 
     class EncounterRuleMultiplier : public Multiplier
@@ -172,11 +168,11 @@ namespace
                                 Rules::RoleMask roles, EncounterDefinition::Predicate predicate, EncounterGate gate,
                                 uint32 encounterId)
             : Multiplier(botAI, name),
-              rule(std::move(rule)),
-              roles(roles),
-              predicate(predicate),
-              gate(gate),
-              encounterId(encounterId)
+              _rule(std::move(rule)),
+              _roles(roles),
+              _predicate(predicate),
+              _gate(gate),
+              _encounterId(encounterId)
         {
         }
 
@@ -185,22 +181,22 @@ namespace
             if (!action)
                 return 1.0f;
 
-            bool const cares =
-                cache.Get(action, [&] { return Rules::RuleCares(*rule, ClassifyAction(action), action->getName()); });
+            bool const cares = _cache.Get(
+                action, [&] { return Rules::RuleCares(*_rule, ClassifyAction(action), action->getName()); });
 
             return Rules::Evaluate(
-                cares, [&] { return gate.open(botAI, encounterId); },
-                [&] { return Rules::RoleMatches(roles, [&](Rules::RoleMask role) { return BotHasRole(botAI, role); }); },
-                [&] { return predicate(botAI); });
+                cares, [&] { return _gate.open(botAI, _encounterId); },
+                [&] { return Rules::RoleMatches(_roles, [&](Rules::RoleMask role) { return BotHasRole(botAI, role); }); },
+                [&] { return _predicate(botAI); });
         }
 
     private:
-        std::shared_ptr<Rules::Rule const> rule;
-        Rules::RoleMask roles;
-        EncounterDefinition::Predicate predicate;
-        EncounterGate gate;
-        uint32 encounterId;
-        CaresCache cache;
+        std::shared_ptr<Rules::Rule const> _rule;
+        Rules::RoleMask _roles;
+        EncounterDefinition::Predicate _predicate;
+        EncounterGate _gate;
+        uint32 _encounterId;
+        CaresCache _cache;
     };
 
     class EncounterGatedMultiplier : public Multiplier
@@ -208,29 +204,31 @@ namespace
     public:
         EncounterGatedMultiplier(PlayerbotAI* botAI, Multiplier* inner, Rules::FamilyMask families, EncounterGate gate,
                                  uint32 encounterId)
-            : Multiplier(botAI, inner->getName()), inner(inner), families(families), gate(gate), encounterId(encounterId)
+            : Multiplier(botAI, inner->getName()),
+              _inner(inner),
+              _families(families),
+              _gate(gate),
+              _encounterId(encounterId)
         {
         }
 
-        ~EncounterGatedMultiplier() override { delete inner; }
+        ~EncounterGatedMultiplier() override { delete _inner; }
 
         float GetValue(Action* action) override
         {
-            if (!action || !cache.Get(action, [&] { return (ClassifyAction(action) & families) != 0; }) ||
-                !gate.open(botAI, encounterId))
-            {
+            if (!action || !_cache.Get(action, [&] { return (ClassifyAction(action) & _families) != 0; }) ||
+                !_gate.open(botAI, _encounterId))
                 return 1.0f;
-            }
 
-            return inner->GetValue(action);
+            return _inner->GetValue(action);
         }
 
     private:
-        Multiplier* inner;
-        Rules::FamilyMask families;
-        EncounterGate gate;
-        uint32 encounterId;
-        CaresCache cache;
+        Multiplier* _inner;
+        Rules::FamilyMask _families;
+        EncounterGate _gate;
+        uint32 _encounterId;
+        CaresCache _cache;
     };
 }  // namespace
 
@@ -273,79 +271,78 @@ uint32 EncounterTriggerPassId(PlayerbotAI* botAI)
 EncounterGatedTrigger::EncounterGatedTrigger(PlayerbotAI* botAI, Trigger* inner, EncounterGate gate,
                                              uint32 encounterId, char const* traceName)
     : Trigger(botAI, inner ? inner->getName() : "trigger", inner ? inner->getCheckInterval() : 1),
-      inner(inner),
-      gate(gate),
-      encounterId(encounterId),
-      traceName(traceName)
+      _inner(inner),
+      _gate(gate),
+      _encounterId(encounterId),
+      _traceName(traceName)
 {
 }
 
-EncounterGatedTrigger::~EncounterGatedTrigger() { delete inner; }
+EncounterGatedTrigger::~EncounterGatedTrigger() { delete _inner; }
 
 Event EncounterGatedTrigger::Check()
 {
-    if (!inner || !gate.open(botAI, encounterId))
+    if (!_inner || !_gate.open(botAI, _encounterId))
         return Event();
 
     Event event = [this]()
     {
         CheckScopeGuard const scope(botAI, CurrentGatePass(botAI));
-        return inner->Check();
+        return _inner->Check();
     }();
 
     if (!event)
         return event;
 
-    // A trigger firing while its own encounter is live is the only thing that can name a pull the engage
-    // hook missed: Yogg-Saron's phase one has no boss to enter combat with a player. Live rather than
-    // open, since with nothing engaged every gate is open.
-    if (traceName && RaidObs::Active() && gate.live(botAI, encounterId))
-        RaidObs::NamePull(botAI->GetBot()->GetMap(), traceName);
+    // Only a trigger firing while its encounter is live can name a pull the engage hook missed (Yogg's
+    // phase one has no boss to engage). Live rather than open: with nothing engaged every gate is open.
+    if (_traceName && RaidObs::Active() && _gate.live(botAI, _encounterId))
+        RaidObs::NamePull(botAI->GetBot()->GetMap(), _traceName);
 
     return event;
 }
 
-bool EncounterGatedTrigger::IsActive() { return inner && gate.open(botAI, encounterId) && inner->IsActive(); }
+bool EncounterGatedTrigger::IsActive() { return _inner && _gate.open(botAI, _encounterId) && _inner->IsActive(); }
 
-bool EncounterGatedTrigger::IsBuffTrigger() { return inner && inner->IsBuffTrigger(); }
+bool EncounterGatedTrigger::IsBuffTrigger() { return _inner && _inner->IsBuffTrigger(); }
 
-bool EncounterGatedTrigger::IsDebuffTrigger() { return inner && inner->IsDebuffTrigger(); }
+bool EncounterGatedTrigger::IsDebuffTrigger() { return _inner && _inner->IsDebuffTrigger(); }
 
 std::vector<NextAction> EncounterGatedTrigger::getHandlers()
 {
-    return inner ? inner->getHandlers() : std::vector<NextAction>();
+    return _inner ? _inner->getHandlers() : std::vector<NextAction>();
 }
 
 void EncounterGatedTrigger::Reset()
 {
     EndGatePass(botAI);
 
-    if (inner)
-        inner->Reset();
+    if (_inner)
+        _inner->Reset();
 }
 
-Unit* EncounterGatedTrigger::GetTarget() { return inner ? inner->GetTarget() : Trigger::GetTarget(); }
+Unit* EncounterGatedTrigger::GetTarget() { return _inner ? _inner->GetTarget() : Trigger::GetTarget(); }
 
 Value<Unit*>* EncounterGatedTrigger::GetTargetValue()
 {
-    return inner ? inner->GetTargetValue() : Trigger::GetTargetValue();
+    return _inner ? _inner->GetTargetValue() : Trigger::GetTargetValue();
 }
 
 std::string const EncounterGatedTrigger::GetTargetName()
 {
-    return inner ? inner->GetTargetName() : Trigger::GetTargetName();
+    return _inner ? _inner->GetTargetName() : Trigger::GetTargetName();
 }
 
 void EncounterGatedTrigger::ExternalEvent(std::string const param, Player* owner)
 {
-    if (inner)
-        inner->ExternalEvent(param, owner);
+    if (_inner)
+        _inner->ExternalEvent(param, owner);
 }
 
 void EncounterGatedTrigger::ExternalEvent(WorldPacket& packet, Player* owner)
 {
-    if (inner)
-        inner->ExternalEvent(packet, owner);
+    if (_inner)
+        _inner->ExternalEvent(packet, owner);
 }
 
 Rules::FamilyMask ClassifyAction(Action* action)
@@ -442,36 +439,36 @@ Rules::FamilyMask ClassifyAction(Action* action)
 }
 
 EncounterDefinition::EncounterDefinition(uint32 encounterId, EncounterGate gate, char const* traceName, Define define)
-    : encounterId(encounterId), gate(gate), traceName(traceName)
+    : _encounterId(encounterId), _gate(gate), _traceName(traceName)
 {
     EncounterBuilder builder(*this);
     define(builder);
 
     std::vector<std::string> movers;
-    for (Row const& row : rows)
+    for (Row const& row : _rows)
         if (row.flag == EncounterRow::Mover)
             movers.push_back(row.action);
 
-    for (std::shared_ptr<Rules::Rule> const& rule : builder.moverRules)
+    for (std::shared_ptr<Rules::Rule> const& rule : builder._moverRules)
         rule->passNames.insert(rule->passNames.end(), movers.begin(), movers.end());
 }
 
 void EncounterDefinition::RegisterTriggers(std::unordered_map<std::string, TriggerCreator>& creators) const
 {
-    for (Row const& row : rows)
+    for (Row const& row : _rows)
     {
         TriggerCreator inner = row.makeTrigger;
-        EncounterGate const gate = this->gate;
-        uint32 const encounterId = this->encounterId;
-        char const* traceName = this->traceName;
-        creators[row.trigger] = [inner, gate, encounterId, traceName](PlayerbotAI* ai) -> Trigger*
-        { return new EncounterGatedTrigger(ai, inner(ai), gate, encounterId, traceName); };
+        EncounterGate const gate = _gate;
+        uint32 const encounterId = _encounterId;
+        char const* traceName = _traceName;
+        creators[row.trigger] = [inner, gate, encounterId, traceName](PlayerbotAI* botAI) -> Trigger*
+        { return new EncounterGatedTrigger(botAI, inner(botAI), gate, encounterId, traceName); };
     }
 }
 
 void EncounterDefinition::RegisterActions(std::unordered_map<std::string, ActionCreator>& creators) const
 {
-    for (Row const& row : rows)
+    for (Row const& row : _rows)
         if (row.makeAction)
             creators[row.action] = row.makeAction;
 }
@@ -479,34 +476,34 @@ void EncounterDefinition::RegisterActions(std::unordered_map<std::string, Action
 void EncounterDefinition::AddTriggerNodes(std::vector<TriggerNode*>& triggers) const
 {
     // One node per run of rows: ProcessTriggers checks a quiet trigger again for every node naming it.
-    for (std::size_t first = 0; first < rows.size();)
+    for (std::size_t first = 0; first < _rows.size();)
     {
         std::vector<NextAction> actions;
         std::size_t next = first;
-        for (; next < rows.size() && rows[next].trigger == rows[first].trigger; ++next)
-            actions.push_back(NextAction(rows[next].action, rows[next].priority));
+        for (; next < _rows.size() && _rows[next].trigger == _rows[first].trigger; ++next)
+            actions.push_back(NextAction(_rows[next].action, _rows[next].priority));
 
-        triggers.push_back(new TriggerNode(rows[first].trigger, std::move(actions)));
+        triggers.push_back(new TriggerNode(_rows[first].trigger, std::move(actions)));
         first = next;
     }
 }
 
 void EncounterDefinition::AddMultipliers(PlayerbotAI* botAI, std::vector<Multiplier*>& multipliers) const
 {
-    for (MultiplierCreator const& make : this->multipliers)
+    for (MultiplierCreator const& make : _multipliers)
         multipliers.push_back(make(botAI));
 }
 
 void EncounterDefinition::OnTick(PlayerbotAI* botAI) const
 {
-    if (tick && gate.open(botAI, encounterId))
-        tick(botAI);
+    if (_tick && _gate.open(botAI, _encounterId))
+        _tick(botAI);
 }
 
 void EncounterBuilder::Node(std::string trigger, EncounterDefinition::TriggerCreator makeTrigger, std::string action,
                             EncounterDefinition::ActionCreator makeAction, float priority, EncounterRow flag)
 {
-    definition.rows.push_back(
+    _definition._rows.push_back(
         {std::move(trigger), std::move(makeTrigger), std::move(action), std::move(makeAction), priority, flag});
 }
 
@@ -534,25 +531,26 @@ void EncounterBuilder::Exclusive(char const* name, RoleMask roles, Predicate pre
     AddRule(name, roles, predicate, Rules::Exclusive(families, std::move(names)), false);
 }
 
-void EncounterBuilder::Tick(EncounterDefinition::TickFn tick) { definition.tick = tick; }
+void EncounterBuilder::Tick(EncounterDefinition::TickFn tick) { _definition._tick = tick; }
 
 void EncounterBuilder::AddRule(char const* name, RoleMask roles, Predicate predicate, Rules::Rule rule, bool moverRows)
 {
     auto const shared = std::make_shared<Rules::Rule>(std::move(rule));
     if (moverRows)
-        moverRules.push_back(shared);
+        _moverRules.push_back(shared);
 
-    EncounterGate const gate = definition.gate;
-    uint32 const encounterId = definition.encounterId;
-    definition.multipliers.push_back(
-        [name, roles, predicate, shared, gate, encounterId](PlayerbotAI* ai) -> ::Multiplier*
-        { return new EncounterRuleMultiplier(ai, name, shared, roles, predicate, gate, encounterId); });
+    EncounterGate const gate = _definition._gate;
+    uint32 const encounterId = _definition._encounterId;
+    _definition._multipliers.push_back(
+        [name, roles, predicate, shared, gate, encounterId](PlayerbotAI* botAI) -> ::Multiplier*
+        { return new EncounterRuleMultiplier(botAI, name, shared, roles, predicate, gate, encounterId); });
 }
 
 void EncounterBuilder::HandWritten(FamilyMask families, EncounterDefinition::MultiplierCreator make)
 {
-    EncounterGate const gate = definition.gate;
-    uint32 const encounterId = definition.encounterId;
-    definition.multipliers.push_back([families, make, gate, encounterId](PlayerbotAI* ai) -> ::Multiplier*
-                                     { return new EncounterGatedMultiplier(ai, make(ai), families, gate, encounterId); });
+    EncounterGate const gate = _definition._gate;
+    uint32 const encounterId = _definition._encounterId;
+    _definition._multipliers.push_back(
+        [families, make, gate, encounterId](PlayerbotAI* botAI) -> ::Multiplier*
+        { return new EncounterGatedMultiplier(botAI, make(botAI), families, gate, encounterId); });
 }

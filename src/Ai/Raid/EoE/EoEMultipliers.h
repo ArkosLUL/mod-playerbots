@@ -14,7 +14,7 @@
 class MalygosScionTankAssistMultiplier : public Multiplier
 {
 public:
-    MalygosScionTankAssistMultiplier(PlayerbotAI* ai) : Multiplier(ai, "malygos") {}
+    MalygosScionTankAssistMultiplier(PlayerbotAI* botAI) : Multiplier(botAI, "malygos") {}
 
     float GetValue(Action* action) override;
 };

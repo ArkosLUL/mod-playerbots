@@ -14,65 +14,30 @@
 #include "Player.h"
 #include "PlayerbotAI.h"
 #include "Strategy.h"
-#include "Timer.h"
 
 namespace Family = RaidEncounterRules::Family;
 namespace Role = RaidEncounterRules::Role;
 
 namespace
 {
-bool Phase1(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == 1; }
-bool Phase2(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == 2; }
-bool Phase3(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == 3; }
-bool Phase4(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == 4; }
-
-struct BossHolder
-{
-    bool mainTank = false;
-    bool victim = false;        // he is hitting this bot
-    bool victimIsTank = false;  // he is hitting a tank, this bot or another
-};
-
-// The P1 rules ask for every movement action in the queue and IsMainTank walks the group, so the
-// answer is kept for the rest of this bot's tick.
-BossHolder const& Holder(PlayerbotAI* botAI)
-{
-    thread_local PlayerbotAI* cachedFor = nullptr;
-    thread_local uint32 cachedAtMs = 0;
-    thread_local BossHolder cached;
-
-    uint32 const now = getMSTime();
-    if (cachedFor != botAI || cachedAtMs != now || !cachedAtMs)
-    {
-        cachedFor = botAI;
-        cachedAtMs = now;
-
-        Player* bot = botAI->GetBot();
-        Unit* boss = GetMalygos(bot);
-        Unit* victim = boss ? boss->GetVictim() : nullptr;
-        Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
-
-        cached.mainTank = PlayerbotAI::IsMainTank(bot);
-        cached.victim = victim == bot;
-        cached.victimIsTank = victimPlayer && PlayerbotAI::IsTank(victimPlayer);
-    }
-
-    return cached;
-}
+bool Phase1(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == MalygosPhase::P1; }
+bool Phase2(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == MalygosPhase::P2; }
+bool Phase3(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == MalygosPhase::P3; }
+bool PhaseTransition(PlayerbotAI* botAI) { return GetMalygosPhase(botAI->GetBot()) == MalygosPhase::Transition; }
 
 bool Phase1TankedAndNotMainTank(PlayerbotAI* botAI)
 {
-    return Phase1(botAI) && !Holder(botAI).mainTank && Holder(botAI).victimIsTank;
+    return Phase1(botAI) && !GetMalygosAggro(botAI).mainTank && GetMalygosAggro(botAI).victimIsTank;
 }
 
 // Whoever Malygos is actually hitting behaves as the tank, assigned or not.
 bool Phase1NotBossTank(PlayerbotAI* botAI)
 {
-    return Phase1(botAI) && !Holder(botAI).mainTank && !Holder(botAI).victim;
+    return Phase1(botAI) && !GetMalygosAggro(botAI).mainTank && !GetMalygosAggro(botAI).victim;
 }
 
-bool Phase1BossVictim(PlayerbotAI* botAI) { return Phase1(botAI) && Holder(botAI).victim; }
-bool Phase1NotMainTank(PlayerbotAI* botAI) { return Phase1(botAI) && !Holder(botAI).mainTank; }
+bool Phase1BossVictim(PlayerbotAI* botAI) { return Phase1(botAI) && GetMalygosAggro(botAI).victim; }
+bool Phase1NotMainTank(PlayerbotAI* botAI) { return Phase1(botAI) && !GetMalygosAggro(botAI).mainTank; }
 bool Phase2Riding(PlayerbotAI* botAI) { return Phase2(botAI) && botAI->GetBot()->GetVehicle(); }
 bool Phase2OnFoot(PlayerbotAI* botAI) { return Phase2(botAI) && !botAI->GetBot()->GetVehicle(); }
 
@@ -101,9 +66,8 @@ void DefineMalygos(EncounterBuilder& e)
     e.Node<MalygosDrakeFlightTrigger, EoEDrakeAttackAction>(ACTION_NORMAL + 5);
     e.Node<DrakeSurgeTrigger, DrakeSurgeShieldAction>(ACTION_EMERGENCY + 5);
 
-    // Arcane Breath is a frontal cone on whoever Malygos is hitting, so an off-tank taunting from the
-    // melee stack turns him inward and sweeps it through the raid. Only while a tank already holds
-    // him: with nobody on him the taunt is the rescue.
+    // Arcane Breath cones whoever he's hitting, so an off-tank taunting from the stack swings it
+    // through the raid. Only while a tank holds him; with nobody on him the taunt is the rescue.
     e.Block("malygos", Role::Any, Phase1TankedAndNotMainTank, Family::Taunt);
 
     // "enemy too close for spell" stays active next to a 20-reach boss, and every class wires it to
@@ -120,9 +84,8 @@ void DefineMalygos(EncounterBuilder& e)
 
     e.OwnTargeting("malygos", Role::Dps, Phase1, Family::DpsAssist);
 
-    // Nobody but the boss's current victim walks anywhere in P1 under their own steam. Attacks are
-    // movement too, so the EoE ones are named, and closing on a heal target is the one exception. A
-    // reach spell is a walk as well and gets no such exception.
+    // In P1 only the boss's victim moves on its own. Attacks move too, so the EoE ones are named;
+    // closing on a heal target is the one exception, reach spells get none.
     e.OwnMovement("malygos", Role::Any, Phase1NotBossTank, Family::ReachHeal,
                   {MalygosPositionAction::Name, MalygosTargetAction::Name, KillPowerSparkAction::Name});
     e.Block("malygos", Role::Any, Phase1NotBossTank, Family::Charge);
@@ -137,7 +100,7 @@ void DefineMalygos(EncounterBuilder& e)
     // Keep the generic flee from walking bots off the edge; the position action recentres.
     e.Block("malygos", Role::Any, Phase2, Family::Flee);
 
-    // A rider's chase actions steer the disk, which dove ~25 yd each time it parked next to a Scion.
+    // A rider's chase actions steer the disk and dive it whenever it parks by a Scion.
     // Leaving the vehicle stays open as a manual override.
     e.Exclusive("malygos", Role::Any, Phase2Riding, 0,
                 {MalygosRideDiskAction::Name, MalygosTargetAction::Name, "leave vehicle"});
@@ -153,7 +116,7 @@ void DefineMalygos(EncounterBuilder& e)
     e.Exclusive("malygos", Role::Any, Phase3, 0, {EoEFlyDrakeAction::Name});
 
     // Phase transition: hold the gather at centre and stay off the default strategy.
-    e.Exclusive("malygos", Role::Any, Phase4, 0, {MalygosPositionAction::Name});
+    e.Exclusive("malygos", Role::Any, PhaseTransition, 0, {MalygosPositionAction::Name});
 }
 }  // namespace
 

@@ -20,22 +20,22 @@ class EoEFlyDrakeAction : public MovementAction
 public:
     static constexpr char const* Name = "eoe fly drake";
 
-    EoEFlyDrakeAction(PlayerbotAI* ai) : MovementAction(ai, Name) {}
+    EoEFlyDrakeAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
     bool isPossible() override;
 
 private:
-    uint32 stackCalcAtMs = 0;
-    float stackX = 0.0f;
-    float stackY = 0.0f;
-    float stackZ = 0.0f;
-    bool stackValid = false;
+    uint32 _stackCalcAtMs = 0;
+    float _stackX = 0.0f;
+    float _stackY = 0.0f;
+    float _stackZ = 0.0f;
+    bool _stackValid = false;
 
     // Last destination handed to the MotionMaster, so the same one is not restamped every tick.
-    float issuedX = 0.0f;
-    float issuedY = 0.0f;
-    bool issued = false;
+    float _issuedX = 0.0f;
+    float _issuedY = 0.0f;
+    bool _issued = false;
 };
 
 class EoEDrakeAttackAction : public Action
@@ -49,9 +49,9 @@ public:
     bool isPossible() override;
 
 protected:
-    bool CastDrakeSpellAction(Unit* target, uint32 spellId);
-    bool DrakeDpsAction(Unit* drake, Unit* target);
-    bool DrakeHealAction(Unit* drake, std::vector<ObjectGuid> const& healers);
+    bool CastDrakeSpell(Unit* target, uint32 spellId);
+    bool DpsRotation(Unit* drake, Unit* target);
+    bool HealRotation(Unit* drake, std::vector<ObjectGuid> const& healers);
 };
 
 class DrakeSurgeShieldAction : public Action

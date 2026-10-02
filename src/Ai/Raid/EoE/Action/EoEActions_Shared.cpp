@@ -17,26 +17,31 @@
 
 using namespace EncounterHelpers;
 
-bool MalygosPositionAction::Execute(Event /*event*/)
+bool MalygosPositionAction::isUseful()
 {
     // Disk riders steer their vehicle instead; never drag them off it.
     if (bot->GetVehicle())
-    {
         return false;
-    }
 
-    uint8 phase = GetMalygosPhase(bot);
+    MalygosPhase const phase = GetMalygosPhase(bot);
+    return phase == MalygosPhase::P1 || phase == MalygosPhase::P2 || phase == MalygosPhase::Transition;
+}
+
+bool MalygosPositionAction::Execute(Event /*event*/)
+{
+    MalygosPhase const phase = GetMalygosPhase(bot);
     Unit* boss = GetMalygos(bot);
 
-    // GetMalygosPhase reports the pull intro as 4, the same value the real transitions carry. He is
-    // untouchable throughout it, so full health is what tells them apart.
-    bool const intro = phase == 4 && boss && boss->IsFullHealth();
+    // The pull intro reports as Transition too. He is untouchable throughout it, so full health is
+    // what tells it apart.
+    bool const intro = phase == MalygosPhase::Transition && boss && boss->IsFullHealth();
 
-    if (phase == 1 || intro)
+    if (phase == MalygosPhase::P1 || intro)
     {
-        // Whoever Malygos is chewing on behaves as the tank, assigned or not - but not in the intro,
+        // Whoever Malygos is chewing on behaves as the tank, assigned or not. Not in the intro though,
         // where he is pacified and his victim is only whoever pulled.
-        bool isBossTank = botAI->IsMainTank(bot) || (!intro && boss && boss->GetVictim() == bot);
+        MalygosAggro const& aggro = GetMalygosAggro(botAI);
+        bool const isBossTank = aggro.mainTank || (!intro && aggro.victim);
 
         // This action owns the walking in both directions; PullPowerSparkAction only casts.
         bool const gripDuty = !isBossTank && IsOnPowerSparkGripDuty(botAI);
@@ -73,28 +78,20 @@ bool MalygosPositionAction::Execute(Event /*event*/)
 
         // Hand the tick back either way, or this outranks the rotation and the bot stops attacking.
         if (isBossTank && boss)
-        {
             ServerFacade::instance().SetFacingTo(bot, boss);
-        }
         return false;
     }
-    else if (phase == 2 || phase == 4)
+    else if (phase == MalygosPhase::P2 || phase == MalygosPhase::Transition)
     {
         float const cx = MALYGOS_CENTER_POSITION.first;
         float const cy = MALYGOS_CENTER_POSITION.second;
-        float const safeRadius = MALYGOS_ANTIFALL_RADIUS;
 
-        float dist = bot->GetDistance2d(cx, cy);
-        if (dist > safeRadius)
+        float const dist = bot->GetDistance2d(cx, cy);
+        if (dist > MALYGOS_ANTIFALL_RADIUS)
         {
-            float target = safeRadius - MALYGOS_ANTIFALL_INSET;
-            float tx = cx;
-            float ty = cy;
-            if (dist > 0.01f)
-            {
-                tx = cx + (bot->GetPositionX() - cx) / dist * target;
-                ty = cy + (bot->GetPositionY() - cy) / dist * target;
-            }
+            float const target = MALYGOS_ANTIFALL_RADIUS - MALYGOS_ANTIFALL_INSET;
+            float const tx = cx + (bot->GetPositionX() - cx) / dist * target;
+            float const ty = cy + (bot->GetPositionY() - cy) / dist * target;
             return MoveTo(EOE_MAP_ID, tx, ty, bot->GetPositionZ(),
                 false, false, false, false, MovementPriority::MOVEMENT_COMBAT);
         }
@@ -107,61 +104,46 @@ bool MalygosPositionAction::Execute(Event /*event*/)
 bool MalygosTargetAction::Execute(Event /*event*/)
 {
     Unit* boss = GetMalygos(bot);
-    uint8 phase = GetMalygosPhase(bot);
+    MalygosPhase const phase = GetMalygosPhase(bot);
 
-    if (phase == 1)
+    if (phase == MalygosPhase::P1)
     {
         if (botAI->IsHeal(bot))
-        {
             return false;
-        }
         if (!boss)
-        {
             return false;
-        }
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
         // The tank never peels: dropping Malygos swings his Arcane Breath cone through the raid.
         Unit* newTarget = boss;
-        bool const isBossTank = botAI->IsMainTank(bot) || boss->GetVictim() == bot;
+        MalygosAggro const& aggro = GetMalygosAggro(botAI);
+        bool const isBossTank = aggro.mainTank || aggro.victim;
         if (!isBossTank && botAI->IsDps(bot))
         {
             if (Unit* spark = GetPowerSparkToKill(botAI, currentTarget))
-            {
                 newTarget = spark;
-            }
         }
 
         if (!currentTarget || currentTarget->GetGUID() != newTarget->GetGUID())
-        {
             return Attack(newTarget);
-        }
     }
-    else if (phase == 2)
+    else if (phase == MalygosPhase::P2)
     {
         // Runs before the early returns below so a disk rider's ghoul is covered too.
         if (bot->GetGuardianPet())
         {
             if (Unit* petTarget = GetNearestEoECreature(bot, NPC_NEXUS_LORD))
-            {
                 CommandPetAttack(botAI, petTarget);
-            }
             else
-            {
                 StopPet(botAI);
-            }
         }
 
         if (botAI->IsHeal(bot))
-        {
             return false;
-        }
 
         if (bot->GetVehicle())
-        {
             return false;
-        }
 
         Unit* nexusLord = nullptr;
         Unit* scionOfEternity = nullptr;
@@ -177,13 +159,11 @@ bool MalygosTargetAction::Execute(Event /*event*/)
         float closestAnyScion = std::numeric_limits<float>::max();
 
         GuidVector targets = AI_VALUE(GuidVector, "possible targets no los");
-        for (auto& target : targets)
+        for (ObjectGuid const& target : targets)
         {
             Unit* unit = botAI->GetUnit(target);
             if (!unit)
-            {
                 continue;
-            }
 
             float dist = bot->GetExactDist(unit);
             bool inReach = !gateByReach || bot->IsWithinCombatRange(unit, reach);
@@ -224,27 +204,19 @@ bool MalygosTargetAction::Execute(Event /*event*/)
 
         Unit* newTarget = nexusLord;
         if (!newTarget && botAI->IsRangedDps(bot))
-        {
             newTarget = scionOfEternity;
-        }
         if (!newTarget)
-        {
             return false;
-        }
 
         Unit* currentTarget = AI_VALUE(Unit*, "current target");
 
-        // Swapped by GUID, not entry: entry alone welded bots to an add they could never reach.
+        // Stays on any reachable add of the right kind; one out of reach is swapped for the picked one.
         if (currentTarget && currentTarget->IsAlive() && currentTarget->GetEntry() == newTarget->GetEntry() &&
             (!gateByReach || bot->IsWithinCombatRange(currentTarget, reach)))
-        {
             return false;
-        }
 
         if (!currentTarget || currentTarget->GetGUID() != newTarget->GetGUID())
-        {
             return Attack(newTarget);
-        }
     }
 
     return false;

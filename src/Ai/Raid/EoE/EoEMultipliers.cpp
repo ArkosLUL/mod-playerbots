@@ -11,10 +11,8 @@
 
 float MalygosScionTankAssistMultiplier::GetValue(Action* action)
 {
-    if (GetMalygosPhase(bot) != 2)
-    {
+    if (GetMalygosPhase(bot) != MalygosPhase::P2)
         return 1.0f;
-    }
 
     Unit* target = action->GetTarget();
     return target && target->GetEntry() == NPC_SCION_OF_ETERNITY ? 0.0f : 1.0f;

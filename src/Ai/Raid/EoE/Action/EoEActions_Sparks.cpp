@@ -18,16 +18,12 @@ namespace
 Unit* GetPowerSparkToGrip(PlayerbotAI* botAI)
 {
     if (!IsOnPowerSparkGripDuty(botAI))
-    {
         return nullptr;
-    }
 
     Player* bot = botAI->GetBot();
     std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
     if (bot->GetDistance2d(grip.first, grip.second) > POWER_SPARK_GRIP_TOLERANCE)
-    {
         return nullptr;
-    }
 
     Unit* spark = GetNearestPowerSparkTo(botAI, grip.first, grip.second);
     return spark && botAI->CanCastSpell("death grip", spark) ? spark : nullptr;
@@ -36,62 +32,53 @@ Unit* GetPowerSparkToGrip(PlayerbotAI* botAI)
 
 bool PullPowerSparkAction::isUseful()
 {
-    if (GetPowerSparkToGrip(botAI))
-    {
-        return true;
-    }
-
-    Unit* snare = GetPowerSparkToSnare(botAI);
-    return snare && botAI->CanCastSpell("chains of ice", snare);
-}
-
-bool PullPowerSparkAction::Execute(Event /*event*/)
-{
     if (Unit* spark = GetPowerSparkToGrip(botAI))
     {
-        return botAI->CastSpell("death grip", spark);
+        _sparkGuid = spark->GetGUID();
+        _grip = true;
+        return true;
     }
 
     // The grip only buys the distance back once, and the spark covers 6 yd/s walking it off again.
     // Its immunity mask (creature_immunities -335) carries neither root nor snare, so this lands.
-    if (Unit* snare = GetPowerSparkToSnare(botAI))
-    {
-        return botAI->CastSpell("chains of ice", snare);
-    }
+    Unit* snare = GetPowerSparkToSnare(botAI);
+    if (!snare || !botAI->CanCastSpell("chains of ice", snare))
+        return false;
 
-    return false;
+    _sparkGuid = snare->GetGUID();
+    _grip = false;
+    return true;
+}
+
+bool PullPowerSparkAction::Execute(Event /*event*/)
+{
+    Unit* spark = botAI->GetUnit(_sparkGuid);
+    return spark && botAI->CastSpell(_grip ? "death grip" : "chains of ice", spark);
 }
 
 bool KillPowerSparkAction::isUseful()
 {
-    // Only a spark reachable standing still - nobody walks in P1. DK grips are PullPowerSparkAction.
-    if (!botAI->IsDps(bot) || botAI->IsMainTank(bot))
-    {
+    // Only a spark reachable standing still, nobody walks in P1. DK grips are PullPowerSparkAction.
+    MalygosAggro const& aggro = GetMalygosAggro(botAI);
+    if (!botAI->IsDps(bot) || aggro.mainTank || aggro.victim)
         return false;
-    }
 
-    Unit* boss = GetMalygos(bot);
-    if (boss && boss->GetVictim() == bot)
-    {
+    Unit* spark = GetPowerSparkToKill(botAI, AI_VALUE(Unit*, "current target"));
+    if (!spark)
         return false;
-    }
 
-    return GetPowerSparkToKill(botAI, AI_VALUE(Unit*, "current target")) != nullptr;
+    _sparkGuid = spark->GetGUID();
+    return true;
 }
 
 bool KillPowerSparkAction::Execute(Event /*event*/)
 {
-    Unit* currentTarget = AI_VALUE(Unit*, "current target");
-
-    Unit* spark = GetPowerSparkToKill(botAI, currentTarget);
+    Unit* spark = botAI->GetUnit(_sparkGuid);
     if (!spark)
-    {
         return false;
-    }
 
+    Unit* currentTarget = AI_VALUE(Unit*, "current target");
     if (!currentTarget || currentTarget->GetGUID() != spark->GetGUID())
-    {
         return Attack(spark);
-    }
     return false;
 }

@@ -9,9 +9,10 @@
 
 #include "Action.h"
 #include "AttackAction.h"
+#include "ObjectGuid.h"
 #include "PlayerbotAI.h"
 
-// P1: the DK half of the Power Spark answer - Death Grip, then Chains of Ice on what it pulled.
+// P1: the DK half of the Power Spark answer, Death Grip and then Chains of Ice on what it pulled.
 class PullPowerSparkAction : public Action
 {
 public:
@@ -21,6 +22,10 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    ObjectGuid _sparkGuid;
+    bool _grip = false;
 };
 
 class KillPowerSparkAction : public AttackAction
@@ -32,6 +37,9 @@ public:
 
     bool Execute(Event event) override;
     bool isUseful() override;
+
+private:
+    ObjectGuid _sparkGuid;
 };
 
 #endif

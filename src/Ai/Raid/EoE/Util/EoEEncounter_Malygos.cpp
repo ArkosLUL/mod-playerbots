@@ -28,17 +28,18 @@ namespace
 constexpr uint32 EOE_PHASE_CACHE_MS = 500;
 constexpr uint32 EOE_CREATURE_CACHE_MS = 300;
 
-// Swept from the platform centre rather than from whichever bot refreshed it, so the shared answer
-// really is position-independent. Covers the Power Spark spawn ring at r 107; everything else the
-// strategy looks for lives on the platform inside r 56.
+// Swept from the platform centre so the shared answer doesn't depend on which bot refreshed it.
+// Covers the Power Spark spawn ring at r 107; everything else sits inside r 56.
 constexpr float EOE_CACHE_SWEEP_RADIUS = 120.0f;
 // Fallback when the instance script cannot hand over the boss guid.
 constexpr float EOE_BOSS_FALLBACK_SWEEP = 250.0f;
+// Any closer to the centre and his bearing is noise.
+constexpr float MALYGOS_BEARING_DEADZONE = 1.0f;
 
 struct PhaseCacheEntry
 {
     uint32 at;
-    uint8 phase;
+    MalygosPhase phase;
 };
 
 struct CreatureCacheEntry
@@ -54,16 +55,12 @@ struct LayoutCacheEntry
     MalygosP1Layout layout;
 };
 
-// Past the per-bot drake check the answer is identical for the whole instance, so this keys on the
-// instance. Nothing is ever evicted: one entry per instance id.
 struct MalygosInstanceState
 {
-    PhaseCacheEntry phase{0, 0};
-    // Malygos' guid, so the whole strategy stops re-running the search behind GetMalygos. No window:
-    // the guid is resolved live on every read and dropped the moment it stops resolving to a live boss.
+    PhaseCacheEntry phase{0, MalygosPhase::None};
+    // No expiry needed: resolved on every read and cleared once it no longer resolves to a live boss.
     ObjectGuid boss;
     LayoutCacheEntry layout;
-    // Keyed on creature entry. The instance is already the key of the map this sits in.
     std::unordered_map<uint32 /*entry*/, CreatureCacheEntry> creatures;
 };
 
@@ -96,9 +93,7 @@ std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
 {
     static std::vector<ObjectGuid> const none;
     if (bot->GetMapId() != EOE_MAP_ID)
-    {
         return none;
-    }
 
     uint32 const now = getMSTime();
     CreatureCacheEntry& cached = MalygosStateFor(bot).creatures[entry];
@@ -120,9 +115,7 @@ std::vector<ObjectGuid> const& GetEoECreatureGuids(Player* bot, uint32 entry)
         for (Creature* creature : found)
         {
             if (creature->IsAlive())
-            {
                 cached.guids.push_back(creature->GetGUID());
-            }
         }
     }
 
@@ -134,6 +127,13 @@ std::pair<float, float> MalygosP1Spot(float angle, float offset)
     return {MALYGOS_CENTER_POSITION.first + std::cos(angle) * offset,
             MALYGOS_CENTER_POSITION.second + std::sin(angle) * offset};
 }
+
+// The P2 bubbles, the surge focus and the hover disks are all unselectable from spawn, so this
+// filter can't live in the creature cache.
+bool IsLivePowerSpark(Unit* spark)
+{
+    return spark->IsAlive() && !spark->HasUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE));
+}
 }
 
 void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out)
@@ -143,9 +143,7 @@ void GetEoECreatures(Player* bot, uint32 entry, std::vector<Unit*>& out)
     {
         Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
         if (unit && unit->IsAlive())
-        {
             out.push_back(unit);
-        }
     }
 }
 
@@ -157,9 +155,7 @@ Unit* GetNearestEoECreature(Player* bot, uint32 entry, float maxDist)
     {
         Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
         if (!unit || !unit->IsAlive())
-        {
             continue;
-        }
 
         float dist = bot->GetExactDist2d(unit);
         if (dist <= closestDist)
@@ -177,9 +173,7 @@ bool AnyEoECreature(Player* bot, uint32 entry)
     {
         Unit* unit = ObjectAccessor::GetUnit(*bot, guid);
         if (unit && unit->IsAlive())
-        {
             return true;
-        }
     }
     return false;
 }
@@ -192,9 +186,7 @@ Unit* GetMalygos(Player* bot)
         if (Unit* boss = ObjectAccessor::GetUnit(*bot, cached))
         {
             if (boss->IsAlive())
-            {
                 return boss;
-            }
         }
 
         cached.Clear();
@@ -208,9 +200,7 @@ Unit* GetMalygos(Player* bot)
         if (Creature* boss = instance->GetCreature(EOE_DATA_MALYGOS))
         {
             if (!boss->IsAlive())
-            {
                 return nullptr;
-            }
 
             cached = boss->GetGUID();
             return boss;
@@ -219,58 +209,72 @@ Unit* GetMalygos(Player* bot)
 
     Unit* boss = bot->FindNearestCreature(NPC_MALYGOS, EOE_BOSS_FALLBACK_SWEEP, true);
     if (boss)
-    {
         cached = boss->GetGUID();
-    }
     return boss;
 }
 
-uint8 GetMalygosPhase(Player* bot)
+MalygosPhase GetMalygosPhase(Player* bot)
 {
     if (bot->GetMapId() != EOE_MAP_ID)
-    {
-        return 0;
-    }
+        return MalygosPhase::None;
 
     // Riding a Skytalon is the one per-bot part of the answer, so it is asked every time and has
     // to come before the shared cache.
     Unit* drake = bot->GetVehicleBase();
     if (drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON)
-    {
-        return 3;
-    }
+        return MalygosPhase::P3;
 
     uint32 const now = getMSTime();
     PhaseCacheEntry& cached = MalygosStateFor(bot).phase;
     if (cached.at && getMSTimeDiff(cached.at, now) < EOE_PHASE_CACHE_MS)
-    {
         return cached.phase;
-    }
     cached.at = now;
-    cached.phase = 0;
+    cached.phase = MalygosPhase::None;
 
     Unit* boss = GetMalygos(bot);
     if (!boss || !boss->IsInCombat())
-    {
-        return 0;
-    }
+        return MalygosPhase::None;
 
     // P2: Malygos is airborne/untargetable while the disc adds are up.
     if (AnyEoECreature(bot, NPC_NEXUS_LORD) || AnyEoECreature(bot, NPC_SCION_OF_ETERNITY))
     {
-        cached.phase = 2;
-        return 2;
+        cached.phase = MalygosPhase::P2;
+        return cached.phase;
     }
 
     if (!boss->HasUnitFlag(UNIT_FLAG_NON_ATTACKABLE))
     {
-        cached.phase = 1;
-        return 1;
+        cached.phase = MalygosPhase::P1;
+        return cached.phase;
     }
 
-    // P1->P2 / P2->P3 transition, and the pull intro.
-    cached.phase = 4;
-    return 4;
+    cached.phase = MalygosPhase::Transition;
+    return cached.phase;
+}
+
+MalygosAggro const& GetMalygosAggro(PlayerbotAI* botAI)
+{
+    thread_local PlayerbotAI* cachedFor = nullptr;
+    thread_local uint32 cachedAtMs = 0;
+    thread_local MalygosAggro cached;
+
+    uint32 const now = getMSTime();
+    if (cachedFor != botAI || cachedAtMs != now || !cachedAtMs)
+    {
+        cachedFor = botAI;
+        cachedAtMs = now;
+
+        Player* bot = botAI->GetBot();
+        Unit* boss = GetMalygos(bot);
+        Unit* victim = boss ? boss->GetVictim() : nullptr;
+        Player* victimPlayer = victim ? victim->ToPlayer() : nullptr;
+
+        cached.mainTank = PlayerbotAI::IsMainTank(bot);
+        cached.victim = victim == bot;
+        cached.victimIsTank = victimPlayer && PlayerbotAI::IsTank(victimPlayer);
+    }
+
+    return cached;
 }
 
 MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
@@ -278,20 +282,14 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
     LayoutCacheEntry& cached = MalygosStateFor(bot).layout;
     uint32 const now = getMSTime();
     if (cached.at && getMSTimeDiff(cached.at, now) >= EOE_LATCH_STALE_MS)
-    {
         cached.latched = false;
-    }
     cached.at = now;
 
-    uint8 const phase = GetMalygosPhase(bot);
-    if (phase == 0)
-    {
+    MalygosPhase const phase = GetMalygosPhase(bot);
+    if (phase == MalygosPhase::None)
         cached.latched = false;
-    }
     else if (cached.latched)
-    {
         return cached.layout;
-    }
 
     // He is committed to his bearing the instant JustEngagedWith fires, so latch the first one.
     float angle = MALYGOS_LANDING_ANGLES[0];
@@ -299,7 +297,7 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
     {
         float const dx = boss->GetPositionX() - MALYGOS_CENTER_POSITION.first;
         float const dy = boss->GetPositionY() - MALYGOS_CENTER_POSITION.second;
-        if (std::fabs(dx) > 1.0f || std::fabs(dy) > 1.0f)
+        if (std::fabs(dx) > MALYGOS_BEARING_DEADZONE || std::fabs(dy) > MALYGOS_BEARING_DEADZONE)
         {
             float const bearing = std::atan2(dy, dx);
             float closest = std::numeric_limits<float>::max();
@@ -315,7 +313,7 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
             }
         }
 
-        cached.latched = phase != 0;
+        cached.latched = phase != MalygosPhase::None;
     }
 
     cached.layout.tank = MalygosP1Spot(angle, MALYGOS_MAINTANK_OFFSET);
@@ -327,14 +325,24 @@ MalygosP1Layout const& GetMalygosP1Layout(Player* bot)
 
 void GetLivePowerSparks(Player* bot, std::vector<Unit*>& out)
 {
-    GetEoECreatures(bot, NPC_POWER_SPARK, out);
-
-    // Spark-specific on purpose: the P2 bubbles, the surge focus and the hover disks are all
-    // unselectable from spawn, so the same filter in the creature cache would blind half of P2.
-    out.erase(std::remove_if(out.begin(), out.end(), [](Unit* spark)
+    out.clear();
+    for (ObjectGuid const& guid : GetEoECreatureGuids(bot, NPC_POWER_SPARK))
     {
-        return spark->HasUnitFlag(UnitFlags(UNIT_FLAG_NOT_SELECTABLE | UNIT_FLAG_NON_ATTACKABLE));
-    }), out.end());
+        Unit* spark = ObjectAccessor::GetUnit(*bot, guid);
+        if (spark && IsLivePowerSpark(spark))
+            out.push_back(spark);
+    }
+}
+
+bool AnyLivePowerSpark(Player* bot)
+{
+    for (ObjectGuid const& guid : GetEoECreatureGuids(bot, NPC_POWER_SPARK))
+    {
+        Unit* spark = ObjectAccessor::GetUnit(*bot, guid);
+        if (spark && IsLivePowerSpark(spark))
+            return true;
+    }
+    return false;
 }
 
 Unit* GetNearestPowerSparkTo(PlayerbotAI* botAI, float x, float y)
@@ -363,9 +371,7 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
     std::vector<Unit*> sparks;
     GetLivePowerSparks(bot, sparks);
     if (sparks.empty())
-    {
         return nullptr;
-    }
 
     Unit* boss = GetMalygos(bot);
     bool const ranged = botAI->IsRanged(bot);
@@ -376,17 +382,12 @@ Unit* GetPowerSparkToKill(PlayerbotAI* botAI, Unit* currentTarget)
     {
         bool inReach;
         if (ranged)
-        {
             inReach = bot->IsWithinCombatRange(spark, sPlayerbotAIConfig.spellDistance);
-        }
         else
-        {
             inReach = bot->IsWithinMeleeRange(spark, currentTarget == spark ? POWER_SPARK_MELEE_STICKY : 0.0f);
-        }
+
         if (!inReach)
-        {
             continue;
-        }
 
         // Nearest to handing over its buff, not nearest to the bot.
         float const bossDist = boss ? boss->GetExactDist2d(spark) : bot->GetExactDist2d(spark);
@@ -403,15 +404,11 @@ Unit* GetPowerSparkToSnare(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     if (!bot->IsClass(CLASS_DEATH_KNIGHT) || bot->GetVehicle())
-    {
         return nullptr;
-    }
 
     uint32 const chainsId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", "chains of ice")->Get();
     if (!chainsId || !bot->HasSpell(chainsId) || bot->HasSpellCooldown(chainsId))
-    {
         return nullptr;
-    }
 
     std::vector<Unit*> sparks;
     GetLivePowerSparks(bot, sparks);
@@ -422,9 +419,7 @@ Unit* GetPowerSparkToSnare(PlayerbotAI* botAI)
     {
         // Any caster's: a second DK re-snaring costs a rune and buys nothing.
         if (spark->HasAura(chainsId))
-        {
             continue;
-        }
 
         float const dist = bot->GetExactDist2d(spark);
         if (dist < bestDist)
@@ -440,27 +435,19 @@ bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
 {
     Player* bot = botAI->GetBot();
     if (!bot->IsClass(CLASS_DEATH_KNIGHT) || bot->GetVehicle())
-    {
         return false;
-    }
 
     uint32 const gripId = botAI->GetAiObjectContext()->GetValue<uint32>("spell id", "death grip")->Get();
     if (!gripId || !bot->HasSpell(gripId) || bot->HasSpellCooldown(gripId))
-    {
         return false;
-    }
 
     Unit* boss = GetMalygos(bot);
     if (!boss)
-    {
         return false;
-    }
 
     std::pair<float, float> const& grip = GetMalygosP1Layout(bot).grip;
     if (boss->GetExactDist2d(grip.first, grip.second) < POWER_SPARK_GRIP_SAFE_BOSS_DISTANCE)
-    {
         return false;
-    }
 
     Unit* spark = GetNearestPowerSparkTo(botAI, grip.first, grip.second);
     return spark && spark->GetExactDist2d(grip.first, grip.second) <= POWER_SPARK_GRIP_ENGAGE_RADIUS;
@@ -469,9 +456,7 @@ bool IsOnPowerSparkGripDuty(PlayerbotAI* botAI)
 float GetBubbleShrinkFactor(Unit* bubble)
 {
     if (!bubble)
-    {
         return 0.0f;
-    }
 
     Aura* aura = bubble->GetAura(SPELL_ARCANE_OVERLOAD_AURA);
     if (!aura)
@@ -485,9 +470,7 @@ float GetBubbleShrinkFactor(Unit* bubble)
     for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
     {
         if (AuraEffect const* effect = aura->GetEffect(i))
-        {
             ticks = std::max(ticks, effect->GetTickNumber());
-        }
     }
 
     float factor = 1.0f - BUBBLE_SHRINK_PER_TICK * static_cast<float>(ticks + 1);
@@ -497,9 +480,7 @@ float GetBubbleShrinkFactor(Unit* bubble)
 bool IsSafelySheltered(Player* bot)
 {
     if (!bot->HasAura(SPELL_ARCANE_OVERLOAD_PROTECTION))
-    {
         return false;
-    }
 
     Unit* current = GetNearestEoECreature(bot, NPC_ARCANE_OVERLOAD, BUBBLE_SEARCH_RADIUS);
     return current && GetBubbleShrinkFactor(current) >= BUBBLE_MIN_USABLE_FACTOR;
@@ -511,20 +492,15 @@ Unit* FindFreeHoverDisk(Player* bot)
     GetEoECreatures(bot, NPC_HOVER_DISK, disks);
 
     Unit* closest = nullptr;
-    // Sentinel: anything past the distance a bot will walk can never win.
-    float closestDist = 40.0f;
+    float closestDist = DISK_MAX_WALK_DISTANCE;
     for (Unit* disk : disks)
     {
         if (disk->HasUnitFlag(UNIT_FLAG_NOT_SELECTABLE))
-        {
             continue;
-        }
 
         Vehicle* kit = disk->GetVehicleKit();
         if (!kit || !kit->GetAvailableSeatCount())
-        {
             continue;
-        }
 
         float dist = bot->GetExactDist2d(disk);
         if (dist < closestDist)

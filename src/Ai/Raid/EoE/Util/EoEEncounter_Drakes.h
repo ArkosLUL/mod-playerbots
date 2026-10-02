@@ -31,7 +31,7 @@ void GetDrakeHealerGuids(PlayerbotAI* botAI, std::vector<ObjectGuid>& out);
 
 bool IsDrakeHealer(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers);
 
-// Every Skytalon the raid is flying, plus this bot's place in the healer queue - energy descending,
+// Every Skytalon the raid is flying, plus this bot's place in the healer queue: energy descending,
 // guid ascending, so every bot derives the same order. Both come off one walk of the roster.
 void GetDrakeFlightAndHealerRank(PlayerbotAI* botAI, std::vector<ObjectGuid> const& healers,
     std::vector<Unit*>& drakes, uint8& rank);
@@ -47,9 +47,8 @@ uint32 DrakeAuraRemainingMs(Unit* drake, uint32 spellId);
 
 bool IsDrakeSurgeTarget(PlayerbotAI* botAI);
 
-// Milliseconds since the boss picked this drake, false when it is not picked at all. The slots stay
-// set for SURGE_CYCLE_MS while the beam only lands across [SURGE_BEAM_DELAY_MS, SURGE_BEAM_END_MS],
-// so every consumer needs the clock rather than the raw flag.
+// Milliseconds since the boss picked this drake, false when it isn't picked. The slots stay set for
+// SURGE_CYCLE_MS but the beam only lands in [SURGE_BEAM_DELAY_MS, SURGE_BEAM_END_MS].
 bool GetDrakeSurgeElapsedMs(PlayerbotAI* botAI, uint32& elapsedMs);
 
 #endif

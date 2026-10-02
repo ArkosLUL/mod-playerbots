@@ -20,6 +20,7 @@ public:
     MalygosPositionAction(PlayerbotAI* botAI) : MovementAction(botAI, Name) {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
 };
 
 class MalygosTargetAction : public AttackAction

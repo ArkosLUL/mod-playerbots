@@ -179,10 +179,8 @@ struct BossStates
 
 constexpr uint32_t MAX_BOSS_STATES = 64;
 
-// Open while this encounter is in progress, closed once it's done, otherwise closed only while another
-// one is in progress. With nothing engaged everything stays open, so a pre-pull sequence with no boss
-// to point at yet (Mimiron's console walk, boarding a siege vehicle) keeps working. Outside an
-// instance, or for an id the script doesn't have, it's open rather than silently dead.
+// Closed once this encounter is done or while another one is in progress, open otherwise, so pre-pull
+// steps with no boss engaged yet still run. Open outside an instance and for ids the script lacks.
 inline bool GateOpen(BossStates const& states, uint32_t encounterId)
 {
     if (!states.inInstance || encounterId >= states.encounterCount)

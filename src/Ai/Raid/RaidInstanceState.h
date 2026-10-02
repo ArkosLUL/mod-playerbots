@@ -14,15 +14,9 @@
 #include <unordered_map>
 #include <vector>
 
-// Encounter state the bots of one raid instance share, one State per instance id. Every store
-// forgets an instance when its map is destroyed, so a saved lockout entered again starts clean.
-//
-// Only the lookup is locked, the returned reference is used without it. Safe because one instance
-// map is updated by one thread at a time, and bot code runs inside its map's update or on the world
-// thread, which never overlaps it. Different instances do update at once, hence the lock.
-//
-// Not thread_local: the same map can land on a different worker from one tick to the next.
-// Don't hold a reference past the current tick, the map going away erases it.
+// Encounter state shared by the bots of one raid instance, dropped when its map is destroyed. Only the
+// lookup is locked: one map updates on one thread at a time, but different maps run in parallel and
+// can move between workers, so not thread_local. Don't hold a reference past the current tick.
 
 namespace RaidInstanceStateRegistry
 {

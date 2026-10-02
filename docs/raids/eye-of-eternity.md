@@ -55,8 +55,8 @@ Verified against `boss_malygos.cpp`:
 ## Phase model
 
 P1 = Malygos attackable and no adds. P2 = disc adds (`NPC_NEXUS_LORD` / `NPC_SCION_OF_ETERNITY`) up.
-P3 = on a Wyrmrest Skytalon (30161). **P4 = transition** — in combat, Malygos non-attackable, not
-mounted.
+P3 = on a Wyrmrest Skytalon (30161). **P4 = transition** (`MalygosPhase::Transition`) — in combat,
+Malygos non-attackable, not mounted.
 
 P4 exists because of a real failure: during P2→P3 the boss is untargetable and the bot is not yet on
 its drake, so the phase resolved to 0, every override lifted, and **the default
@@ -333,10 +333,10 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   is instead of trailing the raid leader.
   Two earlier bugs died here: `MoveFollow` on the raid leader left every drake permanently in
   motion (a moving vehicle can neither finish a cast nor hold a facing — the flight circled the boss
-  without ever firing), and `DrakeDpsAction`'s range-close called `MoveForwards`, whose endpoint
+  without ever firing), and the dps rotation's range-close called `MoveForwards`, whose endpoint
   goes through `CanReachPositionAndGetValidCoords` — no answer for a point in mid-air, so it
   silently did nothing *after* `mm->Clear(false)` had wiped the follow, and the drake stopped dead
-  out of range for good. `DrakeDpsAction` no longer moves at all.
+  out of range for good. `DpsRotation` no longer moves at all.
 - **P3 — Static Field: the stack drifts off it and re-parks.** Malygos casts 57430 on a random
   raider every 12 s; it summons a **stationary** `NPC_STATIC_FIELD` that pulses for its full 20 s
   life, so two are often up at once. It cannot be pre-dodged — it lands on someone.
@@ -427,7 +427,7 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   would look exactly like one that went out, since `CastVehicleSpell` returns true even when the cast
   it prepared was rejected. The healer branch runs before the boss lookup in
   `EoEDrakeAttackAction::Execute`, since a healer needs no boss at all. The dps side needs none of
-  this — its targets are the boss, so `CastDrakeSpellAction` goes through `CanCastVehicleSpell` and
+  this — its targets are the boss, so `CastDrakeSpell` goes through `CanCastVehicleSpell` and
   gets the power check for free.
 - **P3 — healers bank five combo points and then hold them.** The five are not for the heal: Life
   Burst restores a flat 5000 whatever the drake holds. They are for the **+50% healing done** it
@@ -615,18 +615,17 @@ list.
   the threat list doing `Utf8toWStr` + `wstrToLower` + `Utf8FitTo` per entry, i.e. string allocation
   per unit per bot per tick. It also only answers for units the bot already threatens, so a bot with
   no threat yet got nothing back at all.
-- **The P1 rules read who holds Malygos once per bot per tick** (`Holder`, a per-thread cache of
-  live state). They are asked for every queued movement action, so uncached `IsMainTank` alone was
-  tens of thousands of strategy-list scans a tick across a raid.
+- **Who holds Malygos is read once per bot per tick** (`GetMalygosAggro`, a per-thread cache of live
+  state), by the P1 rules and the position, target and kill-spark actions. The rules are asked for
+  every queued movement action, so uncached `IsMainTank` alone was tens of thousands of
+  strategy-list scans a tick across a raid.
 - **The P3 healer roster is cached per instance for 2 s.** `GetDrakeHealerGuids` walks the group and
   sorts two vectors for an answer that only moves when the roster or the difficulty does, and both
   drake actions read it every tick. `GetDrakeFlightAndHealerRank` stays uncached — it reads live
   drake energy.
-- **Nothing evicts the caches, deliberately.** Phase, creatures, boss guid, P1 layout, drake heading
-  and healer roster hold one entry per instance id, tens of bytes each, never freed. What they do
-  carry is a staleness window — `EOE_LATCH_STALE_MS`
-  (5 min), far longer than any pull — because instance ids get recycled and a latch with no window
-  eventually hands a fresh pull the previous tenant's state.
+- **All EoE caches live in `RaidInstanceState`,** one entry per instance id, dropped when the
+  instance map is destroyed. Latches still carry `EOE_LATCH_STALE_MS` (5 min, far longer than any
+  pull), so a re-pull in the same still-loaded instance doesn't inherit the last pull's drake heading.
 - **Triggers that gate a multi-tick reaction do not check every tick.** `power spark`,
   `malygos bubble` and `surge of power` run at 200 ms, `malygos free disk` at 300 ms (`Trigger`'s
   `checkInterval`). Each of them starts a walk, a boarding or a peel that the MotionMaster carries on
