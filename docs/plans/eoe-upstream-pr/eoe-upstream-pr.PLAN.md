@@ -87,9 +87,10 @@ durable into `docs/raids/eye-of-eternity.md`, commit on `Custom`. Then update me
 
 ## Phase B — PR branch contents (each git step below needs the user's explicit go at that step)
 
-**State 2026-10-02:** both branches built and verified in a throwaway clone of upstream (not in this
-repo, not pushed); PR texts drafted, awaiting wording approval, `pmon` numbers and the user's
-AI Assistance wording. Rebuild from this section if the clone is gone.
+**State 2026-10-02:** opened as **draft** PRs #2876 (framework, fork branch `raid-encounter-framework`)
+and #2877 (EoE, `eoe-malygos-rework`); the user writes the `pmon` justification. CI's C++ style +
+cppcheck job skips drafts. macOS fails on a core link error (`PlayerSearcher<AnyPlayerInObjectRangeCheck>`)
+that upstream `test-staging` has too. Rebuild from this section if the branches are lost.
 
 **PR 1 — framework**, branched from `upstream/test-staging`:
 - New `src/Ai/Raid/RaidEncounter.{h,cpp}` + `RaidEncounterRules.h` from `Custom`, trimmed to what EoE
