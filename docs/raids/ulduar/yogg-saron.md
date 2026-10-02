@@ -122,6 +122,12 @@ from the middle**, and it stood there 5.3 s and took **41,832**. Focus fire is w
 enough: it cuts the window a Guardian spends at or under 20% from a **median 3.5 s** to **0.9-1.0 s**,
 and one second is 7 yd of travel against a 16 yd blast from a start in melee contact.
 
+**Sara's Blessing (63134) is a heal with a 20 s tail, and nothing reads it.** Effect 1 heals 27,000,
+effect 2 ticks 6,000 shadow every 2 s for 20 s: 60,000 raw, ~40,000 once resisted, `DispelType 0` so
+nothing lifts this one either. Net about -13,000 on a 30,000 pool, so it kills nobody by itself — it is
+what leaves the holder unable to take the next nova. One pull: **160,204** over 4 casts, and **44%** of
+everything Mighty took before a nova finished it from full. Shadow school, so **48943** cuts it too.
+
 The "chasing me" half of the ranged rule needs no timing, but it is not the whole test: the station
 clears a blast on the stack by about a yard, so the back line ignores a low Guardian **the tank still
 holds there** (`YoggSaronGuardianOnTheStack`) whoever it is hitting, and dodges one that has left the
@@ -158,6 +164,28 @@ each. So the three smallest pools also get `GetYoggSaronNovaThreats`, gated at 1
 hit kills them **after their own best button** (`YoggSaronNovaAfterOwnButton`), which rides the phase 1
 dodge rather than a new node. One with Shamanistic Rage up or ready keeps swinging. Watch the Guardian
 count against the **10** Sara needs inside 15 yd: one pull landed 11, so the margin is one kill.
+
+**The step-out aims at the station, because its own default destination wakes a Guardian.** The nova
+clear radius is 20 yd and the Guardians are on the pile, so the nearest clear spot sits **~19 yd** out,
+where orbits 1 and 2 both reach — neither of the two radii below that no orbit reaches. Across the
+three pulls that have a step-out, **100%** of melee nova destinations landed where an orbit reaches and
+70-100% where two do, and those bots then dodged the cloud they woke: Shadow **9 of 10** and **10 of
+11** cloud dodges inside 20 s of its own step-out, Totemist and Assasin 7 of 8, against **0 of 1** for
+every melee that never steps out. So phase 1 sets `HazardSet::preferred` to the station's band **and**
+blob (`…_P1_RANGED_STATION_RADIUS` ± `…_P1_RANGED_BAND_TOLERANCE`, inside
+`…_P1_RANGED_STACK_RADIUS` of `…_P1_RANGED_SPOT`). Both tests, because the blob alone reaches 16.5 yd
+from the middle, back on orbit 1. It costs no summon of its own: orbit 2 runs through the station and
+14 bots already wake that cloud every lap. **Not the tank**, which holds the Guardians on the pile, nor
+a melee healer — `IsMelee` is `!IsRanged`, and Fervor opens the gate with no pool test. Judge it on the
+melee nova row of `--clouds`, not on the raid's own feet: that ran **46-63%** across all ten pulls with
+and without a step-out, because the pile drifts onto orbit 1 for cloud dodges too.
+
+**Two gaps left in the buttons, both deliberate for now.** A **dps warrior has none**: the ladder's
+only warrior rows are Last Stand and Shield Wall, both protection-only, so `CanCastSpell` rejects both
+and neither warrior wrote a `yogg.novadef` note across two pulls while dying from full. And
+`…_NOVA_STEP_OUT_POOL` is one nova's 28,600, so 30-31k pools never leave, yet two Guardians dying
+together deal ~39,000. `YoggSaronNovaDamageFrom` already predicts the chain and the gate ignores it;
+re-measure once fewer Guardians are self-woken, since that is what puts two of them low at once.
 
 Three tiers, in that relevance order, because one cast covering 25 raiders beats any single bot's own:
 
@@ -322,8 +350,9 @@ oscillating against hazards that never stop moving:
   69 of 86 melee spacing moves that left the leash had a target outside it, and landed at a median
   12-14 yd, on the innermost orbit.
 
-- **Phase 2 does the same by preference.** `set.preferred` is tried ahead of `accept` and dropped when
-  nothing satisfies both, so a bot in a hazard still moves: it asks for a spot still inside
+- **Both phases also ask by preference.** `set.preferred` is tried ahead of `accept` and dropped when
+  nothing satisfies both, so a bot in a hazard still moves. Phase 1 asks for the station once a nova is
+  pending (above). Phase 2 asks for a spot still inside
   `meleeDistance` / `spellDistance` of the current target, which leaves `reach melee` and `reach spell`
   nothing to undo. Without it the 3 s hold lapses, the reach node walks the bot back at its target, the
   bot lands in a hazard and the spacing node walks it out again — **1565 handovers** in one phase 2,
@@ -559,6 +588,9 @@ never finished phase 1. The trigger is a pet holding a Guardian far out, which r
 there against 1.1% the pull before and 83% of a phase 1 on 2026-09-26: intermittent, so the fix is
 measured over pulls rather than one. Of 676 ticks the pick was out of range in **67.5%** while a
 candidate inside 30 yd existed in **79.0%**, so the clamp redirects the taunt rather than starving it.
+Both pulls after it landed finished phase 1 — **125.2 s** and 140.1 s, 12 and 11 kills against the 10
+needed — with the tank frozen 22% and 25% of the phase against 55%, and 1 of 11 and 2 of 8 taunts out
+of reach.
 
 **So phase 1's control node ends on an attack**, the way phase 3's does: nothing to fetch or the taunt
 still on cooldown, and the tank hits the lowest-health Guardian already inside `IsWithinMeleeRange`
@@ -603,7 +635,9 @@ at 1:57.37, and two melee held in the middle went 100% → 62-75% → 15-36% →
   Wrath, Seal of Vengeance: tanks keep the generic picker), humans, running DoTs and cleaves not typed
   `Aoe`, and 2 of 5 died inside 6 s (2.9, 4.3 s), killing nobody. The clock is
   `YoggSaronGuardianDeathListenerScript` on 65719, which only a Guardian's `JustDied` casts. It holds
-  without a bot tank, and through the handover, where the phase still reads 1.
+  without a bot tank, and through the handover, where the phase still reads 1. Two deaths **0.000 s**
+  apart on 2026-10-02 put their novas 16 ms apart for 21,542 + 17,337 and killed four melee from full,
+  so the gap does not cover a simultaneous pair at all.
 - **AoE hold.** `yogg-saron phase 1 aoe hold multiplier` zeroes non-heal `Aoe` actions, tanks included,
   while a Guardian other than the focus is below 30% within 10 yd of the middle or of the focus.
   Replayed, it came on before every splash kill (0:22.2, 1:05.2, 1:48.7) and covered 8.9% of that
@@ -1304,7 +1338,11 @@ non-tank swing, `yogg.tankhold`,
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
 outside, and each healer's distance to the melee spot and facing during gazes. Under `--fervor`: each
 Fervor run, whether it came back inside 16.2 yd while holding and what walked it back, novas on holders,
-and Guardians only runners summoned. Under `--threat`, beside Guardian time on target and the taunts
+and Guardians only runners summoned. Under `--clouds`, beside the orbit shares and the spawn
+attribution: where each dodge reason sends each role, how many orbits can reach it there, and how many
+of a melee bot's cloud dodges fell inside 20 s of its own step-out. A step-out that wakes the next
+Guardian leaves no other trace, since the note says only why it moved. Under `--threat`, beside
+Guardian time on target and the taunts
 that landed: how long each tank's damage stayed frozen **while it was moving** and the node pairs that
 took turns on it, then every taunt **attempt** from the action rows with its verdict and how far off it
 aimed. The attempts are the point - a cast that failed never reaches a cast row, and those are the ones

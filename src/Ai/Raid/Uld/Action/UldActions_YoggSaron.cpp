@@ -301,6 +301,28 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
         }
     }
 
+    // A nova step-out otherwise lands on the inner orbit: the clear radius is 20 yd and the Guardians
+    // are on the pile, so the nearest safe spot sits ~19 yd out while that orbit summons from 3.1 to
+    // 20.4. One pull put every melee step-out there and woke 7 of its 16 Guardians off that orbit,
+    // which nothing but a player's feet can reach. The station band is the one radius only the second
+    // orbit reaches, and the back line already wakes that cloud, so joining it costs no summon of its
+    // own. Both tests, because the stack radius alone reaches 16.5 yd from the middle and that is back
+    // on the inner orbit. Preferred rather than required, so this never holds a bot in the blast. Not
+    // the tank: it keeps the Guardians on the pile, and IsMelee is !IsRanged, so a melee healer would
+    // be caught too whenever Fervor opened the gate for it.
+    if (!novas.empty() && PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot))
+    {
+        set.preferred = [](float x, float y)
+        {
+            float const fromMiddle = ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(x, y);
+
+            return std::abs(fromMiddle - ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS) <=
+                       ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE &&
+                   ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetExactDist2d(x, y) <=
+                       ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS;
+        };
+    }
+
     return !set.hazards.empty();
 }
 

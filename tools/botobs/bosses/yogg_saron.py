@@ -100,6 +100,20 @@ NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
 P1_LEASH = 6.5
 
+# ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE and _P1_RANGED_STACK_RADIUS, with the spot the back line
+# walks to. The band is what keeps a bot off the inner orbit and the blob is what keeps the raid's
+# exposure to one bearing, so a dodge that lands in both wakes nothing the back line would not have.
+RANGED_BAND_TOLERANCE = 1.0
+RANGED_STACK_RADIUS = 5.0
+RANGED_SPOT = (1958.78, -25.587)
+
+# How long after a yogg.p1dodge note its own move may still show up. The note is written in the trigger
+# and the move in the action that follows it, so they are one bot tick apart at worst.
+DODGE_MOVE_MS = 1500
+
+# A cloud dodge this soon after a step-out is a bot dodging the cloud its own step-out woke.
+DODGE_FOLLOWUP_MS = 20000
+
 # 65719 is a flat 25,000 against Sara, so what the phase costs is her health divided by it. Never
 # assume that number: mod-dungeon-scale scales raid boss health and the result moves with raid size -
 # 240,000 at 25 raiders, 237,500 at 24, against the 199,999 of her spawn row. Ten kills, not eight.
@@ -776,6 +790,38 @@ def show_runner_spawns(trace: Trace, holds: dict, p1_end: int, guardians: set) -
         print(f"    {clock(when):>9}  " + ", ".join(f"{name}/{role} {far:.1f} yd out" for name, role, far in who))
 
 
+def summon_bands(distance: float) -> tuple[int, ...]:
+    """Which cloud orbits can summon a Guardian on a bot this far from the middle, 1-indexed.
+
+    A cloud takes anyone within 8.5 yd, so every orbit reaches that far either side of itself. Two
+    numbers follow and the whole phase 1 layout rests on them: nothing reaches inside 3.1 yd, which is
+    the circle the melee pile stands in, and the only band one orbit alone reaches is 20.4-22.6 yd,
+    whose midpoint is the 21.5 yd station. Everywhere between 12.9 and 20.1 two orbits reach at once,
+    and that is where a nova step-out lands by default.
+    """
+    return tuple(index for index, ring in enumerate(CLOUD_ORBITS, 1)
+                 if abs(distance - ring) < CLOUD_SUMMON_REACH)
+
+
+def dodge_followups(rows: list[tuple[int, str]], window_ms: int) -> tuple[int, int]:
+    """Cloud dodges, and how many followed a nova or fervor one inside the window, over (t, reason).
+
+    A bot that steps out of a blast and then has to dodge a cloud woke that cloud by stepping out,
+    because the step-out lands it where an orbit reaches and the pile it left does not.
+    """
+    total = after = 0
+    stepped: int | None = None
+    for when, reason in sorted(rows):
+        if reason in ("nova", "fervor"):
+            stepped = when
+        elif reason == "cloud":
+            total += 1
+            if stepped is not None and when - stepped <= window_ms:
+                after += 1
+
+    return total, after
+
+
 def show_clouds(trace: Trace) -> None:
     print("CLOUD ORBITS")
     rows = notes(trace, "yogg.cloudreach")
@@ -813,7 +859,74 @@ def show_clouds(trace: Trace) -> None:
     if taunts:
         print(f"  phase 1 taunts        : {dict(taunts)}  (counts = still inside 15 yd of Sara)")
 
+    show_dodge_destinations(trace)
     show_cloud_spawns(trace)
+
+
+def show_dodge_destinations(trace: Trace) -> None:
+    """Where a phase 1 dodge sends a bot, and how many cloud orbits can reach it there.
+
+    Shadow Nova is cleared at 20 yd and the Guardians stand on the pile, so the nearest safe spot sits
+    just inside the inner orbit's outer edge, where two orbits reach at once: the step-out that saves a
+    bot from one blast is what wakes the Guardian for the next. The back line never has the problem,
+    because it starts at the station and moves outward from there.
+    """
+    dodges: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.p1dodge"):
+        dodges[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+    if not dodges:
+        return
+
+    issued: dict[int, list[dict]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok") and rec.get("by") == "yogg-saron phase 1 spacing action":
+            issued[rec.get("g", 0)].append(rec)
+
+    # The note names the reason, the move that follows carries the destination, so the two have to be
+    # paired to say anything about where a given reason sends a bot.
+    landed: dict[tuple[str, str], list[tuple[float, float]]] = collections.defaultdict(list)
+    for guid, items in dodges.items():
+        for when, reason in items:
+            move = next((rec for rec in issued.get(guid, []) if when <= rec["t"] <= when + DODGE_MOVE_MS),
+                        None)
+            if not move:
+                continue
+
+            spot = (move.get("x", 0.0), move.get("y", 0.0))
+            landed[(trace.role(guid), reason)].append(
+                (math.dist(spot, BODY), math.dist(spot, RANGED_SPOT)))
+
+    if landed:
+        print()
+        print(f"  where a dodge lands, from the middle   ({RANGED_STATION:.1f} yd is the station)")
+        print("    role    why      n  median    max   an orbit reaches  two do  in the stack")
+        for (role, reason), spots in sorted(landed.items()):
+            out = sorted(distance for distance, _ in spots)
+            count = len(spots)
+            reaches = sum(1 for distance, _ in spots if summon_bands(distance))
+            both = sum(1 for distance, _ in spots if len(summon_bands(distance)) > 1)
+            stack = sum(1 for distance, from_spot in spots
+                        if from_spot <= RANGED_STACK_RADIUS
+                        and abs(distance - RANGED_STATION) <= RANGED_BAND_TOLERANCE)
+            print(f"    {role:7} {reason:7} {count:3} {out[count // 2]:6.1f} {out[-1]:6.1f}"
+                  f"   {reaches * 100 // count:14}% {both * 100 // count:6}% {stack * 100 // count:12}%")
+
+    loops = []
+    for guid, items in dodges.items():
+        if trace.role(guid) not in ("melee", "tank"):
+            continue
+
+        total, after = dodge_followups(items, DODGE_FOLLOWUP_MS)
+        steps = sum(1 for _, reason in items if reason in ("nova", "fervor"))
+        if total or steps:
+            loops.append((after, steps, total, trace.name(guid)))
+
+    if loops:
+        print()
+        print(f"  melee cloud dodges inside {DODGE_FOLLOWUP_MS // 1000} s of the bot's own step-out")
+        for after, steps, total, name in sorted(loops, reverse=True):
+            print(f"    {name:14} stepped out {steps:3}, dodged a cloud {total:3},"
+                  f" of those after a step-out {after:3}")
 
 
 def show_cloud_spawns(trace: Trace) -> None:

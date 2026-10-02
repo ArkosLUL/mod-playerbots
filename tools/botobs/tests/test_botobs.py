@@ -1088,6 +1088,37 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.move_tug([(0, "a"), (1000, "b")]), [])
         self.assertEqual(yogg_saron.move_tug([(0, "a"), (1000, "a"), (2000, "a")]), [])
 
+    def test_summon_bands_names_the_orbits_that_can_reach_a_radius(self):
+        # The melee pile: the inner orbit starts reaching at 11.6 - 8.5 = 3.1, so the 2.8 yd circle
+        # clears it by 0.3 and nothing else is near enough to matter.
+        self.assertEqual(yogg_saron.summon_bands(0.0), ())
+        self.assertEqual(yogg_saron.summon_bands(2.8), ())
+        self.assertEqual(yogg_saron.summon_bands(3.2), (1,))
+        # Where a nova step-out lands by default. Two orbits reach it at once, which is why the bots
+        # that stepped out dodged a cloud within 20 s almost every time.
+        self.assertEqual(yogg_saron.summon_bands(19.0), (1, 2))
+        # The station. The only band one orbit alone reaches, and the whole 20.5-22.5 tolerance is
+        # inside it, which is what makes it a destination rather than just somewhere further out.
+        self.assertEqual(yogg_saron.summon_bands(yogg_saron.RANGED_STATION), (2,))
+        self.assertEqual(yogg_saron.summon_bands(20.5), (2,))
+        self.assertEqual(yogg_saron.summon_bands(22.5), (2,))
+        # Past the outer orbit's reach nothing touches a bot at all.
+        self.assertEqual(yogg_saron.summon_bands(yogg_saron.P1_ROOM_RADIUS + 1.0), ())
+
+    def test_dodge_followups_counts_clouds_woken_by_the_bot_own_step_out(self):
+        # 1790966646: Shadow stepped out 11 times and 9 of its 10 cloud dodges came within 20 s of one.
+        self.assertEqual(yogg_saron.dodge_followups([(0, "nova"), (5000, "cloud")], 20000), (1, 1))
+        self.assertEqual(yogg_saron.dodge_followups([(0, "fervor"), (5000, "cloud")], 20000), (1, 1))
+        # Past the window the cloud is the orbit coming round, not the step-out that just happened.
+        self.assertEqual(yogg_saron.dodge_followups([(0, "nova"), (30000, "cloud")], 20000), (1, 0))
+        # A cloud dodge with no step-out before it is a bot the orbit reached where it stood, which is
+        # what every melee that never steps out has exactly one of.
+        self.assertEqual(yogg_saron.dodge_followups([(0, "cloud")], 20000), (1, 0))
+        self.assertEqual(yogg_saron.dodge_followups([(0, "nova"), (1000, "fervor")], 20000), (0, 0))
+        self.assertEqual(yogg_saron.dodge_followups([], 20000), (0, 0))
+        # Out of order in, same answer out: the notes arrive per bot, not globally sorted.
+        self.assertEqual(yogg_saron.dodge_followups([(5000, "cloud"), (0, "nova")], 20000), (1, 1))
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))
