@@ -1054,6 +1054,18 @@ class YoggPhases(unittest.TestCase):
         # The edges count: a button applied on the same tick as the nova still absorbed it.
         self.assertEqual(yogg_saron.nova_cover(spans, 5000), ["pain suppression", "shamanistic rage"])
 
+    def test_nova_preresist_counts_the_hits_that_resisted_nothing(self):
+        # 1790928932: 9 of 138 hits resisted nothing and the worst of those was 26,692, which is the
+        # figure the ladder has to plan against rather than the 17,717 median after resistance.
+        rows = [{"a": 17717, "rs": 2572}, {"a": 26692, "rs": 0}, {"a": 25490},
+                {"a": 41832, "rs": 10458}]
+        self.assertEqual(yogg_saron.nova_preresist(rows), (4, 2, 26692))
+        # A missing `rs` is no resist, same as zero: both say the hit landed whole.
+        self.assertEqual(yogg_saron.nova_preresist([{"a": 100}]), (1, 1, 100))
+        # Nothing unresisted leaves no worst, and an empty list must not raise.
+        self.assertEqual(yogg_saron.nova_preresist([{"a": 100, "rs": 5}]), (1, 0, 0))
+        self.assertEqual(yogg_saron.nova_preresist([]), (0, 0, 0))
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))

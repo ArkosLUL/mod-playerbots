@@ -141,20 +141,21 @@ NOVA_GAP_MS = 6000
 NOVA_GAP_HEALTH_PCT = 30.0
 NOVA_CHAIN_RADIUS = 18.0
 
-# Sara's Fervor doubles the nova, so its holder runs from any Guardian at or under 50% inside 17 yd. The
+# Sara's Fervor doubles the nova, so its holder runs from every living Guardian inside 17 yd: Fervor
+# lasts 15 s against a nova every 10.4 s, so one at full health now detonates inside the window. The
 # nova reached players at 16.2, and a walk back within 6 s of the aura dropping is still the run's.
 SPELL_SARAS_FERVOR = 63138
 SPELL_SHADOW_NOVAS = (65209, 62714)
-FERVOR_NOVA_HEALTH_PCT = 50.0
 NOVA_TRIGGER_RADIUS = 17.0
 NOVA_REACH = 16.2
 FERVOR_AFTER_MS = 6000
 
-# The two gates the phase 1 ladder fires on, and what a nova is worth, mirroring
-# src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.h.
+# The two gates the ladder fires on, and what a nova is worth, mirroring
+# src/Ai/Raid/Uld/Util/UldEncounter_YoggSaron.h. The damage is the unresisted hit, not the median:
+# resistance is rolled per hit and the ones that kill roll none.
 NOVA_SOON_HEALTH_PCT = 20.0
 NOVA_NOW_HEALTH_PCT = 10.0
-NOVA_EXPECTED_DAMAGE = 17400
+NOVA_EXPECTED_DAMAGE = 28600
 
 # A trace carries the aura, not the cast name, so the ladder is read by id. Mirrors the table in
 # src/Ai/Raid/RaidTankDefensive.cpp.
@@ -682,12 +683,18 @@ def show_fervor(trace: Trace) -> None:
             if not me or me[5] <= 0:
                 continue
             lows = [math.dist(me[1:3], row[1:3]) for other, row in rows.items()
-                    if other in guardians and 0 < row[5] <= FERVOR_NOVA_HEALTH_PCT]
+                    if other in guardians and row[5] > 0]
             series.append((snap["t"], min(lows) if lows else None))
         back_at, inside = came_back(series)
         head = f"    {trace.name(guid):13} {trace.role(guid):6} {clock(start):>9} -> {clock(end):>9}"
         if back_at is None:
-            print(f"{head}  stayed out")
+            # Never getting out reads the same as never coming back, and they are opposite outcomes:
+            # one pull's warlock was walked to 3.5 yd off the pile and killed there without ever
+            # clearing the blast.
+            out = max((far for _, far in series if far is not None), default=None)
+            print(f"{head}  " + ("no reading" if out is None else
+                                 "stayed out" if out >= NOVA_TRIGGER_RADIUS else
+                                 f"never left, closest {min(far for _, far in series if far is not None):.1f} yd"))
             continue
         back += 1
         walkers = collections.Counter(rec.get("by") for rec in moves[guid]
@@ -2525,6 +2532,14 @@ def nova_cover(spans: list[tuple[int, int, str]], when: int) -> list[str]:
     return sorted({name for start, end, name in spans if start <= when <= end})
 
 
+def nova_preresist(rows: list[dict]) -> tuple[int, int, int]:
+    """(hits, hits that resisted nothing, the worst unresisted hit) over `dmg` rows. The unresisted hit
+    is the figure worth planning against: over one pull the damage before resistance ran a 23,547 median
+    against a 17,717 median after it, and every death from full health took a hit that resisted none."""
+    clean = [rec["a"] for rec in rows if not rec.get("rs")]
+    return len(rows), len(clean), max(clean, default=0)
+
+
 def defensive_spans(trace: Trace, until: int, wanted: dict[int, str]) -> dict[int, list[tuple]]:
     """guid -> (start, end, name) for each of `wanted` a roster member carried before `until`. An aura
     still up at the end of the window is closed there rather than dropped."""
@@ -2555,10 +2570,12 @@ def show_novas(trace: Trace) -> None:
     roster = roster_guids(trace)
     guardians = guids_of_entry(trace, NPC_GUARDIAN)
 
+    # The whole fight, not just phase 1: nothing in the core despawns the Guardians phase 1 leaves
+    # alive, so their death nova outlives the phase that spawned them.
+    end = max((snap["t"] for snap in trace.of("snap")), default=p1_end)
+
     series: dict[int, list[tuple[int, float]]] = collections.defaultdict(list)
     for snap in trace.of("snap"):
-        if snap["t"] > p1_end:
-            break
         for row in snap.get("u", []):
             if row[0] in guardians:
                 series[row[0]].append((snap["t"], row[5]))
@@ -2566,22 +2583,25 @@ def show_novas(trace: Trace) -> None:
     # One nova per Guardian: it is a death explosion, so a source cannot fire twice.
     hits: dict[int, list[dict]] = collections.defaultdict(list)
     for rec in trace.of("dmg"):
-        if rec.get("sp") in SPELL_SHADOW_NOVAS and rec["t"] <= p1_end and rec.get("d") in roster:
+        if rec.get("sp") in SPELL_SHADOW_NOVAS and rec.get("d") in roster:
             hits[rec.get("s")].append(rec)
     if not hits:
-        print("  no nova hit a raider in phase 1")
+        print("  no nova hit a raider")
         return
 
-    own = defensive_spans(trace, p1_end, NOVA_DEFENSIVES)
-    ext = defensive_spans(trace, p1_end, NOVA_EXTERNALS)
-    raid = defensive_spans(trace, p1_end, NOVA_RAID_AURAS)
+    own = defensive_spans(trace, end, NOVA_DEFENSIVES)
+    ext = defensive_spans(trace, end, NOVA_EXTERNALS)
+    raid = defensive_spans(trace, end, NOVA_RAID_AURAS)
 
     died: dict[int, list[int]] = collections.defaultdict(list)
     for rec in death_records(trace):
         died[rec.get("g")].append(rec["t"])
 
-    print(f"  novas on raiders in phase 1: {len(hits)}, {sum(len(rows) for rows in hits.values())} hits")
-    print(f"  a bot is counted at risk when the nova leaves it under {NOVA_EXPECTED_DAMAGE} hp")
+    rows_all = [rec for rows in hits.values() for rec in rows]
+    total, clean, worst_clean = nova_preresist(rows_all)
+    print(f"  novas on raiders: {len(hits)}, {total} hits")
+    print(f"  resisted nothing: {clean} of {total}, worst {worst_clean} - this is what kills, so a bot "
+          f"is counted at risk when the nova leaves it under {NOVA_EXPECTED_DAMAGE} hp")
 
     at_risk = covered = 0
     # Two novas in one tick each sit inside the same death's window, and a bot can die more than once a
@@ -2598,8 +2618,13 @@ def show_novas(trace: Trace) -> None:
         worst = max(rows, key=lambda rec: rec["a"])
         pool = trace.maxhp.get(worst["d"]) or 0
         share = f" ({worst['a'] / pool * 100:.0f}% of pool)" if pool else ""
-        print(f"    {clock(when):>9}  warning {gates}  {len(rows)} raiders, "
-              f"worst {worst['a']} on {trace.name(worst['d'])}{share}")
+        roll = " resisted nothing" if not worst.get("rs") else f" resisted {worst['rs']}"
+        # The back line stands 21.5 yd out and clears a blast on the stack by about a yard, so one of
+        # them taking a nova at all means the Guardian came to them.
+        back = sum(1 for rec in rows if trace.role(rec.get("d")) in ("ranged", "heal"))
+        caught = f", {back} of them back line" if back else ""
+        print(f"    {clock(when):>9}  warning {gates}  {len(rows)} raiders{caught}, "
+              f"worst {worst['a']} on {trace.name(worst['d'])}{share},{roll}")
 
         doomed = []
         for rec in rows:
@@ -2633,6 +2658,15 @@ def show_novas(trace: Trace) -> None:
 
     print(f"  novas that would have killed somebody: {at_risk}, with a button up on at least one: {covered}")
     print(f"  deaths to a nova: {len(lethal)}, of which had any button up: {len(lethal_covered)}")
+
+    # The handover walks bots 15 yd out from a middle the back line sits 21.5 yd from, so a bearing
+    # pointing at the stack ends between the two and the Guardians follow the tank there. One back-line
+    # bot caught is somebody who walked in; the whole stack is somebody who walked a Guardian to them.
+    for label, inside in (("in phase 1", lambda t: t <= p1_end), ("after it", lambda t: t > p1_end)):
+        hit = {rec.get("d") for rows in hits.values() for rec in rows
+               if inside(rec["t"]) and trace.role(rec.get("d")) in ("ranged", "heal")}
+        verdict = ", ".join(sorted(trace.name(guid) for guid in hit)) if hit else "none"
+        print(f"  back line caught by a nova {label}: {len(hit)} - {verdict}")
 
 
 SECTIONS = (

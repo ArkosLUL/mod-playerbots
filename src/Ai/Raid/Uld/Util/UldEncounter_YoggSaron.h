@@ -157,31 +157,31 @@ constexpr float ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS = 22.0f;
 // raid to the rim and leaves bots to be picked off one at a time.
 constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
 
-// Fervor gets a wider gate because the nova it doubles kills outright rather than hurts, so waiting
-// for a Guardian to look nearly dead is waiting too long: under focus fire one is below 20% for about
-// a second, which is 7 yd of travel against a 16 yd blast.
-constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
+// What one nova does when it resists nothing, which is the only figure worth planning against:
+// resistance is rolled per hit, so the median is survivable and the hits that kill are the ones that
+// roll none. Over 138 hits the damage before resistance ran a 23,547 median to a 27,034 ordinary
+// maximum, 9 of them resisted nothing, and a ret paladin died from a verified full 28,582 bar on a
+// recorded 26,692 - 65209 has two SCHOOL_DAMAGE effects and the trace records one row per raider, so
+// the real hit is higher than any row shows. Below this figure a bot at full health never looked at
+// risk, so the ladder only ever fired after the hit.
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 28600;
 
-// Shadow Nova against a melee bot, measured over 520 hits in four pulls: a per-pull median of
-// 16,961-17,636 against pools of 23,537 for the enhancement shaman up to 31,249 for a warrior. So one
-// nova is 56-106% of a bar, two in one tick killed eight melee from full health, and a Fervored one ran
-// to 45,340. The healers were already out-healing it 1.7 to 1 and still lost them, because an instant
-// that takes most of a bar is mitigated or not survived.
-constexpr uint32 ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE = 17400;
+// Melee at or under this pool die to an unresisted nova whichever reduction they own, so they leave the
+// blast instead. Above it a 20% cut is enough and the ladder covers them: the smallest melee needs 18%
+// off, the biggest 0.1%.
+constexpr uint32 ULDUAR_YOGG_SARON_NOVA_STEP_OUT_POOL = 26000;
 
-// Two gates, because a button is only worth firing if it is still up when the nova lands. Over 48 novas
-// a Guardian first dropping under 20% detonated a median 4.8 s later and never later than 11.5; under
-// 10% it was a median 2.4 s with 46 of the 48 inside 6 s. So the 12 s buttons go at 20% and the 5 s ones
-// wait for 10%. Everything in the ladder is instant, so even the 0.8 s minimum is castable.
+// Two gates. A Guardian first dropping under 20% detonated a median 4.8 s later and as late as 11.5,
+// under 10% a median 2.4 s and never later than 3.7 over one pull's 11 novas. So a bot spends its own
+// button and a healer its external only at 10%, where a 5 s window always covers the hit and a Guardian
+// sits for far less time; Divine Sacrifice still goes at 20%, because one cast covers 25 raiders for
+// 10 s and is worth starting early. Everything in the ladder is instant, so even 0.3 s is castable.
 constexpr float ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT = 20.0f;
 constexpr float ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT = 10.0f;
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_SOON_WINDOW_MS = 12000;
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_NOW_WINDOW_MS = 5000;
 
-// A cooldown goes out only when the nova would leave the bot inside about one melee swing of dead, so a
-// 45 s Anti-Magic Shell is still in hand for the window that needs it. Counting past two low Guardians
-// buys nothing: a pair already covers every death measured.
-constexpr float ULDUAR_YOGG_SARON_NOVA_SAFETY = 1.25f;
+// Counting past two low Guardians buys nothing: a pair already covers every death measured.
 constexpr uint32 ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN = 2;
 
 // Divine Sacrifice is the only raid-wide reduction that exists on this core, and one cast covers 25
@@ -701,24 +701,38 @@ std::vector<Unit*> GetYoggSaronChannellingCrushers(PlayerbotAI* botAI);
 std::vector<char const*> YoggSaronJudgementSpells(Player* bot);
 
 // Guardians whose death nova this bot should leave. Ranged and healers count only one that is both
-// about to die and chasing them: at spell range nothing else can reach them. Melee stand in a nova by
-// design and count one only while Sara's Fervor is doubling it. Shared so the trigger and the action
-// cannot disagree about who is running.
+// about to die and chasing them: at spell range nothing else can reach them. A Sara's Fervor holder
+// counts every living Guardian in reach, because Fervor outlasts the gap between novas. Melee stand in
+// a nova by design and count one about to detonate only when their pool is small enough that it kills
+// them whatever reduction they own. Shared so the trigger and the action cannot disagree about who is
+// running.
 std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius);
 
-// What the next Shadow Nova is worth against `target`: the measured median per low Guardian within the
-// blast, at most two of them, doubled while Sara's Fervor is on it. 0 when nothing in reach is close to
-// detonating. Unlike GetYoggSaronNovaThreats this counts melee as well - that one answers who should
+// What the next Shadow Nova is worth against `target`: the unresisted figure per low Guardian within
+// the blast, at most two of them, doubled while Sara's Fervor is on it. 0 when nothing in reach is close
+// to detonating. Unlike GetYoggSaronNovaThreats this counts melee as well - that one answers who should
 // run, this one answers who is about to be hit whether they can move or not.
 uint32 YoggSaronNovaDamageOn(Unit* target);
 
-// Whether that leaves `target` inside about one melee swing of dead. False for a bot the nova only
-// bruises, so the shortest cooldown is not spent on the first of twelve novas.
+// Whether that kills `target` outright. False for a bot the nova only bruises, so the shortest cooldown
+// is not spent on the first of eleven novas.
 bool YoggSaronNovaWouldHurt(Unit* target);
 
 // How long a button has to last to still be up when the nova lands, or 0 when the bot does not need one.
-// Shared so the trigger and the action cannot pick different windows.
-uint32 YoggSaronNovaNeedMs(Unit* target);
+// `now` asks at the 10% gate, which is where a bot spends its own button and a healer its external; the
+// 20% gate is Divine Sacrifice's alone. Shared so the trigger and the action cannot pick different
+// windows.
+uint32 YoggSaronNovaNeedMs(Unit* target, bool now);
+
+// Whether a living Guardian is close enough for its death nova to reach this bot. What the nova nodes
+// gate on instead of the phase: the Guardians phase 1 leaves alive keep their death explosion and
+// nothing in the core despawns them, so they have to be answered in phase 2 as well.
+bool YoggSaronNovaNearby(PlayerbotAI* botAI);
+
+// Whether the nova cooldowns are still being saved. All of phase 1, because every death measured in it
+// was a nova and nothing else there is worth a three-minute cooldown, and after it only while a leftover
+// Guardian is in reach - phase 2 has Crush and the Death Rays to spend them on.
+bool YoggSaronNovaHold(PlayerbotAI* botAI);
 
 // How many melee and tanks on the stack the next nova would take that far down, which is what decides
 // whether the one raid-wide cooldown is worth spending.
@@ -735,8 +749,8 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI);
 bool ClaimYoggSaronNovaExternal(PlayerbotAI* botAI, Player* victim);
 bool ClaimYoggSaronNovaWindow(Player* bot);
 
-// The phase 1 Guardian no dps should touch: the higher-health half of a low pair standing close enough
-// for one nova to finish the other, which is how eight melee died in a single tick. The guid breaks an
+// The Guardian no dps should touch: the higher-health half of a low pair standing close enough for one
+// nova to finish the other, which is how eight melee died in a single tick. The guid breaks an
 // exact tie, so one of a pair is always free to die and the two can never wait on each other.
 void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions);
 

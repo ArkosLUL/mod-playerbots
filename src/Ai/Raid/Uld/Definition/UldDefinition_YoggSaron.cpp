@@ -171,15 +171,14 @@ void DefineYoggSaron(EncounterBuilder& e)
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"food", "drink"});
 
-    // Every one of those buttons otherwise fires on "I am already low", which in phase 1 means after the
-    // nova rather than before it: Totemist cast Shamanistic Rage nine times in one pull and still died
-    // four times. Melee only, so the tank keeps its own against the Guardians it is holding and the back
-    // line keeps its own against Dark Volley.
-    e.Block("yogg-saron nova defensive hold", Role::Melee, YoggSaronInPhase1, 0, HeldMagicDefensiveNames());
+    // Every one of those buttons otherwise fires on "I am already low", which means after the nova
+    // rather than before it: Totemist cast Shamanistic Rage nine times in one pull and still died four
+    // times. Melee only, so the tank keeps its own against the Guardians it is holding and the back line
+    // keeps its own against Dark Volley.
+    e.Block("yogg-saron nova defensive hold", Role::Melee, YoggSaronNovaHold, 0, HeldMagicDefensiveNames());
 
-    // The externals and the raid cooldown, held for the same reason. Every phase 1 death measured was a
-    // nova, so nothing else in the phase is worth spending a three-minute cooldown on.
-    e.Block("yogg-saron nova cooldown hold", Role::Any, YoggSaronInPhase1, 0,
+    // The externals and the raid cooldown, held for the same reason.
+    e.Block("yogg-saron nova cooldown hold", Role::Any, YoggSaronNovaHold, 0,
             {"pain suppression", "pain suppression on party", "guardian spirit on party",
              "hand of sacrifice on party", "divine sacrifice"});
 

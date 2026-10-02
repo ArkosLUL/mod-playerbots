@@ -70,6 +70,39 @@ float HeadingGap(float from, float to)
 
     return gap > static_cast<float>(M_PI) ? 2.0f * static_cast<float>(M_PI) - gap : gap;
 }
+
+// The handover bearing turned off the back line. Walking `radius` out from the middle along the bearing
+// a bot already holds is the shortest line clear of the body, but the ring is 15 yd and the back line
+// parks at 21.5, so a westward bearing ends between the two: the tank walked to 6.6 yd of the stack
+// with three live Guardians taunted onto it, two of them detonated 2.9 yd away, and eleven raiders died
+// in three seconds. The cone to refuse follows from the triangle, 51.9 degrees at this radius, which
+// still leaves 256 degrees for the fan.
+float YoggSaronClearBearing(float angle, float radius)
+{
+    float const toStation = ULDUAR_YOGG_SARON_MIDDLE.GetAngle(&ULDUAR_YOGG_SARON_P1_RANGED_SPOT);
+    float const station = ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(&ULDUAR_YOGG_SARON_P1_RANGED_SPOT);
+
+    float const reach = (radius * radius + station * station -
+                         ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS *
+                             ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS) /
+                        (2.0f * radius * station);
+    if (reach >= 1.0f)
+        return angle;
+
+    // Below -1 the whole circle is inside the blast, which the geometry of this room never gives, and
+    // acos would be the wrong answer anyway.
+    float const cone = std::acos(std::max(reach, -1.0f));
+    float const gap = HeadingGap(angle, toStation);
+    if (gap >= cone)
+        return angle;
+
+    // To the nearer edge, so a bot still walks the shortest line it is allowed.
+    float const sign = Position::NormalizeOrientation(angle - toStation) <= static_cast<float>(M_PI)
+                           ? 1.0f
+                           : -1.0f;
+
+    return Position::NormalizeOrientation(toStation + sign * cone);
+}
 }  // namespace
 
 const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, -24.871964f, 324.88956f, 6.247805f);
@@ -80,8 +113,9 @@ bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
     {
         // Straight out along the bearing the bot already holds, so nine melee fan around the ring
         // rather than stacking on one point, and each of them walks the shortest line out there is.
-        float const angle = ULDUAR_YOGG_SARON_MIDDLE.GetAngle(bot->GetPositionX(), bot->GetPositionY());
         float const radius = ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
+        float const angle = YoggSaronClearBearing(
+            ULDUAR_YOGG_SARON_MIDDLE.GetAngle(bot->GetPositionX(), bot->GetPositionY()), radius);
 
         return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX() + radius * std::cos(angle),
                       ULDUAR_YOGG_SARON_MIDDLE.GetPositionY() + radius * std::sin(angle),
@@ -289,6 +323,16 @@ bool YoggSaronPhase1StationAction::Execute(Event /*event*/)
 bool YoggSaronPhase2SpacingAction::Collect(HazardSet& set)
 {
     inDeathRay = false;
+
+    // Nothing in the core despawns the Guardians phase 1 leaves alive and JustDied still fires the
+    // nova, so the blast outlives the phase that spawned them. In the fallback too, for the same
+    // reason phase 1 does it: the nova is what the retry keeps when the rest cannot also be cleared.
+    for (Unit* guardian :
+         GetYoggSaronNovaThreats(botAI, SearchRadius() + ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS))
+    {
+        set.hazards.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+        set.fallback.emplace_back(guardian->GetPosition(), ULDUAR_YOGG_SARON_SHADOW_NOVA_CLEAR_RADIUS);
+    }
 
     std::list<Creature*> rays;
     bot->GetCreatureListWithEntryInGrid(rays, NPC_DEATH_RAY,
@@ -1581,7 +1625,7 @@ bool YoggSaronSqueezeEscapeAction::Execute(Event /*event*/)
 
 bool YoggSaronNovaDefensiveAction::Execute(Event /*event*/)
 {
-    uint32 const needMs = YoggSaronNovaNeedMs(bot);
+    uint32 const needMs = YoggSaronNovaNeedMs(bot, true);
     if (!needMs)
         return false;
 

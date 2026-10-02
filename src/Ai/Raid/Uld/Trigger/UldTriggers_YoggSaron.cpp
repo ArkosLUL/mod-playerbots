@@ -292,6 +292,10 @@ bool YoggSaronPhase2SpacingTrigger::IsActive()
     if (!hazardNear)
         hazardNear = YoggSaronInBodyKnockback(bot);
 
+    // Same reason for the Guardians phase 1 left alive, which keep their death nova here.
+    if (!hazardNear)
+        hazardNear = !GetYoggSaronNovaThreats(botAI, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty();
+
     if (!hazardNear)
         return false;
 
@@ -799,16 +803,16 @@ bool YoggSaronSqueezeEscapeTrigger::IsActive()
 
 bool YoggSaronNovaDefensiveTrigger::IsActive()
 {
-    // Cheapest read first, as everywhere in this file: a plain distance, then a 17 yd sweep, and the
-    // phase last because it is three 200 yd grid sweeps on every bot on the map.
+    // Cheapest read first, as everywhere in this file: a plain distance, then a 17 yd sweep. A bot
+    // spends its own button at the 10% gate only, where the nova lands within 3.7 s and a Guardian
+    // sits for a fraction of the time it spends under 20% - at the wider gate the whole raid emptied
+    // its cooldowns onto the first nova and had nothing for the next eight.
     if (!YoggSaronInPhase1Room(bot))
         return false;
 
-    uint32 const needMs = YoggSaronNovaNeedMs(bot);
-    if (!needMs || !NextMagicDefensive(botAI, bot, nullptr, needMs))
-        return false;
+    uint32 const needMs = YoggSaronNovaNeedMs(bot, true);
 
-    return YoggSaronInPhase1(botAI);
+    return needMs && NextMagicDefensive(botAI, bot, nullptr, needMs);
 }
 
 bool YoggSaronNovaExternalTrigger::IsActive()
@@ -821,10 +825,8 @@ bool YoggSaronNovaExternalTrigger::IsActive()
         return false;
 
     Player* victim = YoggSaronNovaVictim(botAI);
-    if (!victim || !YoggSaronNovaExternalAction::PickExternal(botAI, victim))
-        return false;
 
-    return YoggSaronInPhase1(botAI);
+    return victim && YoggSaronNovaExternalAction::PickExternal(botAI, victim);
 }
 
 bool YoggSaronNovaRaidCooldownTrigger::IsActive()
@@ -837,8 +839,5 @@ bool YoggSaronNovaRaidCooldownTrigger::IsActive()
     if (!botAI->CanCastSpell("divine sacrifice", bot))
         return false;
 
-    if (YoggSaronNovaHurtCount(botAI) < ULDUAR_YOGG_SARON_NOVA_RAID_COUNT)
-        return false;
-
-    return YoggSaronInPhase1(botAI);
+    return YoggSaronNovaHurtCount(botAI) >= ULDUAR_YOGG_SARON_NOVA_RAID_COUNT;
 }

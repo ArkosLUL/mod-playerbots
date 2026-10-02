@@ -1294,42 +1294,6 @@ std::vector<char const*> YoggSaronJudgementSpells(Player* bot)
     return {"judgement of wisdom", "judgement of light", "judgement of justice"};
 }
 
-std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
-{
-    Player* bot = botAI->GetBot();
-
-    // Standing in a nova is the price of killing a Guardian at all, and Sara's Fervor is what turns
-    // that price into a death: +100% damage taken for 15 s. Measured over one pull, novas ran to a
-    // 13,877 median across 199 hits and 23,789-34,039 across the 4 that landed on a Fervor holder,
-    // against caster and healer pools of 25,000-30,000. All four were lethal, one from full health.
-    bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
-    bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
-    if (!fervor && !atRange)
-        return {};
-
-    std::list<Creature*> guardians;
-    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, radius);
-
-    std::vector<Unit*> threats;
-    for (Creature* guardian : guardians)
-    {
-        float const gate = fervor ? ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT
-                                  : ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT;
-        if (!guardian->IsAlive() || guardian->GetHealthPct() > gate)
-            continue;
-
-        // At spell range the only way into a 15 yd nova is for the Guardian to have walked over, so
-        // one chasing somebody else is a blast the bot is already clear of. A bot carrying Fervor is
-        // in it wherever the Guardian is heading.
-        if (!fervor && guardian->GetVictim() != bot)
-            continue;
-
-        threats.push_back(guardian);
-    }
-
-    return threats;
-}
-
 namespace
 {
 // Living Guardians at or under `gate`, swept once. A raid-wide count that swept around every member
@@ -1371,7 +1335,7 @@ uint32 YoggSaronNovaDamageFrom(std::vector<Creature*> const& low, Unit* target)
 
 bool YoggSaronNovaLeavesNothing(uint32 expected, Unit* target)
 {
-    return expected && target->GetHealth() <= uint32(expected * ULDUAR_YOGG_SARON_NOVA_SAFETY);
+    return expected && target->GetHealth() <= expected;
 }
 
 // Read off the list already swept, so asking this for all 25 raiders costs no extra grid search.
@@ -1408,6 +1372,64 @@ bool YoggSaronNovaCandidate(Player* member)
 }
 }  // namespace
 
+std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
+{
+    Player* bot = botAI->GetBot();
+
+    // Standing in a nova is the price of killing a Guardian at all, and two things turn that price
+    // into a death. Sara's Fervor doubles it: +100% damage taken for 15 s, measured at 39,430 and
+    // 45,340 against pools of 23,000-30,000, every one of them lethal from full health. And an
+    // unresisted nova is over the full bar of all but the two biggest melee, so a small pool with
+    // nothing left to press has to leave rather than mitigate.
+    bool const fervor = bot->HasAura(SPELL_SARAS_FERVOR);
+    bool const atRange = PlayerbotAI::IsRanged(bot) || PlayerbotAI::IsHeal(bot);
+    bool const fragile = !atRange && bot->GetMaxHealth() <= ULDUAR_YOGG_SARON_NOVA_STEP_OUT_POOL;
+    if (!fervor && !atRange && !fragile)
+        return {};
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, radius);
+
+    std::vector<Creature*> low;
+    for (Creature* guardian : guardians)
+    {
+        if (!guardian->IsAlive())
+            continue;
+
+        // Fervor outlasts the gap between novas - 15 s against a nova every 10.4 s - so a Guardian at
+        // full health now is one that detonates inside the window, and a holder parked next to the pile
+        // dies there. A small pool instead waits for the tighter gate, because leaving is dps it does
+        // not get back and the Guardians still have to die inside 15 yd for Sara.
+        float const gate = fervor ? 100.0f
+                                  : (fragile ? ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT
+                                             : ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT);
+        if (guardian->GetHealthPct() > gate)
+            continue;
+
+        // At spell range the station clears a blast on the stack by about a yard - measured, the back
+        // line sits 16.2-17.0 yd from every low Guardian in phase 1 and none of them reached it - so
+        // dodging one the tank still holds there would only fight the station node. One that has left
+        // the stack can reach them: at the handover three walked to within 2.2 yd of the back line and
+        // two detonated there. Fervor reaches wherever the Guardian is heading, and a melee bot is in
+        // the blast whoever the Guardian is hitting.
+        if (atRange && !fervor && guardian->GetVictim() != bot && YoggSaronGuardianOnTheStack(guardian))
+            continue;
+
+        low.push_back(guardian);
+    }
+
+    // What the hit is worth decides it for a melee bot: one its own cooldown still carries keeps
+    // swinging, and only one the nova kills whatever it presses walks out.
+    if (fragile && !fervor)
+    {
+        uint32 const expected = YoggSaronNovaDamageFrom(low, bot);
+        if (bot->GetHealth() > YoggSaronNovaAfterOwnButton(low, bot, expected))
+            return {};
+    }
+
+    return std::vector<Unit*>(low.begin(), low.end());
+}
+
 uint32 YoggSaronNovaDamageOn(Unit* target)
 {
     if (!target || !target->IsAlive())
@@ -1424,20 +1446,34 @@ bool YoggSaronNovaWouldHurt(Unit* target)
     return YoggSaronNovaLeavesNothing(YoggSaronNovaDamageOn(target), target);
 }
 
-uint32 YoggSaronNovaNeedMs(Unit* target)
+uint32 YoggSaronNovaNeedMs(Unit* target, bool now)
 {
     if (!target || !target->IsAlive())
         return 0;
 
-    std::vector<Creature*> const low = YoggSaronLowGuardians(target, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
-                                                             ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS);
+    float const gate = now ? ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT
+                           : ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT;
+    std::vector<Creature*> const low =
+        YoggSaronLowGuardians(target, gate, ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS);
     if (!YoggSaronNovaLeavesNothing(YoggSaronNovaDamageFrom(low, target), target))
         return 0;
 
-    // A Guardian already under the tighter gate detonates a median 2.4 s later, which a 5 s button
-    // covers; one that has only just passed 20% can take up to 11.5 s, so there only a 12 s button is
-    // worth starting.
+    // A Guardian already under the tighter gate detonates a median 2.4 s later and never later than
+    // 3.7, which a 5 s button covers; one that has only just passed 20% can take up to 11.5 s, so
+    // there only a 12 s button is worth starting.
     return YoggSaronNovaNeedFrom(low, target);
+}
+
+bool YoggSaronNovaNearby(PlayerbotAI* botAI)
+{
+    return !YoggSaronLowGuardians(botAI->GetBot(), 100.0f,
+                                  ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS).empty();
+}
+
+bool YoggSaronNovaHold(PlayerbotAI* botAI)
+{
+    // The 17 yd sweep first: the phase read is three 200 yd grid sweeps on every bot on the map.
+    return YoggSaronNovaNearby(botAI) || YoggSaronInPhase1(botAI);
 }
 
 uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
@@ -1475,7 +1511,7 @@ Player* YoggSaronNovaVictim(PlayerbotAI* botAI)
     if (!group)
         return nullptr;
 
-    std::vector<Creature*> const low = YoggSaronLowGuardians(bot, ULDUAR_YOGG_SARON_NOVA_SOON_HEALTH_PCT,
+    std::vector<Creature*> const low = YoggSaronLowGuardians(bot, ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT,
                                                              ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);
     if (low.empty())
         return nullptr;
@@ -1547,9 +1583,6 @@ bool ClaimYoggSaronNovaWindow(Player* bot)
 
 void AppendYoggSaronTargetExclusions(PlayerbotAI* botAI, GuidSet& exclusions)
 {
-    if (!YoggSaronInPhase1(botAI))
-        return;
-
     std::vector<Creature*> const low =
         YoggSaronLowGuardians(botAI->GetBot(), ULDUAR_YOGG_SARON_P1_NOVA_GAP_HEALTH_PCT,
                               ULDUAR_YOGG_SARON_P1_ROOM_RADIUS);
