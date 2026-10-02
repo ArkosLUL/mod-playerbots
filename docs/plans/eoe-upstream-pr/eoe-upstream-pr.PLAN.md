@@ -87,11 +87,18 @@ durable into `docs/raids/eye-of-eternity.md`, commit on `Custom`. Then update me
 
 ## Phase B — PR branch contents (each git step below needs the user's explicit go at that step)
 
+**State 2026-10-02:** both branches built and verified in a throwaway clone of upstream (not in this
+repo, not pushed); PR texts drafted, awaiting wording approval, `pmon` numbers and the user's
+AI Assistance wording. Rebuild from this section if the clone is gone.
+
 **PR 1 — framework**, branched from `upstream/test-staging`:
 - New `src/Ai/Raid/RaidEncounter.{h,cpp}` + `RaidEncounterRules.h` from `Custom`, trimmed to what EoE
   uses: remove `RaidObs` (`RaidEncounter.cpp:26,302-303`, `.h:99`; `src/Bot/Obs` is local-only),
   `EncounterTriggerPassId`/`CheckScope` (Uld/OS only: `.cpp:79-94,266-269,290-294`, `.h:42-47`),
-  `Tick`/`OnTick` (upstream Engine never calls `Strategy::OnTick`; `.cpp:500-504,537`).
+  `Tick`/`OnTick` (upstream Engine never calls `Strategy::OnTick`; `.cpp:500-504,537`). Also
+  `EncounterGate::live`, `BossStateGateLive` and `traceName` (only `RaidObs` read them):
+  `EncounterGate` becomes `bool (*)(PlayerbotAI*, uint32)`. Drop `RaidEncounterRules.h`'s
+  `tools/nativetest` comment (no `tools/` upstream).
 - New `src/Ai/Raid/RaidInstanceState.{h,cpp}` unchanged.
 - `src/Bot/Engine/Trigger/Trigger.h`: add `getCheckInterval()` (local `:42`).
 - `src/Script/Playerbots.cpp`: `void AddSC_RaidInstanceStateScripts();` in upstream's declaration
@@ -100,9 +107,11 @@ durable into `docs/raids/eye-of-eternity.md`, commit on `Custom`. Then update me
 
 **PR 2 — EoE rework**, branched from PR 1's branch:
 - Delete upstream `EoE/EoEActions.{h,cpp}`, `EoE/EoETriggers.{h,cpp}`; copy `Custom`'s whole
-  `src/Ai/Raid/EoE/` (post Phase A).
+  `src/Ai/Raid/EoE/` (post Phase A). In `EoEDefinition_Malygos.cpp` drop `MalygosGate` and build
+  the definition as `(EOE_DATA_MALYGOS, &MalygosGateOpen, &DefineMalygos)`.
 - `src/Util/EncounterHelpers.{h,cpp}`: add only `CommandPetAttack` / `StopPet` (local
-  `EncounterHelpers.cpp:615-657`) + `#include "CreatureAI.h"`. Never copy the local file: it deletes
+  `EncounterHelpers.cpp:615-657`, comments cut to upstream's rule) + `#include "CreatureAI.h"`.
+  Never copy the local file: it deletes
   `GetSelfImmunitySpell`, which upstream Hyjal uses, and carries ~12 unrelated local helpers.
 - Title e.g. `refactor(Raid/EoE): ...` (precedent `cc57c9c04 fix(Naxx/Thaddius)`).
 - Both PRs target `test-staging` (forks can't base on a fork branch), so PR 2's diff includes PR 1's
@@ -127,7 +136,10 @@ Provenance "original", checklist.
   image's core = the local fork; errors in untouched upstream files are not PR errors); grep creator
   tables for every EoE action/trigger name (`ai-engine.md` checklist); cppcheck with upstream's
   exact command (`cppcheck --force --inline-suppr --suppressions-list=./.suppress.cppcheck src/`)
-  in a throwaway container or a local install — empty report required.
+  in a throwaway container or a local install — empty report required. Result 2026-10-02:
+  codestyle passes, all 15 touched TUs compile, cppcheck 2.13 (`ubuntu:24.04`) empty on both
+  branches. `Playerbots.cpp` can't be compiled: upstream needs `ModuleDatabasePool.h`, missing from
+  the build image's core.
 - In-game (user): EoE 10 + 25 normal on `Custom` after Phase A to confirm unchanged behaviour;
   `playerbot pmon` before/after per the template (`BotActiveAlone = 100`,
   `botActiveAloneSmartScale = 0`, `pmon toggle` after login, `pmon stack` 5 min later). Ideally one

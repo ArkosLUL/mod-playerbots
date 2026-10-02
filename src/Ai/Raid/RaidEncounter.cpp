@@ -184,10 +184,10 @@ namespace
             bool const cares = _cache.Get(
                 action, [&] { return Rules::RuleCares(*_rule, ClassifyAction(action), action->getName()); });
 
+            auto const hasRole = [&](Rules::RoleMask role) { return BotHasRole(botAI, role); };
             return Rules::Evaluate(
                 cares, [&] { return _gate.open(botAI, _encounterId); },
-                [&] { return Rules::RoleMatches(_roles, [&](Rules::RoleMask role) { return BotHasRole(botAI, role); }); },
-                [&] { return _predicate(botAI); });
+                [&] { return Rules::RoleMatches(_roles, hasRole); }, [&] { return _predicate(botAI); });
         }
 
     private:
