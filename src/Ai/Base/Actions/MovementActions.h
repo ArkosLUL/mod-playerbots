@@ -60,6 +60,9 @@ protected:
     bool MoveNear(WorldObject* target, float distance = sPlayerbotAIConfig.contactDistance,
                   MovementPriority priority = MovementPriority::MOVEMENT_NORMAL);
     float GetFollowAngle();
+    // Z clamps and collision checks have to ask this, not the bot: a vehicle passenger never counts as
+    // flying, so a drake rider's destination would be pinned to the ground under it.
+    Unit* GetMover() const;
     bool Follow(Unit* target, float distance = sPlayerbotAIConfig.followDistance);
     bool Follow(Unit* target, float distance, float angle);
     bool ChaseTo(WorldObject* obj, float distance = 0.0f);

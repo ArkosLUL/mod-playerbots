@@ -109,6 +109,11 @@ durable into `docs/raids/eye-of-eternity.md`, commit on `Custom`. Then update me
   commit until PR 1 merges; PR 2's body says so and links PR 1, PR 1's body links PR 2 as its user.
   After PR 1 merges, PR 2 is rebased onto `test-staging` (ask first).
 
+**Separate PR — vehicle riders' movement** (independent of the stack, same bug upstream): the
+`MovementAction::GetMover()` change in `src/Ai/Base/Actions/MovementActions.{h,cpp}` (Z clamps,
+`CheckCollisionAndGetValidCoords`, `Follow` drive the vehicle). Shared code, so its own PR per
+upstream's scope rule; fixes post-kill EoE drakes diving to Z 0.
+
 **PR texts** (drafted with `handover` + `use-conversational-language`, shown to the user, published
 only after explicit approval of the wording): fill every `PULL_REQUEST_TEMPLATE.md` section —
 observable before/after, minimum logic + per-tick cost (300 ms per-instance creature cache, ~7

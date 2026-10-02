@@ -88,7 +88,9 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
 - **Ground height is 0.0 everywhere.** `getHeightFromFlat` returns `gridHeight`, and with no vmaps
   nothing can override it, so `Map::GetHeight` answers 0.0 across the whole map while the platform
   sits near Z 266. `UpdateAllowedPositionZ` then pins any **non-flying** unit to Z 0 — a 266 yd
-  drop. Its flying branch only ever raises Z, so it is inert up here.
+  drop. Its flying branch only ever raises Z, so it is inert up here. A drake rider counts as
+  non-flying: after the kill, `move to loot` and `follow` dove the whole flight to Z 0 until the
+  clamps asked the drake instead ([../engine/pitfalls.md](../engine/pitfalls.md), vehicle riders).
 - **The off-navmesh failure mode cannot happen on this map.** Raw ring geometry that would be
   rejected elsewhere ([../engine/pitfalls.md](../engine/pitfalls.md)) always paths here, and the
   *height* half of `SearchForBestPath`'s check has nothing but the flat 0.0 surface to test against.
