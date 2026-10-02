@@ -1498,19 +1498,32 @@ bool YoggSaronGuardianControlAction::ControlPhaseOne()
                       false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
-    Unit* guardian = YoggSaronPhase1TauntTarget(botAI);
-    if (!guardian)
-        return false;
-
-    // Whether the Guardian being fetched is still somewhere its death would pay for the phase, which
-    // is the one thing worth knowing about a taunt here after the fact.
-    if (RaidObs::Active())
+    if (Unit* guardian = YoggSaronPhase1TauntTarget(botAI))
     {
-        RaidObs::NoteDerived(bot, "yogg.p1taunt",
-                             YoggSaronGuardianCountsForSara(guardian) ? "counts" : "beyond");
+        // Whether the Guardian being fetched is still somewhere its death would pay for the phase,
+        // which is the one thing worth knowing about a taunt here after the fact.
+        if (RaidObs::Active())
+        {
+            RaidObs::NoteDerived(bot, "yogg.p1taunt",
+                                 YoggSaronGuardianCountsForSara(guardian) ? "counts" : "beyond");
+        }
+
+        if (Taunt(guardian))
+            return true;
     }
 
-    return Taunt(guardian);
+    // Nothing to fetch, or the taunt is still on cooldown: hold the pile instead. A taunt that does
+    // not go out still leaves the bot selected on what it aimed at, and nothing here replaces that,
+    // so without this the tank stands on the middle with a stale target and never swings.
+    Unit* hold = YoggSaronPhase1StackTarget(botAI);
+    Unit* current = AI_VALUE(Unit*, "current target");
+    if (!hold || current == hold)
+        return false;
+
+    if (RaidObs::Active())
+        RaidObs::NoteDerived(bot, "yogg.tankhold", "attack");
+
+    return Attack(hold);
 }
 
 bool YoggSaronGuardianControlAction::Taunt(Unit* guardian)

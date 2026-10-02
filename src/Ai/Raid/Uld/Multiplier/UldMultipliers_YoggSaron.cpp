@@ -50,11 +50,20 @@ float YoggSaronMovementGuardMultiplier::FleeGuard()
     return YoggSaronInPhase1(botAI) ? 0.0f : 1.0f;
 }
 
-bool YoggSaronMovementGuardMultiplier::MeleeReachIsWrong(Action* action)
+bool YoggSaronMovementGuardMultiplier::ReachIsWrong(Action* action)
 {
-    // Only the melee reach pays the phase read, so every other reach keeps the cheap ring arithmetic
-    // below ahead of it.
-    if (action->getName() != "reach melee" || !YoggSaronInPhase1(botAI))
+    // The spell reach too, for anyone who fights from the pile: a taunt and a judgement are both 30 yd
+    // casts, so chasing a Guardian with either walks the bot off the middle for nothing. One pull had
+    // the tank alternate between this reach and the control node's walk back 1.6 times a second for
+    // 83 s without landing a swing. The back line keeps its own, since the 21.5 yd station is the only
+    // thing holding it in range.
+    std::string const name = action->getName();
+    bool const spellReach =
+        name == "reach spell" && !PlayerbotAI::IsRanged(bot) && !PlayerbotAI::IsHeal(bot);
+
+    // Only these two pay the phase read, so every other reach keeps the cheap ring arithmetic below
+    // ahead of it.
+    if ((name != "reach melee" && !spellReach) || !YoggSaronInPhase1(botAI))
         return false;
 
     // Walking at a Guardian that is not on the stack is walking out of the cloud-free circle, and the
@@ -144,7 +153,7 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
         return 1.0f;
 
-    if (MeleeReachIsWrong(action))
+    if (ReachIsWrong(action))
         return 0.0f;
 
     if (CrusherReachIsWrong())

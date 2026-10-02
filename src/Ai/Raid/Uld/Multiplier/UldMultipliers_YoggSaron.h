@@ -35,7 +35,7 @@ public:
 private:
     float FleeGuard();
     float SetBehindGuard();
-    bool MeleeReachIsWrong(Action* action);
+    bool ReachIsWrong(Action* action);
     bool CrusherReachIsWrong();
 };
 

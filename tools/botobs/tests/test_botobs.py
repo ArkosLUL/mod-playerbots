@@ -1066,6 +1066,28 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(yogg_saron.nova_preresist([{"a": 100, "rs": 5}]), (1, 0, 0))
         self.assertEqual(yogg_saron.nova_preresist([]), (0, 0, 0))
 
+    def test_stalled_damage_only_counts_frozen_damage_while_the_bot_moves(self):
+        # 1790958937: Bulwark dealt nothing for 93.2 s of a 168.7 s phase 1, walked somewhere on every
+        # tick of it, because its target was 45-48 yd away and two nodes took turns on it.
+        samples = [(0, 100, 1), (1000, 100, 1), (2000, 100, 1), (3000, 250, 1), (4000, 250, 1)]
+        self.assertEqual(yogg_saron.stalled_damage(samples), (2000, 3000))
+        # Standing still breaks the run rather than joining the two halves, so a bot that stops often
+        # never reads as one long stall even with its damage flat throughout.
+        still = [(0, 100, 1), (1000, 100, 1), (2000, 100, 0), (3000, 100, 1), (4000, 100, 1)]
+        self.assertEqual(yogg_saron.stalled_damage(still), (2000, 3000))
+        # Damage going up every tick is a bot that is swinging, however much it moves.
+        self.assertEqual(yogg_saron.stalled_damage([(0, 100, 1), (1000, 200, 1), (2000, 300, 1)]), (0, 0))
+        self.assertEqual(yogg_saron.stalled_damage([]), (0, 0))
+
+    def test_move_tug_counts_reversals_not_handoffs(self):
+        # The 1.6 Hz signature: reach spell steps out, the control node walks back, repeat.
+        rows = [(0, "reach spell"), (600, "control"), (1600, "reach spell"), (2200, "control"),
+                (3200, "reach spell")]
+        self.assertEqual(yogg_saron.move_tug(rows), [("control", "reach spell", 3)])
+        # One handoff is a bot being walked somewhere once, which is not a tug.
+        self.assertEqual(yogg_saron.move_tug([(0, "a"), (1000, "b")]), [])
+        self.assertEqual(yogg_saron.move_tug([(0, "a"), (1000, "a"), (2000, "a")]), [])
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))

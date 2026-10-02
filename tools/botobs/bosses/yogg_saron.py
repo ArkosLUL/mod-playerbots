@@ -185,6 +185,11 @@ STACK_FOOD_RADIUS = 15.0
 REDIRECT_SPELLS = {34477: "Misdirection", 57934: "Tricks of the Trade"}
 TAUNT_SPELLS = {355: "Taunt", 62124: "Hand of Reckoning", 56222: "Dark Command", 2649: "Growl"}
 
+# The same four as bot actions, for the attempts that failed and so never reached a cast row. All of
+# them share spell range index 4, which is ULDUAR_YOGG_SARON_P1_TAUNT_RANGE.
+TAUNT_ACTIONS = {"taunt", "hand of reckoning", "dark command", "growl"}
+TAUNT_RANGE = 30.0
+
 # The tentacle's own melee range on a player, centre to centre: CombatReach 8 on display 28814, plus
 # 1.5, plus 4/3, which is 10.83. No leeway, since it never moves. Same number as the module's
 # ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS, so the reader and the trigger agree on who is inside.
@@ -2222,6 +2227,7 @@ def show_threat(trace: Trace) -> None:
 
     guardians = guids_of_entry(trace, NPC_GUARDIAN)
     roster = roster_guids(trace)
+    tanks = {guid for guid in roster if trace.role(guid) == "tank"}
 
     held, _ = threat_share(trace, guardians, lambda when: 0 <= when <= p1_end)
     if sum(held.values()):
@@ -2233,6 +2239,9 @@ def show_threat(trace: Trace) -> None:
     if split:
         print(f"  bot non-tanks on one Guardian: {split[0]:4.1f}%   on two or more: {split[1]:4.1f}%"
               f"   (of the time any of them was on one)")
+
+    show_tank_engagement(trace, p1_end, tanks)
+    show_taunt_attempts(trace, p1_end, tanks)
 
     redirects = [rec for rec in trace.of("cast")
                  if rec.get("sp") in REDIRECT_SPELLS and 0 <= rec["t"] <= p1_end]
@@ -2270,6 +2279,94 @@ def show_threat(trace: Trace) -> None:
         print(f"    {clock(rec['t']):>9}  {TAUNT_SPELLS[rec['sp']]:<18}"
               f" rank {rank or '?'}/{len(live):<2}  target {radius} yd out")
     print(f"    landed on the focus Guardian: {on_focus} of {len(taunts)}")
+
+
+def stalled_damage(samples: list[tuple[int, int, int]]) -> tuple[int, int]:
+    """Longest and total ms over (t, dealt, moving) where `dealt` never changed while `moving` was set.
+    Damage frozen on a bot that is on the move every tick is a bot being walked somewhere each time it
+    comes up, so it never stands still long enough to swing."""
+    longest = total = run = 0
+    previous: tuple[int, int] | None = None
+    for when, dealt, moving in samples:
+        if previous is not None and dealt == previous[1] and moving:
+            run += when - previous[0]
+        else:
+            longest = max(longest, run)
+            total += run
+            run = 0
+        previous = (when, dealt)
+
+    return max(longest, run), total + run
+
+
+def move_tug(rows: list[tuple[int, str]]) -> list[tuple[str, str, int]]:
+    """Issuer pairs that took turns, and how many reversals each made, over (t, issuer) in time order.
+    A reversal is one issuer's move, then another's, then the first one's again - a bot being pulled two
+    ways rather than walked somewhere once."""
+    counts: collections.Counter = collections.Counter()
+    for first, second, third in zip(rows, rows[1:], rows[2:]):
+        if first[1] != second[1] and first[1] == third[1]:
+            counts[tuple(sorted((first[1], second[1])))] += 1
+
+    return [(pair[0], pair[1], count) for pair, count in counts.most_common()]
+
+
+def show_tank_engagement(trace: Trace, p1_end: int, tanks: set) -> None:
+    """Whether a phase 1 tank ever stood still long enough to swing. Nothing here gives a tank a target
+    of its own - the dps resolver stands down for one and the generic picker keeps whatever is already
+    selected - so a stale selection across the room leaves the reach walking at it every tick."""
+    for guid, samples in snapshot_rows(trace, tanks).items():
+        inside = [(row[0], row[12], row[9]) for row in samples if 0 <= row[0] <= p1_end]
+        if len(inside) < 2:
+            continue
+
+        longest, total = stalled_damage(inside)
+        span = inside[-1][0] - inside[0][0] or 1
+        print(f"\n  {trace.name(guid)}: damage frozen while moving for {total / 1000:5.1f} s of"
+              f" {span / 1000:5.1f} ({100.0 * total / span:3.0f}%),"
+              f" longest stretch {longest / 1000:5.1f} s")
+
+        moves = [(rec["t"], rec.get("by") or "?") for rec in trace.of("move")
+                 if rec.get("g") == guid and rec.get("ok") and 0 <= rec["t"] <= p1_end]
+        for first, second, count in move_tug(moves)[:3]:
+            print(f"    pulled both ways {count:3d} times: {first} against {second}")
+
+
+def show_taunt_attempts(trace: Trace, p1_end: int, tanks: set) -> None:
+    """The taunts that never left the gun, which the cast rows cannot show. The pick has no range test
+    of its own, and all four class taunts reach 30 yd, so an out-of-range aim fails - and CastSpell
+    selects before it validates range, so the tank is left holding what it could not reach."""
+    attempts = [rec for rec in trace.of("act")
+                if rec.get("a") in TAUNT_ACTIONS and rec.get("g") in tanks and 0 <= rec["t"] <= p1_end]
+    if not attempts:
+        return
+
+    rows = snapshot_rows(trace, tanks)
+    failed = out_of_reach = 0
+    print(f"\n  taunt attempts: {len(attempts)}   (over {TAUNT_RANGE:.0f} yd the cast cannot land)")
+    for rec in attempts:
+        if rec.get("vd") != "OK":
+            failed += 1
+
+        aim = taunt_aim(trace, rows.get(rec["g"], []), rec["t"])
+        reach = "?" if aim is None else f"{aim[1]:5.1f} yd"
+        if aim and aim[1] > TAUNT_RANGE:
+            out_of_reach += 1
+
+        print(f"    {clock(rec['t']):>9}  {rec['a']:<18} {rec.get('vd', '?'):<10}"
+              f" aimed {reach} away" + (f" at {trace.name(aim[0])}" if aim else ""))
+    print(f"    failed: {failed} of {len(attempts)}, of which out of reach: {out_of_reach}")
+
+
+def taunt_aim(trace: Trace, rows: list[list], when: int) -> tuple[int, float] | None:
+    """What a taunt attempt was aimed at and how far off it was, from the tank's first snapshot at or
+    after it: the selection is already set by then, whether the cast went out or not."""
+    after = next((row for row in rows if row[0] >= when), None)
+    if not after or not after[8]:
+        return None
+
+    spot = position_at(trace, after[8], after[0])
+    return (after[8], math.dist((after[2], after[3]), spot)) if spot else None
 
 
 def focus_split(trace: Trace, guardians: set, roster: set, p1_end: int) -> tuple[float, float] | None:

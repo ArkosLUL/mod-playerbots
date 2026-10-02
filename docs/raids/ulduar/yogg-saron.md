@@ -380,7 +380,10 @@ raid on the clouds:
   leash — eight parked on the 21.5 yd station. Median destination **10.5 yd** from the middle, which is
   the innermost orbit. Now zeroed in phase 1 while the current target is outside
   `ULDUAR_YOGG_SARON_P1_LEASH` **and a bot tank is alive to fetch it**; without that second condition a
-  dead tank strands every melee bot out of combat.
+  dead tank strands every melee bot out of combat. **`reach spell` is in the same rule** for anyone who
+  fights from the pile, since a taunt and a judgement are both 30 yd casts: left out of it, it traded
+  the tick with the control node's walk back **116 times** in one phase 1 while the tank held a target
+  45 yd away. The back line keeps its own, which is all that holds it in range from the 21.5 yd station.
 - **`flee` walks ranged and healers off the station.** Not the panic route: median health when fleeing
   was **96.9%** and 74% of the moves were above 80%. It is `RangedCombatStrategy`'s `"enemy too close
   for spell"` at `ACTION_MOVE + 4`, true whenever a Guardian stands on a caster — and the 3 yd it gives
@@ -540,8 +543,28 @@ reactive — whoever last hit a raid member — and its aim decays as they pile 
 **6 of 13 times**, all six with 1-5 alive, then rank 3, 3, 4, 6 and **7 of 9**. `yogg-saron guardian
 control` runs in phase 1 as well now, holding the tank inside the **2.8 yd** cloud-free circle rather
 than phase 3's 5.0 and taunting `YoggSaronPhase1TauntTarget`: the raid's focus first, skipping any
-Guardian already inside the leash or already walking at a tank. Taunt reaches 30 yd, which covers the
-whole 21.5 yd back line, so this never walks the tank out after one.
+Guardian already inside the leash or already walking at a tank, and **nothing it cannot reach**: Taunt
+355, Hand of Reckoning 62124, Dark Command 56222 and Growl 6795 all share spell range index 4, so
+`ULDUAR_YOGG_SARON_P1_TAUNT_RANGE` is **30 yd** - still the whole 21.5 yd back line, so this never
+walks the tank out after one.
+
+**An unreachable aim sticks, which is why the range has to be in the pick.** `PlayerbotAI::CastSpell`
+selects before it validates range, so a taunt that cannot land still leaves the tank holding what it
+aimed at, and nothing takes that back: `YoggSaronSetDpsPriorityTrigger` stands down for a tank outside
+phase 2 and the generic picker keeps any live target (**5** casts in 169 s). Lowest health anywhere then
+means whatever a hunter pet is grinding down at the wall, which wins forever while out of range. One
+pull aimed **12 of 15** taunts at 45-57 yd, dealt nothing for **93.2 s of 168.7** while two nodes took
+turns walking it, held the Guardians **8.8%** of the time against **28%** on a non-tank raider, and
+never finished phase 1. The trigger is a pet holding a Guardian far out, which ran **54.9%** of samples
+there against 1.1% the pull before and 83% of a phase 1 on 2026-09-26: intermittent, so the fix is
+measured over pulls rather than one. Of 676 ticks the pick was out of range in **67.5%** while a
+candidate inside 30 yd existed in **79.0%**, so the clamp redirects the taunt rather than starving it.
+
+**So phase 1's control node ends on an attack**, the way phase 3's does: nothing to fetch or the taunt
+still on cooldown, and the tank hits the lowest-health Guardian already inside `IsWithinMeleeRange`
+(`YoggSaronPhase1StackTarget`), holding where none is. In reach only, so holding the pile is never a
+walk off the middle - one sat in reach through all **331** samples of that stall. `yogg.tankhold`
+"attack" records it, the same value phase 3 writes.
 
 **A taunt only pays if the raid waits for the walk**, and per-bot kill orders cannot wait. One pull
 taunted the focus at 22.4 yd and killed it at **18.0 yd, 6.4 s later**. Preferring a Guardian inside
@@ -1281,7 +1304,11 @@ non-tank swing, `yogg.tankhold`,
 each beacon's marked guardians' distance to Yogg and his health over the heal, gaze cost inside vs
 outside, and each healer's distance to the melee spot and facing during gazes. Under `--fervor`: each
 Fervor run, whether it came back inside 16.2 yd while holding and what walked it back, novas on holders,
-and Guardians only runners summoned. Under `--novas`, for the whole fight rather than phase 1: every
+and Guardians only runners summoned. Under `--threat`, beside Guardian time on target and the taunts
+that landed: how long each tank's damage stayed frozen **while it was moving** and the node pairs that
+took turns on it, then every taunt **attempt** from the action rows with its verdict and how far off it
+aimed. The attempts are the point - a cast that failed never reaches a cast row, and those are the ones
+that cost the phase. Under `--novas`, for the whole fight rather than phase 1: every
 nova with the warning each gate gave, the raiders in reach and how many were back line, the worst hit as
 a share of their pool and what it resisted, how many hits resisted nothing, who it would have killed and
 what was up on them, the raid-wide auras live at that instant, the deaths, and the back-line bots a nova

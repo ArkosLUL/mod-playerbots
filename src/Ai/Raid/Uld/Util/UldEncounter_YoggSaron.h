@@ -237,6 +237,12 @@ constexpr float ULDUAR_YOGG_SARON_P1_ROOM_RADIUS =
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH = 6.5f;
 constexpr float ULDUAR_YOGG_SARON_P1_LEASH_RELEASE = ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
 
+// How far the fetch can reach: Taunt 355, Hand of Reckoning 62124, Dark Command 56222 and Growl 6795
+// all share spell range index 4, so 30 yd whoever is tanking. Without it the pick is whatever is
+// lowest on health anywhere in sight range, and a Guardian a pet is grinding down at the wall wins
+// that forever - one pull aimed 83 s of taunts at one 48 yd away and landed none of them.
+constexpr float ULDUAR_YOGG_SARON_P1_TAUNT_RANGE = 30.0f;
+
 // The other of those two 15s: how far 65719 reaches Sara, so how far out a kill still counts. It is
 // the wider one on purpose - the leash decides where a bot stands, this decides when the raid gives
 // up on a Guardian, and keeping them apart is what stops a focus flipping on a yard of drift.
@@ -800,6 +806,12 @@ bool YoggSaronPhase1AoeHold(PlayerbotAI* botAI);
 // hit somebody picked the 7th-lowest Guardian of 9. Only fires for a Guardian outside the leash,
 // because one already inside needs no fetching.
 Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI);
+
+// The Guardian a phase 1 tank should be swinging at, lowest health first, or null while none is
+// already in reach. Nothing else gives a tank a target here - the dps resolver stands down for one
+// and the generic picker keeps whatever is selected - so one pull held a stale selection 48 yd away
+// and dealt nothing for 83 s with a Guardian inside its reach throughout.
+Unit* YoggSaronPhase1StackTarget(PlayerbotAI* botAI);
 
 // Whether the raid still has a living bot tank to fetch Guardians with. The reach guard below stands
 // melee down on the promise that somebody else brings the target in, so it has to know that somebody

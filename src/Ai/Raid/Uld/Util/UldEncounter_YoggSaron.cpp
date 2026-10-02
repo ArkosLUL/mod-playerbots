@@ -1667,11 +1667,38 @@ Unit* YoggSaronPhase1TauntTarget(PlayerbotAI* botAI)
             continue;
         }
 
+        // Out of taunt range is not a candidate: the cast would fail, and a failed cast still leaves
+        // the bot selected on what it aimed at, which is then what every reach walks toward.
+        if (bot->GetDistance(guardian) > ULDUAR_YOGG_SARON_P1_TAUNT_RANGE)
+            continue;
+
         if (YoggSaronPhase1GuardianPreferred(guardian, focus))
             focus = guardian;
     }
 
     return focus;
+}
+
+Unit* YoggSaronPhase1StackTarget(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+
+    std::list<Creature*> guardians;
+    bot->GetCreatureListWithEntryInGrid(guardians, NPC_GUARDIAN_OF_YS, ULDUAR_YOGG_SARON_P1_TAUNT_RANGE);
+
+    Unit* lowest = nullptr;
+    for (Creature* guardian : guardians)
+    {
+        // In reach only: anything further is the taunt's job, and walking at it is what the reach
+        // guard stands the bot down from.
+        if (!guardian->IsAlive() || !bot->IsWithinMeleeRange(guardian))
+            continue;
+
+        if (!lowest || guardian->GetHealth() < lowest->GetHealth())
+            lowest = guardian;
+    }
+
+    return lowest;
 }
 
 bool YoggSaronBotTankAlive(PlayerbotAI* botAI)
