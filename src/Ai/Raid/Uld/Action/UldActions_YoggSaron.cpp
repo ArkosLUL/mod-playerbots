@@ -71,38 +71,6 @@ float HeadingGap(float from, float to)
     return gap > static_cast<float>(M_PI) ? 2.0f * static_cast<float>(M_PI) - gap : gap;
 }
 
-// The handover bearing turned off the back line. Walking `radius` out from the middle along the bearing
-// a bot already holds is the shortest line clear of the body, but the ring is 15 yd and the back line
-// parks at 21.5, so a westward bearing ends between the two: the tank walked to 6.6 yd of the stack
-// with three live Guardians taunted onto it, two of them detonated 2.9 yd away, and eleven raiders died
-// in three seconds. The cone to refuse follows from the triangle, 51.9 degrees at this radius, which
-// still leaves 256 degrees for the fan.
-float YoggSaronClearBearing(float angle, float radius)
-{
-    float const toStation = ULDUAR_YOGG_SARON_MIDDLE.GetAngle(&ULDUAR_YOGG_SARON_P1_RANGED_SPOT);
-    float const station = ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(&ULDUAR_YOGG_SARON_P1_RANGED_SPOT);
-
-    float const reach = (radius * radius + station * station -
-                         ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS *
-                             ULDUAR_YOGG_SARON_SHADOW_NOVA_TRIGGER_RADIUS) /
-                        (2.0f * radius * station);
-    if (reach >= 1.0f)
-        return angle;
-
-    // Below -1 the whole circle is inside the blast, which the geometry of this room never gives, and
-    // acos would be the wrong answer anyway.
-    float const cone = std::acos(std::max(reach, -1.0f));
-    float const gap = HeadingGap(angle, toStation);
-    if (gap >= cone)
-        return angle;
-
-    // To the nearer edge, so a bot still walks the shortest line it is allowed.
-    float const sign = Position::NormalizeOrientation(angle - toStation) <= static_cast<float>(M_PI)
-                           ? 1.0f
-                           : -1.0f;
-
-    return Position::NormalizeOrientation(toStation + sign * cone);
-}
 }  // namespace
 
 const Position ULDUAR_YOGG_SARON_BOSS_ROOM_RESTORE_POINT = Position(1928.8923f, -24.871964f, 324.88956f, 6.247805f);
@@ -111,16 +79,14 @@ bool YoggSaronGuardianPositioningAction::Execute(Event /*event*/)
 {
     if (YoggSaronHandoverState(botAI).clearing)
     {
-        // Straight out along the bearing the bot already holds, so nine melee fan around the ring
-        // rather than stacking on one point, and each of them walks the shortest line out there is.
-        float const radius = ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
-        float const angle = YoggSaronClearBearing(
-            ULDUAR_YOGG_SARON_MIDDLE.GetAngle(bot->GetPositionX(), bot->GetPositionY()), radius);
+        // One spot rather than a fan. Letting each bot keep the bearing it already held spread the
+        // front line over 37 and 40 yd and put ten of eleven outside every healer's 38.5 yd at some
+        // point, and a pair of Guardians that had followed them out killed five of them standing on
+        // the same ring.
+        Position const& spot = ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT;
 
-        return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX() + radius * std::cos(angle),
-                      ULDUAR_YOGG_SARON_MIDDLE.GetPositionY() + radius * std::sin(angle),
-                      ULDUAR_YOGG_SARON_MIDDLE.GetPositionZ(), false, false, false, true,
-                      MovementPriority::MOVEMENT_FORCED, true, false);
+        return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(),
+                      false, false, false, true, MovementPriority::MOVEMENT_FORCED, true, false);
     }
 
     return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY(),
@@ -305,11 +271,14 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     // are on the pile, so the nearest safe spot sits ~19 yd out while that orbit summons from 3.1 to
     // 20.4. One pull put every melee step-out there and woke 7 of its 16 Guardians off that orbit,
     // which nothing but a player's feet can reach. The station band is the one radius only the second
-    // orbit reaches, and the back line already wakes that cloud, so joining it costs no summon of its
-    // own. Both tests, because the stack radius alone reaches 16.5 yd from the middle and that is back
-    // on the inner orbit. Preferred rather than required, so this never holds a bot in the blast. Not
-    // the tank: it keeps the Guardians on the pile, and IsMelee is !IsRanged, so a melee healer would
-    // be caught too whenever Fervor opened the gate for it.
+    // orbit reaches, and the back line already wakes that cloud.
+    //
+    // The band alone, not the band and the back line's blob together: the sweep tests rings 2 yd apart
+    // and 16 bearings around the bot, and both tests at once leave it 0 to 2 points of the ~200 it
+    // offers, so one cloud near the bearing emptied the set and only 11-15% of step-outs reached it.
+    // The band on its own offers 11 to 16. Preferred rather than required, so this never holds a bot in
+    // the blast. Not the tank: it keeps the Guardians on the pile, and IsMelee is !IsRanged, so a melee
+    // healer would be caught too whenever Fervor opened the gate for it.
     if (!novas.empty() && PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot))
     {
         set.preferred = [](float x, float y)
@@ -317,9 +286,7 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
             float const fromMiddle = ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(x, y);
 
             return std::abs(fromMiddle - ULDUAR_YOGG_SARON_P1_RANGED_STATION_RADIUS) <=
-                       ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE &&
-                   ULDUAR_YOGG_SARON_P1_RANGED_SPOT.GetExactDist2d(x, y) <=
-                       ULDUAR_YOGG_SARON_P1_RANGED_STACK_RADIUS;
+                   ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE;
         };
     }
 
@@ -1725,7 +1692,7 @@ bool YoggSaronNovaDefensiveAction::Execute(Event /*event*/)
     if (!needMs)
         return false;
 
-    char const* defensive = NextMagicDefensive(botAI, bot, "yogg.novadef", needMs);
+    uint32 const defensive = NextMagicDefensive(botAI, bot, "yogg.novadef", needMs);
 
     return defensive && botAI->CastSpell(defensive, bot);
 }

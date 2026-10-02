@@ -34,7 +34,7 @@ bool AlgalonBigBangSoakTrigger::IsActive()
         return remaining <= ULDUAR_ALGALON_SOAK_DISPERSION_MS;
 
     return remaining <= ULDUAR_ALGALON_SOAK_DEFENSIVE_MS &&
-           NextTankDefensive(botAI, bot, "algalon.defensive", true) != nullptr;
+           NextTankDefensive(botAI, bot, "algalon.defensive", true) != 0;
 }
 
 bool AlgalonBigBangExternalTrigger::IsActive()

@@ -159,6 +159,12 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if (CrusherReachIsWrong())
         return 0.0f;
 
+    // Above the radius test, not below it: the handover's anchor is outside the ring, so a bot that has
+    // arrived would otherwise get its reach back and be pulled off the spot it just walked to. Spans
+    // the phase boundary too, the window being phase 1 and the hold that outlives it phase 2.
+    if (YoggSaronHandoverState(botAI).clearing)
+        return 0.0f;
+
     float const fromMiddle =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
     if (fromMiddle >= ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
@@ -172,12 +178,7 @@ float YoggSaronMovementGuardMultiplier::GetValue(Action* action)
     if ((phase == 2 || phase == 3) && fromMiddle < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_RADIUS)
         return 0.0f;
 
-    if (phase != 1 && phase != 2)
-        return 1.0f;
-
-    // The walk out of the ring, which spans the phase boundary: the window is phase 1 and the hold that
-    // outlives it is phase 2.
-    return YoggSaronHandoverState(botAI).clearing ? 0.0f : 1.0f;
+    return 1.0f;
 }
 
 float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)

@@ -1119,6 +1119,28 @@ class YoggPhases(unittest.TestCase):
         # Out of order in, same answer out: the notes arrive per bot, not globally sorted.
         self.assertEqual(yogg_saron.dodge_followups([(5000, "cloud"), (0, "nova")], 20000), (1, 1))
 
+    def test_beyond_reach_counts_spots_no_healer_can_cover(self):
+        # 1790975740 at the ring: the front line sat 32.5 yd from the nearest healer on median and ten
+        # of eleven passed 38.5 at some point in the next 15 s.
+        self.assertEqual(yogg_saron.beyond_reach([(0.0, 0.0)], [(0.0, 30.0)], 38.5), (0, 1))
+        self.assertEqual(yogg_saron.beyond_reach([(0.0, 0.0)], [(0.0, 40.0)], 38.5), (1, 1))
+        # Exactly at the reach still counts as covered, the way GetExactDist2d <= range does.
+        self.assertEqual(yogg_saron.beyond_reach([(0.0, 0.0)], [(0.0, 38.5)], 38.5), (0, 1))
+        # The nearest healer is the one that matters, not the first.
+        self.assertEqual(yogg_saron.beyond_reach([(0.0, 0.0)], [(0.0, 50.0), (0.0, 10.0)], 38.5), (0, 1))
+        # No healer left standing covers nobody.
+        self.assertEqual(yogg_saron.beyond_reach([(0.0, 0.0)], [], 38.5), (1, 1))
+        self.assertEqual(yogg_saron.beyond_reach([], [(0.0, 0.0)], 38.5), (0, 0))
+
+    def test_cooldown_gap_says_how_late_the_raid_button_was(self):
+        # 1790975740: Divine Sacrifice went at 0:22.4, 0:32.9 and 1:13.2, and the nova that killed five
+        # landed at 2:14.2, which is 8.2 s before the first of them came back.
+        self.assertEqual(yogg_saron.cooldown_gap([22435, 32892, 73193], 120000, 134229), 8206)
+        # One already off cooldown means the raid had it and did not use it.
+        self.assertIsNone(yogg_saron.cooldown_gap([22435], 120000, 150000))
+        # Nothing spent is the same answer: the button was in hand.
+        self.assertIsNone(yogg_saron.cooldown_gap([], 120000, 134229))
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))

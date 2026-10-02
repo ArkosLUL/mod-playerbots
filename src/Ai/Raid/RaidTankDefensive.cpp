@@ -19,9 +19,9 @@ namespace
 // Bubbles are deliberately absent - a paladin under Divine Shield does no damage and holds nothing. So
 // is short rotational mitigation (shield block, bone shield, spell reflection), which keeps running on
 // its own class logic; only the real cooldowns are sequenced. Cast names are the strings the class
-// contexts already register, so one row serves both the cast and the multiplier, and the aura is
-// matched by id because PlayerbotAI::HasAura compares the DBC string exactly - "anti magic shell" is
-// not "Anti-Magic Shell".
+// contexts already register, so one row serves the hold and the trace note. The cast and the aura both
+// go by id: PlayerbotAI::HasAura and the spellbook lookup behind CanCastSpell both compare the DBC
+// string exactly, and "anti magic shell" is not "Anti-Magic Shell".
 //
 // `tank` marks the nine NextTankDefensive has always offered. The two dps-only rows at the bottom are
 // out of that set, so the bosses that hold a tank's buttons do not also start holding a rogue's.
@@ -33,7 +33,7 @@ struct TankDefensive
 {
     uint8 playerClass;
     char const* castName;
-    uint32 auraId;
+    uint32 spellId;
     bool magicOnly;
     uint32 windowMs;
     uint8 cutPct;
@@ -77,7 +77,7 @@ TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physica
 
         // One at a time: anything still running means the bot is already covered, and stacking the
         // next one on top spends two buttons on one window.
-        if (bot->HasAura(entry.auraId))
+        if (bot->HasAura(entry.spellId))
         {
             running = true;
             return &entry;
@@ -86,33 +86,33 @@ TankDefensive const* PickDefensive(PlayerbotAI* botAI, Player* bot, bool physica
         if (entry.windowMs < needMs)
             continue;
 
-        if (!weakest && botAI->CanCastSpell(entry.castName, bot))
+        if (!weakest && botAI->CanCastSpell(entry.spellId, bot))
             weakest = &entry;
     }
 
     return weakest;
 }
 
-char const* NextDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly,
-                          bool tankOnly, uint32 needMs)
+uint32 NextDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly,
+                     bool tankOnly, uint32 needMs)
 {
     bool running = false;
     TankDefensive const* picked = PickDefensive(botAI, bot, physicalOnly, tankOnly, needMs, running);
-    char const* castName = running || !picked ? nullptr : picked->castName;
+    bool const cast = picked && !running;
 
     if (noteKind && RaidObs::Active())
-        RaidObs::NoteDerived(bot, noteKind, castName ? castName : (running ? "covered" : "none"));
+        RaidObs::NoteDerived(bot, noteKind, cast ? picked->castName : (running ? "covered" : "none"));
 
-    return castName;
+    return cast ? picked->spellId : 0;
 }
 }  // namespace
 
-char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly)
+uint32 NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly)
 {
     return NextDefensive(botAI, bot, noteKind, physicalOnly, true, 0);
 }
 
-char const* NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs)
+uint32 NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs)
 {
     return NextDefensive(botAI, bot, noteKind, false, false, needMs);
 }

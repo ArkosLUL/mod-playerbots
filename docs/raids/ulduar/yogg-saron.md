@@ -171,21 +171,49 @@ where orbits 1 and 2 both reach — neither of the two radii below that no orbit
 three pulls that have a step-out, **100%** of melee nova destinations landed where an orbit reaches and
 70-100% where two do, and those bots then dodged the cloud they woke: Shadow **9 of 10** and **10 of
 11** cloud dodges inside 20 s of its own step-out, Totemist and Assasin 7 of 8, against **0 of 1** for
-every melee that never steps out. So phase 1 sets `HazardSet::preferred` to the station's band **and**
-blob (`…_P1_RANGED_STATION_RADIUS` ± `…_P1_RANGED_BAND_TOLERANCE`, inside
-`…_P1_RANGED_STACK_RADIUS` of `…_P1_RANGED_SPOT`). Both tests, because the blob alone reaches 16.5 yd
-from the middle, back on orbit 1. It costs no summon of its own: orbit 2 runs through the station and
-14 bots already wake that cloud every lap. **Not the tank**, which holds the Guardians on the pile, nor
+every melee that never steps out. So phase 1 sets `HazardSet::preferred` to the station's **band alone**
+(`…_P1_RANGED_STATION_RADIUS` ± `…_P1_RANGED_BAND_TOLERANCE`), which is already the only-orbit-2 band
+and so costs no summon of its own: orbit 2 runs through the station and 14 bots wake that cloud every
+lap anyway.
+
+The blob (`…_P1_RANGED_STACK_RADIUS` of `…_P1_RANGED_SPOT`) came out of the test: asking
+for both left `FindNearestPositionClearOfHazards` **0 to 2** acceptable points of the ~200 its grid
+offers a bot 0-6 yd from the middle — rings 2 yd apart, 16 bearings, against a 2.3 × 10 yd lens 19 yd
+away — so one cloud circle emptied the set and only **11%** and **15%** of step-outs reached it. The
+band on its own offers **11 to 16**. Widening the tolerance is not the fix: ±1.0 *is* the band, 1.13 yd
+either side of 21.5. **Not the tank**, which holds the Guardians on the pile, nor
 a melee healer — `IsMelee` is `!IsRanged`, and Fervor opens the gate with no pool test. Judge it on the
 melee nova row of `--clouds`, not on the raid's own feet: that ran **46-63%** across all ten pulls with
 and without a step-out, because the pile drifts onto orbit 1 for cloud dodges too.
 
-**Two gaps left in the buttons, both deliberate for now.** A **dps warrior has none**: the ladder's
-only warrior rows are Last Stand and Shield Wall, both protection-only, so `CanCastSpell` rejects both
-and neither warrior wrote a `yogg.novadef` note across two pulls while dying from full. And
-`…_NOVA_STEP_OUT_POOL` is one nova's 28,600, so 30-31k pools never leave, yet two Guardians dying
-together deal ~39,000. `YoggSaronNovaDamageFrom` already predicts the chain and the gate ignores it;
-re-measure once fewer Guardians are self-woken, since that is what puts two of them low at once.
+**The raid-wide button waits for a chained nova, or it is never there for one.**
+`YoggSaronNovaHurtCount` flags a member on `GetHealth() <= expected`, and one nova's `expected` is the
+**unresisted** 28,600 while every pool in the raid is 23,387-31,089 — so a single Guardian low anywhere
+flagged the whole melee group and three paladins each spent Divine Sacrifice inside the first **73 s**,
+on novas where nobody fell below 8,020. Its 120 s came back at **2:22.4**; the double nova killed five
+at **2:14.2**, **8.2 s** short. Resistance is why the figure is wrong: over **234** hits across two
+pulls **none** resisted under 10%, the median resisted **21%** and the median landed **14,411**. So the
+count now needs `…_NOVA_MAX_CHAIN × …_NOVA_EXPECTED_DAMAGE`, which is what `YoggSaronNovaDamageFrom`
+already returns for two Guardians in reach — and for one on a Fervor holder, correctly, since a single
+nova does kill one from full. The warning is ample: two Guardians sat at **5.28%** and **0.03%** within
+17 yd of the pile from 2:08.7 to 2:14.2.
+
+**Anti-Magic Shell had never once fired for a bot**, on a name rather than a judgement. The ladder
+tested `CanCastSpell("anti magic shell")`, which goes through `SpellIdValue` and `Utf8FitTo`'s
+substring compare against the DBC string **'Anti-Magic Shell'** — so the only **75%** row, and the
+shortest cooldown at 45 s, was skipped in silence. Across twelve pulls: bots **0** casts, the human
+death knight **24**. `NextTankDefensive` and `NextMagicDefensive` now return the **spell id** and
+`PickDefensive` tests that, which is safe because all eleven rows' ids are single-rank; `castName`
+stays the action name `IsHeldTankDefensive` and the class contexts match on. Obliteration had spent
+Icebound Fortitude (30%, 120 s) at 1:28.4 and died at 2:14 with the 45 s button it could not reach.
+
+**Two gaps left, both deliberate.** A **dps warrior has none**: Last Stand is a protection talent and
+Shield Wall needs a shield (871 carries `EquippedItemClass` 4, subclass mask 64), so `CanCastSpell`
+rejects both, and the pair ate eight novas of 15,258-22,250 with nothing up. **No warrior button closes
+it** — Enraged Regeneration (55694, no item requirement) heals 3% of max health a second for 10 s,
+against 36,321 arriving in 50 ms. And `…_NOVA_STEP_OUT_POOL` is still one nova's 28,600, so 30-31k
+pools never leave; re-measure once fewer Guardians are self-woken, since that is what puts two low at
+once.
 
 Three tiers, in that relevance order, because one cast covering 25 raiders beats any single bot's own:
 
@@ -193,8 +221,9 @@ Three tiers, in that relevance order, because one cast covering 25 raiders beats
   (3) of the stack. Claimed per window by `ClaimYoggSaronNovaWindow` (`…_NOVA_WINDOW_MS` 10 s, the
   spell's own duration), and cast through the class node so `cancel divine sacrifice` stays its
   continuer.
-- **`yogg-saron nova defensive`** — the bot's own, from `NextMagicDefensive`: shortest cooldown first
-  and never two at once, so Anti-Magic Shell (45 s) goes ahead of Barkskin and Shamanistic Rage (60 s),
+- **`yogg-saron nova defensive`** — the bot's own, from `NextMagicDefensive`, by **spell id**:
+  shortest cooldown first and never two at once, so Anti-Magic Shell (45 s, and reachable only since
+  the id replaced its name) goes ahead of Barkskin and Shamanistic Rage (60 s),
   then Cloak of Shadows (90 s), Icebound Fortitude (120 s), Divine Protection and Survival Instincts
   (180 s). No claim — a personal button covers one bot, so two bots firing is not an overlap.
 - **`yogg-saron nova external`** — a healer's, in worth order `pain suppression`, `guardian spirit`,
@@ -858,37 +887,72 @@ the end of the transformation dialogue — 4 + 5 + 4.5 + 4 s of it plus the 500 
 `EVENT_SARA_P2_START`, measured 18.0-18.3 s. The phase reads 1 throughout and Guardians are usually still
 alive, so the leash kept hauling melee and the tank onto the middle: before the walk out, in every
 pull on record **9 of 9 melee and the tank stood in the ring when it lit**, against **0 of 10 ranged
-and 0 of 4 healers**, already 8.2 yd clear of it on the 21.5 yd station. With it, 2 of 9. So the walk
-out belongs to melee and the tank alone — to `ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS` along
-the bearing each already holds, which fans nine of them around the ring instead of stacking them on a
-point.
+and 0 of 4 healers**, already 8.2 yd clear of it on the 21.5 yd station. So the walk out belongs to
+melee and the tank alone, and it goes to **one anchor**.
 
-**That bearing has to be turned off the back line.** The ring is 15 yd and the station 21.5, so a
-bearing pointing west ends *between* the two: the tank walked to **6.6 yd** of the stack with three live
-Guardians taunted onto it, two detonated **2.9 yd** away, and eleven raiders died in three seconds,
-three of the four healers among them. `YoggSaronClearBearing` refuses the cone whose endpoint lands
-inside `…_SHADOW_NOVA_TRIGGER_RADIUS` of `…_P1_RANGED_SPOT` — **51.9°** either side at that radius, from
-the triangle — and clamps to the nearer edge, leaving 256° for the fan.
+**A fan of bearings is the wrong shape, twice over.** Sending each bot out along the bearing it
+already held spread the front line over **37.0** and **40.4 yd** at the ring (57.7 five seconds later),
+centred on bearing 34° and 75° against the station's 180°, which left **10 of 11** past every healer's
+38.5 yd `AiPlayerbot.HealDistance` at some point in the next 15 s — median gap 32.5 and 37.5 yd, worst
+50.7 and 55.0. The bearing also had to be bent off the back line, because at 15 yd a westward one ends
+*between* ring and station: the tank once walked to **6.6 yd** of the stack with three live Guardians
+taunted onto it, two detonated **2.9 yd** away, and eleven raiders died in three seconds, three of the
+four healers among them.
+
+**So `ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT` (1973.315, -5.246, 324.889) replaces both**, every term
+of it from a constant already here:
+
+- on `…_P1_RANGED_STATION_RADIUS` — the one radius only orbit 2 reaches, and the orbit the back line
+  already wakes. The 15 yd ring sat inside orbit 1's 20.1 yd reach, which nothing but a player's feet
+  can wake, for the whole 18 s.
+- **25 yd round from `…_P1_RANGED_SPOT`**, which is `…_SHADOW_NOVA_CLEAR_RADIUS` (20) plus
+  `…_P1_RANGED_STACK_RADIUS` (5), so a Guardian dying anywhere in the melee group stays 20 yd off the
+  nearest bot in the back line's blob, which is the 51.9° cone's purpose met by construction.
+- 6.5 yd clear of the knock back and of a nova left on the pile; 20-25 yd from the healers; on the +y
+  half, where melee measured at bearings 27-77° already stand. Floor by navprobe, `settledZ` 324.889,
+  the station's own Z.
+
+**Phase 1 is closed; the handover is what is left.** The two pulls after the taunt clamp both end it in **123.6** and
+**121.0 s** with 10 and 12 kills inside 15 yd against the 10 Sara needs, the tank holding Guardians
+**65.0%** and **77.5%** of the time, **0 of 13** taunts out of reach in each (the remaining
+`IMPOSSIBLE` verdicts at 0.2-3.9 yd are the 8 s Hand of Reckoning cooldown), **0 of 234** novas
+resisting nothing and no back-line bot caught by one. Every nova that would have killed anybody landed
+**after** the ring: 3 then 0. What is left there is the pair dying together — two Guardians 0 ms apart
+at 13.4 and 14.5 yd took Mighty from **100%** for 13,035 + 23,286 against a 30,339 pool, and five melee
+parked on that ring died at once. **The anchor does not fix that**; it makes the group reachable and
+keeps the pair off the back line. The two that had a button up, both rogues under Cloak of Shadows,
+took **zero** nova rows.
 
 **With none alive the raid drops combat and eats where it stands.** The `food` cheat's eat and drink sit
 the bot and `SetNextCheckDelay(18000 × missing%)`: no AI at all. On the 20:51 kill the last Guardian
 died 8.5 s before the ring, four melee sat down 3.3-4.4 yd out, and two were still eating when it threw
 them. Bots ate on the stack in phase 1 lulls too. `yogg-saron stack food guard multiplier` zeroes
 `food` and `drink` inside 15 yd of the middle for the whole encounter; the station keeps eating.
-`--phases` prints how long before the ring the last Guardian died, or how many were alive, and every
-meal inside 15 yd.
+`--phases` prints how long before the ring the last Guardian died, or how many were alive **and how
+far out each stood**, every meal inside 15 yd, and the handover's own shape: the front line's spread,
+its centre's bearing and distance from the station spot, its distance from the anchor, and how many
+bots spent any of the next 15 s past every healer's reach. `--novas` prints each Divine Sacrifice press
+with when its 120 s returns against the first nova that killed, what a nova actually lands against the
+28,600 the gate assumes, and which ladder rows a bot cast — plus any a human pressed and no bot did,
+which is the only way a row nothing can pick shows up at all.
 
 **Yogg without Shadow Barrier is the whole window**, and `SetVisible(false)` does not hide him from a
 grid search, so the encounter's tick latches it from the first tick and `YoggSaronHandoverState` reads
 that. P3 strips the barrier again and
 the Brain separates the two: it is summoned in the tick the barrier first lands, so it is up for
-everything after the window and absent for all of it. The walk is **led, not immediate** — leftover
-Guardians stop counting for Sara the moment she dies (`DamageTaken` returns early on `_secondPhase`)
-but their novas still land for 25k (the nova gap above spaces them here too), and one dying at the
-clearance radius reaches the back line where
-one dying on the leash cannot, so the raid holds the middle until
-`ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS` out. Nothing in the world counts the dialogue down, so the
-clock is predicted off the first sighting, like the portal wave's.
+everything after the window and absent for all of it. Nothing in the world counts the dialogue down.
+
+**The walk is immediate, and `clearing` is a role test rather than a radius.** It used to open on a
+lead of `max(4 s, walk ÷ speed × 2)` so the raid could hold the middle: leftover Guardians stop
+counting for Sara the moment she dies (`DamageTaken` returns early on `_secondPhase`) but their novas
+still land for 25k, and one dying at the 15 yd clearance radius reaches the back line where one dying
+on the leash cannot. The anchor's 25 yd buys that outright, and the lead cost more than it bought —
+**2 and 3 of 11** were still in the ring when it lit, the first 14 s of the window were spent walking
+melee onto the middle they had to leave, and a bot already outside 15 yd got no `clearing` at all, so
+`reach melee` dragged Shadow back in and its walk opened with **2.0 s** left and was refused six ticks
+running (it ended **1.1 yd** out). Now any bot the positioning trigger owns — `IsTank || IsMelee`, the
+same test it opens with — walks the moment Sara dies, with 18 s of slack. The radius is gone on
+purpose: the anchor is outside the ring, so a radius test would release a bot the instant it arrived.
 
 **The walk has to outlive the ring.** "Yogg without the barrier" ends on the tick the barrier lands,
 and melee released there walk straight back under the knock back — three of nine were inside 13.3 yd

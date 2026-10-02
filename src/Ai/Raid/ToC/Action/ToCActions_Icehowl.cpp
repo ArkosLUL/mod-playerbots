@@ -230,7 +230,7 @@ RaidObs::MoveOutcome IcehowlClearChargePathAction::IssueDodge(Position const& sp
 
 bool IcehowlTankDefensiveAction::Execute(Event /*event*/)
 {
-    char const* defensive = NextTankDefensive(botAI, bot, "nb.defensive");
+    uint32 const defensive = NextTankDefensive(botAI, bot, "nb.defensive");
     return defensive && botAI->CastSpell(defensive, bot);
 }
 

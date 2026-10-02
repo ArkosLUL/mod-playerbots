@@ -1495,7 +1495,7 @@ bool MimironPlasmaBlastDefensiveAction::TankHasDefensive(Unit* victim)
         return false;
 
     PlayerbotAI* tankAI = GET_PLAYERBOT_AI(tank);
-    return tankAI && NextTankDefensive(tankAI, tank, nullptr) != nullptr;
+    return tankAI && NextTankDefensive(tankAI, tank, nullptr) != 0;
 }
 
 bool MimironPlasmaBlastDefensiveAction::Execute(Event /*event*/)
@@ -1506,7 +1506,7 @@ bool MimironPlasmaBlastDefensiveAction::Execute(Event /*event*/)
 
     if (victim == bot)
     {
-        char const* defensive = NextTankDefensive(botAI, bot, "mimiron.plasma");
+        uint32 const defensive = NextTankDefensive(botAI, bot, "mimiron.plasma");
         if (!defensive)
             return false;
 

@@ -15,18 +15,22 @@
 class Player;
 class PlayerbotAI;
 
-// The weakest cooldown the tank can cast right now, or nullptr - either because none is off cooldown
-// or because one is already running. Ordered by cooldown length, which is what "weakest" means here.
+// The weakest cooldown the tank can cast right now, or 0 - either because none is off cooldown or
+// because one is already running. Ordered by cooldown length, which is what "weakest" means here.
 // `noteKind` names the trace row to record the pick under, or nullptr for no row: the act stream sees
 // one action name whichever button it ends up casting, and the order they go in is the whole point.
 // `physicalOnly` skips what only helps against magic, for a hit Anti-Magic Shell would waste itself on.
-char const* NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly = false);
+//
+// The spell id rather than its name, because a name has to come back through the bot's spellbook and
+// that match is exact: "anti magic shell" is not "Anti-Magic Shell", and across twelve pulls the 75%
+// row no bot ever cast was that one. Cast names stay the action names the class contexts register.
+uint32 NextTankDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, bool physicalOnly = false);
 
 // The same pick for an incoming magic hit, and for any role rather than only a tank's buttons. `needMs`
 // is how long the hit is still away, so a 5 s button is not spent on something 11 s out: a row whose
 // own duration would run out first is skipped. Pass 0 to ask only whether anything is available, which
 // is how one bot reads whether another is already covered.
-char const* NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs);
+uint32 NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind, uint32 needMs);
 
 // How much of that hit the bot can still take off by itself, as a percentage, so somebody else can work
 // out whether a second layer is needed on top. The cut of a button already running when there is one,

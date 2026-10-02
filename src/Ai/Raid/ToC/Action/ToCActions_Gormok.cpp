@@ -96,7 +96,7 @@ bool GormokTankSwapTauntAction::Execute(Event /*event*/)
 
 bool GormokTankDefensiveAction::Execute(Event /*event*/)
 {
-    char const* defensive = NextTankDefensive(botAI, bot, "nb.defensive");
+    uint32 const defensive = NextTankDefensive(botAI, bot, "nb.defensive");
     return defensive && botAI->CastSpell(defensive, bot);
 }
 

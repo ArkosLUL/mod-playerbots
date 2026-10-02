@@ -67,7 +67,7 @@ bool AlgalonBigBangSoakAction::Execute(Event /*event*/)
         return botAI->CastSpell("dispersion", bot);
     }
 
-    char const* defensive = NextTankDefensive(botAI, bot, "algalon.defensive", true);
+    uint32 const defensive = NextTankDefensive(botAI, bot, "algalon.defensive", true);
     return defensive && botAI->CastSpell(defensive, bot);
 }
 

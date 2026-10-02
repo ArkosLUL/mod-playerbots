@@ -67,6 +67,7 @@ const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE = Position(1954.06f, 
 const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE = Position(1950.11f, -79.284f, 239.98982f);
 const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE = Position(2048.63f, -25.5f, 239.72f);
 const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT = Position(1958.78f, -25.587f, 324.889f);
+const Position ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT = Position(1973.315f, -5.246f, 324.889f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT = Position(1998.5377f, -22.90317f, 324.8895f);
 const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT = Position(2018.7628f, -18.896868f, 327.07245f);
 
@@ -956,12 +957,7 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
 
     YoggSaronHandover answer;
     uint32 const now = getMSTime();
-    if (state.handoverStartMs)
-    {
-        uint32 const elapsed = getMSTimeDiff(state.handoverStartMs, now);
-        answer.active = true;
-        answer.msToRing = elapsed >= ULDUAR_YOGG_SARON_HANDOVER_MS ? 0 : ULDUAR_YOGG_SARON_HANDOVER_MS - elapsed;
-    }
+    answer.active = state.handoverStartMs != 0;
 
     bool const holding = !answer.active && state.handoverRingMs &&
                          getMSTimeDiff(state.handoverRingMs, now) < ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS;
@@ -969,24 +965,10 @@ YoggSaronHandover YoggSaronHandoverState(PlayerbotAI* botAI)
     if (!answer.active && !holding)
         return answer;
 
-    // Only melee and the tank are ever inside the ring when it lights up; the back line is already
-    // parked at 21.5 yd, which is 8.2 yd clear of it.
-    float const fromMiddle =
-        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
-    float const walk = ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS - fromMiddle;
-
-    if (walk > 0.0f)
-    {
-        uint32 lead = ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS;
-        float const speed = bot->GetSpeed(MOVE_RUN);
-        if (speed > 0.0f)
-        {
-            lead = std::max(
-                lead, static_cast<uint32>(walk / speed * ULDUAR_YOGG_SARON_HANDOVER_LEAD_SAFETY * 1000.0f));
-        }
-
-        answer.clearing = answer.msToRing <= lead;
-    }
+    // No radius in the test, unlike the ring the walk used to aim at: the anchor is outside the
+    // clearance radius, so a bot that had arrived would read as not needing the handover any more and
+    // hand itself straight back to the leash.
+    answer.clearing = botAI->IsTank(bot) || PlayerbotAI::IsMelee(bot);
 
     return answer;
 }
@@ -1551,7 +1533,15 @@ uint32 YoggSaronNovaHurtCount(PlayerbotAI* botAI)
         if (!YoggSaronNovaCandidate(member))
             continue;
 
-        if (YoggSaronNovaLeavesNothing(YoggSaronNovaDamageFrom(low, member), member))
+        // A chained nova only. One nova's 28,600 is the unresisted figure and every pool in the raid
+        // is under it, so a single Guardian low anywhere counted the whole melee group and three
+        // paladins spent Divine Sacrifice inside the first 73 s of a pull, 8 s short of coming back
+        // for the pair that killed five. Nothing resisted less than 10% over 234 hits and the median
+        // landed 14,411. Fervor doubles the answer below, which is right: one nova does kill a holder
+        // from full.
+        uint32 const expected = YoggSaronNovaDamageFrom(low, member);
+        if (expected >= ULDUAR_YOGG_SARON_NOVA_MAX_CHAIN * ULDUAR_YOGG_SARON_NOVA_EXPECTED_DAMAGE &&
+            YoggSaronNovaLeavesNothing(expected, member))
             ++count;
     }
 

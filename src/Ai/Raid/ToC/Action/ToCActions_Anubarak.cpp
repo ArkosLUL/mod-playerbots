@@ -202,7 +202,7 @@ bool AnubarakInterruptShadowStrikeAction::Execute(Event /*event*/)
 
 bool AnubarakTankDefensiveAction::Execute(Event /*event*/)
 {
-    char const* defensive = NextTankDefensive(botAI, bot, "anub.defensive");
+    uint32 const defensive = NextTankDefensive(botAI, bot, "anub.defensive");
     return defensive && botAI->CastSpell(defensive, bot);
 }
 

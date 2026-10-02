@@ -108,6 +108,20 @@ RANGED_BAND_TOLERANCE = 1.0
 RANGED_STACK_RADIUS = 5.0
 RANGED_SPOT = (1958.78, -25.587)
 
+# ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT, the one place melee and the tank wait out the handover, and
+# AiPlayerbot.HealDistance, which decides whether standing there is worth a heal at all. No AC_ override
+# touches the heal range here, so it is the code default.
+HANDOVER_MELEE_SPOT = (1973.315, -5.246)
+HEAL_DISTANCE = 38.5
+
+# How long after the ring to keep watching the gap, and how often. One instant hides it: a healer steps
+# out to 31-33 yd for its own nova dodge, and that is when the front line loses it.
+HANDOVER_WATCH_MS = 15000
+HANDOVER_WATCH_STEP_MS = 500
+
+# Divine Sacrifice's cooldown, for asking whether a press spent early was back when a nova killed.
+RAID_COOLDOWN_MS = 120000
+
 # How long after a yogg.p1dodge note its own move may still show up. The note is written in the trigger
 # and the move in the action that follows it, so they are one bot tick apart at worst.
 DODGE_MOVE_MS = 1500
@@ -185,6 +199,9 @@ NOVA_EXTERNALS = {33206: "pain suppression", 47788: "guardian spirit", 6940: "ha
 # Divine Sacrifice is the cast; Divine Guardian is the raid-wide 20% its talent procs, and the one that
 # says the reduction actually reached the raid.
 NOVA_RAID_AURAS = {64205: "divine sacrifice", 70940: "divine guardian"}
+# The cast, as opposed to the pair of auras it puts on the raid. 30% of raid damage redirected to the
+# paladin for 10 s, plus 20% off everyone for 6 s where the second rank of the talent is trained.
+SPELL_DIVINE_SACRIFICE = 64205
 FERVOR_MS = 15000
 P1_SPACING = "yogg-saron phase 1 spacing action"
 # Real summons measured their approach out to 8.71 centre to centre, and a pass is read off every
@@ -606,8 +623,8 @@ def show_room_gate(trace: Trace, p1_end: int) -> None:
 def show_handover(trace: Trace) -> None:
     """Sara hits 0 and Yogg is summoned invisible in the same tick; 18 s of transformation dialogue
     later ACTION_YOGG_SARON_APPEAR lights the knockback ring and summons the Brain together. Melee and
-    the tank are leashed to the middle right through it, so the question is who was standing in the
-    ring when it appeared."""
+    the tank walk to one anchor for the whole window, so the questions are who was still in the ring
+    when it appeared and whether the anchor held them somewhere the healers could reach."""
     down = first_seen(trace, guids_of_entry(trace, NPC_YOGG_SARON))
     ring = first_seen(trace, guids_of_entry(trace, NPC_BRAIN))
     if down is None or ring is None or ring <= down:
@@ -633,6 +650,53 @@ def show_handover(trace: Trace) -> None:
                           for role, v in sorted(inside.items()) if v)
         print(f"    in the {KNOCKBACK_RADIUS} yd ring when it lit: {parts}")
 
+    def spots_at(when: int) -> dict[int, tuple[float, float]]:
+        found: dict[int, tuple[float, float]] = {}
+        for guid in roster:
+            spot = at(trace, guid, when)
+            if spot:
+                found[guid] = (spot[0], spot[1])
+
+        return found
+
+    # The spread is the measure of the scatter, and the centre's bearing says which way it went: the
+    # back line is one bearing of the 360 and the anchor is the only one that keeps them in reach.
+    ring_spots = spots_at(ring)
+    front = {guid: spot for guid, spot in ring_spots.items()
+             if trace.role(guid) in ("melee", "tank")}
+    healers = [spot for guid, spot in ring_spots.items() if trace.role(guid) == "heal"]
+    if front:
+        spread = max(math.dist(a, b) for a in front.values() for b in front.values())
+        cx = sum(spot[0] for spot in front.values()) / len(front)
+        cy = sum(spot[1] for spot in front.values()) / len(front)
+        print(f"    front line at the ring: {spread:.1f} yd across {len(front)}, centre "
+              f"{math.dist((cx, cy), BODY):.1f} yd out at bearing "
+              f"{math.degrees(math.atan2(cy - BODY[1], cx - BODY[0])) % 360:.0f} deg, "
+              f"{math.dist((cx, cy), RANGED_SPOT):.1f} yd from the station spot")
+        anchored = [math.dist(spot, HANDOVER_MELEE_SPOT) for spot in front.values()]
+        out, total = beyond_reach(list(front.values()), healers, HEAL_DISTANCE)
+        print(f"      from the anchor: median {statistics.median(anchored):.1f} yd, "
+              f"max {max(anchored):.1f}   beyond every healer's {HEAL_DISTANCE:.1f} yd: "
+              f"{out} of {total}")
+
+    gaps: dict[int, list[float]] = collections.defaultdict(list)
+    for when in range(ring, ring + HANDOVER_WATCH_MS, HANDOVER_WATCH_STEP_MS):
+        here = spots_at(when)
+        heals = [spot for guid, spot in here.items() if trace.role(guid) == "heal"]
+        if not heals:
+            continue
+        for guid, spot in here.items():
+            if trace.role(guid) in ("melee", "tank"):
+                gaps[guid].append(min(math.dist(spot, heal) for heal in heals))
+    if gaps:
+        flat = [gap for one in gaps.values() for gap in one]
+        loose = sorted((trace.name(guid) for guid, one in gaps.items()
+                        if any(gap > HEAL_DISTANCE for gap in one)))
+        print(f"    in the {HANDOVER_WATCH_MS // 1000} s after the ring, out of every healer's reach at "
+              f"some point: {len(loose)} of {len(gaps)}")
+        print(f"      gap to the nearest healer: median {statistics.median(flat):.1f} yd, "
+              f"worst {max(flat):.1f}" + (f"   {', '.join(loose)}" if loose else ""))
+
     held = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.handover"))
     if held:
         print(f"    yogg.handover         : {dict(held)}")
@@ -645,7 +709,12 @@ def show_handover(trace: Trace) -> None:
     alive = [guid for guid, when in born.items() if when <= ring and deaths.get(guid, ring + 1) > ring]
     before = [when for when in deaths.values() if when <= ring]
     if alive:
-        print(f"    Guardians alive at the ring: {len(alive)}")
+        # How far out they stood is the risk: they follow the front line, and two dying together on top
+        # of it is what killed five melee 10 s after one ring.
+        far = sorted(math.dist(spot[:2], BODY) for spot in
+                     (at(trace, guid, ring) for guid in alive) if spot)
+        where = f"  at {', '.join(f'{one:.1f}' for one in far)} yd out" if far else ""
+        print(f"    Guardians alive at the ring: {len(alive)}{where}")
     elif before:
         print(f"    last phase 1 Guardian died {(ring - max(before)) / 1000:.1f} s before the ring")
 
@@ -832,6 +901,26 @@ def dodge_followups(rows: list[tuple[int, str]], window_ms: int) -> tuple[int, i
                 after += 1
 
     return total, after
+
+
+def beyond_reach(spots: list[tuple[float, float]], healers: list[tuple[float, float]],
+                 reach: float) -> tuple[int, int]:
+    """How many of `spots` had no healer within `reach`, and how many spots there were. With no healer
+    standing anywhere, nothing is reachable: a raid with its healers dead is not a raid in range."""
+    out = sum(1 for spot in spots
+              if not any(math.dist(spot, healer) <= reach for healer in healers))
+
+    return out, len(spots)
+
+
+def cooldown_gap(presses: list[int], cooldown_ms: int, when: int) -> int | None:
+    """How long after `when` the earliest of `presses` comes back off cooldown, or None if one was
+    already available then. Nothing pressed is also None: the button was in hand."""
+    ready = [press + cooldown_ms for press in presses]
+    if not ready or any(back <= when for back in ready):
+        return None
+
+    return min(ready) - when
 
 
 def show_clouds(trace: Trace) -> None:
@@ -2979,14 +3068,51 @@ def show_novas(trace: Trace) -> None:
     print(f"  novas that would have killed somebody: {at_risk}, with a button up on at least one: {covered}")
     print(f"  deaths to a nova: {len(lethal)}, of which had any button up: {len(lethal_covered)}")
 
-    # The handover walks bots 15 yd out from a middle the back line sits 21.5 yd from, so a bearing
-    # pointing at the stack ends between the two and the Guardians follow the tank there. One back-line
-    # bot caught is somebody who walked in; the whole stack is somebody who walked a Guardian to them.
+    # The handover sends the front line to one spot 25 yd round the station ring from the back line, so
+    # a Guardian that followed it there cannot reach them. One back-line bot caught is somebody who
+    # walked in; the whole stack is somebody who walked a Guardian to them.
     for label, inside in (("in phase 1", lambda t: t <= p1_end), ("after it", lambda t: t > p1_end)):
         hit = {rec.get("d") for rows in hits.values() for rec in rows
                if inside(rec["t"]) and trace.role(rec.get("d")) in ("ranged", "heal")}
         verdict = ", ".join(sorted(trace.name(guid) for guid in hit)) if hit else "none"
         print(f"  back line caught by a nova {label}: {len(hit)} - {verdict}")
+
+    # The raid-wide button against the nova that needed it. Spending it is only visible as a cast: the
+    # aura lands on all 25, so every row of it looks the same whoever pressed. Divine Sacrifice is the
+    # press and Divine Guardian the 20% its talent procs alongside, so counting the cast counts once.
+    presses = [(rec["t"], trace.name(rec.get("s")))
+               for rec in sorted(trace.of("cast"), key=lambda rec: rec["t"])
+               if rec.get("sp") == SPELL_DIVINE_SACRIFICE and rec.get("s") in roster]
+    print(f"  raid-wide mitigation: {len(presses)} presses, {RAID_COOLDOWN_MS // 1000} s each")
+    for when, who in presses:
+        print(f"    {clock(when):>9}  {who:14} back at {clock(when + RAID_COOLDOWN_MS)}")
+    if lethal:
+        first = min(when for _, when in lethal)
+        gap = cooldown_gap([when for when, _ in presses], RAID_COOLDOWN_MS, first)
+        says = "one was in hand" if gap is None else f"the earliest was back {gap / 1000:.1f} s too late"
+        print(f"    against the first nova that killed, at {clock(first)}: {says}")
+
+    # What the gate's own figure is worth. Resistance is rolled per hit, so the median is not a floor,
+    # but it is what decides whether a single nova can kill the pool the gate is comparing against.
+    shares = [rec.get("rs", 0) / (rec["a"] + rec.get("rs", 0)) for rec in rows_all
+              if rec["a"] + rec.get("rs", 0) > 0]
+    if shares:
+        print(f"  a nova landed a median {statistics.median(rec['a'] for rec in rows_all):,.0f} against "
+              f"the {NOVA_EXPECTED_DAMAGE:,} the gate assumes, resisted median "
+              f"{statistics.median(shares) * 100:.1f}% (min {min(shares) * 100:.1f}%)")
+
+    # A ladder row nothing picks leaves no verdict anywhere, so the only way to see one is to notice a
+    # human of that class pressing what no bot does.
+    bots = collections.Counter(rec.get("sp") for rec in trace.of("cast")
+                               if rec.get("sp") in NOVA_DEFENSIVES and rec.get("s") in roster
+                               and rec.get("s") not in trace.humans)
+    humans = {rec.get("sp") for rec in trace.of("cast")
+              if rec.get("sp") in NOVA_DEFENSIVES and rec.get("s") in trace.humans}
+    pressed = ", ".join(f"{NOVA_DEFENSIVES[spell]} {count}" for spell, count in bots.most_common())
+    print(f"  ladder rows a bot cast: {pressed or 'none'}")
+    quiet = sorted(NOVA_DEFENSIVES[spell] for spell in humans if spell not in bots)
+    if quiet:
+        print(f"    a human pressed these and no bot did: {', '.join(quiet)}")
 
 
 SECTIONS = (

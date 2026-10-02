@@ -338,20 +338,17 @@ constexpr float ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS = 15.0f;
 
 // Sara hits 0 and Yogg is summoned invisible in the same tick, then ACTION_YOGG_SARON_APPEAR lights
 // the ring at the end of the transformation dialogue: 4 + 5 + 4.5 + 4 s of it plus the 500 ms
-// EVENT_SARA_P2_START. Measured 18.2 / 18.0 / 18.3 s over three pulls.
+// EVENT_SARA_P2_START. Measured 18.2 / 18.0 / 18.3 s over three pulls, though nothing here counts it
+// down: the window is read off the Brain being absent.
 //
 // Melee and the tank are standing in the ring when it appears in every pull on record - 9 of 9 melee
 // and the tank, against 0 of 10 ranged and 0 of 4 healers, who are already out on the 21.5 yd
-// station. So the walk out belongs to melee and the tank alone.
+// station. So the walk out belongs to melee and the tank alone, and they go the moment Sara dies.
+// Leading it to the last few seconds left two and three of eleven still inside the ring when it lit,
+// and what the lead bought, keeping a Guardian's nova off the back line while melee held the middle,
+// the anchor's 25 yd of clearance buys anyway.
 //
-// It is led rather than immediate. Leftover Guardians stop counting for Sara the moment she dies but
-// their novas still land for 25k, and one dying at the clearance radius reaches the back line where
-// one dying on the leash cannot - so the raid holds the middle until the last few seconds.
-constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_MS = 18000;
-constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_LEAD_FLOOR_MS = 4000;
-constexpr float ULDUAR_YOGG_SARON_HANDOVER_LEAD_SAFETY = 2.0f;
-
-// And how long the walk out keeps claiming the bot after the ring has actually lit. Without it the
+// How long the walk keeps claiming the bot after the ring has actually lit. Without it the
 // window closes on the same tick the barrier lands: three of nine melee were back inside 13.3 yd
 // within 600 ms of the knock back starting, because reach melee took the very next tick.
 constexpr uint32 ULDUAR_YOGG_SARON_HANDOVER_HOLD_MS = 6000;
@@ -547,6 +544,13 @@ extern const Position ULDUAR_YOGG_SARON_STORMWIND_KEEPER_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_ICECROWN_CITADEL_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_CHAMBER_OF_ASPECTS_ENTRANCE;
 extern const Position ULDUAR_YOGG_SARON_P1_RANGED_SPOT;
+
+// Where melee and the tank sit out the handover. On the station ring, so the only orbit that
+// reaches it is the one the back line already wakes; the 15 yd ring the walk used before is inside
+// the innermost orbit, which nothing but a player's feet can wake. 25 yd round from the station
+// spot, the nova clear radius plus the back line's own blob, so a Guardian dying in the melee group
+// cannot reach the raider nearest it. On the floor by navprobe, same Z as the station.
+extern const Position ULDUAR_YOGG_SARON_HANDOVER_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_MELEE_SPOT;
 extern const Position ULDUAR_YOGG_SARON_PHASE_3_RANGED_SPOT;
 
@@ -862,22 +866,20 @@ bool YoggSaronRouteClearOfClouds(Player* bot, std::vector<Position> const& cloud
 bool YoggSaronWalkCrossesCloud(Player* bot, Position const& to, Position const* exempt = nullptr,
                                float exemptRadius = 0.0f);
 
-// The window between Sara dying and Yogg emerging, and how long is left of it. Yogg being here
-// without SPELL_SHADOW_BARRIER is the whole of it, because ACTION_YOGG_SARON_APPEAR casts the barrier
-// and the knockback in one call. SetVisible(false) does not hide him from a grid search, so the
-// window is readable from its first tick. msToRing is predicted off the first sighting the way the
-// portal clock predicts its first wave, since nothing in the world counts it down.
+// The window between Sara dying and Yogg emerging. Yogg being here without SPELL_SHADOW_BARRIER is
+// the whole of it, because ACTION_YOGG_SARON_APPEAR casts the barrier and the knockback in one call.
+// SetVisible(false) does not hide him from a grid search, so the window is readable from its first
+// tick.
 struct YoggSaronHandover
 {
     bool active = false;
-    // Whether it is time for this bot to walk out, which is the lead decided here rather than by each
-    // caller, so the trigger and the action cannot answer it differently. Never true for a bot that is
-    // already outside the clearance radius, which is the whole back line.
+    // Whether the handover owns where this bot stands, decided here rather than by each caller, so the
+    // trigger, the action and the two multipliers cannot answer it differently. Melee and the tank
+    // only, the same audience the positioning trigger opens with.
     //
     // It stays true for a hold after the ring has lit, because the window itself ends on that tick and
     // a bot released there walks straight back under the knock back.
     bool clearing = false;
-    uint32 msToRing = 0;
 };
 
 // A read of the window the encounter's tick latches.

@@ -113,27 +113,27 @@ bool YoggSaronGuardianPositioningTrigger::IsActive()
     if (!botAI->IsTank(bot) && !PlayerbotAI::IsMelee(bot))
         return false;
 
+    // The handover wins over the leash and goes first: Sara is already down by then, so holding a bot
+    // on the leash only buys it a knock back a second for the rest of the fight. No radius of its own
+    // either, because the anchor is outside the ring and a bot that had arrived would hand itself
+    // straight back to the leash.
+    if (YoggSaronHandoverState(botAI).clearing)
+    {
+        returning = false;
+        return true;
+    }
+
     float const fromSara =
         bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY());
 
     // The release radius is what makes this hysteresis rather than a boundary: let go the instant the
     // bot crosses the leash, reach melee drags it straight back out and the two trade the tick.
     bool const beyond = fromSara > (returning ? ULDUAR_YOGG_SARON_P1_LEASH_RELEASE : ULDUAR_YOGG_SARON_P1_LEASH);
-    bool const inRing = fromSara < ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS;
 
-    if (!beyond && !inRing)
+    if (!beyond && fromSara >= ULDUAR_YOGG_SARON_BODY_KNOCKBACK_CLEAR_RADIUS)
     {
         returning = false;
         return false;
-    }
-
-    // The walk out of the ring wins over the leash, and is tested first because it is two sweeps
-    // against the phase read's four, and one of them before Sara dies. Sara is already down by then,
-    // so holding a bot on the leash only buys it a knock back a second for the rest of the fight.
-    if (inRing && YoggSaronHandoverState(botAI).clearing)
-    {
-        returning = false;
-        return true;
     }
 
     // A live phase-1 Guardian before the phase read, which is four 200 yd sweeps - melee sit outside
