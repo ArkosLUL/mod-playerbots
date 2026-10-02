@@ -489,77 +489,103 @@ bool YoggSaronPetGuardAction::Execute(Event /*event*/)
     if (owned.empty())
         return false;
 
+    // A stunned one can't swing, so a pet may stay on it until the stun is about to lift.
+    auto const swinging = [this](Unit* unit)
+    {
+        return unit && unit->IsAlive() && unit->GetEntry() == NPC_CRUSHER_TENTACLE &&
+               !YoggSaronCrusherStunHolds(botAI, unit);
+    };
+
     Unit* target = AI_VALUE(Unit*, "current target");
+    bool const ownerOnCrusher = swinging(target);
     if (target && (!target->IsAlive() || target->GetEntry() == NPC_CRUSHER_TENTACLE))
         target = nullptr;
 
     bool pulled = false;
+    bool held = false;
     for (Creature* pet : owned)
     {
         // Around the pet: a ranged owner can stand well outside any Crusher its pet is sitting on.
         std::list<Creature*> crushers;
         pet->GetCreatureListWithEntryInGrid(crushers, NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE);
 
-        Creature* touching = nullptr;
+        bool touching = false;
         for (Creature* crusher : crushers)
         {
             // Either half is enough. Being the victim is what makes the tentacle swing, and standing
             // in reach is what lets it: SetInCombatWithZone gives it a threat list holding the whole
-            // raid, so a pet that never attacked can still come up as the victim. A stunned one can't
-            // swing, so the pet stays on it until the stun is about to lift.
-            if (crusher->IsAlive() && (crusher->GetVictim() == pet || crusher->IsWithinMeleeRange(pet)) &&
-                !YoggSaronCrusherStunHolds(botAI, crusher))
+            // raid, so a pet that never attacked can still come up as the victim.
+            if (swinging(crusher) && (crusher->GetVictim() == pet || crusher->IsWithinMeleeRange(pet)))
             {
-                touching = crusher;
+                touching = true;
                 break;
             }
         }
 
-        if (!touching)
+        Unit* const victim = pet->GetVictim();
+        bool const onCrusher = swinging(victim);
+
+        if (!touching && !onCrusher && !ownerOnCrusher)
         {
             Unhush(pet);
             continue;
         }
 
-        // Somewhere else to be. An idle pet is what PetAI reads as "pick your own", and its first two
-        // picks are whoever is hitting the pet and whoever the owner is hitting, usually this Crusher
-        // too. A pet that has a living victim is never re-selected, so one good command is the whole
-        // fix.
-        Unit* elsewhere = target ? target : YoggSaronPetFallbackTarget(botAI, pet);
+        // Passive, and driven by command from here. PetAI retargets a pet three ways, OwnerAttacked on
+        // every harmful spell the owner casts (Spell.cpp), KilledUnit picking its attacker or the
+        // owner's victim, and AttackedBy, and all three skip a passive pet. Pulling it off once it's in
+        // reach was too late: all five bot Crush deaths in one pull were cones aimed at a pet.
+        Hush(pet);
 
-        pet->AttackStop();
+        // A pet already on another add only needs to stay on it, unless the pet itself is in the reach.
+        Unit* elsewhere = nullptr;
+        if (!touching && victim && victim->IsAlive() && victim->GetEntry() != NPC_CRUSHER_TENTACLE)
+            elsewhere = victim;
+        else
+            elsewhere = target ? target : YoggSaronPetFallbackTarget(botAI, pet);
 
-        if (elsewhere && pet->AI())
+        // Passive pets only attack while this is set (PetAI::CanAttack).
+        if (CharmInfo* charm = pet->GetCharmInfo())
+            charm->SetIsCommandAttack(elsewhere != nullptr);
+
+        if (touching || onCrusher)
         {
-            Unhush(pet);
-            pet->AI()->AttackStart(elsewhere);
+            pet->AttackStop();
+            pulled = true;
         }
         else
-        {
-            // Nothing else on the floor. Passive is the one state SelectNextTarget, AttackedBy and
-            // OwnerAttacked all honour, so it is what keeps a pet out of the cone when there is no
-            // other target to hold its attention.
-            pet->SetReactState(REACT_PASSIVE);
-            hushed.insert(pet->GetGUID());
-            pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
-        }
+            held = true;
 
-        pulled = true;
+        if (elsewhere && elsewhere != pet->GetVictim() && pet->AI())
+            pet->AI()->AttackStart(elsewhere);
+        else if (!elsewhere && (touching || onCrusher))
+            pet->GetMotionMaster()->MoveFollow(bot, PET_FOLLOW_DIST, pet->GetFollowAngle());
     }
 
     if (RaidObs::Active())
-        RaidObs::NoteDerived(bot, "yogg.petguard", pulled ? "pulled" : "clear");
+        RaidObs::NoteDerived(bot, "yogg.petguard", pulled ? "pulled" : (held ? "held" : "clear"));
 
     // Never claims the tick. Commanding a pet costs the bot nothing it was going to do with its own
     // body, and the node sits above the dps resolver only so it is asked before the pet swings again.
     return false;
 }
 
+void YoggSaronPetGuardAction::Hush(Creature* pet)
+{
+    // First stance only, or a second hush would save passive as the one to give back.
+    hushed.emplace(pet->GetGUID(), pet->GetReactState());
+    pet->SetReactState(REACT_PASSIVE);
+}
+
 void YoggSaronPetGuardAction::Unhush(Creature* pet)
 {
     // Only pets this node silenced, so a stance the player set themselves is never overwritten.
-    if (hushed.erase(pet->GetGUID()))
-        pet->SetReactState(REACT_DEFENSIVE);
+    auto const it = hushed.find(pet->GetGUID());
+    if (it == hushed.end())
+        return;
+
+    pet->SetReactState(it->second);
+    hushed.erase(it);
 }
 
 size_t YoggSaronSetDpsPriorityAction::TierOf(Unit* unit, bool brainLevel)

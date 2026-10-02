@@ -758,18 +758,24 @@ the whole raid, so a pet that never attacked can still come up as the victim. Me
 it never fired for two pets on a stunned Crusher with their owners 38 yd out, and they took 8 Crushes
 in 4 s once the stun lifted, 13 across the pull.
 
-**Pulling a pet is half a command; it also has to be given somewhere else to be.** `PetAI::UpdateAI`
-re-selects the moment the pet has no victim, and `SelectNextTarget` checks whoever is attacking the
-pet first and `owner->GetVictim()` third - both the Crusher, because the only tick this node ever
-fires in is one where the owner is on a Crusher itself. A first version stopped the attack and
-recalled the pet, and the pet was back in melee range before the bot's next tick: 336, 321, 312 and
-165 samples with a Crusher targeted, four pets between 0.0 and 0.4 yd of one. A pet that *has* a
-living victim is never re-selected - `UpdateAI` takes the melee branch, and `AttackedBy` and
-`OwnerAttacked` both bail on "prevent pet from disengaging" - so `YoggSaronPetFallbackTarget` hands
-it the nearest live phase 2 add that is not a Crusher and the one command sticks. `REACT_PASSIVE` is
-the fallback for an empty floor, since passive is the one state all three of those honour; restored
-to defensive the tick the pet is clear, and only for pets this node silenced. It stays a per-tick
-node rather than a latch: an uncommandable guardian can walk back in at any point.
+**Pulling a pet off is too late, and it never sticks.** All 5 bot Crush deaths in one pull were cones
+aimed at a felguard or hunter pet in the reach, 99 pet-seconds in a swinging Crusher's reach between
+them. A pulled pet stays the victim while it walks out and the cone follows it: Worm, sent to a
+Constrictor beside Prayer, swept it through Prayer. PetAI puts a pet back three ways, `OwnerAttacked` on
+every harmful spell the owner casts (`Spell.cpp`), `KilledUnit` → `SelectNextTarget` (the pet's
+attacker, then `owner->GetVictim()`, both the Crusher) when its add dies, and `AttackedBy`; a first
+version that only stopped and recalled had four pets back at 0.0-0.4 yd before the bot's next tick.
+All three skip a passive pet, which still attacks while `IsCommandAttack` is set (`PetAI::CanAttack`).
+So the guard hushes a pet, remembering its stance, whenever it touches, targets, or its owner targets a
+Crusher whose stun does not hold, and drives it by `SetIsCommandAttack` + `AttackStart`: its own add if
+it is on one outside the reach, else the owner's target, else `YoggSaronPetFallbackTarget`'s nearest
+live phase 2 add that is not a Crusher, else follow. The trigger also fires on either targeting a
+Crusher or on any passive pet, so the stance comes back once the danger is gone, only for pets this node
+hushed; one still hushed when the gate closes stays passive until re-summoned. It stays a per-tick node
+rather than a latch: an uncommandable guardian can walk back in at any point. `yogg.petguard` reads
+`pulled`, `held` (hushed before contact) or `clear`. `yogg-saron crusher pet spell hold` blocks
+`pet acid spit` (cast for the pet at the hunter's target) and `shadowfiend` (spawns 3 yd from its
+target) while the target is a swinging Crusher.
 
 So `GetYoggSaronCrushWedges` raises a wedge **only for a Crusher that currently has something inside
 its melee range**, which keeps it armed for exactly the case the guard cannot close — an
@@ -1347,8 +1353,10 @@ place is a bot standing still and nothing else names it. **Frozen bots**, the lo
 target and cast nothing, which is that same failure from outside. And **launches**, read off the switch to
 effect movement near the body (height missed most) and matched to the last walk whose line crossed
 the ring rather than to the last walk issued, which is usually the dodge out; per phase, bot and node.
-Under `--crush`, **Crush hits** split into the tentacle's victim and the cone, each kill with the walk
-that put it inside the reach and any melee hit first, and what every raider took of it with the tanks'
+Under `--crush`, **Crush hits** split into the tentacle's victim and the cone, each kill with what the
+cone was aimed at (of the samples either side of the hit, the one facing nearest the dead bot: the
+tentacle turns the moment anybody hits it), the walk issued in the last 3 s or still in flight, any
+melee hit first, and how many cone kills were aimed at a pet, and what every raider took of it with the tanks'
 share; **the reach**, ranged and healer samples and
 walks inside it; and **Diminish Power**, uptime off the aura and how many Judgements landed
 mid-channel and dropped it. Under `--brain`, one row per wave: room clear time, one-target snapshots

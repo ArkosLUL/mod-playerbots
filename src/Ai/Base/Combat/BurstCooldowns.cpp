@@ -48,8 +48,9 @@ namespace
     // Bosses that never take a victim at all, so nothing is ever "held" on them. VX-001 overrides
     // AttackStart to do nothing and its UpdateAI never calls UpdateVictim, so neither GetVictim()
     // nor the threat manager's pick is ever set: it faces whoever Rapid Burst rolled and swings at
-    // nobody.
-    std::unordered_set<uint32> const noVictimBosses = {33651};
+    // nobody. Same for Yogg-Saron, whose AttackStart is empty too, and his Brain, which runs
+    // NullCreatureAI. Neither had a victim in ~2,000 samples of one pull.
+    std::unordered_set<uint32> const noVictimBosses = {33651, 33288, 33890};
 
     // Trial of the Crusader's Faction Champions, both rosters. Their script resets every player's
     // threat on the pull, 2 s later, then every ~9 s, weighted by distance, health and armour.

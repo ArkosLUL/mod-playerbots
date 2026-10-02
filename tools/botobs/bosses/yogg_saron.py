@@ -16,8 +16,8 @@
                                     Induce Madness caught whoever it charmed
     yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
                                     targets and taunts, beacon heals, Lunatic Gaze
-    yogg_saron.py <file> --crush    Crush and who took it, the body's knockback and who walked into
-                                    it, Death Rays
+    yogg_saron.py <file> --crush    Crush, who took it and what each cone was aimed at, the body's
+                                    knockback and who walked into it, Death Rays
     yogg_saron.py <file> --sanity   Sanity minima and where they went
 
 The fight has three rooms, five mechanics that kill and nothing in the world to sweep for two of
@@ -209,6 +209,13 @@ TAUNT_RANGE = 30.0
 # 1.5, plus 4/3, which is 10.83. No leeway, since it never moves. Same number as the module's
 # ULDUAR_YOGG_SARON_CRUSHER_REACH_TRIGGER_RADIUS, so the reader and the trigger agree on who is inside.
 CRUSHER_MELEE_RANGE = 11.0
+
+# The tentacle faces whoever it is swinging at and turns the moment anybody else hits it, so either
+# sample around a Crush can name somebody else. The one facing nearest the bot the cone landed on is
+# the swing's: four of one pull's five cone kills needed the sample after, the tank's the one before.
+CRUSH_AIM_LAG_MS = 500
+# A walk older than this did not put anybody in a cone that tracks a moving victim.
+CRUSH_WALK_BLAME_MS = 3000
 
 # 64145 is a channel, so it only exists while the tentacle keeps channelling, and the tentacle only
 # re-casts it once its victim is out of melee range. Counting cast starts misses every break that was
@@ -2021,6 +2028,49 @@ def row_before(rows: list[list], when: int) -> list | None:
     return rows[index - 1] if index else None
 
 
+def crush_aim_row(rows: list[list], when: int, hit_xy: tuple[float, float],
+                  lag_ms: int = CRUSH_AIM_LAG_MS) -> list | None:
+    """The Crusher row naming who a swing at `when` was aimed at: of the last sample before the hit and
+    the first within `lag_ms` after it, the one facing nearest `hit_xy`, where the cone landed."""
+    stamps = [row[0] for row in rows]
+    index = bisect.bisect_left(stamps, when)
+    candidates = []
+    if index:
+        candidates.append(rows[index - 1])
+    if index < len(rows) and rows[index][0] - when <= lag_ms:
+        candidates.append(rows[index])
+    if not candidates:
+        return None
+
+    def off_facing(row: list) -> float:
+        bearing = math.atan2(hit_xy[1] - row[3], hit_xy[0] - row[2])
+        return abs((bearing - row[5] + math.pi) % (2 * math.pi) - math.pi)
+
+    return min(candidates, key=off_facing)
+
+
+def crush_blame(walks: list[dict], guid: int, when: int, spot: tuple[float, float], on_victim: bool,
+                window_ms: int = CRUSH_WALK_BLAME_MS) -> dict | None:
+    """The walk that had the bot moving in the last `window_ms` before a Crush, or None if it stood
+    still. A `wait` was refused behind a walk still in flight, so it moved nobody itself but says the
+    last accepted walk was still going, however long ago it was issued. For the tentacle's own victim
+    only a walk that ended in its reach counts, since standing there is what made it the victim."""
+    blamed = None
+    in_flight = False
+    for rec in walks:
+        if rec.get("g") != guid or rec["t"] > when:
+            continue
+        if rec.get("r") == "wait":
+            in_flight = in_flight or when - rec["t"] <= window_ms
+            continue
+        if on_victim and math.dist((rec.get("x", 0), rec.get("y", 0)), spot) > CRUSHER_MELEE_RANGE:
+            continue
+        blamed = rec
+    if blamed and (when - blamed["t"] <= window_ms or in_flight):
+        return blamed
+    return None
+
+
 def crusher_alive_spans(trace: Trace, crushers: set) -> dict[int, tuple[int, int]]:
     """First and last snapshot each Crusher was sampled alive."""
     spans: dict[int, list[int]] = {}
@@ -2049,9 +2099,11 @@ def show_crush_hits(trace: Trace) -> None:
     split = collections.Counter()
     kills = []
     for hit in hits:
-        crusher = row_before(rows.get(hit["s"], []), hit["t"])
         victim = row_before(rows.get(hit.get("d"), []), hit["t"])
-        on_victim = bool(crusher) and len(crusher) > 8 and crusher[8] == hit.get("d")
+        crusher = crush_aim_row(rows.get(hit["s"], []), hit["t"], (victim[2], victim[3])) if victim else \
+            row_before(rows.get(hit["s"], []), hit["t"])
+        aimed_at = crusher[8] if crusher and len(crusher) > 8 else None
+        on_victim = aimed_at == hit.get("d")
         role = trace.role(hit.get("d"))
         split[("victim" if on_victim else "cone", "tank" if role == "tank" else "other")] += 1
         if hit.get("ok", 0) <= 0 or not crusher or not victim:
@@ -2059,14 +2111,10 @@ def show_crush_hits(trace: Trace) -> None:
 
         spot = (crusher[2], crusher[3])
         gap = math.dist(spot, (victim[2], victim[3]))
-        walked = None
-        for rec in walks:
-            if rec.get("g") == hit["d"] and rec["t"] <= hit["t"] and \
-                    math.dist((rec.get("x", 0), rec.get("y", 0)), spot) <= CRUSHER_MELEE_RANGE:
-                walked = rec
+        walked = crush_blame(walks, hit["d"], hit["t"], spot, on_victim)
         swung = [trace.spells.get(rec["sp"], "") for rec in melee_hits
                  if rec.get("s") == hit["d"] and rec["tgt"] == hit["s"] and hit["t"] - 3000 <= rec["t"] <= hit["t"]]
-        kills.append((hit["t"], hit["d"], role, gap, on_victim, walked, swung))
+        kills.append((hit["t"], hit["d"], role, gap, on_victim, aimed_at, walked, swung))
 
     parts = ", ".join(f"{kind} ({who}) {count}" for (kind, who), count in sorted(split.items()))
     print(f"  Crush hits by who the tentacle was swinging at: {parts}")
@@ -2084,11 +2132,17 @@ def show_crush_hits(trace: Trace) -> None:
           f" {on_tanks * 100.0 / total:.0f}% of it on tanks")
     for guid, count in taken.most_common(6):
         print(f"    {trace.name(guid):14} {trace.role(guid):6} {count:3d} hits {damage[guid]:9,d}")
-    for when, guid, role, gap, on_victim, walked, swung in kills:
-        how = f"walked in by {walked.get('by', '?')}" if walked else "nothing walked it in"
+    for when, guid, role, gap, on_victim, aimed_at, walked, swung in kills:
+        how = f"walked in by {walked.get('by', '?')}" if walked else "stood still"
         hit_first = f", hit it first with {', '.join(sorted(set(swung)))}" if swung else ""
-        kind = "its victim" if on_victim else "cone"
+        kind = "its victim" if on_victim else f"cone at {trace.name(aimed_at)}"
         print(f"    killed {clock(when):>10} {trace.name(guid):14} {role:6} {gap:4.1f} yd, {kind}, {how}{hit_first}")
+
+    # A cone needs something in the reach to swing at, and a pet there is somebody else's death.
+    cones = [aimed_at for _, _, _, _, on_victim, aimed_at, _, _ in kills if not on_victim]
+    if cones:
+        on_pets = sum(1 for aimed_at in cones if aimed_at in trace.owners)
+        print(f"  cone kills aimed at a pet: {on_pets} of {len(cones)}")
 
 
 def show_crusher_reach(trace: Trace) -> None:

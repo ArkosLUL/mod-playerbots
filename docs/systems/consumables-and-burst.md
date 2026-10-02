@@ -63,8 +63,8 @@ tank swap or tank death re-arms the gate. The boss predicate is `IsDungeonBoss()
 the de-facto is-boss check used everywhere (also `ShamanTriggers.cpp:488`).
 
 **Bosses no tank can hold skip the dwell**, in the multiplier and `OffensivePotionTrigger` alike: one
-on a vehicle (the XT-002 Heart, no threat table), `BossTakesNoVictim` (VX-001, whose script never sets
-a victim) and `BossHasNoStableVictim` (the 28 Faction Champions, whose script re-seeds threat every
+on a vehicle (the XT-002 Heart, no threat table), `BossTakesNoVictim` (VX-001, Yogg-Saron and his Brain, whose scripts never set
+a victim: an empty `AttackStart`, or `NullCreatureAI` for the Brain; ~2,000 samples of each, no victim) and `BossHasNoStableVictim` (the 28 Faction Champions, whose script re-seeds threat every
 ~9 s). The last two key on entry in `BurstCooldowns.cpp`, since the reason lives in the script.
 
 **Any tank counts, deliberately.** A raid that hands a boss-flagged add to its off-tank has

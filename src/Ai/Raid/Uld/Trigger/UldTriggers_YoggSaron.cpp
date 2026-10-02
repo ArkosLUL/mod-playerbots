@@ -595,11 +595,26 @@ bool YoggSaronPetGuardTrigger::IsActive()
     if (bot->m_Controlled.empty() || !IsYoggSaronFight())
         return false;
 
+    // An owner on a Crusher sends its pet there with every harmful cast, from any range.
+    Unit* target = AI_VALUE(Unit*, "current target");
+    if (target && target->IsAlive() && target->GetEntry() == NPC_CRUSHER_TENTACLE)
+        return true;
+
     // From the pet, not the owner. With their owners 38 yd out this never fired for two pets sitting on
-    // a stunned Crusher, and they ate 8 Crushes in 4 s once the stun lifted.
+    // a stunned Crusher, and they ate 8 Crushes in 4 s once the stun lifted. A passive pet may be one the
+    // action hushed and has to give back.
     for (Unit* controlled : bot->m_Controlled)
+    {
+        Unit* victim = controlled->GetVictim();
+        if (victim && victim->GetEntry() == NPC_CRUSHER_TENTACLE)
+            return true;
+
+        if (Creature* creature = controlled->ToCreature(); creature && creature->HasReactState(REACT_PASSIVE))
+            return true;
+
         if (controlled->FindNearestCreature(NPC_CRUSHER_TENTACLE, ULDUAR_YOGG_SARON_CRUSH_RANGE, true))
             return true;
+    }
 
     return false;
 }

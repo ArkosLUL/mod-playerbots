@@ -55,6 +55,14 @@ bool YoggSaronBrainIsTarget(PlayerbotAI* botAI)
     return target && target->GetEntry() == NPC_BRAIN;
 }
 
+// A Crusher that can swing, with no stun holding it.
+bool YoggSaronCrusherIsTarget(PlayerbotAI* botAI)
+{
+    Unit* target = botAI->GetAiObjectContext()->GetValue<Unit*>("current target")->Get();
+    return target && target->IsAlive() && target->GetEntry() == NPC_CRUSHER_TENTACLE &&
+           !YoggSaronCrusherStunHolds(botAI, target);
+}
+
 // Food and drink sit a bot down with no AI at all for up to 18 s. With no Guardian alive the raid drops
 // combat and eats wherever it stands: four melee sat down in the ring 8 s before it lit, and two were
 // still eating when it threw them. The back line on the 21.5 yd station keeps eating.
@@ -177,6 +185,12 @@ void DefineYoggSaron(EncounterBuilder& e)
     e.Block("yogg-saron portal spot hold", Role::Any, YoggSaronHoldingPortalSpot,
             Family::Reach | Family::ReachHeal | Family::SetBehind | Family::RearFlank |
                 Family::CombatFormationMove | Family::Charge | Family::Follow | Family::MoveRandom);
+
+    // Both put a pet in the Crusher's reach past the pet guard. Acid Spit is cast for the pet at the
+    // hunter's target, and Shadowfiend spawns 3 yd from its target and melees it, so the priest saves it
+    // for the next target that isn't a Crusher.
+    e.Block("yogg-saron crusher pet spell hold", Role::Any, YoggSaronCrusherIsTarget, 0,
+            {"pet acid spit", "shadowfiend"});
 
     e.Multiplier<YoggSaronMovementGuardMultiplier>(Family::Flee | Family::SetBehind | Family::Reach |
                                                    Family::ReachHeal);

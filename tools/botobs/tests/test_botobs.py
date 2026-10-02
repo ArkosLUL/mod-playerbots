@@ -1253,6 +1253,36 @@ class YoggPhases(unittest.TestCase):
         self.assertEqual(summary["died"], 1)
         self.assertIsNone(yogg_saron.hold_summary({}, [])["median"])
 
+    def test_a_crush_is_read_off_the_sample_facing_the_bot_it_landed_on(self):
+        # [t, guid, x, y, z, facing, hp, mana, target]: the tentacle faces somebody north of it before
+        # the swing and has turned onto a pet due east of it just after.
+        rows = [
+            [1000, 9, 0.0, 0.0, 0.0, math.pi / 2, 50.0, 0.0, 7],
+            [1300, 9, 0.0, 0.0, 0.0, 0.0, 50.0, 0.0, 8],
+        ]
+        self.assertEqual(yogg_saron.crush_aim_row(rows, 1200, (15.0, 0.5))[8], 8)
+        self.assertEqual(yogg_saron.crush_aim_row(rows, 1200, (0.5, 15.0))[8], 7)
+        # the sample after is too late to be the swing's, so only the one before is left
+        self.assertEqual(yogg_saron.crush_aim_row(rows, 1200, (15.0, 0.5), lag_ms=50)[8], 7)
+        self.assertIsNone(yogg_saron.crush_aim_row([], 1200, (15.0, 0.5)))
+
+    def test_a_crush_is_blamed_on_a_walk_still_running_and_never_on_an_old_one(self):
+        spot = (0.0, 0.0)
+        walks = [
+            {"g": 1, "t": 1000, "x": 30.0, "y": 0.0, "by": "follow"},
+            {"g": 2, "t": 50000, "x": 20.0, "y": 0.0, "by": "reach melee"},
+            {"g": 2, "t": 58000, "x": 21.0, "y": 0.0, "by": "reach spell", "r": "wait"},
+            {"g": 3, "t": 59000, "x": 20.0, "y": 0.0, "by": "phase 2 spacing"},
+            {"g": 4, "t": 59000, "x": 5.0, "y": 0.0, "by": "malady"},
+        ]
+        self.assertIsNone(yogg_saron.crush_blame(walks, 1, 60000, spot, False))
+        # issued 10 s before, but a walk refused behind it 2 s before the hit says it was still going
+        self.assertEqual(yogg_saron.crush_blame(walks, 2, 60000, spot, False)["by"], "reach melee")
+        self.assertEqual(yogg_saron.crush_blame(walks, 3, 60000, spot, False)["by"], "phase 2 spacing")
+        # the tentacle's own victim only counts a walk that ended in its reach
+        self.assertIsNone(yogg_saron.crush_blame(walks, 3, 60000, spot, True))
+        self.assertEqual(yogg_saron.crush_blame(walks, 4, 60000, spot, True)["by"], "malady")
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

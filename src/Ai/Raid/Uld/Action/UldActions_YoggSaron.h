@@ -16,6 +16,7 @@
 #include <functional>
 #include <optional>
 #include <set>
+#include <unordered_map>
 #include <vector>
 
 class YoggSaronGuardianPositioningAction : public MovementAction
@@ -209,11 +210,13 @@ public:
     bool Execute(Event event) override;
 
 private:
+    void Hush(Creature* pet);
+
     // Give a pet its stance back, once it is clear and only if this node took it away.
     void Unhush(Creature* pet);
 
-    // Pets currently held passive because there was nothing but a Crusher for them to hit.
-    std::set<ObjectGuid> hushed;
+    // Pets held passive while a Crusher is in play for them, with the stance each had before.
+    std::unordered_map<ObjectGuid, ReactStates> hushed;
 };
 
 // One owner of every non-tank's target for the whole encounter, in place of the raid icons this fight
