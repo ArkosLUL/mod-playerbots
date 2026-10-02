@@ -434,8 +434,8 @@ tick, by `RequestSpellInterrupt` on the caster.
 - **A vehicle rider never counts as flying.** `Player::CanFly` reads only the bot's own
   `MOVEMENTFLAG_CAN_FLY`, which `UpdateMovementState` strips without a flight aura. So a Z clamp
   (`UpdateAllowedPositionZ`) or `CheckCollisionAndGetValidCoords` run on the bot pins a drake's
-  destination to the ground, and the bot's own `MoveFollow` moves nothing. Clamp, check and follow
-  with `MovementAction::GetMover()`, which returns the vehicle base.
+  destination to the ground, and the bot's own `MoveFollow` moves nothing. A strategy that keeps a
+  bot on a flying vehicle has to keep generic movement off it and steer the vehicle base itself.
 - **`MoveInside(..., distance = 0)` effectively never returns false** — `MovementActions.cpp:1692`
   returns false only when `GetDistance2d <= distance`. The action then succeeds every tick,
   out-prioritises combat, and pins every melee on one exact point at zero DPS. `MoveNear` offsets by

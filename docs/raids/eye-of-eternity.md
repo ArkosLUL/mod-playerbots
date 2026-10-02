@@ -89,8 +89,9 @@ comment is "used when we are either flying/swiming or **on map w/o mmaps**". Fou
   nothing can override it, so `Map::GetHeight` answers 0.0 across the whole map while the platform
   sits near Z 266. `UpdateAllowedPositionZ` then pins any **non-flying** unit to Z 0 — a 266 yd
   drop. Its flying branch only ever raises Z, so it is inert up here. A drake rider counts as
-  non-flying: after the kill, `move to loot` and `follow` dove the whole flight to Z 0 until the
-  clamps asked the drake instead ([../engine/pitfalls.md](../engine/pitfalls.md), vehicle riders).
+  non-flying ([../engine/pitfalls.md](../engine/pitfalls.md), vehicle riders), so after the kill
+  `move to loot` and `follow` dove the flight to Z 0. The gate therefore stays open for Skytalon
+  riders past the kill: the P3 flight keeps the drake and follows the leader's.
 - **The off-navmesh failure mode cannot happen on this map.** Raw ring geometry that would be
   rejected elsewhere ([../engine/pitfalls.md](../engine/pitfalls.md)) always paths here, and the
   *height* half of `SearchForBestPath`'s check has nothing but the flat 0.0 surface to test against.

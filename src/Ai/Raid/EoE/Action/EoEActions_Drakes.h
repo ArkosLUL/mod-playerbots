@@ -46,6 +46,7 @@ public:
     EoEDrakeAttackAction(PlayerbotAI* botAI) : Action(botAI, Name) {}
 
     bool Execute(Event event) override;
+    bool isUseful() override;
     bool isPossible() override;
 
 protected:

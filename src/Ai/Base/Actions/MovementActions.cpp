@@ -170,7 +170,7 @@ bool MovementAction::MoveNear(WorldObject* target, float distance, MovementPrior
         // hand PointMovementGenerator a Z that matches the target's
         // floor but not the sampled (x,y) — avoids straight-line
         // fallbacks through geometry.
-        GetMover()->UpdateAllowedPositionZ(x, y, z);
+        bot->UpdateAllowedPositionZ(x, y, z);
 
         if (!bot->IsWithinLOS(x, y, z))
             continue;
@@ -879,7 +879,7 @@ bool MovementAction::MoveTo(WorldObject* target, float distance, MovementPriorit
         dz = bz + (tz - bz) * (needToGo / distanceToTarget);
     else
         dz = tz;
-    GetMover()->UpdateAllowedPositionZ(dx, dy, dz);
+    bot->UpdateAllowedPositionZ(dx, dy, dz);
     return MoveTo(target->GetMapId(), dx, dy, dz, false, false, false, false, priority);
 }
 
@@ -1005,12 +1005,6 @@ float MovementAction::GetFollowAngle()
     }
 
     return 0;
-}
-
-Unit* MovementAction::GetMover() const
-{
-    Unit* vehicleBase = bot->GetVehicleBase();
-    return vehicleBase ? vehicleBase : bot;
 }
 
 bool MovementAction::IsMovingAllowed(WorldObject* target)
@@ -1383,21 +1377,9 @@ bool MovementAction::Follow(Unit* target, float distance, float angle)
     // AI_VALUE(LastMovement&, "last movement").Set(target);
     ClearIdleState();
 
-    // A passenger's own MotionMaster moves nothing, so a driver follows with its vehicle.
-    Unit* mover = GetMover();
-    if (Vehicle* vehicle = bot->GetVehicle())
+    if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() == FOLLOW_MOTION_TYPE)
     {
-        VehicleSeatEntry const* seat = vehicle->GetSeatForPassenger(bot);
-        if (!seat || !seat->CanControl())
-        {
-            NoteTracking(bot, RaidObs::MoveKind::Follow, target, RaidObs::MoveOutcome::NotAllowed);
-            return false;
-        }
-    }
-
-    if (mover->GetMotionMaster()->GetCurrentMovementGeneratorType() == FOLLOW_MOTION_TYPE)
-    {
-        Unit* currentTarget = ServerFacade::instance().GetChaseTarget(mover);
+        Unit* currentTarget = ServerFacade::instance().GetChaseTarget(bot);
         if (currentTarget && currentTarget->GetGUID() == target->GetGUID())
         {
             NoteTracking(bot, RaidObs::MoveKind::Follow, target, RaidObs::MoveOutcome::Duplicate);
@@ -1405,10 +1387,10 @@ bool MovementAction::Follow(Unit* target, float distance, float angle)
         }
     }
 
-    if (mover->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE)
-        mover->GetMotionMaster()->Clear();
+    if (bot->GetMotionMaster()->GetCurrentMovementGeneratorType() != FOLLOW_MOTION_TYPE)
+        bot->GetMotionMaster()->Clear();
 
-    mover->GetMotionMaster()->MoveFollow(target, distance, angle);
+    bot->GetMotionMaster()->MoveFollow(target, distance, angle);
     NoteTracking(bot, RaidObs::MoveKind::Follow, target, RaidObs::MoveOutcome::Issued);
     return true;
 }
@@ -1697,7 +1679,7 @@ bool MovementAction::MoveAway(Unit* target, float distance, bool backwards)
         float dy = bot->GetPositionY() + sin(angle) * distance;
         float dz = bot->GetPositionZ();
         bool exact = true;
-        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                             bot->GetPositionZ(), dx, dy, dz))
         {
             // disable prediction if position is invalid
@@ -1720,7 +1702,7 @@ bool MovementAction::MoveAway(Unit* target, float distance, bool backwards)
         dx = bot->GetPositionX() + cos(angle) * distance;
         dy = bot->GetPositionY() + sin(angle) * distance;
         dz = bot->GetPositionZ();
-        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                             bot->GetPositionZ(), dx, dy, dz))
         {
             // disable prediction if position is invalid
@@ -1783,7 +1765,7 @@ bool MovementAction::Move(float angle, float distance)
     float z = bot->GetMapWaterOrGroundLevel(x, y, bot->GetPositionZ());
     if (z == -100000.0f || z == -200000.0f)
         z = bot->GetPositionZ();
-    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+    if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                         bot->GetPositionZ(), x, y, z, false))
         return false;
 
@@ -2259,7 +2241,7 @@ Position MovementAction::BestPositionForMeleeToFlee(Position pos, float radius)
         float dx = bot->GetPositionX() + cos(angle) * fleeDis;
         float dy = bot->GetPositionY() + sin(angle) * fleeDis;
         float dz = bot->GetPositionZ();
-        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                             bot->GetPositionZ(), dx, dy, dz))
         {
             continue;
@@ -2322,7 +2304,7 @@ Position MovementAction::BestPositionForRangedToFlee(Position pos, float radius)
         float dx = bot->GetPositionX() + cos(angle) * fleeDis;
         float dy = bot->GetPositionY() + sin(angle) * fleeDis;
         float dz = bot->GetPositionZ();
-        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                             bot->GetPositionZ(), dx, dy, dz))
         {
             continue;
@@ -2605,7 +2587,7 @@ bool TankFaceAction::Execute(Event /*event*/)
     std::vector<Position> availablePos;
     float x, y, z;
     target->GetNearPoint(bot, x, y, z, 0.0f, dist, goodAngle1);
-    if (bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+    if (bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                        bot->GetPositionZ(), x, y, z))
     {
         /// @todo: movement control now is a mess, prepare to rewrite
@@ -2618,7 +2600,7 @@ bool TankFaceAction::Execute(Event /*event*/)
         }
     }
     target->GetNearPoint(bot, x, y, z, 0.0f, dist, goodAngle2);
-    if (bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+    if (bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                        bot->GetPositionZ(), x, y, z))
     {
         std::list<FleeInfo>& infoList = AI_VALUE(std::list<FleeInfo>&, "recently flee info");
@@ -2839,7 +2821,7 @@ bool SetBehindTargetAction::Execute(Event /*event*/)
     std::vector<Position> availablePos;
     float x, y, z;
     target->GetNearPoint(bot, x, y, z, 0.0f, dist, goodAngle1);
-    if (bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+    if (bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                        bot->GetPositionZ(), x, y, z))
     {
         /// @todo: movement control now is a mess, prepare to rewrite
@@ -2852,7 +2834,7 @@ bool SetBehindTargetAction::Execute(Event /*event*/)
         }
     }
     target->GetNearPoint(bot, x, y, z, 0.0f, dist, goodAngle2);
-    if (bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+    if (bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                        bot->GetPositionZ(), x, y, z))
     {
         std::list<FleeInfo>& infoList = AI_VALUE(std::list<FleeInfo>&, "recently flee info");
@@ -2902,7 +2884,7 @@ bool MoveRandomAction::Execute(Event /*event*/)
         x += urand(0, distance) * cos(angle);
         y += urand(0, distance) * sin(angle);
 
-        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(GetMover(), bot->GetPositionX(), bot->GetPositionY(),
+        if (!bot->GetMap()->CheckCollisionAndGetValidCoords(bot, bot->GetPositionX(), bot->GetPositionY(),
                                                             bot->GetPositionZ(), x, y, z))
             continue;
         if (map->IsInWater(bot->GetPhaseMask(), x, y, z, bot->GetCollisionHeight()))

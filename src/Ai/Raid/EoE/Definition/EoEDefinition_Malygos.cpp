@@ -41,6 +41,19 @@ bool Phase1NotMainTank(PlayerbotAI* botAI) { return Phase1(botAI) && !GetMalygos
 bool Phase2Riding(PlayerbotAI* botAI) { return Phase2(botAI) && botAI->GetBot()->GetVehicle(); }
 bool Phase2OnFoot(PlayerbotAI* botAI) { return Phase2(botAI) && !botAI->GetBot()->GetVehicle(); }
 
+// The platform stays gone after the kill, so a rider keeps the P3 flight: generic follow and loot
+// clamp a passenger's destination to the ground, which is Z 0 here.
+bool MalygosGateOpen(PlayerbotAI* botAI, uint32 encounterId)
+{
+    if (BossStateGateOpen(botAI, encounterId))
+        return true;
+
+    Unit* drake = botAI->GetBot()->GetVehicleBase();
+    return drake && drake->GetEntry() == NPC_WYRMREST_SKYTALON;
+}
+
+constexpr EncounterGate MalygosGate{&MalygosGateOpen, &BossStateGateLive};
+
 void DefineMalygos(EncounterBuilder& e)
 {
     e.Node<MalygosTrigger, MalygosPositionAction>(ACTION_MOVE);
@@ -122,6 +135,6 @@ void DefineMalygos(EncounterBuilder& e)
 
 EncounterDefinition const& EoEMalygosDefinition()
 {
-    static EncounterDefinition const definition(EOE_DATA_MALYGOS, BossStateGate, "malygos", &DefineMalygos);
+    static EncounterDefinition const definition(EOE_DATA_MALYGOS, MalygosGate, "malygos", &DefineMalygos);
     return definition;
 }

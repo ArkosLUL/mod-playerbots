@@ -88,9 +88,10 @@ bool EoEFlyDrakeAction::Execute(Event /*event*/)
         return false;
     }
 
-    // No boss in reach yet: the flight is still forming up, so fan out behind the raid leader.
+    // No boss: the flight is still forming up, or he is dead. Either way fan out behind the leader's
+    // drake. A leader without one is falling, so nobody follows them.
     Player* master = botAI->GetMaster();
-    if (!master)
+    if (!master || !master->IsInMap(bot))
         return false;
     Unit* masterVehicle = master->GetVehicleBase();
     if (!masterVehicle)
@@ -111,6 +112,9 @@ bool EoEFlyDrakeAction::Execute(Event /*event*/)
     }
     return false;
 }
+
+// Riders keep the flight after the kill, but there is nothing left to cast at or heal through.
+bool EoEDrakeAttackAction::isUseful() { return GetMalygos(bot) != nullptr; }
 
 bool EoEDrakeAttackAction::isPossible()
 {
