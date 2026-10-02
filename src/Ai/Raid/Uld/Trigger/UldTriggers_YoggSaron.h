@@ -231,6 +231,18 @@ public:
     bool IsActive() override;
 };
 
+// A damage dealer the reprisal hold took off the tentacles, out of its room healer's reach. Nothing heals
+// it there, so it would sit out the rest of the room.
+class YoggSaronReprisalRegroupTrigger : public YoggSaronTrigger
+{
+public:
+    static constexpr char const* Name = "yogg-saron reprisal regroup trigger";
+
+    YoggSaronReprisalRegroupTrigger(PlayerbotAI* ai)
+        : YoggSaronTrigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 // Once the room's door is open, onto the spot the bot hits the Brain from. A single walk dies on the
 // healer's first heal, and melee arriving in front of the Brain get walked out of range by set behind.
 class YoggSaronBrainSpotTrigger : public YoggSaronTrigger

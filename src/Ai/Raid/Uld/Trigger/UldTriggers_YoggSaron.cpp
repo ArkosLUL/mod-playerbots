@@ -175,9 +175,10 @@ bool YoggSaronSanityTrigger::IsActive()
 
     // Standing in the well halves damage done, so a bot only walks to one with nothing to kill, unless
     // it is low. One that got there stays until full whatever spawns: +20 every 2 s is a short wait. A
-    // brain team bot heading for its portal keeps heading there.
+    // brain team bot heading for its portal keeps heading there, and one already in a well leaves for it
+    // once it is past low: topping outranks the portal walk.
     char const* reason = nullptr;
-    if (bot->GetDistance(sanityWell) < 1.0f)
+    if (bot->GetDistance(sanityWell) < 1.0f && !YoggSaronPortalWalkPending(botAI))
         reason = "topping";
     else if (sanityAuraStacks < 40)
         reason = "low";
@@ -503,6 +504,16 @@ bool YoggSaronIllusionHealerStationTrigger::IsActive()
         return false;
 
     return YoggSaronWalkMakingProgress(botAI, "healer", station);
+}
+
+bool YoggSaronReprisalRegroupTrigger::IsActive()
+{
+    // The hold is a set lookup, so it goes before the level test.
+    if (!YoggSaronReprisalHold(botAI) || !botAI->CanMove() || !IsInBrainLevel())
+        return false;
+
+    Player* healer = YoggSaronRoomHealer(botAI);
+    return healer && bot->GetExactDist2d(healer) > ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE;
 }
 
 bool YoggSaronBrainSpotTrigger::IsActive()

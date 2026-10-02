@@ -11,8 +11,9 @@
     yogg_saron.py <file> --threat   who the Guardians were on, redirects, and taunt aim
     yogg_saron.py <file> --portals  portal waves, assignments and who got down
     yogg_saron.py <file> --tentacles  tentacle stock at each brain room door, stun removal, leftovers at P3
-    yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure, and
-                                    where Induce Madness caught whoever it charmed
+    yogg_saron.py <file> --brain    brain-room occupancy, the Brain's health, skull exposure,
+                                    who reflect and gaze killed and the reprisal holds, and where
+                                    Induce Madness caught whoever it charmed
     yogg_saron.py <file> --phase3   Immortal Guardians, who pulled them off the tanks, the bot tank's
                                     targets and taunts, beacon heals, Lunatic Gaze
     yogg_saron.py <file> --crush    Crush and who took it, the body's knockback and who walked into
@@ -57,7 +58,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from raidobs.cli import run_sections  # noqa: E402
 from raidobs.geometry import at, first_seen, guids_of_entry  # noqa: E402
 from raidobs.geometry import track as tracks  # noqa: E402
-from raidobs.probes import emitted_keys, latch_spans, silent_keys  # noqa: E402
+from raidobs.probes import emitted_keys, holder_spans, latch_spans, silent_keys  # noqa: E402
 from raidobs.space import show_share, threat_share  # noqa: E402
 from raidobs.stuck import IDLE_MS, idle_windows, veto_counts  # noqa: E402
 from raidobs.trace import Trace, clock, combat_deaths, death_records, notes, roster_guids  # noqa: E402
@@ -257,6 +258,10 @@ BRAIN_LINK_RANGE = 20.0
 
 # The boss platform floor is z 325-330 and every illusion room is z 236-244, so this separates them.
 BRAIN_LEVEL_Z = 300.0
+
+# How far back a death below the platform is read for what killed it. The reflect deaths ran from full
+# or half health to dead in one to three seconds, so five covers the run without the room before it.
+REPRISAL_DEATH_WINDOW_MS = 5000
 
 # The brain level's floor runs 236 to 244. Anything well above it is in the air, where the Brain's own
 # model hangs at 265 and a gap-closer aimed at it leaves the bot with nothing to walk on.
@@ -1256,6 +1261,7 @@ def show_brain(trace: Trace) -> None:
     if reprisal:
         total = sum(rec.get("a", 0) for rec in reprisal)
         print(f"  Grim Reprisal    : {len(reprisal)} hits for {total:,} self-inflicted")
+    show_reprisal(trace)
 
     madness = [rec for rec in trace.of("dmg") + trace.of("aura") if rec.get("sp") == SPELL_INDUCE_MADNESS]
     exits = collections.Counter(str(rec.get("txt", "")) for rec in notes(trace, "yogg.exit"))
@@ -1272,6 +1278,56 @@ def show_brain(trace: Trace) -> None:
 
     show_brain_waves(trace)
     show_stalled_walks(trace)
+
+
+def reprisal_deaths(deaths: list[dict], hits: list[dict], window_ms: int = REPRISAL_DEATH_WINDOW_MS) -> list[dict]:
+    """Deaths below the platform that Grim Reprisal and the skulls' Lunatic Gaze did most of, over the
+    last few seconds of damage. Both are the room's own cost of fighting there, so this is the count the
+    reprisal hold exists to bring down."""
+    killed = []
+    for death in deaths:
+        if death.get("z", BRAIN_LEVEL_Z) >= BRAIN_LEVEL_Z:
+            continue
+        window = [hit for hit in hits
+                  if hit.get("d") == death.get("g") and death["t"] - window_ms <= hit["t"] <= death["t"]]
+        total = sum(hit.get("a", 0) for hit in window)
+        room = sum(hit.get("a", 0) for hit in window
+                   if hit.get("sp") in (SPELL_GRIM_REPRISAL, SPELL_LUNATIC_GAZE_SKULL))
+        if total and room * 2 > total:
+            killed.append(death)
+    return killed
+
+
+def hold_summary(spans: dict[int, list[tuple[str, int, int]]], deaths: list[dict]) -> dict:
+    """Reprisal holds from `yogg.reprisal` spans: how many, by how many bots, the median length in
+    seconds, and how many ended with the bot dead anyway."""
+    holds = [(guid, start, stop) for guid, rows in spans.items() for held, start, stop in rows if held == "1"]
+    died = sum(1 for guid, start, stop in holds
+               if any(death.get("g") == guid and start <= death["t"] <= stop for death in deaths))
+    lengths = [(stop - start) / 1000.0 for _, start, stop in holds]
+    return {"holds": len(holds), "bots": len({guid for guid, _, _ in holds}),
+            "median": statistics.median(lengths) if lengths else None, "died": died}
+
+
+def show_reprisal(trace: Trace) -> None:
+    deaths = combat_deaths(trace)
+    dead = {death.get("g") for death in deaths}
+    killed = reprisal_deaths(deaths, [rec for rec in trace.of("dmg") if rec.get("d") in dead])
+    if killed:
+        waves = [(rec["t"], int(rec.get("txt", 0))) for rec in notes(trace, "yogg.wave")]
+        named = []
+        for death in killed:
+            wave = max((ordinal for when, ordinal in waves if when <= death["t"]), default=0)
+            named.append(f"{trace.name(death['g'])}({trace.role(death['g'])}) w{wave}")
+        print(f"  reprisal deaths  : {len(killed)} below the platform, mostly reflect and gaze - {', '.join(named)}")
+
+    end = trace.records[-1].get("t", 0) if trace.records else 0
+    spans = holder_spans(trace, "yogg.reprisal", end)
+    if spans:
+        summary = hold_summary(spans, deaths)
+        median = f"{summary['median']:.1f} s" if summary["median"] is not None else "-"
+        print(f"  reprisal holds   : {summary['holds']} by {summary['bots']} bots, median {median},"
+              f" {summary['died']} ended in a death")
 
 
 def group_runs(stamps: list[int], gap_ms: int, min_ms: int) -> list[tuple[int, int]]:
@@ -2888,7 +2944,8 @@ SECTIONS = (
     ("portals", "portal waves, assignments, and who never walked for one", show_portals),
     ("phase2", "Constrictor, Brain Link, node handovers", show_phase2),
     ("tentacles", "platform tentacle stock, Shattered Illusion stuns, leftovers at phase 3", show_tentacles),
-    ("brain", "brain room, the Brain, skulls, Induce Madness, stalled walks", show_brain),
+    ("brain", "brain room, the Brain, skulls, reprisal deaths and holds, Induce Madness, stalled walks",
+     show_brain),
     ("phase3", "Immortal Guardians, beacon heals, Lunatic Gaze", show_phase3),
     ("crush", "Crush and who took it, knockback and Death Rays", show_crush),
     ("sanity", "Sanity minima", show_sanity),

@@ -917,6 +917,23 @@ bool YoggSaronSetDpsPriorityAction::Execute(Event /*event*/)
             bot->InterruptSpell(CURRENT_CHANNELED_SPELL);
     }
 
+    // Off the tentacles until healed, so no target: the drop is what ends the white swings, and every
+    // swing is a hit Grim Reprisal answers. Only a cast at the tentacle is cut, so a self-heal still lands.
+    if (YoggSaronReprisalHold(botAI))
+    {
+        if (currentTarget)
+        {
+            bool aimedAtIt = false;
+            for (CurrentSpellTypes const type : {CURRENT_GENERIC_SPELL, CURRENT_CHANNELED_SPELL})
+                if (Spell* spell = bot->GetCurrentSpell(type))
+                    aimedAtIt = aimedAtIt || spell->m_targets.GetUnitTarget() == currentTarget;
+
+            DropTarget(currentTarget, aimedAtIt);
+        }
+
+        return false;
+    }
+
     // Healers take no target in an illusion room or in phase 3. A target is what reach spell walks them
     // toward: 39 yd off a room's middle with half the team out of heal range, and in phase 3 41-45 yd
     // from the tank chasing tentacles. With none, nothing turns them back toward Yogg either.
@@ -1231,6 +1248,24 @@ bool YoggSaronIllusionHealerStationAction::Execute(Event /*event*/)
 
     return MoveTo(bot->GetMapId(), station.GetPositionX(), station.GetPositionY(), station.GetPositionZ(), false, false,
                   false, true, MovementPriority::MOVEMENT_FORCED, true, false);
+}
+
+bool YoggSaronReprisalRegroupAction::Execute(Event /*event*/)
+{
+    Player* healer = YoggSaronRoomHealer(botAI);
+    if (!healer)
+        return false;
+
+    // Short of the healer on this bot's side, since in range is all a heal needs.
+    float const angle = healer->GetAngle(bot);
+    Position const spot(healer->GetPositionX() + std::cos(angle) * ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP,
+                        healer->GetPositionY() + std::sin(angle) * ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP,
+                        healer->GetPositionZ());
+
+    YoggSaronReleaseStalledWalk(botAI, "regroup", spot);
+
+    return MoveTo(bot->GetMapId(), spot.GetPositionX(), spot.GetPositionY(), spot.GetPositionZ(), false, false, false,
+                  true, MovementPriority::MOVEMENT_FORCED, true, false);
 }
 
 bool YoggSaronBrainSpotAction::Execute(Event /*event*/)

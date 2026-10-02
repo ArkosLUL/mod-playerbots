@@ -492,6 +492,23 @@ constexpr uint32 ULDUAR_YOGG_SARON_WALK_RETRY_MS = 4000;
 // is still running keeps isMoving() true, so this only ever fires on a walk that has already died.
 constexpr uint32 ULDUAR_YOGG_SARON_WALK_STALL_MS = 500;
 
+// Grim Reprisal sends 60% of every direct hit on a tentacle back at whoever landed it, DoT ticks
+// excepted, so a damage dealer below the stop line stays off the tentacles until healed past the resume
+// line. The worst single burst measured was 35% of max health in 0.2 s (a Windfury chain), and six
+// melee died in one pull still swinging at 21-39%.
+constexpr float ULDUAR_YOGG_SARON_REPRISAL_STOP_PCT = 40.0f;
+constexpr float ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT = 70.0f;
+
+// Induce Madness time left under which nobody holds back. An uncleared room has no way out, so a
+// tentacle left alive at the end charms everyone in the room, held or not.
+constexpr uint32 ULDUAR_YOGG_SARON_REPRISAL_ALL_IN_MS = 15000;
+
+// A held bot further than this from its room's healer walks toward it, and stops about this short of it.
+// Inside the 38.5 yd heal range with room for both to move: four of the six melee that died to
+// reprisal in one pull had the healer 37-50 yd away.
+constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_RANGE = 25.0f;
+constexpr float ULDUAR_YOGG_SARON_REPRISAL_REGROUP_STOP = 15.0f;
+
 // How often the per-bot exposure probes resample. They answer "where was this bot standing when the
 // thing that killed it went off", so a second is fine and a tick is 25 bots of noise.
 constexpr uint32 ULDUAR_YOGG_SARON_OBS_SCAN_INTERVAL_MS = 1000;
@@ -585,6 +602,9 @@ enum YoggSaronRoomState : uint32
     YOGG_SARON_ROOM_STATE_DOOR_SHUT = 3,
     YOGG_SARON_ROOM_STATE_TO_BRAIN = 4,
     YOGG_SARON_ROOM_STATE_AT_BRAIN = 5,
+    // Off the tentacles until healed, see YoggSaronReprisalHold. Has no target, so without its own
+    // state it reads as walkingin and the walk-in node marches it back onto one.
+    YOGG_SARON_ROOM_STATE_REPRISAL = 6,
 };
 
 YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI);
@@ -686,6 +706,18 @@ YoggSaronPortalIntent YoggSaronPortalPlan(PlayerbotAI* botAI, Position& spot);
 // A brain team bot already walking to, standing on, or late for its portal. Anything that would pull it
 // elsewhere stands down: a room without its healer fell to 14% while Brain Link held that healer upstairs.
 bool YoggSaronPortalWalkPending(PlayerbotAI* botAI);
+
+// A brain team bot already on its portal spot waiting for the wave. Nothing else keeps it there: the
+// portal node only walks on spreading or late, so reach would take it back to its target and the two
+// would trade it for the whole lead. Slot and distance first, so the plan is only read on the spot.
+bool YoggSaronHoldingPortalSpot(PlayerbotAI* botAI);
+
+// Damage dealer in an illusion room off the tentacles until healed. Latched in the tick, see
+// ULDUAR_YOGG_SARON_REPRISAL_STOP_PCT; this only reads it.
+bool YoggSaronReprisalHold(PlayerbotAI* botAI);
+
+// Nearest living group healer in the bot's own illusion room, or null.
+Player* YoggSaronRoomHealer(PlayerbotAI* botAI);
 
 // Guardians casting Dark Volley right now, for the interrupt node. Shared between trigger and action
 // so the two cannot disagree about what is being kicked.

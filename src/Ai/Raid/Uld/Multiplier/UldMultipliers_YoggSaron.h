@@ -53,6 +53,21 @@ public:
     float GetValue(Action* action) override;
 };
 
+// Anything that hits more than one tentacle, held in an illusion room. Every tentacle a hit lands on
+// sends its own 60% back, so a cluster of three returns 180%: Sweeping Strikes and Bladestorm took a
+// warrior from full to dead in 2 s, faster than the reprisal hold can react. Most melee cleaves carry no
+// AoE threat type, hence the names. Heals are never held.
+class YoggSaronIllusionMultiTargetHoldMultiplier : public Multiplier
+{
+public:
+    YoggSaronIllusionMultiTargetHoldMultiplier(PlayerbotAI* botAI)
+        : Multiplier(botAI, "yogg-saron illusion multi target hold multiplier")
+    {
+    }
+
+    float GetValue(Action* action) override;
+};
+
 // Phase 1 walks back to the stack or the station, held in two cases:
 // - A Sara's Fervor holder near a live nova. The dodge only fires inside 17 yd, so the station, the
 //   leash and the reach nodes walked the bot straight back in: 31 of 44 runs were inside the blast

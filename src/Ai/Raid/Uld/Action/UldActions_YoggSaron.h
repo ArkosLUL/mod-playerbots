@@ -368,6 +368,17 @@ public:
     bool Execute(Event event) override;
 };
 
+class YoggSaronReprisalRegroupAction : public MovementAction
+{
+public:
+    static constexpr char const* Name = "yogg-saron reprisal regroup action";
+
+    YoggSaronReprisalRegroupAction(PlayerbotAI* ai)
+        : MovementAction(ai, Name) {}
+
+    bool Execute(Event event) override;
+};
+
 class YoggSaronBrainSpotAction : public MovementAction
 {
 public:

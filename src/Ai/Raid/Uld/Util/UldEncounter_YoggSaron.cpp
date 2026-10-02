@@ -81,6 +81,8 @@ struct YoggSaronEncounterState
     RaidObs::ObsValue<uint32> wave{"yogg.wave"};
     RaidObs::ObsGuidSet brainTeam{"yogg.brainteam"};
     RaidObs::ObsGuidMap<uint8> portalSlot{"yogg.portalslot"};
+    // Damage dealers off the tentacles until healed. See YoggSaronTickReprisal.
+    RaidObs::ObsGuidSet reprisalHold{"yogg.reprisal"};
 
     // Phase 2's clock. nextWaveMs is a prediction: it starts at +60 s and re-anchors on every wave a
     // bot actually sees, so a delayed wave corrects itself rather than compounding.
@@ -395,6 +397,12 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
                 break;
             }
 
+            if (YoggSaronReprisalHold(botAI))
+            {
+                state = YOGG_SARON_ROOM_STATE_REPRISAL;
+                break;
+            }
+
             // Line of sight is the whole difference. Two of the three rooms put their tentacles
             // behind a doorway, the dps resolver will not pick what it cannot see, and nothing else
             // in the fight moves a bot once the portal has dropped it.
@@ -410,7 +418,7 @@ YoggSaronRoomState YoggSaronRoomStateOf(PlayerbotAI* botAI)
 
     if (RaidObs::Active())
     {
-        char const* names[] = {"none", "walkingin", "fighting", "doorshut", "tobrain", "atbrain"};
+        char const* names[] = {"none", "walkingin", "fighting", "doorshut", "tobrain", "atbrain", "reprisal"};
         RaidObs::NoteDerived(bot, "yogg.roomstate", names[state]);
     }
 
@@ -620,8 +628,11 @@ YoggSaronPortalWave YoggSaronPortalWaveState(PlayerbotAI* botAI)
     }
     // A prediction nobody confirmed rolls on by a whole period rather than reading "any moment now"
     // forever, which would keep the brain team parked on its spots for the rest of the fight.
+    //
+    // Signed, not getMSTimeDiff: that reads a prediction still in the future as a timer wrap, ~4.29e9 ms
+    // late, so every call pushed it another 80 s out and no trace ever showed a bot spreading.
     else if (!portalsUp && state.nextWaveMs &&
-             getMSTimeDiff(state.nextWaveMs, now) > ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS)
+             static_cast<int32>(now - state.nextWaveMs) > static_cast<int32>(ULDUAR_YOGG_SARON_PORTAL_WAVE_DEBOUNCE_MS))
     {
         state.nextWaveMs += ULDUAR_YOGG_SARON_PORTAL_WAVE_PERIOD_MS;
     }
@@ -677,8 +688,35 @@ std::vector<Player*> GetYoggSaronBrainTeam(PlayerbotAI* botAI)
     // the same walk from every seat.
     auto const byGuid = [](Player* left, Player* right) { return left->GetGUID() < right->GetGUID(); };
     std::sort(melee.begin(), melee.end(), byGuid);
-    std::sort(healers.begin(), healers.end(), byGuid);
     std::sort(ranged.begin(), ranged.end(), byGuid);
+
+    // Healers by how much they can heal on the move, then GUID. A moving bot can't start a cast-time
+    // spell at all, and the room healer walks a lot: a holy paladin moved 31-62% of its room time with 82%
+    // of its heals on a cast time. Class decides it, since a healing priest is disc or holy and a healing
+    // druid resto, and every seat reads the same class.
+    auto const mobileRank = [](Player* healer)
+    {
+        switch (healer->getClass())
+        {
+            case CLASS_PRIEST:
+                return 0;
+            case CLASS_DRUID:
+                return 1;
+            case CLASS_SHAMAN:
+                return 2;
+            case CLASS_PALADIN:
+                return 3;
+            default:
+                return 4;
+        }
+    };
+    std::sort(healers.begin(), healers.end(),
+              [&](Player* left, Player* right)
+              {
+                  int const leftRank = mobileRank(left);
+                  int const rightRank = mobileRank(right);
+                  return leftRank != rightRank ? leftRank < rightRank : left->GetGUID() < right->GetGUID();
+              });
 
     std::vector<Player*> team = melee;
     if (!healers.empty())
@@ -828,6 +866,23 @@ bool YoggSaronPortalWalkPending(PlayerbotAI* botAI)
 
     return intent == YOGG_SARON_PORTAL_SPREADING || intent == YOGG_SARON_PORTAL_HOLDING ||
            intent == YOGG_SARON_PORTAL_LATE;
+}
+
+bool YoggSaronHoldingPortalSpot(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    if (bot->GetPositionZ() < ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return false;
+
+    // A slot left over from the last wave only lets the plan be asked; the plan has the answer.
+    YoggSaronEncounterState const& state = YoggSaronStateFor(bot);
+    auto const assignment = state.portalSlot.find(bot->GetGUID());
+    if (assignment == state.portalSlot.end() ||
+        bot->GetExactDist2d(ULDUAR_YOGG_SARON_PORTAL_SPOTS[assignment->second]) > ULDUAR_YOGG_SARON_PORTAL_CLICK_RADIUS)
+        return false;
+
+    Position spot;
+    return YoggSaronPortalPlan(botAI, spot) == YOGG_SARON_PORTAL_HOLDING;
 }
 
 namespace
@@ -2589,9 +2644,83 @@ void TickYoggSaronObs(PlayerbotAI* botAI)
 }
 }  // namespace
 
+bool YoggSaronReprisalHold(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    return YoggSaronStateFor(bot).reprisalHold.count(bot->GetGUID()) != 0;
+}
+
+Player* YoggSaronRoomHealer(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    Group* group = bot->GetGroup();
+    if (!group || (room != YOGG_SARON_ROOM_STORMWIND && room != YOGG_SARON_ROOM_ICECROWN &&
+                   room != YOGG_SARON_ROOM_CHAMBER))
+        return nullptr;
+
+    Player* nearest = nullptr;
+    for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
+    {
+        Player* member = ref->GetSource();
+        if (!member || member == bot || !member->IsAlive() || !PlayerbotAI::IsHeal(member) ||
+            YoggSaronRoomOf(member) != room)
+            continue;
+
+        if (!nearest || bot->GetExactDist2d(member) < bot->GetExactDist2d(nearest))
+            nearest = member;
+    }
+
+    return nearest;
+}
+
+namespace
+{
+// Induce Madness has this little left, or less. False with no cast going, so no deadline then.
+bool YoggSaronInduceMadnessWithin(PlayerbotAI* botAI, uint32 ms)
+{
+    Creature* brain = YoggSaronNearestCreature(botAI, NPC_BRAIN);
+    if (!brain || !brain->IsAlive() || !brain->HasUnitState(UNIT_STATE_CASTING))
+        return false;
+
+    Spell* induceMadness = brain->GetCurrentSpell(CURRENT_GENERIC_SPELL);
+    return induceMadness && induceMadness->m_spellInfo->Id == SPELL_INDUCE_MADNESS &&
+           induceMadness->GetCastTimeRemaining() <= static_cast<int32>(ms);
+}
+
+// Latched here, before the triggers run, so the resolver, the rules and the room state all read one
+// answer per tick. Stops under the stop line, starts again at the resume line. Only worth it with a
+// healer in the room to lift the bot back up, and never in the last seconds, when an uncleared room
+// charms everyone in it anyway.
+void YoggSaronTickReprisal(PlayerbotAI* botAI)
+{
+    Player* bot = botAI->GetBot();
+    YoggSaronEncounterState& state = YoggSaronStateFor(bot);
+    ObjectGuid const guid = bot->GetGUID();
+    bool const held = state.reprisalHold.count(guid) != 0;
+
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    bool const inIllusion =
+        room == YOGG_SARON_ROOM_STORMWIND || room == YOGG_SARON_ROOM_ICECROWN || room == YOGG_SARON_ROOM_CHAMBER;
+
+    // Cheap tests first, the sweeps only for a bot that would be held.
+    float const line = held ? ULDUAR_YOGG_SARON_REPRISAL_RESUME_PCT : ULDUAR_YOGG_SARON_REPRISAL_STOP_PCT;
+    bool hold = inIllusion && bot->IsAlive() && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot) &&
+                bot->GetHealthPct() < line;
+    hold = hold && YoggSaronRoomHealer(botAI) && !YoggSaronInfluenceTentaclesCleared(botAI) &&
+           !YoggSaronInduceMadnessWithin(botAI, ULDUAR_YOGG_SARON_REPRISAL_ALL_IN_MS);
+
+    if (hold)
+        state.reprisalHold.insert(guid);
+    else if (held)
+        state.reprisalHold.erase(guid);
+}
+}  // namespace
+
 void YoggSaronTick(PlayerbotAI* botAI)
 {
     YoggSaronTickHandover(botAI);
     YoggSaronTickRtiMark(botAI);
+    YoggSaronTickReprisal(botAI);
     TickYoggSaronObs(botAI);
 }

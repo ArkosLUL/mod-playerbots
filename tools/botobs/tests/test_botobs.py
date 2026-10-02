@@ -1222,6 +1222,37 @@ class YoggPhases(unittest.TestCase):
         # 5131 only ran the click node and 5135 ran outside the window, so neither walked for this wave.
         self.assertEqual(yogg_saron.walked_for_a_portal(trace, {5124, 5131, 5135}, 0, 30000), {5124})
 
+    def test_only_a_death_below_that_reflect_and_gaze_mostly_caused_is_a_reprisal_death(self):
+        reflect, gaze, squeeze = yogg_saron.SPELL_GRIM_REPRISAL, yogg_saron.SPELL_LUNATIC_GAZE_SKULL, 64126
+        deaths = [
+            {"g": 1, "t": 10000, "z": 239.7},
+            {"g": 2, "t": 10000, "z": 239.7},
+            {"g": 3, "t": 10000, "z": 325.0},
+        ]
+        hits = [
+            {"d": 1, "t": 8000, "sp": reflect, "a": 6000},
+            {"d": 1, "t": 9000, "sp": gaze, "a": 1750},
+            {"d": 1, "t": 9500, "sp": squeeze, "a": 3000},
+            # outside the window, so it cannot tip the share
+            {"d": 2, "t": 1000, "sp": reflect, "a": 90000},
+            {"d": 2, "t": 9000, "sp": squeeze, "a": 9000},
+            {"d": 3, "t": 9000, "sp": reflect, "a": 9000},
+        ]
+        killed = yogg_saron.reprisal_deaths(deaths, hits)
+        self.assertEqual([death["g"] for death in killed], [1])
+
+    def test_a_hold_is_measured_and_one_the_bot_died_in_is_counted(self):
+        spans = {
+            1: [("1", 1000, 5000), ("0", 5000, 20000), ("1", 20000, 22000)],
+            2: [("1", 3000, 9000)],
+        }
+        summary = yogg_saron.hold_summary(spans, [{"g": 2, "t": 8000}, {"g": 1, "t": 30000}])
+        self.assertEqual(summary["holds"], 3)
+        self.assertEqual(summary["bots"], 2)
+        self.assertAlmostEqual(summary["median"], 4.0)
+        self.assertEqual(summary["died"], 1)
+        self.assertIsNone(yogg_saron.hold_summary({}, [])["median"])
+
     def test_a_taunt_is_down_for_eight_seconds_after_its_last_cast(self):
         casts = [1000, 20000]
         self.assertFalse(yogg_saron.on_cooldown(casts, 500, 8000))

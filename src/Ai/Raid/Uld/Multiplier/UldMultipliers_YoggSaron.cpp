@@ -195,6 +195,30 @@ float YoggSaronPhase1AoeHoldMultiplier::GetValue(Action* action)
     return YoggSaronPhase1AoeHold(botAI) ? 0.0f : 1.0f;
 }
 
+float YoggSaronIllusionMultiTargetHoldMultiplier::GetValue(Action* action)
+{
+    if (!action || dynamic_cast<CastHealingSpellAction*>(action))
+        return 1.0f;
+
+    // Under the floor first, so the bots on the platform pay one compare.
+    if (bot->GetPositionZ() >= ULDUAR_YOGG_SARON_BOSS_ROOM_AXIS_Z_PATHING_ISSUE_DETECT)
+        return 1.0f;
+
+    YoggSaronRoom const room = YoggSaronRoomOf(bot);
+    if (room != YOGG_SARON_ROOM_STORMWIND && room != YOGG_SARON_ROOM_ICECROWN && room != YOGG_SARON_ROOM_CHAMBER)
+        return 1.0f;
+
+    static std::set<std::string> const multiTarget = {
+        "bladestorm",    "sweeping strikes", "cleave",       "whirlwind",   "thunder clap",
+        "shockwave",     "divine storm",     "howling blast", "blood boil", "fan of knives",
+        "blade flurry",  "swipe (cat)",      "multi-shot",    "fire nova",  "chain lightning"};
+
+    if (action->getThreatType() == Action::ActionThreatType::Aoe || multiTarget.count(action->getName()))
+        return 0.0f;
+
+    return 1.0f;
+}
+
 float YoggSaronPhase1WalkGuardMultiplier::GetValue(Action* action)
 {
     if (!action)

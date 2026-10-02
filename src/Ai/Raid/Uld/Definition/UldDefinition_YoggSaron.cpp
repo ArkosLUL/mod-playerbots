@@ -139,6 +139,8 @@ void DefineYoggSaron(EncounterBuilder& e)
     // step toward one mate; the trigger stands down inside 10 yd of the station and heal reach owns the
     // bot from there.
     e.Node<YoggSaronIllusionHealerStationTrigger, YoggSaronIllusionHealerStationAction>(ACTION_RAID);
+    // Level with the room walk, which a held bot never runs: its room state reads reprisal, not walkingin.
+    e.Node<YoggSaronReprisalRegroupTrigger, YoggSaronReprisalRegroupAction>(ACTION_RAID);
     // Over reach melee and set behind, so a bot arriving in front of the Brain goes round to the spot
     // rather than being walked out of range and back. Under the exit walk.
     e.Node<YoggSaronBrainSpotTrigger, YoggSaronBrainSpotAction>(ACTION_RAID);
@@ -163,11 +165,25 @@ void DefineYoggSaron(EncounterBuilder& e)
             {"killing spree"});
     e.Block("yogg-saron displacement guard multiplier", Role::Any, YoggSaronBrainIsTarget, Family::Charge);
 
+    // Everything else that could put a held bot back on a tentacle. Not the whole Attack family: the dps
+    // resolver is an AttackAction itself, and it is what drops the target. The assist is already blocked.
+    e.Block("yogg-saron reprisal hold", Role::Any, YoggSaronReprisalHold,
+            Family::Melee | Family::DpsAoe | Family::AggressiveTarget | Family::AttackAnything |
+                Family::AttackLeastHp | Family::AttackRti | Family::DebuffOnAttacker | Family::Charge);
+
+    // A bot on its portal spot waits there. The portal walk is quiet once it arrives, so without this
+    // reach takes it back to its target and the walk fetches it again for the whole lead. The Yogg dodges
+    // are none of these and still move it.
+    e.Block("yogg-saron portal spot hold", Role::Any, YoggSaronHoldingPortalSpot,
+            Family::Reach | Family::ReachHeal | Family::SetBehind | Family::RearFlank |
+                Family::CombatFormationMove | Family::Charge | Family::Follow | Family::MoveRandom);
+
     e.Multiplier<YoggSaronMovementGuardMultiplier>(Family::Flee | Family::SetBehind | Family::Reach |
                                                    Family::ReachHeal);
 
     // Whether an action is AoE is its threat type, which any action can override.
     e.Multiplier<YoggSaronPhase1AoeHoldMultiplier>(Family::AnyAction);
+    e.Multiplier<YoggSaronIllusionMultiTargetHoldMultiplier>(Family::AnyAction);
 
     e.Block("yogg-saron stack food guard multiplier", Role::Any, YoggSaronInsideRing, 0, {"food", "drink"});
 

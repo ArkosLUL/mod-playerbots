@@ -959,6 +959,15 @@ the state machine: `notteam` / `waiting` / `spreading` / `holding` / `late` / `c
 out-of-phase-2 reset clears that clock but not `waveOrdinal`, so a fresh pull labelled its first wave
 **5**; harmless while `slotWave` carries with it, but read `yogg.wave` as a session counter.
 
+**Compare wave times signed, never with `getMSTimeDiff`.** It reads `old > new` as a timer wrap and
+returns ~4.29e9, so the roll-forward test fired on every call while the prediction was still ahead and
+pushed it another 80 s each time: **no trace ever showed `spreading`**, and every brain team bot walked
+only once it saw the portals. Holding needs a rule too, because the portal walk goes quiet on arrival
+and reach would take the bot back to its target: `yogg-saron portal spot hold` blocks reach, heal
+reach, set behind, rear flank, formation moves, charges, follow and random moves while
+`YoggSaronHoldingPortalSpot` holds, slot and distance read before the plan. The Yogg dodges still move
+it.
+
 **Rebuild the plan when the portals spawn, and take one that is still there.** The wave a plan is
 for carries the same ordinal before and after the portals appear, so a latch keyed on that alone
 never rebuilds a second time: every assignment in one pull was stamped **55 to 61 s** before the
@@ -974,7 +983,9 @@ against 2 for the click meant `holding` did not imply clickable. Portals taken p
 
 **The brain team is melee first, then exactly one healer, then ranged; tanks never.** The room is a
 60 s race on foot, and it doubles as the Crush answer above. Order within each band by GUID so every
-bot derives the same team from its own seat. The trigger and the action used to build the list
+bot derives the same team from its own seat, except healers, which go priest, druid, shaman, paladin
+first: `PlayerbotAI::CanCastSpell` refuses a cast-time spell while moving, and a holy paladin moved
+31-62% of its room time with 82% of its heals on a cast time. The trigger and the action used to build the list
 differently — one skipped the master, the other did not — so they disagreed about who was on it;
 `GetYoggSaronBrainTeam` is the single owner now.
 
@@ -1020,7 +1031,7 @@ the action walked to the first group member carrying the aura rather than to the
 
 **Top up Sanity whenever the platform has nothing to kill.** Each well's 64169 is a 6 yd area aura
 giving +20 Sanity every 2 s and **-50% damage done**. `yogg-saron sanity` walks a bot to the nearest
-well below 40, keeps one inside 1 yd there until 100, and in phase 2 also walks it at any Sanity under
+well below 40, keeps one inside 1 yd there until 100 unless its portal walk is pending, and in phase 2 also walks it at any Sanity under
 100 while no Guardian, Crusher, Constrictor or Corruptor lives, unless it is a brain team bot with a
 portal walk pending. One pull had 66 s of that (27, 15, 11, 7 and 6 s) with 20 of 23 raiders under
 100 and wells a median 35-42 yd away. Stunned tentacles outlasted the brain team in 5 of 6 waves, so
@@ -1123,6 +1134,24 @@ treats revealed and disguised alike and picks what the fewest other room members
 always keeps one no lower GUID is also on, so two that race onto a free one settle next tick. Grim
 Reprisal (63305) reflects 60% of every hit at its attacker, so the split changes nobody's incoming
 damage. Probed as `yogg.spread`: `free`, `shared` or `kept`.
+
+**Grim Reprisal is what kills the brain team, and only a hit triggers it.**
+`spell_yogg_saron_grim_reprisal_aura` casts 64039 for 60% of the hit at the attacker, totems skipped;
+63305's `ProcTypeMask` 0x222A8 has no `TAKEN_PERIODIC` bit and no `spell_proc` or linked override, so
+DoTs never reflect and a bot that stops hitting stops taking it. Six melee died below in one pull still
+swinging at 21-39%, the worst burst 35% of max health in 0.2 s. So a damage dealer in an illusion room
+holds under **40%** and fights again at **70%**, latched in the tick as `yogg.reprisal`: only while a
+healer lives in its room, and never with Induce Madness under 15 s, since an uncleared room charms
+everyone in it. The resolver drops the target, `yogg-saron reprisal hold` blocks the other pickers,
+melee and charges, the room state reads `reprisal` so the walk-in leaves it alone, and `yogg-saron
+reprisal regroup` walks it to 15 yd of the healer past 25: four of those six died with the healer
+37-50 yd away.
+
+**Each tentacle a hit lands on reflects separately**, so a cleave on a cluster of three returns 180%:
+Sweeping Strikes and Bladestorm took a warrior from full to dead in 2 s, faster than any hold.
+`yogg-saron illusion multi target hold multiplier` zeroes, in the rooms, every AoE-threat action and a
+name list, since most cleaves (Bladestorm, Cleave, Whirlwind, Divine Storm, Howling Blast, Multi-Shot)
+carry no AoE threat type. Heals are never held.
 
 **The healer stations on its room's live tentacles, not on the room middle.** A target is what `reach
 spell` walks it to: median 8-39 yd from the middle per wave, with 30% and 57% of healer-to-mate samples
@@ -1293,7 +1322,7 @@ Following a master is wrong in every part of this fight — the illusion rooms a
 idled behind a human on `clean quest log`, `apply oil` and `loot roll` — so `yogg-saron stop
 following` removes `FollowMasterStrategy` and nothing adds it back.
 
-**Twenty-seven `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
+**Twenty-eight `yogg.` probes and a reader.** `tools/botobs/bosses/yogg_saron.py` prints phases, cloud-orbit
 exposure, portal waves and assignments, brain-room occupancy and Brain health, Crush and knockback
 exposure per role, and Sanity minima — and names any key missing from the whole trace, because a key
 declared in source and absent from every trace of its own boss means the recorder is dropping it,
@@ -1301,7 +1330,7 @@ not that the thing never happened. The keys are `yogg.phase`, `yogg.engaged`, `y
 `yogg.roomstate`, `yogg.cloudreach`, `yogg.knockback`, `yogg.crush`, `yogg.deathray`, `yogg.wave`,
 `yogg.portal`, `yogg.portalslot`, `yogg.brainteam`, `yogg.skull`, `yogg.exit`, `yogg.handover`,
 `yogg.squeeze`, `yogg.brainlink`, `yogg.tentacle`, `yogg.gaze`, `yogg.petguard`, `yogg.detour`,
-`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold` and `yogg.walkstep`,
+`yogg.judgement`, `yogg.spread`, `yogg.sanity`, `yogg.stunned`, `yogg.tankhold`, `yogg.walkstep` and `yogg.reprisal`,
 beside the older `yogg.walk`, `yogg.station`, `yogg.p1dodge`, `yogg.p1station` and `yogg.p1leash`.
 Two hazards go to the timeline only because nothing can sweep for either: the body's knockback
 circle, and each Crusher's wedge carrying facing, arc and range so it can be tested by hand
@@ -1309,7 +1338,8 @@ afterwards.
 
 `--portals` tells a bot that walked for a portal and lost the race from one whose node never ran at
 all, which is the only way the room-tag leak shows; `--brain` prints what the healer landed per room
-beside how close it came to its station, and every walk down there that stalled or gave up.
+beside how close it came to its station, every walk down there that stalled or gave up, the deaths
+reflect and gaze did most of, and the reprisal holds.
 
 Three of its views exist because this fight keeps failing in ways the per-mechanic sections cannot
 see. **Vetoes**, tallied by multiplier and action, because a zeroed walk with nothing walking in its
