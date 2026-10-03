@@ -37,6 +37,10 @@ uint32 NextMagicDefensive(PlayerbotAI* botAI, Player* bot, char const* noteKind,
 // and 0 when the bot has nothing castable or only something that adds health rather than cutting damage.
 uint8 BestMagicDefensiveCut(PlayerbotAI* botAI, Player* bot, uint32 needMs);
 
+// The cast name of a tank button off cooldown within `withinMs`, or nullptr, read for a hit still seconds
+// away: NextTankDefensive also answers 0 on the global cooldown, mid channel, or with one already running.
+char const* ReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs = 0);
+
 // True for the cast names in that table, so an encounter can hold the class nodes off them until the
 // window it wants them spent in. The tank variant lists only the buttons NextTankDefensive offers.
 bool IsHeldTankDefensive(std::string const& actionName);

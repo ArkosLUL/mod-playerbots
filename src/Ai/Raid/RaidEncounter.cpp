@@ -424,7 +424,7 @@ Rules::FamilyMask ClassifyAction(Action* action)
                  dynamic_cast<CastGrowlAction*>(action) || dynamic_cast<CastChallengingRoarAction*>(action) ||
                  dynamic_cast<CastHandOfReckoningAction*>(action) ||
                  dynamic_cast<CastRighteousDefenseAction*>(action) || dynamic_cast<CastDarkCommandAction*>(action) ||
-                 dynamic_cast<CastDeathGripAction*>(action))
+                 dynamic_cast<CastDeathGripAction*>(action) || dynamic_cast<CastMockingBlowAction*>(action))
             mask |= Family::Taunt;
 
         return mask;

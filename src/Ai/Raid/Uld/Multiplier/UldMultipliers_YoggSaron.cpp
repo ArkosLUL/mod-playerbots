@@ -19,6 +19,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
+#include "RaidSplash.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
 #include "SharedDefines.h"
@@ -209,12 +210,7 @@ float YoggSaronIllusionMultiTargetHoldMultiplier::GetValue(Action* action)
     if (room != YOGG_SARON_ROOM_STORMWIND && room != YOGG_SARON_ROOM_ICECROWN && room != YOGG_SARON_ROOM_CHAMBER)
         return 1.0f;
 
-    static std::set<std::string> const multiTarget = {
-        "bladestorm",    "sweeping strikes", "cleave",       "whirlwind",   "thunder clap",
-        "shockwave",     "divine storm",     "howling blast", "blood boil", "fan of knives",
-        "blade flurry",  "swipe (cat)",      "multi-shot",    "fire nova",  "chain lightning"};
-
-    if (action->getThreatType() == Action::ActionThreatType::Aoe || multiTarget.count(action->getName()))
+    if (action->getThreatType() == Action::ActionThreatType::Aoe || MULTI_TARGET_ACTIONS.count(action->getName()))
         return 0.0f;
 
     return 1.0f;

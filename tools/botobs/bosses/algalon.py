@@ -7,10 +7,14 @@
     algalon.py <file> --deaths          every death by the mechanic that killed it, cause by role
     algalon.py <file> --loose           every stretch he spent off the swap pair: cause, hits, deaths, pickup
     algalon.py <file> --swaps           the swap pair, Phase Punch, swaps due and their latency, threat steals
+    algalon.py <file> --hold            the edge hold: where he stood, every pickup's drag to the tank slot
+    algalon.py <file> --taunts          every taunt cast at him, non-tanks flagged, pair taunts that missed
     algalon.py <file> --reach           seconds each raid member outside the pair stood in his reach
     algalon.py <file> --bigbang         every Big Bang: holes, soaker and backup, who it hit, what followed
+    algalon.py <file> --soak            every Big Bang's soaker: the hit, healers, kit, reserved buttons spent
     algalon.py <file> --phasing         every hole phase: Big Bang or stray, and what put a stray one there
     algalon.py <file> --stars           star deaths, what each landed into, the kill window, the team
+    algalon.py <file> --collateral      star health lost beyond the drain while unfocused, casts on stars
     algalon.py <file> --holes           hole stock, empty seconds before each Big Bang, holes lost, urgency
     algalon.py <file> --constellations  activations, victims, the handler and kite branches, removals
     algalon.py <file> --smash           every Cosmic Smash wave: who stood near it, the dodge, damage
@@ -35,10 +39,20 @@ What the generic views get wrong here, and what this reads instead:
   or a hole appears on its last spot; a constellation left through a hole when both rows vanish
   together.
 - **`algalon.soaker`, `algalon.backup`, `algalon.focusstar` and `algalon.handler` are raid-wide
-  latches**: `g` is whichever bot's tick flipped them and the guid is in `txt`. `algalon.hide`, `kite`,
-  `spot` and `starwindow` are per bot and change-only, so a value holds until that bot's next row.
+  latches**: `g` is whichever bot's tick flipped them and the guid is in `txt`. `algalon.hide`, `kite`
+  and `spot` are per bot and change-only, so a value holds until that bot's next row.
+- **`algalon.starwindow` is written by whichever bot tracks the stars, and the tracker changes**, so
+  its rows read as one timeline, the latest winning. Summed per bot, the last tracker's final value
+  ran to the end of the pull.
 - **`postmortem.py --from`/`--band` measure every bot from one point**, and each ring bot has its own
   slot in `ULDUAR_ALGALON_RING_SLOTS`; `--formation` measures from the slot.
+- **The tank slot, the hold spot and the ring come from today's source.** A trace with no
+  `algalon.spot=pickup` predates the edge hold, so `--hold` and `--formation` measure it against spots
+  its bots never used.
+- **A star loses 1 % of its health a second on its own**, so an untouched one reads 100 less its age
+  in seconds, and whatever it lost beyond that is damage.
+- **Only the first multiplier that zeroes an action writes a `veto` row**, and a row repeats only when
+  the verdict changes, so veto counts are rows rather than ticks and miss a guard behind another zero.
 - **His victim is the target column plus his own swings.** Whoever he one-shots dies between two
   snapshots, so a melee or Quantum Strike row names a victim the column never shows. He is loose
   whenever that victim is outside the swap pair, `algalon.swappair` or else the roster's tanks.
@@ -108,9 +122,22 @@ SPELL_PAIN_SUPPRESSION = 33206
 SPELL_GUARDIAN_SPIRIT = 47788
 SOAK_SPELLS = (SPELL_DISPERSION, SPELL_PAIN_SUPPRESSION, SPELL_GUARDIAN_SPIRIT)
 SPELL_RIGHTEOUS_DEFENSE = 31789
-# Taunt, Hand of Reckoning, Righteous Defense, Growl, Dark Command, Death Grip, Mocking Blow by rank
-TAUNT_SPELLS = frozenset((355, 62124, SPELL_RIGHTEOUS_DEFENSE, 6795, 56222, 49576, 694, 7400, 7402, 20559, 20560,
-                          25266))
+SPELL_ICE_BLOCK = 45438
+# matched by name, which covers every rank; the ids only cover a trace that names no spells
+TAUNT_IDS = {355: "Taunt", 62124: "Hand of Reckoning", SPELL_RIGHTEOUS_DEFENSE: "Righteous Defense", 6795: "Growl",
+             56222: "Dark Command", 49576: "Death Grip", 1161: "Challenging Shout", 5209: "Challenging Roar",
+             **{rank: "Mocking Blow" for rank in (694, 7400, 7402, 20559, 20560, 25266)}}
+TAUNT_NAMES = frozenset(TAUNT_IDS.values())
+# no target of their own, so they count when he stood within AREA_TAUNT_YD of the caster
+AREA_TAUNTS = frozenset(("Challenging Shout", "Challenging Roar"))
+# The buttons the soak keeps for Big Bang: tank defensives, the paladin immunities and the externals.
+RESERVED_IDS = {498: "Divine Protection", 642: "Divine Shield", 48788: "Lay on Hands", 33206: "Pain Suppression",
+                47788: "Guardian Spirit", 6940: "Hand of Sacrifice", 64205: "Divine Sacrifice", 871: "Shield Wall",
+                12975: "Last Stand", 48792: "Icebound Fortitude", 61336: "Survival Instincts", 22812: "Barkskin",
+                55233: "Vampiric Blood", 22842: "Frenzied Regeneration", SPELL_DISPERSION: "Dispersion"}
+RESERVED_NAMES = frozenset(RESERVED_IDS.values())
+SOAK_NODES = ("algalon soaker prep action", "algalon soaker rescue action")
+PRIEST_CLASS = (5, "priest")
 SMASH_MOVER = "algalon cosmic smash action"
 
 
@@ -131,8 +158,13 @@ def _radius_or(name: str, fallback: float) -> float:
 # Read from the source so a retune shows up here without a second edit. Fallbacks for a checkout that
 # doesn't declare one, or not as a literal.
 ROOM_CENTER = _anchor_or("ULDUAR_ALGALON_ROOM_CENTER", (1632.668, -302.7656, 417.3211))
-TANK_SLOT = _anchor_or("ULDUAR_ALGALON_TANK_SLOT", (1632.7, -321.5, 417.321))
-OFFTANK_SLOT = _anchor_or("ULDUAR_ALGALON_OFFTANK_SLOT", None)
+# T, where the holding tank stands; A, where he is expected and the ring's centre; T2, the other pair tank.
+TANK_SLOT = _anchor_or("ULDUAR_ALGALON_TANK_SLOT", (1637.957, -340.396, 417.321))
+HOLD_SPOT = _anchor_or("ULDUAR_ALGALON_HOLD_SPOT", (1636.843, -332.474, 417.321))
+OFFTANK_SLOT = _anchor_or("ULDUAR_ALGALON_OFFTANK_SLOT", (1633.300, -336.001, 417.321))
+# where the pair waits for the intro to end
+PICKUP_SLOT = _anchor_or("ULDUAR_ALGALON_PICKUP_SLOT", (1633.781, -310.688, 417.321))
+PULL_OFFTANK_SLOT = _anchor_or("ULDUAR_ALGALON_PULL_OFFTANK_SLOT", (1628.668, -309.694, 417.321))
 ROOM_RADIUS = _radius_or("ULDUAR_ALGALON_ROOM_RADIUS", 47.0)
 SHELTER_RADIUS = _radius_or("ULDUAR_ALGALON_SHELTER_RADIUS", 6.0)
 # combat reach 9 + 1.5 + 4/3 against a player
@@ -142,6 +174,9 @@ DODGE_TRIGGER_YD = _radius_or("ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS", 12.0
 ALGALON_SOURCE = RAID_ROOT / "Uld" / "Util" / "UldEncounter_Algalon.cpp"
 RING_SLOT_TABLE = re.compile(r"\bULDUAR_ALGALON_RING_SLOTS\s*=\s*\{\{?(.*?)\}?\};", re.S)
 RING_SLOT_ROW = re.compile(r"\bPosition\s*\(\s*" + NUMBER + r"\s*,\s*" + NUMBER + r"\s*,\s*" + NUMBER + r"\s*\)")
+# A row's comment, `// healer, 19 yd from the hold at +85 deg`, or before the edge hold `// healer, 19 yd at 0 deg`.
+RING_SLOT_NOTE = re.compile(r"//\s*([A-Za-z][A-Za-z ]*?)\s*,\s*(\d+(?:\.\d+)?)\s*yd\b[^\n]*?\bat\s+([+-]?\d+(?:\.\d+)?)"
+                            r"\s*deg")
 
 # uint32 in the source, or not named there at all.
 BIG_BANG_CAST_MS = 8000
@@ -187,6 +222,30 @@ OFF_TEAM_MS = 3000
 KILLED_HP = 5.0
 MAX_STEP_MS = 2000
 TIMELINE_SHOWN = 16
+
+ON_SLOT_YD = _radius_or("ULDUAR_ALGALON_HOLDER_ON_SPOT_RADIUS", 3.0)
+# the melee release timer, a uint32 in the source
+DRAG_DUE_MS = 8000
+HOLD_STEP_MS = 5000
+# a taunt took when his victim became the caster this soon; a later change is still shown
+TAUNT_TAKE_MS = 600
+TAUNT_LATE_MS = 3000
+AREA_TAUNT_YD = 10.0
+# one press of a button, however many cast rows it wrote
+ECHO_MS = 1000
+SOAK_AFTER_MS = 5000
+SOAK_DAMAGE_MS = 3000
+HEAL_WAIT_MS = 10000
+HANDOVER_LEAD_MS = 20000
+CHEWED_PCT = 10.0
+# the probe's own allowance for drain-only health at death
+DRAINED_SLACK = _radius_or("ULDUAR_ALGALON_STAR_DRAIN_SLACK_PCT", 3.0)
+WORST_WINDOW_MS = 10000
+TEAM_FAR_YD = 40.0
+# a nearest hole further than this at the cast start can't be reached before the impact
+HOLE_REACH_YD = 43.0
+NEARHOLE_YD = _radius_or("ULDUAR_ALGALON_FAR_HOLE_YARDS", 35.0)
+NEARHOLE_LEAD_MS = 15000
 
 # The phase latch and the pull note trail his first swing by up to a tick.
 INTRO_LEAD_MS = 1500
@@ -254,6 +313,25 @@ def as_guid(text) -> int:
 
 def who(trace: Trace, guid) -> str:
     return f"{trace.name(guid)} ({trace.role(guid)})"
+
+
+def label_of(trace: Trace, guid) -> str:
+    """`who`, with a pet named as its owner's and a human starred."""
+    owner = trace.owners.get(guid)
+    if owner:
+        return f"{trace.names.get(guid, trace.name(guid))} ({trace.name(owner)}'s pet)"
+    return who(trace, guid) + ("*" if guid in trace.humans else "")
+
+
+def spell_name(trace: Trace, spell, ids: dict[int, str]) -> str:
+    """The spell's name from the trace, else from `ids`, else empty."""
+    return trace.spells.get(spell) or ids.get(spell, "")
+
+
+def class_of(trace: Trace, guid):
+    classes = cached(trace, "_algalon_classes",
+                     lambda trace: {member["g"]: member.get("c") for member in trace.header.get("roster", [])})
+    return classes.get(guid)
 
 
 def emitted(trace: Trace) -> set[str]:
@@ -324,6 +402,22 @@ class Samples:
         if not found:
             return []
         return found[1][bisect.bisect_left(found[0], low):bisect.bisect_right(found[0], high)]
+
+    def timed(self, guid: int, low: int, high: int) -> list[tuple[int, list]]:
+        """`between`, each row with its stamp."""
+        found = self.rows.get(guid)
+        if not found:
+            return []
+        low, high = bisect.bisect_left(found[0], low), bisect.bisect_right(found[0], high)
+        return list(zip(found[0][low:high], found[1][low:high]))
+
+    def after(self, guid: int, when: int):
+        """The guid's first row after `when`, or None."""
+        found = self.rows.get(guid)
+        if not found:
+            return None
+        index = bisect.bisect_right(found[0], when)
+        return found[1][index] if index < len(found[1]) else None
 
     def frame(self, when: int) -> dict[int, list]:
         """Every row of the last snapshot at or before `when`."""
@@ -552,6 +646,12 @@ def swings(trace: Trace) -> list[dict]:
     return cached(trace, "_algalon_swings", build)
 
 
+def taunt_spell(trace: Trace, rec: dict) -> str:
+    """The taunt a cast row pressed, or empty. A triggered row is the spell's own echo, not a press."""
+    name = spell_name(trace, rec.get("sp"), TAUNT_IDS)
+    return name if name in TAUNT_NAMES and not rec.get("tr") else ""
+
+
 def taunts(trace: Trace) -> list[tuple[int, int]]:
     """`(t, caster)` per taunt a raid member cast at him. Righteous Defense goes on the friend he is
     hitting, so on a raid member it counts too."""
@@ -559,8 +659,8 @@ def taunts(trace: Trace) -> list[tuple[int, int]]:
         boss = boss_guid(trace)
         roster = roster_guids(trace)
         return [(rec["t"], rec["s"]) for rec in trace.of("cast")
-                if rec.get("sp") in TAUNT_SPELLS and rec.get("s") in roster
-                and (rec.get("tgt") == boss or (rec.get("sp") == SPELL_RIGHTEOUS_DEFENSE and rec.get("tgt") in roster))]
+                if (name := taunt_spell(trace, rec)) and rec.get("s") in roster
+                and (rec.get("tgt") == boss or (name == "Righteous Defense" and rec.get("tgt") in roster))]
     return cached(trace, "_algalon_taunts", build)
 
 
@@ -898,13 +998,15 @@ def threat_steals(trace: Trace) -> list[tuple[int, int, int]]:
     return out
 
 
-def spot_distance(trace: Trace, guid: int, value: str, point) -> float | None:
-    """Median distance to `point` while the bot's `algalon.spot` read `value`."""
+def spot_distance(trace: Trace, guid: int, value: str, point, low: int = -(1 << 62),
+                  high: int = 1 << 62) -> float | None:
+    """Median distance to `point` while the bot's `algalon.spot` read `value`, inside `[low, high)`."""
     if point is None:
         return None
     samples = samples_of(trace)
-    spans = [(start, stop) for held, start, stop in holder_spans(trace, "algalon.spot", pull_end(trace)).get(guid, [])
-             if held == value]
+    spans = [(max(start, low), min(stop, high))
+             for held, start, stop in holder_spans(trace, "algalon.spot", pull_end(trace)).get(guid, [])
+             if held == value and start < high and stop > low]
     gaps = [dist2(row[1:3], point) for start, stop in spans for row in samples.between(guid, start, stop - 1)
             if alive(row)]
     return statistics.median(gaps) if gaps else None
@@ -945,16 +1047,315 @@ def show_swaps(trace: Trace) -> None:
         print(f"  algalon.tankrole {trace.name(guid)}: "
               + ", ".join(f"{value} {held / 1000:.1f} s" for value, held in totals.most_common())
               + "; " + ", ".join(f"{clock(start)} {value}" for value, start, _ in spans[:TIMELINE_SHOWN]))
+    begin = intro_end(trace)
+    split = begin if begin is not None else 0
     for guid in sorted(pair, key=trace.name):
-        for value, point in (("tank", TANK_SLOT), ("offtank", OFFTANK_SLOT)):
-            gap = spot_distance(trace, guid, value, point)
+        for value, point, low, high, when in (("pickup", PICKUP_SLOT, -(1 << 62), split, " in the intro"),
+                                              ("offtank", PULL_OFFTANK_SLOT, -(1 << 62), split, " in the intro"),
+                                              ("tank", TANK_SLOT, split, 1 << 62, ""),
+                                              ("offtank", OFFTANK_SLOT, split, 1 << 62, "")):
+            gap = spot_distance(trace, guid, value, point, low, high)
             if gap is not None:
-                print(f"  {trace.name(guid)} on algalon.spot={value}: {gap:.1f} yd median from its slot")
+                print(f"  {trace.name(guid)} on algalon.spot={value}{when}: {gap:.1f} yd median from its slot")
+    for rec in notes(trace, "algalon.handover"):
+        print(f"  algalon.handover {clock(rec['t'])}: {rec.get('txt')} ({trace.name(rec.get('g'))})")
     steals = threat_steals(trace)
     for when, old, new in steals:
         print(f"  threat steal {clock(when)}: {trace.name(new)} pulled him off {trace.name(old)} with no taunt")
     if not steals:
         print("  no threat steal between the pair")
+
+
+# ----------------------------------------------------------------------------------------------- hold
+
+def edge_hold(trace: Trace) -> bool:
+    """Whether the pull ran the edge hold, which its pickup tank says with `algalon.spot=pickup`."""
+    return cached(trace, "_algalon_edge", lambda trace: any(
+        value == "pickup" for spans in holder_spans(trace, "algalon.spot").values() for value, _, _ in spans))
+
+
+def holder_runs(trace: Trace) -> list[list]:
+    """`[start, stop, victim]` per stretch after the intro on one victim. A blank target column up to
+    BRIDGE_MS long stays inside the stretch around it."""
+    def build(trace: Trace) -> list[list]:
+        begin = intro_end(trace)
+        if begin is None:
+            return []
+        runs: list[list] = []
+        for when, victim in victim_samples(trace):
+            if when < begin or not victim:
+                continue
+            if runs and runs[-1][2] == victim and when - runs[-1][1] <= BRIDGE_MS:
+                runs[-1][1] = when
+            else:
+                runs.append([when, when, victim])
+        end = pull_end(trace)
+        for index, run in enumerate(runs):
+            following = runs[index + 1][0] if index + 1 < len(runs) else end
+            run[1] = min(following, run[1] + BRIDGE_MS)
+        return runs
+    return cached(trace, "_algalon_runs", build)
+
+
+def hold_pickups(trace: Trace) -> list[dict]:
+    """Each time a pair tank took him from someone else, the intro included: when it got onto the tank
+    slot, where he came to rest, who outside the pair stood in his reach on the way, and how far off
+    the slot the holder still was DRAG_DUE_MS in."""
+    def build(trace: Trace) -> list[dict]:
+        boss = boss_guid(trace)
+        if boss is None:
+            return []
+        pair, _ = swap_pair(trace)
+        samples = samples_of(trace)
+        phased = all_phases(trace)
+        outsiders = [guid for guid in roster_guids(trace) if guid not in pair]
+        runs = holder_runs(trace)
+        out = []
+        for index, (start, stop, holder) in enumerate(runs):
+            before = runs[index - 1][2] if index else 0
+            if holder not in pair or before == holder:
+                continue
+            arrival = next((when for when, row in samples.timed(holder, start, stop - 1)
+                            if alive(row) and dist2(row[1:3], TANK_SLOT) <= ON_SLOT_YD), None)
+            until = arrival if arrival is not None else stop
+            rest = next((row for _, row in samples.timed(boss, until, stop - 1) if len(row) > 8 and not row[8]),
+                        None) or samples.row(boss, until)
+            near: dict[int, tuple[float, int]] = {}
+            for _, when, _ in samples.steps(start, until):
+                him = samples.row(boss, when)
+                if not alive(him):
+                    continue
+                for guid in outsiders:
+                    row = samples.row(guid, when)
+                    if not alive(row) or phased_at(phased, guid, when):
+                        continue
+                    gap = dist2(row[1:3], him[1:3])
+                    if gap <= MELEE_REACH and gap < near.get(guid, (math.inf, 0))[0]:
+                        near[guid] = (gap, when)
+            due = samples.row(holder, start + DRAG_DUE_MS)
+            out.append({
+                "start": start, "stop": stop, "holder": holder, "before": before, "arrival": arrival,
+                "rest": tuple(rest[1:3]) if rest else None,
+                "near": near,
+                "due_gap": dist2(due[1:3], TANK_SLOT) if alive(due) else None,
+            })
+        return out
+    return cached(trace, "_algalon_pickups", build)
+
+
+def bot_hold(trace: Trace) -> tuple[int, int]:
+    """`(held, on)`: ms after the intro a bot of the swap pair was his victim, and of those the ms it
+    stood within ON_SLOT_YD of the tank slot."""
+    boss, begin = boss_guid(trace), intro_end(trace)
+    if boss is None or begin is None:
+        return 0, 0
+    samples = samples_of(trace)
+    pair, _ = swap_pair(trace)
+    held = on = 0
+    for _, when, weight in samples.steps(begin, pull_end(trace)):
+        him = samples.row(boss, when)
+        victim = target_of(him) if alive(him) else 0
+        if victim not in pair or victim in trace.humans:
+            continue
+        held += weight
+        row = samples.row(victim, when)
+        if alive(row) and dist2(row[1:3], TANK_SLOT) <= ON_SLOT_YD:
+            on += weight
+    return held, on
+
+
+def hold_timeline(trace: Trace) -> list[dict]:
+    """Every HOLD_STEP_MS from the intro's end: his distance from the hold spot and the room centre,
+    his victim, and that victim's distance from the tank slot."""
+    boss, begin = boss_guid(trace), intro_end(trace)
+    if boss is None or begin is None:
+        return []
+    samples = samples_of(trace)
+    out = []
+    for when in range(begin, pull_end(trace), HOLD_STEP_MS):
+        him = samples.row(boss, when)
+        if not alive(him):
+            continue
+        victim = target_of(him)
+        row = samples.row(victim, when) if victim else None
+        out.append({"t": when, "to_hold": dist2(him[1:3], HOLD_SPOT), "to_centre": dist2(him[1:3], ROOM_CENTER),
+                    "victim": victim, "to_slot": dist2(row[1:3], TANK_SLOT) if alive(row) else None})
+    return out
+
+
+def victim_tag(trace: Trace, pair, guid: int) -> str:
+    if not guid:
+        return "-"
+    if guid in pair:
+        return f"{trace.name(guid)} (pair{', human' if guid in trace.humans else ''})"
+    return f"{trace.name(guid)} (loose)"
+
+
+def show_hold(trace: Trace) -> None:
+    print("EDGE HOLD")
+    if boss_guid(trace) is None or intro_end(trace) is None:
+        print("  the intro never ended, or Algalon was never sampled")
+        return
+    print(f"  tank slot T ({TANK_SLOT[0]:.1f}, {TANK_SLOT[1]:.1f}), hold spot A ({HOLD_SPOT[0]:.1f},"
+          f" {HOLD_SPOT[1]:.1f}), room centre C; on T within {ON_SLOT_YD:.0f} yd")
+    if not edge_hold(trace):
+        print("  absent from this trace: algalon.spot=pickup; it predates the edge hold, so T and A are spots"
+              " its bots never used")
+    pair, _ = swap_pair(trace)
+    rows = hold_timeline(trace)
+    if rows:
+        print(f"  {'at':>9} {'from A':>7} {'from C':>7}  {'victim':32} {'to T':>6}")
+    for row in rows:
+        to_slot = "-" if row["to_slot"] is None else f"{row['to_slot']:.1f}"
+        print(f"  {clock(row['t']):>9} {row['to_hold']:7.1f} {row['to_centre']:7.1f}"
+              f"  {victim_tag(trace, pair, row['victim']):32} {to_slot:>6}")
+
+    for pickup in hold_pickups(trace):
+        source = trace.name(pickup["before"]) if pickup["before"] else "the intro"
+        if pickup["arrival"] is not None:
+            drag = f"on T after {(pickup['arrival'] - pickup['start']) / 1000:.1f} s"
+        else:
+            drag = f"never on T before {clock(pickup['stop'])}"
+        rest = (f"he came to rest {dist2(pickup['rest'], ROOM_CENTER):.1f} yd from C,"
+                f" {dist2(pickup['rest'], HOLD_SPOT):.1f} yd from A" if pickup["rest"] else "he was not sampled")
+        print(f"  pickup {clock(pickup['start'])}: {label_of(trace, pickup['holder'])} from {source}, {drag}; {rest}")
+        near = sorted((gap, when, guid) for guid, (gap, when) in pickup["near"].items())
+        print("      in his reach on the way: " + (", ".join(f"{trace.name(guid)} {gap:.1f} yd @ {clock(when)}"
+                                                         for gap, when, guid in near) or "nobody"))
+    held, on = bot_hold(trace)
+    if held:
+        print(f"  a bot of the pair held him {held / 1000:.1f} s, {on * 100.0 / held:.0f}% of it on T")
+    else:
+        print("  no bot of the pair held him after the intro")
+
+
+def hold_faults(trace: Trace) -> list[tuple[int, str]]:
+    """A bot that picked him up and was still off the tank slot DRAG_DUE_MS later, while still holding
+    him. Only on a trace that ran the edge hold."""
+    if not edge_hold(trace):
+        return []
+    out = []
+    for pickup in hold_pickups(trace):
+        holder = pickup["holder"]
+        late = pickup["arrival"] is None or pickup["arrival"] - pickup["start"] > DRAG_DUE_MS
+        if holder in trace.humans or not late or pickup["stop"] - pickup["start"] < DRAG_DUE_MS:
+            continue
+        off = f", {pickup['due_gap']:.1f} yd off" if pickup["due_gap"] is not None else ""
+        out.append((pickup["start"], f"{trace.name(holder)} not on the tank slot {DRAG_DUE_MS // 1000} s after picking"
+                                     f" him up @ {secs(pickup['start'])}{off}"))
+    return out
+
+
+# --------------------------------------------------------------------------------------------- taunts
+
+def taunt_casts(trace: Trace) -> list[dict]:
+    """Every taunt cast at him: `{t, caster, name, before, took, outcome}`. Righteous Defense goes on a
+    friend, so it counts when he was hitting that friend; the area taunts have no target, so they count
+    when he stood within AREA_TAUNT_YD of the caster. `outcome` is `already` when he was on the caster,
+    `took` when the caster became his victim within TAUNT_TAKE_MS, else `missed`."""
+    def build(trace: Trace) -> list[dict]:
+        boss = boss_guid(trace)
+        if boss is None:
+            return []
+        samples = samples_of(trace)
+        roster = roster_guids(trace)
+        victims = victim_samples(trace)
+        stamps = [when for when, _ in victims]
+        out: list[dict] = []
+        last: dict[tuple, int] = {}
+        for rec in trace.of("cast"):
+            name = taunt_spell(trace, rec)
+            who_cast = rec.get("s")
+            if not name or trace.owners.get(who_cast, who_cast) not in roster:
+                continue
+            when = rec["t"]
+            index = bisect.bisect_left(stamps, when)
+            before = victims[index - 1][1] if index else 0
+            if name == "Righteous Defense":
+                aimed = rec.get("tgt") == boss or (rec.get("tgt") in roster and rec.get("tgt") == before)
+            elif name in AREA_TAUNTS:
+                spot, him = position_at(samples, who_cast, when), position_at(samples, boss, when)
+                aimed = bool(spot and him) and dist2(spot, him) <= AREA_TAUNT_YD
+            else:
+                aimed = rec.get("tgt") == boss
+            key = (who_cast, name)
+            if not aimed or when - last.get(key, -(1 << 62)) <= ECHO_MS:
+                continue
+            last[key] = when
+            took = next((at for at, victim in victims[index:] if at <= when + TAUNT_LATE_MS and victim == who_cast),
+                        None)
+            if before == who_cast:
+                outcome = "already"
+            elif took is not None and took - when <= TAUNT_TAKE_MS:
+                outcome = "took"
+            else:
+                outcome = "missed"
+            out.append({"t": when, "caster": who_cast, "name": name, "before": before, "took": took,
+                        "outcome": outcome})
+        return out
+    return cached(trace, "_algalon_taunt_casts", build)
+
+
+def show_taunts(trace: Trace) -> None:
+    print("TAUNTS AT HIM")
+    if boss_guid(trace) is None:
+        print("  Algalon was never sampled")
+        return
+    pair, source = swap_pair(trace)
+    rows = taunt_casts(trace)
+    if not rows:
+        print("  nobody taunted him")
+    for row in rows:
+        guid = row["caster"]
+        lag = f"+{(row['took'] - row['t']) / 1000:.1f} s" if row["took"] is not None else ""
+        if guid in pair and row["outcome"] == "already":
+            verdict = "swap pair, already his"
+        elif guid in pair and row["outcome"] == "took":
+            verdict = f"swap pair, took {lag}"
+        elif guid in pair:
+            verdict = "swap pair, MISSED" + (f", his at {lag}" if lag else "")
+        elif trace.role(guid) == "tank":
+            verdict = "tank outside the pair"
+        else:
+            verdict = "NON-TANK"
+        print(f"  {clock(row['t']):>9}  {label_of(trace, guid):34} {row['name']:18}  on {trace.name(row['before'])};"
+              f" {verdict}")
+    print(f"  swap pair from {source}; a taunt took when his victim became the caster within"
+          f" {TAUNT_TAKE_MS / 1000:.1f} s")
+    show_vetoes(trace, "algalon taunt guard")
+
+
+def taunt_faults(trace: Trace) -> list[tuple[int, str]]:
+    """A non-tank taunting him, one line per caster and spell; a pair tank's taunt that missed."""
+    pair, _ = swap_pair(trace)
+    out = []
+    loose: dict[tuple, list[int]] = collections.defaultdict(list)
+    for row in taunt_casts(trace):
+        if trace.role(row["caster"]) != "tank":
+            loose[(row["caster"], row["name"])].append(row["t"])
+        elif row["caster"] in pair and row["outcome"] == "missed":
+            late = f", his at +{(row['took'] - row['t']) / 1000:.1f} s" if row["took"] is not None else ""
+            out.append((row["t"], f"pickup taunt missed @ {secs(row['t'])}: {trace.name(row['caster'])} {row['name']}"
+                                  f" while he was on {trace.name(row['before'])}{late}"))
+    for (guid, name), stamps in loose.items():
+        out.append((stamps[0], f"non-tank taunt at Algalon: {label_of(trace, guid)} {name} {len(stamps)}x"
+                               f" from {secs(stamps[0])}"))
+    return out
+
+
+def vetoes(trace: Trace, multiplier: str) -> collections.Counter:
+    """`(bot, action)` counts of the veto rows a multiplier wrote."""
+    return collections.Counter((rec.get("g", 0), rec.get("a") or "?") for rec in trace.of("veto")
+                               if rec.get("m") == multiplier)
+
+
+def show_vetoes(trace: Trace, multiplier: str) -> None:
+    counted = vetoes(trace, multiplier)
+    if not counted:
+        print(f"  no {multiplier} veto row in this trace")
+        return
+    print(f"  {multiplier} vetoes: " + ", ".join(f"{trace.name(guid)} {action} {n}"
+                                                  for (guid, action), n in counted.most_common()))
 
 
 # ---------------------------------------------------------------------------------------------- reach
@@ -1099,7 +1500,30 @@ def nobody_near(trace: Trace, samples: Samples, phased, boss: int | None, low: i
     return None
 
 
+def ice_blocks(trace: Trace) -> dict[int, list[tuple[int, int]]]:
+    """Per player, `(on, off)` per Ice Block it wore. One still on when the file ends runs to the end."""
+    end = pull_end(trace)
+    out: dict[int, list[tuple[int, int]]] = collections.defaultdict(list)
+    wearing: dict[int, int] = {}
+    for rec in trace.of("aura"):
+        if spell_name(trace, rec.get("sp"), {SPELL_ICE_BLOCK: "Ice Block"}) != "Ice Block":
+            continue
+        guid = rec.get("d", 0)
+        if rec.get("r"):
+            if guid in wearing:
+                out[guid].append((wearing.pop(guid), rec["t"]))
+        else:
+            wearing.setdefault(guid, rec["t"])
+    for guid, on in wearing.items():
+        out[guid].append((on, end))
+    return out
+
+
 def big_bang_rows(trace: Trace) -> list[dict]:
+    return cached(trace, "_algalon_bang_rows", build_big_bang_rows)
+
+
+def build_big_bang_rows(trace: Trace) -> list[dict]:
     samples = samples_of(trace)
     roster = roster_guids(trace)
     boss = boss_guid(trace)
@@ -1120,6 +1544,7 @@ def big_bang_rows(trace: Trace) -> list[dict]:
     ascends = [rec["t"] for rec in trace.of("cast") if rec.get("sp") == SPELL_ASCEND]
     finish = trace.of("end")[-1] if trace.of("end") else None
     healers = {guid for guid in roster if trace.role(guid) == "heal"}
+    blocks = ice_blocks(trace)
 
     casts = big_bang_casts(trace)
     out = []
@@ -1170,10 +1595,23 @@ def big_bang_rows(trace: Trace) -> list[dict]:
             if start <= rec["t"] <= tail:
                 taken[rec.get("d")] += rec.get("a", 0)
 
+        present = holes_at(samples, holes, start)
+        hole_spots = [found[1:3] for hole in present if (found := samples.row(hole, start))]
+        gaps = {}
+        for guid in roster:
+            found = samples.row(guid, start)
+            if hole_spots and alive(found) and not phased_at(phased, guid, start):
+                gaps[guid] = min(dist2(found[1:3], spot) for spot in hole_spots)
+
         watched = sanctioned | {soaker}
         out.append({
             **cast,
-            "holes": holes_at(samples, holes, start),
+            "holes": present,
+            "hole_gaps": gaps,
+            "unreachable": sorted(((gap, guid) for guid, gap in gaps.items()
+                                   if gap > HOLE_REACH_YD and guid not in sanctioned), reverse=True),
+            "iceblock": sorted((on, off, guid) for guid, spans in blocks.items() for on, off in spans
+                               if on < stop and off > start),
             "holes_probe": value_at(hole_count, start),
             "soaker": soaker,
             "soaker_from": soaker_from,
@@ -1204,6 +1642,47 @@ def big_bang_rows(trace: Trace) -> list[dict]:
     return out
 
 
+def nearhole_shares(trace: Trace, row: dict) -> list[tuple[int, float | None, float]]:
+    """`(bot, nearest hole yd, share)` for each bot outside the pair that held `algalon.spot=nearhole` in
+    the NEARHOLE_LEAD_MS before the cast, or stood over NEARHOLE_YD from every hole at its start; the
+    share is of that lead."""
+    spots = holder_spans(trace, "algalon.spot", pull_end(trace))
+    pair, _ = swap_pair(trace)
+    low, high = row["start"] - NEARHOLE_LEAD_MS, row["start"]
+    out = []
+    for guid in roster_guids(trace):
+        if guid in trace.humans or guid in pair:
+            continue
+        held = sum(max(0, min(stop, high) - max(start, low)) for value, start, stop in spots.get(guid, [])
+                   if value == "nearhole")
+        gap = row["hole_gaps"].get(guid)
+        if held or (gap is not None and gap > NEARHOLE_YD):
+            out.append((guid, gap, held / NEARHOLE_LEAD_MS))
+    return sorted(out, key=lambda entry: (-(entry[1] or 0.0), trace.name(entry[0])))
+
+
+def show_hole_reach(trace: Trace, row: dict) -> None:
+    gaps = sorted(((gap, guid) for guid, gap in row["hole_gaps"].items()), reverse=True)
+    if not gaps:
+        print("      nearest hole at the cast: no hole, or nobody unphased")
+    else:
+        print(f"      nearest hole at the cast, unphased: median {statistics.median(gap for gap, _ in gaps):.1f} yd,"
+              " farthest " + ", ".join(f"{trace.name(guid)} {gap:.1f}" for gap, guid in gaps[:5]))
+    if row["unreachable"]:
+        print(f"      beyond {HOLE_REACH_YD:.0f} yd of every hole, soaker and backup aside: "
+              + ", ".join(f"{trace.name(guid)} {gap:.1f}" for gap, guid in row["unreachable"]))
+    for on, off, guid in row["iceblock"]:
+        print(f"      Ice Block during the cast: {trace.name(guid)} {clock(on)} .. {clock(off)}")
+    if not any(value == "nearhole" for spans in holder_spans(trace, "algalon.spot").values() for value, _, _ in spans):
+        print("      absent from this trace: algalon.spot=nearhole")
+        return
+    shares = nearhole_shares(trace, row)
+    print(f"      on algalon.spot=nearhole in the {NEARHOLE_LEAD_MS // 1000} s before: "
+          + (", ".join(f"{trace.name(guid)} {'-' if gap is None else f'{gap:.1f} yd'} {share * 100.0:.0f}%"
+                       for guid, gap, share in shares) or "nobody, and no bot over"
+             f" {NEARHOLE_YD:.0f} yd from a hole"))
+
+
 def show_bigbang(trace: Trace) -> None:
     print("BIG BANG")
     rows = big_bang_rows(trace)
@@ -1211,6 +1690,7 @@ def show_bigbang(trace: Trace) -> None:
         print("  no Big Bang was cast")
         return
     show_absent(trace, "algalon.bigbang", "algalon.soaker", "algalon.backup", "algalon.hide", "algalon.defensive")
+    show_vetoes(trace, "algalon ice block hold")
 
     for row in rows:
         src = "" if row["src"] == "cast" else f"  (from {row['src']})"
@@ -1231,6 +1711,7 @@ def show_bigbang(trace: Trace) -> None:
         saves += [f"{clock(when)} {trace.name(caster)} {trace.spell(spell)} -> {trace.name(target)}"
                   for when, caster, spell, target in row["externals"]]
         print(f"      defensives: {'; '.join(saves) if saves else 'none'}")
+        show_hole_reach(trace, row)
 
         hit = []
         for guid, rec in sorted(row["victims"].items(), key=lambda item: trace.name(item[0])):
@@ -1269,6 +1750,221 @@ def show_bigbang(trace: Trace) -> None:
         if row["ended"]:
             after.append(f"pull ended {row['ended'][1]} {(row['ended'][0] - row['end']) / 1000:+.1f} s")
         print(f"      after: {', '.join(after) if after else 'the pull went on'}")
+
+
+def bang_faults(trace: Trace) -> list[tuple[int, str]]:
+    """Raid members other than the soaker and backup with every hole out of reach at a cast."""
+    return [(row["start"], f"Big Bang {row['n']} @ {secs(row['start'])}: nearest hole beyond {HOLE_REACH_YD:.0f} yd"
+                           f" for " + ", ".join(f"{trace.name(guid)} {gap:.1f}" for gap, guid in row["unreachable"]))
+            for row in big_bang_rows(trace) if row["unreachable"]]
+
+
+# ----------------------------------------------------------------------------------------------- soak
+
+def parse_soakkit(text) -> dict[str, str]:
+    """`algalon.soakkit` reads `def=<cast name|none> forbearance=<0|1>`; a cast name can hold spaces."""
+    return dict(part.split("=", 1) for part in re.split(r"\s+(?=[a-z]+=)", str(text or "").strip()) if "=" in part)
+
+
+def reserved_casts(trace: Trace) -> list[dict]:
+    """`{t, caster, name, tgt}` per press, by anyone, of a button the soak keeps for Big Bang. A triggered
+    row is the spell's echo on whoever it landed on, not a press."""
+    def build(trace: Trace) -> list[dict]:
+        out: list[dict] = []
+        last: dict[tuple, int] = {}
+        for rec in trace.of("cast"):
+            name = spell_name(trace, rec.get("sp"), RESERVED_IDS)
+            if name not in RESERVED_NAMES or rec.get("tr"):
+                continue
+            key = (rec.get("s"), name)
+            if rec["t"] - last.get(key, -(1 << 62)) <= ECHO_MS:
+                continue
+            last[key] = rec["t"]
+            out.append({"t": rec["t"], "caster": rec.get("s"), "name": name, "tgt": rec.get("tgt") or 0})
+        return out
+    return cached(trace, "_algalon_reserved", build)
+
+
+def soak_window(row: dict) -> tuple[int, int]:
+    """The stretch a press counts as part of a Big Bang's soak: the defensive lead before the cast, through
+    the rescue after the impact."""
+    return row["start"] - DEFENSIVE_LEAD_MS, row["impact"] + SOAK_AFTER_MS
+
+
+def record_index(trace: Trace, rec: dict) -> int:
+    """Where `rec` sits in the time-sorted records, so rows of the same millisecond keep the order they
+    were written in."""
+    low = bisect.bisect_left([r.get("t", 0) for r in trace.records], rec["t"])
+    return next(index for index in range(low, len(trace.records)) if trace.records[index] is rec)
+
+
+def soak_rows(trace: Trace) -> list[dict]:
+    """Per Big Bang: the soaker's hit and what came in the seconds after it, the healers' way back, what
+    was put on the soaker during the cast, its kit, and every reserved button pressed since the last
+    soak."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        roster = roster_guids(trace)
+        healers = sorted((guid for guid in roster if trace.role(guid) == "heal"), key=trace.name)
+        phased = all_phases(trace)
+        kits = notes(trace, "algalon.soakkit")
+        handovers = notes(trace, "algalon.handover")
+        acts = [rec for rec in trace.of("act") if rec.get("a") in SOAK_NODES]
+        reserved = reserved_casts(trace)
+        out = []
+        since = -(1 << 62)
+        for bang in big_bang_rows(trace):
+            start, soaker = bang["start"], bang["soaker"]
+            hit = bang["victims"].get(soaker) if soaker else None
+            impact = hit["t"] if hit else bang["end"]
+            later: list[dict] = []
+            heal = None
+            if soaker:
+                # rows of the impact's own millisecond count when they were written after the hit
+                index = record_index(trace, hit) + 1 if hit else bisect.bisect_right(
+                    [r.get("t", 0) for r in trace.records], impact)
+                for rec in trace.records[index:]:
+                    if rec.get("t", 0) > impact + HEAL_WAIT_MS:
+                        break
+                    if rec.get("d") != soaker:
+                        continue
+                    if rec.get("e") == "dmg" and rec["t"] <= impact + SOAK_DAMAGE_MS:
+                        later.append(rec)
+                    elif rec.get("e") == "heal" and heal is None:
+                        heal = rec
+            first = samples.row(soaker, impact) if soaker else None
+            then = samples.after(soaker, impact) if soaker else None
+            strip = {}
+            for guid in healers:
+                span = next((stop for begin, stop, _ in phased.get(guid, ()) if begin <= impact < stop), None)
+                strip[guid] = span - impact if span is not None else None
+            kit = [rec for rec in kits if start - BANG_LEAD_MS <= rec["t"] <= impact]
+            defensive = [text for _, guid, text in bang["defensives"] if guid == soaker]
+            prep = []
+            seen: dict[tuple, int] = {}
+            for rec in trace.of("cast"):
+                key = (rec.get("s"), rec.get("sp"))
+                if (soaker and rec.get("tgt") == soaker and rec.get("s") in healers and start <= rec["t"] <= impact
+                        and not rec.get("tr") and rec["t"] - seen.get(key, -(1 << 62)) > ECHO_MS):
+                    seen[key] = rec["t"]
+                    prep.append((rec["t"], rec.get("s"), rec.get("sp")))
+            row = {
+                "n": bang["n"], "start": start, "end": bang["end"], "impact": impact, "soaker": soaker,
+                "hit": hit,
+                "hp": (hit.get("hp") if hit else first[5] if alive(first) else None,
+                       then[5] if then and len(then) > 5 else None),
+                "later": later,
+                "heal": heal,
+                "strip": strip,
+                "prep": prep,
+                "kit": parse_soakkit(kit[-1].get("txt")) if kit else None,
+                "defensive": defensive[-1] if defensive else None,
+                "handover": [rec for rec in handovers if start - HANDOVER_LEAD_MS <= rec["t"] <= impact],
+                "acts": collections.Counter((rec.get("a"), rec.get("g", 0), rec.get("vd") or "?") for rec in acts
+                                            if start <= rec["t"] <= impact + SOAK_AFTER_MS),
+                "died": next((rec["t"] for rec in death_records(trace)
+                              if soaker and rec.get("g") == soaker and impact <= rec["t"] <= impact + SOAK_AFTER_MS),
+                             None),
+            }
+            low, high = soak_window(row)
+            row["earlier"] = [press for press in reserved if since <= press["t"] < low]
+            row["pressed"] = [press for press in reserved if low <= press["t"] <= high]
+            since = high
+            out.append(row)
+        return out
+    return cached(trace, "_algalon_soak", build)
+
+
+def kit_label(row: dict) -> str:
+    if row["kit"] is not None:
+        return f"def={row['kit'].get('def', '?')}" + (" forbearance" if row["kit"].get("forbearance") == "1" else "")
+    if row["defensive"] is not None:
+        return f"algalon.defensive {row['defensive']}"
+    return "no kit probe"
+
+
+def heal_label(row: dict) -> str:
+    heal = row["heal"]
+    if heal is None:
+        return "no heal on him"
+    return f"first heal +{(heal['t'] - row['impact']) / 1000:.1f} s"
+
+
+def press_label(trace: Trace, press: dict) -> str:
+    target = f" -> {trace.name(press['tgt'])}" if press["tgt"] and press["tgt"] != press["caster"] else ""
+    return f"{clock(press['t'])} {trace.name(press['caster'])} {press['name']}{target}"
+
+
+def show_soak(trace: Trace) -> None:
+    print("BIG BANG SOAK")
+    rows = soak_rows(trace)
+    if not rows:
+        print("  no Big Bang was cast")
+        return
+    show_absent(trace, "algalon.soaker", "algalon.soakkit", "algalon.handover")
+    if not any(rec.get("a") in SOAK_NODES for rec in trace.of("act")):
+        print(f"  absent from this trace: act rows of {' and '.join(SOAK_NODES)}")
+    show_vetoes(trace, "algalon cooldown reserve")
+    for row in rows:
+        print(f"  #{row['n']}  {clock(row['start'])} .. {clock(row['end'])}")
+        if not row["soaker"]:
+            print("      soaker unknown")
+            continue
+        first, then = row["hp"]
+        hit = row["hit"]
+        health = (f"{first:.0f}% -> {then:.0f}% at the next sample" if first is not None and then is not None
+                  else "health -")
+        landed = (f"hit {clock(hit['t'])} for {hit.get('a', 0):,}, {hit.get('ab', 0):,} absorbed" if hit
+                  else "not hit")
+        print(f"      soaker {label_of(trace, row['soaker'])}: {landed}; {health}")
+        taken: collections.Counter = collections.Counter()
+        for rec in row["later"]:
+            taken[trace.spell(rec.get("sp"))] += rec.get("a", 0)
+        print(f"      taken in the {SOAK_DAMAGE_MS // 1000} s after: {sum(taken.values()):,}"
+              + (" (" + ", ".join(f"{name} {amount:,}" for name, amount in taken.most_common()) + ")" if taken else ""))
+        strips = [(back, guid) for guid, back in row["strip"].items() if back is not None]
+        print("      healers unphased: " + (", ".join(f"{trace.name(guid)} +{back / 1000:.2f} s"
+                                                      for back, guid in sorted(strips)) or "none phased at the hit"))
+        heal = row["heal"]
+        print(f"      first heal on him: " + (f"{trace.name(heal.get('s'))} {trace.spell(heal.get('sp'))}"
+                                             f" {heal.get('a', 0):,} at +{(heal['t'] - row['impact']) / 1000:.2f} s"
+                                             if heal else "none"))
+        print("      put on him during the cast: " + (", ".join(
+            f"{clock(when)} {trace.name(guid)} {trace.spell(spell)}" for when, guid, spell in row["prep"])
+            or "nothing"))
+        print(f"      kit: {kit_label(row)}")
+        for rec in row["handover"]:
+            print(f"      algalon.handover {rec.get('txt')} ({trace.name(rec.get('g'))}) @ {clock(rec['t'])}")
+        for (node, guid, verdict), n in sorted(row["acts"].items(),
+                                               key=lambda item: (item[0][0], trace.name(item[0][1]))):
+            print(f"      {node}: {trace.name(guid)} {verdict} {n}")
+        print("      reserved buttons pressed before the cast: " + (
+            "; ".join(press_label(trace, press) for press in row["earlier"]) or "none"))
+        print("      reserved buttons pressed for this soak: " + (
+            "; ".join(press_label(trace, press) for press in row["pressed"]) or "none"))
+        died = row["died"]
+        print("      " + (f"soaker DIED +{(died - row['impact']) / 1000:.1f} s after the hit" if died is not None
+                          else f"soaker alive {SOAK_AFTER_MS // 1000} s after the hit"))
+
+
+def soak_faults(trace: Trace) -> list[tuple[int, str]]:
+    """The soaker dying soon after the hit, and a pair tank or priest spending a reserved button outside
+    every soak with a Big Bang still to come."""
+    out = []
+    rows = soak_rows(trace)
+    for row in rows:
+        if row["died"] is not None:
+            out.append((row["died"], f"Big Bang {row['n']} @ {secs(row['start'])}: soaker {trace.name(row['soaker'])}"
+                                     f" died {(row['died'] - row['impact']) / 1000:.1f} s after the hit"
+                                     f" ({kit_label(row)}, {heal_label(row)})"))
+    pair, _ = swap_pair(trace)
+    for row in rows:
+        for press in row["earlier"]:
+            if press["caster"] in pair or class_of(trace, press["caster"]) in PRIEST_CLASS:
+                target = f" on {trace.name(press['tgt'])}" if press["tgt"] and press["tgt"] != press["caster"] else ""
+                out.append((press["t"], f"{trace.name(press['caster'])} spent {press['name']}{target}"
+                                        f" @ {secs(press['t'])}, outside a Big Bang soak"))
+    return out
 
 
 # -------------------------------------------------------------------------------------------- phasing
@@ -1345,16 +2041,29 @@ def show_phasing(trace: Trace) -> None:
     rows = phasing_rows(trace)
     if not rows:
         print("  nobody in the raid was phased by a hole")
+    else:
+        stray = [row for row in rows if row["label"] == "stray"]
+        causes = collections.Counter(row["cause"].split(" (")[0] for row in stray)
+        print(f"  {len(rows)} hole phase(s): {len(rows) - len(stray)} in a Big Bang, {len(stray)} stray"
+              + (" (" + ", ".join(f"{cause} {n}" for cause, n in causes.most_common()) + ")" if stray else ""))
+        print(f"  {'at':>9}  {'who':28} {'label':8} {'phased':>7} {'dark matter':>11}  {'died':4}  cause")
+        for row in rows:
+            print(f"  {clock(row['start']):>9}  {who(trace, row['guid']):28} {row['label']:8}"
+                  f" {(row['stop'] - row['start']) / 1000:6.1f}s {row['matter']:11,}"
+                  f"  {'yes' if row['died'] else '-':4}  {row['cause'] or '-'}")
+    if boss_guid(trace) is None:
         return
-    stray = [row for row in rows if row["label"] == "stray"]
-    causes = collections.Counter(row["cause"].split(" (")[0] for row in stray)
-    print(f"  {len(rows)} hole phase(s): {len(rows) - len(stray)} in a Big Bang, {len(stray)} stray"
-          + (" (" + ", ".join(f"{cause} {n}" for cause, n in causes.most_common()) + ")" if stray else ""))
-    print(f"  {'at':>9}  {'who':28} {'label':8} {'phased':>7} {'dark matter':>11}  {'died':4}  cause")
-    for row in rows:
-        print(f"  {clock(row['start']):>9}  {who(trace, row['guid']):28} {row['label']:8}"
-              f" {(row['stop'] - row['start']) / 1000:6.1f}s {row['matter']:11,}  {'yes' if row['died'] else '-':4}"
-              f"  {row['cause'] or '-'}")
+    guarded = vetoes(trace, "algalon walk guard")
+    if not guarded:
+        print("  no algalon walk guard veto row in this trace")
+        return
+    per_bot: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+    for (guid, action), n in guarded.items():
+        per_bot[guid][action] += n
+    print("  algalon walk guard vetoes, only those no earlier multiplier had zeroed, one row per verdict change:")
+    for guid, actions in sorted(per_bot.items(), key=lambda item: (-sum(item[1].values()), trace.name(item[0]))):
+        print(f"    {who(trace, guid):28} {sum(actions.values()):4}  "
+              + ", ".join(f"{action} {n}" for action, n in actions.most_common()))
 
 
 # ---------------------------------------------------------------------------------------------- stars
@@ -1465,7 +2174,8 @@ def star_team(trace: Trace) -> dict:
 
 
 def parse_stardeath(text) -> tuple[str, float | None]:
-    """`algalon.stardeath` reads `<killed|collapsed> <yd>`, the yd `-` when nobody was unphased."""
+    """`algalon.stardeath` reads `<killed|drained|chewed> <yd>`, older traces `<killed|collapsed> <yd>`,
+    the yd `-` when nobody was unphased."""
     how, _, gap = str(text or "").strip().partition(" ")
     try:
         return how, float(gap)
@@ -1502,37 +2212,116 @@ def value_before(trace: Trace, key: str, when: int) -> str | None:
     return str(found[-1].get("txt", "")) if found else None
 
 
+def drain_only(samples: Samples, star: int) -> tuple[float, float] | None:
+    """`(health, expected)` at the star's last row: what it read, and what the drain alone leaves of its
+    first reading by then."""
+    found = samples.rows.get(star)
+    if not found:
+        return None
+    stamps, rows = found
+    return rows[-1][5], rows[0][5] - (stamps[-1] - stamps[0]) / 1000.0
+
+
 def star_rows(trace: Trace) -> list[dict]:
     """`star_deaths`, plus what each landed into: the probe's own note, the kill window, a live meteor,
-    a Big Bang cast, the nearest unphased raid member, who it could kill, and who it did."""
-    samples = samples_of(trace)
-    roster = roster_guids(trace)
-    phased = all_phases(trace)
-    casts = big_bang_casts(trace)
-    seen = [meteor["t"] for meteor in meteors(trace)[0]]
-    killed = [row["t"] for row in death_rows(trace) if row["cause"] == "star explosion"]
-    out = []
-    for death in star_deaths(trace):
-        when = death["t"]
-        up = {guid: row for guid, row in samples.frame(when - 1).items()
-              if guid in roster and alive(row) and not phased_at(phased, guid, when)}
-        last = samples.seen(death["star"]) if death["star"] else None
-        spot = samples.row(death["star"], last[1])[1:3] if last else None
-        weakest = min(((health_of(trace, guid, row), guid, row[5]) for guid, row in up.items()
-                       if health_of(trace, guid, row) is not None), default=None)
-        probe = note_near(trace, "algalon.stardeath", when, STAR_NOTE_MS)
-        out.append({
-            **death,
-            "note": parse_stardeath(probe.get("txt")) if probe else None,
-            "window": value_before(trace, "algalon.starwindow", when),
-            "meteor": any(when - METEOR_LIVE_MS <= appeared <= when for appeared in seen),
-            "bang": next((cast["n"] for cast in casts if cast["start"] <= when <= cast["end"]), None),
-            "nearest": min(((dist2(row[1:3], spot), guid) for guid, row in up.items()), default=None) if spot else None,
-            "weakest": weakest,
-            "below": below_safe(trace, up),
-            "killed": sum(1 for at in killed if when - SAMPLE_LAG_MS <= at <= death["last"] + SHARE_MS),
-        })
-    return out
+    a Big Bang cast, the nearest unphased raid member, who it could kill, and who it did. `class` is
+    this reader's own: `killed` when it was the focus star, `drained` when its health was within
+    DRAINED_SLACK of the drain alone, else `chewed`."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        roster = roster_guids(trace)
+        phased = all_phases(trace)
+        casts = big_bang_casts(trace)
+        pair, _ = swap_pair(trace)
+        focus = latch_spans(trace, "algalon.focusstar", pull_end(trace))
+        seen = [meteor["t"] for meteor in meteors(trace)[0]]
+        killed = [row["t"] for row in death_rows(trace) if row["cause"] == "star explosion"]
+        out = []
+        for death in star_deaths(trace):
+            when = death["t"]
+            frame = samples.frame(when - 1)
+            up = {guid: row for guid, row in frame.items()
+                  if guid in roster and alive(row) and not phased_at(phased, guid, when)}
+            last = samples.seen(death["star"]) if death["star"] else None
+            spot = samples.row(death["star"], last[1])[1:3] if last else None
+            weakest = min(((health_of(trace, guid, row), guid, row[5]) for guid, row in up.items()
+                           if health_of(trace, guid, row) is not None), default=None)
+            probe = note_near(trace, "algalon.stardeath", when, STAR_NOTE_MS)
+            drain = drain_only(samples, death["star"]) if death["star"] else None
+            if drain is None:
+                kind = None
+            elif as_guid(value_at(focus, when - 1)) == death["star"]:
+                kind = "killed"
+            else:
+                kind = "drained" if drain[0] >= drain[1] - DRAINED_SLACK else "chewed"
+            out.append({
+                **death,
+                "note": parse_stardeath(probe.get("txt")) if probe else None,
+                "window": value_before(trace, "algalon.starwindow", when),
+                "meteor": any(when - METEOR_LIVE_MS <= appeared <= when for appeared in seen),
+                "bang": next((cast["n"] for cast in casts if cast["start"] <= when <= cast["end"]), None),
+                "nearest": (min(((dist2(row[1:3], spot), guid) for guid, row in up.items()), default=None)
+                            if spot else None),
+                "weakest": weakest,
+                "below": below_safe(trace, up),
+                "killed": sum(1 for at in killed if when - SAMPLE_LAG_MS <= at <= death["last"] + SHARE_MS),
+                "drain": drain,
+                "class": kind,
+                # phased or not: the hole it leaves phases whoever stands there
+                "pair": sorted((dist2(row[1:3], spot), guid) for guid, row in frame.items()
+                               if spot and guid in pair and alive(row) and dist2(row[1:3], spot) <= STAR_NEAR_YD),
+            })
+        return out
+    return cached(trace, "_algalon_star_rows", build)
+
+
+def window_spans(trace: Trace) -> list[tuple[str, int, int]]:
+    """`algalon.starwindow` as one timeline across every bot that tracked the stars, the latest row
+    winning."""
+    return latch_spans(trace, "algalon.starwindow", pull_end(trace))
+
+
+def focus_near(spans, when: int) -> int:
+    """The focus star at `when`, or the first one set within STAR_NOTE_MS after it: the window and the
+    focus note can land a tick apart."""
+    held = as_guid(value_at(spans, when))
+    if held:
+        return held
+    return next((as_guid(value) for value, start, _ in spans if when <= start <= when + STAR_NOTE_MS
+                 and as_guid(value)), 0)
+
+
+def window_opens(trace: Trace) -> list[dict]:
+    """Each time the kill window opened, `open` or `deadline` on the merged `algalon.starwindow` or
+    `algalon.urgent` turning 1: the focus star, the team, its mean distance to the star and the
+    distance from the team's mean position."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        end = pull_end(trace)
+        focus = latch_spans(trace, "algalon.focusstar", end)
+        team = holder_spans(trace, "algalon.starteam", end)
+        urgent = latch_spans(trace, "algalon.urgent", end)
+        opens = [(start, value) for value, start, _ in window_spans(trace) if value in ("open", "deadline")]
+        opens += [(start, "urgent") for value, start, _ in urgent if value == "1"]
+        out = []
+        for when, kind in sorted(opens):
+            star = focus_near(focus, when)
+            spot = position_at(samples, star, when) if star else None
+            if spot is None:
+                continue
+            everyone_ranged = value_at(urgent, when) == "1"
+            members = [guid for guid in roster_guids(trace)
+                       if value_at(team.get(guid, []), when) == "1"
+                       or (everyone_ranged and trace.role(guid) == "ranged")]
+            spots = [row[1:3] for guid in members if alive(row := samples.row(guid, when))]
+            if not spots:
+                continue
+            middle = (statistics.fmean(x for x, _ in spots), statistics.fmean(y for _, y in spots))
+            out.append({"t": when, "kind": kind, "star": star, "members": len(spots),
+                        "mean": statistics.fmean(dist2(point, spot) for point in spots),
+                        "middle": dist2(middle, spot)})
+        return out
+    return cached(trace, "_algalon_window_opens", build)
 
 
 def star_flags(row: dict) -> str:
@@ -1564,7 +2353,11 @@ def show_stars(trace: Trace) -> None:
               f" {row['damage']:9,} {gap:>7} {low:>8}{star_flags(row)}")
         parts = []
         if row["note"]:
-            parts.append(f"algalon.stardeath {row['note'][0]} {'-' if row['note'][1] is None else row['note'][1]}")
+            old = " (the old probe's drained or chewed)" if row["note"][0] == "collapsed" else ""
+            parts.append(f"algalon.stardeath {row['note'][0]} {'-' if row['note'][1] is None else row['note'][1]}{old}")
+        if row["drain"]:
+            parts.append(f"read as {row['class']}, {row['drain'][0]:.1f}% at its last sample against"
+                         f" {row['drain'][1]:.1f}% on the drain alone")
         parts.append(f"window {row['window'] or '-'}")
         if row["nearest"]:
             parts.append(f"nearest {trace.name(row['nearest'][1])} {row['nearest'][0]:.1f} yd")
@@ -1578,11 +2371,22 @@ def show_stars(trace: Trace) -> None:
         parts.append(f"{row['killed']} died to it")
         print(f"      {'; '.join(parts)}")
 
-    window = span_totals(holder_spans(trace, "algalon.starwindow", pull_end(trace)))
+    window = span_totals({0: window_spans(trace)})
     total = sum(window.values())
     if total:
-        print("  algalon.starwindow: " + ", ".join(f"{value} {held / 1000:.1f} s ({held * 100.0 / total:.0f}%)"
-                                                  for value, held in window.most_common()))
+        print("  algalon.starwindow, every tracker's rows as one timeline: " + ", ".join(
+            f"{value} {held / 1000:.1f} s ({held * 100.0 / total:.0f}%)" for value, held in window.most_common()))
+    for opened in window_opens(trace):
+        print(f"  window {opened['kind']} {clock(opened['t'])}: focus star {opened['middle']:.1f} yd from the team's"
+              f" mean position, {opened['mean']:.1f} yd from its {opened['members']} member(s) on average")
+    hazard = holder_spans(trace, "algalon.hazard", pull_end(trace))
+    if not hazard:
+        print("  absent from this trace: algalon.hazard")
+    else:
+        stepped = sorted(((sum(stop - start for value, start, stop in spans if value == "star"), guid)
+                          for guid, spans in hazard.items()), reverse=True)
+        print("  off a dying star (algalon.hazard=star): " + (", ".join(
+            f"{trace.name(guid)} {held / 1000:.1f} s" for held, guid in stepped if held) or "nobody"))
 
     team = star_team(trace)
     if team["members"] or team["drafted"]:
@@ -1597,6 +2401,132 @@ def show_stars(trace: Trace) -> None:
     if team["off"]:
         print("  damage dealers off the team on a star: " + ", ".join(
             f"{trace.name(guid)} {held / 1000:.1f} s" for guid, held in team["off"].most_common()))
+
+
+def window_faults(trace: Trace) -> list[tuple[int, str]]:
+    """A deadline or urgent window opening on a focus star far from the star team."""
+    return [(opened["t"], f"{opened['kind']} window @ {secs(opened['t'])}: focus star {opened['middle']:.1f} yd from"
+                          f" the star team's mean position")
+            for opened in window_opens(trace)
+            if opened["kind"] in ("deadline", "urgent") and opened["middle"] > TEAM_FAR_YD]
+
+
+# ----------------------------------------------------------------------------------------- collateral
+
+def star_labels(trace: Trace) -> dict[int, str]:
+    """`star N` by the order the stars were first sampled, since they all share one name."""
+    samples = samples_of(trace)
+    order = sorted((seen[0], guid) for guid in guids_of_entry(trace, NPC_COLLAPSING_STAR)
+                   if (seen := samples.seen(guid)))
+    return {guid: f"star {index + 1}" for index, (_, guid) in enumerate(order)}
+
+
+def worst_window(stamps: list[int], total: list[float]) -> tuple[float, int | None, int | None]:
+    """`(amount, from, to)`: the largest rise of the running `total` within WORST_WINDOW_MS, the tightest
+    such stretch where several tie."""
+    best: tuple[float, int | None, int | None] = (0.0, None, None)
+    for low in range(len(stamps)):
+        for high in range(low + 1, len(stamps)):
+            if stamps[high] - stamps[low] > WORST_WINDOW_MS:
+                break
+            amount = total[high] - total[low]
+            tighter = best[1] is not None and stamps[high] - stamps[low] < best[2] - best[1]
+            if amount > best[0] + 1e-6 or (abs(amount - best[0]) <= 1e-6 and tighter):
+                best = (amount, stamps[low], stamps[high])
+    return best
+
+
+def star_excess(trace: Trace) -> list[dict]:
+    """Per star, the health it lost beyond its 1 %/s drain while it was not the focus star: in total,
+    in its worst WORST_WINDOW_MS, and when the total reached CHEWED_PCT."""
+    def build(trace: Trace) -> list[dict]:
+        samples = samples_of(trace)
+        focus = latch_spans(trace, "algalon.focusstar", pull_end(trace))
+        labels = star_labels(trace)
+        out = []
+        for star, label in labels.items():
+            stamps, rows = samples.rows[star]
+            total = [0.0]
+            crossed = None
+            for index in range(1, len(stamps)):
+                excess = rows[index - 1][5] - rows[index][5] - (stamps[index] - stamps[index - 1]) / 1000.0
+                unfocused = as_guid(value_at(focus, stamps[index - 1])) != star
+                total.append(total[-1] + (excess if unfocused else 0.0))
+                if crossed is None and total[-1] >= CHEWED_PCT:
+                    crossed = stamps[index]
+            amount, low, high = worst_window(stamps, total)
+            out.append({"star": star, "label": label, "first": stamps[0], "last": stamps[-1], "excess": total[-1],
+                        "worst": amount, "worst_from": low, "worst_to": high, "crossed": crossed})
+        return out
+    return cached(trace, "_algalon_excess", build)
+
+
+def star_casts(trace: Trace) -> dict[str, collections.Counter]:
+    """`(caster, spell name)` counts of every cast a raid member or its pet put on a star, by who cast
+    it: the star team on the focus star, the team on another star, or someone off the team. A pet goes
+    with its owner's team."""
+    stars = guids_of_entry(trace, NPC_COLLAPSING_STAR)
+    end = pull_end(trace)
+    roster = roster_guids(trace)
+    team = holder_spans(trace, "algalon.starteam", end)
+    focus = latch_spans(trace, "algalon.focusstar", end)
+    urgent = latch_spans(trace, "algalon.urgent", end)
+    out: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
+    for rec in trace.of("cast"):
+        target, who_cast = rec.get("tgt"), rec.get("s")
+        owner = trace.owners.get(who_cast, who_cast)
+        if target not in stars or owner not in roster:
+            continue
+        when = rec["t"]
+        listed = (value_at(team.get(owner, []), when) == "1"
+                  or (value_at(urgent, when) == "1" and trace.role(owner) == "ranged"))
+        if not listed:
+            group = "off the star team"
+        elif target == as_guid(value_at(focus, when)):
+            group = "star team on the focus star"
+        else:
+            group = "star team on another star"
+        name = trace.spells.get(rec.get("sp")) or trace.spell(rec.get("sp"))
+        out[group][(who_cast, name)] += 1
+    return out
+
+
+def show_collateral(trace: Trace) -> None:
+    print("STAR COLLATERAL")
+    rows = star_excess(trace)
+    if not rows:
+        print("  no star was sampled")
+        return
+    show_absent(trace, "algalon.focusstar", "algalon.starteam")
+    deaths = {row["star"]: row["t"] for row in star_deaths(trace) if row["star"]}
+    print("  health lost beyond the 1 %/s drain while not the focus star:")
+    for row in rows:
+        gone = f"died {clock(deaths[row['star']])}" if row["star"] in deaths else f"last seen {clock(row['last'])}"
+        worst = (f", worst {WORST_WINDOW_MS // 1000} s {row['worst']:.1f}% from {clock(row['worst_from'])}"
+                 f" to {clock(row['worst_to'])}" if row["worst_from"] is not None else "")
+        print(f"    {row['label']:8} spawned {clock(row['first'])}, {gone}: {row['excess']:5.1f}%{worst}")
+    groups = star_casts(trace)
+    for group in ("star team on the focus star", "star team on another star", "off the star team"):
+        counted = groups.get(group)
+        if not counted:
+            continue
+        print(f"  casts on stars, {group}:")
+        by_caster: dict[int, collections.Counter] = collections.defaultdict(collections.Counter)
+        for (guid, name), n in counted.items():
+            by_caster[guid][name] += n
+        for guid, names in sorted(by_caster.items(), key=lambda item: (-sum(item[1].values()), trace.name(item[0]))):
+            print(f"    {label_of(trace, guid):34} " + ", ".join(f"{name} {n}" for name, n in names.most_common()))
+    if not groups:
+        print("  no cast on a star")
+    print("  * human")
+    show_vetoes(trace, "algalon splash hold")
+
+
+def collateral_faults(trace: Trace) -> list[tuple[int, str]]:
+    return [(row["crossed"], f"star chewed: {row['label']} lost {row['excess']:.1f}% beyond its drain while not the"
+                             f" focus star, {row['worst']:.1f}% of it in {WORST_WINDOW_MS // 1000} s from"
+                             f" {secs(row['worst_from'])}")
+            for row in star_excess(trace) if row["crossed"] is not None]
 
 
 # ---------------------------------------------------------------------------------------------- holes
@@ -2122,6 +3052,21 @@ def parse_ring_slots(text: str) -> list[tuple[float, float, float]]:
     return [(float(x), float(y), float(z)) for x, y, z in RING_SLOT_ROW.findall(found.group(1))]
 
 
+def parse_ring_notes(text: str) -> list[tuple[str, float, float] | None]:
+    """`(role, yd, deg)` from each table row's comment, in slot order, None for a row without one. The
+    edge hold measures from the hold spot with a signed angle, the ring before it from the room centre."""
+    found = RING_SLOT_TABLE.search(text)
+    if not found:
+        return []
+    out = []
+    for line in found.group(1).splitlines():
+        if not RING_SLOT_ROW.search(line):
+            continue
+        note = RING_SLOT_NOTE.search(line)
+        out.append((note.group(1), float(note.group(2)), float(note.group(3))) if note else None)
+    return out
+
+
 def arc_offset(index: int, count: int, width: float) -> float:
     """Centre-out around the arc's middle, alternating sides: the same order the strategy filled in."""
     if count <= 1:
@@ -2153,20 +3098,33 @@ def arc_slots() -> list[tuple[float, float]]:
     return out
 
 
+def algalon_source() -> str:
+    try:
+        return ALGALON_SOURCE.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
 @functools.lru_cache(maxsize=1)
 def ring_slots() -> tuple[tuple[float, float], ...]:
     """Each ring slot's spot by index: the source's table, else the older arcs."""
-    try:
-        text = ALGALON_SOURCE.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        text = ""
-    table = parse_ring_slots(text)
+    table = parse_ring_slots(algalon_source())
     return tuple((x, y) for x, y, _ in table) if table else tuple(arc_slots())
+
+
+@functools.lru_cache(maxsize=1)
+def ring_notes() -> tuple[tuple[str, float, float] | None, ...]:
+    return tuple(parse_ring_notes(algalon_source()))
 
 
 def slot_position(index: int) -> tuple[float, float] | None:
     spots = ring_slots()
     return spots[index] if 0 <= index < len(spots) else None
+
+
+def slot_note(index: int) -> tuple[str, float, float] | None:
+    found = ring_notes()
+    return found[index] if 0 <= index < len(found) else None
 
 
 def slots(trace: Trace) -> dict[int, int]:
@@ -2196,7 +3154,7 @@ def ring_rows(trace: Trace) -> list[dict]:
     for guid in sorted(members, key=trace.name):
         slot = held.get(guid)
         target = slot_position(slot) if slot is not None else None
-        to_slot, to_tank, to_boss = [], [], []
+        to_slot, to_hold, to_boss = [], [], []
         for _, when, _ in samples.steps(0, end):
             row = samples.row(guid, when)
             if not alive(row) or phased_at(phased, guid, when):
@@ -2206,7 +3164,7 @@ def ring_rows(trace: Trace) -> list[dict]:
                 to_boss.append(dist2(row[1:3], him[1:3]))
             if spot and value_at(spot.get(guid, []), when) not in (None, "slot"):
                 continue
-            to_tank.append(dist2(row[1:3], TANK_SLOT))
+            to_hold.append(dist2(row[1:3], HOLD_SPOT))
             if target:
                 to_slot.append(dist2(row[1:3], target))
         branches = collections.Counter()
@@ -2216,8 +3174,9 @@ def ring_rows(trace: Trace) -> list[dict]:
         out.append({
             "guid": guid,
             "slot": slot,
+            "note": slot_note(slot) if slot is not None else None,
             "to_slot": statistics.median(to_slot) if to_slot else None,
-            "to_tank": statistics.median(to_tank) if to_tank else None,
+            "to_hold": statistics.median(to_hold) if to_hold else None,
             "to_boss": statistics.median(to_boss) if to_boss else None,
             "in_reach": sum(1 for gap in to_boss if gap <= MELEE_REACH) / len(to_boss) if to_boss else None,
             "branches": branches,
@@ -2234,27 +3193,33 @@ def show_formation(trace: Trace) -> None:
         return
     show_absent(trace, "algalon.slot", "algalon.spot")
     if not ring_slots():
-        print("  no ring slot table or ring constants in the source: distance to the tank slot only")
+        print("  no ring slot table or ring constants in the source: distance to the hold spot only")
+    if not edge_hold(trace):
+        print("  this trace predates the edge hold (no algalon.spot=pickup): to slot and to A measure against"
+              " today's ring around the hold spot, which its bots never used")
 
     rows = ring_rows(trace)
     if not rows:
         print("  no ring bot")
         return
-    print(f"  {'bot':14} {'role':6} {'slot':>4} {'to slot':>8} {'to tank slot':>12} {'to boss':>8} {'in reach':>8}"
-          f" {'stalls':>10}  spot")
+    print(f"  {'bot':14} {'role':6} {'slot':>4} {'slot is':24} {'to slot':>8} {'to A':>6} {'to boss':>8}"
+          f" {'in reach':>8} {'stalls':>10}  spot")
     for row in rows:
         total = sum(row["branches"].values())
         shares = ", ".join(f"{value} {held * 100.0 / total:.0f}%" for value, held in row["branches"].most_common()) \
             if total else "-"
         to_slot = "-" if row["to_slot"] is None else f"{row['to_slot']:.1f}"
-        to_tank = "-" if row["to_tank"] is None else f"{row['to_tank']:.1f}"
+        to_hold = "-" if row["to_hold"] is None else f"{row['to_hold']:.1f}"
         to_boss = "-" if row["to_boss"] is None else f"{row['to_boss']:.1f}"
         in_reach = "-" if row["in_reach"] is None else f"{row['in_reach'] * 100.0:.0f}%"
         slot = "-" if row["slot"] is None else str(row["slot"])
+        note = f"{row['note'][0]} {row['note'][1]:.0f} yd {row['note'][2]:+.0f} deg" if row["note"] else "-"
         stalled = f"{row['stalls']} / {row['stalled'] / 1000:.0f}s" if row["stalls"] else "-"
-        print(f"  {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {slot:>4} {to_slot:>8}"
-              f" {to_tank:>12} {to_boss:>8} {in_reach:>8} {stalled:>10}  {shares}")
-    print("  medians over living, unphased samples; to slot and to tank slot only while algalon.spot read slot"
+        print(f"  {trace.name(row['guid'])[:14]:14} {trace.role(row['guid']):6} {slot:>4} {note:24} {to_slot:>8}"
+              f" {to_hold:>6} {to_boss:>8} {in_reach:>8} {stalled:>10}  {shares}")
+    print("  slot is the table's own comment: role, yards from the hold spot A and the signed angle off A's"
+          " line to the room centre")
+    print("  medians over living, unphased samples; to slot and to A only while algalon.spot read slot"
           f" where it exists, to boss and in reach ({MELEE_REACH:.2f} yd) over every sample after the intro;"
           f" stalls are {STALL_MS // 1000} s+ stationary windows with accepted moves")
 
@@ -2352,7 +3317,10 @@ def expected_probes(trace: Trace) -> dict[str, str]:
     if star_deaths(trace):
         out["algalon.stardeath"] = "a star died"
     if meteor_beside_bot(trace):
-        out["algalon.dodge"] = "a meteor fell beside a bot"
+        out["algalon.dodge"] = out["algalon.hazard"] = "a meteor fell beside a bot"
+    # The soaker writes its own kit, so a human soaker leaves none.
+    if any(row["soaker"] and row["soaker"] not in trace.humans for row in big_bang_rows(trace)):
+        out["algalon.soakkit"] = "a bot soaked a Big Bang"
     return out
 
 
@@ -2415,8 +3383,14 @@ def star_faults(trace: Trace) -> list[tuple[int, str]]:
             out.append((row["t"], f"star died with a Cosmic Smash meteor live @ {at}"))
         if row["bang"]:
             out.append((row["t"], f"star died during Big Bang {row['bang']}'s cast @ {at}"))
+        named = 0
         if row["nearest"] and row["nearest"][0] < STAR_NEAR_YD:
-            out.append((row["t"], f"star died {row['nearest'][0]:.1f} yd from {trace.name(row['nearest'][1])} @ {at}"))
+            gap, named = row["nearest"]
+            pair = " of the swap pair" if any(guid == named for _, guid in row["pair"]) else ""
+            out.append((row["t"], f"star died {gap:.1f} yd from {trace.name(named)}{pair} @ {at}"))
+        for gap, guid in row["pair"]:
+            if guid != named:
+                out.append((row["t"], f"star died {gap:.1f} yd from {trace.name(guid)} of the swap pair @ {at}"))
     return out
 
 
@@ -2469,6 +3443,12 @@ def failures(trace: Trace) -> list[tuple[int | None, str]]:
             for row in phasing_rows(trace) if row["label"] == "stray" and row["died"]]
 
     out += star_faults(trace)
+    out += collateral_faults(trace)
+    out += window_faults(trace)
+    out += soak_faults(trace)
+    out += bang_faults(trace)
+    out += taunt_faults(trace)
+    out += hold_faults(trace)
     team = star_team(trace)
     if team["members"]:
         for guid, held in team["off"].most_common():
@@ -2541,10 +3521,14 @@ SECTIONS = (
     ("deaths", "every death by the mechanic that killed it, cause by role", show_deaths),
     ("loose", "every stretch he spent off the swap pair: cause, hits, deaths, who took him back", show_loose),
     ("swaps", "the swap pair, Phase Punch, swaps due and their latency, calls, threat steals", show_swaps),
+    ("hold", "the edge hold: his distance from A and C, every pickup's drag to the tank slot", show_hold),
+    ("taunts", "every taunt cast at him, non-tanks flagged, pair taunts that missed", show_taunts),
     ("reach", "seconds each raid member outside the pair stood alive and unphased in his reach", show_reach),
-    ("bigbang", "every Big Bang: holes, soaker, who it hit, tank-alone time, re-phase loops", show_bigbang),
-    ("phasing", "every hole phase: Big Bang or stray, what caused a stray one, Dark Matter, deaths", show_phasing),
-    ("stars", "star deaths, what each landed into, the kill window and the star team", show_stars),
+    ("bigbang", "every Big Bang: holes and their reach, soaker, who it hit, tank-alone time", show_bigbang),
+    ("soak", "every Big Bang's soaker: the hit, healers, kit, reserved buttons spent", show_soak),
+    ("phasing", "every hole phase: Big Bang or stray, its cause, Dark Matter, walk guard vetoes", show_phasing),
+    ("stars", "star deaths, health against the drain, the kill window and the star team", show_stars),
+    ("collateral", "star health lost beyond the drain while unfocused, every cast on a star", show_collateral),
     ("holes", "hole stock, empty seconds before each Big Bang, holes lost, urgent spans", show_holes),
     ("constellations", "activations, victims, handler and kite branches, removals", show_constellations),
     ("smash", "every Cosmic Smash wave: who stood near it, the dodge, distance at the impact", show_smash),

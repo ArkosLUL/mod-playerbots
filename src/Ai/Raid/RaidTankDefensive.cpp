@@ -10,11 +10,17 @@
 #include "PlayerbotAI.h"
 #include "RaidObs.h"
 #include "SharedDefines.h"
+#include "SpellAuras.h"
 
 #include <array>
 
 namespace
 {
+constexpr uint32 SPELL_DIVINE_PROTECTION = 498;
+// Divine Shield, Divine Protection, Hand of Protection and a self Lay on Hands put it up for 2 min, and
+// it blocks the other three.
+constexpr uint32 SPELL_FORBEARANCE = 25771;
+
 // Weakest first, which here is shortest cooldown first: the strongest button stays in hand longest.
 // Bubbles are deliberately absent - a paladin under Divine Shield does no damage and holds nothing. So
 // is short rotational mitigation (shield block, bone shield, spell reflection), which keeps running on
@@ -123,6 +129,31 @@ uint8 BestMagicDefensiveCut(PlayerbotAI* botAI, Player* bot, uint32 needMs)
     TankDefensive const* picked = PickDefensive(botAI, bot, false, false, needMs, running);
 
     return picked ? picked->cutPct : 0;
+}
+
+char const* ReadyTankDefensive(Player* bot, bool physicalOnly, uint32 withinMs)
+{
+    if (!bot)
+        return nullptr;
+
+    for (TankDefensive const& entry : TANK_DEFENSIVES)
+    {
+        if (!entry.tank || entry.playerClass != bot->getClass() || (physicalOnly && entry.magicOnly))
+            continue;
+
+        if (entry.spellId == SPELL_DIVINE_PROTECTION)
+        {
+            Aura const* forbearance = bot->GetAura(SPELL_FORBEARANCE);
+            if (forbearance &&
+                (forbearance->GetDuration() < 0 || static_cast<uint32>(forbearance->GetDuration()) > withinMs))
+                continue;
+        }
+
+        if (bot->HasSpell(entry.spellId) && bot->GetSpellCooldownDelay(entry.spellId) <= withinMs)
+            return entry.castName;
+    }
+
+    return nullptr;
 }
 
 bool IsHeldTankDefensive(std::string const& actionName)

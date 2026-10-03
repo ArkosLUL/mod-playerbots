@@ -50,13 +50,29 @@ cast nobody is the soaker yet, and every bot, tank included, would run for a hol
 
 Big Bang's second effect applies **64445, which strips every phase a second after the hit**, Phase
 Punch's included; it ignores phase, so it reaches everyone. The soaker is alone for about a second.
-It casts `NextTankDefensive(..., physicalOnly)` at ≤ 3 s remaining, skipping Anti-Magic Shell. A
-**backup** priest with Dispersion also stays out and casts it at ≤ 5 s (it lasts 6 s): a soaker dying
+It casts `NextTankDefensive(..., physicalOnly)` at ≤ 3 s remaining, skipping Anti-Magic Shell. The hit plus
+the Quantum Strike and Phase Punch landing with it took a soaker with no defensive from full to 21-24%, and his
+next swing, 1.2-2.6 s later while the healers were still phased, killed him. A **backup** priest with Dispersion also stays out and casts it at ≤ 5 s (it lasts 6 s): a soaker dying
 to the hit with everyone else phased is a reset, and the backup is promoted if that happens. The
 button follows what the bot can cast, not its slot, and Dispersion is checked by spell id and cooldown:
 `CanCastSpell` refuses during a channel, and a shadow priest is nearly always in Mind Flay. A disc or
-holy priest puts Pain Suppression or Guardian Spirit on the soaker before hiding. All of these, and the
-tank defensives, are held from 20 s before the cast.
+holy priest puts Pain Suppression or Guardian Spirit on the soaker before hiding, a paladin Hand of
+Sacrifice.
+
+**The buttons are reserved by their own cooldown** (`AlgalonCooldownReserveMultiplier`), not a window: Divine
+Protection, Shield Wall, Pain Suppression and the rest cool down 2-3 min against a 90.5 s cast, and a 20 s hold
+saw every one spent on the way. A button is held whenever casting it now leaves it cooling down at the next hit,
+so in practice only Barkskin, Vampiric Blood and glyphed Dispersion run between casts. Swap tanks never cast
+Divine Shield or Lay on Hands (a bubble or self Lay on Hands puts Forbearance on them, which blocks Divine
+Protection 2 min), nor Lay on Hands on others. The soak, external and rescue actions cast directly and pass.
+Ice Block is held 20 s before the cast and cancelled by the hide: it pins the mage and Big Bang goes through it.
+
+A holder with no physical button back by the time the soak needs it (`ReadyTankDefensive`: cooldown and, for
+Divine Protection, Forbearance run out in time; not `NextTankDefensive`, which also answers 0 on the GCD or mid
+channel) hands him to a bot partner that has one and ≤ 2 stacks, 15 s out. Healers spend one global cooldown on the soaker before hiding
+(shield, renew, rejuvenation, lifebloom, riptide, earth shield, sacred shield): only what is already on him
+ticks in the second he is alone. Back out of the field, a healer's first cast for 4 s after the hit goes on
+him while he is under 60%, instants first, Lay on Hands under 30% (Forbearance only blocks a self-cast).
 
 The Phase Punch queued behind the cast lands on the soaker while everyone else is still phased, and a
 5th stack then leaves nobody unphased. So a holder at 3 stacks with the cast ≤ 15 s away hands over to
@@ -97,13 +113,33 @@ override of them all:
   below full health if their maximum is lower. A percentage gate can't work: 80 % of a 26 k clothie is
   below one 25-man explosion;
 - the **lowest-health** star at least 7 yd from every raid member, since its hole lands where it dies
-  and phases whoever is in the field. The star the team is already on keeps it down to 5 yd, so a
-  drift past the edge doesn't flip the team between stars.
+  and phases whoever is in the field, 9 yd from the swap tanks and the handler, and 16 yd from him (his
+  melee ring). The star the team is already on keeps it down to 5 yd from the raid, so a drift past the
+  edge doesn't flip the team between stars.
 
 The last two give way to a **deadline**. A star's health is its seconds left, and spacing i explosions
-takes i gaps plus the kills, 16 s each, so once the i-th shortest-lived star is down to `16 x i` %, the
-lowest star is opened wherever it is and whatever the raid's health. A wave's four stars spawn and drain
-together; without the deadline the gates could hold until all four went off in the same second.
+takes i gaps plus the kills, 16 s each, plus the team's walk into range (mean distance past 28 yd at 7 yd/s),
+so once the i-th shortest-lived star is down to that, the lowest star is opened whatever the raid's health,
+but never within 9 yd of a swap tank or the handler (a hole under the holder sets him loose; it did twice)
+and, given a choice, not within 16 yd of him. A wave's four stars spawn and drain together; without the
+deadline the gates could hold until all four went off in the same second. `urgent` takes any star.
+
+**Splash breaks the pacing.** Stars died chewed, 75% gone in 11 s with nobody sent, two 1.4 s apart, from
+Starfall, Blade Flurry, Death and Decay, Pestilence diseases, warrior cleaves, Divine Storm and Avenger's
+Shield; the Aoe threat type covers almost none of them. While any star lives, `AlgalonSplashHoldMultiplier`
+holds Starfall, Blade Flurry, Sweeping Strikes and Bladestorm outright (self auras that hit whatever comes near),
+and anything else that splashes (`SpellSplashes`, `MULTI_TARGET_ACTIONS`, HotR, Avenger's Shield, Seed of
+Corruption, Mind Sear, Living Bomb, Corpse Explosion, the Aoe threat type) while a star is within 12 yd of the
+bot or its target, not counting the star the bot is hitting; friendly spells are never held. Humans'
+Consecration, HotR and Death and Decay still chew them.
+
+**The team works a far star from a spot of its own**: from its ring slot, `reach spell` walks half the gap and
+the slot node walks it back, so a deadline star 35-68 yd out drained untouched. A ranged team member whose focus
+star is over 28 yd from its slot stands 25 yd from the star towards the slot (`star`), outside his reach.
+
+**A star at 5% or less is a hazard** for the dodge: anyone unphased within 8 yd steps off it, since it dies
+within seconds whoever is on it (`algalon.hazard`). As with a meteor, the generic movers are held within 12 yd
+of it and a slot within 8 yd of it waits (`smash`).
 
 The tracker marks the focus star with the **star** icon for humans; skull would pull every bot's
 `attack rti target`. A skull a player puts on a star or add wins over the exclusions. An AoE multiplier
@@ -119,9 +155,20 @@ hole is stepped aside from the slot itself; a bot standing in one outside a cast
 A bot phased outside a cast is alone in the void with the phase-16 Dark Matter, which kills a healer in
 about 3 s. So no walk may clip a field: dodges and exits reject ground whose straight path passes within
 7.5 yd of a hole, and a bot already beside one may not walk closer to it. Only a bot inside a field, or
-phased, may cross its own. When every path crosses a hole the dodge and the exit take one anyway: the
+phased, may cross the one it is in, no other. When every path is blocked the dodge and the exit first take
+one kept 6.3 yd off every hole (`field`, just outside the 6 yd field), and only then one across a hole: the
 void is still better than a meteor or staying phased. A slot walk with a hole in the way goes round it
 via a point 9.5 yd off the hole that has a clear line on to the slot (`blocked`).
+
+The generic movers know nothing of holes, and holes land beside him where melee stand: 34 stray phases in
+four pulls came off `reach melee`, `set behind` and `reach spell`. `AlgalonWalkGuardMultiplier` holds reach,
+reach-to-heal, set behind and rear flank when the stop point (melee range of the target, 28 yd for spells, both
+set-behind spots) is within 7.5 yd of a hole or the walk passes within 6.3 yd of one. A held bot waits; holes
+live until a constellation eats one or phase 2.
+
+**A far hole is approached before the cast.** Within 15 s of it or during it, a bot whose nearest hole is over
+35 yd from its own spot (a melee bot's is him) waits 30 yd from that hole (`nearhole`), with the generic movers
+held: three ranged 45-64 yd from the only hole couldn't make it in 8 s. Swap tanks and the handler are left out.
 
 ## Constellations: the handler collects them
 
@@ -150,25 +197,32 @@ The dodge clears **15 yd** from every marker (10 yd if nothing clears), 8 yd fro
 dodge within 0.3 s, then `reach melee` walked them back to 6-12 yd before the impact. Charge and
 Intercept are blocked for melee there too.
 
-## The formation is anchored on him
+## He is held at the edge
 
 At the end of the intro the core makes him `AttackStart` a **random player** within 150 yd, and he does
 the same to whoever is next on threat whenever he loses his tank. Anyone inside his reach is one swing
-(25-67 k on cloth), so the formation is anchored on his landing spot (`ROOM_CENTER`), where he is
-tanked:
+(25-67 k on cloth). Held mid-room he sat 20-24 yd from all four star spawns, so stars drifted past the melee
+and got cleaved; he is walked out to the −Y edge, bearing −82° (the middle of the gap between the two spawns
+there):
 
-- **Tank slots** 8 yd from him, the holder's on the −Y side and the other swap tank's at bearing 240°.
-  Both are inside his reach, so holding him from either doesn't move him, and neither does a swap
-  taunt. Before the pull the pickup tank waits on the tank slot and taunts on the first selectable
-  tick.
-- **Rings** at 19 yd (4 healer slots), 25 yd (6) and 31 yd (8), each ordered to alternate sides so a
-  short raid still spreads, all at least 8 yd from the four worm hole spots. Ranged at 31 yd are still
-  in range: spell range adds both combat reaches.
-- **Melee** wait on an arc 21 yd out on the +Y (entrance) side until a swap tank holds him, or 5 s
-  after the intro; an `OwnMovement` rule and a Charge block keep reach and charges from taking them in
-  early.
+- **Pickup**: both swap tanks wait 8 yd from his landing spot, in his reach, and the pickup tank taunts on
+  the first selectable tick. It keeps that spot until a swap tank holds him, so a missed taunt doesn't send
+  it walking away from him while he is loose.
+- **Hold**: the holder walks to the tank slot, 38 yd out, and drags him there. A chase stops 1.5-12 yd short
+  of its target (0.5 + his reach 9 + 1.5), so he stands 27-32 yd out, about the hold spot at 30. The other
+  swap tank's slot is 4.1-7.2 yd from him anywhere in that range, so a swap taunt never moves him; with him
+  held elsewhere (a human holder, the walk out) it stands 7 yd from him towards the tank slot.
+- **Rings** around the hold spot at 19 yd (4 healer slots), 25 yd (6) and 31 yd (8), on the room side, each
+  ordered to alternate sides so a short raid still spreads.
+- **Melee** wait 15-17 yd from the hold spot, either side of his path, until a swap tank holds him and either
+  stands on the tank slot or 8 s have passed since the intro; not onto a loose boss unless 20 s pass. An `OwnMovement` rule
+  and a Charge block keep reach and charges from taking them in early.
 
-All 30 points (18 slots, two tank slots, ten staging spots) are navprobe-verified, flat at Z 417.321.
+Every ring slot and waiting spot is 13.5 yd from the whole line from his landing spot to the tank slot (his
+landing, his drag and any stop point), at least 8 yd from the four worm hole spots and within 44 yd of the
+centre; healers are within 22 yd of the tank slot. Ranged at 31 yd are still in range: spell range adds
+both combat reaches. All 36 points, including probes 40-44 yd out on that bearing, are navprobe-verified,
+flat at Z 417.321.
 The formation yields while a marker is within 15 yd of the **slot**, not the bot: a bot that already
 dodged passes trivially and walks back under it.
 
@@ -192,8 +246,11 @@ keeps its slot in his reach. Its threat then trails the melee, so when the holde
 swing can land on a damage dealer until the pickup taunt lands.
 
 The pickup prefers a bot, then fewer stacks, but never a bot already at 4 stacks over a human with
-fewer. The class taunt nodes are blocked for every tank while he is engaged; the swap, pickup, handler
-and Dark Matter nodes taunt through `CastClassTaunt`. The handler is a bot tank outside the pair, else
+fewer. The class taunt nodes are blocked for everyone while he is engaged: an Arms warrior's snare chain ends
+in Mocking Blow, which `ClassifyAction` now counts as a taunt, and one killed its caster. The swap, pickup,
+handler and Dark Matter nodes taunt through `CastClassTaunt`; when the pickup's taunt missed or is cooling down
+while he is off a swap tank, the class's second one follows (Righteous Defense on his victim, Challenging Shout
+or Roar), since a missed Hand of Reckoning left him loose for 1.5 s. The handler is a bot tank outside the pair, else
 the pair bot not holding him. Misdirection and Tricks of the Trade on the main tank stay off for the
 whole fight (`UldThreatRedirectMultiplier`).
 
@@ -208,16 +265,20 @@ Raid-wide values, all written by the instance tick: `algalon.phase` (0 idle, 1 i
 recorded), `algalon.swappair`. Derived per bot, each inside the helper that derives it: `algalon.hide`
 (`none`/`wait`/`run`/`in`/`exit`/`soak`/`backup`/`hold`/`noshelter`), `algalon.kite`
 (`taunt`/`hole`/`parked`/`kept`/`none`), `algalon.spot`
-(`tank`/`offtank`/`stage`/`slot`/`buried`/`blocked`/`smash`/`none`), `algalon.dodge`
-(`idle`/`clear`/`min`/`cross`/`none`, where `cross` means only a path over a hole was clear),
+(`pickup`/`tank`/`offtank`/`stage`/`slot`/`star`/`nearhole`/`buried`/`blocked`/`smash`/`none`), `algalon.hazard`
+(`smash`/`star`/`none`), `algalon.dodge` (`idle`/`clear`/`min`/`field`/`cross`/`none`, where `cross` means only a
+path over a hole was clear),
 `algalon.defensive` (the pick, on change only). `algalon.tankrole`
 (`hold`/`yield`/`take`/`call`/`out`/`none`) per pair bot and `algalon.starwindow`
 (`urgent`/`bigbang`/`smash`/`gap`/`deadline`/`raidhp`/`near`/`open`/`none`) are computed in the tick; the window is
 written on the tracker bot, since the tick runs on whichever bot comes first.
 
 Events: `algalon.holelost` (`kite`/`stray`/`phase2`), one per hole, skipped when every summon goes at
-once on a kill or Ascend; `algalon.stardeath` (`killed`/`collapsed` and the nearest raid member's
-distance), the only record of how a star died, since damage rows cover players alone; `algalon.pull`
+once on a kill or Ascend; `algalon.stardeath` (`killed` as the focus star, `drained` within 3% of its
+drain-only health, else `chewed`, and the nearest raid member's distance; older traces say `collapsed`), the
+only record of how a star died, since damage rows cover players alone; `algalon.soakkit`
+(`def=<button|none> forbearance=<0|1>` on the soaker at the cast start); `algalon.handover` (`nodef` on a
+holder handing him over for want of a defensive); `algalon.pull`
 (`inreach=N victim=GUID`) at the tick the intro ends; `algalon.call` (`swap`/`loose`/`bigbang`/`hide`)
 per raid warning, sent only when a human is in the raid. Each meteor is written as a `haz` circle (62311 / 64596, the impact point, 6 yd): the sweep
 keeps the 40 units nearest its anchor and on 25-man drops some markers.
@@ -240,7 +301,15 @@ counted by cause and role with humans starred. Then:
   had him;
 - `--loose`: every window his victim was no swap tank, with its cause (intro end, 5th stack, holder
   died or phased, threat), the deaths in it and how it ended;
-- `--swaps`: the pair, stack timelines, swaps due and their latency, missed swaps, calls, threat steals;
+- `--swaps`: the pair, stack timelines, swaps due and their latency, missed swaps, calls, threat steals,
+  hand-overs;
+- `--hold`: his distance from the hold spot and the centre, the holder and its distance from the tank slot, the
+  drag after each pickup and who was in his reach on it;
+- `--soak`: per Big Bang the soaker's health across the hit, the kit, the prep casts, the first heal after it
+  and every reserved button spent earlier;
+- `--collateral`: per star the health lost beyond drain while nobody was sent, and every cast on a star by caster
+  and spell;
+- `--taunts`: every taunt at him by caster and role, and whether a swap tank's took within 0.6 s;
 - `--bigbang` (holes at the cast, soaker and backup health, who was hit unphased, tank-alone seconds,
   re-phase loops, void Dark Matter damage, evade after), `--stars` (how each died, the window, a live
   meteor, raid health against the top roll), `--smash` (per wave and bot: distance, dodge latency and

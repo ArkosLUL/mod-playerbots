@@ -168,6 +168,20 @@ What lands on a raid add is not what PvP experience predicts.
   star under 15 %" skipped the gap and the health check, and put two raid-wide explosions 3.2 s apart.
   Override only for what is worse than the hit it delays: no shelter before Big Bang, or stars whose own
   collapse is about to stack them anyway.
+- **Reserve a cooldown against the next event by its own cooldown, not a window.** Algalon held the soak
+  buttons 20 s before Big Bang, and every 2-3 min button had been spent on the way, so the soaker had
+  nothing at the hit. Hold whenever casting now leaves it cooling down at the event; bubbles and self heals
+  that put up a lockout (Forbearance) count as spending the button they lock.
+- **The Aoe threat type misses most splash.** Starfall, Blade Flurry, Sweeping Strikes, Cleave, Bladestorm,
+  HotR, Avenger's Shield, Multi-Shot, Chain Lightning, Seed of Corruption and Mind Sear fail even the spell
+  area test. A hold on "don't hit the add next to the boss" needs `SpellSplashes` plus the named list in
+  `RaidSplash.h`, and self auras held outright: they hit whatever comes near for their whole duration.
+- **Collateral breaks "health is lifetime".** A draining add timed by its health dies early and next to
+  whoever chewed it; trace which deaths were drain and which were splash before tuning the timing.
+- **A slot leash fights `reach spell`.** It walks half the gap to an out-of-range target, the slot node
+  walks the bot back, and the target is never reached. Give the mover its own spot in range instead.
+- **Mocking Blow is a taunt.** It is a `MELEE_ACTION`, and an Arms warrior's snare chain falls back to it;
+  `ClassifyAction` counts it in `Family::Taunt`, so a taunt guard has to cover every role, not tanks.
 - **Read `speed_run` before designing any relocation.** An add faster than a player can be neither
   kited nor ferried: the bot walks the whole distance taking uninterrupted melee, out of healer range,
   dealing nothing, and still arrives with the add on top of it. Freya's lasher is 8.0 yd/s against 7.0,

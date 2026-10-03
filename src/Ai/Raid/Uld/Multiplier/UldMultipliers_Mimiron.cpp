@@ -19,6 +19,7 @@
 #include "PlayerbotAI.h"
 #include "Playerbots.h"
 #include "PriestActions.h"
+#include "RaidSplash.h"
 #include "RaidTankDefensive.h"
 #include "ReachTargetActions.h"
 #include "RogueActions.h"
@@ -65,38 +66,11 @@ float MimironTankAnchorGuardMultiplier::GetValue(Action* action)
                : 1.0f;
 }
 
-namespace
-{
-// Whether this action actually splashes. The threat type does not say: CastHealingSpellAction
-// declares Aoe, while whirlwind, divine storm, consecration, death and decay, starfall, swipe and
-// pestilence declare something else and hit everything nearby anyway - all of them ran in a
-// Firefighter phase 3 with the guard up. The spell says instead: IsTargetingArea covers the area
-// and cone selection categories, IsAffectingArea adds the persistent area auras.
-bool MimironActionSplashes(PlayerbotAI* botAI, Action* action)
-{
-    // Totem and trap summons stay invisible to that test - the summon is single-target and the area
-    // lives on what it summons - so they are named.
-    static std::set<std::string> const summoners = {"magma totem", "fire nova", "explosive trap",
-                                                    "trap launcher: explosive trap"};
-    if (summoners.count(action->getName()))
-        return true;
-
-    CastSpellAction* spellAction = dynamic_cast<CastSpellAction*>(action);
-    if (!spellAction || dynamic_cast<CastHealingSpellAction*>(action))
-        return false;
-
-    uint32 const spellId =
-        botAI->GetAiObjectContext()->GetValue<uint32>("spell id", spellAction->getSpell())->Get();
-    SpellInfo const* spellInfo = spellId ? sSpellMgr->GetSpellInfo(spellId) : nullptr;
-    return spellInfo && (spellInfo->IsTargetingArea() || spellInfo->IsAffectingArea());
-}
-}  // namespace
-
 float MimironFireBotAoeGuardMultiplier::GetValue(Action* action)
 {
     // The spell test first: it answers off the action alone, while the kept list walks the bot's
     // whole target list, and this runs for every action of every bot in the instance.
-    if (!action || !MimironActionSplashes(botAI, action))
+    if (!action || !SpellSplashes(botAI, action))
         return 1.0f;
 
     std::vector<ObjectGuid> const kept = GetMimironKeptFireBots(botAI, bot);

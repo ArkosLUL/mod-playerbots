@@ -8,7 +8,6 @@
 
 #include "Player.h"
 #include "PlayerbotAI.h"
-#include "RaidTankDefensive.h"
 #include "Strategy.h"
 #include "UldActions_Algalon.h"
 #include "UldEncounterGate.h"
@@ -25,12 +24,6 @@ bool AlgalonCooldownsHeld(PlayerbotAI* botAI)
 {
     return AlgalonEngaged(botAI) &&
            (AlgalonBigBangCasting(botAI) || AlgalonBigBangWithin(botAI, ULDUAR_ALGALON_COOLDOWN_HOLD_SECONDS));
-}
-
-// Either swap tank can end up holding him when the cast starts, so both keep their buttons.
-bool AlgalonTankDefensivesHeld(PlayerbotAI* botAI)
-{
-    return IsAlgalonSwapTank(botAI->GetBot()) && AlgalonCooldownsHeld(botAI);
 }
 
 // Phased bots are left out: inside the void they are safe, and phase-16 Dark Matter is on them.
@@ -76,6 +69,8 @@ bool AlgalonFormationHolds(PlayerbotAI* botAI)
 
 bool AlgalonMeleeHeldBack(PlayerbotAI* botAI) { return AlgalonMeleeStaged(botAI->GetBot()); }
 
+bool AlgalonGoingToFarHole(PlayerbotAI* botAI) { return AlgalonHeadsForFarHole(botAI->GetBot()); }
+
 bool AlgalonSmashHold(PlayerbotAI* botAI) { return AlgalonEngaged(botAI) && AlgalonSmashHoldsGround(botAI->GetBot()); }
 
 void DefineAlgalon(EncounterBuilder& e)
@@ -87,7 +82,10 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonBigBangExternalTrigger, AlgalonBigBangExternalAction>(ACTION_EMERGENCY + 8);
     e.Node<AlgalonBigBangHideTrigger, AlgalonBigBangHideAction>(ACTION_EMERGENCY + 7, EncounterRow::Mover);
     e.Node<AlgalonCosmicSmashTrigger, AlgalonCosmicSmashAction>(ACTION_EMERGENCY + 6, EncounterRow::Mover);
+    e.Node<AlgalonSoakerPrepTrigger, AlgalonSoakerPrepAction>(ACTION_EMERGENCY + 5);
     e.Node<AlgalonLeaveBlackHoleTrigger, AlgalonLeaveBlackHoleAction>(ACTION_EMERGENCY + 4, EncounterRow::Mover);
+    // Below the exit: a healer still inside the field when the phase drops is phased again.
+    e.Node<AlgalonSoakerRescueTrigger, AlgalonSoakerRescueAction>(ACTION_EMERGENCY + 3);
     e.Node<AlgalonTankPickupTrigger, AlgalonTankPickupAction>(ACTION_RAID + 8);
     e.Node<AlgalonPhasePunchSwapTrigger, AlgalonPhasePunchSwapAction>(ACTION_RAID + 7);
     e.Node<AlgalonYieldBossTrigger, AlgalonYieldBossAction>(ACTION_RAID + 7);
@@ -98,10 +96,8 @@ void DefineAlgalon(EncounterBuilder& e)
     e.Node<AlgalonStarMarkTrigger, AlgalonStarMarkAction>(ACTION_RAID + 2);
     e.Node<AlgalonRaidPositionTrigger, AlgalonRaidPositionAction>(ACTION_RAID, EncounterRow::Mover);
 
-    // The soak and externals cast these directly, so they stay free for the one cast they're for.
-    e.Block("algalon hold tank defensives", Role::Tank, AlgalonTankDefensivesHeld, 0, HeldTankDefensiveNames());
-    e.Block("algalon hold big bang cooldowns", Role::Any, AlgalonCooldownsHeld, 0,
-            {"dispersion", "pain suppression", "guardian spirit on party"});
+    e.Multiplier<AlgalonCooldownReserveMultiplier>(Family::Spell);
+    e.Block("algalon ice block hold", Role::Any, AlgalonCooldownsHeld, 0, {"ice block"});
 
     // Every other mover would walk a hider back out of its hole, and MoveTo answers Duplicate from the
     // run's second tick, so the run can't defend itself.
@@ -111,17 +107,21 @@ void DefineAlgalon(EncounterBuilder& e)
             Family::Charge | Family::Blink | Family::Disengage);
 
     // The class "lose aggro" nodes taunt on cooldown whenever someone else holds him, 4 stacks or not, and
-    // a tank outside the pair would take him from both. The swap, pickup, constellation and Dark Matter
-    // nodes taunt through CastClassTaunt instead.
-    e.Block("algalon taunt guard", Role::Tank, AlgalonEngaged, Family::Taunt);
+    // a tank outside the pair would take him from both; an Arms warrior's snare chain ends in Mocking Blow.
+    // The swap, pickup, constellation and Dark Matter nodes taunt through CastClassTaunt instead.
+    e.Block("algalon taunt guard", Role::Any, AlgalonEngaged, Family::Taunt);
     // The target exclusions keep every picker off him for the yielding tank except "attack rti target",
     // which follows a skull the raid put on him.
     e.Block("algalon yield skull", Role::Tank, AlgalonYielding, Family::AttackRti);
 
     e.OwnTargeting("algalon star team", Role::Dps, AlgalonStarTeamFocused);
 
-    e.Multiplier<AlgalonStarAoeMultiplier>(Family::Spell);
+    e.Multiplier<AlgalonSplashHoldMultiplier>(Family::AnyAction);
     e.Multiplier<AlgalonTargetGuardMultiplier>(Family::Melee | Family::Spell | Family::PetAttack);
+
+    // Ahead of the movement rules below, so a field is what the trace names when it holds a walk.
+    e.Multiplier<AlgalonWalkGuardMultiplier>(Family::Reach | Family::ReachHeal | Family::SetBehind |
+                                             Family::RearFlank);
 
     // Attack would chase the constellation and Reach would walk back to Algalon while the handler leads
     // one to a hole. Its own taunts are AttackActions too, and a swap it can't make phases the holder out.
@@ -146,6 +146,9 @@ void DefineAlgalon(EncounterBuilder& e)
     // encounter's own still run, and its slot walks already avoid a live marker.
     e.OwnMovement("algalon smash hold", Role::Any, AlgalonSmashHold, Family::Attack);
     e.Block("algalon smash hold charges", Role::Melee, AlgalonSmashHold, Family::Charge);
+
+    // A bot walking towards a hole it couldn't reach in the cast would be walked back to him by reach.
+    e.OwnMovement("algalon far hole", Role::Any, AlgalonGoingToFarHole, Family::Attack);
 
     e.Tick(AlgalonTickEncounterState);
 }

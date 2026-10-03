@@ -236,7 +236,10 @@ def probe_notes(handler: int) -> list[dict]:
              note(40000, MERCY, "algalon.call", "bigbang"), note(90000, MERCY, "algalon.call", "bigbang"),
              note(30000, AGONY, "algalon.stardeath", "killed 15.6"),
              note(33000, AGONY, "algalon.stardeath", "collapsed -"),
-             note(20400, TRUESHOT, "algalon.dodge", "clear")]
+             note(20400, TRUESHOT, "algalon.dodge", "clear"),
+             note(20000, TRUESHOT, "algalon.hazard", "smash"), note(26000, TRUESHOT, "algalon.hazard", "none"),
+             note(40000, BULWARK, "algalon.soakkit", "def=shield wall forbearance=0"),
+             note(90000, BULWARK, "algalon.soakkit", "def=none forbearance=0")]
     for guid, changes in ((BULWARK, ((8000, "hold"), (59000, "yield"), (76800, "take"), (77000, "hold"),
                                      (89000, "out"))),
                           (AEGIS, ((8000, "yield"), (59800, "take"), (60000, "hold"), (77000, "yield"),
@@ -492,7 +495,7 @@ class SyntheticPull(unittest.TestCase):
         rows = {row["guid"]: row for row in al.ring_rows(self.trace)}
         self.assertEqual(set(rows), {MERCY, TREE, AGONY, TRUESHOT})
         self.assertEqual(rows[MERCY]["slot"], 0)
-        self.assertAlmostEqual(rows[MERCY]["to_tank"], 14.0)
+        self.assertAlmostEqual(rows[MERCY]["to_hold"], al.dist2(spot(0, 14), al.HOLD_SPOT))
         self.assertAlmostEqual(rows[MERCY]["to_boss"], 10.0)
         self.assertEqual((rows[MERCY]["in_reach"], rows[AGONY]["in_reach"]), (1.0, 0.0))
         if al.ring_slots():
@@ -570,6 +573,8 @@ class SyntheticPull(unittest.TestCase):
         self.assertEqual([line for _, line in al.failures(self.trace)], [
             "4 player(s) inside 11.83 yd of him when the intro ended @ 8.0s (Shiv, Brawl, Mercy, Tree)",
             "Algalon loose 0.5 s @ 8.0s (intro end): 1 death",
+            "star chewed: star 1 lost 40.0% beyond its drain while not the focus star, 40.0% of it in 10 s from 10.0s",
+            "star chewed: star 2 lost 60.0% beyond its drain while not the focus star, 30.0% of it in 10 s from 10.0s",
             "threat steal @ 20.0s: Aegis pulled him off Bulwark with no taunt",
             "Cosmic Smash @ 24.8s: inside 10 yd at the impact: Tree 6.3",
             "Cosmic Smash @ 24.8s: dodged, then walked back inside 15 yd by the impact: Trueshot 12.0"
@@ -604,6 +609,8 @@ class SyntheticPull(unittest.TestCase):
         self.assertIn("evade 4.1 s after Big Bang 2", text)
         self.assertEqual(text.count("wave 0:20.000: 1 meteor(s), impact 0:24.800"), 1)
         self.assertNotIn("no failures detected", text)
+        self.assertIn("this trace predates the edge hold", text)
+        self.assertIn("kit: def=shield wall", text)
 
 
 class HumanHandler(unittest.TestCase):
@@ -653,9 +660,9 @@ class WithoutProbes(unittest.TestCase):
     def test_the_verdict_names_the_probes_the_events_imply(self):
         lines = [line for _, line in al.failures(self.trace)]
         self.assertEqual(lines[0], "missing probes: algalon.bigbang, algalon.dodge, algalon.handler,"
-                                   " algalon.hide, algalon.holes, algalon.phase, algalon.pull, algalon.slot,"
-                                   " algalon.soaker, algalon.spot, algalon.stardeath, algalon.starwindow,"
-                                   " algalon.swappair, algalon.tankrole")
+                                   " algalon.hazard, algalon.hide, algalon.holes, algalon.phase, algalon.pull,"
+                                   " algalon.slot, algalon.soaker, algalon.soakkit, algalon.spot, algalon.stardeath,"
+                                   " algalon.starwindow, algalon.swappair, algalon.tankrole")
         self.assertIn("Big Bang 1 @ 40.0s: 2 non-soakers hit unphased (Aegis, Trueshot)", lines)
         self.assertIn("evade 4.1 s after Big Bang 2 (Ascend at +0.3 s, pull ended reset)", lines)
 
@@ -771,6 +778,340 @@ class DeathCauses(unittest.TestCase):
                       [line for _, line in al.failures(self.trace)])
 
 
+HOLDER, PARTNER, PRIEST, PALADIN, CASTER, ROGUE, HUNTER, WARRIOR, MAGE = range(7001, 7010)
+WOLF = (2 << 32) | 7101
+E_BOSS, E_STAR_A, E_STAR_B, E_HOLE = (CREATURE | n for n in (201, 211, 212, 221))
+EDGE_END = 60000
+
+# (guid, name, class, role, human, offset from the tank slot when it stands still)
+EDGE_ROSTER = (
+    (HOLDER, "Bulwark", 2, "tank", 0, None),
+    (PARTNER, "Dragon", 2, "tank", 1, (4, 4)),
+    (PRIEST, "Prayer", 5, "heal", 0, (-25, 0)),
+    (PALADIN, "Holylight", 2, "heal", 0, (-25, 0)),
+    (CASTER, "Druidica", 11, "ranged", 0, (-25, 40)),
+    (ROGUE, "Assasin", 4, "melee", 0, (-22, 0)),
+    (HUNTER, "Trueshot", 3, "ranged", 0, (-20, 30)),
+    (WARRIOR, "Mighty", 1, "melee", 0, (0, 30)),
+    (MAGE, "Smartface", 8, "ranged", 0, (-70, 0)),
+)
+HOLE_SPOT = (-25, 0)
+STAR_A_SPOT, STAR_B_SPOT = (30, -30), (5, 10)
+
+EDGE_SPELLS = {62124: "Hand of Reckoning", 2649: "Growl", 694: "Mocking Blow", 31789: "Righteous Defense",
+               33206: "Pain Suppression", 498: "Divine Protection", 6940: "Hand of Sacrifice", 53601: "Sacred Shield",
+               48066: "Power Word: Shield", 20267: "Judgement of Light", 45438: "Ice Block", 48461: "Wrath",
+               53190: "Starfall", 22482: "Blade Flurry", 31803: "Holy Vengeance", 64584: "Big Bang"}
+
+
+def holder_offset(when: int) -> tuple[float, float]:
+    """20 yd out on the pickup spot, a 5 s walk onto the tank slot, then off it for 11 s from 19 s."""
+    if when < 8000:
+        return 0, 20
+    if when < 13000:
+        return 0, 20 - 4 * (when - 8000) / 1000
+    return (0, 10) if 19000 <= when < 30000 else (0, 0)
+
+
+def edge_boss_offset(when: int) -> tuple[tuple[float, float], int]:
+    """Where he stands and whether he moves: dragged 22 yd from 8 s to 13 s, then held."""
+    if when < 8000:
+        return (0, 30), 0
+    if when < 13000:
+        return (0, 30 - 4.4 * (when - 8000) / 1000), 1
+    return (0, 8), 0
+
+
+# Nobody in the intro, the holder, a second on the warrior's Mocking Blow, the holder again until he dies
+# after Big Bang, then the human partner.
+EDGE_TARGETS = ((8000, 0), (20000, HOLDER), (21000, WARRIOR), (39500, HOLDER))
+
+
+def star_a_hp(when: int) -> float:
+    """Drain only until the team focuses it at 12 s, then killed by 20 s."""
+    return 100 - (when - 10000) / 1000 if when < 12000 else 98 - 96 * (when - 12000) / 7500
+
+
+def star_b_hp(when: int) -> float:
+    """Drain only, then 5 %/s of splash on top from 14 s to 18 s while unfocused, then focused at 21 s."""
+    if when <= 14000:
+        return 100 - (when - 10000) / 1000
+    if when <= 18000:
+        return 96 - 6 * (when - 14000) / 1000
+    if when <= 21000:
+        return 72 - (when - 18000) / 1000
+    return 69 - 68 * (when - 21000) / 3500
+
+
+def edge_row(guid: int, offset, hp: float, target: int = 0, moving: int = 0) -> list:
+    x, y = spot(*offset)
+    return [guid, x, y, 417.3, 0.0, hp, 80.0, target, moving, 0, 0, 0, 0, 0.0]
+
+
+def edge_snap(when: int) -> dict:
+    units = []
+    for guid, _, _, _, _, offset in EDGE_ROSTER:
+        if guid == HOLDER:
+            hp = 100.0 if when < 38500 else 25.0 if when < 39200 else 0.0
+            units.append(edge_row(guid, holder_offset(when), hp))
+        else:
+            units.append(edge_row(guid, offset, 100.0, E_STAR_A if guid == CASTER and 12000 <= when < 20000 else 0))
+    units.append(edge_row(WOLF, (0, 9), 100.0))
+    offset, moving = edge_boss_offset(when)
+    victim = next((victim for until, victim in EDGE_TARGETS if when < until), PARTNER)
+    units.append(edge_row(E_BOSS, offset, 90.0, victim, moving))
+    if 10000 <= when <= 19500:
+        units.append(edge_row(E_STAR_A, STAR_A_SPOT, star_a_hp(when)))
+    if 10000 <= when <= 24500:
+        units.append(edge_row(E_STAR_B, STAR_B_SPOT, star_b_hp(when)))
+    if when >= 22000:
+        units.append(edge_row(E_HOLE, HOLE_SPOT, 100.0))
+    return {"t": when, "e": "snap", "u": units, "hz": []}
+
+
+def veto(when: int, guid: int, multiplier: str, action: str) -> dict:
+    return {"t": when, "e": "veto", "g": guid, "m": multiplier, "a": action}
+
+
+def edge_pull() -> list[dict]:
+    """A pull on the edge hold: the pickup tank drags him onto the tank slot, wanders off it after a
+    Mocking Blow pickup, soaks Big Bang with nothing up and dies to his next swings; two stars, one
+    chewed by splash; a mage in Ice Block far from the only hole."""
+    roster = [{"g": guid, "n": name, "c": klass, "r": role, "h": human}
+              for guid, name, klass, role, human, _ in EDGE_ROSTER]
+    records = [
+        {"e": "hdr", "v": 13, "ts": 1789500000000, "map": 603, "inst": 4, "diff": 0,
+         "boss": "algalon-the-observer", "roster": roster},
+        {"t": 0, "e": "pull", "boss": "algalon-the-observer", "src": "engage"},
+        {"t": 1, "e": "unit", "g": E_BOSS, "en": al.NPC_ALGALON, "n": "Algalon the Observer", "b": 1},
+        {"t": 1, "e": "unit", "g": E_STAR_A, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"},
+        {"t": 1, "e": "unit", "g": E_STAR_B, "en": al.NPC_COLLAPSING_STAR, "n": "Collapsing Star"},
+        {"t": 1, "e": "unit", "g": E_HOLE, "en": al.NPC_BLACK_HOLE, "n": "Black Hole"},
+        {"t": 1, "e": "unit", "g": WOLF, "en": 3825, "n": "Wolf", "own": HUNTER},
+        *({"t": 1, "e": "spell", "sp": spell, "n": name} for spell, name in EDGE_SPELLS.items()),
+
+        note(0, PRIEST, "algalon.phase", 1), note(8000, PRIEST, "algalon.phase", 2),
+        note(8000, PRIEST, "algalon.pull", f"inreach=1 victim={HOLDER}"),
+        note(0, HOLDER, "algalon.swappair", 1), note(0, PARTNER, "algalon.swappair", 1),
+        note(0, HOLDER, "algalon.spot", "pickup"), note(8000, HOLDER, "algalon.spot", "tank"),
+        note(8000, CASTER, "algalon.spot", "slot"), note(20000, CASTER, "algalon.spot", "nearhole"),
+        note(30000, CASTER, "algalon.spot", "slot"),
+        note(8000, CASTER, "algalon.starteam", 1), note(8000, PRIEST, "algalon.urgent", 0),
+        note(8000, PRIEST, "algalon.focusstar", 0), note(12000, PRIEST, "algalon.focusstar", E_STAR_A),
+        note(20000, PRIEST, "algalon.focusstar", 0), note(21000, PRIEST, "algalon.focusstar", E_STAR_B),
+        note(25000, PRIEST, "algalon.focusstar", 0),
+        # Druidica tracks the stars until Big Bang, Prayer after; Druidica's last row is never superseded.
+        note(8000, CASTER, "algalon.starwindow", "none"), note(12000, CASTER, "algalon.starwindow", "open"),
+        note(20000, CASTER, "algalon.starwindow", "gap"), note(21000, CASTER, "algalon.starwindow", "deadline"),
+        note(30000, CASTER, "algalon.starwindow", "bigbang"), note(34000, PRIEST, "algalon.starwindow", "bigbang"),
+        note(38000, PRIEST, "algalon.starwindow", "gap"),
+        note(20000, CASTER, "algalon.stardeath", "killed 42.4"), note(25000, CASTER, "algalon.stardeath", "killed 5.0"),
+        note(30000, PRIEST, "algalon.bigbang", 1), note(38500, PRIEST, "algalon.bigbang", 0),
+        note(30000, PRIEST, "algalon.soaker", HOLDER), note(38500, PRIEST, "algalon.soaker", 0),
+        note(30000, HOLDER, "algalon.soakkit", "def=none forbearance=1"),
+        note(25000, HOLDER, "algalon.handover", "nodef"),
+
+        # Taunts: the pickup, a pet, one while already his, the warrior's Mocking Blow, a Righteous Defense
+        # that misses with its own triggered echo, the holder's taunt back, and the partner after the death.
+        cast(7900, HOLDER, 62124, E_BOSS), cast(15000, WOLF, 2649, E_BOSS), cast(18000, HOLDER, 62124, E_BOSS),
+        cast(20000, WARRIOR, 694, E_BOSS), cast(20200, PARTNER, 31789, WARRIOR),
+        {**cast(20200, PARTNER, 31789, E_BOSS), "tr": 1},
+        cast(20500, HOLDER, 62124, E_BOSS), cast(39300, PARTNER, 62124, E_BOSS),
+
+        # Reserved buttons spent long before Big Bang, by a priest, the holder and a holy paladin.
+        cast(16000, PRIEST, 33206, CASTER), cast(17000, HOLDER, 498), cast(18000, PALADIN, 6940, ROGUE),
+
+        # On stars: the team on its focus, the team's Starfall on the other, and two splashers off the team.
+        cast(15000, CASTER, 48461, E_STAR_A),
+        {**cast(15000, CASTER, 53190, E_STAR_B), "tr": 1}, {**cast(16000, CASTER, 53190, E_STAR_B), "tr": 1},
+        {**cast(16500, ROGUE, 22482, E_STAR_B), "tr": 1}, {**cast(17000, PARTNER, 31803, E_STAR_B), "tr": 1},
+        dmg(20000, E_STAR_A, ROGUE, al.SPELL_BLACK_HOLE_EXPLOSION[0], 1000),
+        dmg(25000, E_STAR_B, ROGUE, al.SPELL_BLACK_HOLE_EXPLOSION[0], 1000),
+
+        *(veto(when, ROGUE, "algalon splash hold", "blade flurry") for when in (16500, 17500)),
+        veto(21000, WARRIOR, "algalon taunt guard", "mocking blow"),
+        *(veto(when, ROGUE, "algalon walk guard", "reach melee") for when in (23000, 24000, 25000)),
+        veto(23500, WARRIOR, "algalon walk guard", "set behind"),
+        veto(26000, HOLDER, "algalon cooldown reserve", "divine protection"),
+        veto(29500, MAGE, "algalon ice block hold", "ice block"),
+
+        aura(29000, MAGE, al.SPELL_ICE_BLOCK), aura(31000, MAGE, al.SPELL_ICE_BLOCK, removed=True),
+
+        # Big Bang: shielded during the cast, healers phased until a second after the hit, which takes the
+        # holder to a quarter; a heal 0.6 s later, then two swings kill him 1.2 s after the hit.
+        cast(30000, E_BOSS, al.SPELL_BIG_BANG[1], cast_ms=8000),
+        cast(31000, PALADIN, 53601, HOLDER), cast(31500, PRIEST, 48066, HOLDER),
+        {"t": 31500, "e": "act", "g": PRIEST, "a": "algalon soaker prep action", "rel": 0, "vd": "OK"},
+        *phased(PRIEST, al.SPELL_BLACK_HOLE_PHASE, 33000, 39000),
+        *phased(PALADIN, al.SPELL_BLACK_HOLE_PHASE, 33000, 39000),
+        {**dmg(38000, E_BOSS, HOLDER, al.SPELL_BIG_BANG[1], 30000), "ab": 1500},
+        {"t": 38600, "e": "heal", "s": PALADIN, "d": HOLDER, "sp": 20267, "a": 937, "oh": 0, "hp": 27.0},
+        dmg(38800, E_BOSS, HOLDER, 0, 12000, hp=25.0),
+        {"t": 39100, "e": "act", "g": PALADIN, "a": "algalon soaker rescue action", "rel": 0, "vd": "FAILED"},
+        dmg(39200, E_BOSS, HOLDER, 0, 9000, hp=20.0, over=3000),
+        death(39200, HOLDER, E_BOSS, 9000, (0, 0)),
+        {"t": EDGE_END, "e": "end", "out": "wipe"},
+    ]
+    records += [edge_snap(when) for when in range(0, EDGE_END, 500)]
+    return records
+
+
+class EdgeHold(unittest.TestCase):
+    """The views the edge hold added, on a pull that ran it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.folder = tempfile.TemporaryDirectory()
+        cls.trace = load(cls.folder.name, edge_pull())
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.folder.cleanup()
+
+    def test_each_pickup_times_the_drag_and_names_who_stood_in_his_reach(self):
+        self.assertTrue(al.edge_hold(self.trace))
+        first, second, third = al.hold_pickups(self.trace)
+        self.assertEqual((first["start"], first["stop"], first["holder"], first["before"], first["arrival"]),
+                         (8000, 20000, HOLDER, 0, 12500))
+        self.assertEqual(first["rest"], spot(0, 8))
+        self.assertEqual(first["near"], {WARRIOR: (0.0, 8000)})
+        self.assertEqual((second["start"], second["before"], second["arrival"], second["near"]),
+                         (21000, WARRIOR, 30000, {}))
+        self.assertAlmostEqual(second["due_gap"], 10.0)
+        self.assertEqual((third["holder"], third["arrival"]), (PARTNER, None))
+
+    def test_bot_hold_counts_only_bot_holders_and_their_time_on_the_slot(self):
+        self.assertEqual(al.bot_hold(self.trace), (30500, 16000))
+        rows = {row["t"]: row for row in al.hold_timeline(self.trace)}
+        self.assertEqual((rows[8000]["victim"], rows[8000]["to_slot"]), (HOLDER, 20.0))
+        self.assertEqual((rows[23000]["to_slot"], rows[43000]["victim"]), (10.0, PARTNER))
+        self.assertAlmostEqual(rows[13000]["to_hold"], al.dist2(spot(0, 8), al.HOLD_SPOT))
+        self.assertIn("a bot of the pair held him 30.5 s, 52% of it on T", render(self.trace, "hold"))
+
+    def test_a_bot_holder_off_the_slot_after_a_pickup_is_a_failure(self):
+        self.assertEqual(al.hold_faults(self.trace),
+                         [(21000, "Bulwark not on the tank slot 8 s after picking him up @ 21.0s, 10.0 yd off")])
+
+    def test_taunts_read_whether_his_victim_became_the_caster(self):
+        rows = [(row["t"], row["caster"], row["name"], row["before"], row["outcome"])
+                for row in al.taunt_casts(self.trace)]
+        self.assertEqual(rows, [
+            (7900, HOLDER, "Hand of Reckoning", 0, "took"),
+            (15000, WOLF, "Growl", HOLDER, "missed"),
+            (18000, HOLDER, "Hand of Reckoning", HOLDER, "already"),
+            (20000, WARRIOR, "Mocking Blow", HOLDER, "took"),
+            (20200, PARTNER, "Righteous Defense", WARRIOR, "missed"),
+            (20500, HOLDER, "Hand of Reckoning", WARRIOR, "took"),
+            (39300, PARTNER, "Hand of Reckoning", HOLDER, "took")])
+        self.assertEqual(sorted(line for _, line in al.taunt_faults(self.trace)), [
+            "non-tank taunt at Algalon: Mighty (melee) Mocking Blow 1x from 20.0s",
+            "non-tank taunt at Algalon: Wolf (Trueshot's pet) Growl 1x from 15.0s",
+            "pickup taunt missed @ 20.2s: Dragon Righteous Defense while he was on Mighty"])
+        self.assertIn("algalon taunt guard vetoes: Mighty mocking blow 1", render(self.trace, "taunts"))
+
+    def test_soak_reads_the_hit_the_healers_and_the_kit(self):
+        (row,) = al.soak_rows(self.trace)
+        self.assertEqual((row["impact"], row["hp"], row["hit"]["ab"]), (38000, (100.0, 25.0), 1500))
+        self.assertEqual(sum(rec["a"] for rec in row["later"]), 21000)
+        self.assertEqual((row["heal"]["s"], row["heal"]["t"]), (PALADIN, 38600))
+        self.assertEqual(row["strip"], {PRIEST: 1000, PALADIN: 1000})
+        self.assertEqual(row["prep"], [(31000, PALADIN, 53601), (31500, PRIEST, 48066)])
+        self.assertEqual((row["kit"], al.kit_label(row)), ({"def": "none", "forbearance": "1"}, "def=none forbearance"))
+        self.assertEqual([rec["txt"] for rec in row["handover"]], ["nodef"])
+        self.assertEqual(row["acts"], {("algalon soaker prep action", PRIEST, "OK"): 1,
+                                       ("algalon soaker rescue action", PALADIN, "FAILED"): 1})
+        self.assertEqual(row["died"], 39200)
+        self.assertEqual([(press["t"], press["name"]) for press in row["earlier"]],
+                         [(16000, "Pain Suppression"), (17000, "Divine Protection"), (18000, "Hand of Sacrifice")])
+        self.assertEqual(row["pressed"], [])
+        text = render(self.trace, "soak")
+        self.assertIn("first heal on him: Holylight Judgement of Light 20267 937 at +0.60 s", text)
+        self.assertIn("algalon cooldown reserve vetoes: Bulwark divine protection 1", text)
+
+    def test_soak_failures_name_the_death_and_the_buttons_a_tank_or_priest_spent(self):
+        self.assertEqual(al.soak_faults(self.trace), [
+            (39200, "Big Bang 1 @ 30.0s: soaker Bulwark died 1.2 s after the hit (def=none forbearance,"
+                    " first heal +0.6 s)"),
+            (16000, "Prayer spent Pain Suppression on Druidica @ 16.0s, outside a Big Bang soak"),
+            (17000, "Bulwark spent Divine Protection @ 17.0s, outside a Big Bang soak")])
+
+    def test_big_bang_measures_every_unphased_member_to_the_nearest_hole(self):
+        (row,) = al.big_bang_rows(self.trace)
+        self.assertAlmostEqual(row["hole_gaps"][CASTER], 40.0)
+        self.assertEqual(row["hole_gaps"][PRIEST], 0.0)
+        self.assertEqual([(round(gap, 1), guid) for gap, guid in row["unreachable"]], [(45.0, MAGE)])
+        self.assertEqual(row["iceblock"], [(29000, 31000, MAGE)])
+        shares = [(guid, round(gap, 1), round(share, 3)) for guid, gap, share in al.nearhole_shares(self.trace, row)]
+        self.assertEqual(shares, [(MAGE, 45.0, 0.0), (CASTER, 40.0, 0.667), (WARRIOR, 39.1, 0.0)])
+        self.assertEqual(al.bang_faults(self.trace),
+                         [(30000, "Big Bang 1 @ 30.0s: nearest hole beyond 43 yd for Smartface 45.0")])
+        self.assertIn("Ice Block during the cast: Smartface 0:29.000 .. 0:31.000", render(self.trace, "bigbang"))
+
+    def test_star_window_rows_from_every_tracker_read_as_one_timeline(self):
+        self.assertEqual(al.span_totals({0: al.window_spans(self.trace)})["bigbang"], 8000)
+        self.assertEqual(al.span_totals(probes.holder_spans(self.trace, "algalon.starwindow", EDGE_END))["bigbang"],
+                         34000)
+        self.assertIn("bigbang 8.0 s", render(self.trace, "stars"))
+
+    def test_window_opens_measure_the_team_against_the_focus_star(self):
+        opens = [(row["t"], row["kind"], row["star"], row["members"], round(row["middle"], 2))
+                 for row in al.window_opens(self.trace)]
+        self.assertEqual(opens, [(12000, "open", E_STAR_A, 1, 89.02), (21000, "deadline", E_STAR_B, 1, 42.43)])
+        self.assertEqual(al.window_faults(self.trace),
+                         [(21000, "deadline window @ 21.0s: focus star 42.4 yd from the star team's mean position")])
+
+    def test_stars_read_against_their_drain_and_the_pair(self):
+        first, second = al.star_rows(self.trace)
+        self.assertEqual((first["class"], first["drain"], first["pair"]), ("killed", (2.0, 90.5), []))
+        self.assertEqual((second["class"], second["drain"]), ("killed", (1.0, 85.5)))
+        self.assertEqual([(round(gap, 2), guid) for gap, guid in second["pair"]], [(5.0, HOLDER), (6.08, PARTNER)])
+        lines = [line for _, line in al.star_faults(self.trace)]
+        self.assertIn("star died 5.0 yd from Bulwark of the swap pair @ 25.0s", lines)
+        self.assertIn("star died 6.1 yd from Dragon of the swap pair @ 25.0s", lines)
+
+    def test_collateral_is_health_lost_beyond_the_drain_while_unfocused(self):
+        first, second = al.star_excess(self.trace)
+        self.assertEqual((first["star"], second["star"]), (E_STAR_A, E_STAR_B))
+        self.assertAlmostEqual(first["excess"], 0.0)
+        self.assertAlmostEqual(second["excess"], 20.0)
+        self.assertEqual((round(second["worst"], 6), second["worst_from"], second["worst_to"], second["crossed"]),
+                         (20.0, 14000, 18000, 16000))
+        self.assertEqual(al.collateral_faults(self.trace), [
+            (16000, "star chewed: star 2 lost 20.0% beyond its drain while not the focus star, 20.0% of it in 10 s"
+                    " from 14.0s")])
+
+    def test_casts_on_stars_split_by_team_and_focus(self):
+        groups = al.star_casts(self.trace)
+        self.assertEqual(dict(groups), {
+            "star team on the focus star": {(CASTER, "Wrath"): 1},
+            "star team on another star": {(CASTER, "Starfall"): 2},
+            "off the star team": {(ROGUE, "Blade Flurry"): 1, (PARTNER, "Holy Vengeance"): 1}})
+        text = render(self.trace, "collateral")
+        self.assertIn("Dragon (tank)*", text)
+        self.assertIn("algalon splash hold vetoes: Assasin blade flurry 2", text)
+
+    def test_phasing_counts_walk_guard_vetoes_per_bot(self):
+        text = render(self.trace, "phasing")
+        self.assertRegex(text, r"Assasin \(melee\) +3  reach melee 3")
+        self.assertRegex(text, r"Mighty \(melee\) +1  set behind 1")
+
+    def test_formation_and_the_verdict_on_a_pull_that_ran_the_edge_hold(self):
+        self.assertNotIn("predates the edge hold", render(self.trace, "formation"))
+        lines = [line for _, line in al.failures(self.trace)]
+        for line in ("Bulwark not on the tank slot 8 s after picking him up @ 21.0s, 10.0 yd off",
+                     "pickup taunt missed @ 20.2s: Dragon Righteous Defense while he was on Mighty",
+                     "deadline window @ 21.0s: focus star 42.4 yd from the star team's mean position",
+                     "Big Bang 1 @ 30.0s: nearest hole beyond 43 yd for Smartface 45.0"):
+            self.assertIn(line, lines)
+
+    def test_every_section_renders(self):
+        text = render(self.trace)
+        self.assertIn("EDGE HOLD", text)
+        self.assertIn("swap pair, MISSED", text)
+        self.assertIn("soaker DIED +1.2 s after the hit", text)
+        self.assertNotIn("absent from this trace: algalon.spot=pickup", text)
+
+
 SLOT_SOURCE = """
 const Position ULDUAR_ALGALON_ROOM_CENTER = Position(1632.668f, -302.7656f, 417.3211f);
 const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS = {{
@@ -787,8 +1128,42 @@ class Contracts(unittest.TestCase):
 
     def test_stardeath_reads_how_and_the_nearest_yards(self):
         self.assertEqual(al.parse_stardeath("killed 12.3"), ("killed", 12.3))
+        self.assertEqual(al.parse_stardeath("chewed 1.6"), ("chewed", 1.6))
+        self.assertEqual(al.parse_stardeath("drained -"), ("drained", None))
         self.assertEqual(al.parse_stardeath("collapsed -"), ("collapsed", None))
         self.assertEqual(al.parse_stardeath(None), ("", None))
+
+    def test_soakkit_keeps_a_defensive_named_in_two_words(self):
+        self.assertEqual(al.parse_soakkit("def=divine protection forbearance=0"),
+                         {"def": "divine protection", "forbearance": "0"})
+        self.assertEqual(al.parse_soakkit("def=none forbearance=1"), {"def": "none", "forbearance": "1"})
+        self.assertEqual(al.parse_soakkit(None), {})
+
+    def test_ring_notes_read_both_comment_shapes(self):
+        source = """
+const std::array<Position, ULDUAR_ALGALON_TOTAL_SLOTS> ULDUAR_ALGALON_RING_SLOTS = {{
+    Position(1617.869f, -333.468f, 417.321f),  // healer, 19 yd from the hold at +85 deg
+    Position(1655.356f, -328.200f, 417.321f),  // ranged, 31 yd from the hold at -40 deg
+    Position(1651.668f, -302.766f, 417.321f),  // healer, 19 yd at 0 deg
+    Position(1613.668f, -302.766f, 417.321f),
+}};
+"""
+        self.assertEqual(al.parse_ring_notes(source), [("healer", 19.0, 85.0), ("ranged", 31.0, -40.0),
+                                                       ("healer", 19.0, 0.0), None])
+        self.assertEqual(len(al.parse_ring_slots(source)), 4)
+        self.assertEqual(al.parse_ring_notes(source.replace("RING_SLOTS", "OTHER_SLOTS")), [])
+
+    def test_a_triggered_cast_is_not_a_taunt(self):
+        trace = types.SimpleNamespace(spells={67485: "Hand of Reckoning", 2649: "Growl", 355: "Taunt"})
+        self.assertEqual(al.taunt_spell(trace, {"sp": 2649}), "Growl")
+        self.assertEqual(al.taunt_spell(trace, {"sp": 67485, "tr": 1}), "")
+        self.assertEqual(al.taunt_spell(trace, {"sp": 694}), "Mocking Blow")
+        self.assertEqual(al.taunt_spell(trace, {"sp": 48461}), "")
+
+    def test_the_worst_window_is_the_tightest_of_equal_rises(self):
+        stamps = [0, 1000, 2000, 3000, 12500]
+        self.assertEqual(al.worst_window(stamps, [0.0, 0.0, 5.0, 5.0, 9.0]), (5.0, 1000, 2000))
+        self.assertEqual(al.worst_window([0], [0.0]), (0.0, None, None))
 
     def test_a_wave_reads_the_dodge_it_set_not_the_idle_after_it(self):
         wave = {"seen": 1000, "impact": 6000}

@@ -39,8 +39,12 @@ bool AlgalonBigBangSoakTrigger::IsActive()
 
 bool AlgalonBigBangExternalTrigger::IsActive()
 {
-    if (bot->getClass() != CLASS_PRIEST || IsAlgalonPhased(bot) || !AlgalonBigBangLatched(bot))
+    uint8 const playerClass = bot->getClass();
+    if ((playerClass != CLASS_PRIEST && playerClass != CLASS_PALADIN) || IsAlgalonPhased(bot) ||
+        !AlgalonBigBangLatched(bot))
+    {
         return false;
+    }
 
     if (AlgalonBigBangRemainingMs(botAI) < ULDUAR_ALGALON_EXTERNAL_MIN_REMAINING_MS)
         return false;
@@ -49,8 +53,37 @@ bool AlgalonBigBangExternalTrigger::IsActive()
     if (!soaker || soaker == bot || GetAlgalonBigBangBackup(botAI) == bot)
         return false;
 
-    return (!soaker->HasAura(SPELL_ALGALON_PAIN_SUPPRESSION) && botAI->CanCastSpell("pain suppression", soaker)) ||
-           (!soaker->HasAura(SPELL_ALGALON_GUARDIAN_SPIRIT) && botAI->CanCastSpell("guardian spirit", soaker));
+    return GetAlgalonSoakerExternal(botAI, soaker) != nullptr;
+}
+
+// One layer per healer while it still has a global cooldown to spare before its walk to the hole: the
+// healers are phased for a second after the hit, and whatever is already ticking on him is all he has.
+bool AlgalonSoakerPrepTrigger::IsActive()
+{
+    if (!AlgalonBigBangLatched(bot) || IsAlgalonPhased(bot) || AlgalonHideSlackMs(bot) <= ULDUAR_ALGALON_PREP_GCD_MS ||
+        !PlayerbotAI::IsHeal(bot))
+    {
+        return false;
+    }
+
+    Player* soaker = GetAlgalonBigBangSoaker(botAI);
+    if (!soaker || soaker == bot || IsAlgalonPhased(soaker))
+        return false;
+
+    return GetAlgalonSoakerPrep(botAI, soaker) != nullptr;
+}
+
+// Once out of the field, a healer's first cast goes on the soaker while he is low.
+bool AlgalonSoakerRescueTrigger::IsActive()
+{
+    Player* soaker = GetAlgalonRescueTarget(botAI);
+    if (!soaker || soaker == bot || IsAlgalonPhased(bot) || AlgalonHoleNear(bot, ULDUAR_ALGALON_SHELTER_RADIUS) ||
+        !PlayerbotAI::IsHeal(bot))
+    {
+        return false;
+    }
+
+    return GetAlgalonRescueSpell(botAI, soaker) != nullptr;
 }
 
 bool AlgalonBigBangHideTrigger::IsActive() { return GetAlgalonHideRole(bot) == AlgalonHideRole::Run; }
@@ -60,12 +93,18 @@ bool AlgalonCosmicSmashTrigger::IsActive()
     if (!AlgalonEngaged(botAI))
         return false;
 
-    bool const threatened = AlgalonCosmicSmashThreatens(bot);
-    // The dodge writes its branch change-only, so without a reset two waves dodged the same way read as one.
-    if (!threatened && RaidObs::Active())
-        RaidObs::NoteDerived(bot, "algalon.dodge", "idle");
+    bool const smash = AlgalonCosmicSmashThreatens(bot);
+    bool const star = !smash && AlgalonDyingStarThreatens(bot);
+    if (RaidObs::Active())
+    {
+        RaidObs::NoteDerived(bot, "algalon.hazard", smash ? "smash" : (star ? "star" : "none"));
+        // The dodge writes its branch change-only, so without a reset two waves dodged the same way read as
+        // one.
+        if (!smash && !star)
+            RaidObs::NoteDerived(bot, "algalon.dodge", "idle");
+    }
 
-    return threatened;
+    return smash || star;
 }
 
 // A bot still inside the field when its 10s phase ends is phased again within a second, and while

@@ -43,18 +43,60 @@ void ReleaseStalledWalk(PlayerbotAI* botAI, Player* bot)
         last.clear();
 }
 
-// Nearest ground clear of every marker and hole, near the bot's own slot when it has one. With
-// `pathClear` the walk there must not clip another hole's field either: that phases the bot into the
-// void Dark Matter, which is still better than a meteor or staying in the field, so callers fall back.
-Position FindAlgalonClearSpot(Player* bot, float markerClearance, bool pathClear)
+// How close the walk to a spot may pass another hole: with margin, then just outside its 6 yd field, then
+// anywhere. Clipping a field phases the bot into the void Dark Matter, which is still better than a meteor
+// or staying in the field, so callers fall back down the list.
+enum class AlgalonPathRule
+{
+    Clear,
+    Field,
+    Any,
+};
+
+// Nearest ground clear of every marker, hole and dying star, near the bot's own slot when it has one.
+Position FindAlgalonClearSpot(Player* bot, float markerClearance, AlgalonPathRule rule)
 {
     Position anchor;
     Position const* prefer = GetAlgalonSlotAnchor(bot, anchor) ? &anchor : nullptr;
-    auto const reachable = [bot, pathClear](float x, float y)
-    { return AlgalonSpotInRoom(x, y) && (!pathClear || !AlgalonPathCrossesHole(bot, x, y)); };
+    auto const reachable = [bot, rule](float x, float y)
+    {
+        if (!AlgalonSpotInRoom(x, y))
+            return false;
+
+        switch (rule)
+        {
+            case AlgalonPathRule::Clear:
+                return !AlgalonPathCrossesHole(bot, x, y);
+            case AlgalonPathRule::Field:
+                return !AlgalonPathCrossesHole(bot, x, y, ULDUAR_ALGALON_FIELD_PATH_CLEARANCE);
+            default:
+                return true;
+        }
+    };
     return FindNearestPositionClearOfHazards(bot, GetAlgalonDodgeHazards(bot, markerClearance),
                                              ULDUAR_ALGALON_DODGE_SEARCH_RADIUS, 2.0f, static_cast<float>(M_PI) / 8.0f,
                                              prefer, reachable);
+}
+
+// The class's second taunt, for when the first missed or is cooling down while he is off a swap tank.
+// Righteous Defense goes on the friend he is hitting; the shout and the roar taunt everything near the tank.
+bool CastBackupTaunt(PlayerbotAI* botAI, Player* bot, Unit* boss)
+{
+    Unit* victim = boss->GetVictim();
+    switch (bot->getClass())
+    {
+        case CLASS_PALADIN:
+            return victim && victim != bot && victim->IsPlayer() &&
+                   botAI->CanCastSpell("righteous defense", victim) && botAI->CastSpell("righteous defense", victim);
+        case CLASS_WARRIOR:
+            return bot->IsWithinDistInMap(boss, 10.0f) && botAI->CanCastSpell("challenging shout", bot) &&
+                   botAI->CastSpell("challenging shout", bot);
+        case CLASS_DRUID:
+            return bot->IsWithinDistInMap(boss, 10.0f) && botAI->CanCastSpell("challenging roar", bot) &&
+                   botAI->CastSpell("challenging roar", bot);
+        default:
+            return false;
+    }
 }
 }  // namespace
 
@@ -76,16 +118,22 @@ bool AlgalonBigBangSoakAction::Execute(Event /*event*/)
 bool AlgalonBigBangExternalAction::Execute(Event /*event*/)
 {
     Player* soaker = GetAlgalonBigBangSoaker(botAI);
-    if (!soaker)
-        return false;
+    char const* external = GetAlgalonSoakerExternal(botAI, soaker);
+    return external && botAI->CastSpell(external, soaker);
+}
 
-    if (!soaker->HasAura(SPELL_ALGALON_PAIN_SUPPRESSION) && botAI->CanCastSpell("pain suppression", soaker))
-        return botAI->CastSpell("pain suppression", soaker);
+bool AlgalonSoakerPrepAction::Execute(Event /*event*/)
+{
+    Player* soaker = GetAlgalonBigBangSoaker(botAI);
+    char const* layer = GetAlgalonSoakerPrep(botAI, soaker);
+    return layer && botAI->CastSpell(layer, soaker);
+}
 
-    if (!soaker->HasAura(SPELL_ALGALON_GUARDIAN_SPIRIT) && botAI->CanCastSpell("guardian spirit", soaker))
-        return botAI->CastSpell("guardian spirit", soaker);
-
-    return false;
+bool AlgalonSoakerRescueAction::Execute(Event /*event*/)
+{
+    Player* soaker = GetAlgalonRescueTarget(botAI);
+    char const* heal = GetAlgalonRescueSpell(botAI, soaker);
+    return heal && botAI->CastSpell(heal, soaker);
 }
 
 bool AlgalonBigBangHideAction::Execute(Event /*event*/)
@@ -97,6 +145,10 @@ bool AlgalonBigBangHideAction::Execute(Event /*event*/)
     // Anywhere inside the field phases the bot on its next pulse.
     if (bot->GetExactDist2d(shelter) <= ULDUAR_ALGALON_SHELTER_RADIUS - 1.5f)
         return false;
+
+    // Big Bang goes through it, and the block holds the mage in place until the hit.
+    if (bot->HasAura(SPELL_ALGALON_ICE_BLOCK))
+        bot->RemoveAurasDueToSpell(SPELL_ALGALON_ICE_BLOCK);
 
     BreakCastPinningTheFeet(botAI, bot);
     ReleaseStalledWalk(botAI, bot);
@@ -116,17 +168,23 @@ bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 {
     // FleePosition clamps to AiPlayerbot.FleeDistance (5 yd), inside the doubled damage band.
     char const* branch = "clear";
-    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, true);
+    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_CLEARANCE, AlgalonPathRule::Clear);
     if (clear == Position())
     {
         branch = "min";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, true);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Clear);
+    }
+
+    if (clear == Position())
+    {
+        branch = "field";
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Field);
     }
 
     if (clear == Position())
     {
         branch = "cross";
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, false);
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_MIN_CLEARANCE, AlgalonPathRule::Any);
     }
 
     if (clear == Position())
@@ -146,9 +204,13 @@ bool AlgalonCosmicSmashAction::Execute(Event /*event*/)
 
 bool AlgalonLeaveBlackHoleAction::Execute(Event /*event*/)
 {
-    Position clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, true);
-    if (clear == Position())
-        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, false);
+    Position clear;
+    for (AlgalonPathRule rule : {AlgalonPathRule::Clear, AlgalonPathRule::Field, AlgalonPathRule::Any})
+    {
+        clear = FindAlgalonClearSpot(bot, ULDUAR_ALGALON_COSMIC_SMASH_TRIGGER_RADIUS, rule);
+        if (clear != Position())
+            break;
+    }
 
     if (clear == Position())
         return false;
@@ -183,7 +245,12 @@ bool AlgalonTakeBossAction::Execute(Event /*event*/)
     if (boss->GetVictim() != bot && CastClassTaunt(botAI, boss))
         return true;
 
-    // Taunt on cooldown or out of its 30 yd: walk in and hit him.
+    Unit* victim = boss->GetVictim();
+    Player* holder = victim ? victim->ToPlayer() : nullptr;
+    if (victim != bot && (!holder || !IsAlgalonSwapTank(holder)) && CastBackupTaunt(botAI, bot, boss))
+        return true;
+
+    // Taunts on cooldown or out of reach: walk in and hit him.
     if (AI_VALUE(Unit*, "current target") != boss)
         return Attack(boss);
 

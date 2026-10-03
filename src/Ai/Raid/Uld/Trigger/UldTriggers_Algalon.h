@@ -29,6 +29,24 @@ public:
     bool IsActive() override;
 };
 
+class AlgalonSoakerPrepTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon soaker prep";
+
+    AlgalonSoakerPrepTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
+class AlgalonSoakerRescueTrigger : public Trigger
+{
+public:
+    static constexpr char const* Name = "algalon soaker rescue";
+
+    AlgalonSoakerRescueTrigger(PlayerbotAI* ai) : Trigger(ai, Name) {}
+    bool IsActive() override;
+};
+
 class AlgalonBigBangHideTrigger : public Trigger
 {
 public:

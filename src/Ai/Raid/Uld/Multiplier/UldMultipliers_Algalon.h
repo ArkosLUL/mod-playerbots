@@ -25,12 +25,55 @@ private:
     std::unordered_map<Action*, bool> damagesCurrentTarget;
 };
 
-// Algalon: stars die one at a time on purpose, each death 16-21k to the whole raid, and splash that
-// clips a second one undoes the pacing.
-class AlgalonStarAoeMultiplier : public Multiplier
+// Algalon: the soak buttons are kept for Big Bang. Divine Protection, Shield Wall, Pain Suppression and
+// the rest cool down for two minutes or more against a 90.5 s cast, so one spent on the way is missing at
+// the hit, and the raid is phased for a second after it. A button that will be back in time stays free. The
+// soak, external and rescue actions cast directly and never meet this.
+class AlgalonCooldownReserveMultiplier : public Multiplier
 {
 public:
-    AlgalonStarAoeMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon star aoe") {}
+    AlgalonCooldownReserveMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon cooldown reserve") {}
+    float GetValue(Action* action) override;
+
+private:
+    struct Reserve
+    {
+        uint32 spellId = 0;
+        bool swapTanksOnly = false;
+        // A bubble or a self Lay on Hands puts Forbearance on the tank, which blocks Divine Protection.
+        bool alwaysForSwapTanks = false;
+    };
+
+    std::unordered_map<Action*, Reserve> reserves;
+};
+
+// Algalon: stars die one at a time on purpose, each death 16-21k to the whole raid. Splash that lands on
+// one kills it on its own clock, near whoever stands there, and can bring two down together. The threat
+// type misses most of it, so the spell and the name decide.
+class AlgalonSplashHoldMultiplier : public Multiplier
+{
+public:
+    AlgalonSplashHoldMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon splash hold") {}
+    float GetValue(Action* action) override;
+
+private:
+    enum class Splash : uint8
+    {
+        None,
+        // Self auras that hit whatever comes near for their whole duration.
+        Always,
+        Near,
+    };
+
+    std::unordered_map<Action*, Splash> splashes;
+};
+
+// Algalon: reach, set behind and the healers' reach know nothing of the black holes, and a hole beside him
+// is where melee stand. A bot that would stop at a field's edge or walk through one waits instead.
+class AlgalonWalkGuardMultiplier : public Multiplier
+{
+public:
+    AlgalonWalkGuardMultiplier(PlayerbotAI* ai) : Multiplier(ai, "algalon walk guard") {}
     float GetValue(Action* action) override;
 };
 

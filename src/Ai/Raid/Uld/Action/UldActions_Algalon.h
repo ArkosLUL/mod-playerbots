@@ -32,6 +32,24 @@ public:
     bool Execute(Event event) override;
 };
 
+class AlgalonSoakerPrepAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon soaker prep action";
+
+    AlgalonSoakerPrepAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
+class AlgalonSoakerRescueAction : public Action
+{
+public:
+    static constexpr char const* Name = "algalon soaker rescue action";
+
+    AlgalonSoakerRescueAction(PlayerbotAI* ai) : Action(ai, Name) {}
+    bool Execute(Event event) override;
+};
+
 class AlgalonBigBangHideAction : public MovementAction
 {
 public:
