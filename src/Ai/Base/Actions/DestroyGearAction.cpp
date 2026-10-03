@@ -35,23 +35,37 @@ bool DestroyGearAction::Execute(Event event)
     if (candidates.empty())
     {
         std::ostringstream out;
-        out << "No gear more than " << margin << " ilvl below equipped.";
+        out << "No gear more than " << margin << " ilvl below equipped and nothing openable.";
         botAI->TellMaster(out);
         return true;
     }
 
+    size_t openables = 0;
+    for (Candidate const& candidate : candidates)
+        if (candidate.openable)
+            ++openables;
+
+    size_t const gear = candidates.size() - openables;
+
     if (!confirm)
     {
         std::ostringstream head;
-        head << "Gear cleanup, more than " << margin << " ilvl below equipped: " << candidates.size() << " items";
+        head << "Bag cleanup: " << gear << " gear items more than " << margin << " ilvl below equipped, "
+             << openables << " openable items";
         botAI->TellMaster(head);
 
         for (size_t i = 0; i < candidates.size() && i < MAX_PREVIEW_LINES; ++i)
         {
-            ItemTemplate const* proto = candidates[i].item->GetTemplate();
+            Item* item = candidates[i].item;
+            ItemTemplate const* proto = item->GetTemplate();
             std::ostringstream line;
-            line << "  " << chat->FormatItem(proto) << " " << proto->ItemLevel << " (equipped "
-                 << candidates[i].baseline << ")";
+            line << "  " << chat->FormatItem(proto);
+
+            if (!candidates[i].openable)
+                line << " " << proto->ItemLevel << " (equipped " << candidates[i].baseline << ")";
+            else if (item->GetCount() > 1)
+                line << " x" << item->GetCount();
+
             botAI->TellMaster(line);
         }
 
@@ -72,7 +86,8 @@ bool DestroyGearAction::Execute(Event event)
         bot->DestroyItem(candidate.item->GetBagSlot(), candidate.item->GetSlot(), true);
 
     std::ostringstream out;
-    out << "Destroyed " << candidates.size() << " gear items more than " << margin << " ilvl below equipped.";
+    out << "Destroyed " << gear << " gear items more than " << margin << " ilvl below equipped and " << openables
+        << " openable items.";
     botAI->TellMaster(out);
     return true;
 }
@@ -167,25 +182,32 @@ std::vector<DestroyGearAction::Candidate> DestroyGearAction::Collect(uint32 marg
     for (Item* item : visitor.items)
     {
         ItemTemplate const* proto = item->GetTemplate();
-        if (proto->Class != ITEM_CLASS_WEAPON && proto->Class != ITEM_CLASS_ARMOR)
+
+        // Bots open these on pickup but leave declined loot inside, and the core only removes an
+        // emptied container, so an opened sack never leaves the bags on its own.
+        bool const openable = proto->HasFlag(ITEM_FLAG_HAS_LOOT);
+        if (!openable && proto->Class != ITEM_CLASS_WEAPON && proto->Class != ITEM_CLASS_ARMOR)
             continue;
 
         if (IsProtected(proto))
             continue;
 
         uint32 baseline = 0;
-        if (!SlotBaseline(proto, baseline))
-            continue;
+        if (!openable)
+        {
+            if (!SlotBaseline(proto, baseline))
+                continue;
 
-        if (baseline <= proto->ItemLevel || baseline - proto->ItemLevel <= margin)
-            continue;
+            if (baseline <= proto->ItemLevel || baseline - proto->ItemLevel <= margin)
+                continue;
+        }
 
         // Last, because it runs the full item-usage calculation - only worth paying for an item
         // that is otherwise already condemned.
         if (IsNeededForQuest(item))
             continue;
 
-        candidates.push_back({item, baseline});
+        candidates.push_back({item, baseline, openable});
     }
 
     return candidates;

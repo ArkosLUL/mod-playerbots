@@ -21,13 +21,19 @@ per bot and no way for a stale preview to destroy something else. Whisper, party
 custom channels all work without extra code — every entry point converges on
 `PlayerbotAI::HandleCommand`, and the party/raid hook already fans out to the whole group.
 
-Per bagged item: keep unless it is `ITEM_CLASS_WEAPON` or `ITEM_CLASS_ARMOR` → apply the protection
-gate → resolve slots with `sRandomItemMgr->GetViableSlots(proto->InventoryType)`, skipping anything
-that returns `nullptr` (bags, quivers, ammo, non-equippables) → take the **lowest** `ItemLevel` among
+Per bagged item: keep unless it is `ITEM_CLASS_WEAPON`, `ITEM_CLASS_ARMOR` or openable → apply the
+protection gate → destroy openables now → resolve slots with
+`sRandomItemMgr->GetViableSlots(proto->InventoryType)`, skipping anything that returns `nullptr` (bags, quivers, ammo, non-equippables) → take the **lowest** `ItemLevel` among
 the viable slots that actually hold something → destroy when `baseline - ItemLevel > X`. Taking the
 minimum is the conservative choice: a bagged ring only dies if it is worse than the *worse* of the
 two equipped rings. An item whose viable slots are all empty is skipped — there is no baseline, so
 nothing proves it junk.
+
+**Openables** (`ITEM_FLAG_HAS_LOOT`: sacks, lockboxes, gifts) ignore the margin. Bots open them on
+pickup, but `store loot` declines some contents and the core removes an item container only once
+fully looted, so it stays forever: every Large Sack of Ulduar Spoils keeps 2 Runed Orbs and a recipe.
+Locked lockboxes and never-opened sacks go too, by choice; their contents are lost. `DestroyItem`
+already drops the container's `item_loot_storage` rows.
 
 `GetViableSlots` had to move into the public section of `RandomItemMgr.h`; it is a const lookup into
 a table built once at init, so there is nothing to protect. It is reused rather than replaced because

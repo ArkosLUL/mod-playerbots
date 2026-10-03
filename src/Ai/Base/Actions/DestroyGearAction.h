@@ -17,7 +17,8 @@ class PlayerbotAI;
 struct ItemTemplate;
 
 // "destroygear <margin> [confirm]" - drops bagged weapons/armor sitting more than <margin> item
-// levels below whatever the bot wears in that slot. Without "confirm" it only reports.
+// levels below whatever the bot wears in that slot, plus every openable item (sacks, lockboxes,
+// gifts) whatever the margin. Without "confirm" it only reports.
 class DestroyGearAction : public InventoryAction
 {
 public:
@@ -30,6 +31,7 @@ private:
     {
         Item* item;
         uint32 baseline;
+        bool openable;
     };
 
     static bool ParseParams(std::string const& param, uint32& margin, bool& confirm);
