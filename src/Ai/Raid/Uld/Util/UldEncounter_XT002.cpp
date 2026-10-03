@@ -333,14 +333,16 @@ std::vector<Position> GetXT002OtherFormationSlots(Player* bot)
     return slots;
 }
 
-// Melee get no northern lot, and it is the navmesh rather than the layout that decides it: a sunken
-// WMO roof underlies the yard and rises east, so from anywhere in the melee stack findSmoothPath
-// answers PATHFIND_NOPATH for every point north of the boss line while the whole southern arc is
-// clean. Their one lot sits under them anyway, a 15 to 31yd walk.
+// Melee get no northern lot, and distance rules it out even where the navmesh does not. A sunken WMO
+// roof underlies the northern yard and rises east, so from the melee stack findSmoothPath answers
+// PATHFIND_NOPATH for everything north of the boss line; the route that does path runs west and then
+// north, and the nearest northern point that both paths and clears Gravity Bomb's 20yd expiry pull off
+// the raid is 53yd out. A carrier has 50.5yd of running in the 9s, and 26yd of it under Tympanic
+// Tantrum. Their one lot is 18 to 44yd away instead, and it grows east rather than north.
 std::vector<XT002BombLot> GetXT002BombLots(PlayerbotAI* botAI, Player* bot)
 {
     if (botAI->IsMelee(bot))
-        return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE, -1.0f}};
+        return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_MELEE, -1.0f, ULDUAR_XT002_BOMB_GRID_X_CELLS_MELEE}};
 
     return {{ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_SOUTH, -1.0f},
             {ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH, 1.0f}};

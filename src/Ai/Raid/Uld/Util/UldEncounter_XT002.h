@@ -89,13 +89,19 @@ constexpr float ULDUAR_XT002_RANGED_RING_OUTER_X = 9.0f;
 constexpr float ULDUAR_XT002_RANGED_RING_OUTER_Y = 12.0f;
 constexpr size_t ULDUAR_XT002_RANGED_RING_INNER_SLOTS = 6;
 
-// XT-002 hard mode: Void Zone parking grid, walked +x from a Gravity Bomb origin and then away from
-// the raid in y. The origin is the corner nearest the raid, so the cells that only get used once the
-// lot fills are the far ones. Step is just over the Void Zone diameter so consecutive drops cannot
-// overlap.
+// XT-002 hard mode: default shape of a Void Zone parking grid, walked +x from a Gravity Bomb origin
+// and then away from the raid in y. The origin is the corner nearest the raid, so the cells that only
+// get used once the lot fills are the far ones. Step is just over the Void Zone diameter so
+// consecutive drops cannot overlap. A lot may be wider than this, see XT002BombLot.
 constexpr float ULDUAR_XT002_BOMB_GRID_STEP = 6.0f;
 constexpr int ULDUAR_XT002_BOMB_GRID_X_CELLS = 5;
 constexpr int ULDUAR_XT002_BOMB_GRID_Y_CELLS = 4;
+
+// XT-002 hard mode: columns in the melee lot. A lot is only ever entered from the raid side, so a row
+// of puddles across it seals everything behind: three at y -47 left no cell in a 5-wide lot with a
+// clean walk in, and the carrier that took the least bad one died in Consumption. Wide beats deep.
+// Probed to x 913 on flat 409.803 terrain with findSmoothPath normal; x 925 answers PATHFIND_NOPATH.
+constexpr int ULDUAR_XT002_BOMB_GRID_X_CELLS_MELEE = 7;
 
 // XT-002 hard mode: arrival deadband for a parking cell, and the drift tolerated before the carrier
 // re-issues a move. A bot that re-issues every tick slides in place and cannot cast, and Gravity Bomb
@@ -115,7 +121,11 @@ constexpr float ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE =
     ULDUAR_XT002_VOID_ZONE_RADIUS + ULDUAR_XT002_BOMB_CELL_ARRIVED;
 
 // XT-002 hard mode: clearance the walk to a parking cell keeps from puddles already down. The carrier
-// action outranks "xt002 avoid hazard action", so nothing else protects a carrier on the way in.
+// action outranks "xt002 avoid hazard action", so nothing else protects a carrier on the way in. Cells
+// are ranked by how close their walk actually comes, capped here: above this a walk is simply clear,
+// and below it the roomier walk wins. A plain yes/no at this value picked the worse walk, because it
+// sits above Consumption's 5yd and cells sit 6yd apart, so two occupied cells in a row made every
+// remaining cell in it read "not clear" at a distance that costs nothing.
 constexpr float ULDUAR_XT002_BOMB_APPROACH_CLEARANCE = 7.5f;
 
 // XT-002: adds spawn at toy piles 78-125yd out and walk in, and one that never paths away from its
@@ -162,7 +172,9 @@ constexpr float ULDUAR_XT002_SEARING_LIGHT_SLOT_CLEARANCE = 12.0f;
 // and flip the raid into hard mode by accident.
 constexpr float ULDUAR_XT002_HEART_SAFE_HP_PCT = 15.0f;
 
-// XT-002 normal mode: the last Heart phase is over below this, so the held burst cooldowns are free.
+// XT-002: the last Heart phase is over below this, so the held burst cooldowns are free. In hard mode
+// reaching it at all means the Heart survived every window and there will be no Heartbreak, so what was
+// being saved for it is released here too.
 constexpr float ULDUAR_XT002_FINAL_PUSH_HP_PCT = 25.0f;
 
 extern const Position ULDUAR_XT002_MAINTANK_SPOT;
@@ -173,11 +185,14 @@ extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_SOUTH;
 extern const Position ULDUAR_XT002_GRAVITY_BOMB_ORIGIN_RANGED_NORTH;
 
 // One Void Zone parking grid. The grid walks +x from the origin and `yDirection` in y, so the origin
-// is always the corner nearest the raid whichever side of the formation the lot is on.
+// is always the corner nearest the raid whichever side of the formation the lot is on. The cell counts
+// are per lot because the melee one has open ground to the east that the ranged ones do not.
 struct XT002BombLot
 {
     Position origin;
     float yDirection;
+    int xCells = ULDUAR_XT002_BOMB_GRID_X_CELLS;
+    int yCells = ULDUAR_XT002_BOMB_GRID_Y_CELLS;
 };
 
 // XT-002 Deconstructor. These use GetFirstAliveUnitByEntry rather than "find target": the Heart

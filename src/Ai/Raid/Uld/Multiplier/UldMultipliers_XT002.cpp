@@ -57,27 +57,39 @@ float XT002BurstWindowMultiplier::GetValue(Action* action)
         cachedAtMs = now;
         cachedValue = EvaluateWindow();
     }
-    return cachedValue;
+
+    bool const lust = name == "bloodlust" || name == "heroism";
+    return (lust ? cachedValue.allowLust : cachedValue.allowAll) ? 1.0f : 0.0f;
 }
 
-float XT002BurstWindowMultiplier::EvaluateWindow()
+XT002BurstWindowMultiplier::Window XT002BurstWindowMultiplier::EvaluateWindow()
 {
     Unit* xt002 = GetXT002(botAI);
     if (!xt002)
-        return 1.0f;
+        return {true, true};
 
     // Heartbreak is up: there will be no further Heart phase, so there is nothing left to save for.
     if (IsXT002HeartbreakActive(bot, xt002))
-        return 1.0f;
+        return {true, true};
+
+    bool const hardMode = IsXT002HardModeActive(botAI);
 
     if (GetXT002ExposedHeart(botAI))
-        return IsXT002HardModeActive(botAI) ? 1.0f : 0.0f;
+    {
+        // Hard mode burns the Heart with everything except lust. The Heart dies inside its 30s window
+        // either way, and Heartbreak then runs for the rest of the fight - six minutes in the pull this
+        // came from, against the twenty-odd seconds the Heart lives. Lust spent here is lust not spent
+        // there, and Exhaustion means there is no second one.
+        return {hardMode, false};
+    }
 
-    // Normal mode: the last Heart phase is behind us below this, so the push is the window.
-    if (!IsXT002HardModeActive(botAI) && xt002->GetHealthPct() < ULDUAR_XT002_FINAL_PUSH_HP_PCT)
-        return 1.0f;
+    // Below this the last Heart phase is behind us, so the push is the window. In hard mode it means
+    // the Heart outlived all three of its windows and the attempt is over, which also releases the lust
+    // that was being held for a Heartbreak that is not coming.
+    if (xt002->GetHealthPct() < ULDUAR_XT002_FINAL_PUSH_HP_PCT)
+        return {true, true};
 
-    return 0.0f;
+    return {false, false};
 }
 
 float XT002TargetGuardMultiplier::GetValue(Action* action)
@@ -115,6 +127,12 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
     // where ours returns false, and flees a flat AiPlayerbot.FleeDistance in a direction of its
     // own picking - two movers pulling different ways is what leaves a bot sliding in place.
     bool const genericAvoidAoe = dynamic_cast<AvoidAoeAction*>(action) != nullptr;
+
+    // Charge and the other gap closers move the bot without being MovementActions, so the mover pin
+    // below never sees them: a carrier that had just parked on its cell charged back out of it three
+    // times in one pull, once into a puddle it then died in and twice 20yd into the melee stack with a
+    // live Gravity Bomb, whose expiry yanks everyone inside 20yd.
+    bool const gapCloser = dynamic_cast<CastReachTargetSpellAction*>(action) && carryingDebuff();
 
     // Both immunities cover all magic and carry SPELL_ATTR1_IMMUNITY_PURGES_EFFECT, so applying
     // one strips the debuff outright - and the boss script summons the Void Zone or the Life Spark
@@ -178,7 +196,8 @@ float XT002TargetGuardMultiplier::GetValue(Action* action)
         }
     }
 
-    bool const standDown = genericRedirect || genericAvoidAoe || purgingImmunity || genericPicker || pinnedMover;
+    bool const standDown =
+        genericRedirect || genericAvoidAoe || purgingImmunity || genericPicker || pinnedMover || gapCloser;
     if (!standDown && !heartHit)
         return 1.0f;
 

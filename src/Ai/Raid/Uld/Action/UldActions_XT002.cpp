@@ -121,7 +121,7 @@ bool XT002MoveClearAction::MoveClearOf(std::vector<std::pair<Unit*, float>> cons
     return false;
 }
 
-bool XT002DebuffCarrierAction::ApproachIsClear(float x, float y, std::list<Creature*> const& voidZones) const
+float XT002DebuffCarrierAction::ApproachClearance(float x, float y, std::list<Creature*> const& voidZones) const
 {
     float const fromX = bot->GetPositionX();
     float const fromY = bot->GetPositionY();
@@ -129,6 +129,7 @@ bool XT002DebuffCarrierAction::ApproachIsClear(float x, float y, std::list<Creat
     float const runY = y - fromY;
     float const runLengthSq = runX * runX + runY * runY;
 
+    float nearest = std::numeric_limits<float>::max();
     for (Creature* voidZone : voidZones)
     {
         float projection = 0.0f;
@@ -139,14 +140,20 @@ bool XT002DebuffCarrierAction::ApproachIsClear(float x, float y, std::list<Creat
             projection = std::max(0.0f, std::min(1.0f, projection));
         }
 
-        if (voidZone->GetExactDist2d(fromX + runX * projection, fromY + runY * projection) <
-            ULDUAR_XT002_BOMB_APPROACH_CLEARANCE)
-        {
-            return false;
-        }
+        nearest = std::min(nearest,
+                           voidZone->GetExactDist2d(fromX + runX * projection, fromY + runY * projection));
     }
 
-    return true;
+    return nearest;
+}
+
+bool XT002DebuffCarrierAction::StandingInVoidZone(std::list<Creature*> const& voidZones) const
+{
+    for (Creature* voidZone : voidZones)
+        if (voidZone->GetExactDist2d(bot) < ULDUAR_XT002_VOID_ZONE_RADIUS)
+            return true;
+
+    return false;
 }
 
 bool XT002DebuffCarrierAction::InsideParkingLot() const
@@ -154,16 +161,15 @@ bool XT002DebuffCarrierAction::InsideParkingLot() const
     // Each grid is axis-aligned, so its extent is a rectangle. The margin is the re-engage band, which
     // is what the carrier already tolerates as "on a cell".
     float const margin = ULDUAR_XT002_BOMB_CELL_REENGAGE;
-    float const span = (ULDUAR_XT002_BOMB_GRID_Y_CELLS - 1) * ULDUAR_XT002_BOMB_GRID_STEP;
 
     for (XT002BombLot const& lot : GetXT002BombLots(botAI, bot))
     {
         float const originX = lot.origin.GetPositionX();
         float const originY = lot.origin.GetPositionY();
-        float const farY = originY + lot.yDirection * span;
+        float const farY = originY + lot.yDirection * (lot.yCells - 1) * ULDUAR_XT002_BOMB_GRID_STEP;
 
         float const minX = originX - margin;
-        float const maxX = originX + (ULDUAR_XT002_BOMB_GRID_X_CELLS - 1) * ULDUAR_XT002_BOMB_GRID_STEP + margin;
+        float const maxX = originX + (lot.xCells - 1) * ULDUAR_XT002_BOMB_GRID_STEP + margin;
         float const minY = std::min(originY, farY) - margin;
         float const maxY = std::max(originY, farY) + margin;
 
@@ -185,7 +191,8 @@ float XT002DebuffCarrierAction::TravelReach(uint32 remainingMs) const
     return bot->GetSpeed(MOVE_RUN) * (remainingMs - ULDUAR_XT002_BOMB_TRAVEL_MARGIN_MS) / 1000.0f;
 }
 
-bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach)
+bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach,
+                                           std::list<Creature*> const& voidZones)
 {
     float const runX = cellX - bot->GetPositionX();
     float const runY = cellY - bot->GetPositionY();
@@ -197,6 +204,14 @@ bool XT002DebuffCarrierAction::StopShortOf(float cellX, float cellY, float reach
     float const stopX = bot->GetPositionX() + runX * scale;
     float const stopY = bot->GetPositionY() + runY * scale;
     float const stopZ = bot->GetPositionZ();
+
+    // Standing in Consumption for the rest of the debuff and then taking the expiry hit on top is what
+    // kills a carrier that could not make its cell, so the same clearance a cell has to have applies
+    // here. Refusing hands the tick to the ring search, which maximises clearance instead of following
+    // a bearing.
+    for (Creature* voidZone : voidZones)
+        if (voidZone->GetExactDist2d(stopX, stopY) < ULDUAR_XT002_VOID_ZONE_RADIUS)
+            return false;
 
     // No line-of-sight test here either. The stopping point lies on the bearing into the lot, which
     // is the one direction where a ray clips the building rim while the path is clean, and the
@@ -325,18 +340,18 @@ bool XT002DebuffCarrierAction::MoveToSearingLightSpot(bool heartbreak)
     return false;
 }
 
-XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit* boss, float reach,
-                                                                           float& cellX, float& cellY)
+XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(std::list<Creature*> const& voidZones,
+                                                                           float reach, float& cellX,
+                                                                           float& cellY)
 {
-    std::list<Creature*> voidZones;
-    boss->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE, ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
-
     struct Cell
     {
         float x;
         float y;
         float z;
-        int rank;
+        bool reachable;
+        float lane;
+        bool roomy;
         float distance;
     };
 
@@ -347,13 +362,12 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
     // formation, and the shortest-walk tie-break below is what sends a carrier to the near one.
     for (XT002BombLot const& lot : GetXT002BombLots(botAI, bot))
     {
-        for (int cell = 0; cell < ULDUAR_XT002_BOMB_GRID_X_CELLS * ULDUAR_XT002_BOMB_GRID_Y_CELLS; ++cell)
+        for (int cell = 0; cell < lot.xCells * lot.yCells; ++cell)
         {
             float const candidateX =
-                lot.origin.GetPositionX() + (cell % ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
+                lot.origin.GetPositionX() + (cell % lot.xCells) * ULDUAR_XT002_BOMB_GRID_STEP;
             float const candidateY =
-                lot.origin.GetPositionY() +
-                lot.yDirection * (cell / ULDUAR_XT002_BOMB_GRID_X_CELLS) * ULDUAR_XT002_BOMB_GRID_STEP;
+                lot.origin.GetPositionY() + lot.yDirection * (cell / lot.xCells) * ULDUAR_XT002_BOMB_GRID_STEP;
 
             // Measured against where the puddles actually are rather than the cells they were aimed at, so
             // a drop that landed off-centre blocks whatever it is really near.
@@ -366,17 +380,19 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
 
             float const distance = bot->GetExactDist2d(candidateX, candidateY);
 
-            // Reachable first, then room, then a clear approach, then the shortest walk. Reachable leads
-            // because a cell the bomb goes off before the bot arrives at is worth nothing at all, however
-            // roomy - the lot runs 30-50 yd out against a 9s debuff, so this is a real gate and not a
-            // formality. Room comes next: standing in Consumption costs the whole debuff, where crossing
-            // a puddle on the way costs a second or two.
+            // Reachable first, then the roomiest walk in, then room at the cell, then the shortest walk.
+            // Reachable leads because a cell the bomb goes off before the bot arrives at is worth nothing
+            // at all, however roomy - the lot runs 18-50 yd out against a 9s debuff, so this is a real
+            // gate and not a formality. The walk comes next because it is the half that costs real
+            // damage: the cell only has to stay out of a puddle's 6yd, where a walk that cuts through one
+            // ticks Consumption the whole way.
             bool const reachable = distance + ULDUAR_XT002_BOMB_CELL_ARRIVED <= reach;
-            int const rank = (reachable ? 4 : 0) +
-                             (nearestVoidZone >= ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE ? 2 : 0) +
-                             (ApproachIsClear(candidateX, candidateY, voidZones) ? 1 : 0);
+            float const lane = std::min(ApproachClearance(candidateX, candidateY, voidZones),
+                                        ULDUAR_XT002_BOMB_APPROACH_CLEARANCE);
+            bool const roomy = nearestVoidZone >= ULDUAR_XT002_BOMB_CELL_PREFERRED_CLEARANCE;
 
-            cells.push_back({candidateX, candidateY, lot.origin.GetPositionZ(), rank, distance});
+            cells.push_back({candidateX, candidateY, lot.origin.GetPositionZ(), reachable, lane, roomy,
+                             distance});
             nearestDistance = std::min(nearestDistance, distance);
         }
     }
@@ -389,8 +405,12 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
 
     std::sort(cells.begin(), cells.end(), [](Cell const& left, Cell const& right)
     {
-        if (left.rank != right.rank)
-            return left.rank > right.rank;
+        if (left.reachable != right.reachable)
+            return left.reachable;
+        if (left.lane != right.lane)
+            return left.lane > right.lane;
+        if (left.roomy != right.roomy)
+            return left.roomy;
         return left.distance < right.distance;
     });
 
@@ -402,7 +422,13 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
     // step apart and both bands are under that, so only one cell can ever answer. Holding through drift
     // matters because a bot that re-issues every tick slides in place and cannot cast - and a cell
     // taken by a fresh puddle drops out of the list entirely, which drops the latch with it.
-    if (parked && nearestDistance <= ULDUAR_XT002_BOMB_CELL_REENGAGE)
+    //
+    // Standing in Consumption is never parked, whatever the bands say. A displaced carrier can end up
+    // inside a puddle and still measure within the re-engage band of some other cell, and parking there
+    // means standing in it until the bomb goes off.
+    bool const inVoidZone = StandingInVoidZone(voidZones);
+
+    if (parked && !inVoidZone && nearestDistance <= ULDUAR_XT002_BOMB_CELL_REENGAGE)
     {
         if (bot->isMoving())
             bot->StopMoving();
@@ -412,7 +438,7 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
 
     parked = false;
 
-    if (nearestDistance <= ULDUAR_XT002_BOMB_CELL_ARRIVED)
+    if (!inVoidZone && nearestDistance <= ULDUAR_XT002_BOMB_CELL_ARRIVED)
     {
         parked = true;
         if (bot->isMoving())
@@ -422,13 +448,13 @@ XT002DebuffCarrierAction::ParkResult XT002DebuffCarrierAction::ParkVoidZone(Unit
     }
 
     // Nothing in the lot is close enough to walk to inside the debuff.
-    if (cells.front().rank < 4)
+    if (!cells.front().reachable)
         return ParkResult::OutOfReach;
 
     size_t attempts = 0;
     for (Cell const& candidate : cells)
     {
-        if (candidate.rank < 4 || attempts >= ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS)
+        if (!candidate.reachable || attempts >= ULDUAR_XT002_MOVE_CANDIDATE_ATTEMPTS)
             break;
 
         ++attempts;
@@ -470,6 +496,15 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
     // without walking the splash back through the raid to reach the Searing Light spot.
     bool const steppingOffOwnBomb = !hasBomb && heartbreak && InsideParkingLot();
 
+    // One scan for the whole tick: the cell ranking, the stop-short fallback and the ring search all
+    // need the same puddles, and each of them standing in Consumption is what kills a carrier.
+    std::list<Creature*> voidZones;
+    if (heartbreak && xt002)
+    {
+        xt002->GetCreatureListWithEntryInGrid(voidZones, PB_NPC_XT002_VOID_ZONE,
+                                              ULDUAR_XT002_VOID_ZONE_SEARCH_RADIUS);
+    }
+
     if (heartbreak && (hasBomb || steppingOffOwnBomb))
     {
         // Only a bot actually holding the bomb runs against a clock. Stepping off one's own puddle is
@@ -483,7 +518,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
         {
             float cellX = 0.0f;
             float cellY = 0.0f;
-            switch (ParkVoidZone(xt002, reach, cellX, cellY))
+            switch (ParkVoidZone(voidZones, reach, cellX, cellY))
             {
                 case ParkResult::Moving:
                     return true;
@@ -492,7 +527,7 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
                 case ParkResult::Parked:
                     return false;
                 case ParkResult::OutOfReach:
-                    if (StopShortOf(cellX, cellY, reach))
+                    if (StopShortOf(cellX, cellY, reach, voidZones))
                         return true;
                     break;
                 case ParkResult::None:
@@ -527,17 +562,23 @@ bool XT002DebuffCarrierAction::Execute(Event /*event*/)
     if (!group)
         return false;
 
-    std::vector<std::pair<Unit*, float>> allies;
+    std::vector<std::pair<Unit*, float>> avoid;
     for (GroupReference* ref = group->GetFirstMember(); ref; ref = ref->next())
     {
         Player* member = ref->GetSource();
         if (!member || member == bot || !member->IsAlive())
             continue;
 
-        allies.emplace_back(member, ULDUAR_XT002_DEBUFF_CLEAR_RADIUS);
+        avoid.emplace_back(member, ULDUAR_XT002_DEBUFF_CLEAR_RADIUS);
     }
 
-    return MoveClearOf(allies);
+    // The puddles belong in here as well. This is where a carrier ends up once it cannot reach a cell
+    // and cannot stop short of one, and a search that only clears the raid parked a slowed carrier 1.7yd
+    // from a live puddle for the rest of its bomb.
+    for (Creature* voidZone : voidZones)
+        avoid.emplace_back(voidZone, ULDUAR_XT002_VOID_ZONE_RADIUS);
+
+    return MoveClearOf(avoid);
 }
 
 bool XT002AvoidHazardAction::Execute(Event /*event*/)

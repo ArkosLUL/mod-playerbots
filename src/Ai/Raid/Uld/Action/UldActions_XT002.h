@@ -72,15 +72,15 @@ private:
     };
 
     // Picks a cell from every parking grid the role owns that is free of Void Zones, preferring one the
-    // bot can still reach inside `reach` yards, then one with room to spare, then a clear approach,
-    // then the shortest walk. Ranged and healers have a lot on each side of the formation, and that
-    // last tie-break is what sends a carrier to the near one rather than across the room. Offers its
-    // ranked cells to the pathfinder in turn and reports Moving on the first one accepted. There is
+    // bot can still reach inside `reach` yards, then the roomiest walk in, then room at the cell, then
+    // the shortest walk. Ranged and healers have a lot on each side of the formation, and that last
+    // tie-break is what sends a carrier to the near one rather than across the room. Offers its ranked
+    // cells to the pathfinder in turn and reports Moving on the first one accepted. There is
     // deliberately no line-of-sight test: the lots sit past the edge of the Ulduar building geometry,
     // so a ray from the raid clips the rim and rejects every cell while the navmesh path to each of
     // them is clean. The best cell is written to `cellX`/`cellY` whether or not it turned out to be
     // usable.
-    ParkResult ParkVoidZone(Unit* boss, float reach, float& cellX, float& cellY);
+    ParkResult ParkVoidZone(std::list<Creature*> const& voidZones, float reach, float& cellX, float& cellY);
 
     // How far the bot can still walk before the bomb goes off. GetSpeed(MOVE_RUN) already carries
     // Tympanic Tantrum's 50% slow, which is the case this exists for: slowed, the reach is about 25yd,
@@ -89,10 +89,10 @@ private:
 
     // Follows the bearing to a cell as far as the time budget allows and stops there, so a carrier
     // that cannot make the lot drops its puddle on the approach instead of mid-stride in the raid.
-    // False when the stopping point is not clear of the expiry pull or the pathfinder will not take
-    // it, which hands the tick to the dynamic search - that one maximises clearance rather than
-    // following a fixed bearing.
-    bool StopShortOf(float cellX, float cellY, float reach);
+    // False when the stopping point sits in a live Void Zone, is not clear of the expiry pull, or the
+    // pathfinder will not take it, which hands the tick to the dynamic search - that one maximises
+    // clearance rather than following a fixed bearing.
+    bool StopShortOf(float cellX, float cellY, float reach, std::list<Creature*> const& voidZones);
 
     // The Searing Light spot, or the nearest alternate around it that is clear of Void Zones and that
     // the pathfinder accepts. Neither guard is optional: a puddle sat 2 yd from the spot for half a
@@ -106,10 +106,13 @@ private:
     // actually roomiest once the raid has drifted off its slots.
     float RaidClearance(float x, float y) const;
 
-    // Whether the straight line from the bot to (x, y) stays ULDUAR_XT002_BOMB_APPROACH_CLEARANCE
-    // clear of every Void Zone in `voidZones`. An approximation - the bot follows a navmesh path, not
-    // this line - but the carrier action outranks the hazard dodge, so it is the only guard there is.
-    bool ApproachIsClear(float x, float y, std::list<Creature*> const& voidZones) const;
+    // How close the straight line from the bot to (x, y) comes to the nearest Void Zone in `voidZones`.
+    // An approximation - the bot follows a navmesh path, not this line - but the carrier action
+    // outranks the hazard dodge, so it is the only guard there is.
+    float ApproachClearance(float x, float y, std::list<Creature*> const& voidZones) const;
+
+    // Whether the bot is standing inside a live Void Zone, which no parking cell is allowed to be.
+    bool StandingInVoidZone(std::list<Creature*> const& voidZones) const;
 
     // Whether the bot is standing in any parking grid its role owns. Geometry only, ignoring which
     // cells are occupied: the case this exists for is a carrier whose bomb has just expired under its
