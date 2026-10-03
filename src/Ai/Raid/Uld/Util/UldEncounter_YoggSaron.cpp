@@ -1526,11 +1526,11 @@ std::vector<Unit*> GetYoggSaronNovaThreats(PlayerbotAI* botAI, float radius)
         if (!guardian->IsAlive())
             continue;
 
-        // Fervor outlasts the gap between novas - 15 s against a nova every 10.4 s - so a Guardian at
-        // full health now is one that detonates inside the window, and a holder parked next to the pile
-        // dies there. A small pool instead waits for the tighter gate, because leaving is dps it does
-        // not get back and the Guardians still have to die inside 15 yd for Sara.
-        float const gate = fervor ? 100.0f
+        // Three gates, widest first. A Fervor holder has to be clear of the blast rather than mitigate
+        // it, so it leaves on the longest warning anyone gets; a small pool with no Fervor waits for the
+        // tightest, because leaving is dps it does not get back and the Guardians still have to die
+        // inside 15 yd for Sara.
+        float const gate = fervor ? ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT
                                   : (fragile ? ULDUAR_YOGG_SARON_NOVA_NOW_HEALTH_PCT
                                              : ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT);
         if (guardian->GetHealthPct() > gate)

@@ -115,12 +115,23 @@ server-side grep are silent, and `DispelType 0` means nothing lifts it. Measured
 **45,340** against that 23,537 pool, both from full health and both **0.4-1.1 s after it landed**, with
 the bot still walking out.
 
-So a Fervor holder dodges **every living Guardian in reach, with no health gate at all**: Fervor runs
-15 s against a nova every 10.4 s, so one at full health now detonates inside the window. A 50% gate
-found nothing low when Fervor landed on a warlock at the station, the spacing walk moved it to **3.5 yd
-from the middle**, and it stood there 5.3 s and took **41,832**. Focus fire is why no gate is early
-enough: it cuts the window a Guardian spends at or under 20% from a **median 3.5 s** to **0.9-1.0 s**,
-and one second is 7 yd of travel against a 16 yd blast from a start in melee contact.
+So a Fervor holder leaves on the widest gate anyone gets, `…_FERVOR_NOVA_HEALTH_PCT` (**50%**), and it
+cannot be tighter: over 98 novas a 50% warning ran a **median 9.2 s** and came in under the ~2.5 s a
+15 yd walk takes exactly **once**, against **30 of the 98** under 20%. Focus fire is why — it cuts the
+window a Guardian spends at or under 20% from a **median 3.5 s** to **0.9-1.0 s**, and one second is
+7 yd of travel against a 16 yd blast from a start in melee contact.
+
+Nor wider. Fervor runs 15 s against a nova every **10.4 s**, so a holder meets one whatever the gate,
+but "every living Guardian in reach" is satisfied on **100.0%** of melee ticks over seven pulls (23,761
+of 23,761) against 72.9% at 50%: the holder left a **median 6.2 s** before the nova against 1.8 s for
+everyone else, **3 of its 10** runs dodged nothing at all, and Fervor runners woke 6 Guardians 20-30 yd
+out.
+
+**The hold travels with the gate, and that is the live hazard.** `yogg-saron phase 1 walk guard
+multiplier` pins a holder outside only while the same gate is satisfied, and **11 of 40** landings over
+seven pulls had a Guardian inside 22 yd with none of them under 50%. A warlock was once in exactly that
+state: nothing low, the spacing walk put it **3.5 yd from the middle**, and it stood there 5.3 s and
+took **41,832**. Watch where an unheld holder ends up.
 
 **Sara's Blessing (63134) is a heal with a 20 s tail, and nothing reads it.** Effect 1 heals 27,000,
 effect 2 ticks 6,000 shadow every 2 s for 20 s: 60,000 raw, ~40,000 once resisted, `DispelType 0` so
@@ -206,6 +217,8 @@ death knight **24**. `NextTankDefensive` and `NextMagicDefensive` now return the
 `PickDefensive` tests that, which is safe because all eleven rows' ids are single-rank; `castName`
 stays the action name `IsHeldTankDefensive` and the class contexts match on. Obliteration had spent
 Icebound Fortitude (30%, 120 s) at 1:28.4 and died at 2:14 with the 45 s button it could not reach.
+Since the id replaced the name bots have cast it **11 times over seven pulls**, 1-3 a pull, with every
+other ladder row still firing.
 
 **Two gaps left, both deliberate.** A **dps warrior has none**: Last Stand is a protection talent and
 Shield Wall needs a shield (871 carries `EquippedItemClass` 4, subclass mask 64), so `CanCastSpell`
@@ -382,8 +395,9 @@ oscillating against hazards that never stop moving:
   12-14 yd, on the innermost orbit.
 
 - **Both phases also ask by preference.** `set.preferred` is tried ahead of `accept` and dropped when
-  nothing satisfies both, so a bot in a hazard still moves. Phase 1 asks for the station once a nova is
-  pending (above). Phase 2 asks for a spot still inside
+  nothing satisfies both, so a bot in a hazard still moves. Phase 1 asks melee for the station band
+  once a nova is pending and for the cloud-free circle when none is (both below). Phase 2 asks for a
+  spot still inside
   `meleeDistance` / `spellDistance` of the current target, which leaves `reach melee` and `reach spell`
   nothing to undo. Without it the 3 s hold lapses, the reach node walks the bot back at its target, the
   bot lands in a hazard and the spacing node walks it out again — **1565 handovers** in one phase 2,
@@ -469,8 +483,10 @@ one answers who should run, the other who is about to be hit regardless.
 **A Fervor run has to end out of reach, not at the edge.** The dodge fires inside 17 yd and stops at
 20, and the station, the leash or `reach melee` then walked the bot straight back: over 9 traces **31
 of 44** runs that got clear were inside 16.2 yd again while still holding Fervor (melee a median 1.1 s
-later, ranged 5.3), and 3 of 17 novas on Fervor holders killed. `yogg-saron phase 1 walk guard
-multiplier` zeroes the station, the leash (not its handover walk out), `reach melee`, `reach spell` and
+later, ranged 5.3), and 3 of 17 novas on Fervor holders killed. With the hold in place it is **28 of
+39** over seven pulls and 1 of 8 novas on a holder killed, so the walk back is narrowed rather than
+closed. `yogg-saron phase 1 walk guard multiplier` zeroes the station, the leash (not its handover walk
+out), `reach melee`, `reach spell` and
 `set behind` for a Fervor holder while a Guardian at or under 50% is within
 `ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS` (22). Casting is untouched, and the spacing node still steps it
 off a cloud.
@@ -520,10 +536,17 @@ cannot reach the station. The cost is a narrower band against `reach melee`, and
 the flips.
 
 Nothing pins melee inside 2.89 yd, though — they get there because a Guardian walks to whoever holds
-threat and `meleeDistance` is 0.75. Measured they sat at **2.5-2.9 yd** and triggered no inner-orbit
-Guardian at all; all three of one pull's came from the human player at 6.7-13.4 yd. **That is the first
-thing to check** now that they hold still instead of orbiting: settle beyond 2.89 and the innermost
-cloud harvests one Guardian every 24 s, and the leash has to come in past 6.5 as well.
+threat and `meleeDistance` is 0.75. Left alone they sit at **2.5-2.9 yd** and wake nothing.
+
+**What takes them out of the circle is their own cloud dodge, so the dodge aims back at it.**
+`set.preferred` asks for `…_P1_CLOUD_FREE_RADIUS` of the middle, for melee that are neither tank nor
+healer: the tank's own control walk already holds it there, and `IsMelee` is `!IsRanged`, so a melee
+healer would be pulled into the pile by it. Of **124** melee cloud dodges over seven pulls only **56**
+ended inside the circle — **30** stopped in the 2.8-20.1 yd band the innermost orbit sweeps and **38**
+ran out onto the second orbit's ring — while a spot in the circle was clear of every cloud circle and
+past the route test in **111 of the 124**, and in 32 of the 38 that ran out. So melee feet woke **16 of
+102** Guardians, **11** of them inside 20 s of a dodge; the back line woke 20, the tanks 16, Sara's
+timer 46, and 4 could not be attributed. Preferred, not required, so it never holds a bot in a cloud.
 
 ## Targeting is direct, never a raid icon
 
@@ -933,10 +956,15 @@ them. Bots ate on the stack in phase 1 lulls too. `yogg-saron stack food guard m
 `--phases` prints how long before the ring the last Guardian died, or how many were alive **and how
 far out each stood**, every meal inside 15 yd, and the handover's own shape: the front line's spread,
 its centre's bearing and distance from the station spot, its distance from the anchor, and how many
-bots spent any of the next 15 s past every healer's reach. `--novas` prints each Divine Sacrifice press
-with when its 120 s returns against the first nova that killed, what a nova actually lands against the
-28,600 the gate assumes, and which ladder rows a bot cast — plus any a human pressed and no bot did,
-which is the only way a row nothing can pick shows up at all.
+bots spent any of the next 15 s past every healer's reach, plus each bot tank's crossings between the
+middle and the anchor and the moves it had refused. `--novas` prints each Divine Sacrifice press with
+when its 120 s returns against the first nova that killed, what a nova actually lands against the
+28,600 the gate assumes, the warning every health gate gave against the 2.5 s a step-out walks for, and
+which ladder rows a bot cast — plus any a human pressed and no bot did, which is the only way a row
+nothing can pick shows up at all. `--clouds` buckets melee cloud dodges by what can summon where they
+landed, tags each foot on a cloud with the dodge that put it there, and splits the melee feet out of
+the raid's own; it also prints how long before its nova each step-out left, by reason, keyed on the nova
+rather than on health, since the Guardian that opened the window is often dead by the next snapshot.
 
 **Yogg without Shadow Barrier is the whole window**, and `SetVisible(false)` does not hide him from a
 grid search, so the encounter's tick latches it from the first tick and `YoggSaronHandoverState` reads
@@ -955,6 +983,26 @@ melee onto the middle they had to leave, and a bot already outside 15 yd got no 
 running (it ended **1.1 yd** out). Now any bot the positioning trigger owns — `IsTank || IsMelee`, the
 same test it opens with — walks the moment Sara dies, with 18 s of slack. The radius is gone on
 purpose: the anchor is outside the ring, so a radius test would release a bot the instant it arrived.
+
+**The anchor holds, and the tank was the one bot that could not get to it.** Over seven pulls the
+median bot stands **0.0-2.1 yd** from the anchor when the ring lights, the bot front line spans
+**7.7-26.7 yd** centred at 17.2-21.5 yd out on bearing **109-113°** (the anchor's own), **0 of 9** are
+past every healer's 38.5 yd, and **melee 0 of 9 are in the 13.3 yd ring in every pull** — against
+1 and 3 of 9 before it, and a centre on bearing 25 and 65° a median 17.7-24.0 yd off the anchor. Those
+are bots only and alive only: a corpse keeps its last spot and then releases to the entrance, which
+read as a 90 yd front line in the pull that lost eight.
+
+What did not reach it was `yogg-saron guardian control action`, which walks the tank back to the middle
+from outside the 2.8 yd cloud-free circle. Both walks are `MOVEMENT_FORCED`, so each cleared the
+other's hold and neither arrived: per pull the anchor walk was refused **52-97** times and the control
+walk **46-95**, four moves landed, and the tank **crossed between the middle and the anchor one to four
+times** a window, ending it at 0.0-21.5 yd out. It now stands the **walk** down for the window and
+keeps taunting, because `…_P1_TAUNT_RANGE` (30) covers the room from 21.5 yd out, which also keeps the
+Guardians the 25 yd off the back line the anchor was chosen for.
+
+**Three to six Guardians are alive at the ring in every pull, and the pile is one blast.** A nova on
+the anchor catches all nine melee where the fan caught a few: one pull's 2:05.6 nova killed four with
+nothing up, 1.3 s before the ring. The anchor bought reachability and the back line's safety, not this.
 
 **The walk has to outlive the ring.** "Yogg without the barrier" ends on the tick the barrier lands,
 and melee released there walk straight back under the knock back — three of nine were inside 13.3 yd

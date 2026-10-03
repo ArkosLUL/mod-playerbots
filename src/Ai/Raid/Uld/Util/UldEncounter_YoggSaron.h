@@ -170,6 +170,11 @@ constexpr float ULDUAR_YOGG_SARON_FERVOR_HOLD_RADIUS = 22.0f;
 // raid to the rim and leaves bots to be picked off one at a time.
 constexpr float ULDUAR_YOGG_SARON_GUARDIAN_NOVA_HEALTH_PCT = 20.0f;
 
+// Where a Sara's Fervor holder leaves, earlier than anyone else because the nova hits it twice as hard.
+// The widest gate whose worst case still covers the walk out: over 98 novas exactly one warning under
+// 50% came in under the ~2.5 s a 15 yd walk takes, against 30 of them under 20%.
+constexpr float ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT = 50.0f;
+
 // What one nova does when it resists nothing, which is the only figure worth planning against:
 // resistance is rolled per hit, so the median is survivable and the hits that kill are the ones that
 // roll none. Over 138 hits the damage before resistance ran a 23,547 median to a 27,034 ordinary

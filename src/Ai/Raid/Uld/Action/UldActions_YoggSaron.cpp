@@ -253,6 +253,11 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     // cleared.
     set.hazards.insert(set.hazards.end(), set.fallback.begin(), set.fallback.end());
 
+    // Who a destination preference is for. Not the tank, which its own control walk already holds on
+    // the cloud-free circle, and not a melee healer, which IsMelee being !IsRanged cannot tell apart.
+    bool const pileDodger =
+        PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot);
+
     // With nothing about to detonate, a melee bot dodging a cloud otherwise steps out of its own swing
     // range and reach melee hauls it straight back - the two traded the tick 252 times in one pull.
     // Requiring the candidate to stay in reach ends the trade, and the retry drops it when nothing
@@ -269,6 +274,20 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
             set.clear = [at, reach](float x, float y) { return at.GetExactDist2d(x, y) <= reach; };
             set.fallback = set.hazards;
         }
+
+        // Somewhere no orbit reaches, not merely clear of the cloud it is leaving. Of 124 melee cloud
+        // dodges only 56 ended inside the 2.8 yd circle: 30 stopped in the band the inner orbit sweeps
+        // and 38 ran out onto the second orbit's ring, which is where 11 of the 16 Guardians melee feet
+        // woke came from, and a spot in the circle was clear and walkable in 111 of the 124. Preferred
+        // rather than required, so it can never hold a bot in a cloud.
+        if (pileDodger)
+        {
+            set.preferred = [](float x, float y)
+            {
+                return ULDUAR_YOGG_SARON_MIDDLE.GetExactDist2d(x, y) <=
+                       ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS;
+            };
+        }
     }
 
     // A nova step-out otherwise lands on the inner orbit: the clear radius is 20 yd and the Guardians
@@ -281,9 +300,8 @@ bool YoggSaronPhase1SpacingAction::Collect(HazardSet& set)
     // and 16 bearings around the bot, and both tests at once leave it 0 to 2 points of the ~200 it
     // offers, so one cloud near the bearing emptied the set and only 11-15% of step-outs reached it.
     // The band on its own offers 11 to 16. Preferred rather than required, so this never holds a bot in
-    // the blast. Not the tank: it keeps the Guardians on the pile, and IsMelee is !IsRanged, so a melee
-    // healer would be caught too whenever Fervor opened the gate for it.
-    if (!novas.empty() && PlayerbotAI::IsMelee(bot) && !PlayerbotAI::IsTank(bot) && !PlayerbotAI::IsHeal(bot))
+    // the blast.
+    if (!novas.empty() && pileDodger)
     {
         set.preferred = [](float x, float y)
         {
@@ -1574,8 +1592,14 @@ bool YoggSaronGuardianControlAction::ControlPhaseOne()
     // the tank, so wherever the tank stands is where it dies, and outside 2.89 yd the innermost orbit
     // sweeps the pile - one pull fed it 8 of its 23 Guardians that way. Taunt reaches 30 yd from here,
     // which covers the whole 21.5 yd back line, so this is never a walk out after one.
-    if (bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) >
-        ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS)
+    //
+    // Not while the handover owns where the tank stands. Both walks are forced, so each cleared the
+    // other's hold and neither arrived: over seven pulls the walk to the anchor was refused 52-97 times
+    // a pull and this one 46-95, and the tank crossed between the middle and the anchor one to four
+    // times a window. The taunt below stays, because 30 yd covers the room from the anchor as well.
+    if (!YoggSaronHandoverState(botAI).clearing &&
+        bot->GetDistance2d(ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionY()) >
+            ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS)
     {
         return MoveTo(bot->GetMapId(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionX(),
                       ULDUAR_YOGG_SARON_MIDDLE.GetPositionY(), ULDUAR_YOGG_SARON_MIDDLE.GetPositionZ(), false,

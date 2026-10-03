@@ -1141,6 +1141,28 @@ class YoggPhases(unittest.TestCase):
         # Nothing spent is the same answer: the button was in hand.
         self.assertIsNone(yogg_saron.cooldown_gap([], 120000, 134229))
 
+    def test_dodge_zone_splits_the_room_by_what_can_summon_there(self):
+        # Of 124 melee cloud dodges over seven pulls 56 landed in the core, 30 in the inner orbit's
+        # reach and 38 past it, which is what the preference is there to move.
+        self.assertEqual(yogg_saron.dodge_zone(1.0), "core")
+        self.assertEqual(yogg_saron.dodge_zone(12.0), "inner orbit")
+        self.assertEqual(yogg_saron.dodge_zone(21.5), "beyond")
+        # Both boundaries belong to the tighter band, the way the game's <= tests read them.
+        self.assertEqual(yogg_saron.dodge_zone(2.8), "core")
+        self.assertEqual(yogg_saron.dodge_zone(20.1), "inner orbit")
+
+    def test_crossings_counts_a_walk_once_and_a_tick_trade_every_time(self):
+        # Walking to the anchor and staying there is one crossing.
+        self.assertEqual(yogg_saron.crossings([1.0, 8.0, 21.0, 21.5], 2.8, 20.5), 1)
+        # The shape Bulwark made in 1791019084, where the handover walk and the control walk cancelled
+        # each other: three crossings in one 18 s window and no arrival.
+        self.assertEqual(yogg_saron.crossings([1.1, 21.5, 0.9, 20.6, 1.0, 21.3], 2.8, 20.5), 3)
+        # Turning back short of the far bound is not a crossing.
+        self.assertEqual(yogg_saron.crossings([1.1, 19.5, 0.9], 2.8, 20.5), 0)
+        # Never reaching either end is no crossing at all.
+        self.assertEqual(yogg_saron.crossings([8.0, 12.0, 15.0], 2.8, 20.5), 0)
+        self.assertEqual(yogg_saron.crossings([], 2.8, 20.5), 0)
+
     def test_stun_window_ends_at_induce_madness_or_phase_3(self):
         # 1789568759: wave 1 ran its full stun, wave 6 lost it to phase 3 at +49.8 s.
         self.assertEqual(yogg_saron.stun_window(192654, 224354, 644834), (224354, 252654))

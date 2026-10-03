@@ -103,6 +103,11 @@ NOVA_RADIUS = 15.0
 RANGED_STATION = 21.5
 P1_LEASH = 6.5
 
+# ULDUAR_YOGG_SARON_P1_CLOUD_FREE_RADIUS: inside this no orbit reaches, so it is the only ground in the
+# room a melee bot can stand on without farming a Guardian. The tank is held here and the melee dodge
+# aims here, which is why where a dodge lands is read against it.
+P1_CLOUD_FREE_RADIUS = 2.8
+
 # ULDUAR_YOGG_SARON_P1_RANGED_BAND_TOLERANCE and _P1_RANGED_STACK_RADIUS, with the spot the back line
 # walks to. The band is what keeps a bot off the inner orbit and the blob is what keeps the raid's
 # exposure to one bearing, so a dodge that lands in both wakes nothing the back line would not have.
@@ -172,12 +177,22 @@ NOVA_GAP_MS = 6000
 NOVA_GAP_HEALTH_PCT = 30.0
 NOVA_CHAIN_RADIUS = 18.0
 
-# Sara's Fervor doubles the nova, so its holder runs from every living Guardian inside 17 yd: Fervor
-# lasts 15 s against a nova every 10.4 s, so one at full health now detonates inside the window. The
-# nova reached players at 16.2, and a walk back within 6 s of the aura dropping is still the run's.
+# Sara's Fervor doubles the nova, so its holder leaves on the widest warning anyone gets, a Guardian
+# under ULDUAR_YOGG_SARON_FERVOR_NOVA_HEALTH_PCT inside 17 yd. The nova reached players at 16.2, and a
+# walk back within 6 s of the aura dropping is still the run's.
 SPELL_SARAS_FERVOR = 63138
 SPELL_SHADOW_NOVAS = (65209, 62714)
 NOVA_TRIGGER_RADIUS = 17.0
+FERVOR_NOVA_HEALTH_PCT = 50.0
+
+# How far ahead of a step-out to look for the nova it was dodging, and what the walk out of the blast
+# costs: 15 yd at a bot's run speed. A warning shorter than the walk is a step-out that arrives late.
+STEP_OUT_LEAD_MS = 25000
+STEP_OUT_WALK_MS = 2500
+
+# Every health gate a step-out or a button hangs off, widest first, so one nova row can be read against
+# all of them at once.
+NOVA_WARNING_GATES = (FERVOR_NOVA_HEALTH_PCT, 20.0, 10.0)
 NOVA_REACH = 16.2
 FERVOR_AFTER_MS = 6000
 
@@ -641,7 +656,7 @@ def show_handover(trace: Trace) -> None:
         if abs(snap["t"] - ring) > 400:
             continue
         for row in snap.get("u", []):
-            if row[0] in roster:
+            if row[0] in roster and row[5] > 0:
                 standing.setdefault(row[0], math.dist((row[1], row[2]), BODY))
 
     inside: dict[str, list[bool]] = collections.defaultdict(list)
@@ -652,12 +667,18 @@ def show_handover(trace: Trace) -> None:
                           for role, v in sorted(inside.items()) if v)
         print(f"    in the {KNOCKBACK_RADIUS} yd ring when it lit: {parts}")
 
+    # Health off the same row as the position, because the dead are out of all of this: a corpse keeps
+    # its last spot in the snapshot and then releases to the entrance, which read as a 90 yd front line
+    # in the one pull that lost eight.
+    where = tracks(trace, roster, ("t", "x", "y", "hp"))
+    stamps = {guid: [row[0] for row in rows] for guid, rows in where.items()}
+
     def spots_at(when: int) -> dict[int, tuple[float, float]]:
         found: dict[int, tuple[float, float]] = {}
-        for guid in roster:
-            spot = at(trace, guid, when)
-            if spot:
-                found[guid] = (spot[0], spot[1])
+        for guid, rows in where.items():
+            index = bisect.bisect_right(stamps[guid], when)
+            if index and rows[index - 1][3] > 0:
+                found[guid] = (rows[index - 1][1], rows[index - 1][2])
 
         return found
 
@@ -665,13 +686,13 @@ def show_handover(trace: Trace) -> None:
     # back line is one bearing of the 360 and the anchor is the only one that keeps them in reach.
     ring_spots = spots_at(ring)
     front = {guid: spot for guid, spot in ring_spots.items()
-             if trace.role(guid) in ("melee", "tank")}
+             if trace.role(guid) in ("melee", "tank") and guid not in trace.humans}
     healers = [spot for guid, spot in ring_spots.items() if trace.role(guid) == "heal"]
     if front:
         spread = max(math.dist(a, b) for a in front.values() for b in front.values())
         cx = sum(spot[0] for spot in front.values()) / len(front)
         cy = sum(spot[1] for spot in front.values()) / len(front)
-        print(f"    front line at the ring: {spread:.1f} yd across {len(front)}, centre "
+        print(f"    front line at the ring: {spread:.1f} yd across {len(front)} bots, centre "
               f"{math.dist((cx, cy), BODY):.1f} yd out at bearing "
               f"{math.degrees(math.atan2(cy - BODY[1], cx - BODY[0])) % 360:.0f} deg, "
               f"{math.dist((cx, cy), RANGED_SPOT):.1f} yd from the station spot")
@@ -698,6 +719,27 @@ def show_handover(trace: Trace) -> None:
               f"some point: {len(loose)} of {len(gaps)}")
         print(f"      gap to the nearest healer: median {statistics.median(flat):.1f} yd, "
               f"worst {max(flat):.1f}" + (f"   {', '.join(loose)}" if loose else ""))
+
+    # The bot tank has to stand at the anchor with the melee and still wants to hold whatever is left,
+    # and both walks are forced. More than one crossing is the two trading the tick instead of a bot
+    # walking somewhere, and a refused move is one that never got the motion master.
+    far = RANGED_STATION - RANGED_BAND_TOLERANCE
+    for guid in sorted((one for one in roster
+                        if trace.role(one) == "tank" and one not in trace.humans), key=trace.name):
+        rows = [row for row in tracks(trace, {guid}).get(guid, []) if down <= row[0] <= ring]
+        if not rows:
+            continue
+
+        refused: collections.Counter = collections.Counter()
+        for rec in trace.of("move"):
+            if rec.get("g") == guid and down <= rec["t"] <= ring and not rec.get("ok"):
+                refused[rec.get("by")] += 1
+
+        out = [math.dist((row[1], row[2]), BODY) for row in rows]
+        turns = crossings(out, P1_CLOUD_FREE_RADIUS, far)
+        says = ", ".join(f"{name} {count}" for name, count in refused.most_common(2)) or "none"
+        print(f"    {trace.name(guid)}: {turns} crossings between the middle and the anchor, "
+              f"{out[-1]:.1f} yd out when the ring lit;  refused: {says}")
 
     held = collections.Counter(rec.get("txt") for rec in notes(trace, "yogg.handover"))
     if held:
@@ -925,6 +967,38 @@ def cooldown_gap(presses: list[int], cooldown_ms: int, when: int) -> int | None:
     return min(ready) - when
 
 
+def dodge_zone(distance: float) -> str:
+    """Which of phase 1's three bands a spot this far from the middle sits in.
+
+    "an orbit reaches" cannot answer where a dodge should have gone, because at the station band one
+    always does by design. These three can: inside the cloud-free circle nothing reaches, out to the
+    inner orbit's own reach the one orbit no timer can pick sweeps the spot, and past that the bot is on
+    the ring the back line already wakes.
+    """
+    if distance <= P1_CLOUD_FREE_RADIUS:
+        return "core"
+
+    return "inner orbit" if distance <= CLOUD_ORBITS[0] + CLOUD_SUMMON_REACH else "beyond"
+
+
+def crossings(distances: list[float], near: float, far: float) -> int:
+    """How many times a track went from inside `near` to beyond `far`.
+
+    Walking somewhere crosses once. More than that is two movers trading the tick, each clearing the
+    other's hold, so neither destination is ever reached and the bot ends the window mid-stride.
+    """
+    count = 0
+    inside = False
+    for distance in distances:
+        if distance <= near:
+            inside = True
+        elif distance >= far:
+            count += inside
+            inside = False
+
+    return count
+
+
 def show_clouds(trace: Trace) -> None:
     print("CLOUD ORBITS")
     rows = notes(trace, "yogg.cloudreach")
@@ -963,6 +1037,7 @@ def show_clouds(trace: Trace) -> None:
         print(f"  phase 1 taunts        : {dict(taunts)}  (counts = still inside 15 yd of Sara)")
 
     show_dodge_destinations(trace)
+    show_stepout_leads(trace)
     show_cloud_spawns(trace)
 
 
@@ -1014,6 +1089,14 @@ def show_dodge_destinations(trace: Trace) -> None:
             print(f"    {role:7} {reason:7} {count:3} {out[count // 2]:6.1f} {out[-1]:6.1f}"
                   f"   {reaches * 100 // count:14}% {both * 100 // count:6}% {stack * 100 // count:12}%")
 
+    # What can summon where the melee dodge put them, which is the question the columns above cannot
+    # answer: at the station band an orbit always reaches, on purpose.
+    zones = collections.Counter(dodge_zone(distance)
+                                for distance, _ in landed.get(("melee", "cloud"), []))
+    if zones:
+        parts = "  ".join(f"{zone} {zones[zone]}" for zone in ("core", "inner orbit", "beyond"))
+        print(f"    of {sum(zones.values())} melee cloud dodges, by what reaches them there:  {parts}")
+
     loops = []
     for guid, items in dodges.items():
         if trace.role(guid) not in ("melee", "tank"):
@@ -1030,6 +1113,73 @@ def show_dodge_destinations(trace: Trace) -> None:
         for after, steps, total, name in sorted(loops, reverse=True):
             print(f"    {name:14} stepped out {steps:3}, dodged a cloud {total:3},"
                   f" of those after a step-out {after:3}")
+
+
+def show_stepout_leads(trace: Trace) -> None:
+    """How long before the nova a melee step-out leaves, by what opened it.
+
+    Health cannot answer it. The Guardian that opened the window is often dead by the next snapshot and
+    the next lowest one reads as the cause, which is how a step-out comes out "opened on a Guardian at
+    100%". The nova a Guardian casts at Sara on the way out is its death, so the lead is the gap to the
+    first one from a Guardian that was inside the trigger radius when the bot decided to leave.
+    """
+    p1_end = phase1_end(phase_spans(trace))
+    if p1_end is None:
+        return
+
+    novas = sorted((rec["t"], rec.get("s")) for rec in trace.of("cast")
+                   if rec.get("sp") == SPELL_SHADOW_NOVA_SARA)
+    guardians = guids_of_entry(trace, NPC_GUARDIAN)
+    issued: dict[int, list[int]] = collections.defaultdict(list)
+    for rec in trace.of("move"):
+        if rec.get("ok") and rec.get("by") == "yogg-saron phase 1 spacing action":
+            issued[rec.get("g", 0)].append(rec["t"])
+
+    leads: dict[str, list[float]] = collections.defaultdict(list)
+    dodged_nothing: collections.Counter = collections.Counter()
+    for rec in notes(trace, "yogg.p1dodge"):
+        reason = str(rec.get("txt", ""))
+        when = rec["t"]
+        guid = rec.get("g", 0)
+        if reason not in ("nova", "fervor") or when > p1_end or trace.role(guid) != "melee":
+            continue
+        if not any(when <= moved <= when + DODGE_MOVE_MS for moved in issued.get(guid, [])):
+            continue
+
+        here = at(trace, guid, when)
+        if not here:
+            continue
+
+        lead = None
+        for fired, caster in novas:
+            if not when <= fired <= when + STEP_OUT_LEAD_MS or caster not in guardians:
+                continue
+            spot = at(trace, caster, when)
+            if spot and math.dist(spot[:2], here[:2]) <= NOVA_TRIGGER_RADIUS:
+                lead = (fired - when) / 1000.0
+                break
+
+        if lead is None:
+            dodged_nothing[reason] += 1
+        else:
+            leads[reason].append(lead)
+
+    if not leads and not dodged_nothing:
+        return
+
+    print()
+    print(f"  how long before the nova a melee step-out left  (the walk out takes "
+          f"{STEP_OUT_WALK_MS / 1000:.1f} s)")
+    for reason in ("nova", "fervor"):
+        got = sorted(leads.get(reason, []))
+        missed = dodged_nothing[reason]
+        if not got and not missed:
+            continue
+        says = (f"median {statistics.median(got):4.1f} s, max {got[-1]:4.1f}" if got
+                else "no nova to measure against")
+        print(f"    {reason:7} {len(got) + missed:3}  {says}"
+              f"   over 5 s early {sum(1 for one in got if one > 5):2}"
+              f"   dodged nothing inside {STEP_OUT_LEAD_MS // 1000} s {missed:2}")
 
 
 def show_cloud_spawns(trace: Trace) -> None:
@@ -1052,6 +1202,20 @@ def show_cloud_spawns(trace: Trace) -> None:
     if not clouds:
         print("\n  no Ominous Cloud was ever sampled, so spawns cannot be attributed")
         return
+
+    # What had moved a foot onto the cloud, which is the difference between a bot that walked into one
+    # and a bot a dodge put there.
+    dodges: dict[int, list[tuple[int, str]]] = collections.defaultdict(list)
+    for rec in notes(trace, "yogg.p1dodge"):
+        dodges[rec.get("g", 0)].append((rec["t"], str(rec.get("txt", ""))))
+
+    def moved_by(guid: int, when: int) -> tuple[str, float] | None:
+        past = [(t, why) for t, why in dodges.get(guid, []) if when - DODGE_FOLLOWUP_MS <= t <= when]
+        if not past:
+            return None
+        t, why = past[-1]
+
+        return why, (when - t) / 1000.0
 
     def orbit_of(radius: float) -> int:
         for index, ring in enumerate(CLOUD_ORBITS, 1):
@@ -1091,11 +1255,12 @@ def show_cloud_spawns(trace: Trace) -> None:
         orbit = cloud_orbit.get(cloud, 0)
         per_orbit[orbit] += 1
 
-        _, marked = frame_at(when - CLOUD_SUMMON_DELAY_MS)
+        mark = when - CLOUD_SUMMON_DELAY_MS
+        _, marked = frame_at(mark)
         who = []
         if cloud in marked:
             who = sorted((round(math.dist(marked[guid2], marked[cloud]), 1), trace.name(guid2),
-                          trace.role(guid2))
+                          trace.role(guid2), moved_by(guid2, mark))
                          for guid2 in roster
                          if guid2 in marked
                          and math.dist(marked[guid2], marked[cloud]) <= CLOUD_SUMMON_REACH)
@@ -1104,7 +1269,8 @@ def show_cloud_spawns(trace: Trace) -> None:
         detail.append((when, orbit, who))
 
     for when, orbit, who in detail:
-        names = ", ".join(f"{name}/{role} {gap}" for gap, name, role in who) or "-"
+        names = ", ".join(f"{name}/{role} {gap}" + (f" <-{sent[0]} {sent[1]:.0f}s" if sent else "")
+                          for gap, name, role, sent in who) or "-"
         ring = f"orbit{orbit}" if orbit else "no cloud"
         print(f"  {clock(when):>9}  {ring:<9}  {names}")
 
@@ -1121,6 +1287,13 @@ def show_cloud_spawns(trace: Trace) -> None:
     print(f"  Sara's timer: {total - ours}"
           f"   (20-18-16-14-12-10 s, and it can only pick a cloud over"
           f" {INFORM_CLOUD_MIN_RANGE:.0f} yd out)")
+
+    # Melee separately from the back line: the back line's blob is one bearing of the 360 and it pays
+    # for the station on purpose, while a melee foot on a cloud is a dodge that went the wrong way.
+    feet = [who for _, _, who in detail if any(role == "melee" for _, _, role, _ in who)]
+    sent = sum(1 for who in feet if any(role == "melee" and moved for _, _, role, moved in who))
+    if feet:
+        print(f"  melee feet: {len(feet)} of {total}, of those with a dodge behind them: {sent}")
 
 
 def show_portals(trace: Trace) -> None:
@@ -3188,8 +3361,8 @@ def show_novas(trace: Trace) -> None:
         when = rows[0]["t"]
         gates = "  ".join(
             f"{int(gate)}%:" + ("-" if warn is None else f"{warn:.1f}s")
-            for gate, warn in ((NOVA_SOON_HEALTH_PCT, nova_warning(series.get(source, []), NOVA_SOON_HEALTH_PCT, when)),
-                               (NOVA_NOW_HEALTH_PCT, nova_warning(series.get(source, []), NOVA_NOW_HEALTH_PCT, when))))
+            for gate, warn in ((gate, nova_warning(series.get(source, []), gate, when))
+                               for gate in NOVA_WARNING_GATES))
         worst = max(rows, key=lambda rec: rec["a"])
         pool = trace.maxhp.get(worst["d"]) or 0
         share = f" ({worst['a'] / pool * 100:.0f}% of pool)" if pool else ""
@@ -3266,6 +3439,22 @@ def show_novas(trace: Trace) -> None:
         print(f"  a nova landed a median {statistics.median(rec['a'] for rec in rows_all):,.0f} against "
               f"the {NOVA_EXPECTED_DAMAGE:,} the gate assumes, resisted median "
               f"{statistics.median(shares) * 100:.1f}% (min {min(shares) * 100:.1f}%)")
+
+    # What each gate is worth as a warning, which is what decides where a gate can sit at all: one
+    # shorter than the walk is a step-out that arrives after the blast.
+    table = []
+    for gate in NOVA_WARNING_GATES:
+        got = sorted(warn for source in hits
+                     for warn in [nova_warning(series.get(source, []), gate, hits[source][0]["t"])]
+                     if warn is not None)
+        if got:
+            table.append((gate, got))
+    if table:
+        print(f"  the warning each gate gave  (a step-out walks for {STEP_OUT_WALK_MS / 1000:.1f} s)")
+        for gate, got in table:
+            tight = sum(1 for one in got if one < STEP_OUT_WALK_MS / 1000.0)
+            print(f"    {int(gate):3}%  median {statistics.median(got):5.1f} s   shortest {got[0]:5.1f}"
+                  f"   under the walk {tight:3} of {len(got)}")
 
     # A ladder row nothing picks leaves no verdict anywhere, so the only way to see one is to notice a
     # human of that class pressing what no bot does.
